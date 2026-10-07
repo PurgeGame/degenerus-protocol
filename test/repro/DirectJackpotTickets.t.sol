@@ -70,7 +70,7 @@ abstract contract DirectTicketFixture is BucketSeed {
     }
     function queueLength() external view returns (uint256) { return _ticketQueueLength(_tqWriteKey(42)); }
     function owed(address player) external view returns (uint80) { return _owedOf(_tqWriteKey(42), player); }
-    function ownerAt(uint32 idx) external view returns (address) { return _walletKey(idx + 1); }
+    function ownerAt(uint32 id) external view returns (address) { return _walletKey(id); }
     function bucket(uint24 lvl, uint8 trait) external view returns (address[] memory owners) {
         owners = new address[](_bucketLength(lvl, trait));
         for (uint256 i; i < owners.length; ++i) owners[i] = _bucketOwnerAt(lvl, trait, i);
@@ -114,7 +114,7 @@ contract DirectJackpotTicketsTest is Test {
                 for (uint256 j; j < count; ++j) {
                     bytes32[] memory topics = new bytes32[](4);
                     topics[0] = WIN;
-                    topics[1] = bytes32(uint256(uint160(h.ownerAt(uint32(owners[j >> 3] >> (32 * (j & 7)))))));
+                    topics[1] = bytes32(uint256(uint32(owners[j >> 3] >> (32 * (j & 7)))));
                     topics[2] = logs[i].topics[2];
                     topics[3] = logs[i].topics[3];
                     uint256 index = uint32(indices[j >> 3] >> (32 * (j & 7)));
@@ -180,7 +180,7 @@ contract DirectJackpotTicketsTest is Test {
         // including repeated winners, virtual entries and partial source words.
         for (uint256 i; i < referenceLogs.length; ++i) {
             if (referenceLogs[i].topics[0] != WIN) continue;
-            address player = address(uint160(uint256(referenceLogs[i].topics[1])));
+            address player = h.ownerAt(uint32(uint256(referenceLogs[i].topics[1])));
             (uint32 awarded,,,) = abi.decode(referenceLogs[i].data, (uint32,uint24,uint256,bool));
             for (uint8 q; q < 4; ++q) expected[player][q] += awarded / 4;
         }

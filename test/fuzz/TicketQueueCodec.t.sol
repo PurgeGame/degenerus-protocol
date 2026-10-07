@@ -51,9 +51,7 @@ contract TicketQueueCodecHarness is DegenerusGameStorage, WalletSeed {
     }
     function seedOwner(uint24 lvl, uint32 pos, address player) external {
         require(pos != 0);
-        uint256 word = mintPacked_[player];
-        mintPacked_[player] = (word & ~(uint256(type(uint32).max) << BitPackingLib.WALLET_ID_SHIFT))
-            | (uint256(pos) << BitPackingLib.WALLET_ID_SHIFT);
+        walletIds[player] = pos;
         uint256[] storage table = wallets;
         assembly ("memory-safe") {
             if iszero(gt(sload(table.slot), pos)) { sstore(table.slot, add(pos, 1)) }
@@ -141,8 +139,7 @@ contract TicketQueueCodecTest is Test {
     function test_ZeroLaneCannotResolveFirstOwner() public {
         h.seedOwner(5, 1, address(0xBEEF));
         h.seedWord(5, 0);
-        vm.expectRevert(bytes4(keccak256("E()")));
-        h.owner(5, 5, 0);
+        assertEq(h.owner(5, 5, 0), address(0), "empty lane does not alias the first account");
         vm.expectRevert(bytes4(keccak256("E()")));
         h.append(5, 0);
         h.release(5);

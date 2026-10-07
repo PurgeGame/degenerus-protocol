@@ -667,7 +667,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      Game's registration or account resolution and never changed. Bits 0..63 are zero.
     ///      Every board door reads it first, so a bet learns its owner's ID and the
     ///      unchanged-board fast path from one read.
-    mapping(address => uint256) internal _passCredits;
+
 
     /// @dev A wallet's UNCOMMITTED day-pass credits and its board, keyed by Game wallet ID: the
     ///      normal count in bits 0..31, the high-roller count above `_PASS_HIGH_SHIFT`, and the
@@ -1091,12 +1091,9 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      the Game: `allocate` registers a new wallet (a paying action); otherwise an
     ///      unregistered wallet reverts. The fill is written back only by a board save.
     function _walletWord(address who, bool allocate) internal returns (uint256 word) {
-        word = _passCredits[who];
-        if (word >> CrapsPreferenceLib.ID_SHIFT == 0) {
-            uint256 id = IGameCrapsWorkStage(_GAME).registerWallet(who, allocate);
-            if (id == 0) revert NoWalletId();
-            word |= id << CrapsPreferenceLib.ID_SHIFT;
-        }
+        uint32 id = IGameCrapsWorkStage(_GAME).registerWallet(who, allocate);
+        if (id == 0) revert NoWalletId();
+        word = (_passCreditsById[id] & ~(uint256(type(uint32).max) << CrapsPreferenceLib.ID_SHIFT)) | (uint256(id) << CrapsPreferenceLib.ID_SHIFT);
     }
 
     /// @dev Bank credits, SATURATING at the lane's ceiling. A lootbox sweep is permissionless and

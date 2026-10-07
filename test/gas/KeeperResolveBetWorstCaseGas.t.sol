@@ -62,7 +62,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
     ///      flips into the lootbox branch (DegeneretteModule:759). A count of 10 proves all 10 spins
     ///      drove a real lootbox materialization (the per-spin maximum branch).
     bytes32 private constant PAYOUT_CAPPED_SIG =
-        0xf8a9468f6767206f82ef0f809e2c4fb396a1495ad99e9f116652fe99a91f20c5;
+        keccak256("PayoutCapped(uint32,uint256,uint256)");
 
     address private player;
     address private cranker;

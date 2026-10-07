@@ -127,7 +127,7 @@ contract QuadrantWhalePassTest is Test {
         }
     }
 
-    function _read(Vm.Log[] memory logs) private pure returns (Draw memory d) {
+    function _read(Vm.Log[] memory logs) private view returns (Draw memory d) {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] == ETH_WIN) {
                 uint8 q = uint8(uint256(logs[i].topics[3])) >> 6;
@@ -137,12 +137,12 @@ contract QuadrantWhalePassTest is Test {
                 d.eth[q] += amount;
                 d.ethTotal += amount;
                 ++d.slots[q];
-                d.ethWinner[q] = address(uint160(uint256(logs[i].topics[1])));
+                d.ethWinner[q] = h.walletKeyOf(uint32(uint256(logs[i].topics[1])));
                 d.fingerprint = keccak256(abi.encode(d.fingerprint, logs[i].topics, index));
             } else if (logs[i].topics[0] == PASS_WIN) {
                 (uint256 halves, uint8 source) = abi.decode(logs[i].data, (uint256, uint8));
                 assertEq(source, 5, "quadrant event source");
-                address winner = address(uint160(uint256(logs[i].topics[1])));
+                address winner = h.walletKeyOf(uint32(uint256(logs[i].topics[1])));
                 uint160 w = uint160(winner);
                 uint256 q = w >= DEITY ? w - DEITY : (w - BASE) / 0x10000;
                 assertLt(q, 4, "recipient belongs to a quadrant");
@@ -293,7 +293,7 @@ contract QuadrantWhalePassTest is Test {
         Draw memory d = _run(1250 ether, word, 0, true);
         (,,, uint256 entropy) = _geometry(word, 1000 ether, true);
         uint8 solo = JackpotBucketLib.soloBucketIndex(entropy);
-        assertEq(address(uint160(h.goldenTicketRaw())), d.ethWinner[solo]);
+        assertEq(h.walletKeyOf(uint32(h.goldenTicketRaw())), d.ethWinner[solo]);
         assertTrue(d.ethWinner[solo] != d.passWinner[solo], "separate draws exercise distinct winners");
     }
 

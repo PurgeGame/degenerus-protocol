@@ -30,17 +30,14 @@ contract WalletIdPhaseEGasSeeder is DegenerusGameStorage, WalletSeed {
     /// @dev Register `player` and give it durable purchase history (betting and quest gates).
     function seedHistory(address player, uint256 mintData) external returns (uint32 id) {
         id = _seedWallet(player);
-        mintPacked_[player] |= mintData;
+        mintPacked_[_walletIdOf(player)] |= mintData;
     }
 }
 
 /// @dev Run with FOUNDRY_ISOLATE=true: every measured call is its own transaction against
 ///      committed prior state. Phase E wallet-ID paths that the customer gas suites do not
-///      cover. The same file runs on the pre-E tree with `ID_KEYED = false`, where the credit
-///      and pass doors take an address in place of the wallet ID.
+///      cover. Historical pre-E measurements are preserved in the planning gas artifacts.
 contract WalletIdPhaseEGasTest is DeployProtocol {
-    bool private constant ID_KEYED = true;
-
     address private constant REG = address(0xA11CE);
     address private constant FRESH = address(0xF2E5);
     address private constant U2 = address(0xB002);
@@ -110,35 +107,26 @@ contract WalletIdPhaseEGasTest is DeployProtocol {
         emit log_named_uint(scenario, used);
     }
 
-    /// @dev The key a credit or pass door takes: the wallet ID, or the address on the pre-E tree.
-    function _key(address player) private view returns (uint256) {
-        return ID_KEYED ? uint256(game.walletIdOf(player)) : uint256(uint160(player));
+    function _key(address player) private view returns (uint32) {
+        return game.walletIdOf(player);
     }
 
     function _credit(address player, uint256 amount) private {
-        uint256 key = _key(player);
+        uint32 id = _key(player);
         vm.prank(address(game));
-        (bool ok,) = address(coinflip).call(abi.encodeWithSignature(
-            ID_KEYED ? "creditFlip(uint32,uint256)" : "creditFlip(address,uint256)", key, amount));
-        require(ok, "credit");
+        coinflip.creditFlip(id, amount);
     }
 
     function _creditPasses(address player, uint32 normal) private {
-        uint256 key = _key(player);
+        uint32 id = _key(player);
         vm.prank(address(game));
-        (bool ok,) = address(crapsBattle).call(abi.encodeWithSignature(
-            ID_KEYED ? "creditPasses(uint32,uint32,uint32)" : "creditPasses(address,uint32,uint32)",
-            key, normal, uint32(0)));
-        require(ok, "creditPasses");
+        crapsBattle.creditPasses(id, normal, 0);
     }
 
     function _deliverPasses(address player, uint32 normal) private {
-        uint256 key = _key(player);
+        uint32 id = _key(player);
         vm.prank(address(game));
-        (bool ok,) = address(crapsBattle).call(abi.encodeWithSignature(
-            ID_KEYED ? "deliverPasses(uint32,uint32,uint32)" : "deliverPasses(address,uint32,uint32)",
-            key, normal, uint32(0)));
-        require(ok, "deliverPasses");
+        crapsBattle.deliverPasses(id, normal, 0);
     }
 
     function _wallet(uint256 i) private pure returns (address) { return address(uint160(0xC0FFEE0000 + i)); }
@@ -161,7 +149,7 @@ contract WalletIdPhaseEGasTest is DeployProtocol {
     }
 
     function test_Gas_CreditBatchTenFresh() public {
-        uint256[] memory keys = new uint256[](10);
+        uint32[] memory keys = new uint32[](10);
         uint256[] memory amounts = new uint256[](10);
         for (uint256 i; i < 10; ++i) {
             _history(_wallet(i + 1));
@@ -169,22 +157,17 @@ contract WalletIdPhaseEGasTest is DeployProtocol {
             amounts[i] = 1000;
         }
         vm.prank(address(game));
-        (bool ok,) = address(coinflip).call(abi.encodeWithSignature(
-            ID_KEYED ? "creditFlipBatch(uint32[],uint256[])" : "creditFlipBatch(address[],uint256[])", keys, amounts));
-        require(ok, "batch");
+        coinflip.creditFlipBatch(keys, amounts);
         _report("credit_batch_10_fresh");
     }
 
     function test_Gas_CreditPairFresh() public {
         _history(_wallet(1));
         _history(_wallet(2));
-        uint256 a = _key(_wallet(1));
-        uint256 b = _key(_wallet(2));
+        uint32 a = _key(_wallet(1));
+        uint32 b = _key(_wallet(2));
         vm.prank(address(game));
-        (bool ok,) = address(coinflip).call(abi.encodeWithSignature(
-            ID_KEYED ? "creditFlipPair(uint32,uint256,uint32,uint256)" : "creditFlipPair(address,uint256,address,uint256)",
-            a, uint256(1000), b, uint256(1000)));
-        require(ok, "pair");
+        coinflip.creditFlipPair(a, 1000, b, 1000);
         _report("credit_pair_fresh");
     }
 
@@ -296,7 +279,7 @@ contract WalletIdPhaseEGasTest is DeployProtocol {
         _openDay();
         _flip(FRESH);
         vm.prank(FRESH);
-        crapsBattle.enterBonusBattle(1, BOARD, 1);
+        crapsBattle.enterBonusBattle(0, 1, BOARD, 1);
         _report("craps_window_first_new_wallet");
     }
 
@@ -304,7 +287,7 @@ contract WalletIdPhaseEGasTest is DeployProtocol {
         _openDay();
         _flip(REG);
         vm.prank(REG);
-        crapsBattle.enterBonusBattle(1, BOARD, 1);
+        crapsBattle.enterBonusBattle(0, 1, BOARD, 1);
         _report("craps_window_first_registered");
     }
 
@@ -312,9 +295,9 @@ contract WalletIdPhaseEGasTest is DeployProtocol {
         _openDay();
         _flip(REG);
         vm.prank(REG);
-        crapsBattle.enterBonusBattle(1, BOARD, 1);
+        crapsBattle.enterBonusBattle(0, 1, BOARD, 1);
         vm.prank(REG);
-        crapsBattle.enterBonusBattle(2, BOARD, 1);
+        crapsBattle.enterBonusBattle(0, 2, BOARD, 1);
         _report("craps_window_unchanged_board");
     }
 
@@ -322,9 +305,9 @@ contract WalletIdPhaseEGasTest is DeployProtocol {
         _openDay();
         _flip(REG);
         vm.prank(REG);
-        crapsBattle.enterBonusBattle(1, BOARD, 1);
+        crapsBattle.enterBonusBattle(0, 1, BOARD, 1);
         vm.prank(REG);
-        crapsBattle.enterBonusBattle(2, BOARD2, 1);
+        crapsBattle.enterBonusBattle(0, 2, BOARD2, 1);
         _report("craps_window_changed_board");
     }
 
@@ -348,7 +331,7 @@ contract WalletIdPhaseEGasTest is DeployProtocol {
         _creditPasses(REG, 5);
         uint24 day = uint24(game.currentDayView()) + 1;
         vm.prank(REG);
-        crapsBattle.applyCrapsPasses(day, 1, false, BOARD);
+        crapsBattle.applyCrapsPasses(0, day, 1, false, BOARD);
         _report("pass_spend");
     }
 

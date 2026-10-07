@@ -35,11 +35,6 @@ contract DegradeDirectFallbackHarness is DegenerusGameJackpotModule, BucketSeed 
     /// @dev Thanos scaling declared for the target level after the latch.
     function driftSnap() external { snapShift = 1; }
 
-    /// @dev Deities without a registry ID for every symbol (real deities always carry one).
-    function addUnregisteredDeities() external {
-        for (uint8 i; i < 32; ++i) deityBySymbol[i] = _seedWallet(address(uint160(0xD000 + i)));
-    }
-
     function state() external view returns (uint8 quadrant, uint16 winner, uint32 round, bool direct, uint8 counter, bool pending) {
         return (jackpotWork.quadrant, jackpotWork.winner, jackpotWork.directTicketRound,
             jackpotWork.directTickets, jackpotCounter, dailyJackpotCoinTicketsPending);
@@ -122,20 +117,6 @@ contract DegradeDirectTicketFallbackTest is Test {
         assertFalse(direct2, "direct flag cleared by the fallback");
         assertEq(counter, 1, "the day completes as a counted jackpot day");
         assertFalse(pending, "coin+tickets latch cleared");
-    }
-
-    /// @dev A deity without a registry ID would have no lane in the direct form: the whole draw
-    ///      falls back to the queued path, which pays the deity by address.
-    function test_UnregisteredDeityFallsBackToQueued() public {
-        h.seed(WORD, TICKETS);
-        h.addUnregisteredDeities();
-        (uint256 direct, uint256 queued, uint256 calls) = _finish();
-        assertEq(direct, 0, "no direct batch with an unregistered deity");
-        assertEq(queued, TICKETS, "queued path pays every winner position");
-        assertGt(calls, 0);
-        (,,, bool isDirect, uint8 counter,) = h.state();
-        assertFalse(isDirect);
-        assertEq(counter, 1);
     }
 
     /// @dev Reachable shape: nothing drifts and the whole draw stays on the direct lane.

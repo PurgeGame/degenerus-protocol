@@ -9,14 +9,10 @@ import {Coinflip} from "../../contracts/Coinflip.sol";
 /// @notice The claim already holds the beneficiary's wallet ID (committed at the burn); a batch
 ///         whose synthetic flip wins credits `principal + principal * reward / 100` to that ID
 ///         through `creditFlip(id, …)`. The beneficiary never touched Coinflip, so the stake is
-///         visible through walletIdOf and Coinflip's address-keyed cache stays empty.
+///         visible through walletIdOf without another registration.
 contract RedemptionFlipCreditWalletIdTest is RedemptionFixture {
     bytes32 private constant WALLET_REGISTERED = keccak256("WalletRegistered(uint32,address)");
     bytes32 private constant STAKE_UPDATED = keccak256("CoinflipStakeUpdated(uint32,uint24,uint256,uint256)");
-
-    function _cachedId(address p) private view returns (uint32) {
-        return uint32(uint256(vm.load(address(coinflip), keccak256(abi.encode(p, uint256(2))))) >> 184);
-    }
 
     /// @dev A settlement word with roll `roll` whose synthetic flip for `batchId` wins.
     function _winningWord(uint16 roll, uint32 batchId) private pure returns (uint256 word) {
@@ -30,7 +26,6 @@ contract RedemptionFlipCreditWalletIdTest is RedemptionFixture {
         _seedFlipBacking(1_000_000);
         uint32 aliceId = game.walletIdOf(alice);
         assertTrue(aliceId != 0);
-        assertEq(_cachedId(alice), 0, "fixture: alice never touched Coinflip");
 
         uint32 batchId = _openBatchId();
         _burn(alice, sdgnrs.totalSupply() / 1000);
@@ -56,7 +51,6 @@ contract RedemptionFlipCreditWalletIdTest is RedemptionFixture {
 
         assertEq(_claimTokens(alice, batchId), 0, "claim settled");
         assertEq(coinflip.coinflipAmount(alice) - before, flipPaid, "credited under the claim's wallet ID");
-        assertEq(_cachedId(alice), 0, "the ID credit never touches the address-keyed state");
         bool stake;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter == address(game) && logs[i].topics[0] == WALLET_REGISTERED) {

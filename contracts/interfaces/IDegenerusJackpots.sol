@@ -28,6 +28,7 @@ pragma solidity 0.8.34;
 /// @notice Interface for the jackpot distribution contract.
 /// @dev Handles BAF (Big Ass Flip) jackpot calculations and payouts.
 interface IDegenerusJackpots {
+    function bafConsolationOfId(uint32 playerId, uint24 lvl) external view returns (uint256);
     /// @notice Opens a bracket's resolution (today's winning-flip claims route onward).
     function beginBaf() external;
 

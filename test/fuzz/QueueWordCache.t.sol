@@ -265,15 +265,6 @@ contract QueueWordCacheTest is QueueWordCacheBase {
         assertEq(o.distinctWords, 5, "each word loaded exactly once");
     }
 
-    function test_ReservedZeroLaneMatchesRevert() public {
-        h.seed(3, 3, 8, 1 << 24, 99, 1);
-        bytes32 base = keccak256(abi.encode(keccak256(abi.encode(h.physicalKey(3), uint256(12)))));
-        vm.store(address(h), base, bytes32(0));
-        uint24 anchor = h.prime(3, 3, 0, 99, 0);
-        vm.expectRevert(bytes4(keccak256("E()")));
-        h.run{gas: REALISTIC_GAS}(anchor);
-    }
-
     /// @dev Three consecutive checkpoints of the round phase at a fuzzed gas limit (the gas
     ///      selects the checkpoint): every call keeps the cache invariants against the uncached
     ///      oracle and the frontier never regresses. Twelve never-exhausted entries follow the

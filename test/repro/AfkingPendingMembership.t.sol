@@ -18,7 +18,7 @@ contract AfkingMembershipHarness is GameAfkingModule, WalletSeed {
         ticketsFullyProcessed = true;
         humanReadComplete = true;
         uint32 pendingId = _seedWallet(pending);
-        _subscribers.push(uint256(uint160(pending)) | (uint256(pendingId) << 160));
+        _subscribers.push(pendingId);
         Sub storage sub = _subOf[pendingId];
         sub.setPosition = 1;
         sub.dailyQuantity = quantity;
@@ -30,7 +30,7 @@ contract AfkingMembershipHarness is GameAfkingModule, WalletSeed {
         _pendingBoxCount = 1;
         if (clean != address(0)) {
             uint32 cleanId = _seedWallet(clean);
-            _subscribers.push(uint256(uint160(clean)) | (uint256(cleanId) << 160));
+            _subscribers.push(cleanId);
             _subOf[cleanId].setPosition = 2;
         }
     }

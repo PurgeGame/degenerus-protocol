@@ -58,7 +58,7 @@ contract WalletIdEntropyHarness is DegenerusGameTicketModule, WalletSeed {
         uint24 key = _foilWriteKey();
         uint256 i = _foilCount(key);
         uint256 s = _foilSlot(key, i);
-        uint256 pack = (uint256(id) << 192) | (uint256(lvl) << 160) | uint160(buyer);
+        uint256 pack = (uint256(id) << 192) | (uint256(lvl) << 160);
         assembly ("memory-safe") { sstore(s, pack) }
         foilWriteCount = uint32(i + 1);
     }
@@ -112,7 +112,7 @@ contract DeityMenuSource {
     function setId(address who, uint32 id) external { ids[who] = id; }
     function setWord(uint24 d, uint256 w) external { words[d] = w; }
 
-    function deityBoonData(address) external view returns (uint256, uint24, uint8, bool, bool) {
+    function deityBoonDataById(uint32) external view returns (uint256, uint24, uint8, bool, bool) {
         return (seed, today, 0, false, false);
     }
     function rngWordForDay(uint24 d) external view returns (uint256) { return words[d]; }

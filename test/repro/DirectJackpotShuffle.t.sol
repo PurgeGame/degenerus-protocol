@@ -13,14 +13,15 @@ contract DirectShuffleHarness is DegenerusGameTicketModule, BucketSeed {
     function seed(bool tails) external {
         _setTicketBufferLevel(42);
         _seedWallet(address(1));
-        for (uint256 i; i < 32; ++i) (uint80(_seedWallet(address(uint160(0x1000 + i)))) << OWNER_IDX_SHIFT);
+        for (uint256 i; i < 32; ++i) _seedWallet(address(uint160(0x1000 + i)));
         if (tails) {
             for (uint256 t; t < 256; ++t) _seedBucket(42, uint8(t), address(0xCAFE), t == 253 ? 1 : 7);
         }
     }
     function round(uint256 seed, uint256 count) external {
         uint256[4] memory lanes;
-        for (uint256 i; i < count; ++i) lanes[i >> 3] |= (i + 1) << (32 * (i & 7));
+        // ID 1 is the fixture sentinel; the 32 players occupy IDs 2..33.
+        for (uint256 i; i < count; ++i) lanes[i >> 3] |= (i + 2) << (32 * (i & 7));
         _materializeJackpotRound(42, lanes, count, seed);
     }
     function shuffleGas(uint256[4] memory words, uint256 positions, uint256 entropy)
@@ -127,7 +128,7 @@ contract DirectJackpotShuffleTest is Test {
         (bytes32[] memory reads,) = vm.accesses(address(h));
         for (uint256 i; i < reads.length; ++i) {
             uint256 slot = uint256(reads[i]);
-            assertTrue(slot < ownerData || slot >= ownerData + 33, "no owner address resolution");
+            assertTrue(slot < ownerData || slot >= ownerData + 34, "no owner address resolution");
         }
     }
 

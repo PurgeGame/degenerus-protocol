@@ -35,7 +35,7 @@ contract TicketCheckpointHarness is DegenerusGameTicketModule, WalletSeed {
     function seedFoil(address buyer, uint24 lvl) external {
         uint80 owner = (uint80(_seedWallet(buyer)) << OWNER_IDX_SHIFT);
         foilRecord[lvl & 3][_seedWallet(buyer)] = (uint256(lvl) << _FOIL_LEVEL_SHIFT) | (uint256(10_000) << _FOIL_MULT_SHIFT);
-        _foilAppend(_foilWriteKey(), (uint256(owner >> OWNER_IDX_SHIFT) << 192) | (uint256(lvl) << 160) | uint160(buyer));
+        _foilAppend(_foilWriteKey(), (uint256(owner >> OWNER_IDX_SHIFT) << 192) | (uint256(lvl) << 160));
     }
     function _foilAppend(uint24 key, uint256 pack) internal {
         uint256 i = _foilCount(key);

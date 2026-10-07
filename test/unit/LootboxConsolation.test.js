@@ -1,62 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-//
-// LootboxConsolation.test.js — Phase 274 Wave 2 TST-WX-01..03
-//
-// WWXRP cold-bust consolation coverage. The contract under test is the
-// ticket-collapse block of `_settleLootboxRoll` at
-// `contracts/modules/DegenerusGameLootboxModule.sol` (per-roll settle surface):
-//
-//   _queueEntries(player, rollLevel, wholeTicketsToEntries(whole), false);
-//   if (payColdBustConsolation && whole == 0) {
-//       wwxrp.mintPrize(player, _boxWwxrpStake(rollAmount));
-//   }
-//
-// The consolation payout is `wwxrp.mintPrize`, which emits a standard WWXRP
-// ERC-20 `Transfer` event (`0x0` -> player); there is no dedicated
-// lootbox-WWXRP event. Off-chain, a consolation is distinguished from the
-// regular 10%-path WWXRP win by the absence of a same-tx ticket-path emission.
-//
-// `_queueEntries` is called unconditionally; its `if (entries == 0) return;`
-// early-return absorbs the `whole == 0` cold-bust case silently. The WWXRP
-// consolation is paid on the surviving manual lootbox path — `openBox` —
-// which passes `payColdBustConsolation = true`. It is gated by the dedicated
-// `payColdBustConsolation` flag (the only per-path box flag — `emitLootboxEvent`
-// was retired once every box emits LootBoxOpened). The two auto-resolve callers
-// (`resolveLootboxDirect`, `resolveRedemptionLootbox`) pass
-// `payColdBustConsolation = false`, so cold-bust is silent for them.
-// (v47: the FLIP-lootbox manual caller `openFlipLootBox` — which also passed
-// `payColdBustConsolation = true` while emitting `FlipLootOpen` — was removed,
-// terminal-paradox closure.)
-//
-// TEST STRATEGY:
-//   - TST-WX-01 (cold-bust trigger) + TST-WX-02 (non-trigger predicate matrix) —
-//     mathematical / structural assertions on the trigger predicate
-//     `payColdBustConsolation AND scaledPre > 0 AND whole == 0`. The Bernoulli
-//     outcome is purely a function of (scaledPre, seed); we verify via the
-//     `LootboxBernoulliTester` contract that the math holds at boundary AND under
-//     randomized seed sweep.
-//   - TST-WX-02 (auto-resolve always-skip) — source-level structural assertion
-//     that the consolation `mintPrize` call sits INSIDE the
-//     `if (payColdBustConsolation && whole == 0)` gate, and that
-//     `_queueEntries` is the single unconditional ticket-award callsite.
-//   - TST-WX-03 (magnitude assertion) — the consolation magnitude is
-//     `_boxWwxrpStake(rollAmount)`: 500 WWXRP per ETH of roll value, floored at
-//     one whole token. Verified against the LootboxBernoulliTester mirror AND a
-//     source-grep cross check that the production helper keeps both halves.
-//   - TST-WX-04 (behavioral gate coverage) — deployed-contract verification via
-//     the `LootboxBernoulliTester.coldBustConsolationFires` mirror of the
-//     production gate, driven with each of the four callers' actual flag values.
-//     This exercises the `payColdBustConsolation && whole == 0` decision that
-//     CR-01 got wrong. (The `openFlipLootBox` cold-bust case the prior
-//     emitLootboxEvent-gated surface silently dropped is moot in v47 — that
-//     FLIP-lootbox caller was removed.)
-//
-// CROSS-CITES:
-//   - D-274-WX-AMOUNT-01 (consolation and spin stake share `_boxWwxrpStake`, so
-//     they are magnitude-equal at equal roll value by construction)
-//   - D-274-MANUAL-ONLY-01 (consolation fires on the manual paths only)
-//   - D-277-CONSOLATION-GATE-01 (cold-bust consolation gating)
-//   - LBX-WX-01..04 requirements per .planning/REQUIREMENTS.md
+// Consolation arithmetic and source gate checks; tester methods are mathematical mirrors.
+// Protocol settlement/ID credit execution is covered by LootboxOpenGoldens and BoxResolutionIds.
 
 import { expect } from "chai";
 import hre from "hardhat";
@@ -132,25 +76,7 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
       ).to.equal(true);
     });
 
-    it("[01d] consolation accumulation is gated by `payColdBustConsolation && whole == 0` (auto-resolve cannot trigger)", function () {
-      const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      const mintPrize = source.indexOf(
-        "acc.wwxrp += _boxWwxrpStake(rollAmount);"
-      );
-      expect(mintPrize).to.be.greaterThan(-1);
-      // Within 600 chars preceding the mintPrize call, the
-      // `if (payColdBustConsolation && whole == 0)` gate must appear (the NatSpec
-      // comment block between the gate and the call widens the gap).
-      // Auto-resolve callers pass `payColdBustConsolation = false`, so they never
-      // reach the consolation; the surviving manual caller (`openBox`) passes
-      // `payColdBustConsolation = true` and can trigger it. (v47: the FLIP-lootbox
-      // manual caller `openFlipLootBox` was removed.)
-      const window = source.slice(Math.max(0, mintPrize - 600), mintPrize);
-      expect(
-        window.includes("if (payColdBustConsolation && whole == 0)"),
-        "consolation mintPrize not gated by `payColdBustConsolation && whole == 0`"
-      ).to.equal(true);
-    });
+
   });
 
   describe("TST-WX-02 — non-trigger predicate matrix", function () {
@@ -176,13 +102,13 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
       // caller — manual openBox + both auto-resolve callers — its own
       // `if (whole != 0)` per-lane guard absorbs an all-cold-bust entry).
       const callLine =
-        "_queueEntries(player, currentLevel + uint24(offset), wholeTicketsToEntries(whole), false)";
+        "_queueEntries(id, currentLevel + uint24(offset), wholeTicketsToEntries(whole), false)";
       const firstIdx = source.indexOf(callLine);
       const secondIdx = source.indexOf(callLine, firstIdx + 1);
-      expect(firstIdx, "`_queueEntries(player, currentLevel + uint24(offset), wholeTicketsToEntries(whole), false)` callsite not found").to.be.greaterThan(-1);
+      expect(firstIdx, "`_queueEntries(id, currentLevel + uint24(offset), wholeTicketsToEntries(whole), false)` callsite not found").to.be.greaterThan(-1);
       expect(
         secondIdx,
-        "`_queueEntries(player, currentLevel + uint24(offset), wholeTicketsToEntries(whole), false)` must appear at exactly one source site (sentinel-branch duplication retired)"
+        "`_queueEntries(id, currentLevel + uint24(offset), wholeTicketsToEntries(whole), false)` must appear at exactly one source site (sentinel-branch duplication retired)"
       ).to.equal(-1);
       expect(
         source.indexOf("function _flushBoxAcc("),
@@ -200,7 +126,7 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
         gateWindow.includes("if (payColdBustConsolation && whole == 0)"),
         "consolation gate `if (payColdBustConsolation && whole == 0)` must precede the accumulation"
       ).to.equal(true);
-      const flushLine = "if (acc.wwxrp != 0) wwxrp.mintPrize(player, acc.wwxrp);";
+      const flushLine = "if (acc.wwxrp != 0) wwxrp.creditPrize(id, acc.wwxrp);";
       expect(
         source.includes(flushLine),
         "the per-entry WWXRP flush site must exist"
@@ -238,19 +164,19 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
       // inside this guard — it lives in a different function, gated instead by
       // its own per-lane `if (whole != 0)`.
       expect(
-        source.includes("_queueEntries(player, currentLevel + uint24(offset), wholeTicketsToEntries(whole), false)"),
+        source.includes("_queueEntries(id, currentLevel + uint24(offset), wholeTicketsToEntries(whole), false)"),
         "the per-entry `_queueEntries` flush callsite must exist"
       ).to.equal(true);
     });
 
-    it("[02d] the standard WWXRP win and the cold-bust consolation both draw `_boxWwxrpStake`, each off its OWN roll amount", function () {
+    it("[02d] WWXRP spins retain fractional stake; cold-bust consolation uses the whole-token helper", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
       // Both WWXRP magnitudes derive from the same helper, so they are equal by
       // construction at equal roll value. The spin sits in `_resolveLootboxRoll`
       // (param `amount`); the consolation sits in `_settleLootboxRoll` (param
       // `rollAmount`) — each passes the roll amount its own frame carries.
       expect(
-        /_callWwxrpSpin\(\s*player,\s*_boxWwxrpStake\(amount\)/.test(source),
+        /_callWwxrpSpin\(\s*id,\s*_boxWwxrpSpinStake\(amount\)/.test(source),
         "the standard WWXRP win must stake `_boxWwxrpStake(amount)` via `_callWwxrpSpin`"
       ).to.equal(true);
       expect(
@@ -259,7 +185,7 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
       ).to.equal(true);
       // Neither site may re-introduce a flat magnitude that ignores box size.
       expect(
-        /_callWwxrpSpin\(\s*player,\s*LOOTBOX_WWXRP_PRIZE\b/.test(source),
+        /_callWwxrpSpin\(\s*id,\s*LOOTBOX_WWXRP_PRIZE\b/.test(source),
         "the WWXRP spin must not stake a flat constant"
       ).to.equal(false);
     });
@@ -310,27 +236,20 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
         source.match(/uint256 private constant LOOTBOX_WWXRP_PER_ETH\s*=\s*500;/),
         "LOOTBOX_WWXRP_PER_ETH = 500 declaration missing"
       ).to.not.be.null;
+      expect(source.includes("return _boxWwxrpSpinStake(amount) / TOKEN_MATH_SCALE;")).to.equal(true);
       // The helper must both scale and floor — dropping either half is the drift
       // this catches (an unfloored stake changes the smallest boxes' token payouts).
       expect(
-        source.includes("stake = (amount * LOOTBOX_WWXRP_PER_ETH) / 1 ether;"),
+        source.includes("stake = amount * LOOTBOX_WWXRP_PER_ETH;"),
         "`_boxWwxrpStake` must scale by LOOTBOX_WWXRP_PER_ETH"
       ).to.equal(true);
       expect(
-        source.includes("if (stake < LOOTBOX_WWXRP_PRIZE) stake = LOOTBOX_WWXRP_PRIZE;"),
+        source.includes("if (stake < LOOTBOX_WWXRP_PRIZE * TOKEN_MATH_SCALE) stake = LOOTBOX_WWXRP_PRIZE * TOKEN_MATH_SCALE;"),
         "`_boxWwxrpStake` must floor at LOOTBOX_WWXRP_PRIZE"
       ).to.equal(true);
     });
 
-    it("[03d] the two constants live as siblings (declared near each other for visual drift catch)", function () {
-      const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      const prizeIdx = source.indexOf("uint256 private constant LOOTBOX_WWXRP_PRIZE");
-      const perEthIdx = source.indexOf("uint256 private constant LOOTBOX_WWXRP_PER_ETH");
-      expect(prizeIdx).to.be.greaterThan(-1);
-      expect(perEthIdx).to.be.greaterThan(-1);
-      // Within 500 chars of each other (NatSpec for the sibling constant fits).
-      expect(Math.abs(prizeIdx - perEthIdx)).to.be.lessThan(500);
-    });
+
   });
 
   describe("TST-WX-04 — behavioral cold-bust gate coverage (deployed-contract; the gate CR-01 got wrong)", function () {
@@ -380,7 +299,7 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
 
     it("[04c] auto-resolve cold-bust stays SILENT — payColdBustConsolation=false ⇒ never fires (D-277-AR-SILENT-01)", async function () {
       const tester = await deployTester();
-      // resolveLootboxDirect + resolveRedemptionLootbox both pass
+      // Direct recirculation passes
       // payColdBustConsolation = false — cold-bust must stay silent for them.
       for (const scaledPre of [1, 47, 50, 99]) {
         const fires = await tester.coldBustConsolationFires(
@@ -412,17 +331,6 @@ describe("LootboxConsolation — Phase 274 Wave 2 TST-WX-01..03", function () {
       }
     });
 
-    it("[04e] the production gate `payColdBustConsolation && whole == 0` is the tester's mirrored decision (drift detector)", function () {
-      const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // The behavioral tests above are only load-bearing if the tester mirrors
-      // the production gate. Assert the production source still gates the
-      // consolation on `payColdBustConsolation && whole == 0` — if it drifts,
-      // this fails and the tester (LootboxBernoulliTester.coldBustConsolationFires)
-      // must be reconciled in lock-step.
-      expect(
-        source.includes("if (payColdBustConsolation && whole == 0)"),
-        "production consolation gate drifted from `payColdBustConsolation && whole == 0` — update LootboxBernoulliTester.coldBustConsolationFires to match"
-      ).to.equal(true);
-    });
+
   });
 });

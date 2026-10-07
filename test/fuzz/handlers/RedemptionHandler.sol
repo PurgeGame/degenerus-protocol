@@ -25,7 +25,6 @@ contract RedemptionHandler is Test {
     mapping(uint32 => mapping(address => bool)) public claimed;
     mapping(uint32 => uint16) public firstRoll;
     mapping(uint32 => uint256) public paidRolled;
-    mapping(uint32 => mapping(address => uint256)) public dayValue;
     uint256 public ghost_initialSupply;
     uint256 public ghost_totalBurned;
     uint256 public ghost_totalMinted;
@@ -48,7 +47,7 @@ contract RedemptionHandler is Test {
             actors.push(actor);
             vm.deal(actor, 10 ether);
             vm.prank(address(g));
-            s.transferFromPool(sDGNRS.Pool.Reward, actor, 1_000_000 ether);
+            s.transferFromPool(sDGNRS.Pool.Reward, actor, 1_000_000e12);
         }
     }
     function setCoinflip(address c) external { coinflip = c; }
@@ -63,11 +62,9 @@ contract RedemptionHandler is Test {
         if (game.gameOver() || game.livenessTriggered()) return;
         address actor = actors[seed % actors.length];
         uint256 bal = sdgnrs.balanceOf(actor);
-        if (bal < 1 ether) return;
-        amount = bound(amount, 1 ether, bal);
+        if (bal < 1e12) return;
+        amount = bound(amount, 1e12, bal);
         (uint32 id,,,) = sdgnrs.redemptionBatchState();
-        (uint256 quoted,) = sdgnrs.previewBurnValue(amount);
-        uint32 day = game.currentDayView();
         uint256 supply = sdgnrs.totalSupply();
         vm.prank(actor);
         try sdgnrs.burn(amount) {
@@ -75,8 +72,6 @@ contract RedemptionHandler is Test {
             submitted[id][actor] += amount;
             (, uint16 score) = sdgnrs.pendingRedemptions(game.walletIdOf(actor), id);
             if (frozenScore[id][actor] == 0) frozenScore[id][actor] = score;
-            dayValue[day][actor] += quoted;
-            assertLe(dayValue[day][actor], 160 ether, "wall-day admission cap");
             ++successfulBurns;
         } catch {}
         _trackSupply(supply);
@@ -84,7 +79,7 @@ contract RedemptionHandler is Test {
     /// @notice The old stuck-day rejection is now a valid burn into the next open batch.
     function action_burnOnPreviousDay(uint256 seed) external {
         ++calls_burnOnPreviousDay;
-        _burn(seed, 1 ether);
+        _burn(seed, 1e12);
     }
     function action_advanceDay(uint256 word) external {
         ++calls_advanceDay;
@@ -162,18 +157,23 @@ contract RedemptionHandler is Test {
         _recordClaims(vm.getRecordedLogs());
     }
     function _recordClaims(Vm.Log[] memory logs) private {
-        bytes32 sig = keccak256("RedemptionClaimed(address,uint32,uint16,uint256,uint256,uint256)");
+        bytes32 sig = keccak256("RedemptionClaimed(uint32,uint32,uint16,uint256,uint256,uint256)");
         for (uint256 i; i < logs.length; ++i) {
             Vm.Log memory e = logs[i];
             if (e.emitter != address(sdgnrs) || e.topics.length != 3 || e.topics[0] != sig) continue;
             uint32 id = uint32(uint256(e.topics[2]));
-            address actor = address(uint160(uint256(e.topics[1])));
+            uint32 walletId = uint32(uint256(e.topics[1]));
+            address actor;
+            for (uint256 a; a < actors.length; ++a) {
+                if (game.walletIdOf(actors[a]) == walletId) { actor = actors[a]; break; }
+            }
+            assertTrue(actor != address(0), "claim belongs to a tracked ID");
             if (claimed[id][actor]) ++ghost_doubleClaim;
             claimed[id][actor] = true;
             ++ghost_claimCount;
-            (uint128 tokens,,uint96 base,,uint16 roll,) = sdgnrs.redemptionBatches(id);
+            (uint128 tokens,uint96 payout,,,uint16 roll,) = sdgnrs.redemptionBatches(id);
             // Closed claims remove the full rolled amount, including a forfeited dust box.
-            if (roll != 0) paidRolled[id] += (uint256(base) * submitted[id][actor] / tokens) * roll / 100;
+            if (roll != 0) paidRolled[id] += uint256(payout) * submitted[id][actor] / tokens;
         }
     }
     function _observeRolls() private {

@@ -40,13 +40,11 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
     uint256 internal constant _AWARD_STANDING = 100;
     uint256 internal constant _SYBIL_SCORE_FLOOR = 12;
     uint256 internal constant _MAX_MIN_SCORE = 0xFFF;
-    function entryPrice(address player, uint256 base) external view returns (uint256) { return _newcomer(player) ? base + base / 20 : base; }
+    function entryPrice(address player, uint256 base) external view returns (uint256) { return _newcomer(_idOf(player)) ? base + base / 20 : base; }
 
-    /// @dev The wallet ID the table keys `player` by: the address word's cached ID, else the
-    ///      Game's (0 when the address has none, which reads as empty state everywhere).
+    /// @dev Canonical Game wallet ID, or zero before registration.
     function _idOf(address player) internal view returns (uint32 id) {
-        id = uint32(_passCredits[player] >> CrapsPreferenceLib.ID_SHIFT);
-        if (id == 0) id = ICrapsWalletIdView(_GAME).walletIdOf(player);
+        id = ICrapsWalletIdView(_GAME).walletIdOf(player);
     }
 
     /// @dev The account key of a stored bet owner ID (the Game's wallet table).
@@ -356,10 +354,6 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
     ///      passes to sDGNRS and the Vault, which is production state every suite inherits — so a
     ///      test whose claim is about the FLIP leg of the funding ladder says here that the bank
     ///      is empty, rather than leaving the reader to wonder which leg actually paid.
-    function passCreditsSlot() external pure returns (uint256 slot) {
-        assembly ("memory-safe") { slot := _passCredits.slot }
-    }
-
     /// @dev Root of the ID-keyed pass word (passes, board, initialized bit).
     function passCreditsByIdSlot() external pure returns (uint256 slot) {
         assembly ("memory-safe") { slot := _passCreditsById.slot }
@@ -434,8 +428,17 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
         return _loadDaySeat(uint256(day) * BONUS_SLOTS_PER_DAY, _idOf(player)) & _MASK32;
     }
 
+    function daySeatNumberOfId(uint24 day, uint32 playerId) external view returns (uint256) {
+        return _loadDaySeat(uint256(day) * BONUS_SLOTS_PER_DAY, playerId) & _MASK32;
+    }
+
     function seatedIn(uint64 slot, address player) external view returns (bool) {
         uint32 id = _idOf(player);
+        if (slot >= _CUSTOM_SLOT_BASE) return _bonusSeated[_slotWindow(slot).key][id];
+        return _loadDaySeat(uint256(slot) & ~uint256(7), id) & (uint256(1) << (32 + (slot & 7))) != 0;
+    }
+
+    function seatedInId(uint64 slot, uint32 id) external view returns (bool) {
         if (slot >= _CUSTOM_SLOT_BASE) return _bonusSeated[_slotWindow(slot).key][id];
         return _loadDaySeat(uint256(slot) & ~uint256(7), id) & (uint256(1) << (32 + (slot & 7))) != 0;
     }

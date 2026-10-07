@@ -24,15 +24,6 @@ contract DailyEthTicketLegEntries is Test {
     uint256 internal constant TICKET_LEG_BPS = 7500; // PURCHASE_REWARD_JACKPOT_TICKET_BPS
     uint256 internal constant CONVERSION_BPS = 5000; // the pool-backed leg's 50% conversion
 
-    event JackpotTicketWin(
-        address indexed winner,
-        uint24 indexed entryLevel,
-        uint16 indexed traitId,
-        uint32 entryCount,
-        uint24 sourceLevel,
-        uint256 entryIndex,
-        bool roundedUp
-    );
 
     function setUp() public {
         h = new GoldenTicketHarness();

@@ -1,6 +1,6 @@
 import hre from "hardhat";
 import { deployFullProtocol } from "./deployFixture.js";
-import { eth } from "./testUtils.js";
+
 
 // sDGNRS pool index used by transferFromPool to fund test voters.
 export const POOL_REWARD = 3;
@@ -68,19 +68,19 @@ export async function deployGNRUSFixture() {
   const stethAddress = await mockSteth.getAddress();
   const charityAddress = await charity.getAddress();
 
-  // v33: vote weight = floor(sdgnrs.balanceOf(voter) / 1e18); no minimum, no bonus.
+  // v33: vote weight = floor(sdgnrs.balanceOf(voter) / 1e12); no minimum, no bonus.
   // Sized for tie-break (voter1 == voter2 == 100 sDGNRS), multi-slot (per-voter
   // independence), and tie-breaker (voter3 == 200 sDGNRS to force a clear winner
   // when paired against the equal-weight pair).
-  const voter1Amount = eth("100");   // 100 sDGNRS → vote weight = 100
-  const voter2Amount = eth("100");   // 100 sDGNRS → vote weight = 100 (tie partner)
-  const voter3Amount = eth("200");   // 200 sDGNRS → vote weight = 200 (tie breaker)
+  const voter1Amount = hre.ethers.parseUnits("100", 12);   // 100 sDGNRS → vote weight = 100
+  const voter2Amount = hre.ethers.parseUnits("100", 12);   // 100 sDGNRS → vote weight = 100 (tie partner)
+  const voter3Amount = hre.ethers.parseUnits("200", 12);   // 200 sDGNRS → vote weight = 200 (tie breaker)
 
   await giveSDGNRS(sdgnrs, gameAddress, voter1.address, voter1Amount);
   await giveSDGNRS(sdgnrs, gameAddress, voter2.address, voter2Amount);
   await giveSDGNRS(sdgnrs, gameAddress, voter3.address, voter3Amount);
 
-  // Sub-1e18 voters (weight = 0 → REJECT_ZERO_WEIGHT) are funded inline by
+  // Sub-1e12 voters (weight = 0 → REJECT_ZERO_WEIGHT) are funded inline by
   // the it-blocks that exercise that branch — keeping them off the default
   // fixture avoids polluting tie-break tests with extra voting weight.
 

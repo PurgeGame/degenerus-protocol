@@ -24,6 +24,8 @@ pragma solidity 0.8.34;
  * Provided AS IS, without warranty of any kind. Full text: TERMS.md
  */
 
+import {IDegenerusGame} from "./interfaces/IDegenerusGame.sol";
+
 import {ContractAddresses} from "./ContractAddresses.sol";
 
 /**
@@ -246,13 +248,13 @@ contract DegenerusAdmin {
     enum ProposalState { Active, Executed, Killed }
 
     /// @dev Packed into 3 storage slots (down from 7).
-    ///      Weights and snapshot stored as whole tokens (wei / 1e18). Max 1T = fits uint40 (1.1T max).
+    ///      Weights and snapshot stored as whole tokens (raw / 1e12). Max 1T = fits uint40 (1.1T max).
     ///      createdAt as uint40 = max year ~36,847.
-    ///      Slot 1: proposer(20) + createdAt(5) + votingSnapshot(5) + path(1) + state(1) = 32 exact
+    ///      Slot 1: proposer(4) + createdAt(5) + votingSnapshot(5) + path(1) + state(1) = 16 bytes
     ///      Slot 2: coordinator(20) + approveWeight(5) + rejectWeight(5) = 30 bytes
     ///      Slot 3: keyHash(32) = 32 bytes
     struct Proposal {
-        address proposer;              // slot 1: who proposed
+        uint32 proposer;              // slot 1: who proposed
         uint40 createdAt;              // slot 1: block.timestamp at creation
         uint40 votingSnapshot;         // slot 1: voting sDGNRS at proposal time (whole tokens)
         ProposalPath path;             // slot 1: Admin or Community
@@ -352,7 +354,7 @@ contract DegenerusAdmin {
     /// @notice Emitted when a LINK donation credits a donor's flip stake.
     /// @param player The donor credited.
     /// @param amount FLIP-denominated flip stake credited.
-    event LinkCreditRecorded(address indexed player, uint256 amount);
+    event LinkCreditRecorded(uint32 indexed player, uint256 amount);
     /// @notice Emitted when the LINK/ETH price feed address is set or swapped.
     /// @param oldFeed Previous feed address (zero if none was set).
     /// @param newFeed New feed address now in effect.
@@ -361,25 +363,25 @@ contract DegenerusAdmin {
     // Governance events
     /// @notice Emitted when a VRF coordinator-swap proposal is filed.
     /// @param proposalId The new proposal's ID.
-    /// @param proposer The address that filed the proposal.
+    /// @param proposer The ordinary wallet ID that filed the proposal.
     /// @param coordinator The proposed VRF coordinator.
     /// @param keyHash The proposed VRF key hash.
     /// @param path The proposal's path (Admin or Community).
     event ProposalCreated(
         uint256 indexed proposalId,
-        address indexed proposer,
+        uint32 indexed proposer,
         address coordinator,
         bytes32 keyHash,
         ProposalPath path
     );
     /// @notice Emitted when a vote is cast on a coordinator-swap proposal.
     /// @param proposalId The proposal voted on.
-    /// @param voter The address casting the vote.
+    /// @param voter The ordinary wallet ID casting the vote.
     /// @param approve True to approve, false to reject.
     /// @param weight The voter's sDGNRS weight (wei) applied to the vote.
     event VoteCast(
         uint256 indexed proposalId,
-        address indexed voter,
+        uint32 indexed voter,
         bool approve,
         uint256 weight
     );
@@ -435,27 +437,56 @@ contract DegenerusAdmin {
     /// @notice Proposal data by ID (1-indexed).
     mapping(uint256 => Proposal) public proposals;
 
-    /// @dev Per-voter vote direction + weight, packed into one slot (6 bytes).
+    /// @dev One vote direction + weight lane (6 bytes).
     struct VoterRecord {
         Vote v;     // vote direction
         uint40 w;   // weight at time of vote (whole tokens)
     }
 
-    /// @dev Vote direction + weight per voter per proposal (packed slot).
-    mapping(uint256 => mapping(address => VoterRecord)) private voterRecords;
+    /// @dev Five voter lanes per word per proposal, indexed by ordinary wallet ID / 5.
+    mapping(uint256 => mapping(uint32 => uint256)) private voterRecords;
 
     /// @notice Vote direction per voter per proposal.
     function votes(uint256 proposalId, address voter) external view returns (Vote) {
-        return voterRecords[proposalId][voter].v;
+        return _voterRecord(voterRecords[proposalId], _governanceId(voter)).v;
     }
 
     /// @notice Vote weight recorded at time of vote (whole tokens).
     function voteWeight(uint256 proposalId, address voter) external view returns (uint40) {
-        return voterRecords[proposalId][voter].w;
+        return _voterRecord(voterRecords[proposalId], _governanceId(voter)).w;
+    }
+
+    /// @dev Five 48-bit vote records per word. IDs always belong to msg.sender's ordinary wallet.
+    function _voterRecord(mapping(uint32 => uint256) storage records, uint32 id)
+        private view returns (VoterRecord memory record)
+    {
+        uint256 lane = records[id / 5] >> ((id % 5) * 48);
+        record.v = Vote(uint8(lane));
+        record.w = uint40(lane >> 8);
+    }
+
+    function _setVoterRecord(mapping(uint32 => uint256) storage records, uint32 id, Vote direction, uint40 weight) private {
+        uint256 shift = (id % 5) * 48;
+        uint256 lane = uint256(uint8(direction)) | (uint256(weight) << 8);
+        records[id / 5] = (records[id / 5] & ~(uint256(type(uint48).max) << shift)) | (lane << shift);
+    }
+
+    function _governanceId(address wallet) private view returns (uint32) {
+        return IDegenerusGame(ContractAddresses.GAME).walletIdOf(wallet);
+    }
+
+    /// @dev No account selector: voting weight and identity both belong to the caller.
+    ///      Past free admission the caller must first register through a qualifying paid Game door.
+    function _registerGovernanceCaller() private returns (uint32) {
+        return IDegenerusGame(ContractAddresses.GAME).registerWallet(msg.sender, true);
     }
 
     /// @notice Tracks each address's current active proposal ID (0 = none).
-    mapping(address => uint256) public activeProposalId;
+    mapping(uint32 => uint256) private _activeProposalId;
+
+    function activeProposalId(address proposer) external view returns (uint256) {
+        return _activeProposalId[_governanceId(proposer)];
+    }
 
     /// @dev Epoch cutoff: proposals with id < validFromId were superseded by an executed swap and can
     ///      no longer vote or execute (they keep state == Active in storage). Advanced to
@@ -467,11 +498,11 @@ contract DegenerusAdmin {
     // =========================================================================
 
     /// @dev Packed into 2 storage slots (down from 6).
-    ///      Weights and snapshot stored as whole tokens (wei / 1e18). Max 1T = fits uint40 (1.1T max).
-    ///      Slot 1: proposer(20) + createdAt(5) + votingSnapshot(5) + path(1) + state(1) = 32 exact
+    ///      Weights and snapshot stored as whole tokens (raw / 1e12). Max 1T = fits uint40 (1.1T max).
+    ///      Slot 1: proposer(4) + createdAt(5) + votingSnapshot(5) + path(1) + state(1) = 16 bytes
     ///      Slot 2: feed(20) + approveWeight(5) + rejectWeight(5) = 30 bytes
     struct FeedProposal {
-        address proposer;              // slot 1: who proposed
+        uint32 proposer;              // slot 1: who proposed
         uint40 createdAt;              // slot 1: block.timestamp at creation
         uint40 votingSnapshot;         // slot 1: voting sDGNRS at proposal time (whole tokens)
         ProposalPath path;             // slot 1: Admin or Community
@@ -487,21 +518,25 @@ contract DegenerusAdmin {
     /// @notice Feed proposal data by ID (1-indexed).
     mapping(uint256 => FeedProposal) public feedProposals;
 
-    /// @dev Vote direction + weight per voter per feed proposal (packed slot).
-    mapping(uint256 => mapping(address => VoterRecord)) private feedVoterRecords;
+    /// @dev Five voter lanes per word per feed proposal, indexed by ordinary wallet ID / 5.
+    mapping(uint256 => mapping(uint32 => uint256)) private feedVoterRecords;
 
     /// @notice Vote direction per voter per feed proposal.
     function feedVotes(uint256 proposalId, address voter) external view returns (Vote) {
-        return feedVoterRecords[proposalId][voter].v;
+        return _voterRecord(feedVoterRecords[proposalId], _governanceId(voter)).v;
     }
 
     /// @notice Vote weight recorded at time of feed vote (whole tokens).
     function feedVoteWeight(uint256 proposalId, address voter) external view returns (uint40) {
-        return feedVoterRecords[proposalId][voter].w;
+        return _voterRecord(feedVoterRecords[proposalId], _governanceId(voter)).w;
     }
 
     /// @notice Tracks each address's current active feed proposal ID (0 = none).
-    mapping(address => uint256) public activeFeedProposalId;
+    mapping(uint32 => uint256) private _activeFeedProposalId;
+
+    function activeFeedProposalId(address proposer) external view returns (uint256) {
+        return _activeFeedProposalId[_governanceId(proposer)];
+    }
 
     /// @dev Epoch cutoff: feed proposals with id < feedValidFromId were superseded by an executed
     ///      swap and can no longer vote or execute (they keep state == Active in storage). Advanced to
@@ -511,23 +546,23 @@ contract DegenerusAdmin {
     // Feed governance events
     /// @notice Emitted when a price-feed-swap proposal is filed.
     /// @param proposalId The new proposal's ID.
-    /// @param proposer The address that filed the proposal.
+    /// @param proposer The ordinary wallet ID that filed the proposal.
     /// @param feed The proposed price feed (zero to disable).
     /// @param path The proposal's path (Admin or Community).
     event FeedProposalCreated(
         uint256 indexed proposalId,
-        address indexed proposer,
+        uint32 indexed proposer,
         address feed,
         ProposalPath path
     );
     /// @notice Emitted when a vote is cast on a price-feed-swap proposal.
     /// @param proposalId The proposal voted on.
-    /// @param voter The address casting the vote.
+    /// @param voter The ordinary wallet ID casting the vote.
     /// @param approve True to approve, false to reject.
     /// @param weight The voter's sDGNRS weight (wei) applied to the vote.
     event FeedVoteCast(
         uint256 indexed proposalId,
-        address indexed voter,
+        uint32 indexed voter,
         bool approve,
         uint256 weight
     );
@@ -722,8 +757,9 @@ contract DegenerusAdmin {
         // mint multiple simultaneous admin proposals. The Community path keeps its own per-address
         // slot. A slot pointing at a superseded proposal (id < feedValidFromId) no longer blocks: the
         // proposer may file afresh against the current feed state.
-        address limitKey = path == ProposalPath.Admin ? address(vault) : msg.sender;
-        uint256 existing = activeFeedProposalId[limitKey];
+        uint32 proposerId = _registerGovernanceCaller();
+        uint32 limitKey = path == ProposalPath.Admin ? 1 : proposerId;
+        uint256 existing = _activeFeedProposalId[limitKey];
         if (existing >= feedValidFromId && existing != 0) {
             FeedProposal storage ep = feedProposals[existing];
             if (_isActiveProposal(ep.state, ep.createdAt, FEED_PROPOSAL_LIFETIME)) {
@@ -733,17 +769,17 @@ contract DegenerusAdmin {
 
         proposalId = ++feedProposalCount;
         FeedProposal storage p = feedProposals[proposalId];
-        p.proposer = msg.sender;
+        p.proposer = proposerId;
         p.createdAt = uint40(block.timestamp);
         p.path = path;
         // p.state = ProposalState.Active (default 0)
         p.feed = newFeed;
         // approveWeight and rejectWeight start at 0
-        p.votingSnapshot = uint40(circ / 1 ether);
+        p.votingSnapshot = uint40(circ / 1e12);
 
-        activeFeedProposalId[limitKey] = proposalId;
+        _activeFeedProposalId[limitKey] = proposalId;
 
-        emit FeedProposalCreated(proposalId, msg.sender, newFeed, path);
+        emit FeedProposalCreated(proposalId, proposerId, newFeed, path);
     }
 
     /// @notice Vote on an active feed swap proposal.
@@ -770,13 +806,12 @@ contract DegenerusAdmin {
         (uint40 aw, uint40 rw) = (p.approveWeight, p.rejectWeight);
         uint40 weight = _voterWeight();
         if (weight != 0) {
-            VoterRecord memory vr = feedVoterRecords[proposalId][msg.sender];
+            uint32 voterId = _registerGovernanceCaller();
+            VoterRecord memory vr = _voterRecord(feedVoterRecords[proposalId], voterId);
             (aw, rw) = _applyVote(approve, weight, vr.v, vr.w, aw, rw);
             (p.approveWeight, p.rejectWeight) = (aw, rw);
-            feedVoterRecords[proposalId][msg.sender] = VoterRecord(
-                approve ? Vote.Approve : Vote.Reject, weight
-            );
-            emit FeedVoteCast(proposalId, msg.sender, approve, uint256(weight) * 1 ether);
+            _setVoterRecord(feedVoterRecords[proposalId], voterId, approve ? Vote.Approve : Vote.Reject, weight);
+            emit FeedVoteCast(proposalId, voterId, approve, uint256(weight) * 1e12);
         }
 
         Resolution r = _resolveThreshold(
@@ -886,7 +921,8 @@ contract DegenerusAdmin {
 
         // 1-per-address active proposal limit. A slot pointing at a superseded proposal
         // (id < validFromId) no longer blocks: the proposer may file afresh.
-        uint256 existing = activeProposalId[msg.sender];
+        uint32 proposerId = _registerGovernanceCaller();
+        uint256 existing = _activeProposalId[proposerId];
         if (existing >= validFromId && existing != 0) {
             Proposal storage ep = proposals[existing];
             if (_isActiveProposal(ep.state, ep.createdAt, PROPOSAL_LIFETIME)) {
@@ -911,17 +947,17 @@ contract DegenerusAdmin {
 
         proposalId = ++proposalCount;
         Proposal storage p = proposals[proposalId];
-        p.proposer = msg.sender;
+        p.proposer = proposerId;
         p.createdAt = uint40(block.timestamp);
         p.path = path;
         // p.state = ProposalState.Active (default 0)
         p.coordinator = newCoordinator;
         p.keyHash = newKeyHash;
-        p.votingSnapshot = uint40(circ / 1 ether);
+        p.votingSnapshot = uint40(circ / 1e12);
 
-        activeProposalId[msg.sender] = proposalId;
+        _activeProposalId[proposerId] = proposalId;
 
-        emit ProposalCreated(proposalId, msg.sender, newCoordinator, newKeyHash, path);
+        emit ProposalCreated(proposalId, proposerId, newCoordinator, newKeyHash, path);
     }
 
     /// @notice Vote on an active VRF swap proposal.
@@ -961,13 +997,12 @@ contract DegenerusAdmin {
         (uint40 aw, uint40 rw) = (p.approveWeight, p.rejectWeight);
         uint40 weight = _voterWeight();
         if (weight != 0) {
-            VoterRecord memory vr = voterRecords[proposalId][msg.sender];
+            uint32 voterId = _registerGovernanceCaller();
+            VoterRecord memory vr = _voterRecord(voterRecords[proposalId], voterId);
             (aw, rw) = _applyVote(approve, weight, vr.v, vr.w, aw, rw);
             (p.approveWeight, p.rejectWeight) = (aw, rw);
-            voterRecords[proposalId][msg.sender] = VoterRecord(
-                approve ? Vote.Approve : Vote.Reject, weight
-            );
-            emit VoteCast(proposalId, msg.sender, approve, uint256(weight) * 1 ether);
+            _setVoterRecord(voterRecords[proposalId], voterId, approve ? Vote.Approve : Vote.Reject, weight);
+            emit VoteCast(proposalId, voterId, approve, uint256(weight) * 1e12);
         }
 
         Resolution r = _resolveThreshold(
@@ -1056,7 +1091,7 @@ contract DegenerusAdmin {
 
     /// @dev Get voter's sDGNRS weight as whole tokens. Sub-token balances have no vote weight.
     function _voterWeight() private view returns (uint40) {
-        return uint40(sDGNRS.balanceOf(msg.sender) / 1 ether);
+        return uint40(sDGNRS.balanceOf(msg.sender) / 1e12);
     }
 
     /// @dev Validate a proposal is active and not expired.
@@ -1329,7 +1364,7 @@ contract DegenerusAdmin {
         if (credit == 0) return;
 
         coinflipReward.creditFlip(donorId, credit);
-        emit LinkCreditRecorded(from, credit);
+        emit LinkCreditRecorded(donorId, credit);
     }
 
     // =========================================================================

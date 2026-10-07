@@ -59,9 +59,10 @@ contract BafDrawGas is DeployProtocol {
 
     function testNormalDepositWarmSingleTransactionRegression() public {
         (uint256 first, uint256 sameDay, uint256 nextDay) = this.measureWarmDepositProfile();
-        // The first deposit of a registered wallet makes one Game lookup and caches the ID in slot A.
+        // Self deposits resolve the canonical Game ID on each call. The removed claim-state
+        // cache saved that lookup on repeats; the current warm repeat measures 24,945 gas.
         assertLe(first, 108_000, "first-ever warm deposit ceiling");
-        assertLe(sameDay, 23_500, "same-day warm repeat ceiling");
+        assertLe(sameDay, 25_500, "same-day warm repeat ceiling");
         assertLe(nextDay, 46_500, "next-day warm repeat ceiling");
     }
 
@@ -86,7 +87,7 @@ contract BafDrawGas is DeployProtocol {
             vm.record();
         }
         sameDay = _measuredDeposit(alice);
-        if (cold) assertLe(sameDay, 23_500 + _depositColdAllowance(), "cold same-day repeat ceiling");
+        if (cold) assertLe(sameDay, 25_500 + _depositColdAllowance(), "cold same-day repeat ceiling");
         _warpToDay(3);
         if (cold) {
             _coolDeposit();
@@ -141,8 +142,8 @@ contract BafDrawGas is DeployProtocol {
         vm.cool(address(jackpots));
     }
 
-    /// @notice A new wallet's first deposit also registers it with Game (one allocation call and the
-    ///         cached ID write); the ordinary profile above starts from a registered wallet.
+    /// @notice A new wallet's first deposit also registers it with Game; the ordinary
+    ///         profile above starts from a registered wallet.
     function testFirstDepositWithRegistrationGas() public {
         _mint(alice, 1000);
         uint256 used = _measuredDeposit(alice);

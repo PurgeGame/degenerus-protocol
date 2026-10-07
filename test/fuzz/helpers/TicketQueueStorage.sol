@@ -8,11 +8,10 @@ import {GameSlots} from "../../helpers/GameSlots.sol";
 ///      wallet IDs (wallet-table position; element 0 is never assigned).
 library TicketQueueStorage {
     uint256 internal constant QUEUE = GameSlots.TICKET_QUEUE;
-    uint256 internal constant MINT = GameSlots.MINT_PACKED; // Forward ID at bits 224..255.
+    uint256 internal constant MINT = GameSlots.WALLET_IDS; // Forward address-to-ID registry.
     uint256 internal constant OWNERS = GameSlots.WALLETS; // Wallet table; ID = position.
     uint256 internal constant PENDING = GameSlots.TICKET_PENDING;
     uint256 internal constant FUTURE = GameSlots.FAR_FUTURE_OWED;
-    uint256 private constant ID_SHIFT = 224;
     Vm private constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
     function queueKey(uint24 key) internal pure returns (uint24) {
@@ -22,7 +21,7 @@ library TicketQueueStorage {
     }
     function ownerKey(uint24 lvl) internal pure returns (uint24) { return lvl; }
     function _id(address host, address player) private view returns (uint32) {
-        return uint32(uint256(vm.load(host, keccak256(abi.encode(player, MINT)))) >> ID_SHIFT);
+        return uint32(uint256(vm.load(host, keccak256(abi.encode(player, MINT)))));
     }
     function _shift(uint24 key) private pure returns (uint256) {
         return (key & 1) * 84 + (key & (uint24(1) << 23) != 0 ? 42 : 0);
@@ -58,8 +57,8 @@ library TicketQueueStorage {
                 uint24 key = occupying | flags;
                 uint256 n = length(host, key);
                 for (uint256 i; i < n; ++i) {
-                    address player = ownerAt(host, key, occupying, i);
-                    if (owed(host, key, player) != 0) setOwed(host, key, player, 0);
+                    uint32 id = ownerIdAt(host, key, i);
+                    if (owedById(host, key, id) != 0) setOwedById(host, key, id, 0);
                 }
                 vm.store(host, keccak256(abi.encode(uint256(root), QUEUE)), bytes32(header & ~uint256(type(uint32).max)));
             }
@@ -73,8 +72,17 @@ library TicketQueueStorage {
             uint256 word = uint256(vm.load(host, bytes32(uint256(keccak256(abi.encode(queue))) + i / 8)));
             uint32 id = uint32(word / (2 ** (32 * (i % 8))));
             require(id != 0 && id < count, "invalid owner ID");
-            address player = address(uint160(uint256(vm.load(host, bytes32(uint256(keccak256(abi.encode(OWNERS))) + id)))));
-            require(player != address(0) && _id(host, player) == id, "identity mismatch");
+            uint256 ownerWord = _ownerWord(host, id);
+            uint32 parent = uint32(ownerWord >> 160);
+            if (parent == 0) {
+                address player = address(uint160(ownerWord));
+                require(player != address(0) && _id(host, player) == id, "wallet identity mismatch");
+            } else {
+                require(uint160(ownerWord) == 0 && parent < count, "invalid subaccount owner");
+                uint256 parentWord = _ownerWord(host, parent);
+                require(parentWord >> 160 == 0 && uint160(parentWord) != 0, "owner must be ordinary");
+                require(_id(host, address(uint160(parentWord))) == parent, "owner identity mismatch");
+            }
         }
     }
     function seed(address host, uint24 key, uint24 lvl, address player, uint80 value) internal returns (uint256 index) {
@@ -87,8 +95,7 @@ library TicketQueueStorage {
             vm.store(host, bytes32(uint256(keccak256(abi.encode(OWNERS))) + count), bytes32(uint256(uint160(player))));
             vm.store(host, bytes32(OWNERS), bytes32(count + 1));
             bytes32 mintSlot = keccak256(abi.encode(player, MINT));
-            uint256 mintWord = uint256(vm.load(host, mintSlot));
-            vm.store(host, mintSlot, bytes32(mintWord | (uint256(id) << ID_SHIFT)));
+            vm.store(host, mintSlot, bytes32(uint256(id)));
         }
         setOwed(host, key, player, (uint80(id) << 48) | uint48(value));
         uint24 physical = queueKey(key);
@@ -102,7 +109,9 @@ library TicketQueueStorage {
         vm.store(host, queue, bytes32((index + 1) | (uint256(lvl) << 32)));
     }
     function owed(address host, uint24 key, address player) internal view returns (uint80) {
-        uint32 id = _id(host, player);
+        return owedById(host, key, _id(host, player));
+    }
+    function owedById(address host, uint24 key, uint32 id) internal view returns (uint80) {
         if (id == 0) return 0;
         if (key & (uint24(1) << 22) != 0) {
             uint24 lvl = key & 0x3fffff;
@@ -125,7 +134,9 @@ library TicketQueueStorage {
         return bytes32(uint256(keccak256(abi.encode(uint256(id), FUTURE))) + (((key & 0x3fffff) - 1) % 100) / 8);
     }
     function setOwed(address host, uint24 key, address player, uint80 value) internal {
-        uint32 id = _id(host, player);
+        setOwedById(host, key, _id(host, player), value);
+    }
+    function setOwedById(address host, uint24 key, uint32 id, uint80 value) internal {
         require(id != 0);
         if (key & (uint24(1) << 22) != 0) {
             require(uint8(value) == 0);
@@ -153,12 +164,19 @@ library TicketQueueStorage {
         if (next & pairMask != 0) next |= uint256(key & 0x3fffff) << tagShift;
         vm.store(host, slot, bytes32(next));
     }
-    function ownerAt(address host, uint24 key, uint24, uint256 index) internal view returns (address) {
+    function _ownerWord(address host, uint32 id) private view returns (uint256) {
+        return uint256(vm.load(host, bytes32(uint256(keccak256(abi.encode(OWNERS))) + id)));
+    }
+    function ownerIdAt(address host, uint24 key, uint256 index) internal view returns (uint32 id) {
         require(index < length(host, key));
         bytes32 queue = keccak256(abi.encode(uint256(queueKey(key)), QUEUE));
         uint256 word = uint256(vm.load(host, bytes32(uint256(keccak256(abi.encode(queue))) + index / 8)));
-        uint32 id = uint32(word / (2 ** (32 * (index % 8))));
+        id = uint32(word >> (32 * (index % 8)));
         require(id != 0);
-        return address(uint160(uint256(vm.load(host, bytes32(uint256(keccak256(abi.encode(OWNERS))) + id)))));
+    }
+    function ownerAt(address host, uint24 key, uint24, uint256 index) internal view returns (address) {
+        uint256 word = _ownerWord(host, ownerIdAt(host, key, index));
+        uint32 parent = uint32(word >> 160);
+        return address(uint160(parent == 0 ? word : _ownerWord(host, parent)));
     }
 }

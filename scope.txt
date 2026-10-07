@@ -44,7 +44,6 @@ contracts/interfaces/IVRFCoordinator.sol
 contracts/interfaces/IVaultCoin.sol
 contracts/interfaces/IsDGNRS.sol
 contracts/libraries/ActivityCurveLib.sol
-contracts/libraries/AffiliateIdentityLib.sol
 contracts/libraries/BitPackingLib.sol
 contracts/libraries/CrapsPreferenceLib.sol
 contracts/libraries/CrapsPriceLib.sol
@@ -63,6 +62,7 @@ contracts/libraries/PackedTicketShuffle.sol
 contracts/libraries/PriceLookupLib.sol
 contracts/libraries/SigFigLib.sol
 contracts/libraries/TicketEntropy.sol
+contracts/libraries/WalletTableLib.sol
 contracts/modules/DegenerusGameAdvanceModule.sol
 contracts/modules/DegenerusGameBingoModule.sol
 contracts/modules/DegenerusGameBoonModule.sol

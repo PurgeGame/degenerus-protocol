@@ -84,7 +84,7 @@ contract V56FreezeSolvency is DeployProtocol {
 
     /// @dev keccak256 of the materialized-box event — the byte-identity oracle's source signature.
     bytes32 private constant LOOTBOX_OPENED_SIG =
-        keccak256("LootBoxOpened(address,uint48,uint256,uint24,uint32,uint256,bool)");
+        keccak256("LootBoxOpened(uint32,uint48,uint256,uint24,uint32,uint256,bool)");
 
     /// @dev QUEST_SLOT0_REWARD / 1 ether = 100 whole FLIP accrued to pendingFlip per delivered buy.
     uint256 private constant SLOT0_FLIP_PER_BUY = 100;
@@ -429,10 +429,10 @@ contract V56FreezeSolvency is DeployProtocol {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2
-                || logs[i].topics[1] != bytes32(uint256(uint160(who)))) continue;
+                || logs[i].topics[1] != bytes32(uint256(game.walletIdOf(who)))) continue;
             bytes32 topic = logs[i].topics[0];
             if (topic != LOOTBOX_OPENED_SIG
-                && topic != keccak256("BoxSpin(address,uint64,uint256,uint256,uint256)")) continue;
+                && topic != keccak256("BoxSpin(uint32,uint64,uint256,uint256,uint256)")) continue;
             b.present = true;
             b.resultsDigest = keccak256(abi.encode(b.resultsDigest, logs[i].topics, logs[i].data));
             if (topic == LOOTBOX_OPENED_SIG) {
@@ -450,8 +450,8 @@ contract V56FreezeSolvency is DeployProtocol {
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2) continue;
             if (logs[i].topics[0] != LOOTBOX_OPENED_SIG &&
-                logs[i].topics[0] != keccak256("BoxSpin(address,uint64,uint256,uint256,uint256)")) continue;
-            if (logs[i].topics[1] == bytes32(uint256(uint160(who)))) count++;
+                logs[i].topics[0] != keccak256("BoxSpin(uint32,uint64,uint256,uint256,uint256)")) continue;
+            if (logs[i].topics[1] == bytes32(uint256(game.walletIdOf(who)))) count++;
         }
     }
 

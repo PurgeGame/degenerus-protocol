@@ -40,10 +40,15 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
 
     /// @dev Permissionless cache refresh, executed against Game storage only. Returns the
     ///      wallet ID beside the score (0 for an unregistered wallet; never allocated here).
+    function playerActivityScoreCachedById(uint32 id) external returns (uint256) {
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
+        return _playerActivityScoreCached(id, _effectiveQuestStreak(id));
+    }
+
     function playerActivityScoreCached(address player) external returns (uint256 score, uint32 id) {
         if (address(this) != ContractAddresses.GAME) revert E();
         id = _walletIdOf(player);
-        score = _playerActivityScoreCached(player, _effectiveQuestStreak(id));
+        score = _playerActivityScoreCached(id, _effectiveQuestStreak(id));
     }
 
     function mineFlip() external {
@@ -243,8 +248,8 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
             if (numerator >= (denominator - 1) / 1e18 + 1) {
                 // The stake ledger is keyed by wallet ID. A keeper without one is registered on
                 // its first bounty, after the measured work; past paid admission that bounty is
-                // dropped (no registration, no credit). Registration writes the keeper's mint
-                // word, and nothing after it in this call writes that word.
+                // dropped (no registration, no credit). Registration only appends the ordinary
+                // wallet and its forward lookup; it does not write mint history.
                 uint32 minerId = _walletIdOf(msg.sender);
                 if (minerId == 0 && wallets.length <= PAID_ADMISSION_WALLETS) {
                     (minerId, ) = _registerWallet(msg.sender, 0);
@@ -275,7 +280,7 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
     /// @dev A deity pass, or a lazy/whale pass whose window covers the current level,
     ///      doubles the caller's bounty. Same pass test as the activity score.
     function _minerHoldsActivePass(address miner) internal view returns (bool) {
-        uint256 packed = mintPacked_[miner];
+        uint256 packed = mintPacked_[_walletIdOf(miner)];
         if (packed >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0) return true;
         uint256 passType = (packed >> BitPackingLib.WHALE_PASS_TYPE_SHIFT) & 3;
         return (passType == 1 || passType == 3)

@@ -25,6 +25,7 @@ pragma solidity 0.8.34;
  */
 
 import {ContractAddresses} from "./ContractAddresses.sol";
+import {IDegenerusGame} from "./interfaces/IDegenerusGame.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
 
 /// @notice Minimal interface for sDGNRS balance snapshots used by GNRUS governance.
@@ -131,7 +132,7 @@ contract GNRUS {
     /// @param slot The charity slot voted for.
     /// @param voter The address casting the vote.
     /// @param weight The voter's weight applied to the slot.
-    event Voted(uint24 indexed level, uint8 indexed slot, address indexed voter, uint256 weight);
+    event Voted(uint24 indexed level, uint8 indexed slot, uint32 indexed voter, uint256 weight);
 
     /// @notice Emitted when a level resolves with a winning slot
     /// @param level The resolved level.
@@ -216,15 +217,22 @@ contract GNRUS {
 
     /// @notice Whether a voter has already voted for a given (level, voter, slot) tuple
     // Low 20 bits are votes; bits 20..43 authenticate the current level. One word is
-    // reused when a voter returns. Historical individual votes are indexed from Voted events.
-    mapping(address => uint256) private _voterWord;
+    // reused when a voter returns. Five ordinary wallet IDs share each storage word.
+    // Historical individual votes are indexed from Voted events.
+    mapping(uint32 => uint256) private _voterWord;
 
     /// @notice Whether the voter has voted on a slot of the current level.
     /// @dev Historical levels return false; Voted events retain the permanent vote history.
     function hasVoted(uint24 level, address voter, uint8 slot) public view returns (bool) {
         if (level != currentLevel || slot >= MAX_ACTIVE_SLOTS) return false;
-        uint256 word = _voterWord[voter];
+        uint32 voterId = IDegenerusGame(ContractAddresses.GAME).walletIdOf(voter);
+        uint256 word = _voterLane(voterId);
         return uint24(word >> 20) == level && (word & (uint256(1) << slot)) != 0;
+    }
+
+    /// @dev Five 48-bit account lanes per word; each uses 20 vote bits and a 24-bit level.
+    function _voterLane(uint32 id) private view returns (uint256) {
+        return (_voterWord[id / 5] >> ((id % 5) * 48)) & type(uint48).max;
     }
 
     /// @notice Current-level charity slate. Index = uint8 slot id (0..19). Address-only, no metadata.
@@ -650,13 +658,12 @@ contract GNRUS {
     // =====================================================================
 
     /// @notice Cast a vote toward a charity slot in the current level.
-    /// @dev Permissionless. Vote weight = `sdgnrs.balanceOf(msg.sender) / 1e18` (no bonus, no threshold).
+    /// @dev Permissionless. Vote weight = `sdgnrs.balanceOf(msg.sender) / 1e12` (no bonus, no threshold).
     ///      Voter may vote on multiple slots independently per level — each (level, voter, slot) tuple
     ///      is tracked in the voter's level-tagged 20-bit mask.
     ///      Locked slots (0/1/2) accept votes normally — the locked-slot guard lives exclusively in
     ///      `setCharity`. Voters CAN vote on locked slots once filled.
-    ///      CEI-clean: the only external interaction (`sdgnrs.balanceOf`) is a STATICCALL view BEFORE
-    ///      state writes; no callback surface.
+    ///      Balance and identity checks precede vote writes; registration calls the trusted Game registrar.
     /// @param slot The current-slate slot index (0..MAX_ACTIVE_SLOTS-1) to vote for
     function vote(uint8 slot) external {
         // 1. Slot bounds check (cheapest — calldata read + compare; shares the InvalidSlot error)
@@ -673,22 +680,26 @@ contract GNRUS {
         // 3. Load the reusable word; a different level starts with an empty mask.
         uint24 level = currentLevel;
         address voter = msg.sender;
-        uint256 word = _voterWord[voter];
+        uint32 voterId = IDegenerusGame(ContractAddresses.GAME).walletIdOf(voter);
+        uint256 word = _voterLane(voterId);
         if (uint24(word >> 20) != level) word = uint256(level) << 20;
         uint256 bit = uint256(1) << slot;
         if (word & bit != 0) revert VoteRejected(REJECT_ALREADY_VOTED);
 
         // 4. Zero-weight rejection (cross-contract STATICCALL — fires LAST among rejection checks
         //    so sad-path callers don't pay for the indirect call)
-        uint256 weight = sdgnrs.balanceOf(voter) / 1e18;
+        uint256 weight = sdgnrs.balanceOf(voter) / 1e12;
         if (weight == 0) revert VoteRejected(REJECT_ZERO_WEIGHT);
 
         // 5. State writes — hasVoted bit set, slotApproveWeight accumulator incremented
-        _voterWord[voter] = word | bit;
+        // Ordinary-wallet registration only; subaccounts cannot reuse the owner's token weight.
+        if (voterId == 0) voterId = IDegenerusGame(ContractAddresses.GAME).registerWallet(voter, true);
+        uint256 shift = (voterId % 5) * 48;
+        _voterWord[voterId / 5] = (_voterWord[voterId / 5] & ~(uint256(type(uint48).max) << shift)) | ((word | bit) << shift);
         slotApproveWeight[level][slot] += weight;
 
         // 6. Emit
-        emit Voted(level, slot, voter, weight);
+        emit Voted(level, slot, voterId, weight);
     }
 
     // =====================================================================

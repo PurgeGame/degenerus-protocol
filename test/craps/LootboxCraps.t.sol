@@ -123,7 +123,7 @@ contract LootboxCrapsTest is CrapsPins {
     LootboxCrapsHarness internal craps;
 
     uint24 internal constant U = 30;
-    uint256 internal constant UW = 30;
+    uint256 internal constant UW = 30 ether;
 
 
     function setUp() public {

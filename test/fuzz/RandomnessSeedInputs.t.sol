@@ -39,7 +39,7 @@ contract SeedInputSeeder is DegenerusGame, WalletSeed {
 
     function afking(address player, uint256 amount, uint256 word) external {
         (bool ok, bytes memory result) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(
-            abi.encodeCall(IDegenerusGameLootboxModule.resolveAfkingBox, (player, _seedWallet(player), amount, uint24(100), word, uint16(0)))
+            abi.encodeCall(IDegenerusGameLootboxModule.resolveAfkingBox, (_seedWallet(player), amount, uint24(100), word, uint16(0)))
         );
         if (!ok) assembly { revert(add(result, 32), mload(result)) }
     }
@@ -52,9 +52,9 @@ contract RandomnessSeedInputsTest is DeployProtocol {
     uint256 private constant QUEUED_ORDER_DOMAIN = 0x5175657565644f72646572;
     uint256 private constant BOX_OPEN_TAG = 0x426f784f70656e;
     uint256 private constant AFKING_BOX_TAG = 0x41666b696e67426f78;
-    bytes32 private constant OPENED = keccak256("LootBoxOpened(address,uint48,uint256,uint24,uint32,uint256,bool)");
-    bytes32 private constant PRESALE = keccak256("PresaleBoxOpened(address,uint48,uint256,uint256,uint256,uint256,bool,uint32,uint32)");
-    bytes32 private constant SPIN = keccak256("BoxSpin(address,uint64,uint256,uint256,uint256)");
+    bytes32 private constant OPENED = keccak256("LootBoxOpened(uint32,uint48,uint256,uint24,uint32,uint256,bool)");
+    bytes32 private constant PRESALE = keccak256("PresaleBoxOpened(uint32,uint48,uint256,uint256,uint256,uint256,bool,uint32,uint32)");
+    bytes32 private constant SPIN = keccak256("BoxSpin(uint32,uint64,uint256,uint256,uint256)");
 
     function setUp() public {
         _deployProtocol();
@@ -73,7 +73,7 @@ contract RandomnessSeedInputsTest is DeployProtocol {
         else {
             uint32 id = game.walletIdOf(PLAYER);
             vm.prank(address(sdgnrs));
-            game.resolveRedemptionLootbox{value: amount}(PLAYER, id, amount, word, 0, 1);
+            game.resolveRedemptionLootbox{value: amount}(id, amount, word, 0, 1);
         }
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bool found;

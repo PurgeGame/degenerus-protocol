@@ -26,7 +26,7 @@ contract WardenLbxClosingBoxOrder is DeployProtocol {
     uint256 constant PRESALE_BOX_ETH_CAP = 50 ether;
     uint256 constant QUEUED_ORDER_DOMAIN = 0x5175657565644f72646572; // "QueuedOrder"
 
-    bytes32 constant REMAINDER_SWEPT_TOPIC = keccak256("PresaleBoxRemainderSwept(address,uint256)");
+    bytes32 constant REMAINDER_SWEPT_TOPIC = keccak256("PresaleBoxRemainderSwept(uint32,uint256)");
 
     function setUp() public {
         _deployProtocol();

@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
+import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @title StreakSnapshotAndPendingFlipClampTest -- proves the v69 single-integer streak path and the
 ///        narrowed `pendingFlip` saturating clamp against the post-PACK Sub accumulator.
@@ -65,14 +66,14 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
     uint256 private constant OFF_STREAKLATCH = 26; // uint16 subStreakLatch (bytes 26..27)
 
     /// @dev recordAfkingSecondary is QUESTS-gated; the live +1 bump is driven by pranking as this caller.
-    address private constant QUESTS_CALLER = address(0x3Cff5E7eBecb676c3Cb602D0ef2d46710b88854E);
+    address private constant QUESTS_CALLER = ContractAddresses.QUESTS;
 
     /// @dev The shipped ceilings: pendingFlip saturates at type(uint24).max; the streak latch clamp at
     ///      type(uint16).max.
     uint256 private constant PENDINGFLIP_CEILING = 16_777_215; // type(uint24).max
     uint256 private constant STREAK_LATCH_CEILING = 65_535; // type(uint16).max
 
-    /// @dev QUEST_SLOT0_REWARD / 1 ether = 100 whole FLIP accrued to pendingFlip per delivered buy.
+    /// @dev QUEST_SLOT0_REWARD = 100 whole FLIP accrued to pendingFlip per delivered buy.
     uint256 private constant SLOT0_FLIP_PER_BUY = 100;
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
@@ -257,7 +258,7 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
     }
 
     /// @notice A settle/claim of a pendingFlip pinned at the ceiling reads the clamped value back as a uint256,
-    ///         credits exactly 16_777_215 whole FLIP (x 1e18), and zeroes the field — the clamp did not corrupt
+    ///         credits exactly 16_777_215 whole FLIP, and zeroes the field — the clamp did not corrupt
     ///         the claimed amount, and `affiliateBase` is untouched.
     function test_PendingFlipSettleRoundTripUnderClamp() public {
         address p = makeAddr("settle_p");
@@ -272,7 +273,7 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
         game.claimAfkingFlip(_aids(_singleton(p))); // _settlePendingFlip: reads owed as uint256, zeroes the field, credits
         uint256 stakeAfter = coinflip.coinflipAmount(p);
 
-        assertEq(stakeAfter - stakeBefore, PENDINGFLIP_CEILING * 1 ether, "settle credits exactly the clamped 16,777,215 whole FLIP (x 1e18)");
+        assertEq(stakeAfter - stakeBefore, PENDINGFLIP_CEILING, "settle credits exactly the clamped 16,777,215 whole FLIP");
         assertEq(_pendingFlip24Of(p), 0, "settle zeroes pendingFlip (a re-claim finds 0)");
         assertEq(_affiliateBase32Of(p), affBefore, "settle/clamp leaves affiliateBase untouched (its own clamp is out of scope)");
     }

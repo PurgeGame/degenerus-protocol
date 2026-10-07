@@ -21,7 +21,8 @@ contract MinerRewardScheduleHarness is DegenerusGameMinerModule {
     }
 
     function seedPass(address miner, uint256 packed, uint24 currentLevel) external {
-        mintPacked_[miner] = packed;
+        _registerWallet(miner, type(uint256).max);
+        mintPacked_[_walletIdOf(miner)] = packed;
         level = currentLevel;
     }
 

@@ -9,14 +9,18 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///      entry book, claim gates and payment dispatch are the production code.
 contract WwxrpRecyclingGameMock {
     mapping(uint24 => uint256) public rngWordForDay;
-    mapping(address => uint256) public playerActivityScore;
+    mapping(uint32 => uint256) public playerActivityScore;
     uint24 public level;
     function setWord(uint24 day, uint256 word) external { rngWordForDay[day] = word; }
-    function setActivity(address player, uint256 score) external { playerActivityScore[player] = score; }
+    function setActivity(address player, uint256 score) external { playerActivityScore[walletIdOf[player]] = score; }
     mapping(address => uint32) public walletIdOf;
     function setId(address player, uint32 id) external { walletIdOf[player] = id; }
-    function playerActivityScoreCached(address player) external view returns (uint256, uint32) {
-        return (playerActivityScore[player], walletIdOf[player]);
+    function registerWallet(address player, bool) external view returns (uint32 id) {
+        id = walletIdOf[player];
+        require(id != 0, "fixture actor must be registered");
+    }
+    function playerActivityScoreCachedById(uint32 id) external view returns (uint256) {
+        return playerActivityScore[id];
     }
     function setLevel(uint24 value) external { level = value; }
     function extsload(bytes32) external pure returns (bytes32) { return bytes32(0); }

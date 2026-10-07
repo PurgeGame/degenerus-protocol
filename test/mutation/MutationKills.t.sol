@@ -82,7 +82,7 @@ contract MutationKills is DeployProtocol {
     // ---------------------------------------------------------------------
 
     /// @dev Per-actor sDGNRS funding routed through the Reward pool (game is the authorized caller).
-    uint256 internal constant ACTOR_FUNDING = 1_000_000 ether;
+    uint256 internal constant ACTOR_FUNDING = 1_000_000e12;
 
     address internal burner;
 
@@ -222,7 +222,7 @@ contract MutationKills is DeployProtocol {
         uint256 poolBefore = sdgnrs.poolBalance(sDGNRS.Pool.Reward);
         uint256 sinkBefore = sdgnrs.balanceOf(sink);
         uint256 contractBefore = sdgnrs.balanceOf(address(sdgnrs));
-        uint256 req = 10_000 ether;
+        uint256 req = 10_000e12;
         require(poolBefore >= req, "fixture: reward pool too small");
 
         vm.prank(address(game));
@@ -243,7 +243,7 @@ contract MutationKills is DeployProtocol {
         uint256 poolBefore = sdgnrs.poolBalance(sDGNRS.Pool.Reward);
         uint256 supplyBefore = sdgnrs.totalSupply();
         uint256 contractBalBefore = sdgnrs.balanceOf(address(sdgnrs));
-        uint256 req = 5_000 ether;
+        uint256 req = 5_000e12;
         require(poolBefore >= req, "fixture: reward pool too small");
 
         vm.prank(address(game));
@@ -266,7 +266,7 @@ contract MutationKills is DeployProtocol {
     ///      assert the wrapper debit + recipient credit (supply unchanged — pure transfer).
     function test_kills_StakedStonk_wrapperTransferTo_movesBalance() public {
         // Fund the DGNRS wrapper address with sDGNRS so wrapperTransferTo has balance to move.
-        uint256 seed = 12_000 ether;
+        uint256 seed = 12_000e12;
         vm.prank(address(game));
         sdgnrs.transferFromPool(sDGNRS.Pool.Reward, ContractAddresses.DGNRS, seed);
 
@@ -274,7 +274,7 @@ contract MutationKills is DeployProtocol {
         uint256 wrapperBefore = sdgnrs.balanceOf(ContractAddresses.DGNRS);
         uint256 recipientBefore = sdgnrs.balanceOf(recipient);
         uint256 supplyBefore = sdgnrs.totalSupply();
-        uint256 amount = 4_000 ether;
+        uint256 amount = 4_000e12;
         require(wrapperBefore >= amount, "fixture: wrapper underfunded");
 
         vm.prank(ContractAddresses.DGNRS);

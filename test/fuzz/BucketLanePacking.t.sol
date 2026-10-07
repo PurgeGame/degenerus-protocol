@@ -141,7 +141,8 @@ contract BucketLanePacking is Test {
             assertEq(got, model[k]);
             assertTrue(got != address(0));
             uint256 lane = (h.laneWord(lvl, trait, k >> 3) >> (32 * (k & 7))) & 0xffffffff;
-            assertLt(lane, owners);
+            assertGt(lane, 0);
+            assertLe(lane, owners);
         }
     }
 
@@ -172,8 +173,8 @@ contract BucketLanePacking is Test {
             assertLt(calls, 64, "drain did not finish");
         }
         assertGt(calls, 1, "the drain must span more than one chunk to test the resume");
-        // the seeder's position-zero sentinel plus the drained player
-        assertEq(h.ownerCount(lvl), 2);
+        // ownerCount excludes the ID-zero sentinel; only the drained player is registered.
+        assertEq(h.ownerCount(lvl), 1);
         assertEq(h.ownerAt(lvl, 0, 0) == p || h.bucketLen(lvl, 0) == 0, true);
         uint256 total;
         for (uint256 t; t < 256; ++t) {

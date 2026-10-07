@@ -35,7 +35,7 @@ contract WwxrpIncineratorTest is DeployProtocol {
 
     event IncineratorEntered(
         uint24 indexed bracket,
-        address indexed player,
+        uint32 indexed player,
         uint32 entryIndex,
         uint256 burnAmount,
         uint256 effectiveScore,
@@ -146,7 +146,7 @@ contract WwxrpIncineratorTest is DeployProtocol {
         vm.prank(address(game));
         wwxrp.mintPrize(alice, amt);
         vm.expectEmit(true, true, false, true, address(wwxrp));
-        emit IncineratorEntered(100, alice, 0, amt, amt, amt);
+        emit IncineratorEntered(100, aliceId, 0, amt, amt, amt);
         vm.prank(alice);
         wwxrp.enter(0, amt);
 
@@ -185,8 +185,8 @@ contract WwxrpIncineratorTest is DeployProtocol {
         uint256 score = 500;
         vm.mockCall(
             address(game),
-            abi.encodeWithSignature("playerActivityScoreCached(address)", alice),
-            abi.encode(score, aliceId)
+            abi.encodeWithSignature("playerActivityScoreCachedById(uint32)", aliceId),
+            abi.encode(score)
         );
         uint256 mult = wwxrp.drawMultBps(score);
         assertGt(mult, BPS, "mocked score maps above 1.0x");

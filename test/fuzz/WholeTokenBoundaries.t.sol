@@ -20,11 +20,11 @@ contract WholeTokenBoundaries is DeployProtocol {
         tags = new CrapsTagHarness();
     }
 
-    function test_MetadataOnlyChangesTheTwoGamblingTokens() public view {
+    function test_TokenDecimalConventions() public view {
         assertEq(coin.decimals(), 0);
         assertEq(wwxrp.decimals(), 0);
-        assertEq(sdgnrs.decimals(), 18);
-        assertEq(dgnrs.decimals(), 18);
+        assertEq(sdgnrs.decimals(), 12);
+        assertEq(dgnrs.decimals(), 12);
         assertEq(gnrus.decimals(), 18);
     }
 

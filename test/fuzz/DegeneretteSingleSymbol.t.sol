@@ -82,7 +82,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] != DQ.RESOLVED_SIG) continue;
             if (uint256(logs[i].topics[3]) != id) continue;
-            assertEq(address(uint160(uint256(logs[i].topics[1]))), who, "bet owner");
+            assertEq(uint32(uint256(logs[i].topics[1])), game.walletIdOf(who), "bet owner");
             bytes memory spins;
             (, firstHouse, spins) = abi.decode(logs[i].data, (uint256, uint32, bytes));
             tickets = new uint32[](spins.length / 5);
@@ -316,7 +316,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
     }
 
     function _boxRecord(Vm.Log[] memory logs) private pure returns (uint256 packed, uint256 payout) {
-        bytes32 topic = keccak256("BoxSpin(address,uint64,uint256,uint256,uint256)");
+        bytes32 topic = keccak256("BoxSpin(uint32,uint64,uint256,uint256,uint256)");
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] == topic) {
                 (, packed, payout,) = abi.decode(logs[i].data, (uint64, uint256, uint256, uint256));
@@ -333,7 +333,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
             (bytes memory returned, Vm.Log[] memory logs) = _awardCall(
                 abi.encodeCall(
                     IDegenerusGameDegeneretteModule.resolveFlipSpinsFromBox,
-                    (alice, 3000e18, uint16(305), seed, symbol)
+                    (uint32(1), 3000e18, uint16(305), seed, symbol)
                 )
             );
             (uint256 packed, uint256 payout) = _boxRecord(logs);
@@ -371,7 +371,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
             if (chosen >= 24 && chosen != 32) continue;
             (bytes memory returned, Vm.Log[] memory logs) = _awardCall(
                 abi.encodeCall(
-                    IDegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox, (alice, 1e18, uint16(305), seed, chosen)
+                    IDegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox, (uint32(1), 1e18, uint16(305), seed, chosen)
                 )
             );
             (uint256 packed, uint256 payout) = _boxRecord(logs);
@@ -416,7 +416,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         (bytes memory returned, Vm.Log[] memory logs) = _awardCall(
             abi.encodeCall(
                 IDegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox,
-                (alice, 1e18, uint16(0), seed, symbol)
+                (uint32(1), 1e18, uint16(0), seed, symbol)
             )
         );
         (uint256 packed, uint256 payout) = _boxRecord(logs);
@@ -437,8 +437,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         vm.etch(facadeCopy, facade);
         vm.etch(address(game), address(new DegeneretteEthAwardRouter(facadeCopy)).code);
         vm.recordLogs();
-        IDegenerusGameDegeneretteModule(address(game)).resolveEthSpinFromBox(
-            alice, game.walletIdOf(alice), 0.01 ether, uint16(30_000), seed, uint8(15)
+        IDegenerusGameDegeneretteModule(address(game)).resolveEthSpinFromBox(game.walletIdOf(alice), 0.01 ether, uint16(30_000), seed, uint8(15)
         );
         Vm.Log[] memory logs = vm.getRecordedLogs();
         vm.etch(address(game), facade);
@@ -448,7 +447,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         // 25% of gross exceeds the cap: exactly 10% of the 10,000 ETH future pool is cash.
         assertEq(game.claimableWinningsOf(alice) - claimableBefore, 1000 ether);
         assertEq(uint256(vm.load(address(game), bytes32(GameSlots.PRIZE_POOLS_PACKED))) >> 128, 9000 ether);
-        bytes32 capTopic = keccak256("PayoutCapped(address,uint256,uint256)");
+        bytes32 capTopic = keccak256("PayoutCapped(uint32,uint256,uint256)");
         bool capped;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics.length == 0 || logs[i].topics[0] != capTopic) continue;
@@ -476,7 +475,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         (bytes memory returned, Vm.Log[] memory logs) = _awardCall(
             abi.encodeCall(
                 IDegenerusGameDegeneretteModule.resolveFlipSpinsFromBox,
-                (alice, tooLarge, uint16(0), uint256(1), uint8(0))
+                (uint32(1), tooLarge, uint16(0), uint256(1), uint8(0))
             )
         );
         assertEq(abi.decode(returned, (uint256)), 0);

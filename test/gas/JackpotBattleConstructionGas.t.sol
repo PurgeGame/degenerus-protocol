@@ -35,7 +35,8 @@ contract BattlePaidMinerProbe {
 /// @dev Test-only storage construction. Every measured worker is the deployed production
 /// bytecode, including Game -> Miner -> Advance -> Jackpot -> Draw -> Craps -> JackpotBattle.
 contract BattleConstructionGameSeed is DegenerusGameStorage, WalletSeed {
-    function seedMinerPass(address miner, uint256 packed) external { mintPacked_[miner] = packed; }
+    function seedMinerPass(address miner, uint256 packed) external {
+        _registerWallet(miner, type(uint256).max); mintPacked_[_walletIdOf(miner)] = packed; }
 
     function seedSession(uint24 ceiling, uint24 day, uint256 word) external {
         level = ceiling - 1;

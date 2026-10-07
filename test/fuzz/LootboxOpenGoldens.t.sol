@@ -19,12 +19,12 @@ contract LootboxOpenGoldens is DeployProtocol {
     address internal actor;
     uint256 internal constant PRESALE_BOX_CREDIT_SLOT = GameSlots.PRESALE_BOX_CREDIT;
 
-    bytes32 internal constant OPENED = keccak256("LootBoxOpened(address,uint48,uint256,uint24,uint32,uint256,bool)");
+    bytes32 internal constant OPENED = keccak256("LootBoxOpened(uint32,uint48,uint256,uint24,uint32,uint256,bool)");
     bytes32 internal constant QUEUED = keccak256("EntriesQueued(uint32,uint24,uint32)");
-    bytes32 internal constant DGNRS = keccak256("LootBoxDgnrsBatch(address,uint256,uint256)");
-    bytes32 internal constant PASSES = keccak256("LootBoxCrapsPasses(address,uint32,uint32,uint24)");
-    bytes32 internal constant PRESALE = keccak256("PresaleBoxOpened(address,uint48,uint256,uint256,uint256,uint256,bool,uint32,uint32)");
-    bytes32 internal constant REWARD = keccak256("LootBoxReward(address,uint8,uint256,uint256)");
+    bytes32 internal constant DGNRS = keccak256("LootBoxDgnrsBatch(uint32,uint256,uint256)");
+    bytes32 internal constant PASSES = keccak256("LootBoxCrapsPasses(uint32,uint32,uint32,uint24)");
+    bytes32 internal constant PRESALE = keccak256("PresaleBoxOpened(uint32,uint48,uint256,uint256,uint256,uint256,bool,uint32,uint32)");
+    bytes32 internal constant REWARD = keccak256("LootBoxReward(uint32,uint8,uint256,uint256)");
 
     function setUp() public {
         _deployProtocol();
@@ -140,7 +140,7 @@ contract LootboxOpenGoldens is DeployProtocol {
             uint256 n;
             for (uint256 i; i < logs.length; i++) {
                 if (logs[i].topics[0] != OPENED || logs[i].emitter != address(game)) continue;
-                if (address(uint160(uint256(logs[i].topics[1]))) != actor) continue;
+                if (uint32(uint256(logs[i].topics[1])) != game.walletIdOf(actor)) continue;
                 (uint256 amount,,,,) = abi.decode(logs[i].data, (uint256, uint24, uint32, uint256, bool));
                 if (n < 4) sizes[n] = amount;
                 n++;
@@ -231,9 +231,9 @@ contract LootboxOpenGoldens is DeployProtocol {
             // The engine call also carries unindexed engine events (Advance, MinerWork, ...).
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2) continue;
             bytes32 t = logs[i].topics[0];
-            address who = address(uint160(uint256(logs[i].topics[1])));
+            uint32 who = uint32(uint256(logs[i].topics[1]));
             if (t == OPENED) {
-                assertEq(who, whale, "every plain box is the order's");
+                assertEq(who, whaleId, "every plain box is the order's");
                 assertEq(uint256(logs[i].topics[2]), WHALE_REF, "tagged with the order's buffer and position");
                 (uint256 a, uint24 lvl, uint32 sc, uint256 fl, bool up) = abi.decode(logs[i].data, (uint256, uint24, uint32, uint256, bool));
                 assertLt(nOpened, 9, "bounded");
@@ -243,12 +243,12 @@ contract LootboxOpenGoldens is DeployProtocol {
                 assertLt(nQueued, 8, "bounded");
                 qLevel[nQueued] = lvl; qEntries[nQueued++] = e;
             } else if (t == DGNRS) {
-                assertEq(who, whale, "the DGNRS batches are the order's");
+                assertEq(who, whaleId, "the DGNRS batches are the order's");
                 (uint256 r, uint256 pd) = abi.decode(logs[i].data, (uint256, uint256));
                 assertLt(nDgnrs, 8, "bounded");
                 dReq[nDgnrs] = r; dPaid[nDgnrs++] = pd;
             } else if (t == PRESALE) {
-                assertEq(who, pre, "the presale box is the presale buyer's");
+                assertEq(who, game.walletIdOf(pre), "the presale box is the presale buyer's");
                 assertEq(uint256(logs[i].topics[2]), PRESALE_REF, "tagged with the presale entry's position");
                 (uint256 a, uint256 fl, uint256 dg,, bool cl,,) = abi.decode(logs[i].data, (uint256, uint256, uint256, uint256, bool, uint32, uint32));
                 assertEq(a, 0.5 ether, "presale amount");
@@ -279,11 +279,11 @@ contract LootboxOpenGoldens is DeployProtocol {
             assertEq(qEntries[k], expectedEntries[k], "whole-ticket entries");
         }
         assertEq(nDgnrs, 1, "one DGNRS batch");
-        assertEq(dReq[0], 32_902_300 ether, "DGNRS requested");
-        assertEq(dPaid[0], 32_902_300 ether, "DGNRS paid in full");
+        assertEq(dReq[0], 32_902_300e12, "DGNRS requested");
+        assertEq(dPaid[0], 32_902_300e12, "DGNRS paid in full");
         assertEq(nPresale, 1, "the presale box opened");
         assertEq(presaleFlip, 0, "presale FLIP branch not drawn");
-        assertEq(presaleDgnrs, 3_750_000_000 ether, "presale DGNRS roll");
+        assertEq(presaleDgnrs, 3_750_000_000e12, "presale DGNRS roll");
         assertEq(nPasses, 0, "no craps passes rolled on this word");
     }
 
@@ -309,9 +309,9 @@ contract LootboxOpenGoldens is DeployProtocol {
             // The engine call also carries unindexed engine events (Advance, MinerWork, ...).
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2) continue;
             bytes32 t = logs[i].topics[0];
-            address who = address(uint160(uint256(logs[i].topics[1])));
+            uint32 who = uint32(uint256(logs[i].topics[1]));
             if (t == OPENED) {
-                assertEq(who, whale, "order's box");
+                assertEq(who, whaleId, "order's box");
                 assertEq(uint256(logs[i].topics[2]), WHALE_REF, "a parent box, never a recirculated child");
                 assertLt(nO, 8, "eight parent boxes");
                 (uint256 a, uint24 lvl, uint32 sc, uint256 fl, bool u) = abi.decode(logs[i].data, (uint256, uint24, uint32, uint256, bool));
@@ -330,7 +330,7 @@ contract LootboxOpenGoldens is DeployProtocol {
             } else if (t == PASSES) {
                 nP++;
             } else if (t == PRESALE) {
-                assertEq(who, pre, "presale buyer");
+                assertEq(who, game.walletIdOf(pre), "presale buyer");
                 assertEq(uint256(logs[i].topics[2]), PRESALE_REF, "the presale entry's tag");
                 (uint256 a, uint256 fl, uint256 dg, uint256 ww, bool cl, uint32 pn, uint32 ph) = abi.decode(logs[i].data, (uint256, uint256, uint256, uint256, bool, uint32, uint32));
                 assertEq(a, 0.5 ether, "presale amount");
@@ -358,7 +358,7 @@ contract LootboxOpenGoldens is DeployProtocol {
         uint256 n;
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2 || logs[i].topics[0] != PRESALE) continue;
-            assertEq(address(uint160(uint256(logs[i].topics[1]))), pre, "presale buyer");
+            assertEq(uint32(uint256(logs[i].topics[1])), game.walletIdOf(pre), "presale buyer");
             assertEq(uint256(logs[i].topics[2]), PRESALE_REF, "the presale entry's tag");
             uint256 a; bool cl;
             (a, fl, dg, ww, cl, pn, ph) = abi.decode(logs[i].data, (uint256, uint256, uint256, uint256, bool, uint32, uint32));

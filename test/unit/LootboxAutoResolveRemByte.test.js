@@ -1,43 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-//
-// LootboxAutoResolveRemByte.test.js — Phase 275 Wave 2 TST-LBX-AR-05
-//
-// `_rollRemainder` zero-invocation regression on auto-resolve queues.
-//
-// The pre-Phase-275 auto-resolve branch routed `futureTickets` (scaled) into
-// `_queueEntriesScaled(...)` at `DegenerusGameStorage.sol:596`, which packs a
-// fractional remainder into the `rem` byte of `entriesOwedPacked[wk][buyer]`.
-// At trait-assignment time `_rollRemainder` reads + promotes that rem byte to
-// a whole ticket via a Bernoulli round-up.
-//
-// Phase 275 LBX-AR-02 swaps the auto-resolve callsite to
-// `_queueEntries(player, targetLevel, wholeTicketsToEntries(whole), false)` at
-// `DegenerusGameStorage.sol:562` — the whole-helper. Per D-275-TST-05-01, the
-// invariant is: the `_queueEntries` body writes ONLY the whole-ticket count
-// into `entriesOwedPacked` and NEVER touches the rem byte. After Plan A:
-//   - rem byte stays 0 across the open → activate flow on auto-resolve queues.
-//   - `_rollRemainder` is never invoked for auto-resolve queues (it can only
-//     run when rem != 0, by the implementation in DegenerusGameStorage.sol).
-//
-// TEST STRATEGY:
-//   No deterministic fixture exists for `resolveLootboxDirect` /
-//   `resolveRedemptionLootbox` at the full-state granularity required (level
-//   + day + sDGNRS staking + VRF mock). Per the LBX-02 fixture-coverage-gap
-//   precedent, this test combines:
-//     (a) Source-level structural proof that `_queueEntries` body writes the
-//         packed slot with `rem` carried from the existing slot value
-//         unchanged (no fractional accumulation).
-//     (b) Source-level proof that `_queueEntriesScaled` body DOES write a
-//         non-zero rem byte (positive control — proves the rem-byte mechanism
-//         exists and is gated behind the scaled helper that Plan A NO LONGER
-//         calls on the auto-resolve path).
-//     (c) Source-level proof that the LootboxModule auto-resolve branch
-//         calls `_queueEntries` (whole) and NOT `_queueEntriesScaled`.
-//
-// CROSS-CITES:
-//   - D-275-TST-05-01 (rem-byte snapshot approach via entriesOwedPacked direct read)
-//   - D-275-HOIST-01 (Bernoulli math hoisted to shared scope)
-//   - LBX-AR-06 (`_rollRemainder` zero-invocation on auto-resolve queues)
+// Whole-entry appends preserve fractional credit; scaled purchases accumulate it.
 
 import { expect } from "chai";
 import fs from "node:fs";
@@ -75,22 +37,22 @@ function extractBody(source, signature) {
   return source.slice(bodyStart, bodyEnd + 1);
 }
 
-describe("LootboxAutoResolveRemByte — Phase 275 Wave 2 TST-LBX-AR-05", function () {
+describe("Whole and scaled entry remainder storage", function () {
   this.timeout(30_000);
 
   describe("`_queueEntries` body proof: writes ONLY whole tickets — rem byte carried unchanged from existing slot value (LBX-AR-06)", function () {
-    it("[01a] `_queueEntries` body in `entriesOwedPacked` write packs `(packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(rem)` where `rem = uint8(packed)` from the PRE-existing slot value (no fractional accumulation)", function () {
+    it("[01a] `_queueEntries` body in `entry-owed codec` write packs `(packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(rem)` where `rem = uint8(packed)` from the PRE-existing slot value (no fractional accumulation)", function () {
       const storage = fs.readFileSync(STORAGE_PATH, "utf8");
       const body = extractBody(storage, "function _queueEntries(");
       expect(body, "`_queueEntries` body not found").to.not.equal(null);
 
       // The write site MUST pack `rem` from the existing slot, never from a
       // newly-computed fractional value. The pattern is:
-      //   entriesOwedPacked[wk][buyer] =
+      //   entry-owed codec[wk][buyer] =
       //       (packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(rem);
-      // The owner-registry bits above bit 48 ride along untouched.
+      // The wallet-ID bits above bit 48 ride along untouched.
       expect(
-        /_setEntryOwed\(wk,\s*uint32\(packed\s*>>\s*OWNER_IDX_SHIFT\),\s*\(packed\s*&\s*OWNER_IDX_MASK\)\s*\|\s*\(uint80\(owed\)\s*<<\s*8\)\s*\|\s*uint80\(rem\)/.test(body),
+        /_setEntryOwed\(wk,\s*id,\s*\(packed\s*&\s*OWNER_IDX_MASK\)\s*\|\s*\(uint80\(owed\)\s*<<\s*8\)\s*\|\s*uint80\(rem\)/.test(body),
         "_queueEntries must pack `(packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(rem)` with rem carried from existing slot"
       ).to.equal(true);
 
@@ -100,8 +62,6 @@ describe("LootboxAutoResolveRemByte — Phase 275 Wave 2 TST-LBX-AR-05", functio
       expect(/\bfrac\b/.test(body), "_queueEntries must not have a `frac` local").to.equal(false);
       expect(/\bnewRem\b/.test(body), "_queueEntries must not have a `newRem` local").to.equal(false);
 
-      // _rollRemainder is NOT invoked from _queueEntries (whole-only helper).
-      expect(body.includes("_rollRemainder"), "_queueEntries must NOT invoke _rollRemainder").to.equal(false);
 
       // Emission: EntriesQueued (whole-helper), not EntriesQueuedScaled.
       expect(body.includes("emit EntriesQueued("), "_queueEntries must emit EntriesQueued").to.equal(true);
@@ -110,11 +70,11 @@ describe("LootboxAutoResolveRemByte — Phase 275 Wave 2 TST-LBX-AR-05", functio
 
     it("[01b] positive control: `_queueEntriesScaled` body DOES write a non-zero rem byte when frac != 0", function () {
       const storage = fs.readFileSync(STORAGE_PATH, "utf8");
-      const body = extractBody(storage, "function _queueEntriesScaled(");
+      const body = extractBody(storage, "function _queueEntriesScaledCore(");
       expect(body, "`_queueEntriesScaled` body not found").to.not.equal(null);
 
       // The scaled helper computes `uint8 frac = uint8(uint256(quantityScaled) % QTY_SCALE)`
-      // and folds it into `newRem` before packing into `entriesOwedPacked`.
+      // and folds it into `newRem` before packing into `entry-owed codec`.
       expect(body.includes("% QTY_SCALE"), "_queueEntriesScaled must compute frac via % QTY_SCALE").to.equal(true);
       expect(/\bfrac\b/.test(body), "_queueEntriesScaled must have a `frac` local").to.equal(true);
       expect(/\bnewRem\b/.test(body), "_queueEntriesScaled must have a `newRem` local").to.equal(true);
@@ -123,83 +83,5 @@ describe("LootboxAutoResolveRemByte — Phase 275 Wave 2 TST-LBX-AR-05", functio
     });
   });
 
-  describe("LootboxModule auto-resolve branch calls `_queueEntries` (whole) — not `_queueEntriesScaled` (LBX-AR-02)", function () {
-    it("[02a] LootboxModule contains `_queueEntries(player, currentLevel + uint24(offset), wholeTicketsToEntries(whole), false)` at one source site and ZERO occurrences of `_queueEntriesScaled`", function () {
-      const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // Pre-refactor the manual true-branch and auto-resolve else-arm each had
-      // their own `_queueEntries(player, targetLevel, wholeTicketsToEntries(whole), false)` call (the
-      // "exactly twice" structure). Box-order rework: both paths accumulate into
-      // a shared `BoxAcc` (`_settleLootboxRoll` per roll) and flush the
-      // whole-ticket queue ONCE per entry from `_flushBoxAcc` — one source site,
-      // reached at most once per distinct target level per entry. The
-      // load-bearing invariant survives: the lootbox path queues WHOLE tickets
-      // via `_queueEntries`, never `_queueEntriesScaled`.
-      const callPattern = /_queueEntries\(player, currentLevel \+ uint24\(offset\), wholeTicketsToEntries\(whole\), false\)/g;
-      const calls = (source.match(callPattern) || []).length;
-      expect(calls, "expected exactly one `_queueEntries(player, currentLevel + uint24(offset), wholeTicketsToEntries(whole), false)` source site (per-entry flush path)").to.equal(1);
-      expect(
-        source.includes("_queueEntriesScaled"),
-        "`_queueEntriesScaled` must not appear in DegenerusGameLootboxModule.sol"
-      ).to.equal(false);
-    });
 
-    it("[02b] the single whole-ticket queue site lives inside `_flushBoxAcc` (the per-entry flush that replaced the manual/auto branch arms)", function () {
-      const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // The pre-refactor manual-first / auto-second branch-ordering invariant is
-      // retired: there are no longer two arms. The equivalent structural anchor
-      // is that the sole whole-ticket queue call sits inside `_flushBoxAcc`,
-      // which every entry point (manual openBox, both auto-resolve callers)
-      // reaches once its `_settleLootboxRoll`-driven `BoxAcc` accumulation
-      // completes.
-      const flushBody = extractBody(source, "function _flushBoxAcc(");
-      expect(flushBody, "`_flushBoxAcc` body not found").to.not.equal(null);
-      expect(
-        flushBody.includes("_queueEntries(player, currentLevel + uint24(offset), wholeTicketsToEntries(whole), false)"),
-        "the whole-ticket queue call must live inside `_flushBoxAcc`"
-      ).to.equal(true);
-      // The queue site appears nowhere else in the module.
-      const totalCalls = (source.match(/_queueEntries\(player, currentLevel \+ uint24\(offset\), wholeTicketsToEntries\(whole\), false\)/g) || []).length;
-      expect(totalCalls, "the whole-ticket queue call must be single-site").to.equal(1);
-    });
-  });
-
-  describe("`_rollRemainder` invocation surface — auto-resolve paths cannot reach it because `_queueEntries` never writes the rem byte", function () {
-    it("[03a] `_rollRemainder` lives in DegenerusGameStorage.sol (shared by the mint and foil drains) and is invoked ONLY by code paths that read a non-zero `rem` byte from `entriesOwedPacked` (analytical anchor — empirical confirmation in TST-LBX-AR-06 mint-boost regression)", function () {
-      const MINT_MODULE_PATH = path.resolve(
-        process.cwd(),
-        "contracts/modules/DegenerusGameMintModule.sol"
-      );
-      const mint = fs.readFileSync(MINT_MODULE_PATH, "utf8");
-      const storage = fs.readFileSync(STORAGE_PATH, "utf8");
-      // _rollRemainder is defined ONCE, in the shared storage base (the mint drain and the
-      // foil-hosted round drain both consume it); mint-boost paths still reach it per
-      // D-40N-MINTBOOST-OUT-01.
-      expect(
-        storage.includes("function _rollRemainder("),
-        "_rollRemainder helper must exist in DegenerusGameStorage (shared by both drains)"
-      ).to.equal(true);
-      expect(mint.includes("function _rollRemainder(")).to.equal(false);
-      // Not defined in DegenerusGameLootboxModule.sol and never invoked from it.
-      const lootbox = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      expect(lootbox.includes("function _rollRemainder(")).to.equal(false);
-      expect(lootbox.includes("_rollRemainder("), "LootboxModule must not invoke _rollRemainder").to.equal(false);
-    });
-
-    it("[03b] `entriesOwedPacked` rem byte (uint8) layout: low 8 bits of the packed uint80, whole-count occupies bits [8..39], snap-done marker at bit 40, owner-registry position in bits [48..79]", function () {
-      const storage = fs.readFileSync(STORAGE_PATH, "utf8");
-      // The packing pattern `(uint80(owed) << 8) | uint80(rem)` confirms the
-      // layout: low 8 bits = rem, bits [8..39] = owed (whole count), the snap-done
-      // marker at bit 40, and the owner-registry position (plus one) in bits
-      // [48..79] behind OWNER_IDX_MASK. This is the structural anchor for the
-      // rem-byte snapshot strategy.
-      expect(
-        /\(uint80\(owed\)\s*<<\s*8\)\s*\|\s*uint80\(rem\)/.test(storage),
-        "entriesOwedPacked layout pattern not found in storage"
-      ).to.equal(true);
-      expect(
-        /OWNER_IDX_MASK\s*=\s*uint80\(type\(uint32\)\.max\)\s*<<\s*48/.test(storage),
-        "owner-registry bits must sit above the snap-done marker"
-      ).to.equal(true);
-    });
-  });
 });

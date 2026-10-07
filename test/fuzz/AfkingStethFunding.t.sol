@@ -26,8 +26,7 @@ contract AfkingStethFundingTest is DeployProtocol {
 
     /// @dev operatorApprovals[id][op] read from storage.
     function _approved(uint32 id, address op) internal view returns (bool) {
-        bytes32 inner = keccak256(abi.encode(uint256(id), GameSlots.OPERATOR_APPROVALS));
-        return uint256(vm.load(address(game), keccak256(abi.encode(op, inner)))) != 0;
+        return game.afkingFundingApproved(id, game.walletIdOf(op));
     }
     AfkingStethHost internal host;
     AdversarialAfkingSteth internal badToken;
@@ -48,8 +47,9 @@ contract AfkingStethFundingTest is DeployProtocol {
     function _consent(address funder, address player) internal {
         if (funder == player) return;
         _aid(funder);
+        uint32 playerId = _aid(player);
         vm.prank(funder);
-        game.setOperatorApproval(0, player, true);
+        game.setAfkingFundingApproval(0, playerId, true);
     }
 
     function _authorize(address funder, address player, uint256 allowance_) internal {
@@ -169,7 +169,7 @@ contract AfkingStethFundingTest is DeployProtocol {
         assertFalse(_approved(funderId, NEXT));
         host.setLock(true);
         vm.prank(FUNDER);
-        game.setOperatorApproval(0, PLAYER, false);
+        game.setAfkingFundingApproval(0, _aidCache[PLAYER], false);
         assertFalse(_approved(funderId, PLAYER));
         host.setClosed(true);
         _consent(FUNDER, PLAYER);
@@ -192,7 +192,7 @@ contract AfkingStethFundingTest is DeployProtocol {
         mockStETH.mint(FUNDER, 1 ether);
         _authorize(FUNDER, PLAYER, type(uint256).max);
         vm.prank(FUNDER);
-        game.setOperatorApproval(0, PLAYER, false);
+        game.setAfkingFundingApproval(0, _aidCache[PLAYER], false);
         _work();
         _assertEvicted(PLAYER);
         _consent(FUNDER, PLAYER);
@@ -228,9 +228,9 @@ contract AfkingStethFundingTest is DeployProtocol {
 
     function test_OnlyGameCanCallAtomicPull() public {
         vm.expectRevert();
-        game.pullAfkingSteth(PLAYER, FUNDER, 1);
+        game.pullAfkingSteth(uint32(1), FUNDER, 1);
         vm.expectRevert();
-        afkingModule.pullAfkingSteth(PLAYER, FUNDER, 1);
+        afkingModule.pullAfkingSteth(uint32(1), FUNDER, 1);
     }
 
     function testFuzz_AllTokenFaultsEvictAndNextSubscriberContinues(uint8 operationSeed, uint8 faultSeed) public {
@@ -367,9 +367,10 @@ contract AfkingStethFundingTest is DeployProtocol {
         mockStETH.mint(source, 1 ether);
         _authorize(source, PLAYER, type(uint256).max);
         _expectNoTokenCalls();
+        uint32 subscriber = game.walletIdOf(PLAYER);
         vm.prank(address(game));
         vm.expectRevert(abi.encodeWithSignature("AfkingStethPullFailed()"));
-        game.pullAfkingSteth(PLAYER, source, 1);
+        game.pullAfkingSteth(subscriber, source, 1);
         assertEq(mockStETH.balanceOf(source), 1 ether);
     }
 
@@ -442,9 +443,10 @@ contract AfkingStethFundingTest is DeployProtocol {
     function test_AtomicPullRechecksConfiguredSource() public {
         _add(PLAYER, FUNDER, false, true, 1, 0, 0);
         _authorize(NEXT, PLAYER, type(uint256).max);
+        uint32 subscriber = game.walletIdOf(PLAYER);
         vm.prank(address(game));
         vm.expectRevert(abi.encodeWithSignature("AfkingStethPullFailed()"));
-        game.pullAfkingSteth(PLAYER, NEXT, 1);
+        game.pullAfkingSteth(subscriber, NEXT, 1);
     }
 
     function test_PoolOverflowRejectsPullWithoutTruncatingCredit() public {

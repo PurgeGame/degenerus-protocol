@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -78,7 +79,7 @@ contract V56SubHardening is DeployProtocol {
     uint256 private constant OFF_PENDINGFLIP = 23;    // uint24 pendingFlip          (bytes 23..25)
     uint256 private constant OFF_STREAKLATCH = 26;    // uint16 subStreakLatch       (bytes 26..27)
 
-    uint256 private constant DEITY_SHIFT = 184;       // HAS_DEITY_PASS_SHIFT in mintPacked_ (confers nothing for afking credentials or mining participation)
+    uint256 private constant DEITY_SHIFT = BitPackingLib.HAS_DEITY_PASS_SHIFT;       // HAS_DEITY_PASS_SHIFT in mintPacked_ (confers nothing for afking credentials or mining participation)
 
     /// @dev The game `level` lives in slot 0 at byte 12 (uint24) — poked up to drive the level-crossing
     ///      membership-survival proof (the fixture level does not advance organically).
@@ -86,7 +87,7 @@ contract V56SubHardening is DeployProtocol {
 
     /// @dev SubscriptionExpired(player indexed, uint8 reason): reason 1 = funding-skip kill; reason 2 =
     ///      cancel-tombstone reclaim. Neither is level-crossing related anymore.
-    bytes32 private constant SUB_EXPIRED_SIG = keccak256("SubscriptionExpired(address,uint8)");
+    bytes32 private constant SUB_EXPIRED_SIG = keccak256("SubscriptionExpired(uint32,uint8)");
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
     uint256 private _lastFulfilledReqId;
@@ -367,8 +368,9 @@ contract V56SubHardening is DeployProtocol {
 
         // The affiliate-path call (msg.sender == AFFILIATE) reaches the NEW Game stub, which delegatecalls
         // the module impl past its AFFILIATE-only gate -> drains-and-zeroes, returns the drained base.
+        uint32 subscriberId = game.walletIdOf(p);
         vm.prank(ContractAddresses.AFFILIATE);
-        uint256 drained = game.drainAffiliateBase(p);
+        uint256 drained = game.drainAffiliateBase(subscriberId);
         assertEq(drained, uint256(baseBefore), "F-356-01: the stub returned the accrued base (reachable + decoded)");
         assertEq(_affiliateBaseOf(p), 0, "F-356-01: the affiliate path zeroed the base (read-and-zero)");
     }
@@ -388,9 +390,10 @@ contract V56SubHardening is DeployProtocol {
 
         // A non-affiliate caller hits the module impl's AFFILIATE-only gate -> NotApproved() bubbles back
         // through the Game stub's _revertDelegate before any storage write.
+        uint32 subscriberId = game.walletIdOf(p);
         vm.prank(makeAddr("not_affiliate"));
         vm.expectRevert(abi.encodeWithSignature("NotApproved()"));
-        game.drainAffiliateBase(p);
+        game.drainAffiliateBase(subscriberId);
         assertEq(_affiliateBaseOf(p), baseBefore, "F-356-01: the rejected non-affiliate drain left the base intact");
     }
 
@@ -631,7 +634,7 @@ contract V56SubHardening is DeployProtocol {
 
     /// @dev Deity bit only; it confers nothing for the afking coin gate or mining participation.
     function _grantDeityPass(address who) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(game.walletIdOf(who), uint256(MINTPACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         packed |= (uint256(1) << DEITY_SHIFT);
         vm.store(address(game), slot, bytes32(packed));
@@ -651,7 +654,7 @@ contract V56SubHardening is DeployProtocol {
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2) continue;
             if (logs[i].topics[0] != SUB_EXPIRED_SIG) continue;
-            if (address(uint160(uint256(logs[i].topics[1]))) != who) continue;
+            if (uint32(uint256(logs[i].topics[1])) != game.walletIdOf(who)) continue;
             if (uint8(uint256(bytes32(logs[i].data))) == reason) count++;
         }
     }

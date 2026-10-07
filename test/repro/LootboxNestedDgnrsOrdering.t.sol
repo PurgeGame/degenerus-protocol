@@ -26,9 +26,9 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
     // three nonzero batches and distinguish live-pool pricing after the child.
     uint256 private constant RNG_WORD = 53867;
 
-    bytes32 private constant DGNRS_BATCH_SIG = keccak256("LootBoxDgnrsBatch(address,uint256,uint256)");
+    bytes32 private constant DGNRS_BATCH_SIG = keccak256("LootBoxDgnrsBatch(uint32,uint256,uint256)");
     bytes32 private constant LOOTBOX_OPENED_SIG =
-        keccak256("LootBoxOpened(address,uint48,uint256,uint24,uint32,uint256,bool)");
+        keccak256("LootBoxOpened(uint32,uint48,uint256,uint24,uint32,uint256,bool)");
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
     uint256 private constant QUEUED_ORDER_DOMAIN = 0x5175657565644f72646572;
@@ -169,7 +169,7 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
         for (uint256 i; i < logs.length; ++i) {
             VmSafe.Log memory entry = logs[i];
             if (entry.emitter != address(game) || entry.topics.length < 2) continue;
-            if (entry.topics[1] != bytes32(uint256(uint160(PLAYER)))) continue;
+            if (entry.topics[1] != bytes32(uint256(game.walletIdOf(PLAYER)))) continue;
 
             if (entry.topics[0] == DGNRS_BATCH_SIG) {
                 assertLt(r.batchCount, 3, "unexpected extra DGNRS settlement batch");

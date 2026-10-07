@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 // Permanently skipped historical cases were retired in the test review.
 // See docs/TEST_REVIEW.md for replacement suites and remaining coverage limits.
 
+import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -85,12 +86,12 @@ contract AfKingConcurrency is DeployProtocol {
     uint256 private constant OFF_LASTBOUGHT = 10; // uint24 lastAutoBoughtDay  (bytes 11..13)
     uint256 private constant OFF_LASTOPENED = 13; // uint24 lastOpenedDay      (bytes 14..16)
 
-    uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS_SHIFT in mintPacked_
+    uint256 private constant DEITY_SHIFT = BitPackingLib.HAS_DEITY_PASS_SHIFT; // HAS_DEITY_PASS_SHIFT in mintPacked_
 
     /// @dev SubscriptionExpired(address indexed player, uint8 reason) — the game-resident module
     ///      event (emitter == address(game) via delegatecall). reason 2 = CancelReclaim,
     ///      reason 1 = AutoPause (pass-eviction at crossing OR funding-skip kill).
-    bytes32 private constant SUB_EXPIRED_SIG = keccak256("SubscriptionExpired(address,uint8)");
+    bytes32 private constant SUB_EXPIRED_SIG = keccak256("SubscriptionExpired(uint32,uint8)");
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
     uint256 private _lastFulfilledReqId;
@@ -282,7 +283,7 @@ contract AfKingConcurrency is DeployProtocol {
     /// @dev Grant `who` the permanent deity bit so _passHorizonOf(who) == type(uint24).max. RE-DERIVED
     ///      slot: mintPacked_ is slot 10 on DegenerusGame (the old helper used slot 9 — WRONG).
     function _grantDeityPass(address who) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(game.walletIdOf(who), uint256(MINTPACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         packed |= (uint256(1) << DEITY_SHIFT);
         vm.store(address(game), slot, bytes32(packed));
@@ -377,7 +378,8 @@ contract AfKingConcurrency is DeployProtocol {
     /// @dev `_subscribers[i]` (data at keccak256(56) + i).
     function _subscriberAt(uint256 i) internal view returns (address) {
         bytes32 base = keccak256(abi.encode(uint256(SUBSCRIBERS_SLOT)));
-        return address(uint160(uint256(vm.load(address(game), bytes32(uint256(base) + i)))));
+        uint32 id = uint32(uint256(vm.load(address(game), bytes32(uint256(base) + i / 8))) >> ((i % 8) * 32));
+        return _fixturePayee(id);
     }
 
     /// @dev The stamp day a sub was last processed (for the "this cycle" assertions).
@@ -410,7 +412,7 @@ contract AfKingConcurrency is DeployProtocol {
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter != address(game) || logs[i].topics.length == 0) continue;
             if (logs[i].topics[0] == SUB_EXPIRED_SIG && logs[i].topics.length >= 2) {
-                _expiredPlayers.push(address(uint160(uint256(logs[i].topics[1]))));
+                _expiredPlayers.push(_fixturePayee(uint32(uint256(logs[i].topics[1]))));
                 _expiredReasons.push(uint8(uint256(bytes32(logs[i].data))));
             }
         }

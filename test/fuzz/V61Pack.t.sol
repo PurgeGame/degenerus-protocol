@@ -35,9 +35,6 @@ contract V61Pack is Test {
 
     SettleClaimableShortfallTester private t;
 
-    /// @dev PlayerCredited(player, amount) — emitted by _creditClaimable (the low-half credit).
-    event PlayerCredited(address indexed player, uint256 amount);
-
     function setUp() public {
         t = new SettleClaimableShortfallTester();
     }
@@ -47,7 +44,7 @@ contract V61Pack is Test {
     // =========================================================================
 
     /// @notice Crediting claimable round-trips the LOW half exactly via _claimableOf, and the raw packed slot
-    ///         shows the HIGH (afking) half byte-UNCHANGED. _creditClaimable also emits PlayerCredited.
+    ///         shows the HIGH (afking) half byte-UNCHANGED.
     function testCreditClaimableRoundTripHighHalfUntouched() public {
         address p = makeAddr("rt_claimable");
         uint256 afkingSeed = 123 ether;
@@ -56,8 +53,6 @@ contract V61Pack is Test {
         assertEq(highBefore, afkingSeed, "seed: afking high half set");
 
         uint256 amount = 77 ether;
-        vm.expectEmit(true, false, false, true, address(t));
-        emit PlayerCredited(p, amount);
         t.setClaimable(p, amount); // setClaimable zeroes then credits → net credit of `amount`
 
         assertEq(t.getClaimable(p), amount, "low half round-trips to the credited claimable");

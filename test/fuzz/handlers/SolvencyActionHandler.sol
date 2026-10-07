@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {BitPackingLib} from "../../../contracts/libraries/BitPackingLib.sol";
 import "forge-std/Test.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {DegenerusDeityPass} from "../../../contracts/DegenerusDeityPass.sol";
@@ -41,7 +42,7 @@ contract SolvencyActionHandler is Test {
     MockVRFCoordinator public vrf;
 
     uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED;
-    uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS score bit (advance bypass + subscribe gate)
+    uint256 private constant DEITY_SHIFT = BitPackingLib.HAS_DEITY_PASS_SHIFT; // HAS_DEITY_PASS score bit (advance bypass + subscribe gate)
     uint256 private constant WHALE_PASS_PRICE = 2.4 ether; // levels 0-3 (WhaleHandler bound)
     uint256 private constant LAZY_PASS_PRICE = 0.24 ether; // levels 0-2
     uint256 private constant DEITY_PASS_BASE = 24 ether; // first pass (k = 0)
@@ -345,7 +346,7 @@ contract SolvencyActionHandler is Test {
 
     /// @dev Field-isolated seed of the HAS_DEITY_PASS score bit (no balance touched ⇒ cannot move the Σ).
     function _grantDeityScoreBit(address who) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(game.walletIdOf(who), uint256(MINTPACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         packed |= (uint256(1) << DEITY_SHIFT);
         vm.store(address(game), slot, bytes32(packed));

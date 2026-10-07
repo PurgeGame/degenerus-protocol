@@ -237,7 +237,7 @@ describe("DegenerusAdmin", function () {
       });
 
       expect(event).to.not.be.null;
-      expect(event.args.player).to.equal(alice.address);
+      expect(event.args.player).to.equal(await game.walletIdOf(alice.address));
       expect(event.args.amount).to.equal(flip(1198));
       expect(flipAfter).to.equal(flip(1198));
     });

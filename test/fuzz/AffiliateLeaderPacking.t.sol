@@ -38,13 +38,13 @@ contract AffiliateLeaderPacking is DeployProtocol {
     function _earn(uint256 k, uint256 amount, bool fresh) internal {
         vm.prank(address(game));
         address buyer = _buyer();
-        affiliate.payAffiliate(amount, codes[k], buyer, uint32(uint160(buyer)), LVL, fresh, 0);
+        affiliate.payAffiliate(amount, codes[k], uint32(uint160(buyer)), LVL, fresh, 0);
     }
 
     function _earnCombined(uint256 k, uint256 tktFresh, uint256 lbFresh) internal {
         vm.prank(address(game));
         address buyer = _buyer();
-        affiliate.payAffiliateCombined(codes[k], buyer, uint32(uint160(buyer)), LVL, tktFresh, 0, lbFresh, 0, 0);
+        affiliate.payAffiliateCombined(codes[k], uint32(uint160(buyer)), LVL, tktFresh, 0, lbFresh, 0, 0);
     }
 
     function _slot(uint256 base) internal pure returns (bytes32) {
@@ -147,7 +147,7 @@ contract AffiliateLeaderPacking is DeployProtocol {
         vm.cool(address(coinflip));
         vm.prank(address(game));
         uint256 g = gasleft();
-        affiliate.payAffiliate(100, codes[1], buyer, uint32(uint160(buyer)), LVL, true, 0);
+        affiliate.payAffiliate(100, codes[1], uint32(uint160(buyer)), LVL, true, 0);
         g -= gasleft();
         emit log_named_uint("payAffiliate non-leading cold gas", g);
     }

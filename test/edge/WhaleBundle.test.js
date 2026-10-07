@@ -183,7 +183,7 @@ describe("WhaleBundle", function () {
         .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
       const events = await getEvents(tx, whaleModule, "LootBoxBuy");
       expect(events.length).to.be.gte(1);
-      expect(events[0].args.buyer).to.equal(alice.address);
+      expect(events[0].args.buyer).to.equal(await game.walletIdOf(alice.address));
     });
   });
 
@@ -478,8 +478,8 @@ describe("WhaleBundle", function () {
       // _applyWhalePassStats emits PassActivated for whoever receives it.
       const activated = await getEvents(tx, game, "PassActivated");
       const recipients = activated.map((e) => e.args.player);
-      expect(recipients).to.include(alice.address);
-      expect(recipients).to.not.include(await vault.getAddress());
+      expect(recipients).to.include(await game.walletIdOf(alice.address));
+      expect(recipients).to.not.include(await game.walletIdOf(await vault.getAddress()));
     });
 
     it("pays NO affiliate commission — the code only binds the referrer", async function () {

@@ -41,9 +41,9 @@ contract BigRecordArmingTest is DeployProtocol {
     uint256 private constant BOX_SPIN_TYPE_RECORD = 3;
 
     bytes32 private constant BET_PLACED_SIG =
-        keccak256("DegeneretteBetPlaced(address,uint32,uint64,uint256)");
+        keccak256("DegeneretteBetPlaced(uint32,uint32,uint64,uint256)");
     bytes32 private constant BOX_SPIN_SIG =
-        keccak256("BoxSpin(address,uint64,uint256,uint256,uint256)");
+        keccak256("BoxSpin(uint32,uint64,uint256,uint256,uint256)");
 
     uint256 private constant SPIN_MIN_ETH = 1 ether;
     uint256 private constant BOX_MIN_ETH = 5 ether;

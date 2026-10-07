@@ -34,9 +34,9 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
     uint256 private constant AFKING_RESET_SLOT = GameSlots.AFKING_RESET_DAY; // uint24 _afkingResetDay
     uint256 private constant AFKING_RESET_OFF = 4;
 
-    bytes32 private constant AFKING_DELIVERED_SIG = keccak256("AfkingDelivered(address,uint256)");
+    bytes32 private constant AFKING_DELIVERED_SIG = keccak256("AfkingDelivered(uint32,uint256)");
     bytes32 private constant DAILY_RNG_APPLIED_SIG = keccak256("DailyRngApplied(uint24,uint256,uint256,uint256)");
-    bytes32 private constant SUB_DRAW_WON_SIG = keccak256("SubDrawWon(address,uint24,uint24,uint256)");
+    bytes32 private constant SUB_DRAW_WON_SIG = keccak256("SubDrawWon(uint32,uint24,uint24,uint256)");
 
     uint256 private constant WORD_NORMAL = 0xA11CE;
     uint256 private constant WORD_LATE = 0xBEEF_0001;

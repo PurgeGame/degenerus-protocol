@@ -44,7 +44,7 @@ export const DEPLOY_ORDER = [
   "COIN",                  // N+12: FLIP
   "COINFLIP",              // N+13: Coinflip (no constructor args)
   "GAME",                  // N+14: DegenerusGame (internal storage only)
-  "WWXRP",                 // N+15: WWXRP
+  "GAME_TICKET_MODULE",    // N+15: registry live before Affiliate constructor
   "AFFILIATE",             // N+16: DegenerusAffiliate
   "JACKPOTS",              // N+17: DegenerusJackpots
   "QUESTS",                // N+18: DegenerusQuests
@@ -89,7 +89,7 @@ export const DEPLOY_ORDER = [
   // predicted address. No storage, no ctor args, no deploy-time dependents:
   // GAME calls it at runtime through a compile-time constant.
   "JACKPOT_BATTLE",       // N+31: JackpotBattle
-  "GAME_TICKET_MODULE",  // N+32: deterministic ticket materialization
+  "WWXRP",              // N+32: no constructor dependencies
   "GAME_MINER_MODULE",  // N+33: the permissionless state engine
   "GAME_RNG_MODULE",     // N+34: request, retry and publication
   "GAME_JACKPOT_DRAW_MODULE", // N+35: daily battle and FLIP drawings

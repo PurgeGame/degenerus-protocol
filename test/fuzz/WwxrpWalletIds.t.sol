@@ -16,11 +16,11 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 ///         the bucket hashes the ID, the WWXRP boon lane is read raw at
 ///         `keccak(id, GAME_BOON_PACKED_SLOT) + 1` and consumed by ID; a claim by anyone credits
 ///         the stored ID; the incinerator entry is one slot `cum | id << 192` and resolve returns
-///         and credits the winner's ID; `consumeBoon(address)` resolves the ID with walletIdOf.
+///         and credits the winner's ID; `consumeBoon(uint32)` takes the ID directly.
 contract WwxrpWalletIdsTest is DeployProtocol {
     bytes32 private constant WALLET_REGISTERED = keccak256("WalletRegistered(uint32,address)");
     bytes32 private constant DRAW_ENTERED =
-        keccak256("DrawEntered(uint24,address,uint8,uint32,uint256,uint256,uint256)");
+        keccak256("DrawEntered(uint24,uint32,uint8,uint32,uint256,uint256,uint256)");
     bytes32 private constant DRAW_CLAIMED = keccak256("DrawClaimed(uint24,uint32,bool,uint256,uint8,uint32)");
     bytes32 private constant INCIN_RESOLVED = keccak256("IncineratorResolved(uint24,uint32,uint256,uint256,uint256)");
 
@@ -59,7 +59,7 @@ contract WwxrpWalletIdsTest is DeployProtocol {
     }
 
     function _gameId(address p) internal view returns (uint32) {
-        return uint32(uint256(vm.load(address(game), GameSlotKeys.mintPacked(p))) >> 224);
+        return uint32(uint256(vm.load(address(game), GameSlotKeys.walletId(p))));
     }
 
     function _walletCount() internal view returns (uint256) {
@@ -118,7 +118,7 @@ contract WwxrpWalletIdsTest is DeployProtocol {
     function _effectiveOf(Vm.Log[] memory logs, address player) internal view returns (uint256 effective) {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(wwxrp) || logs[i].topics[0] != DRAW_ENTERED) continue;
-            if (address(uint160(uint256(logs[i].topics[2]))) != player) continue;
+            if (uint32(uint256(logs[i].topics[2])) != _gameId(player)) continue;
             (,,, effective,) = abi.decode(logs[i].data, (uint8, uint32, uint256, uint256, uint256));
         }
     }
@@ -161,7 +161,7 @@ contract WwxrpWalletIdsTest is DeployProtocol {
         bool seen;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(wwxrp) || logs[i].topics[0] != DRAW_ENTERED) continue;
-            assertEq(address(uint160(uint256(logs[i].topics[2]))), p, "DrawEntered keeps the entrant address");
+            assertEq(uint32(uint256(logs[i].topics[2])), expectedId, "DrawEntered keeps the entrant ID");
             (uint8 evBucket,,,,) = abi.decode(logs[i].data, (uint8, uint32, uint256, uint256, uint256));
             assertEq(evBucket, bucket);
             seen = true;
@@ -169,7 +169,7 @@ contract WwxrpWalletIdsTest is DeployProtocol {
         assertTrue(seen);
 
         vm.prank(p);
-        wwxrp.enter(0, 100);
+        wwxrp.enter(expectedId, 100);
         (eid,) = wwxrp.entryAt(day, bucket, 1);
         assertEq(eid, expectedId, "same bucket, same ID; no second registration");
     }
@@ -228,8 +228,12 @@ contract WwxrpWalletIdsTest is DeployProtocol {
         (uint256 pScore,) = game.playerActivityScore(p);
         (uint256 qScore,) = game.playerActivityScore(q);
         vm.recordLogs();
-        _enter(p, 1_000);
-        _enter(q, 1_000);
+        _fund(p, 1_000);
+        _fund(q, 1_000);
+        vm.prank(p);
+        wwxrp.enter(pid, 1_000);
+        vm.prank(q);
+        wwxrp.enter(qid, 1_000);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         assertEq(_effectiveOf(logs, p), (1_000 * wwxrp.drawMultBps(pScore) * 10_400) / 1e8, "tier-1 boost (+4%)");
@@ -238,9 +242,9 @@ contract WwxrpWalletIdsTest is DeployProtocol {
         assertEq((slot1 >> WWXRP_LANE_SHIFT) & 3, 0, "the ID's lane is spent");
     }
 
-    /// @notice A trusted minter's `consumeBoon(address)` resolves the ID with walletIdOf: an ID-less
+    /// @notice A trusted minter's `consumeBoon(uint32)` takes the ID directly: an ID-less
     ///         address consumes ID 0 (nothing) and is not registered; a registered one spends its lane.
-    function test_ConsumeBoon_ResolvesByWalletIdOf() public {
+    function test_ConsumeBoon_UsesSuppliedWalletId() public {
         address owner = makeAddr("vault_owner");
         address app = makeAddr("trusted_app");
         vm.mockCall(address(vault), abi.encodeWithSignature("isVaultOwner(address)", owner), abi.encode(true));
@@ -255,16 +259,16 @@ contract WwxrpWalletIdsTest is DeployProtocol {
         vm.expectCall(address(game), abi.encodeCall(DegenerusGame.consumeCoinflipBoon, (uint32(0))), 1);
         vm.expectCall(address(game), abi.encodeCall(DegenerusGame.consumeCoinflipBoon, (pid)), 1);
         vm.prank(app);
-        assertEq(wwxrp.consumeBoon(x), 0);
+        assertEq(wwxrp.consumeBoon(0), 0);
         vm.prank(app);
-        assertEq(wwxrp.consumeBoon(p), 800, "tier 2 x 400 bps");
+        assertEq(wwxrp.consumeBoon(pid), 800, "tier 2 x 400 bps");
         (, uint256 slot1) = game.boonPacked(pid);
         assertEq((slot1 >> WWXRP_LANE_SHIFT) & 3, 0);
         assertEq(_gameId(x), 0, "a lookup never registers");
 
         vm.expectRevert(WWXRP.OnlyMinter.selector);
         vm.prank(x);
-        wwxrp.consumeBoon(p);
+        wwxrp.consumeBoon(pid);
     }
 
     // =====================================================================

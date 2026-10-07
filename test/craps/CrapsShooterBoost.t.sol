@@ -500,7 +500,7 @@ contract CrapsShooterBoostTest is CrapsPins {
         Craps.Bets memory played = _scattered(blankId, slot);
         assertEq(craps.betOf(blankId).chips, 0, "the fixture's blank ticket stored chips");
         (,, uint256 posted,,,) = craps.bonusTermsFor(day, PER);
-        assertEq(craps.stakeFor(played), (posted * 10) / 7, "the scattered blank board is not the whole round");
+        assertEq(craps.stakeFor(played), (posted * 10 * 1 ether) / 7, "the scattered blank board is not the whole round");
 
         // And it settles under row zero, which row seven would not reproduce. Search for a table
         // word that actually SEPARATES those endpoint rows: a run in which no shooter draws

@@ -294,7 +294,9 @@ contract StallResilience is DeployProtocol {
         bool opened;
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter == address(game) && logs[i].topics.length > 1
-                && address(uint160(uint256(logs[i].topics[1]))) == buyer) opened = true;
+                && (logs[i].topics[0] == keccak256("LootBoxOpened(uint32,uint48,uint256,uint24,uint32,uint256,bool)")
+                    || logs[i].topics[0] == keccak256("BoxSpin(uint32,uint64,uint256,uint256,uint256)"))
+                && uint32(uint256(logs[i].topics[1])) == game.walletIdOf(buyer)) opened = true;
         }
         assertTrue(opened, "the stalled cohort's box opened on the reissued word");
     }

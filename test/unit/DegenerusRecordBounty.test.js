@@ -236,7 +236,7 @@ describe("DegenerusRecordBounty", function () {
       const f = await getFixture();
       const bounty = await getBounty(f);
       await recordSetViaCoinflip(
-        f, bounty, 0, f.alice.address, hre.ethers.parseEther("215000")
+        f, bounty, 0, f.alice.address, 215_000n
       );
       await recordSetViaCoinflip(
         f, bounty, 1, f.alice.address, hre.ethers.parseEther("1.2345")

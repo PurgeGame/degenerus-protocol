@@ -25,7 +25,7 @@ contract DailyGasExtrasSeeder is DegenerusGame {
 contract VaultHistorySeeder is CoinflipStakeSetter {
     function seedVaultHistory(bool sufficient) external {
         address player = ContractAddresses.VAULT;
-        PlayerCoinflipState storage s = playerState[player];
+        PlayerCoinflipState storage s = playerState[degenerusGame.walletIdOf(player)];
         s.claimableStored = 0;
         s.lastClaim = 34;
         s.autoRebuyStartDay = 34;

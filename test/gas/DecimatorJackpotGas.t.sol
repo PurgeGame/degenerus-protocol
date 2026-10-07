@@ -72,7 +72,7 @@ contract DecimatorGasHost is DecimatorJackpotHarness, BucketSeed {
         subsFullyProcessed = true;
         _afkingResetDay = day;
         _seedWallet(msg.sender);
-        if (activePass) mintPacked_[msg.sender] |= uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT;
+        if (activePass) mintPacked_[_walletIdOf(msg.sender)] |= uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT;
     }
     function idOf(address who) external view returns (uint32) { return _walletIdOf(who); }
     function seedRecipients(uint256 n) external {

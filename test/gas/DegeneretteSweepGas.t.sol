@@ -89,7 +89,7 @@ contract DegeneretteSweepGas is DeployProtocol {
         uint256 resolved;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] == DQ.RESOLVED_SIG) ++resolved;
-            if (logs[i].topics[0] == keccak256("LootBoxOpened(address,uint48,uint256,uint24,uint32,uint256,bool)")) ++boxes;
+            if (logs[i].topics[0] == keccak256("LootBoxOpened(uint32,uint48,uint256,uint24,uint32,uint256,bool)")) ++boxes;
         }
         assertEq(resolved, n, "every bet resolved");
         emit log_named_uint("  win boxes opened", boxes);

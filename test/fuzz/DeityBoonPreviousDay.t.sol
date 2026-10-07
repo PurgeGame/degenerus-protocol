@@ -14,7 +14,7 @@ contract PreviousDayBoonSeeder is WalletSeed {
     function seed(uint24 day, uint256 word, address deity, bool locked) external {
         _recordDailyRng(day, word);
         _seedWallet(deity);
-        mintPacked_[deity] |= uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT;
+        mintPacked_[_walletIdOf(deity)] |= uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT;
         rngLockedFlag = locked;
     }
 }
@@ -25,7 +25,7 @@ contract DeityBoonPreviousDayTest is DeployProtocol {
     uint24 private constant TODAY = 41;
     uint256 private constant YESTERDAY_WORD = 0xCAFE;
     uint256 private constant TODAY_WORD = 0xBEEF;
-    bytes32 private constant ISSUED = keccak256("DeityBoonIssued(address,address,uint24,uint8,uint8)");
+    bytes32 private constant ISSUED = keccak256("DeityBoonIssued(uint32,uint32,uint24,uint8,uint8)");
     DeityBoonViewerTreeHarness private viewer;
     uint32 private deityId;
     uint32 private recipientId;
@@ -70,8 +70,8 @@ contract DeityBoonPreviousDayTest is DeployProtocol {
         uint256 issued;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] != ISSUED) continue;
-            assertEq(address(uint160(uint256(logs[i].topics[1]))), DEITY);
-            assertEq(address(uint160(uint256(logs[i].topics[2]))), recipient);
+            assertEq(uint32(uint256(logs[i].topics[1])), game.walletIdOf(DEITY));
+            assertEq(uint32(uint256(logs[i].topics[2])), game.walletIdOf(recipient));
             assertEq(uint256(logs[i].topics[3]), day, "stamp the issuance day, not the seed day");
             (uint8 actualSlot, uint8 actualType) = abi.decode(logs[i].data, (uint8, uint8));
             assertEq(actualSlot, slot);

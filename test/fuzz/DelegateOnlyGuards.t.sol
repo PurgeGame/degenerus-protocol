@@ -23,12 +23,12 @@ contract DelegateOnlyGuards is DeployProtocol {
 
     function test_purchaseLazyPass_directCallReverts() public {
         vm.expectRevert();
-        whaleModule.purchaseLazyPass{value: 1 ether}(address(this), bytes32(0));
+        whaleModule.purchaseLazyPass{value: 1 ether}(0, bytes32(0));
     }
 
     function test_purchaseDeityPass_directCallReverts() public {
         vm.expectRevert();
-        whaleModule.purchaseDeityPass{value: 1 ether}(address(this), 0, bytes32(0));
+        whaleModule.purchaseDeityPass{value: 1 ether}(0, 0, bytes32(0));
     }
 
     // The lootbox module's delegatecall-only entrypoints. Each guards on the executing
@@ -37,12 +37,12 @@ contract DelegateOnlyGuards is DeployProtocol {
 
     function test_beginBoxOrder_directCallReverts() public {
         vm.expectRevert();
-        lootboxModule.beginBoxOrder(address(this), 1, 1);
+        lootboxModule.beginBoxOrder(1, 1);
     }
 
     function test_recordCoverBox_directCallReverts() public {
         vm.expectRevert();
-        lootboxModule.recordCoverBox(address(this), 1 ether, 1, 0, false, 1);
+        lootboxModule.recordCoverBox(1, 1 ether, 1, 0, false, 1);
     }
 
     function test_applyBoxOrderScore_directCallReverts() public {
@@ -52,6 +52,6 @@ contract DelegateOnlyGuards is DeployProtocol {
 
     function test_resolveLootboxDirect_directCallReverts() public {
         vm.expectRevert();
-        lootboxModule.resolveLootboxDirect(address(this), 1, 1 ether, 1, 1);
+        lootboxModule.resolveLootboxDirect(1, 1 ether, 1, 1);
     }
 }

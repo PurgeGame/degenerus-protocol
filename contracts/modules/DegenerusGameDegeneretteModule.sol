@@ -83,7 +83,7 @@ contract DegenerusGameDegeneretteModule is
     /// @param betId The bet's id within `index`: its queue position + 1.
     /// @param packed The queued bet word (layout on DegenerusGameStorage.degeneretteQueue).
     event DegeneretteBetPlaced(
-        address indexed player,
+        uint32 indexed player,
         uint32 indexed index,
         uint64 indexed betId,
         uint256 packed
@@ -91,8 +91,8 @@ contract DegenerusGameDegeneretteModule is
 
     /// @notice Paid ETH on a protocol deity's hero enters its next-day boon draw.
     event ProtocolBoonDrawEntered(
-        address indexed issuer,
-        address indexed player,
+        uint32 indexed issuer,
+        uint32 indexed player,
         uint24 indexed day,
         uint256 amount,
         uint16 scoreSnapshot,
@@ -101,7 +101,7 @@ contract DegenerusGameDegeneretteModule is
     );
 
     /// @notice Emitted once per resolved Degenerette bet, carrying every spin.
-    /// @param player The bet owner (paid).
+    /// @param playerId The reward account's wallet ID.
     /// @param index The lootbox RNG index the bet resolved against.
     /// @param betId The bet's id within `index` (queue position + 1).
     /// @param totalPayout Total payout across all spins. For a FLIP bet the summed spin
@@ -112,7 +112,7 @@ contract DegenerusGameDegeneretteModule is
     ///        big-endian), then score S (low 4 bits, 1-9) | house wild count W (bits 4-6).
     ///        Each spin's payout follows from these plus the bet's stake and activity score.
     event DegeneretteResolved(
-        address indexed player,
+        uint32 indexed playerId,
         uint32 indexed index,
         uint64 indexed betId,
         uint256 totalPayout,
@@ -121,11 +121,11 @@ contract DegenerusGameDegeneretteModule is
     );
 
     /// @notice Emitted when ETH payout exceeds pool cap and excess is converted to lootbox.
-    /// @param player The player address.
+    /// @param playerId The reward account's wallet ID.
     /// @param cappedEthPayout The ETH payout after capping.
     /// @param excessConverted Total ETH routed to the lootbox for this spin — the 3-tier split remainder plus the pool-cap overflow (= payout − cappedEthPayout).
     event PayoutCapped(
-        address indexed player,
+        uint32 indexed playerId,
         uint256 cappedEthPayout,
         uint256 excessConverted
     );
@@ -135,7 +135,7 @@ contract DegenerusGameDegeneretteModule is
     ///         self-contained record of that outcome (placed bets report through
     ///         DegeneretteResolved instead). Every reel + every output reward is here or, for
     ///         the ETH recirc, in the fresh box's own (now-emitted) events.
-    /// @param player The reward recipient.
+    /// @param playerId The reward account's wallet ID.
     /// @param betId Self-classifying id: bit 63 = synthetic-origin sentinel, bits 62-60 = spin type
     ///        (0=WWXRP, 1=FLIP, 2=ETH, 3=record bounty), bits 59-0 = seed entropy (unique per spin).
     /// @param packedSpins Per-spin reels packed low→high, each spin = [playerTraits:32 |
@@ -149,7 +149,7 @@ contract DegenerusGameDegeneretteModule is
     ///        recirculated remainder is derivable as `payout - ethShare` (ETH only); that recirc
     ///        box emits its own LootBoxOpened / BoxSpin so its contents are itemized.
     event BoxSpin(
-        address indexed player,
+        uint32 indexed playerId,
         uint64 betId,
         uint256 packedSpins,
         uint256 payout,
@@ -359,17 +359,16 @@ contract DegenerusGameDegeneretteModule is
         // way: distributed by the terminal drain before game over, swept to the terminal
         // sinks after it, and simply trapped once the one-shot final sweep has run.
         if (_livenessTriggered()) revert GameOver();
-        address player = msg.sender;
         address payee = msg.sender;
         bool gift;
         if (id != 0) {
             // An authorized caller spends the account's funds; any other caller makes a gift.
             bool authorized;
-            (player, payee, authorized) = _account(id, msg.sender);
+            (, payee, authorized) = _account(id, msg.sender);
             gift = !authorized;
         }
         _placeDegeneretteBet(
-            player,
+            id,
             gift ? msg.sender : payee,
             gift,
             currency,
@@ -391,7 +390,8 @@ contract DegenerusGameDegeneretteModule is
     ///      inside _resolveBet (resolution-batch-invariant).
     struct ResolveAcc {
         uint32 ownerId; // whose payouts ethClaimable / flipMint currently hold
-        uint256 ownerElement; // that owner's wallet-table element, read once per owner run
+        uint256 ownerElement; // loaded only by a referral lookup or token payout
+        address payee; // shared by the current owner's token payouts
         uint256 ethClaimable; // summed ETH claimable across all bets
         uint256 flipMint; // summed FLIP mint across all bets
         bool poolFrozen; // prizePoolFrozen snapshot (loaded with the pool locals)
@@ -459,13 +459,23 @@ contract DegenerusGameDegeneretteModule is
     /// @dev Pay the current owner's accumulated FLIP and ETH, then clear them.
     function _flushOwner(ResolveAcc memory acc) private {
         if (acc.flipMint != 0) {
-            coin.mintForGame(_payee(acc.ownerElement), acc.flipMint);
+            coin.mintForGame(_resolvePayee(acc), acc.flipMint);
             acc.flipMint = 0;
         }
         if (acc.ethClaimable != 0) {
             _addClaimableEth(acc.ownerId, acc.ethClaimable);
             acc.ethClaimable = 0;
         }
+    }
+
+    function _ownerElement(ResolveAcc memory acc) private view returns (uint256) {
+        if (acc.ownerElement == 0) acc.ownerElement = _walletElement(acc.ownerId);
+        return acc.ownerElement;
+    }
+
+    function _resolvePayee(ResolveAcc memory acc) private view returns (address) {
+        if (acc.payee == address(0)) acc.payee = _payee(_ownerElement(acc));
+        return acc.payee;
     }
 
     /// @dev Write the running prize-pool local back once, only if an ETH win loaded it.
@@ -489,7 +499,7 @@ contract DegenerusGameDegeneretteModule is
     ///      funded entirely by the caller (`burnFrom` = the caller), which registers as a paying
     ///      funder and earns the quest.
     function _placeDegeneretteBet(
-        address player,
+        uint32 playerId,
         address burnFrom,
         bool gift,
         uint8 currency,
@@ -501,17 +511,15 @@ contract DegenerusGameDegeneretteModule is
         // The bet is a paying entry for its owner and its funder: register both before anything
         // loads their mint words, at the stake's ETH equivalent (FLIP converts at PRICE_COIN_UNIT
         // per ticket). A self bet registers once.
-        uint32 playerId;
         uint32 funderId;
         {
             uint256 spendWei = uint256(amountPerSpin) * spinCount;
             if (currency != CURRENCY_ETH) spendWei = spendWei * PriceLookupLib.priceForLevel(lvl + 1) / PRICE_COIN_UNIT;
-            (playerId, ) = _registerWallet(player, spendWei);
+            playerId = _registerCallerAccount(playerId == 0 ? _walletIdOf(msg.sender) : playerId, spendWei);
             funderId = playerId;
             if (gift) (funderId, ) = _registerWallet(msg.sender, spendWei);
         }
         uint256 totalBet = _placeDegeneretteBetCore(
-            player,
             playerId,
             currency,
             amountPerSpin,
@@ -538,7 +546,6 @@ contract DegenerusGameDegeneretteModule is
     }
 
     function _placeDegeneretteBetCore(
-        address player,
         uint32 playerId,
         uint8 currency,
         uint128 amountPerSpin,
@@ -579,7 +586,7 @@ contract DegenerusGameDegeneretteModule is
         // lootbox-share EV multiplier). This snapshot precedes the new bet's quest credit.
         uint32 questStreak = _effectiveQuestStreak(playerId);
         uint16 activityScore = uint16(
-            _playerActivityScoreCachedAt(player, questStreak, lvl + 1, lvl)
+            _playerActivityScoreCachedAt(playerId, questStreak, lvl + 1, lvl)
         );
 
         // ETH-only per-bet bookkeeping: biggest-spin record and protocol boon entries.
@@ -613,9 +620,9 @@ contract DegenerusGameDegeneretteModule is
                 // effective quest streak already read, before this bet's quest credit.
                 uint16 boonScore = _activeTicketLevel() == lvl + 1
                     ? activityScore
-                    : uint16(_playerActivityScore(player, questStreak));
+                    : uint16(_playerActivityScore(playerId, questStreak));
                 _enterProtocolBoonDraw(
-                    player, playerId, symbol, day, totalBet, wagerUnit, boonScore
+                    playerId, symbol, day, totalBet, wagerUnit, boonScore
                 );
             }
         }
@@ -675,16 +682,16 @@ contract DegenerusGameDegeneretteModule is
         }
         uint256 slot = _betSlot(index, position);
         assembly ("memory-safe") { sstore(slot, bet) }
-        emit DegeneretteBetPlaced(player, uint32(index), betId, bet);
+        emit DegeneretteBetPlaced(playerId, uint32(index), betId, bet);
     }
 
     /// @dev Only ordinary ETH placements reach this helper. A gifted bet belongs
     ///      to its recipient; all weight is paid stake, before any boon boost.
     ///      Pool and entry writes revert atomically if later funding fails.
     function _enterProtocolBoonDraw(
-        address player, uint32 playerId, uint8 symbol, uint24 day, uint256 amount, uint256 wagerUnits, uint16 score
+        uint32 playerId, uint8 symbol, uint24 day, uint256 amount, uint256 wagerUnits, uint16 score
     ) private {
-        address issuer = symbol == 0 ? ContractAddresses.VAULT : ContractAddresses.SDGNRS;
+        uint32 issuer = symbol == 0 ? VAULT_WALLET_ID : SDGNRS_WALLET_ID;
         if (deityBySymbol[symbol] != (symbol == 0 ? VAULT_WALLET_ID : SDGNRS_WALLET_ID)) return;
         uint256 weight = wagerUnits * ActivityCurveLib.boonDrawMultUnits(score);
         if (weight > type(uint64).max) revert InvalidBet();
@@ -695,13 +702,21 @@ contract DegenerusGameDegeneretteModule is
         if (pool.day != day) pool = ProtocolBoonPool(0, 0, 0, 0, day);
         uint32 index = pool.entryCount;
         uint64 cumulativeWeight = pool.totalWeight + uint64(weight);
-        protocolBoonEntries[issuer][ring][index] = ProtocolBoonEntry(playerId, cumulativeWeight, score);
+        ProtocolBoonEntry storage entryTarget = protocolBoonEntries[issuer][ring][index];
+        uint256 entryWord = uint256(playerId) | (uint256(cumulativeWeight) << 32) | (uint256(score) << 96);
+        assembly ("memory-safe") { sstore(entryTarget.slot, entryWord) }
         // Weight <= uint64.max and multiplier >= 800 bound amount well below uint112.
         pool.totalWageredWei += uint112(amount);
         pool.totalWeight = cumulativeWeight;
         pool.entryCount = index + 1;
-        protocolBoonPools[issuer][ring] = pool;
-        emit ProtocolBoonDrawEntered(issuer, player, day, amount, score, uint64(weight), index);
+        // Write the packed header once. Struct assignment can emit multiple read/modify
+        // writes for these fields even though all five fit in one word.
+        ProtocolBoonPool storage target = protocolBoonPools[issuer][ring];
+        uint256 header = uint256(pool.totalWageredWei) | (uint256(pool.totalWeight) << 112)
+            | (uint256(pool.entryCount) << 176) | (uint256(pool.awardedMask) << 208)
+            | (uint256(pool.day) << 216);
+        assembly ("memory-safe") { sstore(target.slot, header) }
+        emit ProtocolBoonDrawEntered(issuer, playerId, day, amount, score, uint64(weight), index);
     }
 
     /// @dev Processes bet funds (burn tokens, handle ETH, check pool). `burnFrom` pays a FLIP
@@ -772,11 +787,9 @@ contract DegenerusGameDegeneretteModule is
         if (playerId != acc.ownerId) {
             _flushOwner(acc);
             acc.ownerId = playerId;
-            acc.ownerElement = _walletElement(playerId);
+            acc.ownerElement = 0;
+            acc.payee = address(0);
         }
-        // The bet's seeds take the committed wallet ID; the address feeds token payouts,
-        // the referrer lookup and the resolution event.
-        address player = address(uint160(acc.ownerElement));
         uint8 symbol = uint8((bet >> BET_SYMBOL_SHIFT) & MASK_5);
         uint8 spinCount = uint8((bet >> BET_COUNT_SHIFT) & MASK_5);
         uint8 currency = uint8((bet >> BET_CURRENCY_SHIFT) & 1);
@@ -814,7 +827,7 @@ contract DegenerusGameDegeneretteModule is
                 // lootbox-share is returned and summed into this bet's box. `paid` is
                 // what the spin actually pays across both legs.
                 (uint256 spinLootboxShare, uint256 paid) = _distributePayout(
-                    player,
+                    playerId,
                     currency,
                     amountPerSpin,
                     payout,
@@ -835,7 +848,7 @@ contract DegenerusGameDegeneretteModule is
             // _awardDegeneretteDgnrs reads poolBalance fresh per call, so summing
             // off a stale balance would change the payout.
             if (currency == CURRENCY_ETH && s >= 7) {
-                _awardDegeneretteDgnrs(_payee(acc.ownerElement), amountPerSpin, s);
+                _awardDegeneretteDgnrs(acc, amountPerSpin, s);
             }
 
             unchecked {
@@ -894,7 +907,6 @@ contract DegenerusGameDegeneretteModule is
             // The bet-win recirc box itemizes its contents via LootBoxOpened (like every box path)
             // so the per-box FLIP datum is recoverable.
             _resolveDegeneretteLootboxDirect(
-                player,
                 playerId,
                 totals.betLootboxShare,
                 EntropyLib.hash2(rngWord, betId),
@@ -908,11 +920,13 @@ contract DegenerusGameDegeneretteModule is
         if (totals.affiliateBoxShare > 0) {
             uint256 refFlip = (totals.affiliateBoxShare * PRICE_COIN_UNIT) /
                 PriceLookupLib.priceForLevel(level + 1);
-            coinflip.creditFlip(affiliate.getReferrerId(player), (refFlip * AFFILIATE_BOX_BPS) / 10_000);
+            coinflip.creditFlip(
+                affiliate.getReferrerIdById(playerId), (refFlip * AFFILIATE_BOX_BPS) / 10_000
+            );
         }
 
         emit DegeneretteResolved(
-            player,
+            playerId,
             index,
             betId,
             totals.totalPayout,
@@ -933,7 +947,7 @@ contract DegenerusGameDegeneretteModule is
             delete degeneretteRecordBounty[key];
             // The chain's FLIP joins the owner's batched mint, which pays the owner's payee.
             acc.flipMint += _flipSpinChain(
-                player,
+                playerId,
                 recordBounty * TOKEN_MATH_SCALE,
                 activityScore,
                 EntropyLib.hash4(rngWord, playerId, betId, RECORD_SPIN_TAG),
@@ -964,7 +978,7 @@ contract DegenerusGameDegeneretteModule is
     ///      flip in _resolveBet then doubles or zeroes the bet's total
     ///      before the flush). FLIP does not use the 3-tier split (which applies only to the
     ///      lootbox-convertible ETH path).
-    /// @param player The player to receive the payout.
+    /// @param playerId The reward account's wallet ID.
     /// @param currency The currency type (0=ETH, 1=FLIP).
     /// @param betAmount The per-ticket bet amount (uint128) — the tier-threshold reference.
     /// @param payout The total payout amount (uint256).
@@ -975,7 +989,7 @@ contract DegenerusGameDegeneretteModule is
     ///         summed by the caller into the per-bet box.
     /// @return paid What this spin actually pays out across both legs.
     function _distributePayout(
-        address player,
+        uint32 playerId,
         uint8 currency,
         uint128 betAmount,
         uint256 payout,
@@ -1033,7 +1047,7 @@ contract DegenerusGameDegeneretteModule is
                 if (ethShare > maxEth) {
                     lootboxShare += ethShare - maxEth;
                     ethShare = maxEth;
-                    emit PayoutCapped(player, ethShare, lootboxShare);
+                    emit PayoutCapped(playerId, ethShare, lootboxShare);
                 }
                 unchecked {
                     pool -= ethShare;
@@ -1114,7 +1128,6 @@ contract DegenerusGameDegeneretteModule is
     ///      Internal ETH reward-spin recirculation keeps the normal 10 ETH ceiling.
     ///      The resolved box itemizes its contents via `LootBoxOpened` like every box path.
     function _resolveLootboxDirect(
-        address player,
         uint32 id,
         uint256 amount,
         uint256 rngWord,
@@ -1125,7 +1138,6 @@ contract DegenerusGameDegeneretteModule is
             .delegatecall(
                 abi.encodeWithSelector(
                     IDegenerusGameLootboxModule.resolveLootboxDirect.selector,
-                    player,
                     id,
                     amount,
                     rngWord,
@@ -1137,7 +1149,6 @@ contract DegenerusGameDegeneretteModule is
 
     /// @dev One purchased bet's combined box, with a 50 ETH ceiling if allowance remains.
     function _resolveDegeneretteLootboxDirect(
-        address player,
         uint32 id,
         uint256 amount,
         uint256 rngWord,
@@ -1146,7 +1157,6 @@ contract DegenerusGameDegeneretteModule is
         (bool ok, bytes memory data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(
             abi.encodeWithSelector(
                 IDegenerusGameLootboxModule.resolveDegeneretteLootboxDirect.selector,
-                player,
                 id,
                 amount,
                 rngWord,
@@ -1348,10 +1358,10 @@ contract DegenerusGameDegeneretteModule is
     }
 
     /// @dev Award sDGNRS from Reward pool on the top-3 score tiers (S>=7) Degenerette ETH bets.
-    ///      Reward scales by bet size (capped at 1 ETH) and score tier; it goes to `payee`, the
-    ///      bettor account's payee.
+    ///      Reward scales by bet size (capped at 1 ETH) and score tier. Resolve the account's
+    ///      payee only when a nonzero reward is ready to transfer.
     function _awardDegeneretteDgnrs(
-        address payee,
+        ResolveAcc memory acc,
         uint256 betWei,
         uint8 s
     ) private {
@@ -1371,7 +1381,7 @@ contract DegenerusGameDegeneretteModule is
 
         sdgnrs.transferFromPool(
             IsDGNRS.Pool.Reward,
-            payee,
+            _resolvePayee(acc),
             reward
         );
     }
@@ -1440,7 +1450,7 @@ contract DegenerusGameDegeneretteModule is
     ///      WWXRP with a minimum of one for a positive sub-token win; a loss stays zero.
     ///      Returned for the calling box or foil entry to mint its WWXRP lane once.
     function resolveWwxrpSpinFromBox(
-        address player,
+        uint32 playerId,
         uint256 stake,
         uint16 activityScore,
         uint256 seed,
@@ -1462,7 +1472,7 @@ contract DegenerusGameDegeneretteModule is
 
         // One self-contained record: the single reel + WWXRP-minted payout (no ETH split).
         emit BoxSpin(
-            player,
+            playerId,
             betId,
             _packSpin(0, spin) |
                 (uint256(1) << BOX_SPIN_COUNT_SHIFT),
@@ -1478,7 +1488,7 @@ contract DegenerusGameDegeneretteModule is
     ///      lane (credited via coinflip.creditFlip at flush). No pool / ETH / recirc touch, so
     ///      this is solvency-safe on every box path including recirc.
     function resolveFlipSpinsFromBox(
-        address player,
+        uint32 playerId,
         uint256 totalStake,
         uint16 activityScore,
         uint256 seed,
@@ -1488,7 +1498,7 @@ contract DegenerusGameDegeneretteModule is
         // Returned, not minted: the caller sums every FLIP lane in the entry and credits once.
         return
             _flipSpinChain(
-                player,
+                playerId,
                 totalStake,
                 activityScore,
                 seed,
@@ -1501,7 +1511,7 @@ contract DegenerusGameDegeneretteModule is
     ///      a chosen symbol; random box awards pass 32. Every spin rerolls colors. Returns the
     ///      whole-FLIP result; every caller credits or mints it.
     function _flipSpinChain(
-        address player,
+        uint32 playerId,
         uint256 totalStake,
         uint16 activityScore,
         uint256 seed,
@@ -1550,7 +1560,7 @@ contract DegenerusGameDegeneretteModule is
         packedSpins |=
             (uint256(BOX_FLIP_SPINS) << BOX_SPIN_COUNT_SHIFT) |
             (survived ? (uint256(1) << BOX_SPIN_SURVIVED_SHIFT) : 0);
-        emit BoxSpin(player, betId, packedSpins, total, 0);
+        emit BoxSpin(playerId, betId, packedSpins, total, 0);
     }
 
     /// @notice One ETH Degenerette spin staking a lootbox roll's ticket budget.
@@ -1560,7 +1570,6 @@ contract DegenerusGameDegeneretteModule is
     ///      fresh state, and the recirc box is opened with the ETH-spin path disabled (the box
     ///      module passes allowEthSpin=false on the recirc entry) so no ETH-spin can cascade.
     function resolveEthSpinFromBox(
-        address player,
         uint32 playerId,
         uint256 stake,
         uint16 activityScore,
@@ -1579,22 +1588,23 @@ contract DegenerusGameDegeneretteModule is
         uint256 packed = _packSpin(0, spin) |
             (uint256(1) << BOX_SPIN_COUNT_SHIFT);
         if (payout == 0) {
-            emit BoxSpin(player, betId, packed, 0, 0);
+            emit BoxSpin(playerId, betId, packed, 0, 0);
             return;
         }
 
         ResolveAcc memory acc;
+        acc.ownerId = playerId;
         // A box spin stakes a lootbox roll's budget rather than a placed bet, so it
         // never touches the biggest-spin record — that arms only on a placed ETH
         // bet's total wager (amountPerSpin x spinCount).
         (uint256 lootboxShare, ) = _distributePayout(
-            player,
+            playerId,
             CURRENCY_ETH,
             betAmount,
             payout,
             acc
         );
-        if (s >= 7) _awardDegeneretteDgnrs(_payee(_walletElement(playerId)), betAmount, s);
+        if (s >= 7) _awardDegeneretteDgnrs(acc, betAmount, s);
 
         // Flush THIS spin's pool/claimable BEFORE recirc so recirc reads fresh storage.
         if (acc.ethClaimable != 0) _addClaimableEth(playerId, acc.ethClaimable);
@@ -1608,13 +1618,12 @@ contract DegenerusGameDegeneretteModule is
 
         // One self-contained record: the reel + ETH gross + the claimable share. The
         // recirculated remainder (payout - ethShare) is itemized by the recirc box's own events.
-        emit BoxSpin(player, betId, packed, payout, acc.ethClaimable);
+        emit BoxSpin(playerId, betId, packed, payout, acc.ethClaimable);
 
         // Recirc into a fresh re-hashed box; allowEthSpin=false there -> no ETH-spin cascade.
         // The recirculated box's contents are itemized for the UI via its own LootBoxOpened.
         if (lootboxShare != 0) {
             _resolveLootboxDirect(
-                player,
                 playerId,
                 lootboxShare,
                 EntropyLib.hash2(seed, BOX_RECIRC_TAG),

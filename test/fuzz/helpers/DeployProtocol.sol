@@ -170,8 +170,92 @@ abstract contract DeployProtocol is Test {
         id = game.registerWallet(who, true);
     }
 
+    function _fixtureId(address player) internal view returns (uint32) {
+        return uint32(uint256(vm.load(address(game), GameSlotKeys.walletId(player))));
+    }
+    function _fixtureId(uint32 id) internal pure returns (uint32) { return id; }
+    function _fixturePayee(uint32 id) internal view returns (address payee) {
+        if (id != 0) (, payee,) = game.resolveAccount(id, address(0));
+    }
+
+
+    function _fixtureMint(address probe) internal view returns (uint256) {
+        return game.mintPackedOfId(_fixtureId(probe));
+    }
+
+    function _fixtureMint(uint32 probe) internal view returns (uint256) {
+        return game.mintPackedOfId(_fixtureId(probe));
+    }
+
+    function _fixtureHasDeity(address probe) internal view returns (bool) {
+        return (_fixtureMint(probe) >> BitPackingLib.HAS_DEITY_PASS_SHIFT) & 1 != 0;
+    }
+
+    function _fixtureHasDeity(uint32 probe) internal view returns (bool) {
+        return (_fixtureMint(probe) >> BitPackingLib.HAS_DEITY_PASS_SHIFT) & 1 != 0;
+    }
+
+    function _fixtureBalances(address probe) internal view returns (uint256) {
+        if (uint256(vm.load(address(game), bytes32(GameSlots.GAME_OVER_STATE_PACKED))) >> 56 & 0xff != 0) return 0;
+        return uint256(vm.load(address(game), GameSlotKeys.balances(_fixtureId(probe))));
+    }
+
+    function _fixtureBalances(uint32 probe) internal view returns (uint256) {
+        if (uint256(vm.load(address(game), bytes32(GameSlots.GAME_OVER_STATE_PACKED))) >> 56 & 0xff != 0) return 0;
+        return uint256(vm.load(address(game), GameSlotKeys.balances(_fixtureId(probe))));
+    }
+
+    function _fixtureClaimable(address probe) internal view returns (uint256) { return uint128(_fixtureBalances(probe)); }
+
+    function _fixtureClaimable(uint32 probe) internal view returns (uint256) { return uint128(_fixtureBalances(probe)); }
+    function _fixtureAfking(address probe) internal view returns (uint256) { return _fixtureBalances(probe) >> 128; }
+
+    function _fixtureAfking(uint32 probe) internal view returns (uint256) { return _fixtureBalances(probe) >> 128; }
+
+    function _fixtureEntries(uint24 lvl, address probe) internal view returns (uint32 total) {
+        uint32 id = _fixtureId(probe);
+        uint256 word = uint256(vm.load(address(game), keccak256(abi.encode(id, GameSlots.TICKET_PENDING))));
+        uint256 parity = lvl & 1;
+        if (uint24(word >> (168 + parity * 24)) == lvl) {
+            total = uint32(word >> (parity * 84 + 8)) + uint32(word >> (parity * 84 + 50));
+        }
+        if (lvl == 0) return total;
+        uint256 position = (lvl - 1) % 100;
+        uint256 header = uint256(vm.load(address(game), keccak256(abi.encode((position + 1) | 0x400000, GameSlots.TICKET_QUEUE))));
+        uint24 occupying = uint24(header >> 32);
+        if (occupying == 0) occupying = uint24(position + 1);
+        if (occupying == lvl) {
+            uint256 lane = uint256(vm.load(address(game), bytes32(uint256(keccak256(abi.encode(id, GameSlots.FAR_FUTURE_OWED))) + position / 8)));
+            total += uint32(lane >> ((position % 8) * 32)) & 0x3fffffff;
+        }
+    }
+
+    function _fixtureEntries(uint24 lvl, uint32 probe) internal view returns (uint32 total) {
+        uint32 id = _fixtureId(probe);
+        uint256 word = uint256(vm.load(address(game), keccak256(abi.encode(id, GameSlots.TICKET_PENDING))));
+        uint256 parity = lvl & 1;
+        if (uint24(word >> (168 + parity * 24)) == lvl) {
+            total = uint32(word >> (parity * 84 + 8)) + uint32(word >> (parity * 84 + 50));
+        }
+        if (lvl == 0) return total;
+        uint256 position = (lvl - 1) % 100;
+        uint256 header = uint256(vm.load(address(game), keccak256(abi.encode((position + 1) | 0x400000, GameSlots.TICKET_QUEUE))));
+        uint24 occupying = uint24(header >> 32);
+        if (occupying == 0) occupying = uint24(position + 1);
+        if (occupying == lvl) {
+            uint256 lane = uint256(vm.load(address(game), bytes32(uint256(keccak256(abi.encode(id, GameSlots.FAR_FUTURE_OWED))) + position / 8)));
+            total += uint32(lane >> ((position % 8) * 32)) & 0x3fffffff;
+        }
+    }
+
     /// @notice Deploy the full protocol. Must be called from setUp().
     /// @dev Uses vm.warp(86400) to match the fixed timestamp in patchForFoundry.js.
+    function _affiliateBootstrap() internal pure virtual returns (
+        address[] memory, bytes32[] memory, uint8[] memory, address[] memory, bytes32[] memory
+    ) {
+        return (new address[](0), new bytes32[](0), new uint8[](0), new address[](0), new bytes32[](0));
+    }
+
     function _deployProtocol() internal {
         _deployProtocol(true);
     }
@@ -214,16 +298,11 @@ abstract contract DeployProtocol is Test {
         coinflip = new Coinflip();                // N+13 = nonce 18
 
         game = new DegenerusGame();                    // N+14 = nonce 19
-        wwxrp = new WWXRP();               // N+15 = nonce 20
+        ticketModule = new DegenerusGameTicketModule(); // N+15 = nonce 20
 
-        // DegenerusAffiliate needs empty arrays
-        affiliate = new DegenerusAffiliate(
-            new address[](0),
-            new bytes32[](0),
-            new uint8[](0),
-            new address[](0),
-            new bytes32[](0)
-        );                                             // N+16 = nonce 21
+        (address[] memory owners, bytes32[] memory codes, uint8[] memory kicks,
+            address[] memory players, bytes32[] memory refs) = _affiliateBootstrap();
+        affiliate = new DegenerusAffiliate(owners, codes, kicks, players, refs); // N+16
 
         jackpots = new DegenerusJackpots();            // N+17 = nonce 22
         quests = new DegenerusQuests();                // N+18 = nonce 23
@@ -286,7 +365,7 @@ abstract contract DeployProtocol is Test {
         // Jackpot battle craps battle — appended, so it shifts no earlier nonce. No storage, no
         // ctor args; the jackpot module calls ContractAddresses.JACKPOT_BATTLE bare.
         jackpotBattle = new JackpotBattle();                              // N+31 = nonce 36
-        ticketModule = new DegenerusGameTicketModule();                    // N+32 = nonce 37
+        wwxrp = new WWXRP(); // N+32 = nonce 37
         minerModule = new DegenerusGameMinerModule();                      // N+33 = nonce 38
         rngModule = new DegenerusGameRngModule();                          // N+34 = nonce 39
         jackpotDrawModule = new DegenerusGameJackpotDrawModule();          // N+35 = nonce 40
@@ -339,6 +418,7 @@ abstract contract DeployProtocol is Test {
     ///      pass-acquisition hook would. Self-validating via the game's
     ///      mintPackedFor view: reverts if the slot layout drifted.
     function _markSeatEligible(address player) internal {
+        _giveWalletId(player);
         bytes32 slot = GameSlotKeys.mintPacked(player);
         uint256 packed = uint256(vm.load(address(game), slot));
         vm.store(address(game), slot, bytes32(packed | (uint256(1) << BitPackingLib.SEAT_CLAIMED_SHIFT)));

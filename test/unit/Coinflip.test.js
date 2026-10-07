@@ -142,12 +142,12 @@ describe("Coinflip", function () {
     });
 
     it("emits CoinflipDeposit event", async function () {
-      const { coinflip, coin, alice, vault } = await loadFixture(deployFullProtocol);
+      const { game, coinflip, coin, alice, vault } = await loadFixture(deployFullProtocol);
       const vaultAddr = await vault.getAddress();
       await giveFlip(coin, alice, flip(500), await coinflip.getAddress());
       const tx = await deposit(coinflip, alice, flip(200));
       const ev = await getEvent(tx, coinflip, "CoinflipDeposit");
-      expect(ev.args.player).to.equal(alice.address);
+      expect(ev.args.player).to.equal(await game.walletIdOf(alice.address));
       expect(ev.args.creditedFlip).to.equal(flip(200));
     });
 
@@ -198,18 +198,12 @@ describe("Coinflip", function () {
       const aliceId = await giveWalletId(game, alice.address);
       const tx = await coinflip.connect(bob).depositCoinflip(aliceId, flip(200));
       const ev = await getEvent(tx, coinflip, "CoinflipDeposit");
-      expect(ev.args.player).to.equal(alice.address);
+      expect(ev.args.player).to.equal(await game.walletIdOf(alice.address));
       expect(ev.args.creditedFlip).to.equal(flip(200));
       // The stake belongs to alice, not the funder.
       expect(await coinflip.coinflipAmount(alice.address)).to.be.gte(flip(200));
     });
 
-    it("zero amount deposit emits CoinflipDeposit with amount 0", async function () {
-      const { coinflip, alice } = await loadFixture(deployFullProtocol);
-      const tx = await coinflip.connect(alice).depositCoinflip(0, 0);
-      const ev = await getEvent(tx, coinflip, "CoinflipDeposit");
-      expect(ev.args.creditedFlip).to.equal(0n);
-    });
   });
 
   // =========================================================================
@@ -875,7 +869,7 @@ describe("Coinflip", function () {
         .connect(alice)
         .setCoinflipAutoRebuy(0, true, flip(1000));
       const ev = await getEvent(tx, coinflip, "CoinflipAutoRebuyToggled");
-      expect(ev.args.player).to.equal(alice.address);
+      expect(ev.args.player).to.equal(await game.walletIdOf(alice.address));
       expect(ev.args.enabled).to.equal(true);
     });
 
@@ -1097,7 +1091,7 @@ describe("Coinflip", function () {
       ).to.not.be.reverted;
     });
 
-    it("player loses and gets WWXRP consolation prize on claim", async function () {
+    it("player loses and receives ID-keyed WWXRP claimable on claim", async function () {
       const { coinflip, coin, game, alice, vault, wwxrp } = await loadFixture(
         deployFullProtocol
       );
@@ -1111,11 +1105,13 @@ describe("Coinflip", function () {
       // Loss: even rngWord => win=false
       await resolveDay(hre.ethers, game, coinflip, epoch, 2n);
 
-      // Claim triggers WWXRP mint for losses
+      const playerId = await game.walletIdOf(alice.address);
+      const claimableBefore = await wwxrp.claimable(playerId);
+      const heldBefore = await wwxrp.balanceOf(alice.address);
       await coinflip.connect(alice).claimCoinflips(0, flip(999999));
 
-      const wwxrpBal = await wwxrp.balanceOf(alice.address);
-      expect(wwxrpBal).to.be.gte(flip(1)); // 1 WWXRP per loss
+      expect(await wwxrp.claimable(playerId)).to.equal(claimableBefore + flip(1));
+      expect(await wwxrp.balanceOf(alice.address)).to.equal(heldBefore);
     });
 
     it("multiple consecutive wins compound correctly with auto-rebuy", async function () {

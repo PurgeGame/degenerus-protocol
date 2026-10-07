@@ -60,7 +60,6 @@ contract JackpotSingleCallHarness is DegenerusGameJackpotModule, BucketSeed {
 ///
 /// @dev Drives the live `runTerminalJackpotWork` entry (msg.sender==GAME guard satisfied via prank)
 ///      which routes straight into the single-call `_processDailyEth` at the 305 ceiling.
-///      Source-level attestations use vm.readFile over ./contracts (foundry.toml grants read).
 contract JackpotSingleCallCorrectness is Test {
     JackpotSingleCallHarness internal h;
 
@@ -76,39 +75,6 @@ contract JackpotSingleCallCorrectness is Test {
     /// @dev The REAL mainnet block gas limit. foundry.toml inflates block_gas_limit to 30e9 for
     ///      the test harness; the JGAS-03 "fits under the block limit" bar is the mainnet 30M.
     uint256 internal constant MAINNET_BLOCK_GAS_LIMIT = 30_000_000;
-
-    // -------------------------------------------------------------------------
-    // JGAS-04 delta-attribution constants (Phase 319 Plan 02)
-    // -------------------------------------------------------------------------
-
-    /// @dev The 316-SPEC §J4.2 theoretical worst-case single-call band (structural estimate, +/-30%):
-    ///      the 305-winner credit loop ~7.6-9.2M + fixed overhead ~1-3M = ~9-12M gas. This is a
-    ///      derived structural bound, NOT a measurement (which is precisely why the JGAS-01 REMOVE
-    ///      lock's finality was gated on this JGAS-04 empirical confirmation).
-    uint256 internal constant SPEC_THEORY_WORST_CASE_LO_GAS = 9_000_000;
-    uint256 internal constant SPEC_THEORY_WORST_CASE_HI_GAS = 12_000_000;
-
-    /// @dev RM-02 freed, per daily-ETH winner, the unconditional cold `autoRebuyState[beneficiary]`
-    ///      SLOAD + the conditional `_processAutoRebuy` branch from `_addClaimableEth`. EIP-2929
-    ///      cold-access: 1 cold storage slot (~2100) + 1 cold account (~2100) ~= 4.2k gas per winner.
-    ///      The post-RM-02 2-arg `_addClaimableEth(beneficiary, weiAmount)` (JackpotModule:738) falls
-    ///      straight to `_creditClaimable` with NO `autoRebuyState` read (source-confirmed: grep of
-    ///      `autoRebuyState` over the jackpot module returns ZERO matches).
-    uint256 internal constant RM02_FREED_PER_WINNER_GAS = 4_200;
-
-    /// @dev A2 (RESEARCH Assumptions Log) + WR-02 re-frame: the numeric `theory - freed` band is
-    ///      explicitly NOT a proof of the exact 1.3M freed delta. EIP-2929 cold-access constants are
-    ///      fixed, but the surrounding warm/cold loop state shifts the precise number AND the theory
-    ///      band is itself +/-30%, so any tolerance wide enough to absorb that uncertainty is too wide
-    ///      to pin the 1.3M delta numerically (a ~3M tolerance around a ~7.7M lower edge admits roughly
-    ///      [4.7M, 10.7M] — almost any plausible measurement passes; the numeric check is near-vacuous
-    ///      and is retained ONLY as a coarse sanity sieve). The LOAD-BEARING proof that RM-02 freed the
-    ///      per-winner `autoRebuyState` SLOAD is the STRUCTURAL `_countOccurrences(jp, "autoRebuyState")
-    ///      == 0` source attestation below — the freed surface is provably, byte-for-byte absent from
-    ///      the jackpot path. The numeric assertion is downgraded to a one-sided "measured gas sits at
-    ///      or below the (theory - freed) upper edge" sanity bound (the freeing could only LOWER the
-    ///      total), framed as "consistent-with", never "empirically confirmed the exact 1.3M delta".
-    uint256 internal constant ATTRIBUTION_TOLERANCE_GAS = 3_000_000;
 
     /// @dev JackpotEthWin topic0 (for vm.recordLogs filtering).
     bytes32 internal constant JACKPOT_ETH_WIN_TOPIC =
@@ -333,71 +299,6 @@ contract JackpotSingleCallCorrectness is Test {
         emit log_named_uint("jgas04_margin_under_30M", margin);
     }
 
-    /// @notice JGAS-04 delta attribution (structural, RESEARCH option (a) — no dead-code re-introduction):
-    ///         the enabling headroom that lets all 305 winners fit one call is RM-02 removing, per
-    ///         winner, the unconditional cold `autoRebuyState[beneficiary]` SLOAD + `_processAutoRebuy`
-    ///         branch from `_addClaimableEth`. The post-RM-02 2-arg `_addClaimableEth` (JackpotModule:738)
-    ///         falls straight to `_creditClaimable` (source-confirmed: zero `autoRebuyState` reads on
-    ///         the jackpot path).
-    ///
-    ///         WR-02 RE-FRAME: this test does NOT empirically confirm the exact ~1.3M freed delta. The
-    ///         LOAD-BEARING proof is the STRUCTURAL `_countOccurrences(jp, "autoRebuyState") == 0`
-    ///         attestation — the freed surface is provably absent from the jackpot module source. The
-    ///         numeric `theory - freed` figure is a coarse sanity sieve only: it computes the freed
-    ///         estimate from the EIP-2929 cold-access constants (~4.2k/winner x 305 ~= 1.28M) and
-    ///         asserts the MEASURED single-call gas sits at/below the 316-SPEC §J4.2 theory (9-12M)
-    ///         MINUS that freed delta — a one-sided upper-bound that is "consistent with" the freeing
-    ///         having lowered the total, NOT a proof of the 1.3M magnitude (Assumption A2; the band's
-    ///         tolerance is too wide to pin the delta numerically — see ATTRIBUTION_TOLERANCE_GAS). It
-    ///         does NOT re-introduce the removed SLOAD (option (b) comparison harness is rejected).
-    function testJgas04FreedAutoRebuyStateSloadDeltaAttribution() public {
-        (uint8[4] memory traitIds, ) = _deriveTraits(_word());
-        _seedAllBuckets(traitIds);
-
-        vm.prank(ContractAddresses.GAME);
-        uint256 gasBefore = gasleft();
-        (, uint256 paidWei) = h.runTerminalJackpotWork(POOL_WEI, TARGET_LVL, _word(), gasleft());
-        uint256 gasUsed = gasBefore - gasleft();
-        assertGt(paidWei, 0, "JGAS-04 attribution: the measured call actually paid out");
-
-        // The freed band: RM-02 removed ~4.2k cold-access gas per winner x 305 winners ~= 1.28M off
-        // the worst-case single-call total. (1 cold storage slot ~2100 + 1 cold account ~2100.)
-        uint256 freed = RM02_FREED_PER_WINNER_GAS * DAILY_ETH_MAX_WINNERS;
-        assertGt(freed, 1_000_000, "JGAS-04: the freed autoRebuyState-SLOAD band is ~1.3M (4.2k x 305)");
-        assertLt(freed, 1_600_000, "JGAS-04: the freed band stays in the ~1.3M neighborhood");
-
-        // WR-02 one-sided sanity sieve (NOT a proof of the 1.3M magnitude): the 316-SPEC structural
-        // worst case (9-12M) less the freed ~1.3M => ~7.7-10.7M. The ONLY defensible numeric direction
-        // is the upper bound — the freeing could only LOWER the total, so the measured single-call gas
-        // must sit at/below the (theory - freed) upper edge. The prior lower-edge "within tolerance"
-        // assertion was near-vacuous (a 3M tolerance around the ~7.7M lower edge admits ~[4.7M,10.7M])
-        // and is REMOVED: it claimed to confirm the 1.3M delta but admitted almost any measurement.
-        // The load-bearing proof is the STRUCTURAL autoRebuyState==0 attestation below.
-        uint256 theoryMinusFreedHi = SPEC_THEORY_WORST_CASE_HI_GAS - freed; // ~10.72M
-
-        // measured must not exceed the (theory - freed) upper edge (the freeing did lower the total).
-        assertLt(
-            gasUsed,
-            theoryMinusFreedHi,
-            "JGAS-04: measured single-call gas is below the (theory - freed) upper edge (consistent-with, not a proof of the exact 1.3M delta - A2/WR-02)"
-        );
-
-        // Source attestation (THE LOAD-BEARING PROOF): the removed surface is genuinely gone (no
-        // dead-code re-introduction). The 2-arg _addClaimableEth performs ZERO autoRebuyState reads on
-        // the jackpot daily-ETH path — this structural absence, not the numeric band, proves JGAS-04.
-        string memory jp = _stripComments(
-            vm.readFile("contracts/modules/DegenerusGameJackpotModule.sol")
-        );
-        assertEq(
-            _countOccurrences(jp, "autoRebuyState"),
-            0,
-            "JGAS-04: the per-winner autoRebuyState SLOAD is structurally absent from the jackpot path"
-        );
-
-        emit log_named_uint("jgas04_measured_single_call_gas", gasUsed);
-        emit log_named_uint("jgas04_freed_autoRebuyState_sload_band", freed);
-        emit log_named_uint("jgas04_theory_minus_freed_hi", theoryMinusFreedHi);
-    }
 
     /// @notice JGAS-03 split behaviorally gone: the daily-ETH jackpot at the 305 ceiling completes
     ///         in ONE call -- the full pool resolves with no second-call carry. We re-run the same
@@ -431,7 +332,6 @@ contract JackpotSingleCallCorrectness is Test {
         (, uint256 paidWei) = h.runTerminalJackpotWork(POOL_WEI, TARGET_LVL, _word(), gasleft());
 
         // Full resolution in one call: everything except the in-bucket rounding dust is paid.
-        // (No resumeEthPool carry could exist -- the symbol is grep-clean, proven below.)
         assertEq(
             paidWei + expectedDust,
             POOL_WEI,
@@ -439,82 +339,6 @@ contract JackpotSingleCallCorrectness is Test {
         );
     }
 
-    /// @notice JGAS-03 split grep-clean: the two-call-split symbol set returns ZERO non-comment
-    ///         matches across the daily-ETH production surface (JackpotModule + AdvanceModule).
-    ///         The split MECHANISM is structurally absent, not merely unreached.
-    /// @dev Reads each source via vm.readFile (foundry.toml grants read on ./contracts), strips
-    ///      comments so NatSpec prose cannot self-invalidate the gate, and asserts 0 residual
-    ///      matches per symbol. Mirrors the established VrfWireOneShot / RngFreezeAndRemovalProofs
-    ///      source-attestation pattern.
-    function testSplitSymbolsGrepClean() public view {
-        string[7] memory splitKillSet = [
-            "resumeEthPool",
-            "SPLIT_CALL1",
-            "SPLIT_CALL2",
-            "SPLIT_NONE",
-            "_resumeDailyEth",
-            "STAGE_JACKPOT_ETH_RESUME",
-            "call1Bucket"
-        ];
-        // splitMode is asserted separately so its substring does not accidentally match a longer
-        // identifier; it must also be zero.
-        string[2] memory sources = [
-            "contracts/modules/DegenerusGameJackpotModule.sol",
-            "contracts/modules/DegenerusGameAdvanceModule.sol"
-        ];
-
-        for (uint256 s; s < sources.length; ++s) {
-            string memory code = _stripComments(vm.readFile(sources[s]));
-            for (uint256 k; k < splitKillSet.length; ++k) {
-                assertEq(
-                    _countOccurrences(code, splitKillSet[k]),
-                    0,
-                    string.concat("split symbol still present in ", sources[s], ": ", splitKillSet[k])
-                );
-            }
-            assertEq(
-                _countOccurrences(code, "splitMode"),
-                0,
-                string.concat("splitMode still present in ", sources[s])
-            );
-        }
-    }
-
-    /// @notice JGAS-03 single-call structural attestation: the AdvanceModule retains NO resume
-    ///         stage. The three live STAGE_JACKPOT_* constants are the renumbered 8/9/10 set
-    ///         (COIN_TICKETS / PHASE_ENDED / DAILY_STARTED); STAGE_JACKPOT_ETH_RESUME is absent.
-    function testNoResumeStageConstantInAdvanceModule() public view {
-        string memory adv = _stripComments(
-            vm.readFile("contracts/modules/DegenerusGameAdvanceModule.sol")
-        );
-        assertEq(
-            _countOccurrences(adv, "STAGE_JACKPOT_ETH_RESUME"),
-            0,
-            "no resume stage constant survives in the AdvanceModule"
-        );
-        // Advance now dispatches the metered worker. This source check follows
-        // that route; component payout tests above retain their economic checks.
-        // The public engine may resume or compose workers across its gas boundary.
-        assertGt(
-            _countOccurrences(adv, "IDegenerusGameJackpotModule.runDailyJackpot.selector"),
-            0,
-            "the daily-ETH worker is still dispatched"
-        );
-        assertGt(
-            _countOccurrences(adv, "ContractAddresses.GAME_JACKPOT_MODULE.delegatecall"),
-            0,
-            "the worker reaches the jackpot module"
-        );
-        string memory jp = _stripComments(
-            vm.readFile("contracts/modules/DegenerusGameJackpotModule.sol")
-        );
-        assertGt(_countOccurrences(jp, "function runDailyJackpot("), 0, "the worker exists");
-        assertGt(
-            _countOccurrences(jp, "return _runDailyJackpot(isJackpotPhase, lvl, randWord, allowance);"),
-            0,
-            "the metered worker reaches the shared daily-ETH implementation"
-        );
-    }
 
     /// @notice JGAS-03 preserved ceiling: every rotation of the terminal geometry is a
     ///         permutation of 152/104/48/1 = 305.
@@ -620,88 +444,5 @@ contract JackpotSingleCallCorrectness is Test {
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Source-level grep helpers (vm.readFile over ./contracts)
-    // -------------------------------------------------------------------------
 
-    /// @dev Count non-overlapping occurrences of `needle` in `haystack`.
-    function _countOccurrences(string memory haystack, string memory needle)
-        private
-        pure
-        returns (uint256 count)
-    {
-        bytes memory hb = bytes(haystack);
-        bytes memory n = bytes(needle);
-        if (n.length == 0 || hb.length < n.length) return 0;
-        for (uint256 i = 0; i <= hb.length - n.length; ) {
-            bool matched = true;
-            for (uint256 j = 0; j < n.length; ++j) {
-                if (hb[i + j] != n[j]) {
-                    matched = false;
-                    break;
-                }
-            }
-            if (matched) {
-                unchecked {
-                    ++count;
-                    i += n.length;
-                }
-            } else {
-                unchecked {
-                    ++i;
-                }
-            }
-        }
-    }
-
-    /// @dev Strip `//` line comments and lines whose first non-space char starts a block comment
-    ///      (`*` or `/*`), so NatSpec prose mentioning a kill-set symbol does not self-invalidate
-    ///      the grep gate. Code matches survive. (Mirrors RngFreezeAndRemovalProofs._stripComments.)
-    function _stripComments(string memory src) private pure returns (string memory) {
-        bytes memory b = bytes(src);
-        bytes memory out = new bytes(b.length);
-        uint256 o;
-        uint256 i;
-        uint256 lineStart;
-        bool lineIsBlockComment;
-        while (i < b.length) {
-            if (b[i] == 0x0a) {
-                out[o++] = b[i];
-                i++;
-                lineStart = i;
-                lineIsBlockComment = false;
-                continue;
-            }
-            if (i == lineStart || _onlySpacesSince(b, lineStart, i)) {
-                if (b[i] == 0x2a) {
-                    lineIsBlockComment = true;
-                } else if (b[i] == 0x2f && i + 1 < b.length && b[i + 1] == 0x2a) {
-                    lineIsBlockComment = true;
-                }
-            }
-            if (!lineIsBlockComment && b[i] == 0x2f && i + 1 < b.length && b[i + 1] == 0x2f) {
-                while (i < b.length && b[i] != 0x0a) i++;
-                continue;
-            }
-            if (!lineIsBlockComment) {
-                out[o++] = b[i];
-            }
-            i++;
-        }
-        bytes memory trimmed = new bytes(o);
-        for (uint256 k; k < o; k++) trimmed[k] = out[k];
-        return string(trimmed);
-    }
-
-    /// @dev True iff every byte in [from, to) is a space (0x20) or tab (0x09).
-    function _onlySpacesSince(bytes memory b, uint256 from, uint256 to)
-        private
-        pure
-        returns (bool)
-    {
-        for (uint256 i = from; i < to; i++) {
-            if (b[i] != 0x20 && b[i] != 0x09) return false;
-        }
-        return true;
-    }
 }

@@ -196,13 +196,12 @@ contract AfKingSeatToken is SeatFixture {
         vm.prank(owner);
         game.purchase{value: 0.01 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(afkingSubToken.balanceOf(owner), 0);
-        (uint32 smurfId, address smurfKey) = _createSmurf(owner);
+        uint32 smurfId = _createSmurf(owner);
 
         vm.prank(owner);
         game.purchaseLazyPass{value: 0.24 ether}(smurfId, bytes32(0));
         assertEq(afkingSubToken.balanceOf(owner), 1, "the smurf's seat mints to the owner");
-        assertEq(afkingSubToken.balanceOf(smurfKey), 0, "never to the smurf key");
-        assertTrue(_isEligible(smurfKey), "latch on the smurf's word");
+        assertEq((game.mintPackedOfId(smurfId) >> BitPackingLib.SEAT_CLAIMED_SHIFT) & 1, 1, "subaccount latch");
         assertFalse(_isEligible(owner), "owner's own latch untouched");
         assertEq(afkingSubToken.freeClaims(), 1);
 

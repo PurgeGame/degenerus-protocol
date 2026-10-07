@@ -80,11 +80,6 @@ contract CrapsWalletIdsProtocolTest is DeployProtocol {
         coin.mintForGame(who, amount);
     }
 
-    function _cachedId(address who) internal view returns (uint32) {
-        bytes32 slot = keccak256(abi.encode(who, crapsBattle.passCreditsSlot()));
-        return uint32(uint256(crapsBattle.extsload(slot)) >> 85);
-    }
-
     function _call(Vm.AccountAccess[] memory a, address target, bytes4 sel) internal pure returns (uint256 at, bytes memory args) {
         for (uint256 i; i < a.length; ++i) {
             if (a[i].account != target || a[i].data.length < 4 || bytes4(a[i].data) != sel) continue;
@@ -105,7 +100,7 @@ contract CrapsWalletIdsProtocolTest is DeployProtocol {
     }
 
     /// @dev Grade one first contact: the Game allocated before FLIP burned, FLIP and Quests saw
-    ///      the new ID, the bet word owns it, and the address word caches it.
+    ///      the new ID, the bet word owns it.
     function _gradeFirstContact(address who, uint256 betId, Vm.AccountAccess[] memory acc, Vm.Log[] memory logs, uint8 flags)
         internal
         view
@@ -135,7 +130,7 @@ contract CrapsWalletIdsProtocolTest is DeployProtocol {
         uint256 w = crapsBattle.betWordOf(betId);
         assertEq(uint32(w), id, "bet word bits 0..31 are the ID");
         assertEq(w & MID_MASK, 0, "bet word bits 32..159 are zero");
-        assertEq(_cachedId(who), id, "the address word caches the ID");
+
     }
 
     function test_firstContactOnACustomBattleRegistersBeforeTheBurn() public {
@@ -164,7 +159,7 @@ contract CrapsWalletIdsProtocolTest is DeployProtocol {
         _gradeFirstContact(bob, betId, acc, vm.getRecordedLogs(), 0x2);
     }
 
-    function test_aBoardSaveNeedsAGameWalletIdAndThenCachesIt() public {
+    function test_aBoardSaveRequiresAnExistingAccount() public {
         vm.prank(carol);
         vm.expectRevert(CrapsBattleStorage.NoWalletId.selector);
         crapsBattle.setPreferredBoard(0, BOARD);
@@ -172,7 +167,7 @@ contract CrapsWalletIdsProtocolTest is DeployProtocol {
         uint32 id = _giveWalletId(carol);
         vm.prank(carol);
         crapsBattle.setPreferredBoard(0, BOARD);
-        assertEq(_cachedId(carol), id);
+
         assertEq(crapsBattle.preferredBoardOf(id), BOARD);
     }
 

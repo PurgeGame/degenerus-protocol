@@ -142,7 +142,7 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
         uint256 gifterBefore = coin.balanceOf(gifter);
 
         vm.expectEmit(true, false, false, false, address(coinflip));
-        emit CoinflipDeposit(player, 0); // assert topic1 (player) only; amount not checked
+        emit CoinflipDeposit(_fixtureId(player), 0); // assert topic1 (player) only; amount not checked
 
         vm.prank(gifter);
         coinflip.depositCoinflip(playerId, amt);
@@ -151,7 +151,7 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
         assertEq(coin.balanceOf(gifter), gifterBefore - amt, "funder's FLIP funded the stake");
     }
 
-    event CoinflipDeposit(address indexed player, uint256 creditedFlip);
+    event CoinflipDeposit(uint32 indexed player, uint256 creditedFlip);
 
     // ----- claimBingo permissionless -----
 

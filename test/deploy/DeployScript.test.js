@@ -109,7 +109,7 @@ describe("Deploy Pipeline", function () {
 
     it("DGNRS: creator holds initial vesting (50B) as DGNRS", async function () {
       const f = await loadFixture(deployFullProtocol);
-      const CREATOR_INITIAL = 50_000_000_000n * 10n ** 18n;
+      const CREATOR_INITIAL = 50_000_000_000n * 10n ** 12n;
       const creatorDgnrs = await f.dgnrs.balanceOf(f.deployer.address);
       expect(creatorDgnrs).to.equal(CREATOR_INITIAL);
     });

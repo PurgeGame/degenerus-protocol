@@ -84,9 +84,9 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
     address private constant HOUSE = ContractAddresses.SDGNRS;
     uint32 private constant HOUSE_ID = 2;
     uint256 private constant CAP = 8000;
-    bytes32 private constant BURN_EVENT = keccak256("DecimatorBurn(address,uint256,uint64)");
+    bytes32 private constant BURN_EVENT = keccak256("DecimatorBurn(uint32,uint256,uint64)");
     bytes32 private constant RECORDED_EVENT =
-        keccak256("DecBurnRecorded(address,uint24,uint64,uint256,uint256,uint256,uint32)");
+        keccak256("DecBurnRecorded(uint32,uint24,uint64,uint256,uint256,uint256,uint32)");
     bytes32 private constant SETTLED_EVENT = keccak256("CoinflipDayResolved(uint24,bool,uint16,uint128)");
     bytes32 private constant QUEST_EVENT = keccak256("QuestSlotRolled(uint24,uint8,uint8,uint8,uint24)");
     AutoDecimatorGameHarness private harness;
@@ -146,7 +146,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
     function _burned(Vm.Log[] memory logs) private view returns (uint256 amount, uint256 count) {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter == address(coin) && logs[i].topics[0] == BURN_EVENT) {
-                assertEq(address(uint160(uint256(logs[i].topics[1]))), HOUSE);
+                assertEq(uint32(uint256(logs[i].topics[1])), game.walletIdOf(HOUSE));
                 (uint256 spent,) = abi.decode(logs[i].data, (uint256, uint64));
                 amount += spent;
                 ++count;
@@ -158,8 +158,9 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         address player = makeAddr("manual-decimator");
         _prepare(21, 4, 3, true);
         harness.applyOpeningWord(21);
-        vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScore.selector, player), abi.encode(uint256(500), uint32(0)));
-        vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScoreCached.selector, player), abi.encode(uint256(500), uint32(0)));
+        uint32 playerId = _giveWalletId(player);
+        vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScore.selector, player), abi.encode(uint256(500), playerId));
+        vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScoreCachedById.selector, playerId), abi.encode(uint256(500)));
         vm.prank(address(game)); coin.mintForGame(player, 4_000_000);
         vm.recordLogs();
         vm.prank(player); coin.decimatorBurn(0, 2_000_000, 0);

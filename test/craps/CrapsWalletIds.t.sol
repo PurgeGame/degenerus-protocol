@@ -13,9 +13,9 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @dev The table plus the raw readers and fixture writers the wallet-ID suite grades through.
 contract WalletIdTable is CrapsViews {
-    function addressWord(address who) external view returns (uint256) {
-        return _passCredits[who];
-    }
+
+
+
 
     function idWord(uint32 id) external view returns (uint256) {
         return _passCreditsById[id];
@@ -80,7 +80,7 @@ contract CrapsWalletIdsTest is CrapsPins {
     uint32 internal constant BOARD = 3 | (3 << 12) | (1 << 15);
     uint32 internal constant BOARD_B = 2 | (1 << 3);
     uint256 internal constant ADDRESS_SLOT = 14;
-    uint256 internal constant ID_SLOT = 15;
+    uint256 internal constant ID_SLOT = 14;
     uint256 internal constant INIT = 1 << 84;
     uint256 internal constant ID_SHIFT = 85;
     uint256 internal constant HIGH_BIT = 1 << 217;
@@ -119,9 +119,8 @@ contract CrapsWalletIdsTest is CrapsPins {
         return game.registerWallet(who, true);
     }
 
-    function _cachedId(address who) internal view returns (uint32) {
-        return uint32(c.addressWord(who) >> ID_SHIFT);
-    }
+
+
 
     function _boardOf(uint256 word) internal pure returns (uint32 chips) {
         (chips,) = CrapsPreferenceLib.decode(word);
@@ -135,9 +134,8 @@ contract CrapsWalletIdsTest is CrapsPins {
         return uint32(word >> 32);
     }
 
-    function _addrSlot(address who) internal pure returns (bytes32) {
-        return keccak256(abi.encode(who, ADDRESS_SLOT));
-    }
+
+
 
     function _idSlot(uint32 id) internal pure returns (bytes32) {
         return keccak256(abi.encode(uint256(id), ID_SLOT));
@@ -228,7 +226,6 @@ contract CrapsWalletIdsTest is CrapsPins {
             assertLt(reg, burn, "registration precedes the burn");
             assertEq(flip.lastCrapsId(), id, "FLIP received the wallet ID");
             _assertOwnerWord(betId, id);
-            assertEq(_cachedId(p), id, "the address word caches the ID");
             assertEq(_boardOf(c.idWord(id)), BOARD, "the board is saved in the ID word");
             uint256 slips;
             for (uint256 i; i < logs.length; ++i) {
@@ -267,7 +264,6 @@ contract CrapsWalletIdsTest is CrapsPins {
         c.upgradeReservedDay(0, day + 1);
 
         assertEq(game.walletIdOf(stranger), 0, "no ID was allocated");
-        assertEq(c.addressWord(stranger), 0, "no address word was written");
     }
 
     /// @dev The paying upgrade registers first; a wallet with no ticket then reverts and the
@@ -280,45 +276,8 @@ contract CrapsWalletIdsTest is CrapsPins {
         assertEq(game.walletIdOf(stranger), 0, "the failed upgrade left no wallet ID");
     }
 
-    function test_setPreferredBoardCachesForAGameRegisteredWallet() public {
-        uint32 id = _register(alice);
-        assertEq(c.addressWord(alice), 0);
-        vm.expectCall(address(game), abi.encodeCall(MockGame.registerWallet, (alice, false)), 1);
-        vm.prank(alice);
-        c.setPreferredBoard(0, BOARD);
-        uint256 a = c.addressWord(alice);
-        assertEq(uint32(a >> ID_SHIFT), id, "cache written");
-        assertTrue(a & INIT != 0, "address word initialized");
-        assertEq(_boardOf(a), BOARD);
-        assertEq(uint64(a), 0, "address word pass lanes stay zero");
-        assertEq(_boardOf(c.idWord(id)), BOARD, "ID word board");
-        assertEq(c.preferredBoardOf(id), BOARD, "preferredBoardOf reads the ID word");
-    }
 
-    function test_amendSlipCachesForAGameRegisteredWallet() public {
-        uint32 id = _register(alice);
-        vm.prank(ContractAddresses.GAME);
-        uint24 reserved = c.deliverPasses(id, 1, 0);
-        assertEq(reserved, day + 1, "the delivery reserved tomorrow");
-        assertEq(c.addressWord(alice), 0, "a delivery writes no address word");
-        uint256 betId = _dayBet(reserved, c.daySeatOfId(reserved, id));
-        _assertOwnerWord(betId, id);
-        vm.prank(alice);
-        c.amendSlip(betId, BOARD);
-        assertEq(_cachedId(alice), id, "amendSlip wrote the cache");
-        assertEq(c.betOf(betId).chips, BOARD, "the slip was amended");
-    }
 
-    function test_applyCrapsPassesCachesForAGameRegisteredWallet() public {
-        uint32 id = _register(alice);
-        vm.prank(ContractAddresses.GAME);
-        c.creditPasses(id, 1, 0);
-        vm.prank(alice);
-        c.applyCrapsPasses(day + 1, 1, false, BOARD);
-        assertEq(_cachedId(alice), id, "applyCrapsPasses wrote the cache");
-        assertEq(_normal(c.idWord(id)), 0, "the pass was spent from the ID word");
-        _assertOwnerWord(_dayBet(day + 1, c.daySeatOfId(day + 1, id)), id);
-    }
 
     function test_convertAndUpgradeReservedDayLeaveTheAddressWordUntouched() public {
         uint32 id = _register(alice);
@@ -332,64 +291,24 @@ contract CrapsWalletIdsTest is CrapsPins {
         uint256 w = c.idWord(id);
         assertEq(_normal(w), 0, "21 normals debited from the ID word");
         assertEq(_high(w), 1, "one high credited to the ID word");
-        assertEq(c.addressWord(alice), 0, "convertNormalToHigh wrote no address word");
 
         vm.prank(alice);
         c.upgradeReservedDay(0, reserved);
         w = c.idWord(id);
         assertEq(_high(w), 0, "the high pass was debited from the ID word");
         assertEq(_normal(w), 1, "the normal pass was banked back into the ID word");
-        assertEq(c.addressWord(alice), 0, "upgradeReservedDay wrote no address word");
         assertEq(c.betWordOf(_dayBet(reserved, c.daySeatOfId(reserved, id))) & DAY_HIGH_MASK, DAY_HIGH_MASK);
     }
 
     // ── 3. Fast path ─────────────────────────────────────────────────────────
 
-    function test_aCachedRepeatBetTouchesNeitherPassWordNorTheGameIdentity() public {
-        uint64 slot = _customSlot(true);
-        vm.prank(alice);
-        c.enterBattle(slot, BOARD, 1);
-        uint32 id = game.walletIdOf(alice);
-        assertEq(_cachedId(alice), id);
 
-        vm.expectCall(address(game), abi.encodeWithSelector(MockGame.registerWallet.selector), 0);
-        vm.expectCall(address(game), abi.encodeWithSelector(bytes4(keccak256("rngLocked()"))), 0);
-        vm.record();
-        vm.prank(alice);
-        uint256 betId = c.enterBattle(slot, BOARD, 1);
-        (, bytes32[] memory writes) = vm.accesses(address(c));
-        for (uint256 i; i < writes.length; ++i) {
-            assertTrue(writes[i] != _addrSlot(alice), "SSTORE to the address word");
-            assertTrue(writes[i] != _idSlot(id), "SSTORE to the ID word");
-        }
-        _assertOwnerWord(betId, id);
-    }
+
 
     // ── 4. Locked save ───────────────────────────────────────────────────────
 
-    function test_aLockedFirstBetCachesTheIdOnlyAndTheNextUnlockedBetSaves() public {
-        uint64 slot = _customSlot(true);
-        game.setRngLocked(true);
-        vm.prank(alice);
-        uint256 first = c.enterBattle(slot, BOARD, 1);
-        uint32 id = game.walletIdOf(alice);
-        uint256 a = c.addressWord(alice);
-        assertEq(uint32(a >> ID_SHIFT), id, "the locked bet cached the ID");
-        assertEq(a & INIT, 0, "but did not initialize the address word");
-        assertEq(_boardOf(a), 0, "or save a board there");
-        assertEq(c.idWord(id), 0, "the ID word got no board");
-        assertEq(c.betOf(first).chips, BOARD, "the bet itself carries its board");
 
-        game.setRngLocked(false);
-        vm.expectCall(address(game), abi.encodeWithSelector(MockGame.registerWallet.selector), 0);
-        vm.prank(alice);
-        c.enterBattle(slot, BOARD, 1);
-        a = c.addressWord(alice);
-        assertTrue(a & INIT != 0, "the unlocked bet initialized");
-        assertEq(_boardOf(a), BOARD);
-        assertTrue(c.idWord(id) & INIT != 0, "ID word initialized");
-        assertEq(_boardOf(c.idWord(id)), BOARD, "ID word board saved");
-    }
+
 
     // ── 5. vaultComp ─────────────────────────────────────────────────────────
 
@@ -429,7 +348,6 @@ contract CrapsWalletIdsTest is CrapsPins {
         uint256 k5 = (uint256(_daySlot(day + 1) + 2) << 64) | 1;
         _assertOwnerWord(k5, ids[4]);
         assertEq(_chipsOf(k5), 0, "kind 5 on board zero");
-        for (uint256 i; i < 5; ++i) assertEq(c.addressWord(to[i]), 0, "a comp writes no address word");
     }
 
     function test_vaultCompHonoursTheRecipientsSavedBoard() public {
@@ -453,12 +371,10 @@ contract CrapsWalletIdsTest is CrapsPins {
         c.creditPasses(id, 3, 2);
         assertEq(_normal(c.idWord(id)), 3);
         assertEq(_high(c.idWord(id)), 2);
-        assertEq(c.addressWord(alice), 0, "credits never reach the address word");
         vm.prank(ContractAddresses.GAME);
         uint24 reserved = c.deliverPasses(id, 2, 0);
         assertEq(reserved, day + 1);
         assertEq(_normal(c.idWord(id)), 4, "one delivered pass seated, one banked by ID");
-        assertEq(c.addressWord(alice), 0);
     }
 
     function test_boardSavesAndPassMovesPreserveEachOthersLanes() public {
@@ -486,7 +402,6 @@ contract CrapsWalletIdsTest is CrapsPins {
         w = c.idWord(id);
         assertEq(_normal(w), 7, "a board change keeps the passes");
         assertEq(_boardOf(w), BOARD_B);
-        assertEq(uint64(c.addressWord(alice)), 0, "address word pass lanes stay zero");
     }
 
     // ── 7. Protocol bodies ───────────────────────────────────────────────────
@@ -497,8 +412,6 @@ contract CrapsWalletIdsTest is CrapsPins {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         assertEq(fresh.idWord(2), 20, "sDGNRS ID word: twenty normal passes");
         assertEq(fresh.idWord(1), 20, "Vault ID word: twenty normal passes");
-        assertEq(fresh.addressWord(ContractAddresses.SDGNRS), 0);
-        assertEq(fresh.addressWord(ContractAddresses.VAULT), 0);
         uint256 seen;
         for (uint256 i; i < logs.length; ++i) {
             if (_t0(logs[i]) != CrapsBattleStorage.CrapsPassesCredited.selector) continue;
@@ -515,7 +428,6 @@ contract CrapsWalletIdsTest is CrapsPins {
     function test_openBonusDaySeatsTheBodiesByIdOnTheirIdWordPasses() public {
         vm.prank(ContractAddresses.VAULT);
         c.setPreferredBoard(0, BOARD);
-        assertEq(_cachedId(ContractAddresses.VAULT), 1, "the Vault's address word caches Game ID 1");
         assertEq(_boardOf(c.idWord(1)), BOARD, "the Vault's board sits in ID word 1");
         uint256 house = _normal(c.idWord(2));
         uint256 vaultPasses = _normal(c.idWord(1));
@@ -530,8 +442,6 @@ contract CrapsWalletIdsTest is CrapsPins {
         _assertOwnerWord(_dayBet(day, vSeat), 1);
         assertEq(c.betOf(_dayBet(day, vSeat)).chips, BOARD, "the Vault plays its saved board");
         assertEq(c.betOf(_dayBet(day, hSeat)).chips, 0, "sDGNRS plays random");
-        assertEq(uint64(c.addressWord(ContractAddresses.VAULT)), 0);
-        assertEq(c.addressWord(ContractAddresses.SDGNRS), 0);
     }
 
     function test_theUnfundedHouseStillSeatsIdTwo() public {
@@ -833,7 +743,6 @@ contract CrapsWalletIdsTest is CrapsPins {
             ++seen;
         }
         assertEq(seen, 1);
-        assertEq(c.addressWord(alice), 0, "awards never touch the address word");
         assertGt(coinflip.stakedById(id), 0);
     }
 
@@ -1112,9 +1021,6 @@ contract CrapsWalletIdsTest is CrapsPins {
         assertEq(_normal(c.idWord(aId)), _normal(a0) + 1, "alice's normal refund by ID");
         assertEq(_high(c.idWord(bId)), _high(b0) + 1, "bob's high refund by ID");
         assertEq(_normal(c.idWord(cId)), _normal(c0) + 1, "carol's refund by ID");
-        assertEq(uint64(c.addressWord(alice)), 0);
-        assertEq(uint64(c.addressWord(bob)), 0);
-        assertEq(c.addressWord(carol), 0, "an uncached holder's address word stays empty");
         uint256 refunds;
         uint256 lapsedSeats;
         for (uint256 i; i < logs.length; ++i) {

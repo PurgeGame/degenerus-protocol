@@ -45,7 +45,7 @@ contract GoldenTicketFoilHarness is DegenerusGameFoilPackModule, WalletSeed {
         uint256 ownerIdx = uint256(_seedWallet(buyer));
         uint32 position = foilReadCount;
         uint256 slot = _foilSlot(_foilReadKey(), position);
-        uint256 pack = (ownerIdx << 192) | (uint256(lvl) << 160) | uint256(uint160(buyer));
+        uint256 pack = (ownerIdx << 192) | (uint256(lvl) << 160);
         assembly ("memory-safe") { sstore(slot, pack) }
         foilReadCount = position + 1;
     }
@@ -109,7 +109,7 @@ contract GoldenTicketFoilHarness is DegenerusGameFoilPackModule, WalletSeed {
         uint8 golds,
         uint8 allGold
     ) external {
-        _settleGoldenTicket(buyer, _seedWallet(buyer), lvl, golds, allGold);
+        _settleGoldenTicket(_seedWallet(buyer), lvl, golds, allGold);
     }
 
     /// @dev Drive the grand push directly — the branch the DRAIN takes when a pack's
@@ -122,7 +122,7 @@ contract GoldenTicketFoilHarness is DegenerusGameFoilPackModule, WalletSeed {
         uint8 golds,
         uint8 allGold
     ) external {
-        _pushFoilGrand(buyer, _seedWallet(buyer), lvl, golds, allGold);
+        _pushFoilGrand(_seedWallet(buyer), lvl, golds, allGold);
     }
 
     function walletIdOf(address who) external view returns (uint32) {
@@ -205,11 +205,11 @@ contract CoinflipRecorder {
 
 /// @dev Recorder etched at ContractAddresses.WWXRP: captures mintPrize calls.
 contract WwxrpRecorder {
-    address public lastTo;
+    uint32 public lastTo;
     uint256 public lastAmount;
     uint256 public calls;
 
-    function mintPrize(address to, uint256 a) external {
+    function creditPrize(uint32 to, uint256 a) external {
         lastTo = to;
         lastAmount = a;
         ++calls;
@@ -723,7 +723,7 @@ contract GoldenTicketFoilPack is Test {
     // -- helpers --------------------------------------------------------------
 
     function assertNoFoilEvent(Vm.Log[] memory logs) internal pure {
-        bytes32 topic = keccak256("GoldenTicketFoil(address,uint24,uint8,uint8,uint256)");
+        bytes32 topic = keccak256("GoldenTicketFoil(uint32,uint24,uint8,uint8,uint256)");
         for (uint256 i; i < logs.length; ++i) {
             require(logs[i].topics[0] != topic, "no golden-ticket event");
         }
@@ -732,7 +732,7 @@ contract GoldenTicketFoilPack is Test {
     function foilEventPayload(
         Vm.Log[] memory logs
     ) internal pure returns (uint8 golds, uint8 allGold, uint256 flipCredit) {
-        bytes32 topic = keccak256("GoldenTicketFoil(address,uint24,uint8,uint8,uint256)");
+        bytes32 topic = keccak256("GoldenTicketFoil(uint32,uint24,uint8,uint8,uint256)");
         bool found;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] == topic) {

@@ -15,9 +15,9 @@ import {GameSlots} from "./GameSlots.sol";
 ///         then score | house wilds << 4.
 library DegeneretteQueue {
     uint256 internal constant QUEUE_SLOT = GameSlots.DEGENERETTE_QUEUE;
-    bytes32 internal constant PLACED_SIG = keccak256("DegeneretteBetPlaced(address,uint32,uint64,uint256)");
+    bytes32 internal constant PLACED_SIG = keccak256("DegeneretteBetPlaced(uint32,uint32,uint64,uint256)");
     bytes32 internal constant RESOLVED_SIG =
-        keccak256("DegeneretteResolved(address,uint32,uint64,uint256,uint32,bytes)");
+        keccak256("DegeneretteResolved(uint32,uint32,uint64,uint256,uint32,bytes)");
 
     /// @dev The newest bet id at `index` (the buffer's bet count).
     function lastBetId(Vm vm, address game, uint48 index) internal view returns (uint64) {

@@ -6,7 +6,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @title OverpayToAfking
-/// @notice Every ETH a buy doesn't need, and any bare send, is credited to the payer's
+/// @notice Every ETH a buy doesn't need, and any registered caller's bare send, is credited to the payer's
 ///         withdrawable afking balance instead of reverting, stranding, or funding the pool.
 ///         Assertions read the real afkingFundingOf getter (slot-free).
 contract OverpayToAfking is DeployProtocol {
@@ -69,6 +69,7 @@ contract OverpayToAfking is DeployProtocol {
         address sender = makeAddr("plainSender");
         uint256 amt = 0.5 ether;
         vm.deal(sender, amt);
+        _aid(sender); // Bare funding deposits require an existing account.
 
         vm.prank(sender);
         (bool ok, ) = address(game).call{value: amt}("");
@@ -122,6 +123,7 @@ contract OverpayToAfking is DeployProtocol {
         address buyer = makeAddr("withdrawer");
         uint256 amt = 0.3 ether;
         vm.deal(buyer, amt);
+        _aid(buyer); // Bare funding deposits require an existing account.
 
         vm.prank(buyer);
         (bool ok, ) = address(game).call{value: amt}("");
@@ -136,7 +138,7 @@ contract OverpayToAfking is DeployProtocol {
     }
 
     /// @dev Mirror of the Game's ledger-credit log (DegenerusGameStorage).
-    event AfkingFunded(address indexed player, uint256 amount);
+    event AfkingFunded(uint32 indexed player, uint256 amount);
 
     /// @notice A funded subscribe routes its msg.value through the emitting credit helper,
     ///         so the afking ledger's credits are observable and not merely its debits.
@@ -156,7 +158,7 @@ contract OverpayToAfking is DeployProtocol {
 
         uint256 funded = 1 ether;
         vm.expectEmit(true, false, false, true, address(game));
-        emit AfkingFunded(sub, funded);
+        emit AfkingFunded(_fixtureId(sub), funded);
         uint256 seat = _seatOf(sub);
         vm.prank(sub);
         game.subscribe{value: funded}(0, false, true, 1, 0, seat);
@@ -178,13 +180,14 @@ contract OverpayToAfking is DeployProtocol {
 
         // The funder consents to fund this subscriber.
         uint32 funderId = _aid(funder);
+        uint32 subscriberId = _aid(sub);
         uint256 seat = _seatOf(sub);
         vm.prank(funder);
-        game.setOperatorApproval(0, sub, true);
+        game.setAfkingFundingApproval(funderId, subscriberId, true);
 
         uint256 funded = 1 ether;
         vm.expectEmit(true, false, false, true, address(game));
-        emit AfkingFunded(funder, funded);
+        emit AfkingFunded(_fixtureId(funder), funded);
         vm.prank(sub);
         game.subscribe{value: funded}(0, false, true, 1, funderId, seat);
 

@@ -10,15 +10,15 @@ contract RedemptionGasTest is RedemptionFixture {
     function test_gas_burn_gambling() public {
         vm.cool(address(sdgnrs)); vm.cool(address(game));
         uint256 before = gasleft();
-        _burn(alice, 1 ether);
+        _burn(alice, 1e12);
         uint256 used = before - gasleft();
         emit log_named_uint("cold burn", used);
         assertLt(used, 350_000);
     }
     function test_gas_burnWrapped_gambling() public {
-        dgnrs.transfer(alice, 1000 ether);
-        vm.prank(alice); sdgnrs.burnWrapped(1000 ether);
-        assertEq(_claimTokens(alice, _openBatchId()), 1000 ether);
+        dgnrs.transfer(alice, 1000e12);
+        vm.prank(alice); sdgnrs.burnWrapped(1000e12);
+        assertEq(_claimTokens(alice, _openBatchId()), 1000e12);
     }
     function test_gas_closeRedemptionBatch() public {
         _burn(alice, sdgnrs.totalSupply() / 1000);

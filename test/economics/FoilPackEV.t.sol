@@ -133,7 +133,7 @@ contract FoilPackEV is DeployProtocol {
 
         for (uint256 i = 0; i < FOIL_BUYERS; i++) {
             r.foilValue += _realizedValue(fb[i]);
-            r.foilWwxrp += wwxrp.balanceOf(fb[i]);
+            r.foilWwxrp += wwxrp.claimable(game.walletIdOf(fb[i]));
         }
         for (uint256 i = 0; i < TICKET_BUYERS; i++) {
             r.ticketValue += _realizedValue(tb[i]);

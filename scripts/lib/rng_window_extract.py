@@ -238,6 +238,9 @@ def classify_mode(masked_line: str, ident: str) -> str:
         return "WRITE"
     if re.search(r"(?:\+\+|--)\s*" + target, masked_line):
         return "WRITE"
+    # Direct assembly stores through a bound storage reference keep the same owner.
+    if re.search(r"\bsstore\s*\(\s*" + re.escape(ident) + r"\.slot\s*,", masked_line):
+        return "WRITE"
     return "READ"
 
 

@@ -59,7 +59,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     /// @param newCurseCount The curse-counter field AFTER the change: stored curse points (0..20;
     ///        each smite or cashout-curse adds +2 saturating at 20; activity penalty = value points;
     ///        0 means cured).
-    event CurseChanged(address indexed player, uint8 newCurseCount);
+    event CurseChanged(uint32 indexed player, uint8 newCurseCount);
 
     /// @dev Resolve the salvage-swap counterparty for a budget, fail-closed. sDGNRS first when its OWN
     ///      claimable covers totalBudget above a >=1 ETH floor; else the vault when its owner has enabled
@@ -96,8 +96,8 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         (BitPackingLib.MASK_24 << BitPackingLib.LEVEL_STREAK_SHIFT);
 
     /// @dev Record a mint streak completion for a given level (idempotent per level).
-    function _recordMintStreakForLevel(address player, uint24 mintLevel) internal {
-        if (player == address(0)) return;
+    function _recordMintStreakForLevel(uint32 player, uint24 mintLevel) internal {
+        if (player == 0) return;
         uint256 mintData = mintPacked_[player];
         uint24 lastCompleted = uint24(
             (mintData >> BitPackingLib.MINT_STREAK_LAST_COMPLETED_SHIFT) & BitPackingLib.MASK_24
@@ -280,18 +280,18 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
 
     /// @dev Activity score body operating on a caller-supplied current level, so every
     ///      level comparison (pass window, mint count, affiliate cache) shares one read.
-    /// @param player The player address to calculate score for.
+    /// @param player The account ID to calculate score for.
     /// @param questStreak Quest streak value (pre-fetched from handler return or external view).
     /// @param streakBaseLevel Level used for mint streak calculation.
     /// @param currLevel The game's current level.
     /// @return scorePoints Total activity score in whole points.
     function _playerActivityScoreAt(
-        address player,
+        uint32 player,
         uint32 questStreak,
         uint24 streakBaseLevel,
         uint24 currLevel
     ) internal view returns (uint256 scorePoints) {
-        if (player == address(0)) return 0;
+        if (player == 0) return 0;
 
         uint256 packed = mintPacked_[player];
         bool hasDeityPass = packed >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0;
@@ -349,7 +349,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
                     affPoints = (packed >> BitPackingLib.AFFILIATE_BONUS_POINTS_SHIFT) & BitPackingLib.MASK_6;
                 } else {
                     affPoints = affiliate.affiliateBonusPointsBest(
-                        currLevel, uint32(packed >> BitPackingLib.WALLET_ID_SHIFT)
+                        currLevel, player
                     );
                 }
                 bonusPoints += affPoints;
@@ -382,14 +382,14 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     /// @dev Current-level affiliate points only depend on earlier levels. All earning
     ///      writers credit the next level, so this cache remains valid until level advances.
     ///      Only cache bits change; participation, pass, and curse fields are preserved.
-    function _cacheAffiliateBonus(uint24 currLevel, uint256 packed)
+    function _cacheAffiliateBonus(uint32 player, uint24 currLevel, uint256 packed)
         internal view returns (uint256)
     {
         if (((packed >> BitPackingLib.AFFILIATE_BONUS_LEVEL_SHIFT) & BitPackingLib.MASK_24) == currLevel) {
             return packed;
         }
         uint256 points = affiliate.affiliateBonusPointsBest(
-            currLevel, uint32(packed >> BitPackingLib.WALLET_ID_SHIFT)
+            currLevel, player
         );
         packed = BitPackingLib.setPacked(
             packed, BitPackingLib.AFFILIATE_BONUS_LEVEL_SHIFT, BitPackingLib.MASK_24, currLevel
@@ -400,9 +400,9 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     }
 
     function _playerActivityScoreCachedAt(
-        address player, uint32 questStreak, uint24 streakBaseLevel, uint24 currLevel
+        uint32 player, uint32 questStreak, uint24 streakBaseLevel, uint24 currLevel
     ) internal returns (uint256) {
-        if (player == address(0)) return 0;
+        if (player == 0) return 0;
         uint256 previous = mintPacked_[player];
         // Only persist beside durable purchase history. Mutable-only seat/curse
         // fields can later clear; leaving a cache-only word would incorrectly pass
@@ -413,23 +413,23 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         if ((previous & historyMask) == 0) {
             return _playerActivityScoreAt(player, questStreak, streakBaseLevel, currLevel);
         }
-        uint256 packed = _cacheAffiliateBonus(currLevel, previous);
+        uint256 packed = _cacheAffiliateBonus(player, currLevel, previous);
         if (packed != previous) mintPacked_[player] = packed;
         return _playerActivityScoreAt(player, questStreak, streakBaseLevel, currLevel);
     }
 
-    function _playerActivityScoreCached(address player, uint32 questStreak) internal returns (uint256) {
+    function _playerActivityScoreCached(uint32 player, uint32 questStreak) internal returns (uint256) {
         return _playerActivityScoreCachedAt(player, questStreak, _activeTicketLevel(), level);
     }
 
     /// @dev Convenience wrapper using _activeTicketLevel() (the routed buy-now level) as
     ///      streakBaseLevel — so a terminal-jackpot deposit scores against the level its
     ///      participation records to — with currLevel (the actual level) for the score body.
-    /// @param player The player address to calculate score for.
+    /// @param player The account ID to calculate score for.
     /// @param questStreak Quest streak value (pre-fetched from handler return or external view).
     /// @return scorePoints Total activity score in whole points.
     function _playerActivityScore(
-        address player,
+        uint32 player,
         uint32 questStreak
     ) internal view returns (uint256 scorePoints) {
         uint24 currLevel = level;
@@ -451,7 +451,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     uint8 internal constant CURSE_COUNT_CAP = 20;
 
     /// @dev Add a saturating +2 curse stack to `target` (no SSTORE once at the cap).
-    function _applyCurseStack(address target) internal {
+    function _applyCurseStack(uint32 target) internal {
         uint256 packed = mintPacked_[target];
         uint256 curse = (packed >> BitPackingLib.CURSE_COUNT_SHIFT) & BitPackingLib.MASK_5;
         if (curse >= CURSE_COUNT_CAP) return;
@@ -467,7 +467,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     }
 
     /// @dev Clear `target`'s curse counter to 0 (field-isolated; no SSTORE when already 0).
-    function _clearCurse(address target) internal {
+    function _clearCurse(uint32 target) internal {
         uint256 packed = mintPacked_[target];
         if ((packed >> BitPackingLib.CURSE_COUNT_SHIFT) & BitPackingLib.MASK_5 == 0) return;
         mintPacked_[target] = BitPackingLib.setPacked(
@@ -485,7 +485,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     ///      floor counts the level as minted (mint day, streak, level count, quest
     ///      activity gate). Shared by the pass-bundled lootbox leg and the plain
     ///      standalone lootbox buy.
-    function _recordLootboxUnits(address player, uint256 lootboxWei) internal {
+    function _recordLootboxUnits(uint32 player, uint256 lootboxWei) internal {
         // Routed level: lootbox participation counts toward the level the tickets route to.
         uint24 lvl = _activeTicketLevel();
         uint256 units = (lootboxWei * 4 * QTY_SCALE) /
@@ -520,7 +520,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
      *   whale-pass frozen; pass flag/type clear once lvl passes frozenUntilLevel), refresh affiliate cache
      */
     function _recordMintData(
-        address player,
+        uint32 player,
         uint24 lvl,
         uint32 mintUnits
     ) internal {
@@ -695,7 +695,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
 
         // Score at the actual game level; the recorded ticket level can be one ahead.
         // Piggyback the current-level affiliate cache on this existing SSTORE.
-        data = _cacheAffiliateBonus(level, data);
+        data = _cacheAffiliateBonus(player, level, data);
 
         // ---------------------------------------------------------------------
         // Commit to storage (only if changed)

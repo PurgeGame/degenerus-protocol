@@ -406,7 +406,7 @@ contract RedemptionEndingPendingTest is RedemptionCloseTools {
         vm.deal(playerA, 1 ether);
         _giveWalletId(playerA);
         vm.prank(address(game));
-        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, playerA, 1_000_000 ether);
+        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, playerA, 1_000_000e12);
         vm.mockCall(
             address(coinflip),
             abi.encodeWithSelector(IReviewCoinflipMock.getCoinflipDayResult.selector),
@@ -429,7 +429,7 @@ contract RedemptionEndingPendingTest is RedemptionCloseTools {
         _primeCurrentDayRng();
         burnDay = _openBatch();
         vm.prank(playerA);
-        sdgnrs.burn(1_000_000 ether);
+        sdgnrs.burn(1_000_000e12);
         vm.warp(vm.getBlockTimestamp() + 1 days);
         _primeCurrentDayRng();
         _closeFunded();
@@ -472,7 +472,7 @@ contract ReviewFoilHarness is DegenerusGameFoilPackModule, WalletSeed {
         foilRecord[lvl & 3][_seedWallet(buyer)] = uint256(day) | (uint256(multBps) << _FOIL_MULT_SHIFT)
             | (uint256(lvl) << _FOIL_LEVEL_SHIFT);
         uint256 ownerIdx = uint256(_seedWallet(buyer));
-        _foilAppend(_foilReadKey(), (ownerIdx << 192) | (uint256(lvl) << 160) | uint256(uint160(buyer)));
+        _foilAppend(_foilReadKey(), (ownerIdx << 192) | (uint256(lvl) << 160));
     }
 
     function _foilAppend(uint24 key, uint256 pack) internal {

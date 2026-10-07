@@ -47,7 +47,7 @@ import {IDegenerusGameWhaleModule, IDegenerusGameJackpotDrawModule, IDegenerusGa
 ///      context makes msg.sender the Game, which is a whitelisted WWXRP minter.
 interface IWwxrpMintPrize {
     /// @notice Mint WWXRP to a recipient (WWXRP, authorized minters only).
-    function mintPrize(address to, uint256 amount) external;
+    function creditPrize(uint32 to, uint256 amount) external;
 }
 
 /**
@@ -1268,8 +1268,8 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
             }
         }
         if (wwxrpAward != 0) {
-            IWwxrpMintPrize(ContractAddresses.WWXRP).mintPrize(
-                _payee(_walletElement(winner)),
+            IWwxrpMintPrize(ContractAddresses.WWXRP).creditPrize(
+                winner,
                 wwxrpAward
             );
         }

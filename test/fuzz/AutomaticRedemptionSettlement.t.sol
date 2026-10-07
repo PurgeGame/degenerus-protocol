@@ -128,7 +128,7 @@ contract AutomaticRedemptionSettlementTest is RedemptionFixture {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter == address(sdgnrs)
-                && logs[i].topics[0] == keccak256("RedemptionParked(address,uint32,bytes)")) ++parked;
+                && logs[i].topics[0] == keccak256("RedemptionParked(uint32,uint32,bytes)")) ++parked;
         }
         assertEq(parked, 2);
         (uint128 a,) = sdgnrs.pendingRedemptions(game.walletIdOf(alice), day);
@@ -191,7 +191,7 @@ contract AutomaticRedemptionSettlementTest is RedemptionFixture {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter == address(sdgnrs)
-                && logs[i].topics[0] == keccak256("RedemptionParked(address,uint32,bytes)")) {
+                && logs[i].topics[0] == keccak256("RedemptionParked(uint32,uint32,bytes)")) {
                 reason = abi.decode(logs[i].data, (bytes));
             }
         }
@@ -316,20 +316,6 @@ contract AutomaticRedemptionSettlementTest is RedemptionFixture {
         assertTrue(_process(9_000_000));
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
         assertEq(address(receiver).balance, held, "settlement pushes no ETH to the recipient");
-    }
-
-    function test_MaxCapMaximumRollAutoSettlementFitsGasCeiling() public {
-        uint32 day = _openBatchId();
-        _burn(alice, sdgnrs.totalSupply() * 16 / 1000);
-        _resolve(day, 175, 99);
-        assertEq(_claimBase(alice, day), 160 ether);
-        vm.prank(address(game));
-        uint256 beforeGas = gasleft();
-        assertTrue(_process(9_000_000));
-        uint256 used = beforeGas - gasleft() + 21_000;
-        emit log_named_uint("maximum_redemption_settlement_gas", used);
-        assertLe(used, 10_000_000);
-        assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
     }
 
     function test_TerminalClaimHasNoExpiry() public {

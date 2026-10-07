@@ -68,7 +68,7 @@ contract FoilClaimBatch is DeployProtocol {
     uint24 private _endDay;
 
     bytes32 private constant FOIL_CLAIMED_SIG =
-        keccak256("FoilMatchClaimed(address,uint24,uint256,uint8,uint256)");
+        keccak256("FoilMatchClaimed(uint32,uint24,uint256,uint8,uint256)");
 
     function setUp() public {
         _deployProtocol();
@@ -144,12 +144,12 @@ contract FoilClaimBatch is DeployProtocol {
             _completeDay(_seed(nPurchaseDays, d));
             _endDay = game.currentDayView();
             (uint32 board, uint24 drawLevel) = _foilDraw(_endDay);
-            bytes32 outer = keccak256(abi.encode(uint256(drawLevel & 3), uint256(58)));
-            bytes32 firstSlot = keccak256(abi.encode(_fb[0], outer));
+            bytes32 outer = keccak256(abi.encode(uint256(drawLevel & 3), FOIL_RECORD_SLOT));
+            bytes32 firstSlot = keccak256(abi.encode(_fid[0], outer));
             uint256 first = uint256(vm.load(address(game), firstSlot));
             if (first >> 255 != 0 && uint24(first) <= _endDay && drawLevel != 0) {
                 for (uint256 i; i < FOIL_BUYERS; ++i) {
-                    bytes32 slot = keccak256(abi.encode(_fb[i], outer));
+                    bytes32 slot = keccak256(abi.encode(_fid[i], outer));
                     uint256 record = uint256(vm.load(address(game), slot));
                     assertTrue(record >> 255 != 0, "real pack materialized");
                     vm.store(address(game), slot, bytes32((record & ~(uint256(type(uint32).max) << 152)) | (uint256(board) << 152)));
@@ -366,12 +366,13 @@ contract FoilClaimBatch is DeployProtocol {
         lvl = game.jackpotPhase() ? game.level() : game.level() + 1;
         vm.prank(p);
         game.purchase{value: 10 * priceWei}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        uint32 playerId = game.walletIdOf(p);
         bytes32 inner = keccak256(abi.encode(uint256(lvl & 3), FOIL_RECORD_SLOT));
-        uint256 rec = uint256(vm.load(address(game), keccak256(abi.encode(p, inner))));
+        uint256 rec = uint256(vm.load(address(game), keccak256(abi.encode(playerId, inner))));
         multBps = uint16(rec >> 24);
         for (uint256 i; i < 50 && rec >> 255 == 0; ++i) {
             _tick();
-            rec = uint256(vm.load(address(game), keccak256(abi.encode(p, inner))));
+            rec = uint256(vm.load(address(game), keccak256(abi.encode(playerId, inner))));
         }
         assertTrue(rec >> 255 != 0, "new foil cohort generated");
         resolveDay = uint24(rec);
@@ -549,7 +550,7 @@ contract FoilClaimBatch is DeployProtocol {
         revert("harness: day never sealed within the bound");
     }
 
-    bytes32 private constant BOX_SPIN_SIG = keccak256("BoxSpin(address,uint64,uint256,uint256,uint256)");
+    bytes32 private constant BOX_SPIN_SIG = keccak256("BoxSpin(uint32,uint64,uint256,uint256,uint256)");
     bytes32 private constant NO_MATCH = keccak256("NoClaimableMatch()");
     uint256 private constant SEEDED = uint256(1) << 216;
 

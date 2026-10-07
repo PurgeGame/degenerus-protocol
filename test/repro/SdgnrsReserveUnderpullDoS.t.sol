@@ -32,8 +32,8 @@ contract SdgnrsReserveUnderpullDoS is RedemptionCloseTools {
     address internal playerX = address(0xBEEF01); // gambling-burn claimant, owed the reserve P
     address internal playerY = address(0xBEEF02); // post-gameOver deterministic burner (the drain)
 
-    uint256 internal constant FUND = 80_000_000_000 ether;
-    uint256 internal constant BURN = 10_000_000_000 ether;
+    uint256 internal constant FUND = 80_000_000_000e12;
+    uint256 internal constant BURN = 10_000_000_000e12;
 
     function setUp() public {
         _deployProtocol();

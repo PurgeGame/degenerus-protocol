@@ -160,11 +160,6 @@ contract AnyInputHandler is Test {
         return n == 0 ? seed : 1 + seed % n;
     }
 
-    function _ps(uint256[] memory seeds) internal view returns (address[] memory out) {
-        out = new address[](seeds.length);
-        for (uint256 i; i < seeds.length; ++i) out[i] = _p(seeds[i]);
-    }
-
     function _val(uint256 raw) internal view returns (uint256) {
         uint256 bal = currentActor.balance;
         return bal == 0 ? 0 : raw % (bal + 1);
@@ -510,7 +505,7 @@ contract AnyInputHandler is Test {
     }
 
     function af_claim(uint256 a, uint256[] calldata pSeeds) external act(a) {
-        _call(55, AFFILIATE, 0, abi.encodeWithSignature("claim(address[])", _ps(pSeeds)));
+        _call(55, AFFILIATE, 0, abi.encodeWithSignature("claim(uint32[])", _ids(pSeeds)));
     }
 
     function wx_enter(uint256 a, uint256 amount) external act(a) {

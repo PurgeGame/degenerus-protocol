@@ -35,8 +35,8 @@ contract ColdTerminalSeeder is DegenerusGame, BucketSeed {
     }
 }
 
-/// @dev The normal ending runs in separate transactions: the first latches the terminal level and
-///      affiliate and sends the ending's own terminal request; once answered, the next applies the
+/// @dev The normal ending runs in separate transactions: the first latches the terminal level
+///      and sends the ending's own terminal request; once answered, the next applies the
 ///      word and settles capped coinflip backfill; later calls finish the payout checkpoints.
 ///      setUp runs everything before the measured step, so the test body starts cold.
 abstract contract ColdTerminalFixture is DeployProtocol {
@@ -64,10 +64,6 @@ abstract contract ColdTerminalFixture is DeployProtocol {
         terminalStateSlot = ColdTerminalSeeder(payable(address(game))).terminalPaidSlot();
         ColdTerminalSeeder(payable(address(game))).seed(WORD, _sealedAge());
         vm.etch(address(game), original);
-        vm.prank(address(0xAFF1));
-        affiliate.createAffiliateCode(bytes32("TERMINAL"), 0);
-        vm.prank(address(game));
-        affiliate.payAffiliate(1000 ether, bytes32("TERMINAL"), address(0xAFF2), 0xAFF2, 10, true, 0);
         vm.deal(address(game), 5000 ether);
         _requestTerminalWord();
         if (!_fresh()) _applyTerminalWord();
@@ -77,6 +73,7 @@ abstract contract ColdTerminalFixture is DeployProtocol {
         assertGt(ContractAddresses.GAME_MINER_MODULE.code.length, 0, "miner deployment survives setup");
         if (_fresh()) _applyTerminalWord();
         uint256 winners;
+        uint256 awarded;
         uint256 refunds;
         uint256 rngApplied;
         uint256 largestCall;
@@ -92,7 +89,11 @@ abstract contract ColdTerminalFixture is DeployProtocol {
             for (uint256 i; i < logs.length; ++i) {
                 if (logs[i].topics.length == 0) continue;
                 bytes32 topic = logs[i].topics[0];
-                if (topic == keccak256("JackpotEthWin(uint32,uint24,uint16,uint256,uint256)")) ++winners;
+                if (topic == keccak256("JackpotEthWin(uint32,uint24,uint16,uint256,uint256)")) {
+                    ++winners;
+                    (uint256 amount,) = abi.decode(logs[i].data, (uint256, uint256));
+                    awarded += amount;
+                }
                 if (topic == keccak256("DeityPassRefundsSettled(uint256)")) refunds += abi.decode(logs[i].data, (uint256));
                 if (topic == keccak256("DailyRngApplied(uint24,uint256,uint256,uint256)")) ++rngApplied;
             }
@@ -111,7 +112,7 @@ abstract contract ColdTerminalFixture is DeployProtocol {
         assertEq(winners, 305, "all terminal draw slots must execute");
         assertEq(refunds, 600 ether, "30 paid refunds; genesis has no refund basis");
         assertEq(rngApplied, 0, "the payout runs on the recorded terminal word");
-        assertEq(game.claimableWinningsOf(address(0xAFF1)), 88 ether, "affiliate gets 2% after refunds");
+        assertApproxEqAbs(awarded, 4400 ether, 305, "the terminal cohort receives the pot after refunds");
     }
 
     function _terminalPaid() private view returns (bool) {

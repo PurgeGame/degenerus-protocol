@@ -4,6 +4,7 @@ import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js
 import {
   deployFullProtocol,
   restoreAddresses,
+  giveWalletId,
 } from "../helpers/deployFixture.js";
 import {
   eth,
@@ -80,10 +81,10 @@ async function payAffiliateAsGame(
     "0x1000000000000000000",
   ]);
   const gameSigner = await hreEthers.getSigner(gameAddr);
-  const senderId = await game.walletIdOf(sender);
+  const senderId = await giveWalletId(game, sender);
   const tx = await affiliate
     .connect(gameSigner)
-    .payAffiliate(amount, code, sender, senderId, lvl, isFreshEth, lootboxActivityScore);
+    .payAffiliate(amount, code, senderId, lvl, isFreshEth, lootboxActivityScore);
   await hreEthers.provider.send("hardhat_stopImpersonatingAccount", [gameAddr]);
   return tx;
 }
@@ -109,13 +110,12 @@ async function payAffiliateAsGameStatic(
     "0x1000000000000000000",
   ]);
   const gameSigner = await hreEthers.getSigner(gameAddr);
-  const senderId = await game.walletIdOf(sender);
+  const senderId = await giveWalletId(game, sender);
   const result = await affiliate
     .connect(gameSigner)
     .payAffiliate.staticCall(
       amount,
       code,
-      sender,
       senderId,
       lvl,
       isFreshEth,

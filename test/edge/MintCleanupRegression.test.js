@@ -423,7 +423,7 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
       expect(mint.slot).to.equal("9");
       expect(wallets.slot).to.equal("13");
       expect(pending.slot).to.equal("70");
-      expect(layout.types[mint.type].label).to.equal("mapping(address => uint256)");
+      expect(layout.types[mint.type].label).to.equal("mapping(uint32 => uint256)");
       expect(layout.types[wallets.type].label).to.equal("uint256[]");
       expect(layout.types[pending.type].label).to.equal("mapping(uint32 => uint256)");
 

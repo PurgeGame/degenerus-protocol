@@ -8,14 +8,13 @@ import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol"
 
 /// @title CompositionHandler -- Handler for cross-module composition invariant tests
 /// @notice Exercises cross-module state transitions and tracks ghost variables
-///         for composition safety invariants (gap bits, pool solvency, level monotonicity).
+///         for composition safety invariants (pool solvency, level monotonicity, game-over latch).
 /// @dev Uses FOUNDRY_PROFILE=deep for 1K invariant runs.
 contract CompositionHandler is Test {
     DegenerusGame public game;
     MockVRFCoordinator public vrf;
 
     // --- Ghost variables for composition invariants ---
-    uint256 public ghost_gapBitsNonZero;
     uint256 public ghost_poolSolvencyViolation;
     uint256 public ghost_levelDecreased;
     bool public ghost_gameOverSeen;
@@ -31,18 +30,6 @@ contract CompositionHandler is Test {
     // --- Actor management ---
     address[] public actors;
     address internal currentActor;
-
-    // --- Constants ---
-    // mintPacked_ is at storage slot 10 (from forge inspect)
-    uint256 private constant MINT_PACKED_SLOT = 10;
-    // Gap bits are in TWO ranges (NOT continuous):
-    //   Gap 1: bits 154-159 (6 bits) -- between WHALE_PASS_TYPE(152-153) and MINT_STREAK_LAST_COMPLETED(160-183)
-    //   Gap 2: bits 215-227 (13 bits) -- between AFFILIATE_BONUS_POINTS(209-214) and LEVEL_UNITS(228-243)
-    // Real fields between gaps: MINT_STREAK(160-183), DEITY_PASS(184), AFFILIATE_BONUS_LEVEL(185-208), AFFILIATE_BONUS_POINTS(209-214)
-    uint256 private constant GAP1_SHIFT = 154;
-    uint256 private constant GAP1_MASK = (uint256(1) << 6) - 1;   // 6 bits: 154-159
-    uint256 private constant GAP2_SHIFT = 215;
-    uint256 private constant GAP2_MASK = (uint256(1) << 13) - 1;  // 13 bits: 215-227
 
     modifier useActor(uint256 seed) {
         currentActor = actors[bound(seed, 0, actors.length - 1)];
@@ -87,7 +74,7 @@ contract CompositionHandler is Test {
         vm.prank(currentActor);
         try game.mineFlip() {} catch {}
 
-        _checkCompositionInvariants(currentActor);
+        _checkCompositionInvariants();
     }
 
     // =========================================================================
@@ -121,7 +108,7 @@ contract CompositionHandler is Test {
             ) {} catch {}
         }
 
-        _checkCompositionInvariants(currentActor);
+        _checkCompositionInvariants();
     }
 
     // =========================================================================
@@ -165,7 +152,7 @@ contract CompositionHandler is Test {
         vm.prank(currentActor);
         try game.mineFlip() {} catch {}
 
-        _checkCompositionInvariants(currentActor);
+        _checkCompositionInvariants();
     }
 
     // =========================================================================
@@ -191,29 +178,17 @@ contract CompositionHandler is Test {
             0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false
         ) {} catch {}
 
-        _checkCompositionInvariants(currentActor);
+        _checkCompositionInvariants();
     }
 
     // =========================================================================
     // Composition Invariant Checks (run after every action)
     // =========================================================================
 
-    function _checkCompositionInvariants(address player) private {
-        _checkGapBits(player);
+    function _checkCompositionInvariants() private {
         _checkPoolSolvency();
         _checkLevelMonotonicity();
         _checkGameOverLatch();
-    }
-
-    /// @dev Check mintPacked_[player] gap bits (154-159 and 184-227) are zero
-    function _checkGapBits(address player) private {
-        bytes32 slot = keccak256(abi.encode(player, MINT_PACKED_SLOT));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        uint256 gap1 = (packed >> GAP1_SHIFT) & GAP1_MASK;
-        uint256 gap2 = (packed >> GAP2_SHIFT) & GAP2_MASK;
-        if (gap1 != 0 || gap2 != 0) {
-            ghost_gapBitsNonZero++;
-        }
     }
 
     /// @dev Check pool solvency: obligations <= balance

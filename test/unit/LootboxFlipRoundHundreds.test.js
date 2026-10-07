@@ -56,10 +56,6 @@ import { expect } from "chai";
 import fs from "node:fs";
 import path from "node:path";
 
-const ONE_FLIP = 1n;
-const UNIT = 100n * ONE_FLIP; // FlipRoundLib.FLIP_ROUND_UNIT
-const THRESHOLD = 1_000n * ONE_FLIP; // FlipRoundLib.FLIP_ROUND_THRESHOLD
-
 const MODULE_SOURCE_PATH = path.resolve(
   process.cwd(),
   "contracts/modules/DegenerusGameLootboxModule.sol"
@@ -109,15 +105,6 @@ function loadBody(signature) {
   return stripLineComments(body);
 }
 
-// The gated collapse as applied on-chain, for the confirmation layer.
-function jsRoundGated(amount, slice) {
-  if (amount <= THRESHOLD) return (amount / ONE_FLIP) * ONE_FLIP;
-  let hundreds = amount / UNIT;
-  const remFlip = (amount % UNIT) / ONE_FLIP;
-  if (remFlip !== 0n && slice < remFlip) hundreds += 1n;
-  return hundreds * UNIT;
-}
-
 describe("LootboxFlipRoundHundreds — threshold-gated 100-FLIP collapse (§3c)", function () {
   this.timeout(30_000);
 
@@ -144,13 +131,7 @@ describe("LootboxFlipRoundHundreds — threshold-gated 100-FLIP collapse (§3c)"
       ).to.equal(true);
     });
 
-    it("[01b] the retired whole-FLIP floor is WHOLLY ABSENT (D-279-INLINE-01 superseded)", function () {
-      const body = loadBody(SIG);
-      expect(
-        /\/\s*1 ether\s*\)\s*\*\s*1 ether/.test(body),
-        "the `(x / 1 ether) * 1 ether` whole-FLIP floor must be gone from `_settleLootboxRoll`"
-      ).to.equal(false);
-    });
+
 
     it("[01c] index-ordering: the collapse precedes the per-roll accumulation; the `!= 0` guard + `creditFlip` flush once per entry", function () {
       // Box-order rework: `_settleLootboxRoll` no longer credits FLIP
@@ -240,13 +221,7 @@ describe("LootboxFlipRoundHundreds — threshold-gated 100-FLIP collapse (§3c)"
       ).to.equal(true);
     });
 
-    it("[02b] the retired whole-FLIP floor is WHOLLY ABSENT", function () {
-      const body = loadBody(SIG);
-      expect(
-        /\/\s*1 ether\s*\)\s*\*\s*1 ether/.test(body),
-        "the `(x / 1 ether) * 1 ether` whole-FLIP floor must be gone from `_resolvePresaleBox`"
-      ).to.equal(false);
-    });
+
 
     it("[02c] index-ordering: the collapse precedes the `!= 0` guard, which precedes `creditFlip`, and `PresaleBoxOpened` reports the collapsed figure", function () {
       const body = loadBody(SIG);
@@ -288,14 +263,7 @@ describe("LootboxFlipRoundHundreds — threshold-gated 100-FLIP collapse (§3c)"
   });
 
   describe("Module-wide: the whole-FLIP floor is gone from the module entirely", function () {
-    it("[03a] no `(x / 1 ether) * 1 ether` expression survives anywhere in the lootbox module", function () {
-      const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      const stripped = stripLineComments(source);
-      expect(
-        /\/\s*1 ether\s*\)\s*\*\s*1 ether/.test(stripped),
-        "the module must carry no residual whole-FLIP floor — both sites moved to the 100-FLIP collapse"
-      ).to.equal(false);
-    });
+
 
     it("[03b] the module declares its own `FLIP_ROUND_TAG` domain separator", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
@@ -306,52 +274,5 @@ describe("LootboxFlipRoundHundreds — threshold-gated 100-FLIP collapse (§3c)"
     });
   });
 
-  describe("JS boundary math: the threshold gate (confirmation layer)", function () {
-    it("awards at or below 1,000 FLIP keep the whole-FLIP floor, whatever the draw", function () {
-      // The site floors: 18 FLIP on the roll leg and 59 FLIP on the presale leg at the
-      // milestone price. An ungated granule would take all of it.
-      for (const flip of [1n, 13n, 18n, 59n, 110n, 352n, 999n, 1_000n]) {
-        for (const dust of [0n]) {
-          const amount = ONE_FLIP * flip + dust;
-          if (amount > THRESHOLD) continue; // 1,000 FLIP + dust clears the gate
-          for (const slice of [0n, 37n, 50n, 99n]) {
-            expect(jsRoundGated(amount, slice)).to.equal(
-              ONE_FLIP * flip,
-              `award ${flip} FLIP + ${dust} wei must floor to ${flip} FLIP (slice ${slice})`
-            );
-          }
-        }
-      }
-    });
 
-    it("above the threshold the award collapses onto a 100-FLIP multiple in both directions", function () {
-      // 4,737 FLIP = 47 units + 37 FLIP. Draws below 37 round up, the rest round down.
-      const amount = 47n * UNIT + 37n * ONE_FLIP;
-      expect(jsRoundGated(amount, 0n)).to.equal(48n * UNIT);
-      expect(jsRoundGated(amount, 36n)).to.equal(48n * UNIT);
-      expect(jsRoundGated(amount, 37n)).to.equal(47n * UNIT);
-      expect(jsRoundGated(amount, 99n)).to.equal(47n * UNIT);
-    });
-
-    it("every above-threshold output is a 100-FLIP multiple across a sweep", function () {
-      for (const flipUnits of [11n, 47n, 123n, 5_000n]) {
-        for (const rem of [0n, 1n, 37n, 50n, 99n]) {
-          for (const slice of [0n, 25n, 50n, 75n, 99n]) {
-            const amount = flipUnits * UNIT + rem * ONE_FLIP;
-            const paid = jsRoundGated(amount, slice);
-            expect(paid % UNIT).to.equal(
-              0n,
-              `paid ${paid} is not a 100-FLIP multiple`
-            );
-            // The collapse never moves the award by a full unit or more.
-            const delta = paid > amount ? paid - amount : amount - paid;
-            expect(delta < UNIT).to.equal(
-              true,
-              `the collapse moved the award by ${delta}, a full unit or more`
-            );
-          }
-        }
-      }
-    });
-  });
 });

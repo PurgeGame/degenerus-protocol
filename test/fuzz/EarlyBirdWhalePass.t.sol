@@ -14,6 +14,7 @@ import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 contract EarlyBirdWhaleHarness is DegenerusGameJackpotModule, BucketSeed {
+    function walletKeyOf(uint32 id) external view returns (address) { return _walletKey(id); }
     function price(uint24 target, uint256 budget, uint256 word, bool turbo) external {
         level = target - 1;
         dailyIdx = 100;
@@ -102,7 +103,7 @@ contract EarlyBirdWhalePassTest is Test {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] == PASS) {
-                a.winner = address(uint160(uint256(logs[i].topics[1])));
+                a.winner = h.walletKeyOf(uint32(uint256(logs[i].topics[1])));
                 (uint256 halves, uint8 source) = abi.decode(logs[i].data, (uint256, uint8));
                 assertEq(source, 4, "ticket-leg event source");
                 a.passWinners[a.passEvents] = a.winner;

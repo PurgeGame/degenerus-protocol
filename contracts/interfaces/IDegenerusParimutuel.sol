@@ -29,11 +29,14 @@ pragma solidity 0.8.34;
 /// @notice The game's view of the parimutuel market: the seal it pushes and the in-order
 ///         settlement stage it cranks, plus the player bet door.
 interface IDegenerusParimutuel {
+    function marketStateById(uint32 playerId, uint24 round) external view returns (
+        uint24 openRound, uint128 overCount, uint128 underCount, uint256 questReward,
+        uint8 side, bool claimed, uint8 outcome, uint256 payout
+    );
     /// @notice Bet the fixed FLIP stake on round's OVER or UNDER side for account `id`.
-    /// @dev Authorized: `id == 0` is the caller, whose ID rides Quests `marketBetGates(caller, ...)`
-    ///      (no Game resolution call). A nonzero `id` needs Game
+    /// @dev Authorized: `id == 0` is the caller, whose ID comes from the Game registry. A nonzero `id` needs Game
     ///      `resolveAccount(id, msg.sender).authorized` (the account's key, a smurf's owner, or an
-    ///      approved operator); the gates and the growth-bet reward read the account key. The
+    ///      approved operator); the gates and growth-bet reward use that ID. The
     ///      stake burns from the account's PAYEE (`burnCoin(payee, STAKE)`); the bet, the
     ///      settlement credit (`creditFlipBatch` by ID) and the quest reward are the account's.
     /// @param id Account placing the bet (0 = caller).

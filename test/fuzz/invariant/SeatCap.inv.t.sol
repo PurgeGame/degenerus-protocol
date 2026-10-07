@@ -58,7 +58,6 @@ contract SeatCapHandler is Test {
 
     uint32[] public smurfIds;
     mapping(uint32 => address) public smurfOwner;
-    mapping(uint32 => address) public smurfKeyOf;
     mapping(uint32 => bool) public opApproved;
 
     // ── ghost seat model ──
@@ -209,17 +208,15 @@ contract SeatCapHandler is Test {
     }
 
     function _setElement(uint256 index) internal view returns (uint256) {
-        return uint256(
-            vm.load(address(game), bytes32(uint256(keccak256(abi.encode(GameSlots.SUBSCRIBERS))) + index))
-        );
+        return uint32(uint256(vm.load(address(game), bytes32(uint256(keccak256(abi.encode(GameSlots.SUBSCRIBERS))) + index / 8))) >> (32 * (index % 8)));
     }
 
     /// @dev Whether account `id` (key `key`) is in the set, cross-checking the element word.
-    function _inSet(uint32 id, address key) internal view returns (bool present, bool consistent) {
+    function _inSet(uint32 id, address) internal view returns (bool present, bool consistent) {
         uint256 p = _pos(id);
         if (p == 0) return (false, true);
         uint256 el = _setElement(p - 1);
-        return (true, address(uint160(el)) == key && uint32(el >> 160) == id);
+        return (true, uint32(el) == id);
     }
 
     function exemptEntries() public view returns (uint256 e, bool sdgnrsIn, bool consistent) {
@@ -259,7 +256,7 @@ contract SeatCapHandler is Test {
             }
         } else {
             a.id = smurfIds[i - N_WALLETS];
-            a.key = smurfKeyOf[a.id];
+            a.key = address(0);
             a.payee = smurfOwner[a.id];
             a.caller = a.payee;
             a.callId = a.id;
@@ -346,10 +343,8 @@ contract SeatCapHandler is Test {
         _fund(owner, price);
         vm.prank(owner);
         try game.createSmurf{value: price}(bytes32(0), MintPaymentKind.DirectEth) returns (uint32 sid) {
-            (address key,,) = game.resolveAccount(sid, owner);
             smurfIds.push(sid);
             smurfOwner[sid] = owner;
-            smurfKeyOf[sid] = key;
             ++oks[A_SMURF];
         } catch (bytes memory r) {
             _noteRevert(A_SMURF, r);
@@ -542,7 +537,8 @@ contract SeatCapHandler is Test {
         ++calls[A_UNDERFUND];
         Acct memory a = _pickLive(seed);
         if (a.id == 0) return;
-        uint256 rem = game.afkingFundingOf(a.key);
+        uint256 balances = uint256(vm.load(address(game), GameSlotKeys.balances(a.id)));
+        uint256 rem = balances >> 128;
         if (rem != 0) {
             vm.prank(a.caller);
             try game.withdrawAfkingFunding(a.id, rem) {
@@ -551,7 +547,7 @@ contract SeatCapHandler is Test {
                 _noteRevert(A_UNDERFUND, r);
             }
         }
-        if (game.claimableWinningsOf(a.key) > 1) {
+        if (uint128(balances) > 1) {
             vm.prank(a.caller);
             try game.claimWinnings(a.id) {} catch {}
         }
@@ -599,7 +595,7 @@ contract SeatCapHandler is Test {
     function _recipient(uint256 seed) internal view returns (address) {
         uint256 k = seed % 5;
         if (k == 0) return phantom;
-        if (k == 1 && smurfIds.length != 0) return smurfKeyOf[smurfIds[(seed >> 8) % smurfIds.length]];
+        if (k == 1 && smurfIds.length != 0) return smurfOwner[smurfIds[(seed >> 8) % smurfIds.length]];
         if (k == 2) return address(vault);
         return wallets[(seed >> 8) % N_WALLETS];
     }

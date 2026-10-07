@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 // Permanently skipped historical cases were retired in the test review.
@@ -88,10 +89,10 @@ contract KeeperNonBrick is DeployProtocol {
     uint256 private constant OFF_LASTBOUGHT = 7; // uint24 lastAutoBoughtDay (bytes 7..9)
     uint256 private constant OFF_LASTOPENED = 10; // uint24 lastOpenedDay     (bytes 10..12)
 
-    uint256 private constant DEITY_SHIFT = 184;
+    uint256 private constant DEITY_SHIFT = BitPackingLib.HAS_DEITY_PASS_SHIFT;
 
     /// @dev SubscriptionExpired(address indexed player, uint8 reason). reason 1 = AutoPause, 2 = CancelReclaim.
-    bytes32 private constant SUB_EXPIRED_SIG = keccak256("SubscriptionExpired(address,uint8)");
+    bytes32 private constant SUB_EXPIRED_SIG = keccak256("SubscriptionExpired(uint32,uint8)");
 
     // -------------------------------------------------------------------------
     // Afking reward peg mirror (the module's own FIXED constants, REW-03) — game storage, reusable as-is.
@@ -251,7 +252,7 @@ contract KeeperNonBrick is DeployProtocol {
     }
 
     function _grantDeityPass(address who) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(game.walletIdOf(who), uint256(MINTPACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         packed |= (uint256(1) << DEITY_SHIFT);
         vm.store(address(game), slot, bytes32(packed));
@@ -359,7 +360,7 @@ contract KeeperNonBrick is DeployProtocol {
                 logs[i].emitter == address(game) &&
                 logs[i].topics.length >= 2 &&
                 logs[i].topics[0] == SUB_EXPIRED_SIG &&
-                address(uint160(uint256(logs[i].topics[1]))) == who &&
+                uint32(uint256(logs[i].topics[1])) == game.walletIdOf(who) &&
                 uint8(uint256(bytes32(logs[i].data))) == reason
             ) count++;
         }

@@ -14,10 +14,11 @@ contract CrapsNewcomerTest is CrapsPins {
         _installPins();
         table = new CrapsViews();
         game.setLevel(10);
+        _idFor(player);
         game.setMintHistory(player, 0);
         // An aggregate score read must never be needed, even at entry or amendment.
         vm.mockCallRevert(
-            ContractAddresses.GAME, abi.encodeWithSignature("playerActivityScore(address)", player), "score read"
+            ContractAddresses.GAME, abi.encodeWithSignature("playerActivityScoreById(uint32)", _idFor(player)), "score read"
         );
     }
 
@@ -93,11 +94,11 @@ contract CrapsNewcomerTest is CrapsPins {
 
     function test_compedEntitlementHasNoNewcomerSurcharge() public {
         vm.mockCallRevert(
-            ContractAddresses.GAME, abi.encodeWithSignature("mintPackedFor(address)", player), "unnecessary history read"
+            ContractAddresses.GAME, abi.encodeWithSignature("mintPackedOfId(uint32)", _idFor(player)), "unnecessary history read"
         );
         uint24 tomorrow = table.currentDayIndex() + 1;
         flip.setCompLane(25_000);
-        uint256 code = uint160(player) | (uint256(2) << 160) | (uint256(tomorrow) << 176) | (uint256(1) << 200);
+        uint256 code = uint256(_idFor(player)) | (uint256(2) << 160) | (uint256(tomorrow) << 176) | (uint256(1) << 200);
         vm.prank(ContractAddresses.VAULT);
         assertEq(table.vaultComp(code), 25_000);
         assertEq(flip.compSpent(), 25_000);

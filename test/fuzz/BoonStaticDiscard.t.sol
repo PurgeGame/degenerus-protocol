@@ -40,7 +40,7 @@ contract BoonStaticDiscard is DeployProtocol {
     uint8 constant BOON_DEITY_PASS_10 = 25;
     uint8 constant BOON_DEITY_PASS_35 = 27;
 
-    bytes32 constant BOON_DISCARDED_SIG = keccak256("BoonDiscarded(address,uint8)");
+    bytes32 constant BOON_DISCARDED_SIG = keccak256("BoonDiscarded(uint32,uint8)");
 
     uint256 private _lastFulfilledReqId;
 
@@ -91,8 +91,8 @@ contract BoonStaticDiscard is DeployProtocol {
         RecyclingState.seedWord(address(game), index, bytes32(vrfWord));
     }
 
-    function _boonSlot(address player, uint256 offset) internal pure returns (bytes32) {
-        return bytes32(uint256(keccak256(abi.encode(player, SLOT_BOON_PACKED))) + offset);
+    function _boonSlot(address player, uint256 offset) internal view returns (bytes32) {
+        return bytes32(uint256(keccak256(abi.encode(game.walletIdOf(player), SLOT_BOON_PACKED))) + offset);
     }
 
     /// @notice At a level with the decimator window SHUT, dec-tier draws must still be
@@ -150,7 +150,7 @@ contract BoonStaticDiscard is DeployProtocol {
     }
 
     bytes32 constant DEITY_BOON_ISSUED_SIG =
-        keccak256("DeityBoonIssued(address,address,uint24,uint8,uint8)");
+        keccak256("DeityBoonIssued(uint32,uint32,uint24,uint8,uint8)");
 
     /// @notice Module-side twin of the viewer test: issue ALL THREE slots through the real
     ///         issueDeityBoon path and read the emitted boonType. No slot may revert (the

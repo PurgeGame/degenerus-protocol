@@ -20,7 +20,7 @@ contract UnpushedSidegameOutcomeEngine {
         uint32 player = uint32(header);
         if (player == ALICE_ID || player == BOB_ID) {
             r.peakBankroll = bankroll * 120;
-            r.unitsPlayed = (uint256(1) << 104) | ((r.peakBankroll / 1 ether) << 60);
+            r.unitsPlayed = (uint256(1) << 104) | (r.peakBankroll << 60);
             r.stop = Craps.SlipStop.Goal;
         }
         r.totalRolls = 1;
@@ -74,7 +74,7 @@ contract UnpushedSidegameRngSafety is CrapsPins {
         api.appendJackpotBattle(new uint256[](0), 0, true);
         vm.stopPrank();
 
-        table.seedProgressive(1_000_000 ether);
+        table.seedProgressive(1_000_000);
         vm.etch(ContractAddresses.CRAPS_ENGINE, address(new UnpushedSidegameOutcomeEngine()).code);
     }
 
@@ -100,11 +100,11 @@ contract UnpushedSidegameRngSafety is CrapsPins {
         assertFalse(step.progressed || step.rewardBasis != 0, "the scheduled cohort waits while the daily jackpot stage holds the lock");
         uint256 before = table.progressivePool();
         _settleJackpot();
-        assertEq(before - table.progressivePool(), 100_000 ether, "the jackpot stage consumes the progressive first");
+        assertEq(before - table.progressivePool(), 100_000, "the jackpot stage consumes the progressive first");
         // The daily phase ends with the jackpot stage; the lock lifts and the gated read
         // consumers, the scheduled Craps cohort among them, run on the same frozen outcomes.
         game.setRngLocked(false);
         uint256 aliceLast = _settleScheduled();
-        assertEq(aliceLast, 90_000 ether);
+        assertEq(aliceLast, 90_000);
     }
 }

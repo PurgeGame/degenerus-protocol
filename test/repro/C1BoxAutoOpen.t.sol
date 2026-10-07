@@ -96,11 +96,11 @@ contract C1BoxAutoOpen is DeployProtocol {
     /// @dev LootBoxOpened events in `logs` for `who`'s queued entry (N, pos): the tag is
     ///      QUEUED_ENTRY_TAG (bit 46) | pos << 1 | N.
     function _opens(Vm.Log[] memory logs, address who, uint48 index, uint256 pos) internal view returns (uint256 n) {
-        bytes32 sig = keccak256("LootBoxOpened(address,uint48,uint256,uint24,uint32,uint256,bool)");
+        bytes32 sig = keccak256("LootBoxOpened(uint32,uint48,uint256,uint24,uint32,uint256,bool)");
         uint256 tag = (uint256(1) << 46) | (pos << 1) | index;
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter == address(game) && logs[i].topics.length == 3 && logs[i].topics[0] == sig
-                && address(uint160(uint256(logs[i].topics[1]))) == who && uint256(logs[i].topics[2]) == tag) ++n;
+                && uint32(uint256(logs[i].topics[1])) == game.walletIdOf(who) && uint256(logs[i].topics[2]) == tag) ++n;
         }
     }
 

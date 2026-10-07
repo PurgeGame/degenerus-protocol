@@ -6,6 +6,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {WalletTableLib} from "../../contracts/libraries/WalletTableLib.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {GameSlotKeys} from "../helpers/GameSlots.sol";
 
 /// @dev The wallet table root as the Game storage declares it.
@@ -49,10 +50,15 @@ contract WalletTableLibTest is Test {
         assertEq(WalletTableLib.ownerOf(type(uint32).max), address(0), "unallocated");
     }
 
-    function testFuzz_DecodesOnlyTheAccountKey(uint32 id, uint160 key, uint32 smurfOwner, uint64 halfPasses) public {
-        uint256 element = uint256(key) | (uint256(smurfOwner) << 160) | (uint256(halfPasses) << 192);
-        _element(id, element);
-        assertEq(WalletTableLib.ownerOf(id), address(key), "low 160 bits only");
+    function testFuzz_ResolvesOrdinaryAndSmurfOwners(uint32 id, uint160 key, uint32 smurfOwner, uint64 halfPasses) public {
+        vm.assume(id != 0 && key != 0 && smurfOwner != id);
+        if (smurfOwner == 0) {
+            _element(id, uint256(key) | (uint256(halfPasses) << 192));
+        } else {
+            _element(smurfOwner, uint256(key) | (uint256(halfPasses) << 192));
+            _element(id, (uint256(smurfOwner) << 160) | (uint256(halfPasses) << 192));
+        }
+        assertEq(WalletTableLib.ownerOf(id), address(key), "half-pass bits never change the account owner");
     }
 }
 
@@ -73,12 +79,19 @@ contract WalletTableLibGameTest is DeployProtocol {
         assertEq(WalletTableLib.ownerOf(id + 1), address(0), "next element is unallocated");
     }
 
-    function test_SmurfAndHalfPassBitsDoNotLeakIntoTheKey() public {
+    function test_SmurfOwnerResolutionIgnoresHalfPassBalances() public {
         address who = makeAddr("tableBits");
-        uint32 id = _giveWalletId(who);
+        uint32 ownerId = _giveWalletId(who);
+        uint256 price = game.mintPrice();
+        vm.deal(who, price);
+        vm.prank(who);
+        uint32 id = game.createSmurf{value: price}(bytes32(0), MintPaymentKind.DirectEth);
         bytes32 slot = GameSlotKeys.walletElement(id);
         uint256 element = uint256(vm.load(address(game), slot));
-        vm.store(address(game), slot, bytes32(element | (uint256(7) << 160) | (uint256(123) << 192)));
+        assertEq(uint160(element), 0, "subaccount has no address key");
+        assertEq(uint32(element >> 160), ownerId);
+        vm.store(address(game), slot, bytes32(element | (uint256(123) << 192)));
         assertEq(WalletTableLib.ownerOf(id), who);
+        assertEq(WalletTableLib.ownerOf(ownerId), who);
     }
 }

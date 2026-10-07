@@ -5,12 +5,8 @@ import {Test} from "forge-std/Test.sol";
 import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
-import {WalletSeed} from "../helpers/WalletSeed.sol";
 
-contract DrainPrices is DegenerusGameTicketModule, WalletSeed {
-    function recordAtQueueIndex(uint24 lvl, uint256 index) external view returns (uint256) {
-        return _entryRecordOf(lvl, _tqPositionAt(ticketQueue[_ticketQueueStorageKey(lvl)], index));
-    }
+contract DrainPrices is DegenerusGameTicketModule {
     function roundMax() external pure returns (uint256) { return ROUND_MAX; }
     function entryMax() external pure returns (uint256) { return ENTRY_MAX; }
     function seatMax() external pure returns (uint256) { return SEAT_MAX; }
@@ -73,29 +69,6 @@ contract TicketDrainWorstCaseBound is Test {
             STEP_GAS_TARGET);
     }
 
-    function test_PositionLookupUsesGlobalIdentityAndPendingWithoutWalletMap() public {
-        uint24 lvl = 7;
-        uint256 queueBase = uint256(keccak256(abi.encode(keccak256(abi.encode(uint256(1), uint256(12))))));
-        uint256 ownerBase = uint256(keccak256(abi.encode(uint256(67))));
-        uint32 id = 0x01000002;
-        bytes32 queueSlot = bytes32(queueBase + 1);
-        bytes32 ownerSlot = bytes32(ownerBase + id - 1);
-        bytes32 pendingSlot = keccak256(abi.encode(uint256(id), uint256(78)));
-        vm.store(address(p), bytes32(uint256(67)), bytes32(uint256(id)));
-        vm.store(address(p), queueSlot, bytes32(uint256(id) << 32));
-        vm.store(address(p), ownerSlot, bytes32(uint256(uint160(address(0xBEEF)))));
-        vm.store(address(p), pendingSlot, bytes32((uint256(1) << 255) | (uint256(lvl) << 192)
-            | (uint256(1) << 125) | (uint256(4) << 92)));
-        uint256 record = uint160(address(0xBEEF)) | (uint256((uint80(id) << 48) | (uint80(4) << 8)) << 160);
-        vm.record();
-        assertEq(p.recordAtQueueIndex(lvl, 9), record);
-        (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(address(p));
-        assertEq(reads.length, 4, "queue lane, shared count, identity and owed; no wallet-map lookup");
-        for (uint256 i; i < reads.length; ++i) {
-            assertTrue(reads[i] == queueSlot || reads[i] == bytes32(uint256(67))
-                || reads[i] == ownerSlot || reads[i] == pendingSlot);
-        }
-        assertEq(writes.length, 0);
-    }
+
 
 }

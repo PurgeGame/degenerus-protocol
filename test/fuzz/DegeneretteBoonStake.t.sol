@@ -56,7 +56,7 @@ contract DegeneretteBoonStake is DeployProtocol {
     uint24 private constant EXPIRY_DAYS = 2;
 
     bytes32 private constant BET_PLACED_SIG =
-        keccak256("DegeneretteBetPlaced(address,uint32,uint64,uint256)");
+        keccak256("DegeneretteBetPlaced(uint32,uint32,uint64,uint256)");
 
     address private player;
 

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -98,7 +99,7 @@ contract AutoOpenCursorRing is DeployProtocol {
     uint256 private constant OFF_LASTBOUGHT = 7;      // uint24 lastAutoBoughtDay (bytes 7..9)
     uint256 private constant OFF_LASTOPENED = 10;     // uint24 lastOpenedDay     (bytes 10..12)
 
-    uint256 private constant DEITY_SHIFT = 184;
+    uint256 private constant DEITY_SHIFT = BitPackingLib.HAS_DEITY_PASS_SHIFT;
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
     uint256 private _lastFulfilledReqId;
@@ -401,7 +402,7 @@ contract AutoOpenCursorRing is DeployProtocol {
     }
 
     function _grantDeityPass(address who) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(game.walletIdOf(who), uint256(MINTPACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         packed |= (uint256(1) << DEITY_SHIFT);
         vm.store(address(game), slot, bytes32(packed));

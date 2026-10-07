@@ -65,9 +65,9 @@ contract WinLootboxCapProbe is DegenerusGameStorage, WalletSeed {
 }
 
 contract DegeneretteWinLootboxCap is DeployProtocol {
-    bytes4 private constant NORMAL = bytes4(keccak256("resolveLootboxDirect(address,uint32,uint256,uint256,uint16)"));
-    bytes4 private constant WIN = bytes4(keccak256("resolveDegeneretteLootboxDirect(address,uint32,uint256,uint256,uint16)"));
-    bytes32 private constant OPENED = keccak256("LootBoxOpened(address,uint48,uint256,uint24,uint32,uint256,bool)");
+    bytes4 private constant NORMAL = bytes4(keccak256("resolveLootboxDirect(uint32,uint256,uint256,uint16)"));
+    bytes4 private constant WIN = bytes4(keccak256("resolveDegeneretteLootboxDirect(uint32,uint256,uint256,uint16)"));
+    bytes32 private constant OPENED = keccak256("LootBoxOpened(uint32,uint48,uint256,uint24,uint32,uint256,bool)");
     uint16 private constant MAX_SCORE = 30_000;
     uint8 private constant SYMBOL = 9;
     uint48 private constant INDEX = 1;
@@ -100,7 +100,7 @@ contract DegeneretteWinLootboxCap is DeployProtocol {
 
     function _resolve(bytes4 selector, uint256 amount, uint16 score) private returns (uint256 scaled, uint24 target) {
         vm.recordLogs();
-        probe.dispatch(address(lootboxModule), abi.encodeWithSelector(selector, player, playerId, amount, directWord, score));
+        probe.dispatch(address(lootboxModule), abi.encodeWithSelector(selector, playerId, amount, directWord, score));
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 count;
         for (uint256 i; i < logs.length; ++i) {
@@ -188,7 +188,7 @@ contract DegeneretteWinLootboxCap is DeployProtocol {
     function test_DirectModuleCallRejectsValueEvenForZeroAmount() public {
         vm.expectRevert(bytes4(keccak256("OnlyDelegatecall()")));
         (bool ok,) = address(lootboxModule).call{value: 1 ether}(
-            abi.encodeWithSelector(WIN, player, playerId, uint256(0), uint256(1), MAX_SCORE)
+            abi.encodeWithSelector(WIN, playerId, uint256(0), uint256(1), MAX_SCORE)
         );
         assertTrue(ok); // expectRevert makes the observed low-level call succeed
     }
@@ -355,12 +355,12 @@ contract DegeneretteWinLootboxCap is DeployProtocol {
         vm.cool(address(game));
         vm.cool(address(lootboxModule));
         uint256 beforeGas = gasleft();
-        probe.dispatch(address(lootboxModule), abi.encodeWithSelector(NORMAL, player, playerId, 60 ether, uint256(12345), MAX_SCORE));
+        probe.dispatch(address(lootboxModule), abi.encodeWithSelector(NORMAL, playerId, 60 ether, uint256(12345), MAX_SCORE));
         emit log_named_uint("cap_normal_recirc", beforeGas - gasleft());
     }
 
     function _resolvedCount(Vm.Log[] memory logs) private pure returns (uint256 n) {
-        bytes32 resolved = keccak256("DegeneretteResolved(address,uint32,uint64,uint256,uint32,bytes)");
+        bytes32 resolved = keccak256("DegeneretteResolved(uint32,uint32,uint64,uint256,uint32,bytes)");
         for (uint256 i; i < logs.length; ++i) if (logs[i].topics[0] == resolved) ++n;
     }
 }

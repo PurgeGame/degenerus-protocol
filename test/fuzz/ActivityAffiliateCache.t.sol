@@ -21,8 +21,7 @@ contract ActivityAffiliateCacheTest is ActivityAffiliateCacheFixture {
         uint256 packed, uint32 streak, uint24 lvl, uint24 basis, address player, uint128 earnings
     ) public {
         packed = _stale(packed, lvl);
-        uint32 id = uint32(packed >> 224);
-        host.seed(player, packed, lvl);
+        uint32 id = host.seed(player, packed, lvl);
         if (lvl > 1) _seedEarnings(lvl - 1, id, earnings);
         uint256 expected = host.score(player, streak, basis);
         uint256 actual = host.scoreCached(player, streak, basis);
@@ -33,14 +32,14 @@ contract ActivityAffiliateCacheTest is ActivityAffiliateCacheFixture {
             assertEq(afterPacked, packed, "zero or history-free player never cached");
         }
         else {
-            assertEq((afterPacked >> 185) & 0xffffff, lvl);
-            assertEq((afterPacked >> 209) & 63, affiliate.affiliateBonusPointsBest(lvl, id));
+            assertEq((afterPacked >> 173) & 0xffffff, lvl);
+            assertEq((afterPacked >> 197) & 63, affiliate.affiliateBonusPointsBest(lvl, id));
         }
         assertEq(host.score(player, streak, basis), expected);
     }
 
     function testFuzz_CacheHitHasNoAffiliateCallOrStore(uint256 packed, uint24 lvl, uint32 streak) public {
-        packed = _withId(_stale(packed, lvl) | 1, PLAYER_ID);
+        packed = _stale(packed, lvl) | 1;
         host.seed(PLAYER, packed, lvl);
         uint256 expected = host.scoreCached(PLAYER, streak, lvl);
         vm.startStateDiffRecording();
@@ -53,7 +52,7 @@ contract ActivityAffiliateCacheTest is ActivityAffiliateCacheFixture {
         // At level6, level5 earnings count; advancing to7 drops level1 and admits6.
         _seedEarnings(1, PLAYER_ID, 1_000);
         _seedEarnings(5, PLAYER_ID, 100);
-        host.seed(PLAYER, _withId(_stale(1, 6), PLAYER_ID), 6);
+        host.seed(PLAYER, _stale(1, 6), 6);
         uint256 first = host.scoreCached(PLAYER, 0, 6);
         _seedEarnings(6, PLAYER_ID, 50_000);
         // Next/current-level earnings never change the cached prior-level window.
@@ -64,18 +63,18 @@ contract ActivityAffiliateCacheTest is ActivityAffiliateCacheFixture {
         uint256 actual = host.scoreCached(PLAYER, 0, 7);
         (uint256 calls, uint256 stores) = _cacheAccesses(vm.stopAndReturnStateDiff(), address(host));
         assertEq(actual, expected); assertGt(actual, first); assertEq(calls, 1); assertEq(stores, 1);
-        assertEq((host.packedOf(PLAYER) >> 185) & 0xffffff, 7);
+        assertEq((host.packedOf(PLAYER) >> 173) & 0xffffff, 7);
     }
 
     function test_RecordMintPiggybacksActualLevelCache() public {
         _seedEarnings(23, PLAYER_ID, 100);
         _seedEarnings(24, PLAYER_ID, 50_000);
-        host.seed(PLAYER, _withId(0, PLAYER_ID), 24);
+        host.seed(PLAYER, 0, 24);
         host.record(PLAYER, 25, 400);
         uint256 packed = host.packedOf(PLAYER);
-        assertEq((packed >> 185) & 0xffffff, 24, "actual game level, not target25");
-        assertEq((packed >> 209) & 63, affiliate.affiliateBonusPointsBest(24, PLAYER_ID));
-        assertTrue(affiliate.affiliateBonusPointsBest(25, PLAYER_ID) != ((packed >> 209) & 63));
+        assertEq((packed >> 173) & 0xffffff, 24, "actual game level, not target25");
+        assertEq((packed >> 197) & 63, affiliate.affiliateBonusPointsBest(24, PLAYER_ID));
+        assertTrue(affiliate.affiliateBonusPointsBest(25, PLAYER_ID) != ((packed >> 197) & 63));
         uint256 expected = host.score(PLAYER, 10, 25);
         vm.startStateDiffRecording();
         uint256 actual = host.scoreCached(PLAYER, 10, 25);
@@ -93,7 +92,7 @@ contract ActivityAffiliateCacheTest is ActivityAffiliateCacheFixture {
 
     function test_ProductionFacadeDelegatesAndPreservesView() public {
         vm.etch(ContractAddresses.GAME, type(ActivityAffiliateCacheHost).runtimeCode);
-        ActivityAffiliateCacheHost(ContractAddresses.GAME).seed(PLAYER, _withId(1, PLAYER_ID), 24);
+        ActivityAffiliateCacheHost(ContractAddresses.GAME).seed(PLAYER, 1, 24);
         vm.etch(ContractAddresses.GAME, type(DegenerusGame).runtimeCode);
         vm.etch(ContractAddresses.GAME_MINER_MODULE, type(DegenerusGameMinerModule).runtimeCode);
         vm.etch(ContractAddresses.QUESTS, type(ActivityCacheQuestStub).runtimeCode);
@@ -116,7 +115,7 @@ contract ActivityAffiliateCacheTest is ActivityAffiliateCacheFixture {
 
     function _productionGame(uint256 packed) private returns (DegenerusGame game, DegenerusQuests quests) {
         vm.etch(ContractAddresses.GAME, type(ActivityAffiliateCacheHost).runtimeCode);
-        ActivityAffiliateCacheHost(ContractAddresses.GAME).seed(PLAYER, _withId(packed, PLAYER_ID), 24);
+        ActivityAffiliateCacheHost(ContractAddresses.GAME).seed(PLAYER, packed, 24);
         vm.etch(ContractAddresses.GAME, type(DegenerusGame).runtimeCode);
         vm.etch(ContractAddresses.GAME_MINER_MODULE, type(DegenerusGameMinerModule).runtimeCode);
         vm.etch(ContractAddresses.QUESTS, type(DegenerusQuests).runtimeCode);
@@ -125,9 +124,9 @@ contract ActivityAffiliateCacheTest is ActivityAffiliateCacheFixture {
     }
 
     function testFuzz_PermissionlessCacheCannotOpenGrowthGate(uint8 curse) public {
-        uint256 packed = uint256(curse) << BitPackingLib.CURSE_COUNT_SHIFT;
+        uint256 packed = (uint256(curse) & BitPackingLib.MASK_5) << BitPackingLib.CURSE_COUNT_SHIFT;
         (DegenerusGame game, DegenerusQuests quests) = _productionGame(packed);
-        (bool mayBet, bool rewarded,) = quests.marketBetGates(PLAYER, 24);
+        (bool mayBet, bool rewarded,) = quests.marketBetGates(game.walletIdOf(PLAYER), 24);
         assertFalse(mayBet); assertFalse(rewarded);
         (uint256 expected,) = game.playerActivityScore(PLAYER);
         vm.startStateDiffRecording();
@@ -136,22 +135,22 @@ contract ActivityAffiliateCacheTest is ActivityAffiliateCacheFixture {
         assertEq(cached, expected);
         (,uint256 stores) = _cacheAccesses(vm.stopAndReturnStateDiff(), address(game));
         assertEq(stores, 0);
-        assertEq(game.mintPackedFor(PLAYER), _withId(packed, PLAYER_ID));
-        (mayBet, rewarded,) = quests.marketBetGates(PLAYER, 24);
+        assertEq(game.mintPackedFor(PLAYER), packed);
+        (mayBet, rewarded,) = quests.marketBetGates(game.walletIdOf(PLAYER), 24);
         assertFalse(mayBet); assertFalse(rewarded);
     }
 
     function testFuzz_MutableOnlyWordsNeverPersistCache(uint8 curse) public {
-        uint256 packed = uint256(curse) << BitPackingLib.CURSE_COUNT_SHIFT;
-        host.seed(PLAYER, _withId(packed, PLAYER_ID), 24);
+        uint256 packed = (uint256(curse) & BitPackingLib.MASK_5) << BitPackingLib.CURSE_COUNT_SHIFT;
+        host.seed(PLAYER, packed, 24);
         uint256 expected = host.score(PLAYER, 17, 25);
         vm.startStateDiffRecording();
         assertEq(host.scoreCached(PLAYER, 17, 25), expected);
         (,uint256 stores) = _cacheAccesses(vm.stopAndReturnStateDiff(), address(host));
-        assertEq(stores, 0); assertEq(host.packedOf(PLAYER), _withId(packed, PLAYER_ID));
+        assertEq(stores, 0); assertEq(host.packedOf(PLAYER), packed);
     }
     function test_HitsAndHistoryFreeWalletsSkipMinerDispatch() public {
-        (DegenerusGame game,) = _productionGame(1 | (uint256(24) << 185));
+        (DegenerusGame game,) = _productionGame(1 | (uint256(24) << 173));
         vm.etch(ContractAddresses.GAME_MINER_MODULE, hex"5f5ffd");
         (uint256 cached,) = game.playerActivityScoreCached(PLAYER);
         assertEq(cached, activityScoreOf(address(game), PLAYER));
@@ -159,7 +158,7 @@ contract ActivityAffiliateCacheTest is ActivityAffiliateCacheFixture {
         vm.etch(ContractAddresses.GAME_MINER_MODULE, hex"5f5ffd");
         (cached,) = game.playerActivityScoreCached(PLAYER);
         assertEq(cached, activityScoreOf(address(game), PLAYER));
-        assertEq(game.mintPackedFor(PLAYER), _withId(0, PLAYER_ID));
+        assertEq(game.mintPackedFor(PLAYER), 0);
     }
 
 }

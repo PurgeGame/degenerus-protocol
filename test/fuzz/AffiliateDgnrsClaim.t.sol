@@ -11,7 +11,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 /// @notice Validates proportional distribution, claim window, and edge cases.
 ///
 /// Strategy: tests that need claims use vm.store to set levelDgnrsAllocation
-/// directly (slot 28), bypassing the complex game state machine for the
+/// directly (compiler-pinned GameSlots), bypassing the complex game state machine for the
 /// jackpot/transition flow. Score routing and totalAffiliateScore accumulation
 /// are tested via actual purchases (no vm.store needed).
 contract AffiliateDgnrsClaim is DeployProtocol {
@@ -109,7 +109,7 @@ contract AffiliateDgnrsClaim is DeployProtocol {
         _setLevel(claimLevel);
 
         // Set allocation (5% of a hypothetical 10M token affiliate pool)
-        uint256 allocation = 500_000 ether; // 500k DGNRS
+        uint256 allocation = 500_000e12; // 500k DGNRS
         _setAllocation(claimLevel, allocation);
     }
 
@@ -156,7 +156,7 @@ contract AffiliateDgnrsClaim is DeployProtocol {
         // Alice has score, Bob doesn't
         for (uint256 i = 0; i < 30; i++) _buyOne(CODE_ALICE);
         _setLevel(1);
-        _setAllocation(1, 1_000_000 ether);
+        _setAllocation(1, 1_000_000e12);
 
         vm.expectRevert();
         _claimDgnrs(bob);
@@ -172,7 +172,7 @@ contract AffiliateDgnrsClaim is DeployProtocol {
     function test_revertBelowMinScore() public {
         // bob created CODE_BOB in setUp but never recorded a buy under it -> score 0.
         _setLevel(1);
-        _setAllocation(1, 1_000_000 ether);
+        _setAllocation(1, 1_000_000e12);
 
         uint256 bobScore = affiliate.affiliateScore(1, game.walletIdOf(bob));
         assertTrue(bobScore < 10, "Score below min");
@@ -185,7 +185,7 @@ contract AffiliateDgnrsClaim is DeployProtocol {
     function test_revertDoubleClaim() public {
         for (uint256 i = 0; i < 25; i++) _buyOne(CODE_ALICE);
         _setLevel(1);
-        _setAllocation(1, 1_000_000 ether);
+        _setAllocation(1, 1_000_000e12);
 
         _claimDgnrs(alice);
 
@@ -293,7 +293,7 @@ contract AffiliateDgnrsClaim is DeployProtocol {
         uint24 lvl = _buildScoresAndSetupClaim(CODE_ALICE, 30, CODE_BOB, 25);
 
         // Use a small allocation to test the cap behavior
-        uint256 smallAllocation = 100 ether;
+        uint256 smallAllocation = 100e12;
         _setAllocation(lvl, smallAllocation);
 
         uint256 bal;
@@ -341,7 +341,7 @@ contract AffiliateDgnrsClaim is DeployProtocol {
         // Build scores at level 1, set up claim
         for (uint256 i = 0; i < 30; i++) _buyOne(CODE_ALICE);
         _setLevel(1);
-        _setAllocation(1, 500_000 ether);
+        _setAllocation(1, 500_000e12);
 
         // Alice can claim at level 1
         uint256 before = sdgnrs.balanceOf(alice);
@@ -350,7 +350,7 @@ contract AffiliateDgnrsClaim is DeployProtocol {
 
         // Move to level 2 — Alice's level-1 scores are no longer accessible
         _setLevel(2);
-        _setAllocation(2, 500_000 ether);
+        _setAllocation(2, 500_000e12);
 
         // Bob had no score at level 2 → reverts
         vm.expectRevert();
@@ -374,7 +374,7 @@ contract AffiliateDgnrsClaim is DeployProtocol {
 
         uint24 lvl = 1;
         _setLevel(lvl);
-        _setAllocation(lvl, 1_000_000 ether);
+        _setAllocation(lvl, 1_000_000e12);
 
         uint256 aScore = affiliate.affiliateScore(lvl, game.walletIdOf(alice));
         uint256 bScore = affiliate.affiliateScore(lvl, game.walletIdOf(bob));

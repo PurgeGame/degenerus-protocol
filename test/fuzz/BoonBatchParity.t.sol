@@ -19,7 +19,7 @@ contract BoonBatchParityHarness is DegenerusGameBoonModule, WalletSeed {
         returns (uint256 slot0, uint256 slot1, uint256 mintData, uint256 whaleClaims)
     {
         BoonPacked storage bp = boonPacked[_walletIdOf(player)];
-        return (bp.slot0, bp.slot1, mintPacked_[player], _halfPassesOf(player));
+        return (bp.slot0, bp.slot1, mintPacked_[_walletIdOf(player)], _halfPassesOf(player));
     }
 }
 
@@ -73,7 +73,7 @@ contract BoonBatchParity is Test {
         vm.recordLogs();
         uint256 nonceBase;
         for (uint256 lane; lane < 5; ++lane) {
-            gameBoon.rollBoxBoons(PLAYER, playerId, _budget(amounts[lane]), 1, amounts[lane], CURRENT_LEVEL, seed, nonceBase++);
+            gameBoon.rollBoxBoons(playerId, _budget(amounts[lane]), 1, amounts[lane], CURRENT_LEVEL, seed, nonceBase++);
         }
         Vm.Log[] memory expectedLogs = vm.getRecordedLogs();
         bytes32 expectedState = _stateHash();
@@ -81,7 +81,7 @@ contract BoonBatchParity is Test {
         assertTrue(vm.revertToState(snapshot), "snapshot restore failed");
 
         vm.recordLogs();
-        gameBoon.rollBoxBoonTiers(PLAYER, playerId, amounts, countsPacked, CURRENT_LEVEL, seed);
+        gameBoon.rollBoxBoonTiers(playerId, amounts, countsPacked, CURRENT_LEVEL, seed);
         Vm.Log[] memory actualLogs = vm.getRecordedLogs();
 
         assertEq(_stateHash(), expectedState, "batched boon state drift");

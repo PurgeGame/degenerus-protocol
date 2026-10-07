@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {BitPackingLib} from "../../../contracts/libraries/BitPackingLib.sol";
 import "forge-std/Test.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {FLIP} from "../../../contracts/FLIP.sol";
@@ -38,8 +39,8 @@ contract V61AfkingSpendHandler is Test {
     // Canonical v61 storage layout (378-01 recalibration key + BitPackingLib)
     // -------------------------------------------------------------------------
     uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED;
-    uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS score bit (subscribe gate)
-    uint256 private constant CURSE_COUNT_SHIFT = 215;
+    uint256 private constant DEITY_SHIFT = BitPackingLib.HAS_DEITY_PASS_SHIFT; // HAS_DEITY_PASS score bit (subscribe gate)
+    uint256 private constant CURSE_COUNT_SHIFT = BitPackingLib.CURSE_COUNT_SHIFT;
     uint256 private constant PRICE_COIN_UNIT = 1000;
     uint256 private constant SMITE_BURN = PRICE_COIN_UNIT / 5; // 200 FLIP
     uint256 private constant DECURSE_BURN = PRICE_COIN_UNIT / 10; // 100 FLIP
@@ -270,7 +271,7 @@ contract V61AfkingSpendHandler is Test {
     // =========================================================================
 
     function _grantDeityScoreBit(address who) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(game.walletIdOf(who), uint256(MINTPACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         packed |= (uint256(1) << DEITY_SHIFT);
         vm.store(address(game), slot, bytes32(packed));
@@ -281,7 +282,7 @@ contract V61AfkingSpendHandler is Test {
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2) continue;
             if (logs[i].topics[0] != AFKING_SPENT_SIG) continue;
-            if (logs[i].topics[1] != bytes32(uint256(uint160(who)))) continue;
+            if (logs[i].topics[1] != bytes32(uint256(game.walletIdOf(who)))) continue;
             return abi.decode(logs[i].data, (uint256));
         }
         return 0;

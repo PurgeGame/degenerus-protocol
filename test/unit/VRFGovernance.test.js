@@ -6,7 +6,6 @@ import {
   restoreAddresses,
 } from "../helpers/deployFixture.js";
 import {
-  eth,
   advanceTime,
   advanceToNextDay,
   fulfillVRF,
@@ -94,7 +93,7 @@ describe("VRF Governance", function () {
   // =========================================================================
   describe("propose", function () {
     it("admin path: DGVE holder can propose after 44h stall", async function () {
-      const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
+      const { admin, game, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
       const keyHash = hre.ethers.id("new-key");
 
@@ -103,7 +102,7 @@ describe("VRF Governance", function () {
       const tx = await admin.connect(deployer).propose(vrfAddr, keyHash);
       const ev = await getEvent(tx, admin, "ProposalCreated");
       expect(ev.args.proposalId).to.equal(1n);
-      expect(ev.args.proposer).to.equal(deployer.address);
+      expect(ev.args.proposer).to.equal(await game.walletIdOf(deployer.address));
       expect(ev.args.coordinator).to.equal(vrfAddr);
       expect(ev.args.keyHash).to.equal(keyHash);
       expect(ev.args.path).to.equal(0); // Admin path
@@ -112,7 +111,7 @@ describe("VRF Governance", function () {
     });
 
     it("reverts with NotStalled if VRF stall < 44h for admin", async function () {
-      const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
+      const { admin, game, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
       const keyHash = hre.ethers.id("new-key");
 
@@ -156,7 +155,7 @@ describe("VRF Governance", function () {
     });
 
     it("reverts with ZeroAddress for zero keyHash", async function () {
-      const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
+      const { admin, game, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       await expect(
         admin.connect(deployer).propose(await mockVRF.getAddress(), ZERO_BYTES32)
       ).to.be.revertedWithCustomError(admin, "ZeroAddress");
@@ -167,7 +166,7 @@ describe("VRF Governance", function () {
       const vrfAddr = await mockVRF.getAddress();
 
       // Give deployer sDGNRS so reject vote has weight to kill
-      await giveSDGNRS(sdgnrs, game, deployer.address, eth("1000"));
+      await giveSDGNRS(sdgnrs, game, deployer.address, hre.ethers.parseUnits("1000", 12));
 
       await createStall(45);
 
@@ -182,7 +181,7 @@ describe("VRF Governance", function () {
     });
 
     it("snapshots circulating supply at creation", async function () {
-      const { admin, mockVRF, deployer, sdgnrs } = await loadFixture(deployFullProtocol);
+      const { admin, game, mockVRF, deployer, sdgnrs } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
       await createStall(45);
@@ -192,7 +191,7 @@ describe("VRF Governance", function () {
       const [, , circulatingSnapshot] = await admin.proposals(1);
       const liveCirc = await sdgnrs.votingSupply();
       // circulatingSnapshot is now uint40 whole tokens (divided by 1e18)
-      expect(circulatingSnapshot).to.equal(liveCirc / eth("1"));
+      expect(circulatingSnapshot).to.equal(liveCirc / hre.ethers.parseUnits("1", 12));
     });
   });
 
@@ -251,7 +250,7 @@ describe("VRF Governance", function () {
 
       // Keep a nonzero whole-token snapshot so a dust vote cannot resolve by
       // virtue of a zero denominator.
-      await giveSDGNRS(sdgnrs, game, bob.address, eth("1"));
+      await giveSDGNRS(sdgnrs, game, bob.address, hre.ethers.parseUnits("1", 12));
       await giveSDGNRS(sdgnrs, game, alice.address, 1n);
 
       await createStall(45);
@@ -269,7 +268,7 @@ describe("VRF Governance", function () {
   // =========================================================================
   describe("threshold decay", function () {
     it("returns 5000 (50%) at creation", async function () {
-      const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
+      const { admin, game, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
       await createStall(45);
@@ -279,7 +278,7 @@ describe("VRF Governance", function () {
     });
 
     it("stays at 5000 (50%) after 24h", async function () {
-      const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
+      const { admin, game, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
       await createStall(45);
@@ -290,7 +289,7 @@ describe("VRF Governance", function () {
     });
 
     it("decays to 4000 (40%) after 48h", async function () {
-      const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
+      const { admin, game, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
       await createStall(45);
@@ -301,7 +300,7 @@ describe("VRF Governance", function () {
     });
 
     it("decays to 3000 (30%) after 72h", async function () {
-      const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
+      const { admin, game, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
       await createStall(45);
@@ -312,7 +311,7 @@ describe("VRF Governance", function () {
     });
 
     it("decays to 2000 (20%) after 96h", async function () {
-      const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
+      const { admin, game, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
       await createStall(45);
@@ -323,7 +322,7 @@ describe("VRF Governance", function () {
     });
 
     it("decays to 1000 (10%) after 120h", async function () {
-      const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
+      const { admin, game, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
       await createStall(45);
@@ -334,7 +333,7 @@ describe("VRF Governance", function () {
     });
 
     it("decays to 500 (5%) after 144h", async function () {
-      const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
+      const { admin, game, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
       await createStall(45);
@@ -345,7 +344,7 @@ describe("VRF Governance", function () {
     });
 
     it("returns 0 (expired) after 168h", async function () {
-      const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
+      const { admin, game, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
       await createStall(45);
@@ -361,7 +360,7 @@ describe("VRF Governance", function () {
   // =========================================================================
   describe("proposal expiry", function () {
     it("voting on expired proposal marks it Expired and reverts", async function () {
-      const { admin, mockVRF, deployer, sdgnrs } = await loadFixture(deployFullProtocol);
+      const { admin, game, mockVRF, deployer, sdgnrs } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
       await createStall(45);
@@ -388,7 +387,7 @@ describe("VRF Governance", function () {
     });
 
     it("returns false when VRF not stalled", async function () {
-      const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
+      const { admin, game, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
       await createStall(45);
@@ -425,7 +424,7 @@ describe("VRF Governance", function () {
   describe("unwrapTo VRF stall guard", function () {
     it("unwrapTo works normally (rngLocked=false)", async function () {
       const { dgnrs, sdgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
-      const amount = eth("100");
+      const amount = hre.ethers.parseUnits("100", 12);
 
       const wrapperBefore = await dgnrs.balanceOf(deployer.address);
       const stakedBefore = await sdgnrs.balanceOf(alice.address);
@@ -436,7 +435,7 @@ describe("VRF Governance", function () {
 
     it("unwrapTo reverts when rngLocked is true", async function () {
       const { dgnrs, game, deployer, alice } = await loadFixture(deployFullProtocol);
-      const amount = eth("100");
+      const amount = hre.ethers.parseUnits("100", 12);
 
       // Advance to next day and call mineFlip to trigger VRF request,
       // which sets rngLockedFlag = true
@@ -497,7 +496,7 @@ describe("VRF Governance", function () {
   // =========================================================================
   describe("1-per-address active proposal limit", function () {
     it("reverts with AlreadyHasActiveProposal when same address proposes twice", async function () {
-      const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
+      const { admin, game, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
       await createStall(45);
@@ -510,7 +509,7 @@ describe("VRF Governance", function () {
     });
 
     it("sets activeProposalId after propose", async function () {
-      const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
+      const { admin, game, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
       expect(await admin.activeProposalId(deployer.address)).to.equal(0n);
@@ -525,7 +524,7 @@ describe("VRF Governance", function () {
       const { admin, mockVRF, deployer, sdgnrs, game } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
-      await giveSDGNRS(sdgnrs, game, deployer.address, eth("1000"));
+      await giveSDGNRS(sdgnrs, game, deployer.address, hre.ethers.parseUnits("1000", 12));
       await createStall(45);
 
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key1"));
@@ -545,7 +544,7 @@ describe("VRF Governance", function () {
       const { admin, mockVRF, deployer, sdgnrs, game } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
-      await giveSDGNRS(sdgnrs, game, deployer.address, eth("1000"));
+      await giveSDGNRS(sdgnrs, game, deployer.address, hre.ethers.parseUnits("1000", 12));
       await createStall(45);
 
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key1"));
@@ -561,7 +560,7 @@ describe("VRF Governance", function () {
     });
 
     it("allows new proposal after previous expires (lazy expiry)", async function () {
-      const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
+      const { admin, game, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
       await createStall(45);
@@ -583,8 +582,8 @@ describe("VRF Governance", function () {
       const vrfAddr = await mockVRF.getAddress();
 
       // Give alice and bob enough sDGNRS for community path (0.5% of circulating)
-      await giveSDGNRS(sdgnrs, game, alice.address, eth("500"));
-      await giveSDGNRS(sdgnrs, game, bob.address, eth("500"));
+      await giveSDGNRS(sdgnrs, game, alice.address, hre.ethers.parseUnits("500", 12));
+      await giveSDGNRS(sdgnrs, game, bob.address, hre.ethers.parseUnits("500", 12));
 
       // 7-day stall for community path
       await createStall(7 * 24);
@@ -607,9 +606,9 @@ describe("VRF Governance", function () {
       const vrfAddr = await mockVRF.getAddress();
 
       // Give deployer majority sDGNRS (>60% for threshold), alice and bob for community proposals
-      await giveSDGNRS(sdgnrs, game, deployer.address, eth("5000"));
-      await giveSDGNRS(sdgnrs, game, alice.address, eth("100"));
-      await giveSDGNRS(sdgnrs, game, bob.address, eth("100"));
+      await giveSDGNRS(sdgnrs, game, deployer.address, hre.ethers.parseUnits("5000", 12));
+      await giveSDGNRS(sdgnrs, game, alice.address, hre.ethers.parseUnits("100", 12));
+      await giveSDGNRS(sdgnrs, game, bob.address, hre.ethers.parseUnits("100", 12));
 
       // 7-day stall for community path
       await createStall(7 * 24);
@@ -652,9 +651,9 @@ describe("VRF Governance", function () {
       const vrfAddr = await mockVRF.getAddress();
 
       // Give deployer majority sDGNRS (>60% for threshold)
-      await giveSDGNRS(sdgnrs, game, deployer.address, eth("5000"));
-      await giveSDGNRS(sdgnrs, game, alice.address, eth("100"));
-      await giveSDGNRS(sdgnrs, game, bob.address, eth("100"));
+      await giveSDGNRS(sdgnrs, game, deployer.address, hre.ethers.parseUnits("5000", 12));
+      await giveSDGNRS(sdgnrs, game, alice.address, hre.ethers.parseUnits("100", 12));
+      await giveSDGNRS(sdgnrs, game, bob.address, hre.ethers.parseUnits("100", 12));
 
       // 7-day stall
       await createStall(7 * 24);
@@ -697,8 +696,8 @@ describe("VRF Governance", function () {
       const vrfAddr = await mockVRF.getAddress();
 
       // Give deployer and alice sDGNRS
-      await giveSDGNRS(sdgnrs, game, deployer.address, eth("1000"));
-      await giveSDGNRS(sdgnrs, game, alice.address, eth("500"));
+      await giveSDGNRS(sdgnrs, game, deployer.address, hre.ethers.parseUnits("1000", 12));
+      await giveSDGNRS(sdgnrs, game, alice.address, hre.ethers.parseUnits("500", 12));
 
       // First stall episode: create and execute a proposal
       await createStall(7 * 24);
@@ -745,7 +744,7 @@ describe("VRF Governance", function () {
       const vrfAddr = await mockVRF.getAddress();
 
       // Give deployer sDGNRS so they can vote
-      await giveSDGNRS(sdgnrs, game, deployer.address, eth("1000"));
+      await giveSDGNRS(sdgnrs, game, deployer.address, hre.ethers.parseUnits("1000", 12));
 
       // Create 21h stall
       await createStall(45);
@@ -771,8 +770,8 @@ describe("VRF Governance", function () {
       const vrfAddr = await mockVRF.getAddress();
 
       // Give deployer a large amount and alice a tiny amount
-      await giveSDGNRS(sdgnrs, game, deployer.address, eth("1000"));
-      await giveSDGNRS(sdgnrs, game, alice.address, eth("1"));
+      await giveSDGNRS(sdgnrs, game, deployer.address, hre.ethers.parseUnits("1000", 12));
+      await giveSDGNRS(sdgnrs, game, alice.address, hre.ethers.parseUnits("1", 12));
 
       // Create 21h stall
       await createStall(45);
@@ -799,7 +798,7 @@ describe("VRF Governance", function () {
       const vrfAddr = await mockVRF.getAddress();
 
       // Give deployer sDGNRS
-      await giveSDGNRS(sdgnrs, game, deployer.address, eth("1000"));
+      await giveSDGNRS(sdgnrs, game, deployer.address, hre.ethers.parseUnits("1000", 12));
 
       // Create 21h stall
       await createStall(45);
@@ -826,17 +825,17 @@ describe("VRF Governance", function () {
   // =========================================================================
   describe("tie condition", function () {
     it("equal approve and reject weights leave proposal Active (neither execute nor kill)", async function () {
-      const { admin, mockVRF, deployer, alice, bob, carol, sdgnrs, dgnrs } =
+      const { admin, game, mockVRF, deployer, alice, bob, carol, sdgnrs, dgnrs } =
         await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
       const subId = await admin.subscriptionId();
       // Three equal eligible holders: either first vote is below the initial 50%.
       // The third holder abstains; the first two form an exact, nonzero tie.
       for (const owner of [deployer, alice, bob]) {
-        await dgnrs.connect(deployer).unwrapTo(owner.address, eth("1000"));
-        expect(await sdgnrs.balanceOf(owner.address)).to.equal(eth("1000"));
+        await dgnrs.connect(deployer).unwrapTo(owner.address, hre.ethers.parseUnits("1000", 12));
+        expect(await sdgnrs.balanceOf(owner.address)).to.equal(hre.ethers.parseUnits("1000", 12));
       }
-      expect(await sdgnrs.votingSupply()).to.equal(eth("3000"));
+      expect(await sdgnrs.votingSupply()).to.equal(hre.ethers.parseUnits("3000", 12));
       expect(await sdgnrs.balanceOf(carol.address)).to.equal(0n);
       await createStall(45);
       await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("tie-key"));
@@ -845,13 +844,16 @@ describe("VRF Governance", function () {
       expect(await admin.threshold(id)).to.equal(5000n);
 
       await expect(admin.connect(deployer).vote(id, true))
-        .to.emit(admin, "VoteCast").withArgs(id, deployer.address, true, eth("1000"));
+        .to.emit(admin, "VoteCast").withArgs(id, await game.walletIdOf(deployer.address), true, hre.ethers.parseUnits("1000", 12));
       const first = await admin.proposals(id);
       expect(first[4], "first vote must leave room for the opposing vote").to.equal(0n);
       expect(first[6]).to.equal(1000n);
       expect(first[7]).to.equal(0n);
-      await expect(admin.connect(alice).vote(id, false))
-        .to.emit(admin, "VoteCast").withArgs(id, alice.address, false, eth("1000"));
+      const opposingVote = await admin.connect(alice).vote(id, false);
+      const opposingEvent = await getEvent(opposingVote, admin, "VoteCast");
+      expect(opposingEvent.args.voter).to.equal(await game.walletIdOf(alice.address));
+      expect(opposingEvent.args.approve).to.equal(false);
+      expect(opposingEvent.args.weight).to.equal(hre.ethers.parseUnits("1000", 12));
       expect(await admin.voteWeight(id, deployer.address)).to.equal(1000n);
       expect(await admin.voteWeight(id, alice.address)).to.equal(1000n);
       expect(await admin.votes(id, deployer.address)).to.equal(1n);
@@ -879,7 +881,7 @@ describe("VRF Governance", function () {
   // =========================================================================
   describe("proposal storage", function () {
     it("stores correct proposal data", async function () {
-      const { admin, mockVRF, deployer, sdgnrs } = await loadFixture(deployFullProtocol);
+      const { admin, game, mockVRF, deployer, sdgnrs } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
       const keyHash = hre.ethers.id("test-key");
 
@@ -890,11 +892,11 @@ describe("VRF Governance", function () {
              coordinator, approveWeight, rejectWeight, storedKeyHash]
         = await admin.proposals(1);
 
-      expect(proposer).to.equal(deployer.address);
+      expect(proposer).to.equal(await game.walletIdOf(deployer.address));
       expect(createdAt).to.be.gt(0n);
-      // circulatingSnapshot is uint40 whole tokens; may be 0 if circ < 1e18
+      // circulatingSnapshot is uint40 whole tokens; may be 0 if circ < 1e12
       const liveCirc = await sdgnrs.votingSupply();
-      expect(circulatingSnapshot).to.equal(liveCirc / eth("1"));
+      expect(circulatingSnapshot).to.equal(liveCirc / hre.ethers.parseUnits("1", 12));
       expect(path).to.equal(0); // Admin
       expect(state).to.equal(0); // Active
       expect(coordinator).to.equal(vrfAddr);
@@ -924,8 +926,8 @@ describe("VRF Governance", function () {
       // Voting weight: deployer below the initial 50% threshold (stays Active on
       // approve) but enough to clear the DECAYED threshold later — the exact
       // stale-proposal-at-decayed-threshold vector the fix closes.
-      await giveSDGNRS(sdgnrs, game, deployer.address, eth("4000"));
-      await giveSDGNRS(sdgnrs, game, alice.address, eth("4500"));
+      await giveSDGNRS(sdgnrs, game, deployer.address, hre.ethers.parseUnits("4000", 12));
+      await giveSDGNRS(sdgnrs, game, alice.address, hre.ethers.parseUnits("4500", 12));
 
       // 1) Open a proposal during a genuine >=44h stall and record approval weight.
       await createStall(45);

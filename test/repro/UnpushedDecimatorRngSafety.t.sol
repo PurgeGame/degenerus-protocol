@@ -108,8 +108,9 @@ contract UnpushedDecimatorRngSafety is DeployProtocol {
         _quietCrapsTable();
         vm.etch(ContractAddresses.CRAPS_ENGINE, address(new UnpushedDecimatorFlatEngine()).code);
         for (uint64 id = 1; id <= COUNT; ++id) {
+            uint32 playerId = _giveWalletId(address(uint160(0xD000 + id)));
             vm.prank(ContractAddresses.COIN);
-            game.recordDecBurn(address(uint160(0xD000 + id)), LVL, 2000, 10_000, 0);
+            game.recordDecBurn(playerId, LVL, 2000, 10_000, 0);
         }
         _seed(abi.encodeCall(UnpushedDecimatorSessionSeeder.closeWindow, ()));
         vm.prank(address(game));

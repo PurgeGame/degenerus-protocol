@@ -58,7 +58,7 @@ interface IDegenerusCoinJackpotView {
 /// @notice WWXRP mint surface for skipped-bracket consolation prizes.
 interface IWwxrpMintPrize {
     /// @notice Mint WWXRP to a recipient.
-    function mintPrize(address to, uint256 amount) external;
+    function creditPrize(uint32 to, uint256 amount) external;
 }
 
 /// @title DegenerusJackpots
@@ -118,7 +118,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @param score Frozen bracket score consumed by the claim (FLIP-denominated).
     /// @param wwxrpAmount WWXRP requested (score / 1000, minimum 1 for a positive score), before gameMintScale.
     event BafConsolationClaimed(
-        address indexed player,
+        uint32 indexed player,
         uint24 indexed lvl,
         uint256 score,
         uint256 wwxrpAmount
@@ -461,21 +461,14 @@ contract DegenerusJackpots is IDegenerusJackpots {
     function claimBafConsolation(uint32 id, uint24 lvl) external {
         BafLevel memory lv = bafLevel[lvl];
         if (!lv.skipped) revert NothingToClaim();
-        address key = msg.sender;
-        address payee = msg.sender;
-        if (id == 0) {
-            // A caller with no ID reads the never-written key 0: no score, nothing to claim.
-            id = degenerusGame.walletIdOf(msg.sender);
-        } else {
-            (key, payee, ) = degenerusGame.resolveAccount(id, msg.sender);
-        }
+        if (id == 0) id = degenerusGame.walletIdOf(msg.sender);
         BafPlayer memory ps = bafPlayer[lvl][id];
         if (ps.epoch != lv.epoch) revert NothingToClaim();
         uint256 amount = _bafConsolationAmount(ps.total);
         if (amount == 0) revert NothingToClaim();
         delete bafPlayer[lvl][id];
-        emit BafConsolationClaimed(key, lvl, ps.total, amount);
-        wwxrp.mintPrize(payee, amount);
+        emit BafConsolationClaimed(id, lvl, ps.total, amount);
+        wwxrp.creditPrize(id, amount);
     }
 
     /// @notice Claimable WWXRP consolation for a player at a bracket level, before WWXRP's
@@ -483,9 +476,14 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @return Zero unless the bracket is skipped and the player holds an
     ///         unclaimed live-epoch score.
     function bafConsolationOf(address player, uint24 lvl) external view returns (uint256) {
+        return bafConsolationOfId(degenerusGame.walletIdOf(player), lvl);
+    }
+
+    /// @notice Claimable consolation of an account, including a subaccount.
+    function bafConsolationOfId(uint32 playerId, uint24 lvl) public view returns (uint256) {
         BafLevel memory lv = bafLevel[lvl];
         if (!lv.skipped) return 0;
-        BafPlayer memory ps = bafPlayer[lvl][degenerusGame.walletIdOf(player)];
+        BafPlayer memory ps = bafPlayer[lvl][playerId];
         if (ps.epoch != lv.epoch) return 0;
         return _bafConsolationAmount(ps.total);
     }

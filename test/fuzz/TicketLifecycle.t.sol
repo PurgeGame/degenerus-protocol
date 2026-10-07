@@ -2327,19 +2327,9 @@ contract TicketLifecycleTest is DeployProtocol {
         }
     }
 
-    /// @dev Register `claimant` in the wallet table as production does (append the owner key, record
-    ///      the ID in its mintPacked word; no ticket or box state) and set its pending half-passes
-    ///      to `halfPasses` (wallet-table element bits 192..255).
+    /// @dev Register the claimant through production, then seed its pending half-passes.
     function _creditHalfPasses(address claimant, uint256 halfPasses) internal {
-        uint32 id = game.walletIdOf(claimant);
-        if (id == 0) {
-            uint256 position = uint256(vm.load(address(game), bytes32(GameSlots.WALLETS)));
-            vm.store(address(game), bytes32(GameSlots.WALLETS), bytes32(position + 1));
-            vm.store(address(game), GameSlotKeys.walletElement(uint32(position)), bytes32(uint256(uint160(claimant))));
-            bytes32 packedSlot = GameSlotKeys.mintPacked(claimant);
-            vm.store(address(game), packedSlot, bytes32(uint256(vm.load(address(game), packedSlot)) | (position << 224)));
-            id = uint32(position);
-        }
+        uint32 id = _giveWalletId(claimant);
         bytes32 slot = GameSlotKeys.walletElement(id);
         uint256 element = uint256(vm.load(address(game), slot));
         vm.store(address(game), slot, bytes32((element & ((uint256(1) << 192) - 1)) | (halfPasses << 192)));

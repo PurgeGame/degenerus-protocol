@@ -20,7 +20,7 @@ contract SdgnrsLevelHighPasses is DeployProtocol {
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = GameSlots.PRIZE_POOLS_PACKED;
     uint256 private constant POOL_HALF_MASK = (uint256(1) << 128) - 1;
     uint256 private constant PRICE_COIN_UNIT = 1000;
-    uint256 private constant HIGH_ROLLER_DAY_PASS_VALUE = 21 * 24_800 ether;
+    uint256 private constant HIGH_ROLLER_DAY_PASS_VALUE = 21 * 24_800;
 
     bytes32 private constant POOLS_SETTLED_SIG =
         keccak256("PoolsSettled(uint24,uint24,uint24,uint256,uint256,uint256,uint256,uint256,uint256)");
@@ -46,7 +46,7 @@ contract SdgnrsLevelHighPasses is DeployProtocol {
     ///         against the `CrapsPassesCredited` the table logged at each close. Nothing lands in
     ///         the normal lane from the cut: the fraction under a whole high pass is dropped; the
     ///         normal lane can also receive whale-purchase and lootbox pass awards.
-    bytes32 private constant WHALE_PURCHASED_SIG = keccak256("WhalePassPurchased(address,uint256,uint256)");
+    bytes32 private constant WHALE_PURCHASED_SIG = keccak256("WhalePassPurchased(uint32,uint256,uint256)");
 
     function test_LevelCloseBanksHighPassesToSdgnrs() public {
         (uint256 normalBefore, uint256 highBefore) = crapsBattle.passCreditsOf(ContractAddresses.SDGNRS);
@@ -74,7 +74,7 @@ contract SdgnrsLevelHighPasses is DeployProtocol {
             }
             if (
                 l.emitter == address(game) && l.topics[0] == WHALE_PURCHASED_SIG
-                    && address(uint160(uint256(l.topics[1]))) == ContractAddresses.SDGNRS
+                    && uint32(uint256(l.topics[1])) == SDGNRS_ID
             ) {
                 (uint256 qty,) = abi.decode(l.data, (uint256, uint256));
                 whaleNormals += qty;

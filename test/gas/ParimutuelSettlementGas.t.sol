@@ -16,7 +16,7 @@ import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 ///         the per-winner worst case GROWTH_SETTLE_GAS must cover.
 contract ParimutuelSettlementGasTest is DeployProtocol {
     bytes4 private constant GROWTH_STATE = bytes4(keccak256("growthState(uint24)"));
-    bytes4 private constant MARKET_GATES = bytes4(keccak256("marketBetGates(address,uint24)"));
+    bytes4 private constant MARKET_GATES = bytes4(keccak256("marketBetGates(uint32,uint24)"));
     bytes32 private constant MINER_WORK = keccak256("MinerWork(address,uint8,uint256,uint256)");
     uint256 private constant STAKE = 1_000;
     uint256 private constant SETTLEMENT_SLOT = 4; // DegenerusParimutuel.growthSettlement
@@ -49,7 +49,7 @@ contract ParimutuelSettlementGasTest is DeployProtocol {
     }
 
     function _bet(address who, uint32 id, bool over) private {
-        vm.mockCall(address(quests), abi.encodeWithSelector(MARKET_GATES, who), abi.encode(true, false, id));
+        vm.mockCall(address(quests), abi.encodeWithSelector(MARKET_GATES, id), abi.encode(true, false, id));
         vm.prank(address(game));
         coin.mintForGame(who, STAKE);
         vm.prank(who);

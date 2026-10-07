@@ -23,7 +23,7 @@ abstract contract RedemptionFixture is DeployProtocol {
     address internal carol = address(0xCA201);
 
     bytes32 internal constant CLAIMED_TOPIC =
-        keccak256("RedemptionClaimed(address,uint32,uint16,uint256,uint256,uint256)");
+        keccak256("RedemptionClaimed(uint32,uint32,uint16,uint256,uint256,uint256)");
     bytes32 internal constant TRANSFER_TOPIC = keccak256("Transfer(address,address,uint256)");
     bytes32 internal constant SYNTH_FLIP_TAG = keccak256("sdgnrs.redemption.synthetic-flip");
 
@@ -174,7 +174,7 @@ abstract contract RedemptionFixture is DeployProtocol {
     {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(sdgnrs) || logs[i].topics[0] != CLAIMED_TOPIC) continue;
-            if (address(uint160(uint256(logs[i].topics[1]))) != player) continue;
+            if (uint32(uint256(logs[i].topics[1])) != game.walletIdOf(player)) continue;
             if (uint32(uint256(logs[i].topics[2])) != id) continue;
             (, direct, lootbox,) = abi.decode(logs[i].data, (uint16, uint256, uint256, uint256));
             return (true, direct, lootbox);
@@ -188,7 +188,7 @@ abstract contract RedemptionFixture is DeployProtocol {
     }
 
     function _seedFlipBacking(uint128 wholeFlip) internal {
-        bytes32 slot = keccak256(abi.encode(address(sdgnrs), uint256(2)));
+        bytes32 slot = keccak256(abi.encode(uint32(2), uint256(2)));
         uint256 packed = uint256(vm.load(address(coinflip), slot));
         vm.store(address(coinflip), slot, bytes32((packed & (type(uint256).max << 128)) | wholeFlip));
         vm.prank(address(sdgnrs));

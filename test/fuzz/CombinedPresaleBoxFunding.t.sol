@@ -18,7 +18,7 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 contract CombinedPresaleBoxFunding is DeployProtocol {
     using BoxOrderLib for uint256;
 
-    bytes32 constant PRESALE_BUY = keccak256("PresaleBoxBuy(address,uint48,uint32,uint256,bool)");
+    bytes32 constant PRESALE_BUY = keccak256("PresaleBoxBuy(uint32,uint48,uint32,uint256,bool)");
 
     function setUp() public {
         _deployProtocol();
@@ -59,7 +59,7 @@ contract CombinedPresaleBoxFunding is DeployProtocol {
         for (uint256 i; i < logs.length; ++i) {
             if (
                 logs[i].topics[0] == PRESALE_BUY &&
-                address(uint160(uint256(logs[i].topics[1]))) == buyer
+                uint32(uint256(logs[i].topics[1])) == game.walletIdOf(buyer)
             ) {
                 (uint32 position, uint256 amount, bool closing) = abi.decode(logs[i].data, (uint32, uint256, bool));
                 assertEq(amount, boxAmount, "box funded at requested amount");
@@ -94,7 +94,7 @@ contract CombinedPresaleBoxFunding is DeployProtocol {
         bool found;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] != PRESALE_BUY) continue;
-            assertEq(address(uint160(uint256(logs[i].topics[1]))), buyer);
+            assertEq(uint32(uint256(logs[i].topics[1])), game.walletIdOf(buyer));
             assertEq(uint256(logs[i].topics[2]), writeBuffer, "purchase records the write buffer");
             uint32 pos;
             uint256 applied;

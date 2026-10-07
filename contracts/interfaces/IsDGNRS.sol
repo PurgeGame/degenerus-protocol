@@ -29,7 +29,7 @@ import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 /// @title IsDGNRS
 /// @notice Interface for the sDGNRS token contract (contract-to-contract calls, plus the two
 ///         ID-taking redemption-claim doors)
-/// @dev sDGNRS is backed by ETH, stETH, and FLIP reserves with pool-based distribution
+/// @dev sDGNRS uses 12 decimals and is backed by ETH, stETH, and FLIP reserves with pool-based distribution
 interface IsDGNRS {
     /// @notice sDGNRS reward pools (initial allocations plus ongoing-pool century refills)
     /// @dev Each pool has a dedicated balance for specific distribution purposes
@@ -77,7 +77,7 @@ interface IsDGNRS {
     function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 flipOut);
 
     /// @notice Claim account `id`'s resolved gambling-burn redemption in batch `batchId`.
-    /// @dev Authorized: `id == 0` is the caller (ID from sDGNRS's own forward word); a nonzero
+    /// @dev Authorized: `id == 0` is the caller (ID from Game.walletIdOf); a nonzero
     ///      `id` needs Game `resolveAccount(id, msg.sender).authorized` (the account's key, a
     ///      smurf's owner, or an approved operator). The direct half credits the account's Game
     ///      claimable by ID and the lootbox half resolves for the account; after game over the

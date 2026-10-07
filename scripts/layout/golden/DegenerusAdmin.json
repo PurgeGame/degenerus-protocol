@@ -45,15 +45,15 @@
     "label": "voterRecords",
     "offset": 0,
     "slot": 5,
-    "typeLabel": "mapping(uint256 => mapping(address => struct DegenerusAdmin.VoterRecord))"
+    "typeLabel": "mapping(uint256 => mapping(uint32 => uint256))"
   },
   {
     "bytes": "32",
     "encoding": "mapping",
-    "label": "activeProposalId",
+    "label": "_activeProposalId",
     "offset": 0,
     "slot": 6,
-    "typeLabel": "mapping(address => uint256)"
+    "typeLabel": "mapping(uint32 => uint256)"
   },
   {
     "bytes": "32",
@@ -85,15 +85,15 @@
     "label": "feedVoterRecords",
     "offset": 0,
     "slot": 10,
-    "typeLabel": "mapping(uint256 => mapping(address => struct DegenerusAdmin.VoterRecord))"
+    "typeLabel": "mapping(uint256 => mapping(uint32 => uint256))"
   },
   {
     "bytes": "32",
     "encoding": "mapping",
-    "label": "activeFeedProposalId",
+    "label": "_activeFeedProposalId",
     "offset": 0,
     "slot": 11,
-    "typeLabel": "mapping(address => uint256)"
+    "typeLabel": "mapping(uint32 => uint256)"
   },
   {
     "bytes": "32",

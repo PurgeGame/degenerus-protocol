@@ -62,7 +62,7 @@ contract V56SecUnmanipulable is DeployProtocol {
 
     /// @dev SubscriptionExpired(player indexed, uint8 reason): reason 1 = AutoPause (funding-skip kill of
     ///      a NORMAL sub), reason 2 = cancel-reclaim (the in-stage tombstone reclaim).
-    bytes32 private constant SUB_EXPIRED_SIG = keccak256("SubscriptionExpired(address,uint8)");
+    bytes32 private constant SUB_EXPIRED_SIG = keccak256("SubscriptionExpired(uint32,uint8)");
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
     uint256 private _lastFulfilledReqId;
@@ -125,9 +125,10 @@ contract V56SecUnmanipulable is DeployProtocol {
         assertGt(baseBefore, 0, "non-vacuity: base accrued");
 
         // A non-affiliate caller cannot reach the drain (it reverts before any storage write).
+        uint32 subscriberId = game.walletIdOf(p);
         vm.prank(makeAddr("not_affiliate"));
         vm.expectRevert();
-        IGameAfkingModule(address(game)).drainAffiliateBase(p);
+        IGameAfkingModule(address(game)).drainAffiliateBase(subscriberId);
         assertEq(_affiliateBaseOf(p), baseBefore, "rejected non-affiliate drain left the base intact");
     }
 
@@ -335,7 +336,7 @@ contract V56SecUnmanipulable is DeployProtocol {
             game.claimAfkingFlip(_aids(_pair(ledger.player, ledger.player)));
         } else {
             vm.prank(ledger.relayer);
-            affiliate.claim(_pair(ledger.player, ledger.player));
+            affiliate.claim(_aids(_pair(ledger.player, ledger.player)));
         }
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256[5] memory expected;
@@ -373,13 +374,13 @@ contract V56SecUnmanipulable is DeployProtocol {
     function _accountDeliveries(ChurnLedger memory ledger, Vm.Log[] memory logs, uint256 fundingBefore, uint256 price)
         private
     {
-        bytes32 delivered = keccak256("AfkingDelivered(address,uint256)");
-        bytes32 cover = keccak256("LootBoxBuy(address,uint48,uint32,uint256)");
+        bytes32 delivered = keccak256("AfkingDelivered(uint32,uint256)");
+        bytes32 cover = keccak256("LootBoxBuy(uint32,uint48,uint32,uint256)");
         uint256 cost;
         uint256 count;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2
-                || address(uint160(uint256(logs[i].topics[1]))) != ledger.player) continue;
+                || uint32(uint256(logs[i].topics[1])) != game.walletIdOf(ledger.player)) continue;
             if (logs[i].topics[0] == cover) {
                 (, uint256 coverWei) = abi.decode(logs[i].data, (uint32, uint256));
                 cost += coverWei;
@@ -698,7 +699,7 @@ contract V56SecUnmanipulable is DeployProtocol {
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2) continue;
             if (logs[i].topics[0] != SUB_EXPIRED_SIG) continue;
-            if (address(uint160(uint256(logs[i].topics[1]))) != who) continue;
+            if (uint32(uint256(logs[i].topics[1])) != game.walletIdOf(who)) continue;
             if (uint8(uint256(bytes32(logs[i].data))) == reason) count++;
         }
     }
@@ -709,7 +710,7 @@ contract V56SecUnmanipulable is DeployProtocol {
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2) continue;
             if (logs[i].topics[0] != SUB_EXPIRED_SIG) continue;
-            if (address(uint160(uint256(logs[i].topics[1]))) != who) continue;
+            if (uint32(uint256(logs[i].topics[1])) != game.walletIdOf(who)) continue;
             count++;
         }
     }

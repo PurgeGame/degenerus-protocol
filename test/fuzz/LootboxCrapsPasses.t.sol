@@ -18,7 +18,7 @@ contract LootboxCrapsPasses is DeployProtocol {
     uint256 constant LB_CUSTOM_COUNT_SHIFT = 121;
     uint256 constant LB_SIZE_SHIFT = 128;
 
-    bytes32 constant PASS_EVENT = keccak256("LootBoxCrapsPasses(address,uint32,uint32,uint24)");
+    bytes32 constant PASS_EVENT = keccak256("LootBoxCrapsPasses(uint32,uint32,uint32,uint24)");
 
     uint256 private _lastFulfilledReqId;
 

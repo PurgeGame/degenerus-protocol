@@ -270,7 +270,7 @@ contract CoinflipPackedStake is DeployProtocol {
         assertEq(coin.balanceOf(player), 100, "only the principal leaves the wallet");
         assertEq(total, _whole(total), "the stake is whole FLIP");
         assertGe(amount, 100, "the normalized principal (plus any quest bonus) is staked");
-        bytes32 depositSig = keccak256("CoinflipDeposit(address,uint256)");
+        bytes32 depositSig = keccak256("CoinflipDeposit(uint32,uint256)");
         bool seen;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter == address(coinflip) && logs[i].topics[0] == depositSig) {

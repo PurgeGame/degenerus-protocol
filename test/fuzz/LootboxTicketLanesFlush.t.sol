@@ -18,7 +18,7 @@ contract LootboxTicketLanesFlush is DeployProtocol {
     address internal actor;
 
     bytes32 internal constant OPENED =
-        keccak256("LootBoxOpened(address,uint48,uint256,uint24,uint32,uint256,bool)");
+        keccak256("LootBoxOpened(uint32,uint48,uint256,uint24,uint32,uint256,bool)");
     bytes32 internal constant QUEUED = keccak256("EntriesQueued(uint32,uint24,uint32)");
     /// @dev Event-tag bit of a queued entry: QUEUED_ENTRY_TAG | position << 1 | buffer.
     uint48 internal constant QUEUED_ENTRY_TAG = uint48(1) << 46;
@@ -107,7 +107,7 @@ contract LootboxTicketLanesFlush is DeployProtocol {
         uint32 actorId = game.walletIdOf(actor);
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2) continue;
-            if (logs[i].topics[0] == OPENED && address(uint160(uint256(logs[i].topics[1]))) == actor
+            if (logs[i].topics[0] == OPENED && uint32(uint256(logs[i].topics[1])) == game.walletIdOf(actor)
                 && uint48(uint256(logs[i].topics[2])) == ref) {
                 (, uint24 lvl, uint32 scaled,, bool up) = abi.decode(logs[i].data, (uint256, uint24, uint32, uint256, bool));
                 uint256 whole = scaled / 100 + (up ? 1 : 0);

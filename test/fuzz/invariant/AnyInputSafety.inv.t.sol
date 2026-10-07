@@ -25,6 +25,8 @@ import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol"
 ///         (d) Liveness: from the current state, inside snapshotState/revertToState, warp a day and
 ///             drive VRF fulfilment + mineFlip (each call capped at 16.7M gas) until the day is
 ///             sealed and the engine answers NoWork, within MAX_CRANKS calls and with no gas failure.
+///             A delivered reserved word uses the existing owner-authorized transport retry;
+///             ordinary keeper progress still uses only the permissionless mineFlip door.
 contract AnyInputSafety is DeployProtocol {
     AnyInputHandler public handler;
     address[] internal actors;
@@ -67,7 +69,7 @@ contract AnyInputSafety is DeployProtocol {
                 game.purchaseWhalePass{value: 2.4 ether}(0, 1, bytes32(0)); // seat + sDGNRS + far-future entries
             }
             vm.startPrank(ContractAddresses.CREATOR);
-            dgnrs.transfer(a, 1_000_000 ether);
+            dgnrs.transfer(a, 1_000_000e12);
             _erc20Transfer(dgve, a, dgveSupply / 100);
             _erc20Transfer(dgvf, a, dgvfSupply / 100);
             vm.stopPrank();
@@ -125,7 +127,7 @@ contract AnyInputSafety is DeployProtocol {
         game.purchase{value: priceWei * 10}(0, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         vm.stopPrank();
         vm.startPrank(ContractAddresses.CREATOR);
-        dgnrs.transfer(BYSTANDER, 1_000_000 ether);
+        dgnrs.transfer(BYSTANDER, 1_000_000e12);
         _erc20Transfer(dgve, BYSTANDER, dgveSupply / 200);
         _erc20Transfer(dgvf, BYSTANDER, dgvfSupply / 200);
         vm.stopPrank();
@@ -264,7 +266,19 @@ contract AnyInputSafety is DeployProtocol {
                 r.quiet = true;
                 break;
             }
-            if (s == RNG_NOT_READY && _fulfillLast(r.cranks + 1_000_000)) continue;
+            if (s == RNG_NOT_READY) {
+                if (_fulfillLast(r.cranks + 1_000_000)) continue;
+                uint256 request = mockVRF.lastRequestId();
+                (,, bool delivered) = mockVRF.pendingRequests(request);
+                // A callback can deliver 0/1 (after nudges), which intentionally leaves Game
+                // waiting. mineFlip cannot replace that transport; only the timed owner retry can.
+                if (request != 0 && delivered && !game.isRngFulfilled()) {
+                    vm.prank(ContractAddresses.CREATOR);
+                    try admin.retryGameRng() {
+                        if (_fulfillLast(r.cranks + 2_000_000)) continue;
+                    } catch {}
+                }
+            }
             r.badSel = s;
             if (s == bytes4(keccak256("InsufficientExecutionGas()")) || s == bytes4(keccak256("WorkGasBound()"))
                 || s == bytes4(keccak256("EmptyRevert()"))) r.gasFailure = true;
@@ -599,6 +613,14 @@ contract AnyInputSafety is DeployProtocol {
         coin.transfer(actors[0], 1);
         handler.prog_warp(1); // any handler action re-reads the bystander
         assertEq(handler.bystanderViolations(), 1, "oracle must see the decrease");
+    }
+
+    /// @notice Minimized fuzz regression: reserved callback values need the authorized retry.
+    function test_livenessRecoversReservedWordViaOwnerRetry() public {
+        handler.prog_buy(3225, 0, type(uint256).max);
+        handler.prog_mineFlip(1139325335);
+        handler.prog_fulfillVrf(0);
+        _checkLiveness();
     }
 
     /// @notice The liveness probe completes from the fixture state and reports its gas.

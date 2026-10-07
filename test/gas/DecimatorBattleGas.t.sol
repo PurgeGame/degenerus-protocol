@@ -43,7 +43,7 @@ contract DecimatorBattleGasTest is Test {
             h.open(round);
             vm.startPrank(ContractAddresses.COIN);
             for (uint64 i = 1; i <= 2000; ++i) {
-                h.recordDecBurn(address(uint160(i)), round, uint256(i) * 1000, 10_000, 0);
+                h.recordFor(address(uint160(i)), round, uint256(i) * 1000, 10_000, 0);
             }
             vm.stopPrank();
             h.seal(round, 100 ether, uint256(keccak256(abi.encode("decimator gas", round))));

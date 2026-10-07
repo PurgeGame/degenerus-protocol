@@ -28,15 +28,18 @@ contract WalletIdPhaseFGasSeeder is DegenerusGamePayoutUtils {
         balancesPacked[_walletIdOf(player)] = claimable | (afking << 128);
         claimablePool += uint128(claimable + afking);
     }
+
+    function seedBalances(uint32 player, uint256 claimable, uint256 afking) external {
+        balancesPacked[player] = claimable | (afking << 128);
+        claimablePool += uint128(claimable + afking);
+    }
 }
 
 /// @dev Run with FOUNDRY_ISOLATE=true: every measured call is its own transaction against
 ///      committed prior state. Phase F account paths (smurfs, acting on behalf by ID, payee
-///      payouts, the deity group scan). The same file runs on the pre-F tree with
-///      `F_TREE = false`, where the doors take an address and smurf scenarios are skipped.
+///      payouts, the deity group scan). Historical comparison measurements are retained
+///      in the phase gas evidence; this suite exercises the current ID-only interfaces.
 contract WalletIdPhaseFGasTest is DeployProtocol {
-    bool private constant F_TREE = true;
-
     address private constant REG = address(0xA11CE);
     address private constant OPERATOR = address(0x0EEA);
     address private constant OWNER = address(0x0E1E);
@@ -45,7 +48,6 @@ contract WalletIdPhaseFGasTest is DeployProtocol {
 
     bytes private gameCode;
     uint32 private smurfId;
-    address private smurfKey;
 
     function setUp() public {
         _deployProtocol();
@@ -66,16 +68,12 @@ contract WalletIdPhaseFGasTest is DeployProtocol {
         _ticket(REFERRER, REFERRER);
         _ticket(OWNER, OWNER);
         _approve(REG, REG, OPERATOR);
-        if (F_TREE) {
-            smurfId = _createSmurf(OWNER, bytes32(0));
-            smurfKey = address(uint160(uint256(keccak256(abi.encode(keccak256("degenerus.smurf"), OWNER, smurfId)))));
-            require(game.walletIdOf(smurfKey) == smurfId, "smurf key");
-            _approve(OWNER, smurfKey, OPERATOR);
-        }
+        smurfId = _createSmurf(OWNER, bytes32(0));
+        _approve(OWNER, smurfId, OPERATOR);
     }
 
     // ---------------------------------------------------------------------
-    // Fixture plumbing: one call shape per tree
+    // Fixture plumbing: current account-ID interfaces
     // ---------------------------------------------------------------------
 
     function _seeder() private returns (WalletIdPhaseFGasSeeder) {
@@ -93,16 +91,13 @@ contract WalletIdPhaseFGasTest is DeployProtocol {
         emit log_named_uint(scenario, used);
     }
 
-    /// @dev The account argument a door takes for `account` when `caller` acts: the wallet ID (0
-    ///      for self) on the F tree, the address (0 for self) before it.
+    /// @dev Zero selects the caller; explicit IDs select another authorized account.
     function _acct(address caller, address account) private view returns (uint256) {
         if (caller == account) return 0;
-        return F_TREE ? uint256(game.walletIdOf(account)) : uint256(uint160(account));
+        return uint256(game.walletIdOf(account));
     }
 
-    function _sig(string memory f, string memory pre) private pure returns (string memory) {
-        return F_TREE ? f : pre;
-    }
+    function _acct(address, uint32 account) private pure returns (uint256) { return account; }
 
     function _call(address caller, address target, uint256 value, bytes memory data) private {
         vm.prank(caller);
@@ -114,21 +109,34 @@ contract WalletIdPhaseFGasTest is DeployProtocol {
         _ticketWithCode(caller, account, bytes32(0));
     }
 
+    function _ticket(address caller, uint32 account) private {
+        _ticketWithCode(caller, account, bytes32(0));
+    }
+
     function _ticketWithCode(address caller, address account, bytes32 code) private {
         bytes memory data = abi.encodeWithSignature(
-            _sig("purchase(uint32,uint256,uint256,bytes32,uint8,bool)",
-                "purchase(address,uint256,uint256,bytes32,uint8,bool)"),
+            "purchase(uint32,uint256,uint256,bytes32,uint8,bool)",
+            _acct(caller, account), 400, 0, code, uint8(MintPaymentKind.DirectEth), false);
+        _call(caller, address(game), _price(), data);
+    }
+
+    function _ticketWithCode(address caller, uint32 account, bytes32 code) private {
+        bytes memory data = abi.encodeWithSignature(
+            "purchase(uint32,uint256,uint256,bytes32,uint8,bool)",
             _acct(caller, account), 400, 0, code, uint8(MintPaymentKind.DirectEth), false);
         _call(caller, address(game), _price(), data);
     }
 
     /// @dev `holder` (the account's key or a smurf's owner) approves `operator` for `account`.
     function _approve(address holder, address account, address operator) private {
-        bytes memory data = F_TREE
-            ? abi.encodeWithSignature("setOperatorApproval(uint32,address,bool)",
-                holder == account ? 0 : uint256(game.walletIdOf(account)), operator, true)
-            : abi.encodeWithSignature("setOperatorApproval(address,bool)", operator, true);
+        bytes memory data = abi.encodeWithSignature("setOperatorApproval(uint32,address,bool)",
+                holder == account ? 0 : uint256(game.walletIdOf(account)), operator, true);
         _call(holder, address(game), 0, data);
+    }
+
+    function _approve(address holder, uint32 account, address operator) private {
+        vm.prank(holder);
+        game.setOperatorApproval(account, operator, true);
     }
 
     function _createSmurf(address owner, bytes32 code) private returns (uint32 id) {
@@ -142,28 +150,50 @@ contract WalletIdPhaseFGasTest is DeployProtocol {
 
     function _bet(address caller, address account) private {
         bytes memory data = abi.encodeWithSignature(
-            _sig("placeDegeneretteBet(uint32,uint8,uint128,uint8,uint8)",
-                "placeDegeneretteBet(address,uint8,uint128,uint8,uint8)"),
+            "placeDegeneretteBet(uint32,uint8,uint128,uint8,uint8)",
+            _acct(caller, account), uint8(0), uint128(0.01 ether), uint8(1), uint8(3));
+        _call(caller, address(game), 0.01 ether, data);
+    }
+
+    function _bet(address caller, uint32 account) private {
+        bytes memory data = abi.encodeWithSignature(
+            "placeDegeneretteBet(uint32,uint8,uint128,uint8,uint8)",
             _acct(caller, account), uint8(0), uint128(0.01 ether), uint8(1), uint8(3));
         _call(caller, address(game), 0.01 ether, data);
     }
 
     function _claimWinnings(address caller, address account) private {
         bytes memory data = abi.encodeWithSignature(
-            _sig("claimWinnings(uint32)", "claimWinnings(address)"), _acct(caller, account));
+            "claimWinnings(uint32)", _acct(caller, account));
+        _call(caller, address(game), 0, data);
+    }
+
+    function _claimWinnings(address caller, uint32 account) private {
+        bytes memory data = abi.encodeWithSignature(
+            "claimWinnings(uint32)", _acct(caller, account));
         _call(caller, address(game), 0, data);
     }
 
     function _withdrawAfking(address caller, address account, uint256 amount) private {
-        bytes memory data = F_TREE
-            ? abi.encodeWithSignature("withdrawAfkingFunding(uint32,uint256)", _acct(caller, account), amount)
-            : abi.encodeWithSignature("withdrawAfkingFunding(uint256)", amount);
+        bytes memory data = abi.encodeWithSignature("withdrawAfkingFunding(uint32,uint256)", _acct(caller, account), amount);
+        _call(caller, address(game), 0, data);
+    }
+
+    function _withdrawAfking(address caller, uint32 account, uint256 amount) private {
+        bytes memory data = abi.encodeWithSignature("withdrawAfkingFunding(uint32,uint256)", _acct(caller, account), amount);
         _call(caller, address(game), 0, data);
     }
 
     function _flipDeposit(address caller, address account, uint256 amount) private {
         bytes memory data = abi.encodeWithSignature(
-            _sig("depositCoinflip(uint32,uint256)", "depositCoinflip(address,uint256)"),
+            "depositCoinflip(uint32,uint256)",
+            _acct(caller, account), amount);
+        _call(caller, address(coinflip), 0, data);
+    }
+
+    function _flipDeposit(address caller, uint32 account, uint256 amount) private {
+        bytes memory data = abi.encodeWithSignature(
+            "depositCoinflip(uint32,uint256)",
             _acct(caller, account), amount);
         _call(caller, address(coinflip), 0, data);
     }
@@ -175,23 +205,41 @@ contract WalletIdPhaseFGasTest is DeployProtocol {
 
     function _whalePass(address caller, address account) private {
         bytes memory data = abi.encodeWithSignature(
-            _sig("purchaseWhalePass(uint32,uint256,bytes32)", "purchaseWhalePass(address,uint256,bytes32)"),
+            "purchaseWhalePass(uint32,uint256,bytes32)",
+            _acct(caller, account), uint256(1), bytes32(0));
+        _call(caller, address(game), 10 ether, data);
+    }
+
+    function _whalePass(address caller, uint32 account) private {
+        bytes memory data = abi.encodeWithSignature(
+            "purchaseWhalePass(uint32,uint256,bytes32)",
             _acct(caller, account), uint256(1), bytes32(0));
         _call(caller, address(game), 10 ether, data);
     }
 
     function _subscribe(address caller, address account, uint8 qty, uint256 seat) private {
-        bytes memory data = F_TREE
-            ? abi.encodeWithSignature("subscribe(uint32,bool,bool,uint8,uint32,uint256)",
-                _acct(caller, account), false, true, qty, uint32(0), seat)
-            : abi.encodeWithSignature("subscribe(address,bool,bool,uint8,address)",
-                _acct(caller, account), false, true, qty, address(0));
+        bytes memory data = abi.encodeWithSignature("subscribe(uint32,bool,bool,uint8,uint32,uint256)",
+                _acct(caller, account), false, true, qty, uint32(0), seat);
+        _call(caller, address(game), 0, data);
+    }
+
+    function _subscribe(address caller, uint32 account, uint8 qty, uint256 seat) private {
+        bytes memory data = abi.encodeWithSignature("subscribe(uint32,bool,bool,uint8,uint32,uint256)",
+                _acct(caller, account), false, true, qty, uint32(0), seat);
         _call(caller, address(game), 0, data);
     }
 
     function _deity(address caller, address account, uint8 symbol) private returns (bool ok) {
         bytes memory data = abi.encodeWithSignature(
-            _sig("purchaseDeityPass(uint32,uint8,bytes32)", "purchaseDeityPass(address,uint8,bytes32)"),
+            "purchaseDeityPass(uint32,uint8,bytes32)",
+            _acct(caller, account), symbol, bytes32(0));
+        vm.prank(caller);
+        (ok,) = address(game).call{value: 100_000 ether}(data);
+    }
+
+    function _deity(address caller, uint32 account, uint8 symbol) private returns (bool ok) {
+        bytes memory data = abi.encodeWithSignature(
+            "purchaseDeityPass(uint32,uint8,bytes32)",
             _acct(caller, account), symbol, bytes32(0));
         vm.prank(caller);
         (ok,) = address(game).call{value: 100_000 ether}(data);
@@ -202,13 +250,11 @@ contract WalletIdPhaseFGasTest is DeployProtocol {
     // ---------------------------------------------------------------------
 
     function test_Gas_SmurfCreateBlankCode() public {
-        if (!F_TREE) return;
         _createSmurf(OWNER, bytes32(0));
         _report("smurf_create_blank_code");
     }
 
     function test_Gas_SmurfCreateReferredOwner() public {
-        if (!F_TREE) return;
         // FRESH registers through a purchase referred by REFERRER's default code, then creates.
         _ticketWithCode(FRESH, FRESH, bytes32(uint256(uint160(REFERRER))));
         _createSmurf(FRESH, bytes32(0));
@@ -230,14 +276,12 @@ contract WalletIdPhaseFGasTest is DeployProtocol {
     }
 
     function test_Gas_TicketOwnerForSmurf() public {
-        if (!F_TREE) return;
-        _ticket(OWNER, smurfKey);
+        _ticket(OWNER, smurfId);
         _report("ticket_owner_for_smurf");
     }
 
     function test_Gas_TicketOperatorForSmurf() public {
-        if (!F_TREE) return;
-        _ticket(OPERATOR, smurfKey);
+        _ticket(OPERATOR, smurfId);
         _report("ticket_operator_for_smurf");
     }
 
@@ -252,8 +296,7 @@ contract WalletIdPhaseFGasTest is DeployProtocol {
     }
 
     function test_Gas_DegeneretteOwnerForSmurf() public {
-        if (!F_TREE) return;
-        _bet(OWNER, smurfKey);
+        _bet(OWNER, smurfId);
         _report("degenerette_owner_for_smurf");
     }
 
@@ -263,8 +306,7 @@ contract WalletIdPhaseFGasTest is DeployProtocol {
     }
 
     function test_Gas_SetOperatorApprovalOwnerForSmurf() public {
-        if (!F_TREE) return;
-        _approve(OWNER, smurfKey, FRESH);
+        _approve(OWNER, smurfId, FRESH);
         _report("set_operator_approval_owner_for_smurf");
     }
 
@@ -287,21 +329,17 @@ contract WalletIdPhaseFGasTest is DeployProtocol {
     }
 
     function test_Gas_ClaimWinningsOwnerForSmurf() public {
-        if (!F_TREE) return;
-        _seeder().seedBalances(smurfKey, 1 ether, 0);
+        _seeder().seedBalances(smurfId, 1 ether, 0);
         _restoreGame();
-        _claimWinnings(OWNER, smurfKey);
+        _claimWinnings(OWNER, smurfId);
         _report("claim_winnings_owner_for_smurf");
-        assertEq(smurfKey.balance, 0);
     }
 
     function test_Gas_ClaimWinningsOperatorForSmurf() public {
-        if (!F_TREE) return;
-        _seeder().seedBalances(smurfKey, 1 ether, 0);
+        _seeder().seedBalances(smurfId, 1 ether, 0);
         _restoreGame();
-        _claimWinnings(OPERATOR, smurfKey);
+        _claimWinnings(OPERATOR, smurfId);
         _report("claim_winnings_operator_for_smurf");
-        assertEq(smurfKey.balance, 0);
     }
 
     function test_Gas_WithdrawAfkingSelf() public {
@@ -312,7 +350,6 @@ contract WalletIdPhaseFGasTest is DeployProtocol {
     }
 
     function test_Gas_WithdrawAfkingOperatorForOrdinary() public {
-        if (!F_TREE) return;
         _seeder().seedBalances(REG, 0, 1 ether);
         _restoreGame();
         _withdrawAfking(OPERATOR, REG, 0.5 ether);
@@ -320,12 +357,10 @@ contract WalletIdPhaseFGasTest is DeployProtocol {
     }
 
     function test_Gas_WithdrawAfkingOwnerForSmurf() public {
-        if (!F_TREE) return;
-        _seeder().seedBalances(smurfKey, 0, 1 ether);
+        _seeder().seedBalances(smurfId, 0, 1 ether);
         _restoreGame();
-        _withdrawAfking(OWNER, smurfKey, 0.5 ether);
+        _withdrawAfking(OWNER, smurfId, 0.5 ether);
         _report("withdraw_afking_owner_for_smurf");
-        assertEq(smurfKey.balance, 0);
     }
 
     // ---------------------------------------------------------------------
@@ -347,10 +382,9 @@ contract WalletIdPhaseFGasTest is DeployProtocol {
     }
 
     function test_Gas_FlipDepositOwnerForSmurf() public {
-        if (!F_TREE) return;
         _mintFlip(OWNER, 1_000);
-        _flipDeposit(OWNER, smurfKey, 100);
-        _flipDeposit(OWNER, smurfKey, 100);
+        _flipDeposit(OWNER, smurfId, 100);
+        _flipDeposit(OWNER, smurfId, 100);
         _report("flip_deposit_owner_for_smurf");
     }
 
@@ -364,8 +398,7 @@ contract WalletIdPhaseFGasTest is DeployProtocol {
     }
 
     function test_Gas_WhalePassOwnerForSmurf() public {
-        if (!F_TREE) return;
-        _whalePass(OWNER, smurfKey);
+        _whalePass(OWNER, smurfId);
         _report("whale_pass_owner_for_smurf");
     }
 
@@ -397,9 +430,8 @@ contract WalletIdPhaseFGasTest is DeployProtocol {
     }
 
     function test_Gas_DeityPass32ndOwnerForSmurf() public {
-        if (!F_TREE) return;
         uint8 symbol = _fillDeities();
-        require(_deity(OWNER, smurfKey, symbol), "deity 32 smurf");
+        require(_deity(OWNER, smurfId, symbol), "deity 32 smurf");
         _report("deity_pass_32nd_owner_for_smurf");
     }
 
@@ -421,9 +453,8 @@ contract WalletIdPhaseFGasTest is DeployProtocol {
     }
 
     function test_Gas_SubscribeNewOwnerForSmurf() public {
-        if (!F_TREE) return;
         uint256 seat = _grantSeat(OWNER);
-        _subscribe(OWNER, smurfKey, 1, seat);
+        _subscribe(OWNER, smurfId, 1, seat);
         _report("subscribe_new_owner_for_smurf");
     }
 }

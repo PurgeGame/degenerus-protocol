@@ -153,11 +153,7 @@ contract DegenerusQuests is IDegenerusQuests {
 
     /// @notice Emitted once per level-quest roll — the stored row for the quest the
     ///         entropy selected, so consumers never replay the weighted roll.
-    /// @param lvl The level the quest belongs to — the one being entered, matching the
     ///        level LevelQuestCompleted reports.
-    /// @param version The level-quest version the roll produced (the progress join key).
-    /// @param questType The rolled quest type.
-    /// @param target The completion target (ETH-based types scale with that level's ticket
     ///        price, the same one every progress handler enforces; FLIP types are fixed).
     event LevelQuestRolled(
         uint24 indexed lvl,
@@ -551,14 +547,9 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @notice Roll the daily quest set. Slot 0 is always MINT_ETH; slot 1 is random, except on the
     ///         first purchase day (forced FOIL) and the first jackpot day (forced MINT_FLIP).
     /// @dev Idempotent per day. Called by AdvanceModule when RNG word is available.
-    /// @param day Quest day identifier.
-    /// @param entropy VRF entropy word.
-    /// @param forceMintFlip When true, slot 1 is MINT_FLIP (the FLIP redeem window is live this
     ///        day); when false, MINT_FLIP is excluded from the slot 1 roll so a player is never handed
     ///        a daily FLIP-mint quest they cannot complete while the window is shut.
-    /// @param forceFoil When true (the day a level's purchase phase opens), slot 1 is the
     ///        buy-a-foil-pack quest. Takes precedence over forceMintFlip.
-    /// @param forceDecimator When true (the day a decimator burn window is armed), slot 1 is the
     ///        decimator quest, outranking both other forces so the window's opening day always
     ///        carries it. On an x4/x99 level this is that level's first jackpot day, so it
     ///        displaces forceMintFlip there; if that level also collapses its phase in one day
@@ -2774,32 +2765,31 @@ contract DegenerusQuests is IDegenerusQuests {
     ///         no quest ledger writes.
     /// @dev earnsReward = recordGrowthBet's own eligibility (level quest or active
     ///      afking). mayBet = that, or an ever-written mintPacked_ word with the curse
-    ///      counter and wallet ID masked out. The curse is the one field a third party can
-    ///      write into a stranger's word (deity smite), and an ID alone is registration, not
-    ///      participation; neither opens the markets.
+    ///      counter masked out. The curse is the one field a third party can write into a
+    ///      stranger's word (deity smite). Registration leaves the word empty; neither
+    ///      registration nor a curse opens the markets.
     ///      The wallet ID rides the same mint word; every door that writes a nonzero mint field
     ///      registers first, so mayBet implies a nonzero ID.
-    /// @param player The player to test.
+    /// @param playerId The account to test.
     /// @param lvl The level to test against.
     /// @return mayBet True if the player may place a bet at all.
     /// @return earnsReward True if the placement also earns the growth quest.
     /// @return id The player's wallet ID (0 if unregistered; never allocates).
-    function marketBetGates(address player, uint24 lvl)
+    function marketBetGates(uint32 playerId, uint24 lvl)
         external
         view
         override
         returns (bool mayBet, bool earnsReward, uint32 id)
     {
-        uint256 mintData = questGame.mintPackedFor(player);
-        id = uint32(mintData >> BitPackingLib.WALLET_ID_SHIFT);
+        uint256 mintData = questGame.mintPackedOfId(playerId);
+        id = playerId;
         earnsReward =
             _levelQuestEligible(lvl, mintData) ||
             questPlayerState[id].afkingActive;
         mayBet =
             earnsReward ||
             (mintData &
-                ~((BitPackingLib.MASK_5 << BitPackingLib.CURSE_COUNT_SHIFT) |
-                    (uint256(type(uint32).max) << BitPackingLib.WALLET_ID_SHIFT))) !=
+                ~(BitPackingLib.MASK_5 << BitPackingLib.CURSE_COUNT_SHIFT)) !=
             0;
     }
 
@@ -2814,14 +2804,13 @@ contract DegenerusQuests is IDegenerusQuests {
     ///      word and clears it.
     /// @param id The bettor's wallet ID, as `marketBetGates` returned it in the same call
     ///        (keys the quest record and the credit).
-    /// @param player The bettor's address (its mint word is the eligibility source).
     /// @param lvl The level the bet was placed on. Taken from the caller rather than read
     ///        back off the game: PARIMUTUEL is the only permitted caller and it read this
     ///        from the game in the same call, so the value is the same one questGame.level()
     ///        would return, for one less external call.
     /// @param reward FLIP to credit on first completion this level.
     /// @return paid The FLIP actually credited (0 when ineligible or already completed).
-    function recordGrowthBet(uint32 id, address player, uint24 lvl, uint256 reward)
+    function recordGrowthBet(uint32 id, uint24 lvl, uint256 reward)
         external
         override
         returns (uint256 paid)
@@ -2838,7 +2827,7 @@ contract DegenerusQuests is IDegenerusQuests {
         if ((packed >> LQ_GROWTH_BET_BIT) & 1 == 1) return 0;
 
         if (
-            !_levelQuestEligible(lvl, questGame.mintPackedFor(player)) &&
+            !_levelQuestEligible(lvl, questGame.mintPackedOfId(id)) &&
             !questPlayerState[id].afkingActive
         ) return 0;
 

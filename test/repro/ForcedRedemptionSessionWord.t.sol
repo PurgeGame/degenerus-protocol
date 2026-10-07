@@ -97,10 +97,10 @@ contract ForcedRedemptionSessionWordTest is RedemptionCloseTools {
         uint32 burnDay;
         for (uint256 i; i < OWNERS; ++i) {
             address owner = _owner(i);
-            dgnrs.unwrapTo(owner, 1_000_000_000 ether);
+            dgnrs.unwrapTo(owner, 1_000_000_000e12);
             _giveWalletId(owner);
             vm.prank(owner);
-            sdgnrs.burn(500_000_000 ether);
+            sdgnrs.burn(500_000_000e12);
             burnDay = _openBatch();
             (, uint16 score) = sdgnrs.pendingRedemptions(game.walletIdOf(owner), burnDay);
             scores[i] = score;
@@ -135,8 +135,8 @@ contract ForcedRedemptionSessionWordTest is RedemptionCloseTools {
         for (uint256 i = head; i < OWNERS; ++i) {
             if (!terminal || i == head) {
                 vm.expectCall(address(game), abi.encodeWithSelector(
-                    game.resolveRedemptionLootbox.selector, _owner(i), game.walletIdOf(_owner(i)), boxes[i],
-                    uint256(keccak256(abi.encode(WORD, uint256(uint160(_owner(i)))))), scores[i] - 1, burnDay
+                    game.resolveRedemptionLootbox.selector, game.walletIdOf(_owner(i)), boxes[i],
+                    uint256(keccak256(abi.encode(WORD, uint256(game.walletIdOf(_owner(i)))))), scores[i] - 1, burnDay
                 ));
             }
         }

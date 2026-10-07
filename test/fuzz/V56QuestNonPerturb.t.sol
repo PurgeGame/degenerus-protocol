@@ -64,8 +64,8 @@ contract V56QuestNonPerturb is DeployProtocol {
     ///      Slot-0 target = min(mintPrice * 1, 0.5 ether); a 1-ticket ETH mint at this price clears it.
     uint256 private constant MINT_PRICE = 0.5 ether;
 
-    /// @dev The fixed slot-1 random-quest reward (DegenerusQuests QUEST_RANDOM_REWARD = 100 ether).
-    uint256 private constant QUEST_RANDOM_REWARD = 100 ether;
+    /// @dev The fixed slot-1 random-quest reward (DegenerusQuests QUEST_RANDOM_REWARD = 100).
+    uint256 private constant QUEST_RANDOM_REWARD = 100;
 
     function setUp() public {
         _deployProtocol();

@@ -95,6 +95,7 @@ contract StateEngineIntegrationTest is RedemptionCloseTools {
 
     function _queueMixedWork() private returns (uint32 burnDay) {
         vm.deal(address(sdgnrs), 10_000 ether);
+        _giveWalletId(ALICE);
         uint256 amount = sdgnrs.totalSupply() * 16 / 1000;
         vm.prank(address(game));
         sdgnrs.transferFromPool(sDGNRS.Pool.Reward, ALICE, amount);

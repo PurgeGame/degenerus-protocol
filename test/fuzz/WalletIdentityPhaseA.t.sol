@@ -13,7 +13,8 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 contract WalletIdentityProbe is DegenerusGameStorage {
     function walletsLength() external view returns (uint256) { return wallets.length; }
     function element(uint32 id) external view returns (uint256) { return _walletElement(id); }
-    function mintWord(address owner) external view returns (uint256) { return mintPacked_[owner]; }
+    function idOf(address owner) external view returns (uint32) { return _walletIdOf(owner); }
+    function mintWord(address owner) external view returns (uint256) { return mintPacked_[_walletIdOf(owner)]; }
     function setWalletsLength(uint256 n) external { assembly { sstore(wallets.slot, n) } }
     function register(address owner, uint256 spend) external returns (uint32 id) { (id, ) = _registerWallet(owner, spend); }
     function addHalf(uint32 id, uint256 n) external { _addHalfPasses(id, n); }
@@ -90,7 +91,7 @@ contract WalletIdentityPhaseATest is DeployProtocol {
         assertEq(game.walletIdOf(buyer), before, "ID = prior table length");
         WalletIdentityProbe probe = _probe();
         assertEq(address(uint160(probe.element(uint32(before)))), buyer, "reverse direction");
-        assertEq(probe.mintWord(buyer) >> BitPackingLib.WALLET_ID_SHIFT, before, "forward direction");
+        assertEq(probe.idOf(buyer), before, "forward direction");
         _restore();
     }
 
@@ -111,7 +112,7 @@ contract WalletIdentityPhaseATest is DeployProtocol {
     // ----- mintPacked_ codec -----
 
     function test_MintWordFieldsDisjointAndComplete() public pure {
-        uint256[16] memory masks = [
+        uint256[15] memory masks = [
             BitPackingLib.MASK_24 << BitPackingLib.LAST_LEVEL_SHIFT,
             BitPackingLib.MASK_24 << BitPackingLib.LEVEL_COUNT_SHIFT,
             BitPackingLib.MASK_24 << BitPackingLib.LEVEL_STREAK_SHIFT,
@@ -126,15 +127,14 @@ contract WalletIdentityPhaseATest is DeployProtocol {
             BitPackingLib.MASK_24 << BitPackingLib.AFFILIATE_BONUS_LEVEL_SHIFT,
             BitPackingLib.MASK_6 << BitPackingLib.AFFILIATE_BONUS_POINTS_SHIFT,
             BitPackingLib.MASK_5 << BitPackingLib.CURSE_COUNT_SHIFT,
-            BitPackingLib.MASK_16 << BitPackingLib.LEVEL_UNITS_SHIFT,
-            uint256(type(uint32).max) << BitPackingLib.WALLET_ID_SHIFT
+            BitPackingLib.MASK_16 << BitPackingLib.LEVEL_UNITS_SHIFT
         ];
         uint256 union;
         for (uint256 i; i < masks.length; ++i) {
             assertEq(union & masks[i], 0, "fields overlap");
             union |= masks[i];
         }
-        assertEq(union, type(uint256).max, "fields cover the word");
+        assertEq(union, (uint256(1) << 224) - 1, "32 high bits are free");
         assertGe(BitPackingLib.MASK_5, 20, "curse cap fits");
         assertEq(BitPackingLib.MASK_24, type(uint24).max, "day is uint24");
     }
@@ -277,7 +277,7 @@ contract WalletIdentityPhaseATest is DeployProtocol {
         vm.prank(ContractAddresses.AFFILIATE);
         uint32 id = game.registerWallet(owner, true);
         assertGt(id, 0);
-        (bool mayBet,,) = quests.marketBetGates(owner, game.level() + 1);
+        (bool mayBet,,) = quests.marketBetGates(game.walletIdOf(owner), game.level() + 1);
         assertFalse(mayBet, "registration alone does not open the markets");
     }
 
@@ -301,7 +301,7 @@ contract WalletIdentityPhaseATest is DeployProtocol {
         WalletIdentityProbe probe = _probe();
         for (uint32 id = 1; id < end; ++id) {
             address key = address(uint160(probe.element(id)));
-            assertEq(probe.mintWord(key) >> BitPackingLib.WALLET_ID_SHIFT, id, "forward matches reverse");
+            assertEq(probe.idOf(key), id, "forward matches reverse");
         }
         _restore();
     }

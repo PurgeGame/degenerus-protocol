@@ -51,7 +51,8 @@ contract CenturyPoolDoublingTest is DeployProtocol {
         vm.warp(block.timestamp + 1 days);
         buyer = makeAddr("century_buyer");
         vm.deal(address(game), 5_000 ether);
-        _fundFlip(buyer, 1_000_000 ether);
+        _giveWalletId(buyer);
+        _fundFlip(buyer, 1_000_000);
     }
 
     // ---------------------------------------------------------------------
@@ -123,9 +124,9 @@ contract CenturyPoolDoublingTest is DeployProtocol {
     function _redeem() internal returns (bool ok) {
         vm.prank(buyer);
         (ok, ) = address(game).call(
-            abi.encodeWithSignature(
-                "redeemFlip(address,uint256)",
-                buyer,
+            abi.encodeWithSelector(
+                game.redeemFlip.selector,
+                uint32(0),
                 REDEEM_QTY
             )
         );

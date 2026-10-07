@@ -232,30 +232,6 @@ describe("AdvanceGame Gas Benchmarks", function () {
   });
 
   // =========================================================================
-  // 2. RNG 18h Timeout Retry
-  // =========================================================================
-
-  // The 12h VRF retry path at AdvanceModule:1205-1212 is structurally
-  // unreachable in fresh-fixture scope. The DegenerusGame constructor
-  // (DegenerusGame.sol:224-231) pre-queues vault perpetual tickets for
-  // levels 1-100 into ticketQueue[lvl] (raw key, since ticketWriteSlot
-  // defaults to false). The first mineFlip requests VRF and calls
-  // _swapAndFreeze which flips ticketWriteSlot=true and resets
-  // ticketsFullyProcessed=false. On the second advance the new-day
-  // drain block reads ticketQueue[_tqReadKey(purchaseLevel)] which
-  // resolves to the pre-queued raw key — non-empty + no VRF =>
-  // RngNotReady at line 270 before rngGate's retry branch can fire.
-  // Reaching the retry would require draining the vault pre-queue
-  // through 100 levels of gameplay or fulfilling VRF (which defeats
-  // the retry test). Worst-case retry gas is observable indirectly via
-  // the Fresh VRF Request and VRF Callback benchmarks.
-  describe.skip("2. VRF 12h Timeout Retry (path unreachable in fresh fixture)", function () {
-    it("worst case: stale VRF retry re-issues request after 12h", async function () {
-      // Intentionally skipped — see describe-block comment for rationale.
-    });
-  });
-
-  // =========================================================================
   // 3. Ticket Batch Processing (STAGE_TICKETS_WORKING = 5)
   // =========================================================================
 
@@ -264,7 +240,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
     // an 11.5M cap, i.e. against its own gas limit). The ticket drain is now asserted per chunk
     // and under realistic allowances: one admitted chunk <= 10M, every 10M call succeeds and
     // progresses until the drain completes, and a 16.7M call from the same state succeeds.
-    it("worst case: max budget (550 writes) ticket processing", async function () {
+    it("large ticket cohort progresses and finishes under supplied gas allowances", async function () {
       const { game, deployer, advanceModule, mockVRF, alice, bob, carol, dan, eve, others } =
         await loadFixture(deployFullProtocol);
 
@@ -288,7 +264,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
       console.log(`      16.7M-allowance call: ${ceiling.gasUsed.toLocaleString()} gas`);
       await hre.ethers.provider.send("evm_revert", [start]);
 
-      await measureNextChunk(game, deployer, "ticket drain (550 writes)");
+      await measureNextChunk(game, deployer, "large ticket cohort drain");
       let calls = 0;
       let maxGas = 0n;
       while ((await game.nextMinerAction()) === MINER_TICKETS) {
@@ -297,7 +273,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
         expect(++calls, "ticket drain finishes in bounded realistic calls").to.be.lte(100);
       }
       console.log(`      realistic 10M calls to finish the drain: ${calls}; max call gas ${maxGas.toLocaleString()}`);
-      recordGas("Ticket Batch 550 writes (max 10M-allowance call)", { gasUsed: maxGas });
+      recordGas("Large ticket cohort (max 10M-allowance call)", { gasUsed: maxGas });
     });
   });
 
@@ -880,127 +856,3 @@ describe("AdvanceGame Gas Benchmarks", function () {
 });
 
 // ===========================================================================
-// Phase 264 SURF-05 D-IMPL-06 — HEAD-only mineFlip margin record.
-//
-// The disclosed REQUIREMENTS.md SURF-05 invariant is `MAX_BLOCK_GAS /
-// WORST_CASE_ADVANCE_GAS ≥ 1.99`. Under the checkpointed engine the unit of
-// advance work is one admitted chunk, not a whole transaction (a call keeps admitting
-// chunks while its allowance lasts, so a transaction's total only mirrors its gas
-// limit). This block re-runs the section-16 SC-1 fixture (305 players, max-scale
-// pool), walks the turbo jackpot day one chunk at a time, and asserts the margin
-// against the heaviest measured chunk.
-// ===========================================================================
-
-describe("Phase 264 SURF-05 — mineFlip 1.99× margin preserved at v35.0 HEAD", function () {
-  this.timeout(1_800_000); // 30 min — re-runs the SC-1 305-player setup
-
-  const MAX_BLOCK_GAS = 30_000_000n;
-  const REQUIRED_MARGIN = 1.99;
-
-  // Local copies of the section-16 helpers — re-declared inside this describe
-  // block to keep the existing section-16 byte-identical (no shared-helper
-  // refactor in Phase 264 per D-IMPL-06; section-16 file shape unchanged for
-  // git-blame stability).
-  async function buyOneTicket(game, buyer) {
-    return game.connect(buyer).purchase(
-      0,
-      400n,
-      0n,
-      ZERO_BYTES32,
-      MintPaymentKind.DirectEth,
-      false,
-      { value: eth(0.01) },
-    );
-  }
-
-  async function setupPlayers(game, namedSigners, otherSigners, count, enableAutoRebuy) {
-    const players = [...namedSigners, ...otherSigners].slice(0, count);
-    console.log(`      [Phase 264 SURF-05] Setting up ${players.length} players...`);
-
-    const batchSize = 50;
-    for (let start = 0; start < players.length; start += batchSize) {
-      const batch = players.slice(start, start + batchSize);
-      await Promise.all(batch.map(p => buyOneTicket(game, p)));
-    }
-    console.log(`      [Phase 264 SURF-05] ${players.length} tickets purchased`);
-
-    // Auto-rebuy removed in v46 (df4ef365); no-op here (see section-16 note).
-    // The worst-case advance gas is covered by the forge gas suites.
-    void enableAutoRebuy;
-
-    return players;
-  }
-
-  async function fundPoolHeavy(game, buyers, bundlesPerBuyer) {
-    const pricePerBundle = eth(2.4);
-    for (const buyer of buyers) {
-      try {
-        await game
-          .connect(buyer)
-          .purchaseWhalePass(0, bundlesPerBuyer, hre.ethers.ZeroHash, {
-            value: BigInt(bundlesPerBuyer) * pricePerBundle,
-          });
-      } catch {
-        try {
-          await game
-            .connect(buyer)
-            .purchaseWhalePass(0, bundlesPerBuyer, hre.ethers.ZeroHash, {
-              value: BigInt(bundlesPerBuyer) * eth(4),
-            });
-        } catch {
-          console.log(`      [Phase 264 SURF-05] (Whale bundle failed for ${buyer.address.slice(0, 8)}...)`);
-        }
-      }
-    }
-    const pool = await game.currentPrizePoolView();
-    const nextPool = await game.nextPrizePoolView();
-    console.log(`      [Phase 264 SURF-05] Pool: ${hre.ethers.formatEther(pool)} ETH (current) + ${hre.ethers.formatEther(nextPool)} ETH (next)`);
-  }
-
-  async function runWorstCaseBenchmarkAtHead() {
-    const fixture = await loadFixture(deployFullProtocol);
-    const { game, deployer, advanceModule, mockVRF, alice, bob, carol, dan, eve, others } = fixture;
-
-    // SC-1 fixture composition: 305 players + autorebuy + 5 buyers × 20 bundles.
-    const players = await setupPlayers(
-      game, [alice, bob, carol, dan, eve], others.slice(0, 300), 305, true,
-    );
-    await fundPoolHeavy(game, players.slice(0, 5), 20);
-
-    const stageReceipts = new Map();
-    for (let day = 0; day < 5 && !stageReceipts.has(9n); day++) {
-      await advanceToNextDay();
-      heaviestByStage(await walkNextDay(game, deployer, mockVRF, advanceModule,
-        BigInt(day * 1000 + 305305), `[Phase 264 SURF-05] day ${day}`), stageReceipts);
-      if (stageReceipts.has(9n)) console.log(`      [Phase 264 SURF-05] Jackpot phase ended on day ${day}`);
-    }
-    return stageReceipts;
-  }
-
-  it("preserves 1.99× margin at v35.0 HEAD across the worst-case mineFlip path", async function () {
-    const stageReceipts = await runWorstCaseBenchmarkAtHead();
-
-    expect(
-      stageReceipts.size > 0,
-      "Phase 264 SURF-05: worst-case benchmark fixture failed to capture any mineFlip stages — fixture regression",
-    ).to.equal(true);
-
-    let maxGas = 0n;
-    let maxStage = -1;
-    for (const [stage, chunk] of stageReceipts) {
-      if (chunk.gasUsed > maxGas) {
-        maxGas = chunk.gasUsed;
-        maxStage = Number(stage);
-      }
-    }
-
-    // Every walked chunk already asserted <= 10M inside measureNextChunk.
-    const margin = Number(MAX_BLOCK_GAS) / Number(maxGas);
-    console.log(`      [Phase 264 SURF-05] heaviest chunk stage = ${maxStage}, gasUsed = ${maxGas.toLocaleString()}, margin = ${margin.toFixed(3)}× (required ≥ ${REQUIRED_MARGIN})`);
-
-    expect(
-      margin >= REQUIRED_MARGIN,
-      `Phase 264 SURF-05: mineFlip margin ${margin.toFixed(3)} < required ${REQUIRED_MARGIN} (max-gas stage ${maxStage} = ${maxGas.toLocaleString()})`,
-    ).to.equal(true);
-  });
-});

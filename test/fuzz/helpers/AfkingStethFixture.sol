@@ -51,7 +51,7 @@ contract AfkingStethHost is DegenerusGame, WalletSeed {
         uint256 claimable
     ) external {
         (uint32 id, ) = _registerWallet(player, 0);
-        _subscribers.push(uint256(uint160(player)) | (uint256(id) << 160));
+        _subscribers.push(id);
         Sub storage sub = _subOf[id];
         sub.setPosition = uint32(_subscribers.length);
         sub.dailyQuantity = quantity;
@@ -59,7 +59,7 @@ contract AfkingStethHost is DegenerusGame, WalletSeed {
         uint32 sourceId;
         if (source != address(0)) {
             (sourceId, ) = _registerWallet(source, 0);
-            _fundingSourceOf[id] = uint256(uint160(source)) | (uint256(sourceId) << 160);
+            _fundingSourceOf[id] = sourceId;
         }
         sub.lastAutoBoughtDay = _afkingResetDay - 1;
         sub.lastOpenedDay = _afkingResetDay - 1;
@@ -94,7 +94,7 @@ contract AfkingStethHost is DegenerusGame, WalletSeed {
     }
 
     function sourceOf(address player) external view returns (address) {
-        return address(uint160(_fundingSourceOf[_walletIdOf(player)]));
+        return _walletKey(_fundingSourceOf[_walletIdOf(player)]);
     }
 
     function memberOf(address player) external view returns (uint256) {
@@ -128,7 +128,7 @@ contract AfkingStethHost is DegenerusGame, WalletSeed {
 
     function setSource(address player, address source) external {
         _fundingSourceOf[_seedWallet(player)] =
-            source == address(0) ? 0 : uint256(uint160(source)) | (uint256(_seedWallet(source)) << 160);
+            source == address(0) ? 0 : _seedWallet(source);
         if (source == address(0)) _subOf[_seedWallet(player)].flags &= ~uint8(1);
         else _subOf[_seedWallet(player)].flags |= 1;
     }

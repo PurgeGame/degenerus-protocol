@@ -21,7 +21,7 @@
     "label": "playerReferralCode",
     "offset": 0,
     "slot": 2,
-    "typeLabel": "mapping(address => bytes32)"
+    "typeLabel": "mapping(uint32 => bytes32)"
   },
   {
     "bytes": "32",
@@ -30,13 +30,5 @@
     "offset": 0,
     "slot": 3,
     "typeLabel": "mapping(uint24 => uint256)"
-  },
-  {
-    "bytes": "32",
-    "encoding": "mapping",
-    "label": "_bootstrapOwner",
-    "offset": 0,
-    "slot": 4,
-    "typeLabel": "mapping(bytes32 => address)"
   }
 ]

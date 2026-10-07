@@ -19,7 +19,7 @@ contract DecimatorReferenceTest is Test {
 
     function _burn(address owner, uint256 amount) private {
         vm.prank(ContractAddresses.COIN);
-        h.recordDecBurn(owner, 5, amount, 10_000, 0);
+        h.recordFor(owner, 5, amount, 10_000, 0);
     }
 
     function test_AggregateTracksActualTopupAndDecay() public {

@@ -20,7 +20,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 contract LootboxBudgetResume is DeployProtocol {
     address internal actor;
 
-    bytes32 internal constant OPENED = keccak256("LootBoxOpened(address,uint48,uint256,uint24,uint32,uint256,bool)");
+    bytes32 internal constant OPENED = keccak256("LootBoxOpened(uint32,uint48,uint256,uint24,uint32,uint256,bool)");
 
     function setUp() public {
         _deployProtocol();

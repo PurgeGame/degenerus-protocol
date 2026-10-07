@@ -14,6 +14,7 @@ import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
 
 contract JackpotCheckpointHarness is DegenerusGameJackpotModule, BucketSeed {
+    function walletKeyOf(uint32 id) external view returns (address) { return _walletKey(id); }
     function seed(uint24 lvl, uint256 word, bool concentrated) external {
         level = lvl - 1;
         dailyIdx = 100;
@@ -175,7 +176,7 @@ contract JackpotCheckpointsTest is Test {
                 assertEq(entries, 20, "5 whole tickets per slot");
                 assertEq(source, LVL);
                 assertFalse(rounded);
-                assertEq(address(uint160(uint256(logs[i].topics[1]))), address(uint160(0x10001 + index)));
+                assertEq(h.walletKeyOf(uint32(uint256(logs[i].topics[1]))), address(uint160(0x10001 + index)));
             }
             (, , uint16 winner,) = h.progress();
             assertEq(winner % 8, 0, "checkpoint sits on a group start");

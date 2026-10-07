@@ -4,6 +4,7 @@ import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js
 import {
   deployFullProtocol,
   restoreAddresses,
+  giveWalletId,
 } from "../helpers/deployFixture.js";
 import {
   eth,
@@ -64,10 +65,10 @@ async function payAffiliateAsGame(
   ]);
   const gameSigner = await hreEthers.getSigner(gameAddr);
   // The impersonated account need not be the Game: only the Game exposes the wallet table.
-  const senderId = typeof game.walletIdOf === "function" ? await game.walletIdOf(sender) : 0n;
+  const senderId = typeof game.walletIdOf === "function" ? await giveWalletId(game, sender) : 0n;
   const tx = await affiliate
     .connect(gameSigner)
-    .payAffiliate(amount, code, sender, senderId, lvl, isFreshEth, lootboxActivityScore);
+    .payAffiliate(amount, code, senderId, lvl, isFreshEth, lootboxActivityScore);
   await hreEthers.provider.send("hardhat_stopImpersonatingAccount", [gameAddr]);
   return tx;
 }
@@ -91,10 +92,10 @@ async function payAffiliateCombinedAsGame(
     "0x1000000000000000000",
   ]);
   const gameSigner = await hreEthers.getSigner(gameAddr);
-  const senderId = await game.walletIdOf(sender);
+  const senderId = await giveWalletId(game, sender);
   const tx = await affiliate
     .connect(gameSigner)
-    .payAffiliateCombined(code, sender, senderId, lvl, tktFresh, tktRecycled, lbFresh, lbRecycled, lbFreshScore);
+    .payAffiliateCombined(code, senderId, lvl, tktFresh, tktRecycled, lbFresh, lbRecycled, lbFreshScore);
   await hreEthers.provider.send("hardhat_stopImpersonatingAccount", [gameAddr]);
   return tx;
 }
@@ -126,10 +127,10 @@ async function payAffiliateAsGameStatic(
     "0x1000000000000000000",
   ]);
   const gameSigner = await hreEthers.getSigner(gameAddr);
-  const senderId = await game.walletIdOf(sender);
+  const senderId = await giveWalletId(game, sender);
   const result = await affiliate
     .connect(gameSigner)
-    .payAffiliate.staticCall(amount, code, sender, senderId, lvl, isFreshEth, lootboxActivityScore);
+    .payAffiliate.staticCall(amount, code, senderId, lvl, isFreshEth, lootboxActivityScore);
   await hreEthers.provider.send("hardhat_stopImpersonatingAccount", [gameAddr]);
   return result;
 }
@@ -138,6 +139,19 @@ async function payAffiliateAsGameStatic(
 // ---------------------------------------------------------------------------
 // Test Suite
 // ---------------------------------------------------------------------------
+
+async function deployBootstrapAffiliate() {
+  const [, alice, bob, carol] = await hre.ethers.getSigners();
+  return deployFullProtocol({
+    affiliateBootstrap: [
+      [alice.address, bob.address],
+      [toBytes32("BOOT_A"), toBytes32("BOOT_B")],
+      [7, 12],
+      [bob.address, carol.address],
+      [toBytes32("BOOT_A"), toBytes32("BOOT_A")],
+    ],
+  });
+}
 
 describe("DegenerusAffiliate", function () {
   after(() => restoreAddresses());
@@ -176,12 +190,16 @@ describe("DegenerusAffiliate", function () {
     });
 
     it("emits Affiliate(1) events for VAULT and DGNRS on construction", async function () {
-      // Since we cannot catch constructor events directly via receipt in this test,
-      // we verify the codes exist (side effect of constructor) which implies events fired.
-      const { affiliate } = await loadFixture(deployFullProtocol);
-      const vaultCode = hre.ethers.encodeBytes32String("VAULT");
-      const info = await affiliate.affiliateCode(vaultCode);
-      expect(info.owner).to.not.equal(ZERO_ADDRESS);
+      const { affiliate, game, vault, sdgnrs } = await loadFixture(deployFullProtocol);
+      const events = await getEvents(affiliate.deploymentTransaction(), affiliate, "Affiliate");
+      const codes = events.filter((event) => event.args.amount === 1n);
+      expect(codes.map((event) => event.args.code)).to.deep.equal([
+        toBytes32("VAULT"), toBytes32("DGNRS"),
+      ]);
+      expect(codes.map((event) => event.args.senderId)).to.deep.equal([
+        await game.walletIdOf(await vault.getAddress()),
+        await game.walletIdOf(await sdgnrs.getAddress()),
+      ]);
     });
 
     it("getReferrer returns sdgnrs for vault's own address (cross-registered to DGNRS)", async function () {
@@ -194,19 +212,11 @@ describe("DegenerusAffiliate", function () {
     });
 
     it("seeds pre-known affiliate codes passed to constructor", async function () {
-      const { alice, bob } = await loadFixture(deployFullProtocol);
-      const factory = await hre.ethers.getContractFactory("DegenerusAffiliate");
-
+      const { affiliate: affiliateBootstrapped, game, alice, bob } = await loadFixture(deployBootstrapAffiliate);
       const codeA = toBytes32("BOOT_A");
       const codeB = toBytes32("BOOT_B");
-      const affiliateBootstrapped = await factory.deploy(
-        [alice.address, bob.address],
-        [codeA, codeB],
-        [7, 12],
-        [],
-        []
-      );
-      await affiliateBootstrapped.waitForDeployment();
+      expect(await game.walletIdOf(alice.address)).to.not.equal(0n);
+      expect(await game.walletIdOf(bob.address)).to.not.equal(0n);
 
       const infoA = await affiliateBootstrapped.affiliateCode(codeA);
       const infoB = await affiliateBootstrapped.affiliateCode(codeB);
@@ -226,18 +236,14 @@ describe("DegenerusAffiliate", function () {
     });
 
     it("seeds pre-known player referrals passed to constructor", async function () {
-      const { alice, bob, carol } = await loadFixture(deployFullProtocol);
-      const factory = await hre.ethers.getContractFactory("DegenerusAffiliate");
-      const codeA = toBytes32("BOOT_REF_A");
-
-      const affiliateBootstrapped = await factory.deploy(
-        [alice.address],
-        [codeA],
-        [3],
-        [bob.address, carol.address],
-        [codeA, codeA]
-      );
-      await affiliateBootstrapped.waitForDeployment();
+      const { affiliate: affiliateBootstrapped, game, alice, bob, carol } = await loadFixture(deployBootstrapAffiliate);
+      const aliceId = await game.walletIdOf(alice.address);
+      expect(aliceId).to.not.equal(0n);
+      for (const player of [bob, carol]) {
+        const playerId = await game.walletIdOf(player.address);
+        expect(playerId).to.not.equal(0n);
+        expect(await affiliateBootstrapped.getReferrerIdById(playerId)).to.equal(aliceId);
+      }
 
       expect(await affiliateBootstrapped.getReferrer(bob.address)).to.equal(
         alice.address
@@ -262,13 +268,13 @@ describe("DegenerusAffiliate", function () {
     });
 
     it("emits Affiliate(1, code, creator) event", async function () {
-      const { affiliate, alice } = await loadFixture(deployFullProtocol);
+      const { game, affiliate, alice } = await loadFixture(deployFullProtocol);
       const code = toBytes32("ALICE2");
       const tx = await affiliate.connect(alice).createAffiliateCode(code, 5);
       const ev = await getEvent(tx, affiliate, "Affiliate");
       expect(ev.args.amount).to.equal(1n);
       expect(ev.args.code).to.equal(code);
-      expect(ev.args.sender).to.equal(alice.address);
+      expect(ev.args.senderId).to.equal(await game.walletIdOf(alice.address));
     });
 
     it("reverts with Zero when code is bytes32(0)", async function () {
@@ -327,23 +333,23 @@ describe("DegenerusAffiliate", function () {
     });
 
     it("emits Affiliate(0, code, player) event", async function () {
-      const { affiliate, alice, bob } = await loadFixture(deployFullProtocol);
+      const { game, affiliate, alice, bob } = await loadFixture(deployFullProtocol);
       const code = toBytes32("REFEV");
       await affiliate.connect(alice).createAffiliateCode(code, 0);
       const tx = await affiliate.connect(bob).referPlayer(code);
       const ev = await getEvent(tx, affiliate, "Affiliate");
       expect(ev.args.amount).to.equal(0n);
       expect(ev.args.code).to.equal(code);
-      expect(ev.args.sender).to.equal(bob.address);
+      expect(ev.args.senderId).to.equal(await game.walletIdOf(bob.address));
     });
 
     it("emits ReferralUpdated event", async function () {
-      const { affiliate, alice, bob } = await loadFixture(deployFullProtocol);
+      const { game, affiliate, alice, bob } = await loadFixture(deployFullProtocol);
       const code = toBytes32("REFUPD");
       await affiliate.connect(alice).createAffiliateCode(code, 0);
       const tx = await affiliate.connect(bob).referPlayer(code);
       const ev = await getEvent(tx, affiliate, "ReferralUpdated");
-      expect(ev.args.player).to.equal(bob.address);
+      expect(ev.args.player).to.equal(await game.walletIdOf(bob.address));
       expect(ev.args.code).to.equal(code);
       expect(ev.args.locked).to.equal(false);
     });
@@ -408,7 +414,7 @@ describe("DegenerusAffiliate", function () {
       await expect(
         affiliate
           .connect(alice)
-          .payAffiliate(flip(1000000), ZERO_BYTES32, bob.address, 0, 1, true, 0)
+          .payAffiliate(flip(1000000), ZERO_BYTES32, 0, 1, true, 0)
       ).to.be.revertedWithCustomError(affiliate, "OnlyAuthorized");
     });
 

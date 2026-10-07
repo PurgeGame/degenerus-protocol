@@ -49,7 +49,8 @@ contract CreditsGameExt is DegenerusGame {
     function x_setPendingFlip(uint32 id, uint24 owed) external { _subOf[id].pendingFlip = owed; }
 
     function x_setDeityBit(address a) external {
-        mintPacked_[a] |= uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT;
+        _registerWallet(a, type(uint256).max);
+        mintPacked_[_walletIdOf(a)] |= uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT;
     }
 
     /// @dev Give `id`'s live run a funded tenure of `span` days (both day markers set past the
@@ -77,14 +78,14 @@ contract CreditsGameExt is DegenerusGame {
 ///      leg by GameWalletIdViews (item 13).
 contract GameWalletIdCredits is DeployProtocol {
     bytes32 private constant STAKE_UPDATED = keccak256("CoinflipStakeUpdated(uint32,uint24,uint256,uint256)");
-    bytes32 private constant GOLDEN_TICKET_FOIL = keccak256("GoldenTicketFoil(address,uint24,uint8,uint8,uint256)");
+    bytes32 private constant GOLDEN_TICKET_FOIL = keccak256("GoldenTicketFoil(uint32,uint24,uint8,uint8,uint256)");
     bytes32 private constant GOLDEN_TICKET_WIN =
         keccak256("GoldenTicketWin(uint32,uint24,uint8,uint8,bool,uint256,uint256,uint256,uint256)");
     bytes32 private constant JACKPOT_FLIP_WIN = keccak256("JackpotFlipWin(uint32,uint24,uint8,uint256,uint256)");
     bytes32 private constant PRESALE_BOX_OPENED =
-        keccak256("PresaleBoxOpened(address,uint48,uint256,uint256,uint256,uint256,bool,uint32,uint32)");
-    bytes32 private constant AFKING_FLIP_CLAIMED = keccak256("AfkingFlipClaimed(address,uint256)");
-    bytes32 private constant SUB_DRAW_WON = keccak256("SubDrawWon(address,uint24,uint24,uint256)");
+        keccak256("PresaleBoxOpened(uint32,uint48,uint256,uint256,uint256,uint256,bool,uint32,uint32)");
+    bytes32 private constant AFKING_FLIP_CLAIMED = keccak256("AfkingFlipClaimed(uint32,uint256)");
+    bytes32 private constant SUB_DRAW_WON = keccak256("SubDrawWon(uint32,uint24,uint24,uint256)");
     bytes32 private constant FOIL_CCY_TAG = keccak256("foil-currency");
 
     uint256 private constant FOIL_READY = uint256(1) << 255;
@@ -408,7 +409,7 @@ contract GameWalletIdCredits is DeployProtocol {
                 ContractAddresses.GAME_LOOTBOX_MODULE,
                 abi.encodeCall(
                     DegenerusGameLootboxModule.resolveLootboxDirect,
-                    (player, id, 1 ether, uint256(keccak256(abi.encode("box_word", k))), uint16(100))
+                    (id, 1 ether, uint256(keccak256(abi.encode("box_word", k))), uint16(100))
                 )
             );
             (uint256 credited, uint256 others) = _credits(vm.getRecordedLogs(), id);
@@ -442,7 +443,7 @@ contract GameWalletIdCredits is DeployProtocol {
             uint256 flipOut;
             for (uint256 i; i < logs.length; ++i) {
                 if (logs[i].emitter == address(game) && logs[i].topics[0] == PRESALE_BOX_OPENED) {
-                    assertEq(address(uint160(uint256(logs[i].topics[1]))), player, "decoded owner");
+                    assertEq(uint32(uint256(logs[i].topics[1])), game.walletIdOf(player), "owner ID");
                     (, flipOut,,,,,) = abi.decode(logs[i].data, (uint256, uint256, uint256, uint256, bool, uint32, uint32));
                 }
             }
@@ -498,7 +499,7 @@ contract GameWalletIdCredits is DeployProtocol {
         // sDGNRS funds the swap from claimable and pays the cash leg's FLIP part from its settled
         // coinflip bank (Coinflip playerState slot 2, claimableStored in the low 128 bits).
         _seedClaimable(ContractAddresses.SDGNRS, 50 ether);
-        bytes32 bank = keccak256(abi.encode(ContractAddresses.SDGNRS, uint256(2)));
+        bytes32 bank = keccak256(abi.encode(uint32(2), uint256(2)));
         uint256 slotA = uint256(vm.load(address(coinflip), bank));
         vm.store(address(coinflip), bank, bytes32((slotA & ~uint256(type(uint128).max)) | 100_000_000));
 
@@ -663,16 +664,16 @@ contract GameWalletIdCredits is DeployProtocol {
             Vm.Log[] memory logs = vm.getRecordedLogs();
             for (uint256 i; i < logs.length; ++i) {
                 if (logs[i].emitter != address(game) || logs[i].topics[0] != SUB_DRAW_WON) continue;
-                address winner = address(uint160(uint256(logs[i].topics[1])));
+                uint32 winner = uint32(uint256(logs[i].topics[1]));
                 (,, uint256 prize) = abi.decode(logs[i].data, (uint24, uint24, uint256));
                 // The credit is the Coinflip event emitted just before the draw's event.
                 uint256 j = i;
                 while (j > 0 && !(logs[j - 1].emitter == address(coinflip) && logs[j - 1].topics[0] == STAKE_UPDATED)) --j;
                 assertGt(j, 0, "the draw credited the stake lane");
-                assertEq(uint32(uint256(logs[j - 1].topics[1])), game.walletIdOf(winner), "credited by the ring element's ID");
+                assertEq(uint32(uint256(logs[j - 1].topics[1])), winner, "credited by the ring element's ID");
                 (uint256 amount,) = abi.decode(logs[j - 1].data, (uint256, uint256));
                 assertEq(amount, prize, "credited the prize");
-                if (winner == p) checked = true;
+                if (winner == pid) checked = true;
             }
         }
         assertTrue(checked, "fixture: the subscriber won a draw");

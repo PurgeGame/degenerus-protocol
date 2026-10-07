@@ -44,6 +44,7 @@ interface IDegenerusGameTicketModule {
 }
 
 interface IDegenerusGameMinerModule {
+    function playerActivityScoreCachedById(uint32 id) external returns (uint256);
     error NoWork();
     error RngNotReady();
     function mineFlip() external;
@@ -182,7 +183,7 @@ interface IDegenerusGameDecimatorModule {
     /// @param chips The entry's board: zero to seven named chips, as a normal battle takes them.
     /// @return entryId The wallet's accumulated battle entry.
     function recordDecBurn(
-        address player,
+        uint32 player,
         uint24 lvl,
         uint256 baseAmount,
         uint256 multBps,
@@ -208,22 +209,22 @@ interface IDegenerusGameWhaleModule {
     function initProtocolDeity() external;
 
     /// @notice Purchases a whale pass for the buyer
-    /// @param buyer Address receiving the pass
+    /// @param buyerId Address receiving the pass
     /// @param quantity Number of passes to purchase
     /// @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code)
-    function purchaseWhalePass(address buyer, uint256 quantity, bytes32 affiliateCode) external payable;
+    function purchaseWhalePass(uint32 buyerId, uint256 quantity, bytes32 affiliateCode) external payable;
 
     /// @notice Purchases a 10-level lazy pass for the buyer
-    /// @param buyer Address receiving the pass
+    /// @param buyerId Address receiving the pass
     /// @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code)
-    function purchaseLazyPass(address buyer, bytes32 affiliateCode) external payable;
+    function purchaseLazyPass(uint32 buyerId, bytes32 affiliateCode) external payable;
 
     /// @notice Purchases a deity pass for a specific symbol
-    /// @param buyer Address receiving the deity pass
+    /// @param buyerId Address receiving the deity pass
     /// @param symbolId Symbol index (0-31) to bind the pass to
     /// @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code)
     function purchaseDeityPass(
-        address buyer,
+        uint32 buyerId,
         uint8 symbolId,
         bytes32 affiliateCode
     ) external payable;
@@ -280,9 +281,9 @@ interface IDegenerusGameMintModule {
     /// @notice Body of Game.createSmurf (raw msg.data target, identical selector; see
     ///         IDegenerusGame for the full contract). Owner = msg.sender (must hold an ID).
     /// @dev Resolves and locks the owner's referral from `affiliateCode` as a purchase does,
-    ///      registers the smurf (`wallets.push(key | ownerId << 160)`, mint word = ID | smurf
-    ///      flag, `WalletRegistered` + `SmurfCreated`), calls Affiliate `copyReferral(owner,
-    ///      key)`, then buys one whole ticket for the smurf paid by the owner (payer ID threaded
+    ///      appends the subaccount owner ID, sets its mint-word flag and emits `SmurfCreated`.
+    ///      Calls Affiliate `copyReferral(ownerId, smurfId)`, then buys one whole ticket
+    ///      for the subaccount paid by the owner (payer ID threaded
     ///      through the payment path; fresh-ETH overpay to the owner's AFKing balance).
     /// @param affiliateCode Referral code applied to the owner if its referral is unset.
     /// @param payKind How the owner funds the ticket.
@@ -291,13 +292,13 @@ interface IDegenerusGameMintModule {
         external payable returns (uint32 smurfId);
 
     /// @notice Processes a ticket and lootbox purchase
-    /// @param buyer Address of the buyer
+    /// @param buyerId Address of the buyer
     /// @param entryQuantityScaled Ticket quantity in scaled entry units (400 = one whole ticket; 2 decimals, x100)
     /// @param boxOrder Packed box order (0 to skip): [small:8][med:8][large:8][customCount:8][customSize:56 gwei].
     /// @param affiliateCode Affiliate code for referral tracking
     /// @param payKind Payment method used for the purchase
     function purchase(
-        address buyer,
+        uint32 buyerId,
         uint256 entryQuantityScaled,
         uint256 boxOrder,
         bytes32 affiliateCode,
@@ -312,7 +313,7 @@ interface IDegenerusGameMintModule {
     /// @param payerId Ledger the claimable/AFKing legs debit: 0 = the buyer's own, else a
     ///        smurf's owner on its creation ticket.
     function purchaseWith(
-        address buyer,
+        uint32 buyerId,
         uint256 entryQuantityScaled,
         uint256 boxOrder,
         bytes32 affiliateCode,
@@ -380,14 +381,14 @@ interface IDegenerusGameLootboxModule {
 
     /// @notice Build a purchase's ordinary entry: validate and price, consume a live boost,
     ///         snapshot distress, arm the box bounty. Nothing is queued
-    /// @param buyer Player the entry is for
+    /// @param buyerId Player the entry is for
     /// @param buyerId The buyer's wallet ID
     /// @param boxOrder Packed input: [small:8][med:8][large:8][customCount:8][customSize:56 gwei]
     /// @return costWei Total wei the order costs
     /// @return shares Prize-pool shares packed as (future << 128) | next
     /// @return flipCredit Biggest-box bounty claim, to join the buyer's flip credit
     /// @return word The in-flight entry word
-    function beginBoxOrder(address buyer, uint32 buyerId, uint256 boxOrder)
+    function beginBoxOrder(uint32 buyerId, uint256 boxOrder)
         external
         payable
         returns (
@@ -398,14 +399,14 @@ interface IDegenerusGameLootboxModule {
         );
 
     /// @notice Append a system-granted box entry (pass purchases, afking cover)
-    /// @param player Player receiving the boxes
+    /// @param id Player receiving the boxes
     /// @param amountWei Box spend in wei
     /// @param score Activity-score snapshot
     /// @param capKey Level key for the shared per-(wallet, level) EV-cap accumulator
     /// @param boost Whether to consume a live lootbox-boost boon and snapshot distress
     /// @param count Custom boxes, one per pass; zero for the afking cover box
     function recordCoverBox(
-        address player,
+        uint32 id,
         uint256 amountWei,
         uint16 score,
         uint24 capKey,
@@ -427,12 +428,12 @@ interface IDegenerusGameLootboxModule {
     ) external payable returns (uint256);
 
     /// @notice Resolves a lootbox directly with provided randomness
-    /// @param player Address of the lootbox owner
+    /// @param id The reward account's wallet ID.
     /// @param amount Amount associated with the lootbox
     /// @param rngWord Random word for lootbox resolution
     /// @param activityScore Frozen activity score in whole points for the EV multiplier (caller-snapshotted)
     function resolveLootboxDirect(
-        address player, uint32 id,
+        uint32 id,
         uint256 amount,
         uint256 rngWord,
         uint16 activityScore
@@ -441,7 +442,7 @@ interface IDegenerusGameLootboxModule {
     /// @notice Resolve a purchased Degenerette win with a 50 ETH score ceiling if allowance remains.
     /// @dev One combined box per bet; recorded shared usage is clamped to the normal 10 ETH cap.
     function resolveDegeneretteLootboxDirect(
-        address player, uint32 id,
+        uint32 id,
         uint256 amount,
         uint256 rngWord,
         uint16 activityScore
@@ -450,13 +451,13 @@ interface IDegenerusGameLootboxModule {
     /// @notice Resolves an sDGNRS redemption's full lootbox leg (auth, funding-mix pull, pool
     ///         credit, one box order of up to 20 equal boxes) — delegatecall target of the
     ///         Game's thin stub.
-    /// @param player Player receiving lootbox rewards
+    /// @param id The reward account's wallet ID.
     /// @param amount Total lootbox value (msg.value ETH + the stETH remainder pulled inside)
     /// @param rngWord RNG word for entropy
     /// @param activityScore Raw activity score (whole points) snapshotted at burn submission
     /// @param batchId Redemption batch of the claim (tags the order's seeds and events)
     function resolveRedemptionLootbox(
-        address player, uint32 id,
+        uint32 id,
         uint256 amount,
         uint256 rngWord,
         uint16 activityScore,
@@ -475,13 +476,13 @@ interface IDegenerusGameLootboxModule {
     ///      the word is a caller-passed param (_recordedDailyWord(stamp day)) and the seed
     ///      `day` is the FROZEN stamped process day. Called by the GameAfkingModule
     ///      open-leg.
-    /// @param player Box owner (resolved from the subscription)
+    /// @param id The reward account's wallet ID.
     /// @param amount The stamped spend in wei (boons OFF ⇒ amount == spend)
     /// @param day The boundary-pinned process day stamped at process (frozen seed input)
     /// @param rngWord The frozen stamp day's word _recordedDailyWord(day), passed by the caller
     /// @param activityScore The stamped activity score in whole points (the frozen EV input)
     function resolveAfkingBox(
-        address player, uint32 id,
+        uint32 id,
         uint256 amount,
         uint24 day,
         uint256 rngWord,
@@ -494,7 +495,6 @@ interface IDegenerusGameLootboxModule {
 /// @notice Interface for boon consumption
 interface IDegenerusGameBoonModule {
     /// @notice Draw boons for every box in one opened entry, in a single call
-    /// @param player Box owner (account key for the mint word and box events)
     /// @param id Box owner's wallet ID (boon and quest state key)
     /// @param perBoxBudget Boon budget of a single box, in wei of ETH-equivalent value
     /// @param boxCount Boxes rolled in this entry
@@ -503,7 +503,6 @@ interface IDegenerusGameBoonModule {
     /// @param seed Player-mixed entry seed; box i draws off a (nonceBase + i)-tagged derivative
     /// @param nonceBase Global box position of this batch's first box within its entry
     function rollBoxBoons(
-        address player,
         uint32 id,
         uint256 perBoxBudget,
         uint256 boxCount,
@@ -514,14 +513,12 @@ interface IDegenerusGameBoonModule {
     ) external payable;
 
     /// @notice Draw boons for a mixed box order in one delegatecall
-    /// @param player Box owner (account key for the mint word and box events)
     /// @param id Box owner's wallet ID (boon and quest state key)
     /// @param amounts Per-box resolution amount for small/medium/large/custom/cover lanes
     /// @param countsPacked Five uint8 lane counts packed from least significant to most
     /// @param currentLevel Open level (level + 1)
     /// @param seed Player-mixed entry seed; nonces run cumulatively across populated lanes
     function rollBoxBoonTiers(
-        address player,
         uint32 id,
         uint256[5] calldata amounts,
         uint40 countsPacked,
@@ -597,7 +594,7 @@ interface IDegenerusGameDegeneretteModule {
     ) external payable;
 
     /// @notice Resolve a lootbox WWXRP roll as a single WWXRP Degenerette spin.
-    /// @param player The reward recipient.
+    /// @param playerId The reward account's wallet ID.
     /// @param stake Virtual WWXRP stake in 10^18 sub-units per token (not an ERC20 amount).
     /// @param activityScore Frozen activity score in whole points from the box's commitment.
     /// @param seed Domain-separated spin seed (hash2-tagged off the box seed).
@@ -605,7 +602,7 @@ interface IDegenerusGameDegeneretteModule {
     /// @return wwxrpOut The spin's whole-token WWXRP payout, returned for the box entry's WWXRP lane (the
     ///         caller mints once).
     function resolveWwxrpSpinFromBox(
-        address player,
+        uint32 playerId,
         uint256 stake,
         uint16 activityScore,
         uint256 seed,
@@ -616,7 +613,7 @@ interface IDegenerusGameDegeneretteModule {
         returns (uint256 wwxrpOut);
 
     /// @notice Resolve a lootbox roll as three FLIP Degenerette spins under one survival flip.
-    /// @param player The reward recipient.
+    /// @param playerId The reward account's wallet ID.
     /// @param totalStake Virtual FLIP budget in 10^18 sub-units per token, split across three spins.
     /// @param activityScore Frozen activity score in whole points from the box's commitment.
     /// @param seed Domain-separated spin seed (hash2-tagged off the box seed).
@@ -624,7 +621,7 @@ interface IDegenerusGameDegeneretteModule {
     /// @return flipOut Whole-token payout after the survival flip, returned for the box entry's
     ///         FLIP lane (credited by the caller at flush).
     function resolveFlipSpinsFromBox(
-        address player,
+        uint32 playerId,
         uint256 totalStake,
         uint16 activityScore,
         uint256 seed,
@@ -635,14 +632,12 @@ interface IDegenerusGameDegeneretteModule {
         returns (uint256 flipOut);
 
     /// @notice Resolve a lootbox roll as one ETH Degenerette spin (claimable + recirc split).
-    /// @param player The reward recipient.
     /// @param playerId The recipient's wallet ID.
     /// @param stake The ETH bet amount for the one spin (the ticket budget it replaces).
     /// @param activityScore Frozen activity score in whole points from the box's commitment.
     /// @param seed Domain-separated spin seed (hash2-tagged off the box seed).
     /// @param symbol Hero symbol 0..23 (no Dice), or 32 for a random eligible hero.
     function resolveEthSpinFromBox(
-        address player,
         uint32 playerId,
         uint256 stake,
         uint16 activityScore,
@@ -683,7 +678,8 @@ interface IDegenerusGameBingoModule {
 ///      the bounty payee read the original caller).
 interface IGameAfkingModule {
     /// @notice GAME-only atomic stETH fallback funding operation.
-    function pullAfkingSteth(uint256 subWord, address source, uint256 shortfall) external returns (uint256);
+    function setAfkingFundingApproval(uint32 funderId, uint32 subscriberId, bool approved) external;
+    function pullAfkingSteth(uint32 subWord, address source, uint256 shortfall) external returns (uint256);
 
     function runSubscriberWork(uint24 processDay, uint256 gasAllowance) external returns (MineFlipGas.Result memory);
     function runAfkingWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory);
@@ -719,10 +715,10 @@ interface IGameAfkingModule {
     ///         read accessor.
     /// @param sub The subscriber whose affiliate base is drained.
     /// @return base The drained whole-FLIP affiliate base (0 if already drained).
-    function drainAffiliateBase(address sub) external returns (uint256 base, uint32 id);
+    function drainAffiliateBase(uint32 sub) external returns (uint256 base);
 
     /// @notice Cashout-curse SET hook, delegatecalled from the Game's claimWinnings.
-    function maybeCurse(address player) external;
+    function maybeCurse(uint32 player) external;
 
     /// @notice Permissionless paid cure: clear account `id`'s cashout/smite curse for 100 FLIP
     ///         burned from the caller's own wallet (0 = caller; otherwise allocated, else E).
@@ -748,9 +744,9 @@ interface IDegenerusGameFoilPackModule {
     ///         and lootbox legs. Registers the buyer first (paid admission uses the whole quoted
     ///         spend), caps fresh ETH at the combined cost, credits any overpay to the payer's
     ///         afking, runs the ticket/lootbox leg through the mint module, then delivers the pack.
-    /// @param buyer Player receiving every leg (already operator-resolved).
+    /// @param buyerId Player receiving every leg (already operator-resolved).
     function purchaseWithFoil(
-        address buyer,
+        uint32 buyerId,
         uint256 entryQuantityScaled,
         uint256 boxOrder,
         bytes32 affiliateCode,

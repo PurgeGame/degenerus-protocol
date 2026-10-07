@@ -15,13 +15,13 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 ///         2.4 ETH, lazy pass = 0.24 ETH, foil premium = 10 prices = 0.1 ETH.
 contract EthInEventsTest is DeployProtocol {
     bytes32 private constant TICKETS_SIG =
-        keccak256("EntriesBought(address,uint256,uint256)");
+        keccak256("EntriesBought(uint32,uint256,uint256)");
     bytes32 private constant WHALE_SIG =
-        keccak256("WhalePassPurchased(address,uint256,uint256)");
+        keccak256("WhalePassPurchased(uint32,uint256,uint256)");
     bytes32 private constant LAZY_SIG =
-        keccak256("LazyPassPurchased(address,uint24,uint256)");
+        keccak256("LazyPassPurchased(uint32,uint24,uint256)");
     bytes32 private constant FOIL_SIG =
-        keccak256("FoilPackBought(address,uint24,uint16,uint256)");
+        keccak256("FoilPackBought(uint32,uint24,uint16,uint256)");
 
     function setUp() public {
         _deployProtocol();
@@ -102,14 +102,14 @@ contract EthInEventsTest is DeployProtocol {
     ///      event places weiIn as its LAST word, so `weiIn` is the 2nd return regardless of event.
     function _evt2(Vm.Log[] memory logs, bytes32 sig, address player)
         internal
-        pure
+        view
         returns (uint256 first, uint256 weiIn, bool found)
     {
         for (uint256 i; i < logs.length; ++i) {
             if (
                 logs[i].topics.length >= 2 &&
                 logs[i].topics[0] == sig &&
-                address(uint160(uint256(logs[i].topics[1]))) == player
+                uint32(uint256(logs[i].topics[1])) == game.walletIdOf(player)
             ) {
                 (first, weiIn) = abi.decode(logs[i].data, (uint256, uint256));
                 return (first, weiIn, true);

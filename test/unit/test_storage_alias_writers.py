@@ -46,6 +46,21 @@ contract Module {
 """)
         self.assertEqual(writes, {("clear", "nested")})
 
+    def test_assembly_store_through_struct_alias_is_attributed(self):
+        writes = self.writes("""
+contract Module {
+    function write(uint256 id, uint256 value) external {
+        Round storage target = rounds[id];
+        assembly ("memory-safe") { sstore(target.slot, value) }
+    }
+    function read(uint256 id) external view returns (uint256 value) {
+        Round storage target = rounds[id];
+        assembly ("memory-safe") { value := sload(target.slot) }
+    }
+}
+""")
+        self.assertEqual(writes, {("write", "rounds")})
+
     def test_read_only_and_other_function_aliases_are_not_writers(self):
         writes = self.writes("""
 contract Module {

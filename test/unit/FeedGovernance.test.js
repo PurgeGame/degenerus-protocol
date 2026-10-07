@@ -68,7 +68,7 @@ async function grantSdgnrs(sdgnrs, game, recipient, amount) {
  * Handles granting sDGNRS voting weight to the deployer.
  */
 async function setFeedViaGovernance(admin, sdgnrs, game, deployer, feedAddr) {
-  await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseEther("1000"));
+  await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseUnits("1000", 12));
   await admin.connect(deployer).proposeFeedSwap(feedAddr);
   const proposalId = await admin.feedProposalCount();
   await admin.connect(deployer).voteFeedSwap(proposalId, true);
@@ -161,7 +161,7 @@ describe("Feed Governance", function () {
 
       // First set the feed via governance (propose + vote with instant threshold)
       // Since feed is zero (unhealthy), admin can propose
-      await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseEther("1000"));
+      await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseUnits("1000", 12));
       await admin.connect(deployer).proposeFeedSwap(feedAddr);
       // Vote to execute (deployer has enough weight)
       await admin.connect(deployer).voteFeedSwap(1, true);
@@ -214,7 +214,7 @@ describe("Feed Governance", function () {
       const feedAddr = await mockFeed.getAddress();
 
       // Set feed via governance first
-      await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseEther("1000"));
+      await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseUnits("1000", 12));
       await admin.connect(deployer).proposeFeedSwap(feedAddr);
       await admin.connect(deployer).voteFeedSwap(1, true);
       // Feed is now set and healthy
@@ -234,7 +234,7 @@ describe("Feed Governance", function () {
       const feedAddr = await mockFeed.getAddress();
 
       // Set feed via governance
-      await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseEther("1000"));
+      await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseUnits("1000", 12));
       await admin.connect(deployer).proposeFeedSwap(feedAddr);
       await admin.connect(deployer).voteFeedSwap(1, true);
 
@@ -280,7 +280,7 @@ describe("Feed Governance", function () {
 
       // Keep a nonzero whole-token snapshot so a dust vote cannot resolve by
       // virtue of a zero denominator.
-      await grantSdgnrs(sdgnrs, game, bob.address, eth("1"));
+      await grantSdgnrs(sdgnrs, game, bob.address, hre.ethers.parseUnits("1", 12));
       await grantSdgnrs(sdgnrs, game, alice.address, 1n);
       await admin.connect(deployer).proposeFeedSwap(await newFeed.getAddress());
 
@@ -296,8 +296,8 @@ describe("Feed Governance", function () {
       const newFeedAddr = await newFeed.getAddress();
 
       // Grant deployer sDGNRS and give a minority stake so vote alone doesn't execute at 50%
-      await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseEther("100"));
-      await grantSdgnrs(sdgnrs, game, alice.address, hre.ethers.parseEther("1000"));
+      await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseUnits("100", 12));
+      await grantSdgnrs(sdgnrs, game, alice.address, hre.ethers.parseUnits("1000", 12));
       await admin.connect(deployer).proposeFeedSwap(newFeedAddr);
 
       // Deployer votes approve (~9% weight, below 50% threshold)
@@ -316,7 +316,7 @@ describe("Feed Governance", function () {
     it("emits FeedVoteCast event", async function () {
       const { admin, sdgnrs, game, deployer } = await loadFixture(deployFullProtocol);
       const newFeed = await deployNewFeed();
-      await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseEther("1000"));
+      await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseUnits("1000", 12));
       await admin.connect(deployer).proposeFeedSwap(await newFeed.getAddress());
 
       const tx = await admin.connect(deployer).voteFeedSwap(1, true);
@@ -329,8 +329,8 @@ describe("Feed Governance", function () {
     it("vote can be changed from approve to reject", async function () {
       const { admin, sdgnrs, game, deployer, alice } = await loadFixture(deployFullProtocol);
       // Give deployer a minority stake so approve vote doesn't instantly execute
-      await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseEther("100"));
-      await grantSdgnrs(sdgnrs, game, alice.address, hre.ethers.parseEther("1000"));
+      await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseUnits("100", 12));
+      await grantSdgnrs(sdgnrs, game, alice.address, hre.ethers.parseUnits("1000", 12));
       await admin.connect(deployer).proposeFeedSwap(ZERO_ADDRESS);
 
       // Vote approve (deployer has ~9% weight, below 50% threshold — won't execute)
@@ -343,7 +343,7 @@ describe("Feed Governance", function () {
 
     it("proposal expires after 168 hours (7 days)", async function () {
       const { admin, sdgnrs, game, deployer } = await loadFixture(deployFullProtocol);
-      await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseEther("1000"));
+      await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseUnits("1000", 12));
       await admin.connect(deployer).proposeFeedSwap(ZERO_ADDRESS);
 
       // Advance past 168h lifetime
@@ -409,7 +409,7 @@ describe("Feed Governance", function () {
       const newFeedAddr = await newFeed.getAddress();
 
       // Feed is zero (unhealthy) — admin can propose immediately
-      await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseEther("1000"));
+      await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseUnits("1000", 12));
       await admin.connect(deployer).proposeFeedSwap(newFeedAddr);
 
       // Vote to approve — deployer has sDGNRS weight
@@ -435,7 +435,7 @@ describe("Feed Governance", function () {
       const newFeedAddr = await newFeed.getAddress();
 
       // Set feed via governance
-      await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseEther("1000"));
+      await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseUnits("1000", 12));
       await admin.connect(deployer).proposeFeedSwap(newFeedAddr);
       await admin.connect(deployer).voteFeedSwap(1, true);
 
@@ -449,7 +449,7 @@ describe("Feed Governance", function () {
       const feedAddr = await mockFeed.getAddress();
 
       // Set feed first
-      await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseEther("1000"));
+      await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseUnits("1000", 12));
       await admin.connect(deployer).proposeFeedSwap(feedAddr);
       await admin.connect(deployer).voteFeedSwap(1, true);
       expect(await admin.linkEthPriceFeed()).to.equal(feedAddr);
@@ -472,7 +472,7 @@ describe("Feed Governance", function () {
       const feed2Addr = await feed2.getAddress();
 
       // First swap: zero → feed1
-      await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseEther("1000"));
+      await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseUnits("1000", 12));
       await admin.connect(deployer).proposeFeedSwap(feed1Addr);
       await admin.connect(deployer).voteFeedSwap(1, true);
       expect(await admin.linkEthPriceFeed()).to.equal(feed1Addr);
@@ -537,7 +537,7 @@ describe("Feed Governance", function () {
       const { admin, sdgnrs, game, deployer } = await loadFixture(deployFullProtocol);
       const newFeed = await deployNewFeed();
 
-      await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseEther("1000"));
+      await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseUnits("1000", 12));
       await admin.connect(deployer).proposeFeedSwap(await newFeed.getAddress());
 
       // Vote reject
@@ -574,7 +574,7 @@ describe("Feed Governance", function () {
       const feedAddr = await mockFeed.getAddress();
 
       // Set feed via governance
-      await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseEther("1000"));
+      await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseUnits("1000", 12));
       await admin.connect(deployer).proposeFeedSwap(feedAddr);
       await admin.connect(deployer).voteFeedSwap(1, true);
 
@@ -604,7 +604,7 @@ describe("Feed Governance", function () {
       const feed1 = await deployNewFeed();
       const feed2 = await deployNewFeed();
 
-      await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseEther("1000"));
+      await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseUnits("1000", 12));
 
       // Deployer proposes feed1
       await admin.connect(deployer).proposeFeedSwap(await feed1.getAddress());
@@ -636,8 +636,8 @@ describe("Feed Governance", function () {
       // Give deployer (Admin path) and bob (Community path) 50% of voting supply EACH, so each
       // proposal is independently execute-capable at the 50% threshold. This makes the block on the
       // survivor meaningful: bob's proposal has enough weight to execute — only the cutoff stops it.
-      await grantSdgnrs(sdgnrs, game, deployer.address, eth("1000"));
-      await grantSdgnrs(sdgnrs, game, bob.address, eth("1000"));
+      await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseUnits("1000", 12));
+      await grantSdgnrs(sdgnrs, game, bob.address, hre.ethers.parseUnits("1000", 12));
 
       // Two LIVE proposals coexist: A (admin, id 1) and B (community, id 2).
       await admin.connect(deployer).proposeFeedSwap(feed1Addr); // id 1

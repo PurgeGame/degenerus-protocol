@@ -51,7 +51,7 @@ interface ICoinflip {
     /// @param autoRebuyCarry Post-update rolling auto-rebuy carry.
     /// @param lastClaim Post-update claim cursor day.
     event CoinflipClaimState(
-        address indexed player,
+        uint32 indexed player,
         uint128 claimableStored,
         uint128 autoRebuyCarry,
         uint24  lastClaim
@@ -75,11 +75,9 @@ interface ICoinflip {
     ///      untouched. The recycling bonus pays on the winnings leg only.
     ///      Stakes and principal use whole FLIP. Each percentage bonus floors at its
     ///      calculation boundary before it is added to the day's stake. CoinflipStakeUpdated reports the accepted stake.
-    ///      The stake ledger is keyed by wallet ID. A nonzero `id` is the ID itself; a self
-    ///      deposit reads the caller's ID from its coinflip state and on a miss registers the
-    ///      caller (a paying action: Game `registerWallet(msg.sender, true)`). The account's
-    ///      address-keyed coinflip state is keyed by the resolved key (a smurf's hash key).
-    ///      Any minted payout of the claim walk (loss-streak WWXRP) goes to the payee.
+    ///      Both stake ledger and claim state are keyed by account ID. Self deposits register
+    ///      the caller subject to Game admission policy. Loss-streak WWXRP rewards credit
+    ///      that account's claimable balance; token withdrawals resolve its owner separately.
     /// @param id The account receiving the stake (0 = caller).
     /// @param amount Amount of FLIP to deposit (must be >= 100 FLIP minimum).
     /// @custom:reverts E (Game) If `id` is unallocated, or a new self depositor must register
@@ -208,7 +206,7 @@ interface ICoinflip {
     /// @notice Credit flip stake to wallet `id` without burning tokens.
     /// @dev Called by authorized creditors (GAME, QUESTS, AFFILIATE, ADMIN, SDGNRS, WWXRP,
     ///      PARIMUTUEL, CRAPS) for rewards. Keyed by wallet ID only: writes the ID-keyed stake
-    ///      lane and never reads or fills the address-keyed PlayerCoinflipState, so a creditor
+    ///      lane and never reads or fills the ID-keyed PlayerCoinflipState, so a creditor
     ///      needs nothing but the ID. `id == 0` or `amount == 0` is a silent no-op, never a
     ///      revert: credits reached from a mineFlip stage cannot fail on a missing wallet.
     ///      Never touches the biggest-flip record (credits carry recordAmount 0).
@@ -304,6 +302,11 @@ interface ICoinflip {
     /*+======================================================================+
       |                          VIEW FUNCTIONS                              |
       +======================================================================+*/
+
+    function previewClaimCoinflipsById(uint32 id) external view returns (uint256);
+    function previewSalvageFlipBackingById(uint32 id) external view returns (uint256);
+    function coinflipAmountById(uint32 id) external view returns (uint256);
+    function coinflipAutoRebuyInfoById(uint32 id) external view returns (bool, uint256, uint256, uint24);
 
     /// @notice Preview total claimable FLIP for a player including pending daily claims.
     /// @dev Calculates claimable from stored balance plus unprocessed winning days within claim window.

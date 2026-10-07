@@ -208,11 +208,10 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
     /// @param id The account the bet belongs to (0 = caller).
     /// @param over True to bet that growth accelerates, false to bet that it does not.
     function placeBet(uint32 id, bool over) external {
-        address key = msg.sender;
         address payee = msg.sender;
         if (id != 0) {
             bool authorized;
-            (key, payee, authorized) = game.resolveAccount(id, msg.sender);
+            (, payee, authorized) = game.resolveAccount(id, msg.sender);
             if (!authorized) revert NotApproved();
         }
 
@@ -227,7 +226,8 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
         // implies a nonzero ID (for a resolved account, `id` itself).
         bool mayBet;
         bool earnsReward;
-        (mayBet, earnsReward, id) = quests.marketBetGates(key, round);
+        if (id == 0) id = game.walletIdOf(msg.sender);
+        (mayBet, earnsReward, ) = quests.marketBetGates(id, round);
         if (!mayBet) revert NotEligible();
         _recordBet(id, round, over);
 
@@ -240,7 +240,6 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
         if (earnsReward) {
             reward = quests.recordGrowthBet(
                 id,
-                key,
                 round,
                 _questReward(phaseDay)
             );
@@ -459,6 +458,26 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
             uint256 payout
         )
     {
+        return marketStateById(game.walletIdOf(player), round);
+    }
+
+    function marketStateById(
+        uint32 playerId,
+        uint24 round
+    )
+        public
+        view
+        returns (
+            uint24 openRound,
+            uint128 overCount,
+            uint128 underCount,
+            uint256 questReward,
+            uint8 side,
+            bool claimed,
+            uint8 outcome,
+            uint256 payout
+        )
+    {
         // growthState(0): the ratchet terms are not a settlement input — the outcome is a
         // bit this contract holds — so the view asks only for the routing half, and round 0
         // skips the three ratchet reads.
@@ -472,7 +491,7 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
         overCount = uint128(packed);
         underCount = uint128(packed >> 128);
         outcome = _readOutcome(round);
-        (side, claimed, payout) = _position(game.walletIdOf(player), round, packed, outcome);
+        (side, claimed, payout) = _position(playerId, round, packed, outcome);
     }
 
     /// @dev Wallet `id`'s side on `round`, whether settlement has paid its win, and the payout

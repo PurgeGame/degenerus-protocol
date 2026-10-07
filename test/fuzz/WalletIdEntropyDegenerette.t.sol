@@ -22,7 +22,7 @@ contract WalletIdEntropyDegeneretteTest is DeployProtocol {
     uint8 private constant SPINS = 3;
     uint8 private constant HERO = 3;
     uint48 private constant INDEX = 1;
-    bytes32 private constant RESOLVED = keccak256("DegeneretteResolved(address,uint32,uint64,uint256,uint32,bytes)");
+    bytes32 private constant RESOLVED = keccak256("DegeneretteResolved(uint32,uint32,uint64,uint256,uint32,bytes)");
 
     address private player;
     uint32 private playerId;
@@ -67,7 +67,7 @@ contract WalletIdEntropyDegeneretteTest is DeployProtocol {
         game.placeDegeneretteBet(0, CURRENCY_FLIP, FLIP_PER_SPIN, SPINS, HERO);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics[0] == keccak256("DegeneretteBetPlaced(address,uint32,uint64,uint256)")) {
+            if (logs[i].topics[0] == keccak256("DegeneretteBetPlaced(uint32,uint32,uint64,uint256)")) {
                 betId = uint64(uint256(logs[i].topics[3]));
             }
         }

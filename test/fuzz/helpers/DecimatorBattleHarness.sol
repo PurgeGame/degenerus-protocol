@@ -5,6 +5,11 @@ import {DegenerusGameDecimatorModule} from "../../../contracts/modules/Degenerus
 import {WalletSeed} from "../../helpers/WalletSeed.sol";
 
 contract DecimatorBattleHarness is DegenerusGameDecimatorModule, WalletSeed {
+    function recordFor(address player, uint24 lvl, uint256 amount, uint256 mult, uint32 chips) external returns (uint64) {
+        uint32 id = player == address(0) ? 0 : _seedWallet(player);
+        return recordDecBurn(id, lvl, amount, mult, chips);
+    }
+
     function extsload(bytes32 slot) external view returns (bytes32 value) {
         assembly { value := sload(slot) }
     }
@@ -64,7 +69,7 @@ contract DecimatorBattleHarness is DegenerusGameDecimatorModule, WalletSeed {
     /// @dev The stack in wei of virtual chips, as the Lens reports it.
     function entryOf(uint24 lvl, uint64 id) external view returns (Entry memory e) {
         uint256 entry = decBattleEntries[(uint256(lvl) << 64) | id];
-        e.owner = address(uint160(entry));
+        e.owner = _walletKey(uint32(entry));
         e.stack = (entry >> 190);
         e.chips = uint32((entry >> 160) & 0x3FFFFFFF);
     }

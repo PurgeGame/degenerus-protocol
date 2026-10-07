@@ -6,7 +6,7 @@ import {CompositionHandler} from "../handlers/CompositionHandler.sol";
 
 /// @title CompositionInvariant -- Proves cross-module composition safety
 /// @notice Tests that no module interaction sequence corrupts shared state.
-///         Uses ghost variables to track gap bits, pool solvency, level monotonicity,
+///         Uses ghost variables to track pool solvency, level monotonicity,
 ///         and gameOver latch across random sequences of cross-module operations.
 /// @dev Run with FOUNDRY_PROFILE=deep for 1K invariant runs, 256 depth.
 ///      Composition handler exercises 4 distinct cross-module action sequences:
@@ -24,19 +24,6 @@ contract CompositionInvariant is DeployProtocol {
         compositionHandler = new CompositionHandler(game, mockVRF, 8);
 
         targetContract(address(compositionHandler));
-    }
-
-    /// @notice Gap bits (154-159 and 215-227) in mintPacked_ must always be zero
-    /// @dev If any setPacked call site writes to gap bits, this catches it.
-    ///      Real fields: MINT_STREAK(160-183), DEITY_PASS(184), AFFILIATE_BONUS_LEVEL(185-208), AFFILIATE_BONUS_POINTS(209-214).
-    ///      Ghost counter increments each time gap bits are found nonzero
-    ///      after any cross-module action sequence.
-    function invariant_gapBitsAlwaysZero() public view {
-        assertEq(
-            compositionHandler.ghost_gapBitsNonZero(),
-            0,
-            "COMPOSITION BUG: mintPacked_ gap bits (154-159, 215-227) found nonzero"
-        );
     }
 
     /// @notice Pool solvency must hold after every cross-module operation

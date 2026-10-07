@@ -20,7 +20,6 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///         they hold no claim (`NoClaim`). sDGNRS and GNRUS pull their own Game claimable with
 ///         `claimWinnings(0)`.
 contract RedemptionAccountsTest is RedemptionFixture {
-    bytes32 internal constant SMURF_KEY_TAG = keccak256("degenerus.smurf");
 
     address internal operator = address(0x0FE7A70);
     address internal stranger = address(0x5712A6E);
@@ -37,14 +36,13 @@ contract RedemptionAccountsTest is RedemptionFixture {
         return uint32(uint256(vm.load(address(game), bytes32(GameSlots.WALLETS))));
     }
 
-    function _createSmurf(address o) internal returns (uint32 sid, address skey) {
+    function _createSmurf(address o) internal returns (uint32 sid) {
         (,,,, uint256 price) = game.purchaseInfo();
         vm.deal(o, o.balance + price);
         vm.prank(o);
         sid = game.createSmurf{value: price}(bytes32(0), MintPaymentKind.DirectEth);
-        skey = address(uint160(uint256(keccak256(abi.encode(SMURF_KEY_TAG, o, sid)))));
         (address key, address payee,) = game.resolveAccount(sid, o);
-        require(key == skey && payee == o, "fixture: smurf key and payee");
+        require(key == address(0) && payee == o, "fixture: account owner");
     }
 
     /// @dev Strip sDGNRS's ETH and stETH custody so a live claim's legs refuse; returns what to restore.
@@ -81,7 +79,7 @@ contract RedemptionAccountsTest is RedemptionFixture {
     function _claimedFor(Vm.Log[] memory logs, address player) internal view returns (uint256 n) {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(sdgnrs) || logs[i].topics[0] != CLAIMED_TOPIC) continue;
-            if (address(uint160(uint256(logs[i].topics[1]))) == player) ++n;
+            if (uint32(uint256(logs[i].topics[1])) == game.walletIdOf(player)) ++n;
         }
     }
 
@@ -142,7 +140,7 @@ contract RedemptionAccountsTest is RedemptionFixture {
     /// @notice X reverts Unauthorized on a closed and an open batch, an unallocated ID reverts E, and
     ///         a smurf holds no claim (`NoClaim` for its owner on either batch); A's claims survive.
     function test_Stranger_Unauthorized_UnallocatedE_SmurfNoClaim() public {
-        (uint32 smurfId, address smurfKey) = _createSmurf(alice);
+        uint32 smurfId = _createSmurf(alice);
         vm.prank(alice);
         game.setOperatorApproval(smurfId, operator, true);
         _burn(alice, sdgnrs.totalSupply() / 1000);
@@ -173,7 +171,6 @@ contract RedemptionAccountsTest is RedemptionFixture {
 
         assertGt(_claimTokens(alice, closed), 0, "A's closed claim intact");
         assertGt(_claimTokens(alice, open), 0, "A's open claim intact");
-        assertEq(smurfKey.balance + mockStETH.balanceOf(smurfKey), 0, "the smurf key received nothing");
     }
 
     /// @notice Error precedence on claimRedemption: NotResolved, then NotGameOver, then the account
@@ -220,7 +217,7 @@ contract RedemptionAccountsTest is RedemptionFixture {
 
         vm.expectCall(address(game), abi.encodeCall(DegenerusGame.resolveAccount, (aliceId, operator)), 1);
         vm.expectCall(
-            address(game), abi.encodeWithSelector(DegenerusGame.resolveRedemptionLootbox.selector, alice, aliceId), 1
+            address(game), abi.encodeWithSelector(DegenerusGame.resolveRedemptionLootbox.selector, aliceId), 1
         );
         vm.expectCall(address(game), abi.encodeWithSelector(DegenerusGame.creditRedemptionDirect.selector, aliceId), 1);
         vm.recordLogs();
@@ -258,7 +255,7 @@ contract RedemptionAccountsTest is RedemptionFixture {
     ///         gets Unauthorized, an unallocated ID E, an authorized caller NoClaim; a smurf has no
     ///         parked claim.
     function test_ParkedClaim_ErrorPrecedence() public {
-        (uint32 smurfId,) = _createSmurf(alice);
+        uint32 smurfId = _createSmurf(alice);
         uint32 batchId = _parkAliceClaim();
         uint32 empty = batchId + 7;
 
@@ -331,7 +328,7 @@ contract RedemptionAccountsTest is RedemptionFixture {
 /// @notice sDGNRS and the vault subscribe in their constructors with `subscribe(0, true, false, 1,
 ///         0, 0)`, before the seat token is deployed: the exempt subscriptions never call it.
 contract SdgnrsConstructorSubscribeTest is DeployProtocol {
-    bytes32 internal constant SUBSCRIPTION_UPDATED = keccak256("SubscriptionUpdated(address,uint8,bool,bool,address)");
+    bytes32 internal constant SUBSCRIPTION_UPDATED = keccak256("SubscriptionUpdated(uint32,uint8,bool,bool,uint32)");
 
     function test_ConstructorSubscribe_BeforeSeatTokenExists() public {
         vm.expectCall(
@@ -358,14 +355,14 @@ contract SdgnrsConstructorSubscribeTest is DeployProtocol {
                 firstTokenLog = i;
             }
             if (logs[i].emitter != ContractAddresses.GAME || logs[i].topics[0] != SUBSCRIPTION_UPDATED) continue;
-            address player = address(uint160(uint256(logs[i].topics[1])));
+            uint32 player = uint32(uint256(logs[i].topics[1]));
             (uint8 qty, bool drain, bool tickets) = abi.decode(logs[i].data, (uint8, bool, bool));
             assertEq(qty, 1);
             assertTrue(drain);
             assertFalse(tickets);
             assertEq(logs[i].topics[2], bytes32(0), "self-funded");
-            if (player == ContractAddresses.SDGNRS) sdgnrsSub = i;
-            if (player == ContractAddresses.VAULT) vaultSub = i;
+            if (player == 2) sdgnrsSub = i;
+            if (player == 1) vaultSub = i;
         }
         assertTrue(sdgnrsSub != type(uint256).max, "sDGNRS subscribed at construction");
         assertTrue(vaultSub != type(uint256).max, "the vault subscribed at construction");

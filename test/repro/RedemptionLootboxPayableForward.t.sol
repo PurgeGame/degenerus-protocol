@@ -58,8 +58,8 @@ contract RedemptionLootboxPayableForward is RedemptionCloseTools {
     /// @dev sDGNRS funding / burn sizing mirrors V62RedemptionReentrancy: large enough that the
     ///      175% MAX roll yields a multi-ETH lootbox half (so the Game-side 5-ETH-chunk loop
     ///      runs more than once and each chunk's delegatecall carries the in-flight msg.value).
-    uint256 internal constant PLAYER_FUNDING = 80_000_000_000 ether;
-    uint256 internal constant BURN_AMOUNT = 10_000_000_000 ether;
+    uint256 internal constant PLAYER_FUNDING = 80_000_000_000e12;
+    uint256 internal constant BURN_AMOUNT = 10_000_000_000e12;
 
     address internal player;
 

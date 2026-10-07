@@ -190,7 +190,7 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
         assertEq(game.level(), 101, "game must continue past the century");
         assertEq(sdgnrs.lastRecycledCentury(), 1, "first century recycled through real progression");
         assertLe(sdgnrs.totalSupply(), sdgnrs.centurySupplyCheckpoint());
-        assertLt(sdgnrs.centurySupplyCheckpoint(), 1e30, "actual first-century burns keep supply below genesis");
+        assertLt(sdgnrs.centurySupplyCheckpoint(), 1e24, "actual first-century burns keep supply below genesis");
         assertTrue(
             _levelPrizePool(100) != achieved,
             "endPhase must reset levelPrizePool[100] to the x01 restart base"

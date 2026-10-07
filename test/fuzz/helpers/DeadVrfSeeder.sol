@@ -56,7 +56,7 @@ contract DeadVrfSeeder is DegenerusGame, BucketSeed {
         uint256 id = uint256(_seedWallet(player));
         index = _foilCount(key);
         uint256 slot = _foilSlot(key, index);
-        uint256 pack = (id << 192) | (uint256(lvl) << 160) | uint256(uint160(player));
+        uint256 pack = (id << 192) | (uint256(lvl) << 160);
         assembly ("memory-safe") { sstore(slot, pack) }
         if (key == _foilWriteKey()) foilWriteCount = uint32(index + 1);
         else foilReadCount = uint32(index + 1);

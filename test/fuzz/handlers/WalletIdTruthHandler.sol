@@ -20,7 +20,7 @@ interface IWidWwxrp {
 }
 
 interface IWidQuests {
-    function marketBetGates(address player, uint24 lvl) external view returns (bool, bool, uint32);
+    function marketBetGates(uint32 player, uint24 lvl) external view returns (bool, bool, uint32);
 }
 
 interface IWidCraps {
@@ -45,20 +45,15 @@ interface IWidOwnerOf {
 ///         strangers). It records every `WalletRegistered`, `SmurfCreated` and seat transfer.
 ///         `checkAll` is the suite-wide ID-truth oracle of LOOTBOX-ORDER-QUEUE-PLAN section 0,
 ///         extended to Phase F accounts:
-///         - the canonical pair (wallet-table element and `mintPacked_` bits 224..255) agrees in
-///           both directions, IDs are contiguous with exactly one registration each, and every
-///           cached or stored ID in Coinflip, Craps, Affiliate, sDGNRS, WWXRP, Parimutuel,
-///           Jackpots and the Decimator equals the canonical ID of its key (smurf keys and keys
-///           written by operators included);
-///         - every smurf element's owner lane points to an allocated ordinary element, its key is
-///           `smurfKey(owner, id)`, the smurf flag (mint word bit 147) is set exactly on smurf
-///           keys, `SmurfCreated` fired once per smurf with its owner, the smurf's referral word
-///           is the owner's, and no protocol flow leaves ETH, stETH or a token at a smurf key;
-///         - at most one deity per main wallet;
-///         - an account door succeeded only for an authorized caller (gift and permissionless
-///           doors excepted), never for an unallocated ID, and never refused an authorized one.
+///         - ordinary forward-registry entries agree with wallet-table addresses;
+///         - account IDs are contiguous, allocated once, and stored IDs reference live accounts;
+///         - subaccounts store only an ordinary owner ID, have their own mint flag and referral,
+///           and emit one SmurfCreated event;
+///         - at most one deity account belongs to a main wallet;
+///         - authorized actions accept only owners or approved operators, except explicit gift
+///           and permissionless credit doors; claims never allocate an account.
 /// @dev Storage roots of the other contracts come from `scripts/layout/golden/<Contract>.json`;
-///      `PhaseESlotCounts.t.sol` and the suite's non-vacuity test pin them at runtime.
+///      the contract-specific ID suites and this suite's non-vacuity test pin them at runtime.
 ///      Two reachability shortcuts, both confined to one call: the Decimator window opens only at
 ///      levels x4/x99, so the burn doors open it for `level + 1` the way the advance does (window
 ///      flag and the round's `openedDay`) and shut the flag after the burn; the growth market opens
@@ -109,7 +104,6 @@ contract WalletIdTruthHandler is Test {
     uint256 internal constant DEC_WINDOW_BIT = (GameSlots.DECIMATOR_FLAGS_OFFSET * 8); // DEC_WINDOW_OPEN = 1
 
     // ------------------------------------------------------------------ accounts (plan F1/F2, decisions G1/G4)
-    bytes32 internal constant SMURF_KEY_TAG = keccak256("degenerus.smurf");
     uint256 internal constant SMURF_FLAG_SHIFT = 147; // mint word bit 147
     uint256 internal constant LANE_MASK = 0xffffffff; // wallet-table owner lane, bits 160..191
 
@@ -117,9 +111,9 @@ contract WalletIdTruthHandler is Test {
     bytes32 internal constant SMURF_CREATED = keccak256("SmurfCreated(uint32,uint32)");
     bytes32 internal constant ERC721_TRANSFER = keccak256("Transfer(address,address,uint256)");
     bytes32 internal constant DEC_BURN_RECORDED =
-        keccak256("DecBurnRecorded(address,uint24,uint64,uint256,uint256,uint256,uint32)");
+        keccak256("DecBurnRecorded(uint32,uint24,uint64,uint256,uint256,uint256,uint32)");
     bytes32 internal constant DRAW_ENTERED =
-        keccak256("DrawEntered(uint24,address,uint8,uint32,uint256,uint256,uint256)");
+        keccak256("DrawEntered(uint24,uint32,uint8,uint32,uint256,uint256,uint256)");
     bytes32 internal constant SLIP_PLACED = keccak256("CrapsSlipPlaced(uint32,uint256)");
     bytes4 internal constant NOT_APPROVED = bytes4(keccak256("NotApproved()"));
     bytes4 internal constant UNAUTHORIZED = bytes4(keccak256("Unauthorized()"));
@@ -187,14 +181,14 @@ contract WalletIdTruthHandler is Test {
         uint24 day;
         uint8 bucket;
         uint32 index;
-        address entrant;
+        uint32 entrant;
     }
 
     struct PmBet {
         uint24 round;
         uint8 side;
         uint32 index;
-        address bettor;
+        uint32 bettor;
     }
 
     struct Slip {
@@ -205,7 +199,7 @@ contract WalletIdTruthHandler is Test {
     struct DecEntry {
         uint24 lvl;
         uint64 entryId;
-        address burner;
+        uint32 burner;
     }
 
     WxEntry[] internal _wx;
@@ -316,7 +310,7 @@ contract WalletIdTruthHandler is Test {
     function _code(uint256 sel, address self) internal returns (bytes32) {
         uint256 k = sel % 10;
         if (k == 0) return bytes32(0);
-        if (k == 2 && smurfIds.length != 0) return bytes32(uint256(uint160(_keyOf(smurfIds[(sel >> 8) % smurfIds.length]))));
+        if (k == 2 && smurfIds.length != 0) return bytes32((uint256(1) << 160) | smurfIds[(sel >> 8) % smurfIds.length]);
         if (k == 1 || k == 2) return bytes32(uint256(uint160(actors[(sel >> 8) % actors.length])));
         if (k == 3 && freshCount < MAX_FRESH) return bytes32(uint256(uint160(_fresh())));
         if (k == 4 && codes.length != 0) return codes[(sel >> 8) % codes.length];
@@ -371,7 +365,7 @@ contract WalletIdTruthHandler is Test {
                     smurfCreatedOwner[sid] = uint32(uint256(l.topics[1]));
                 } else if (t0 == DEC_BURN_RECORDED && l.topics.length == 4 && _dec.length < CAP) {
                     _dec.push(DecEntry(
-                        uint24(uint256(l.topics[2])), uint64(uint256(l.topics[3])), address(uint160(uint256(l.topics[1])))
+                        uint24(uint256(l.topics[2])), uint64(uint256(l.topics[3])), uint32(uint256(l.topics[1]))
                     ));
                 }
             } else if (l.emitter == SEAT && t0 == ERC721_TRANSFER && l.topics.length == 4) {
@@ -383,7 +377,7 @@ contract WalletIdTruthHandler is Test {
                 _seatHolder[t] = address(uint160(uint256(l.topics[2])));
             } else if (l.emitter == WWXRP && t0 == DRAW_ENTERED && l.topics.length == 3 && _wx.length < CAP) {
                 (uint8 bucket, uint32 index,,,) = abi.decode(l.data, (uint8, uint32, uint256, uint256, uint256));
-                _wx.push(WxEntry(uint24(uint256(l.topics[1])), bucket, index, address(uint160(uint256(l.topics[2])))));
+                _wx.push(WxEntry(uint24(uint256(l.topics[1])), bucket, index, uint32(uint256(l.topics[2]))));
             } else if (l.emitter == CRAPS && t0 == SLIP_PLACED && l.topics.length == 2 && _slips.length < CAP) {
                 uint256 bet = abi.decode(l.data, (uint256));
                 _slips.push(Slip((bet >> 32) & type(uint128).max, uint32(uint256(l.topics[1]))));
@@ -603,7 +597,7 @@ contract WalletIdTruthHandler is Test {
     function cf_autoRebuy(uint256 a, bool enabled, uint256 takeProfit) external {
         address p = _actor(a);
         _call(15, p, COINFLIP, 0, abi.encodeWithSignature(
-            "setCoinflipAutoRebuy(uint32,bool,uint256)", uint32(0), enabled, takeProfit % 1_000_000), true);
+            "setCoinflipAutoRebuy(uint32,bool,uint256)", uint32(0), enabled, takeProfit % 1_000_000), false);
     }
 
     // =====================================================================================
@@ -749,9 +743,9 @@ contract WalletIdTruthHandler is Test {
 
     function af_claim(uint256 a, uint256 sSeed) external {
         address p = _actor(a);
-        address[] memory subs = new address[](1);
-        subs[0] = sSeed % 2 == 0 ? p : actors[sSeed % actors.length];
-        _call(28, p, AFFILIATE, 0, abi.encodeWithSignature("claim(address[])", subs), true);
+        uint32[] memory subs = new uint32[](1);
+        subs[0] = _fwd(sSeed % 2 == 0 ? p : actors[sSeed % actors.length]);
+        _call(28, p, AFFILIATE, 0, abi.encodeWithSignature("claim(uint32[])", subs), true);
     }
 
     // =====================================================================================
@@ -783,7 +777,7 @@ contract WalletIdTruthHandler is Test {
         uint32 index = uint32(over ? uint128(counts) : counts >> 128);
         bool ok = _pmCall(action, caller, id, over);
         if (mocked) vm.clearMockedCalls();
-        if (ok) _notePmBet(round, over ? 1 : 2, index, bettor);
+        if (ok) _notePmBet(round, over ? 1 : 2, index, id == 0 ? _fwd(caller) : id);
     }
 
     /// @dev The open round, mocking `growthState(0)` open for this bet when the market is shut
@@ -805,7 +799,7 @@ contract WalletIdTruthHandler is Test {
         else ok = _acctCall(action, caller, id, PARIMUTUEL, 0, data, AUTH | F_CR);
     }
 
-    function _notePmBet(uint24 round, uint8 side, uint32 index, address bettor) internal {
+    function _notePmBet(uint24 round, uint8 side, uint32 index, uint32 bettor) internal {
         if (_pm.length >= CAP) return;
         _pm.push(PmBet(round, side, index, bettor));
         if (!_pmRoundSeen[round]) {
@@ -829,7 +823,7 @@ contract WalletIdTruthHandler is Test {
         address p = _actor(a);
         uint256 bal = IWidBalance(SDGNRS).balanceOf(p);
         uint32 batch = _openBatch();
-        (bool ok,) = _call(33, p, SDGNRS, 0, abi.encodeWithSignature("burn(uint256)", 1e18 + amtSeed % (bal / 1000 + 1)), true);
+        (bool ok,) = _call(33, p, SDGNRS, 0, abi.encodeWithSignature("burn(uint256)", 1e12 + amtSeed % (bal / 1000 + 1)), true);
         _noteBurn(ok, p, batch);
     }
 
@@ -837,7 +831,7 @@ contract WalletIdTruthHandler is Test {
         address p = _actor(a);
         uint256 bal = IWidBalance(DGNRS).balanceOf(p);
         uint32 batch = _openBatch();
-        (bool ok,) = _call(34, p, SDGNRS, 0, abi.encodeWithSignature("burnWrapped(uint256)", 1e18 + amtSeed % (bal / 1000 + 1)), true);
+        (bool ok,) = _call(34, p, SDGNRS, 0, abi.encodeWithSignature("burnWrapped(uint256)", 1e12 + amtSeed % (bal / 1000 + 1)), true);
         _noteBurn(ok, p, batch);
     }
 
@@ -1154,11 +1148,7 @@ contract WalletIdTruthHandler is Test {
     }
 
     function _authorized(uint32 id, address caller) internal view returns (bool) {
-        uint256 el = _element(id);
-        address key = address(uint160(el));
-        if (caller == key) return true;
-        if ((el >> 160) & LANE_MASK != 0 && _smurfKeyOf(caller, id) == key) return true;
-        return _approved(id, caller);
+        return caller == _payeeOfElement(_element(id)) || _approved(id, caller);
     }
 
     function _approved(uint32 id, address op) internal view returns (bool) {
@@ -1369,16 +1359,15 @@ contract WalletIdTruthHandler is Test {
         return ownerId == 0 ? address(uint160(el)) : _keyOf(ownerId);
     }
 
-    function _smurfKeyOf(address owner, uint32 id) internal pure returns (address) {
-        return address(uint160(uint256(keccak256(abi.encode(SMURF_KEY_TAG, owner, id)))));
-    }
+
+
 
     function _mintWord(address key) internal view returns (uint256) {
         return uint256(vm.load(GAME, GameSlotKeys.mintPacked(key)));
     }
 
     function _fwd(address key) internal view returns (uint32) {
-        return uint32(_mintWord(key) >> 224);
+        return uint32(uint256(vm.load(GAME, GameSlotKeys.walletId(key))));
     }
 
     function _tableLength() internal view returns (uint256) {
@@ -1387,11 +1376,17 @@ contract WalletIdTruthHandler is Test {
 
     /// @dev True when `id` is an allocated ID whose canonical pair agrees in both directions.
     function _registered(uint32 id) internal view returns (bool) {
-        return id != 0 && id < _tableLength() && _fwd(_keyOf(id)) == id;
+        if (id == 0 || id >= _tableLength()) return false;
+        uint256 el = _element(id);
+        uint32 owner = uint32(el >> 160);
+        return owner == 0 ? _fwd(address(uint160(el))) == id
+            : address(uint160(el)) == address(0) && owner < id && uint32(_element(owner) >> 160) == 0;
     }
 
-    function _referral(address k) internal view returns (uint256) {
-        return uint256(vm.load(AFFILIATE, keccak256(abi.encode(k, AFF_REFERRAL))));
+    function _referral(address k) internal view returns (uint256) { return _referralId(_fwd(k)); }
+
+    function _referralId(uint32 id) internal view returns (uint256) {
+        return uint256(vm.load(AFFILIATE, keccak256(abi.encode(id, AFF_REFERRAL))));
     }
 
     function _fail(string memory tag, string memory what, address key, uint256 a, uint256 b) internal pure {
@@ -1421,22 +1416,27 @@ contract WalletIdTruthHandler is Test {
     /// @dev Canonical pair, one registration per ID, contiguous IDs, protocol constants.
     function _checkRegistry() internal view {
         uint256 n = regIds.length;
-        if (_tableLength() != n + 1) _fail("REGISTRY", "table length != registrations + 1", address(0), _tableLength(), n + 1);
-        if (_element(0) != 0) _fail("REGISTRY", "element 0 assigned", address(0), _element(0), 0);
-        if (n < 3 || regOwners[0] != VAULT || regOwners[1] != SDGNRS || regOwners[2] != GNRUS) {
-            revert("REGISTRY: protocol IDs are not VAULT 1, SDGNRS 2, GNRUS 3");
-        }
+        uint256 count = n + smurfIds.length;
+        if (_tableLength() != count + 1) _fail("REGISTRY", "table length != all allocations + 1", address(0), _tableLength(), count + 1);
+        if (_element(0) != 0 || _fwd(address(0)) != 0) revert("REGISTRY: zero identity assigned");
+        if (n < 3 || regOwners[0] != VAULT || regOwners[1] != SDGNRS || regOwners[2] != GNRUS) revert("REGISTRY: protocol IDs changed");
+        bool[] memory seen = new bool[](count + 1);
         for (uint256 i; i < n; ++i) {
-            uint32 id = regIds[i];
-            address owner = regOwners[i];
-            if (id != i + 1) _fail("REGISTRY", "IDs not contiguous (or an ID registered twice)", owner, id, i + 1);
-            if (owner == address(0)) _fail("REGISTRY", "zero owner", owner, id, 0);
-            if (_keyOf(id) != owner) _fail("REGISTRY", "element(id) != key", owner, uint160(_keyOf(id)), uint160(owner));
-            if (_fwd(owner) != id) _fail("REGISTRY", "mintPacked_[key] >> 224 != id (ID split)", owner, _fwd(owner), id);
+            uint32 id = regIds[i]; address owner = regOwners[i];
+            if (id == 0 || id > count || seen[id]) revert("REGISTRY: duplicate or invalid ordinary allocation");
+            seen[id] = true;
+            if (owner == address(0) || _keyOf(id) != owner || uint32(_element(id) >> 160) != 0) revert("REGISTRY: ordinary table mismatch");
+            if (_fwd(owner) != id) _fail("REGISTRY", "forward registry disagrees with table", owner, _fwd(owner), id);
         }
+        for (uint256 i; i < smurfIds.length; ++i) {
+            uint32 id = smurfIds[i];
+            if (id == 0 || id > count || seen[id]) revert("REGISTRY: duplicate or invalid subaccount allocation");
+            seen[id] = true;
+        }
+        for (uint256 id = 1; id <= count; ++id) if (!seen[id]) revert("REGISTRY: allocation gap");
     }
 
-    /// @dev Every known key: reverse direction, and every per-contract cache of the key.
+    /// @dev Every ordinary wallet: canonical reverse direction and ID-keyed referral/quest state.
     function _checkKeys() internal view {
         uint256 len = _tableLength();
         for (uint256 i; i < keys.length; ++i) {
@@ -1448,44 +1448,21 @@ contract WalletIdTruthHandler is Test {
             } else if ((_mintWord(k) >> SMURF_FLAG_SHIFT) & 1 != 0) {
                 _fail("SMURFFLAG", "smurf flag on an unregistered key", k, 1, 0);
             }
-            _checkKeyCaches(k, id);
+            _checkAccountRecords(k, id);
         }
     }
 
-    function _checkKeyCaches(address k, uint32 id) internal view {
-        // Coinflip slot A
-        uint32 c = uint32(uint256(vm.load(COINFLIP, keccak256(abi.encode(k, CF_PLAYER_STATE)))) >> CF_ID_SHIFT);
-        if (c != 0 && c != id) _fail("COINFLIP", "slot A cached ID != canonical", k, c, id);
-        // Craps address word: board, INITIALIZED and the ID cache; pass lanes stay zero
-        uint256 cw = uint256(vm.load(CRAPS, keccak256(abi.encode(k, CrapsSlots.PASS_CREDITS))));
-        uint32 cc = uint32(cw >> CR_ID_SHIFT);
-        if (cc != 0 && cc != id) _fail("CRAPS", "address word cached ID != canonical", k, cc, id);
-        if (cw & type(uint64).max != 0) _fail("CRAPS", "address word holds pass lanes", k, cw & type(uint64).max, 0);
-        if (cc != 0 && cw & CR_INITIALIZED != 0) {
-            uint256 iw = uint256(vm.load(CRAPS, keccak256(abi.encode(uint256(cc), CrapsSlots.PASS_CREDITS_BY_ID))));
-            if (iw & CR_INITIALIZED == 0 || iw & CR_BOARD_MASK != cw & CR_BOARD_MASK) {
-                _fail("CRAPS", "saved board differs between address word and ID word", k, iw & CR_BOARD_MASK, cw & CR_BOARD_MASK);
-            }
+    function _checkAccountRecords(address k, uint32 id) internal view {
+        uint256 w = _referralId(id);
+        if (w > 1 && w < (uint256(1) << 192)) {
+            if (w >> 32 != 1 || !_registered(uint32(w))) _fail("AFFILIATE", "invalid default referral ID word", k, w, id);
         }
-        // sDGNRS forward word
-        uint32 s = uint32(uint256(vm.load(SDGNRS, keccak256(abi.encode(k, SD_DAY_VALUE)))) >> SD_ID_SHIFT);
-        if (s != 0 && s != id) _fail("SDGNRS", "forward word cached ID != canonical", k, s, id);
-        // Affiliate referral word
-        uint256 w = _referral(k);
-        if (w > 1 && w < (uint256(1) << 160)) _fail("AFFILIATE", "referral word in the sentinel range", k, w, 0);
-        if (w >= (uint256(1) << 160) && w < (uint256(1) << 192)) {
-            address owner = address(uint160(w));
-            uint32 oid = uint32(w >> 160);
-            if (oid == 0 || oid != _fwd(owner)) _fail("AFFILIATE", "default-code referral word owner ID != canonical", owner, oid, _fwd(owner));
-        }
-        // Quests piggyback: mayBet implies a nonzero ID equal to the canonical one
-        (bool mayBet,, uint32 gid) = IWidQuests(QUESTS).marketBetGates(k, 1);
-        if (gid != id) _fail("QUESTS", "marketBetGates ID != canonical", k, gid, id);
-        if (mayBet && id == 0) _fail("QUESTS", "mayBet without a wallet ID", k, 0, 1);
+        (bool mayBet,, uint32 gid) = IWidQuests(QUESTS).marketBetGates(id, 1);
+        if (gid != id || (mayBet && id == 0)) _fail("QUESTS", "quest identity mismatch", k, gid, id);
     }
 
-    /// @dev Every allocated element: owner lane, key derivation, smurf flag, `SmurfCreated`,
-    ///      referral copy and no value at smurf keys (plan F2, decisions G4/G9, inventory M14).
+    /// @dev Every allocated element: owner lane, zero subaccount address, smurf flag, `SmurfCreated`,
+    ///      and referral copy (plan F2, decisions G4/G9, inventory M14).
     function _checkSmurfs() internal view {
         uint256 len = _tableLength();
         for (uint32 id = 1; id < len; ++id) {
@@ -1511,41 +1488,23 @@ contract WalletIdTruthHandler is Test {
         if ((oel >> 160) & LANE_MASK != 0) _fail("SMURFLANE", "owner lane points at a smurf", key, ownerId, id);
         address ownerKey = address(uint160(oel));
         if (ownerKey == address(0)) _fail("SMURFLANE", "owner lane points at an empty element", key, ownerId, id);
-        address derived = _smurfKeyOf(ownerKey, id);
-        if (key != derived) _fail("SMURFLANE", "key != smurfKey(owner, id)", key, uint160(derived), id);
-        if ((_mintWord(key) >> SMURF_FLAG_SHIFT) & 1 == 0) _fail("SMURFFLAG", "smurf mint word lost bit 147", key, id, 1);
+        if (key != address(0)) _fail("SMURFLANE", "subaccount stores an address", key, uint160(key), 0);
+        if ((uint256(vm.load(GAME, GameSlotKeys.mintPacked(id))) >> SMURF_FLAG_SHIFT) & 1 == 0) _fail("SMURFFLAG", "smurf mint word lost bit 147", key, id, 1);
         if (smurfCreatedCount[id] != 1) _fail("SMURFEVENT", "SmurfCreated count != 1", key, smurfCreatedCount[id], 1);
         if (smurfCreatedOwner[id] != ownerId) _fail("SMURFEVENT", "SmurfCreated owner != owner lane", key, smurfCreatedOwner[id], ownerId);
-        _checkSmurfReferral(key, ownerKey);
-        _checkNoValue(key);
+        _checkSmurfReferral(id, ownerId);
+        _checkAccountRecords(address(0), id);
     }
 
     /// @dev The smurf's referral word is a verbatim copy of its owner's, never the owner itself.
-    function _checkSmurfReferral(address key, address ownerKey) internal view {
-        uint256 sw = _referral(key);
-        uint256 ow = _referral(ownerKey);
-        if (sw != ow) _fail("SMURFREF", "smurf referral word != owner's", key, sw, ow);
-        if (sw >= (uint256(1) << 160) && sw < (uint256(1) << 192) && address(uint160(sw)) == ownerKey) {
-            _fail("SMURFREF", "smurf referred by its owner", key, sw, 0);
-        }
+    function _checkSmurfReferral(uint32 id, uint32 ownerId) internal view {
+        uint256 sw = _referralId(id); uint256 ow = _referralId(ownerId);
+        if (sw != ow) _fail("SMURFREF", "subaccount referral differs from owner", address(0), sw, ow);
+        if (sw > 1 && sw < (uint256(1) << 192) && uint32(sw) == ownerId) revert("SMURFREF: self referral");
     }
 
-    /// @dev No ETH, stETH, FLIP, WWXRP, DGNRS, sDGNRS, seat or deity pass at a smurf key.
-    function _checkNoValue(address k) internal view {
-        if (k.balance != 0) _fail("SMURFVALUE", "ETH at a smurf key", k, k.balance, 0);
-        _noBalance(COIN, "FLIP at a smurf key", k);
-        _noBalance(WWXRP, "WWXRP at a smurf key", k);
-        _noBalance(DGNRS, "DGNRS at a smurf key", k);
-        _noBalance(SDGNRS, "sDGNRS at a smurf key", k);
-        _noBalance(STETH, "stETH at a smurf key", k);
-        _noBalance(SEAT, "seat token at a smurf key", k);
-        _noBalance(DEITY_NFT, "deity pass at a smurf key", k);
-    }
 
-    function _noBalance(address token, string memory what, address k) internal view {
-        uint256 b = IWidBalance(token).balanceOf(k);
-        if (b != 0) _fail("SMURFVALUE", what, k, b, 0);
-    }
+
 
     /// @dev At most one deity per main wallet (decision G5): the deity accounts' payees differ.
     function _checkDeityGroup() internal view {
@@ -1574,11 +1533,11 @@ contract WalletIdTruthHandler is Test {
 
     /// @dev The referrer ID a cache of `k`'s first hop must hold, from Game's canonical IDs.
     ///      `stable` is false for an unset referral, which must never be cached.
-    function _canonRef(address k) internal view returns (bool stable, uint32 id) {
-        uint256 w = _referral(k);
+    function _canonRef(uint32 accountId) internal view returns (bool stable, uint32 id) {
+        uint256 w = _referralId(accountId);
         if (w == 0) return (false, 1);
         if (w == 1) return (true, 1);
-        if (w < (uint256(1) << 192)) return (true, _fwd(address(uint160(w))));
+        if (w < (uint256(1) << 192)) return (true, uint32(w));
         bytes32 c = bytes32(w);
         if (c == bytes32("VAULT")) return (true, 1);
         if (c == bytes32("DGNRS")) return (true, 2);
@@ -1589,15 +1548,16 @@ contract WalletIdTruthHandler is Test {
 
     /// @dev An upline cache pair (`cache` = valid bits 64/65 over upline1 [0:32) and upline2
     ///      [32:64)) for the owner whose key is `ownerKey`.
-    function _checkUplines(string memory tag, address ownerKey, uint256 cache) internal view {
+    function _checkUplines(string memory tag, uint32 ownerId, uint256 cache) internal view {
+        address ownerKey = _payeeOfElement(_element(ownerId));
         uint32 u1 = uint32(cache);
         uint32 u2 = uint32(cache >> 32);
         if (cache & (uint256(1) << 64) != 0) {
-            (bool stable, uint32 want) = _canonRef(ownerKey);
+            (bool stable, uint32 want) = _canonRef(ownerId);
             if (!stable) _fail(tag, "upline1 cached from an unset referral", ownerKey, u1, 0);
             if (u1 != want || !_registered(u1)) _fail(tag, "upline1 cache != canonical referrer", ownerKey, u1, want);
             if (cache & (uint256(1) << 65) != 0) {
-                (bool stable2, uint32 want2) = _canonRef(_keyOf(u1));
+                (bool stable2, uint32 want2) = _canonRef(u1);
                 if (!stable2) _fail(tag, "upline2 cached from an unset referral", ownerKey, u2, 0);
                 if (u2 != want2 || !_registered(u2)) _fail(tag, "upline2 cache != canonical referrer", ownerKey, u2, want2);
             } else if (u2 != 0) {
@@ -1630,7 +1590,7 @@ contract WalletIdTruthHandler is Test {
         if (flags & 1 != 0) _fail("AFFCODE", "runtime code left pending", ownerKey, flags, 0);
         if (ownerId == 0 || ownerId != wantOwner) _fail("AFFCODE", "code owner ID != canonical", ownerKey, ownerId, wantOwner);
         uint256 cache = uint256(uint32(w >> 40)) | (uint256(uint32(w >> 72)) << 32) | (((flags >> 1) & 3) << 64);
-        _checkUplines("AFFCODE", ownerKey, cache);
+        _checkUplines("AFFCODE", ownerId, cache);
     }
 
     /// @dev Earnings-word upline caches and level leaders, every level the run can have touched.
@@ -1644,7 +1604,7 @@ contract WalletIdTruthHandler is Test {
                 uint256 cache = w >> 128;
                 if (cache == 0) continue;
                 if (cache >> 66 != 0) _fail("AFFEARN", "earnings word spills past bit 194", _keyOf(id), cache >> 66, 0);
-                _checkUplines("AFFEARN", _keyOf(id), cache);
+                _checkUplines("AFFEARN", id, cache);
             }
             uint32 leader = uint32(uint256(vm.load(AFFILIATE, keccak256(abi.encode(lvl, AFF_LEVEL_SCORE)))) >> 224);
             if (leader != 0 && !_registered(leader)) _fail("AFFLEAD", "level leader is not a registered ID", address(0), leader, lvl);
@@ -1668,7 +1628,7 @@ contract WalletIdTruthHandler is Test {
             WxEntry memory e = _wx[i];
             if (e.day + 2 < today) continue;
             (uint32 id,) = IWidWwxrp(WWXRP).entryAt(e.day, e.bucket, e.index);
-            if (id != _fwd(e.entrant)) _fail("WWXRP", "entry ID != entrant's canonical ID", e.entrant, id, _fwd(e.entrant));
+            if (id != e.entrant) _fail("WWXRP", "entry differs from emitted ID", address(0), id, e.entrant);
         }
         uint24 bracket = (game.level() / 100 + 1) * 100;
         (, uint32 n) = IWidWwxrp(WWXRP).incineratorInfo(bracket);
@@ -1700,7 +1660,7 @@ contract WalletIdTruthHandler is Test {
         for (uint256 i; i < _pm.length; ++i) {
             PmBet memory b = _pm[i];
             uint32 id = _pmLane(b.round, b.side, b.index);
-            if (id != _fwd(b.bettor)) _fail("PARIMUTUEL", "lane ID != bettor's canonical ID", b.bettor, id, _fwd(b.bettor));
+            if (id != b.bettor) _fail("PARIMUTUEL", "lane differs from selected ID", address(0), id, b.bettor);
         }
     }
 
@@ -1725,10 +1685,10 @@ contract WalletIdTruthHandler is Test {
             uint256 base = uint256(keccak256(abi.encode(root)));
             if (n > 256) n = 256;
             for (uint256 i; i < n; ++i) {
-                uint256 e = uint256(vm.load(SDGNRS, bytes32(base + i)));
-                address a = address(uint160(e));
-                uint32 id = uint32(e >> 160);
-                if (id == 0 || id != _fwd(a)) _fail("SDGNRS", "batch beneficiary ID != canonical", a, id, _fwd(a));
+                uint128 entry = uint128(uint256(vm.load(SDGNRS, bytes32(base + i / 2))) >> (128 * (i % 2)));
+                if (entry == 0) continue; // settled or parked entries are cleared before recycling
+                uint32 id = uint32(entry >> 80);
+                if (!_registered(id)) _fail("SDGNRS", "queue recipient is unallocated", address(0), id, i);
             }
         }
     }
@@ -1740,8 +1700,8 @@ contract WalletIdTruthHandler is Test {
             uint256 key = (uint256(e.lvl) << 64) | e.entryId;
             uint256 w = uint256(vm.load(GAME, keccak256(abi.encode(key, GameSlots.DEC_BATTLE_ENTRIES))));
             if (w == 0) continue;
-            if (uint32(w) != _fwd(e.burner) || uint32(w) == 0) _fail("DECIMATOR", "entry owner ID != burner's canonical ID", e.burner, uint32(w), _fwd(e.burner));
-            if ((w >> 32) & type(uint128).max != 0) _fail("DECIMATOR", "entry bits 32..159 nonzero", e.burner, w, 0);
+            if (uint32(w) != e.burner || uint32(w) == 0) _fail("DECIMATOR", "entry differs from emitted ID", address(0), uint32(w), e.burner);
+            if ((w >> 32) & type(uint128).max != 0) _fail("DECIMATOR", "entry bits 32..159 nonzero", address(0), w, 0);
         }
     }
 
@@ -1767,7 +1727,7 @@ contract WalletIdTruthHandler is Test {
     // =====================================================================================
 
     function regCount() external view returns (uint256) {
-        return regIds.length;
+        return regIds.length + smurfIds.length;
     }
 
     function keyCount() external view returns (uint256) {

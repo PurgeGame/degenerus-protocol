@@ -49,11 +49,10 @@ contract SmurfGameHarness is DegenerusGame {
 /// @notice Deploys the protocol, etches the harness over the Game, and builds owners, smurfs
 ///         (`createSmurf` by an owner that already holds an ID) and ordinary wallets.
 abstract contract SmurfFixture is DeployProtocol {
-    bytes32 internal constant SMURF_KEY_TAG = keccak256("degenerus.smurf");
     bytes32 internal constant POOL_TRANSFER = keccak256("PoolTransfer(uint8,address,uint256)");
-    bytes32 internal constant BET_PLACED = keccak256("DegeneretteBetPlaced(address,uint32,uint64,uint256)");
-    bytes32 internal constant BET_RESOLVED = keccak256("DegeneretteResolved(address,uint32,uint64,uint256,uint32,bytes)");
-    bytes32 internal constant BOX_SPIN = keccak256("BoxSpin(address,uint64,uint256,uint256,uint256)");
+    bytes32 internal constant BET_PLACED = keccak256("DegeneretteBetPlaced(uint32,uint32,uint64,uint256)");
+    bytes32 internal constant BET_RESOLVED = keccak256("DegeneretteResolved(uint32,uint32,uint64,uint256,uint32,bytes)");
+    bytes32 internal constant BOX_SPIN = keccak256("BoxSpin(uint32,uint64,uint256,uint256,uint256)");
 
     /// @dev The Degenerette bet buffer the fixtures place into (its word unset at placement).
     uint48 internal constant BET_INDEX = 1;
@@ -72,9 +71,7 @@ abstract contract SmurfFixture is DeployProtocol {
     // Accounts
     // ---------------------------------------------------------------------
 
-    function _smurfKeyOf(address owner, uint32 id) internal pure returns (address) {
-        return address(uint160(uint256(keccak256(abi.encode(SMURF_KEY_TAG, owner, id)))));
-    }
+
 
     /// @dev An ordinary wallet with an ID and ETH.
     function _wallet(string memory name) internal returns (address a, uint32 id) {
@@ -84,13 +81,12 @@ abstract contract SmurfFixture is DeployProtocol {
     }
 
     /// @dev `owner` creates a smurf, paying its admission ticket with fresh ETH.
-    function _createSmurf(address owner) internal returns (uint32 smurfId, address key) {
+    function _createSmurf(address owner) internal returns (uint32 smurfId) {
         uint256 price = game.mintPrice();
         vm.prank(owner);
         smurfId = game.createSmurf{value: price}(bytes32(0), MintPaymentKind.DirectEth);
-        key = _smurfKeyOf(owner, smurfId);
-        assertEq(game.walletIdOf(key), smurfId, "fixture: smurf key registered");
-        assertEq((game.mintPackedFor(key) >> BitPackingLib.SMURF_FLAG_SHIFT) & 1, 1, "fixture: smurf flag");
+
+        assertEq((_fixtureMint(smurfId) >> BitPackingLib.SMURF_FLAG_SHIFT) & 1, 1, "fixture: smurf flag");
         assertEq((ext.x_walletElement(smurfId) >> 160) & 0xffffffff, game.walletIdOf(owner), "fixture: owner lane");
     }
 
@@ -98,30 +94,11 @@ abstract contract SmurfFixture is DeployProtocol {
     // Balances
     // ---------------------------------------------------------------------
 
-    /// @dev Every token a protocol payout can hand a player: none may sit at a smurf key.
-    function _assertHoldsNothing(address key) internal view {
-        assertEq(key.balance, 0, "smurf key holds no ETH");
-        assertEq(coin.balanceOf(key), 0, "smurf key holds no FLIP");
-        assertEq(wwxrp.balanceOf(key), 0, "smurf key holds no WWXRP");
-        assertEq(sdgnrs.balanceOf(key), 0, "smurf key holds no sDGNRS");
-        assertEq(dgnrs.balanceOf(key), 0, "smurf key holds no DGNRS");
-        assertEq(afkingSubToken.balanceOf(key), 0, "smurf key holds no seat");
-        assertEq(deityPass.balanceOf(key), 0, "smurf key holds no deity pass");
-        assertEq(recordBounty.balanceOf(key), 0, "smurf key holds no record trophy");
-    }
-
-    /// @dev sDGNRS pool transfers in `logs`: the total to `to`, and the count to `other`.
-    function _poolTransfers(Vm.Log[] memory logs, address to, address other)
-        internal
-        view
-        returns (uint256 total, uint256 toOther)
-    {
+    /// @dev Sum sDGNRS pool transfers to the expected payout recipient.
+    function _poolTransfers(Vm.Log[] memory logs, address to) internal view returns (uint256 total) {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(sdgnrs) || logs[i].topics[0] != POOL_TRANSFER) continue;
-            address recipient = address(uint160(uint256(logs[i].topics[2])));
-            uint256 amount = abi.decode(logs[i].data, (uint256));
-            if (recipient == to) total += amount;
-            if (recipient == other) ++toOther;
+            if (address(uint160(uint256(logs[i].topics[2]))) == to) total += abi.decode(logs[i].data, (uint256));
         }
     }
 
@@ -145,11 +122,11 @@ abstract contract SmurfFixture is DeployProtocol {
     }
 
     /// @dev The bet id of the newest DegeneretteBetPlaced in `logs`.
-    function _placedBetId(Vm.Log[] memory logs) internal view returns (uint64 betId, address player) {
+    function _placedBetId(Vm.Log[] memory logs) internal view returns (uint64 betId, uint32 player) {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter == address(game) && logs[i].topics[0] == BET_PLACED) {
                 betId = uint64(uint256(logs[i].topics[3]));
-                player = address(uint160(uint256(logs[i].topics[1])));
+                player = uint32(uint256(logs[i].topics[1]));
             }
         }
     }

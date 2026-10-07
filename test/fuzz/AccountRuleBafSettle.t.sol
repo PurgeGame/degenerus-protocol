@@ -17,7 +17,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///         authorized zero deposit. Either way the advance must not revert. The drive turbo-chains
 ///         from genesis to the level-10 latch day (the shape of TurboBafTicketFloor's drive).
 contract AccountRuleBafSettle is DeployProtocol {
-    bytes32 private constant COINFLIP_DEPOSIT = keccak256("CoinflipDeposit(address,uint256)");
+    bytes32 private constant COINFLIP_DEPOSIT = keccak256("CoinflipDeposit(uint32,uint256)");
 
     address private buyer = address(0xBA5E1);
     uint256 private simTime;
@@ -86,7 +86,7 @@ contract AccountRuleBafSettle is DeployProtocol {
         for (uint256 j; j < logs.length; ++j) {
             if (logs[j].emitter != address(coinflip) || logs[j].topics.length < 2) continue;
             if (logs[j].topics[0] != COINFLIP_DEPOSIT) continue;
-            if (address(uint160(uint256(logs[j].topics[1]))) != ContractAddresses.VAULT) continue;
+            if (uint32(uint256(logs[j].topics[1])) != 1) continue;
             if (abi.decode(logs[j].data, (uint256)) == 0) ++vaultSettles;
         }
     }

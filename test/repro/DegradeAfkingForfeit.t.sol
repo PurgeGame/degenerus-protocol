@@ -32,7 +32,7 @@ contract AfkingForfeitSeeder is DegenerusGame {
         // Every ring member is box-clean, so the count has no openable stamp behind it.
         uint256 len = _subscribers.length;
         for (uint256 i; i < len; ++i) {
-            Sub storage sub = _subOf[uint32(_subscribers[i] >> 160)];
+            Sub storage sub = _subOf[_subscribers[i]];
             sub.lastOpenedDay = sub.lastAutoBoughtDay;
         }
         _pendingBoxCount = count;
@@ -45,7 +45,7 @@ contract AfkingForfeitSeeder is DegenerusGame {
 
     function pendingBoxCount() external view returns (uint16) { return _pendingBoxCount; }
     function subscribersLength() external view returns (uint256) { return _subscribers.length; }
-    function subscriberAt(uint256 i) external view returns (address) { return address(uint160(_subscribers[i])); }
+    function subscriberAt(uint256 i) external view returns (address) { return _walletKey(_subscribers[i]); }
     function markers(address who) external view returns (uint24 bought, uint24 opened) {
         Sub storage sub = _subOf[_walletIdOf(who)];
         return (sub.lastAutoBoughtDay, sub.lastOpenedDay);
@@ -63,7 +63,7 @@ contract DegradeAfkingForfeitTest is DeployProtocol {
     bytes internal realCode;
     bytes32 private constant FORFEIT = keccak256("AfkingBoxCountForfeited(uint16)");
     bytes32 private constant LOOTBOX_OPENED =
-        keccak256("LootBoxOpened(address,uint48,uint256,uint24,uint32,uint256,bool)");
+        keccak256("LootBoxOpened(uint32,uint48,uint256,uint24,uint32,uint256,bool)");
     uint8 private constant AFKING = 9;
 
     function setUp() public {

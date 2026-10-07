@@ -26,12 +26,6 @@ contract SeatTenureDraw is DeployProtocol {
         }
     }
 
-    event SubDrawWon(
-        address indexed winner,
-        uint24 day,
-        uint24 spanDays,
-        uint256 flipAmount
-    );
 
     uint256 private _lastFulfilledReqId;
 
@@ -90,11 +84,11 @@ contract SeatTenureDraw is DeployProtocol {
         returns (uint256 count, address winner, uint24 day, uint24 span, uint256 flipAmount)
     {
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        bytes32 sig = keccak256("SubDrawWon(address,uint24,uint24,uint256)");
+        bytes32 sig = keccak256("SubDrawWon(uint32,uint24,uint24,uint256)");
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter != address(game) || logs[i].topics[0] != sig) continue;
             count++;
-            winner = address(uint160(uint256(logs[i].topics[1])));
+            winner = _fixturePayee(uint32(uint256(logs[i].topics[1])));
             (day, span, flipAmount) = abi.decode(logs[i].data, (uint24, uint24, uint256));
         }
     }

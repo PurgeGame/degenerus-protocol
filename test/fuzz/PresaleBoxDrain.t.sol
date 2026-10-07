@@ -21,8 +21,8 @@ contract PresaleBoxDrain is DeployProtocol {
     uint256 constant PRESALE_BOX_ETH_CAP = 50 ether;
     uint256 constant QUEUED_ORDER_DOMAIN = 0x5175657565644f72646572; // "QueuedOrder"
     uint256 constant QUEUED_ENTRY_TAG = uint256(1) << 46;
-    bytes32 constant OPENED = keccak256("PresaleBoxOpened(address,uint48,uint256,uint256,uint256,uint256,bool,uint32,uint32)");
-    bytes32 constant SWEPT = keccak256("PresaleBoxRemainderSwept(address,uint256)");
+    bytes32 constant OPENED = keccak256("PresaleBoxOpened(uint32,uint48,uint256,uint256,uint256,uint256,bool,uint32,uint32)");
+    bytes32 constant SWEPT = keccak256("PresaleBoxRemainderSwept(uint32,uint256)");
 
     function setUp() public {
         _deployProtocol();
@@ -176,7 +176,7 @@ contract PresaleBoxDrain is DeployProtocol {
             if (logs[i].emitter != address(game) || logs[i].topics.length == 0) continue;
             if (logs[i].topics[0] == OPENED) {
                 assertLt(t.opened, buyers.length, "no duplicate resolution");
-                assertEq(address(uint160(uint256(logs[i].topics[1]))), buyers[t.opened], "FIFO recipient");
+                assertEq(uint32(uint256(logs[i].topics[1])), game.walletIdOf(buyers[t.opened]), "FIFO recipient");
                 assertEq(
                     uint256(logs[i].topics[2]),
                     QUEUED_ENTRY_TAG | ((base + t.opened) << 1) | index,
@@ -191,7 +191,7 @@ contract PresaleBoxDrain is DeployProtocol {
             } else if (logs[i].topics[0] == SWEPT) {
                 assertEq(t.opened, buyers.length, "the remainder follows every resolution");
                 assertFalse(t.sawSweep, "remainder paid once");
-                assertEq(address(uint160(uint256(logs[i].topics[1]))), buyers[buyers.length - 1]);
+                assertEq(uint32(uint256(logs[i].topics[1])), game.walletIdOf(buyers[buyers.length - 1]));
                 t.swept = abi.decode(logs[i].data, (uint256));
                 t.sawSweep = true;
             }

@@ -47,7 +47,7 @@ interface IWWXRP {
     /// @notice Mint prize tokens to a recipient
     /// @param to The address to receive the prize
     /// @param amount The amount of tokens to mint
-    function mintPrize(address to, uint256 amount) external;
+    function creditPrize(uint32 to, uint256 amount) external;
 }
 
 /// @notice The craps table's day-pass door. Called ONCE per lootbox entry that rolled any pass,
@@ -95,7 +95,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     // =========================================================================
 
     /// @notice Emitted when an ETH lootbox is successfully opened
-    /// @param player The player who opened the lootbox
+    /// @param id The reward account's wallet ID.
     /// @param lootboxIndex Entry tag: QUEUED_ENTRY_TAG | position << 1 | buffer for a queued
     ///        entry; REDEMPTION_INDEX_TAG | batchId for an sDGNRS redemption order; 0 for the
     ///        single-box resolvers. With the sealed session it identifies the entry permanently.
@@ -106,7 +106,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param roundedUp True iff the Bernoulli round-up incremented the awarded
     ///        whole-ticket count by 1
     event LootBoxOpened(
-        address indexed player,
+        uint32 indexed id,
         uint48 indexed lootboxIndex,
         uint256 amount,
         uint24 futureLevel,
@@ -116,7 +116,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     );
 
     /// @notice Emitted when a lootbox awards a whale pass jackpot
-    /// @param player The player who won the jackpot
+    /// @param id The reward account's wallet ID.
     /// @param targetLevel Level AT BOX-OPEN TIME (`level + 1`), reported for
     ///        downstream indexers. Ticket queuing is deferred to the player-paid
     ///        `claimWhalePass` endpoint; tickets actually get queued at the level
@@ -127,7 +127,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param statsBoost 0 at open; stats are applied at `claimWhalePass`
     /// @param frozenUntilLevel 0 at open; the freeze is applied at `claimWhalePass`
     event LootBoxWhalePassJackpot(
-        address indexed player,
+        uint32 indexed id,
         uint256 lootboxAmount,
         uint24 targetLevel,
         uint32 entriesPerLevel,
@@ -138,18 +138,18 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @notice Aggregated DGNRS settlement for an opened entry's contiguous reward batch.
     /// @dev An ETH-spin boundary may split one entry into multiple batches because that spin can
     ///      recursively open another box and mutate the same pool.
-    /// @param player Reward recipient.
+    /// @param id The reward account's wallet ID.
     /// @param requested Total DGNRS this contiguous batch priced (pre-clamp).
     /// @param paid DGNRS actually credited from the pool.
-    event LootBoxDgnrsBatch(address indexed player, uint256 requested, uint256 paid);
+    event LootBoxDgnrsBatch(uint32 indexed id, uint256 requested, uint256 paid);
 
     /// @notice A lootbox entry rolled Craps day passes. `day` is the future day one of them was
     ///         placed on, or zero where none could be — in which case every pass was banked as
     ///         credit instead. Emitted once per entry, never once per box.
-    event LootBoxCrapsPasses(address indexed player, uint32 normal, uint32 highRoller, uint24 day);
+    event LootBoxCrapsPasses(uint32 indexed id, uint32 normal, uint32 highRoller, uint24 day);
 
     /// @notice Emitted when a coin-presale box is resolved.
-    /// @param player The box owner.
+    /// @param id The reward account's wallet ID.
     /// @param index Entry tag (see `LootBoxOpened.lootboxIndex`).
     /// @param amount The box ETH resolved.
     /// @param flip FLIP credited: the whole collapsed roll when the 50% FLIP-valued branch
@@ -162,7 +162,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param normalPasses Normal Craps day passes credited by the pass side (0 otherwise).
     /// @param highPasses High-roller Craps day passes credited by the pass side (0 otherwise).
     event PresaleBoxOpened(
-        address indexed player,
+        uint32 indexed id,
         uint48 indexed index,
         uint256 amount,
         uint256 flip,
@@ -175,23 +175,23 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
     /// @notice The Pool.PresaleBox remainder, paid inside the closing purchase's own presale
     ///         resolution: every earlier presale box has settled by then.
-    /// @param player The closing box's buyer.
+    /// @param id The reward account's wallet ID.
     /// @param dgnrs DGNRS swept (the pool's whole remaining balance).
-    event PresaleBoxRemainderSwept(address indexed player, uint256 dgnrs);
+    event PresaleBoxRemainderSwept(uint32 indexed id, uint256 dgnrs);
 
     /// @notice Unified lootbox reward event for boon awards
-    /// @param player The player receiving the reward
+    /// @param id The reward account's wallet ID.
     /// @param rewardType The type of reward (2=CoinflipBoon, 4=Boost5, 5=Boost15, 6=Boost25/Purchase, 8=DecimatorBoost, 9=WhaleBoon, 10=ActivityBoon/DeityPassBoon, 11=LazyPassBoon, 12=QuestShield, 13=DegeneretteBoon, 14=CrapsBoon)
     /// @param amount Primary reward amount (varies by type: BPS for boosts, token amount for boons; for type 13 the rolled boonType 32-40, which identifies the boon's currency and size)
-    event LootBoxReward(address indexed player, uint8 indexed rewardType, uint256 lootboxAmount, uint256 amount);
+    event LootBoxReward(uint32 indexed id, uint8 indexed rewardType, uint256 lootboxAmount, uint256 amount);
 
     /// @notice Emitted when a lootbox-drawn boon is discarded instead of delivered — the
     ///         statically-drawn type is a deity-pass discount and the player already holds a
     ///         pass or supply is capped. Every other type, decimator tiers included, is
     ///         delivered. Nothing is written; the draw itself stays fully deterministic.
-    /// @param player The player whose draw was discarded
+    /// @param id The reward account's wallet ID.
     /// @param boonType The statically-drawn boon type that was discarded
-    event BoonDiscarded(address indexed player, uint8 boonType);
+    event BoonDiscarded(uint32 indexed id, uint8 boonType);
 
     /// @notice Emitted when a deity issues a boon to another player
     /// @param deity The deity pass holder issuing the boon
@@ -200,7 +200,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param slot The slot index (0-2) of the boon
     /// @param boonType The type of boon issued (1-43; 10-12 and 20-21 are unused)
     event DeityBoonIssued(
-        address indexed deity, address indexed recipient, uint24 indexed day, uint8 slot, uint8 boonType
+        uint32 indexed deity, uint32 indexed recipient, uint24 indexed day, uint8 slot, uint8 boonType
     );
 
     // =========================================================================
@@ -425,11 +425,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///         declarations — one box-buy event across every path.
     /// @param index Physical write buffer (0/1) the entry joined.
     /// @param position The entry's zero-based position in that buffer.
-    event LootBoxBuy(address indexed buyer, uint48 indexed index, uint32 position, uint256 amount);
+    event LootBoxBuy(uint32 indexed buyer, uint48 indexed index, uint32 position, uint256 amount);
 
     /// @notice Emitted when a lootbox-boost boon is consumed by a buy.
     event BoostUsed(
-        address indexed player, uint24 indexed day, uint256 originalAmount, uint256 boostedAmount, uint16 boostBps
+        uint32 indexed player, uint24 indexed day, uint256 originalAmount, uint256 boostedAmount, uint16 boostBps
     );
 
     /// @dev Floor for the biggest-box bounty.
@@ -453,7 +453,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Consume the player's lootbox-boost boon, if live, and return the uplift in wei.
     ///      Deity-granted boosts are valid only on their grant day; others expire after
     ///      BOX_BOOST_EXPIRY_DAYS. Either way the boon is cleared here — it is one-shot.
-    function _consumeBoxBoost(address player, uint32 id, uint256 amount) private returns (uint256 extra) {
+    function _consumeBoxBoost(uint32 id, uint256 amount) private returns (uint256 extra) {
         BoonPacked storage bp = boonPacked[id];
         uint256 s0 = bp.slot0;
         uint8 tier = uint8(s0 >> BP_LOOTBOX_TIER_SHIFT);
@@ -474,7 +474,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint16 boostBps = _lootboxTierToBps(tier);
         extra = _boostAmount(amount, boostBps);
         bp.slot0 = s0 & BP_LOOTBOX_CLEAR;
-        emit BoostUsed(player, day, amount, amount + extra, boostBps);
+        emit BoostUsed(id, day, amount, amount + extra, boostBps);
     }
 
     /// @notice Build a purchase's ordinary entry: validate and price the order at the active
@@ -482,7 +482,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///         Nothing is queued here — `applyBoxOrderScore` finalizes the word and the caller
     ///         appends it once every leg of the purchase is complete.
     /// @dev Delegatecall entrypoint from the Mint module; runs in the Game's storage context.
-    /// @param buyer Player the entry is for (already registered).
     /// @param buyerId The buyer's wallet ID.
     /// @param boxOrder Packed purchase input: [small:8][med:8][large:8][customCount:8][customSize:56 gwei].
     /// @return costWei Total wei the order costs.
@@ -491,7 +490,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///         two live locals there is exactly what tips it into a Yul stack-too-deep.
     /// @return flipCredit Any biggest-box bounty claim, to join the buyer's flip credit.
     /// @return word The in-flight entry word, still missing its score and EV fraction.
-    function beginBoxOrder(address buyer, uint32 buyerId, uint256 boxOrder)
+    function beginBoxOrder(uint32 buyerId, uint256 boxOrder)
         external
         payable
         returns (uint256 costWei, uint256 shares, uint256 flipCredit, uint256 word)
@@ -499,7 +498,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         (word, costWei) = _decodeBoxOrder(boxOrder, _activeTicketLevel());
         // The boost is capped at a quarter of the spend, so the fraction fits its lane.
-        word |= uint256(buyerId) | ((_consumeBoxBoost(buyer, buyerId, costWei) * 10_000 / costWei) << LB_BOOST_SHIFT);
+        word |= uint256(buyerId) | ((_consumeBoxBoost(buyerId, costWei) * 10_000 / costWei) << LB_BOOST_SHIFT);
         bool distress = _isDistressMode();
         if (distress) word |= LB_DISTRESS;
 
@@ -550,7 +549,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      storage context. The size is whole gwei per box; the remainder is reward-side only,
     ///      since the paid and credited ETH stays in the callers' accounting. A grant below one
     ///      gwei per box appends nothing and never blocks the caller.
-    /// @param player Player receiving the boxes (registered; its mint word is already loaded).
+    /// @param id Player receiving the boxes (registered; its mint word is already loaded).
     /// @param amountWei Box spend in wei.
     /// @param score Caller's activity-score snapshot.
     /// @param capKey Level key for the shared per-(wallet, level) EV-cap accumulator.
@@ -558,7 +557,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///        purchases yes, afking no).
     /// @param count Custom boxes (one per pass bought, at most 100); zero for the afking cover.
     function recordCoverBox(
-        address player,
+        uint32 id,
         uint256 amountWei,
         uint16 score,
         uint24 capKey,
@@ -568,19 +567,18 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         uint256 size = amountWei / ((count == 0 ? 1 : uint256(count)) * LB_SIZE_UNIT);
         if (size == 0) return;
-        uint32 id = _walletIdOf(player);
         uint256 capped = score > ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS
             ? ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS
             : score;
         uint256 word = uint256(id) | (uint256(_activeTicketLevel()) << LB_LEVEL_SHIFT) | (capped << LB_SCORE_SHIFT)
             | (size << LB_SIZE_SHIFT) | (count == 0 ? LB_COVER : uint256(count) << LB_CUSTOM_COUNT_SHIFT);
         if (boost) {
-            word |= (_consumeBoxBoost(player, id, amountWei) * 10_000 / amountWei) << LB_BOOST_SHIFT;
+            word |= (_consumeBoxBoost(id, amountWei) * 10_000 / amountWei) << LB_BOOST_SHIFT;
             if (_isDistressMode()) word |= LB_DISTRESS;
         }
         word |= (_drawEvBenefit(id, capKey, amountWei, capped) * 10_000 / amountWei) << LB_EV_SHIFT;
         (uint48 idx, uint32 position) = _appendBoxEntry(word, amountWei);
-        emit LootBoxBuy(player, idx, position, amountWei);
+        emit LootBoxBuy(id, idx, position, amountWei);
     }
 
     /// @dev The EV-cap draw an entry's EV fraction records: a bonus score (mult > NEUTRAL)
@@ -628,13 +626,19 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint32 passHigh;
         // The entry owner's wallet ID, handed to a nested ETH spin so it needs no lookup.
         uint32 id;
+        address payee; // Filled only when a token payout needs it.
+    }
+
+    /// @dev Resolve a token recipient once per entry, only on a path that transfers tokens.
+    function _boxPayee(BoxAcc memory acc) private view returns (address) {
+        if (acc.payee == address(0)) acc.payee = _payee(_walletElement(acc.id));
+        return acc.payee;
     }
 
     /// @dev Resolution context for one entry, carried as a single memory struct rather than a
     ///      spread of locals: the tier loop threads all of it, and a wide parameter list here is
     ///      exactly what tips this module into a Yul stack-too-deep.
     struct BoxRoll {
-        address player;
         uint32 id; // the entry's wallet ID: the owner input of every seed
         uint48 index; // event tag: the entry reference or the redemption batch tag
         uint256 rootWord; // committed per-entry root every box seed derives from
@@ -650,27 +654,25 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     }
 
     /// @dev Storage-free order core: resolve every box of the entry `word` for wallet `id`
-    ///      (account `player`) off `rootWord`, then settle the entry. Box `n` (1-based across
+    ///      off `rootWord`, then settle the entry. Box `n` (1-based across
     ///      all tiers) seeds from hash4(rootWord, id, BOX_OPEN_TAG, n) and the entry's boon
     ///      draws from hash4(rootWord, id, BOX_BOON_TAG, boonIndex). Queued entries pass their
     ///      order root and physical buffer; the sDGNRS redemption order passes its ID-mixed word
     ///      and its tagged batch, which no buffer can equal. Every box in the entry resolves as
     ///      its OWN roll at its OWN size — a small rolls small and a medium rolls medium.
     function _rollOrder(
-        address player,
         uint32 id,
         uint256 rootWord,
         uint256 boonIndex,
         uint48 eventRef,
         uint256 word,
-        uint24 currentLevel
+        uint24 currentLevel,
+        BoxAcc memory acc
     ) private {
-        // `c`'s declaration allocates its nested BoxAcc; use it directly rather than
-        // allocating a second one and repointing.
+        // Share the entry's lazy token-recipient cache with its presale leg.
         BoxRoll memory c;
-        c.player = player;
         c.id = id;
-        c.acc.id = id;
+        c.acc = acc;
         c.index = eventRef;
         c.rootWord = rootWord;
         c.boonSeed = EntropyLib.hash4(rootWord, uint256(id), BOX_BOON_TAG, boonIndex);
@@ -704,7 +706,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // Final settlement for the whole entry: one call per remaining fungible lane, one ticket
         // write per distinct level. DGNRS may already be checkpointed at an ETH-spin boundary.
         // Boon draws have completed before this remaining fungible/ticket flush.
-        _flushBoxAcc(player, id, c.acc, currentLevel);
+        _flushBoxAcc(id, c.acc, currentLevel);
     }
 
     /// @dev Re-raise a failed nested module call with its own revert data. Empty data (the
@@ -720,13 +722,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev One box's boon draw, for the resolvers that settle a single box outside the
     ///      entry sweep (afking covers, degenerette auto-resolve, ETH-spin recirc).
     ///      Identical draw to the entry path's per-tier call;
-    ///      `seed` is the box's own player-specific resolution seed, drawn at nonce 0.
-    function _rollSingleBoxBoons(address player, uint32 id, uint256 amount, uint24 currentLevel, uint256 seed) private {
+    ///      `seed` is the box's own account-specific resolution seed, drawn at nonce 0.
+    function _rollSingleBoxBoons(uint32 id, uint256 amount, uint24 currentLevel, uint256 seed) private {
         (bool ok, bytes memory data) = ContractAddresses.GAME_BOON_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
                     IDegenerusGameBoonModule.rollBoxBoons.selector,
-                    player,
                     id,
                     _lootboxBoonBudget(amount),
                     1,
@@ -742,7 +743,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Settle an entry's remaining accumulated rewards: one call per fungible lane, one
     ///      ticket write per distinct target level. DGNRS may already have been checkpointed at
     ///      an ETH-spin recursion boundary; every other lane settles only here.
-    function _flushBoxAcc(address player, uint32 id, BoxAcc memory acc, uint24 currentLevel) private {
+    function _flushBoxAcc(uint32 id, BoxAcc memory acc, uint24 currentLevel) private {
         uint256 touched = acc.ticketTouched;
         while (touched != 0) {
             // Find the least-significant set bit in six bounded steps (all lanes are 0..50),
@@ -778,15 +779,15 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             }
         }
         if (acc.dgnrs != 0) {
-            uint256 paid = _creditDgnrsReward(id, acc.dgnrs);
+            uint256 paid = _creditDgnrsReward(acc, acc.dgnrs);
             // One aggregated emit for the entry's remaining batch, under its OWN event: reusing the per-box
             // LootBoxDgnrsReward schema would silently put DGNRS units in a field indexers
             // read as box ETH.
-            if (paid != 0) emit LootBoxDgnrsBatch(player, acc.dgnrs, paid);
+            if (paid != 0) emit LootBoxDgnrsBatch(id, acc.dgnrs, paid);
         }
         if (acc.flip != 0) coinflip.creditFlip(id, acc.flip);
-        if (acc.wwxrp != 0) wwxrp.mintPrize(_payee(_walletElement(id)), acc.wwxrp);
-        if ((acc.passNormal | acc.passHigh) != 0) _deliverPasses(player, id, acc);
+        if (acc.wwxrp != 0) wwxrp.creditPrize(id, acc.wwxrp);
+        if ((acc.passNormal | acc.passHigh) != 0) _deliverPasses(id, acc);
     }
 
     /// @dev Hand the entry's whole pass award to the craps table in ONE call — not one per winning
@@ -798,11 +799,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      The roll is announced from HERE, and the table's own `CrapsPassesCredited` /
     ///      `CrapsDayReserved` logs say which disposition it landed in, so an indexer reconciles
     ///      every rolled pass.
-    function _deliverPasses(address player, uint32 id, BoxAcc memory acc) private {
+    function _deliverPasses(uint32 id, BoxAcc memory acc) private {
         uint24 day = ICrapsPassDelivery(ContractAddresses.CRAPS).deliverPasses(
             id, acc.passNormal, acc.passHigh
         );
-        emit LootBoxCrapsPasses(player, acc.passNormal, acc.passHigh, day);
+        emit LootBoxCrapsPasses(id, acc.passNormal, acc.passHigh, day);
     }
 
     /// @dev Add whole tickets to one target-level offset and remember that offset on first touch.
@@ -842,7 +843,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             .delegatecall(
                 abi.encodeWithSelector(
                     IDegenerusGameBoonModule.rollBoxBoons.selector,
-                    c.player,
                     c.id,
                     _lootboxBoonBudget(scaled),
                     count,
@@ -856,7 +856,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     }
 
     /// @dev Roll `count` boxes of `size` wei each. Every box takes its own seed — the nonce is
-    ///      its position in the entry — so two same-size boxes from one player at one index draw
+    ///      its position in the entry — so two same-size boxes from one id at one index draw
     ///      independently (their outcomes may still coincide). Returns zero for an empty lane,
     ///      otherwise its scaled size.
     function _rollTier(BoxRoll memory c, uint256 count, uint256 size) private returns (uint256 scaled) {
@@ -884,7 +884,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                 // Size only prices the award; the nonce already distinguishes every box.
                 uint256 seed = EntropyLib.hash4(c.rootWord, uint256(c.id), BOX_OPEN_TAG, ++c.nonce);
                 _resolveLootboxCommon(
-                    c.player,
+                    c.id,
                     c.index,
                     scaled,
                     _rollTargetLevel(c.currentLevel, seed),
@@ -929,7 +929,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             .delegatecall(
                 abi.encodeWithSelector(
                     IDegenerusGameBoonModule.rollBoxBoonTiers.selector,
-                    c.player,
                     c.id,
                     amounts,
                     countsPacked,
@@ -952,8 +951,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      advanced cursor before this call, so an entry settles at most once. The entry's
     ///      root binds the cohort word to the entry's buffer and position, both fixed when the
     ///      purchase appended it, before that buffer's word was requested; every box, boon and
-    ///      presale seed then mixes the stored wallet ID. The address is decoded once, for the
-    ///      address-keyed boons and the token payouts.
+    ///      presale seed then mixes the stored wallet ID. Token recipients are decoded only
+    ///      when a payout transfers tokens.
     /// @param buffer Physical read buffer (0/1).
     /// @param position The entry's zero-based position in that buffer.
     /// @param entry The stored entry word.
@@ -963,14 +962,15 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         external
     {
         uint32 id = uint32(entry);
-        address player = _walletKey(id);
+        BoxAcc memory acc;
+        acc.id = id;
         uint256 rootWord = EntropyLib.hash4(QUEUED_ORDER_DOMAIN, rngWord, buffer, position);
         uint48 ref = QUEUED_ENTRY_TAG | (uint48(position) << 1) | buffer;
-        if (_boxEntryCount(entry) != 0) _rollOrder(player, id, rootWord, buffer, ref, entry, currentLevel);
+        if (_boxEntryCount(entry) != 0) _rollOrder(id, rootWord, buffer, ref, entry, currentLevel, acc);
         uint256 presale = (entry >> LB_PRESALE_SHIFT) & LB_PRESALE_MASK;
         if (presale != 0) {
             _resolvePresaleBox(
-                player,
+                acc,
                 ref,
                 presale,
                 entry,
@@ -986,7 +986,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      WWXRP dud), 40% DGNRS, 10% WWXRP. The closing purchase's box is the last presale box
     ///      ever appended and the FIFO settles it last, so it also takes whatever remains in
     ///      Pool.PresaleBox: no other entry can draw from that pool afterwards.
-    /// @param player Box owner (account key; its payee takes the token prizes).
+    /// @param acc Entry accumulator holding the owner ID and lazy token-recipient cache.
     /// @param ref Event tag (QUEUED_ENTRY_TAG | position << 1 | buffer).
     /// @param amount Exact applied presale wei.
     /// @param entry The entry word (frozen tier and closing flag).
@@ -994,7 +994,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param currentLevel Open level (`level + 1`); prices the FLIP branch's budget-to-coin
     ///        conversion. The DGNRS branch pays tokens and reads no price.
     function _resolvePresaleBox(
-        address player,
+        BoxAcc memory acc,
         uint48 ref,
         uint256 amount,
         uint256 entry,
@@ -1002,8 +1002,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint24 currentLevel
     ) private {
         bool closing = entry & LB_CLOSING != 0;
-        // The entry word's low 32 bits are the owner's wallet ID; its element is warm.
-        address payee = _payee(_walletElement(uint32(entry)));
+        uint32 id = acc.id;
         uint256 outcome = uint16(seed) % 100;
         uint256 flipOut;
         uint256 dgnrsOut;
@@ -1066,7 +1065,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                     else passNormal = uint32(passCount);
                 } else {
                     wwxrpOut = LOOTBOX_WWXRP_PRIZE;
-                    wwxrp.mintPrize(payee, wwxrpOut);
+                    wwxrp.creditPrize(id, wwxrpOut);
                 }
             }
             if (flipOut != 0) {
@@ -1074,20 +1073,20 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             }
         } else if (outcome < 90) {
             // 40% DGNRS: 5-tier %-of-pool curve keyed on the tier frozen at purchase.
-            dgnrsOut = _presaleBoxDgnrsReward(payee, amount, (entry >> LB_TIER_SHIFT) & 7);
+            dgnrsOut = _presaleBoxDgnrsReward(acc, amount, (entry >> LB_TIER_SHIFT) & 7);
         } else {
             // 10% WWXRP: 1 token flavor "dud".
             wwxrpOut = LOOTBOX_WWXRP_PRIZE;
-            wwxrp.mintPrize(payee, wwxrpOut);
+            wwxrp.creditPrize(id, wwxrpOut);
         }
 
-        emit PresaleBoxOpened(player, ref, amount, flipOut, dgnrsOut, wwxrpOut, closing, passNormal, passHigh);
+        emit PresaleBoxOpened(id, ref, amount, flipOut, dgnrsOut, wwxrpOut, closing, passNormal, passHigh);
 
         if (closing) {
             uint256 remaining = dgnrs.poolBalance(IsDGNRS.Pool.PresaleBox);
             if (remaining != 0) {
                 emit PresaleBoxRemainderSwept(
-                    player, dgnrs.transferFromPool(IsDGNRS.Pool.PresaleBox, payee, remaining)
+                    id, dgnrs.transferFromPool(IsDGNRS.Pool.PresaleBox, _boxPayee(acc), remaining)
                 );
             }
         }
@@ -1096,11 +1095,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev Presale-box DGNRS award: tierMultiplier x base x boxEth, base = poolStart/40, at
     ///      the tier frozen at purchase (`_presaleTier`: 3.0x, 2.5x, 2.0x, 1.5x, 1.0x for tiers
     ///      0..4). Snapshots Pool.PresaleBox into presaleBoxDgnrsPoolStart on first resolution.
-    /// @param payee The box owner's payee, credited.
+    /// @param acc Entry accumulator holding the owner ID and lazy token-recipient cache.
     /// @param amount Box ETH for this resolution.
     /// @param tier Frozen tier 0..4.
     /// @return paid Actual DGNRS transferred from the pool.
-    function _presaleBoxDgnrsReward(address payee, uint256 amount, uint256 tier) private returns (uint256 paid) {
+    function _presaleBoxDgnrsReward(BoxAcc memory acc, uint256 amount, uint256 tier) private returns (uint256 paid) {
         uint256 poolStart = presaleBoxDgnrsPoolStart;
         if (poolStart == 0) {
             poolStart = dgnrs.poolBalance(IsDGNRS.Pool.PresaleBox);
@@ -1114,7 +1113,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 tierTenths = PRESALE_BOX_DGNRS_TIER1_TENTHS - PRESALE_BOX_DGNRS_TIER_STEP_TENTHS * tier;
         uint256 dgnrsAmount = SigFigLib.floorToThreeSigFigs((poolStart * tierTenths * amount) / (400 * 1 ether));
         if (dgnrsAmount == 0) return 0;
-        paid = dgnrs.transferFromPool(IsDGNRS.Pool.PresaleBox, payee, dgnrsAmount);
+        paid = dgnrs.transferFromPool(IsDGNRS.Pool.PresaleBox, _boxPayee(acc), dgnrsAmount);
     }
 
     /// @notice Resolve an internal ETH reward spin's recirculated lootbox (normal 10 ETH cap).
@@ -1123,7 +1122,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      draw; ineligible drawn types are discarded at delivery (`_deliverBoon`). Emits
     ///      the per-box `LootBoxOpened` summary like every box path; no cold-bust
     ///      consolation on this auto-resolve path.
-    /// @param player Player address to resolve for
+    /// @param id Wallet ID to resolve for
     /// @param amount ETH amount for the lootbox resolution
     /// @param rngWord RNG word to use for resolution
     /// @param activityScore Whole-point activity score frozen at commitment by the caller —
@@ -1131,26 +1130,26 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     // payable: reachable from the payable redemption path via an ETH-spin's recirc
     // (`resolveEthSpinFromBox` -> `_resolveLootboxDirect`); delegatecall preserves the
     // in-flight msg.value, so a non-payable callvalue guard here would revert the claim.
-    function resolveLootboxDirect(address player, uint32 id, uint256 amount, uint256 rngWord, uint16 activityScore)
+    function resolveLootboxDirect(uint32 id, uint256 amount, uint256 rngWord, uint16 activityScore)
         external
         payable
     {
-        _resolveLootboxDirectCore(player, id, amount, rngWord, activityScore, LOOTBOX_EV_BENEFIT_CAP);
+        _resolveLootboxDirectCore(id, amount, rngWord, activityScore, LOOTBOX_EV_BENEFIT_CAP);
     }
 
     /// @notice Resolve one purchased Degenerette bet's combined win box.
     /// @dev Remaining allowance is checked at settlement. A qualifying box gets a 50 ETH
     ///      ceiling less prior usage, then exhausts the normal allowance if it crosses 10 ETH.
     ///      The activity score and RNG seed remain frozen; no purchase bookkeeping is added.
-    function resolveDegeneretteLootboxDirect(address player, uint32 id, uint256 amount, uint256 rngWord, uint16 activityScore)
+    function resolveDegeneretteLootboxDirect(uint32 id, uint256 amount, uint256 rngWord, uint16 activityScore)
         external
         payable
     {
-        _resolveLootboxDirectCore(player, id, amount, rngWord, activityScore, DEGENERETTE_WIN_EV_CAP);
+        _resolveLootboxDirectCore(id, amount, rngWord, activityScore, DEGENERETTE_WIN_EV_CAP);
     }
 
     function _resolveLootboxDirectCore(
-        address player, uint32 id, uint256 amount, uint256 rngWord, uint16 activityScore, uint256 ceiling
+        uint32 id, uint256 amount, uint256 rngWord, uint16 activityScore, uint256 ceiling
     ) private
     {
         // Delegatecall-only: address(this) == GAME under the nested dispatch. A direct call on the
@@ -1177,15 +1176,15 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         BoxAcc memory acc;
         acc.id = id;
         _resolveLootboxCommon(
-            player, 0, scaledAmount, targetLevel, currentLevel, seed, false, 0, 0, activityScore, false, acc
+            id, 0, scaledAmount, targetLevel, currentLevel, seed, false, 0, 0, activityScore, false, acc
         );
         // Single-box entry: the accumulator exists for uniformity, and flushing it
         // here keeps every reward credit on one path.
-        _flushBoxAcc(player, id, acc, currentLevel);
+        _flushBoxAcc(id, acc, currentLevel);
         // The boon draw the box's 10% haircut paid for. The common resolver takes the
         // haircut for EVERY caller, so every caller must also draw — the entry sweep does
         // it per tier; the single-box resolvers do it here.
-        _rollSingleBoxBoons(player, id, scaledAmount, currentLevel, seed);
+        _rollSingleBoxBoons(id, scaledAmount, currentLevel, seed);
     }
 
     /// @dev Tag bit on a redemption order's index: the batch id rides below it, and a real
@@ -1208,14 +1207,13 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      Per-box seeds come from the redemption entropy, which sDGNRS mixes with the claim's
     ///      beneficiary ID; the order's boon index and event tag are the tagged batch id. The
     ///      pool takes the whole amount, so the size rounding dust stays protocol value.
-    /// @param player Player receiving lootbox rewards
     /// @param id The claim's beneficiary wallet ID
     /// @param amount Total lootbox value to resolve (msg.value ETH + the stETH remainder pulled here)
     /// @param rngWord RNG entropy for lootbox resolution
     /// @param activityScore Snapshotted activity score (whole points) from burn submission
     /// @param batchId The redemption batch the claim belongs to (seed and event tag)
     function resolveRedemptionLootbox(
-        address player, uint32 id, uint256 amount, uint256 rngWord, uint16 activityScore, uint32 batchId
+        uint32 id, uint256 amount, uint256 rngWord, uint16 activityScore, uint32 batchId
     ) external payable {
         if (msg.sender != ContractAddresses.SDGNRS) revert OnlySDGNRS();
         if (amount == 0) return;
@@ -1257,16 +1255,18 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // No queue position: the ID-mixed redemption word is the root and the tagged batch keys
         // the boon draw.
         uint48 tag = REDEMPTION_INDEX_TAG | uint48(batchId);
-        _rollOrder(player, id, rngWord, tag, tag, word, currentLevel);
+        BoxAcc memory acc;
+        acc.id = id;
+        _rollOrder(id, rngWord, tag, tag, word, currentLevel, acc);
     }
 
-    /// @notice Credit the direct half of an sDGNRS redemption claim to `player`'s claimable winnings.
+    /// @notice Credit the direct half of an sDGNRS redemption claim to `id`'s claimable winnings.
     /// @dev Delegatecall target of the Game's creditRedemptionDirect stub, so msg.sender (sDGNRS),
     ///      msg.value, and address(this) (the Game) are all the caller's. The value arrives with the
     ///      same funding mix as resolveRedemptionLootbox — msg.value covers 0..amount and the rest is
     ///      pulled as stETH (sDGNRS pre-approves GAME for max) — so a mid-game ETH-depleted sDGNRS
     ///      still settles. The credit rides the claimable reserve (claimablePool in tandem); the
-    ///      arriving value backs it and the player withdraws via the access-gated claimWinnings.
+    ///      arriving value backs it and the id withdraws via the access-gated claimWinnings.
     /// @param id Claimant wallet ID credited.
     /// @param amount Total direct-half value (msg.value ETH + the stETH remainder pulled here).
     function creditRedemptionDirect(uint32 id, uint256 amount) external payable {
@@ -1295,16 +1295,16 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///           passes the frozen stamp day's word), NOT read from any index-keyed map; and
     ///        2. the seed `day` is the FROZEN stamped process day (a passed param), NOT the
     ///           live `_simulatedDayIndex()` — the day MUST stay frozen in the seed or a
-    ///           self-keepering player could grind the seed by open-timing.
+    ///           self-keepering id could grind the seed by open-timing.
     ///
     ///      The live-level handling matches `resolveLootboxDirect`: `currentLevel = level +
     ///      1` LIVE, `targetLevel = _rollTargetLevel(currentLevel, seed)` rolls from the LIVE
-    ///      level (NO stored baseLevel floor — auto-open removes the player's ability to time
+    ///      level (NO stored baseLevel floor — auto-open removes the id's ability to time
     ///      the level, so the level freeze is unnecessary),
-    ///      and the SINGLE `_applyEvMultiplierWithCap(player, currentLevel, amount,
+    ///      and the SINGLE `_applyEvMultiplierWithCap(id, currentLevel, amount,
     ///      evMultiplierBps)` RMW — the sole residual live-read, a benign monotonic
     ///      down-clamp, keyed on the SAME per-level window of
-    ///      `lootboxEvCapPacked[player]` the human buy-time write uses
+    ///      `lootboxEvCapPacked[id]` the human buy-time write uses
     ///      so the human + afking boxes share the one per-level 10-ETH EV budget.
     ///      The buy-time EV write is bypassed for afking boxes (the process pass STAMPS only),
     ///      so this is the single draw (no double-draw). The cap hard-clamps at 10 ETH with the
@@ -1332,12 +1332,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      module — `resolveAfkingBox` binds the caller-passed active session word;
     ///      `resolveLootboxDirect` reads no day at all and takes the committed word its caller
     ///      passes — the Degenerette's betId-mixed word).
-    /// @param player Box owner (resolved by the GameAfkingModule open-leg from the sub).
+    /// @param id Box owner (resolved by the GameAfkingModule open-leg from the sub).
     /// @param amount The stamped spend in wei (boons OFF ⇒ amount == spend).
     /// @param day The boundary-pinned PROCESS day stamped at process (frozen in the seed).
     /// @param rngWord The active published session word, retained until all pending boxes finish.
     /// @param activityScore The stamped activity score in whole points (the FROZEN EV input).
-    function resolveAfkingBox(address player, uint32 id, uint256 amount, uint24 day, uint256 rngWord, uint16 activityScore)
+    function resolveAfkingBox(uint32 id, uint256 amount, uint24 day, uint256 rngWord, uint16 activityScore)
         external
     {
         if (amount == 0) return;
@@ -1348,35 +1348,35 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 seed = EntropyLib.hash4(rngWord, uint256(id), AFKING_BOX_TAG, day);
 
         // LIVE level, exactly like resolveLootboxDirect: auto-open removes the
-        // player's ability to time the level, so the box rolls from the live level with
+        // id's ability to time the level, so the box rolls from the live level with
         // NO stored baseLevel floor.
         uint24 currentLevel = level + 1;
         uint24 targetLevel = _rollTargetLevel(currentLevel, seed);
 
         // The SINGLE EV-cap RMW at open — the sole residual live-read, a benign
-        // monotonic down-clamp, keyed [player][currentLevel] on the SAME
+        // monotonic down-clamp, keyed [id][currentLevel] on the SAME
         // per-level 10-ETH budget map the human buy-time write uses. Fed the FROZEN
         // evMultiplierBps from the stamped activityScore. Hard-clamped, no revert.
         // sDGNRS's protocol-owned self-subscription boxes are exempt: the full amount
         // takes the multiplier and no per-level budget is drawn — its EV benefit is
         // redemption backing, not a player subsidy to bound.
         uint256 evMultiplierBps = _lootboxEvMultiplierFromScore(uint256(activityScore));
-        uint256 scaledAmount = player == ContractAddresses.SDGNRS
+        uint256 scaledAmount = id == SDGNRS_WALLET_ID
             ? (amount * evMultiplierBps) / 10_000
             : _applyEvMultiplierWithCap(id, currentLevel, amount, evMultiplierBps);
 
         BoxAcc memory acc;
         acc.id = id;
         _resolveLootboxCommon(
-            player, 0, scaledAmount, targetLevel, currentLevel, seed, true, 0, 0, activityScore, true, acc
+            id, 0, scaledAmount, targetLevel, currentLevel, seed, true, 0, 0, activityScore, true, acc
         );
         // Single-box entry: the accumulator exists for uniformity, and flushing it
         // here keeps every reward credit on one path.
-        _flushBoxAcc(player, id, acc, currentLevel);
+        _flushBoxAcc(id, acc, currentLevel);
         // The boon draw the box's 10% haircut paid for. The common resolver takes the
         // haircut for EVERY caller, so every caller must also draw — the entry sweep does
         // it per tier; the single-box resolvers do it here.
-        _rollSingleBoxBoons(player, id, scaledAmount, currentLevel, seed);
+        _rollSingleBoxBoons(id, scaledAmount, currentLevel, seed);
     }
 
     // =========================================================================
@@ -1422,7 +1422,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
     /// @dev Common lootbox resolution logic shared by ETH and FLIP lootboxes.
     ///      Handles whale pass jackpots, lazy pass awards, ticket/FLIP rolls, and boons.
-    /// @param player Player receiving rewards
+    /// @param id Wallet ID receiving rewards
     /// @param index Entry tag (see `LootBoxOpened.lootboxIndex`). Used purely as the
     ///        `lootboxIndex` identifier on the `LootBoxOpened` emit; auto-resolve
     ///        callers pass `0`.
@@ -1465,7 +1465,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///        instead — see `_resolveLootboxRoll`. Directly-opened boxes pass true.
     /// @param acc Running reward accumulator the caller flushes after all of a box's rolls settle.
     function _resolveLootboxCommon(
-        address player,
+        uint32 id,
         uint48 index,
         uint256 amount,
         uint24 targetLevel,
@@ -1486,7 +1486,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // A target >= base + 5 is a far-future roll (near offsets are 0-4), which weights the
         // ticket budget up.
         _settleLootboxRoll(
-            player,
+            id,
             index,
             mainAmount,
             amount,
@@ -1507,7 +1507,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      bonus + single Bernoulli whole-collapse + queue at `rollLevel`, the whole-FLIP
     ///      floor + creditFlip, and one LootBoxOpened. `rollAmount` drives the reward calc;
     ///      `fullAmount` fills the event's amount field. One box resolves here exactly once.
-    /// @param player Player receiving rewards.
+    /// @param id Wallet ID receiving rewards.
     /// @param index Entry tag (see `LootBoxOpened.lootboxIndex`) — event tag only.
     /// @param rollAmount This roll's ETH chunk (the box's main amount, boon budget removed).
     /// @param fullAmount The box's full ETH-equivalent amount — event amount field only, not the reward basis.
@@ -1528,7 +1528,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param acc Running reward accumulator this roll adds its FLIP, whole tickets (by level
     ///        offset), DGNRS, WWXRP and pass output to.
     function _settleLootboxRoll(
-        address player,
+        uint32 id,
         uint48 index,
         uint256 rollAmount,
         uint256 fullAmount,
@@ -1551,7 +1551,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 targetPrice = PriceLookupLib.priceForLevel(rollLevel);
 
         (uint256 flipOut, uint32 scaledWholeTickets, uint256 dgnrsOut, uint256 wwxrpOut, bool wasSpin) = _resolveLootboxRoll(
-            player, rollAmount, targetPrice, rollSeed, isFarFuture, activityScore, allowEthSpin, currentLevel, acc
+            id, rollAmount, targetPrice, rollSeed, isFarFuture, activityScore, allowEthSpin, currentLevel, acc
         );
         acc.dgnrs += dgnrsOut;
         acc.wwxrp += wwxrpOut;
@@ -1609,7 +1609,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         // ETH-spin) are recorded by their own single BoxSpin event from the Degenerette module, so
         // the (all-zero) LootBoxOpened is suppressed for them; every other roll emits LootBoxOpened.
         if (!wasSpin) {
-            emit LootBoxOpened(player, index, fullAmount, rollLevel, scaledWholeTickets, flipAmount, roundedUp);
+            emit LootBoxOpened(id, index, fullAmount, rollLevel, scaledWholeTickets, flipAmount, roundedUp);
         }
     }
 
@@ -1622,7 +1622,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      every box resolved inside a bet resolution (the sweep's `sweepDegeneretteBets`, the
     ///      ETH-pool memory-accumulator context) free of an ETH-pool
     ///      read-modify-write.
-    /// @param player Player receiving the reward
+    /// @param id Wallet ID receiving the reward
     /// @param amount The roll's main amount (box amount less the boon budget)
     /// @param targetPrice Price at the rolled target level (ticket legs only)
     /// @param seed The box's 256-bit keccak seed (sliced inline)
@@ -1650,7 +1650,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      Spin sub-seeds use hash2-tagged chunks (BOX_*_SPIN_TAG), counter-tagged and
     ///      collision-free vs the primary chunk, so they consume no additional primary bits.
     function _resolveLootboxRoll(
-        address player,
+        uint32 id,
         uint256 amount,
         uint256 targetPrice,
         uint256 seed,
@@ -1682,7 +1682,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         } else if (roll < 14) {
             // 15% chance: one WWXRP Degenerette spin staking the roll's size-scaled WWXRP.
             wwxrpOut = _callWwxrpSpin(
-                player, _boxWwxrpSpinStake(amount), activityScore, EntropyLib.hash2(seed, BOX_WWXRP_SPIN_TAG)
+                id, _boxWwxrpSpinStake(amount), activityScore, EntropyLib.hash2(seed, BOX_WWXRP_SPIN_TAG)
             );
             wasSpin = true;
         } else if (roll == 14) {
@@ -1699,14 +1699,14 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             // the holder ends up with is a day's play, not the FLIP the coin roll would have
             // credited. That is the trade the branch is making, not an accident of rounding.
             wasSpin =
-                _rollCrapsPasses(player, _largeFlipOut(amount, seed, currentLevel), amount, seed, activityScore, acc);
+                _rollCrapsPasses(id, _largeFlipOut(amount, seed, currentLevel), amount, seed, activityScore, acc);
         } else if (roll < 19) {
             // 10% chance: three FLIP Degenerette spins under one survival flip. Stake = the
             // would-be large FLIP haircut to 70.60% (LOOTBOX_FLIP_SPINS_STAKE_BPS). Mint-only
             // (no pool / recirc) → safe on every box path.
             uint256 stake = (_largeFlipOut(amount, seed, currentLevel) * LOOTBOX_FLIP_SPINS_STAKE_BPS) / 10_000;
             if (stake != 0) {
-                flipOut = _callFlipSpins(player, stake, activityScore, EntropyLib.hash2(seed, BOX_FLIP_SPIN_TAG));
+                flipOut = _callFlipSpins(id, stake, activityScore, EntropyLib.hash2(seed, BOX_FLIP_SPIN_TAG));
                 wasSpin = true;
             }
         } else {
@@ -1725,10 +1725,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
                     uint256 pendingDgnrs = acc.dgnrs;
                     if (pendingDgnrs != 0) {
                         acc.dgnrs = 0;
-                        uint256 paid = _creditDgnrsReward(acc.id, pendingDgnrs);
-                        if (paid != 0) emit LootBoxDgnrsBatch(player, pendingDgnrs, paid);
+                        uint256 paid = _creditDgnrsReward(acc, pendingDgnrs);
+                        if (paid != 0) emit LootBoxDgnrsBatch(id, pendingDgnrs, paid);
                     }
-                    _callEthSpin(player, acc.id, ethStake, activityScore, EntropyLib.hash2(seed, BOX_ETH_SPIN_TAG));
+                    _callEthSpin(id, ethStake, activityScore, EntropyLib.hash2(seed, BOX_ETH_SPIN_TAG));
                     // The child may have changed Pool.Lootbox even when the parent had nothing
                     // pending. Force any later parent DGNRS roll to observe the live balance.
                     acc.dgnrsPoolLoaded = false;
@@ -1785,7 +1785,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      the coin is even tossed.
     /// @return spun Whether the zero-pass fallback consumed a spin.
     function _rollCrapsPasses(
-        address player,
+        uint32 id,
         uint256 budget,
         uint256 amount,
         uint256 seed,
@@ -1809,7 +1809,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             // Rounded away — take the consolation spin instead. Additive by design: it is not
             // deducted from the budget and not netted off anywhere else.
             acc.wwxrp += _callWwxrpSpin(
-                player, _boxWwxrpSpinStake(amount), activityScore, EntropyLib.hash2(seed, BOX_PASS_SPIN_TAG)
+                id, _boxWwxrpSpinStake(amount), activityScore, EntropyLib.hash2(seed, BOX_PASS_SPIN_TAG)
             );
             return true;
         }
@@ -1833,7 +1833,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     }
 
     /// @dev Delegatecall the Degenerette module's WWXRP box-spin resolver (Game storage context).
-    function _callWwxrpSpin(address player, uint256 stake, uint16 activityScore, uint256 seed)
+    function _callWwxrpSpin(uint32 id, uint256 stake, uint16 activityScore, uint256 seed)
         private
         returns (uint256 wwxrpOut)
     {
@@ -1841,7 +1841,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             .delegatecall(
                 abi.encodeWithSelector(
                     IDegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox.selector,
-                    player,
+                    id,
                     stake,
                     activityScore,
                     seed,
@@ -1853,7 +1853,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     }
 
     /// @dev Delegatecall the Degenerette module's triple-FLIP box-spin resolver.
-    function _callFlipSpins(address player, uint256 stake, uint16 activityScore, uint256 seed)
+    function _callFlipSpins(uint32 id, uint256 stake, uint16 activityScore, uint256 seed)
         private
         returns (uint256 flipOut)
     {
@@ -1861,7 +1861,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             .delegatecall(
                 abi.encodeWithSelector(
                     IDegenerusGameDegeneretteModule.resolveFlipSpinsFromBox.selector,
-                    player,
+                    id,
                     stake,
                     activityScore,
                     seed,
@@ -1873,12 +1873,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     }
 
     /// @dev Delegatecall the Degenerette module's ETH box-spin resolver.
-    function _callEthSpin(address player, uint32 id, uint256 stake, uint16 activityScore, uint256 seed) private {
+    function _callEthSpin(uint32 id, uint256 stake, uint16 activityScore, uint256 seed) private {
         (bool ok, bytes memory data) = ContractAddresses.GAME_DEGENERETTE_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
                     IDegenerusGameDegeneretteModule.resolveEthSpinFromBox.selector,
-                    player,
                     id,
                     stake,
                     activityScore,
@@ -2004,12 +2003,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     }
 
     /// @dev Credit DGNRS reward from the Lootbox pool to box owner `id`'s payee (its own key,
-    ///      or the owner's for a smurf). The element read is warm on the queued-entry path.
-    /// @param id Box owner's wallet ID
+    ///      or the owner's for a smurf). Resolve the payee only on the first token transfer.
+    /// @param acc Entry accumulator holding the owner ID and lazy token-recipient cache.
     /// @param amount Requested DGNRS amount to credit
     /// @return paid Actual DGNRS amount paid from pool
-    function _creditDgnrsReward(uint32 id, uint256 amount) private returns (uint256 paid) {
+    function _creditDgnrsReward(BoxAcc memory acc, uint256 amount) private returns (uint256 paid) {
         if (amount == 0) return 0;
-        paid = dgnrs.transferFromPool(IsDGNRS.Pool.Lootbox, _payee(_walletElement(id)), amount);
+        paid = dgnrs.transferFromPool(IsDGNRS.Pool.Lootbox, _boxPayee(acc), amount);
     }
 }

@@ -26,6 +26,7 @@ contract NativeAtomicDegeneretteTest is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
+        _giveWalletId(PLAYER);
         vm.warp(vm.getBlockTimestamp() + 1 days);
         vm.deal(address(game), 1_000_000 ether);
         vm.deal(PLAYER, 10_000 ether);
@@ -35,12 +36,13 @@ contract NativeAtomicDegeneretteTest is DeployProtocol {
         host.fundFuture();
     }
 
-    function _winningWord(uint32 index, uint8 minimum, bool flip) private pure returns (uint256 word) {
+    function _winningWord(uint32 index, uint8 minimum, bool flip) private view returns (uint256 word) {
+        uint32 playerId = game.walletIdOf(PLAYER);
         for (uint256 nonce;; ++nonce) {
             word = uint256(keccak256(abi.encode("native atomic bet", nonce)));
             (uint8 score,) = Ref.score(Ref.player(word, index, 9, 0, false), Ref.house(word, index, 0, false));
             if (score >= minimum && (!flip || uint256(keccak256(abi.encode(
-                word, uint256(uint160(PLAYER)), uint256(1), uint256(0x446567656e537572766976616c)
+                word, uint256(playerId), uint256(1), uint256(0x446567656e537572766976616c)
             ))) & 1 == 1)) return word;
         }
     }
@@ -116,7 +118,7 @@ contract NativeAtomicDecimatorTest is Test {
         for (uint64 id = 1; id <= 200; ++id) {
             (uint32 chips,) = _board(id);
             vm.prank(ContractAddresses.COIN);
-            host.recordDecBurn(address(uint160(id) + 0x1000), 5, 2000 + uint256(id), 10_000, chips);
+            host.recordFor(address(uint160(id) + 0x1000), 5, 2000 + uint256(id), 10_000, chips);
         }
         host.seal(5, 50 ether, word);
         uint256 runAllowance = GasBounds.DECIMATOR_RUN_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS + 40_000;

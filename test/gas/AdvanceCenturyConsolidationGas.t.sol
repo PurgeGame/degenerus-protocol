@@ -724,7 +724,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
             // reverts; a rolled-back cursor alone would not exclude an early failure.
             vm.expectCall(
                 ContractAddresses.WWXRP,
-                abi.encodeWithSignature("mintPrize(address,uint256)", ContractAddresses.VAULT, 1)
+                abi.encodeWithSignature("creditPrize(uint32,uint256)", uint32(1), 1)
             );
         }
         CenturyNativeGasHost host = CenturyNativeGasHost(payable(address(game)));
@@ -748,7 +748,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         );
         assertEq(_countTopic(logs, keccak256("RedemptionResolved(uint32,uint16,uint16)")), 0, "redemption resolves only after daily work");
         if (historyMode != 0) {
-            bytes32 stateSlot = keccak256(abi.encode(ContractAddresses.VAULT, uint256(2)));
+            bytes32 stateSlot = keccak256(abi.encode(uint32(1), uint256(2)));
             uint24 cursor = uint24(uint256(vm.load(address(coinflip), stateSlot)) >> 128);
             emit log_named_uint("vault_claim_cursor_after", cursor);
             assertEq(cursor, historyMode == 1 ? 399 : 34, "365-day settlement must commit or roll back");

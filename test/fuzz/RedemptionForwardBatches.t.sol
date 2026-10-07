@@ -216,16 +216,11 @@ contract RedemptionForwardBatchesTest is RedemptionFixture {
         vm.deal(address(sdgnrs), ethHeld);
         _giveSteth(stethHeld);
 
-        // Burn as much as the per-wallet day cap and the holding allow (at least the minimum).
+        // No admission cap: any holding may burn, including the last raw token unit.
         uint256 supply = sdgnrs.totalSupply();
-        (uint256 live,) = sdgnrs.previewBurnValue(supply);
         uint256 maxAmount = sdgnrs.balanceOf(alice);
-        if (live > 160 ether) {
-            uint256 capped = 160 ether * supply / live;
-            if (capped < maxAmount) maxAmount = capped;
-        }
-        vm.assume(maxAmount >= 1e18);
-        uint256 amount = bound(amountSeed, 1e18, maxAmount);
+        vm.assume(maxAmount >= 1e12);
+        uint256 amount = bound(amountSeed, 1e12, maxAmount);
         _burn(alice, amount);
         assertEq(sdgnrs.totalSupply(), supply - amount, "the burn leaves supply at once");
 
@@ -391,7 +386,7 @@ contract RedemptionForwardBatchesTest is RedemptionFixture {
     // ---------------------------------------------------------------------
 
     bytes32 internal constant OPENED_TOPIC =
-        keccak256("LootBoxOpened(address,uint48,uint256,uint24,uint32,uint256,bool)");
+        keccak256("LootBoxOpened(uint32,uint48,uint256,uint24,uint32,uint256,bool)");
 
     /// @dev Resolve one lootbox leg as sDGNRS would; return gas, opened-box events and the
     ///      expected order shape.
@@ -410,8 +405,7 @@ contract RedemptionForwardBatchesTest is RedemptionFixture {
         vm.recordLogs();
         vm.prank(address(sdgnrs));
         uint256 g0 = gasleft();
-        game.resolveRedemptionLootbox{value: amount}(
-            alice, aliceId, amount, uint256(keccak256(abi.encode("leg", amount))), 300, batchId
+        game.resolveRedemptionLootbox{value: amount}(aliceId, amount, uint256(keccak256(abi.encode("leg", amount))), 300, batchId
         );
         gasUsed = g0 - gasleft();
         Vm.Log[] memory logs = vm.getRecordedLogs();

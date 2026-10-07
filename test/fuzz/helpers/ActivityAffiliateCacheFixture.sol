@@ -8,29 +8,31 @@ import {DegenerusAffiliate} from "../../../contracts/DegenerusAffiliate.sol";
 import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 
 contract ActivityAffiliateCacheHost is DegenerusGameMintStreakUtils {
-    function seed(address player, uint256 packed, uint24 currentLevel) external {
-        mintPacked_[player] = packed;
+    function seed(address player, uint256 packed, uint24 currentLevel) external returns (uint32 id) {
+        if (wallets.length == 0) wallets.push();
+        if (player != address(0)) (id,) = _registerWallet(player, type(uint256).max);
+        mintPacked_[id] = packed;
         level = currentLevel;
     }
-    function packedOf(address player) external view returns (uint256) { return mintPacked_[player]; }
+    function packedOf(address player) external view returns (uint256) { return mintPacked_[_walletIdOf(player)]; }
     function score(address player, uint32 streak, uint24 basis) external view returns (uint256) {
-        return _playerActivityScoreAt(player, streak, basis, level);
+        return _playerActivityScoreAt(_walletIdOf(player), streak, basis, level);
     }
     /// @dev Non-view transaction wrapper gives uncached/cached benchmarks identical
     /// CALL isolation and intrinsic-gas treatment; the score calculation is unchanged.
     function scoreUncached(address player, uint32 streak, uint24 basis) external returns (uint256) {
-        return _playerActivityScoreAt(player, streak, basis, level);
+        return _playerActivityScoreAt(_walletIdOf(player), streak, basis, level);
     }
     function scoreCached(address player, uint32 streak, uint24 basis) external returns (uint256) {
-        return _playerActivityScoreCachedAt(player, streak, basis, level);
+        return _playerActivityScoreCachedAt(_walletIdOf(player), streak, basis, level);
     }
-    function record(address player, uint24 target, uint32 units) external { _recordMintData(player, target, units); }
+    function record(address player, uint24 target, uint32 units) external { _recordMintData(_walletIdOf(player), target, units); }
 }
 
 abstract contract ActivityAffiliateCacheFixture is Test {
-    uint256 internal constant CACHE_MASK = ((uint256(1) << 30) - 1) << 185;
+    uint256 internal constant CACHE_MASK = ((uint256(1) << 30) - 1) << 173;
     address internal constant PLAYER = address(0xA11CE);
-    uint32 internal constant PLAYER_ID = 0xA11CE;
+    uint32 internal constant PLAYER_ID = 1;
     ActivityAffiliateCacheHost internal host;
     DegenerusAffiliate internal affiliate;
 
@@ -48,13 +50,8 @@ abstract contract ActivityAffiliateCacheFixture is Test {
         assertEq(affiliate.affiliateScore(lvl, id), earned);
     }
 
-    /// @dev The mint word carries the wallet ID (bits 224..255) the Game passes to Affiliate.
-    function _withId(uint256 packed, uint32 id) internal pure returns (uint256) {
-        return (packed & ~(uint256(type(uint32).max) << 224)) | (uint256(id) << 224);
-    }
-
     function _stale(uint256 packed, uint24 lvl) internal pure returns (uint256) {
-        return (packed & ~CACHE_MASK) | (uint256(lvl ^ 1) << 185);
+        return (packed & ~CACHE_MASK) | (uint256(lvl ^ 1) << 173);
     }
 
     function _cacheAccesses(Vm.AccountAccess[] memory accesses, address target)

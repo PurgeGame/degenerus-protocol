@@ -46,14 +46,6 @@ contract IncineratorStallAwardGuard is DeployProtocol {
     bytes32 private constant DOM_INCIN_WINNER = "WWXRP_INCIN_WINNER";
     uint256 private constant BPS = 10_000;
 
-    event IncineratorEntered(
-        uint24 indexed bracket,
-        address indexed player,
-        uint32 entryIndex,
-        uint256 burnAmount,
-        uint256 effectiveScore,
-        uint256 cumulativeScore
-    );
 
     event IncineratorResolved(
         uint24 indexed bracket,
@@ -180,11 +172,11 @@ contract IncineratorStallAwardGuard is DeployProtocol {
             if (currentLevel > 100) break;
 
             if (currentLevel == 99 && !entered) {
-                _enterAs(alice, 100 ether);
-                _enterAs(bob, 300 ether);
+                _enterAs(alice, 100);
+                _enterAs(bob, 300);
                 entered = true;
             }
-            if (currentLevel >= 99) _selfDeposit(depositor, 1_000 ether);
+            if (currentLevel >= 99) _selfDeposit(depositor, 1_000);
 
             simTime += 1 days + 1;
             vm.warp(simTime);
@@ -210,7 +202,7 @@ contract IncineratorStallAwardGuard is DeployProtocol {
         assertGt(armedDay, 0, "the x00 last-purchase day armed the draw");
 
         // Deposits made after the seal, still on the sealed day, stake the armed day.
-        _selfDeposit(depositor, 5_000 ether);
+        _selfDeposit(depositor, 5_000);
         (, uint96 bookTotal, uint32 bookCount) = coinflip.bafDrawInfo();
         assertGt(bookCount, 0, "the armed day's book has entries");
         assertGt(bookTotal, 0, "the armed day's book has weight");
@@ -316,11 +308,11 @@ contract IncineratorStallAwardGuard is DeployProtocol {
             uint24 currentLevel = game.level();
             if (game.gameOver() || currentLevel > 100) break;
             if (currentLevel == 99 && !entered) {
-                _enterAs(alice, 100 ether);
-                _enterAs(bob, 300 ether);
+                _enterAs(alice, 100);
+                _enterAs(bob, 300);
                 entered = true;
             }
-            if (currentLevel >= 99) _selfDeposit(depositor, 1_000 ether);
+            if (currentLevel >= 99) _selfDeposit(depositor, 1_000);
             simTime += 1 days + 1;
             vm.warp(simTime);
             _seedNextPrizePool(49.9 ether + d * 10 ether);

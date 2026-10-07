@@ -231,7 +231,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
     ///      larger rewards floor to whole FLIP (DegenerusGameMinerModule.mineFlip).
     function _wholeFlip(uint256 priced) private pure returns (uint256) {
         if (priced == 0) return 0;
-        return priced < 1 ether ? 1 ether : (priced / 1 ether) * 1 ether;
+        return priced < 1 ether ? 1 : priced / 1 ether;
     }
 
     /// @dev The miner reward clock's origin: `rngRequestTime`, slot 0 bits 48..95. The engine

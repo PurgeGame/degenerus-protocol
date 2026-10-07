@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 // Permanently skipped historical cases were retired in the test review.
 // See docs/TEST_REVIEW.md for replacement suites and remaining coverage limits.
 
+import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -79,10 +80,10 @@ contract AfKingFundingWaterfall is DeployProtocol {
     uint256 private constant OFF_DAILY = 0; // uint8  dailyQuantity     (byte 0)
     uint256 private constant OFF_LASTBOUGHT = 7; // uint24 lastAutoBoughtDay (bytes 7..9)
 
-    uint256 private constant DEITY_SHIFT = 184;
+    uint256 private constant DEITY_SHIFT = BitPackingLib.HAS_DEITY_PASS_SHIFT;
 
-    bytes32 private constant SKIPPED_SIG = keccak256("PlayerSkipped(address,uint8)");
-    bytes32 private constant SUB_EXPIRED_SIG = keccak256("SubscriptionExpired(address,uint8)");
+    bytes32 private constant SKIPPED_SIG = keccak256("PlayerSkipped(uint32,uint8)");
+    bytes32 private constant SUB_EXPIRED_SIG = keccak256("SubscriptionExpired(uint32,uint8)");
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
     uint256 private _lastFulfilledReqId;
@@ -159,10 +160,10 @@ contract AfKingFundingWaterfall is DeployProtocol {
         s = makeAddr(sLabel);
         m = makeAddr(mLabel);
         uint32 sId = _aid(s);
-        _aid(m);
+        uint32 mId = _aid(m);
         uint256 seat = _grantSeat(m);
         vm.prank(s);
-        game.setOperatorApproval(0, m, true); // S approves M's key -> fundingSource = S honored at subscribe
+        game.setAfkingFundingApproval(0, mId, true); // S approves M's key -> fundingSource = S honored at subscribe
         vm.prank(m);
         game.subscribe(0, false, true, 1, sId, seat); // ticket mode, qty 1, source = S
     }
@@ -226,7 +227,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
     /// @dev Grant `who` the permanent deity bit (RE-DERIVED slot 10) — an activity-score/bounty-tier
     ///      flag, unrelated to the AFKing Subscription Token subscribe credential.
     function _grantDeityPass(address who) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(game.walletIdOf(who), uint256(MINTPACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         packed |= (uint256(1) << DEITY_SHIFT);
         vm.store(address(game), slot, bytes32(packed));
@@ -273,7 +274,8 @@ contract AfKingFundingWaterfall is DeployProtocol {
     }
 
     function _fundingSourceOf(address who) internal view returns (address) {
-        return address(uint160(uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(FUNDINGSOURCE_SLOT)))))));
+        uint32 id = uint32(uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(FUNDINGSOURCE_SLOT))))));
+        return id == 0 ? address(0) : _fixturePayee(id);
     }
 
     /// @dev The current process-day stamp of the fixture (so "bought this STAGE" is robust). The STAGE
@@ -314,7 +316,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
                 L.emitter == address(game) &&
                 L.topics.length >= 2 &&
                 L.topics[0] == SKIPPED_SIG &&
-                address(uint160(uint256(L.topics[1]))) == who
+                uint32(uint256(L.topics[1])) == game.walletIdOf(who)
             ) {
                 uint8 r = abi.decode(L.data, (uint8));
                 if (r == reason) count++;
@@ -329,7 +331,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
                 L.emitter == address(game) &&
                 L.topics.length >= 2 &&
                 L.topics[0] == SUB_EXPIRED_SIG &&
-                address(uint160(uint256(L.topics[1]))) == who
+                uint32(uint256(L.topics[1])) == game.walletIdOf(who)
             ) count++;
         }
     }

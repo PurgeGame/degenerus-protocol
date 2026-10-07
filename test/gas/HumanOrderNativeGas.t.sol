@@ -91,7 +91,7 @@ contract HumanOrderGasSeed is DegenerusGame {
     }
 
     function outcome(address player) external view returns (bytes32 digest) {
-        digest = keccak256(abi.encode(_claimableOf(_walletIdOf(player)), boonPacked[_walletIdOf(player)], mintPacked_[player],
+        digest = keccak256(abi.encode(_claimableOf(_walletIdOf(player)), boonPacked[_walletIdOf(player)], mintPacked_[_walletIdOf(player)],
             _getCurrentPrizePool(), _getNextPrizePool(), _getFuturePrizePool(),
             humanReadComplete, boxCursor, boxReadCount));
         for (uint24 lvl = 100; lvl <= 150; ++lvl) {
@@ -106,7 +106,7 @@ contract HumanOrderNativeGasTest is DeployProtocol {
     bytes private gameCode;
     bytes32 private constant MINER_WORK = keccak256("MinerWork(address,uint8,uint256,uint256)");
     bytes32 private constant MINER_BOUNTY = keccak256("MinerBounty(uint8,address,uint256)");
-    bytes32 private constant BOX_SPIN = keccak256("BoxSpin(address,uint64,uint256,uint256,uint256)");
+    bytes32 private constant BOX_SPIN = keccak256("BoxSpin(uint32,uint64,uint256,uint256,uint256)");
 
     function setUp() public {
         _deployProtocol(false);
@@ -176,7 +176,7 @@ contract HumanOrderNativeGasTest is DeployProtocol {
         }
         (uint256 normal, uint256 high) = crapsBattle.passCreditsOf(PLAYER);
         digest = keccak256(abi.encode(digest, coinflip.coinflipAmount(PLAYER), sdgnrs.balanceOf(PLAYER),
-            wwxrp.balanceOf(PLAYER), normal, high));
+            wwxrp.claimable(game.walletIdOf(PLAYER)), normal, high));
         vm.etch(address(game), type(HumanOrderGasSeed).runtimeCode);
         HumanOrderGasSeed host = HumanOrderGasSeed(payable(address(game)));
         assertEq(host.entriesLeft(), 0, "engine admitted and completed the order");

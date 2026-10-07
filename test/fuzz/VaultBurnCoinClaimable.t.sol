@@ -41,7 +41,7 @@ contract VaultBurnCoinClaimableTest is DeployProtocol {
 
     /// @dev Seed `claimableStored` for `player` without disturbing the packed fields above it.
     function _seedClaimable(address player, uint128 amount) private {
-        bytes32 base = keccak256(abi.encode(player, PLAYERSTATE_SLOT));
+        bytes32 base = keccak256(abi.encode(game.walletIdOf(player), PLAYERSTATE_SLOT));
         uint256 word = uint256(vm.load(address(coinflip), base));
         // claimableStored occupies bits 0-127; preserve lastClaim / autoRebuyStartDay / enabled above.
         word = (word & ~uint256(type(uint128).max)) | uint256(amount);

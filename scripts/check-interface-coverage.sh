@@ -86,7 +86,7 @@ PY
 # Extract "<selector>\t<signature>" rows from `forge inspect ... methods` output.
 get_methods() {
   local target="$1"
-  forge inspect "$target" methods 2>/dev/null \
+  forge inspect "$target" methods --skip test 2>/dev/null \
     | awk -F'|' '/^\|/ && $2 ~ /\(/ {
         gsub(/^[ \t]+|[ \t]+$/, "", $2);
         gsub(/^[ \t]+|[ \t]+$/, "", $3);

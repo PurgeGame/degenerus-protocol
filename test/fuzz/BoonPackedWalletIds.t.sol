@@ -34,7 +34,8 @@ contract BoonGameExt is DegenerusGame {
     }
 
     function x_grantDeity(address a) external {
-        mintPacked_[a] |= uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT;
+        _registerWallet(a, type(uint256).max);
+        mintPacked_[_walletIdOf(a)] |= uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT;
     }
 
     function x_openDecWindow() external {
@@ -50,11 +51,11 @@ contract BoonGameExt is DegenerusGame {
 ///         The WWXRP raw read lands on the same slot the getter reads.
 contract BoonPackedWalletIds is DeployProtocol {
     bytes32 private constant BOON_CONSUMED = keccak256("BoonConsumed(uint32,uint8,uint16)");
-    bytes32 private constant BOOST_USED = keccak256("BoostUsed(address,uint24,uint256,uint256,uint16)");
+    bytes32 private constant BOOST_USED = keccak256("BoostUsed(uint32,uint24,uint256,uint256,uint16)");
     bytes32 private constant WALLET_REGISTERED = keccak256("WalletRegistered(uint32,address)");
-    bytes32 private constant DEITY_PURCHASED = keccak256("DeityPassPurchased(address,uint8,uint256,uint24)");
+    bytes32 private constant DEITY_PURCHASED = keccak256("DeityPassPurchased(uint32,uint8,uint256,uint24)");
     bytes32 private constant PROTOCOL_BOON_AWARDED =
-        keccak256("ProtocolBoonDrawAwarded(address,address,uint24,uint8,uint32,uint8)");
+        keccak256("ProtocolBoonDrawAwarded(uint32,uint32,uint24,uint8,uint32,uint8)");
 
     // boonPacked bit positions (DegenerusGameStorage BP_* layout).
     uint256 private constant COINFLIP_TIER = 48;
@@ -170,7 +171,7 @@ contract BoonPackedWalletIds is DeployProtocol {
                 ContractAddresses.GAME_BOON_MODULE,
                 abi.encodeCall(
                     DegenerusGameBoonModule.rollBoxBoons,
-                    (player, id, 100 ether, 4, 1 ether, lvl, uint256(keccak256(abi.encode("single", k))), 0)
+                    (id, 100 ether, 4, 1 ether, lvl, uint256(keccak256(abi.encode("single", k))), 0)
                 )
             );
             (uint256 s0, uint256 s1) = _boon(id);
@@ -196,7 +197,7 @@ contract BoonPackedWalletIds is DeployProtocol {
                 ContractAddresses.GAME_BOON_MODULE,
                 abi.encodeCall(
                     DegenerusGameBoonModule.rollBoxBoonTiers,
-                    (player, id, amounts, counts, lvl, uint256(keccak256(abi.encode("mixed", k))))
+                    (id, amounts, counts, lvl, uint256(keccak256(abi.encode("mixed", k))))
                 )
             );
             (uint256 s0, uint256 s1) = _boon(id);
@@ -259,7 +260,7 @@ contract BoonPackedWalletIds is DeployProtocol {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter == address(game) && logs[i].topics[0] == PROTOCOL_BOON_AWARDED) {
                 ++awards;
-                assertEq(address(uint160(uint256(logs[i].topics[2]))), player, "the only entrant wins");
+                assertEq(uint32(uint256(logs[i].topics[2])), game.walletIdOf(player), "the only entrant wins");
             }
             if (logs[i].emitter == address(game) && logs[i].topics[0] == BOON_CONSUMED) {
                 assertEq(uint32(uint256(logs[i].topics[1])), id, "activity award keyed by the winner ID");
@@ -341,13 +342,13 @@ contract BoonPackedWalletIds is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(minter);
-        uint16 bps = wwxrp.consumeBoon(player);
+        uint16 bps = wwxrp.consumeBoon(id);
 
         assertEq(bps, 800, "tier-2 WWXRP boon");
         _assertConsumedBy(vm.getRecordedLogs(), id, 7);
         // A wallet without an ID has no boon.
         vm.prank(minter);
-        assertEq(wwxrp.consumeBoon(makeAddr("wwxrp_no_id")), 0, "no ID, no boon");
+        assertEq(wwxrp.consumeBoon(0), 0, "no ID, no boon");
         _assertIdZeroEmpty();
     }
 
@@ -450,7 +451,7 @@ contract BoonPackedWalletIds is DeployProtocol {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter == address(game) && logs[i].topics[0] == BOOST_USED) {
                 ++n;
-                assertEq(address(uint160(uint256(logs[i].topics[1]))), player, "boost used by the buyer");
+                assertEq(uint32(uint256(logs[i].topics[1])), game.walletIdOf(player), "boost used by the buyer ID");
             }
         }
         assertEq(n, 1, "one BoostUsed");
@@ -611,7 +612,7 @@ contract BoonPackedWalletIds is DeployProtocol {
         }
         assertEq(n, 1, "registered exactly once");
         assertEq(game.walletIdOf(who), id, "walletIdOf");
-        assertEq(game.mintPackedFor(who) >> BitPackingLib.WALLET_ID_SHIFT, id, "mint word carries the ID");
+        assertEq(game.walletIdOf(who), id, "mint word carries the ID");
         assertEq(address(uint160(uint256(vm.load(address(game), GameSlotKeys.walletElement(id))))), who, "element holds the key");
     }
 

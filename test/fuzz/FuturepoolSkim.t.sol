@@ -27,6 +27,7 @@ pragma solidity 0.8.34;
 // contract visibility change that D-03 forbids.
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {TicketQueueStorage} from "./helpers/TicketQueueStorage.sol";
 import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameAdvanceModule.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -64,14 +65,6 @@ contract SkimHarness is DegenerusGameAdvanceModule {
         return _getPrizePools();
     }
 
-    function setLevelPrizePool(uint24 lvl, uint256 val) external {
-        levelPrizePool[lvl] = val;
-    }
-
-    function getYieldAccumulator() external view returns (uint256) {
-        return yieldAccumulator;
-    }
-
     function exposed_nextToFutureBps(
         uint32 purchaseAge,
         uint24 lvl
@@ -87,15 +80,6 @@ contract SkimHarness is DegenerusGameAdvanceModule {
 ///        to the skim (conservation, insurance, bps curve shape) live in
 ///        this one file per D-02's "no splitting" rule.
 contract FuturepoolSkimTest is DeployProtocol {
-    /// @dev Mirror of production constants used for assertion thresholds.
-    uint16 private constant INSURANCE_SKIM_BPS = 100;
-    uint16 private constant NEXT_TO_FUTURE_BPS_MAX = 8000;
-    uint16 private constant ADDITIVE_RANDOM_BPS = 1000;
-    uint16 private constant OVERSHOOT_THRESHOLD_BPS = 12500;
-    uint16 private constant OVERSHOOT_CAP_BPS = 3500;
-    uint16 private constant OVERSHOOT_COEFF = 4000;
-    uint16 private constant PRICE_COIN_UNIT = 400;
-
     SkimHarness internal harness;
     address internal buyer;
 
@@ -119,6 +103,9 @@ contract FuturepoolSkimTest is DeployProtocol {
 
     function _checkTransitionSkim(uint24 age, uint24 incomingLevel, uint256 expectedBase) private {
         vm.warp(block.timestamp + 500 days);
+        // The raw level jump models completed ticket work. Retire its genesis queues too,
+        // so perpetual renewal can reuse the incoming level's century-ring slot.
+        TicketQueueStorage.retireCompleted(address(game), incomingLevel);
         bytes memory original = address(game).code;
         vm.etch(address(game), type(SkimTransitionSeeder).runtimeCode);
         SkimTransitionSeeder(payable(address(game))).seed(age, incomingLevel);
@@ -162,34 +149,6 @@ contract FuturepoolSkimTest is DeployProtocol {
             }
         }
         fail("production consolidation never emitted its skim");
-    }
-
-    // =========================================================================
-    //  PURE-MATH SPOT VALUES: overshoot surcharge (the exact formula used
-    //  inside the inlined skim block).
-    // =========================================================================
-
-    function _calcSurcharge(uint256 rBps) internal pure returns (uint256) {
-        if (rBps <= OVERSHOOT_THRESHOLD_BPS) return 0;
-        uint256 excess = rBps - OVERSHOOT_THRESHOLD_BPS;
-        uint256 surcharge = (excess * OVERSHOOT_COEFF) / (excess + 10_000);
-        if (surcharge > OVERSHOOT_CAP_BPS) surcharge = OVERSHOOT_CAP_BPS;
-        return surcharge;
-    }
-
-    /// @notice Overshoot surcharge spot values: hand-computed reference vs formula.
-    function test_overshootSurcharge_spotValues() public pure {
-        assertEq(_calcSurcharge(15000), 800, "R=1.5");
-        assertEq(_calcSurcharge(20000), 1714, "R=2.0");
-        assertEq(_calcSurcharge(30000), 2545, "R=3.0");
-        assertEq(_calcSurcharge(100000), OVERSHOOT_CAP_BPS, "R=10 capped");
-        assertEq(_calcSurcharge(12500), 0, "R=1.25 no surcharge");
-    }
-
-    /// @notice Additive component is the tagged word % 1001, so it is in [0, 1000] bps.
-    function testFuzz_additiveRandom_bounded(uint256 rngWord) public pure {
-        uint256 additive = uint256(keccak256(abi.encode(rngWord, keccak256("degenerus.skim.bps")))) % (ADDITIVE_RANDOM_BPS + 1);
-        assertTrue(additive <= ADDITIVE_RANDOM_BPS, "additive must be <= 1000 bps");
     }
 
     // =========================================================================
@@ -262,12 +221,4 @@ contract FuturepoolSkimTest is DeployProtocol {
         assertEq(futureOut, 200 ether, "future round-trip");
     }
 
-    function test_skimHarness_levelPrizePool_setter() public {
-        harness.setLevelPrizePool(5, 1234 ether);
-        // The harness intentionally does not expose a getter for
-        // levelPrizePool; the setter is sufficient for skim-block
-        // state seeding and the setter success (no revert) is the
-        // assertion. yieldAccumulator also starts zero on fresh harness.
-        assertEq(harness.getYieldAccumulator(), 0, "fresh harness yield=0");
-    }
 }

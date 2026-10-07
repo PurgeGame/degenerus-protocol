@@ -119,13 +119,13 @@ contract CoinflipDeepClaimWorstCaseGas is DeployProtocol {
     }
 
     /// @dev playerState slot 2. word0: claimableStored(0) | lastClaim<<128 |
-    ///      autoRebuyStartDay<<152 | autoRebuyEnabled<<176 | wallet ID<<184. word1: autoRebuyStop |
+    ///      autoRebuyStartDay<<152 | autoRebuyEnabled<<176. word1: autoRebuyStop |
     ///      autoRebuyCarry(0)<<128.
     function _installPlayerState(address p, uint24 lastClaim, uint24 startDay, bool rebuyEnabled, uint128 takeProfit)
         internal
     {
-        bytes32 base = keccak256(abi.encode(p, uint256(2)));
-        uint256 w0 = (uint256(lastClaim) << 128) | (uint256(startDay) << 152) | (uint256(game.walletIdOf(p)) << 184);
+        bytes32 base = keccak256(abi.encode(game.walletIdOf(p), uint256(2)));
+        uint256 w0 = (uint256(lastClaim) << 128) | (uint256(startDay) << 152);
         if (rebuyEnabled) w0 |= uint256(1) << 176;
         vm.store(address(coinflip), base, bytes32(w0));
         vm.store(address(coinflip), bytes32(uint256(base) + 1), bytes32(uint256(takeProfit)));

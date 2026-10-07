@@ -82,10 +82,10 @@ async function seedBingo(gameAddress, level, symbol, holders) {
   }
 }
 
-function bingoClaimLeaf(_level, player) {
+function bingoClaimLeaf(_level, playerId) {
   return BigInt(hre.ethers.keccak256(
     hre.ethers.AbiCoder.defaultAbiCoder().encode(
-      ["address", "uint256"], [player, playerClaimWordSlot]
+      ["uint32", "uint256"], [playerId, playerClaimWordSlot]
     )
   ));
 }
@@ -114,8 +114,6 @@ describe("DegenerusGame simple bingo", function () {
   before(async function () {
     lvlTraitEntrySlot = await deriveStorageSlot("lvlTraitEntry");
     playerClaimWordSlot = await deriveStorageSlot("playerClaimWord");
-    expect(lvlTraitEntrySlot).to.equal(8n);
-    expect(playerClaimWordSlot).to.equal(24n);
   });
 
   after(function () {
@@ -164,7 +162,7 @@ describe("DegenerusGame simple bingo", function () {
       BigInt(
         await hre.ethers.provider.getStorage(
           gameAddress,
-          wordHex(bingoClaimLeaf(level, alice.address))
+          wordHex(bingoClaimLeaf(level, await game.walletIdOf(alice.address)))
         )
       )
     ).to.equal(BigInt(level + 1) << (BigInt(level & 1) * 25n));
@@ -172,7 +170,7 @@ describe("DegenerusGame simple bingo", function () {
     const events = bingoEvents(receipt, bingo);
     expect(events).to.have.length(1);
     const [event] = events;
-    expect(event.player).to.equal(alice.address);
+    expect(event.player).to.equal(await game.walletIdOf(alice.address));
     expect(event.level).to.equal(BigInt(level));
     expect(event.symbol).to.equal(BigInt(symbol));
     expect(event.flipReward).to.equal(BINGO_FLIP);
@@ -275,7 +273,7 @@ describe("DegenerusGame simple bingo", function () {
     );
   });
 
-  it("treats address(0) as the caller", async function () {
+  it("treats ID 0 as the caller", async function () {
     const { game, coinflip, alice } = await loadFixture(deployFullProtocol);
     const gameAddress = await game.getAddress();
     const bingo = await bingoAtGame(game);
@@ -322,6 +320,7 @@ describe("DegenerusGame simple bingo", function () {
     await expect(
       bingo.connect(alice).claimBingo(0, level, 32, ZERO_SLOTS)
     ).to.be.revertedWithCustomError(bingo, "InvalidSymbol");
+    await giveWalletId(game, bob.address);
     await expect(
       bingo
         .connect(bob)
@@ -461,7 +460,7 @@ describe("DegenerusGame simple bingo", function () {
       BigInt(
         await hre.ethers.provider.getStorage(
           gameAddress,
-          wordHex(bingoClaimLeaf(expiredLevel, alice.address))
+          wordHex(bingoClaimLeaf(expiredLevel, await game.walletIdOf(alice.address)))
         )
       )
     ).to.equal(0n);

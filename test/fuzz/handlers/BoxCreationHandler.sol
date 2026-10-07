@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {BitPackingLib} from "../../../contracts/libraries/BitPackingLib.sol";
 import {RecyclingState} from "../../helpers/RecyclingState.sol";
 
 import "forge-std/Test.sol";
@@ -43,15 +44,15 @@ contract BoxCreationHandler is Test {
     MockVRFCoordinator public vrf;
 
     uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED;
-    uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS score bit (subscribe/pass gate)
+    uint256 private constant DEITY_SHIFT = BitPackingLib.HAS_DEITY_PASS_SHIFT; // HAS_DEITY_PASS score bit (subscribe/pass gate)
     uint256 private constant PRESALE_BOX_CREDIT_SLOT = GameSlots.PRESALE_BOX_CREDIT; // mapping(uint32 => uint256)
     uint256 private constant PRESALE_BOX_ETH_CAP = 50 ether;
 
-    bytes32 private constant LOOTBOX_BUY = keccak256("LootBoxBuy(address,uint48,uint32,uint256)");
-    bytes32 private constant PRESALE_BUY = keccak256("PresaleBoxBuy(address,uint48,uint32,uint256,bool)");
-    bytes32 private constant LOOTBOX_OPENED = keccak256("LootBoxOpened(address,uint48,uint256,uint24,uint32,uint256,bool)");
+    bytes32 private constant LOOTBOX_BUY = keccak256("LootBoxBuy(uint32,uint48,uint32,uint256)");
+    bytes32 private constant PRESALE_BUY = keccak256("PresaleBoxBuy(uint32,uint48,uint32,uint256,bool)");
+    bytes32 private constant LOOTBOX_OPENED = keccak256("LootBoxOpened(uint32,uint48,uint256,uint24,uint32,uint256,bool)");
     bytes32 private constant PRESALE_OPENED =
-        keccak256("PresaleBoxOpened(address,uint48,uint256,uint256,uint256,uint256,bool,uint32,uint32)");
+        keccak256("PresaleBoxOpened(uint32,uint48,uint256,uint256,uint256,uint256,bool,uint32,uint32)");
     uint256 private constant QUEUED_ENTRY_TAG = uint256(1) << 46;
     uint256 private constant REDEMPTION_INDEX_TAG = uint256(1) << 47;
 
@@ -476,7 +477,7 @@ contract BoxCreationHandler is Test {
     {
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 3 || logs[i].topics[0] != topic) continue;
-            if (address(uint160(uint256(logs[i].topics[1]))) != currentActor) continue;
+            if (uint32(uint256(logs[i].topics[1])) != game.walletIdOf(currentActor)) continue;
             if (uint256(logs[i].topics[2]) != pre.wb) continue;
             uint32 position;
             if (topic == LOOTBOX_BUY) (position, amount) = abi.decode(logs[i].data, (uint32, uint256));
@@ -512,7 +513,7 @@ contract BoxCreationHandler is Test {
             if (!sealed_ && position >= post.cursor) _fifoViolation("an entry resolved ahead of the stored cursor");
             last = position;
             address owner = ownerAt[keccak256(abi.encode(buffer, gen[buffer], position))];
-            if (owner != address(0) && address(uint160(uint256(logs[i].topics[1]))) != owner) {
+            if (owner != address(0) && uint32(uint256(logs[i].topics[1])) != game.walletIdOf(owner)) {
                 _fifoViolation("an entry resolved to a wallet other than its buyer");
             }
         }
@@ -524,7 +525,7 @@ contract BoxCreationHandler is Test {
 
     /// @dev Field-isolated HAS_DEITY_PASS score-bit seed in mintPacked_. No balance touched.
     function _grantDeityScoreBit(address who) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(game.walletIdOf(who), uint256(MINTPACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         packed |= (uint256(1) << DEITY_SHIFT);
         vm.store(address(game), slot, bytes32(packed));

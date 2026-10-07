@@ -14,6 +14,8 @@ contract CrapsPreferredBoardTest is CrapsPins {
     CrapsViews private c;
     address private alice = makeAddr("preferred-alice");
     address private bob = makeAddr("preferred-bob");
+    uint32 private aliceId;
+    uint32 private bobId;
     uint256 private constant INIT = 1 << 84;
     uint32 private constant BOARD = 3 | (3 << 12) | (1 << 15);
     bytes32 private constant EVENT = keccak256("CrapsPreferredBoardSet(uint32,uint32)");
@@ -27,20 +29,17 @@ contract CrapsPreferredBoardTest is CrapsPins {
         _setDailyWord(c.currentDayIndex(), 40 << 8);
         game.setScore(alice, c.SYBIL_SCORE_FLOOR());
         game.setScore(bob, c.SYBIL_SCORE_FLOOR());
-        game.registerWallet(alice, true);
-        game.registerWallet(bob, true);
+        aliceId = game.registerWallet(alice, true);
+        bobId = game.registerWallet(bob, true);
     }
 
-    /// @dev The address-keyed word: board, INITIALIZED and the cached wallet ID (slot 14).
-    function _key(address p) private view returns (bytes32) { return keccak256(abi.encode(p, c.passCreditsSlot())); }
-    /// @dev The ID-keyed word: passes, board and INITIALIZED (slot 15).
+    /// @dev Pass balances and preference share the sole ID-keyed word.
+    function _key(address p) private view returns (bytes32) { return _idKey(p); }
     function _idKey(address p) private view returns (bytes32) {
         return keccak256(abi.encode(uint256(game.walletIdOf(p)), CrapsPreferenceLib.PASS_SLOT));
     }
-    /// @dev The ID word, which holds the pass lanes and the board the doors read.
     function _word(address p) private view returns (uint256) { return uint256(c.extsload(_idKey(p))); }
-    function _raw(address p) private view returns (uint256) { return uint256(c.extsload(_key(p))); }
-    function _cachedId(address p) private view returns (uint32) { return uint32(_raw(p) >> CrapsPreferenceLib.ID_SHIFT); }
+    function _raw(address p) private view returns (uint256) { return _word(p); }
     function _save(address p, uint32 b) private { vm.prank(p); c.setPreferredBoard(0, b); }
     function _dayChips(uint24 day, address p) private view returns (uint256) {
         return c.betOf((uint256(day) * 8 << 64) | c.daySeatNumberOf(day, p)).chips;
@@ -60,7 +59,7 @@ contract CrapsPreferredBoardTest is CrapsPins {
         vm.recordLogs();
         _save(alice, 0);
         assertEq(_word(alice), INIT);
-        assertEq(_cachedId(alice), game.walletIdOf(alice), "first save caches the wallet ID");
+
         assertEq(_events(), 1);
         assertEq(_raw(bob), 0);
         // No RNG read is allowed on an initialized equal board.
@@ -90,14 +89,11 @@ contract CrapsPreferredBoardTest is CrapsPins {
             board |= uint32(count << (i * 3));
             compact |= count << (i * 2);
         }
-        // Bits 85..116 cache the wallet ID; the bits above it are reserved.
-        uint256 base = (reserved & ~((uint256(1) << (CrapsPreferenceLib.ID_SHIFT + 32)) - 1))
-            | (uint256(game.walletIdOf(alice)) << CrapsPreferenceLib.ID_SHIFT);
-        vm.store(address(c), _key(alice), bytes32(base));
-        vm.store(address(c), _idKey(alice), bytes32(uint256(balances)));
+        // All bits above the preference sentinel are reserved and preserved.
+        uint256 base = reserved & ~((uint256(1) << CrapsPreferenceLib.ID_SHIFT) - 1);
+        vm.store(address(c), _idKey(alice), bytes32(base | uint256(balances)));
         _save(alice, board);
-        assertEq(_raw(alice), base | INIT | compact << 64);
-        assertEq(_word(alice), uint256(balances) | INIT | compact << 64, "the ID word keeps its passes");
+        assertEq(_word(alice), base | uint256(balances) | INIT | compact << 64);
         assertEq(c.preferredBoardOf(game.walletIdOf(alice)), board);
         (uint256 n, uint256 h) = c.passCreditsOf(alice);
         assertEq(n, uint32(balances)); assertEq(h, balances >> 32);
@@ -137,7 +133,7 @@ contract CrapsPreferredBoardTest is CrapsPins {
         _save(alice, BOARD);
         uint256 saved = _word(alice);
         // 21 normals per high credit, plus one spare so a normal reservation still has one to spend.
-        vm.prank(ContractAddresses.GAME); c.creditPasses(_idFor(alice), 22, 0);
+        vm.prank(ContractAddresses.GAME); c.creditPasses(aliceId, 22, 0);
         vm.prank(alice); c.convertNormalToHigh(0, 1);
         (uint256 n, uint256 h) = c.passCreditsOf(alice); assertEq(n, 1); assertEq(h, 1);
         uint24 day = c.currentDayIndex() + 1;
@@ -148,7 +144,7 @@ contract CrapsPreferredBoardTest is CrapsPins {
         vm.stopPrank();
         assertEq(_word(alice), saved);
         c.setPassCredits(alice, type(uint32).max, type(uint32).max);
-        vm.prank(ContractAddresses.GAME); c.creditPasses(_idFor(alice), 3, 3);
+        vm.prank(ContractAddresses.GAME); c.creditPasses(aliceId, 3, 3);
         assertEq(_word(alice) >> 64, saved >> 64);
         c.setPassCredits(alice, 0, 0);
         assertEq(_word(alice), saved);
@@ -157,14 +153,14 @@ contract CrapsPreferredBoardTest is CrapsPins {
     function test_DeliverySnapshotsAndNeverInitializes() public {
         _save(alice, BOARD);
         uint256 saved = _word(alice);
-        vm.prank(ContractAddresses.GAME); uint24 day = c.deliverPasses(_idFor(alice), 2, 0);
+        vm.prank(ContractAddresses.GAME); uint24 day = c.deliverPasses(aliceId, 2, 0);
         assertEq(_dayChips(day, alice), BOARD);
         assertEq(_word(alice), saved | 1);
         _save(alice, 0);
         assertEq(_dayChips(day, alice), BOARD, "old ticket changed");
-        vm.prank(ContractAddresses.GAME); c.deliverPasses(_idFor(bob), 1, 0);
+        vm.prank(ContractAddresses.GAME); c.deliverPasses(bobId, 1, 0);
         assertEq(_word(bob), 0, "award initialized preference");
-        vm.prank(ContractAddresses.GAME); c.deliverPasses(_idFor(bob), 2, 0);
+        vm.prank(ContractAddresses.GAME); c.deliverPasses(bobId, 2, 0);
         assertEq(_word(bob), 2, "bank-only award initialized preference");
     }
 
@@ -195,14 +191,14 @@ contract CrapsPreferredBoardTest is CrapsPins {
         _save(alice, BOARD); _save(bob, BOARD);
         _openToday();
         // Current period is past zero; current window comp uses a later period.
-        vm.prank(ContractAddresses.VAULT); c.vaultComp(uint256(_idFor(alice)) | (uint256(5) << 176));
+        vm.prank(ContractAddresses.VAULT); c.vaultComp(uint256(aliceId) | (uint256(5) << 176));
         uint256 slot = uint256(c.currentDayIndex()) * 8 + 6;
         assertEq(c.betOf((slot << 64) | 1).chips, BOARD);
         uint24 day = c.currentDayIndex() + 1;
-        vm.prank(ContractAddresses.VAULT); c.vaultComp(uint256(_idFor(bob)) | (uint256(2) << 160) | (uint256(day) << 176) | (uint256(2) << 200));
+        vm.prank(ContractAddresses.VAULT); c.vaultComp(uint256(bobId) | (uint256(2) << 160) | (uint256(day) << 176) | (uint256(2) << 200));
         assertEq(_dayChips(day, bob), BOARD); assertEq(_dayChips(day + 1, bob), BOARD);
         uint256 saved = _word(bob);
-        vm.prank(ContractAddresses.VAULT); c.vaultComp(uint256(_idFor(bob)) | (uint256(4) << 160) | (uint256(2) << 200));
+        vm.prank(ContractAddresses.VAULT); c.vaultComp(uint256(bobId) | (uint256(4) << 160) | (uint256(2) << 200));
         assertEq(_word(bob), saved | 2);
         _save(bob, 0); assertEq(_dayChips(day, bob), BOARD);
     }
@@ -223,18 +219,18 @@ contract CrapsPreferredBoardTest is CrapsPins {
         _setDailyWord(day, 40 << 8);
         _save(alice, BOARD);
         _openToday();
-        vm.prank(ContractAddresses.VAULT); c.vaultComp(uint256(_idFor(alice)) | (uint256(1) << 160));
+        vm.prank(ContractAddresses.VAULT); c.vaultComp(uint256(aliceId) | (uint256(1) << 160));
         assertEq(_dayChips(day, alice), BOARD);
         _save(alice, 0);
         vm.prank(ContractAddresses.VAULT);
-        c.vaultComp(uint256(_idFor(alice)) | (uint256(3) << 160) | (uint256(day) << 176) | (uint256(1) << 200));
+        c.vaultComp(uint256(aliceId) | (uint256(3) << 160) | (uint256(day) << 176) | (uint256(1) << 200));
         assertEq(_dayChips(day, alice), BOARD, "upgrade moved board");
         assertEq(_word(alice), INIT);
         vm.prank(bob); c.enterBonusDay(BOARD, 1);
         assertEq(_dayChips(day, bob), BOARD);
         assertEq(c.preferredBoardOf(game.walletIdOf(bob)), BOARD);
         vm.prank(ContractAddresses.VAULT);
-        c.vaultComp(uint256(_idFor(bob)) | (uint256(5) << 160) | (uint256(day + 1) << 176) | (uint256(2) << 200));
+        c.vaultComp(uint256(bobId) | (uint256(5) << 160) | (uint256(day + 1) << 176) | (uint256(2) << 200));
         _save(bob, 0);
         for (uint256 i = 1; i <= 2; ++i) {
             uint256 slot = (uint256(day) + i) * 8 + 1;
@@ -247,7 +243,7 @@ contract CrapsPreferredBoardTest is CrapsPins {
         vm.prank(alice); c.buyFutureCrapsDays(day, 1, false, 0);
         assertEq(_word(alice), INIT);
         _save(bob, BOARD);
-        vm.prank(ContractAddresses.GAME); c.creditPasses(_idFor(bob), 1, 0);
+        vm.prank(ContractAddresses.GAME); c.creditPasses(bobId, 1, 0);
         game.setRngLocked(true);
         vm.prank(bob); c.applyCrapsPasses(day, 1, false, 0);
         assertEq(_dayChips(day, bob), 0);
@@ -281,10 +277,8 @@ contract CrapsPreferredBoardTest is CrapsPins {
             assertTrue(vm.revertToState(snap));
             uint256 stored = i == 1 || i == 2 ? 0 : INIT;
             if (i == 4) stored |= uint256(3) << 64;
-            vm.store(address(c), _key(alice), bytes32(stored));
             vm.store(address(c), _idKey(alice), bytes32(stored));
             game.setRngLocked(i == 5);
-            vm.coolSlot(address(c), _key(alice));
             vm.coolSlot(address(c), _idKey(alice));
             vm.cool(ContractAddresses.GAME);
             uint32 board = i == 2 || i == 3 || i == 5 ? BOARD : 0;
@@ -312,17 +306,13 @@ contract CrapsPreferredBoardTest is CrapsPins {
         assertEq(_word(ContractAddresses.VAULT) & type(uint64).max, 0);
         assertEq(_word(ContractAddresses.SDGNRS), INIT);
     }
-    // ----- A8: the wallet ID cache in the address word -----
-
-    function test_BoardSavesToBothWordsAndPassesStayInTheIdWord() public {
+    function test_BoardAndPassesShareOneIdWord() public {
         _save(alice, BOARD);
-        vm.prank(ContractAddresses.GAME); c.creditPasses(_idFor(alice), 3, 2);
-        uint256 compact = _word(alice) & CrapsPreferenceLib.MASK;
-        assertGt(compact, 0, "the ID word did not take the board");
-        assertEq(_raw(alice) & CrapsPreferenceLib.MASK, compact, "the address word's board differs");
-        assertEq(_raw(alice) & type(uint64).max, 0, "the address word carries pass lanes");
-        assertEq(_word(alice) & type(uint64).max, 3 | (uint256(2) << 32), "the passes are not in the ID word");
-        assertTrue(_word(alice) & INIT != 0 && _raw(alice) & INIT != 0, "INITIALIZED not set on both");
+        vm.prank(ContractAddresses.GAME); c.creditPasses(aliceId, 3, 2);
+        assertGt(_word(alice) & CrapsPreferenceLib.MASK, 0);
+        assertEq(_word(alice) & type(uint64).max, 3 | (uint256(2) << 32));
+        assertTrue(_word(alice) & INIT != 0);
+
     }
 
     function test_FreeDoorWithoutGameIdReverts() public {
@@ -341,11 +331,11 @@ contract CrapsPreferredBoardTest is CrapsPins {
         uint32 count = game.walletCount();
         _save(dave, BOARD);
         assertEq(game.walletCount(), count, "fill must not allocate");
-        assertEq(_cachedId(dave), id);
+
         assertEq(c.preferredBoardOf(id), BOARD);
-        // A later change keeps the cached ID and moves the ID word with it.
+        // A later change updates the same account word without duplicating its ID.
         _save(dave, 0);
-        assertEq(_cachedId(dave), id);
+
         assertEq(c.preferredBoardOf(id), 0);
     }
 
@@ -358,7 +348,7 @@ contract CrapsPreferredBoardTest is CrapsPins {
         vm.prank(erin); c.enterBonusBattle(5, BOARD, 1);
         uint32 id = game.walletIdOf(erin);
         assertGt(id, 0, "paid door allocates");
-        assertEq(_cachedId(erin), id);
+
         assertEq(c.preferredBoardOf(id), BOARD);
     }
 }

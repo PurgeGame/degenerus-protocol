@@ -191,7 +191,7 @@ contract GameWalletIdViews is DeployProtocol {
     function _assertIdTruth(address who, uint32 id) private view {
         assertGt(id, 0, "registered");
         assertEq(game.walletIdOf(who), id, "walletIdOf");
-        assertEq(game.mintPackedFor(who) >> BitPackingLib.WALLET_ID_SHIFT, id, "mint word carries the ID");
+        assertEq(game.walletIdOf(who), id, "mint word carries the ID");
         assertEq(
             address(uint160(uint256(vm.load(address(game), GameSlotKeys.walletElement(id))))),
             who,
@@ -543,7 +543,7 @@ contract GameWalletIdViews is DeployProtocol {
         assertEq(id2, buyerId, "cold path returns the ID");
         (uint256 v2,) = game.playerActivityScore(buyer);
         assertEq(s2, v2, "cold path score");
-        assertEq(game.mintPackedFor(buyer) >> BitPackingLib.WALLET_ID_SHIFT, buyerId, "ID survives the refresh");
+        assertEq(game.walletIdOf(buyer), buyerId, "ID survives the refresh");
 
         // Hot path cache hit after the refresh.
         vm.record();
@@ -643,7 +643,7 @@ contract GameWalletIdViews is DeployProtocol {
         (, uint32 rid) = _wallet("degen_referrer");
         vm.mockCall(
             address(affiliate),
-            abi.encodeWithSelector(IDegenerusAffiliate.getReferrerId.selector, makeAddr("degen_referred")),
+            abi.encodeWithSelector(IDegenerusAffiliate.getReferrerIdById.selector),
             abi.encode(rid)
         );
         vm.expectCall(address(coinflip), abi.encodeWithSelector(ICoinflip.creditFlip.selector, rid));
@@ -665,7 +665,7 @@ contract GameWalletIdViews is DeployProtocol {
     function test_DegeneretteUnregisteredReferrerCreditsNobody() public {
         vm.mockCall(
             address(affiliate),
-            abi.encodeWithSelector(IDegenerusAffiliate.getReferrerId.selector, makeAddr("degen_referred")),
+            abi.encodeWithSelector(IDegenerusAffiliate.getReferrerIdById.selector),
             abi.encode(uint32(0))
         );
         vm.expectCall(address(coinflip), abi.encodeWithSelector(ICoinflip.creditFlip.selector, uint32(0)));
@@ -777,7 +777,7 @@ contract GameWalletIdViews is DeployProtocol {
         (address u2, uint32 u2Id) = _wallet("deity_chain_upline2");
         vm.mockCall(
             address(affiliate),
-            abi.encodeWithSelector(IDegenerusAffiliate.referrerIds.selector, buyer),
+            abi.encodeWithSelector(IDegenerusAffiliate.referrerIdsById.selector),
             abi.encode(aId, u1Id, u2Id)
         );
         uint256 reserve = IsDGNRS(address(sdgnrs)).poolBalance(IsDGNRS.Pool.Affiliate);
@@ -813,7 +813,7 @@ contract GameWalletIdViews is DeployProtocol {
         (address a, uint32 aId) = _wallet("deity_skip_affiliate");
         vm.mockCall(
             address(affiliate),
-            abi.encodeWithSelector(IDegenerusAffiliate.referrerIds.selector, buyer),
+            abi.encodeWithSelector(IDegenerusAffiliate.referrerIdsById.selector),
             abi.encode(aId, uint32(0), uint32(0))
         );
         uint256 reserve = IsDGNRS(address(sdgnrs)).poolBalance(IsDGNRS.Pool.Affiliate);
@@ -830,7 +830,7 @@ contract GameWalletIdViews is DeployProtocol {
         address buyer = makeAddr("deity_noid_buyer");
         vm.mockCall(
             address(affiliate),
-            abi.encodeWithSelector(IDegenerusAffiliate.referrerIds.selector, buyer),
+            abi.encodeWithSelector(IDegenerusAffiliate.referrerIdsById.selector),
             abi.encode(uint32(0), uint32(0), uint32(0))
         );
         vm.deal(buyer, 100 ether);

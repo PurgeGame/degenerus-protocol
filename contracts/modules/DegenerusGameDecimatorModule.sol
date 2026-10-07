@@ -31,7 +31,6 @@ import {ContractAddresses} from "../ContractAddresses.sol";
 import {DecimatorSamplingLib as Sampling} from "../libraries/DecimatorSamplingLib.sol";
 import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 import {Craps} from "../Craps.sol";
-import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {DecimatorJackpotTerms} from "../interfaces/IDegenerusGameModules.sol";
 
 interface IDecimatorBoardPreference {
@@ -88,7 +87,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
     // Even a full 66-bit stack therefore produces a score below the 192-bit lane.
 
     event DecBurnRecorded(
-        address indexed player,
+        uint32 indexed player,
         uint24 indexed lvl,
         uint64 indexed entryId,
         uint256 baseAmount,
@@ -119,24 +118,20 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
 
     /// @param chips The entry's board as a normal battle takes it: ten three-bit leg counts naming
     ///        zero to seven chips; the dice scatter the rest of the ten. Each burn sets it.
-    function recordDecBurn(address player, uint24 lvl, uint256 baseAmount, uint256 multBps, uint32 chips)
-        external
+    function recordDecBurn(uint32 playerId, uint24 lvl, uint256 baseAmount, uint256 multBps, uint32 chips)
+        public
         returns (uint64 id)
     {
         if (msg.sender != ContractAddresses.COIN) revert E();
         _checkBoard(chips);
         DecBattleRound storage round = decBattleRounds[lvl];
         if (
-            gameOver || !_decWindowOpen() || lvl != level + 1 || round.phase != 0 || player == address(0)
+            gameOver || !_decWindowOpen() || lvl != level + 1 || round.phase != 0 || playerId == 0
                 || baseAmount == 0 || multBps < 10_000 || multBps > 20_000
         ) revert E();
         uint24 day = _simulatedDayIndex();
         if (round.openedDay == 0 || day < round.openedDay) revert E();
-        // A Decimator burn is a paying entry: register the burner at the burn's ETH equivalent
-        // (FLIP base units at PRICE_COIN_UNIT whole FLIP per ticket price).
-        (uint32 playerId, ) = _registerWallet(
-            player, baseAmount * PriceLookupLib.priceForLevel(lvl) / (PRICE_COIN_UNIT * 1 ether)
-        );
+        // FLIP has already registered the burner and supplies its allocated ID.
         uint256 factor = _dayFactor(day - round.openedDay);
         // Round once to whole FLIP. The uint64 aggregate bound keeps every accepted numerator below 2^138.
         uint256 credited = baseAmount * (factor * multBps) / (1 ether * 10_000);
@@ -159,7 +154,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         round.totalCreditedStack = uint64(total);
         decBattleEntries[_entryKey(lvl, id)] =
             (stack << STACK_SHIFT) | (uint256(chips) << CHIPS_SHIFT) | uint256(playerId);
-        emit DecBurnRecorded(player, lvl, id, baseAmount, credited, stack, chips);
+        emit DecBurnRecorded(playerId, lvl, id, baseAmount, credited, stack, chips);
     }
 
     /// @dev A normal battle's board rules: at most three chips on a leg, seven named in all, and

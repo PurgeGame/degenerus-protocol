@@ -1,112 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-//
-// HeroOverrideWeightedRoll.test.js — Phase 293 v42.0 HRROLL regression fixture (TST-HRROLL-01..06).
-//
-// Audit subject: Phase 292 audit-subject commit `a0218952` — the v42 HRROLL
-// cleanup that replaces the deterministic `_topHeroSymbol(uint32 day)` selector
-// with `_rollHeroSymbol(uint32 day, uint256 entropy) private view returns
-// (bool, uint8, uint8)` — a weighted random roll across the 32 `(quadrant,
-// symbol)` slots in `dailyHeroWagers[day]` with a ×1.5 leader-weight bonus
-// (D-42N-LEADER-BONUS-01) and no min-wager floor on any other slot
-// (D-42N-FLOOR-01).
-//
-// Path of investigation (5 bullets per 293-CONTEXT.md `<decisions>`
-// "JSDoc test-file header" anchor):
-//
-// (i)  Mechanic covered: the v42 HRROLL weighted-roll hero-override selector
-//      at `contracts/modules/DegenerusGameJackpotModule.sol:1630-1700`,
-//      consumed by `_rollBoard` at the same file's L1600-L1628 with
-//      the production callsite at L1988 from `_rollMainTraits`.
-//
-// (ii) JS-replay oracle + cross-attestation strategy per D-293-INVOKE-01:
-//      `_rollHeroSymbol` is `private view` so no inheritance-style harness can
-//      reach it. The ALGORITHM_VERIFIED evidence class is established via a
-//      pure-function JS bit-mirror at `test/helpers/rollHeroSymbolRef.mjs`
-//      (Plan 01 deliverable). The oracle drives N=10000 iterations for the
-//      chi² assertions (TST-HRROLL-01 + TST-HRROLL-02) and small-N samples
-//      for the edge cases (TST-HRROLL-04 + TST-HRROLL-05). Cross-attestation
-//      lives in a separate describe block: 16 production-path replays drive
-//      `mineFlip()` through the natural jackpot resolution chain that
-//      fires `DailyWinningTraits`; the event's `mainTraitsPacked` byte
-//      decodes to the on-chain hero `(quadrant, symbol)` per
-//      `_rollBoard` L1623-L1627, asserted byte-equal to the JS oracle
-//      output for the same `(dailyHeroWagers, randWord, day)` triple.
-//
-// (iii) D-293-GAS-01 RELAX posture (user disposition 2026-05-17,
-//       resolving the original [BLOCKING_ESCALATION] checkpoint surfaced
-//       at first execution): production-path delta measurement between (a)
-//       worst-case-seeded `dailyHeroWagers[D]` (all 32 slots populated;
-//       leader at flat idx 31 to maximise the pass-2 cursor walk +
-//       leader-bonus add at the last cursor position) and (b) all-zero-
-//       seeded baseline (HRROLL-01 early-bail at `total == 0` skips the
-//       pass-2 cursor walk entirely) is log-only traceability — the
-//       per-sample delta, mean, and stddev are captured and logged but
-//       NOT asserted against any soft/hard window. Rationale: the
-//       worst-case-seeded path triggers downstream JackpotFlipWin /
-//       coin-jackpot cascades that fire differently from the all-zero-
-//       seeded path (the trait-byte rewrite at `_rollBoard`
-//       L1623 affects bucket selection downstream); the observed delta
-//       is dominated by those downstream cascades rather than the
-//       `_rollHeroSymbol` body's ~+431 gas contribution. Theoretical
-//       acceptance evidence remains the analytical anchor at
-//       `.planning/phases/292-hero-override-weighted-roll-hrroll/292-01-MEASUREMENT.md`
-//       §3.c (~+431 gas vs v41 `_topHeroSymbol` baseline; well within
-//       the D-42N-GAS-01 soft +500 / hard +750 thresholds). Positive-path
-//       coverage IS asserted: the test verifies `DailyWinningTraits`
-//       fires under both worst-case-seeded and all-zero-seeded paths so
-//       the production-path arrival at `_rollBoard` is
-//       structurally exercised. Mirrors the Phase 291 D-291-GAS-01
-//       SKIP-GAS posture.
-//
-// (iv) D-293-STALE-VIEW-01 path-of-investigation note: the public view
-//      `getDailyHeroWinner(uint32 day)` at `contracts/DegenerusGame.sol:2545`
-//      carries a v41-leftover deterministic-leader body (most-wagered slot
-//      wins, body unchanged from the deleted `_topHeroSymbol` algorithm).
-//      Semantically misleading post-HRROLL since the actual mechanism is now
-//      a weighted random roll requiring per-call entropy. NOT used as a
-//      TST-HRROLL assertion vehicle (would return v41-deterministic output,
-//      not weighted-roll output). Deferred to v43+ explicit cleanup phase
-//      per `293-CONTEXT.md` `<deferred>` register.
-//
-// (v)  LOCKED TST-HRROLL-02 disposition (user 2026-05-17): seed
-//      `[500, 200, 200, 100]` placed at flat idx 0..3 (quadrant 0, symbols
-//      0..3). Algebra under the v42 mechanic: total = 500 + 200 + 200 + 100
-//      = 1000; maxAmount = 500 (leader at flat idx 0 by strict-`>`
-//      first-seen tie-break); leaderBonus = 500 / 2 = 250; effectiveTotal =
-//      1000 + 250 = 1250; leader effective weight = 500 + 250 = 750;
-//      expected leader pick-rate = 750 / 1250 = 0.60 exactly. The ROADMAP
-//      success-criterion-2 example `(500 + 250) / 1250 = 60%` was paired
-//      with seed `[500, 100, 100, 100]` which yields 750/1050 ≈ 71.4% under
-//      the actual contract arithmetic — algebraically inconsistent with the
-//      60% target. This fixture asserts the LOCKED seed `[500, 200, 200,
-//      100]` which is uniquely-up-to-permutation the 4-slot vector
-//      satisfying `(L + L/2) / (T + L/2) = 0.60` ⇒ `L = 0.5 × T` with `T =
-//      1000`, `L = 500`. The path-of-investigation note here documents the
-//      algebraic basis for the chosen seed per
-//      `feedback_no_history_in_comments.md`; the asserting code describes
-//      only the v42 mechanic.
-//
-// Per-test mapping (one line per TST-HRROLL-NN ⇒ describe block):
-//   TST-HRROLL-01 — weighted-distribution chi² uniformity at N=10000 under
-//     seed [400, 300, 200, 100]; df=3 crit=7.815; bonus-adjusted expected
-//     rates [0.5, 0.25, 0.1667, 0.0833].
-//   TST-HRROLL-02 — ×1.5 leader-bonus binomial sanity at N=10000 under
-//     LOCKED seed [500, 200, 200, 100]; df=1 crit=3.841; expected leader
-//     pick-rate exactly 0.60 = 750/1250.
-//   TST-HRROLL-03 — RNG commitment-window proof: dailyHeroWagers[D][0..3]
-//     slot bytes byte-identical across day-D→D+1 advance; JS oracle replay
-//     produces identical (q, s) for both captures; D-288-FIX-SHAPE-01
-//     dailyIdx single-writer invariant preserved.
-//   TST-HRROLL-04 — single-bettor edge case: deterministic (q, s) return
-//     with probability 1.0 across 100 entropy variations, at two distinct
-//     flat-idx positions (idx 0 and idx 17).
-//   TST-HRROLL-05 — zero-wager edge case: HRROLL-01 early-bail returns
-//     (false, 0, 0) across 100 entropy variations.
-//   TST-HRROLL-06 — production-path gas-delta log-only traceability
-//     (RELAX posture); positive-path coverage via `DailyWinningTraits`
-//     event-firing assertion under both worst-case-seeded and all-zero-
-//     seeded paths; theoretical-attestation cite to
-//     292-01-MEASUREMENT.md §3.c (D-291-GAS-01 SKIP-GAS posture mirror).
+// Weighted hero selection: statistical oracle checks, frozen-day retention and
+// production DailyWinningTraits replays. Only quadrants 0–2 are eligible.
+// Lifecycle gas comparisons are diagnostic and do not isolate the hero helper.
 
 import { expect } from "chai";
 import hre from "hardhat";
@@ -171,17 +66,6 @@ const TST_HRROLL_01_SEED = Object.freeze([400, 300, 200, 100]);
 const TST_HRROLL_02_SEED = Object.freeze([500, 200, 200, 100]);
 const TST_HRROLL_02_EXPECTED_LEADER_RATE = 750 / 1250; // 0.60 exactly
 
-// D-42N-GAS-01 theoretical anchor (292-01-MEASUREMENT.md §3.c). RELAX
-// disposition (user 2026-05-17): TST-HRROLL-06 is log-only traceability —
-// production-path delta is captured + logged but NOT asserted on (downstream
-// branch-cost cascade between worst-case-seeded vs all-zero-seeded paths
-// dominates the ~+431 gas _rollHeroSymbol body contribution; the production
-// granularity cannot isolate the body cost from those downstream cascades).
-// The cited theoretical-attestation in 292-01-MEASUREMENT.md §3.c remains
-// the load-bearing acceptance evidence for the gas regression. Mirrors the
-// D-291-GAS-01 SKIP-GAS posture from Phase 291.
-const GAS_DELTA_THEORETICAL = 431;
-
 // Currency tag for ETH bets per DegenerusGameDegeneretteModule constants
 // (CURRENCY_ETH = 0; see DegenerusGameDegeneretteModule.sol).
 const CURRENCY_ETH = 0;
@@ -236,17 +120,8 @@ function computeChi2Multinomial(observed, expected) {
   return chi2;
 }
 
-// Runs `forge inspect` at test runtime and extracts the storage-layout slot
-// index for `dailyHeroWagers`. Re-validates the Phase 292 §2 EMPTY-diff
-// attestation against the v41 close pin (slot 53). Returns a BigInt.
-
-
-// Solidity nested-mapping-with-fixed-array slot derivation:
-//   `dailyHeroWagers` is `mapping(uint32 => uint256[4])` at base slot
-//   `baseSlot`. For key `D`, the inner fixed array starts at
-//   `parentSlot = keccak256(abi.encode(uint256(D), uint256(baseSlot)))`,
-//   and element `q` lives contiguously at `parentSlot + q` (no further
-//   keccak for fixed-length array elements).
+// Each physical hero-pool key names a fixed four-word array; only three quadrants
+// are eligible. The day/validity metadata determines parity-buffer versus spill reads.
 function derivedailyHeroWagersSlot(D, q, baseSlot) {
   const parentSlot = BigInt(
     hre.ethers.keccak256(
@@ -264,18 +139,23 @@ function derivedailyHeroWagersSlot(D, q, baseSlot) {
 // Reads `dailyHeroWagers[D][0..3]` as `BigInt[4]` (matches the
 // `rollHeroSymbolRef` input shape).
 async function readDailyHeroWagersSlots(addr, D, baseSlot) {
+  const metaSlot = await deriveDailyHeroWagersBaseSlot("lootboxRngPacked");
+  const meta = BigInt(await hre.ethers.provider.getStorage(addr, metaSlot));
+  const day = BigInt(D);
+  const latest = meta & 0xffffffn;
   const out = [0n, 0n, 0n, 0n];
-  for (let q = 0; q < 4; ++q) {
-    const slot = derivedailyHeroWagersSlot(D, q, baseSlot);
-    const raw = await hre.ethers.provider.getStorage(addr, slot);
-    out[q] = BigInt(raw);
+  if (day + 1n < latest) return out;
+  for (let q = 0; q < 3; ++q) {
+    const valid = 1n << (24n + (day & 1n) * 3n + BigInt(q));
+    const buffered = latest >= day && (meta & valid) !== 0n;
+    if (!buffered && day <= 1n) continue;
+    const slot = derivedailyHeroWagersSlot(buffered ? day & 1n : day, q, baseSlot);
+    out[q] = BigInt(await hre.ethers.provider.getStorage(addr, slot));
   }
   return out;
 }
 
-// Reads the `dailyIdx` uint32 directly from storage slot 0 of the game
-// contract (internal — no public accessor; bytes [4:8] of slot 0 per
-// DegenerusGameStorage.sol layout).
+// Read dailyIdx from slot 0's three-byte lane at byte offset 3.
 async function readDailyIdx(gameAddr) {
   const word = BigInt(
     await hre.ethers.provider.getStorage(gameAddr, SLOT0_TIMING_FSM)
@@ -321,11 +201,8 @@ async function pinDailyEntropy(game, deployer, mockVRF, word) {
   }
 }
 
-// Decode one trait byte at `mainTraitsPacked[heroQuadrant]` per
-// _rollBoard L1623-1627: trait byte = (quadrant << 6) | (color << 3)
-// | symbol. The hero override writes the SAME byte to all 4 quadrant slots
-// (per L1623), so byte 0 suffices for cross-attestation — but reading
-// `heroQuadrant`'s own byte index is equivalent and self-documenting.
+// Decode the selected quadrant's byte. Hero selection replaces only that byte's
+// low three symbol bits, preserving its color and quadrant.
 function unpackHeroFromTraitsPacked(mainTraitsPacked, heroQuadrant) {
   const byte = Number(
     (BigInt(mainTraitsPacked) >> BigInt(heroQuadrant * 8)) & 0xffn
@@ -344,17 +221,22 @@ function unpackHeroFromTraitsPacked(mainTraitsPacked, heroQuadrant) {
 // worst-case-seeded gas-regression baseline (TST-HRROLL-06) use this path;
 // TST-HRROLL-03 uses the production path (placeDegeneretteBet) instead.
 async function seedDailyHeroWagersDirect(addr, D, baseSlot, rawAmounts) {
+  const day = BigInt(D);
   const packed = packDailyHeroWagers(rawAmounts);
-  for (let q = 0; q < 4; ++q) {
-    const slot = derivedailyHeroWagersSlot(D, q, baseSlot);
-    const valueHex =
-      "0x" + packed[q].toString(16).padStart(64, "0");
+  for (let q = 0; q < 3; ++q) {
     await hre.network.provider.send("hardhat_setStorageAt", [
-      addr,
-      slot,
-      valueHex,
+      addr, derivedailyHeroWagersSlot(day & 1n, q, baseSlot),
+      hre.ethers.toBeHex(packed[q], 32),
     ]);
   }
+  // The three buffer-valid bits and retained day authenticate these reusable words.
+  // Preserve pending ETH and every field above the low 30-bit hero metadata lane.
+  const metaSlot = await deriveDailyHeroWagersBaseSlot("lootboxRngPacked");
+  const meta = BigInt(await hre.ethers.provider.getStorage(addr, metaSlot));
+  const updated = (meta & ~((1n << 30n) - 1n)) | day | (7n << (24n + (day & 1n) * 3n));
+  await hre.network.provider.send("hardhat_setStorageAt", [
+    addr, hre.ethers.toBeHex(metaSlot, 32), hre.ethers.toBeHex(updated, 32),
+  ]);
 }
 
 // -----------------------------------------------------------------------------
@@ -941,46 +823,12 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
   );
 
   // ---------------------------------------------------------------------------
-  // TST-HRROLL-06 — production-path gas regression (RELAXED — log-only
-  // traceability; theoretical-attestation cite 292-01-MEASUREMENT.md §3.c).
-  //
-  // RELAX disposition (user 2026-05-17, resolving the first-execution
-  // [BLOCKING_ESCALATION] checkpoint): the production-path delta between
-  // worst-case-seeded `dailyHeroWagers[D]` (all 32 slots populated; leader
-  // at flat idx 31) and all-zero-seeded baseline (HRROLL-01 early-bail at
-  // total == 0) is captured + logged for traceability but NOT asserted
-  // against any soft/hard window. The production path
-  //   `mineFlip()` → state machine → _emitDailyWinningTraits →
-  //   _rollMainTraits → _rollBoard → _rollHeroSymbol
-  // triggers downstream JackpotFlipWin / coin-jackpot cascades that fire
-  // differently between the two seeded states (the trait-byte rewrite at
-  // _rollBoard L1623 affects bucket selection downstream); the
-  // observed delta is dominated by those downstream cascades rather than
-  // the _rollHeroSymbol body's ~+431 gas contribution. Production-path
-  // granularity cannot isolate the body cost from these downstream
-  // cascades, so a strict assertion against the +431 ± 100 soft / ≤ 750
-  // hard window is not a sound signal.
-  //
-  // Theoretical acceptance evidence remains the analytical anchor at
-  //   `.planning/phases/292-hero-override-weighted-roll-hrroll/292-01-MEASUREMENT.md`
-  //   §3.c (~+431 gas vs v41 `_topHeroSymbol` baseline; well within the
-  //   D-42N-GAS-01 soft +500 / hard +750 thresholds).
-  //
-  // Positive-path coverage IS asserted: the test verifies that
-  // `DailyWinningTraits` fires under both worst-case-seeded AND
-  // all-zero-seeded paths so the production-path arrival at
-  // _rollBoard is structurally exercised. Mirrors the Phase 291
-  // D-291-GAS-01 SKIP-GAS posture.
-  // ---------------------------------------------------------------------------
+  // Compare current populated/empty hero states while requiring real board emission.
   describe(
-    "TST-HRROLL-06 — production-path gas regression (RELAXED — log-only traceability; theoretical-attestation cite 292-01-MEASUREMENT.md §3.c)",
+    "Hero-populated versus empty-pool lifecycle gas (diagnostic)",
     function () {
       it(
-        "DailyWinningTraits event fires under both worst-case-seeded and all-zero-seeded mineFlip jackpot-resolution paths across " +
-          N_GAS_SAMPLES +
-          " measurements; per-sample gas-delta logged for traceability against the +" +
-          GAS_DELTA_THEORETICAL +
-          " gas theoretical anchor (292-01-MEASUREMENT.md §3.c)",
+        "both populated and empty hero pools reach DailyWinningTraits, with lifecycle gas logged",
         async function () {
           this.timeout(600_000); // 5 fresh fixtures × 2 paths each = 10 deploys
 
@@ -1094,13 +942,11 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
             };
           }
 
-          // Worst-case raw amounts: all 32 slots populated; leader at flat
-          // idx 31 (quadrant 3, symbol 7). The leader-bonus add lands at
-          // the last cursor position, forcing the pass-2 walk to run the
-          // full 32-step cumulative loop before returning.
-          const worstRaw = new Array(32);
-          for (let i = 0; i < 31; ++i) worstRaw[i] = 100 + i;
-          worstRaw[31] = 10000; // leader at flat idx 31
+          // Populate all 24 eligible weights; the Dice quadrant is ineligible.
+          // A late leader does not guarantee the random walk visits every weight.
+          const populatedRaw = new Array(32).fill(0);
+          for (let i = 0; i < 23; ++i) populatedRaw[i] = 100 + i;
+          populatedRaw[23] = 10000;
 
           const samples = [];
           let invalidSamples = 0;
@@ -1109,7 +955,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
 
           while (samples.length < N_GAS_SAMPLES && totalAttempts < MAX_ATTEMPTS) {
             ++totalAttempts;
-            const worstResult = await measureAdvanceGameGas(worstRaw);
+            const populatedResult = await measureAdvanceGameGas(populatedRaw);
             const baselineResult = await measureAdvanceGameGas(null); // all-zero seeded
 
             // Positive-path coverage assertion: BOTH paths must fire
@@ -1118,29 +964,29 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
             // remains the load-bearing structural assertion that the
             // production path reaches _rollBoard → _rollHeroSymbol.
             expect(
-              worstResult.dailyWinningTraitsFired,
-              `worst-case-seeded path did not emit DailyWinningTraits (sample attempt ${totalAttempts}); mineFlip drain never reached _emitDailyWinningTraits`
+              populatedResult.dailyWinningTraitsFired,
+              `populated-seeded path did not emit DailyWinningTraits (sample attempt ${totalAttempts}); mineFlip drain never reached _emitDailyWinningTraits`
             ).to.equal(true);
             expect(
               baselineResult.dailyWinningTraitsFired,
               `all-zero-seeded baseline path did not emit DailyWinningTraits (sample attempt ${totalAttempts}); mineFlip drain never reached _emitDailyWinningTraits`
             ).to.equal(true);
 
-            if (worstResult.gasUsed === null || baselineResult.gasUsed === null) {
+            if (populatedResult.gasUsed === null || baselineResult.gasUsed === null) {
               // Defensive guard — should be unreachable given the
               // event-firing assertions above pass, but mirrored for
               // explicit logical coverage.
               ++invalidSamples;
               continue;
             }
-            const delta = worstResult.gasUsed - baselineResult.gasUsed;
+            const delta = populatedResult.gasUsed - baselineResult.gasUsed;
             samples.push({
-              gasWorst: worstResult.gasUsed,
+              gasPopulated: populatedResult.gasUsed,
               gasBaseline: baselineResult.gasUsed,
               delta,
             });
             console.log(
-              `      [TST-HRROLL-06 sample ${samples.length}/${N_GAS_SAMPLES}] gasWorst=${worstResult.gasUsed}, gasBaseline=${baselineResult.gasUsed}, delta=${delta}`
+              `      [TST-HRROLL-06 sample ${samples.length}/${N_GAS_SAMPLES}] gasPopulated=${populatedResult.gasUsed}, gasBaseline=${baselineResult.gasUsed}, delta=${delta}`
             );
           }
 
@@ -1158,24 +1004,12 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
             deltas.length;
           const stddev = Math.sqrt(variance);
 
-          // Log-only traceability output — see RELAX rationale at the
-          // describe-block header. No assertion on the delta window; the
-          // theoretical-attestation cite at 292-01-MEASUREMENT.md §3.c
-          // remains the load-bearing acceptance evidence for the gas
-          // regression. Mirrors the Phase 291 D-291-GAS-01 SKIP-GAS
-          // posture.
+          // These are complete lifecycle calls with different downstream outcomes.
+          // No historical helper delta or engine admission bound is inferred.
           console.log(
-            `      [TST-HRROLL-06] gas-delta samples = [${deltas.join(
-              ", "
-            )}]; mean = ${meanDelta.toFixed(
-              1
-            )} gas; stddev = ${stddev.toFixed(
-              1
-            )} gas; theoretical anchor = +${GAS_DELTA_THEORETICAL} gas (292-01-MEASUREMENT.md §3.c — load-bearing acceptance evidence; production-path delta is NOT asserted against this anchor under the RELAX disposition)`
+            `      [hero lifecycle gas] deltas=[${deltas.join(", ")}]; mean=${meanDelta.toFixed(1)}; stddev=${stddev.toFixed(1)}`
           );
-          console.log(
-            `      [TST-HRROLL-06] PASS — DailyWinningTraits fired under both worst-case-seeded and all-zero-seeded paths across all ${N_GAS_SAMPLES} samples; production-path delta is dominated by downstream JackpotFlipWin / coin-jackpot branch-cost cascades (the trait-byte rewrite at _rollBoard L1623 changes downstream bucket selection), not the _rollHeroSymbol body's ~+${GAS_DELTA_THEORETICAL} gas contribution`
-          );
+
         }
       );
     }
@@ -1196,9 +1030,8 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
   //
   // Decode rules (from _rollBoard L1623-1627):
   //   trait byte = (heroQuadrant << 6) | (heroColor << 3) | heroSymbol
-  //   The hero override writes the SAME byte to ALL 4 quadrant slots in
-  //   `mainTraitsPacked`, so byte 0 suffices (we read byte at heroQuadrant
-  //   for self-documenting symmetry).
+  //   The hero override changes only the chosen quadrant's symbol; compare
+  //   that quadrant's byte with the independent oracle.
   //
   // Cross-attestation strategy NOT used as the LOAD-BEARING distributional
   // verification (handled by the chi² fixtures at N=10000); this is the

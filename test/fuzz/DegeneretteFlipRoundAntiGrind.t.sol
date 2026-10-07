@@ -216,7 +216,7 @@ contract DegeneretteFlipRoundAntiGrind is DeployProtocol {
     /// @dev The smallest mineFlip allowance that resolves a bet, by bisection over snapshots: the
     ///      engine admits a bet only while the remaining allowance covers its declared bound.
     function _minimalAllowance() internal returns (uint256) {
-        bytes32 resolvedSig = keccak256("DegeneretteResolved(address,uint32,uint64,uint256,uint32,bytes)");
+        bytes32 resolvedSig = keccak256("DegeneretteResolved(uint32,uint32,uint64,uint256,uint32,bytes)");
         uint256 lo = 300_000;
         uint256 hi = 30_000_000;
         while (hi - lo > 1_000) {
@@ -249,7 +249,7 @@ contract DegeneretteFlipRoundAntiGrind is DeployProtocol {
         game.placeDegeneretteBet(0, currency, perTicket, spins, uint8(ticket & 7));
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics[0] == keccak256("DegeneretteBetPlaced(address,uint32,uint64,uint256)")) {
+            if (logs[i].topics[0] == keccak256("DegeneretteBetPlaced(uint32,uint32,uint64,uint256)")) {
                 return uint64(uint256(logs[i].topics[3]));
             }
         }

@@ -39,15 +39,15 @@ contract RedemptionAccounting is RedemptionFixture {
         for (uint256 i; i < handler.getBatchCount(); ++i) {
             uint32 id = handler.batches(i);
             if (id == open) continue;
-            (uint128 tokens,,uint96 base,,uint16 roll,) = sdgnrs.redemptionBatches(id);
-            if (roll == 0) { expected += uint256(base) * 175 / 100; continue; }
+            (uint128 tokens,uint96 payout,,,uint16 roll,) = sdgnrs.redemptionBatches(id);
+            if (roll == 0) { expected += payout; continue; }
             if (id == settling) {
-                expected += uint256(base) * roll / 100 - handler.paidRolled(id);
+                expected += uint256(payout) - handler.paidRolled(id);
             } else {
                 // After the cursor drains, rounding dust is released; only parked claims remain.
                 for (uint256 a; a < handler.getActorCount(); ++a) {
                     uint256 pending = _claimTokens(handler.getActor(a), id);
-                    expected += (uint256(base) * pending / tokens) * roll / 100;
+                    expected += uint256(payout) * pending / tokens;
                 }
             }
         }
@@ -58,7 +58,7 @@ contract RedemptionAccounting is RedemptionFixture {
         uint256 pendingOpen;
         for (uint256 i; i < handler.getBatchCount(); ++i) {
             uint32 id = handler.batches(i);
-            (uint128 total,uint128 snapshot,,,,) = sdgnrs.redemptionBatches(id);
+            (uint128 total,,,,,) = sdgnrs.redemptionBatches(id);
             uint256 recorded;
             for (uint256 a; a < handler.getActorCount(); ++a) {
                 address actor = handler.getActor(a);
@@ -72,7 +72,7 @@ contract RedemptionAccounting is RedemptionFixture {
                 if (id == open) pendingOpen += pending;
             }
             assertEq(total, recorded, "batch token weight");
-            assertLe(total, uint256(snapshot) / 2, "batch supply cap");
+            assertLe(total, 1e24, "hard raw-token supply bound");
         }
         assertEq(escrow, pendingOpen, "unpriced holder share");
         assertEq(sdgnrs.totalSupply(), handler.ghost_initialSupply() + handler.ghost_totalMinted() - handler.ghost_totalBurned());

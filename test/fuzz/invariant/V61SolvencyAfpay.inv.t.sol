@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {BitPackingLib} from "../../../contracts/libraries/BitPackingLib.sol";
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {V61AfkingSpendHandler} from "../handlers/V61AfkingSpendHandler.sol";
 import {SolvencyActionHandler} from "../handlers/SolvencyActionHandler.sol";
@@ -63,7 +64,7 @@ contract V61SolvencyAfpay is DeployProtocol {
 
     uint256 private constant BALANCES_PACKED_SLOT = GameSlots.BALANCES_PACKED; // [afking:hi128 | claimable:lo128]
     uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED;
-    uint256 private constant DEITY_SHIFT = 184;
+    uint256 private constant DEITY_SHIFT = BitPackingLib.HAS_DEITY_PASS_SHIFT;
     uint256 private constant PRICE_COIN_UNIT = 1000;
     uint256 private constant SMITE_BURN = PRICE_COIN_UNIT / 5;
 
@@ -433,7 +434,7 @@ contract V61SolvencyAfpay is DeployProtocol {
     }
 
     function _grantDeityScoreBit(address who) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(game.walletIdOf(who), uint256(MINTPACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         packed |= (uint256(1) << DEITY_SHIFT);
         vm.store(address(game), slot, bytes32(packed));
@@ -443,7 +444,7 @@ contract V61SolvencyAfpay is DeployProtocol {
     ///      SOLVENCY-01 identity holds going IN to the focused stale-cashout test. The contract's own claim
     ///      debit is then verified to keep the pairing going OUT — the property under test.
     function _seedClaimablePaired(address who, uint256 amount) internal {
-        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(BALANCES_PACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(uint256(_aid(who)), uint256(BALANCES_PACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         uint256 oldLow = uint128(packed);
         uint256 high = packed >> 128;

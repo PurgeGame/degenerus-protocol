@@ -52,11 +52,6 @@ contract AfKingSubscription is DeployProtocol {
 
     mapping(address => uint32) private _aidCache;
 
-    /// @dev operatorApprovals[id][op] read from storage.
-    function _approved(uint32 id, address op) internal view returns (bool) {
-        bytes32 inner = keccak256(abi.encode(uint256(id), GameSlots.OPERATOR_APPROVALS));
-        return uint256(vm.load(address(game), keccak256(abi.encode(op, inner)))) != 0;
-    }
 
     /// @dev Wallet ID of `a`, registering it when it holds none. Call before any `vm.prank`.
     function _aid(address a) internal returns (uint32 id) {
@@ -84,7 +79,7 @@ contract AfKingSubscription is DeployProtocol {
         keccak256("CoinflipStakeUpdated(uint32,uint24,uint256,uint256)");
 
     /// @dev Game-resident module event signature (emitter == address(game) via delegatecall).
-    bytes32 private constant SUB_EXPIRED_SIG = keccak256("SubscriptionExpired(address,uint8)");
+    bytes32 private constant SUB_EXPIRED_SIG = keccak256("SubscriptionExpired(uint32,uint8)");
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
     uint256 private _lastFulfilledReqId;
@@ -214,7 +209,7 @@ contract AfKingSubscription is DeployProtocol {
         address m = makeAddr("auth_m");
         uint256 seat = _grantSeat(m);
         uint32 sId = _aid(s);
-        _aid(m);
+        uint32 mId = _aid(m);
 
         // REFUSED: M has NOT been approved by S -> the non-zero non-self source reverts NotApproved.
         vm.prank(m);
@@ -223,7 +218,7 @@ contract AfKingSubscription is DeployProtocol {
 
         // S approves M's key on the game; now the SAME subscribe is honored (source stored).
         vm.prank(s);
-        game.setOperatorApproval(0, m, true);
+        game.setAfkingFundingApproval(0, mId, true);
         // Fund S's bucket BEFORE the honored subscribe so M's NEW-run cover-buy (drawn from the resolved
         // source S) is grounded (D-12); the OPEN-E approval gate is the property under test.
         _fundPool(s, 1 ether);
@@ -247,9 +242,9 @@ contract AfKingSubscription is DeployProtocol {
         address m = makeAddr("revoke_m");
         uint256 seat = _grantSeat(m);
         uint32 sId = _aid(s);
-        _aid(m);
+        uint32 mId = _aid(m);
         vm.prank(s);
-        game.setOperatorApproval(0, m, true);
+        game.setAfkingFundingApproval(0, mId, true);
         // Fund S's bucket BEFORE subscribe so M's NEW-run cover-buy (drawn from the resolved source S) is
         // grounded (D-12); the trust-the-sub revoke semantics are the property under test.
         _fundPool(s, 1 ether); // S funds the per-day ETH draw + grounds the subscribe cover-buy
@@ -261,8 +256,8 @@ contract AfKingSubscription is DeployProtocol {
 
         // S REVOKES M's approval AFTER the sub is active.
         vm.prank(s);
-        game.setOperatorApproval(0, m, false);
-        assertFalse(_approved(sId, m), "S has revoked M");
+        game.setAfkingFundingApproval(0, mId, false);
+        assertFalse(game.afkingFundingApproved(sId, mId), "S has revoked M");
 
         // The active sub is NOT terminated by the revoke — the source is fixed at subscribe (no-escalation,
         // no re-check). M stays in the set, fundingSource still S.
@@ -345,7 +340,8 @@ contract AfKingSubscription is DeployProtocol {
     /// @dev Read `who`'s fundingSource from the sparse `_fundingSourceOf` map (slot 53).
     ///      address(0) = self-funded (the common case stores nothing).
     function _fundingSourceOf(address who) internal view returns (address) {
-        return address(uint160(uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(FUNDING_SOURCE_SLOT)))))));
+        uint32 id = uint32(uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(FUNDING_SOURCE_SLOT))))));
+        return id == 0 ? address(0) : _fixturePayee(id);
     }
 
     // ---- Event drain (emitter == address(game) — the game-resident module emits via delegatecall) ----
@@ -376,7 +372,7 @@ contract AfKingSubscription is DeployProtocol {
                 _logsCache[i].emitter == emitter &&
                 _logsCache[i].topics.length >= 2 &&
                 _logsCache[i].topics[0] == sig &&
-                address(uint160(uint256(_logsCache[i].topics[1]))) == who
+                uint32(uint256(_logsCache[i].topics[1])) == game.walletIdOf(who)
             ) count++;
         }
     }

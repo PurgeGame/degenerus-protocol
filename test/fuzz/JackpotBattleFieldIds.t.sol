@@ -28,10 +28,9 @@ contract CrapsReaderStub {
 /// @title The jackpot battle field under wallet IDs
 /// @notice `JackpotBattleFieldLib.prepare(uint32[] ids)` builds one word per drawn entry,
 ///         `id | board << 160 | 1 << 180`, reading each distinct wallet's saved board from the
-///         ID-keyed pass word (`_passCreditsById`, slot 15) in one batched `extsload`.
+///         ID-keyed pass word (`_passCreditsById`, slot 14) in one batched `extsload`.
 contract JackpotBattleFieldIdsTest is Test {
-    uint256 internal constant ADDRESS_SLOT = 14;
-    uint256 internal constant ID_SLOT = 15;
+    uint256 internal constant ID_SLOT = 14;
     bytes4 internal constant BATCH_SEL = bytes4(keccak256("extsload(bytes32[])"));
     uint32 internal constant BOARD_A = 3 | (3 << 12) | (1 << 15);
     uint32 internal constant BOARD_B = 2 | (1 << 3);
@@ -115,25 +114,6 @@ contract JackpotBattleFieldIdsTest is Test {
         assertEq(field[4], _word(257, BOARD_B));
     }
 
-    function test_theBoardComesFromTheIdWordNotTheAddressWord() public {
-        uint32 id = 42;
-        address owner = makeAddr("field-owner");
-        // The address word holds a different board and the ID cache; only the ID word may be read.
-        vm.store(
-            ContractAddresses.CRAPS,
-            keccak256(abi.encode(owner, ADDRESS_SLOT)),
-            bytes32((CrapsPreferenceLib.compress(BOARD_A) << CrapsPreferenceLib.SHIFT) | CrapsPreferenceLib.INITIALIZED
-                | (uint256(id) << CrapsPreferenceLib.ID_SHIFT))
-        );
-        uint32[] memory ids = new uint32[](1);
-        ids[0] = id;
-        (uint256[] memory field, bytes32[][] memory reads) = _prepareRecorded(ids);
-        assertEq(reads[0][0], _idKey(id), "the read targets _passCreditsById");
-        assertEq(field[0], _word(id, 0), "no ID-word board: board zero");
-        _saveBoard(id, BOARD_B, 0);
-        (field,) = _prepareRecorded(ids);
-        assertEq(field[0], _word(id, BOARD_B), "the ID word's board, not the address word's");
-    }
 
     function test_anEmptyDrawReadsNothing() public {
         (uint256[] memory field, bytes32[][] memory reads) = _prepareRecorded(new uint32[](0));

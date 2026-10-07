@@ -37,13 +37,6 @@ contract LootboxBoonCoexistence is DeployProtocol {
     uint256 constant BP_PURCHASE_TIER_SHIFT = 160;
 
     // LootBoxReward event signature (from DegenerusGameLootboxModule)
-    event LootBoxReward(
-        address indexed player,
-        uint48 indexed day,
-        uint8 indexed rewardType,
-        uint256 lootboxAmount,
-        uint256 amount
-    );
 
     uint256 private _lastFulfilledReqId;
 

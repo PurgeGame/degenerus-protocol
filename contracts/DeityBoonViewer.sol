@@ -26,6 +26,7 @@ pragma solidity 0.8.34;
 
 /// @dev Data source interface for deity boon state from the game contract.
 interface IDeityBoonDataSource {
+    function deityBoonDataById(uint32 id) external view returns (uint256, uint24, uint8, bool, bool);
     /// @notice Get the raw boon state for a deity holder.
     /// @param deity Address of the deity pass holder.
     /// @return dailySeed The preceding day's finalized RNG word for today's boons.
@@ -114,18 +115,25 @@ contract DeityBoonViewer {
         address game,
         address deity
     ) external view returns (uint8[3] memory slots, uint8 usedMask, uint24 day) {
+        return deityBoonSlotsById(game, IDeityBoonDataSource(game).walletIdOf(deity));
+    }
+
+    function deityBoonSlotsById(
+        address game,
+        uint32 deityId
+    ) public view returns (uint8[3] memory slots, uint8 usedMask, uint24 day) {
         (
             uint256 dailySeed,
             uint24 d,
             uint8 mask,
             ,
 
-        ) = IDeityBoonDataSource(game).deityBoonData(deity);
+        ) = IDeityBoonDataSource(game).deityBoonDataById(deityId);
 
         day = d;
         usedMask = mask;
 
-        slots = _slotsForDay(IDeityBoonDataSource(game).walletIdOf(deity), day, dailySeed);
+        slots = _slotsForDay(deityId, day, dailySeed);
     }
 
     /// @notice Preview the three deity boon slots available on the next game day.
@@ -138,10 +146,17 @@ contract DeityBoonViewer {
         address game,
         address deity
     ) external view returns (uint8[3] memory slots, uint24 day) {
-        (, uint24 today, , , ) = IDeityBoonDataSource(game).deityBoonData(deity);
+        return deityBoonSlotsTomorrowById(game, IDeityBoonDataSource(game).walletIdOf(deity));
+    }
+
+    function deityBoonSlotsTomorrowById(
+        address game,
+        uint32 deityId
+    ) public view returns (uint8[3] memory slots, uint24 day) {
+        (, uint24 today, , , ) = IDeityBoonDataSource(game).deityBoonDataById(deityId);
         day = today + 1;
         slots = _slotsForDay(
-            IDeityBoonDataSource(game).walletIdOf(deity), day, IDeityBoonDataSource(game).rngWordForDay(today)
+            deityId, day, IDeityBoonDataSource(game).rngWordForDay(today)
         );
     }
 

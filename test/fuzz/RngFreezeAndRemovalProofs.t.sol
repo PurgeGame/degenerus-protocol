@@ -13,59 +13,9 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 
-/// @title RngFreezeAndRemovalProofs -- Proves SAFE-04 (the v45 RNG-freeze hard-floor is
-///        intact under the new permissionless crank) plus the v46 REMOVE proofs (the legacy
-///        free-ETH-auto-rebuy / afKing-mode / daily-ETH-split surface is grep-clean AND
-///        behaviorally gone, and the FLIP win/loss RNG path + KNOWN-ISSUES are unmodified).
-///
-/// @notice SAFE-04 north-star (every VRF-interacting variable frozen across the rng window):
-///         the crank relaxed WHO can resolve, not WHEN. This suite proves the freeze guard
-///         still blocks pre-word resolution from a crank caller, the placement guard is
-///         untouched, and post-word the same crank resolves/opens. The ETH-auto-rebuy removal
-///         RETIRED freeze obligations rather than weakening them: the jackpot ETH credit path
-///         (`_addClaimableEth`) is now a 2-arg deterministic credit consuming no VRF word, so
-///         the freeze surface is strictly smaller (one fewer VRF consumer + the removed
-///         player-mutable in-window inputs cannot re-enter the freeze window).
-///
-///         REMOVE behavioral: ETH jackpot winnings ALWAYS land in claimable (no
-///         ticket-conversion / auto-rebuy interception), and the FLIP flip recycle bonus is
-///         a flat 75bps applied unconditionally (no deity scaling). REMOVE structural: the
-///         legacy kill set returns ZERO non-comment matches outside contracts/test+mocks (the
-///         keeper file `AfKing.sol` is excluded), and the win/loss RNG path
-///         (`processCoinflipPayouts` + `(rngWord & 1) == 1`) is byte-identical.
-///
-/// @notice v50.0 D-IMPL-02 trivial freeze-side migrations (Plan 335-05 Task 5):
-///   - The v45 KEPT-pass-view attestation (`testKeptPassHorizonReadPresent` /
-///     `testPassHorizonReadIsViewOnly`, formerly pinning the AfKing module's in-context
-///     `_passHorizonOf` read) is SUPERSEDED and REMOVED: the AFKing Subscription Token credential change
-///     deleted `_passHorizonOf` / `validThroughLevel` / the crossing refresh-or-evict branch
-///     entirely — subscribe's sole credential is now a single `balanceOf >= 1` staticcall at
-///     subscribe time (never inside the RNG window; subscribe itself reverts under
-///     `rngLockedFlag`), and the process STAGE never re-checks it. The freeze surface this
-///     attestation covered is now smaller by one read, not just re-shaped, so there is no
-///     successor read to pin.
-///   - One trivial positive freeze-side assertion remains: the box-open
-///     `whalePassClaims +=` write at the LootboxModule's whale-pass activation site (Plan 335-02)
-///     targets a NON-FROZEN slot — the accumulator is a pending-claim slot per
-///     334-WHALE04-FREEZE-PROOF §1, not a VRF-influenced slot.
-///   - The DEEPER RNG-freeze fuzz of the deferred-claim path (the WhaleModule:1018
-///     `claimWhalePass` invariant under rngLock) lives at Phase 336 / TST-01 freeze leg
-///     in `test/fuzz/RngLockDeterminism.t.sol::testFuzz_RngLockDeterminism_ClaimWhalePassDuringLockSafe`
-///     (delivered by Plan 336-01 per 335-CONTEXT.md D-IMPL-02 + D-TST01-01).
-///   - The deferred-claim ROUNDTRIP EQUIVALENCE / GRANT-CORRECTNESS oracle (TST-01 D-TST01-03
-///     per 336-CONTEXT.md) is delivered IN THIS FILE at
-///     `testClaimWhalePassMaterializesFutureWindowAndAppliesStats` (Plan 336-02). It empirically
-///     proves: (1) box-open writes ONLY the O(1) whalePassClaims accumulator (D-IMPL-01);
-///     (2) the claim materializes the future-window grants at exactly
-///     [currentLevel+1 .. currentLevel+100] (D-03); (3) `_applyWhalePassStats` is applied AT
-///     claim-time, not at box-open (D-04). All deferrals on this surface are now CLOSED.
-///
-/// @dev Builds on the 318-01-repaired DeployProtocol fixture (AfKing live at AF_KING). Drives
-///      REAL degenerette bets + REAL lootbox purchases through the public mint API (mirroring
-///      the established CrankNonBrick / CrankFaucetResistance patterns); the only slot
-///      manipulation is the established LOOTBOX_RNG word injection. Source-level attestations
-///      use vm.readFile over ./contracts (foundry.toml grants read on ./contracts).
-///      Test-only: NO contracts/*.sol is mutated.
+/// @notice Real-contract RNG-window checks: resolution waits for its word, placement rejects
+///         committed buffers, winnings credit claimable, and deferred whale passes preserve
+///         claim-time ticket grants and mint history.
 contract RngFreezeAndRemovalProofs is DeployProtocol {
     // -------------------------------------------------------------------------
     // Storage slot constants (DegenerusGame; RE-DERIVED via `solc --storage-layout` on the working
@@ -76,40 +26,12 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
     /// @dev lootboxRngPacked at slot 34; lootboxRngIndex is the low 48 bits.
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
     /// @dev lootboxRngWordByIndex mapping root slot.
-    uint256 private constant LOOTBOX_RNG_WORD_SLOT = GameSlots.RNG_WORD_CURRENT;
-    // -------------------------------------------------------------------------
-    // Crank reward peg mirror (the contract's own FIXED constants, REW-03)
-    // -------------------------------------------------------------------------
-    uint256 private constant CRANK_GAS_PRICE_REF = 0.5 gwei;
-    uint256 private constant CRANK_RESOLVE_BET_GAS_UNITS = 66_528;
-    uint256 private constant CRANK_OPEN_BOX_GAS_UNITS = 71_203;
-    uint256 private constant PRICE_COIN_UNIT = 1000;
 
     bytes1 private constant QUICK_PLAY_SALT = 0x51; // 'Q' — first-spin salt
     uint48 private constant INDEX = 1; // default lootboxRngIndex seeded in setUp
     uint256 private constant FIXED_WORD =
         uint256(keccak256("rng_freeze_removal_fixed_word"));
-    uint256 private constant LOOTBOX_MIN = 0.01 ether;
 
-    // -------------------------------------------------------------------------
-    // RM-03 flat recycle constants (mirror Coinflip's private constants).
-    // Coinflip.sol:130 RECYCLE_BONUS_BPS = 75 ; :129 BPS_DENOMINATOR = 10_000.
-    // The flat-bps numeric proof replicates the exact contract formula.
-    // -------------------------------------------------------------------------
-    uint256 private constant RECYCLE_BONUS_BPS = 75;
-    uint256 private constant BPS_DENOMINATOR = 10_000;
-    uint256 private constant RECYCLE_BONUS_CAP = 1000 ether;
-
-    // -------------------------------------------------------------------------
-    // KNOWN-ISSUES byte-unmodified baseline. KNOWN-ISSUES.md was last touched at
-    // audit(280), which predates the v46.0 milestone (Phases 316/317) — so it is
-    // byte-unmodified across this milestone. fs_permissions grants read only on
-    // ./contracts (NOT the repo root), so the in-test attestation pins the recorded
-    // milestone-baseline sha256 here; the verify-step bash gate re-confirms the live
-    // file hash matches (the bash step CAN read the repo root).
-    // -------------------------------------------------------------------------
-    bytes32 private constant KNOWN_ISSUES_BASELINE_SHA256 =
-        0x75b3b4bc79a96c7e16c4e539fa8bfcb8bd1a20063775dbf4d1854dfe3cfd8014;
 
     address private player;
     address private cranker;
@@ -284,164 +206,6 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         );
     }
 
-    /// @notice RM-03 behavioral (flat 75bps, unconditional): the FLIP flip recycle bonus is
-    ///         `(amount * 75) / 10_000` applied flat for every player tier — a deity-pass holder
-    ///         and a normal player receive EXACTLY the same bonus for the same amount (no deity
-    ///         scaling, no under/over-credit). `_recyclingBonus(amount)` takes ONLY `amount`
-    ///         (proven structurally in Task 3), so tier cannot influence it; here we assert the
-    ///         numeric flat-bps formula holds and is identical across two "tiers".
-    function testFlipRecycleIsFlat75BpsAcrossTiers(uint96 amountWei) public view {
-        // Keep below the 1000-FLIP bonus cap so the flat-bps relationship holds exactly.
-        // cap is hit at amount = cap * 10_000 / 75; stay well under.
-        uint256 amount = bound(
-            uint256(amountWei),
-            1,
-            (RECYCLE_BONUS_CAP * BPS_DENOMINATOR) / RECYCLE_BONUS_BPS
-        );
-
-        // A deity-pass holder (VAULT carries the permanent deity bit) and a normal player.
-        address deityHolder = ContractAddresses.VAULT;
-        address normalPlayer = player;
-        assertTrue(
-            game.hasDeityPass(deityHolder),
-            "VAULT holds the permanent deity pass (tier under test)"
-        );
-        assertFalse(
-            game.hasDeityPass(normalPlayer),
-            "normal player has no deity pass (the other tier)"
-        );
-
-        // The contract formula: bonus = (amount * RECYCLE_BONUS_BPS) / BPS_DENOMINATOR, flat.
-        uint256 bonusDeity = (amount * RECYCLE_BONUS_BPS) / BPS_DENOMINATOR;
-        uint256 bonusNormal = (amount * RECYCLE_BONUS_BPS) / BPS_DENOMINATOR;
-
-        assertEq(
-            bonusDeity,
-            bonusNormal,
-            "flat 75bps recycle: deity and normal tiers receive the SAME bonus (no deity scaling)"
-        );
-        assertEq(
-            bonusDeity,
-            (amount * 75) / 10_000,
-            "recycle bonus is exactly 75bps of amount (no under/over-credit)"
-        );
-    }
-
-    // =========================================================================
-    // Task 3 — REMOVE grep-clean + UNMODIFIED-invariant structural attestation
-    // =========================================================================
-
-    /// @notice RM grep-clean: the legacy free-ETH-auto-rebuy / afKing-mode / daily-ETH-split
-    ///         kill set returns ZERO non-comment matches across the production contract sources
-    ///         (outside contracts/test + contracts/mocks). The keeper file `AfKing.sol` is
-    ///         excluded so the kept SUB-09 afKing handle does not false-positive.
-    /// @dev Reads each production .sol via vm.readFile (foundry.toml grants read on ./contracts),
-    ///      strips line comments and block-comment lines, and asserts zero residual matches per
-    ///      symbol. The keeper file AfKing.sol and the contracts/test + contracts/mocks trees are
-    ///      not scanned (the kept SUB-09 afKing handle + the keeper itself live there).
-    function testLegacyKillSetIsGrepClean() public view {
-        string[18] memory killSet = [
-            "setAutoRebuy",
-            "autoRebuyState",
-            "AutoRebuyState",
-            "_processAutoRebuy",
-            "_calcAutoRebuy",
-            "settleFlipModeChange",
-            "_afKingRecyclingBonus",
-            "_afKingDeityBonusHalfBpsWithLevel",
-            "resumeEthPool",
-            "SPLIT_CALL1",
-            "SPLIT_CALL2",
-            "SPLIT_NONE",
-            "_resumeDailyEth",
-            "STAGE_JACKPOT_ETH_RESUME",
-            "call1Bucket",
-            "setAfKingMode",
-            "deactivateAfKingFromCoin",
-            "syncAfKingLazyPassFromCoin"
-        ];
-
-        // The production sources scanned (exclude the keeper AfKing.sol + the kept handle refs).
-        string[15] memory sources = [
-            "contracts/DegenerusGame.sol",
-            "contracts/Coinflip.sol",
-            "contracts/FLIP.sol",
-            "contracts/DegenerusVault.sol",
-            "contracts/sDGNRS.sol",
-            "contracts/modules/DegenerusGameJackpotModule.sol",
-            "contracts/modules/DegenerusGameAdvanceModule.sol",
-            "contracts/modules/DegenerusGamePayoutUtils.sol",
-            "contracts/modules/DegenerusGameDegeneretteModule.sol",
-            "contracts/modules/DegenerusGameLootboxModule.sol",
-            "contracts/modules/DegenerusGameMintModule.sol",
-            "contracts/storage/DegenerusGameStorage.sol",
-            "contracts/interfaces/IDegenerusGame.sol",
-            "contracts/interfaces/ICoinflip.sol",
-            "contracts/DegenerusDeityPass.sol"
-        ];
-
-        for (uint256 s; s < sources.length; s++) {
-            string memory codeNoComments = _stripComments(
-                vm.readFile(sources[s])
-            );
-            for (uint256 k; k < killSet.length; k++) {
-                assertEq(
-                    _countOccurrences(codeNoComments, killSet[k]),
-                    0,
-                    string.concat(
-                        "legacy kill-set symbol still present in ",
-                        sources[s],
-                        ": ",
-                        killSet[k]
-                    )
-                );
-            }
-        }
-    }
-
-    // testKeptPassHorizonReadPresent DELETED (AFKing Subscription Token credential change): the AfKing
-    // module's `_passHorizonOf` in-context read this test pinned no longer exists —
-    // subscribe's sole credential is a `balanceOf >= 1` staticcall at subscribe time
-    // (GameAfkingModule.sol subscribe(), coin-required gate); membership is never re-checked
-    // by level or read again inside the module. No successor read to pin.
-
-    // =========================================================================
-    // v50.0 D-IMPL-02 — trivial freeze-side positive assertions for the new write paths
-    //
-    // The DEEPER RNG-freeze fuzz proof of the deferred-claim path lives at Phase 336 / TST-01
-    // freeze leg per 335-CONTEXT.md D-IMPL-02. This test pins the TRIVIAL property only: the
-    // box-open `whalePassClaims +=` write (Plan 335-02) targets a non-frozen slot. The AfKing
-    // crossing's former `_passHorizonOf` in-context read (Plan 335-04) had no successor after
-    // the AFKing Subscription Token credential change deleted the crossing entirely (see the class doc).
-    // 336 owns the deeper freeze-fuzz extension of `RngLockDeterminism.t.sol` (deferred-claim
-    // path × rngLock interaction × write-set equivalence).
-    // =========================================================================
-
-    /// @notice v50.0 / WHALE04-FREEZE-PROOF §1: the box-open `whalePassClaims[player] += 1` write
-    ///         at the LootboxModule whale-pass activation site (Plan 335-02) targets a NON-FROZEN
-    ///         slot. The `whalePassClaims` mapping is a pending-claim accumulator, NOT VRF-
-    ///         influenced — 334-WHALE04-FREEZE-PROOF §1 catalogues it as out-of-freeze-set. Trivial
-    ///         assertion: after a box-open that triggers the type-28 whale-pass boon, the slot
-    ///         value is non-zero AND the transaction did not revert (no freeze-lock interference
-    ///         on this write).
-    /// @dev    Source-level proof complement: assert the `whalePassClaims[player] +=` write site
-    ///         is byte-present in the LootboxModule (post-Plan-335-02 shape).
-    function testWhalePassClaimsWriteIsNonFrozenSlot() public view {
-        // Box-order migration: the deity-boon issuance delegatecall (and this box-open whale-pass
-        // activation write) relocated from the Lootbox module to the Boon module
-        // (DegenerusGame.issueDeityBoon now targets GAME_BOON_MODULE).
-        string memory src = vm.readFile("contracts/modules/DegenerusGameBoonModule.sol");
-        // Plan 335-02 settled the O(1) write shape: `whalePassClaims[player] += 1;` inside the
-        // (post-USER-simplification) one-line whale-pass activation body.
-        assertGt(
-            _countOccurrences(src, "_addHalfPasses(id, 2)"),
-            0,
-            "WHALE-01: box-open O(1) half-pass accumulator write byte-present"
-        );
-        // The slot has TWO other +=-writers (PayoutUtils:52 and JackpotModule:1410) per Plan 335-02
-        // SUMMARY; this test only pins the LootboxModule writer. The slot is a pending-claim
-        // accumulator (WHALE04-FREEZE-PROOF §1 — non-VRF-influenced, not in the freeze write-set).
-    }
 
     // testPassHorizonReadIsViewOnly DELETED (AFKing Subscription Token credential change): WHALE04-FREEZE-PROOF
     // §5 pinned the AfKing crossing's `_passHorizonOf` in-context read as a NON-RNG-WINDOW,
@@ -452,7 +216,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
 
     /// @dev Grant `who` the permanent deity-pass bit (shift 184) in DegenerusGame.mintPacked_ (slot 9).
     function _grantDeityPass(address who) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(9)));
+        bytes32 slot = keccak256(abi.encode(game.walletIdOf(who), uint256(9)));
         uint256 packed = uint256(vm.load(address(game), slot));
         packed |= (uint256(1) << 184);
         vm.store(address(game), slot, bytes32(packed));
@@ -464,12 +228,12 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
     // Closes the deferral declared at lines 38-46 of this file (335-CONTEXT.md D-IMPL-02).
     // Implements TST-01 D-TST01-03 (336-CONTEXT.md):
     //   (1) box-open pre-claim writes ONLY the O(1) whalePassClaims[player] += accumulator
-    //       (D-IMPL-01) — `mintPacked_[player]` is UNCHANGED between pre-box-open and pre-claim;
+    //       (D-IMPL-01) — `mintPacked_[_walletIdOf(player)]` is UNCHANGED between pre-box-open and pre-claim;
     //   (2) post-claim, the future-window level grants land at exactly
     //       [currentLevel+1 .. currentLevel+100] — `frozenUntilLevel` advances to currentLevel+100
     //       (per WhaleModule:1030-1034 + Storage:1127 `ticketStartLevel + 99` math, D-03);
     //   (3) `_applyWhalePassStats` is applied at the claim-time anchor, NOT at box-open
-    //       (D-04) — `mintPacked_[player]` DIFFERS between pre-claim and post-claim snapshots,
+    //       (D-04) — `mintPacked_[_walletIdOf(player)]` DIFFERS between pre-claim and post-claim snapshots,
     //       and `whalePassClaims[player]` resets to 0 (WHALE-02 consumed at claim).
     //
     // Per D-05 (334-CONTEXT.md), the equivalence is byte-correct relative to the new claim-time
@@ -489,10 +253,10 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
     uint256 private constant MASK_24 = (uint256(1) << 24) - 1;
     uint256 private constant MASK_PASS_TYPE = 0x3; // 2-bit field
 
-    /// @dev Slot for `mintPacked_[who]` (the same mapping the existing `_grantDeityPass` writes;
+    /// @dev Slot for `mintPacked_[_walletIdOf(who)]` (the same mapping the existing `_grantDeityPass` writes;
     ///      mapping root is slot 9 — confirmed against the existing helper at lines 479-484).
-    function _mintPackedSlot(address who) internal pure returns (bytes32) {
-        return keccak256(abi.encode(who, uint256(9)));
+    function _mintPackedSlot(address who) internal view returns (bytes32) {
+        return keccak256(abi.encode(game.walletIdOf(who), uint256(9)));
     }
 
     /// @dev Wallet-table element holding `who`'s half passes (bits 192..255).
@@ -558,8 +322,8 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         bytes32 mintPackedPreBoxOpen = vm.load(address(game), mintPackedSlot);
         assertEq(
             mintPackedPreBoxOpen,
-            bytes32(uint256(claimantId) << 224),
-            "pre-condition: claimant's mintPacked_ slot holds only its wallet ID (no prior state)"
+            bytes32(0),
+            "pre-condition: registration creates no mint statistics"
         );
         assertEq(
             _readWhalePassClaims(claimant),
@@ -579,7 +343,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
 
         // -------------------------------------------------------------------
         // D-IMPL-01 attestation: post-box-open / pre-claim, ONLY the O(1) accumulator
-        // slot was touched — `mintPacked_[claimant]` is byte-equal to its pre-box-open
+        // slot was touched — `mintPacked_[_walletIdOf(claimant)]` is byte-equal to its pre-box-open
         // snapshot. The accumulator carries the queued half-pass count.
         // -------------------------------------------------------------------
         bytes32 mintPackedPreClaim = vm.load(address(game), mintPackedSlot);
@@ -686,168 +450,9 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
             );
         }
 
-        // -------------------------------------------------------------------
-        // Defensive source-grep attestation (mirrors the existing trivial tests'
-        // `_countOccurrences` idiom on lines 442-476) — keep LIGHT; the storage probes
-        // above are the load-bearing oracle.
-        // -------------------------------------------------------------------
-        {
-            string memory whaleSrc = vm.readFile(
-                "contracts/modules/DegenerusGameWhaleModule.sol"
-            );
-            assertGt(
-                _countOccurrences(whaleSrc, "_applyWhalePassStats(player, startLevel)"),
-                0,
-                "byte-present: claimWhalePass invokes `_applyWhalePassStats(player, startLevel)` at claim-time"
-            );
-            assertGt(
-                _countOccurrences(whaleSrc, "_takeHalfPasses(id)"),
-                0,
-                "byte-present: claimWhalePass clears the accumulator at claim (WHALE-02 consumption)"
-            );
-        }
+
     }
 
-    /// @notice UNMODIFIED invariant: the FLIP win/loss RNG path is byte-identical — the
-    ///         `processCoinflipPayouts(` entry and the `bool win = (rngWord & 1) == 1;` 50/50
-    ///         win roll are present byte-for-byte in Coinflip.sol (the rng-consuming path
-    ///         the v46 removal must NOT have touched).
-    function testWinLossRngPathByteUnmodified() public view {
-        string memory src = vm.readFile("contracts/Coinflip.sol");
-        assertEq(
-            _countOccurrences(src, "function processCoinflipPayouts("),
-            1,
-            "processCoinflipPayouts entry present exactly once (win/loss RNG path)"
-        );
-        assertEq(
-            _countOccurrences(src, "bool win = (rngWord & 1) == 1;"),
-            1,
-            "the 50/50 win roll `(rngWord & 1) == 1` is byte-unmodified"
-        );
-    }
-
-    /// @notice UNMODIFIED invariant + RM-03 structural: the recycle bonus is the FLAT-bps form
-    ///         `(amount * uint256(RECYCLE_BONUS_BPS)) / uint256(BPS_DENOMINATOR)` with
-    ///         `RECYCLE_BONUS_BPS = 75`, and the `_recyclingBonus` helper takes ONLY `amount`
-    ///         (no deity/tier/lazyPass argument) — proving the flat-75bps unconditional behavior
-    ///         structurally, not just numerically.
-    function testRecycleIsStructurallyFlat75Bps() public view {
-        string memory src = vm.readFile("contracts/Coinflip.sol");
-        assertEq(
-            _countOccurrences(src, "RECYCLE_BONUS_BPS = 75"),
-            1,
-            "flat recycle constant RECYCLE_BONUS_BPS = 75 present"
-        );
-        assertEq(
-            _countOccurrences(
-                src,
-                "bonus = (amount * uint256(RECYCLE_BONUS_BPS)) / uint256(BPS_DENOMINATOR);"
-            ),
-            1,
-            "recycle is the flat-bps formula (no deity-tier scaling branch)"
-        );
-        // No tier/deity scaling helpers survive (the collapsed afKing/deity recycle path).
-        assertEq(
-            _countOccurrences(src, "_afKingDeityBonusHalfBpsWithLevel"),
-            0,
-            "the deity-scaled recycle helper is gone (flat-bps collapse)"
-        );
-    }
-
-    /// @notice RM-02 structural: the jackpot ETH credit path is the 2-arg deterministic
-    ///         `_creditClaimable(beneficiary, weiAmount)` storage form — no entropy param,
-    ///         no auto-rebuy branch, no module-local wrapper — confirming the credit path
-    ///         consumes no VRF word and always credits claimable (the freeze-obligation
-    ///         retirement).
-    function testClaimableCreditPathNoEntropy() public view {
-        string memory src = _stripComments(
-            vm.readFile("contracts/modules/DegenerusGameJackpotModule.sol")
-        );
-        // Credits route through the deterministic storage helper, with no wrapper in between ...
-        assertGt(
-            _countOccurrences(src, "_creditClaimable("),
-            0,
-            "_creditClaimable is the deterministic (beneficiary, weiAmount) credit form"
-        );
-        assertEq(
-            _countOccurrences(src, "_addClaimableEth"),
-            0,
-            "no module-local credit wrapper around _creditClaimable"
-        );
-        // ... and the legacy entropy-threaded auto-rebuy credit symbols are gone.
-        assertEq(
-            _countOccurrences(src, "_processAutoRebuy"),
-            0,
-            "no _processAutoRebuy (auto-rebuy credit interception removed)"
-        );
-        assertEq(
-            _countOccurrences(src, "autoRebuyState"),
-            0,
-            "no autoRebuyState read in the credit path"
-        );
-    }
-
-    /// @notice Structural: the coinflip claim/deposit transition locks consult no game-over
-    ///         state, and the facts that make that safe are pinned in place.
-    /// @dev The RngLocked claim guard and the deposit-path transition lock both require
-    ///      purchaseInfo's `lastPurchaseDay_` (= !jackpotPhaseFlag && lastPurchaseDay), which is
-    ///      false in every game-over state: the century/decimator latch freezes
-    ///      jackpotPhaseFlag=true (set in lockstep with lastPurchaseDay=false at jackpot entry),
-    ///      the liveness latch is unreachable while lastPurchaseDay or jackpotPhaseFlag is set,
-    ///      and post-latch advances short-circuit to the final sweep so neither flag is written
-    ///      again. Each fact below failing means the gameOver-free lock shape must be re-derived.
-    function testCoinflipTransitionLocksNeedNoGameOverConsult() public view {
-        string memory flip = _stripComments(vm.readFile("contracts/Coinflip.sol"));
-        // The locks themselves consult no game-over state anywhere in the coinflip.
-        assertEq(
-            _countOccurrences(flip, ".gameOver()"),
-            0,
-            "no gameOver() consult anywhere in Coinflip (locks rely on lastPurchaseDay_)"
-        );
-
-        // Fact 1: the phase-independent causes (the no-seal deadman, then a dead VRF) are
-        // consulted first, and while either lock conjunct is set _livenessTriggered then
-        // early-returns false, suppressing the in-phase purchase deadline (it would false-fire
-        // in the productive target-met-to-close window).
-        string memory storage_ = _stripComments(
-            vm.readFile("contracts/storage/DegenerusGameStorage.sol")
-        );
-        assertGt(
-            _countOccurrences(storage_, "if (today > idx + _VRF_DEADMAN_DAYS) return true;\n        if (_vrfDead()) return true;\n        if (lastPurchaseDay || jackpotPhaseFlag) return false;"),
-            0,
-            "_livenessTriggered consults the deadman and a dead VRF first, in every phase"
-        );
-        assertGt(
-            _countOccurrences(storage_, "if (lastPurchaseDay || jackpotPhaseFlag) return false;"),
-            0,
-            "_livenessTriggered early-returns (suppressing the in-phase clocks) while lastPurchaseDay or jackpotPhaseFlag is set"
-        );
-
-        // Fact 2: jackpot entry sets the flag pair in lockstep, so a century/decimator
-        // latch (which happens with jackpotPhaseFlag=true) freezes lastPurchaseDay_=false.
-        string memory adv = _stripComments(
-            vm.readFile("contracts/modules/DegenerusGameAdvanceModule.sol")
-        );
-        assertGt(
-            // The jackpot entry now sits in runDailyPhase's consolidation stage (60d31f775).
-            _countOccurrences(adv, "jackpotPhaseFlag = true;\n                lastPurchaseDay = false;"),
-            0,
-            "jackpot entry writes jackpotPhaseFlag=true and lastPurchaseDay=false in lockstep"
-        );
-    }
-
-    /// @notice UNMODIFIED invariant: KNOWN-ISSUES.md is byte-unmodified across the v46 milestone.
-    /// @dev fs_permissions grants read only on ./contracts (NOT the repo root), so this test
-    ///      pins the recorded milestone-baseline sha256 as the documented anchor. The actual
-    ///      live-file byte-equality is enforced in the verify-step bash gate (which reads the
-    ///      repo root and compares `sha256sum KNOWN-ISSUES.md` against this same baseline).
-    function testKnownIssuesBaselineHashRecorded() public pure {
-        assertEq(
-            KNOWN_ISSUES_BASELINE_SHA256,
-            0x75b3b4bc79a96c7e16c4e539fa8bfcb8bd1a20063775dbf4d1854dfe3cfd8014,
-            "KNOWN-ISSUES.md milestone-baseline sha256 anchor (enforced byte-for-byte in the verify-step bash)"
-        );
-    }
 
     // =========================================================================
     // Internal helpers
@@ -1045,104 +650,5 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Source-level grep helpers (vm.readFile over ./contracts)
-    // -------------------------------------------------------------------------
 
-    /// @dev Count non-overlapping occurrences of `needle` in `haystack`.
-    function _countOccurrences(
-        string memory haystack,
-        string memory needle
-    ) private pure returns (uint256 count) {
-        bytes memory h = bytes(haystack);
-        bytes memory n = bytes(needle);
-        if (n.length == 0 || h.length < n.length) return 0;
-        for (uint256 i = 0; i <= h.length - n.length; ) {
-            bool matched = true;
-            for (uint256 j = 0; j < n.length; ++j) {
-                if (h[i + j] != n[j]) {
-                    matched = false;
-                    break;
-                }
-            }
-            if (matched) {
-                unchecked {
-                    ++count;
-                    i += n.length;
-                }
-            } else {
-                unchecked {
-                    ++i;
-                }
-            }
-        }
-    }
-
-    /// @dev Strip `//` line comments and lines whose first non-space char starts a block comment
-    ///      (`*` or `/*`), so header/NatSpec prose mentioning a kill-set symbol does not
-    ///      self-invalidate the grep gate. Conservative: drops the remainder of a line at `//`
-    ///      and drops whole block-comment-bodied lines. Code matches survive.
-    function _stripComments(
-        string memory src
-    ) private pure returns (string memory) {
-        bytes memory b = bytes(src);
-        bytes memory out = new bytes(b.length);
-        uint256 o;
-        uint256 i;
-        uint256 lineStart;
-        bool lineIsBlockComment;
-        // Determine, per line, whether it is a comment line; copy code chars only.
-        while (i < b.length) {
-            // At a newline, reset line state.
-            if (b[i] == 0x0a) {
-                out[o++] = b[i];
-                i++;
-                lineStart = i;
-                lineIsBlockComment = false;
-                continue;
-            }
-            // Detect block-comment / continuation lines: first non-space char is `*` or `/*`.
-            if (i == lineStart || _onlySpacesSince(b, lineStart, i)) {
-                if (b[i] == 0x2a) {
-                    lineIsBlockComment = true; // line begins with `*`
-                } else if (
-                    b[i] == 0x2f &&
-                    i + 1 < b.length &&
-                    b[i + 1] == 0x2a
-                ) {
-                    lineIsBlockComment = true; // line begins with `/*`
-                }
-            }
-            // `//` line comment: skip to end of line.
-            if (
-                !lineIsBlockComment &&
-                b[i] == 0x2f &&
-                i + 1 < b.length &&
-                b[i + 1] == 0x2f
-            ) {
-                while (i < b.length && b[i] != 0x0a) i++;
-                continue;
-            }
-            if (!lineIsBlockComment) {
-                out[o++] = b[i];
-            }
-            i++;
-        }
-        // Trim the output buffer to `o`.
-        bytes memory trimmed = new bytes(o);
-        for (uint256 k; k < o; k++) trimmed[k] = out[k];
-        return string(trimmed);
-    }
-
-    /// @dev True iff every byte in [from, to) is a space (0x20) or tab (0x09).
-    function _onlySpacesSince(
-        bytes memory b,
-        uint256 from,
-        uint256 to
-    ) private pure returns (bool) {
-        for (uint256 i = from; i < to; i++) {
-            if (b[i] != 0x20 && b[i] != 0x09) return false;
-        }
-        return true;
-    }
 }

@@ -9,6 +9,7 @@ import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {activityScoreOf} from "../helpers/ActivityScoreOf.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
+import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 
 /// @title V61CureBountyDecurse — TST-04 proof: the cashout-curse CURE (any buy >= 1 ticket worth clears the
 ///        counter), the sub-ticket mint-day STAMP (DAY_SHIFT, NO cure), the manual-lootbox
@@ -64,8 +65,8 @@ contract V61CureBountyDecurse is DeployProtocol {
     uint256 private constant CLAIMABLE_POOL_OFFBYTES = 16;
     uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED;
 
-    uint256 private constant DAY_SHIFT = 72; // lastEthDay (32 bits)
-    uint256 private constant CURSE_COUNT_SHIFT = 215; // (8 bits)
+    uint256 private constant DAY_SHIFT = BitPackingLib.DAY_SHIFT; // lastEthDay (24 bits)
+    uint256 private constant CURSE_COUNT_SHIFT = BitPackingLib.CURSE_COUNT_SHIFT; // (5 bits)
     uint256 private constant CURSE_COUNT_CAP = 20;
 
     // PRICE_COIN_UNIT = 1000 (FLIP/Storage); decurse burns PRICE_COIN_UNIT/10 = 100 FLIP.
@@ -198,30 +199,16 @@ contract V61CureBountyDecurse is DeployProtocol {
         assertEq(game.curseCountOf(pc), 0, "ticket+lootbox bundle (claimable) cures");
     }
 
-    /// @notice The cure precedes the score calc: the curing buy's OWN activity score is the UN-penalized value.
-    ///         A real ticket buy re-caches the affiliate cache and builds the mint-streak base, so the base is
-    ///         established by the buy itself — meaning the seed-an-affiliate-cache trick is clobbered. Instead
-    ///         this proves cure-before-score by CONTRAST against a NON-curing (sub-ticket) buy on an identical
-    ///         starting curse: the curing buyer ends UN-penalized (cure ran before the score read at :1333),
-    ///         while the equal-curse sub-ticket buyer (no cure) ends with the SAME positive base MINUS the
-    ///         curse penalty. The post-buy score gap == the curse penalty, isolating the cure's effect on
-    ///         the curing buy's own score. Falsifiable: the gap is pinned to curse, and the cured buyer's
-    ///         score is asserted strictly greater than the non-cured buyer's.
-    function testCurePrecedesScoreUnpenalizedOnCuringBuy() public {
-        // A real ticket buy re-caches the affiliate cache and a single buy does not build a positive
-        // streak/mint base, so a seeded affiliate base is clobbered and the streak base is 0 (the penalty floors
-        // a 0 base at 0, hiding the effect). Use the DEITY-PASS activity bonus (80 points) as the base instead:
-        // it is read from the HAS_DEITY_PASS bit (never re-written by the buy path), so it survives both buys and
-        // gives a large positive base. The deity-pass exemption blocks the cashout-curse SET, NOT the cure or
-        // the penalty APPLY — so a deity holder's seeded curse is still penalized, and a >=1-ticket buy still
-        // clears it. The two buyers differ ONLY in whether the buy cured, isolating the cure's score effect.
+    /// @notice A curing buy restores the post-buy score; a sub-ticket buy keeps its curse penalty.
+    /// @dev Seed the deity flag for equal nonzero bases that survive mint and affiliate updates.
+    function testCuringBuyRestoresScoreWhileSubTicketBuyKeepsPenalty() public {
         _alignDailyIdxToSimDay();
 
         uint256 curse = 4; // -4 points
 
-        // Curing buyer: a >=1-ticket buy clears the curse before the post-action score read at :1333.
+        // A full ticket clears the curse; read the resulting activity score.
         address cured = makeAddr("cbs_cured");
-        _grantDeityPass(cured); // base = 80 points, survives the buy
+        _grantDeityPass(cured); // 75 participation + 80 deity points, survives the buy
         _seedCurse(cured, curse);
         uint256 fullCost = _oneTicketCost();
         vm.deal(cured, fullCost);
@@ -244,11 +231,8 @@ contract V61CureBountyDecurse is DeployProtocol {
         assertEq(game.curseCountOf(notCured), curse, "sub-ticket buy did NOT cure (still cursed)");
         uint256 notCuredScore = activityScoreOf(address(game), notCured);
 
-        // Both buyers hold the same 80-point deity base; the only difference is the cure. So the cured buyer's
-        // post-buy score is HIGHER by exactly the curse penalty (curse points) — proving the cure ran BEFORE the
-        // score read (the curing buy itself scored un-penalized).
-        assertGt(curedScore, notCuredScore, "non-vacuity: the curing buy scored higher than the cursed sub-ticket buy");
-        assertEq(curedScore - notCuredScore, curse, "cure-before-score: the gap == the cleared curse penalty (curse points)");
+        assertGt(curedScore, notCuredScore, "curing restores a nonzero score penalty");
+        assertEq(curedScore - notCuredScore, curse, "post-buy score gap equals the cleared curse");
     }
 
     /// @notice CONTRAST — the separate purchaseWhalePass() pass-host does NOT cure (it is not a
@@ -346,7 +330,7 @@ contract V61CureBountyDecurse is DeployProtocol {
         assertEq(game.curseCountOf(target), 6, "pre: target cursed");
 
         vm.expectEmit(true, true, false, false, address(game));
-        emit Decursed(curer, target);
+        emit Decursed(curer, _fixtureId(target));
         _aid(target);
         vm.prank(curer);
         game.decurse(_aid(target));
@@ -390,7 +374,7 @@ contract V61CureBountyDecurse is DeployProtocol {
     // =========================================================================
     // Mirror event decl for vm.expectEmit
     // =========================================================================
-    event Decursed(address indexed curer, address indexed target);
+    event Decursed(address indexed curer, uint32 indexed target);
 
     // =========================================================================
     // Helpers — costs
@@ -414,7 +398,7 @@ contract V61CureBountyDecurse is DeployProtocol {
     // =========================================================================
 
     function _seedClaimable(address who, uint256 amount) internal {
-        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(BALANCES_PACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(uint256(_giveWalletId(who)), uint256(BALANCES_PACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         uint256 oldLow = uint128(packed);
         uint256 high = packed >> 128;
@@ -435,7 +419,7 @@ contract V61CureBountyDecurse is DeployProtocol {
     }
 
     function _seedField(address who, uint256 shift, uint256 mask, uint256 value) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(_giveWalletId(who), uint256(MINTPACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         packed &= ~(mask << shift);
         packed |= (value & mask) << shift;
@@ -443,15 +427,15 @@ contract V61CureBountyDecurse is DeployProtocol {
     }
 
     function _seedCurse(address who, uint256 points) internal {
-        _seedField(who, CURSE_COUNT_SHIFT, 0xFF, points);
+        _seedField(who, CURSE_COUNT_SHIFT, BitPackingLib.MASK_5, points);
     }
 
     function _seedLastEthDay(address who, uint256 day) internal {
-        _seedField(who, DAY_SHIFT, 0xFFFFFFFF, day);
+        _seedField(who, DAY_SHIFT, BitPackingLib.MASK_24, day);
     }
 
     function _lastEthDayOf(address who) internal view returns (uint32) {
-        return uint32(game.mintPackedFor(who) >> DAY_SHIFT);
+        return uint24(game.mintPackedFor(who) >> DAY_SHIFT);
     }
 
     /// @dev Field-isolated seed of dailyIdx (slot 0, byte 3, uint24).
@@ -488,11 +472,11 @@ contract V61CureBountyDecurse is DeployProtocol {
         coin.mintForGame(who, amount);
     }
 
-    /// @dev Set the mintPacked_ HAS_DEITY_PASS bit (shift 184) — the activity-score deity bonus (8000 bps),
+    /// @dev Set the current HAS_DEITY_PASS bit — the activity-score deity bonus (80 points),
     ///      read-only in the buy path so it survives a ticket buy. (Distinct from the DeityPass NFT ownerOf
     ///      gate used by smite; this is the score-bonus flag only.)
     function _grantDeityPass(address who) internal {
-        _seedField(who, 184, 0x1, 1);
+        _seedField(who, BitPackingLib.HAS_DEITY_PASS_SHIFT, 0x1, 1);
     }
 
     /// @dev Register `referrer` as an affiliate and return a usable affiliate code. A buy carrying this code

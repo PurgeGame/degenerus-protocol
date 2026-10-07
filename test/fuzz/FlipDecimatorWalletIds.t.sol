@@ -39,7 +39,7 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
     }
 
     function _gameId(address p) internal view returns (uint32) {
-        return uint32(uint256(vm.load(address(game), GameSlotKeys.mintPacked(p))) >> 224);
+        return uint32(uint256(vm.load(address(game), GameSlotKeys.walletId(p))));
     }
 
     function _walletCount() internal view returns (uint256) {
@@ -177,7 +177,7 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
         vm.expectCall(address(game), abi.encodeCall(DegenerusGame.registerWallet, (p, true)), 1);
         vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleDecimator, (expectedId, BURN)), 1);
         vm.expectCall(address(game), abi.encodeCall(DegenerusGame.consumeDecimatorBoon, (expectedId)), 1);
-        vm.expectCall(address(game), abi.encodeWithSelector(DegenerusGame.recordDecBurn.selector, p, lvl), 1);
+        vm.expectCall(address(game), abi.encodeWithSelector(DegenerusGame.recordDecBurn.selector, expectedId, lvl), 1);
         vm.recordLogs();
         vm.prank(p);
         coin.decimatorBurn(0, BURN, 0);
@@ -242,7 +242,7 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
             address(game),
             abi.encodeCall(
                 DegenerusGame.recordDecBurn,
-                (p, lvl, BURN + reward, ActivityCurveLib.decBattleMultBps(postScore), uint32(0))
+                (id, lvl, BURN + reward, ActivityCurveLib.decBattleMultBps(postScore), uint32(0))
             ),
             1
         );
@@ -290,7 +290,7 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
 
         vm.expectCall(
             address(game),
-            abi.encodeCall(DegenerusGame.recordDecBurn, (p, lvl, BURN + reward, postMult, uint32(0))),
+            abi.encodeCall(DegenerusGame.recordDecBurn, (id, lvl, BURN + reward, postMult, uint32(0))),
             1
         );
         vm.prank(p);
@@ -333,7 +333,7 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
         assertEq(n, 0);
 
         // Settled sDGNRS backing: claimableStored (slot A low 128 bits).
-        bytes32 stateSlot = keccak256(abi.encode(SDGNRS, uint256(2)));
+        bytes32 stateSlot = keccak256(abi.encode(uint32(2), uint256(2)));
         uint256 packed = uint256(vm.load(address(coinflip), stateSlot));
         vm.store(address(coinflip), stateSlot, bytes32((packed & ~uint256(type(uint128).max)) | 50_000));
         uint24 lvl = _openWindow();
@@ -342,7 +342,7 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
         vm.expectCall(address(game), abi.encodeCall(DegenerusGame.registerWallet, (SDGNRS, true)), 1);
         vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleDecimator, (uint32(2), 8_000)), 1);
         vm.expectCall(address(game), abi.encodeCall(DegenerusGame.consumeDecimatorBoon, (uint32(2))), 1);
-        vm.expectCall(address(game), abi.encodeWithSelector(DegenerusGame.recordDecBurn.selector, SDGNRS, lvl), 1);
+        vm.expectCall(address(game), abi.encodeWithSelector(DegenerusGame.recordDecBurn.selector, uint32(2), lvl), 1);
         vm.recordLogs();
         vm.prank(address(game));
         uint256 spent = coin.autoDecimatorBurn(lvl, 8_000);

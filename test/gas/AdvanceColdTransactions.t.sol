@@ -66,9 +66,9 @@ abstract contract ColdSubscriberFixture is DeployProtocol {
     uint256 internal constant REALISTIC_ALLOWANCE = 10_000_000;
     uint256 internal constant CHUNK_GAS_TARGET = 10_000_000;
     bytes32 internal constant ADVANCE_EVENT = keccak256("Advance(uint8,uint24)");
-    bytes32 internal constant DELIVERED_EVENT = keccak256("AfkingDelivered(address,uint256)");
-    bytes32 internal constant EXPIRED_EVENT = keccak256("SubscriptionExpired(address,uint8)");
-    bytes32 internal constant SKIPPED_EVENT = keccak256("PlayerSkipped(address,uint8)");
+    bytes32 internal constant DELIVERED_EVENT = keccak256("AfkingDelivered(uint32,uint256)");
+    bytes32 internal constant EXPIRED_EVENT = keccak256("SubscriptionExpired(uint32,uint8)");
+    bytes32 internal constant SKIPPED_EVENT = keccak256("PlayerSkipped(uint32,uint8)");
 
     function _mode() internal pure virtual returns (uint8);
 
@@ -115,11 +115,12 @@ abstract contract ColdSubscriberFixture is DeployProtocol {
                 seat = _seatOf(player);
             }
             address source = _split() ? address(uint160(0xA5800000 + i)) : player;
-            uint32 sourceId = _split() ? _giveWalletId(source) : game.walletIdOf(player);
+            uint32 playerId = game.walletIdOf(player);
+            uint32 sourceId = _split() ? _giveWalletId(source) : playerId;
             game.depositAfkingFunding{value: 50 ether}(sourceId);
             if (_split()) {
                 vm.prank(source);
-                game.setOperatorApproval(0, player, true);
+                game.setAfkingFundingApproval(sourceId, playerId, true);
             }
             vm.prank(player);
             game.subscribe(0, _split(), mode == 1, 1, _split() ? sourceId : 0, seat);

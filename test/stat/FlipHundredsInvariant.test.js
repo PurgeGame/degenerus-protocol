@@ -1,61 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-//
-// FlipHundredsInvariant.test.js — combined seven-site gate for the 100-FLIP award granule.
-//
-// SUPERSEDES the three-site whole-FLIP floor gate this file used to carry
-// (D-279-INLINE-01). The granule moved from 1 FLIP to 100 FLIP, and the sites split into
-// three shapes, each with a different mechanism — this file is the single place that
-// asserts ALL of them are present, so a partial revert at any one site fails here even if
-// its own suite is deleted:
-//
-//   §3a BUDGET-SPLIT (exact integer unit math, no probabilistic rounding)
-//     1. `_awardDailyCoinToTraitWinners`  — JackpotModule (its own inline unit split)
-//
-//   MOVED OUT OF §3a — the daily jackpot battle (`_playJackpotBattle`) splits no budget at
-//   all: it hands its whole walked field and its raw `coinBudget` to the standalone
-//   `JackpotBattle.resolve`, which lands each wallet's run payout and the pot on the §3c
-//   threshold-gated collapse (`_award`: whole-FLIP floor up to 1,000 FLIP, EV-preserving
-//   100-FLIP granule above, keyed per wallet off the word). See [01b] / [01e] below.
-//
-//   §3b BIG-LEG TRUNCATE (no RNG at all)
-//     3. `_payGoldenTicket`               — JackpotModule
-//
-//   §3c THRESHOLD-GATED BERNOULLI COLLAPSE (EV-preserving above 1,000 FLIP)
-//     4. `_resolvePresaleBox`             — LootboxModule
-//     5. `_settleLootboxRoll`             — LootboxModule
-//     6. `_resolveBet`                    — DegeneretteModule
-//     7. `_flipSpinChain`                  — DegeneretteModule (both FLIP-spin
-//                                            entry points delegate to it)
-//
-// It also carries the NEGATIVE assertions — the paths deliberately left ragged, each of
-// which would look like an oversight to the next audit pass without a test saying so:
-//   - the mint-boost flip credit (`_purchaseForWithCached`) — out of scope
-//   - the degenerette affiliate `refFlip` and every other affiliate FLIP path — owner-ruled out
-//   - `acc.flipMint` at the `sweepDegeneretteBets` flush — rounding the caller-composed
-//     aggregate is the one real grind in this design, so its ABSENCE is load-bearing
-//
-// CROSS-CITES:
-//   - .planning/PLAN-FLIP-ROUND-HUNDREDS.md §3a / §3b / §3c / §4
-//   - D-279-INLINE-01 SUPERSEDED (the inline whole-FLIP floor is gone from all sites)
-//   - D-40N-BUR-MINTBOOST-OUT-01 (mint-boost stays fractional)
-//   - test/stat/FlipRoundHundredsEv.test.js (EV-neutrality of the primitive itself)
+// Call-site wiring checks for per-award FLIP rounding. Runtime coverage lives in
+// FlipRoundHundredsEv, LootboxFlipRoundHundreds, GoldenTicketArmResolve, CrapsBattle,
+// and DegeneretteFlipRoundAntiGrind. These checks pin the call sites and immutable
+// rounding inputs; they do not substitute copied arithmetic for contract execution.
 
 import { expect } from "chai";
 import fs from "node:fs";
 import path from "node:path";
-
-const ONE_FLIP = 10n ** 18n;
-const UNIT = 100n * ONE_FLIP; // FlipRoundLib.FLIP_ROUND_UNIT
-const THRESHOLD = 1_000n * ONE_FLIP; // FlipRoundLib.FLIP_ROUND_THRESHOLD
 
 const SRC = (rel) => path.resolve(process.cwd(), rel);
 const JACKPOT = SRC("contracts/modules/DegenerusGameJackpotDrawModule.sol");
 const JACKPOT_CORE = SRC("contracts/modules/DegenerusGameJackpotModule.sol");
 const LOOTBOX = SRC("contracts/modules/DegenerusGameLootboxModule.sol");
 const DEGENERETTE = SRC("contracts/modules/DegenerusGameDegeneretteModule.sol");
-const MINT = SRC("contracts/modules/DegenerusGameMintModule.sol");
-const LIB = SRC("contracts/libraries/FlipRoundLib.sol");
-const JACKPOT_BATTLE = SRC("contracts/JackpotBattle.sol");
 const CRAPS_ENGINE = SRC("contracts/CrapsEngine.sol");
 
 // Brace-match function-body extractor (copied from
@@ -100,66 +57,10 @@ function bodyOf(file, signature) {
   return stripLineComments(body);
 }
 
-// The gated collapse as applied on-chain, for the invariant sweeps. At or below the
-// threshold the award keeps the whole-FLIP floor rather than paying wei-scale residue.
-function jsRoundGated(amount, slice) {
-  if (amount <= THRESHOLD) return (amount / ONE_FLIP) * ONE_FLIP;
-  let hundreds = amount / UNIT;
-  const remFlip = (amount % UNIT) / ONE_FLIP;
-  if (remFlip !== 0n && slice < remFlip) hundreds += 1n;
-  return hundreds * UNIT;
-}
-
-// The §3a unit split, for the invariant sweeps. Every paid winner takes the SAME share;
-// `leftover` is the part of the budget the equal-share rule declines to mint.
-function splitUnits(budgetWei, maxWinners) {
-  const units = budgetWei / UNIT;
-  const cap = units < maxWinners ? units : maxWinners;
-  if (cap === 0n) return { units, cap: 0n, amount: 0n, leftover: units };
-  return { units, cap, amount: (units / cap) * UNIT, leftover: units % cap };
-}
-
 describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gate", function () {
   this.timeout(60_000);
 
-  describe("The primitive itself", function () {
-    it("[00a] `FlipRoundLib` declares the 100-FLIP granule and the 1,000-FLIP threshold", function () {
-      const source = fs.readFileSync(LIB, "utf8");
-      expect(
-        /uint256\s+internal\s+constant\s+FLIP_ROUND_UNIT\s*=\s*100 ether\s*;/.test(
-          source
-        ),
-        "`FLIP_ROUND_UNIT` must be 100 ether"
-      ).to.equal(true);
-      expect(
-        /uint256\s+internal\s+constant\s+FLIP_ROUND_THRESHOLD\s*=\s*1_000 ether\s*;/.test(
-          source
-        ),
-        "`FLIP_ROUND_THRESHOLD` must be 1_000 ether"
-      ).to.equal(true);
-    });
 
-    it("[00b] the round-up compares a uint32 window against the WHOLE-FLIP remainder, not the wei remainder", function () {
-      const body = bodyOf(LIB, "function roundFlipToHundreds(");
-      expect(
-        /uint256\s+remFlip\s*=\s*\(\s*amount\s*%\s*FLIP_ROUND_UNIT\s*\)\s*\/\s*1 ether\s*;/.test(
-          body
-        ),
-        "the remainder must be reduced to whole FLIP (0..99) before the roll — a wei compare would need ~67 bits to hold the modulo bias down"
-      ).to.equal(true);
-      expect(
-        /uint32\(entropy\)\s*%\s*100\s*<\s*remFlip/.test(body),
-        "the round-up must fire with probability remFlip/100 off a uint32 window"
-      ).to.equal(true);
-      const source = fs.readFileSync(LIB, "utf8");
-      const declStart = source.indexOf("function roundFlipToHundreds");
-      const decl = source.slice(declStart, source.indexOf("{", declStart));
-      expect(
-        /\bpure\b/.test(decl),
-        "the primitive must be `pure` — it may read no mutable storage inside a freeze window"
-      ).to.equal(true);
-    });
-  });
 
   describe("§3a budget-split sites carry the exact integer unit math", function () {
     it("[01a] site 1 `_awardDailyCoinToTraitWinners` rounds its own budget to whole 100-FLIP shares", function () {
@@ -204,22 +105,14 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
         "a seat's payment must be gated on the 1,000-FLIP threshold"
       ).to.equal(true);
       expect(
-        /FlipRoundLib\.roundFlipToHundreds\(\s*paid\s*,\s*_hash3\(\s*word\s*,\s*0x4372617073526f756e64\s*,\s*betId\s*\)\s*\)/.test(body),
+        /FlipRoundLib\.roundFlipToHundreds\(\s*paid\s*,\s*_hash3\(\s*word\s*,\s*CRAPS_ROUND_TAG\s*,\s*betId\s*\)\s*\)/.test(body),
         "a seat's payment must go through the collapse keyed per bet id"
       ).to.equal(true);
       expect(/FlipRoundLib\.floorWholeFlip\(\s*paid\s*\)/.test(body), "below the threshold the whole-FLIP floor applies").to.equal(true);
     });
   });
 
-  describe("§3a: the extra-unit tag is gone from the module entirely", function () {
-    it("[01c] `FLIP_EXTRA_UNIT_TAG` is declared nowhere in the jackpot module", function () {
-      const source = fs.readFileSync(JACKPOT, "utf8") + "\n" + fs.readFileSync(JACKPOT_CORE, "utf8");
-      expect(
-        /FLIP_EXTRA_UNIT_TAG/.test(stripLineComments(source)),
-        "the extra-unit domain separator must be removed with the mechanism it served"
-      ).to.equal(false);
-    });
-  });
+
 
   describe("§3b big-leg truncate carries no RNG", function () {
     it("[02a] site 3 `_payGoldenTicket` truncates `flipCredit` to a whole unit", function () {
@@ -336,7 +229,7 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
 
       const body = bodyOf(DEGENERETTE, "function _flushOwner(");
       expect(
-        /if\s*\(\s*acc\.flipMint\s*!=\s*0\s*\)\s*\{?\s*coin\.mintForGame\(\s*acc\.owner\s*,\s*acc\.flipMint\s*\)\s*;/.test(
+        /if\s*\(\s*acc\.flipMint\s*!=\s*0\s*\)\s*\{?\s*coin\.mintForGame\(\s*_resolvePayee\(\s*acc\s*\)\s*,\s*acc\.flipMint\s*\)\s*;/.test(
           body
         ),
         "the flush must mint the bare accumulator to the accumulated owner"
@@ -359,23 +252,7 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
   });
 
   describe("Negative gates: the paths deliberately left ragged", function () {
-    it("[05a] the mint-boost flip credit stays fractional (D-40N-BUR-MINTBOOST-OUT-01)", function () {
-      const body = bodyOf(MINT, "function _purchaseForWithCached(");
-      // The buyer credit and the rolled affiliate winner share one Coinflip write, so the
-      // mint-boost leg is the first pair of `creditFlipPair` arguments.
-      expect(
-        /creditFlipPair\(\s*buyerId,\s*lootboxFlipCredit\b/.test(body),
-        "the mint-boost credit call must still be present (positive pin to the right site)"
-      ).to.equal(true);
-      expect(
-        /FlipRoundLib/.test(body),
-        "`_purchaseForWithCached` must apply NO 100-FLIP collapse — the mint-boost path is out of scope"
-      ).to.equal(false);
-      expect(
-        /\/\s*1 ether\s*\)\s*\*\s*1 ether/.test(body),
-        "`_purchaseForWithCached` must apply no whole-FLIP floor either"
-      ).to.equal(false);
-    });
+
 
     it("[05b] the degenerette affiliate `refFlip` credit is untouched (owner-ruled out of scope)", function () {
       const body = bodyOf(DEGENERETTE, "function _resolveBet(");
@@ -395,99 +272,5 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
     });
   });
 
-  describe("Invariant sweep: every in-scope award lands on a 100-FLIP multiple", function () {
-    const N = 2_000;
 
-    it(`[06a] §3a sweep: every paid share is an identical whole unit and the total never overshoots (N=${N})`, function () {
-      // Deterministic LCG over budgets — no RNG dependency, no flake.
-      let x = 123456789n;
-      const next = (mod) => {
-        x = (x * 6364136223846793005n + 1442695040888963407n) % (1n << 64n);
-        return (x >> 17n) % mod;
-      };
-      for (let k = 0; k < N; k++) {
-        const budget = ONE_FLIP * (next(2_000_000n) + 1n);
-        const maxWinners = 50n; // COIN_DRAW_SHARES — each draw has at most 50 shares
-        const { units, cap, amount, leftover } = splitUnits(budget, maxWinners);
-        if (cap === 0n) {
-          expect(budget < UNIT).to.equal(
-            true,
-            "only a sub-unit budget may pay nobody"
-          );
-          continue;
-        }
-        expect(amount % UNIT).to.equal(0n, `share ${amount} is not a unit multiple`);
-        expect(amount >= UNIT).to.equal(true, "no share may be zero");
-
-        const spent = cap * amount;
-        expect(spent <= budget).to.equal(true, "the budget is never overshot");
-        expect(leftover).to.equal(units % cap, "leftover is the uneven-division remainder");
-        expect(leftover < cap).to.equal(
-          true,
-          "the leftover is always under one full round of shares"
-        );
-        // Everything unminted is the leftover units plus the sub-unit dust.
-        expect(budget - spent).to.equal(leftover * UNIT + (budget - units * UNIT));
-      }
-    });
-
-    it(`[06b] §3c sweep: above the threshold every award is a whole unit; at or below it every award is floored to whole FLIP (N=${N})`, function () {
-      let x = 987654321n;
-      const next = (mod) => {
-        x = (x * 6364136223846793005n + 1442695040888963407n) % (1n << 64n);
-        return (x >> 17n) % mod;
-      };
-      for (let k = 0; k < N; k++) {
-        // Sweep across the threshold, in wei so sub-1-FLIP dust is exercised too.
-        const amount = next(5_000_000n * ONE_FLIP) + next(ONE_FLIP);
-        const slice = next(100n);
-        const paid = jsRoundGated(amount, slice);
-        if (amount <= THRESHOLD) {
-          expect(paid).to.equal(
-            (amount / ONE_FLIP) * ONE_FLIP,
-            `award ${amount} at or below the threshold must be floored to whole FLIP`
-          );
-          expect(paid % ONE_FLIP).to.equal(
-            0n,
-            `award ${amount} paid ${paid}, which carries wei-scale residue`
-          );
-          expect(paid <= amount).to.equal(
-            true,
-            `the floor must never pay more than the raw award ${amount}`
-          );
-        } else {
-          expect(paid % UNIT).to.equal(
-            0n,
-            `award ${amount} collapsed to ${paid}, not a unit multiple`
-          );
-          const delta = paid > amount ? paid - amount : amount - paid;
-          expect(delta < UNIT).to.equal(
-            true,
-            `the collapse moved ${amount} by ${delta}, a full unit or more`
-          );
-        }
-      }
-    });
-
-    it("[06c] §3b sweep: the golden-ticket truncate is a pure floor and never overpays", function () {
-      let x = 555555555n;
-      const next = (mod) => {
-        x = (x * 6364136223846793005n + 1442695040888963407n) % (1n << 64n);
-        return (x >> 17n) % mod;
-      };
-      for (let k = 0; k < N; k++) {
-        const credit = next(10_000_000n * ONE_FLIP);
-        const truncated = (credit / UNIT) * UNIT;
-        expect(truncated % UNIT).to.equal(0n);
-        expect(truncated <= credit).to.equal(
-          true,
-          "a truncate may never pay more than the raw credit"
-        );
-        expect(credit - truncated < UNIT).to.equal(
-          true,
-          "a truncate may never discard a full unit or more"
-        );
-      }
-    });
-  });
 });

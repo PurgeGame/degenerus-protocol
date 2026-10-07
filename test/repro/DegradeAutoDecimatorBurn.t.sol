@@ -16,7 +16,7 @@ import {DegenerusQuests} from "../../contracts/DegenerusQuests.sol";
 ///      consume does not. Run: forge test --match-path test/repro/DegradeAutoDecimatorBurn.t.sol -vv
 contract DegradeAutoDecimatorBurnTest is DeployProtocol {
     address private constant HOUSE = ContractAddresses.SDGNRS;
-    bytes32 private constant BURN_EVENT = keccak256("DecimatorBurn(address,uint256,uint64)");
+    bytes32 private constant BURN_EVENT = keccak256("DecimatorBurn(uint32,uint256,uint64)");
 
     function setUp() public {
         _deployProtocol();

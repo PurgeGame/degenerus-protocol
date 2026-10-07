@@ -687,7 +687,7 @@ abstract contract DegenerusGameStorage {
     ///
     ///      SECURITY: Packing reduces gas and storage footprint.
     ///      Bit manipulation requires careful masking (done via BitPackingLib shifts and masks).
-    mapping(address => uint256) internal mintPacked_;
+    mapping(uint32 => uint256) internal mintPacked_;
 
     // =========================================================================
     // RNG History
@@ -766,11 +766,10 @@ abstract contract DegenerusGameStorage {
     ///      overwrites the selected lane after queue reuse.
     mapping(uint24 => uint256[]) internal ticketQueue;
 
-    /// @dev Wallet table: element `id` is the wallet whose permanent ID is `id`. Each element
-    ///      packs the account key (bits 0..159), the smurf owner ID (160..191, zero for an
-    ///      ordinary wallet) and the whale-pass half-pass count (192..255). Element 0 is never
-    ///      assigned. The forward direction is mintPacked_ bits 224..255; _registerWallet is
-    ///      the only writer of both. IDs are never reassigned.
+    /// @dev Wallet table: an ordinary account stores its payout address [0:160). A subaccount
+    ///      stores zero there and its ordinary owner's ID [160:192). Whale half-pass count
+    ///      occupies [192:256). Element zero is unassigned; IDs are permanent. walletIds
+    ///      supplies the forward lookup for ordinary wallets only.
     uint256[] internal wallets;
 
     /// @dev Cursor for ticket queue processing (dual-purpose).
@@ -877,7 +876,7 @@ abstract contract DegenerusGameStorage {
 
     /// @notice Emitted when a deity pass is purchased.
     event DeityPassPurchased(
-        address indexed buyer,
+        uint32 indexed buyer,
         uint8 symbolId,
         uint256 price,
         uint24 level
@@ -1520,50 +1519,40 @@ abstract contract DegenerusGameStorage {
     /// @notice Emitted exactly once per wallet ID, when the wallet is registered.
     event WalletRegistered(uint32 indexed id, address indexed owner);
 
-    /// @notice Emitted once per smurf account, beside its WalletRegistered.
+    /// @notice Emitted once per subaccount allocation.
     /// @param ownerId The owning wallet's ID (the smurf's payee).
     /// @param smurfId The smurf account's wallet ID.
     event SmurfCreated(uint32 indexed ownerId, uint32 indexed smurfId);
 
-    /// @dev Domain tag of the smurf key derivation.
-    bytes32 internal constant SMURF_KEY_TAG = keccak256("degenerus.smurf");
-
-    /// @dev Account key of smurf `id` owned by `owner`: a hash address nobody holds a key for.
-    function _smurfKey(address owner, uint32 id) internal pure returns (address) {
-        return address(uint160(uint256(keccak256(abi.encode(SMURF_KEY_TAG, owner, id)))));
-    }
-
     /// @dev With createSmurf, the only writer of a wallet's identity. Returns the existing ID or allocates the
-    ///      next table position, publishing both directions (the table element and mintPacked_
-    ///      bits 224..255) in the same call, together with the mint word as it now stands.
+    ///      next table position, publishing both directions (the table element and walletIds)
+    ///      in the same call. Existing mint history is returned; new registration does not write it.
     ///      Callers register before anything else in the transaction loads `owner`'s mint word.
     ///      `quotedSpend` is the ETH-equivalent total the paying call charges (zero for the
     ///      external hook); it is read only when a new wallet would be admitted at or above
     ///      PAID_ADMISSION_WALLETS registered wallets.
     function _registerWallet(address owner, uint256 quotedSpend) internal returns (uint32 id, uint256 word) {
-        word = mintPacked_[owner];
-        id = uint32(word >> BitPackingLib.WALLET_ID_SHIFT);
-        if (id != 0) return (id, word);
+        id = walletIds[owner];
+        if (id != 0) return (id, mintPacked_[id]);
         if (owner == address(0)) revert E();
         uint256 position = wallets.length;
         if (position > PAID_ADMISSION_WALLETS && quotedSpend < PAID_ADMISSION_MIN_SPEND) revert E();
         if (position > type(uint32).max) revert E();
         id = uint32(position);
         wallets.push(uint160(owner));
-        word |= position << BitPackingLib.WALLET_ID_SHIFT;
-        mintPacked_[owner] = word;
+        walletIds[owner] = id;
+        // A new account has no mint history; registration does not write a statistics word.
+        word = 0;
         emit WalletRegistered(id, owner);
     }
 
-    /// @dev A registered wallet's ID, or zero.
+    /// @dev Permanent address-to-ID boundary lookup; zero before registration.
     function _walletIdOf(address owner) internal view returns (uint32) {
-        return uint32(mintPacked_[owner] >> BitPackingLib.WALLET_ID_SHIFT);
+        return walletIds[owner];
     }
 
-    /// @dev An existing wallet ID; reverts for an unregistered address. Non-paying paths never
-    ///      register anyone.
     function _requireWalletId(address owner) internal view returns (uint32 id) {
-        id = uint32(mintPacked_[owner] >> BitPackingLib.WALLET_ID_SHIFT);
+        id = walletIds[owner];
         if (id == 0) revert E();
     }
 
@@ -1575,12 +1564,7 @@ abstract contract DegenerusGameStorage {
         }
     }
 
-    /// @dev Wallet ID that an overpayment refund credits: the beneficiary's own (just
-    ///      registered) ID when it pays for itself, otherwise the payer's existing ID. A payer
-    ///      other than the beneficiary must already be registered to overpay.
-    function _payerId(address beneficiary, uint32 beneficiaryId) internal view returns (uint32) {
-        return msg.sender == beneficiary ? beneficiaryId : _requireWalletId(msg.sender);
-    }
+
 
     /// @dev Raw wallet-table element for a stored, nonzero ID.
     function _walletElement(uint32 id) internal view returns (uint256 element) {
@@ -1594,12 +1578,7 @@ abstract contract DegenerusGameStorage {
         return address(uint160(_walletElement(id)));
     }
 
-    /// @dev Account key of a wallet ID: the address whose address-keyed state (mint word,
-    ///      boons, forward caches) belongs to this account. Explicit bounds; zero is invalid.
-    function _walletAddress(uint32 id) internal view returns (address owner) {
-        if (id == 0 || id >= wallets.length) revert E();
-        owner = address(uint160(_walletElement(id)));
-    }
+
 
     /// @dev Payout recipient for a wallet-table element: its own key, or for a smurf account the
     ///      owner's key. Every ETH/stETH/token payout edge that holds an ID resolves through here.
@@ -1609,18 +1588,6 @@ abstract contract DegenerusGameStorage {
         uint256 owner = (element >> 160) & 0xffffffff;
         if (owner != 0) element = _walletElement(uint32(owner));
         return address(uint160(element));
-    }
-
-    /// @dev Payout recipient for account `key` from its own mint word: the key itself unless the
-    ///      word carries the smurf flag, else the owner's key (one table read, smurfs only).
-    function _payeeOfWord(address key, uint256 packed) internal view returns (address) {
-        if ((packed >> BitPackingLib.SMURF_FLAG_SHIFT) & 1 == 0) return key;
-        return _payee(_walletElement(uint32(packed >> BitPackingLib.WALLET_ID_SHIFT)));
-    }
-
-    /// @dev Payout recipient for account `key`, read from its mint word.
-    function _payeeOf(address key) internal view returns (address) {
-        return _payeeOfWord(key, mintPacked_[key]);
     }
 
     /// @dev Revert `E` unless `id` is an allocated, nonzero wallet ID.
@@ -1636,11 +1603,9 @@ abstract contract DegenerusGameStorage {
         payee = _payee(element);
     }
 
-    /// @dev Resolve the allocated account `id` for `caller`: its key, its payee and whether
-    ///      `caller` may act for it — the key itself, a smurf's owner, or an operator approved for
-    ///      `id`. A smurf's owner proves itself by the key derivation (one hash, no owner-element
-    ///      read: the owner is then the payee); any other caller reads the payee. Reverts `E`
-    ///      for `id == 0` or an unallocated `id`.
+    /// @dev Resolve an allocated account's external owner and authorization. Ordinary
+    ///      accounts return their address as key; subaccounts have key zero. Ownership comes
+    ///      from the table's owner-ID lane; operators are approved for the selected ID only.
     function _account(uint32 id, address caller)
         internal
         view
@@ -1649,30 +1614,32 @@ abstract contract DegenerusGameStorage {
         _requireAllocated(id);
         uint256 element = _walletElement(id);
         key = address(uint160(element));
-        if ((element >> 160) & 0xffffffff != 0 && _smurfKey(caller, id) == key) {
-            return (key, caller, true);
-        }
         payee = _payee(element);
         authorized = payee == caller || operatorApprovals[id][caller];
     }
 
-    /// @dev The account an authorized entry point acts for: the caller for `id == 0`, else the
-    ///      allocated account `id`, which the caller must be authorized for (see `_account`).
-    function _resolveAccount(uint32 id) internal view returns (address key, address payee) {
-        if (id == 0) return (msg.sender, msg.sender);
-        bool authorized;
-        (key, payee, authorized) = _account(id, msg.sender);
+    /// @dev Resolve the self shorthand without allocating, or authorize an explicit account.
+    function _resolveAccountId(uint32 id) internal view returns (uint32) {
+        if (id == 0) return _walletIdOf(msg.sender);
+        (, , bool authorized) = _account(id, msg.sender);
         if (!authorized) revert NotApproved();
+        return id;
     }
 
-    /// @dev The account a permissionless door credits: the caller (which must hold an ID) for
-    ///      `id == 0`, else the allocated account `id`. No authorization: the door only pays the
-    ///      account (value to its payee).
-    function _creditAccount(uint32 id) internal view returns (uint32 accountId, address key, address payee) {
-        if (id == 0) return (_requireWalletId(msg.sender), msg.sender, msg.sender);
-        (key, payee) = _accountKeys(id);
-        accountId = id;
+    /// @dev Only an unregistered self caller can reach this helper with ID zero.
+    function _registerCallerAccount(uint32 id, uint256 spend) internal returns (uint32) {
+        if (id != 0) return id;
+        (id, ) = _registerWallet(msg.sender, spend);
+        return id;
     }
+
+    function _creditAccountId(uint32 id) internal view returns (uint32) {
+        if (id == 0) return _requireWalletId(msg.sender);
+        _requireAllocated(id);
+        return id;
+    }
+
+
 
     // =========================================================================
     // Whale-pass half-pass count (wallet-table bits 192..255)
@@ -2704,7 +2671,7 @@ abstract contract DegenerusGameStorage {
     /// @dev Segregated DGNRS allocation + cumulative claimed per level, packed into one
     ///      slot: bits [0:128) = allocation (2.5% of affiliate pool, snapshot at transition),
     ///      bits [128:256) = cumulative claimed. Both are DGNRS base units, bounded by the
-    ///      sDGNRS supply (~1e30) << uint128 (3.4e38). Claims draw against the fixed
+    ///      sDGNRS supply (~1e24) << uint128 (3.4e38). Claims draw against the fixed
     ///      allocation, not the live pool, eliminating first-mover advantage.
     mapping(uint24 => uint256) internal levelDgnrsPacked;
 
@@ -2866,7 +2833,7 @@ abstract contract DegenerusGameStorage {
     ///         indexers should derive current affiliate points or call the score view.
     /// @param player The player whose mintPacked_ record was written.
     /// @param packedAfter The full mintPacked_ word after the write (BitPackingLib layout).
-    event MintRecorded(address indexed player, uint256 packedAfter);
+    event MintRecorded(uint32 indexed player, uint256 packedAfter);
 
     /// @notice Emitted on every pass activation (purchase AND award paths — this event
     ///         does not imply that the player bought the pass or received an AFKing seat).
@@ -2882,7 +2849,7 @@ abstract contract DegenerusGameStorage {
     ///        (max of the prior freeze and this pass's span end).
     /// @param packedAfter The full mintPacked_ word after the activation write.
     event PassActivated(
-        address indexed player,
+        uint32 indexed player,
         bool isWhale,
         uint24 startLevel,
         uint24 frozenUntilAfter,
@@ -2896,7 +2863,7 @@ abstract contract DegenerusGameStorage {
     /// @param ticketStartLevel First level of the 10-level range.
     /// @param entriesPerLevel Number of tickets to queue per level.
     function _activate10LevelPass(
-        address player,
+        uint32 player,
         uint24 ticketStartLevel,
         uint32 entriesPerLevel
     ) internal {
@@ -2982,7 +2949,7 @@ abstract contract DegenerusGameStorage {
 
         mintPacked_[player] = data;
 
-        _queueEntryRange(uint32(data >> BitPackingLib.WALLET_ID_SHIFT), ticketStartLevel, 10, entriesPerLevel);
+        _queueEntryRange(player, ticketStartLevel, 10, entriesPerLevel);
         emit PassActivated(player, false, ticketStartLevel, newFrozenLevel, data);
     }
 
@@ -2991,7 +2958,7 @@ abstract contract DegenerusGameStorage {
     /// @param ticketStartLevel First level of the 100-level range for whale pass tickets.
     /// @return id The player's wallet ID, read from the same word.
     function _applyWhalePassStats(
-        address player,
+        uint32 player,
         uint24 ticketStartLevel
     ) internal returns (uint32 id) {
         uint256 prevData = mintPacked_[player];
@@ -3063,7 +3030,7 @@ abstract contract DegenerusGameStorage {
 
         mintPacked_[player] = data;
         emit PassActivated(player, true, ticketStartLevel, newFrozenLevel, data);
-        id = uint32(data >> BitPackingLib.WALLET_ID_SHIFT);
+        id = player;
     }
 
     /// @dev Returns the current day index.
@@ -3667,8 +3634,8 @@ abstract contract DegenerusGameStorage {
     ///      D + 2 reuses the slots, day D has been drawn or never can be. A pool whose `day` tag
     ///      is not the day asked for holds another day and reads as empty; the first entry
     ///      of a new day resets it. Entries at or past the pool's entryCount are leftovers.
-    mapping(address => mapping(uint24 => ProtocolBoonPool)) internal protocolBoonPools;
-    mapping(address => mapping(uint24 => mapping(uint32 => ProtocolBoonEntry))) internal protocolBoonEntries;
+    mapping(uint32 => mapping(uint24 => ProtocolBoonPool)) internal protocolBoonPools;
+    mapping(uint32 => mapping(uint24 => mapping(uint32 => ProtocolBoonEntry))) internal protocolBoonEntries;
 
     bytes32 internal constant PROTOCOL_BOON_WINNER_TAG = keccak256("degenerus.protocol.boon.winner");
 
@@ -4161,18 +4128,16 @@ abstract contract DegenerusGameStorage {
     ///      accumulator (affiliateBase / pendingFlip / subStreakLatch) and the set position.
     mapping(uint32 => Sub) internal _subOf;
 
-    /// @dev Sparse funder map keyed by subscriber ID — the wallet whose `afkingFunding` funds a sub,
-    ///      packed as funder address (bits 0..159) | funder wallet ID (160..191). Absent ⇒
+    /// @dev Sparse funder ID keyed by subscriber ID — the account whose `afkingFunding` funds a sub.
+    ///      Absent ⇒
     ///      self-funded (the common case, which stores NOTHING). Written at subscribe
     ///      (set-if-nonzero / delete-if-self) and read once per process iteration to resolve the
     ///      source (not needed at open — funding is already debited at process).
-    mapping(uint32 => uint256) internal _fundingSourceOf;
+    mapping(uint32 => uint32) internal _fundingSourceOf;
 
-    /// @dev Insertion-ordered iterable subscriber set (swap-pop tombstone on cancel). Each element
-    ///      packs the subscriber's address (bits 0..159) and wallet ID (160..191): the process pass
-    ///      needs the address for stETH pulls, mint history and affiliate claims, and the ID for
-    ///      `_subOf` and the balance debit. Swap-pop moves the whole word.
-    uint256[] internal _subscribers;
+    /// @dev Insertion-ordered subscriber IDs, eight per storage word. Cancellation uses swap-pop.
+    ///      Mint history, affiliate claims and funding use IDs; stETH pulls resolve the owner at transfer.
+    uint32[] internal _subscribers;
 
     /// @dev The two uint16 cursors + the uint24 afking reset-day pack into ONE slot
     ///      (16 + 16 + 24 = 56 bits). The cursors index `_subscribers` (every entry but the
@@ -4800,4 +4765,19 @@ abstract contract DegenerusGameStorage {
     }
 
     error AfkingStethPullFailed();
+    /// @dev Forward identity lookup for address-boundary authorization and ERC20 integration.
+    ///      Mint statistics are stored separately by ID; only ordinary-wallet registration writes this.
+    mapping(address => uint32) internal walletIds;
+    /// @dev Explicit account-to-account funding consent, independent of external operator rights.
+    mapping(uint32 => mapping(uint32 => bool)) internal afkingFundingApprovals;
+
+    function _ownerWalletId(uint32 id) internal view returns (uint32) {
+        uint32 ownerId = uint32(_walletElement(id) >> 160);
+        return ownerId == 0 ? id : ownerId;
+    }
+
+    function _afkingFundingAllowed(uint32 subscriberId, uint32 funderId) internal view returns (bool) {
+        return subscriberId == funderId || afkingFundingApprovals[funderId][subscriberId]
+            || _ownerWalletId(subscriberId) == _ownerWalletId(funderId);
+    }
 }

@@ -288,7 +288,7 @@ contract BafBoardPackingTest is Test {
 /// @notice The score is keyed by the owner's Game wallet ID; the claim is permissionless and the
 ///         WWXRP mint goes to the owner's address; an address with no ID has nothing to claim.
 contract BafConsolationWalletIdsTest is DeployProtocol {
-    bytes32 private constant CONSOLATION_CLAIMED = keccak256("BafConsolationClaimed(address,uint24,uint256,uint256)");
+    bytes32 private constant CONSOLATION_CLAIMED = keccak256("BafConsolationClaimed(uint32,uint24,uint256,uint256)");
     uint24 private constant BRACKET = 10;
 
     function setUp() public {
@@ -311,17 +311,17 @@ contract BafConsolationWalletIdsTest is DeployProtocol {
         assertEq(jackpots.bafConsolationOf(p, BRACKET), 5);
 
         address runner = makeAddr("consolation_runner");
-        uint256 before = wwxrp.balanceOf(p);
+        uint256 before = wwxrp.claimable(game.walletIdOf(p));
         vm.recordLogs();
         vm.prank(runner);
         jackpots.claimBafConsolation(id, BRACKET);
-        assertEq(wwxrp.balanceOf(p) - before, 5 * wwxrp.gameMintScale(), "minted to the player's address");
-        assertEq(wwxrp.balanceOf(runner), 0);
+        assertEq(wwxrp.claimable(game.walletIdOf(p)) - before, 5 * wwxrp.gameMintScale(), "minted to the player's address");
+        assertEq(wwxrp.claimable(game.walletIdOf(runner)), 0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bool seen;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(jackpots) || logs[i].topics[0] != CONSOLATION_CLAIMED) continue;
-            assertEq(address(uint160(uint256(logs[i].topics[1]))), p);
+            assertEq(uint32(uint256(logs[i].topics[1])), id);
             assertEq(uint24(uint256(logs[i].topics[2])), BRACKET);
             (uint256 score, uint256 amount) = abi.decode(logs[i].data, (uint256, uint256));
             assertEq(score, 5_000);
@@ -346,7 +346,7 @@ contract BafConsolationWalletIdsTest is DeployProtocol {
         vm.expectRevert(DegenerusJackpots.NothingToClaim.selector);
         vm.prank(x);
         jackpots.claimBafConsolation(0, BRACKET);
-        assertEq(uint32(uint256(vm.load(address(game), GameSlotKeys.mintPacked(x))) >> 224), 0);
+        assertEq(uint32(uint256(vm.load(address(game), GameSlotKeys.walletId(x)))), 0);
 
         address empty = makeAddr("consolation_no_score");
         uint32 emptyId = _giveWalletId(empty);
@@ -355,6 +355,6 @@ contract BafConsolationWalletIdsTest is DeployProtocol {
         jackpots.claimBafConsolation(emptyId, BRACKET);
 
         jackpots.claimBafConsolation(id, BRACKET);
-        assertEq(wwxrp.balanceOf(scorer), 2 * wwxrp.gameMintScale());
+        assertEq(wwxrp.claimable(game.walletIdOf(scorer)), 2 * wwxrp.gameMintScale());
     }
 }

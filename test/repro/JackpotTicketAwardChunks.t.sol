@@ -213,7 +213,7 @@ contract JackpotTicketAwardChunksTest is Test {
             assertEq(entries, 20);
             assertEq(source, LVL);
             assertFalse(rounded);
-            winners[n++] = address(uint160(uint256(logs[i].topics[1])));
+            winners[n++] = h.walletKeyOf(uint32(uint256(logs[i].topics[1])));
         }
         return (n, r.done);
     }

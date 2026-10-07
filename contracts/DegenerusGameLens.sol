@@ -28,6 +28,7 @@ import {DecimatorSamplingLib as Sampling} from "./libraries/DecimatorSamplingLib
  */
 
 import {DegenerusGameMintStreakUtils} from "./modules/DegenerusGameMintStreakUtils.sol";
+import {ContractAddresses} from "./ContractAddresses.sol";
 import {BitPackingLib} from "./libraries/BitPackingLib.sol";
 import {GameTimeLib} from "./libraries/GameTimeLib.sol";
 import {ActivityCurveLib} from "./libraries/ActivityCurveLib.sol";
@@ -40,6 +41,7 @@ interface IDegenerusGameLensSource {
     function extsload(bytes32 slot) external view returns (bytes32 value);
 
     /// @notice DegenerusGame's aggregate activity-score read for `player`.
+    function playerActivityScoreById(uint32 id) external view returns (uint256);
     function playerActivityScore(address player) external view returns (uint256 scorePoints);
 }
 
@@ -82,6 +84,12 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         return uint8(_sload(game, bytes32(base)) >> (offset * 8));
     }
 
+    function _protocolIssuerId(address issuer) private pure returns (uint32) {
+        if (issuer == ContractAddresses.VAULT) return VAULT_WALLET_ID;
+        if (issuer == ContractAddresses.SDGNRS) return SDGNRS_WALLET_ID;
+        return 0;
+    }
+
     /// @notice Exact paid ETH, scaled weight, entry count and award mask for a draw.
     /// @dev Pools live in two-day rings (DegenerusGameStorage.protocolBoonPools), so a day's
     ///      pool stays readable until a later day of the same parity (normally two days on)
@@ -92,7 +100,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
     {
         uint256 base;
         assembly { base := protocolBoonPools.slot }
-        uint256 word = _sload(game, _mapSlot(uint256(day & 1), uint256(_mapSlot(issuer, base))));
+        uint256 word = _sload(game, _mapSlot(uint256(day & 1), uint256(_mapSlot(uint256(_protocolIssuerId(issuer)), base))));
         if (uint24(word >> 216) != day) return pool;
         pool.totalWageredWei = uint112(word);
         pool.totalWeight = uint64(word >> 112);
@@ -110,7 +118,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         if (index >= protocolBoonPool(game, issuer, day).entryCount) return entry;
         uint256 base;
         assembly { base := protocolBoonEntries.slot }
-        bytes32 daySlot = _mapSlot(uint256(day & 1), uint256(_mapSlot(issuer, base)));
+        bytes32 daySlot = _mapSlot(uint256(day & 1), uint256(_mapSlot(uint256(_protocolIssuerId(issuer)), base)));
         uint256 word = _sload(game, _mapSlot(uint256(index), uint256(daySlot)));
         entry.playerId = uint32(word);
         entry.cumulativeWeight = uint64(word >> 32);
@@ -123,9 +131,15 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
     function protocolBoonQuote(address game, address player, uint256 amount)
         external view returns (uint256 wagerUnits, uint16 score, uint16 multiplierUnits, uint64 weight)
     {
+        return protocolBoonQuoteById(game, _walletId(game, player), amount);
+    }
+
+    function protocolBoonQuoteById(address game, uint32 id, uint256 amount)
+        public view returns (uint256 wagerUnits, uint16 score, uint16 multiplierUnits, uint64 weight)
+    {
         if (amount < 0.005 ether) revert E();
         wagerUnits = amount / 1e14;
-        uint256 rawScore = IDegenerusGameLensSource(game).playerActivityScore(player);
+        uint256 rawScore = IDegenerusGameLensSource(game).playerActivityScoreById(id);
         if (rawScore > type(uint16).max) revert E();
         score = uint16(rawScore);
         multiplierUnits = uint16(ActivityCurveLib.boonDrawMultUnits(rawScore));
@@ -242,8 +256,8 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
     /// @dev Wallet ID from the player's mint word; zero before registration.
     function _walletId(address game, address player) private view returns (uint32) {
         uint256 base;
-        assembly { base := mintPacked_.slot }
-        return uint32(_sload(game, _mapSlot(player, base)) >> BitPackingLib.WALLET_ID_SHIFT);
+        assembly { base := walletIds.slot }
+        return uint32(_sload(game, _mapSlot(player, base)));
     }
 
     /// @dev Account key of wallet-table element `id`; zero for id 0 or beyond the table.
@@ -252,7 +266,11 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         uint256 base;
         assembly { base := wallets.slot }
         if (id >= _sload(game, bytes32(base))) return address(0);
-        return address(uint160(_sload(game, bytes32(uint256(keccak256(abi.encode(base))) + id))));
+        uint256 table = uint256(keccak256(abi.encode(base)));
+        uint256 element = _sload(game, bytes32(table + id));
+        uint32 ownerId = uint32(element >> 160);
+        if (ownerId != 0) element = _sload(game, bytes32(table + ownerId));
+        return address(uint160(element));
     }
 
     /// @dev Value slot of mapping(addressKey => v) at base `base`.
@@ -273,11 +291,14 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
     ///         unified effective quest streak (the same value _effectiveQuestStreak feeds the
     ///         score).
     function subInfoFull(address game, address player) external view returns (SubFull memory s) {
+        return subInfoFullById(game, _walletId(game, player));
+    }
+
+    function subInfoFullById(address game, uint32 id) public view returns (SubFull memory s) {
         uint256 base;
         assembly {
             base := _subOf.slot
         }
-        uint32 id = _walletId(game, player);
         uint256 w = _sload(game, _mapSlot(uint256(id), base));
         s.dailyQuantity = uint8(w);
         s.active = s.dailyQuantity != 0;
@@ -430,8 +451,15 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         address game,
         address player
     ) external view returns (ActivityBreakdown memory b) {
-        b.total = IDegenerusGameLensSource(game).playerActivityScore(player);
-        if (player == address(0)) return b;
+        return activityScoreBreakdownById(game, _walletId(game, player));
+    }
+
+    function activityScoreBreakdownById(
+        address game,
+        uint32 id
+    ) public view returns (ActivityBreakdown memory b) {
+        b.total = IDegenerusGameLensSource(game).playerActivityScoreById(id);
+        if (id == 0) return b;
 
         uint256 packedBase;
         uint256 subBase;
@@ -439,8 +467,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
             packedBase := mintPacked_.slot
             subBase := _subOf.slot
         }
-        uint256 packed = _sload(game, _mapSlot(player, packedBase));
-        uint32 id = uint32(packed >> BitPackingLib.WALLET_ID_SHIFT);
+        uint256 packed = _sload(game, _mapSlot(uint256(id), packedBase));
         uint256 subWord = _sload(game, _mapSlot(uint256(id), subBase));
         uint256 w = _levelWord(game);
         uint24 currLevel;
@@ -529,9 +556,15 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
     function decBurnOf(address game, uint24 lvl, address player)
         external view returns (DecBurnEntry memory e)
     {
+        return decBurnOfById(game, lvl, _walletId(game, player));
+    }
+
+    function decBurnOfById(address game, uint24 lvl, uint32 id)
+        public view returns (DecBurnEntry memory e)
+    {
         uint256 root;
         assembly { root := decBattlePlayers.slot }
-        uint256 latest = _sload(game, _mapSlot(uint256(_walletId(game, player)), root));
+        uint256 latest = _sload(game, _mapSlot(uint256(id), root));
         if (uint24(latest >> 64) != lvl) return e;
         e.entryId = uint64(latest);
         (e.owner, e.stack, e.chips) = decEntryAt(game, lvl, e.entryId);
@@ -695,6 +728,29 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         return _walletAddress(game, id);
     }
 
+    /// @notice Account identity and raw mint word. Subaccounts have a zero wallet and an ordinary owner ID.
+    function accountInfo(address game, uint32 id) external view returns (address wallet, uint32 ownerId, uint256 mintWord, uint64 halfPasses) {
+        uint256 tableRoot;
+        uint256 mintRoot;
+        assembly { tableRoot := wallets.slot mintRoot := mintPacked_.slot }
+        if (id == 0 || id >= _sload(game, bytes32(tableRoot))) return (address(0), 0, 0, 0);
+        uint256 element = _sload(game, bytes32(uint256(keccak256(abi.encode(tableRoot))) + id));
+        wallet = address(uint160(element));
+        ownerId = uint32(element >> 160);
+        halfPasses = uint64(element >> 192);
+        mintWord = _sload(game, _mapSlot(uint256(id), mintRoot));
+    }
+
+    /// @notice Raw claimable (including its sentinel) and prepaid AFKing balances, zero after the final sweep.
+    function accountBalances(address game, uint32 id) external view returns (uint128 claimable, uint128 afking) {
+        uint256 base;
+        uint256 goRoot;
+        assembly { base := balancesPacked.slot goRoot := gameOverStatePacked.slot }
+        if ((_sload(game, bytes32(goRoot)) >> GO_SWEPT_SHIFT) & GO_SWEPT_MASK != 0) return (0, 0);
+        uint256 word = _sload(game, _mapSlot(uint256(id), base));
+        return (uint128(word), uint128(word >> 128));
+    }
+
     /// @notice Find a wallet ID position in a bounded page of a packed ticket queue.
     /// @dev Queue and trait lanes both store the wallet ID.
     function findQueueEntry(
@@ -753,13 +809,21 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         uint24 lvl,
         address player
     ) external view returns (FoilRecordEntry memory f) {
+        return foilRecordOfById(game, lvl, _walletId(game, player));
+    }
+
+    function foilRecordOfById(
+        address game,
+        uint24 lvl,
+        uint32 id
+    ) public view returns (FoilRecordEntry memory f) {
         uint256 base;
         assembly {
             base := foilRecord.slot
         }
         uint256 w = _sload(
             game,
-            _mapSlot(uint256(_walletId(game, player)), uint256(_mapSlot(uint256(lvl & 3), base)))
+            _mapSlot(uint256(id), uint256(_mapSlot(uint256(lvl & 3), base)))
         );
         if (w == 0 || uint24(w >> _FOIL_LEVEL_SHIFT) != lvl) return f;
         f.present = true;

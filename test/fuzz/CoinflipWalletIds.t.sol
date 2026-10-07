@@ -12,16 +12,11 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 
 /// @title CoinflipWalletIds -- Coinflip keyed by wallet ID on the real protocol
-/// @notice The stake ledger, credits, BAF draw entries and record payees run by the Game wallet ID.
-///         Coinflip's address-keyed player state caches that ID in slot A (bits 184..215):
-///         - paying actions (self/operator deposits, a gift's funder) register through the Game
-///           hook; a gift's recipient and every claim or setting only look up, and a zero ID means
-///           an empty ledger (no revert, no write under key 0);
-///         - credits by ID never read or fill the address-keyed state and skip ID 0 / amount 0;
-///         - VAULT (1) and sDGNRS (2) hold constructor-seeded caches, so protocol paths make no
-///           Game identity call;
-///         - BAF draw entries hold `cum | id << 96`; records ask the Game for the payee on every
-///           ratchet (share 0 on a bare ratchet) and hand the trophy to it.
+/// @notice Stakes, claim banks, rebuy state, BAF draw entries and record payees use Game IDs.
+///         Paid self deposits and gift funders register through Game. Self claims only look up
+///         the ordinary ID; an unregistered wallet has no state to settle. Configuring rebuy
+///         registers the caller under the same admission policy. Explicit IDs are authorized
+///         through Game; credits carry IDs directly and skip zero IDs and amounts.
 contract CoinflipWalletIdsTest is DeployProtocol {
     address internal constant GAME = ContractAddresses.GAME;
     address internal constant COIN = ContractAddresses.COIN;
@@ -80,12 +75,9 @@ contract CoinflipWalletIdsTest is DeployProtocol {
     }
 
     function _slotA(address p) internal view returns (uint256) {
-        return uint256(vm.load(address(coinflip), keccak256(abi.encode(p, PLAYER_STATE_ROOT))));
+        return uint256(vm.load(address(coinflip), keccak256(abi.encode(_gameId(p), PLAYER_STATE_ROOT))));
     }
 
-    function _cachedId(address p) internal view returns (uint32) {
-        return uint32(_slotA(p) >> 184);
-    }
 
     function _lastClaim(address p) internal view returns (uint24) {
         return uint24(_slotA(p) >> 128);
@@ -95,9 +87,9 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         return uint24(uint256(vm.load(address(coinflip), bytes32(CLAIMABLE_DAY_SLOT))));
     }
 
-    /// @dev The Game's wallet ID for `p`, read from its mint word (no call).
+    /// @dev The Game's wallet ID for `p`, read from its canonical registry slot (no call).
     function _gameId(address p) internal view returns (uint32) {
-        return uint32(uint256(vm.load(address(game), GameSlotKeys.mintPacked(p))) >> 224);
+        return uint32(uint256(vm.load(address(game), GameSlotKeys.walletId(p))));
     }
 
     function _walletCount() internal view returns (uint256) {
@@ -164,50 +156,14 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         return 0;
     }
 
-    // =====================================================================
-    //                     layout and protocol caches
-    // =====================================================================
-
-    /// @notice The ID sits in slot A bits 184..215 right above autoRebuyEnabled; the state is
-    ///         still two slots (slot B holds the stop and carry; base + 2 is never written).
-    function test_SlotLayout_IdInSlotA_StateStaysTwoSlots() public {
-        address p = makeAddr("layout_player");
-        _fund(p, 10_000);
-        vm.prank(p);
-        coinflip.depositCoinflip(0, 1_000);
-        uint32 id = _gameId(p);
-        assertTrue(id != 0, "deposit registered the player");
-        vm.prank(p);
-        coinflip.setCoinflipAutoRebuy(0, true, 777);
-
-        bytes32 base = keccak256(abi.encode(p, PLAYER_STATE_ROOT));
-        uint256 a = uint256(vm.load(address(coinflip), base));
-        uint256 b = uint256(vm.load(address(coinflip), bytes32(uint256(base) + 1)));
-        assertEq(uint32(a >> 184), id, "slot A bits 184..215 hold the Game wallet ID");
-        assertEq((a >> 176) & 0xFF, 1, "autoRebuyEnabled sits directly below the ID");
-        assertEq(a >> 216, 0, "nothing above the ID in slot A");
-        assertEq(uint128(b), 777, "slot B low half is the take-profit stop");
-        assertEq(uint256(vm.load(address(coinflip), bytes32(uint256(base) + 2))), 0, "no third slot");
-        (bool enabled, uint256 stop,,) = coinflip.coinflipAutoRebuyInfo(p);
-        assertTrue(enabled);
-        assertEq(stop, 777);
-    }
-
-    /// @notice VAULT and sDGNRS caches hold the Game's protocol constants from construction.
-    function test_ProtocolCaches_SeededAtConstruction() public view {
-        assertEq(_cachedId(VAULT), 1, "vault cache");
-        assertEq(_cachedId(SDGNRS), 2, "sDGNRS cache");
-        assertEq(_gameId(VAULT), 1, "Game vault ID");
-        assertEq(_gameId(SDGNRS), 2, "Game sDGNRS ID");
-    }
 
     // =====================================================================
     //                         deposits and admission
     // =====================================================================
 
-    /// @notice A first self deposit registers the wallet once, caches the ID, keys the stake lane
+    /// @notice A first self deposit registers the wallet once, keys the stake lane
     ///         and the stake event by it, and hands the quest the same ID.
-    function test_FirstSelfDeposit_RegistersOnce_CachesId_QuestsById() public {
+    function test_FirstSelfDeposit_RegistersOnce_StakesAndQuestsById() public {
         address p = makeAddr("first_depositor");
         _fund(p, 10_000);
         uint32 expectedId = uint32(_walletCount());
@@ -225,7 +181,6 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         assertEq(rid, expectedId);
         assertEq(owner, p);
         assertEq(_gameId(p), expectedId);
-        assertEq(_cachedId(p), expectedId, "slot A cache filled");
         uint24 target = _today() + 1;
         assertEq(_lane(target, expectedId), 1_000, "stake keyed by the ID");
         bool seen;
@@ -238,32 +193,9 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         assertTrue(seen, "stake event emitted");
     }
 
-    /// @notice With the cache filled, a deposit asks the Game nothing about identity: no
-    ///         registerWallet / walletIdOf call, no read of the wallet's mint word, no Game write.
-    function test_CachedDeposit_MakesNoIdentityLookup() public {
-        address p = makeAddr("cached_depositor");
-        _fund(p, 10_000);
-        vm.prank(p);
-        coinflip.depositCoinflip(0, 1_000);
-        uint32 id = _cachedId(p);
-        assertTrue(id != 0);
-
-        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.registerWallet.selector), 0);
-        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.walletIdOf.selector), 0);
-        vm.record();
-        vm.prank(p);
-        coinflip.depositCoinflip(0, 2_000);
-        (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(GAME);
-        assertEq(writes.length, 0, "no Game storage write");
-        bytes32 mintSlot = GameSlotKeys.mintPacked(p);
-        for (uint256 i; i < reads.length; ++i) {
-            assertTrue(reads[i] != mintSlot, "no read of the wallet's mint word");
-        }
-        assertEq(_lane(_today() + 1, id), 3_000);
-    }
 
     /// @notice An approved operator's deposit runs on the PLAYER's ID (who pays), never the
-    ///         operator's; the resolved ID fills the cache with no registration.
+    ///         operator's; the supplied ID needs no registration.
     function test_OperatorDeposit_UsesPlayerIdNotOperator() public {
         address p = makeAddr("op_player");
         address o = makeAddr("op_operator");
@@ -282,8 +214,6 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         (uint256 n,,) = _registrations(vm.getRecordedLogs());
         assertEq(n, 0, "no registration on an ID-addressed deposit");
         assertEq(_gameId(o), 0, "operator not registered");
-        assertEq(_cachedId(o), 0);
-        assertEq(_cachedId(p), expectedId);
         assertEq(coin.balanceOf(p), 9_000, "the player funds an operator deposit");
         assertEq(_lane(_today() + 1, expectedId), 1_000);
     }
@@ -303,14 +233,13 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         assertEq(coin.balanceOf(f), 10_000);
     }
 
-    /// @notice A gift to a registered recipient with an empty Coinflip cache works: the recipient
-    ///         is resolved by ID (not allocated) and cached; the paying funder registers and its quest
+    /// @notice A gift to a registered recipient with no prior Coinflip activity works: the recipient
+    ///         is resolved by ID; the paying funder registers and its quest
     ///         gets the funder's ID; the stake is the recipient's.
-    function test_GiftToUncachedRecipient_RegistersFunderForQuest() public {
+    function test_GiftToRegisteredRecipient_RegistersFunderForQuest() public {
         address f = makeAddr("gift_funder_2");
         address r = makeAddr("gift_recipient");
         uint32 rid = _giveWalletId(r);
-        assertEq(_cachedId(r), 0, "recipient never touched Coinflip");
         _fund(f, 10_000);
         uint32 fid = uint32(_walletCount());
 
@@ -326,8 +255,6 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         assertEq(n, 1, "only the funder registers");
         assertEq(regId, fid);
         assertEq(owner, f);
-        assertEq(_cachedId(r), rid, "recipient cache filled from the resolved ID");
-        assertEq(_cachedId(f), fid, "funder cache filled from its registration");
         uint24 target = _today() + 1;
         assertEq(_lane(target, rid), 1_000, "stake is the recipient's");
         assertEq(_lane(target, fid), 0);
@@ -335,18 +262,18 @@ contract CoinflipWalletIdsTest is DeployProtocol {
     }
 
     /// @notice Past PAID_ADMISSION_WALLETS the hook refuses new wallets (a new depositor and a new
-    ///         gift funder revert with the Game's E); existing IDs, cached or not, still deposit.
+    ///         gift funder revert with the Game's E); existing IDs, with or without prior deposits, still deposit.
     function test_PastPaidAdmission_NewDepositorReverts_ExistingDeposits() public {
-        address cached = makeAddr("adm_cached");
-        address uncached = makeAddr("adm_uncached");
+        address repeat = makeAddr("adm_repeat");
+        address registered = makeAddr("adm_registered");
         address fresh = makeAddr("adm_new");
-        _fund(cached, 10_000);
-        _fund(uncached, 10_000);
+        _fund(repeat, 10_000);
+        _fund(registered, 10_000);
         _fund(fresh, 10_000);
-        vm.prank(cached);
+        vm.prank(repeat);
         coinflip.depositCoinflip(0, 1_000);
-        uint32 cid = _cachedId(cached);
-        uint32 uid = _giveWalletId(uncached);
+        uint32 cid = _gameId(repeat);
+        uint32 uid = _giveWalletId(registered);
 
         vm.store(address(game), bytes32(GameSlots.WALLETS), bytes32(PAST_PAID_ADMISSION));
 
@@ -357,15 +284,14 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         vm.prank(fresh);
         coinflip.depositCoinflip(cid, 1_000);
 
-        vm.prank(cached);
+        vm.prank(repeat);
         coinflip.depositCoinflip(0, 1_000);
-        vm.prank(uncached);
+        vm.prank(registered);
         coinflip.depositCoinflip(0, 1_000);
 
         uint24 target = _today() + 1;
         assertEq(_lane(target, cid), 2_000);
         assertEq(_lane(target, uid), 1_000);
-        assertEq(_cachedId(uncached), uid);
         assertEq(_gameId(fresh), 0);
         assertEq(coin.balanceOf(fresh), 10_000);
     }
@@ -375,16 +301,15 @@ contract CoinflipWalletIdsTest is DeployProtocol {
     // =====================================================================
 
     /// @notice A credit by ID to a wallet that never touched Coinflip shows in the views through
-    ///         walletIdOf; the first claim looks the ID up once (no allocation), caches it, records
-    ///         BAF by ID and mints to the caller; a later claim needs no lookup.
-    function test_CreditById_VisibleBeforeFirstClaim_ClaimFillsCacheMintsToCaller() public {
+    ///         walletIdOf; claims resolve that canonical ID without allocation, record BAF by ID
+    ///         and mint to the caller.
+    function test_CreditById_VisibleBeforeFirstClaim_MintsToCaller() public {
         address p = makeAddr("credited_player");
         uint32 id = _giveWalletId(p);
         uint24 d = _today();
         vm.prank(GAME);
         coinflip.creditFlip(id, 5_000);
         assertEq(coinflip.coinflipAmount(p), 5_000, "view resolves the ID through the Game");
-        assertEq(_cachedId(p), 0, "a credit never fills the address-keyed cache");
 
         _warpToDay(d + 1);
         _resolve(d + 1, true);
@@ -392,9 +317,8 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         assertTrue(win);
         uint256 payout = 5_000 + (5_000 * uint256(pct)) / 100;
         assertEq(coinflip.previewClaimCoinflips(p), payout);
-        assertEq(_cachedId(p), 0, "views never fill the cache");
 
-        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.registerWallet, (p, false)), 1);
+        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.walletIdOf, (p)), 2);
         vm.expectCall(GAME, abi.encodeCall(DegenerusGame.registerWallet, (p, true)), 0);
         vm.expectCall(address(jackpots), abi.encodeWithSelector(DegenerusJackpots.recordBafFlip.selector, id), 1);
         uint256 before = coin.balanceOf(p);
@@ -402,15 +326,13 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         uint256 got = coinflip.claimCoinflips(0, type(uint256).max);
         assertEq(got, payout);
         assertEq(coin.balanceOf(p) - before, payout, "minted to the claiming wallet");
-        assertEq(_cachedId(p), id, "first claim fills the cache");
 
         vm.prank(p);
-        assertEq(coinflip.claimCoinflips(0, 1), 0, "nothing left; cached, no second lookup");
+        assertEq(coinflip.claimCoinflips(0, 1), 0, "nothing left to claim");
     }
 
     /// @notice An ID-less wallet: claims and every FLIP callback return 0 without reverting, the
-    ///         views read 0, auto-rebuy can be armed, the cursor moves to the latest resolved day,
-    ///         the wallet is never registered and nothing is written under stake key 0.
+    ///         views read 0, no account is allocated and no state is written under ID 0.
     function test_IdlessWallet_ClaimsAndCallbacksReturnZero_NeverRegisters() public {
         address q = makeAddr("idless_wallet");
         uint24 d = _today();
@@ -425,33 +347,31 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         vm.record();
         vm.prank(q);
         assertEq(coinflip.claimCoinflips(0, 100), 0);
-        assertEq(_lastClaim(q), latest, "the empty walk moves only the cursor");
+        assertEq(_lastClaim(q), 0, "unregistered claims have no cursor");
         vm.startPrank(COIN);
         assertEq(coinflip.claimCoinflipsFromFlip(q, 100), 0);
         assertEq(coinflip.consumeCoinflipsForBurn(q, 100), 0);
         assertEq(coinflip.consumeFlipForSalvage(q, 100), 0);
         vm.stopPrank();
-        vm.prank(q);
-        coinflip.setCoinflipAutoRebuy(0, true, 0);
         (, bytes32[] memory writes) = vm.accesses(address(coinflip));
+        assertEq(writes.length, 0, "unregistered claims write no account state");
         _assertNoKeyZeroWrite(writes, latest + 1);
 
         (bool enabled,,, uint24 startDay) = coinflip.coinflipAutoRebuyInfo(q);
-        assertTrue(enabled, "auto-rebuy armed without an ID");
-        assertEq(startDay, latest);
+        assertFalse(enabled);
+        assertEq(startDay, 0);
         assertEq(coinflip.previewClaimCoinflips(q), 0);
         assertEq(coinflip.previewSalvageFlipBacking(q), 0);
         assertEq(coinflip.coinflipAmount(q), 0);
         (uint256 n,,) = _registrations(vm.getRecordedLogs());
         assertEq(n, 0, "no registration");
         assertEq(_gameId(q), 0);
-        assertEq(_cachedId(q), 0);
         assertEq(_lane(latest + 1, 0), 0);
     }
 
-    /// @notice `depositCoinflip(self, 0)` by an ID-less wallet settles nothing and moves lastClaim
-    ///         to flipsClaimableDay, on and off auto-rebuy.
-    function test_IdlessWallet_ZeroDepositMovesCursor_OnAndOffRebuy() public {
+    /// @notice Empty self deposits allocate and write nothing; rebuy configuration registers an
+    ///         account, whose subsequent empty deposit advances its claim cursor normally.
+    function test_ZeroDepositSkipsUnregisteredWallet_RebuyConfigurationRegisters() public {
         address q = makeAddr("idless_zero");
         address r = makeAddr("idless_rebuy");
         uint24 d = _today();
@@ -462,7 +382,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
 
         vm.prank(q);
         coinflip.depositCoinflip(0, 0);
-        assertEq(_lastClaim(q), d + 2);
+        assertEq(_lastClaim(q), 0);
 
         vm.prank(r);
         coinflip.setCoinflipAutoRebuy(0, true, 0);
@@ -474,12 +394,10 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         _resolve(d + 4, false);
         vm.prank(r);
         coinflip.depositCoinflip(0, 0);
-        assertEq(_lastClaim(r), d + 4, "rebuy-armed ID-less cursor lands on the latest resolved day");
+        assertEq(_lastClaim(r), d + 4, "registered rebuy cursor lands on the latest resolved day");
 
         assertEq(_gameId(q), 0);
-        assertEq(_gameId(r), 0);
-        assertEq(_cachedId(q), 0);
-        assertEq(_cachedId(r), 0);
+        assertGt(_gameId(r), 0);
     }
 
     /// @notice A plain FLIP holder with no ID transfers as before: in-balance transfers succeed and
@@ -545,8 +463,6 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         coinflip.creditFlipPair(idb, 7, 0, 9);
         assertEq(_lane(target, idb), 7);
         assertEq(_lane(target, 0), 0);
-        assertEq(_cachedId(a), 0, "credits never fill the address-keyed cache");
-        assertEq(_cachedId(b), 0);
 
         vm.expectRevert(Coinflip.OnlyFlipCreditors.selector);
         vm.prank(a);
@@ -600,7 +516,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         _fund(p, 10_000);
         vm.prank(p);
         coinflip.depositCoinflip(0, 100);
-        uint32 id = _cachedId(p);
+        uint32 id = _gameId(p);
         uint24 target = _today() + 1;
 
         vm.prank(GAME);
@@ -652,15 +568,13 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         assertGt(backing, 0, "sDGNRS settled its seed win under ID 2");
         assertGt(uint128(_slotA(VAULT)), 0, "the vault settled its seed win under ID 1");
         uint24 target = _today() + 1;
-        assertEq(coinflip.coinflipAmount(VAULT), SEED + _lane(target, 1), "vault seed on its own ID");
-        assertEq(coinflip.coinflipAmount(SDGNRS), SEED + _lane(target, 2), "sDGNRS seed on its own ID");
+        assertEq(coinflip.coinflipAmountById(1), SEED + _lane(target, 1), "vault seed on its own ID");
+        assertEq(coinflip.coinflipAmountById(2), SEED + _lane(target, 2), "sDGNRS seed on its own ID");
         vm.prank(GAME);
         coinflip.creditFlip(1, 3_000);
-        assertEq(coinflip.coinflipAmount(VAULT), SEED + 3_000, "a credit to ID 1 is the vault's");
+        assertEq(coinflip.coinflipAmountById(1), SEED + 3_000, "a credit to ID 1 is the vault's");
         (uint256 n,,) = _registrations(vm.getRecordedLogs());
         assertEq(n, 0);
-        assertEq(_cachedId(VAULT), 1);
-        assertEq(_cachedId(SDGNRS), 2);
     }
 
     // =====================================================================
@@ -684,8 +598,8 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         vm.prank(p2);
         coinflip.depositCoinflip(0, 3_000);
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        uint32 id1 = _cachedId(p1);
-        uint32 id2 = _cachedId(p2);
+        uint32 id1 = _gameId(p1);
+        uint32 id2 = _gameId(p2);
 
         assertEq(_drawEntryRaw(armed, 0), 1_000 | (uint256(id1) << 96));
         assertEq(_drawEntryRaw(armed, 1), 4_000 | (uint256(id2) << 96));
@@ -738,7 +652,6 @@ contract CoinflipWalletIdsTest is DeployProtocol {
             vm.prank(p);
             coinflip.depositCoinflip(0, amount);
             (uint32 eid,) = coinflip.bafDrawEntryAt(armed, uint32(i));
-            assertEq(eid, _cachedId(p));
             assertEq(eid, _gameId(p));
         }
         assertEq(coinflip.bafDrawWinner(rngWord), _refDrawWinner(armed, rngWord));
@@ -798,7 +711,6 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         vm.prank(GAME);
         assertEq(coinflip.armRecord(KIND_SPIN, idb, 2 ether), 0);
         assertEq(recordBounty.ownerOf(KIND_SPIN), a);
-        assertEq(_cachedId(a), 0, "records never touch the address-keyed state");
     }
 
     /// @notice The trophy goes to whatever payee the Game returns for the ID (Coinflip holds no
@@ -849,7 +761,6 @@ contract CoinflipWalletIdsTest is DeployProtocol {
             }
         }
         assertTrue(stake && rec);
-        assertEq(_cachedId(a), 0);
 
         vm.prank(CRAPS);
         assertEq(coinflip.armDiceRunRecord(id, 1_500_000), 0, "no strict improvement");
@@ -869,7 +780,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         uint24 d = _today();
         vm.prank(p);
         coinflip.depositCoinflip(0, 1_000);
-        uint32 id = _cachedId(p);
+        uint32 id = _gameId(p);
 
         vm.expectCall(address(jackpots), abi.encodeWithSelector(DegenerusJackpots.recordBafFlip.selector, uint32(2)), 0);
         vm.expectCall(address(jackpots), abi.encodeWithSelector(DegenerusJackpots.recordBafFlip.selector, id), 1);

@@ -76,7 +76,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
     });
 
     it("instant-apply slot is votable in the same level", async function () {
-      const { charity, deployer, recipient1, voter1 } = await loadFixture(deployGNRUSFixture);
+      const { charity, game, deployer, recipient1, voter1 } = await loadFixture(deployGNRUSFixture);
       await setCharityFromVaultOwner(charity, deployer, 5, recipient1.address);
       await charity.connect(voter1).vote(5);
       const level = await charity.currentLevel();
@@ -205,7 +205,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
       // D-256-LOCKED-SLOT-01 positive case. The locked-slot guard is intentionally
       // confined to setCharity (contracts/GNRUS.sol L375); vote(uint8) has no such
       // restriction, so once a locked slot is filled it is a normal voting target.
-      const { charity, deployer, recipient1, voter1 } = await loadFixture(deployGNRUSFixture);
+      const { charity, game, deployer, recipient1, voter1 } = await loadFixture(deployGNRUSFixture);
       await setCharityFromVaultOwner(charity, deployer, 0, recipient1.address);
       await charity.connect(voter1).vote(0);
       const level = await charity.currentLevel();
@@ -351,7 +351,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
     });
 
     it("queued remove: slot still votable until flush", async function () {
-      const { charity, deployer, recipient1, voter1 } = await loadFixture(deployGNRUSFixture);
+      const { charity, game, deployer, recipient1, voter1 } = await loadFixture(deployGNRUSFixture);
       await setCharityFromVaultOwner(charity, deployer, 5, recipient1.address);
       // Queue remove (`setCharity(5, 0)`); slot still active in current slate.
       await setCharityFromVaultOwner(charity, deployer, 5, ZERO_ADDRESS);
@@ -411,13 +411,13 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
   // -------------------------------------------------------------------
   describe("vote(uint8 slot)", function () {
     it("single-slot vote applies full sDGNRS weight and emits Voted", async function () {
-      const { charity, deployer, recipient1, voter1 } = await loadFixture(deployGNRUSFixture);
+      const { charity, game, deployer, recipient1, voter1 } = await loadFixture(deployGNRUSFixture);
       await setCharityFromVaultOwner(charity, deployer, 5, recipient1.address);
       const tx = await charity.connect(voter1).vote(5);
       const ev = await getEvent(tx, charity, "Voted");
       expect(ev.args.level).to.equal(0n);
       expect(ev.args.slot).to.equal(5n);
-      expect(ev.args.voter).to.equal(voter1.address);
+      expect(ev.args.voter).to.equal(await game.walletIdOf(voter1.address));
       expect(ev.args.weight).to.equal(100n);
       expect(await charity.slotApproveWeight(0, 5)).to.equal(100n);
     });
@@ -518,7 +518,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
     });
 
     it("VoteRejected(REJECT_ALREADY_VOTED) on second vote for same (level, voter, slot)", async function () {
-      const { charity, deployer, recipient1, voter1 } = await loadFixture(deployGNRUSFixture);
+      const { charity, game, deployer, recipient1, voter1 } = await loadFixture(deployGNRUSFixture);
       await setCharityFromVaultOwner(charity, deployer, 5, recipient1.address);
       await charity.connect(voter1).vote(5);
       await expect(
@@ -528,17 +528,17 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
         .withArgs(REJECT_ALREADY_VOTED);
     });
 
-    it("VoteRejected(REJECT_ZERO_WEIGHT) on sub-1e18 sDGNRS balance (integer-floor path)", async function () {
-      // D-256-VOTE-REJECT-01: explicitly exercise the `weight = balanceOf / 1e18` integer
-      // floor at contracts/GNRUS.sol L572-573. A non-zero sub-1e18 balance flows past
+    it("VoteRejected(REJECT_ZERO_WEIGHT) on sub-1e12 sDGNRS balance (integer-floor path)", async function () {
+      // D-256-VOTE-REJECT-01: explicitly exercise the `weight = balanceOf / 1e12` integer
+      // floor at contracts/GNRUS.sol L572-573. A non-zero sub-1e12 balance flows past
       // EMPTY_SLOT and ALREADY_VOTED checks and reverts at the weight comparison — proving
       // the floor is the actual gate (not a balance == 0 short-circuit).
       const { charity, deployer, recipient1, sdgnrs, gameAddress, others } =
         await loadFixture(deployGNRUSFixture);
       const subWhole = others[5];
-      await giveSDGNRS(sdgnrs, gameAddress, subWhole.address, eth("0.5")); // 5e17 → floor = 0
-      // Sanity check: balance is non-zero but sub-1e18.
-      expect(await sdgnrs.balanceOf(subWhole.address)).to.equal(eth("0.5"));
+      await giveSDGNRS(sdgnrs, gameAddress, subWhole.address, hre.ethers.parseUnits("0.5", 12)); // 5e11 → floor = 0
+      // Sanity check: balance is non-zero but sub-1e12.
+      expect(await sdgnrs.balanceOf(subWhole.address)).to.equal(hre.ethers.parseUnits("0.5", 12));
 
       await setCharityFromVaultOwner(charity, deployer, 5, recipient1.address);
       await expect(
@@ -774,7 +774,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
 
       const tieVoters = [others[7], others[8], others[9], others[10]];
       for (const v of tieVoters) {
-        await giveSDGNRS(sdgnrs, gameAddress, v.address, eth("100"));
+        await giveSDGNRS(sdgnrs, gameAddress, v.address, hre.ethers.parseUnits("100", 12));
       }
       await charity.connect(tieVoters[0]).vote(3);
       await charity.connect(tieVoters[1]).vote(5);
@@ -959,7 +959,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
       const extraVoters = others.slice(50, 67);
       expect(extraVoters.length).to.equal(17);
       for (const v of extraVoters) {
-        await giveSDGNRS(sdgnrs, gameAddress, v.address, eth("100"));
+        await giveSDGNRS(sdgnrs, gameAddress, v.address, hre.ethers.parseUnits("100", 12));
       }
       await charity.connect(voter1).vote(0);
       await charity.connect(voter2).vote(1);

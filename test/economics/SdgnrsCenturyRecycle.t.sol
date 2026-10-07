@@ -24,7 +24,7 @@ contract CenturyRedemptionSessionFixture is DegenerusGame {
 }
 
 contract SdgnrsCenturyRecycleTest is RedemptionCloseTools {
-    uint256 private constant INITIAL = 1e30;
+    uint256 private constant INITIAL = 1e24;
     uint256 private constant RNG_WORD = 53; // 50% at level 100; other centuries use separate draws.
     address private constant ALICE = address(0xA11CE);
     address private constant BOB = address(0xB0B);
@@ -35,6 +35,9 @@ contract SdgnrsCenturyRecycleTest is RedemptionCloseTools {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
         _primeCurrentDayRng();
+        _giveWalletId(ALICE);
+        _giveWalletId(BOB);
+        _giveWalletId(ContractAddresses.CREATOR);
         // Custody-backed redemptions exercise the real reservation gate without game-ledger mocks.
         vm.deal(address(sdgnrs), 100 ether);
     }
@@ -175,15 +178,15 @@ contract SdgnrsCenturyRecycleTest is RedemptionCloseTools {
     }
 
     function testLaterBoundaryConsumesCheckpointOnceWithoutCatchUpLoop() public {
-        _award(sDGNRS.Pool.Reward, address(sdgnrs), 1 ether + 1);
-        _assertRefill(300, 1 ether + 1);
-        _award(sDGNRS.Pool.Whale, address(sdgnrs), 2 ether + 1);
+        _award(sDGNRS.Pool.Reward, address(sdgnrs), 1e12 + 1);
+        _assertRefill(300, 1e12 + 1);
+        _award(sDGNRS.Pool.Whale, address(sdgnrs), 2e12 + 1);
         uint256 supply = sdgnrs.totalSupply();
         _recycle(100);
         _recycle(200);
         _recycle(300);
         assertEq(sdgnrs.totalSupply(), supply, "earlier boundaries cannot reissue burns");
-        _assertRefill(500, 2 ether + 1);
+        _assertRefill(500, 2e12 + 1);
     }
 
     function testZeroBurnAndFractionalDustStillAdvanceCheckpoint() public {
@@ -204,31 +207,31 @@ contract SdgnrsCenturyRecycleTest is RedemptionCloseTools {
     }
 
     function testMinimumRollMints25Percent() public {
-        _award(sDGNRS.Pool.Whale, address(sdgnrs), 100 ether);
-        _assertRefill(100, 100 ether, 8);
-        assertEq(sdgnrs.totalSupply(), INITIAL - 75 ether);
+        _award(sDGNRS.Pool.Whale, address(sdgnrs), 100e12);
+        _assertRefill(100, 100e12, 8);
+        assertEq(sdgnrs.totalSupply(), INITIAL - 75e12);
     }
 
     function testMaximumRollMints75PercentAndCannotReroll() public {
-        _award(sDGNRS.Pool.Whale, address(sdgnrs), 100 ether);
-        _assertRefill(100, 100 ether, 119);
-        assertEq(sdgnrs.totalSupply(), INITIAL - 25 ether);
-        _award(sDGNRS.Pool.Whale, address(sdgnrs), 100 ether);
+        _award(sDGNRS.Pool.Whale, address(sdgnrs), 100e12);
+        _assertRefill(100, 100e12, 119);
+        assertEq(sdgnrs.totalSupply(), INITIAL - 25e12);
+        _award(sDGNRS.Pool.Whale, address(sdgnrs), 100e12);
         vm.warp(block.timestamp + 3 days);
         vm.recordLogs();
         _recycle(100, 8);
         _recycle(100, type(uint256).max);
         assertEq(vm.getRecordedLogs().length, 0, "replays emit no new roll or mint");
-        assertEq(sdgnrs.totalSupply(), INITIAL - 125 ether);
-        assertEq(sdgnrs.centurySupplyCheckpoint(), INITIAL - 25 ether);
+        assertEq(sdgnrs.totalSupply(), INITIAL - 125e12);
+        assertEq(sdgnrs.centurySupplyCheckpoint(), INITIAL - 25e12);
     }
 
     function testSameWordSeparatesCenturies() public {
-        _award(sDGNRS.Pool.Whale, address(sdgnrs), 100 ether);
-        _assertRefill(100, 100 ether, 8);
-        _award(sDGNRS.Pool.Whale, address(sdgnrs), 100 ether);
-        _assertRefill(200, 100 ether, 8);
-        assertEq(sdgnrs.totalSupply(), INITIAL - 114 ether, "25% then 61% for the same word");
+        _award(sDGNRS.Pool.Whale, address(sdgnrs), 100e12);
+        _assertRefill(100, 100e12, 8);
+        _award(sDGNRS.Pool.Whale, address(sdgnrs), 100e12);
+        _assertRefill(200, 100e12, 8);
+        assertEq(sdgnrs.totalSupply(), INITIAL - 114e12, "25% then 61% for the same word");
     }
 
     function testTinyRawUnitSplits() public {
@@ -241,14 +244,14 @@ contract SdgnrsCenturyRecycleTest is RedemptionCloseTools {
     function testClampedSelfAwardCountsActualBurn() public {
         uint256 actual = _award(sDGNRS.Pool.Whale, address(sdgnrs), type(uint256).max);
         assertEq(actual, INITIAL / 10);
-        assertEq(_award(sDGNRS.Pool.Whale, address(sdgnrs), 1 ether), 0);
+        assertEq(_award(sDGNRS.Pool.Whale, address(sdgnrs), 1e12), 0);
         _assertRefill(100, actual);
     }
 
     function testMixedRedemptionsWrappedBurnsAndTransfers() public {
-        uint256 direct = 1_000 ether + 3;
-        uint256 wrapped = 2_000 ether + 5;
-        uint256 selfBurn = 3_000 ether + 7;
+        uint256 direct = 1_000e12 + 3;
+        uint256 wrapped = 2_000e12 + 5;
+        uint256 selfBurn = 3_000e12 + 7;
         _award(sDGNRS.Pool.Reward, ALICE, direct * 2);
         vm.prank(ALICE);
         sdgnrs.burn(direct);
@@ -257,24 +260,24 @@ contract SdgnrsCenturyRecycleTest is RedemptionCloseTools {
         sdgnrs.burnWrapped(wrapped);
         assertEq(dgnrs.totalSupply(), wrapperBefore - wrapped);
         _award(sDGNRS.Pool.Affiliate, address(sdgnrs), selfBurn);
-        _award(sDGNRS.Pool.Lootbox, BOB, 4_000 ether);
+        _award(sDGNRS.Pool.Lootbox, BOB, 4_000e12);
         vm.prank(ContractAddresses.CREATOR);
-        dgnrs.unwrapTo(BOB, 5_000 ether);
+        dgnrs.unwrapTo(BOB, 5_000e12);
         vm.prank(ALICE);
         vm.expectRevert(sDGNRS.Insufficient.selector);
         sdgnrs.burn(type(uint256).max);
         _closeFunded();
         _assertRefill(100, direct + wrapped + selfBurn);
         assertEq(sdgnrs.balanceOf(ALICE), direct);
-        assertEq(sdgnrs.balanceOf(BOB), 9_000 ether, "ordinary transfers and unwraps are not burns");
+        assertEq(sdgnrs.balanceOf(BOB), 9_000e12, "ordinary transfers and unwraps are not burns");
     }
 
     function testUnwrappedInventorySurplusIsPreserved() public {
         vm.prank(ContractAddresses.CREATOR);
-        dgnrs.unwrapTo(address(sdgnrs), 1_000 ether);
-        _award(sDGNRS.Pool.Whale, address(sdgnrs), 101 ether);
-        _assertRefill(100, 101 ether);
-        assertEq(sdgnrs.balanceOf(address(sdgnrs)) - _sum(_pools()), 1_000 ether);
+        dgnrs.unwrapTo(address(sdgnrs), 1_000e12);
+        _award(sDGNRS.Pool.Whale, address(sdgnrs), 101e12);
+        _assertRefill(100, 101e12);
+        assertEq(sdgnrs.balanceOf(address(sdgnrs)) - _sum(_pools()), 1_000e12);
     }
 
     function testEmptyPoolsAndInventoryCanBeRefilled() public {
@@ -304,9 +307,9 @@ contract SdgnrsCenturyRecycleTest is RedemptionCloseTools {
     }
 
     function _fundFlip() private {
-        bytes32 slot = keccak256(abi.encode(address(sdgnrs), uint256(2)));
+        bytes32 slot = keccak256(abi.encode(uint32(2), uint256(2)));
         uint256 packed = uint256(vm.load(address(coinflip), slot));
-        vm.store(address(coinflip), slot, bytes32((packed & (type(uint256).max << 128)) | uint128(1e30)));
+        vm.store(address(coinflip), slot, bytes32((packed & (type(uint256).max << 128)) | uint128(1e24)));
     }
 
     function _pendingFingerprint(uint32 id) private view returns (bytes32) {
@@ -320,11 +323,11 @@ contract SdgnrsCenturyRecycleTest is RedemptionCloseTools {
     function testPendingAndResolvedClaimsSurviveRefillsAndSettle() public {
         _fundFlip();
         mockStETH.mint(address(sdgnrs), 50 ether);
-        _award(sDGNRS.Pool.Reward, ALICE, 10_000 ether);
-        _award(sDGNRS.Pool.Reward, BOB, 10_000 ether);
+        _award(sDGNRS.Pool.Reward, ALICE, 10_000e12);
+        _award(sDGNRS.Pool.Reward, BOB, 10_000e12);
         uint32 id = _openBatch();
-        vm.prank(ALICE); sdgnrs.burn(1_000 ether + 1);
-        vm.prank(BOB); sdgnrs.burn(2_000 ether + 1);
+        vm.prank(ALICE); sdgnrs.burn(1_000e12 + 1);
+        vm.prank(BOB); sdgnrs.burn(2_000e12 + 1);
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
         bytes32 fingerprint = _pendingFingerprint(id);
         _assertRefill(100, 0); // Open burns retain their economic holder share.
@@ -335,9 +338,12 @@ contract SdgnrsCenturyRecycleTest is RedemptionCloseTools {
         (,,,uint96 escrow,,) = sdgnrs.redemptionBatches(id);
         assertGt(escrow, 0);
         uint256 reserve = sdgnrs.pendingRedemptionEthValue();
-        _award(sDGNRS.Pool.Whale, address(sdgnrs), 7_000 ether);
+        (uint80 batchTokens, uint96 batchPayout,,,,) = sdgnrs.redemptionBatches(id);
+        (uint80 aliceTokens,) = sdgnrs.pendingRedemptions(game.walletIdOf(ALICE), id);
+        uint256 alicePayout = uint256(batchPayout) * aliceTokens / batchTokens;
+        _award(sDGNRS.Pool.Whale, address(sdgnrs), 7_000e12);
         fingerprint = _pendingFingerprint(id);
-        _assertRefill(200, 10_000 ether + 2); // The close now counts both live burns.
+        _assertRefill(200, 10_000e12 + 2); // The close now counts both live burns.
         assertEq(_pendingFingerprint(id), fingerprint);
         uint256 supply = sdgnrs.totalSupply();
         uint256 before = game.claimableWinningsOf(ALICE);
@@ -345,23 +351,24 @@ contract SdgnrsCenturyRecycleTest is RedemptionCloseTools {
         (uint128 waiting,) = sdgnrs.pendingRedemptions(game.walletIdOf(BOB), id);
         assertGt(waiting, 0);
         assertApproxEqAbs(game.claimableWinningsOf(ALICE) - before, baseAlice * 175 / 100 / 2, 1);
-        assertEq(sdgnrs.pendingRedemptionEthValue(), reserve - baseAlice * 175 / 100);
+        assertEq(sdgnrs.pendingRedemptionEthValue(), reserve - alicePayout);
         _settleOneClaim();
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
         assertFalse(sdgnrs.redemptionSettlementPending());
         assertEq(sdgnrs.totalSupply(), supply);
         _assertRefill(300, 0);
     }
-    function testExistingBatchCapIsNotResetByRefill() public {
-        _award(sDGNRS.Pool.Reward, ALICE, 3_000 ether);
+    function testOpenBatchRemainsUnpricedAcrossRefill() public {
+        _award(sDGNRS.Pool.Reward, ALICE, 3_000e12);
         uint32 id = _openBatch();
-        vm.prank(ALICE); sdgnrs.burn(1_000 ether + 1);
-        (,uint128 snapshot,,,,) = sdgnrs.redemptionBatches(id);
+        vm.prank(ALICE); sdgnrs.burn(1_000e12 + 1);
+        (,uint96 payout,,,,) = sdgnrs.redemptionBatches(id);
+        assertEq(payout, 0);
         _assertRefill(100, 0);
-        vm.prank(ALICE); sdgnrs.burn(1_000 ether + 1);
-        (uint128 tokens,uint128 afterSnapshot,,,,) = sdgnrs.redemptionBatches(id);
-        assertEq(afterSnapshot, snapshot);
-        assertEq(tokens, 2_000 ether + 2);
+        vm.prank(ALICE); sdgnrs.burn(1_000e12 + 1);
+        (uint80 tokens,uint96 afterPayout,,,,) = sdgnrs.redemptionBatches(id);
+        assertEq(afterPayout, 0);
+        assertEq(tokens, 2_000e12 + 2);
         _assertRefill(200, 0);
     }
 
@@ -382,24 +389,24 @@ contract SdgnrsCenturyRecycleTest is RedemptionCloseTools {
     }
 
     function testRealGameOverClosesRecyclingAndTerminalBurnsNeverRecycle() public {
-        _award(sDGNRS.Pool.Reward, ALICE, 1_000 ether);
-        _award(sDGNRS.Pool.Whale, address(sdgnrs), 10_000 ether);
+        _award(sDGNRS.Pool.Reward, ALICE, 1_000e12);
+        _award(sDGNRS.Pool.Whale, address(sdgnrs), 10_000e12);
         _endGame();
         uint256 supply = sdgnrs.totalSupply();
         vm.prank(ALICE);
-        sdgnrs.burn(1_000 ether);
+        sdgnrs.burn(1_000e12);
         vm.prank(ContractAddresses.CREATOR);
-        sdgnrs.burnWrapped(1_000 ether);
+        sdgnrs.burnWrapped(1_000e12);
         _recycle(100);
         _recycle(200);
-        assertEq(sdgnrs.totalSupply(), supply - 2_000 ether);
+        assertEq(sdgnrs.totalSupply(), supply - 2_000e12);
         assertEq(sdgnrs.lastRecycledCentury(), 0);
         assertEq(_sum(_pools()), 0);
     }
 
     function testGameOverAfterRefillNeverMintsAgain() public {
-        _award(sDGNRS.Pool.Whale, address(sdgnrs), 101 ether);
-        _assertRefill(100, 101 ether);
+        _award(sDGNRS.Pool.Whale, address(sdgnrs), 101e12);
+        _assertRefill(100, 101e12);
         _endGame();
         uint256 supply = sdgnrs.totalSupply();
         _recycle(200);
@@ -409,7 +416,7 @@ contract SdgnrsCenturyRecycleTest is RedemptionCloseTools {
     }
 
     function testZeroInventoryTerminalEarlyReturnStillCloses() public {
-        _award(sDGNRS.Pool.Whale, address(sdgnrs), 1 ether);
+        _award(sDGNRS.Pool.Whale, address(sdgnrs), 1e12);
         for (uint8 i; i < 5; ++i) _award(sDGNRS.Pool(i), ALICE, type(uint256).max);
         assertEq(sdgnrs.balanceOf(address(sdgnrs)), 0);
         vm.prank(address(game));
@@ -417,6 +424,6 @@ contract SdgnrsCenturyRecycleTest is RedemptionCloseTools {
         assertTrue(sdgnrs.recyclingClosed());
         _recycle(100);
         assertEq(sdgnrs.lastRecycledCentury(), 0);
-        assertEq(sdgnrs.totalSupply(), INITIAL - 1 ether);
+        assertEq(sdgnrs.totalSupply(), INITIAL - 1e12);
     }
 }

@@ -11,25 +11,24 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 
 /// @title CoinflipAccounts -- Coinflip doors acting for an account by wallet ID (smurfs, operators, gifts)
-/// @notice O owns smurf S (key = the derived hash address); P is an operator O approved for S; X is a
-///         stranger. State follows the account (Coinflip state under S's key, stake lanes by S's ID);
-///         value follows the payee (O's wallet FLIP burns, FLIP and loss WWXRP mint to O). A deposit is
+/// @notice O owns subaccount S; P is an operator O approved for S; X is a stranger.
+///         Coinflip state and stakes follow S's ID. FLIP burns and withdrawals use O's wallet;
+///         loss WWXRP credits stay claimable under S's ID. A deposit is
 ///         direct (flip record, BAF draw entry, coinflip boon) only when the caller is the payee: a
 ///         self deposit or a smurf's owner. An operator deposit and a gift are not direct; a gift
 ///         burns the funder's FLIP, never spends the account's winnings and earns the funder's quest.
 ///         Self actions make no Game `resolveAccount` call; an ID-addressed action makes one, and a
-///         first smurf action fills the slot-A ID cache from it with no registration.
+///         subaccount actions use the supplied ID with no registration.
 contract CoinflipAccountsTest is DeployProtocol {
     address internal constant GAME = ContractAddresses.GAME;
     address internal constant VAULT = ContractAddresses.VAULT;
 
-    bytes32 internal constant SMURF_KEY_TAG = keccak256("degenerus.smurf");
     bytes32 internal constant WALLET_REGISTERED = keccak256("WalletRegistered(uint32,address)");
-    bytes32 internal constant QUEST_COMPLETED = keccak256("QuestCompleted(address,uint8,uint32,uint256)");
-    bytes32 internal constant CLAIM_STATE = keccak256("CoinflipClaimState(address,uint128,uint128,uint24)");
-    bytes32 internal constant DEPOSIT = keccak256("CoinflipDeposit(address,uint256)");
-    bytes32 internal constant TOGGLED = keccak256("CoinflipAutoRebuyToggled(address,bool)");
-    bytes32 internal constant STOP_SET = keccak256("CoinflipAutoRebuyStopSet(address,uint256)");
+    bytes32 internal constant QUEST_COMPLETED = keccak256("QuestCompleted(uint32,uint8,uint32,uint256)");
+    bytes32 internal constant CLAIM_STATE = keccak256("CoinflipClaimState(uint32,uint128,uint128,uint24)");
+    bytes32 internal constant DEPOSIT = keccak256("CoinflipDeposit(uint32,uint256)");
+    bytes32 internal constant TOGGLED = keccak256("CoinflipAutoRebuyToggled(uint32,bool)");
+    bytes32 internal constant STOP_SET = keccak256("CoinflipAutoRebuyStopSet(uint32,uint256)");
     bytes32 internal constant BAF_DRAW_ENTERED = keccak256("BafDrawEntered(uint24,uint32,uint32,uint96,uint96)");
     bytes32 internal constant BIG_RECORD = keccak256("BigRecordUpdated(uint8,uint32,uint256,uint128,uint256)");
 
@@ -44,7 +43,6 @@ contract CoinflipAccountsTest is DeployProtocol {
     address internal owner;
     uint32 internal ownerId;
     uint32 internal smurfId;
-    address internal smurfKey;
     address internal stranger;
     address internal operator;
 
@@ -52,7 +50,7 @@ contract CoinflipAccountsTest is DeployProtocol {
         _deployProtocol();
         owner = makeAddr("cfa_owner");
         ownerId = _giveWalletId(owner);
-        (smurfId, smurfKey) = _createSmurf(owner);
+        (smurfId,) = _createSmurf(owner);
         stranger = makeAddr("cfa_stranger");
         operator = makeAddr("cfa_operator");
         vm.prank(owner);
@@ -63,19 +61,17 @@ contract CoinflipAccountsTest is DeployProtocol {
     //                              helpers
     // =====================================================================
 
-    function _smurfKeyOf(address o, uint32 id) internal pure returns (address) {
-        return address(uint160(uint256(keccak256(abi.encode(SMURF_KEY_TAG, o, id)))));
-    }
+
 
     /// @dev `o` (which holds an ID) creates a smurf, paying the ticket in fresh ETH.
-    function _createSmurf(address o) internal returns (uint32 sid, address skey) {
+    function _createSmurf(address o) internal returns (uint32 sid, uint32 skey) {
         (,,,, uint256 price) = game.purchaseInfo();
         vm.deal(o, price);
         vm.prank(o);
         sid = game.createSmurf{value: price}(bytes32(0), MintPaymentKind.DirectEth);
-        skey = _smurfKeyOf(o, sid);
+        skey = sid;
         (address key, address payee, bool authorized) = game.resolveAccount(sid, o);
-        require(key == skey && payee == o && authorized, "fixture: smurf key, payee, owner authority");
+        require(key == address(0) && payee == o && authorized, "fixture: no key, owner payee and authority");
         vm.deal(o, 0);
     }
 
@@ -100,23 +96,34 @@ contract CoinflipAccountsTest is DeployProtocol {
     }
 
     function _slotA(address p) internal view returns (uint256) {
-        return uint256(vm.load(address(coinflip), keccak256(abi.encode(p, PLAYER_STATE_ROOT))));
+        return uint256(vm.load(address(coinflip), keccak256(abi.encode(_gameId(p), PLAYER_STATE_ROOT))));
+    }
+    function _slotA(uint32 p) internal view returns (uint256) {
+        return uint256(vm.load(address(coinflip), keccak256(abi.encode(_gameId(p), PLAYER_STATE_ROOT))));
     }
 
     function _claimableStored(address p) internal view returns (uint256) {
+        return uint128(_slotA(p));
+    }
+    function _claimableStored(uint32 p) internal view returns (uint256) {
         return uint128(_slotA(p));
     }
 
     function _lastClaim(address p) internal view returns (uint24) {
         return uint24(_slotA(p) >> 128);
     }
-
-    function _cachedId(address p) internal view returns (uint32) {
-        return uint32(_slotA(p) >> 184);
+    function _lastClaim(uint32 p) internal view returns (uint24) {
+        return uint24(_slotA(p) >> 128);
     }
 
+
+
+
     function _gameId(address p) internal view returns (uint32) {
-        return uint32(uint256(vm.load(address(game), GameSlotKeys.mintPacked(p))) >> 224);
+        return _fixtureId(p);
+    }
+    function _gameId(uint32 p) internal view returns (uint32) {
+        return _fixtureId(p);
     }
 
     function _walletCount() internal view returns (uint256) {
@@ -153,7 +160,7 @@ contract CoinflipAccountsTest is DeployProtocol {
         _resolveDay(d + 1, true);
         vm.prank(owner);
         coinflip.depositCoinflip(smurfId, 0);
-        bank = _claimableStored(smurfKey);
+        bank = _claimableStored(smurfId);
         require(bank > 0, "fixture: smurf winnings banked");
     }
 
@@ -185,12 +192,7 @@ contract CoinflipAccountsTest is DeployProtocol {
         return bytes32(uint256(uint160(a)));
     }
 
-    function _assertSmurfKeyEmpty() internal view {
-        assertEq(coin.balanceOf(smurfKey), 0, "smurf key holds no FLIP");
-        assertEq(wwxrp.balanceOf(smurfKey), 0, "smurf key holds no WWXRP");
-        assertEq(smurfKey.balance, 0, "smurf key holds no ETH");
-        assertEq(sdgnrs.balanceOf(smurfKey), 0, "smurf key holds no sDGNRS");
-    }
+
 
     // =====================================================================
     //                 1. owner deposits for its smurf (direct)
@@ -220,7 +222,7 @@ contract CoinflipAccountsTest is DeployProtocol {
         coinflip.depositCoinflip(smurfId, amount);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
-        assertEq(_claimableStored(smurfKey), 0, "the smurf's winnings funded the stake first");
+        assertEq(_claimableStored(smurfId), 0, "the smurf's winnings funded the stake first");
         assertEq(coin.balanceOf(owner), 4_000, "the owner's wallet paid only the remainder");
         assertGe(_lane(target, smurfId) - laneBefore, amount + amount / 4, "stake on S with the 25% boon");
         assertEq(_lane(target, ownerId), ownerLaneBefore, "nothing staked on the owner's lane");
@@ -233,10 +235,9 @@ contract CoinflipAccountsTest is DeployProtocol {
         (uint32 eid,) = coinflip.bafDrawEntryAt(target, 0);
         assertEq(eid, smurfId, "the draw entry carries S");
         assertEq(_countFor(logs, address(coinflip), BAF_DRAW_ENTERED, bytes32(uint256(target))), 1);
-        assertEq(_countFor(logs, address(coinflip), DEPOSIT, _t(smurfKey)), 1, "CoinflipDeposit names S's key");
-        assertEq(_countFor(logs, address(coinflip), CLAIM_STATE, _t(smurfKey)), 1, "claim state names S's key");
-        assertEq(_countFor(logs, address(coinflip), DEPOSIT, _t(owner)), 0);
-        _assertSmurfKeyEmpty();
+        assertEq(_countFor(logs, address(coinflip), DEPOSIT, bytes32(uint256(_fixtureId(smurfId)))), 1, "CoinflipDeposit names S's key");
+        assertEq(_countFor(logs, address(coinflip), CLAIM_STATE, bytes32(uint256(smurfId))), 1, "claim state names S's key");
+        assertEq(_countFor(logs, address(coinflip), DEPOSIT, bytes32(uint256(_fixtureId(owner)))), 0);
     }
 
     /// @notice O's deposit for S can set the flip record: the record and its claim accrue to S, the
@@ -259,7 +260,6 @@ contract CoinflipAccountsTest is DeployProtocol {
         }
         assertTrue(seen, "BigRecordUpdated emitted");
         assertEq(recordBounty.ownerOf(RECORD_KIND_FLIP), owner, "trophy to the payee");
-        _assertSmurfKeyEmpty();
     }
 
     /// @notice A completed quest on an authorized deposit names the account key and its reward joins
@@ -277,8 +277,8 @@ contract CoinflipAccountsTest is DeployProtocol {
         vm.prank(owner);
         coinflip.depositCoinflip(smurfId, 1_000);
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        assertEq(_countFor(logs, address(coinflip), QUEST_COMPLETED, _t(smurfKey)), 1, "quest names S's key");
-        assertEq(_countFor(logs, address(coinflip), QUEST_COMPLETED, _t(owner)), 0);
+        assertEq(_countFor(logs, address(coinflip), QUEST_COMPLETED, bytes32(uint256(_fixtureId(smurfId)))), 1, "quest names S's key");
+        assertEq(_countFor(logs, address(coinflip), QUEST_COMPLETED, bytes32(uint256(_fixtureId(owner)))), 0);
         assertEq(_lane(target, smurfId) - before, 1_050, "quest reward joins S's stake");
 
         uint32 funderId = uint32(_walletCount());
@@ -293,8 +293,8 @@ contract CoinflipAccountsTest is DeployProtocol {
         vm.prank(stranger);
         coinflip.depositCoinflip(smurfId, 1_000);
         logs = vm.getRecordedLogs();
-        assertEq(_countFor(logs, address(coinflip), QUEST_COMPLETED, _t(stranger)), 1, "a gift's quest names the funder");
-        assertEq(_countFor(logs, address(coinflip), QUEST_COMPLETED, _t(smurfKey)), 0);
+        assertEq(_countFor(logs, address(coinflip), QUEST_COMPLETED, bytes32(uint256(_fixtureId(stranger)))), 1, "a gift's quest names the funder");
+        assertEq(_countFor(logs, address(coinflip), QUEST_COMPLETED, bytes32(uint256(_fixtureId(smurfId)))), 0);
         assertEq(_lane(target, smurfId) - before, 1_070, "the funder's quest reward joins S's stake");
         assertEq(_gameId(stranger), funderId);
     }
@@ -317,11 +317,10 @@ contract CoinflipAccountsTest is DeployProtocol {
         uint32 funderId = uint32(_walletCount());
         uint256 laneBefore = _lane(target, smurfId);
         uint256 ownerFlip = coin.balanceOf(owner);
-        uint256 ownerWwxrp = wwxrp.balanceOf(owner);
+        uint256 ownerWwxrp = wwxrp.claimable(smurfId);
 
         vm.expectCall(GAME, abi.encodeCall(DegenerusGame.resolveAccount, (smurfId, stranger)), 1);
         vm.expectCall(GAME, abi.encodeCall(DegenerusGame.registerWallet, (stranger, true)), 1);
-        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.registerWallet.selector, smurfKey), 0);
         vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleFlip, (funderId, 250_000)), 1);
         vm.expectCall(address(quests), abi.encodeWithSelector(DegenerusQuests.handleFlip.selector, smurfId), 0);
         vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.consumeCoinflipBoon.selector), 0);
@@ -331,17 +330,15 @@ contract CoinflipAccountsTest is DeployProtocol {
 
         assertEq(coin.balanceOf(stranger), 50_000, "the funder paid the whole principal");
         assertEq(coin.balanceOf(owner), ownerFlip, "the owner's wallet is untouched");
-        assertEq(_claimableStored(smurfKey), bank, "a gift never spends the account's winnings");
+        assertEq(_claimableStored(smurfId), bank, "a gift never spends the account's winnings");
         assertEq(_lane(target, smurfId) - laneBefore, 250_000, "stake on S, no boon, no bonus");
         assertEq(_coinflipBoonTier(smurfId), 3, "S's coinflip boon kept");
         (,, uint32 count) = coinflip.bafDrawInfo();
         assertEq(count, 0, "a gift carries no draw weight");
         assertEq(coinflip.biggestFlipEver(), 0, "a gift cannot set the record");
-        assertGt(wwxrp.balanceOf(owner), ownerWwxrp, "S's loss consolation went to O");
+        assertGt(wwxrp.claimable(smurfId), ownerWwxrp, "S's loss consolation went to O");
         assertEq(wwxrp.balanceOf(stranger), 0, "nothing to the funder");
         assertEq(_gameId(stranger), funderId, "the paying funder registered");
-        assertEq(_cachedId(stranger), funderId);
-        _assertSmurfKeyEmpty();
     }
 
     // =====================================================================
@@ -402,7 +399,6 @@ contract CoinflipAccountsTest is DeployProtocol {
         (,, uint32 count) = coinflip.bafDrawInfo();
         assertEq(count, 0);
         assertEq(coinflip.biggestFlipEver(), 0);
-        _assertSmurfKeyEmpty();
     }
 
     // =====================================================================
@@ -449,26 +445,25 @@ contract CoinflipAccountsTest is DeployProtocol {
         coinflip.creditFlip(smurfId, 400);
         _warpToDay(d + 1);
         _resolveDay(d + 1, true);
-        uint256 payout = coinflip.previewClaimCoinflips(smurfKey);
+        uint256 payout = coinflip.previewClaimCoinflipsById(_fixtureId(smurfId));
         assertGt(payout, 0);
         vm.prank(GAME);
         coinflip.creditFlip(smurfId, 300);
         _warpToDay(d + 2);
         _resolveDay(d + 2, false);
-        uint256 ownerWwxrp = wwxrp.balanceOf(owner);
+        uint256 ownerWwxrp = wwxrp.claimable(smurfId);
 
         vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.registerWallet.selector), 0);
         vm.expectCall(address(quests), abi.encodeWithSelector(DegenerusQuests.handleFlip.selector), 0);
         vm.prank(stranger);
         coinflip.depositCoinflip(smurfId, 0);
 
-        assertEq(_claimableStored(smurfKey), payout, "S's win settled into S's state");
-        assertEq(_lastClaim(smurfKey), d + 2, "both days walked");
+        assertEq(_claimableStored(smurfId), payout, "S's win settled into S's state");
+        assertEq(_lastClaim(smurfId), d + 2, "both days walked");
         assertEq(coin.balanceOf(stranger), 0, "nothing minted to the caller");
         assertEq(wwxrp.balanceOf(stranger), 0);
-        assertGt(wwxrp.balanceOf(owner), ownerWwxrp, "the loss consolation went to O");
+        assertGt(wwxrp.claimable(smurfId), ownerWwxrp, "the loss consolation went to O");
         assertEq(_gameId(stranger), 0, "a zero-amount gift registers nobody");
-        _assertSmurfKeyEmpty();
     }
 
     // =====================================================================
@@ -487,7 +482,6 @@ contract CoinflipAccountsTest is DeployProtocol {
         coinflip.depositCoinflip(1, 0);
         assertEq(_lastClaim(VAULT), d + 1, "the vault's days settled");
         assertGt(_claimableStored(VAULT), 0, "the vault's seed win banked in its own state");
-        assertEq(_cachedId(VAULT), 1);
     }
 
     /// @notice `depositCoinflip(1, 0)` from GAME with no approval is a zero-amount gift: it settles
@@ -601,7 +595,7 @@ contract CoinflipAccountsTest is DeployProtocol {
         coinflip.setCoinflipAutoRebuyTakeProfit(smurfId, 0);
         vm.stopPrank();
 
-        uint256 preview = coinflip.previewClaimCoinflips(smurfKey);
+        uint256 preview = coinflip.previewClaimCoinflipsById(_fixtureId(smurfId));
         assertGt(preview, 0);
         uint256 ownerBefore = coin.balanceOf(owner);
         vm.expectCall(GAME, abi.encodeCall(DegenerusGame.resolveAccount, (smurfId, owner)), 1);
@@ -611,15 +605,14 @@ contract CoinflipAccountsTest is DeployProtocol {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         assertEq(got, preview);
         assertEq(coin.balanceOf(owner) - ownerBefore, got, "O's claim for S minted to O");
-        assertEq(_countFor(logs, address(coinflip), CLAIM_STATE, _t(smurfKey)), 1, "claim state names S's key");
-        assertEq(_countFor(logs, address(coinflip), CLAIM_STATE, _t(owner)), 0);
-        _assertSmurfKeyEmpty();
+        assertEq(_countFor(logs, address(coinflip), CLAIM_STATE, bytes32(uint256(smurfId))), 1, "claim state names S's key");
+        assertEq(_countFor(logs, address(coinflip), CLAIM_STATE, bytes32(uint256(_gameId(owner)))), 0);
 
         vm.prank(operator);
         coinflip.depositCoinflip(smurfId, 1_000);
         _warpToDay(d + 2);
         _resolveDay(d + 2, true);
-        preview = coinflip.previewClaimCoinflips(smurfKey);
+        preview = coinflip.previewClaimCoinflipsById(_fixtureId(smurfId));
         assertGt(preview, 0);
         ownerBefore = coin.balanceOf(owner);
         vm.prank(operator);
@@ -627,7 +620,6 @@ contract CoinflipAccountsTest is DeployProtocol {
         assertEq(got, preview);
         assertEq(coin.balanceOf(owner) - ownerBefore, got, "P's claim for S minted to O");
         assertEq(coin.balanceOf(operator), 0, "nothing to the operator");
-        _assertSmurfKeyEmpty();
     }
 
     /// @notice Auto-rebuy and the carry live in S's own Coinflip state; P's carry claim, P's
@@ -637,11 +629,11 @@ contract CoinflipAccountsTest is DeployProtocol {
         vm.prank(owner);
         coinflip.setCoinflipAutoRebuy(smurfId, true, 0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        assertEq(_countFor(logs, address(coinflip), TOGGLED, _t(smurfKey)), 1, "toggle names S's key");
-        assertEq(_countFor(logs, address(coinflip), STOP_SET, _t(smurfKey)), 1);
-        (bool enabled,,,) = coinflip.coinflipAutoRebuyInfo(smurfKey);
+        assertEq(_countFor(logs, address(coinflip), TOGGLED, bytes32(uint256(smurfId))), 1, "toggle names the subaccount ID");
+        assertEq(_countFor(logs, address(coinflip), STOP_SET, bytes32(uint256(_fixtureId(smurfId)))), 1);
+        (bool enabled,,,) = coinflip.coinflipAutoRebuyInfoById(_fixtureId(smurfId));
         assertTrue(enabled, "S's state armed");
-        (enabled,,,) = coinflip.coinflipAutoRebuyInfo(owner);
+        (enabled,,,) = coinflip.coinflipAutoRebuyInfoById(_fixtureId(owner));
         assertFalse(enabled, "O's own state untouched");
 
         uint24 d = _today();
@@ -657,22 +649,21 @@ contract CoinflipAccountsTest is DeployProtocol {
         assertGt(claimed, 1_000, "the winning carry paid out");
         assertEq(coin.balanceOf(owner) - ownerBefore, claimed, "carry minted to O");
         assertEq(coin.balanceOf(operator), 0);
-        (,, uint256 carry,) = coinflip.coinflipAutoRebuyInfo(smurfKey);
+        (,, uint256 carry,) = coinflip.coinflipAutoRebuyInfoById(_fixtureId(smurfId));
         assertEq(carry, 0);
 
         vm.prank(operator);
         coinflip.setCoinflipAutoRebuyTakeProfit(smurfId, 500);
-        (, uint256 stop,,) = coinflip.coinflipAutoRebuyInfo(smurfKey);
+        (, uint256 stop,,) = coinflip.coinflipAutoRebuyInfoById(_fixtureId(smurfId));
         assertEq(stop, 500, "take profit on S's state");
 
         vm.recordLogs();
         vm.prank(owner);
         coinflip.setCoinflipAutoRebuy(smurfId, false, 0);
         logs = vm.getRecordedLogs();
-        assertEq(_countFor(logs, address(coinflip), TOGGLED, _t(smurfKey)), 1);
-        (enabled,,,) = coinflip.coinflipAutoRebuyInfo(smurfKey);
+        assertEq(_countFor(logs, address(coinflip), TOGGLED, bytes32(uint256(_fixtureId(smurfId)))), 1);
+        (enabled,,,) = coinflip.coinflipAutoRebuyInfoById(_fixtureId(smurfId));
         assertFalse(enabled);
-        _assertSmurfKeyEmpty();
     }
 
     // =====================================================================
@@ -711,49 +702,11 @@ contract CoinflipAccountsTest is DeployProtocol {
     }
 
     // =====================================================================
-    //                       8. smurf cache fill; self paths
+    //                       8. self paths
     // =====================================================================
 
-    /// @notice Each smurf's first Coinflip action fills its slot-A ID cache from the resolved ID: no
-    ///         registration call, no WalletRegistered, and the cached ID equals the Game's.
-    function test_SmurfFirstAction_FillsCacheFromResolvedId_NoRegistration() public {
-        (uint32 s2, address k2) = _createSmurf(owner);
-        (uint32 s3, address k3) = _createSmurf(owner);
-        vm.prank(owner);
-        game.setOperatorApproval(s2, operator, true);
-        assertEq(_cachedId(smurfKey), 0, "S never touched Coinflip");
-        assertEq(_cachedId(k2), 0);
-        assertEq(_cachedId(k3), 0);
-        _fundFlip(owner, 10_000);
-        _fundFlip(stranger, 10_000);
 
-        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.registerWallet.selector, smurfKey), 0);
-        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.registerWallet.selector, k2), 0);
-        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.registerWallet.selector, k3), 0);
-        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.walletIdOf.selector), 0);
-        vm.recordLogs();
-        vm.prank(owner);
-        coinflip.depositCoinflip(smurfId, 1_000);
-        vm.prank(operator);
-        coinflip.setCoinflipAutoRebuy(s2, true, 0);
-        vm.prank(stranger);
-        coinflip.depositCoinflip(s3, 1_000);
-        Vm.Log[] memory logs = vm.getRecordedLogs();
 
-        for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].emitter != address(game) || logs[i].topics[0] != WALLET_REGISTERED) continue;
-            address registered = address(uint160(uint256(logs[i].topics[2])));
-            assertTrue(registered == stranger, "only the paying gift funder registers");
-        }
-        assertEq(_cachedId(smurfKey), smurfId, "owner deposit filled S's cache");
-        assertEq(_cachedId(k2), s2, "operator setting filled S2's cache");
-        assertEq(_cachedId(k3), s3, "a gift filled S3's cache");
-        assertEq(_gameId(smurfKey), smurfId, "cache equals the Game's ID");
-        assertEq(_gameId(k2), s2);
-        assertEq(_gameId(k3), s3);
-        assertEq(_cachedId(owner), 0, "the owner's own cache untouched");
-        assertEq(_cachedId(operator), 0);
-    }
 
     /// @notice Self actions (`id == 0`) on every Coinflip door make no Game `resolveAccount` call.
     function test_SelfPaths_MakeNoResolveAccountCall() public {

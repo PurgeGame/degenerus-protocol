@@ -13,6 +13,9 @@ let _patchedAddresses = null;
 let _patchedExternal = null;
 let _patchedDayBoundary = null;
 let _patchedVrfKeyHash = null;
+// loadFixture restores chain snapshots without restoring JavaScript module globals. Retain
+// each Game's registrar so helpers never use a different fixture's most recent deployment.
+const _registrarByGame = new Map();
 
 /**
  * Deploy the full Degenerus protocol with mock external dependencies.
@@ -25,7 +28,7 @@ let _patchedVrfKeyHash = null;
  *   4. Deploy every protocol contract in order
  *   5. Verify deployed addresses match predictions
  */
-export async function deployFullProtocol() {
+export async function deployFullProtocol({ affiliateBootstrap = [[], [], [], [], []] } = {}) {
   const signers = await hre.ethers.getSigners();
   const [deployer, alice, bob, carol, dan, eve, ...others] = signers;
 
@@ -82,7 +85,7 @@ export async function deployFullProtocol() {
 
   for (const key of DEPLOY_ORDER) {
     const contractName = KEY_TO_CONTRACT[key];
-    const args = getConstructorArgs(key, predicted);
+    const args = getConstructorArgs(key, predicted, affiliateBootstrap);
     const contract = await deploy(contractName, args);
     const addr = await contract.getAddress();
     contracts[key] = contract;
@@ -101,6 +104,7 @@ export async function deployFullProtocol() {
 
   // Both protocol passes and their packed ticket queues initialize in one transaction.
   const genesisReceipt = await (await contracts.GAME.initProtocolDeity({ gasLimit: 16_777_216 })).wait();
+  _registrarByGame.set(deployedAddrs.get("GAME").toLowerCase(), deployedAddrs.get("COINFLIP"));
 
   return {
     genesisReceipt,
@@ -178,9 +182,9 @@ async function deploy(contractName, args = []) {
   return contract;
 }
 
-function getConstructorArgs(key, predicted) {
+function getConstructorArgs(key, predicted, affiliateBootstrap) {
   if (key === "AFFILIATE") {
-    return [[], [], [], [], []];
+    return affiliateBootstrap;
   }
   if (key === "AF_KING") {
     // AfKing has a 3-arg constructor (subCostEthTarget, bountyEthTarget,
@@ -199,7 +203,8 @@ function getConstructorArgs(key, predicted) {
 export async function giveWalletId(game, addr) {
   const existing = await game.walletIdOf(addr);
   if (existing !== 0n) return existing;
-  const registrar = _patchedAddresses.get("COINFLIP");
+  const registrar = _registrarByGame.get((await game.getAddress()).toLowerCase());
+  if (!registrar) throw new Error("Unknown Game fixture: cannot resolve its wallet registrar");
   await hre.network.provider.send("hardhat_setBalance", [registrar, "0x1000000000000000000"]);
   await hre.network.provider.send("hardhat_impersonateAccount", [registrar]);
   const signer = await hre.ethers.getSigner(registrar);

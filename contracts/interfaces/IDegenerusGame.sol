@@ -42,8 +42,8 @@ enum MintPaymentKind {
 ///
 ///      ACCOUNTS. Every player entry point names the account it acts for by wallet ID, never by
 ///      address. An account is an ordinary wallet or a smurf (an extra account a wallet created
-///      with `createSmurf`; its key is a hash address nobody controls). The account rule:
-///      - `id == 0` is the caller. No resolution read: the caller's own mint word gives its ID.
+///      with `createSmurf`; it stores an owner ID and has no address). The account rule:
+///      - `id == 0` is the caller. The forward wallet registry supplies the caller's ID.
 ///      - Any other `id` must be allocated (`0 < id < wallets.length`), else `E`.
 ///      - Authorized entry points require the caller to be the account's key, the owner of a
 ///        smurf account, or an operator approved for that ID (`setOperatorApproval`), else
@@ -53,7 +53,6 @@ enum MintPaymentKind {
 ///      - Value paid out (ETH, stETH, FLIP, WWXRP, DGNRS, sDGNRS, seat and deity NFTs) goes to the
 ///        account's PAYEE: the caller for `id == 0`, the key of an ordinary wallet, or the owner's
 ///        key for a smurf. Tokens pulled or burned from a player's wallet come from the payee.
-///        A smurf key never holds tokens or receives value.
 ///      - Third-party recipients (deity-boon recipient, AFKing deposit beneficiary, AFKing
 ///        funding source) are IDs that must already exist: 0 or an unallocated ID reverts `E`.
 interface IDegenerusGame {
@@ -63,24 +62,11 @@ interface IDegenerusGame {
     /// @notice A wallet's permanent ID, or zero if unregistered.
     function walletIdOf(address player) external view returns (uint32);
 
-    /// @notice Resolve account `id` for `caller`: its key, its payee and whether `caller` may act for it.
-    /// @dev The one cross-contract account resolver (Coinflip, FLIP, Parimutuel, sDGNRS, WWXRP,
-    ///      Jackpots, CRAPS). Callers resolve `id == 0` (self) from their own forward word and never
-    ///      pass it. Reads the wallet-table element once: `key` = bits 0..159, owner ID = bits
-    ///      160..191. `payee` is `key` for an ordinary wallet and the owner element's key for a smurf
-    ///      (a second read, smurfs only). `authorized` is
-    ///      `key == caller || (smurf && smurfKey(caller, id) == key) || operatorApprovals[id][caller]`,
-    ///      where `smurfKey(owner, id) = address(uint160(uint256(keccak256(abi.encode(SMURF_KEY_TAG,
-    ///      owner, id)))))`. Never reverts on authorization; the caller decides: an authorized door
-    ///      reverts on false, a gift door (Coinflip deposit) treats false as a gift, and a
-    ///      permissionless door ignores it and pays `payee`.
-    /// @param id Wallet ID of the account (nonzero, allocated).
-    /// @param caller The address asking to act (the calling contract's `msg.sender`).
-    /// @return key The account key: the address keying the account's address-keyed state.
-    /// @return payee The address every payout for this account goes to and every wallet-token
-    ///         burn or pull comes from (never a smurf key).
-    /// @return authorized True when `caller` is the key, the smurf's owner, or an approved operator.
-    /// @custom:reverts E If `id == 0` or `id >= wallets.length`.
+    /// @notice Resolve an allocated account's payee and caller authorization.
+    /// @dev Ordinary accounts return their address as `key`; subaccounts return zero.
+    ///      Subaccounts store an owner ID, resolved to an ordinary wallet for payouts.
+    ///      Authorization is `payee == caller || operatorApprovals[id][caller]`.
+    ///      Authorization failure returns false; zero or unallocated IDs revert E.
     function resolveAccount(uint32 id, address caller)
         external view returns (address key, address payee, bool authorized);
 
@@ -100,15 +86,12 @@ interface IDegenerusGame {
 
     /// @notice Create a smurf account owned by the caller, give it the caller's referrer and buy it
     ///         one ticket, all in one call.
-    /// @dev Owner = `msg.sender`, which must already hold a wallet ID (a smurf key is never a
-    ///      caller, so smurfs never own smurfs). Steps, atomically:
+    /// @dev Owner = `msg.sender`, which must already hold an ordinary wallet ID. Steps, atomically:
     ///      1. Resolve the owner's referral exactly as a purchase does: an unset referral is set
     ///         from `affiliateCode`, or locked to no referrer for a blank or invalid code; a set
     ///         referral ignores the code.
-    ///      2. `smurfId = wallets.length`, `key = smurfKey(msg.sender, smurfId)`; the key must be
-    ///         unregistered. Push `key | ownerId << 160`, write the ID and the smurf flag (mint-word
-    ///         bit 147) to the key's mint word, emit `WalletRegistered(smurfId, key)` and
-    ///         `SmurfCreated(uint32 indexed ownerId, uint32 indexed smurfId)`.
+    ///      2. Allocate the next ID, storing only `ownerId << 160` in its wallet-table element.
+    ///         Set the account's mint-word smurf flag and emit `SmurfCreated(ownerId, smurfId)`.
     ///      3. Copy the owner's resolved referral word to the smurf, locked (Affiliate
     ///         `copyReferral`). An owner with no referrer gives a smurf with none.
     ///      4. Buy exactly one whole ticket (400 scaled units, no boxes) for the smurf at the
@@ -121,8 +104,7 @@ interface IDegenerusGame {
     /// @param affiliateCode Referral code applied to the owner if its referral is unset.
     /// @param payKind How the owner funds the ticket (DirectEth, Claimable or Combined).
     /// @return smurfId The new account's wallet ID.
-    /// @custom:reverts E If the caller has no wallet ID, the derived key is already registered,
-    ///                 or paid admission refuses the allocation.
+    /// @custom:reverts E If the caller has no wallet ID or paid admission refuses the allocation.
     /// @custom:reverts (purchase) Every revert of a one-ticket `purchase` by the owner (RNG lock,
     ///                 liveness/game over, insufficient payment).
     function createSmurf(bytes32 affiliateCode, MintPaymentKind payKind)
@@ -185,15 +167,12 @@ interface IDegenerusGame {
     /// @return walletId The player's wallet ID (zero if unregistered).
     function playerActivityScore(address player) external view returns (uint256 scorePoints, uint32 walletId);
 
-    /// @notice Activity score for transactions; refreshes the current-level affiliate cache.
-    /// @dev Non-view twin of playerActivityScore. The wallet ID rides the mint word the score
-    ///      already reads, so a first-contact caller (WWXRP `enter`, FLIP `decimatorBurn`) learns
-    ///      the ID without a second call. Never allocates: a paying caller that gets 0 registers
-    ///      through `registerWallet(player, true)`.
-    /// @param player The player address to calculate for.
-    /// @return score Activity score in whole points.
-    /// @return id The player's wallet ID (0 if unregistered).
+    /// @notice Address convenience form; never allocates identity.
     function playerActivityScoreCached(address player) external returns (uint256 score, uint32 id);
+    /// @notice Account activity score, including effective quest streak.
+    function playerActivityScoreById(uint32 id) external view returns (uint256);
+    /// @notice Account activity score; refreshes its current-level affiliate cache.
+    function playerActivityScoreCachedById(uint32 id) external returns (uint256);
 
     /// @notice Everything the growth-bet parimutuel reads out of the game.
     /// @param round The round to report pool terms for; 0 skips the pool reads.
@@ -257,6 +236,11 @@ interface IDegenerusGame {
         bool deityPassAvailable
     );
 
+    /// @notice Deity boon menu for an account, including a subaccount.
+    function deityBoonDataById(uint32 deityId) external view returns (
+        uint256 dailySeed, uint24 day, uint8 usedMask, bool decimatorOpen, bool deityPassAvailable
+    );
+
     /// @notice Issue a deity boon from deity account `deityId` to account `recipientId`.
     /// @dev Authorized (account rule): `deityId == 0` is the caller; otherwise the caller must be the
     ///      deity account's key, its owner (smurf deity) or an approved operator. The deity account
@@ -298,7 +282,7 @@ interface IDegenerusGame {
     /// @param chips The entry's board: zero to seven named chips, as a normal battle takes them.
     /// @return entryId The wallet's accumulated battle entry.
     function recordDecBurn(
-        address player,
+        uint32 player,
         uint24 lvl,
         uint256 baseAmount,
         uint256 multBps,
@@ -523,15 +507,15 @@ interface IDegenerusGame {
     function hasDeityPass(address player) external view returns (bool);
 
     /// @notice Get raw bit-packed mint data for a player.
-    /// @dev Keyed by account key (a smurf's hash key included). Bits 224..255 hold the wallet ID;
+    /// @dev Address convenience view of ID-keyed mint history. Bits 224..255 are unused;
     ///      bit 147 is the smurf flag (set once by `createSmurf`).
     /// @param player Player address to query.
     /// @return Raw packed uint256 containing mint counts, streak, pass status.
     function mintPackedFor(address player) external view returns (uint256);
 
-    /// @notice Mint word of an allocated wallet ID (resolved through the wallet table).
-    /// @param id Allocated wallet ID.
-    /// @return Raw packed mint word for the ID's account key.
+    /// @notice Mint word keyed directly by account ID; missing IDs return zero.
+    /// @param id Account ID.
+    /// @return Raw packed mint word for the account.
     function mintPackedOfId(uint32 id) external view returns (uint256);
 
     /// @notice Purchase tickets and loot boxes with ETH or claimable for account `id`.
@@ -772,7 +756,8 @@ interface IDegenerusGame {
     /// @dev Game self-call (caller and callee both live in the Game image). `subWord` is the
     ///      sub's set element (key bits 0..159, wallet ID 160..191) and `source` the address the
     ///      stETH comes from: the funding account's payee. The live consent re-check runs by ID.
-    function pullAfkingSteth(uint256 subWord, address source, uint256 shortfall) external returns (uint256);
+    function setAfkingFundingApproval(uint32 funderId, uint32 subscriberId, bool approved) external;
+    function pullAfkingSteth(uint32 subWord, address source, uint256 shortfall) external returns (uint256);
 
     /// @notice Permissionless FLIP claim — pays each listed account its accrued pendingFlip in one
     ///         creditFlip and zeroes it; always credits the account, never the caller.
@@ -784,8 +769,7 @@ interface IDegenerusGame {
     /// @notice Affiliate-only atomic read-and-zero of a sub's accrued affiliateBase.
     /// @param sub The subscriber whose affiliate base is drained.
     /// @return base The drained whole-FLIP affiliate base (0 if already drained).
-    /// @return id The sub's wallet ID (0 for an unregistered address, whose base is 0).
-    function drainAffiliateBase(address sub) external returns (uint256 base, uint32 id);
+    function drainAffiliateBase(uint32 sub) external returns (uint256 base);
 
     /// @notice QUESTS-only: bump an afking sub's streak base for a secondary/level completion.
     /// @dev Keyed by wallet ID (Quests holds only IDs). A no-op unless `id` has a live afking

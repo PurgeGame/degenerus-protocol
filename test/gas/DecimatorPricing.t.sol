@@ -97,7 +97,7 @@ contract DecimatorPricingTest is Test {
             else if (shape == 2) amount = i * 1000; // each sampled entry is the new maximum
             else if (shape == 3) amount = 1000; // every score ties
             else amount = 1000 + uint256(keccak256(abi.encode(salt, i))) % (1_000_000);
-            h.recordDecBurn(address(uint160(salt * 1_000_000 + i)), lvl, amount, 10_000, boards ? _board(i) : 0);
+            h.recordFor(address(uint160(salt * 1_000_000 + i)), lvl, amount, 10_000, boards ? _board(i) : 0);
         }
         vm.stopPrank();
         h.seal(lvl, uint128(fieldPool + salt), uint256(keccak256(abi.encode("pricing", salt))));
@@ -249,7 +249,7 @@ contract DecimatorPricingTest is Test {
         h.open(lvl);
         vm.startPrank(ContractAddresses.COIN);
         for (uint64 id = 1; id <= 200; ++id) {
-            h.recordDecBurn(address(uint160(id) + 0x1000), lvl, 1000 + uint256(id), 10_000, _board(id));
+            h.recordFor(address(uint160(id) + 0x1000), lvl, 1000 + uint256(id), 10_000, _board(id));
         }
         vm.stopPrank();
         h.seal(lvl, 50 ether, uint256(keccak256(abi.encode("round200k", uint256(259)))));
@@ -260,7 +260,7 @@ contract DecimatorPricingTest is Test {
         h.open(again);
         vm.startPrank(ContractAddresses.COIN);
         for (uint64 id = 1; id <= 200; ++id) {
-            h.recordDecBurn(address(uint160(id) + 0x1000), again, 1000 + uint256(id), 10_000, _board(id));
+            h.recordFor(address(uint160(id) + 0x1000), again, 1000 + uint256(id), 10_000, _board(id));
         }
         vm.stopPrank();
         h.seal(again, 50 ether, uint256(keccak256(abi.encode("round200k", uint256(259)))));

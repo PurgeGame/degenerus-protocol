@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {Vm} from "forge-std/Vm.sol";
+import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+
 /// @title GameSlots
 /// @notice DegenerusGame storage roots for tests that address Game storage by slot number
 ///         (`vm.load` / `vm.store` / raw `sload`). One constant per declared variable, named after
@@ -65,6 +68,7 @@ library GameSlots {
     uint256 internal constant BALANCES_PACKED = 7;
     uint256 internal constant LVL_TRAIT_ENTRY = 8;
     uint256 internal constant MINT_PACKED = 9;
+    uint256 internal constant WALLET_IDS = 77;
     uint256 internal constant RNG_WORD_BY_DAY = 10;
     uint256 internal constant PRIZE_POOL_PENDING_PACKED = 11;
     uint256 internal constant TICKET_QUEUE = 12;
@@ -194,8 +198,8 @@ library GameSlots {
 library CrapsSlots {
     uint256 internal constant DAY_STAKED = 9;
     uint256 internal constant HIGH_FIELD = 11;
-    uint256 internal constant PASS_CREDITS = 14;
-    uint256 internal constant PASS_CREDITS_BY_ID = 15;
+
+    uint256 internal constant PASS_CREDITS_BY_ID = 14;
 }
 
 /// @title GameSlotKeys
@@ -206,9 +210,19 @@ library GameSlotKeys {
         return bytes32(uint256(keccak256(abi.encode(GameSlots.WALLETS))) + id);
     }
 
-    /// @dev `mintPacked_[player]` (wallet ID at bits 224-255).
-    function mintPacked(address player) internal pure returns (bytes32) {
-        return keccak256(abi.encode(player, GameSlots.MINT_PACKED));
+    function walletId(address player) internal pure returns (bytes32) {
+        return keccak256(abi.encode(player, GameSlots.WALLET_IDS));
+    }
+
+    /// @dev Read the forward registry directly, without an extra Game call in call-count fixtures.
+    function mintPacked(address player) internal view returns (bytes32) {
+        Vm vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
+        uint32 id = uint32(uint256(vm.load(ContractAddresses.GAME, walletId(player))));
+        return mintPacked(id);
+    }
+
+    function mintPacked(uint32 id) internal pure returns (bytes32) {
+        return keccak256(abi.encode(id, GameSlots.MINT_PACKED));
     }
 
     /// @dev `balancesPacked[id]` (claimable low 128 | afking high 128).

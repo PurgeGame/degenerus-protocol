@@ -99,7 +99,7 @@ describe("Presale flag is independent of mint-lootbox volume", function () {
       "position",
       "amount",
     ]);
-    expect(ev.args.buyer).to.equal(alice.address);
+    expect(ev.args.buyer).to.equal(await game.walletIdOf(alice.address));
     expect(ev.args.amount).to.equal(eth("250"));
     expect(await game.lootboxPresaleActiveFlag()).to.equal(true);
   });

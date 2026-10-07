@@ -70,7 +70,7 @@ contract CrapsSlipHarness is CrapsViews {
         address player
     ) external view returns (CrapsOracle.SlipResult memory) {
         return oracle.resolveSlipFor(
-            b, _crapsSeed(_wordAt(_indexOf(slot)), uint48(slot)), bankroll, goal, cap, player
+            b, _crapsSeed(_wordAt(_indexOf(slot)), uint48(slot)), bankroll, goal, cap, address(uint160(_saltOf(player)))
         );
     }
 
@@ -171,13 +171,13 @@ contract CrapsSlipTest is CrapsPins {
     /// @dev The legacy leg size the oracle fixtures still measure in — those drive the engine
     ///      directly and never pass the table's chip rule. `L` is one round on the pass line.
     uint24 internal constant U = 180;
-    uint128 internal constant UW = 180;
+    uint128 internal constant UW = 180 ether;
     /// @dev The chip. A round is ten of them and an entry places SEVEN, so `C * 7` is what a
     ///      board posts, `C * 10` is the round it grows into, and the fixtures below are cut in
     ///      multiples of it.
     uint24 internal constant C = 60;
     uint24 internal constant L = 600;
-    uint128 internal constant LW = 600;
+    uint128 internal constant LW = 600 ether;
 
     address internal alice = makeAddr("alice");
     address internal bob = makeAddr("bob");
@@ -498,7 +498,7 @@ contract CrapsSlipTest is CrapsPins {
             // The paying path runs lean (no per-leg books); the public view runs full. Pin them.
             assertEq(
                 won,
-                craps.resolveSlipForBet(craps.drawnBoardOf(betId), slot, bankroll, uint256(bankroll) * GOAL_FAR_MULT, craps.MAX_SLIP_HANDS(), craps.betOf(betId).player).bankrollOut,
+                craps.resolveSlipForBet(craps.drawnBoardOf(betId), slot, bankroll * 1 ether, bankroll * GOAL_FAR_MULT * 1 ether, craps.MAX_SLIP_HANDS(), craps.betOf(betId).player).bankrollOut / 1 ether,
                 "lean settlement != full-fidelity view"
             );
         }
@@ -521,7 +521,7 @@ contract CrapsSlipTest is CrapsPins {
             (uint256 won,) = craps.previewSettlement(betId);
             assertEq(
                 won,
-                craps.resolveSlipForBet(craps.drawnBoardOf(betId), slot, bankroll, uint256(bankroll) * GOAL_FAR_MULT, craps.MAX_SLIP_HANDS(), craps.betOf(betId).player).bankrollOut,
+                craps.resolveSlipForBet(craps.drawnBoardOf(betId), slot, bankroll * 1 ether, bankroll * GOAL_FAR_MULT * 1 ether, craps.MAX_SLIP_HANDS(), craps.betOf(betId).player).bankrollOut / 1 ether,
                 "side-only lean settlement != full resolver"
             );
             vm.revertToStateAndDelete(trialSnapshot);
@@ -558,8 +558,8 @@ contract CrapsSlipTest is CrapsPins {
         assertEq(
             won,
             craps.resolveSlipForBet(
-                craps.drawnBoardOf(betId), slot, bankroll, uint256(bankroll) * GOAL_FAR_MULT, craps.MAX_SLIP_HANDS(), craps.betOf(betId).player
-            ).bankrollOut,
+                craps.drawnBoardOf(betId), slot, bankroll * 1 ether, bankroll * GOAL_FAR_MULT * 1 ether, craps.MAX_SLIP_HANDS(), craps.betOf(betId).player
+            ).bankrollOut / 1 ether,
             "the dark lane diverged from the independent oracle"
         );
     }
@@ -588,8 +588,8 @@ contract CrapsSlipTest is CrapsPins {
             assertEq(
                 won,
                 craps.resolveSlipForBet(
-                    craps.drawnBoardOf(betId), slot, bankroll, uint256(bankroll) * GOAL_FAR_MULT, craps.MAX_SLIP_HANDS(), craps.betOf(betId).player
-                ).bankrollOut,
+                    craps.drawnBoardOf(betId), slot, bankroll * 1 ether, bankroll * GOAL_FAR_MULT * 1 ether, craps.MAX_SLIP_HANDS(), craps.betOf(betId).player
+                ).bankrollOut / 1 ether,
                 "the dark-only lean settlement != full resolver"
             );
             vm.revertToStateAndDelete(trialSnapshot);
@@ -754,8 +754,8 @@ contract CrapsSlipTest is CrapsPins {
         (uint256 won, uint256 expected) = craps.previewSettlement(betId);
         assertEq(
             won,
-            craps.resolveSlipForBet(craps.drawnBoardOf(betId), slot, bankroll, bankroll * 50, craps.MAX_SLIP_HANDS(), craps.betOf(betId).player)
-                .bankrollOut,
+            craps.resolveSlipForBet(craps.drawnBoardOf(betId), slot, bankroll * 1 ether, bankroll * 50 * 1 ether, craps.MAX_SLIP_HANDS(), craps.betOf(betId).player)
+                .bankrollOut / 1 ether,
             "lean slip settlement != full view"
         );
 
@@ -847,8 +847,8 @@ contract CrapsSlipTest is CrapsPins {
         // An independent engine, handed only the drawn board and the table seed, reproduces the
         // run exactly — hand for hand and roll for roll.
         CrapsOracle.SlipResult memory r =
-            craps.resolveSlipForBet(craps.drawnBoardOf(betId), slot, bankroll, uint256(bankroll) * GOAL_FAR_MULT, craps.MAX_SLIP_HANDS(), craps.betOf(betId).player);
-        assertEq(won, r.bankrollOut, "replay != settled won");
+            craps.resolveSlipForBet(craps.drawnBoardOf(betId), slot, bankroll * 1 ether, bankroll * GOAL_FAR_MULT * 1 ether, craps.MAX_SLIP_HANDS(), craps.betOf(betId).player);
+        assertEq(won, r.bankrollOut / 1 ether, "replay != settled won");
         assertGt(r.totalRolls, 0, "the replay rolled nothing");
         assertGt(r.handsPlayed, 0, "the replay played no hands");
 

@@ -295,8 +295,8 @@ contract VaultAccountWrappersTest is SeatFixture {
         assertEq(game.afkingFundingOf(address(vault)), afking - x, "only the shortfall withdrawn");
 
         // Order: the claim's WinningsClaimed precedes the withdrawal's AfkingWithdrew.
-        bytes32 claimedTopic = keccak256("WinningsClaimed(address,uint256,uint128)");
-        bytes32 withdrewTopic = keccak256("AfkingWithdrew(address,uint256)");
+        bytes32 claimedTopic = keccak256("WinningsClaimed(uint32,uint256,uint128)");
+        bytes32 withdrewTopic = keccak256("AfkingWithdrew(uint32,uint256)");
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 claimAt = type(uint256).max;
         uint256 withdrawAt = type(uint256).max;

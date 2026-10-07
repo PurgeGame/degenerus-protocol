@@ -76,7 +76,7 @@ contract CrapsRealWiringConservation is DeployProtocol {
     function invariant_vaultCompLaneExact() public view {
         assertGe(
             coin.crapsCompAllowance() + handler.ghost_compLaneSpent(),
-            4_560_000 ether,
+            200 * 24_800,
             "VAULT-COMPS: something other than a grant lowered the comp lane"
         );
         assertTrue(

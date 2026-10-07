@@ -54,7 +54,7 @@ import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
 contract DegenerusGameBoonModule is DegenerusGameStorage {
     /// @notice A protocol slot was automatically awarded to its winning bettor.
     event ProtocolBoonDrawAwarded(
-        address indexed issuer, address indexed winner, uint24 indexed day,
+        uint32 indexed issuerId, uint32 indexed winnerId, uint24 indexed day,
         uint8 slot, uint32 entryIndex, uint8 boonType
     );
 
@@ -73,26 +73,27 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         // Deployment day has no daily word. Draw its menu from the finalized
         // award-day word instead; the wager pool closed before that request.
         if (menuWord == 0) menuWord = winnerWord;
-        _drawProtocolBoons(ContractAddresses.VAULT, awardDay, menuWord, winnerWord);
-        _drawProtocolBoons(ContractAddresses.SDGNRS, awardDay, menuWord, winnerWord);
+        _drawProtocolBoons(VAULT_WALLET_ID, awardDay, menuWord, winnerWord);
+        _drawProtocolBoons(SDGNRS_WALLET_ID, awardDay, menuWord, winnerWord);
     }
 
-    function _drawProtocolBoons(address issuer, uint24 awardDay, uint256 menuWord, uint256 winnerWord) private {
+    function _drawProtocolBoons(uint32 issuerId, uint24 awardDay, uint256 menuWord, uint256 winnerWord) private {
         uint24 day = awardDay - 1;
         // `day`'s ring slot (see protocolBoonPools). A slot tagged with another day holds an
         // older day's pool, which must never draw on this day's words: nothing was wagered on
         // `day`, so there is nothing to award.
-        ProtocolBoonPool storage pool = protocolBoonPools[issuer][day & 1];
+        ProtocolBoonPool storage pool = protocolBoonPools[issuerId][day & 1];
         if (pool.day != day) return;
         uint64 totalWeight = pool.totalWeight;
         uint32 count = pool.entryCount;
         if (totalWeight == 0 || pool.awardedMask != 0) return;
         // Seal once before applying any reward. No retry or reroll after a collision.
         pool.awardedMask = 7;
-        uint32 issuerId = issuer == ContractAddresses.VAULT ? VAULT_WALLET_ID : SDGNRS_WALLET_ID;
+        // Preserve the deployed-address seed domain; storage identity is the protocol ID.
+        address issuer = issuerId == VAULT_WALLET_ID ? ContractAddresses.VAULT : ContractAddresses.SDGNRS;
         deityBoonPacked[issuerId] = uint32(awardDay) | (uint32(7) << 24);
         if (count == 0) return;
-        mapping(uint32 => ProtocolBoonEntry) storage entries = protocolBoonEntries[issuer][day & 1];
+        mapping(uint32 => ProtocolBoonEntry) storage entries = protocolBoonEntries[issuerId][day & 1];
         for (uint8 slot; slot < DEITY_DAILY_BOON_COUNT; ++slot) {
             uint256 roll = uint256(keccak256(abi.encode(
                 PROTOCOL_BOON_WINNER_TAG, issuer, day, slot, winnerWord
@@ -107,11 +108,10 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
             }
             uint32 winnerId = entries[lo].playerId;
             if (winnerId == 0) continue;
-            address winner = _walletKey(winnerId);
             uint8 boonType = _deityBoonForSlot(issuerId, awardDay, slot, menuWord);
             checkAndClearExpiredBoon(winnerId);
-            _applyBoon(winner, winnerId, boonType, awardDay, awardDay, 0, true);
-            emit ProtocolBoonDrawAwarded(issuer, winner, day, slot, lo, boonType);
+            _applyBoon(winnerId, boonType, awardDay, awardDay, 0, true);
+            emit ProtocolBoonDrawAwarded(issuerId, winnerId, day, slot, lo, boonType);
         }
     }
 
@@ -474,7 +474,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
 
     /// @notice Emitted when a box awards a whale pass.
     event LootBoxWhalePassJackpot(
-        address indexed player,
+        uint32 indexed id,
         uint256 lootboxAmount,
         uint24 targetLevel,
         uint32 entriesPerLevel,
@@ -484,7 +484,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
 
     /// @notice Emitted when a box delivers a boon-family reward.
     event LootBoxReward(
-        address indexed player,
+        uint32 indexed id,
         uint8 indexed rewardType,
         uint256 lootboxAmount,
         uint256 amount
@@ -492,12 +492,12 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
 
     /// @notice Emitted when a box-drawn boon is discarded rather than delivered — the
     ///         statically-drawn type is permanently unusable by this player.
-    event BoonDiscarded(address indexed player, uint8 boonType);
+    event BoonDiscarded(uint32 indexed id, uint8 boonType);
 
     /// @notice Emitted when a deity issues a boon to another player.
     event DeityBoonIssued(
-        address indexed deity,
-        address indexed recipient,
+        uint32 indexed deity,
+        uint32 indexed recipient,
         uint24 indexed day,
         uint8 slot,
         uint8 boonType
@@ -711,7 +711,6 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     ///
     ///      Each box still gets its OWN draw off a counter-tagged seed, so a box is a bet here
     ///      too; what is shared is the frame, not the outcome.
-    /// @param player Box owner.
     /// @param id Box owner's wallet ID (boon state key).
     /// @param perBoxBudget Boon budget of a single box, in wei of ETH-equivalent value.
     /// @param boxCount Boxes rolled in this entry.
@@ -721,7 +720,6 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     /// @param nonceBase Global box position of this batch's first box within its entry, so two
     ///        tiers of one entry can never share a draw index (and therefore a roll value).
     function rollBoxBoons(
-        address player,
         uint32 id,
         uint256 perBoxBudget,
         uint256 boxCount,
@@ -736,7 +734,6 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         (uint256 expectedPerBoon, uint24 currentDay) = _boxBoonContext(id, currentLevel);
         if (expectedPerBoon == 0) return;
         _rollBoxBoonLane(
-            player,
             id,
             perBoxBudget,
             boxCount,
@@ -753,7 +750,6 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     ///      remain independent: each lane computes its own capped chance, preserving the current
     ///      saturation economics exactly. Nonces advance cumulatively in the same tier order.
     function rollBoxBoonTiers(
-        address player,
         uint32 id,
         uint256[5] calldata amounts,
         uint40 countsPacked,
@@ -771,7 +767,6 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
             uint256 amount = amounts[lane];
             if (count != 0 && amount != 0) {
                 _rollBoxBoonLane(
-                    player,
                     id,
                     _boxBoonBudget(amount),
                     count,
@@ -812,7 +807,6 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
 
     /// @dev Roll one homogeneous tier using a normalization shared by the whole entry.
     function _rollBoxBoonLane(
-        address player,
         uint32 id,
         uint256 perBoxBudget,
         uint256 boxCount,
@@ -831,7 +825,6 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
                 BOON_PPM_SCALE;
             if (roll < totalChance) {
                 _deliverBoon(
-                    player,
                     id,
                     _boonFromRoll((roll * BOON_WEIGHT_TOTAL) / totalChance),
                     currentDay,
@@ -866,7 +859,6 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     ///      holder cannot buy a lazy pass at all, and that dead case is delivered anyway
     ///      rather than filtered.
     function _deliverBoon(
-        address player,
         uint32 id,
         uint8 boonType,
         uint24 currentDay,
@@ -874,14 +866,14 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     ) private {
         if (boonType >= BOON_DEITY_PASS_10 && boonType <= BOON_DEITY_PASS_35) {
             if (
-                mintPacked_[player] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 == 1 ||
+                mintPacked_[id] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 == 1 ||
                 _deityCount() >= DEITY_PASS_MAX_TOTAL
             ) {
-                emit BoonDiscarded(player, boonType);
+                emit BoonDiscarded(id, boonType);
                 return;
             }
         }
-        _applyBoon(player, id, boonType, 0, currentDay, originalAmount, false);
+        _applyBoon(id, boonType, 0, currentDay, originalAmount, false);
     }
 
     /// @dev Apply a boon to a player. Handles both lootbox-sourced and deity-sourced boons.
@@ -890,15 +882,14 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     ///      Deity boons: no LootBoxReward; manual gifts log DeityBoonIssued, automatic
     ///      draws log ProtocolBoonDrawAwarded. Instant awards keep their own
     ///      BoonConsumed/MintRecorded/quest events. Deity day = day.
-    ///      All boon state is stored in boonPacked[id] (2-slot packed struct); `player` is
-    ///      the account key the activity award and the box events need.
+    ///      All boon state is stored in boonPacked[id] (2-slot packed struct). Only mint-stat
+    ///      access decodes the account key; reward events carry the wallet ID.
     ///      Players can hold one boon per packed lane simultaneously (coinflip, lootbox,
     ///      purchase, decimator, whale, lazy, deity pass, craps, and one per Degenerette
     ///      currency); activity, quest-shield and whale-pass awards credit instantly.
     ///      Isolated bit fields per category -- applying a boon in one category cannot
     ///      affect another category's bits (targeted bitmask operations: & ~mask | value).
     function _applyBoon(
-        address player,
         uint32 id,
         uint8 boonType,
         uint24 day,
@@ -906,7 +897,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         uint256 originalAmount,
         bool isDeity
     ) private {
-        // Every state-touching branch below resolves the same per-player record; derive its
+        // Every state-touching branch below resolves the same account record; derive its
         // storage slot once (a pointer, not a cached value — reads stay live). The two
         // slot-less branches (quest-shield, whale-pass) simply never touch it.
         BoonPacked storage bp = boonPacked[id];
@@ -930,7 +921,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
                 s0 = (s0 & ~(uint256(BP_MASK_24) << BP_DEITY_COINFLIP_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_COINFLIP_DAY_SHIFT);
                 bp.slot0 = s0;
             }
-            if (!isDeity) emit LootBoxReward(player, 2, originalAmount, LOOTBOX_BOON_MAX_BONUS);
+            if (!isDeity) emit LootBoxReward(id, 2, originalAmount, LOOTBOX_BOON_MAX_BONUS);
             return;
         }
 
@@ -957,7 +948,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
                 // Map active tier back to BPS and rewardType for event
                 uint16 activeBps = _lootboxTierToBps(activeTier);
                 uint8 rewardType = activeTier == 3 ? 6 : (activeTier == 2 ? 5 : 4);
-                emit LootBoxReward(player, rewardType, originalAmount, activeBps);
+                emit LootBoxReward(id, rewardType, originalAmount, activeBps);
             }
             return;
         }
@@ -984,7 +975,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
             if (!isDeity) {
                 uint8 rewardType = bps == LOOTBOX_PURCHASE_BOOST_25_BONUS_BPS
                     ? 6 : (bps == LOOTBOX_PURCHASE_BOOST_15_BONUS_BPS ? 5 : 4);
-                emit LootBoxReward(player, rewardType, originalAmount, bps);
+                emit LootBoxReward(id, rewardType, originalAmount, bps);
             }
             return;
         }
@@ -1006,7 +997,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
                 s0 = (s0 & ~(uint256(BP_MASK_24) << BP_DEITY_DECIMATOR_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_DECIMATOR_DAY_SHIFT);
                 bp.slot0 = s0;
             }
-            if (!isDeity) emit LootBoxReward(player, 8, originalAmount, bps);
+            if (!isDeity) emit LootBoxReward(id, 8, originalAmount, bps);
             return;
         }
 
@@ -1040,7 +1031,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
                 s0 = (s0 & ~(uint256(BP_MASK_24) << BP_DEITY_WHALE_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_WHALE_DAY_SHIFT);
                 bp.slot0 = s0;
             }
-            if (!isDeity) emit LootBoxReward(player, 9, originalAmount, bps);
+            if (!isDeity) emit LootBoxReward(id, 9, originalAmount, bps);
             return;
         }
 
@@ -1048,7 +1039,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         // Runs in GAME's delegatecall context, so the call to QUESTS is GAME-authorized.
         if (boonType == BOON_QUEST_SHIELD) {
             IDegenerusQuests(ContractAddresses.QUESTS).awardQuestStreakShield(id, LOOTBOX_QUEST_SHIELD_GRANT);
-            if (!isDeity) emit LootBoxReward(player, 12, originalAmount, LOOTBOX_QUEST_SHIELD_GRANT);
+            if (!isDeity) emit LootBoxReward(id, 12, originalAmount, LOOTBOX_QUEST_SHIELD_GRANT);
             return;
         }
 
@@ -1061,8 +1052,8 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
             uint24 amt = boonType == BOON_ACTIVITY_50
                 ? LOOTBOX_ACTIVITY_BOON_50_BONUS
                 : (boonType == BOON_ACTIVITY_25 ? LOOTBOX_ACTIVITY_BOON_25_BONUS : LOOTBOX_ACTIVITY_BOON_10_BONUS);
-            _creditActivity(player, id, amt, currentDay);
-            if (!isDeity) emit LootBoxReward(player, 10, originalAmount, amt);
+            _creditActivity(id, amt, currentDay);
+            if (!isDeity) emit LootBoxReward(id, 10, originalAmount, amt);
             return;
         }
 
@@ -1086,7 +1077,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
             }
             if (!isDeity) {
                 uint16 bps = tier == DEITY_PASS_BOON_TIER_35 ? 3500 : (tier == DEITY_PASS_BOON_TIER_20 ? 2000 : 1000);
-                emit LootBoxReward(player, 10, originalAmount, bps);
+                emit LootBoxReward(id, 10, originalAmount, bps);
             }
             return;
         }
@@ -1100,7 +1091,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
                 // actual ticket queuing is deferred to claim-time, so the queued
                 // tickets start at the level when the player calls claimWhalePass —
                 // not necessarily `level + 1` here.
-                emit LootBoxWhalePassJackpot(player, originalAmount, level + 1, WHALE_PASS_ENTRIES_PER_LEVEL, 0, 0);
+                emit LootBoxWhalePassJackpot(id, originalAmount, level + 1, WHALE_PASS_ENTRIES_PER_LEVEL, 0, 0);
             }
             return;
         }
@@ -1134,7 +1125,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
             if (!isDeity) {
                 // The value field is the rolled boonType itself (32-40): unlike bps —
                 // identical across currencies — it identifies both the currency and size.
-                emit LootBoxReward(player, 13, originalAmount, boonType);
+                emit LootBoxReward(id, 13, originalAmount, boonType);
             }
             return;
         }
@@ -1162,7 +1153,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
                     newTier;
             }
             // The value field is the rolled boonType (41-43), which names the tier directly.
-            if (!isDeity) emit LootBoxReward(player, 14, originalAmount, boonType);
+            if (!isDeity) emit LootBoxReward(id, 14, originalAmount, boonType);
             return;
         }
 
@@ -1186,21 +1177,20 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
                 s1 = (s1 & ~(uint256(BP_MASK_24) << BP_DEITY_LAZY_PASS_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_LAZY_PASS_DAY_SHIFT);
                 bp.slot1 = s1;
             }
-            if (!isDeity) emit LootBoxReward(player, 11, originalAmount, bps);
+            if (!isDeity) emit LootBoxReward(id, 11, originalAmount, bps);
         }
     }
 
     /// @dev Pay an activity award straight into the player's stats: `levelCount` (the
     ///      activity-score input) plus the matching quest-streak bonus. Both legs saturate
     ///      rather than revert — an award must never be able to brick a box open or a gift.
-    /// @param player Award recipient.
     /// @param id Award recipient's wallet ID (quest state key).
     /// @param amt Units added to the mint-level count and to the quest streak (10, 25 or 50).
     ///        The activity SCORE moves by whatever the score formula makes of them
     ///        (`_mintCountBonusPoints`, capped at 25, plus the streak-derived points).
     /// @param currentDay Day index the award is credited on.
-    function _creditActivity(address player, uint32 id, uint24 amt, uint24 currentDay) private {
-        uint256 prevData = mintPacked_[player];
+    function _creditActivity(uint32 id, uint24 amt, uint24 currentDay) private {
+        uint256 prevData = mintPacked_[id];
         uint24 levelCount = uint24(
             (prevData >> BitPackingLib.LEVEL_COUNT_SHIFT) & BitPackingLib.MASK_24
         );
@@ -1216,8 +1206,8 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
             newLevelCount
         );
         if (data != prevData) {
-            mintPacked_[player] = data;
-            emit MintRecorded(player, data);
+            mintPacked_[id] = data;
+            emit MintRecorded(id, data);
         }
 
         quests.awardQuestStreakBonus(id, uint16(amt), currentDay);
@@ -1379,14 +1369,13 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     /// @custom:reverts SlotAlreadyUsed When slot was already used today
     function issueDeityBoon(uint32 deityId, uint32 recipientId, uint8 slot) external {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
-        (address deity, ) = _resolveAccount(deityId);
-        if (deity == ContractAddresses.VAULT || deity == ContractAddresses.SDGNRS) revert Unauthorized();
+        deityId = _resolveAccountId(deityId);
+        if (deityId == VAULT_WALLET_ID || deityId == SDGNRS_WALLET_ID) revert Unauthorized();
         // A boon is a gift: the recipient must already hold a wallet ID.
-        address recipient = _walletAddress(recipientId);
+        _requireAllocated(recipientId);
         if (slot >= DEITY_DAILY_BOON_COUNT) revert InvalidSlot();
-        uint256 deityWord = mintPacked_[deity];
+        uint256 deityWord = mintPacked_[deityId];
         if (deityWord >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 == 0) revert Unauthorized();
-        deityId = uint32(deityWord >> BitPackingLib.WALLET_ID_SHIFT);
         if (deityId == recipientId) revert SelfBoon();
 
         uint24 day = _simulatedDayIndex();
@@ -1416,9 +1405,9 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         // conditionally-usable families (decimator, deity-pass) unconditionally — so
         // issuance never reverts on the rolled type.
         uint8 boonType = _deityBoonForSlot(deityId, day, slot, rngWord);
-        _applyBoon(recipient, recipientId, boonType, day, day, 0, true);
+        _applyBoon(recipientId, boonType, day, day, 0, true);
 
-        emit DeityBoonIssued(deity, recipient, day, slot, boonType);
+        emit DeityBoonIssued(deityId, recipientId, day, slot, boonType);
     }
 
     /// @dev Deterministically generate a boon type for a deity's slot on a given day.

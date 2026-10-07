@@ -4,15 +4,18 @@ pragma solidity 0.8.34;
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
 
-/// @dev Reads Game's wallet table through its pinned root (asserted against the declared layout
-///      by the slot-pin test). Element `id` holds the account key in bits 0..159; IDs are never
-///      reassigned, so a decoded key is permanent.
+/// @dev Resolve an external payee from Game's pinned wallet-table root.
 library WalletTableLib {
     uint256 internal constant OWNERS_SLOT = 13;
     uint256 private constant OWNERS_BASE = uint256(keccak256(abi.encode(OWNERS_SLOT)));
 
-    /// @dev Account key of wallet-table element `id`. Element 0 and unallocated elements read zero.
+    /// @dev Ordinary accounts store an address; subaccounts store their ordinary owner's ID.
+    ///      Element zero and unallocated elements return zero.
     function ownerOf(uint32 id) internal view returns (address) {
-        return address(uint160(uint256(IDegenerusGame(ContractAddresses.GAME).extsload(bytes32(OWNERS_BASE + id)))));
+        IDegenerusGame game = IDegenerusGame(ContractAddresses.GAME);
+        uint256 element = uint256(game.extsload(bytes32(OWNERS_BASE + id)));
+        uint32 ownerId = uint32(element >> 160);
+        if (ownerId != 0) element = uint256(game.extsload(bytes32(OWNERS_BASE + ownerId)));
+        return address(uint160(element));
     }
 }

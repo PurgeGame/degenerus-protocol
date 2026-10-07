@@ -176,16 +176,16 @@ contract CustomerHotPathGasTest is DeployProtocol {
         _deposit(1000); _bank(1_000_000); _begin(); _deposit(1000); _end("flip_rebet");
     }
     function _bank(uint128 amount) private {
-        bytes32 slot = keccak256(abi.encode(PLAYER, uint256(2)));
+        bytes32 slot = keccak256(abi.encode(game.walletIdOf(PLAYER), uint256(2)));
         uint256 word = uint256(vm.load(address(coinflip), slot));
         vm.store(address(coinflip), slot, bytes32((word & ~uint256(type(uint128).max)) | amount));
     }
     function _claims(uint24 days_, bool rebuy) private {
         uint24 start = 31;
         uint24 last = start + days_;
-        bytes32 state = keccak256(abi.encode(PLAYER, uint256(2)));
+        bytes32 state = keccak256(abi.encode(game.walletIdOf(PLAYER), uint256(2)));
         vm.store(address(coinflip), state, bytes32((uint256(start) << 128)
-            | (uint256(start) << 152) | (uint256(rebuy ? 1 : 0) << 176) | (uint256(game.walletIdOf(PLAYER)) << 184)));
+            | (uint256(start) << 152) | (uint256(rebuy ? 1 : 0) << 176)));
         vm.store(address(coinflip), bytes32(uint256(state) + 1), bytes32(uint256(5000)));
         uint256 global = uint256(vm.load(address(coinflip), bytes32(uint256(4))));
         vm.store(address(coinflip), bytes32(uint256(4)), bytes32((global & ~uint256(0xffffff)) | last));
@@ -249,19 +249,19 @@ contract CustomerHotPathGasTest is DeployProtocol {
         vm.prank(address(game)); crapsBattle.openBonusDay();
     }
     function test_Gas_CrapsWindowFirst() public {
-        _openDay(); _begin(); vm.prank(PLAYER); crapsBattle.enterBonusBattle(1, BOARD, 1); _end("craps_window_first");
+        _openDay(); _begin(); vm.prank(PLAYER); crapsBattle.enterBonusBattle(0, 1, BOARD, 1); _end("craps_window_first");
     }
     function test_Gas_CrapsWindowRepeat() public {
-        _openDay(); vm.prank(PLAYER); crapsBattle.enterBonusBattle(1, BOARD, 1);
-        _begin(); vm.prank(PLAYER); crapsBattle.enterBonusBattle(2, BOARD, 1); _end("craps_window_repeat");
+        _openDay(); vm.prank(PLAYER); crapsBattle.enterBonusBattle(0, 1, BOARD, 1);
+        _begin(); vm.prank(PLAYER); crapsBattle.enterBonusBattle(0, 2, BOARD, 1); _end("craps_window_repeat");
     }
     function test_Gas_CrapsDay() public {
         vm.warp(block.timestamp - ((block.timestamp - 82_620) % 1 days) + 1);
-        _openDay(); _begin(); vm.prank(PLAYER); crapsBattle.enterBonusDay(BOARD, 1); _end("craps_day");
+        _openDay(); _begin(); vm.prank(PLAYER); crapsBattle.enterBonusDay(0, BOARD, 1); _end("craps_day");
     }
     function _future(string memory label, uint8 days_) private {
         uint24 day = uint24(game.currentDayView()) + 1;
-        _begin(); vm.prank(PLAYER); crapsBattle.buyFutureCrapsDays(day, days_, false, BOARD); _end(label);
+        _begin(); vm.prank(PLAYER); crapsBattle.buyFutureCrapsDays(0, day, days_, false, BOARD); _end(label);
     }
     function test_Gas_CrapsFutureOne() public { _future("craps_future_1", 1); }
     function test_Gas_CrapsFutureSeven() public { _future("craps_future_7", 7); }
@@ -277,7 +277,7 @@ contract CustomerHotPathGasTest is DeployProtocol {
         uint32 id = game.walletIdOf(PLAYER);
         vm.prank(address(game)); crapsBattle.creditPasses(id, 5, 0);
         uint24 day = uint24(game.currentDayView()) + 1;
-        _begin(); vm.prank(PLAYER); crapsBattle.applyCrapsPasses(day, 1, false, BOARD); _end("craps_pass");
+        _begin(); vm.prank(PLAYER); crapsBattle.applyCrapsPasses(0, day, 1, false, BOARD); _end("craps_pass");
     }
 
     function test_ClaimCachePreservesUnresolvedAndFutureLanes() public {
@@ -308,10 +308,10 @@ contract CustomerHotPathGasTest is DeployProtocol {
         RecyclingState.seedDailyWord(address(game), day + 1, 12345);
         uint256 balance = coin.balanceOf(PLAYER);
         vm.expectRevert(CrapsBattleStorage.DayNotReservable.selector);
-        vm.prank(PLAYER); crapsBattle.buyFutureCrapsDays(day, 3, false, BOARD);
+        vm.prank(PLAYER); crapsBattle.buyFutureCrapsDays(0, day, 3, false, BOARD);
         assertEq(coin.balanceOf(PLAYER), balance);
         // The first day's seat also rolled back and can still be bought alone.
-        vm.prank(PLAYER); crapsBattle.buyFutureCrapsDays(day, 1, false, BOARD);
+        vm.prank(PLAYER); crapsBattle.buyFutureCrapsDays(0, day, 1, false, BOARD);
     }
 
     function test_ZeroBurnKeepsEventsAndRejectsZeroAddressWithoutStorageWrites() public {

@@ -719,8 +719,8 @@ contract WWXRPDailyDrawTest is DeployProtocol {
 
         vm.mockCall(
             address(game),
-            abi.encodeWithSignature("playerActivityScoreCached(address)", alice),
-            abi.encode(uint256(30_000), aliceId)
+            abi.encodeWithSignature("playerActivityScoreCachedById(uint32)", aliceId),
+            abi.encode(uint256(30_000))
         );
         vm.prank(alice);
         wwxrp.enter(0, 100);
@@ -729,8 +729,8 @@ contract WWXRPDailyDrawTest is DeployProtocol {
 
         vm.mockCall(
             address(game),
-            abi.encodeWithSignature("playerActivityScoreCached(address)", alice),
-            abi.encode(uint256(235), aliceId)
+            abi.encodeWithSignature("playerActivityScoreCachedById(uint32)", aliceId),
+            abi.encode(uint256(235))
         );
         vm.prank(alice);
         wwxrp.enter(0, 100);

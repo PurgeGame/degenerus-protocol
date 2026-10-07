@@ -25,10 +25,10 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
     address private constant PLAYER = address(0xA11CE);
     address private constant KEEPER = address(0xC0DE);
     uint256 private word;
-    bytes32 private constant SPIN = keccak256("BoxSpin(address,uint64,uint256,uint256,uint256)");
-    bytes32 private constant OPENED = keccak256("LootBoxOpened(address,uint48,uint256,uint24,uint32,uint256,bool)");
-    bytes32 private constant DGNRS_BATCH = keccak256("LootBoxDgnrsBatch(address,uint256,uint256)");
-    bytes32 private constant CAPPED = keccak256("PayoutCapped(address,uint256,uint256)");
+    bytes32 private constant SPIN = keccak256("BoxSpin(uint32,uint64,uint256,uint256,uint256)");
+    bytes32 private constant OPENED = keccak256("LootBoxOpened(uint32,uint48,uint256,uint24,uint32,uint256,bool)");
+    bytes32 private constant DGNRS_BATCH = keccak256("LootBoxDgnrsBatch(uint32,uint256,uint256)");
+    bytes32 private constant CAPPED = keccak256("PayoutCapped(uint32,uint256,uint256)");
     bytes32 private constant MINER_WORK = keccak256("MinerWork(address,uint8,uint256,uint256)");
     uint256 private constant QUEUED_ORDER_DOMAIN = 0x5175657565644f72646572;
     /// @dev PLAYER's committed entry position, recorded at its purchase.
@@ -310,15 +310,13 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
     }
 
     function _assertEvents(Vm.Log[] memory logs, Expected memory e) private view {
-        uint256 spins;
-        uint256 children;
-        uint256 batches;
-        uint256 caps;
+        // Keep counters in memory so event decoding fits the via-IR stack.
+        uint256[4] memory counts; // spins, children, inventory batches, caps
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2) continue;
             bytes32 topic = logs[i].topics[0];
             if (topic != SPIN && topic != OPENED && topic != DGNRS_BATCH && topic != CAPPED) continue;
-            assertEq(address(uint160(uint256(logs[i].topics[1]))), PLAYER, "all rewards belong to purchaser");
+            assertEq(uint32(uint256(logs[i].topics[1])), game.walletIdOf(PLAYER), "all rewards belong to purchaser");
             if (topic == SPIN) {
                 (uint64 id, uint256 packed, uint256 gross, uint256 cash) =
                     abi.decode(logs[i].data, (uint64, uint256, uint256, uint256));
@@ -327,7 +325,7 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
                 assertEq(gross, e.gross, "gross payout from stake, ROI, score and gold");
                 assertEq(cash, e.cash, "cash is the live pool cap");
                 assertEq(gross - cash, e.recirculated, "gross reconciles cash plus child face value");
-                ++spins;
+                ++counts[0];
             } else if (topic == OPENED) {
                 assertEq(uint256(logs[i].topics[2]), 0, "direct recirculated child index");
                 (uint256 amount, uint24 target, uint32 entries, uint256 flip, bool rounded) =
@@ -337,23 +335,23 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
                 assertEq(entries, 0);
                 assertEq(flip, 0);
                 assertFalse(rounded);
-                ++children;
+                ++counts[1];
             } else if (topic == DGNRS_BATCH) {
                 (uint256 requested, uint256 paid) = abi.decode(logs[i].data, (uint256, uint256));
                 assertEq(requested, e.childDgnrs, "independent live inventory reward");
                 assertEq(paid, e.childDgnrs);
-                ++batches;
+                ++counts[2];
             } else {
                 (uint256 cash, uint256 recirculated) = abi.decode(logs[i].data, (uint256, uint256));
                 assertEq(cash, e.cash);
                 assertEq(recirculated, e.recirculated);
-                ++caps;
+                ++counts[3];
             }
         }
-        assertEq(spins, 1, "nonzero ETH-spin branch really occurred");
-        assertEq(children, 1, "one recirculated child actually settled");
-        assertEq(batches, 1, "one child inventory payout");
-        assertEq(caps, 1, "pool-cap branch really occurred");
+        assertEq(counts[0], 1, "nonzero ETH-spin branch really occurred");
+        assertEq(counts[1], 1, "one recirculated child actually settled");
+        assertEq(counts[2], 1, "one child inventory payout");
+        assertEq(counts[3], 1, "pool-cap branch really occurred");
     }
 
     function _run(bool laterPurchase) private {

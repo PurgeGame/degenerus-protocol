@@ -25,16 +25,15 @@ import {IDegenerusGameFoilPackModule} from "../interfaces/IDegenerusGameModules.
 ///      admission/publication and must not replace the word before this work ends.
 contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
     /// @notice The one wallet-ID hook for protocol contracts with their own player entry points.
-    /// @dev `allocate = false` returns the existing ID or zero (non-paying actions fill a cache
-    ///      with it and revert only on zero). `allocate = true` (paying actions and affiliate code
-    ///      owners) also registers a new wallet, subject to paid admission: the hook carries no
-    ///      spend, so at PAID_ADMISSION_WALLETS registered wallets it refuses every new wallet.
-    ///      Callers invoke it at most once per wallet and cache any nonzero result.
+    /// @dev With `allocate = false`, return the ordinary wallet's existing ID or zero.
+    ///      Allocation carries no spend here, so it is available only through the free-ID
+    ///      threshold. Later callers must first register through a qualifying Game purchase.
     function registerWallet(address owner, bool allocate) external returns (uint32 id) {
         if (msg.sender != ContractAddresses.AFFILIATE && msg.sender != ContractAddresses.COINFLIP
             && msg.sender != ContractAddresses.CRAPS
             && msg.sender != ContractAddresses.PARIMUTUEL && msg.sender != ContractAddresses.WWXRP
-            && msg.sender != ContractAddresses.ADMIN && msg.sender != ContractAddresses.COIN) revert E();
+            && msg.sender != ContractAddresses.ADMIN && msg.sender != ContractAddresses.COIN
+            && msg.sender != ContractAddresses.GNRUS) revert E();
         if (!allocate) return _walletIdOf(owner);
         (id, ) = _registerWallet(owner, 0);
     }

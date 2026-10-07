@@ -1,48 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-//
-// CrossSurfaceTicketMixing.test.js — Phase 278 Wave 2 TST-CROSS-01 + TST-CLEAN-02/03
-//
-// Phase 278 retired two dead helpers and unified the jackpot ticket-award event
-// surface onto whole-ticket counts. This file carries the test wave's
-// regression coverage for those two deletions plus the cross-surface
-// ticket-award independence proof:
-//
-//   TST-CLEAN-02 — `_queueLootboxTickets` wrapper-removal regression:
-//     The zero-caller `_queueLootboxTickets` wrapper was deleted from
-//     `DegenerusGameStorage.sol`. This block asserts zero remaining
-//     invocation/declaration sites across `contracts/`, and that the three
-//     sibling queue helpers that STAY (`_queueEntries`, `_queueEntriesScaled`,
-//     `_queueEntryRange`) are still present.
-//
-//   TST-CLEAN-03 — `JackpotTicketWin` entries-basis emit regression:
-//     The 2 `JackpotTicketWin` emit sites emit the ENTRIES count queued into
-//     `entriesOwedPacked` — the `uint32(entriesEach)` leg and the BAF
-//     roll's `wholeTicketsToEntries(whole)` — neither multiplies the 4th arg by
-//     `QTY_SCALE`. This block asserts that, plus that the `JackpotTicketWin`
-//     event definition (field types + `indexed` markers) is unchanged: the value
-//     fix shifts emitted VALUES onto the entries basis, not the signature.
-//
-//   TST-CROSS-01 — cross-surface `rem`-byte regression:
-//     The 3 RNG-driven ticket-award surfaces (human lootbox open, auto-resolve
-//     lootbox open, jackpot ticket-roll award) all route through `_queueEntries`
-//     — the whole-ticket helper, which carries the `rem` byte of
-//     `entriesOwedPacked[wk][buyer]` UNTOUCHED. Only `_queueEntriesScaled`
-//     (the mint-boost path) ever writes a non-zero `rem`. Driven full-stack
-//     through the real entry points so the genuinely-shared
-//     `entriesOwedPacked[wk][buyer]` slot is exercised (D-278-TST-CROSS-DEPTH-01).
-//
-// PLACEMENT: `test/integration/` — directory-globbed by both the `test` and
-// `test:integration` package.json scripts, so this file is auto-discovered with
-// no script edit. `test/integration/` is also the correct semantic home: the
-// TST-CROSS-01 full-stack depth requirement (D-278-TST-CROSS-DEPTH-01) needs the
-// integration suite's VRF-mock + level + day + staking fixture setup.
-//
-// CROSS-CITES:
-//   - D-278-EVT-UNIFY-01 / D-278-ENTROPYSTEP-DELETE-01 (278-CONTEXT.md)
-//   - D-278-TST-CROSS-ASSERT-01 / D-278-TST-CROSS-DEPTH-01 (278-CONTEXT.md)
-//   - 278-01-SUMMARY.md (Wave 1 landed the deletions + the whole-ticket emits)
-//   - test/unit/LootboxAutoResolveRemByte.test.js (Phase 275 rem-byte snapshot precedent)
-
+// Verify jackpot event entries match their queue values, and exercise the human
+// box path through VRF settlement with nonzero ticket awards and unchanged remainder.
 import { readEntriesOwed, entryOwnerRecordSlot } from "../helpers/bucketSeed.js";
 
 import { expect } from "chai";
@@ -61,14 +19,9 @@ import {
 import { readyDailyFixture, mineAll, requestMiddayRng } from "../helpers/readyDailyFixture.js";
 import { boCustom } from "../helpers/boxOrder.js";
 
-const MINT_MODULE_SOURCE_PATH = path.resolve(
-  process.cwd(),
-  "contracts/modules/DegenerusGameMintModule.sol"
-);
-
 // ---------------------------------------------------------------------------
-// A wallet's stable ID is the position of its element in the `wallets` table (also stored in the
-// top 32 bits of `mintPacked_`). Near owed balances share one `ticketPending[id]` word (read/write lanes per level
+// A wallet's stable ID is the position of its element in the `wallets` table.
+// Near owed balances share one `ticketPending[id]` word (read/write lanes per level
 // parity, each parity tagged with its level); far-future balances are 32-bit lanes of
 // `farFutureOwed[id]`. The helper decodes the selected queue lane from the layout oracle;
 // the public accessor independently attests owed totals.
@@ -84,10 +37,6 @@ async function readTicketsOwedSlot(gameAddress, wk, buyer) {
   return { slot, packed, owed, rem };
 }
 
-const STORAGE_PATH = path.resolve(
-  process.cwd(),
-  "contracts/storage/DegenerusGameStorage.sol"
-);
 const JACKPOT_SOURCE_PATH = path.resolve(
   process.cwd(),
   "contracts/modules/DegenerusGameJackpotModule.sol"
@@ -107,30 +56,6 @@ function jackpotAwardSource() {
   return fs.readFileSync(TICKET_MODULE_SOURCE_PATH, "utf8") + "\n" +
     fs.readFileSync(JACKPOT_SOURCE_PATH, "utf8") + "\n" +
     fs.readFileSync(JACKPOT_DRAW_SOURCE_PATH, "utf8");
-}
-const CONTRACTS_DIR = path.resolve(process.cwd(), "contracts");
-
-// Brace-match function-body extractor (mirrors test/unit/LootboxAutoResolveRemByte.test.js).
-function extractBody(source, signature) {
-  const fnIdx = source.indexOf(signature);
-  if (fnIdx < 0) return null;
-  let depth = 0;
-  let bodyStart = -1;
-  let bodyEnd = -1;
-  for (let i = fnIdx; i < source.length; i++) {
-    if (source[i] === "{") {
-      if (depth === 0) bodyStart = i;
-      depth++;
-    } else if (source[i] === "}") {
-      depth--;
-      if (depth === 0) {
-        bodyEnd = i;
-        break;
-      }
-    }
-  }
-  if (bodyStart < 0 || bodyEnd < 0) return null;
-  return source.slice(bodyStart, bodyEnd + 1);
 }
 
 // Paren-match emit/call arg-list extractor (mirrors EventSurfaceUnification.test.js).
@@ -171,58 +96,11 @@ function splitTopLevelArgs(parenList) {
   return args;
 }
 
-// Recursively collect every .sol file path under a directory.
-function collectSolFiles(dir) {
-  const out = [];
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...collectSolFiles(full));
-    else if (entry.isFile() && entry.name.endsWith(".sol")) out.push(full);
-  }
-  return out;
-}
-
-describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CROSS-01", function () {
+describe("Cross-surface ticket events and remainder preservation", function () {
   this.timeout(600_000);
 
   after(function () {
     restoreAddresses();
-  });
-
-  describe("TST-CLEAN-02 — `_queueLootboxTickets` wrapper-removal regression", function () {
-    it("[02a] DegenerusGameStorage.sol contains zero `_queueLootboxTickets` references (wrapper + NatSpec fully deleted)", function () {
-      const storage = fs.readFileSync(STORAGE_PATH, "utf8");
-      expect(
-        (storage.match(/_queueLootboxTickets/g) || []).length,
-        "_queueLootboxTickets must be fully removed from DegenerusGameStorage.sol"
-      ).to.equal(0);
-    });
-
-    it("[02b] no .sol file under contracts/ declares or invokes `_queueLootboxTickets`", function () {
-      let total = 0;
-      for (const file of collectSolFiles(CONTRACTS_DIR)) {
-        const src = fs.readFileSync(file, "utf8");
-        total += (src.match(/_queueLootboxTickets/g) || []).length;
-      }
-      expect(
-        total,
-        "_queueLootboxTickets must not appear anywhere under contracts/ — zero declaration + zero invocation sites"
-      ).to.equal(0);
-    });
-
-    it("[02c] the three sibling queue helpers that STAY are still declared in DegenerusGameStorage.sol", function () {
-      const storage = fs.readFileSync(STORAGE_PATH, "utf8");
-      for (const sig of [
-        "function _queueEntries(",
-        "function _queueEntriesScaled(",
-        "function _queueEntryRange(",
-      ]) {
-        expect(
-          storage.includes(sig),
-          `${sig} must still be present — only the zero-caller _queueLootboxTickets wrapper was deleted`
-        ).to.equal(true);
-      }
-    });
   });
 
   describe("TST-CLEAN-03 — `JackpotTicketWin` entries-basis emit regression", function () {
@@ -306,29 +184,7 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
       }
     });
 
-    it("[03e] the compiled JackpotTicketWin ABI fragment carries the 7-field post-Phase-277 signature with exactly 3 indexed params", async function () {
-      const artifact = await hre.artifacts.readArtifact(
-        "DegenerusGameJackpotModule"
-      );
-      const iface = new hre.ethers.Interface(artifact.abi);
-      const frag = iface.getEvent("JackpotTicketWin");
-      expect(frag, "JackpotTicketWin missing from ABI").to.not.equal(null);
-      const types = frag.inputs.map(
-        (i) => `${i.type}${i.indexed ? " indexed" : ""}`
-      );
-      expect(types).to.deep.equal([
-        "uint32 indexed",
-        "uint24 indexed",
-        "uint16 indexed",
-        "uint32",
-        "uint24",
-        "uint256",
-        "bool",
-      ]);
-      expect(frag.inputs.filter((i) => i.indexed).length).to.equal(3);
-      expect(frag.topicHash).to.match(/^0x[0-9a-f]{64}$/);
-      expect(BigInt(frag.topicHash)).to.not.equal(0n);
-    });
+
   });
 
   describe("TST-CROSS-01 — cross-surface `rem`-byte regression (live-state `entriesOwedPacked` read, D-278-TST-CROSS-DEPTH-01)", function () {
@@ -353,6 +209,7 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
       await game.connect(alice).purchase(0, 0n, boCustom(eth(1)), ZERO_BYTES32, 0, false, { value: eth(1) });
       // 1 ETH of pending box value meets the mid-day threshold: an ordinary mineFlip requests.
       const request = await requestMiddayRng(game, deployer, mockVRF);
+      const aliceId = await game.walletIdOf(alice.address);
       const artifact = await hre.artifacts.readArtifact("DegenerusGameLootboxModule");
       const iface = new hre.ethers.Interface(artifact.abi);
       // Choose a ticket-paying outcome, reverting each trial. The regression must
@@ -367,7 +224,7 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
         const ticketAward = receipts.flatMap((receipt) => receipt.logs).some((log) => {
           try {
             const ev = iface.parseLog(log);
-            return ev?.name === "LootBoxOpened" && ev.args.player === alice.address && ev.args.futureTickets > 0n;
+            return ev?.name === "LootBoxOpened" && ev.args.id === aliceId && ev.args.futureTickets > 0n;
           } catch { return false; }
         });
         await hre.ethers.provider.send("evm_revert", [snapshot]);
@@ -498,132 +355,9 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
       expect(sawWholeTicketAward, "ordinary box must award nonzero tickets").to.be.true;
     });
 
-    it("[CROSS-01c] slot-math self-validation: the derived `entriesOwedPacked` slot's `owed` field round-trips against the public `entriesOwedView` accessor", async function () {
-      const fixture = await loadFixture(deployFullProtocol);
-      const { game, alice } = fixture;
-      const gameAddress = await game.getAddress();
-      const currentLevel = BigInt(await game.level()) + 1n;
 
-      // At baseline both the raw-slot `owed` and `entriesOwedView` are 0 — a
-      // trivial-but-real round-trip that pins the keccak nesting math. If a
-      // post-open whole-ticket award is reachable, [CROSS-01b]'s
-      // resolveLiveTicketsOwed `matched` flag exercises the non-zero round-trip.
-      const snap = await resolveLiveTicketsOwed(
-        game,
-        gameAddress,
-        currentLevel,
-        alice
-      );
-      expect(
-        snap.matched,
-        "slot-math self-validation: the derived slot's owed field must match " +
-          "entriesOwedView (keccak nesting: keccak256(abi.encode(buyer, " +
-          "keccak256(abi.encode(wk, 13)))))"
-      ).to.equal(true);
-      expect(snap.owed).to.equal(snap.viewWhole);
-    });
 
-    it("[CROSS-01d] structural cross-check (secondary): the 3 RNG-driven surfaces route through `_queueEntries` (whole, no rem write); `_queueEntriesScaled` is the sole rem-byte writer (mint-boost)", function () {
-      // DEMOTED to a secondary cross-check per D-278-TST-CROSS-DEPTH-01 — the
-      // live-state read above is primary. This block provides the structural
-      // coverage for the auto-resolve + jackpot-roll surfaces the harness
-      // cannot deterministically drive full-stack (see FIXTURE_COVERAGE_GAP).
-      const storage = fs.readFileSync(STORAGE_PATH, "utf8");
-      const lootboxSrc = fs.readFileSync(
-        path.resolve(
-          process.cwd(),
-          "contracts/modules/DegenerusGameLootboxModule.sol"
-        ),
-        "utf8"
-      );
-      const jackpotSrc = fs.readFileSync(JACKPOT_SOURCE_PATH, "utf8");
-      const mintSrc = fs.readFileSync(MINT_MODULE_SOURCE_PATH, "utf8");
 
-      // (1) `_queueEntries` body packs `(packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(rem)`
-      //     with `rem` carried UNCHANGED from the pre-existing slot value — it never
-      //     computes a fraction. The owner-registry bits ride along untouched.
-      const queueBody = extractBody(storage, "function _queueEntries(");
-      expect(queueBody, "_queueEntries body not found").to.not.equal(null);
-      expect(
-        /_setEntryOwed\(wk,\s*uint32\(packed\s*>>\s*OWNER_IDX_SHIFT\),\s*\(packed\s*&\s*OWNER_IDX_MASK\)\s*\|\s*\(uint80\(owed\)\s*<<\s*8\)\s*\|\s*uint80\(rem\)/.test(
-          queueBody
-        ),
-        "_queueEntries must pack `(packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(rem)` with rem carried from the existing slot"
-      ).to.equal(true);
-      expect(
-        queueBody.includes("% QTY_SCALE"),
-        "_queueEntries must NOT compute a fractional remainder"
-      ).to.equal(false);
-      expect(
-        /\bfrac\b/.test(queueBody),
-        "_queueEntries must NOT have a `frac` local"
-      ).to.equal(false);
-      expect(
-        /\bnewRem\b/.test(queueBody),
-        "_queueEntries must NOT have a `newRem` local"
-      ).to.equal(false);
-
-      // (2) `_queueEntriesScaled` body IS the rem-byte writer — it computes
-      //     `frac` via `% QTY_SCALE` and folds it into `newRem`.
-      const scaledBody = extractBody(storage, "function _queueEntriesScaled(");
-      expect(scaledBody, "_queueEntriesScaled body not found").to.not.equal(null);
-      expect(
-        scaledBody.includes("% QTY_SCALE"),
-        "_queueEntriesScaled must compute frac via `% QTY_SCALE`"
-      ).to.equal(true);
-      expect(
-        /\bnewRem\b/.test(scaledBody),
-        "_queueEntriesScaled must have a `newRem` local (the rem-byte writer)"
-      ).to.equal(true);
-
-      // (3) Human + auto-resolve lootbox surfaces: both settle through the
-      //     shared per-entry `_flushBoxAcc` (box-order rework: one box = one
-      //     roll, rewards settle once per entry), which routes each tier's
-      //     ticket award through `_queueEntries` at `currentLevel + uint24(offset)`,
-      //     converting the post-Bernoulli whole count to entries via the
-      //     canonical `wholeTicketsToEntries`, and contains ZERO
-      //     `_queueEntriesScaled` invocations.
-      expect(
-        lootboxSrc.includes(
-          "_queueEntries(player, currentLevel + uint24(offset), wholeTicketsToEntries(whole), false)"
-        ),
-        "LootboxModule must route the ticket award through `_queueEntries` on the entries basis (`wholeTicketsToEntries(whole)`)"
-      ).to.equal(true);
-      expect(
-        lootboxSrc.includes("_queueEntriesScaled"),
-        "LootboxModule must NOT invoke `_queueEntriesScaled` — it never writes the rem byte"
-      ).to.equal(false);
-
-      // (4) Jackpot ticket-roll surface: `_jackpotTicketRoll` converts its
-      //     post-Bernoulli whole count to entries via the canonical
-      //     `wholeTicketsToEntries` and queues it through `_queueEntries`; it does
-      //     NOT call `_queueEntriesScaled` and never invokes the (absent)
-      //     `_queueLootboxTickets` wrapper.
-      const rollBody = extractBody(jackpotAwardSource(), "function _jackpotTicketRoll(");
-      expect(rollBody, "_jackpotTicketRoll body not found").to.not.equal(null);
-      expect(
-        rollBody.includes(
-          "_queueEntries(winner, targetLevel, wholeTicketsToEntries(whole), true)"
-        ),
-        "_jackpotTicketRoll must route the post-Bernoulli whole count through `_queueEntries` on the entries basis (`wholeTicketsToEntries(whole)`)"
-      ).to.equal(true);
-      expect(
-        rollBody.includes("_queueEntriesScaled"),
-        "_jackpotTicketRoll must NOT invoke `_queueEntriesScaled`"
-      ).to.equal(false);
-      expect(
-        rollBody.includes("_queueLootboxTickets"),
-        "_jackpotTicketRoll must NOT invoke the retired `_queueLootboxTickets` wrapper"
-      ).to.equal(false);
-
-      // (5) Mint-boost surface: MintModule is the surface that DOES write the
-      //     rem byte — it invokes `_queueEntriesScaled` (the sole rem-byte
-      //     writer) for boost-derived fractional ticket awards.
-      expect(
-        (mintSrc.match(/_queueEntriesScaled\(/g) || []).length,
-        "MintModule must invoke `_queueEntriesScaled` for boost-derived fractional awards — the surface that flips the rem byte non-zero"
-      ).to.be.gte(1);
-    });
 
     it("[CROSS-01e] live-state: opening the box full-stack through mineFlip delivers owed-entries == the entries basis (~4x the pre-fix whole count) at the roll level", async function () {
       const fixture = await loadFixture(readyDailyFixture);
@@ -653,10 +387,11 @@ describe("CrossSurfaceTicketMixing — Phase 278 Wave 2 TST-CLEAN-02/03 + TST-CR
       );
       const lbIface = new hre.ethers.Interface(lbArtifact.abi);
       let opened = null;
+      const aliceId = await game.walletIdOf(alice.address);
       for (const log of receipts.flatMap((receipt) => receipt.logs)) {
         try {
           const parsed = lbIface.parseLog(log);
-          if (parsed && parsed.name === "LootBoxOpened" && parsed.args.player === alice.address) {
+          if (parsed && parsed.name === "LootBoxOpened" && parsed.args.id === aliceId) {
             opened = parsed;
             break;
           }

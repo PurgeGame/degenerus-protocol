@@ -8,6 +8,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {activityScoreOf} from "../helpers/ActivityScoreOf.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
+import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 
 /// @title V61RngFreezeIntact — SEC-01 proof: the v61 surfaces (AFPAY / PACK / CURSE / SMITE) read NO
 ///        VRF-derived or block entropy in a player-manipulable window, proven EMPIRICALLY by a two-block
@@ -69,11 +70,11 @@ contract V61RngFreezeIntact is DeployProtocol {
     uint256 private constant PRIZE_POOL_PENDING_SLOT = GameSlots.PRIZE_POOL_PENDING_PACKED; // prizePoolPendingPacked (frozen-phase sink)
     uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED;
 
-    uint256 private constant DAY_SHIFT = 72; // lastEthDay (32 bits)
-    uint256 private constant DEITY_SHIFT = 184; // HAS_DEITY_PASS (1 bit)
-    uint256 private constant AFFILIATE_BONUS_LEVEL_SHIFT = 185; // (24 bits)
-    uint256 private constant AFFILIATE_BONUS_POINTS_SHIFT = 209; // (6 bits)
-    uint256 private constant CURSE_COUNT_SHIFT = 215; // (8 bits)
+    uint256 private constant DAY_SHIFT = BitPackingLib.DAY_SHIFT; // lastEthDay (24 bits)
+    uint256 private constant DEITY_SHIFT = BitPackingLib.HAS_DEITY_PASS_SHIFT; // HAS_DEITY_PASS (1 bit)
+    uint256 private constant AFFILIATE_BONUS_LEVEL_SHIFT = BitPackingLib.AFFILIATE_BONUS_LEVEL_SHIFT; // (24 bits)
+    uint256 private constant AFFILIATE_BONUS_POINTS_SHIFT = BitPackingLib.AFFILIATE_BONUS_POINTS_SHIFT; // (6 bits)
+    uint256 private constant CURSE_COUNT_SHIFT = BitPackingLib.CURSE_COUNT_SHIFT; // (5 bits)
 
     uint256 private constant PRICE_COIN_UNIT = 1000;
     uint256 private constant SMITE_BURN = PRICE_COIN_UNIT / 5; // 200 FLIP
@@ -411,7 +412,7 @@ contract V61RngFreezeIntact is DeployProtocol {
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2) continue;
             if (logs[i].topics[0] != AFKING_SPENT_SIG) continue;
-            if (logs[i].topics[1] != bytes32(uint256(uint160(who)))) continue;
+            if (logs[i].topics[1] != bytes32(uint256(game.walletIdOf(who)))) continue;
             return abi.decode(logs[i].data, (uint256));
         }
         return 0;
@@ -472,7 +473,7 @@ contract V61RngFreezeIntact is DeployProtocol {
     // =========================================================================
 
     function _seedClaimable(address who, uint256 amount) internal {
-        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(BALANCES_PACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(uint256(_giveWalletId(who)), uint256(BALANCES_PACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         uint256 oldLow = uint128(packed);
         uint256 high = packed >> 128;
@@ -481,7 +482,7 @@ contract V61RngFreezeIntact is DeployProtocol {
     }
 
     function _seedAfking(address who, uint256 amount) internal {
-        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(BALANCES_PACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(uint256(_giveWalletId(who)), uint256(BALANCES_PACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         uint256 low = uint128(packed);
         uint256 oldHigh = packed >> 128;
@@ -502,7 +503,7 @@ contract V61RngFreezeIntact is DeployProtocol {
     }
 
     function _seedField(address who, uint256 shift, uint256 mask, uint256 value) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(_giveWalletId(who), uint256(MINTPACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         packed &= ~(mask << shift);
         packed |= (value & mask) << shift;
@@ -510,7 +511,7 @@ contract V61RngFreezeIntact is DeployProtocol {
     }
 
     function _seedCurse(address who, uint256 points) internal {
-        _seedField(who, CURSE_COUNT_SHIFT, 0xFF, points);
+        _seedField(who, CURSE_COUNT_SHIFT, BitPackingLib.MASK_5, points);
     }
 
     function _seedAffiliateBase(address who, uint256 points) internal {

@@ -63,7 +63,7 @@ contract SdgnrsWhaleBuy is DeployProtocol {
     uint256 private constant STANDARD = 4 ether;
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
 
-    bytes32 private constant WHALE_PURCHASED_SIG = keccak256("WhalePassPurchased(address,uint256,uint256)");
+    bytes32 private constant WHALE_PURCHASED_SIG = keccak256("WhalePassPurchased(uint32,uint256,uint256)");
 
     uint256 private _lastFulfilledReqId;
     uint256 private _t;
@@ -265,7 +265,7 @@ contract SdgnrsWhaleBuy is DeployProtocol {
         bytes32 poolTransferSig = keccak256("PoolTransfer(uint8,address,uint256)");
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics.length == 2 && logs[i].topics[0] == WHALE_PURCHASED_SIG
-                && address(uint160(uint256(logs[i].topics[1]))) == ContractAddresses.SDGNRS) {
+                && uint32(uint256(logs[i].topics[1])) == 2) {
                 (qty,) = abi.decode(logs[i].data, (uint256, uint256));
             }
             if (logs[i].emitter == address(sdgnrs) && logs[i].topics[0] == poolTransferSig) {
@@ -416,7 +416,7 @@ contract SdgnrsWhaleBuy is DeployProtocol {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics.length == 2 && logs[i].topics[0] == WHALE_PURCHASED_SIG
-                && address(uint160(uint256(logs[i].topics[1]))) == ContractAddresses.SDGNRS) {
+                && uint32(uint256(logs[i].topics[1])) == 2) {
                 (qty, price) = abi.decode(logs[i].data, (uint256, uint256));
                 found = true;
             }
@@ -464,7 +464,7 @@ contract SdgnrsWhaleBuy is DeployProtocol {
 
     /// @dev Wallet ID read from storage (the facade may be etched away by the forwarder).
     function _walletId(address who) internal view returns (uint256) {
-        return uint256(vm.load(address(game), GameSlotKeys.mintPacked(who))) >> 224;
+        return uint256(vm.load(address(game), GameSlotKeys.walletId(who)));
     }
 
     /// @dev Force `who`'s claimable (slot 7 low-128) to `amount`, preserving the afking half, AND

@@ -88,12 +88,12 @@ CONSUMER-SEALED	_dailyWordAt	_windowTerms	CrapsBattle.sol	READ
 CONSUMER-SEALED	_dailyWordAt	openBonusDay	CrapsBattle.sol	READ
 CONSUMER-SEALED	_dailyWordAt	vaultComp	CrapsBattle.sol	READ
 GATE	_currentRngWord	boxesPending	DegenerusGame.sol	READ	Keeper discovery only; a waiting payload cannot open queues.
-CONSUMER-SEALED	_recordedDailyWord	deityBoonData	DegenerusGame.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
+CONSUMER-SEALED	_recordedDailyWord	deityBoonDataById	DegenerusGame.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
 ACCESSOR	rngWordCurrent	isRngFulfilled	DegenerusGame.sol	READ
 CURSOR	_nudgeCount	reverseFlip	DegenerusGame.sol	READ	Quote-gated counter update before daily lock; cap-255 admission.
 ACCESSOR	_nudgeCount	rngNudgeQuote	DegenerusGame.sol	READ	View of pending/frozen nudge receipt; no RNG consumer.
 ACCESSOR	_retainedDailyWord	rngWordForDay	DegenerusGame.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
-CURSOR	lootboxRngPacked	setCrapsRngPending	DegenerusGame.sol	READ	CRAPS-only assembly RMW of parity pending bits 250/251, never entropy/index/readiness slices.
+CURSOR	lootboxRngPacked	setCrapsRngPending	DegenerusGame.sol	WRITE	CRAPS-only assembly RMW of parity pending bits 250/251, never entropy/index/readiness slices.
 ACCESSOR	rngFlagsAndNudges	_decActiveWordOf	DegenerusGameLens.sol	READ
 ACCESSOR	rngWordCurrent	_decActiveWordOf	DegenerusGameLens.sol	READ
 ACCESSOR	rngDayTags	_rngWordByDayOf	DegenerusGameLens.sol	READ	authenticate two-slot day tag before reading reused payload

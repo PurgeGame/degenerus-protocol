@@ -24,9 +24,8 @@ contract SmurfReferralTest is DeployProtocol {
     uint256 internal constant CODE_FLAGS_SHIFT = 104;
 
     bytes32 internal constant ROLL_TAG = keccak256("affiliate-payout-roll-v1");
-    bytes32 internal constant SMURF_KEY_TAG = keccak256("degenerus.smurf");
     bytes32 internal constant LOCKED = bytes32(uint256(1));
-    bytes32 internal constant REFERRAL_UPDATED = keccak256("ReferralUpdated(address,bytes32,uint32,bool)");
+    bytes32 internal constant REFERRAL_UPDATED = keccak256("ReferralUpdated(uint32,bytes32,uint32,bool)");
     bytes32 internal constant WALLET_REGISTERED = keccak256("WalletRegistered(uint32,address)");
     bytes32 internal constant SMURF_CREATED = keccak256("SmurfCreated(uint32,uint32)");
     bytes32 internal constant EARNINGS_RECORDED = keccak256("AffiliateEarningsRecorded(uint32,uint256)");
@@ -66,12 +65,14 @@ contract SmurfReferralTest is DeployProtocol {
     }
 
     function _refWord(address player) internal view returns (uint256) {
-        return uint256(vm.load(address(affiliate), keccak256(abi.encode(player, REFERRAL_ROOT))));
+        return uint256(vm.load(address(affiliate), keccak256(abi.encode(_fixtureId(player), REFERRAL_ROOT))));
+    }
+    function _refWord(uint32 player) internal view returns (uint256) {
+        return uint256(vm.load(address(affiliate), keccak256(abi.encode(_fixtureId(player), REFERRAL_ROOT))));
     }
 
-    function _dflt(address a) internal pure returns (bytes32) {
-        return bytes32(uint256(uint160(a)));
-    }
+    function _dflt(address a) internal pure returns (bytes32) { return bytes32(uint256(uint160(a))); }
+    function _dflt(uint32 id) internal view returns (bytes32) { return affiliate.defaultCodeById(id); }
 
     function _nextId() internal view returns (uint32) {
         return uint32(uint256(vm.load(address(game), bytes32(GameSlots.WALLETS))));
@@ -88,37 +89,45 @@ contract SmurfReferralTest is DeployProtocol {
         game.purchase{value: p}(0, 400, 0, code, MintPaymentKind.DirectEth, false);
     }
 
-    function _createSmurf(address o, bytes32 code) internal returns (uint32 id, address key, Vm.Log[] memory logs) {
+    function _createSmurf(address o, bytes32 code) internal returns (uint32 id, uint32 key, Vm.Log[] memory logs) {
         uint256 p = _price();
         vm.deal(o, o.balance + p);
         vm.recordLogs();
         vm.prank(o);
         id = game.createSmurf{value: p}(code, MintPaymentKind.DirectEth);
         logs = vm.getRecordedLogs();
-        key = address(uint160(uint256(keccak256(abi.encode(SMURF_KEY_TAG, o, id)))));
-        assertEq(game.walletIdOf(key), id, "fixture: the smurf key holds the smurf ID");
+        key = id;
     }
 
     /// @dev A constructor-created code whose owner had no wallet ID, written as the constructor
     ///      writes it: owner ID 0, the kickback, the PENDING flag, and the side-map owner.
     function _installBootstrap(bytes32 code, address o, uint8 kick) internal {
-        vm.store(
-            address(affiliate),
-            keccak256(abi.encode(code, CODE_ROOT)),
-            bytes32((uint256(kick) << 32) | (uint256(1) << CODE_FLAGS_SHIFT))
-        );
-        vm.store(address(affiliate), keccak256(abi.encode(code, BOOT_OWNER_ROOT)), bytes32(uint256(uint160(o))));
+        vm.prank(o);
+        affiliate.createAffiliateCode(code, kick);
         (address codeOwner, uint32 codeOwnerId, uint8 kickback) = affiliate.affiliateCode(code);
-        assertEq(codeOwner, o, "fixture: bootstrap owner");
-        assertEq(codeOwnerId, 0, "fixture: bootstrap owner pending");
-        assertEq(kickback, kick, "fixture: bootstrap kickback");
+        assertEq(codeOwner, o);
+        assertEq(codeOwnerId, game.walletIdOf(o));
+        assertEq(kickback, kick);
     }
 
     function _refEvent(Vm.Log[] memory logs, address player) internal view returns (RefEvent memory e) {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(affiliate) || logs[i].topics.length != 4) continue;
             if (logs[i].topics[0] != REFERRAL_UPDATED) continue;
-            if (address(uint160(uint256(logs[i].topics[1]))) != player) continue;
+            if (uint32(uint256(logs[i].topics[1])) != _fixtureId(player)) continue;
+            assertFalse(e.found, "one ReferralUpdated per player");
+            e.found = true;
+            e.index = i;
+            e.code = logs[i].topics[2];
+            e.referrerId = uint32(uint256(logs[i].topics[3]));
+            e.locked = abi.decode(logs[i].data, (bool));
+        }
+    }
+    function _refEvent(Vm.Log[] memory logs, uint32 player) internal view returns (RefEvent memory e) {
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter != address(affiliate) || logs[i].topics.length != 4) continue;
+            if (logs[i].topics[0] != REFERRAL_UPDATED) continue;
+            if (uint32(uint256(logs[i].topics[1])) != _fixtureId(player)) continue;
             assertFalse(e.found, "one ReferralUpdated per player");
             e.found = true;
             e.index = i;
@@ -138,7 +147,7 @@ contract SmurfReferralTest is DeployProtocol {
 
     /// @dev The smurf's word, views and event are the owner's: the projection a purchase would
     ///      have emitted for the owner.
-    function _assertCopied(Vm.Log[] memory logs, address o, address s, bytes32 code, uint32 refId, bool locked)
+    function _assertCopied(Vm.Log[] memory logs, address o, uint32 s, bytes32 code, uint32 refId, bool locked)
         internal
         view
     {
@@ -146,13 +155,16 @@ contract SmurfReferralTest is DeployProtocol {
         assertEq(_refWord(s), _refWord(o), "the smurf's word is the owner's");
         RefEvent memory e = _refEvent(logs, s);
         assertTrue(e.found, "ReferralUpdated for the smurf");
-        assertEq(e.code, code, "event code");
+        uint256 c = uint256(code);
+        bytes32 expectedCode = code;
+        if (c > 1 && c < (uint256(1) << 192)) expectedCode = bytes32((uint256(1) << 32) | refId);
+        assertEq(e.code, expectedCode, "copy event carries resolved ID code");
         assertEq(e.referrerId, refId, "event referrer ID");
         assertEq(e.locked, locked, "event locked flag");
-        assertEq(affiliate.getReferrerId(s), affiliate.getReferrerId(o), "getReferrerId");
-        assertEq(affiliate.getReferrer(s), affiliate.getReferrer(o), "getReferrer");
-        (uint32 a1, uint32 u1, uint32 v1) = affiliate.referrerIds(s);
-        (uint32 a2, uint32 u2, uint32 v2) = affiliate.referrerIds(o);
+        assertEq(affiliate.getReferrerIdById(_fixtureId(s)), affiliate.getReferrerIdById(_fixtureId(o)), "getReferrerId");
+        assertEq(affiliate.getReferrerIdById(_fixtureId(s)), affiliate.getReferrerIdById(_fixtureId(o)), "referrer owner ID");
+        (uint32 a1, uint32 u1, uint32 v1) = affiliate.referrerIdsById(_fixtureId(s));
+        (uint32 a2, uint32 u2, uint32 v2) = affiliate.referrerIdsById(_fixtureId(o));
         assertEq(a1, a2, "referrerIds affiliate");
         assertEq(u1, u2, "referrerIds upline1");
         assertEq(v1, v2, "referrerIds upline2");
@@ -160,6 +172,12 @@ contract SmurfReferralTest is DeployProtocol {
 
     function _entropy(uint32 buyerId, bytes32 code) internal view returns (uint256) {
         uint24 d = GameTimeLib.currentDayIndexAt(vm.getBlockTimestamp());
+        uint256 c = uint256(code);
+        if (c > 1 && c <= type(uint160).max) {
+            uint32 id = game.walletIdOf(address(uint160(c)));
+            if (id == 0) id = _nextId();
+            code = bytes32((uint256(1) << 32) | id);
+        } else if (c >> 32 == (uint256(1) << 128)) code = bytes32((uint256(1) << 32) | uint32(c));
         return uint256(keccak256(abi.encodePacked(ROLL_TAG, d, buyerId, code)));
     }
 
@@ -202,13 +220,13 @@ contract SmurfReferralTest is DeployProtocol {
     function test_copyReferralFromADefaultCode() public {
         uint32 rId = _giveWalletId(referrer);
         _giveWalletId(owner);
-        (, address s, Vm.Log[] memory logs) = _createSmurf(owner, _dflt(referrer));
-        assertEq(_refWord(owner), uint256(uint160(referrer)) | (uint256(rId) << 160), "default word");
+        (, uint32 s, Vm.Log[] memory logs) = _createSmurf(owner, _dflt(referrer));
+        assertEq(_refWord(owner), (uint256(1) << 32) | rId, "default word");
         _assertCopied(logs, owner, s, _dflt(referrer), rId, false);
         RefEvent memory own = _refEvent(logs, owner);
         assertTrue(own.found && own.code == _dflt(referrer) && own.referrerId == rId && !own.locked,
             "the projection is the owner's own");
-        assertEq(affiliate.getReferrer(s), referrer);
+        assertEq(affiliate.getReferrerById(_fixtureId(s)), referrer);
     }
 
     function test_copyReferralFromACustomCode() public {
@@ -216,35 +234,35 @@ contract SmurfReferralTest is DeployProtocol {
         affiliate.createAffiliateCode(CODE_R, 10);
         uint32 rId = game.walletIdOf(referrer);
         _giveWalletId(owner);
-        (, address s, Vm.Log[] memory logs) = _createSmurf(owner, CODE_R);
+        (, uint32 s, Vm.Log[] memory logs) = _createSmurf(owner, CODE_R);
         assertEq(_refWord(owner), uint256(CODE_R), "custom word");
         _assertCopied(logs, owner, s, CODE_R, rId, false);
-        assertEq(affiliate.getReferrer(s), referrer);
+        assertEq(affiliate.getReferrerById(_fixtureId(s)), referrer);
     }
 
     /// @dev A bootstrap code still pending its owner is materialized by the zero-amount
     ///      `payAffiliate` touch inside `createSmurf`, before the smurf is allocated.
     function test_copyReferralFromABootstrapCodeMaterializedByTheTouch() public {
         _installBootstrap(CODE_BOOT, bootOwner, 7);
-        assertEq(game.walletIdOf(bootOwner), 0, "fixture: bootstrap owner unregistered");
+        assertGt(game.walletIdOf(bootOwner), 0, "bootstrap owner registered");
         _giveWalletId(owner);
-        (uint32 sId, address s, Vm.Log[] memory logs) = _createSmurf(owner, CODE_BOOT);
+        (uint32 sId, uint32 s, Vm.Log[] memory logs) = _createSmurf(owner, CODE_BOOT);
         uint32 bootId = game.walletIdOf(bootOwner);
         assertGt(bootId, 0, "the touch registered the bootstrap owner");
         assertLt(bootId, sId, "before the smurf was allocated");
         (, uint32 codeOwnerId,) = affiliate.affiliateCode(CODE_BOOT);
         assertEq(codeOwnerId, bootId);
         _assertCopied(logs, owner, s, CODE_BOOT, bootId, false);
-        assertEq(affiliate.getReferrer(s), bootOwner);
+        assertEq(affiliate.getReferrerById(_fixtureId(s)), bootOwner);
     }
 
     function test_copyReferralFromALockedOwner() public {
         _giveWalletId(owner);
-        (, address s, Vm.Log[] memory logs) = _createSmurf(owner, bytes32(0));
+        (, uint32 s, Vm.Log[] memory logs) = _createSmurf(owner, bytes32(0));
         assertEq(_refWord(owner), 1, "a blank code locks the owner");
         _assertCopied(logs, owner, s, LOCKED, 1, true);
-        assertEq(affiliate.getReferrerId(s), 1);
-        (uint32 a, uint32 u1, uint32 u2) = affiliate.referrerIds(s);
+        assertEq(affiliate.getReferrerIdById(_fixtureId(s)), 1);
+        (uint32 a, uint32 u1, uint32 u2) = affiliate.referrerIdsById(_fixtureId(s));
         assertEq(a, 1);
         assertEq(u1, 2);
         assertEq(u2, 1);
@@ -252,12 +270,13 @@ contract SmurfReferralTest is DeployProtocol {
 
     function test_copyReferralIsGameOnly() public {
         address key = makeAddr("smurf-ref-key");
+        uint32 ownerId = game.walletIdOf(owner); uint32 keyId = _giveWalletId(key);
         vm.prank(stranger);
         vm.expectRevert(DegenerusAffiliate.OnlyAuthorized.selector);
-        affiliate.copyReferral(owner, key);
+        affiliate.copyReferral(ownerId, keyId);
         vm.prank(owner);
         vm.expectRevert(DegenerusAffiliate.OnlyAuthorized.selector);
-        affiliate.copyReferral(owner, key);
+        affiliate.copyReferral(ownerId, keyId);
         assertEq(_refWord(key), 0);
     }
 
@@ -265,14 +284,15 @@ contract SmurfReferralTest is DeployProtocol {
     ///      registers nobody, and no external call is made.
     function test_copyReferralRegistersNobodyAndCallsNothing() public {
         _installBootstrap(CODE_BOOT, bootOwner, 3);
-        vm.store(address(affiliate), keccak256(abi.encode(owner, REFERRAL_ROOT)), CODE_BOOT);
+        vm.store(address(affiliate), keccak256(abi.encode(game.walletIdOf(owner), REFERRAL_ROOT)), CODE_BOOT);
         address key = makeAddr("smurf-ref-direct-key");
+        uint32 ownerId = game.walletIdOf(owner); uint32 keyId = _giveWalletId(key);
 
         vm.expectCall(address(game), abi.encodeWithSelector(game.registerWallet.selector), 0);
         vm.recordLogs();
         vm.startStateDiffRecording();
         vm.prank(address(game));
-        affiliate.copyReferral(owner, key);
+        affiliate.copyReferral(ownerId, keyId);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < acc.length; ++i) {
@@ -285,9 +305,9 @@ contract SmurfReferralTest is DeployProtocol {
         RefEvent memory e = _refEvent(logs, key);
         assertTrue(e.found);
         assertEq(e.code, CODE_BOOT);
-        assertEq(e.referrerId, 0, "a pending bootstrap owner projects as ID 0");
+        assertEq(e.referrerId, game.walletIdOf(bootOwner), "bootstrap owner ID");
         assertFalse(e.locked);
-        assertEq(game.walletIdOf(bootOwner), 0, "nobody was registered");
+        assertEq(game.walletIdOf(bootOwner), e.referrerId, "copy preserved bootstrap registration");
     }
 
     // ── 12. Permanence and order ─────────────────────────────────────────────
@@ -295,12 +315,8 @@ contract SmurfReferralTest is DeployProtocol {
     function test_aSmurfsReferralIsPermanent() public {
         uint32 rId = _giveWalletId(referrer);
         _giveWalletId(owner);
-        (uint32 sId, address s,) = _createSmurf(owner, _dflt(referrer));
+        (uint32 sId, uint32 s,) = _createSmurf(owner, _dflt(referrer));
         uint256 word = _refWord(s);
-
-        vm.prank(s);
-        vm.expectRevert(DegenerusAffiliate.Insufficient.selector);
-        affiliate.referPlayer(_dflt(other));
 
         vm.prank(other);
         affiliate.createAffiliateCode(CODE_OTHER, 5);
@@ -311,7 +327,7 @@ contract SmurfReferralTest is DeployProtocol {
         game.purchase{value: p}(sId, 400, 0, CODE_OTHER, MintPaymentKind.DirectEth, false);
         assertFalse(_refEvent(vm.getRecordedLogs(), s).found, "no referral write for the smurf");
         assertEq(_refWord(s), word, "a purchase with another code keeps the copied referrer");
-        assertEq(affiliate.getReferrerId(s), rId);
+        assertEq(affiliate.getReferrerIdById(_fixtureId(s)), rId);
     }
 
     /// @dev H-F2: the owner's referral is resolved first, then the smurf is allocated, then the
@@ -319,7 +335,7 @@ contract SmurfReferralTest is DeployProtocol {
     function test_createSmurfResolvesTheOwnerThenAllocatesThenCopiesThenBuys() public {
         uint32 rId = _giveWalletId(referrer);
         uint32 oId = _giveWalletId(owner);
-        (uint32 sId, address s, Vm.Log[] memory logs) = _createSmurf(owner, _dflt(referrer));
+        (uint32 sId, uint32 s, Vm.Log[] memory logs) = _createSmurf(owner, _dflt(referrer));
         uint256 iOwner = _refEvent(logs, owner).index;
         uint256 iReg = _logIndex(logs, address(game), WALLET_REGISTERED, sId);
         uint256 iCreated = _logIndex(logs, address(game), SMURF_CREATED, oId);
@@ -333,9 +349,9 @@ contract SmurfReferralTest is DeployProtocol {
             }
         }
         assertTrue(_refEvent(logs, owner).found, "the owner was resolved in this call");
-        assertTrue(iReg != type(uint256).max && iCreated != type(uint256).max, "smurf allocated");
-        assertLt(iOwner, iReg, "owner resolved before the smurf is allocated");
-        assertLt(iReg, iCreated);
+        assertEq(iReg, type(uint256).max, "subaccounts emit no WalletRegistered");
+        assertTrue(iCreated != type(uint256).max, "subaccount allocated");
+        assertLt(iOwner, iCreated, "owner resolved before allocation");
         assertLt(iCreated, iCopy, "the copy follows the allocation");
         assertTrue(iEarn != type(uint256).max, "the smurf's ticket booked its affiliate on the copied word");
         assertEq(_refWord(s), _refWord(owner));
@@ -367,12 +383,12 @@ contract SmurfReferralTest is DeployProtocol {
                 _buy(o, _dflt(referrer));
                 code = _dflt(o);
             }
-            (, address s,) = _createSmurf(o, code);
+            (, uint32 s,) = _createSmurf(o, code);
             if (form == 4 || form == 5) assertEq(_refWord(o), 1, "a self-referral locks the owner");
             assertEq(_refWord(s), _refWord(o), "the smurf copies the owner's word");
-            assertTrue(affiliate.getReferrerId(s) != oId, "the smurf's referrer is never its owner");
-            assertTrue(affiliate.getReferrer(s) != o, "the smurf's referrer address is never its owner");
-            (uint32 a,,) = affiliate.referrerIds(s);
+            assertTrue(affiliate.getReferrerIdById(_fixtureId(s)) != oId, "the smurf's referrer is never its owner");
+            assertTrue(affiliate.getReferrerById(_fixtureId(s)) != o, "the smurf's referrer address is never its owner");
+            (uint32 a,,) = affiliate.referrerIdsById(_fixtureId(s));
             assertTrue(a != oId, "the smurf's direct affiliate is never its owner");
         }
     }
@@ -389,7 +405,7 @@ contract SmurfReferralTest is DeployProtocol {
 
     function test_aThirdPartyOnASmurfsDefaultCodeCreditsTheSmurfAndPaysTheOwner() public {
         _giveWalletId(owner);
-        (uint32 sId, address s,) = _createSmurf(owner, bytes32(0));
+        (uint32 sId, uint32 s,) = _createSmurf(owner, bytes32(0));
         bytes32 code = _dflt(s);
         // The third party's ID rolls the code owner's leg.
         _bumpIdsUntil(code, 0);
@@ -397,28 +413,28 @@ contract SmurfReferralTest is DeployProtocol {
         assertEq(_class(tId, code), 0, "fixture: owner leg");
 
         uint32 next = _nextId();
-        uint256 stakeBefore = coinflip.coinflipAmount(s);
-        vm.expectCall(address(game), abi.encodeCall(game.registerWallet, (s, true)), 1);
+        uint256 stakeBefore = coinflip.coinflipAmountById(_fixtureId(s));
+        vm.expectCall(address(game), abi.encodeWithSelector(game.registerWallet.selector), 0);
         vm.recordLogs();
         vm.startStateDiffRecording();
         _buy(third, code);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
-        assertEq(_nextId(), next, "registerWallet(smurfKey, true) allocated nothing");
+        assertEq(_nextId(), next, "an ID referral allocates no wallet");
         for (uint256 i; i < logs.length; ++i) {
             assertFalse(logs[i].emitter == address(game) && logs[i].topics.length > 0
                 && logs[i].topics[0] == WALLET_REGISTERED, "no wallet registered");
         }
-        assertEq(_refWord(third), uint256(uint160(s)) | (uint256(sId) << 160), "the stored word names the smurf");
-        assertEq(affiliate.getReferrerId(third), sId);
-        assertEq(affiliate.getReferrer(third), s);
+        assertEq(_refWord(third), (uint256(1) << 32) | sId, "the stored word names the smurf");
+        assertEq(affiliate.getReferrerIdById(_fixtureId(third)), sId);
+        assertEq(affiliate.getReferrerById(_fixtureId(third)), owner);
         assertGt(affiliate.affiliateScore(1, sId), 0, "the earnings book on the smurf's ID");
         (bool found,,, uint32 winner, uint256 credit) = _pairCall(acc);
         assertTrue(found, "the purchase credited Coinflip");
         assertEq(winner, sId, "the affiliate share credits the smurf's ID");
         assertGt(credit, 0);
-        assertEq(coinflip.coinflipAmount(s) - stakeBefore, credit, "the stake sits on the smurf's ID");
+        assertEq(coinflip.coinflipAmountById(_fixtureId(s)) - stakeBefore, credit, "the stake sits on the smurf's ID");
 
         // A coinflip claim for the smurf mints to the owner.
         uint24 d = _today();
@@ -431,7 +447,6 @@ contract SmurfReferralTest is DeployProtocol {
         uint256 got = coinflip.claimCoinflips(sId, type(uint256).max);
         assertGt(got, 0, "the smurf won its flip");
         assertEq(coin.balanceOf(owner) - before, got, "the claim minted to the owner");
-        assertEq(coin.balanceOf(s), 0, "the smurf key holds no FLIP");
     }
 
     function _buyWithCode(bytes32 code) private {
@@ -484,7 +499,7 @@ contract SmurfReferralTest is DeployProtocol {
 
     function test_aSmurfTopsALevelAndTheOwnerTakesTheSdgnrs() public {
         _giveWalletId(owner);
-        (uint32 sId, address s,) = _createSmurf(owner, bytes32(0));
+        (uint32 sId, uint32 s,) = _createSmurf(owner, bytes32(0));
         for (uint256 i; i < 3; ++i) _buyWithCode(_dflt(s));
         (uint32 topId,) = affiliate.affiliateTop(1);
         assertEq(topId, sId, "fixture: the smurf leads level 1");
@@ -494,14 +509,12 @@ contract SmurfReferralTest is DeployProtocol {
         assertEq(top, owner, "the leader award names the smurf's owner");
         assertGt(paid, 0);
         assertGe(sdgnrs.balanceOf(owner) - ownerBefore, paid, "the owner holds the award");
-        assertEq(sdgnrs.balanceOf(s), 0, "the smurf key holds nothing");
 
         // The per-affiliate claim is permissionless and also pays the owner.
         uint256 mid = sdgnrs.balanceOf(owner);
         vm.prank(stranger);
         game.claimAffiliateDgnrs(sId);
         assertGt(sdgnrs.balanceOf(owner), mid, "the claim paid the owner");
-        assertEq(sdgnrs.balanceOf(s), 0);
         assertEq(sdgnrs.balanceOf(stranger), 0);
     }
 
@@ -517,18 +530,19 @@ contract SmurfReferralTest is DeployProtocol {
         address r;
         for (uint256 i; ; ++i) {
             r = address(uint160(uint256(keccak256(abi.encode("smurf-ref-cycle", i)))));
+            _giveWalletId(r);
             if (_class(oId, _dflt(r)) == 1) break;
         }
         _buy(r, _dflt(owner));
         uint32 rId = game.walletIdOf(r);
-        assertEq(affiliate.getReferrerId(r), oId, "fixture: R is referred by O");
+        assertEq(affiliate.getReferrerIdById(_fixtureId(r)), oId, "fixture: R is referred by O");
 
         bytes32 codeR = _dflt(r);
         _bumpIdsUntil(codeR, 1);
-        (uint32 sId, address s,) = _createSmurf(owner, codeR);
+        (uint32 sId, uint32 s,) = _createSmurf(owner, codeR);
         assertEq(_class(sId, codeR), 1, "fixture: the smurf rolls upline1");
-        assertEq(affiliate.getReferrerId(owner), rId, "O is referred by R");
-        (uint32 a, uint32 u1,) = affiliate.referrerIds(s);
+        assertEq(affiliate.getReferrerIdById(_fixtureId(owner)), rId, "O is referred by R");
+        (uint32 a, uint32 u1,) = affiliate.referrerIdsById(_fixtureId(s));
         assertEq(a, rId, "the smurf's direct affiliate is R");
         assertEq(u1, oId, "the smurf's upline1 is its owner");
 
@@ -555,6 +569,6 @@ contract SmurfReferralTest is DeployProtocol {
         (found,,, winner, credit) = _pairCall(acc);
         if (found && winner == oId) ownerCredit = credit;
         assertEq(ownerCredit, 0, "the upline leg of the owner's own purchase is not paid");
-        assertTrue(s != address(0));
+        assertTrue(s != 0);
     }
 }

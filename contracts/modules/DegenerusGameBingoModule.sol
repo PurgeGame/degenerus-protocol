@@ -98,7 +98,7 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
 
     /// @notice Universal record emitted on every successful claim, carrying the paid amounts.
     event BingoClaimed(
-        address indexed player,
+        uint32 indexed player,
         uint256 level,
         uint8 symbol,
         uint256 flipReward,
@@ -109,7 +109,7 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
     ///         the level, the calling address, the claimant's frozen affiliate score, and
     ///         the amount paid.
     event AffiliateDgnrsClaimed(
-        address indexed affiliate,
+        uint32 indexed affiliate,
         uint24 indexed level,
         address indexed caller,
         uint256 score,
@@ -136,7 +136,8 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
     function claimBingo(uint32 id, uint24 lvl, uint8 symbol, uint32[8] calldata slots) external {
         // Permissionless: a settled claim only ever credits the slot owner, never the caller.
         // Bucket lanes hold wallet IDs; a caller with no ID owns no slot.
-        (uint32 playerId, address player, address payee) = _creditAccount(id);
+        uint32 playerId = _creditAccountId(id);
+        address payee = _payee(_walletElement(playerId));
         // ---- Validation (gameOver hard cutoff + range gates) ----
         // No level upper-bound guard: the 8-color ownership check below is the gate —
         // an unmaterialized bucket is empty and fails it, while a bucket the sweep has
@@ -189,7 +190,7 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         // FLIP credit is always paid, even when the Reward pool is empty.
         coinflip.creditFlip(playerId, BINGO_FLIP);
 
-        emit BingoClaimed(player, lvl, symbol, BINGO_FLIP, dgnrsPaid);
+        emit BingoClaimed(playerId, lvl, symbol, BINGO_FLIP, dgnrsPaid);
     }
 
     // -------------------------------------------------------------------------
@@ -214,15 +215,13 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
     /// @param id Affiliate account to claim for (0 = caller; otherwise allocated).
     function claimAffiliateDgnrs(uint32 id) external {
         // Permissionless: a settled claim only ever credits the affiliate, never the caller.
-        address player = msg.sender;
-        address payee = msg.sender;
-        if (id != 0) (player, payee) = _accountKeys(id);
+        uint32 playerId = id == 0 ? _walletIdOf(msg.sender) : _creditAccountId(id);
+        address payee = playerId == 0 ? msg.sender : _payee(_walletElement(playerId));
 
         uint24 currLevel = level;
         if (currLevel == 0) revert NotStarted();
 
-        uint256 word = mintPacked_[player];
-        uint32 playerId = uint32(word >> BitPackingLib.WALLET_ID_SHIFT);
+        uint256 word = mintPacked_[playerId];
         // Every affiliate registered when its code was first used; no ID means no score.
         if (playerId == 0) revert ScoreTooLow();
         if (_affiliateDgnrsClaimed(currLevel, playerId)) revert AlreadyClaimed();
@@ -265,6 +264,6 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
             }
         }
 
-        emit AffiliateDgnrsClaimed(player, currLevel, msg.sender, score, paid);
+        emit AffiliateDgnrsClaimed(playerId, currLevel, msg.sender, score, paid);
     }
 }

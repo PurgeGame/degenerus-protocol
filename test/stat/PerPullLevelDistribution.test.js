@@ -158,39 +158,6 @@ after(function () {
 // (1) STAT-04 — Phase 261 infrastructure reuse + FLIP_LEVEL_TAG sanity.
 // ---------------------------------------------------------------------------
 
-describe("STAT-04 — Phase 261 infrastructure reuse + FLIP_LEVEL_TAG sanity", function () {
-  it("FLIP_LEVEL_TAG matches keccak256('coin-level')", function () {
-    const recomputed = hre.ethers.keccak256(
-      hre.ethers.toUtf8Bytes("coin-level"),
-    );
-    expect(FLIP_LEVEL_TAG).to.equal(recomputed);
-  });
-
-  it("makeRng / CHI2_CRIT_05 / wilsonHilfertyZ are byte-identical to Phase 261 source", function () {
-    // Structural assertion: the helper bodies live in this file with no
-    // out-of-file dependency. STAT-04 default branch is "reuse Phase 261
-    // infrastructure" — the source-of-truth is test/stat/TraitDistribution.test.js
-    // L48-56 / L87-90 / L97-100. This `it` documents the reuse contract.
-    expect(typeof makeRng).to.equal("function");
-    expect(CHI2_CRIT_05[3]).to.equal(7.815);
-    expect(CHI2_CRIT_05[7]).to.equal(14.067);
-    expect(wilsonHilfertyZ(0, 1)).to.be.a("number");
-
-    // Sanity: makeRng is deterministic (fixed seed → fixed first output).
-    const a = makeRng(0xC012_DEAD)();
-    const b = makeRng(0xC012_DEAD)();
-    expect(a).to.equal(b);
-  });
-
-  it("jsGetRandomTraits returns 4 distinct trait IDs across distinct quadrants (0-63, 64-127, 128-191, 192-255)", function () {
-    const sample = jsGetRandomTraits(0x123456789abcdef0n);
-    expect(sample[0]).to.be.within(0, 63);
-    expect(sample[1]).to.be.within(64, 127);
-    expect(sample[2]).to.be.within(128, 191);
-    expect(sample[3]).to.be.within(192, 255);
-  });
-});
-
 // ---------------------------------------------------------------------------
 // (2) STAT-01 — per-pull level distribution chi² uniformity over 10K samples.
 // ---------------------------------------------------------------------------
@@ -258,35 +225,6 @@ describe("STAT-01 — per-pull level distribution chi² uniformity over 10K samp
 // ---------------------------------------------------------------------------
 // (3) STAT-02 — per-trait share under deterministic `i % 4` rotation.
 // ---------------------------------------------------------------------------
-
-describe("STAT-02 — per-trait share under deterministic `i % 4` rotation", function () {
-  it("i % 4 rotation produces exactly 13/13/12/12 hits per trait per call (degenerate chi² ≈ 0)", function () {
-    // The up-to-50 equal-share pull positions rotate traits by i % 4. Across
-    // the full 50-pull domain:
-    //   trait 0 → i ∈ {0, 4, 8, ..., 48}  → 13 pulls
-    //   trait 1 → i ∈ {1, 5, 9, ..., 49}  → 13 pulls
-    //   trait 2 → i ∈ {2, 6, 10, ..., 46} → 12 pulls
-    //   trait 3 → i ∈ {3, 7, 11, ..., 47} → 12 pulls
-    // 50 = 13 + 13 + 12 + 12. Recompute structurally below.
-    const counts = [0, 0, 0, 0];
-    for (let i = 0; i < PULLS_PER_CALL; i++) counts[i % 4]++;
-    expect(counts).to.deep.equal([13, 13, 12, 12]);
-
-    // The JS-replica chi² for a degenerate distribution is the chi² of these
-    // counts vs uniform expectation (12.5 each). It is a small constant — log
-    // for traceability; assertion is trivially below CHI2_CRIT_05[3]=7.815.
-    const expectedPerTrait = PULLS_PER_CALL / 4; // 12.5
-    let chi2 = 0;
-    for (const c of counts) {
-      const diff = c - expectedPerTrait;
-      chi2 += (diff * diff) / expectedPerTrait;
-    }
-    expect(chi2).to.be.lt(CHI2_CRIT_05[3]); // df=3, crit=7.815 — trivially passes
-    console.log(
-      `      [STAT-02] per-trait counts=[${counts.join(",")}] chi²=${chi2.toFixed(4)} (degenerate, df=3 crit=${CHI2_CRIT_05[3]})`,
-    );
-  });
-});
 
 // ---------------------------------------------------------------------------
 // Boundary harness drive helpers.
@@ -410,7 +348,7 @@ describe("D-IMPL-01 — current trait draw routes level 1 and rotates coin trait
   for (const seed of SEEDS) {
     it(`seed=0x${seed.toString(16)}: level-1 coin shares match the current trait rotation`, async function () {
       const fixture = await loadFixture(deployFullProtocol);
-      const { game, deployer, mockVRF, advanceModule, jackpotModule, others } =
+      const { game, deployer, mockVRF, advanceModule, jackpotDrawModule, others } =
         fixture;
 
       // Level 1's trait-matched FLIP draw rolls the day's main board directly
@@ -478,7 +416,7 @@ describe("D-IMPL-01 — current trait draw routes level 1 and rotates coin trait
       // draw emits a different event, from a separately-salted word. Every
       // pull is deity-backed (no skips), so the emitted events land in pull
       // order starting at index 0 — cap is read from the emitted count.
-      const jackpotInterface = jackpotModule.interface;
+      const jackpotInterface = jackpotDrawModule.interface;
       const callGroups = await harvestJackpotFlipWinByCall(
         receipts,
         jackpotInterface,
@@ -498,7 +436,7 @@ describe("D-IMPL-01 — current trait draw routes level 1 and rotates coin trait
       );
 
       // The jackpot battle's award draw appends its entries on the craps table, one event each.
-      const BATTLE_RUN_TOPIC = hre.ethers.id("JackpotBattleEntry(uint64,uint256,address,uint256,uint32)");
+      const BATTLE_RUN_TOPIC = hre.ethers.id("JackpotBattleEntry(uint64,uint256,uint32,uint256,uint32)");
       let battleRuns = 0;
       for (const { receipt } of receipts) {
         for (const log of receipt.logs) {

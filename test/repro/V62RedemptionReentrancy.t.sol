@@ -64,10 +64,10 @@ contract V62RedemptionReentrancy is RedemptionCloseTools {
     /// @dev sDGNRS funding for the attacker. Drawn from the Reward pool (10% of INITIAL_SUPPLY =
     ///      1e11 tokens = 1e29 wei). Sized large so reentrant burns produce reservations comparable
     ///      to the in-flight stETH (overcoming the design's 175% over-collateralization cushion).
-    uint256 internal constant ATTACKER_FUNDING = 80_000_000_000 ether;
+    uint256 internal constant ATTACKER_FUNDING = 80_000_000_000e12;
 
     /// @dev First (outer) burn amount.
-    uint256 internal constant BURN_AMOUNT = 10_000_000_000 ether;
+    uint256 internal constant BURN_AMOUNT = 10_000_000_000e12;
 
     Attacker internal attacker;
 

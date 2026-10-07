@@ -14,17 +14,13 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @dev The table plus raw readers of the two pass words and one fixture writer.
 contract AccountsTable is CrapsViews {
-    function addressWord(address who) external view returns (uint256) {
-        return _passCredits[who];
-    }
+
 
     function idWord(uint32 id) external view returns (uint256) {
         return _passCreditsById[id];
     }
 
-    function setAddressWord(address who, uint256 word) external {
-        _passCredits[who] = word;
-    }
+
 
     function daySeatOfId(uint24 day, uint32 id) external view returns (uint256) {
         return _loadDaySeat(uint256(day) * _BONUS_SLOTS_PER_DAY, id) & _MASK32;
@@ -48,7 +44,6 @@ contract CrapsAccountsTest is CrapsPins {
     uint256 internal constant ID_SHIFT = 85;
     uint256 internal constant INIT = 1 << 84;
     uint256 internal constant DAY_HIGH_MASK = uint256(0x3F) << 217;
-    bytes32 internal constant SMURF_KEY_TAG = keccak256("degenerus.smurf");
 
     uint8 internal constant SET_BOARD = 0;
     uint8 internal constant AMEND = 1;
@@ -69,8 +64,6 @@ contract CrapsAccountsTest is CrapsPins {
     address internal smurfOp = makeAddr("acct-smurf-operator");
     address internal ownerOp = makeAddr("acct-owner-operator");
     address internal fresh = makeAddr("acct-fresh");
-    address internal smurf;
-    address internal smurfB;
     uint32 internal ownerId;
     uint32 internal walletId;
     uint32 internal selfId;
@@ -95,10 +88,8 @@ contract CrapsAccountsTest is CrapsPins {
         walletId = game.registerWallet(wallet, true);
         selfId = game.registerWallet(self, true);
         game.registerWallet(stranger, true);
-        smurf = _smurfKey(owner, game.walletCount() + 1);
-        smurfId = game.registerSmurf(smurf, ownerId);
-        smurfB = _smurfKey(owner, game.walletCount() + 1);
-        smurfBId = game.registerSmurf(smurfB, ownerId);
+        smurfId = game.registerSmurf(ownerId);
+        smurfBId = game.registerSmurf(ownerId);
         game.setOperatorApproval(walletId, operator, true);
         game.setOperatorApproval(smurfBId, smurfOp, true);
         game.setOperatorApproval(ownerId, ownerOp, true);
@@ -112,14 +103,9 @@ contract CrapsAccountsTest is CrapsPins {
 
     // ── fixtures ─────────────────────────────────────────────────────────────
 
-    function _smurfKey(address o, uint32 id) internal pure returns (address) {
-        return address(uint160(uint256(keccak256(abi.encode(SMURF_KEY_TAG, o, id)))));
-    }
 
-    function _newSmurf() internal returns (address key, uint32 id) {
-        key = _smurfKey(owner, game.walletCount() + 1);
-        id = game.registerSmurf(key, ownerId);
-    }
+
+    function _newSmurf() internal returns (uint32 id) { return game.registerSmurf(ownerId); }
 
     function _wordFor(uint256 mult) internal view returns (uint256) {
         for (uint256 i = 1; i < 500; ++i) {
@@ -137,9 +123,7 @@ contract CrapsAccountsTest is CrapsPins {
         return ((uint256(d) * 8) << 64) | seat;
     }
 
-    function _addrSlot(address who) internal view returns (bytes32) {
-        return keccak256(abi.encode(who, c.passCreditsSlot()));
-    }
+
 
     function _idSlot(uint32 id) internal view returns (bytes32) {
         return keccak256(abi.encode(uint256(id), c.passCreditsByIdSlot()));
@@ -232,29 +216,23 @@ contract CrapsAccountsTest is CrapsPins {
     }
 
     struct Before {
-        uint256 callerWord;
         uint256 callerIdWord;
-        uint256 keyWord;
         uint256 accountWord;
         uint256 payeeBurned;
         uint256 callerBurned;
-        uint256 keyBurned;
     }
 
     /// @dev One authorized call: the account's state moves, the payee burns, the caller's own
     ///      Craps words do not change.
-    function _succeeds(uint8 door, address caller, uint32 idArg, uint32 id, address key, address payee, uint256 arg)
+    function _succeeds(uint8 door, address caller, uint32 idArg, uint32 id, address payee, uint256 arg)
         internal
     {
         uint32 callerId = game.walletIdOf(caller);
         Before memory b = Before({
-            callerWord: c.addressWord(caller),
             callerIdWord: callerId == 0 ? 0 : c.idWord(callerId),
-            keyWord: c.addressWord(key),
             accountWord: c.idWord(id),
             payeeBurned: flip.burned(payee),
-            callerBurned: flip.burned(caller),
-            keyBurned: flip.burned(key)
+            callerBurned: flip.burned(caller)
         });
         if (_paying(door) && door != UPGRADE) {
             vm.expectCall(address(flip), abi.encodeWithSelector(MockFlip.burnCoinForCraps.selector, payee, id));
@@ -271,8 +249,7 @@ contract CrapsAccountsTest is CrapsPins {
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         // The caller's own words are untouched when it acts for another account.
-        if (caller != key) {
-            assertEq(c.addressWord(caller), b.callerWord, "caller's address word untouched");
+        if (callerId != id) {
             if (callerId != 0 && callerId != id) assertEq(c.idWord(callerId), b.callerIdWord, "caller's ID word untouched");
         }
         // Burns: the payee pays; the caller and a smurf key never do.
@@ -280,23 +257,17 @@ contract CrapsAccountsTest is CrapsPins {
             assertGt(flip.burned(payee), b.payeeBurned, "the payee burned");
             if (door != UPGRADE) assertEq(flip.lastCrapsId(), id, "FLIP got the account ID");
             if (caller != payee) assertEq(flip.burned(caller), b.callerBurned, "the caller burned nothing");
-            if (key != payee) assertEq(flip.burned(key), b.keyBurned, "the smurf key burned nothing");
         }
-        if (_boardDoor(door)) _assertBoard(door, id, key, logs);
+        if (_boardDoor(door)) _assertBoard(door, id, logs);
         if (_slipDoor(door)) _assertSlips(id, logs);
-        _assertDoorState(door, id, key, arg, b, logs);
-        _assertIdTruth();
+        _assertDoorState(door, id, arg, b, logs);
     }
 
-    function _assertBoard(uint8 door, uint32 id, address key, Vm.Log[] memory logs) internal view {
+    function _assertBoard(uint8 door, uint32 id, Vm.Log[] memory logs) internal view {
         uint32 chips = _chipsFor(door);
         uint256 byId = c.idWord(id);
         assertTrue(byId & INIT != 0, "ID word initialized");
         assertEq(_boardOf(byId), chips, "the board landed in the account's ID word");
-        uint256 byKey = c.addressWord(key);
-        assertEq(uint32(byKey >> ID_SHIFT), id, "the account key's address word caches the account ID");
-        assertTrue(byKey & INIT != 0, "account address word initialized");
-        assertEq(_boardOf(byKey), chips, "the board landed in the account key's address word");
         assertEq(c.preferredBoardOf(id), chips);
         uint256 seen;
         for (uint256 i; i < logs.length; ++i) {
@@ -328,7 +299,7 @@ contract CrapsAccountsTest is CrapsPins {
         }
     }
 
-    function _assertDoorState(uint8 door, uint32 id, address key, uint256 arg, Before memory b, Vm.Log[] memory logs)
+    function _assertDoorState(uint8 door, uint32 id, uint256 arg, Before memory b, Vm.Log[] memory logs)
         internal
         view
     {
@@ -352,38 +323,30 @@ contract CrapsAccountsTest is CrapsPins {
         } else if (door == CONVERT) {
             assertEq(_normal(w), _normal(b.accountWord) - CrapsPriceLib.HIGH_EV, "normals debited from the account");
             assertEq(_high(w), _high(b.accountWord) + 1, "one high credited to the account");
-            assertEq(c.addressWord(key), b.keyWord, "the pass door wrote no address word");
         } else if (door == RESERVED) {
             assertEq(_high(w), _high(b.accountWord) - 1, "the high pass came off the account");
             assertEq(_normal(w), _normal(b.accountWord) + 1, "the normal pass was banked back to the account");
             uint256 seat = c.daySeatOfId(day + 1, id);
             assertEq(c.betWordOf(_dayBet(day + 1, seat)) & DAY_HIGH_MASK, DAY_HIGH_MASK, "the account's day turned high");
-            assertEq(c.addressWord(key), b.keyWord, "the pass door wrote no address word");
         }
     }
 
     /// @dev ID truth: every nonzero ID cached in an address word is the Game's ID of that key,
     ///      smurf keys and operator-written keys included.
-    function _assertIdTruth() internal view {
-        address[10] memory keys = [owner, smurf, smurfB, wallet, operator, ownerOp, stranger, smurfOp, self, fresh];
-        for (uint256 i; i < keys.length; ++i) {
-            uint32 cached = uint32(c.addressWord(keys[i]) >> ID_SHIFT);
-            if (cached != 0) assertEq(cached, game.walletIdOf(keys[i]), "cached ID is the Game's ID of the key");
-        }
-    }
+
 
     // ── 1–3. The ten doors ───────────────────────────────────────────────────
 
     /// @dev Every row of the account rule for one door.
     function _matrix(uint8 door) internal {
         // A smurf's owner acts for the smurf; the owner pays.
-        _succeeds(door, owner, smurfId, smurfId, smurf, owner, _prep(door, smurfId));
+        _succeeds(door, owner, smurfId, smurfId, owner, _prep(door, smurfId));
         // An operator approved for an ordinary wallet acts for it; the wallet pays.
-        _succeeds(door, operator, walletId, walletId, wallet, wallet, _prep(door, walletId));
+        _succeeds(door, operator, walletId, walletId, wallet, _prep(door, walletId));
         // An operator approved on a smurf's ID acts for it; the owner pays.
-        _succeeds(door, smurfOp, smurfBId, smurfBId, smurfB, owner, _prep(door, smurfBId));
+        _succeeds(door, smurfOp, smurfBId, smurfBId, owner, _prep(door, smurfBId));
         // id = 0 is the self path.
-        _succeeds(door, self, 0, selfId, self, self, _prep(door, selfId));
+        _succeeds(door, self, 0, selfId, self, _prep(door, selfId));
 
         bytes4 notApproved = CrapsBattleStorage.NotApproved.selector;
         _reverts(door, stranger, smurfId, notApproved, "stranger for a smurf");
@@ -406,7 +369,6 @@ contract CrapsAccountsTest is CrapsPins {
             (bool ok,) = _call(door, fresh, 0, 0);
             assertTrue(ok, "a paying self door registers the caller");
             assertGt(game.walletIdOf(fresh), 0);
-            _assertIdTruth();
         }
     }
 
@@ -489,14 +451,14 @@ contract CrapsAccountsTest is CrapsPins {
         assertGt(base, 0, "fixture: an established wallet's price");
 
         // A newcomer smurf key with an established owner pays the five percent, from the owner.
-        game.setMintHistory(smurf, 0);
+        game.setMintHistoryById(smurfId, 0);
         uint256 before = flip.burned(owner);
         vm.prank(owner);
         c.enterBonusBattle(smurfId, 1, BOARD, 1);
         assertEq(flip.burned(owner) - before, base + base / 20, "newcomer smurf pays the premium");
 
         // An established smurf key with a newcomer owner pays the base price.
-        game.setMintHistory(smurfB, uint256(3) << BitPackingLib.LEVEL_COUNT_SHIFT);
+        game.setMintHistoryById(smurfBId, uint256(3) << BitPackingLib.LEVEL_COUNT_SHIFT);
         game.setMintHistory(owner, 0);
         before = flip.burned(owner);
         vm.prank(owner);
@@ -510,13 +472,12 @@ contract CrapsAccountsTest is CrapsPins {
         assertEq(flip.burned(owner) - before, base + base / 20, "newcomer owner's own entry pays the premium");
 
         // The deity bit on a key with no level history exempts it.
-        (address smurfC, uint32 smurfCId) = _newSmurf();
-        game.setMintHistory(smurfC, uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT);
+        uint32 smurfCId = _newSmurf();
+        game.setMintHistoryById(smurfCId, uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT);
         before = flip.burned(owner);
         vm.prank(owner);
         c.enterBonusBattle(smurfCId, 1, BOARD, 1);
         assertEq(flip.burned(owner) - before, base, "a deity key is exempt");
-        assertEq(flip.burned(smurf) + flip.burned(smurfB) + flip.burned(smurfC), 0, "smurf keys never burn");
     }
 
     function test_newcomerUpgradeBurnFollowsTheAccountKey() public {
@@ -529,7 +490,7 @@ contract CrapsAccountsTest is CrapsPins {
         uint256 baseDelta = c.upgradeDayWindows(0, day, UPGRADE_MASK);
         assertGt(baseDelta, 0, "fixture: the upgrade costs something");
 
-        game.setMintHistory(smurf, 0);
+        game.setMintHistoryById(smurfId, 0);
         uint256 before = flip.burned(owner);
         vm.expectCall(address(flip), abi.encodeCall(MockFlip.burnCoin, (owner, baseDelta + baseDelta / 20)));
         vm.prank(owner);
@@ -541,7 +502,6 @@ contract CrapsAccountsTest is CrapsPins {
         game.setMintHistory(owner, 0);
         vm.prank(owner);
         assertEq(c.upgradeDayWindows(smurfBId, day, UPGRADE_MASK), baseDelta, "established smurf, base upgrade");
-        assertEq(flip.burned(smurf) + flip.burned(smurfB), 0);
     }
 
     // ── 5. vaultComp by ID ───────────────────────────────────────────────────
@@ -549,7 +509,7 @@ contract CrapsAccountsTest is CrapsPins {
     function test_vaultCompSeatsAndBanksOnTheRecipientIdAndChargesTheLaneForItsKey() public {
         uint256[5] memory kinds = [uint256(0), 1, 2, 4, 5];
         for (uint256 i; i < kinds.length; ++i) {
-            (address key, uint32 id) = _newSmurf();
+            uint32 id = _newSmurf();
             uint256 code;
             if (kinds[i] == 0) code = _comp(0, id, false, 1, 0);
             else if (kinds[i] == 1) code = _comp(1, id, false, 0, 0);
@@ -557,59 +517,36 @@ contract CrapsAccountsTest is CrapsPins {
             else if (kinds[i] == 4) code = _comp(4, id, false, 0, 2);
             else code = _comp(5, id, false, day + 1, 1) | (uint256(2) << 208);
 
-            vm.expectCall(address(flip), abi.encodeWithSelector(MockFlip.burnCoinForCraps.selector, key, id));
+            uint256 beforeComp = flip.compFor(owner);
+            vm.expectCall(address(flip), abi.encodeWithSelector(MockFlip.burnCoinForCraps.selector, owner, id));
             vm.recordLogs();
             vm.prank(ContractAddresses.VAULT);
             uint256 charged = c.vaultComp(code);
             Vm.Log[] memory logs = vm.getRecordedLogs();
 
             assertGt(charged, 0);
-            assertEq(flip.compFor(key), charged, "the comp lane paid for the recipient key");
+            assertEq(flip.compFor(owner) - beforeComp, charged, "the comp lane paid for the recipient key");
             assertTrue(flip.lastCrapsFlags() & 0x10 != 0, "the comp flag is set");
             if (kinds[i] == 4) {
                 assertEq(_normal(c.idWord(id)), 2, "kind 4 banks into the recipient's ID word");
             } else {
                 _assertSlips(id, logs);
             }
-            assertEq(c.addressWord(key), 0, "a comp writes no address word");
         }
         assertEq(flip.burned(owner), 0, "no wallet pays for a comp");
     }
 
-    function test_vaultCompReadsTheBoardFromTheIdWord() public {
-        vm.prank(owner);
-        c.setPreferredBoard(smurfId, BOARD);
-        // Give the smurf key's address word a different board: the comp must ignore it.
-        vm.prank(wallet);
-        c.setPreferredBoard(0, BOARD_B);
-        uint256 other = c.addressWord(wallet);
-        uint256 tampered = (other & ~(uint256(type(uint32).max) << ID_SHIFT)) | (uint256(smurfId) << ID_SHIFT);
-        c.setAddressWord(smurf, tampered);
 
-        vm.recordLogs();
-        vm.prank(ContractAddresses.VAULT);
-        c.vaultComp(_comp(0, smurfId, false, 1, 0));
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        uint256 betId;
-        for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics.length > 1 && logs[i].topics[0] == CrapsBattleStorage.CrapsSlipPlaced.selector) {
-                betId = _betIdOf(logs[i]);
-            }
-        }
-        assertEq(uint32(c.betWordOf(betId)), smurfId);
-        assertEq(c.betOf(betId).chips, BOARD, "the comp seat plays the ID word's board");
-        assertEq(c.addressWord(smurf), tampered, "the comp left the address word alone");
-    }
 
     function test_vaultCompUpgradesAnExistingSeatForTheRecipientKey() public {
         vm.startPrank(ContractAddresses.VAULT);
         c.vaultComp(_comp(1, smurfId, false, 0, 0));
-        uint256 seated = flip.compFor(smurf);
-        vm.expectCall(address(flip), abi.encodeWithSelector(MockFlip.burnCoinForCraps.selector, smurf, smurfId));
+        uint256 seated = flip.compFor(owner);
+        vm.expectCall(address(flip), abi.encodeWithSelector(MockFlip.burnCoinForCraps.selector, owner, smurfId));
         uint256 charged = c.vaultComp(_comp(3, smurfId, false, day, UPGRADE_MASK));
         vm.stopPrank();
         assertGt(charged, 0);
-        assertEq(flip.compFor(smurf) - seated, charged, "the upgrade comp charged the lane for the smurf key");
+        assertEq(flip.compFor(owner) - seated, charged, "the upgrade comp charged the lane for the smurf key");
         uint256 seat = c.daySeatOfId(day, smurfId);
         assertTrue(c.betWordOf(_dayBet(day, seat)) & (uint256(UPGRADE_MASK) << 217) != 0, "the smurf's seat upgraded");
         assertEq(flip.burned(owner), 0);
@@ -651,16 +588,12 @@ contract CrapsAccountsTest is CrapsPins {
         c.upgradeReservedDay(smurfId, d);
         (, bytes32[] memory writes) = vm.accesses(address(c));
         for (uint256 i; i < writes.length; ++i) {
-            assertTrue(writes[i] != _addrSlot(owner), "no write to the owner's address word");
-            assertTrue(writes[i] != _addrSlot(smurf), "no write to the smurf key's address word");
             assertTrue(writes[i] != _idSlot(ownerId), "no write to the owner's ID word");
         }
         uint256 w = c.idWord(smurfId);
         assertEq(_high(w), 0, "converted high spent on the upgrade");
         assertEq(_normal(w), 1, "the day's normal pass banked back to the smurf");
         assertEq(c.idWord(ownerId), ownerWord, "the owner's credits did not move");
-        assertEq(c.addressWord(owner), 0);
-        assertEq(c.addressWord(smurf), 0);
         assertEq(c.betWordOf(_dayBet(d, c.daySeatOfId(d, smurfId))) & DAY_HIGH_MASK, DAY_HIGH_MASK, "the smurf's day is high");
         assertEq(c.betWordOf(_dayBet(d, c.daySeatOfId(d, ownerId))) & DAY_HIGH_MASK, 0, "the owner's day is not");
 
@@ -676,31 +609,11 @@ contract CrapsAccountsTest is CrapsPins {
 
     // ── 7. The fast path on the account path ─────────────────────────────────
 
-    function _assertFastRepeat(address caller, uint32 id, address key) internal {
-        vm.prank(caller);
-        c.enterBattle(id, custom, BOARD, 1);
-        assertEq(uint32(c.addressWord(key) >> ID_SHIFT), id, "fixture: first bet saved and cached");
 
-        vm.expectCall(address(game), abi.encodeWithSelector(bytes4(keccak256("rngLocked()"))), 0);
-        vm.record();
-        vm.prank(caller);
-        uint256 betId = c.enterBattle(id, custom, BOARD, 1);
-        (, bytes32[] memory writes) = vm.accesses(address(c));
-        for (uint256 i; i < writes.length; ++i) {
-            assertTrue(writes[i] != _addrSlot(key), "SSTORE to the account key's address word");
-            assertTrue(writes[i] != _idSlot(id), "SSTORE to the account's ID word");
-            assertTrue(writes[i] != _addrSlot(caller), "SSTORE to the caller's address word");
-        }
-        assertEq(uint32(c.betWordOf(betId)), id);
-    }
 
-    function test_operatorRepeatBetTakesTheFastPath() public {
-        _assertFastRepeat(operator, walletId, wallet);
-    }
 
-    function test_ownerRepeatBetForASmurfTakesTheFastPath() public {
-        _assertFastRepeat(owner, smurfId, smurf);
-    }
+
+
 
     // ── 8. Stub/body alignment ───────────────────────────────────────────────
 
@@ -817,6 +730,5 @@ contract CrapsAccountsTest is CrapsPins {
             _call(door, caller, id, arg);
         }
         _assertNoOwnerZero(vm.getRecordedLogs());
-        _assertIdTruth();
     }
 }

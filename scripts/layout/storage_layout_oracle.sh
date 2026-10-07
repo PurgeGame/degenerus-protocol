@@ -42,7 +42,7 @@ MODULES=(
   DegenerusGameJackpotDrawModule
 )
 
-inspect_norm() { forge inspect "$1" storageLayout --json 2>/dev/null | "${NORM[@]}"; }
+inspect_norm() { forge inspect "$1" storageLayout --json --skip test 2>/dev/null | "${NORM[@]}"; }
 
 fail=0
 

@@ -275,24 +275,21 @@ interface IDegenerusQuests {
     ///      credit and must be the ID `marketBetGates(player, lvl)` returned in the same
     ///      transaction (PARIMUTUEL is trusted to pass that pair; `mayBet` implies it is nonzero).
     /// @param id Wallet ID of the bettor (from `marketBetGates`).
-    /// @param player The bettor's address (its mint word is the eligibility source).
     /// @param lvl The level the bet was placed on, which the caller already read from the
     ///        game in this same call — passing it through saves re-reading it.
     /// @param reward FLIP to credit on first completion this level.
     /// @return paid The FLIP actually credited (0 when ineligible or already completed).
-    function recordGrowthBet(uint32 id, address player, uint24 lvl, uint256 reward) external returns (uint256 paid);
+    function recordGrowthBet(uint32 id, uint24 lvl, uint256 reward) external returns (uint256 paid);
 
     /// @notice The two gates the parimutuel growth market applies to a bet.
     /// @dev Read-only. earnsReward is recordGrowthBet's eligibility; mayBet is the weaker
-    ///      lifetime bar — has this address ever bought anything. The wallet ID rides the mint
-    ///      word this view already reads (bits 224-255). Every door that writes a nonzero mint
-    ///      field registers the wallet first, so mayBet implies id != 0.
-    /// @param player The player to test.
+    ///      lifetime bar — has this account ever bought anything. Mint statistics are keyed by
+    ///      the supplied wallet ID. Paying doors register the account before updating its record.
     /// @param lvl The level to test against.
     /// @return mayBet True if the player may place a bet at all.
     /// @return earnsReward True if the placement also earns the growth quest.
     /// @return id The player's wallet ID (0 if unregistered; never allocates).
-    function marketBetGates(address player, uint24 lvl)
+    function marketBetGates(uint32 playerId, uint24 lvl)
         external
         view
         returns (bool mayBet, bool earnsReward, uint32 id);

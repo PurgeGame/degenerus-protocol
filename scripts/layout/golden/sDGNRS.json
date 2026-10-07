@@ -42,10 +42,10 @@
   {
     "bytes": "32",
     "encoding": "mapping",
-    "label": "pendingRedemptions",
+    "label": "_claimLocations",
     "offset": 0,
     "slot": 5,
-    "typeLabel": "mapping(uint32 => mapping(uint32 => struct sDGNRS.PendingRedemption))"
+    "typeLabel": "mapping(uint32 => uint128)"
   },
   {
     "bytes": "32",
@@ -117,22 +117,14 @@
     "label": "_batchPlayers",
     "offset": 0,
     "slot": 9,
-    "typeLabel": "uint256[][2]"
+    "typeLabel": "uint128[][2]"
   },
   {
     "bytes": "32",
     "encoding": "mapping",
-    "label": "_redemptionDayValue",
+    "label": "_parkedRedemptions",
     "offset": 0,
     "slot": 11,
-    "typeLabel": "mapping(address => uint256)"
-  },
-  {
-    "bytes": "32",
-    "encoding": "mapping",
-    "label": "_parkedRedemptionWord",
-    "offset": 0,
-    "slot": 12,
-    "typeLabel": "mapping(uint32 => mapping(uint32 => uint256))"
+    "typeLabel": "mapping(uint32 => mapping(uint32 => struct sDGNRS.ParkedRedemption))"
   }
 ]

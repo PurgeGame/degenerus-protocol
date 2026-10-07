@@ -66,8 +66,8 @@ interface IVaultOwnership {
 /// @dev Mint-history entry pricing, account resolution and the daily RNG lock.
 interface IGameCraps {
     /// @notice Raw mint history: lifetime count, last mint level and deity ownership. Read for
-    ///         the ACCOUNT key (newcomer pricing follows the account, a smurf's hash key included).
-    function mintPackedFor(address player) external view returns (uint256);
+    ///         the account ID (newcomer pricing follows its own mint history).
+    function mintPackedOfId(uint32 id) external view returns (uint256);
     /// @notice Resolve account `id` for `caller`: key, payee and whether `caller` may act for it
     ///         (its key, a smurf's owner, or an approved operator). Reverts for an unallocated
     ///         or zero `id`; never reverts on authorization. Player doors require `authorized`;
@@ -387,8 +387,8 @@ contract CrapsBattle is CrapsBattleStorage {
     /// @custom:reverts NotApproved If the caller may not act for account `id`.
     function setPreferredBoard(uint32 id, uint32 chips) external {
         _upToSeven(chips);
-        (address key,, uint256 word) = _door(id, false);
-        if (!_rememberBoard(key, word, chips)) revert BetLocked();
+        (, uint256 word) = _door(id, false);
+        if (!_rememberBoard(word, chips)) revert BetLocked();
     }
 
     /// @notice A wallet's saved board in the paid-entry encoding, by Game wallet ID; unset and
@@ -402,19 +402,18 @@ contract CrapsBattle is CrapsBattleStorage {
     ///      Any other `id` is resolved by the Game, which reverts for an unallocated ID, and the
     ///      caller must be authorized for it. Game state follows the account; burns come from
     ///      the payee (a smurf's owner, otherwise the key).
-    /// @return key The account key, whose address word carries the board and the ID cache.
     /// @return payee The address the door's FLIP burns come from.
-    /// @return word The key's address word with the account's wallet ID filled in.
-    function _door(uint32 id, bool allocate) private returns (address key, address payee, uint256 word) {
+    /// @return word The pass/preference word with the ID added in memory for the door.
+    function _door(uint32 id, bool allocate) private returns (address payee, uint256 word) {
         if (id == 0) {
             word = _walletWord(msg.sender, allocate);
-            return (msg.sender, msg.sender, word);
+            return (msg.sender, word);
         }
         bool authorized;
-        (key, payee, authorized) = _resolveAccount(id);
+        (, payee, authorized) = _resolveAccount(id);
         if (!authorized) revert NotApproved();
-        // A cached ID equals `id`: both come from the Game's canonical pair for `key`.
-        word = _passCredits[key] | (uint256(id) << CrapsPreferenceLib.ID_SHIFT);
+        // Carry the selected ID in memory; preference saves preserve only the stored lanes.
+        word = (_passCreditsById[id] & ~(uint256(type(uint32).max) << CrapsPreferenceLib.ID_SHIFT)) | (uint256(id) << CrapsPreferenceLib.ID_SHIFT);
     }
 
     /// @dev The Game's `resolveAccount` for the caller: key, payee and authorization of `id`.
@@ -425,11 +424,11 @@ contract CrapsBattle is CrapsBattleStorage {
     /// @dev A paying door's prologue: its account (`_door`, allocating for a new caller) and the
     ///      packed burn account — the payee, the wallet ID, and the newcomer rate when the
     ///      account's own mint history earns it.
-    function _paidDoor(uint32 id) private returns (address key, uint256 word, uint256 account) {
+    function _paidDoor(uint32 id) private returns (uint256 word, uint256 account) {
         address payee;
-        (key, payee, word) = _door(id, true);
+        (payee, word) = _door(id, true);
         account = uint256(uint160(payee)) | ((word >> CrapsPreferenceLib.ID_SHIFT) << _ACCOUNT_ID_SHIFT);
-        if (_newcomer(key)) account |= _ACCOUNT_NEWCOMER;
+        if (_newcomer(uint32(word >> CrapsPreferenceLib.ID_SHIFT))) account |= _ACCOUNT_NEWCOMER;
     }
 
     /// @dev Every board door's epilogue, on the account's address word as its prologue read it
@@ -439,7 +438,7 @@ contract CrapsBattle is CrapsBattleStorage {
     ///      the daily lock is on. Nothing between the prologue and this epilogue writes the
     ///      account's address word.
     /// @return saved False only when the daily lock prevents a first save or a changed board.
-    function _rememberBoard(address key, uint256 word, uint32 chips) private returns (bool saved) {
+    function _rememberBoard(uint256 word, uint32 chips) private returns (bool saved) {
         uint256 field = CrapsPreferenceLib.compress(chips)
             | (CrapsPreferenceLib.INITIALIZED >> CrapsPreferenceLib.SHIFT);
         // Compare the twenty board bits and the adjacent initialized bit together.
@@ -447,12 +446,10 @@ contract CrapsBattle is CrapsBattleStorage {
         saved = !IGameCraps(_GAME).rngLocked();
         if (saved) {
             uint32 id = uint32(word >> CrapsPreferenceLib.ID_SHIFT);
-            word = (word & ~CrapsPreferenceLib.MASK) | (field << CrapsPreferenceLib.SHIFT);
             uint256 byId = _passCreditsById[id];
             _passCreditsById[id] = (byId & ~CrapsPreferenceLib.MASK) | (field << CrapsPreferenceLib.SHIFT);
             emit CrapsPreferredBoardSet(id, chips);
         }
-        _passCredits[key] = word;
     }
 
     /// @notice Name or re-spread zero through seven chips on an open slip.
@@ -475,7 +472,7 @@ contract CrapsBattle is CrapsBattleStorage {
     /// @custom:reverts NoWalletId If the Game has no wallet ID for the caller.
     /// @custom:reverts NotApproved If the caller may not act for account `id`.
     function amendSlip(uint32 id, uint256 betId, uint32 chips) public {
-        (address key,, uint256 word) = _door(id, false);
+        (, uint256 word) = _door(id, false);
         uint256 header = _loadBet(betId);
         if (uint32(header) != uint32(word >> CrapsPreferenceLib.ID_SHIFT)) revert NotYourBet();
         uint256 slot = betId >> 64;
@@ -506,7 +503,7 @@ contract CrapsBattle is CrapsBattleStorage {
         _storeBet(betId, (header & ~(_BET_CHIPS_MASK << _BET_CHIPS_SHIFT)) | (packed << _BET_CHIPS_SHIFT));
 
         emit CrapsSlipAmended(betId, packed);
-        _rememberBoard(key, word, chips);
+        _rememberBoard(word, chips);
     }
 
     /// @dev One ticket, every window of the day. Nothing per-window is written here: the field
@@ -829,9 +826,9 @@ contract CrapsBattle is CrapsBattleStorage {
     /// @custom:reverts BoardPlaysBothSides If the ticket names both the pass line and don't pass.
     /// @custom:reverts NotApproved If the caller may not act for account `id`.
     function enterBattle(uint32 id, uint64 slot, uint32 chips, uint16 multiple) public returns (uint256 betId) {
-        (address key, uint256 word, uint256 account) = _paidDoor(id);
+        (uint256 word, uint256 account) = _paidDoor(id);
         betId = _enterWindow(_joinableSlot(slot), chips, multiple, account, 0);
-        _rememberBoard(key, word, chips);
+        _rememberBoard(word, chips);
     }
 
     /// @notice Shut a custom battle and take the table it will settle on. Permissionless once its
@@ -1176,8 +1173,8 @@ contract CrapsBattle is CrapsBattleStorage {
     ///      game capital or rewards. It reads the account key's mint history: established
     ///      accounts and deity holders need only that read, and a level lookup is needed only to
     ///      check recency for an account with some recorded minting.
-    function _newcomer(address key) internal view returns (bool) {
-        uint256 packed = IGameCraps(_GAME).mintPackedFor(key);
+    function _newcomer(uint32 id) internal view returns (bool) {
+        uint256 packed = IGameCraps(_GAME).mintPackedOfId(id);
         if (uint24(packed >> BitPackingLib.LEVEL_COUNT_SHIFT) > 2
             || ((packed >> BitPackingLib.HAS_DEITY_PASS_SHIFT) & 1) != 0) return false;
         uint256 lastMintLevel = uint24(packed);
@@ -1214,11 +1211,11 @@ contract CrapsBattle is CrapsBattleStorage {
     /// @custom:reverts NoWalletId If the Game has no wallet ID for the caller.
     /// @custom:reverts NotApproved If the caller may not act for account `id`.
     function applyCrapsPasses(uint32 id, uint24 startDay, uint8 count, bool high, uint32 chips) public {
-        (address key,, uint256 word) = _door(id, false);
+        (, uint256 word) = _door(id, false);
         id = uint32(word >> CrapsPreferenceLib.ID_SHIFT);
         _takeCredits(id, high, count);
         _reserveRun(startDay, count, high, chips, 0, id);
-        _rememberBoard(key, word, chips);
+        _rememberBoard(word, chips);
     }
 
     /// @notice Buy `count` consecutive future days outright for account `id` (0 = the caller),
@@ -1245,7 +1242,7 @@ contract CrapsBattle is CrapsBattleStorage {
     /// @custom:reverts BoardPlaysBothSides If it names both the pass line and don't pass.
     /// @custom:reverts NotApproved If the caller may not act for account `id`.
     function buyFutureCrapsDays(uint32 id, uint24 startDay, uint8 count, bool high, uint32 chips) public {
-        (address key, uint256 word, uint256 account) = _paidDoor(id);
+        (uint256 word, uint256 account) = _paidDoor(id);
         if (count == 0) revert BadPassCount();
         uint8 boonMask;
         unchecked {
@@ -1262,7 +1259,7 @@ contract CrapsBattle is CrapsBattleStorage {
         // nothing, and the rule lives in one place instead of being restated in a pre-walk that
         // could drift from the writer.
         _reserveRun(startDay, count, high, chips, boonMask, uint32(word >> CrapsPreferenceLib.ID_SHIFT));
-        _rememberBoard(key, word, chips);
+        _rememberBoard(word, chips);
     }
 
     /// @notice Convert account `id`'s uncommitted normal pass credits (0 = the caller) into
@@ -1403,7 +1400,7 @@ contract CrapsBattle is CrapsBattleStorage {
     /// @custom:reverts NothingToUpgrade If no selected period is newly upgradable.
     /// @custom:reverts NotApproved If the caller may not act for account `id`.
     function upgradeDayWindows(uint32 id, uint24 day, uint8 periodMask) external returns (uint256 burned) {
-        (,, uint256 account) = _paidDoor(id);
+        (, uint256 account) = _paidDoor(id);
         return _upgradeDayWindows(account, day, periodMask, false);
     }
 
@@ -1493,8 +1490,8 @@ contract CrapsBattle is CrapsBattleStorage {
         uint32 id = uint32(code);
         // A comp pays nothing for its recipient, so the recipient must be an allocated account:
         // the Game's resolution reverts otherwise. Only the key is used; the comp lane pays.
-        (address key,,) = _resolveAccount(id);
-        uint256 account = uint256(uint160(key)) | (uint256(id) << _ACCOUNT_ID_SHIFT);
+        (, address payee,) = _resolveAccount(id);
+        uint256 account = uint256(uint160(payee)) | (uint256(id) << _ACCOUNT_ID_SHIFT);
         uint256 kind = (code >> _COMP_KIND_SHIFT) & 0xFF;
         bool high = code & _COMP_HIGH_BIT != 0;
         uint24 arg = uint24(code >> _COMP_ARG_SHIFT);
@@ -1712,10 +1709,10 @@ contract CrapsBattle is CrapsBattleStorage {
         public
         returns (uint256 betId)
     {
-        (address key, uint256 word, uint256 account) = _paidDoor(id);
+        (uint256 word, uint256 account) = _paidDoor(id);
         Window memory w = _joinableWindow(period);
         betId = _enterWindow(w, chips, multiple, account, 0);
-        _rememberBoard(key, word, chips);
+        _rememberBoard(word, chips);
     }
 
     /// @notice Enter EVERY one of today's windows for account `id` (0 = the caller) with the same
@@ -1735,9 +1732,9 @@ contract CrapsBattle is CrapsBattleStorage {
     /// @custom:reverts BonusPeriodSpent If the day's first window has already closed.
     /// @custom:reverts NotApproved If the caller may not act for account `id`.
     function enterBonusDay(uint32 id, uint32 chips, uint16 multiple) public returns (uint256 placed) {
-        (address key, uint256 word, uint256 account) = _paidDoor(id);
+        (uint256 word, uint256 account) = _paidDoor(id);
         (placed,) = _enterToday(chips, multiple, account, 0);
-        _rememberBoard(key, word, chips);
+        _rememberBoard(word, chips);
     }
 
     /// @dev Today's whole-day ticket for `account`, and what it cost: the paid door and the comp

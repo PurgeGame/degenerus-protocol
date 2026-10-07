@@ -100,10 +100,11 @@ contract QueueHost is DegenerusGame {
 
     /// @dev The Whale/Afking grant door, as their modules call it.
     function grant(address player, uint256 amountWei, uint16 score, bool boost, uint8 count) external {
+        (uint32 id,) = _registerWallet(player, amountWei);
         (bool ok, bytes memory data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(
             abi.encodeWithSignature(
-                "recordCoverBox(address,uint256,uint16,uint24,bool,uint8)",
-                player, amountWei, score, level + 1, boost, count
+                "recordCoverBox(uint32,uint256,uint16,uint24,bool,uint8)",
+                id, amountWei, score, level + 1, boost, count
             )
         );
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
@@ -113,7 +114,7 @@ contract QueueHost is DegenerusGame {
     function direct(address player, uint32 id, uint256 amount, uint256 rngWord) external {
         (bool ok, bytes memory data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(
             abi.encodeWithSignature(
-                "resolveLootboxDirect(address,uint32,uint256,uint256,uint16)", player, id, amount, rngWord, uint16(0)
+                "resolveLootboxDirect(uint32,uint256,uint256,uint16)", id, amount, rngWord, uint16(0)
             )
         );
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
@@ -122,7 +123,7 @@ contract QueueHost is DegenerusGame {
     function afkingBox(address player, uint32 id, uint256 amount, uint24 day, uint256 rngWord) external {
         (bool ok, bytes memory data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(
             abi.encodeWithSignature(
-                "resolveAfkingBox(address,uint32,uint256,uint24,uint256,uint16)", player, id, amount, day, rngWord,
+                "resolveAfkingBox(uint32,uint256,uint24,uint256,uint16)", id, amount, day, rngWord,
                 uint16(0)
             )
         );
@@ -136,8 +137,8 @@ contract QueueHost is DegenerusGame {
     {
         (bool ok, bytes memory data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(
             abi.encodeWithSignature(
-                "resolveRedemptionLootbox(address,uint32,uint256,uint256,uint16,uint32)",
-                player, id, amount, rngWord, uint16(0), batchId
+                "resolveRedemptionLootbox(uint32,uint256,uint256,uint16,uint32)",
+                id, amount, rngWord, uint16(0), batchId
             )
         );
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
@@ -177,7 +178,7 @@ contract QueueHost is DegenerusGame {
             uint256 len = uint256(id) + 1;
             assembly ("memory-safe") { sstore(wallets.slot, len) }
         }
-        mintPacked_[who] = (mintPacked_[who] & ~(uint256(type(uint32).max) << 224)) | (uint256(id) << 224);
+        walletIds[who] = id;
     }
 
     /// @dev Point wallet ID `id` at another account key (an identity edit no production path makes),

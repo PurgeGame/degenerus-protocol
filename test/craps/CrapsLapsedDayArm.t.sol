@@ -46,6 +46,7 @@ contract CrapsLapsedDayArmTest is CrapsPins {
     function setUp() public {
         _installPins();
         game.registerWallet(alice, true);
+        game.registerWallet(dave, true);
         craps = new LapseArmHarness();
         vm.warp(block.timestamp + 1 days);
         _setIndex(0);
@@ -56,8 +57,8 @@ contract CrapsLapsedDayArmTest is CrapsPins {
         flip.setCompLane(100_000_000);
     }
 
-    function _code(uint8 kind, address to, bool high, uint24 arg, uint8 count) internal pure returns (uint256) {
-        return uint256(uint160(to)) | (uint256(kind) << 160) | (high ? (1 << 168) : 0) | (uint256(arg) << 176)
+    function _code(uint8 kind, address to, bool high, uint24 arg, uint8 count) internal returns (uint256) {
+        return uint256(_idFor(to)) | (uint256(kind) << 160) | (high ? (1 << 168) : 0) | (uint256(arg) << 176)
             | (uint256(count) << 200);
     }
 

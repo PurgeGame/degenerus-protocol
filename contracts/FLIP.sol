@@ -96,7 +96,7 @@ contract FLIP {
     /// @param player The key of the account the entry belongs to.
     /// @param amountBurned The amount burned (0 decimals).
     /// @param entryId The wallet's accumulated battle entry id.
-    event DecimatorBurn(address indexed player, uint256 amountBurned, uint64 entryId);
+    event DecimatorBurn(uint32 indexed player, uint256 amountBurned, uint64 entryId);
 
     /// @notice Emitted when virtual coin is escrowed to the vault reserve.
     /// @param sender The account tied to the escrow: the original transfer sender when routed to VAULT via _transfer, address(0) on a direct mint to VAULT, or GAME for tombstoneAtGameOver.
@@ -110,7 +110,7 @@ contract FLIP {
     /// @notice The craps comp lane paid for an entry, passes, an upgrade or a battle donation.
     /// @param player Who was comped, or the vault for a battle donation.
     /// @param amount The FLIP whole tokens charged to the lane.
-    event CrapsCompSpent(address indexed player, uint256 amount);
+    event CrapsCompSpent(uint32 indexed player, uint256 amount);
 
     /// @notice A completed craps battle fed the comp lane.
     /// @param amount Two percent of the field's eligible bankroll.
@@ -696,7 +696,7 @@ contract FLIP {
             unchecked {
                 _crapsCompAllowance = lane - charge;
             }
-            emit CrapsCompSpent(player, gross);
+            emit CrapsCompSpent(id, gross);
             return 0;
         }
 
@@ -848,7 +848,7 @@ contract FLIP {
         uint256 baseAmount = amount + (completed ? questReward : 0);
 
         // Activity score bonus (whole points); the curve self-saturates at its cap.
-        (uint256 bonusPoints, ) = degenerusGame.playerActivityScoreCached(key);
+        uint256 bonusPoints = degenerusGame.playerActivityScoreCachedById(id);
         uint256 decBurnMultBps = ActivityCurveLib.decBattleMultBps(bonusPoints);
 
         // Decimator boon: percent boost on base amount (capped to 50k FLIP).
@@ -859,9 +859,9 @@ contract FLIP {
             baseAmount += boost;
         }
 
-        uint64 entryId = degenerusGame.recordDecBurn(key, lvl, baseAmount, decBurnMultBps, chips);
+        uint64 entryId = degenerusGame.recordDecBurn(id, lvl, baseAmount, decBurnMultBps, chips);
 
-        emit DecimatorBurn(key, amount, entryId);
+        emit DecimatorBurn(id, amount, entryId);
     }
 
 }

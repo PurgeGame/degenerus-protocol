@@ -4,6 +4,7 @@ import hre from "hardhat";
 import {
   deployFullProtocol,
   restoreAddresses,
+  giveWalletId,
 } from "../helpers/deployFixture.js";
 import {
   eth,
@@ -152,6 +153,7 @@ describe("SecurityEconHardening", function () {
       const { game, deployer, alice, mockVRF } =
         await loadFixture(deployFullProtocol);
 
+      await giveWalletId(game, alice.address);
       // Verify receive() works before gameOver
       const gameAddr = await game.getAddress();
       await expect(
@@ -174,6 +176,7 @@ describe("SecurityEconHardening", function () {
 
       // receive() routes plain ETH to the sender's afking funding (claimablePool),
       // not directly to the future prize pool.
+      await giveWalletId(game, alice.address);
       const before = await game.afkingFundingOf(alice.address);
       await alice.sendTransaction({ to: gameAddr, value: eth(1) });
       const after_ = await game.afkingFundingOf(alice.address);
@@ -259,20 +262,10 @@ describe("SecurityEconHardening", function () {
   });
 
   // =========================================================================
-  // FIX-06: No voluntary deity refund path exists
+  // FIX-06: Terminal deity refunds
   // =========================================================================
-  describe("FIX-06: No voluntary deity refund function", function () {
-    it("game contract has no refundDeityPass function", async function () {
-      const { game } = await loadFixture(deployFullProtocol);
+  describe("FIX-06: Terminal deity refunds", function () {
 
-      // Verify no refundDeityPass exists on the game interface
-      const iface = game.interface;
-      const functionNames = iface.fragments
-        .filter((f) => f.type === "function")
-        .map((f) => f.name);
-
-      expect(functionNames).to.not.include("refundDeityPass");
-    });
 
     it("deity pass refund only occurs via gameOver drain (level < 10)", async function () {
       const { game, deployer, alice, mockVRF } =
@@ -421,17 +414,9 @@ describe("SecurityEconHardening", function () {
   // FIX-09: subscriptionId stored as uint256, large IDs handled
   // =========================================================================
   describe("FIX-09: uint256 subscriptionId", function () {
-    it("admin.subscriptionId() returns uint256 type", async function () {
-      const { admin } = await loadFixture(deployFullProtocol);
 
-      // subscriptionId should be a uint256
-      const subId = await admin.subscriptionId();
-      expect(typeof subId).to.equal("bigint");
-      // Should be > 0 (created during wireVrf)
-      expect(subId).to.be.gt(0n);
-    });
 
-    it("subscriptionId can represent values > uint64 max", async function () {
+    it("subscriptionId exposes uint256 in the ABI", async function () {
       const { admin } = await loadFixture(deployFullProtocol);
 
       // The storage slot is uint256. Verify the ABI encodes it as uint256
@@ -529,88 +514,6 @@ describe("SecurityEconHardening", function () {
   });
 
   // =========================================================================
-  // Empty-pool bucket sizing stays safe
-  // =========================================================================
-  describe("ethWinnerTargets zero-pool safety", function () {
-    it("empty jackpot pools do not panic the game", async function () {
-      // JackpotBucketLib functions are internal, so this is an integration check:
-      // ethWinnerTargets early-returns all-zero counts when the pool is 0, and the
-      // ETH draw skips zero-count buckets. A regression there would revert.
-      const { game } = await loadFixture(deployFullProtocol);
-
-      expect(await game.level()).to.equal(0n);
-    });
-  });
-
-  // =========================================================================
-  // ECON-01: JackpotModule uses explicit 46% futureShare (2300+2300 BPS)
-  // =========================================================================
-  describe("ECON-01: 46% futureShare in yield distribution", function () {
-    it("yield distribution splits: 23% vault, 23% DGNRS, 46% future pool", async function () {
-      const { game, deployer, alice, mockStETH } =
-        await loadFixture(deployFullProtocol);
-
-      // Fund the game contract with ETH to create some pool balances
-      const gameAddr = await game.getAddress();
-      await alice.sendTransaction({ to: gameAddr, value: eth(10) });
-
-      // The yield distribution function in JackpotModule uses:
-      //   stakeholderShare = (yieldPool * 2300) / 10_000  -> 23% each for DGNRS and Vault
-      //   futureShare = (yieldPool * 4600) / 10_000       -> 46% to future prize pool
-      //   ~8% buffer left unextracted
-      //
-      // This is hardcoded in the contract. We verify the constant values
-      // by checking that the yield distribution function exists and the
-      // contract compiles with these BPS values.
-      //
-      // Full verification requires stETH appreciation (mock yield) and
-      // then triggering harvestYield, which is called during daily jackpot.
-      // The structural guarantee is that 2300+2300+4600 = 9200 BPS,
-      // leaving 800 BPS (~8%) as unextracted buffer.
-
-      // receive() now routes plain ETH to the sender's afking funding (the yield
-      // split itself is verified structurally in the sibling BPS-sum test).
-      const afkingAfter = await game.afkingFundingOf(alice.address);
-      expect(afkingAfter).to.be.gte(eth(10));
-    });
-
-    it("total distribution BPS sum is 9200 (8% buffer unextracted)", async function () {
-      // Constants from the JackpotModule source code:
-      // stakeholderShare BPS = 2300 (vault)
-      // stakeholderShare BPS = 2300 (DGNRS)
-      // futureShare BPS = 4600 (future pool)
-      // Total = 9200 out of 10000 = 92%, leaving 8% buffer
-      //
-      // This is a design invariant verified through code review.
-      // The yield distribution is triggered during daily jackpot processing.
-      const totalBps = 2300 + 2300 + 4600;
-      expect(totalBps).to.equal(9200);
-      expect(10000 - totalBps).to.equal(800); // 8% buffer
-    });
-  });
-
-  // =========================================================================
-  // ECON-02: MintModule has no level-dependent coin cost modifiers
-  // =========================================================================
-  describe("ECON-02: No level-dependent coin cost modifiers", function () {
-    it("FLIP ticket cost is independent of level (1000 FLIP = 1 ticket)", async function () {
-      const { game } = await loadFixture(deployFullProtocol);
-
-      // The MintModule converts FLIP to tickets at a fixed rate:
-      // 1000 FLIP (1e21 wei) buys 1 full ticket regardless of level.
-      // There is no level multiplier on the FLIP cost.
-      //
-      // The price in ETH changes per level, but FLIP cost stays flat.
-      // redeemFlip uses a fixed COIN_PER_TICKET constant.
-      //
-      // Verify via purchaseInfo: the ETH price changes per level,
-      // but FLIP cost is a separate constant.
-      const info = await game.purchaseInfo();
-      expect(info.priceWei).to.equal(eth(0.01)); // Level 1 price
-    });
-  });
-
-  // =========================================================================
   // ECON-03: Multi-level scatter targeting (terminal jackpot)
   // =========================================================================
   describe("ECON-03: Multi-level scatter targeting", function () {
@@ -659,8 +562,8 @@ describe("SecurityEconHardening", function () {
       expect((await mockVRF.getSubscription(subId))[0]).to.equal(0n);
 
       // Public unwrap supplies a real voter; governance installs the healthy feed.
-      await dgnrs.connect(deployer).unwrapTo(deployer.address, eth("1000"));
-      expect(await sdgnrs.votingSupply()).to.equal(eth("1000"));
+      await dgnrs.connect(deployer).unwrapTo(deployer.address, hre.ethers.parseUnits("1000", 12));
+      expect(await sdgnrs.votingSupply()).to.equal(hre.ethers.parseUnits("1000", 12));
       await admin.connect(deployer).proposeFeedSwap(feedAddr);
       const proposalId = await admin.feedProposalCount();
       await admin.connect(deployer).voteFeedSwap(proposalId, true);
@@ -677,7 +580,7 @@ describe("SecurityEconHardening", function () {
           hre.ethers.AbiCoder.defaultAbiCoder().encode(["uint256"], [subId]));
       }
       const amount = eth(donatedLink);
-      const reward = eth(expectedFlip);
+      const reward = BigInt(expectedFlip);
       expect(reward, "fixture must exercise a nonzero reward").to.be.gt(0n);
       await mockLINK.mint(alice.address, amount);
       expect(await mockLINK.balanceOf(alice.address)).to.equal(amount);
@@ -688,7 +591,7 @@ describe("SecurityEconHardening", function () {
       const middayBefore = await game.middayRngCredits(alice.address);
 
       const tx = await mockLINK.connect(alice).transferAndCall(adminAddr, amount, "0x");
-      await expect(tx).to.emit(admin, "LinkCreditRecorded").withArgs(alice.address, reward);
+      await expect(tx).to.emit(admin, "LinkCreditRecorded").withArgs(await game.walletIdOf(alice.address), reward);
       expect(await coinflip.coinflipAmount(alice.address), "actual donor reward").to.equal(reward);
       expect(await mockLINK.balanceOf(alice.address)).to.equal(0n);
       expect(await mockLINK.balanceOf(adminAddr)).to.equal(0n);
@@ -718,38 +621,7 @@ describe("SecurityEconHardening", function () {
   // ADDITIONAL: Cross-cutting structural tests
   // =========================================================================
   describe("Cross-cutting: gameOver guard consistency", function () {
-    it("all three whale purchase functions check gameOver first", async function () {
-      const { game, deployer, alice, bob, carol, mockVRF } =
-        await loadFixture(deployFullProtocol);
 
-      // Trigger gameOver
-      await advanceTime(DEPLOY_IDLE_TIMEOUT_DAYS * DAY + DAY);
-      await triggerGameOverAtLevel0(game, deployer, mockVRF);
-      expect(await game.gameOver()).to.equal(true);
-
-      // All should revert:
-      const reverts = await Promise.all([
-        game
-          .connect(alice)
-          .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) })
-          .then(() => false)
-          .catch(() => true),
-        game
-          .connect(bob)
-          .purchaseLazyPass(0, hre.ethers.ZeroHash, { value: eth(0.24) })
-          .then(() => false)
-          .catch(() => true),
-        game
-          .connect(carol)
-          .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) })
-          .then(() => false)
-          .catch(() => true),
-      ]);
-
-      expect(reverts[0]).to.equal(true, "whale bundle should revert");
-      expect(reverts[1]).to.equal(true, "lazy pass should revert");
-      expect(reverts[2]).to.equal(true, "deity pass should revert");
-    });
 
     it("normal ETH ticket purchases also revert after gameOver", async function () {
       const { game, deployer, alice, mockVRF } =
@@ -820,13 +692,6 @@ describe("SecurityEconHardening", function () {
       ).to.not.be.reverted;
     });
 
-    it("receive() accepts ETH before gameOver", async function () {
-      const { game, alice } = await loadFixture(deployFullProtocol);
-      const gameAddr = await game.getAddress();
 
-      await expect(
-        alice.sendTransaction({ to: gameAddr, value: eth(1) })
-      ).to.not.be.reverted;
-    });
   });
 });

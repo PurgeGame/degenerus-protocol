@@ -14,7 +14,7 @@ import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 ///         donor's transfer reverts; an existing donor is still admitted and credited.
 contract LinkDonationWalletIdsTest is DeployProtocol {
     bytes32 private constant WALLET_REGISTERED = keccak256("WalletRegistered(uint32,address)");
-    bytes32 private constant LINK_CREDIT = keccak256("LinkCreditRecorded(address,uint256)");
+    bytes32 private constant LINK_CREDIT = keccak256("LinkCreditRecorded(uint32,uint256)");
     bytes32 private constant STAKE_UPDATED = keccak256("CoinflipStakeUpdated(uint32,uint24,uint256,uint256)");
 
     function setUp() public {
@@ -35,9 +35,7 @@ contract LinkDonationWalletIdsTest is DeployProtocol {
         return uint32(uint256(vm.load(address(coinflip), slot)) >> ((uint256(day) & 7) * 32));
     }
 
-    function _cachedId(address p) internal view returns (uint32) {
-        return uint32(uint256(vm.load(address(coinflip), keccak256(abi.encode(p, uint256(2))))) >> 184);
-    }
+
 
     /// @dev The donor's own ERC-677 transfer into the Admin.
     function _donate(address donor, uint256 amount) internal {
@@ -58,14 +56,14 @@ contract LinkDonationWalletIdsTest is DeployProtocol {
     function _linkCredit(Vm.Log[] memory logs, address donor) internal view returns (uint256 credit) {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(admin) || logs[i].topics[0] != LINK_CREDIT) continue;
-            if (address(uint160(uint256(logs[i].topics[1]))) != donor) continue;
+            if (uint32(uint256(logs[i].topics[1])) != game.walletIdOf(donor)) continue;
             credit = abi.decode(logs[i].data, (uint256));
         }
     }
 
     /// @notice A first donation registers the donor once (through creditMiddayRng), banks the
     ///         mid-day credit and stakes the FLIP reward under the returned ID; Coinflip's
-    ///         address-keyed cache stays empty. A repeat donation reuses the ID.
+    ///         stake ledger receives the credit. A repeat donation reuses the ID.
     function test_NewDonor_RegistersThroughMiddayCredit_CreditedById() public {
         address donor = makeAddr("link_donor");
         uint32 expectedId = uint32(_walletCount());
@@ -87,7 +85,7 @@ contract LinkDonationWalletIdsTest is DeployProtocol {
         assertGt(credit, 0, "the donation earned a FLIP reward");
         assertEq(_lane(target, expectedId), credit, "reward staked under the donor's ID");
         assertEq(coinflip.coinflipAmount(donor), credit);
-        assertEq(_cachedId(donor), 0, "an ID credit never touches the address-keyed state");
+
         bool stake;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(coinflip) || logs[i].topics[0] != STAKE_UPDATED) continue;

@@ -30,7 +30,7 @@ contract RecordLifetimeHarness is TicketLevelPrep, WalletSeed {
         for (uint256 i; i < length; ++i) {
             uint32 ownerId = _tqPositionAt(q, i);
             uint32 n = uint32(_entryPacked(key, ownerId) >> 8);
-            if (n != 0) _bucketAppendRun(_traitBufferBase(target), trait, ownerId - 1, n, target);
+            if (n != 0) _bucketAppendRun(_traitBufferBase(target), trait, ownerId, n, target);
             quantity += n;
             _setEntryOwed(key, ownerId, 0);
         }

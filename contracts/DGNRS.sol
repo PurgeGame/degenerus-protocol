@@ -118,7 +118,7 @@ contract DGNRS {
     /// @notice The token symbol.
     string public constant symbol = "DGNRS";
     /// @notice The token decimals.
-    uint8 public constant decimals = 18;
+    uint8 public constant decimals = 12;
 
     // =====================================================================
     //                          ERC20 STATE
@@ -135,7 +135,7 @@ contract DGNRS {
     //                     VESTING AND UNWRAP STATE
     // =====================================================================
 
-    /// @dev DGNRS released to the creator so far; at most CREATOR_TOTAL (2e29), under uint128.
+    /// @dev DGNRS released to the creator so far; at most CREATOR_TOTAL (2e23), under uint128.
     uint128 private _vestingReleased;
     /// @notice DGNRS unwrapped to soulbound sDGNRS over the contract's life; at most UNWRAP_CAP.
     uint128 public totalUnwrapped;
@@ -144,10 +144,10 @@ contract DGNRS {
     //                          CONSTANTS
     // =====================================================================
 
-    uint256 private constant CREATOR_INITIAL = 50_000_000_000 * 1e18;   // 50B at deploy
-    uint256 private constant VEST_PER_LEVEL  = 5_000_000_000 * 1e18;    // 5B per level
-    uint256 private constant CREATOR_TOTAL   = 200_000_000_000 * 1e18;  // 200B total
-    uint256 private constant MIN_UNWRAP_AMOUNT = 1 ether;
+    uint256 private constant CREATOR_INITIAL = 50_000_000_000 * 1e12;   // 50B at deploy
+    uint256 private constant VEST_PER_LEVEL  = 5_000_000_000 * 1e12;    // 5B per level
+    uint256 private constant CREATOR_TOTAL   = 200_000_000_000 * 1e12;  // 200B total
+    uint256 private constant MIN_UNWRAP_AMOUNT = 1e12;
     /// @dev Lifetime ceiling on `unwrapTo`: 20% of the 200B DGNRS supply, 4% of sDGNRS's 1T.
     uint256 private constant UNWRAP_CAP = CREATOR_TOTAL / 5;
 
@@ -198,7 +198,7 @@ contract DGNRS {
 
     /// @notice Transfer DGNRS tokens to a recipient
     /// @param to Recipient address
-    /// @param amount Amount of DGNRS to transfer (18 decimals)
+    /// @param amount Amount of DGNRS to transfer (12 decimals)
     /// @return True on success
     /// @custom:reverts ZeroAddress if to is address(0)
     /// @custom:reverts Unauthorized if to is DGNRS contract address
@@ -210,7 +210,7 @@ contract DGNRS {
     /// @notice Transfer DGNRS tokens from one address to another (requires prior allowance)
     /// @param from Source address
     /// @param to Destination address
-    /// @param amount Amount of DGNRS to transfer (18 decimals)
+    /// @param amount Amount of DGNRS to transfer (12 decimals)
     /// @return True on success
     /// @custom:reverts Insufficient if amount exceeds allowance (unless max uint256 approval)
     /// @custom:reverts ZeroAddress if to is address(0)
@@ -248,7 +248,7 @@ contract DGNRS {
     ///      Unwraps are whole-token minimums so one account cannot be seeded with vote-ineligible dust.
     ///      Lifetime unwraps are capped at `UNWRAP_CAP` (40B), however many calls or owners.
     /// @param recipient Address to receive the soulbound sDGNRS.
-    /// @param amount Amount of DGNRS to burn and unwrap (18 decimals).
+    /// @param amount Amount of DGNRS to burn and unwrap (12 decimals).
     /// @custom:reverts UnwrapCapExceeded If lifetime unwraps would pass `UNWRAP_CAP`.
     function unwrapTo(address recipient, uint256 amount) external {
         if (!vault.isVaultOwner(msg.sender)) revert Unauthorized();
@@ -291,7 +291,7 @@ contract DGNRS {
     ///      during active game, players must use burnWrapped() via sDGNRS gambling path.
     ///      The post-gameOver sDGNRS burn pays no FLIP (flipOut is always 0; the
     ///      return slot is kept for ABI stability).
-    /// @param amount Amount of DGNRS to burn (18 decimals).
+    /// @param amount Amount of DGNRS to burn (12 decimals).
     /// @return ethOut ETH received from backing.
     /// @return stethOut stETH received from backing.
     /// @return flipOut Always 0 (kept for ABI stability).
@@ -319,7 +319,7 @@ contract DGNRS {
 
     /// @notice Preview the value and FLIP output for burning a given amount of DGNRS
     /// @dev Delegates to sDGNRS.previewBurnValue; does not modify state
-    /// @param amount Amount of DGNRS to simulate burning (18 decimals)
+    /// @param amount Amount of DGNRS to simulate burning (12 decimals)
     /// @return ethOut Total value that would be received, in wei (paid as ETH and/or stETH)
     /// @return flipOut FLIP that would be received
     function previewBurnValue(uint256 amount) external view returns (uint256 ethOut, uint256 flipOut) {

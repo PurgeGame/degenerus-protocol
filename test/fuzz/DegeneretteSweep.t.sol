@@ -40,9 +40,9 @@ contract DegeneretteSweep is DeployProtocol {
     uint8 private constant SYMBOL = 9;
     uint48 private constant IDX = 1;
 
-    bytes32 private constant PLACED_SIG = keccak256("DegeneretteBetPlaced(address,uint32,uint64,uint256)");
+    bytes32 private constant PLACED_SIG = keccak256("DegeneretteBetPlaced(uint32,uint32,uint64,uint256)");
     bytes32 private constant RESOLVED_SIG =
-        keccak256("DegeneretteResolved(address,uint32,uint64,uint256,uint32,bytes)");
+        keccak256("DegeneretteResolved(uint32,uint32,uint64,uint256,uint32,bytes)");
     bytes32 private constant MINER_BOUNTY_SIG = keccak256("MinerBounty(uint8,address,uint256)");
     /// @dev Emitted by the unlock right after the freeze lifts.
     bytes32 private constant SNAPSHOT_SIG =
@@ -321,7 +321,7 @@ contract DegeneretteSweep is DeployProtocol {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] != RESOLVED_SIG) continue;
             found = true;
-            assertEq(address(uint160(uint256(logs[i].topics[1]))), alice, "owner topic");
+            assertEq(uint32(uint256(logs[i].topics[1])), game.walletIdOf(alice), "owner topic");
             assertEq(uint256(logs[i].topics[2]), IDX, "index topic");
             assertEq(uint256(logs[i].topics[3]), 1, "bet id topic");
             (, uint32 resultTraits, bytes memory spins) = abi.decode(logs[i].data, (uint256, uint32, bytes));

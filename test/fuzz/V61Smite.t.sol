@@ -7,6 +7,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
+import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 
 /// @title V61Smite — TST-05 proof: deity-smite (the deity adds a curse stack to a smitee for 200 FLIP),
 ///        the ownerOf gate, the active-afker immunity, the 5-stack ceiling, the saturating +2, the shared
@@ -58,7 +59,7 @@ contract V61Smite is DeployProtocol {
     uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED;
     uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF; // was 58
 
-    uint256 private constant CURSE_COUNT_SHIFT = 215; // (8 bits)
+    uint256 private constant CURSE_COUNT_SHIFT = BitPackingLib.CURSE_COUNT_SHIFT; // (5 bits)
     uint256 private constant CURSE_COUNT_CAP = 20;
     uint256 private constant SMITE_CEILING = 10; // 5 stacks * 2 points
 
@@ -188,7 +189,7 @@ contract V61Smite is DeployProtocol {
         uint256 flipBefore = coin.balanceOf(deity);
         _aid(smitee);
         vm.expectEmit(true, true, false, false, address(game));
-        emit Smited(deityId, smitee);
+        emit Smited(deityId, _fixtureId(smitee));
         vm.prank(deity);
         game.smite(deityId, _aid(smitee));
 
@@ -299,7 +300,7 @@ contract V61Smite is DeployProtocol {
     // =========================================================================
     // Mirror event decl for vm.expectEmit
     // =========================================================================
-    event Smited(uint256 indexed deityId, address indexed smitee);
+    event Smited(uint256 indexed deityId, uint32 indexed smitee);
 
     // =========================================================================
     // Helpers — deity pass + costs
@@ -339,7 +340,7 @@ contract V61Smite is DeployProtocol {
     // =========================================================================
 
     function _seedField(address who, uint256 shift, uint256 mask, uint256 value) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(_giveWalletId(who), uint256(MINTPACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         packed &= ~(mask << shift);
         packed |= (value & mask) << shift;
@@ -347,7 +348,7 @@ contract V61Smite is DeployProtocol {
     }
 
     function _seedCurse(address who, uint256 points) internal {
-        _seedField(who, CURSE_COUNT_SHIFT, 0xFF, points);
+        _seedField(who, CURSE_COUNT_SHIFT, BitPackingLib.MASK_5, points);
     }
 
     function _seedDailyIdx(uint256 day) internal {

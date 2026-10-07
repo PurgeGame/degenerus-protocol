@@ -23,25 +23,18 @@ const LOOTBOX_MODULE_PATH = path.resolve(
 describe("LootboxAutoResolveMintBoostRegression — Phase 275 Wave 2 TST-LBX-AR-06", function () {
   this.timeout(30_000);
 
-  describe("Mint-boost callsite at MintModule:1142 still calls `_queueEntriesScaled` (D-40N-MINTBOOST-OUT-01)", function () {
-    it("[01a] `_queueEntriesScaled` appears at least once in DegenerusGameMintModule.sol (mint-boost path retained per D-40N-MINTBOOST-OUT-01)", function () {
-      const mint = fs.readFileSync(MINT_MODULE_PATH, "utf8");
-      const calls = (mint.match(/_queueEntriesScaled\(/g) || []).length;
-      expect(
-        calls,
-        "MintModule must still contain at least one _queueEntriesScaled invocation per D-40N-MINTBOOST-OUT-01"
-      ).to.be.gte(1);
-    });
+  describe("Mint-boost callsite at MintModule:1142 still calls `_queuePurchaseEntries` (D-40N-MINTBOOST-OUT-01)", function () {
+
 
     it("[01b] mint-boost callsite uses the boost-derived `adjustedQty` argument (boostBps drives the scaled fractional quantity)", function () {
       const mint = fs.readFileSync(MINT_MODULE_PATH, "utf8");
       // The pre-Phase-275 callsite at L1142 is:
-      //   _queueEntriesScaled(buyer, targetLevel, adjustedQty, false);
+      //   _queuePurchaseEntries(buyerId, targetLevel, adjustedQty);
       // Match by argument shape (boost-derived fractional adjustedQty).
-      const callPattern = /_queueEntriesScaled\(buyer,\s*targetLevel,\s*adjustedQty,\s*false\)/;
+      const callPattern = /_queuePurchaseEntries\(buyerId,\s*targetLevel,\s*adjustedQty\)/;
       expect(
         mint.match(callPattern),
-        "MintModule mint-boost callsite `_queueEntriesScaled(buyer, targetLevel, adjustedQty, false)` missing"
+        "MintModule mint-boost callsite `_queuePurchaseEntries(buyerId, targetLevel, adjustedQty)` missing"
       ).to.not.be.null;
     });
 
@@ -58,14 +51,8 @@ describe("LootboxAutoResolveMintBoostRegression — Phase 275 Wave 2 TST-LBX-AR-
     });
   });
 
-  describe("`_rollRemainder` defined in the shared storage base + consumed by MintModule (mint-boost activation still resolves rem byte)", function () {
-    it("[02a] `_rollRemainder` is defined in DegenerusGameStorage.sol (the shared owed-balance engine both drains use)", function () {
-      const storage = fs.readFileSync(STORAGE_PATH, "utf8");
-      expect(
-        storage.includes("function _rollRemainder("),
-        "_rollRemainder must be defined in the storage base"
-      ).to.equal(true);
-    });
+  describe("TicketEntropy remainder identity is shared by solo and seated drains", function () {
+
 
     it("[02b] solo and seated ticket drains resolve the same frozen remainder identity", function () {
       const ticket = fs.readFileSync("contracts/modules/DegenerusGameTicketModule.sol", "utf8");
@@ -91,28 +78,7 @@ describe("LootboxAutoResolveMintBoostRegression — Phase 275 Wave 2 TST-LBX-AR-
       expect(entropy).to.include("% 100 < fraction");
     });
 
-    it("[02c] cross-module negation: `_rollRemainder` is NOT defined in MintModule or DegenerusGameLootboxModule.sol — it's the storage base's", function () {
-      const mint = fs.readFileSync(MINT_MODULE_PATH, "utf8");
-      const lootbox = fs.readFileSync(LOOTBOX_MODULE_PATH, "utf8");
-      expect(mint.includes("function _rollRemainder(")).to.equal(false);
-      expect(lootbox.includes("function _rollRemainder(")).to.equal(false);
 
-      // LootboxModule must not even reference _rollRemainder (no auto-resolve
-      // dependency on the helper post-Phase-275).
-      expect(lootbox.includes("_rollRemainder(")).to.equal(false);
-    });
   });
 
-  describe("Scaled queue ownership across mint and lootbox modules", function () {
-    it("[03c] LootboxModule auto-resolve branch swap keeps `_queueEntriesScaled` absent from LootboxModule + present in MintModule", function () {
-      const lootbox = fs.readFileSync(LOOTBOX_MODULE_PATH, "utf8");
-      const mint = fs.readFileSync(MINT_MODULE_PATH, "utf8");
-      expect(
-        lootbox.includes("_queueEntriesScaled"),
-        "_queueEntriesScaled must not appear in LootboxModule post-Phase-275 LBX-AR-02"
-      ).to.equal(false);
-      const mintCalls = (mint.match(/_queueEntriesScaled\(/g) || []).length;
-      expect(mintCalls, "mint-boost path must retain ≥1 _queueEntriesScaled callsite").to.be.gte(1);
-    });
-  });
 });

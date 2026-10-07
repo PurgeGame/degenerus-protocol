@@ -43,6 +43,8 @@ contract GameSlotHarness is DegenerusGameStorage {
     function s_dailyTicketBudgetsPacked() external pure returns (uint256 s, uint256 o) { assembly { s := dailyTicketBudgetsPacked.slot o := dailyTicketBudgetsPacked.offset } }
     function s_balancesPacked() external pure returns (uint256 s, uint256 o) { assembly { s := balancesPacked.slot o := balancesPacked.offset } }
     function s_lvlTraitEntry() external pure returns (uint256 s, uint256 o) { assembly { s := lvlTraitEntry.slot o := lvlTraitEntry.offset } }
+    function s_afkingFundingApprovals() external pure returns (uint256 s, uint256 o) { assembly { s := afkingFundingApprovals.slot o := afkingFundingApprovals.offset } }
+    function s_walletIds() external pure returns (uint256 s) { assembly { s := walletIds.slot } }
     function s_mintPacked() external pure returns (uint256 s, uint256 o) { assembly { s := mintPacked_.slot o := mintPacked_.offset } }
     function s_rngWordByDay() external pure returns (uint256 s, uint256 o) { assembly { s := rngWordByDay.slot o := rngWordByDay.offset } }
     function s_prizePoolPendingPacked() external pure returns (uint256 s, uint256 o) { assembly { s := prizePoolPendingPacked.slot o := prizePoolPendingPacked.offset } }
@@ -143,7 +145,6 @@ contract GameSlotHarness is DegenerusGameStorage {
 contract CrapsSlotHarness is CrapsBattleStorage {
     function dayStaked() external pure returns (uint256 s) { assembly { s := _dayStaked.slot } }
     function highField() external pure returns (uint256 s) { assembly { s := _highField.slot } }
-    function passCredits() external pure returns (uint256 s) { assembly { s := _passCredits.slot } }
     function passCreditsById() external pure returns (uint256 s) { assembly { s := _passCreditsById.slot } }
     function lootboxCrapsPins() external pure returns (uint256, uint256, uint256, uint256) {
         return (RNG_STATE_SLOT, LOOTBOX_RNG_WORD_SLOT, RNG_WORD_BY_DAY_SLOT, RNG_DAY_TAGS_SLOT);
@@ -187,7 +188,6 @@ contract StorageSlotPinsTest is Test {
         CrapsSlotHarness c = new CrapsSlotHarness();
         // JackpotBattleFieldLib reads boards from the ID-keyed pass word in Craps storage.
         assertEq(CrapsPreferenceLib.PASS_SLOT, c.passCreditsById(), "CrapsPreferenceLib.PASS_SLOT");
-        assertEq(CrapsSlots.PASS_CREDITS, c.passCredits(), "CrapsSlots.PASS_CREDITS");
         assertEq(CrapsSlots.PASS_CREDITS_BY_ID, c.passCreditsById(), "CrapsSlots.PASS_CREDITS_BY_ID");
         assertEq(CrapsSlots.DAY_STAKED, c.dayStaked(), "CrapsSlots.DAY_STAKED");
         assertEq(CrapsSlots.HIGH_FIELD, c.highField(), "CrapsSlots.HIGH_FIELD");
@@ -228,6 +228,8 @@ contract StorageSlotPinsTest is Test {
         (s, o) = h.s_dailyTicketBudgetsPacked(); assertEq(s, GameSlots.DAILY_TICKET_BUDGETS_PACKED, "dailyTicketBudgetsPacked.slot"); assertEq(o, 0, "dailyTicketBudgetsPacked.offset");
         (s, o) = h.s_balancesPacked(); assertEq(s, GameSlots.BALANCES_PACKED, "balancesPacked.slot"); assertEq(o, 0, "balancesPacked.offset");
         (s, o) = h.s_lvlTraitEntry(); assertEq(s, GameSlots.LVL_TRAIT_ENTRY, "lvlTraitEntry.slot"); assertEq(o, 0, "lvlTraitEntry.offset");
+        assertEq(h.s_walletIds(), GameSlots.WALLET_IDS, "walletIds.slot");
+        (s, o) = h.s_afkingFundingApprovals(); assertEq(s, 78, "afkingFundingApprovals.slot"); assertEq(o, 0);
         (s, o) = h.s_mintPacked(); assertEq(s, GameSlots.MINT_PACKED, "mintPacked_.slot"); assertEq(o, 0, "mintPacked_.offset");
         (s, o) = h.s_rngWordByDay(); assertEq(s, GameSlots.RNG_WORD_BY_DAY, "rngWordByDay.slot"); assertEq(o, 0, "rngWordByDay.offset");
         (s, o) = h.s_prizePoolPendingPacked(); assertEq(s, GameSlots.PRIZE_POOL_PENDING_PACKED, "prizePoolPendingPacked.slot"); assertEq(o, 0, "prizePoolPendingPacked.offset");

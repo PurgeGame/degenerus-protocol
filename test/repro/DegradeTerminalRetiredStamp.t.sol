@@ -45,7 +45,6 @@ contract RetiredStampSeeder is DegenerusGame, BucketSeed {
 contract DegradeTerminalRetiredStampTest is DeployProtocol {
     uint256 private constant WORD = 0x987654321;
     address private constant HOLDER = address(0x715E7);
-    address private constant TOP = address(0xAFF1);
     bytes32 private constant ETH_WIN = keccak256("JackpotEthWin(uint32,uint24,uint16,uint256,uint256)");
 
     bytes private realCode;
@@ -70,18 +69,12 @@ contract DegradeTerminalRetiredStampTest is DeployProtocol {
         vm.etch(address(game), realCode);
     }
 
-    function _rankTop() private {
-        vm.prank(address(game));
-        affiliate.payAffiliate(1000 ether, bytes32(uint256(uint160(TOP))), address(0xB001), 0xB001, 11, true, 0);
-    }
-
     /// @dev Latch, request, fulfil and apply the terminal word; the payout runs on a later call.
     function _reachPayout() private {
         _fixture(abi.encodeCall(RetiredStampSeeder.seedEnding, (HOLDER)));
         vm.deal(address(game), 100 ether);
-        _rankTop();
         assertTrue(game.livenessTriggered(), "caught up past the deadline");
-        game.mineFlip(); // latches the cohort level and affiliate, requests the terminal word
+        game.mineFlip(); // latches the cohort level and requests the terminal word
         uint256 requestId = mockVRF.lastRequestId();
         mockVRF.fulfillRandomWords(requestId, WORD);
         game.mineFlip(); // applies the word in its own transaction
@@ -105,14 +98,13 @@ contract DegradeTerminalRetiredStampTest is DeployProtocol {
         _finishTerminal();
         assertGt(_ethWins(vm.getRecordedLogs()), 0, "a readable cohort draws winners");
         assertGt(game.claimableWinningsOf(HOLDER), 0, "the cohort's holder is paid");
-        assertEq(game.claimableWinningsOf(TOP), 2 ether, "affiliate share precedes the draw");
     }
 
     function test_RetiredTerminalBufferPaysNobodyAndTheSweepTakesTheShare() public {
         _reachPayout();
         _fixture(abi.encodeCall(RetiredStampSeeder.retireBuffer, (11)));
         vm.expectCall(
-            address(game), abi.encodeWithSelector(game.runTerminalJackpotWork.selector, 98 ether, uint24(11), WORD)
+            address(game), abi.encodeWithSelector(game.runTerminalJackpotWork.selector, 100 ether, uint24(11), WORD)
         );
         vm.recordLogs();
         _finishTerminal();
@@ -121,8 +113,7 @@ contract DegradeTerminalRetiredStampTest is DeployProtocol {
         assertEq(dead, 0, "the normal ending stays normal");
         assertEq(paid, 1, "payout marked complete");
         assertEq(game.claimableWinningsOf(HOLDER), 0, "retired cohort receives nothing");
-        assertEq(game.claimableWinningsOf(TOP), 2 ether, "affiliate share is unchanged");
-        assertEq(liability, 2 ether, "only the affiliate credit is owed");
+        assertEq(liability, 0, "no cohort was credited");
         assertEq(address(game).balance, 100 ether, "nothing left the game at the payout");
         vm.expectRevert();
         game.mineFlip(); // idle until the sweep opens: nothing pays twice
@@ -169,7 +160,7 @@ contract DegradeTerminalRetiredStampTest is DeployProtocol {
 
         refs[0] = uint256(3) << 64; // alice's created ticket: the bucket is unreadable
         vm.expectRevert(DegenerusGameStorage.E.selector);
-        game.claimDeadVrf(game.walletIdOf(alice), refs);
+        game.claimDeadVrf(_fixtureId(alice), refs);
         assertEq(game.claimableWinningsOf(alice), 0);
     }
 }

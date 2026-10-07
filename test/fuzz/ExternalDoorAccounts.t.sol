@@ -23,14 +23,13 @@ import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 contract ExternalDoorAccountsTest is DeployProtocol {
     address internal constant GAME = ContractAddresses.GAME;
 
-    bytes32 internal constant SMURF_KEY_TAG = keccak256("degenerus.smurf");
     bytes32 internal constant WALLET_REGISTERED = keccak256("WalletRegistered(uint32,address)");
-    bytes32 internal constant DECIMATOR_BURN = keccak256("DecimatorBurn(address,uint256,uint64)");
+    bytes32 internal constant DECIMATOR_BURN = keccak256("DecimatorBurn(uint32,uint256,uint64)");
     bytes32 internal constant BET_PLACED = keccak256("BetPlaced(uint32,uint24,bool,uint256)");
     bytes32 internal constant DRAW_ENTERED =
-        keccak256("DrawEntered(uint24,address,uint8,uint32,uint256,uint256,uint256)");
+        keccak256("DrawEntered(uint24,uint32,uint8,uint32,uint256,uint256,uint256)");
     bytes32 internal constant INCIN_ENTERED =
-        keccak256("IncineratorEntered(uint24,address,uint32,uint256,uint256,uint256)");
+        keccak256("IncineratorEntered(uint24,uint32,uint32,uint256,uint256,uint256)");
     bytes4 internal constant GROWTH_STATE = bytes4(keccak256("growthState(uint24)"));
 
     uint256 internal constant BURN = 2_000;
@@ -39,12 +38,11 @@ contract ExternalDoorAccountsTest is DeployProtocol {
     uint256 internal constant OPENED_DAY_SHIFT = 200;
     uint256 internal constant WWXRP_LANE_SHIFT = 232;
 
-    event BafConsolationClaimed(address indexed player, uint24 indexed lvl, uint256 score, uint256 wwxrpAmount);
+    event BafConsolationClaimed(uint32 indexed player, uint24 indexed lvl, uint256 score, uint256 wwxrpAmount);
 
     address internal owner;
     uint32 internal ownerId;
     uint32 internal smurfId;
-    address internal smurfKey;
     address internal stranger;
     address internal operator;
 
@@ -52,7 +50,7 @@ contract ExternalDoorAccountsTest is DeployProtocol {
         _deployProtocol();
         owner = makeAddr("xda_owner");
         ownerId = _giveWalletId(owner);
-        (smurfId, smurfKey) = _createSmurf(owner);
+        (smurfId,) = _createSmurf(owner);
         stranger = makeAddr("xda_stranger");
         operator = makeAddr("xda_operator");
         vm.prank(owner);
@@ -63,18 +61,16 @@ contract ExternalDoorAccountsTest is DeployProtocol {
     //                              helpers
     // =====================================================================
 
-    function _smurfKeyOf(address o, uint32 id) internal pure returns (address) {
-        return address(uint160(uint256(keccak256(abi.encode(SMURF_KEY_TAG, o, id)))));
-    }
 
-    function _createSmurf(address o) internal returns (uint32 sid, address skey) {
+
+    function _createSmurf(address o) internal returns (uint32 sid, uint32 skey) {
         (,,,, uint256 price) = game.purchaseInfo();
         vm.deal(o, price);
         vm.prank(o);
         sid = game.createSmurf{value: price}(bytes32(0), MintPaymentKind.DirectEth);
-        skey = _smurfKeyOf(o, sid);
+        skey = sid;
         (address key, address payee, bool authorized) = game.resolveAccount(sid, o);
-        require(key == skey && payee == o && authorized, "fixture: smurf key, payee, owner authority");
+        require(key == address(0) && payee == o && authorized, "fixture: smurf key, payee, owner authority");
         vm.deal(o, 0);
     }
 
@@ -131,11 +127,7 @@ contract ExternalDoorAccountsTest is DeployProtocol {
         }
     }
 
-    function _assertSmurfKeyEmpty() internal view {
-        assertEq(coin.balanceOf(smurfKey), 0, "smurf key holds no FLIP");
-        assertEq(wwxrp.balanceOf(smurfKey), 0, "smurf key holds no WWXRP");
-        assertEq(smurfKey.balance, 0, "smurf key holds no ETH");
-    }
+
 
     /// @dev Open the next level's Decimator window today: the window flag and the round's opened day.
     function _openWindow() internal returns (uint24 lvl) {
@@ -167,7 +159,10 @@ contract ExternalDoorAccountsTest is DeployProtocol {
     }
 
     function _side(address who, uint24 round) internal view returns (uint8 side) {
-        (,,,, side,,,) = parimutuel.marketState(who, round);
+        (,,,, side,,,) = parimutuel.marketStateById(_fixtureId(who), round);
+    }
+    function _side(uint32 who, uint24 round) internal view returns (uint8 side) {
+        (,,,, side,,,) = parimutuel.marketStateById(_fixtureId(who), round);
     }
 
     function _boonSlot1(uint32 id) internal pure returns (bytes32) {
@@ -199,20 +194,19 @@ contract ExternalDoorAccountsTest is DeployProtocol {
         vm.expectCall(GAME, abi.encodeCall(DegenerusGame.resolveAccount, (smurfId, owner)), 1);
         vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.registerWallet.selector), 0);
         vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleDecimator, (smurfId, BURN)), 1);
-        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.playerActivityScoreCached, (smurfKey)), 1);
+        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.playerActivityScoreCachedById, (smurfId)), 1);
         vm.expectCall(GAME, abi.encodeCall(DegenerusGame.consumeDecimatorBoon, (smurfId)), 1);
-        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.recordDecBurn.selector, smurfKey, lvl), 1);
+        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.recordDecBurn.selector, smurfId, lvl), 1);
         vm.recordLogs();
         vm.prank(owner);
         coin.decimatorBurn(smurfId, BURN, 0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         assertEq(coin.balanceOf(owner), 10_000 - BURN, "the payee's FLIP burned");
-        assertEq(_countFor(logs, address(coin), DECIMATOR_BURN, 1, _t(smurfKey)), 1, "DecimatorBurn names S's key");
+        assertEq(_countFor(logs, address(coin), DECIMATOR_BURN, 1, bytes32(uint256(smurfId))), 1, "DecimatorBurn names S's key");
         assertEq(_registrations(logs), 0, "no registration");
         assertEq(_entryOwner(smurfId, lvl), smurfId, "the Game entry is S's");
         assertEq(_entryOwner(ownerId, lvl), 0, "no entry for O");
-        _assertSmurfKeyEmpty();
     }
 
     /// @notice When O's wallet is short, O's settled coinflip winnings cover the rest; S's never do.
@@ -224,22 +218,21 @@ contract ExternalDoorAccountsTest is DeployProtocol {
         vm.stopPrank();
         _warpToDay(d + 1);
         _resolveDay(d + 1, true);
-        uint256 ownerPending = coinflip.previewClaimCoinflips(owner);
-        uint256 smurfPending = coinflip.previewClaimCoinflips(smurfKey);
+        uint256 ownerPending = coinflip.previewClaimCoinflipsById(_fixtureId(owner));
+        uint256 smurfPending = coinflip.previewClaimCoinflipsById(_fixtureId(smurfId));
         assertGt(ownerPending, BURN);
         assertGt(smurfPending, 0);
         _fundFlip(owner, 500);
         _openWindow();
 
         vm.expectCall(address(coinflip), abi.encodeWithSelector(coinflip.consumeCoinflipsForBurn.selector, owner), 1);
-        vm.expectCall(address(coinflip), abi.encodeWithSelector(coinflip.consumeCoinflipsForBurn.selector, smurfKey), 0);
+        vm.expectCall(address(coinflip), abi.encodeWithSelector(coinflip.consumeCoinflipsForBurn.selector, smurfId), 0);
         vm.prank(owner);
         coin.decimatorBurn(smurfId, BURN, 0);
 
         assertEq(coin.balanceOf(owner), 0, "O's wallet spent first");
-        assertEq(coinflip.previewClaimCoinflips(owner), ownerPending - (BURN - 500), "O's winnings covered the rest");
-        assertEq(coinflip.previewClaimCoinflips(smurfKey), smurfPending, "S's winnings untouched");
-        _assertSmurfKeyEmpty();
+        assertEq(coinflip.previewClaimCoinflipsById(_fixtureId(owner)), ownerPending - (BURN - 500), "O's winnings covered the rest");
+        assertEq(coinflip.previewClaimCoinflipsById(_fixtureId(smurfId)), smurfPending, "S's winnings untouched");
     }
 
     /// @notice X reverts NotApproved and an unallocated ID reverts E (both before any burn); P's burn
@@ -272,7 +265,6 @@ contract ExternalDoorAccountsTest is DeployProtocol {
         coin.decimatorBurn(0, BURN, 0);
         assertEq(game.walletIdOf(p), expected);
         assertEq(_entryOwner(expected, lvl), expected);
-        _assertSmurfKeyEmpty();
     }
 
     // =====================================================================
@@ -292,7 +284,7 @@ contract ExternalDoorAccountsTest is DeployProtocol {
 
         vm.expectCall(GAME, abi.encodeCall(DegenerusGame.resolveAccount, (smurfId, owner)), 1);
         // The bet and P's refused repeat below: the gate read precedes the AlreadyBet check.
-        vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.marketBetGates, (smurfKey, uint24(1))), 2);
+        vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.marketBetGates, (smurfId, uint24(1))), 2);
         vm.recordLogs();
         vm.prank(owner);
         parimutuel.placeBet(smurfId, true);
@@ -300,7 +292,7 @@ contract ExternalDoorAccountsTest is DeployProtocol {
 
         assertEq(coin.balanceOf(owner), 10_000 - STAKE, "O's STAKE burned");
         assertEq(_countFor(logs, address(parimutuel), BET_PLACED, 1, bytes32(uint256(smurfId))), 1, "BetPlaced(S)");
-        assertEq(_side(smurfKey, 1), 1, "S holds the OVER bet");
+        assertEq(_side(smurfId, 1), 1, "S holds the OVER bet");
         assertEq(_side(owner, 1), 0, "O has no bet yet");
 
         vm.prank(owner);
@@ -328,7 +320,6 @@ contract ExternalDoorAccountsTest is DeployProtocol {
         vm.stopPrank();
         assertGt(_lane(target, smurfId), smurfLane, "the OVER win credits S's stake lane");
         assertEq(_lane(target, ownerId), ownerLane, "O's losing UNDER bet pays nothing");
-        _assertSmurfKeyEmpty();
     }
 
     /// @notice P's bet for S burns O's FLIP and O's second bet for S reverts AlreadyBet; O's self
@@ -340,7 +331,7 @@ contract ExternalDoorAccountsTest is DeployProtocol {
         parimutuel.placeBet(smurfId, false);
         assertEq(coin.balanceOf(owner), 10_000 - STAKE, "P's bet for S spent O's FLIP");
         assertEq(coin.balanceOf(operator), 0);
-        assertEq(_side(smurfKey, 1), 2);
+        assertEq(_side(smurfId, 1), 2);
         vm.expectRevert(DegenerusParimutuel.AlreadyBet.selector);
         vm.prank(owner);
         parimutuel.placeBet(smurfId, true);
@@ -350,12 +341,11 @@ contract ExternalDoorAccountsTest is DeployProtocol {
         vm.prank(owner);
         game.purchase{value: price}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.resolveAccount.selector), 0);
-        vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.marketBetGates, (owner, uint24(1))), 1);
+        vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.marketBetGates, (ownerId, uint24(1))), 1);
         vm.prank(owner);
         parimutuel.placeBet(0, true);
         assertEq(_side(owner, 1), 1, "self bet recorded on O");
         assertEq(coin.balanceOf(owner), 10_000 - 2 * STAKE);
-        _assertSmurfKeyEmpty();
     }
 
     // =====================================================================
@@ -372,7 +362,7 @@ contract ExternalDoorAccountsTest is DeployProtocol {
 
         vm.expectCall(GAME, abi.encodeCall(DegenerusGame.resolveAccount, (smurfId, owner)), 1);
         vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.registerWallet.selector), 0);
-        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.playerActivityScoreCached, (smurfKey)), 1);
+        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.playerActivityScoreCachedById, (smurfId)), 1);
         vm.expectCall(GAME, abi.encodeCall(DegenerusGame.consumeCoinflipBoon, (smurfId)), 1);
         vm.recordLogs();
         vm.prank(owner);
@@ -390,13 +380,12 @@ contract ExternalDoorAccountsTest is DeployProtocol {
         bool seen;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(wwxrp) || logs[i].topics[0] != DRAW_ENTERED) continue;
-            assertEq(address(uint160(uint256(logs[i].topics[2]))), smurfKey, "DrawEntered names S's key");
+            assertEq(uint32(uint256(logs[i].topics[2])), smurfId, "DrawEntered names S's key");
             (uint8 evBucket,,,,) = abi.decode(logs[i].data, (uint8, uint32, uint256, uint256, uint256));
             assertEq(evBucket, bucket);
             seen = true;
         }
         assertTrue(seen);
-        _assertSmurfKeyEmpty();
     }
 
     /// @notice At level x99 O's entry for S also enters the century incinerator as S.
@@ -409,9 +398,8 @@ contract ExternalDoorAccountsTest is DeployProtocol {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         (uint32 e,) = wwxrp.incineratorEntryAt(200, 0);
         assertEq(e, smurfId, "the incinerator entry carries S");
-        assertEq(_countFor(logs, address(wwxrp), INCIN_ENTERED, 2, _t(smurfKey)), 1, "IncineratorEntered names S's key");
+        assertEq(_countFor(logs, address(wwxrp), INCIN_ENTERED, 2, bytes32(uint256(smurfId))), 1, "IncineratorEntered names S's key");
         assertEq(wwxrp.balanceOf(owner), 900);
-        _assertSmurfKeyEmpty();
     }
 
     /// @notice X reverts NotApproved, an unallocated ID reverts E; P's entry for S burns O's WWXRP;
@@ -438,9 +426,10 @@ contract ExternalDoorAccountsTest is DeployProtocol {
         assertEq(wwxrp.balanceOf(stranger), 900);
         uint32 sid = game.walletIdOf(stranger);
         assertTrue(sid != 0, "a self entrant registers");
-        (uint32 eid,) = wwxrp.entryAt(_today(), wwxrp.bucketOf(_today(), sid), 0);
+        uint8 bucket = wwxrp.bucketOf(_today(), sid);
+        (,, uint32 count) = wwxrp.bucketInfo(_today(), bucket);
+        (uint32 eid,) = wwxrp.entryAt(_today(), bucket, count - 1);
         assertEq(eid, sid);
-        _assertSmurfKeyEmpty();
     }
 
     // =====================================================================
@@ -454,22 +443,21 @@ contract ExternalDoorAccountsTest is DeployProtocol {
         jackpots.recordBafFlip(smurfId, 10, 5_000);
         vm.prank(GAME);
         jackpots.markBafSkipped(10);
-        assertEq(jackpots.bafConsolationOf(smurfKey, 10), 5);
-        uint256 ownerBefore = wwxrp.balanceOf(owner);
+        assertEq(jackpots.bafConsolationOfId(smurfId, 10), 5);
+        uint256 ownerBefore = wwxrp.claimable(smurfId);
 
-        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.resolveAccount, (smurfId, stranger)), 1);
+        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.resolveAccount, (smurfId, stranger)), 0);
         vm.expectEmit(true, true, false, true, address(jackpots));
-        emit BafConsolationClaimed(smurfKey, 10, 5_000, 5);
+        emit BafConsolationClaimed(smurfId, 10, 5_000, 5);
         vm.prank(stranger);
         jackpots.claimBafConsolation(smurfId, 10);
 
-        assertEq(wwxrp.balanceOf(owner) - ownerBefore, 5, "minted to S's payee");
+        assertEq(wwxrp.claimable(smurfId) - ownerBefore, 5, "minted to S's payee");
         assertEq(wwxrp.balanceOf(stranger), 0, "nothing to the caller");
-        assertEq(jackpots.bafConsolationOf(smurfKey, 10), 0, "S's score consumed");
+        assertEq(jackpots.bafConsolationOfId(smurfId, 10), 0, "S's score consumed");
         vm.expectRevert(DegenerusJackpots.NothingToClaim.selector);
         vm.prank(owner);
         jackpots.claimBafConsolation(smurfId, 10);
-        _assertSmurfKeyEmpty();
     }
 
     /// @notice `id == 0` is the caller (Game `walletIdOf`, no resolveAccount); a caller with no ID
@@ -479,7 +467,7 @@ contract ExternalDoorAccountsTest is DeployProtocol {
         jackpots.recordBafFlip(ownerId, 10, 3_000);
         vm.prank(GAME);
         jackpots.markBafSkipped(10);
-        uint256 before = wwxrp.balanceOf(owner);
+        uint256 before = wwxrp.claimable(ownerId);
         uint32 unallocated = uint32(_walletCount());
 
         vm.expectRevert(DegenerusJackpots.NothingToClaim.selector);
@@ -488,7 +476,7 @@ contract ExternalDoorAccountsTest is DeployProtocol {
         vm.expectRevert(DegenerusJackpots.NothingToClaim.selector);
         vm.prank(stranger);
         jackpots.claimBafConsolation(unallocated, 20);
-        vm.expectRevert(abi.encodeWithSignature("E()"));
+        vm.expectRevert(DegenerusJackpots.NothingToClaim.selector);
         vm.prank(stranger);
         jackpots.claimBafConsolation(unallocated, 10);
 
@@ -496,6 +484,6 @@ contract ExternalDoorAccountsTest is DeployProtocol {
         vm.expectCall(GAME, abi.encodeCall(DegenerusGame.walletIdOf, (owner)), 1);
         vm.prank(owner);
         jackpots.claimBafConsolation(0, 10);
-        assertEq(wwxrp.balanceOf(owner) - before, 3, "self claim paid the caller");
+        assertEq(wwxrp.claimable(ownerId) - before, 3, "self claim paid the caller");
     }
 }

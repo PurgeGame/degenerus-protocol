@@ -49,7 +49,7 @@ abstract contract SdgnrsRecycleGasFixture is BoundaryGasFixture {
             }
             sdgnrs.transferFromPool(sDGNRS.Pool.PresaleBox, address(0xA11CE), type(uint256).max);
         } else {
-            expectedBurns = sdgnrs.transferFromPool(sDGNRS.Pool.Whale, address(sdgnrs), 7_000 ether + 1);
+            expectedBurns = sdgnrs.transferFromPool(sDGNRS.Pool.Whale, address(sdgnrs), 7_000e12 + 1);
         }
         vm.stopPrank();
         expectedSupply = sdgnrs.totalSupply() + expectedBurns * REFILL_PERCENT / 100;

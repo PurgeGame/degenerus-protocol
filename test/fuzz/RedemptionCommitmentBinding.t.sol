@@ -13,8 +13,8 @@ contract RedemptionCommitmentBindingTest is RedemptionFixture {
         id = _openBatchId();
         for (uint256 i; i < OWNERS; ++i) {
             // Real creator unwrap funds each owner, without writing token storage.
-            dgnrs.unwrapTo(_owner(i), 1_000_000_000 ether);
-            _burn(_owner(i), 500_000_000 ether);
+            dgnrs.unwrapTo(_owner(i), 1_000_000_000e12);
+            _burn(_owner(i), 500_000_000e12);
         }
     }
     function _publish(uint256 word, bool delayed) private {
@@ -81,12 +81,12 @@ contract RedemptionCommitmentBindingTest is RedemptionFixture {
         // These mutations happen after the request fixed the price. They cannot change
         // that batch's base, score or word; new burns belong to the next request.
         mockStETH.mint(address(sdgnrs), 100 ether);
-        _burn(alice, 1 ether);
-        assertEq(_claimTokens(alice, id + 1), 1 ether);
+        _burn(alice, 1e12);
+        assertEq(_claimTokens(alice, id + 1), 1e12);
         (,,uint96 unchanged,,,) = sdgnrs.redemptionBatches(id);
         assertEq(unchanged, base);
         assertEq(_settle(id, 7_000_000, word), full, "later backing and burns cannot rewrite committed awards");
-        assertEq(_claimTokens(alice, id + 1), 1 ether, "next batch was not consumed by the known word");
+        assertEq(_claimTokens(alice, id + 1), 1e12, "next batch was not consumed by the known word");
     }
     function test_NormalOddWordCommitment() public { _compare(7419, false); }
     function test_NormalEvenWordCommitment() public { _compare(7076, false); }

@@ -19,7 +19,6 @@ import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 ///           subscriber's key;
 ///         - the batch doors map an element 0 to the caller before their isolating self-calls.
 contract AccountRuleGame is DeployProtocol {
-    bytes32 private constant SMURF_KEY_TAG = keccak256("degenerus.smurf");
     /// @dev Coinflip.playerState root and flipsClaimableDay slot (scripts/layout/golden/Coinflip.json).
     uint256 private constant CF_PLAYER_STATE_ROOT = 2;
     uint256 private constant CF_CLAIMABLE_DAY_SLOT = 4;
@@ -31,13 +30,13 @@ contract AccountRuleGame is DeployProtocol {
     error StaleBatch();
 
     event OperatorApproval(uint32 indexed id, address indexed operator, bool approved);
-    event EntriesBought(address indexed buyer, uint256 entryQuantityScaled, uint256 weiIn);
-    event LootBoxBuy(address indexed buyer, uint48 indexed index, uint32 position, uint256 amount);
-    event WinningsClaimed(address indexed player, uint256 amount, uint128 claimableAfter);
-    event AfkingWithdrew(address indexed player, uint256 amount);
+    event EntriesBought(uint32 indexed buyer, uint256 entryQuantityScaled, uint256 weiIn);
+    event LootBoxBuy(uint32 indexed buyer, uint48 indexed index, uint32 position, uint256 amount);
+    event WinningsClaimed(uint32 indexed player, uint256 amount, uint128 claimableAfter);
+    event AfkingWithdrew(uint32 indexed player, uint256 amount);
     event SubscriptionUpdated(
-        address indexed player, uint8 dailyQuantity, bool drainGameCreditFirst, bool useTickets,
-        address indexed fundingSource
+        uint32 indexed player, uint8 dailyQuantity, bool drainGameCreditFirst, bool useTickets,
+        uint32 indexed fundingSource
     );
 
     address private owner;
@@ -49,7 +48,6 @@ contract AccountRuleGame is DeployProtocol {
     uint32 private walletId;
     uint32 private sourceId;
     uint32 private smurfId;
-    address private smurfKey;
     uint256 private price;
 
     function setUp() public {
@@ -74,27 +72,24 @@ contract AccountRuleGame is DeployProtocol {
         ownerId = game.walletIdOf(owner);
         walletId = game.walletIdOf(wallet);
         sourceId = _giveWalletId(source);
-        (smurfId, smurfKey) = _createSmurf();
+        (smurfId,) = _createSmurf();
     }
 
     // ---------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------
 
-    function _smurfKeyOf(address o, uint32 id) private pure returns (address) {
-        return address(uint160(uint256(keccak256(abi.encode(SMURF_KEY_TAG, o, id)))));
-    }
+
 
     function _buyTicket(address who) private {
         vm.prank(who);
         game.purchase{value: price}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
     }
 
-    function _createSmurf() private returns (uint32 id, address key) {
+    function _createSmurf() private returns (uint32 id, uint32 key) {
         vm.prank(owner);
         id = game.createSmurf{value: price}(bytes32(0), MintPaymentKind.DirectEth);
-        key = _smurfKeyOf(owner, id);
-        assertEq(game.walletIdOf(key), id, "fixture: smurf registered");
+        key = id;
     }
 
     function _walletsLength() private view returns (uint256) {
@@ -167,7 +162,7 @@ contract AccountRuleGame is DeployProtocol {
 
     function test_ResolveAccount_SmurfOwner() public view {
         (address key, address payee, bool ok) = game.resolveAccount(smurfId, owner);
-        assertEq(key, smurfKey);
+        assertEq(key, address(0));
         assertEq(payee, owner);
         assertTrue(ok);
     }
@@ -175,7 +170,7 @@ contract AccountRuleGame is DeployProtocol {
     function test_ResolveAccount_OperatorOnSmurf_PayeeIsOwner() public {
         _approve(owner, smurfId, operator);
         (address key, address payee, bool ok) = game.resolveAccount(smurfId, operator);
-        assertEq(key, smurfKey);
+        assertEq(key, address(0));
         assertEq(payee, owner, "an operator acts for the smurf, value still goes to the owner");
         assertTrue(ok);
     }
@@ -186,7 +181,7 @@ contract AccountRuleGame is DeployProtocol {
         (address key, address payee, bool onSmurf) = game.resolveAccount(smurfId, operator);
         assertTrue(onOwner, "authorized for the owner's account");
         assertFalse(onSmurf, "not for the smurf: approvals are per account ID");
-        assertEq(key, smurfKey);
+        assertEq(key, address(0));
         assertEq(payee, owner);
     }
 
@@ -197,7 +192,7 @@ contract AccountRuleGame is DeployProtocol {
         assertEq(k1, owner);
         assertEq(p1, owner);
         assertFalse(ok1);
-        assertEq(k2, smurfKey);
+        assertEq(k2, address(0));
         assertEq(p2, owner);
         assertFalse(ok2);
         assertFalse(ok3, "another registered wallet is a stranger too");
@@ -288,25 +283,24 @@ contract AccountRuleGame is DeployProtocol {
         uint256 box = 0.02 ether;
         uint256 extra = 0.3 ether;
         uint256 ethBefore = owner.balance;
-        uint256 ownerAfk = game.afkingFundingOf(owner);
-        uint32 smurfOwed = game.entriesOwedView(1, smurfKey);
-        uint32 ownerOwed = game.entriesOwedView(1, owner);
+        uint256 ownerAfk = _fixtureAfking(owner);
+        uint32 smurfOwed = _fixtureEntries(1, smurfId);
+        uint32 ownerOwed = _fixtureEntries(1, owner);
 
         vm.expectEmit(true, false, false, true, address(game));
-        emit EntriesBought(smurfKey, 400, price);
+        emit EntriesBought(_fixtureId(smurfId), 400, price);
         vm.expectEmit(true, false, false, false, address(game));
-        emit LootBoxBuy(smurfKey, 0, 0, 0);
+        emit LootBoxBuy(_fixtureId(smurfId), 0, 0, 0);
         vm.prank(owner);
         game.purchase{value: price + box + extra}(
             smurfId, 400, BoxOrderLib.boCustom(box), bytes32(0), MintPaymentKind.DirectEth, false
         );
 
         assertEq(owner.balance, ethBefore - price - box - extra, "the owner's ETH paid");
-        assertGt(game.entriesOwedView(1, smurfKey), smurfOwed, "tickets to the smurf");
-        assertEq(game.entriesOwedView(1, owner), ownerOwed, "none to the owner");
-        assertEq(game.afkingFundingOf(owner), ownerAfk + extra, "overpay to the paying owner's ID");
-        assertEq(game.afkingFundingOf(smurfKey), 0, "nothing to the smurf");
-        assertEq(smurfKey.balance, 0);
+        assertGt(_fixtureEntries(1, smurfId), smurfOwed, "tickets to the smurf");
+        assertEq(_fixtureEntries(1, owner), ownerOwed, "none to the owner");
+        assertEq(_fixtureAfking(owner), ownerAfk + extra, "overpay to the paying owner's ID");
+        assertEq(_fixtureAfking(smurfId), 0, "nothing to the smurf");
     }
 
     /// @notice A Claimable buy for the smurf spends the smurf's own ledger, not the owner's.
@@ -315,8 +309,8 @@ contract AccountRuleGame is DeployProtocol {
         _seedClaimable(ownerId, 1 ether);
         vm.prank(owner);
         game.purchase(smurfId, 400, 0, bytes32(0), MintPaymentKind.Claimable, false);
-        assertEq(game.claimableWinningsOf(smurfKey), 1 ether - price, "the smurf's claimable spent");
-        assertEq(game.claimableWinningsOf(owner), 1 ether, "the owner's untouched");
+        assertEq(_fixtureClaimable(smurfId), 1 ether - price, "the smurf's claimable spent");
+        assertEq(_fixtureClaimable(owner), 1 ether, "the owner's untouched");
     }
 
     function test_StrangerPurchaseForSmurf_NotApproved() public {
@@ -337,24 +331,24 @@ contract AccountRuleGame is DeployProtocol {
     ///         paying caller's ID (`_payerId`), so an operator without an ID cannot overpay.
     function test_OperatorPurchaseForSmurf() public {
         _approve(owner, smurfId, operator);
-        uint32 smurfOwed = game.entriesOwedView(1, smurfKey);
+        uint32 smurfOwed = _fixtureEntries(1, smurfId);
         uint256 opEth = operator.balance;
         vm.prank(operator);
         game.purchase{value: price}(smurfId, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(operator.balance, opEth - price, "the operator's ETH paid");
-        assertGt(game.entriesOwedView(1, smurfKey), smurfOwed, "tickets to the smurf");
+        assertGt(_fixtureEntries(1, smurfId), smurfOwed, "tickets to the smurf");
 
         vm.prank(operator);
         vm.expectRevert(E.selector);
         game.purchase{value: price + 1 ether}(smurfId, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
 
         uint32 opId = _giveWalletId(operator);
-        uint256 ownerAfk = game.afkingFundingOf(owner);
+        uint256 ownerAfk = _fixtureAfking(owner);
         vm.prank(operator);
         game.purchase{value: price + 1 ether}(smurfId, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
-        assertEq(game.afkingFundingOf(operator), 1 ether, "overpay to the paying operator's ID");
-        assertEq(game.afkingFundingOf(owner), ownerAfk, "not the owner's");
-        assertEq(game.afkingFundingOf(smurfKey), 0, "not the smurf's");
+        assertEq(_fixtureAfking(operator), 1 ether, "overpay to the paying operator's ID");
+        assertEq(_fixtureAfking(owner), ownerAfk, "not the owner's");
+        assertEq(_fixtureAfking(smurfId), 0, "not the smurf's");
         assertTrue(opId != 0);
     }
 
@@ -363,20 +357,19 @@ contract AccountRuleGame is DeployProtocol {
         _openRedemptionWindow();
         _flip(owner, 10_000);
         uint256 ownerFlip = coin.balanceOf(owner);
-        uint32 smurfOwed = game.entriesOwedView(1, smurfKey);
+        uint32 smurfOwed = _fixtureEntries(1, smurfId);
         vm.prank(owner);
         game.redeemFlip(smurfId, 400);
         assertEq(ownerFlip - coin.balanceOf(owner), 1_000, "one ticket's FLIP burned from the owner");
-        assertEq(coin.balanceOf(smurfKey), 0, "the smurf key holds no FLIP");
-        assertGt(game.entriesOwedView(1, smurfKey), smurfOwed, "tickets to the smurf");
+        assertGt(_fixtureEntries(1, smurfId), smurfOwed, "tickets to the smurf");
     }
 
     /// @notice A wallet shortfall comes from the OWNER's settled coinflip winnings, never the smurf's.
     function test_RedeemFlipForSmurf_ShortfallFromOwnerCoinflipClaimable() public {
         _openRedemptionWindow();
         _flip(owner, 400);
-        bytes32 ownerState = keccak256(abi.encode(owner, CF_PLAYER_STATE_ROOT));
-        bytes32 smurfState = keccak256(abi.encode(smurfKey, CF_PLAYER_STATE_ROOT));
+        bytes32 ownerState = keccak256(abi.encode(ownerId, CF_PLAYER_STATE_ROOT));
+        bytes32 smurfState = keccak256(abi.encode(smurfId, CF_PLAYER_STATE_ROOT));
         uint256 latest = uint24(uint256(vm.load(address(coinflip), bytes32(CF_CLAIMABLE_DAY_SLOT))));
         // claimableStored = 5,000 whole FLIP, lastClaim = flipsClaimableDay (no walk to settle).
         vm.store(address(coinflip), ownerState, bytes32((latest << 128) | 5_000));
@@ -404,12 +397,11 @@ contract AccountRuleGame is DeployProtocol {
         _seedClaimable(smurfId, 1 ether);
         uint256 ownerEth = owner.balance;
         vm.expectEmit(true, false, false, true, address(game));
-        emit WinningsClaimed(smurfKey, 1 ether - 1, 1);
+        emit WinningsClaimed(_fixtureId(smurfId), 1 ether - 1, 1);
         vm.prank(owner);
         game.claimWinnings(smurfId);
         assertEq(owner.balance, ownerEth + 1 ether - 1, "paid to the owner");
-        assertEq(game.claimableWinningsOf(smurfKey), 1, "the smurf's ledger debited to the sentinel");
-        assertEq(smurfKey.balance, 0, "no ETH at the smurf key");
+        assertEq(_fixtureClaimable(smurfId), 1, "the smurf's ledger debited to the sentinel");
 
         _approve(owner, smurfId, operator);
         _seedClaimable(smurfId, 1 ether);
@@ -419,7 +411,6 @@ contract AccountRuleGame is DeployProtocol {
         game.claimWinnings(smurfId, 0.2 ether);
         assertEq(owner.balance, ownerEth + 0.2 ether, "an operator's claim pays the owner");
         assertEq(operator.balance, opEth, "never the operator");
-        assertEq(smurfKey.balance, 0);
     }
 
     /// @notice withdrawAfkingFunding for the smurf, by the owner or its operator, pays the owner.
@@ -427,7 +418,7 @@ contract AccountRuleGame is DeployProtocol {
         _fundAfking(smurfId, 1 ether);
         uint256 ownerEth = owner.balance;
         vm.expectEmit(true, false, false, true, address(game));
-        emit AfkingWithdrew(smurfKey, 0.4 ether);
+        emit AfkingWithdrew(_fixtureId(smurfId), 0.4 ether);
         vm.prank(owner);
         game.withdrawAfkingFunding(smurfId, 0.4 ether);
         assertEq(owner.balance, ownerEth + 0.4 ether);
@@ -438,8 +429,7 @@ contract AccountRuleGame is DeployProtocol {
         game.withdrawAfkingFunding(smurfId, 0.3 ether);
         assertEq(owner.balance, ownerEth + 0.7 ether, "an operator's withdraw pays the owner");
         assertEq(operator.balance, opEth);
-        assertEq(game.afkingFundingOf(smurfKey), 0.3 ether, "the smurf's bucket debited");
-        assertEq(smurfKey.balance, 0, "no ETH at the smurf key");
+        assertEq(_fixtureAfking(smurfId), 0.3 ether, "the smurf's bucket debited");
     }
 
     /// @notice An operator's withdraw for an ordinary wallet pays that wallet.
@@ -452,7 +442,7 @@ contract AccountRuleGame is DeployProtocol {
         game.withdrawAfkingFunding(walletId, 0.5 ether);
         assertEq(wallet.balance, walletEth + 0.5 ether, "paid to the wallet");
         assertEq(operator.balance, opEth);
-        assertEq(game.afkingFundingOf(wallet), 0.5 ether);
+        assertEq(_fixtureAfking(wallet), 0.5 ether);
     }
 
     function test_StrangerClaimsForSmurf_NotApproved() public {
@@ -474,7 +464,7 @@ contract AccountRuleGame is DeployProtocol {
         // A zero withdraw returns before resolution: a no-op for anyone (notes J10).
         vm.prank(stranger);
         game.withdrawAfkingFunding(smurfId, 0);
-        assertEq(game.afkingFundingOf(smurfKey), 1 ether);
+        assertEq(_fixtureAfking(smurfId), 1 ether);
     }
 
     // =====================================================================
@@ -512,12 +502,12 @@ contract AccountRuleGame is DeployProtocol {
         _requireCoverBuyDue(walletId);
         uint256 seat = _grantSeat(wallet);
         vm.expectEmit(true, true, false, true, address(game));
-        emit SubscriptionUpdated(wallet, 1, false, true, address(0));
+        emit SubscriptionUpdated(_fixtureId(wallet), 1, false, true, 0);
         vm.prank(wallet);
         game.subscribe(0, false, true, 1, walletId, seat);
         assertEq(uint8(_subWord(walletId) >> 8) & FLAG_EXTERNAL_FUNDING, 0, "no external-funding flag");
         assertEq(_fundingSourceWord(walletId), 0, "sparse map cleared");
-        assertEq(game.afkingFundingOf(wallet), 1 ether - price, "the own bucket paid");
+        assertEq(_fixtureAfking(wallet), 1 ether - price, "the own bucket paid");
         assertEq(afkingSubToken.balanceOf(wallet), 0, "the seat burned");
     }
 
@@ -529,13 +519,13 @@ contract AccountRuleGame is DeployProtocol {
         _requireCoverBuyDue(smurfId);
         uint256 seat = _grantSeat(owner);
         vm.expectEmit(true, true, false, true, address(game));
-        emit SubscriptionUpdated(smurfKey, 1, false, true, owner);
+        emit SubscriptionUpdated(_fixtureId(smurfId), 1, false, true, ownerId);
         vm.prank(owner);
         game.subscribe(smurfId, false, true, 1, ownerId, seat);
         assertEq(uint8(_subWord(smurfId) >> 8) & FLAG_EXTERNAL_FUNDING, FLAG_EXTERNAL_FUNDING);
-        assertEq(_fundingSourceWord(smurfId), uint256(uint160(owner)) | (uint256(ownerId) << 160));
-        assertEq(game.afkingFundingOf(owner), 1 ether - price, "the owner's bucket paid");
-        assertEq(game.afkingFundingOf(smurfKey), 0);
+        assertEq(_fundingSourceWord(smurfId), ownerId);
+        assertEq(_fixtureAfking(owner), 1 ether - price, "the owner's bucket paid");
+        assertEq(_fixtureAfking(smurfId), 0);
         assertEq(afkingSubToken.balanceOf(owner), 0, "the payee's seat burned");
         assertEq(uint8(_subWord(smurfId)), 1, "the smurf's run is live");
     }
@@ -548,9 +538,9 @@ contract AccountRuleGame is DeployProtocol {
         uint256 seat = _grantSeat(owner);
         vm.prank(owner);
         game.subscribe(0, false, true, 1, smurfId, seat);
-        assertEq(_fundingSourceWord(ownerId), uint256(uint160(smurfKey)) | (uint256(smurfId) << 160));
-        assertEq(game.afkingFundingOf(smurfKey), 1 ether - price, "the smurf's bucket paid");
-        assertEq(game.afkingFundingOf(owner), 0);
+        assertEq(_fundingSourceWord(ownerId), smurfId);
+        assertEq(_fixtureAfking(smurfId), 1 ether - price, "the smurf's bucket paid");
+        assertEq(_fixtureAfking(owner), 0);
     }
 
     /// @notice One smurf funds a sibling smurf without approval.
@@ -558,15 +548,15 @@ contract AccountRuleGame is DeployProtocol {
         _advanceDay();
         vm.prank(owner);
         uint32 siblingId = game.createSmurf{value: price}(bytes32(0), MintPaymentKind.DirectEth);
-        address siblingKey = _smurfKeyOf(owner, siblingId);
+        uint32 siblingKey = siblingId;
         _fundAfking(siblingId, 1 ether);
         _requireCoverBuyDue(smurfId);
         uint256 seat = _grantSeat(owner);
         vm.prank(owner);
         game.subscribe(smurfId, false, true, 1, siblingId, seat);
-        assertEq(_fundingSourceWord(smurfId), uint256(uint160(siblingKey)) | (uint256(siblingId) << 160));
-        assertEq(game.afkingFundingOf(siblingKey), 1 ether - price, "the sibling's bucket paid");
-        assertEq(game.afkingFundingOf(smurfKey), 0);
+        assertEq(_fundingSourceWord(smurfId), siblingId);
+        assertEq(_fixtureAfking(siblingKey), 1 ether - price, "the sibling's bucket paid");
+        assertEq(_fixtureAfking(smurfId), 0);
     }
 
     /// @notice An unrelated source must approve the subscriber's key on its own ID.
@@ -580,11 +570,11 @@ contract AccountRuleGame is DeployProtocol {
         game.subscribe(0, false, true, 1, sourceId, seat);
 
         vm.prank(source);
-        game.setOperatorApproval(sourceId, wallet, true);
+        game.setAfkingFundingApproval(sourceId, walletId, true);
         vm.prank(wallet);
         game.subscribe(0, false, true, 1, sourceId, seat);
-        assertEq(game.afkingFundingOf(source), 1 ether - price, "the approving source paid");
-        assertEq(_fundingSourceWord(walletId), uint256(uint160(source)) | (uint256(sourceId) << 160));
+        assertEq(_fixtureAfking(source), 1 ether - price, "the approving source paid");
+        assertEq(_fundingSourceWord(walletId), sourceId);
     }
 
     /// @notice For a smurf subscriber the consent is to the smurf's KEY: approving its owner is not
@@ -601,10 +591,10 @@ contract AccountRuleGame is DeployProtocol {
         game.subscribe(smurfId, false, true, 1, sourceId, seat);
 
         vm.prank(source);
-        game.setOperatorApproval(0, smurfKey, true);
+        game.setAfkingFundingApproval(sourceId, smurfId, true);
         vm.prank(owner);
         game.subscribe(smurfId, false, true, 1, sourceId, seat);
-        assertEq(game.afkingFundingOf(source), 1 ether - price, "the source paid");
+        assertEq(_fixtureAfking(source), 1 ether - price, "the source paid");
     }
 
     function test_DepositAfkingFunding_ZeroOrUnallocatedRevertsE() public {

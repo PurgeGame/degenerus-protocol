@@ -36,7 +36,7 @@ contract LootboxTierSizes is DeployProtocol {
     address internal actor;
 
     bytes32 internal constant OPENED =
-        keccak256("LootBoxOpened(address,uint48,uint256,uint24,uint32,uint256,bool)");
+        keccak256("LootBoxOpened(uint32,uint48,uint256,uint24,uint32,uint256,bool)");
 
     function setUp() public {
         _deployProtocol();
@@ -154,7 +154,7 @@ contract LootboxTierSizes is DeployProtocol {
             uint256 n;
             for (uint256 i; i < logs.length; i++) {
                 if (logs[i].topics[0] != OPENED || logs[i].emitter != address(game)) continue;
-                if (address(uint160(uint256(logs[i].topics[1]))) != actor) continue;
+                if (uint32(uint256(logs[i].topics[1])) != game.walletIdOf(actor)) continue;
                 if (uint48(uint256(logs[i].topics[2])) != _tag(N, pos)) continue;
                 (uint256 amount,,,,) = abi.decode(logs[i].data, (uint256, uint24, uint32, uint256, bool));
                 if (n < 4) sizes[n] = amount;
@@ -200,10 +200,10 @@ contract LootboxTierSizes is DeployProtocol {
 
     /// @dev The figure every plainly-opened box of `who` under entry tag `tag` reported (all
     ///      boxes of one single-tier entry share it); zero if every box drew a spin.
-    function _openedFigure(Vm.Log[] memory logs, address who, uint48 tag) internal pure returns (uint256 fig) {
+    function _openedFigure(Vm.Log[] memory logs, address who, uint48 tag) internal view returns (uint256 fig) {
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].topics[0] != OPENED) continue;
-            if (address(uint160(uint256(logs[i].topics[1]))) != who) continue;
+            if (uint32(uint256(logs[i].topics[1])) != game.walletIdOf(who)) continue;
             if (uint48(uint256(logs[i].topics[2])) != tag) continue;
             (uint256 amount,,,,) = abi.decode(logs[i].data, (uint256, uint24, uint32, uint256, bool));
             if (fig == 0) fig = amount;

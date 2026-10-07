@@ -227,7 +227,7 @@ contract TransientLivenessIntegrationTest is DeployProtocol {
         vm.prank(who);
         (ok, ) = address(game).call{value: value}(
             abi.encodeWithSelector(
-                game.purchase.selector, who, 0, BoxOrderLib.boCustom(value), bytes32(0), MintPaymentKind.DirectEth, false
+                game.purchase.selector, uint32(0), 0, BoxOrderLib.boCustom(value), bytes32(0), MintPaymentKind.DirectEth, false
             )
         );
     }

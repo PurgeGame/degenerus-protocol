@@ -96,12 +96,12 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
         vm.recordLogs();
         (bool ok, bytes memory result) = address(game).call(abi.encodeCall(
             IDegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox,
-            (player, 1 ether, uint16(305), word, symbol)
+            (uint32(1), 1 ether, uint16(305), word, symbol)
         ));
         Vm.Log[] memory logs = vm.getRecordedLogs();
         vm.etch(address(game), facade);
         assertTrue(ok, "automatic WWXRP resolution must remain live");
-        bytes32 spinTopic = keccak256("BoxSpin(address,uint64,uint256,uint256,uint256)");
+        bytes32 spinTopic = keccak256("BoxSpin(uint32,uint64,uint256,uint256,uint256)");
         bool found;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics.length == 0 || logs[i].topics[0] != spinTopic) continue;

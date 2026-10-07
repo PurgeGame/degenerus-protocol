@@ -31,7 +31,11 @@ contract LensStorageHarness is DegenerusGameMintStreakUtils, WalletSeed {
     /// @dev Same body as DegenerusGame.playerActivityScore — the authoritative
     ///      aggregate the lens breakdown must reconcile against.
     function playerActivityScore(address player) external view returns (uint256) {
-        return _playerActivityScore(player, _effectiveQuestStreak(_walletIdOf(player)));
+        return _playerActivityScore(_walletIdOf(player), _effectiveQuestStreak(_walletIdOf(player)));
+    }
+
+    function playerActivityScoreById(uint32 id) external view returns (uint256) {
+        return _playerActivityScore(id, _effectiveQuestStreak(id));
     }
 
     function nativeEffectiveStreak(address player) external view returns (uint32) {
@@ -75,10 +79,11 @@ contract LensStorageHarness is DegenerusGameMintStreakUtils, WalletSeed {
     }
 
     function setMintPacked(address p, uint256 w) external {
-        mintPacked_[p] = w;
+        _registerWallet(p, type(uint256).max);
+        mintPacked_[_walletIdOf(p)] = w;
     }
 
-    /// @dev Register `p` and return its wallet ID (written into its mint word).
+    /// @dev Register `p` and return its canonical wallet ID.
     function seedId(address p) external returns (uint32) {
         return _seedWallet(p);
     }
@@ -112,7 +117,7 @@ contract LensStorageHarness is DegenerusGameMintStreakUtils, WalletSeed {
     function setDecEntry(uint24 lvl, uint64 id, address owner, uint64 stackFlip, uint32 chips) external {
         decBattlePlayers[_seedWallet(owner)] = (uint256(lvl) << 64) | id;
         decBattleEntries[(uint256(lvl) << 64) | id] =
-            (uint256(stackFlip) << 190) | (uint256(chips) << 160) | uint256(uint160(owner));
+            (uint256(stackFlip) << 190) | (uint256(chips) << 160) | uint256(_walletIdOf(owner));
     }
 
     function setDecRound(uint24 lvl, DecBattleRound calldata round) external {
@@ -192,6 +197,7 @@ contract LensParityTest is Test {
         uint24 pendingFlip,
         uint16 subStreakLatch
     ) public {
+        vm.assume(p != address(0));
         harness.setSub(
             p,
             dailyQuantity,
@@ -275,6 +281,7 @@ contract LensParityTest is Test {
     ) public {
         level_ = uint24(bound(level_, 1, 100_000));
         affCachePoints = uint8(bound(affCachePoints, 0, 63)); // 6-bit field
+        curse &= 31; // five-bit field; do not overwrite the adjacent units lane
         uint8 passType = passTypeSeed % 3 == 0 ? 0 : (passTypeSeed % 3 == 1 ? 1 : 3);
 
         uint256 packed = (uint256(lastCompleted)) |
@@ -288,7 +295,7 @@ contract LensParityTest is Test {
             (uint256(curse) << BitPackingLib.CURSE_COUNT_SHIFT);
 
         uint32 id = harness.seedId(PLAYER);
-        harness.setMintPacked(PLAYER, packed | (uint256(id) << BitPackingLib.WALLET_ID_SHIFT));
+        harness.setMintPacked(PLAYER, packed);
         harness.setSlot0(0, level_, jackpotPhase, false, false, 0, 0);
         _mockQuests(id, manualStreak, false);
         _mockAffiliate(level_, id, 41); // cache-miss branch answer
@@ -368,6 +375,7 @@ contract LensParityTest is Test {
         address owner, bool generated, uint40 ordinal
     ) public {
         vm.assume(lvl != 0);
+        vm.assume(owner != address(0) && owner != address(1));
         word = bound(word, 2, type(uint256).max);
         index = uint8(bound(index, 0, 199));
         id = uint64(bound(id, 1, type(uint40).max));
@@ -412,6 +420,7 @@ contract LensParityTest is Test {
     function testFuzz_foilRecordOf(uint24 lvl, address p, uint24 resolveDay, uint16 multBps, uint16 score, uint8 snap)
         public
     {
+        vm.assume(p != address(0));
         uint256 w = uint256(resolveDay) | (uint256(multBps) << 24) | (uint256(score) << 40)
             | (uint256(snap) << 56);
         harness.setFoilRecord(lvl, p, w);

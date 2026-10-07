@@ -4,6 +4,7 @@ import hre from "hardhat";
 import {
   deployFullProtocol,
   restoreAddresses,
+  giveWalletId,
 } from "../helpers/deployFixture.js";
 import {
   eth,
@@ -15,13 +16,15 @@ import {
   ZERO_ADDRESS,
 } from "../helpers/testUtils.js";
 
+const dgnrsUnits = (value) => hre.ethers.parseUnits(value, 12);
+
 const Pool = { Whale: 0, Affiliate: 1, Lootbox: 2, Reward: 3, Earlybird: 4 };
-const INITIAL_SUPPLY = 1_000_000_000_000n * eth("1");
+const INITIAL_SUPPLY = 1_000_000_000_000n * dgnrsUnits("1");
 const CREATOR_BPS = 2000n;
 const BPS_DENOM = 10_000n;
-const CREATOR_TOTAL = 200_000_000_000n * eth("1");
-const CREATOR_INITIAL = 50_000_000_000n * eth("1");
-const VEST_PER_LEVEL = 5_000_000_000n * eth("1");
+const CREATOR_TOTAL = 200_000_000_000n * dgnrsUnits("1");
+const CREATOR_INITIAL = 50_000_000_000n * dgnrsUnits("1");
+const VEST_PER_LEVEL = 5_000_000_000n * dgnrsUnits("1");
 
 // 912-day level-0 idle timeout triggers the game-over liveness path
 const SECONDS_912_DAYS = 912 * 86400;
@@ -62,6 +65,7 @@ async function deployWithGameOver() {
 
 // Helper: impersonate game contract and transfer sDGNRS from pool to recipient
 async function giveSDGNRS(sdgnrs, game, recipient, amount) {
+  await giveWalletId(game, recipient);
   const gameAddr = await game.getAddress();
   await hre.network.provider.request({ method: "hardhat_impersonateAccount", params: [gameAddr] });
   await hre.ethers.provider.send("hardhat_setBalance", [gameAddr, "0xDE0B6B3A7640000"]);
@@ -116,9 +120,9 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
       expect(await dgnrs.symbol()).to.equal("DGNRS");
     });
 
-    it("decimals is 18", async function () {
+    it("decimals is 12", async function () {
       const { dgnrs } = await loadFixture(deployFullProtocol);
-      expect(await dgnrs.decimals()).to.equal(18n);
+      expect(await dgnrs.decimals()).to.equal(12n);
     });
 
     it("totalSupply equals 20% of sDGNRS supply", async function () {
@@ -146,14 +150,14 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
   describe("ERC20", function () {
     it("transfer moves tokens", async function () {
       const { dgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
-      const amount = eth("1000");
+      const amount = dgnrsUnits("1000");
       await dgnrs.connect(deployer).transfer(alice.address, amount);
       expect(await dgnrs.balanceOf(alice.address)).to.equal(amount);
     });
 
     it("transfer emits Transfer event", async function () {
       const { dgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
-      const amount = eth("1000");
+      const amount = dgnrsUnits("1000");
       const tx = await dgnrs.connect(deployer).transfer(alice.address, amount);
       const ev = await getEvent(tx, dgnrs, "Transfer");
       expect(ev.args.from).to.equal(deployer.address);
@@ -164,28 +168,28 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
     it("transfer reverts to zero address", async function () {
       const { dgnrs, deployer } = await loadFixture(deployFullProtocol);
       await expect(
-        dgnrs.connect(deployer).transfer(ZERO_ADDRESS, eth("1"))
+        dgnrs.connect(deployer).transfer(ZERO_ADDRESS, dgnrsUnits("1"))
       ).to.be.revertedWithCustomError(dgnrs, "ZeroAddress");
     });
 
     it("transfer reverts on insufficient balance", async function () {
       const { dgnrs, alice, bob } = await loadFixture(deployFullProtocol);
       await expect(
-        dgnrs.connect(alice).transfer(bob.address, eth("1"))
+        dgnrs.connect(alice).transfer(bob.address, dgnrsUnits("1"))
       ).to.be.revertedWithCustomError(dgnrs, "Insufficient");
     });
 
     it("anyone can transfer DGNRS (not soulbound)", async function () {
       const { dgnrs, deployer, alice, bob } = await loadFixture(deployFullProtocol);
-      await dgnrs.connect(deployer).transfer(alice.address, eth("1000"));
+      await dgnrs.connect(deployer).transfer(alice.address, dgnrsUnits("1000"));
       // Alice can freely transfer to Bob
-      await dgnrs.connect(alice).transfer(bob.address, eth("500"));
-      expect(await dgnrs.balanceOf(bob.address)).to.equal(eth("500"));
+      await dgnrs.connect(alice).transfer(bob.address, dgnrsUnits("500"));
+      expect(await dgnrs.balanceOf(bob.address)).to.equal(dgnrsUnits("500"));
     });
 
     it("approve + transferFrom works", async function () {
       const { dgnrs, deployer, alice, bob } = await loadFixture(deployFullProtocol);
-      const amount = eth("1000");
+      const amount = dgnrsUnits("1000");
       await dgnrs.connect(deployer).approve(alice.address, amount);
       expect(await dgnrs.allowance(deployer.address, alice.address)).to.equal(amount);
 
@@ -199,32 +203,32 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
       const MAX = hre.ethers.MaxUint256;
       await dgnrs.connect(deployer).approve(alice.address, MAX);
 
-      await dgnrs.connect(alice).transferFrom(deployer.address, bob.address, eth("100"));
+      await dgnrs.connect(alice).transferFrom(deployer.address, bob.address, dgnrsUnits("100"));
       expect(await dgnrs.allowance(deployer.address, alice.address)).to.equal(MAX);
     });
 
     it("transferFrom reverts when exceeding allowance", async function () {
       const { dgnrs, deployer, alice, bob } = await loadFixture(deployFullProtocol);
-      await dgnrs.connect(deployer).approve(alice.address, eth("100"));
+      await dgnrs.connect(deployer).approve(alice.address, dgnrsUnits("100"));
       await expect(
-        dgnrs.connect(alice).transferFrom(deployer.address, bob.address, eth("200"))
+        dgnrs.connect(alice).transferFrom(deployer.address, bob.address, dgnrsUnits("200"))
       ).to.be.revertedWithCustomError(dgnrs, "Insufficient");
     });
 
     it("Approval event emitted", async function () {
       const { dgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
-      const tx = await dgnrs.connect(deployer).approve(alice.address, eth("500"));
+      const tx = await dgnrs.connect(deployer).approve(alice.address, dgnrsUnits("500"));
       const ev = await getEvent(tx, dgnrs, "Approval");
       expect(ev.args.owner).to.equal(deployer.address);
       expect(ev.args.spender).to.equal(alice.address);
-      expect(ev.args.amount).to.equal(eth("500"));
+      expect(ev.args.amount).to.equal(dgnrsUnits("500"));
     });
 
     // Coverage gap: DELTA-L-01 — transfer to self
     it("transfer to self does not change balance (DELTA-L-01)", async function () {
       const { dgnrs, deployer } = await loadFixture(deployFullProtocol);
       const balBefore = await dgnrs.balanceOf(deployer.address);
-      const amount = eth("1000");
+      const amount = dgnrsUnits("1000");
 
       const tx = await dgnrs.connect(deployer).transfer(deployer.address, amount);
       // Balance unchanged — tokens debited then credited to same address
@@ -239,7 +243,7 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
     it("transferFrom to self does not change balance", async function () {
       const { dgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
       const balBefore = await dgnrs.balanceOf(deployer.address);
-      const amount = eth("500");
+      const amount = dgnrsUnits("500");
       await dgnrs.connect(deployer).approve(alice.address, amount);
 
       await dgnrs.connect(alice).transferFrom(deployer.address, deployer.address, amount);
@@ -253,7 +257,7 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
   describe("unwrapTo", function () {
     it("vault owner can unwrap DGNRS to soulbound sDGNRS for a recipient", async function () {
       const { dgnrs, sdgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
-      const amount = eth("1000");
+      const amount = dgnrsUnits("1000");
 
       const ownerBefore = await dgnrs.balanceOf(deployer.address);
       const supplyBefore = await dgnrs.totalSupply();
@@ -269,7 +273,7 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
 
     it("emits UnwrapTo event", async function () {
       const { dgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
-      const amount = eth("1000");
+      const amount = dgnrsUnits("1000");
       const tx = await dgnrs.connect(deployer).unwrapTo(alice.address, amount);
       const ev = await getEvent(tx, dgnrs, "UnwrapTo");
       expect(ev.args.recipient).to.equal(alice.address);
@@ -279,23 +283,23 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
     it("reverts when called by non-vault-owner", async function () {
       const { dgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
       // Give alice some DGNRS first
-      await dgnrs.connect(deployer).transfer(alice.address, eth("1000"));
+      await dgnrs.connect(deployer).transfer(alice.address, dgnrsUnits("1000"));
       await expect(
-        dgnrs.connect(alice).unwrapTo(alice.address, eth("100"))
+        dgnrs.connect(alice).unwrapTo(alice.address, dgnrsUnits("100"))
       ).to.be.revertedWithCustomError(dgnrs, "Unauthorized");
     });
 
     it("reverts on zero address recipient", async function () {
       const { dgnrs, deployer } = await loadFixture(deployFullProtocol);
       await expect(
-        dgnrs.connect(deployer).unwrapTo(ZERO_ADDRESS, eth("100"))
+        dgnrs.connect(deployer).unwrapTo(ZERO_ADDRESS, dgnrsUnits("100"))
       ).to.be.revertedWithCustomError(dgnrs, "ZeroAddress");
     });
 
     it("reverts when amount exceeds balance", async function () {
       const { dgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
       // Hold less than the 40B lifetime cap, so the balance check is the one that fires.
-      await dgnrs.connect(deployer).transfer(alice.address, 20_000_000_000n * eth("1"));
+      await dgnrs.connect(deployer).transfer(alice.address, 20_000_000_000n * dgnrsUnits("1"));
       const bal = await dgnrs.balanceOf(deployer.address);
       await expect(
         dgnrs.connect(deployer).unwrapTo(deployer.address, bal + 1n)
@@ -308,7 +312,7 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
       await dgnrs.connect(deployer).unwrapTo(alice.address, cap);
       expect(await dgnrs.totalUnwrapped()).to.equal(cap);
       await expect(
-        dgnrs.connect(deployer).unwrapTo(alice.address, eth("1"))
+        dgnrs.connect(deployer).unwrapTo(alice.address, dgnrsUnits("1"))
       ).to.be.revertedWithCustomError(dgnrs, "UnwrapCapExceeded");
     });
 
@@ -322,14 +326,14 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
     it("reverts when unwrap amount is below one whole token", async function () {
       const { dgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        dgnrs.connect(deployer).unwrapTo(alice.address, eth("1") - 1n)
+        dgnrs.connect(deployer).unwrapTo(alice.address, dgnrsUnits("1") - 1n)
       ).to.be.revertedWithCustomError(dgnrs, "UnwrapTooSmall");
     });
 
     it("allows exactly one whole token to be unwrapped", async function () {
       const { dgnrs, sdgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
-      await dgnrs.connect(deployer).unwrapTo(alice.address, eth("1"));
-      expect(await sdgnrs.balanceOf(alice.address)).to.equal(eth("1"));
+      await dgnrs.connect(deployer).unwrapTo(alice.address, dgnrsUnits("1"));
+      expect(await sdgnrs.balanceOf(alice.address)).to.equal(dgnrsUnits("1"));
     });
   });
 
@@ -347,7 +351,7 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
     it("reverts when amount exceeds balance", async function () {
       const { dgnrs, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        dgnrs.connect(alice).burn(eth("1"))
+        dgnrs.connect(alice).burn(dgnrsUnits("1"))
       ).to.be.revertedWithCustomError(dgnrs, "Insufficient");
     });
 
@@ -355,7 +359,7 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
       const { dgnrs, sdgnrs, game, deployer, alice } = await loadFixture(deployWithGameOver);
 
       // Give alice some DGNRS
-      const amount = eth("100000");
+      const amount = dgnrsUnits("100000");
       await dgnrs.connect(deployer).transfer(alice.address, amount);
 
       // Add ETH backing to sDGNRS
@@ -379,7 +383,7 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
     it("DGNRS totalSupply decreases after burn", async function () {
       const { dgnrs, deployer } = await loadFixture(deployWithGameOver);
       const supplyBefore = await dgnrs.totalSupply();
-      const amount = eth("1000");
+      const amount = dgnrsUnits("1000");
       await dgnrs.connect(deployer).burn(amount);
       expect(await dgnrs.totalSupply()).to.equal(supplyBefore - amount);
     });
@@ -387,22 +391,22 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
     it("sDGNRS totalSupply also decreases (underlying burned)", async function () {
       const { dgnrs, sdgnrs, deployer } = await loadFixture(deployWithGameOver);
       const sSupplyBefore = await sdgnrs.totalSupply();
-      const amount = eth("1000");
+      const amount = dgnrsUnits("1000");
       await dgnrs.connect(deployer).burn(amount);
       expect(await sdgnrs.totalSupply()).to.equal(sSupplyBefore - amount);
     });
 
     it("emits BurnThrough event", async function () {
       const { dgnrs, deployer } = await loadFixture(deployWithGameOver);
-      const tx = await dgnrs.connect(deployer).burn(eth("1000"));
+      const tx = await dgnrs.connect(deployer).burn(dgnrsUnits("1000"));
       const ev = await getEvent(tx, dgnrs, "BurnThrough");
       expect(ev.args.from).to.equal(deployer.address);
-      expect(ev.args.amount).to.equal(eth("1000"));
+      expect(ev.args.amount).to.equal(dgnrsUnits("1000"));
     });
 
     it("burn with stETH backing forwards stETH proportionally", async function () {
       const { dgnrs, sdgnrs, game, mockStETH, deployer, alice } = await loadFixture(deployWithGameOver);
-      const amount = eth("100000");
+      const amount = dgnrsUnits("100000");
       await dgnrs.connect(deployer).transfer(alice.address, amount);
 
       // Deposit stETH into sDGNRS via game
@@ -443,7 +447,7 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
       const { dgnrs, sdgnrs, game } = await loadFixture(deployFullProtocol);
       await depositETH(sdgnrs, game, eth("100"));
 
-      const amount = eth("1000");
+      const amount = dgnrsUnits("1000");
       const [ethD, flipD] = await dgnrs.previewBurnValue(amount);
       const [ethS, flipS] = await sdgnrs.previewBurnValue(amount);
 
@@ -464,7 +468,7 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
 
     it("sDGNRS burn(uint256) burns from msg.sender only", async function () {
       const { sdgnrs, game, alice } = await loadFixture(deployFullProtocol);
-      const amount = eth("1000");
+      const amount = dgnrsUnits("1000");
       await giveSDGNRS(sdgnrs, game, alice.address, amount);
 
       const supplyBefore = await sdgnrs.totalSupply();
@@ -476,7 +480,7 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
     it("wrapperTransferTo reverts when called by non-DGNRS contract", async function () {
       const { sdgnrs, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        sdgnrs.connect(alice).wrapperTransferTo(alice.address, eth("1"))
+        sdgnrs.connect(alice).wrapperTransferTo(alice.address, dgnrsUnits("1"))
       ).to.be.revertedWithCustomError(sdgnrs, "Unauthorized");
     });
   });
@@ -546,7 +550,7 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
       expect(dgnrsSupply0).to.equal(wrapperBal0);
 
       // After unwrapTo — both decrease by same amount
-      const unwrapAmt = eth("5000");
+      const unwrapAmt = dgnrsUnits("5000");
       await dgnrs.connect(deployer).unwrapTo(alice.address, unwrapAmt);
       const dgnrsSupply1 = await dgnrs.totalSupply();
       const wrapperBal1 = await sdgnrs.balanceOf(dgnrsAddr);
@@ -554,7 +558,7 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
       expect(dgnrsSupply1).to.equal(dgnrsSupply0 - unwrapAmt);
 
       // After burn — both decrease by same amount
-      const burnAmt = eth("1000");
+      const burnAmt = dgnrsUnits("1000");
       await dgnrs.connect(deployer).burn(burnAmt);
       const dgnrsSupply2 = await dgnrs.totalSupply();
       const wrapperBal2 = await sdgnrs.balanceOf(dgnrsAddr);
@@ -570,9 +574,9 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
       expect(supply0).to.equal(INITIAL_SUPPLY);
 
       // Give alice sDGNRS from pool, then burn — supply decreases
-      await giveSDGNRS(sdgnrs, game, alice.address, eth("1000"));
-      await sdgnrs.connect(alice).burn(eth("500"));
-      expect(await sdgnrs.totalSupply()).to.equal(supply0 - eth("500"));
+      await giveSDGNRS(sdgnrs, game, alice.address, dgnrsUnits("1000"));
+      await sdgnrs.connect(alice).burn(dgnrsUnits("500"));
+      expect(await sdgnrs.totalSupply()).to.equal(supply0 - dgnrsUnits("500"));
     });
   });
 

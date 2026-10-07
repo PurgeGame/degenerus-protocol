@@ -15,13 +15,13 @@ import {WalletSeed} from "../helpers/WalletSeed.sol";
 contract AfkingStethGasHost is SubscriberNativeGasHost {
     function addStethSubscriber(address player, address source, bool tickets) external {
         uint32 subId = _seedWallet(player);
-        _subscribers.push(uint256(uint160(player)) | (uint256(subId) << 160));
+        _subscribers.push(subId);
         _subOf[subId].setPosition = uint32(_subscribers.length);
         Sub storage sub = _subOf[subId];
         uint24 yesterday = _afkingResetDay - 1;
         sub.dailyQuantity = 255;
         sub.flags = (source == player ? 0 : 1) | (tickets ? 4 : 0);
-        if (source != player) _fundingSourceOf[_seedWallet(player)] = uint256(uint160(source)) | (uint256(_seedWallet(source)) << 160);
+        if (source != player) _fundingSourceOf[_seedWallet(player)] = _seedWallet(source);
         sub.lastAutoBoughtDay = yesterday;
         sub.lastOpenedDay = yesterday;
         sub.afkingStartDay = yesterday;
@@ -77,8 +77,10 @@ contract AfkingStethGasTest is DeployProtocol {
 
     function _authorize(address player, address source, bool finite) private {
         if (source != player) {
+            uint32 playerId = _giveWalletId(player);
+            _giveWalletId(source);
             vm.prank(source);
-            game.setOperatorApproval(0, player, true);
+            game.setAfkingFundingApproval(0, playerId, true);
         }
         vm.prank(source);
         mockStETH.approve(address(game), finite ? 100 ether : type(uint256).max);
@@ -196,8 +198,9 @@ contract AfkingStethGasTest is DeployProtocol {
     function test_GasFullStipendFailureFinalizesEvictionAndFollowingSubscriber() public {
         AdversarialAfkingSteth faulty = _failedFixture(true);
         uint256 initial = vm.snapshotState();
+        uint32 playerId = game.walletIdOf(PLAYER);
         vm.prank(FUNDER);
-        game.setOperatorApproval(0, PLAYER, false);
+        game.setAfkingFundingApproval(0, playerId, false);
         MineFlipGas.Result memory baselineResult;
         uint256 baseline;
         (baselineResult, baseline) = host.measuredSubWork{gas: WORK_GAS}(WORK_GAS);

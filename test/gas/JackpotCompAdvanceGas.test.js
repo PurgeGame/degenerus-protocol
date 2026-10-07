@@ -63,20 +63,19 @@ async function getSlot(addr, slot) {
 }
 
 // Register wallets in the `wallets` table and return their wallet IDs (the lanes of queues and
-// trait buckets). ID = table position; the id lives in mintPacked_ bits 224..255.
+// trait buckets). Ordinary address registration is stored separately in walletIds.
 async function registerOwners(addr, ownerRoot, lvl, holders) {
   const data = arrayData(ownerRoot);
-  const mintRoot = storageRootOf("mintPacked_");
+  const idRoot = storageRootOf("walletIds");
   let count = await getSlot(addr, ownerRoot);
   const ids = [];
   for (const h of holders) {
-    const mintSlot = mapSlot(BigInt(h), mintRoot);
-    const word = await getSlot(addr, mintSlot);
-    let id = (word >> 224n) & 0xffffffffn;
+    const idSlot = mapSlot(BigInt(h), idRoot);
+    let id = (await getSlot(addr, idSlot)) & 0xffffffffn;
     if (id === 0n) {
       id = count++;
       await setSlot(addr, data + id, BigInt(h));
-      await setSlot(addr, mintSlot, word | (id << 224n));
+      await setSlot(addr, idSlot, id);
     }
     ids.push(id);
   }

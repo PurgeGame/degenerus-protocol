@@ -1,7 +1,7 @@
 {
-  "date": "2026-10-05",
+  "date": "2026-10-07",
   "status": "working-tree source identity; verification status is recorded separately",
-  "base_commit": "bcdba75a9282535cc6970bb360bf8e1b1b444278",
+  "base_commit": "e019363a489a63dd7de4862507f348f315b981c1",
   "source_file_count": 83,
   "source_files": [
     "contracts/AFKingSubscriptionToken.sol",
@@ -45,7 +45,6 @@
     "contracts/interfaces/IVaultCoin.sol",
     "contracts/interfaces/IsDGNRS.sol",
     "contracts/libraries/ActivityCurveLib.sol",
-    "contracts/libraries/AffiliateIdentityLib.sol",
     "contracts/libraries/BitPackingLib.sol",
     "contracts/libraries/CrapsPreferenceLib.sol",
     "contracts/libraries/CrapsPriceLib.sol",
@@ -64,6 +63,7 @@
     "contracts/libraries/PriceLookupLib.sol",
     "contracts/libraries/SigFigLib.sol",
     "contracts/libraries/TicketEntropy.sol",
+    "contracts/libraries/WalletTableLib.sol",
     "contracts/modules/DegenerusGameAdvanceModule.sol",
     "contracts/modules/DegenerusGameBingoModule.sol",
     "contracts/modules/DegenerusGameBoonModule.sol",

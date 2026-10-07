@@ -409,18 +409,22 @@ describe("Paper Parity (Phase 46)", function () {
     });
 
     it("shared base payouts match the documented score table", async function () {
-      const centiX = [0, 0, 50, 300, 1000, 2500, 12500, 62500, 2035457, 25025025];
+      const centiX = [0, 0, 0, 50, 300, 1000, 10000, 62500, 1817328, 23000000];
       for (let score = 0; score < centiX.length; score++) {
         expect(await math.base(score)).to.equal(centiX[score], `score ${score}`);
       }
     });
 
-    it("all eight axes matching yields the score-9 jackpot", async function () {
-      const [score, gold] = await math.score(0, 0, 0);
+    it("ordinary matches score 8; a matching wild raises the score and payout multiplier", async function () {
+      const [ordinaryScore, ordinaryWilds] = await math.score(0, 0);
+      expect(ordinaryScore).to.equal(8);
+      expect(ordinaryWilds).to.equal(0);
+      const [score, wilds] = await math.score(0x40, 0x40);
       expect(score).to.equal(9);
-      expect(gold).to.equal(0);
-      expect(await math.base(score)).to.equal(25025025);
-      expect(await math.payout(score, gold, 1, eth(1), 30000)).to.equal(eth("249999.99975"));
+      expect(wilds).to.equal(1);
+      expect(await math.base(score)).to.equal(23000000);
+      // 1,000 whole FLIP at maximum ordinary activity, with one result wild.
+      expect(await math.payout(score, wilds, 1, 1000n, 30000)).to.equal(287212500n);
     });
 
     it("activity curve retains the 90 / 98.91 / 99.7 / 99.9% knees", async function () {

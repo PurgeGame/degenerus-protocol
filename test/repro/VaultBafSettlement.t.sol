@@ -166,8 +166,8 @@ abstract contract VaultBafRig is DeployProtocol {
         return keccak256(abi.encode(uint256(game.walletIdOf(p)), keccak256(abi.encode(uint256(key), uint256(0)))));
     }
 
-    function _stateSlot(address p) internal pure returns (bytes32) {
-        return keccak256(abi.encode(p, uint256(2)));
+    function _stateSlot(address p) internal view returns (bytes32) {
+        return keccak256(abi.encode(game.walletIdOf(p), uint256(2)));
     }
 
     function _scoreSlot(address p, uint24 lvl) internal view returns (bytes32) {
@@ -179,10 +179,7 @@ abstract contract VaultBafRig is DeployProtocol {
     function _mirrorVault(uint24 throughDay) internal {
         bytes32 v = _stateSlot(VAULT);
         bytes32 r = _stateSlot(REF);
-        // The state word carries the cached wallet ID (bits 184..215): the claimer keeps its own.
-        uint256 idMask = uint256(type(uint32).max) << 184;
-        uint256 stateA = (uint256(vm.load(address(coinflip), v)) & ~idMask)
-            | (uint256(game.walletIdOf(REF)) << 184);
+        uint256 stateA = uint256(vm.load(address(coinflip), v));
         vm.store(address(coinflip), r, bytes32(stateA));
         vm.store(address(coinflip), bytes32(uint256(r) + 1), vm.load(address(coinflip), bytes32(uint256(v) + 1)));
         for (uint24 k; k <= throughDay >> 3; ++k) {
@@ -486,8 +483,8 @@ contract VaultBafSettlement is VaultBafRig {
         assertEq(_score(VAULT, 10), frozen, "the settled score is frozen by the skip");
         assertEq(jackpots.bafConsolationOf(VAULT, 10), frozen / 1000, "the vault's settled score is its consolation");
 
-        uint256 wwxrpBefore = wwxrp.balanceOf(VAULT);
+        uint256 wwxrpBefore = wwxrp.claimable(game.walletIdOf(VAULT));
         jackpots.claimBafConsolation(1, 10);
-        assertEq(wwxrp.balanceOf(VAULT) - wwxrpBefore, frozen / 1000, "the consolation pays the vault");
+        assertEq(wwxrp.claimable(game.walletIdOf(VAULT)) - wwxrpBefore, frozen / 1000, "the consolation pays the vault");
     }
 }

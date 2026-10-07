@@ -120,11 +120,11 @@ contract CoinflipRecorder {
 
 /// @dev Recorder etched at ContractAddresses.WWXRP: captures mintPrize calls.
 contract WwxrpRecorder {
-    address public lastTo;
+    uint32 public lastTo;
     uint256 public lastAmount;
     uint256 public calls;
 
-    function mintPrize(address to, uint256 a) external {
+    function creditPrize(uint32 to, uint256 a) external {
         lastTo = to;
         lastAmount = a;
         ++calls;
@@ -172,24 +172,7 @@ contract GoldenTicketArmResolve is Test {
     uint256 internal constant HALF_PASS = 2.25 ether;
     uint256 internal constant COIN_UNIT = 1000;
 
-    event GoldenTicketArmed(
-        address indexed winner,
-        uint24 indexed level,
-        uint8 quadrant,
-        uint8 symbol
-    );
 
-    event GoldenTicketWin(
-        address indexed winner,
-        uint24 indexed level,
-        uint8 route,
-        uint8 goldCount,
-        bool grand,
-        uint256 ethAmount,
-        uint256 halfPassCount,
-        uint256 flipCredit,
-        uint256 wwxrpAmount
-    );
 
     function setUp() public {
         h = new GoldenTicketHarness();
@@ -423,7 +406,7 @@ contract GoldenTicketArmResolve is Test {
         );
         assertEq(golds, 0, "0 golds on resolve board");
         assertFalse(grand);
-        assertEq(wwxrpRec.lastTo(), winner, "wwxrp consolation to armed winner");
+        assertEq(wwxrpRec.lastTo(), h.walletIdOf(winner), "wwxrp consolation to armed winner");
     }
 
     function testNoDoubleFire() public {
@@ -457,7 +440,7 @@ contract GoldenTicketArmResolve is Test {
         assertEq(flip, 0);
         assertEq(wwxrp, 100, "0 golds = 100 WWXRP");
         assertEq(wwxrpRec.calls(), 1);
-        assertEq(wwxrpRec.lastTo(), winner);
+        assertEq(wwxrpRec.lastTo(), h.walletIdOf(winner));
         assertEq(wwxrpRec.lastAmount(), 100);
         assertEq(h.claimableOf(winner), claimBefore, "no ETH leg");
         assertEq(h.whalePassOf(winner), passBefore, "no pass leg");
@@ -737,7 +720,7 @@ contract GoldenTicketArmResolve is Test {
         (bool present, uint32 recordedMain, ) = h.foilDrawFor(day);
         assertTrue(present, "the day's foil record was written");
         assertEq(mainPacked, recordedMain, "the event's board equals the one recorded for foil claims");
-        uint256 draw = uint256(vm.load(address(h), keccak256(abi.encode(uint256(day & 1), uint256(60)))));
+        uint256 draw = uint256(vm.load(address(h), keccak256(abi.encode(uint256(day & 1), uint256(55)))));
         assertEq(uint128(draw >> 88), uint128(uint256(keccak256(abi.encode(word, day, keccak256("foil-payout-seed"))))), "seed binds logical day");
         assertTrue(draw & (uint256(1) << 216) != 0);
         assertEq(uint24(draw >> 217), day, "draw ring authenticates the logical day");

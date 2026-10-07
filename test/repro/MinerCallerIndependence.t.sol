@@ -47,7 +47,9 @@ contract MinerCallerIndependenceTest is DeployProtocol {
         charge = 201_000 * block.basefee * 6 * 1 ether / weiPerLink;
         assertGt(charge, 0);
         _grant(DONOR, charge * 3);
-        _grant(address(0), charge * 7); // The creditless views' sentinel must not act as a credit owner.
+        // A zero-address donor cannot acquire an ID or own credit.
+        vm.expectRevert(bytes4(keccak256("E()")));
+        _grant(address(0), charge * 7);
         vm.mockCall(address(vault), abi.encodeWithSignature("isVaultOwner(address)", OWNER), abi.encode(true));
     }
 
@@ -200,6 +202,6 @@ contract MinerCallerIndependenceTest is DeployProtocol {
         assertEq(game.middayRngCredits(DONOR), charge * 2, "one priced charge to the mineFlip caller");
         assertEq(game.middayRngCredits(OUTSIDER), 0);
         assertEq(game.middayRngCredits(address(game)), 0, "the Game holds no credit");
-        assertEq(game.middayRngCredits(address(0)), charge * 7);
+        assertEq(game.middayRngCredits(address(0)), 0, "reserved ID zero never owns donated credit");
     }
 }

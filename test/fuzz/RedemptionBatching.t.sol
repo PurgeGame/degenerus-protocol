@@ -178,11 +178,11 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
     function test_ZeroValueClaimsStillNeedWholeClaimAdmission() public {
         uint32 day = _openBatchId();
         vm.deal(address(sdgnrs), 0);
-        address[] memory players = _newBurners(3, 1 ether);
+        address[] memory players = _newBurners(3, 1e12);
         _resolve(day, 100, 99);
         (bool done,,uint256 quote) = _drain(150_000);
         assertFalse(done); assertEq(quote, 0);
-        assertEq(_claimTokens(players[0], day), 1 ether);
+        assertEq(_claimTokens(players[0], day), 1e12);
         (done,,quote) = _drain(9_000_000);
         assertTrue(done); assertEq(quote, 0);
         for (uint256 i; i < players.length; ++i) assertEq(_claimTokens(players[i], day), 0);
@@ -215,13 +215,13 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         uint32 day = _openBatchId();
         uint32 aliceId = game.walletIdOf(alice);
         vm.expectRevert(sDGNRS.Unauthorized.selector);
-        sdgnrs.settleRedemptionHead(alice, aliceId, day, 99);
+        sdgnrs.settleRedemptionHead(uint128(aliceId) << 80, day, 99);
     }
 
     function test_PerClaimStepsAndOneCallPlayerEventsAndBalancesAreIdentical() public {
         uint32 day = _openBatchId();
         _burn(alice, sdgnrs.totalSupply() / 1000);
-        _burn(bob, 1 ether); // Dust-forfeit branch alongside a real chunk.
+        _burn(bob, 1e12); // Dust-forfeit branch alongside a real chunk.
         _resolve(day, 175, 99);
         uint256 snap = vm.snapshotState();
         // Probe both step allowances first, so the recording holds only the applied steps.
@@ -265,7 +265,7 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
     function test_LowGasMineClearsRedemptionsWithoutMinerCredit() public {
         vm.fee(1 gwei);
         uint32 day = _openBatchId();
-        _burn(alice, 1 ether); _burn(bob, 1 ether);
+        _burn(alice, 1e12); _burn(bob, 1e12);
         _resolve(day, 100, 99); _commitWord(99);
         vm.warp(vm.getBlockTimestamp() + 1 days);
         assertTrue(sdgnrs.redemptionSettlementPending(), "nonvacuity: redemptions await settlement");

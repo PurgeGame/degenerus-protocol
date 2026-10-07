@@ -60,7 +60,7 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
  */
 interface IFoilWwxrp {
     /// @notice Mint WWXRP to a recipient (WWXRP, authorized minters only).
-    function mintPrize(address to, uint256 amount) external;
+    function creditPrize(uint32 to, uint256 amount) external;
 }
 
 contract DegenerusGameFoilPackModule is
@@ -194,21 +194,21 @@ contract DegenerusGameFoilPackModule is
     /// @dev weiIn = the foil-premium ETH-in (any funding source); the off-chain ETH-in ledger
     ///      reads it here instead of a separate event.
     event FoilPackBought(
-        address indexed buyer,
+        uint32 indexed buyer,
         uint24 indexed level,
         uint16 multBps,
         uint256 weiIn
     );
 
     /// @notice Emitted when a foil match claim resolves to a paid tier.
-    /// @param player The claimant.
+    /// @param id The reward account's wallet ID.
     /// @param day The draw day claimed against.
     /// @param ticketIndex Which of the pack's four tickets matched the board (0-3).
     /// @param tier The matched score T (4..8): the graded symbol/color axis match; T=8
     ///        is the moonshot (all four full doubles). Field name retained for the indexer.
     /// @param faces The face count paid for the score.
     event FoilMatchClaimed(
-        address indexed player,
+        uint32 indexed id,
         uint24 indexed day,
         uint256 ticketIndex,
         uint8 tier,
@@ -216,14 +216,14 @@ contract DegenerusGameFoilPackModule is
     );
 
     /// @notice Emitted when a pack's gold is claimed.
-    /// @param player The pack's buyer.
+    /// @param id The reward account's wallet ID.
     /// @param level The pack's cycle level.
     /// @param golds The pack's total gold quadrants (3-16); the ladder rung.
     /// @param allGoldTickets How many of the pack's four tickets came out all gold.
     /// @param flipCredit FLIP credited (ladder + any single-all-gold-ticket kicker);
     ///        0 on the grand, whose payout is stamped by GoldenTicketWin instead.
     event GoldenTicketFoil(
-        address indexed player,
+        uint32 indexed id,
         uint24 indexed level,
         uint8 golds,
         uint8 allGoldTickets,
@@ -246,7 +246,7 @@ contract DegenerusGameFoilPackModule is
     ///      ETH first through the mint module; the pack gets the remainder, with claimable then
     ///      prepaid afking covering any shortfall.
     function purchaseWithFoil(
-        address buyer,
+        uint32 buyerId,
         uint256 entryQuantityScaled,
         uint256 boxOrder,
         bytes32 affiliateCode,
@@ -261,20 +261,20 @@ contract DegenerusGameFoilPackModule is
             mintCost += boxCost;
         }
         uint256 cost = mintCost + ((FOIL_PACK_TICKETS * priceWei) << _snapShiftFor(routedLvl));
-        (uint32 buyerId, ) = _registerWallet(buyer, cost);
+        buyerId = _registerCallerAccount(_resolveAccountId(buyerId), cost);
         uint256 fresh = payKind == MintPaymentKind.Claimable
             ? 0
             : (msg.value < cost ? msg.value : cost);
         if (msg.value > fresh) {
-            _creditAfkingValue(_payerId(buyer, buyerId), msg.value - fresh);
+            _creditAfkingValue(_requireWalletId(msg.sender), msg.value - fresh);
         }
         uint256 mintFresh = fresh < mintCost ? fresh : mintCost;
         if (mintCost != 0) {
             _moduleCall(ContractAddresses.GAME_MINT_MODULE, abi.encodeWithSelector(
                 IDegenerusGameMintModule.purchaseWith.selector,
-                buyer, entryQuantityScaled, boxOrder, affiliateCode, payKind, mintFresh, uint32(0)));
+                buyerId, entryQuantityScaled, boxOrder, affiliateCode, payKind, mintFresh, uint32(0)));
         }
-        _buyFoilPack(buyer, buyerId, fresh - mintFresh, affiliateCode, payKind);
+        _buyFoilPack(buyerId, fresh - mintFresh, affiliateCode, payKind);
     }
 
     /// @dev Delegatecall a sibling module in the Game's storage context, bubbling its revert.
@@ -292,14 +292,13 @@ contract DegenerusGameFoilPackModule is
     ///      25|20/5 affiliate, the ten price-equivalent mint units, the daily MINT_ETH primary +
     ///      level quest, the mint streak, the recycle bonus, the boost freeze, the queue push,
     ///      and the foil secondary quest.
-    /// @param buyer Player receiving the pack (already operator-resolved and registered).
+    /// @param buyerId Player receiving the pack (already operator-resolved and registered).
     /// @param buyerId The buyer's wallet ID.
     /// @param ethSent Fresh ETH the purchase path carved for the foil leg.
     /// @param affiliateCode Affiliate/referral code for the foil leg.
     /// @param payKind Payment method (DirectEth forbids drawing claimable; prepaid afking
     ///        still covers the shortfall on every kind).
     function _buyFoilPack(
-        address buyer,
         uint32 buyerId,
         uint256 ethSent,
         bytes32 affiliateCode,
@@ -370,7 +369,7 @@ contract DegenerusGameFoilPackModule is
         // shared _recordMintData. Runs before the quest + boost so the units feed
         // the activity score exactly like the equivalent ticket purchase.
         _recordMintData(
-            buyer,
+            buyerId,
             lvl,
             uint32((FOIL_PACK_TICKETS * 4 * QTY_SCALE) << snapS)
         );
@@ -387,7 +386,6 @@ contract DegenerusGameFoilPackModule is
             kickback += affiliate.payAffiliate(
                 (freshBasis * PRICE_COIN_UNIT) / priceWei,
                 affiliateCode,
-                buyer,
                 buyerId,
                 affLevel,
                 true,
@@ -398,7 +396,6 @@ contract DegenerusGameFoilPackModule is
             kickback += affiliate.payAffiliate(
                 (claimableUsed * PRICE_COIN_UNIT) / priceWei,
                 affiliateCode,
-                buyer,
                 buyerId,
                 affLevel,
                 false,
@@ -427,7 +424,7 @@ contract DegenerusGameFoilPackModule is
             kickback += reward;
             // questType 1 == MINT_ETH (the daily primary), matching the ticket leg's gate.
             if (qType == 1) {
-                _recordMintStreakForLevel(buyer, lvl);
+                _recordMintStreakForLevel(buyerId, lvl);
             }
         }
 
@@ -459,7 +456,7 @@ contract DegenerusGameFoilPackModule is
             (bool afkLive, uint32 afkStreak) = _liveAfkingStreak(buyerId);
             if (afkLive) streakSnapshot = afkStreak;
         }
-        uint256 score = _playerActivityScoreCached(buyer, streakSnapshot);
+        uint256 score = _playerActivityScoreCached(buyerId, streakSnapshot);
         uint16 multBps = uint16(ActivityCurveLib.foilBoostBps(score));
 
         // The daily request's foil swap freezes this pack before that request; a mid-day
@@ -476,7 +473,7 @@ contract DegenerusGameFoilPackModule is
         assembly ("memory-safe") { sstore(slot, pack) }
         foilWriteCount = position + 1;
 
-        emit FoilPackBought(buyer, lvl, multBps, cost);
+        emit FoilPackBought(buyerId, lvl, multBps, cost);
     }
 
     // =========================================================================
@@ -511,8 +508,9 @@ contract DegenerusGameFoilPackModule is
         // them into the terminal cohort. The batch variant self-calls this entrypoint
         // under try/catch, so it inherits the gate and skips instead of reverting.
         if (_livenessTriggered()) revert GameOver();
-        (uint32 playerId, address player, ) = _creditAccount(id);
-        if (!_tryClaimFoilMatch(player, playerId, day, ticketIndex)) revert NoClaimableMatch();
+        uint32 playerId = id == 0 ? _walletIdOf(msg.sender) : id;
+        _requireAllocated(playerId);
+        if (!_tryClaimFoilMatch(playerId, day, ticketIndex)) revert NoClaimableMatch();
     }
 
     /// @notice Claim a foil pack's gold: the ladder on its total gold count, plus a
@@ -543,7 +541,8 @@ contract DegenerusGameFoilPackModule is
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (_livenessTriggered()) revert GameOver();
 
-        (uint32 id, address player, ) = _creditAccount(accountId);
+        uint32 id = accountId == 0 ? _walletIdOf(msg.sender) : accountId;
+        _requireAllocated(id);
         (bool present, , , ) = _foilRecordFor(
             id,
             lvl
@@ -574,7 +573,7 @@ contract DegenerusGameFoilPackModule is
 
         // Mark before any payout (CEI).
         foilRecord[lvl & 3][id] = record | _FOIL_GOLD_CLAIMED;
-        _settleGoldenTicket(player, id, lvl, golds, allGold);
+        _settleGoldenTicket(id, lvl, golds, allGold);
     }
 
     /// @notice Permissionlessly resolve a batch of foil match claims.
@@ -637,7 +636,6 @@ contract DegenerusGameFoilPackModule is
     ///      turns false into a revert. A real win sets the double-claim marker before
     ///      the payout (CEI) and pays the isolated 40/40/20 spin.
     function _tryClaimFoilMatch(
-        address player,
         uint32 id,
         uint256 day,
         uint256 ticketIndex
@@ -704,9 +702,9 @@ contract DegenerusGameFoilPackModule is
             faces = FOIL_FACES_T8; // score == 8 (all four full doubles)
         }
 
-        emit FoilMatchClaimed(player, uint24(day), ticketIndex, tier, faces);
+        emit FoilMatchClaimed(id, uint24(day), ticketIndex, tier, faces);
 
-        _payFoilTier(player, id, day, ticketIndex, L, sel, tier, faces, activityScore, uint128(draw >> _FOIL_DRAW_SEED_SHIFT));
+        _payFoilTier(id, day, ticketIndex, L, sel, tier, faces, activityScore, uint128(draw >> _FOIL_DRAW_SEED_SHIFT));
         return true;
     }
 
@@ -762,7 +760,6 @@ contract DegenerusGameFoilPackModule is
     ///      with the normal ticket price, but every award uses the unshifted face.
     ///      Claims can follow purchases by many draws; no live snap read changes them.
     function _payFoilTier(
-        address player,
         uint32 id,
         uint256 day,
         uint256 ticketIndex,
@@ -798,7 +795,6 @@ contract DegenerusGameFoilPackModule is
             // ETH (40%): one pool-capped spin; over-cap recircs to the lootbox.
             _foilSpin(
                 IDegenerusGameDegeneretteModule.resolveEthSpinFromBox.selector,
-                player,
                 id,
                 faces * PriceLookupLib.priceForLevel(L),
                 activityScore,
@@ -810,7 +806,6 @@ contract DegenerusGameFoilPackModule is
             // one survival flip; free mint, no solvency impact.
             _foilSpin(
                 IDegenerusGameDegeneretteModule.resolveFlipSpinsFromBox.selector,
-                player,
                 id,
                 faces * FLIP_FACE_AMOUNT * TOKEN_MATH_SCALE,
                 activityScore,
@@ -821,7 +816,6 @@ contract DegenerusGameFoilPackModule is
             // WWXRP (20%): one spin; free mint, no solvency impact.
             _foilSpin(
                 IDegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox.selector,
-                player,
                 id,
                 faces * WWXRP_FACE_AMOUNT * TOKEN_MATH_SCALE,
                 activityScore,
@@ -832,23 +826,18 @@ contract DegenerusGameFoilPackModule is
     }
 
     /// @dev Delegatecall one of the Degenerette box-spin resolvers in the Game's
-    ///      storage context. The three resolvers share a (player, stake, activityScore,
-    ///      seed, symbol) shape, the ETH one adding the wallet ID after the player, so one
-    ///      helper covers every currency. Only the chosen hero symbol reaches the spin resolver.
+    ///      storage context. The three resolvers share an (id, stake, activityScore,
+    ///      seed, symbol) shape, so one helper covers every currency. Only the chosen hero symbol reaches the spin resolver.
     function _foilSpin(
         bytes4 selector,
-        address player,
         uint32 id,
         uint256 stake,
         uint16 activityScore,
         uint256 seed,
         uint8 symbol
     ) private {
-        // Only the ETH resolver credits claimable and recirculates, so only it takes the ID.
         (bool ok, bytes memory data) = ContractAddresses.GAME_DEGENERETTE_MODULE.delegatecall(
-            selector == IDegenerusGameDegeneretteModule.resolveEthSpinFromBox.selector
-                ? abi.encodeWithSelector(selector, player, id, stake, activityScore, seed, symbol)
-                : abi.encodeWithSelector(selector, player, stake, activityScore, seed, symbol)
+            abi.encodeWithSelector(selector, id, stake, activityScore, seed, symbol)
         );
         if (!ok) revert EmptyRevert();
         // The FLIP and WWXRP box-spin resolvers RETURN their payout for the caller to credit
@@ -863,7 +852,7 @@ contract DegenerusGameFoilPackModule is
             selector == IDegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox.selector
         ) {
             uint256 wwxrpOut = abi.decode(data, (uint256));
-            if (wwxrpOut != 0) IFoilWwxrp(ContractAddresses.WWXRP).mintPrize(_payee(_walletElement(id)), wwxrpOut);
+            if (wwxrpOut != 0) IFoilWwxrp(ContractAddresses.WWXRP).creditPrize(id, wwxrpOut);
         }
     }
 
@@ -1073,14 +1062,12 @@ contract DegenerusGameFoilPackModule is
     ///      own brute-forced (buyer, entropy) vector to reach through the live claim.
     ///      No production contract derives from this module, so the reachable surface is
     ///      unchanged.
-    /// @param player The pack's buyer, who every rung credits.
     /// @param id The buyer's wallet ID (the FLIP credit key).
     /// @param lvl The pack's cycle level.
     /// @param golds The pack's total gold quadrants (3..7, or 8+ scattered across at
     ///        most one whole ticket).
     /// @param allGold How many of the pack's four tickets came out all gold (0 or 1).
     function _settleGoldenTicket(
-        address player,
         uint32 id,
         uint24 lvl,
         uint8 golds,
@@ -1089,7 +1076,7 @@ contract DegenerusGameFoilPackModule is
         uint256 flipCredit = _goldLadderFlip(golds);
         if (allGold == 1) flipCredit += GOLDEN_TICKET_FLIP;
         coinflip.creditFlip(id, flipCredit);
-        emit GoldenTicketFoil(player, lvl, golds, allGold, flipCredit);
+        emit GoldenTicketFoil(id, lvl, golds, allGold, flipCredit);
     }
 
     /// @dev Push the golden-ticket grand for a pack that drained holding two or more
@@ -1112,8 +1099,7 @@ contract DegenerusGameFoilPackModule is
     ///      buyer/entropy can construct. Same precedent as the jackpot module's
     ///      _pickSoloQuadrant, and no production contract derives from this module, so
     ///      the reachable surface is unchanged.
-    /// @param id The pack buyer's wallet ID, which the grand credits; its key is decoded only
-    ///        for the event.
+    /// @param id The pack buyer's wallet ID, which the grand credits and the event identifies.
     /// @param lvl The pack's cycle level.
     /// @param golds The pack's total gold quadrants — 8 to 16 (at least two all-gold tickets,
     ///        the other tickets holding 0-3 golds each).
@@ -1143,7 +1129,7 @@ contract DegenerusGameFoilPackModule is
             assembly ("memory-safe") { revert(add(reason, 32), mload(reason)) }
         }
         // flipCredit 0: the grand's own legs are stamped by GoldenTicketWin.
-        emit GoldenTicketFoil(_walletKey(id), lvl, golds, allGold, 0);
+        emit GoldenTicketFoil(id, lvl, golds, allGold, 0);
     }
 
 }

@@ -64,7 +64,7 @@ contract V61AfpayWaterfall is DeployProtocol {
 
     /// @dev AfkingSpent(address indexed player, uint256 amount) — the headline transparency signal.
     bytes32 private constant AFKING_SPENT_SIG = keccak256("AfkingSpent(uint32,uint256)");
-    bytes32 private constant CLAIMABLE_SPENT_SIG = keccak256("ClaimableSpent(address,uint256,uint256,uint8,uint256)");
+    bytes32 private constant CLAIMABLE_SPENT_SIG = keccak256("ClaimableSpent(uint32,uint256,uint256,uint8,uint256)");
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
     uint256 private _lastFulfilledReqId;
@@ -105,7 +105,7 @@ contract V61AfpayWaterfall is DeployProtocol {
         // The afking leg MUST emit AfkingSpent at the exact afking amount (D-02 breadth: the shared helper
         // emits too, not only _processMintPayment).
         vm.expectEmit(true, false, false, true, address(t));
-        emit AfkingSpent(buyer, expectedAfkingUsed);
+        emit AfkingSpent(uint32(uint160(buyer)), expectedAfkingUsed);
         (uint256 cUsed, uint256 aUsed) = t.settle(buyer, shortfall, true);
 
         assertEq(cUsed, expectedClaimableUsed, "claimableUsed == claimable - 1 (drawn to the strict sentinel)");
@@ -138,7 +138,7 @@ contract V61AfpayWaterfall is DeployProtocol {
         uint256 shortfall = 40 ether;
 
         vm.expectEmit(true, false, false, true, address(t));
-        emit AfkingSpent(buyer, shortfall); // whole shortfall from afking (claimable skipped)
+        emit AfkingSpent(uint32(uint160(buyer)), shortfall); // whole shortfall from afking (claimable skipped)
         (uint256 cUsed, uint256 aUsed) = t.settle(buyer, shortfall, false);
 
         assertEq(cUsed, 0, "DirectEth leg: claimableUsed == 0 (claimable tier skipped)");
@@ -222,7 +222,7 @@ contract V61AfpayWaterfall is DeployProtocol {
 
         vm.deal(buyer, ethSent);
         vm.expectEmit(true, false, false, true, address(game));
-        emit AfkingSpent(buyer, shortfall);
+        emit AfkingSpent(_fixtureId(buyer), shortfall);
         vm.prank(buyer);
         game.purchase{value: ethSent}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
 
@@ -249,9 +249,9 @@ contract V61AfpayWaterfall is DeployProtocol {
         uint256 poolBefore = _prizePoolTotal();
 
         vm.expectEmit(true, false, false, true, address(game));
-        emit ClaimableSpent(buyer, expClaimableUsed, 1, MintPaymentKind.Claimable, cost);
+        emit ClaimableSpent(_fixtureId(buyer), expClaimableUsed, 1, MintPaymentKind.Claimable, cost);
         vm.expectEmit(true, false, false, true, address(game));
-        emit AfkingSpent(buyer, expAfkingUsed);
+        emit AfkingSpent(_fixtureId(buyer), expAfkingUsed);
         vm.prank(buyer);
         game.purchase{value: 0}(0, 400, 0, bytes32(0), MintPaymentKind.Claimable, false);
 
@@ -279,9 +279,9 @@ contract V61AfpayWaterfall is DeployProtocol {
 
         vm.deal(buyer, ethSent);
         vm.expectEmit(true, false, false, true, address(game));
-        emit ClaimableSpent(buyer, expClaimableUsed, 1, MintPaymentKind.Combined, cost);
+        emit ClaimableSpent(_fixtureId(buyer), expClaimableUsed, 1, MintPaymentKind.Combined, cost);
         vm.expectEmit(true, false, false, true, address(game));
-        emit AfkingSpent(buyer, expAfkingUsed);
+        emit AfkingSpent(_fixtureId(buyer), expAfkingUsed);
         vm.prank(buyer);
         game.purchase{value: ethSent}(0, 400, 0, bytes32(0), MintPaymentKind.Combined, false);
 
@@ -424,7 +424,7 @@ contract V61AfpayWaterfall is DeployProtocol {
         uint256 spentEvents;
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter == address(game) && logs[i].topics.length >= 2 && logs[i].topics[0] == AFKING_SPENT_SIG) {
-                if (logs[i].topics[1] == bytes32(uint256(uint160(p)))) spentEvents++;
+                if (logs[i].topics[1] == bytes32(uint256(game.walletIdOf(p)))) spentEvents++;
             }
         }
         assertEq(spentEvents, 0, "no-double-draw: the afking auto-buy never routes through _processMintPayment (no AfkingSpent)");
@@ -437,8 +437,8 @@ contract V61AfpayWaterfall is DeployProtocol {
     // =========================================================================
     // Mirror event decl for vm.expectEmit
     // =========================================================================
-    event AfkingSpent(address indexed player, uint256 amount);
-    event ClaimableSpent(address indexed player, uint256 amount, uint256 newBalance, MintPaymentKind kind, uint256 costWei);
+    event AfkingSpent(uint32 indexed player, uint256 amount);
+    event ClaimableSpent(uint32 indexed player, uint256 amount, uint256 newBalance, MintPaymentKind kind, uint256 costWei);
 
     // =========================================================================
     // Helpers
@@ -454,7 +454,7 @@ contract V61AfpayWaterfall is DeployProtocol {
     /// @dev Seed `who`'s claimable (low half of balancesPacked slot 7) to `amount` and credit claimablePool
     ///      so the solvency identity stays intact. Preserves the afking high half.
     function _seedClaimable(address who, uint256 amount) internal {
-        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(BALANCES_PACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(uint256(_aid(who)), uint256(BALANCES_PACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         uint256 oldLow = uint128(packed);
         uint256 high = packed >> 128;
@@ -465,7 +465,7 @@ contract V61AfpayWaterfall is DeployProtocol {
 
     /// @dev Seed `who`'s afking (high half) to `amount`, preserve the claimable low half, keep the pool.
     function _seedAfking(address who, uint256 amount) internal {
-        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(BALANCES_PACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(uint256(_aid(who)), uint256(BALANCES_PACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         uint256 low = uint128(packed);
         uint256 oldHigh = packed >> 128;
@@ -507,7 +507,7 @@ contract V61AfpayWaterfall is DeployProtocol {
         uint256 afkingEvents;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2
-                || logs[i].topics[1] != bytes32(uint256(uint160(buyer)))) continue;
+                || logs[i].topics[1] != bytes32(uint256(game.walletIdOf(buyer)))) continue;
             assertTrue(logs[i].topics[0] != CLAIMABLE_SPENT_SIG, "unused claimable emits no debit log");
             if (logs[i].topics[0] == AFKING_SPENT_SIG) {
                 assertEq(abi.decode(logs[i].data, (uint256)), expectedDraw, "afking event names the exact draw");
@@ -522,7 +522,7 @@ contract V61AfpayWaterfall is DeployProtocol {
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2) continue;
             if (logs[i].topics[0] != AFKING_SPENT_SIG) continue;
-            if (logs[i].topics[1] != bytes32(uint256(uint160(who)))) continue;
+            if (logs[i].topics[1] != bytes32(uint256(game.walletIdOf(who)))) continue;
             if (abi.decode(logs[i].data, (uint256)) == amount) return true;
         }
         return false;

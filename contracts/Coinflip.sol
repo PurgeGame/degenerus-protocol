@@ -64,7 +64,7 @@ interface IFLIP {
 /// @notice Interface for WWXRP contract methods used by Coinflip.
 interface IWWXRP {
     /// @notice Mint WWXRP consolation prize to a player on coinflip loss.
-    function mintPrize(address to, uint256 amount) external;
+    function creditPrize(uint32 to, uint256 amount) external;
 }
 
 /// @notice Interface for the soulbound record-bounty trophy moved on record ratchets.
@@ -83,23 +83,23 @@ contract Coinflip {
     /// @param creditedFlip The deposit principal actually funded, in whole FLIP: the requested amount
     ///        floored to whole FLIP (the quest and recycling bonuses that join the stake are not
     ///        included); 0 on a zero-amount deposit.
-    event CoinflipDeposit(address indexed player, uint256 creditedFlip);
+    event CoinflipDeposit(uint32 indexed player, uint256 creditedFlip);
     /// @notice Emitted when a player's coinflip auto-rebuy is turned on or off.
     /// @param player The player whose auto-rebuy state changed.
     /// @param enabled True when auto-rebuy is now on, false when turned off.
-    event CoinflipAutoRebuyToggled(address indexed player, bool enabled);
+    event CoinflipAutoRebuyToggled(uint32 indexed player, bool enabled);
     /// @notice Emitted when a player's auto-rebuy take-profit threshold is set or updated.
     /// @param player The auto-rebuy player.
     /// @param stopAmount The take-profit threshold: winnings bank in whole multiples of it,
     ///        the remainder rolls.
-    event CoinflipAutoRebuyStopSet(address indexed player, uint256 stopAmount);
+    event CoinflipAutoRebuyStopSet(uint32 indexed player, uint256 stopAmount);
     /// @notice Emitted when a coinflip deposit completes a quest.
     /// @param player The player credited with the quest reward.
     /// @param questType The completed quest's type identifier.
     /// @param streak The player's streak count at completion.
     /// @param reward The FLIP bonus credited for completing the quest.
     event QuestCompleted(
-        address indexed player,
+        uint32 indexed player,
         uint8 questType,
         uint32 streak,
         uint256 reward
@@ -192,7 +192,7 @@ contract Coinflip {
     /// @param lastClaim       Post-update PlayerCoinflipState.lastClaim (the claim cursor; lets an
     ///        indexer recompute lazy pending winnings from the day-result + per-day-stake events).
     event CoinflipClaimState(
-        address indexed player,
+        uint32 indexed player,
         uint128 claimableStored,
         uint128 autoRebuyCarry,
         uint24  lastClaim
@@ -297,14 +297,12 @@ contract Coinflip {
         IDegenerusQuests(ContractAddresses.QUESTS);
 
     // Player coinflip state: two slots. Slot A holds the claim bank, cursor, auto-rebuy
-    // flags and the wallet's Game ID (a write-once cache every player action reads for
-    // free); slot B holds the take-profit stop and the rolling carry.
+    // flags; slot B holds the take-profit stop and rolling carry. The mapping key is the ID.
     struct PlayerCoinflipState {
         uint128 claimableStored;
         uint24 lastClaim;
         uint24 autoRebuyStartDay;
         bool autoRebuyEnabled;
-        uint32 id;
         uint128 autoRebuyStop;
         uint128 autoRebuyCarry;
     }
@@ -315,7 +313,7 @@ contract Coinflip {
     // slot (key = day>>5, 8-bit lanes, 3-state). Access via the helpers.
     mapping(uint24 => mapping(uint32 => uint256)) internal coinflipStakePacked;
     mapping(uint24 => uint256) internal coinflipDayResultPacked;
-    mapping(address => PlayerCoinflipState) internal playerState;
+    mapping(uint32 => PlayerCoinflipState) internal playerState;
 
 
     // All-time record pool: ONE FLIP pool shared by the five biggest-* records
@@ -414,11 +412,6 @@ contract Coinflip {
         seedWindowStart = 1;
         emit SeedWindowArmed(0, 1, SEED_FLIP_DAYS, SEED_FLIP_DAILY);
 
-        // The seed recipients' ID caches hold the Game's protocol constants from deploy, so
-        // the vault's own actions and every sDGNRS settlement read them without a Game call.
-        playerState[ContractAddresses.VAULT].id = VAULT_WALLET_ID;
-        playerState[ContractAddresses.SDGNRS].id = SDGNRS_WALLET_ID;
-
         // Register this contract's ENS reverse name (best-effort; skipped when the
         // registrar is unset — local/test/testnet builds). The setName(string)
         // selector is shared by the L1 ReverseRegistrar and Base's L2ReverseRegistrar.
@@ -516,11 +509,12 @@ contract Coinflip {
         uint256 amount,
         bool gift
     ) private {
-        PlayerCoinflipState storage state = playerState[key];
+        id = _walletId(key, id, amount != 0);
+        if (id == 0) return;
+        PlayerCoinflipState storage state = playerState[id];
         if (amount != 0 && amount < MIN) revert AmountLTMin();
         // A paid self deposit allocates (nonzero or Game `E`); a resolved account is already
         // allocated. Only a zero-amount self settle can leave the ID zero: nothing to settle.
-        id = _walletId(key, state, id, amount != 0);
         // Stake lanes hold whole FLIP: fund, burn, score and record the floored principal
         // only, so the funder keeps the fraction the lane could not take.
         // Deposits flow through every RNG lock. A deposit on day N stakes day
@@ -532,7 +526,7 @@ contract Coinflip {
         // (claim-time routing off the promoted level) — state the pending draw
         // never reads.
 
-        uint256 mintable = _claimCoinflipsInternal(payee, id, state, false);
+        uint256 mintable = _claimCoinflipsInternal( id, state, false);
         uint128 storedBefore = state.claimableStored;
         uint128 storedAfter = storedBefore;
         if (mintable != 0) {
@@ -561,10 +555,10 @@ contract Coinflip {
         // claimableStored / lastClaim / carry are finalized here — nothing below mutates them
         // (burnForCoinflip and handleFlip never reach a claimable writer, _addDailyFlip writes
         // only per-day stake). One emit covers both exits.
-        _emitClaimState(key);
+        _emitClaimState(id);
 
         if (amount == 0) {
-            emit CoinflipDeposit(key, 0);
+            emit CoinflipDeposit(id, 0);
             return;
         }
 
@@ -583,7 +577,7 @@ contract Coinflip {
         // resulting bonus flows into the account's stake below. A gift's funder pays, so it
         // registers.
         address quester = gift ? msg.sender : key;
-        uint32 questId = gift ? _walletId(quester, playerState[quester], 0, true) : id;
+        uint32 questId = gift ? _walletId(quester, 0, true) : id;
         (
             uint256 reward,
             uint8 questType,
@@ -591,7 +585,7 @@ contract Coinflip {
             bool completed
         ) = questModule.handleFlip(questId, amount);
         uint256 questReward = _questApplyReward(
-            quester,
+            questId,
             reward,
             questType,
             streak,
@@ -610,7 +604,7 @@ contract Coinflip {
         // weighted draw; operator deposits and gifts cannot. Every manual route reverts past the
         // daily cap.
         _addDailyFlip(id, creditedFlip, payee == msg.sender ? amount : 0, true);
-        emit CoinflipDeposit(key, amount);
+        emit CoinflipDeposit(id, amount);
     }
 
     /*+======================================================================+
@@ -683,7 +677,8 @@ contract Coinflip {
         consumed = _claimCoinflipsAmount(player, player, 0, amount, false);
         uint256 remainder = amount - consumed;
         if (remainder == 0) return consumed;
-        PlayerCoinflipState storage state = playerState[player];
+        uint32 id = _viewWalletId(player);
+        PlayerCoinflipState storage state = playerState[id];
         uint256 carry = state.autoRebuyCarry;
         uint256 fromCarry = remainder <= carry ? remainder : carry;
         if (fromCarry != 0) {
@@ -691,7 +686,7 @@ contract Coinflip {
                 state.autoRebuyCarry = uint128(carry - fromCarry);
             }
             consumed += fromCarry;
-            _emitClaimState(player);
+            _emitClaimState(id);
         }
     }
 
@@ -717,7 +712,7 @@ contract Coinflip {
     ///      off-chain reconstruction without an eth_call. Call as the LAST statement after the three
     ///      PlayerCoinflipState fields are finalized; never inside _claimCoinflipsInternal (its
     ///      callers finalize claimableStored after it returns, so an emit there would be stale).
-    function _emitClaimState(address player) private {
+    function _emitClaimState(uint32 player) private {
         PlayerCoinflipState storage s = playerState[player];
         emit CoinflipClaimState(player, s.claimableStored, s.autoRebuyCarry, s.lastClaim);
     }
@@ -732,13 +727,15 @@ contract Coinflip {
         uint256 amount,
         bool mintTokens
     ) private returns (uint256 claimed) {
-        PlayerCoinflipState storage state = playerState[key];
-        uint256 mintable = _claimCoinflipsInternal(payee, _walletId(key, state, id, false), state, false);
+        id = _walletId(key, id, false);
+        if (id == 0) return 0;
+        PlayerCoinflipState storage state = playerState[id];
+        uint256 mintable = _claimCoinflipsInternal( id, state, false);
         uint128 storedBefore = state.claimableStored;
         uint256 stored = storedBefore + mintable;
         if (stored == 0) {
             // _claimCoinflipsInternal may still have advanced lastClaim / settled carry.
-            _emitClaimState(key);
+            _emitClaimState(id);
             return 0;
         }
 
@@ -757,36 +754,22 @@ contract Coinflip {
             }
             claimed = toClaim;
         }
-        _emitClaimState(key);
+        _emitClaimState(id);
     }
 
-    /// @dev The wallet ID of the account keyed `key`, from its coinflip state. A miss fills the
-    ///      write-once cache from `id`, the account's ID that Game `resolveAccount` resolved, or
-    ///      for a self action (`id == 0`) from the Game: `allocate` (a paying action) registers a
-    ///      new wallet, otherwise the lookup returns the existing ID or zero.
-    function _walletId(
-        address key,
-        PlayerCoinflipState storage state,
-        uint32 id,
-        bool allocate
-    ) private returns (uint32) {
-        uint32 cached = state.id;
-        if (cached != 0) return cached;
-        if (id == 0) id = degenerusGame.registerWallet(key, allocate);
-        if (id != 0) state.id = id;
-        return id;
+    /// @dev Explicit accounts already carry an ID. Self actions resolve the ordinary wallet,
+    ///      allocating only when requested and permitted by Game's registration policy.
+    function _walletId(address key, uint32 id, bool allocate) private returns (uint32) {
+        if (id != 0) return id;
+        return allocate ? degenerusGame.registerWallet(key, true) : degenerusGame.walletIdOf(key);
     }
 
-    /// @dev `player`'s wallet ID for a view: the cached ID, else the Game's (0 = none).
-    function _viewWalletId(address player) private view returns (uint32 id) {
-        id = playerState[player].id;
-        if (id == 0) id = degenerusGame.walletIdOf(player);
+    function _viewWalletId(address player) private view returns (uint32) {
+        return degenerusGame.walletIdOf(player);
     }
 
-    /// @dev Process daily coinflip claims and calculate winnings. `id` keys the stake lanes;
-    ///      `payee` is the address the loss consolation mints to.
+    /// @dev Process daily claims by account ID; loss consolation credits ID-keyed WWXRP.
     function _claimCoinflipsInternal(
-        address payee,
         uint32 id,
         PlayerCoinflipState storage state,
         bool deepAutoRebuy
@@ -996,7 +979,7 @@ contract Coinflip {
         }
 
         if (lossCount != 0) {
-            wwxrp.mintPrize(payee, lossCount * COINFLIP_LOSS_WWXRP_REWARD);
+            wwxrp.creditPrize(id, lossCount * COINFLIP_LOSS_WWXRP_REWARD);
         }
 
         return mintable;
@@ -1422,24 +1405,24 @@ contract Coinflip {
         bool enabled,
         uint256 takeProfit
     ) private {
-        PlayerCoinflipState storage state = playerState[key];
+        id = _walletId(key, id, true);
+        PlayerCoinflipState storage state = playerState[id];
         uint256 mintable;
         if (_flipFrozen() && (state.autoRebuyEnabled || flipsClaimableDay + 1 < GameTimeLib.currentDayIndex())) {
             revert RngLocked();
         }
-        id = _walletId(key, state, id, false);
 
         if (enabled) {
             if (takeProfit > type(uint128).max) revert TakeProfitTooLarge();
             if (state.autoRebuyEnabled) revert AutoRebuyAlreadyEnabled();
-            mintable = _claimCoinflipsInternal(payee, id, state, false);
+            mintable = _claimCoinflipsInternal( id, state, false);
             state.autoRebuyStop = uint128(takeProfit);
             state.autoRebuyEnabled = true;
             state.autoRebuyStartDay = state.lastClaim;
-            emit CoinflipAutoRebuyStopSet(key, takeProfit);
-            emit CoinflipAutoRebuyToggled(key, true);
+            emit CoinflipAutoRebuyStopSet(id, takeProfit);
+            emit CoinflipAutoRebuyToggled(id, true);
         } else {
-            mintable = _claimCoinflipsInternal(payee, id, state, true);
+            mintable = _claimCoinflipsInternal( id, state, true);
             uint256 carry = state.autoRebuyCarry;
             if (carry != 0) {
                 mintable += carry;
@@ -1447,13 +1430,13 @@ contract Coinflip {
             }
             state.autoRebuyEnabled = false;
             state.autoRebuyStartDay = 0;
-            emit CoinflipAutoRebuyToggled(key, false);
+            emit CoinflipAutoRebuyToggled(id, false);
         }
 
         if (mintable != 0) {
             flip.mintForGame(payee, mintable);
         }
-        _emitClaimState(key);
+        _emitClaimState(id);
     }
 
     /// @dev Internal auto-rebuy take profit configuration.
@@ -1466,19 +1449,20 @@ contract Coinflip {
         uint32 id,
         uint256 takeProfit
     ) private {
-        PlayerCoinflipState storage state = playerState[key];
+        id = _walletId(key, id, false);
+        PlayerCoinflipState storage state = playerState[id];
         if (!state.autoRebuyEnabled) revert AutoRebuyNotEnabled();
         if (_flipFrozen()) revert RngLocked();
         if (takeProfit > type(uint128).max) revert TakeProfitTooLarge();
 
-        uint256 mintable = _claimCoinflipsInternal(payee, _walletId(key, state, id, false), state, false);
+        uint256 mintable = _claimCoinflipsInternal( id, state, false);
         state.autoRebuyStop = uint128(takeProfit);
-        emit CoinflipAutoRebuyStopSet(key, takeProfit);
+        emit CoinflipAutoRebuyStopSet(id, takeProfit);
 
         if (mintable != 0) {
             flip.mintForGame(payee, mintable);
         }
-        _emitClaimState(key);
+        _emitClaimState(id);
     }
 
     /// @notice Claim up to `amount` of the auto-rebuy carry as minted FLIP while
@@ -1501,11 +1485,12 @@ contract Coinflip {
         uint256 amount
     ) external returns (uint256 claimed) {
         (address key, address payee) = _account(id);
-        PlayerCoinflipState storage state = playerState[key];
+        id = _walletId(key, id, false);
+        PlayerCoinflipState storage state = playerState[id];
         if (!state.autoRebuyEnabled) revert AutoRebuyNotEnabled();
         if (_flipFrozen()) revert RngLocked();
 
-        uint256 mintable = _claimCoinflipsInternal(payee, _walletId(key, state, id, false), state, false);
+        uint256 mintable = _claimCoinflipsInternal( id, state, false);
         if (mintable != 0) {
             state.claimableStored = uint128(
                 uint256(state.claimableStored) + mintable
@@ -1520,7 +1505,7 @@ contract Coinflip {
             }
             flip.mintForGame(payee, claimed);
         }
-        _emitClaimState(key);
+        _emitClaimState(id);
     }
 
     /*+======================================================================+
@@ -1616,14 +1601,12 @@ contract Coinflip {
         // The seed reserve does not drip onto the active flip. It remains available to
         // redemptions, salvage, and the capped opening-day decimator entry; only new flip
         // credits and existing carry ride the daily result after auto-rebuy is armed.
-        PlayerCoinflipState storage sdgnrsState = playerState[
-            ContractAddresses.SDGNRS
-        ];
+        PlayerCoinflipState storage sdgnrsState = playerState[SDGNRS_WALLET_ID];
         if (sdgnrsAutoRebuyArmed) {
-            _claimCoinflipsInternal(ContractAddresses.SDGNRS, SDGNRS_WALLET_ID, sdgnrsState, false);
+            _claimCoinflipsInternal( SDGNRS_WALLET_ID, sdgnrsState, false);
         } else {
             uint256 mintable =
-                _claimCoinflipsInternal(ContractAddresses.SDGNRS, SDGNRS_WALLET_ID, sdgnrsState, false);
+                _claimCoinflipsInternal( SDGNRS_WALLET_ID, sdgnrsState, false);
             if (mintable != 0) {
                 sdgnrsState.claimableStored = uint128(
                     uint256(sdgnrsState.claimableStored) + mintable
@@ -1636,12 +1619,12 @@ contract Coinflip {
                 sdgnrsAutoRebuyArmed = true;
                 sdgnrsState.autoRebuyEnabled = true;
                 sdgnrsState.autoRebuyStartDay = sdgnrsState.lastClaim;
-                emit CoinflipAutoRebuyToggled(ContractAddresses.SDGNRS, true);
+                emit CoinflipAutoRebuyToggled(SDGNRS_WALLET_ID, true);
             }
         }
         // sDGNRS's claim-state was mutated above (the armed branch settles via _claimCoinflipsInternal,
         // which does not emit); surface the committed post-state for log-only reconstruction.
-        _emitClaimState(ContractAddresses.SDGNRS);
+        _emitClaimState(SDGNRS_WALLET_ID);
     }
 
     /*+======================================================================+
@@ -1650,7 +1633,7 @@ contract Coinflip {
 
     /// @notice Credit flip to wallet `id` through the authorized protocol/game creditor lane.
     /// @dev Keyed by wallet ID alone: writes the ID-keyed stake lane and never reads the
-    ///      address-keyed player state. The credit floors to whole FLIP on its own (two sub-FLIP
+    ///      ID-keyed claim state. The credit floors to whole FLIP on its own (two sub-FLIP
     ///      credits add nothing) and saturates at the daily cap; CoinflipStakeUpdated reports the
     ///      accepted amount. A zero ID or amount is a no-op.
     /// @param id The wallet ID receiving the flip credit (0 = no wallet: skipped).
@@ -1718,12 +1701,12 @@ contract Coinflip {
     function redeemableFlipBacking() external returns (uint256 backing) {
         if (msg.sender != ContractAddresses.SDGNRS) revert OnlysDGNRS();
         address s = ContractAddresses.SDGNRS;
-        PlayerCoinflipState storage state = playerState[s];
-        uint256 mintable = _claimCoinflipsInternal(s, SDGNRS_WALLET_ID, state, false);
+        PlayerCoinflipState storage state = playerState[SDGNRS_WALLET_ID];
+        uint256 mintable = _claimCoinflipsInternal( SDGNRS_WALLET_ID, state, false);
         if (mintable != 0) {
             state.claimableStored = uint128(uint256(state.claimableStored) + mintable);
         }
-        _emitClaimState(s);
+        _emitClaimState(SDGNRS_WALLET_ID);
         return uint256(state.claimableStored) + uint256(state.autoRebuyCarry);
     }
 
@@ -1749,14 +1732,14 @@ contract Coinflip {
         if (remainder == 0) return removed;
 
         // Decrement the rolling auto-rebuy carry for the rest (post-day-20 steady state).
-        PlayerCoinflipState storage state = playerState[s];
+        PlayerCoinflipState storage state = playerState[SDGNRS_WALLET_ID];
         uint256 carry = state.autoRebuyCarry;
         if (remainder > carry) remainder = carry;
         unchecked {
             state.autoRebuyCarry = uint128(carry - remainder);
             removed += remainder;
         }
-        _emitClaimState(s);
+        _emitClaimState(SDGNRS_WALLET_ID);
     }
 
     /*+======================================================================+
@@ -1769,8 +1752,12 @@ contract Coinflip {
     ///      through this path — except where a disabled position still holds one, which a
     ///      claim cashes out.
     function previewClaimCoinflips(address player) external view returns (uint256 mintable) {
-        PlayerCoinflipState storage state = playerState[player];
-        (uint256 daily, ) = _viewClaimableCoin(state, _viewWalletId(player));
+        return previewClaimCoinflipsById(_viewWalletId(player));
+    }
+
+    function previewClaimCoinflipsById(uint32 id) public view returns (uint256 mintable) {
+        PlayerCoinflipState storage state = playerState[id];
+        (uint256 daily, ) = _viewClaimableCoin(state, id);
         return daily + state.claimableStored;
     }
 
@@ -1781,15 +1768,22 @@ contract Coinflip {
     ///      the carry reported is the one the settle LEAVES — a pending losing day has
     ///      already wiped it here, exactly as consumeFlipForSalvage will.
     function previewSalvageFlipBacking(address player) external view returns (uint256) {
-        PlayerCoinflipState storage state = playerState[player];
-        (uint256 daily, uint256 carry) = _viewClaimableCoin(state, _viewWalletId(player));
+        return previewSalvageFlipBackingById(_viewWalletId(player));
+    }
+
+    function previewSalvageFlipBackingById(uint32 id) public view returns (uint256) {
+        PlayerCoinflipState storage state = playerState[id];
+        (uint256 daily, uint256 carry) = _viewClaimableCoin(state, id);
         return daily + state.claimableStored + carry;
     }
 
     /// @notice Get player's current coinflip stake for next day, the VAULT and sDGNRS seed included.
     function coinflipAmount(address player) external view returns (uint256 amount) {
+        return coinflipAmountById(_viewWalletId(player));
+    }
+
+    function coinflipAmountById(uint32 id) public view returns (uint256 amount) {
         uint24 targetDay = _targetFlipDay();
-        uint32 id = _viewWalletId(player);
         amount = _flipStake(targetDay, id);
         (bool seeded, uint24 seedStart) = _seedWindow(id);
         if (seeded) {
@@ -1808,7 +1802,20 @@ contract Coinflip {
             uint24 startDay
         )
     {
-        PlayerCoinflipState storage state = playerState[player];
+        return coinflipAutoRebuyInfoById(_viewWalletId(player));
+    }
+
+    function coinflipAutoRebuyInfoById(uint32 id)
+        public
+        view
+        returns (
+            bool enabled,
+            uint256 stop,
+            uint256 carry,
+            uint24 startDay
+        )
+    {
+        PlayerCoinflipState storage state = playerState[id];
         enabled = state.autoRebuyEnabled;
         stop = state.autoRebuyStop;
         carry = state.autoRebuyCarry;
@@ -2057,7 +2064,7 @@ contract Coinflip {
 
     /// @dev Helper to process quest rewards and emit event.
     function _questApplyReward(
-        address player,
+        uint32 player,
         uint256 reward,
         uint8 questType,
         uint32 streak,

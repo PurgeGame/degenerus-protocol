@@ -105,8 +105,6 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     uint16 private constant VRF_MIDDAY_CONFIRMATIONS = 4;
 
     /// @notice Emitted when the VRF coordinator is wired or rotated.
-    /// @param previous Coordinator address before this update (zero on the initial wiring).
-    /// @param current Coordinator address now in effect.
     event VrfCoordinatorUpdated(
         address indexed previous,
         address indexed current
@@ -130,7 +128,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     );
 
     /// @notice A deterministic-ending claim credited `amount` to `player`'s claimable winnings.
-    event DeadVrfClaimed(address indexed player, uint256 amount);
+    event DeadVrfClaimed(uint32 indexed player, uint256 amount);
 
     // error E() — inherited from DegenerusGameStorage
     error RngNotReady();
@@ -456,7 +454,6 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     ///
     ///      The normal ending needs the terminal word. With distributable funds and no word it
     ///      latches the deterministic ending instead, which reads no word.
-    /// @param day Day index for RNG word lookup from rngWordByDay mapping.
     /// @custom:reverts TransferFailed When an stETH or ETH transfer fails.
     function _handleGameOverDrain(uint24 day, MineFlipGas.Meter memory meter, TerminalWork memory work) private returns (bool done) {
         if (_goRead(GO_JACKPOT_PAID_SHIFT, GO_JACKPOT_PAID_MASK) != 0) return true;
@@ -873,7 +870,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         uint256 amount;
         uint256 weight;
         // Holdings are verified by wallet ID; a caller with no ID holds nothing.
-        (uint32 playerId, address player, ) = _creditAccount(id);
+        uint32 playerId = _creditAccountId(id);
         for (uint256 i; i < refs.length; ) {
             uint256 ref = refs[i];
             uint256 kind = ref >> 248;
@@ -923,7 +920,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         if (amount != 0) {
             _creditClaimableLogged(playerId, amount);
             claimablePool += uint128(amount);
-            emit DeadVrfClaimed(player, amount);
+            emit DeadVrfClaimed(playerId, amount);
         }
     }
 

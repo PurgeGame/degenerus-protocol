@@ -11,7 +11,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 /// @dev Real request, fulfilment and unaided production keeper routing across midnight.
 contract SerializedMidnightProgressTest is MiddayFrozenPoolLatch {
     address private constant MINER = address(0xC4A9);
-    uint256 private constant SUBSCRIBERS_LOW_GAS = 2000;
+    uint256 private constant SUBSCRIBERS_LOW_GAS = 1998;
     /// @dev lootboxRngPacked (scripts/layout/golden/DegenerusGame.json); low 48 bits = miner clock.
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
 
@@ -31,7 +31,14 @@ contract SerializedMidnightProgressTest is MiddayFrozenPoolLatch {
             address owner = address(uint160(0xF00000 + i));
             vm.deal(owner, 10 ether);
             _giveWalletId(owner);
-            uint256 seat = _grantSeat(owner);
+            uint256 seat;
+            if (afkingSubToken.freeClaims() < afkingSubToken.FREE_TRANCHE()) {
+                seat = _grantSeat(owner);
+            } else {
+                seat = afkingSubToken.nextSerial();
+                vm.prank(ContractAddresses.VAULT);
+                afkingSubToken.vaultMintSeats(owner, 1);
+            }
             vm.prank(owner);
             game.subscribe{value: 1 ether}(0, false, false, 1, 0, seat);
         }
@@ -93,10 +100,11 @@ contract SerializedMidnightProgressTest is MiddayFrozenPoolLatch {
         uint256 cap = uint256(0.5 gwei) << steps;
         uint256 bps = (3_000 + 4_500 * steps) << (locked ? 1 : 0);
         uint256 rate = block.basefee < cap ? block.basefee : cap;
-        uint256 reward = (used - MineFlipGas.MIN_REWARDED_GAS) * rate * 1000 ether * bps / (price * 10_000);
-        if (reward == 0) return 0;
-        // Coinflip stakes are whole FLIP: at least 1 FLIP, larger rewards floored.
-        return reward < 1 ether ? 1 ether : (reward / 1 ether) * 1 ether;
+        uint256 numerator = (used - MineFlipGas.MIN_REWARDED_GAS) * rate * 1000 * bps;
+        uint256 denominator = price * 10_000;
+        if (numerator < (denominator - 1) / 1e18 + 1) return 0;
+        uint256 reward = numerator / denominator;
+        return reward == 0 ? 1 : reward;
     }
 
     /// @dev The miner clock: the later of the last accepted callback and the current day reset.
@@ -262,6 +270,6 @@ contract SerializedMidnightProgressTest is MiddayFrozenPoolLatch {
         for (uint256 i; i < 1024 && !game.rngLocked(); ++i) game.mineFlip();
         assertTrue(game.rngLocked(), "after the midday cohort drains the next daily request locks");
     }
-    // 2 protocol + 1,000 free + 998 vault seats is the reachable supply ceiling.
-    function test_MidnightDefersSubscriberStampingUntilReadCohortCompletes() public { _crossMidnight(2000); }
+    // The two live protocol seats also consume the 2,000 cap: 1,998 subscriptions fit.
+    function test_MidnightDefersSubscriberStampingUntilReadCohortCompletes() public { _crossMidnight(1998); }
 }

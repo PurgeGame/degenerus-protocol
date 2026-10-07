@@ -54,7 +54,7 @@ contract SubscriberNativeGasHost is DegenerusGame, WalletSeed {
     ///             3=unfunded expiry,4=cancelled tombstone,5=maximum box stamp.
     function add(address player, uint8 mode) external {
         uint32 id = _seedWallet(player);
-        _subscribers.push(uint256(uint160(player)) | (uint256(id) << 160));
+        _subscribers.push(id);
         Sub storage sub = _subOf[id];
         sub.setPosition = uint32(_subscribers.length);
         uint24 yesterday = _afkingResetDay - 1;
@@ -73,7 +73,7 @@ contract SubscriberNativeGasHost is DegenerusGame, WalletSeed {
         if (mode == 2) {
             address funder = address(uint160(player) + 0x100000);
             sub.flags |= 1;
-            _fundingSourceOf[id] = uint256(uint160(funder)) | (uint256(_seedWallet(funder)) << 160);
+            _fundingSourceOf[id] = _seedWallet(funder);
             _creditAfkingValue(_seedWallet(funder), 1 ether);
             _creditClaimable(_seedWallet(player), 100 ether);
             claimablePool += 100 ether;
@@ -95,7 +95,7 @@ contract SubscriberNativeGasHost is DegenerusGame, WalletSeed {
         subsFullyProcessed = true;
         uint32 id = _seedWallet(player);
         delete _subscribers;
-        _subscribers.push(uint256(uint160(player)) | (uint256(id) << 160));
+        _subscribers.push(id);
         _subOpenCursor = 0;
         _pendingBoxCount = 1;
         Sub storage sub = _subOf[id];
@@ -174,7 +174,7 @@ contract SubscriberAfkingNativeGasTest is DeployProtocol {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics.length != 0 && logs[i].emitter == address(game)
-                && logs[i].topics[0] == keccak256("WhalePassPurchased(address,uint256,uint256)")) {
+                && logs[i].topics[0] == keccak256("WhalePassPurchased(uint32,uint256,uint256)")) {
                 (uint256 quantity, uint256 paid) = abi.decode(logs[i].data, (uint256, uint256));
                 assertEq(quantity, 100);
                 assertEq(paid, 400 ether);

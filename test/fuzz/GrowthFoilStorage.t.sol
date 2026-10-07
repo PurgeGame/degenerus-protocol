@@ -9,19 +9,18 @@ contract GrowthFoilStorageTest is GrowthFoilFixture {
     /// activity/loyalty, curses-only, deity fallback, and afking against its policy.
     function testFuzz_MarketGatePolicy(uint256 mintData, uint24 rawLevel, bool afking, bool deity) public {
         uint24 lvl = uint24(bound(rawLevel, 0, type(uint24).max - 1));
-        mintData = (mintData & ~(uint256(type(uint32).max) << BitPackingLib.WALLET_ID_SHIFT)) | (uint256(pid) << BitPackingLib.WALLET_ID_SHIFT);
-        vm.mockCall(address(game), abi.encodeWithSignature("mintPackedFor(address)", PLAYER), abi.encode(mintData));
-        vm.mockCall(address(game), abi.encodeWithSignature("hasDeityPass(address)", PLAYER), abi.encode(deity));
+        mintData = deity ? mintData | (uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT)
+            : mintData & ~(uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT);
+        vm.mockCall(address(game), abi.encodeWithSignature("mintPackedOfId(uint32)", pid), abi.encode(mintData));
         vm.store(address(quests), keccak256(abi.encode(uint256(pid), uint256(1))), bytes32(uint256(afking ? 1 : 0) << 104));
         uint24 unitsLevel = uint24(mintData >> BitPackingLib.LEVEL_UNITS_LEVEL_SHIFT);
         bool activity = (unitsLevel == lvl || unitsLevel == lvl + 1) && uint16(mintData >> BitPackingLib.LEVEL_UNITS_SHIFT) >= 400;
         bool loyalty = uint24(mintData >> 48) >= 5 || (uint24(mintData >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) != 0 && ((mintData >> BitPackingLib.WHALE_PASS_TYPE_SHIFT) & 3) != 0) || deity;
         bool expectedReward = (activity && loyalty) || afking;
-        (bool mayBet, bool earnsReward, uint32 gateId) = quests.marketBetGates(PLAYER, lvl);
+        (bool mayBet, bool earnsReward, uint32 gateId) = quests.marketBetGates(game.walletIdOf(PLAYER), lvl);
         assertEq(earnsReward, expectedReward);
-        assertEq(gateId, pid, "the gate returns the wallet ID from the mint word");
-        uint256 idMask = uint256(type(uint32).max) << BitPackingLib.WALLET_ID_SHIFT;
-        assertEq(mayBet, expectedReward || (mintData & ~((uint256(255) << BitPackingLib.CURSE_COUNT_SHIFT) | idMask)) != 0);
+        assertEq(gateId, pid, "the gate preserves the selected wallet ID");
+        assertEq(mayBet, expectedReward || (mintData & ~(uint256(31) << BitPackingLib.CURSE_COUNT_SHIFT)) != 0);
     }
 
     function test_FoilZeroSpendStillSyncsAndFloors() public {

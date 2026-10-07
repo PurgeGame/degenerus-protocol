@@ -31,11 +31,11 @@ contract RewardRngBoundaryFixture is DegenerusGame, WalletSeed {
         for (uint256 i; i < cleanPrefix; ++i) {
             address member = address(uint160(0x100000 + i));
             uint32 memberId = _seedWallet(member);
-            _subscribers.push(uint256(uint160(member)) | (uint256(memberId) << 160));
+            _subscribers.push(memberId);
             _subOf[memberId].setPosition = uint32(_subscribers.length);
         }
         uint32 subId = _seedWallet(player);
-        _subscribers.push(uint256(uint160(player)) | (uint256(subId) << 160));
+        _subscribers.push(subId);
         _subOf[subId].setPosition = uint32(_subscribers.length);
         Sub storage sub = _subOf[subId];
         sub.amount = 10;
@@ -87,8 +87,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         vm.expectCall(
             ContractAddresses.GAME_LOOTBOX_MODULE,
             abi.encodeWithSelector(
-                IDegenerusGameLootboxModule.resolveAfkingBox.selector,
-                PLAYER, game.walletIdOf(PLAYER), uint256(0.01 ether), day, SESSION_WORD, uint16(1200)
+                IDegenerusGameLootboxModule.resolveAfkingBox.selector, game.walletIdOf(PLAYER), uint256(0.01 ether), day, SESSION_WORD, uint16(1200)
             )
         );
     }
@@ -129,10 +128,24 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
 
         // The new-day router drains the final old-session consumer before requesting again.
         _expectStampedResolve(day);
+        vm.recordLogs();
         for (uint256 i; i < 64 && _pending() != 0; ++i) _keep();
         assertEq(mockVRF.lastRequestId(), requestId, "final-drain call did not request new entropy");
         assertEq(_pending(), 0);
-        assertEq(_openedDay(), day);
+        if (_openedDay() != day) {
+            // This fixture has zero daily quantity. Once its pending box opens, a later
+            // stage in the same keeper call may reclaim that cancellation tombstone.
+            Vm.Log[] memory logs = vm.getRecordedLogs();
+            uint32 playerId = game.walletIdOf(PLAYER);
+            bool reclaimed;
+            for (uint256 i; i < logs.length; ++i) {
+                if (logs[i].emitter == address(game) && logs[i].topics.length > 1
+                    && logs[i].topics[0] == keccak256("SubscriptionExpired(uint32,uint8)")
+                    && uint32(uint256(logs[i].topics[1])) == playerId
+                    && abi.decode(logs[i].data, (uint8)) == 2) reclaimed = true;
+            }
+            assertTrue(reclaimed, "stamp opened or its completed tombstone was reclaimed");
+        }
         assertTrue(_humanComplete(), "the empty human queue completes after AFKing");
         assertTrue(game.rngComplete(), "final AFKing open notifies completion even with human queue already done");
     }
@@ -217,8 +230,8 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
             Vm.Log[] memory logs = vm.getRecordedLogs();
             bool expired;
             for (uint256 i; i < logs.length; ++i) {
-                if (logs[i].topics.length > 1 && logs[i].topics[0] == keccak256("SubscriptionExpired(address,uint8)")
-                    && address(uint160(uint256(logs[i].topics[1]))) == PLAYER) expired = true;
+                if (logs[i].topics.length > 1 && logs[i].topics[0] == keccak256("SubscriptionExpired(uint32,uint8)")
+                    && uint32(uint256(logs[i].topics[1])) == game.walletIdOf(PLAYER)) expired = true;
             }
             assertTrue(expired, "opened with its stamp day, or expired afterwards");
         }

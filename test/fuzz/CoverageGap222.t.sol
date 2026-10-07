@@ -731,7 +731,7 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool ok, ) = address(affiliate).call(
             abi.encodeWithSignature(
-                "payAffiliate(uint256,bytes32,address,uint32,uint24,bool,uint16)",
+                "payAffiliate(uint256,bytes32,uint32,uint24,bool,uint16)",
                 uint256(1 ether),
                 code,
                 buyer,
@@ -1467,8 +1467,7 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool ok, ) = address(game).call(
             abi.encodeWithSignature(
-                "resolveRedemptionLootbox(address,uint32,uint256,uint256,uint16,uint32)",
-                buyer,
+                "resolveRedemptionLootbox(uint32,uint256,uint256,uint16,uint32)",
                 uint32(0),
                 uint256(1 ether),
                 uint256(1),

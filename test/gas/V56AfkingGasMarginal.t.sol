@@ -12,64 +12,13 @@ import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 
-/// @title V56AfkingGasMarginal -- the v56 everyday-afking gas-MARGINAL harness (Phase 355) on the
-///        compute-on-read applied tree (baseline 453f8073). Measures every marginal the GAS phase needs:
-///        the per-buy LOOTBOX marginal, the per-buy TICKET marginal (the minimal-write primitive), the
-///        per-OPEN marginal, the per-EVICT-finalize marginal (the heavier in-stage sub-ending branch), and
-///        the WORST-CASE per-tx chunk for each batched advance/afking loop — the weighted-budget STAGE chunk
-///        (SUB_STAGE_WEIGHT_BUDGET) and the OPEN_BATCH open chunk. From each measured worst-case per-item
-///        marginal it DERIVES the max safe batch (the largest N keeping the per-tx chunk under the 10M comfort
-///        TARGET) and reports the dual bound (< 10M target, provably <= 16.7M hard ceiling).
-///
-/// @notice The v56 compute-on-read applied tree (what THIS harness measures):
-///
-///         (1) The per-buy hot path (GameAfkingModule, _deliverAfkingBuy) is call-free: the SOLVENCY-01 debit
-///             (`afkingFunding[src] -= ethValue; claimablePool -= uint128(ethValue)`, byte-frozen from v55) ->
-///             the per-mode primitive (lootbox box-stamp OR the ticket minimal-write `_queueEntriesScaled`,
-///             replacing the ~262k purchaseWith heavyweight) -> the MODE-AGNOSTIC in-slot accrue (affiliateBase
-///             flat-7% += and the slot-0 reward into pendingFlip) + the compute-on-read streak markers
-///             (gap-resume + afkCoveredThroughDay) -> the lastAutoBoughtDay marker. There is NO per-buy
-///             DegenerusQuests STATICCALL (the streak is computed on read from the Sub slot) and NO settle day.
-///
-///         (2) The Sub slot is a SINGLE 256-bit slot, EXACTLY full (0 free): config 40 + stamp 40 (scorePlus1
-///             uint16 / amount uint24 milli-ETH) + markers 96 (lastAutoBoughtDay / lastOpenedDay /
-///             afkCoveredThroughDay / afkingStartDay uint24 each) + accumulator 72 (affiliateBase uint32 /
-///             pendingFlip uint24 / subStreakLatch uint16). The accumulator is IN-SLOT — the per-buy accrue
-///             is a warm write on the SAME slot the stamp dirtied, NOT a new cold slot.
-///
-///         (3) Sub-ending finalize (cancel / cancel-reclaim / funding-kill): the only cross-contract
-///             work left on the advance chain (a DegenerusQuests playerQuestStates read + finalizeAfking streak
-///             write), so an in-stage finalize is the heavier branch — weighted SUB_STAGE_EVICT_WEIGHT in the
-///             budget. Membership never ends on a level crossing (the AFKing Subscription Token credential needs no per-sub
-///             stored pass horizon) — only cancel or funding-skip kill end a sub; the coin's seat lock blocks exits-by-transfer.
-///
-/// @notice The MARGINAL rule (CR-01 / 350-SPEC §0, load-bearing, verbatim): every per-item number is the
-///         loop-N-divide MARGINAL — (gas for N items − gas for N−1 items), NEVER a single-item TOTAL. A
-///         single-item total over-states the per-item cost and (were a reward pegged to it) re-introduces
-///         the Phase-319 self-crank faucet. Both the N and the N−1 measurements run from ONE identical clean
-///         baseline via `vm.snapshotState()` / `vm.revertToState()` — a LINEAR two-cycle run trips the
-///         idle-fixture day saturation + an unfulfilled-RNG `RngNotReady` on the second cycle (the 351-07
-///         documented failure). The snapshot/revert form gives both measurements the SAME fresh state, so
-///         (gasN − gasNm1) isolates exactly the Nth item's cost.
-///
-/// @notice The DUAL BOUND (USER-LOCKED this phase): every batched per-tx loop in the daily advance / afking
-///         chain must be sized so its WORST-CASE gas TARGETS < 10,000,000 (GAS_TARGET — the design comfort
-///         target) AND PROVABLY NEVER EXCEEDS 16,700,000 (EFFECTIVE_GAS_CEILING — the HARD never-exceed kill
-///         ceiling; a breach = mineFlip DoS / forced game-over). The headroom (16.7M − the measured chunk
-///         at the chosen batch) is the safety margin that absorbs measurement variance + worst-case
-///         outliers. foundry.toml inflates block_gas_limit to 30e9 for the harness; the bar is the 16.7M.
-///         For each batched loop the harness DERIVES the max safe batch: max N = the largest integer with
-///         fixed_tx_overhead + N×worst_case_per_item_marginal < GAS_TARGET ("optimal" = that largest N), and
-///         cross-checks the current constant <= that derived N (an over-large constant FAILS the test).
-///
-/// @dev Live `DeployProtocol` fixture; reuses the validated game-resident driving harness (the
-///      `_settleGame`/`_settleClean` VRF drain, the funded-sub setup, `depositAfkingFunding` funding,
-///      `_grantSeat`, the Sub-slot reads, the snapshot/revert two-near-N form) ported from
-///      V55AfkingGasMarginal. All pinned slots taken from `forge inspect DegenerusGame storageLayout`
-///      against the POST subject (`_subOf = 54`, `_subscribers = 56`, `_subCursor = 58:0`,
-///      `_subOpenCursor = 58:2`, `rngWordByDay = 10`; the Sub field byte offsets shift down 3 bytes past
-///      `amount` after the AFKing Subscription Token credential deleted the stored `validThroughLevel` pass horizon).
-///      Test-only: ZERO contracts/*.sol mutated.
+/// @title AFKing marginal measurements and resumable lifecycle witnesses.
+/// @notice N versus N-1 measurements are comparative diagnostics, not standalone cold
+///         operation proofs. Live admission uses MineFlipGasBounds and caller gas;
+///         fixed subscriber weights and fixed open batch sizes no longer exist.
+///         SubscriberAfkingNativeGas measures complete cold operations and their tails.
+///         This suite retains funding/stamp non-vacuity, forced ETH spins, cursor
+///         ordering, bounded eviction/resume and gap recovery through the live engine.
 contract V56AfkingGasMarginal is DeployProtocol {
 
     mapping(address => uint32) private _aidCache;
@@ -91,8 +40,8 @@ contract V56AfkingGasMarginal is DeployProtocol {
     // RE-DERIVED via `solc --storage-layout` on the working tree after the V62 lootbox repack — the
     // folded lootboxEth word + removed lootboxEthBase/Flip/Purchase/Distress shifted later slots down.
     uint256 private constant RNG_WORD_BY_DAY_SLOT = GameSlots.RNG_WORD_BY_DAY; // mapping(uint24 => uint256) — the afking box's DAY-keyed word + readiness gate
-    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF;           // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = GameSlots.SUBSCRIBERS;     // address[] _subscribers (slot holds the length)
+    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF;           // _subOf mapping root (uint32 => Sub, one packed slot)
+    uint256 private constant SUBSCRIBERS_SLOT = GameSlots.SUBSCRIBERS;     // uint32[] _subscribers (slot holds the length)
     uint256 private constant SUBCURSOR_SLOT = GameSlots.SUB_CURSOR;       // _subCursor (uint16 @ byte 0) + _subOpenCursor (uint16 @ byte 2) + _afkingResetDay (uint24 @ byte 4) + boxCursor (uint48 @ byte 7) + boxReadCount (uint32 @ byte 13)
 
     // Sub packed-field byte offsets — RE-DERIVED via `forge inspect DegenerusGame storageLayout`. The
@@ -127,47 +76,8 @@ contract V56AfkingGasMarginal is DeployProtocol {
     // Dual-bound + worst-case / measurement constants
     // -------------------------------------------------------------------------
 
-    /// @dev The 10M design comfort TARGET (USER-LOCKED dual bound). Every batched per-tx loop's worst-case
-    ///      chunk at the chosen batch must land BELOW this; the derived max-safe batch is the largest N with
-    ///      fixed_overhead + N×worst_case_per_item_marginal < GAS_TARGET.
+    /// @dev Sizing target for an indivisible operation plus its checkpoint tail.
     uint256 internal constant GAS_TARGET = 10_000_000;
-
-    /// @dev The 16.7M HARD never-exceed kill ceiling (USER-LOCKED dual bound). A breach = mineFlip DoS /
-    ///      forced game-over. foundry.toml inflates block_gas_limit to 30e9 for the harness; the never-exceed
-    ///      bar is this 16.7M. The headroom (16.7M − the measured-at-target chunk) is the safety margin.
-    uint256 internal constant EFFECTIVE_GAS_CEILING = 16_700_000;
-
-    /// @dev SUB_STAGE_WEIGHT_BUDGET (DegenerusGameAdvanceModule.sol:158): the per-call STAGE gas-weight budget.
-    ///      Buys are weighted by true marginal cost (lootbox = SUB_STAGE_LOOTBOX_WEIGHT, ticket =
-    ///      SUB_STAGE_TICKET_WEIGHT, evict = SUB_STAGE_EVICT_WEIGHT); a chunk ends when accumulated weight
-    ///      reaches the budget. Weights ratio on true cold marginals (~3.4k per weight-unit), so a budget of
-    ///      2500 caps the worst chunk (any mix, incl. a saturated all-evict crank) near the <10M target, far
-    ///      under the 16.7M ceiling. Mirror of the contract constant — keep in sync.
-    uint256 internal constant SUB_STAGE_WEIGHT_BUDGET = 2500;
-
-    /// @dev SUB_STAGE_LOOTBOX_WEIGHT (GameAfkingModule.sol): the lootbox-buy gas-weight unit (≈34k cold marginal)
-    ///      → weight 10, giving the granularity for ticket (≈73k → 21) and evict (≈29k → 8) to ratio on real
-    ///      marginal cost. Mirror of the contract constant — keep in sync.
-    uint256 internal constant SUB_STAGE_LOOTBOX_WEIGHT = 10;
-
-    /// @dev SUB_STAGE_SKIP_WEIGHT (GameAfkingModule.sol): the gas-weight of a ring-scan skip visit
-    ///      (≈4.7k cold marginal, honestly rounded to 2 units of the ≈3.4k/unit scale). Bounds an
-    ///      all-skip chunk at SUB_STAGE_WEIGHT_BUDGET / 2 = 1250 visits regardless of ring size.
-    uint256 internal constant SUB_STAGE_SKIP_WEIGHT = 2;
-
-    /// @dev SUB_STAGE_EVICT_WEIGHT (GameAfkingModule.sol): the gas-weight of an in-stage sub-ending finalize
-    ///      (funding-kill / cancel-reclaim) — a cross-contract quest streak write + swap-pop,
-    ///      measured ≈29k cold → weight 8. Mirror of the contract constant — keep in sync.
-    uint256 internal constant SUB_STAGE_EVICT_WEIGHT = 8;
-
-    /// @dev SUB_STAGE_TICKET_WEIGHT (GameAfkingModule.sol): a ticket buy's gas-weight vs the lootbox unit — the
-    ///      cold ticketQueue push + owed-mapping SSTORE make it ≈73k → weight 21. A budget-B chunk holds
-    ///      B/SUB_STAGE_TICKET_WEIGHT tickets. Mirror of the contract constant — keep in sync.
-    uint256 internal constant SUB_STAGE_TICKET_WEIGHT = 21;
-
-    /// @dev OPEN_BATCH (GameAfkingModule.sol:246): the flat per-box open-chunk budget; each afking box uniform
-    ///      O(1) (~74k worst box) so 80 boxes ≈ 9.15M, under the 10M comfort target and far under 16.7M.
-    uint256 internal constant OPEN_BATCH = 80;
 
     /// @dev Harness-local day-parity period for `_warpToBoundary` deterministic day selection. The contracts no
     ///      longer have a settle cadence (compute-on-read obviated it); this is purely a test warp helper.
@@ -179,9 +89,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     ///      fail-louds that invariant. A per-tx ceiling proof "at the cap" must use 2000.
     uint256 internal constant SUBSCRIBER_CAP = 2000;
 
-    /// @dev The hard EIP-7825 per-transaction gas bar. The D-06 per-advance asserts use this exact value
-    ///      (16_777_216), not the harness EFFECTIVE_GAS_CEILING comfort constant (16_700_000): EVERY single
-    ///      mineFlip tx in a worst-case multi-day VRF-stall resume must stay strictly under it.
+    /// @dev Historical transaction allowance used by bounded progress witnesses.
     uint256 internal constant EIP7825_TX_GAS_CAP = 16_777_216;
 
     /// @dev A worst-case VRF/keeper stall length (days) for the D-06 gap-resume resume. The gap backfill is
@@ -209,7 +117,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     uint256 internal constant REG_LOCK_OPEN_CEIL = 200_000;        // ~3x the ~70-75k measured open marginal
 
     /// @dev N for the two-near-N marginal: measure N vs N−1 from one clean baseline (snapshot/revert). Big
-    ///      enough that the funded set + the 2 deploy subs stay < SUB_STAGE_BATCH (one advance stamps all in
+    ///      enough that the funded set + the 2 deploy subs fit the measurement allowance (one advance stamps all in
     ///      the first chunk), so the everything-else of the advance is identical across N and N−1.
     uint256 internal constant N_HI = 24;
     uint256 internal constant N_LO = 23;
@@ -227,31 +135,12 @@ contract V56AfkingGasMarginal is DeployProtocol {
         vm.deal(address(game), 10_000_000 ether);
     }
 
-    // =========================================================================
-    // Derived-batch helper (the harness DERIVES the optimal batch, it is not guessed)
-    // =========================================================================
-
-    /// @dev The largest N with `fixedOverhead + N×perItemMarginal < GAS_TARGET` — the derived OPTIMAL
-    ///      (max-safe, throughput-maximizing) batch size for a per-tx loop. If even N=0 already exceeds the
-    ///      target (fixedOverhead >= GAS_TARGET) it returns 0. perItemMarginal must be non-zero (a measured
-    ///      marginal always is; guarded to avoid div-by-zero).
-    function _maxSafeBatch(uint256 fixedOverhead, uint256 perItemMarginal) internal pure returns (uint256) {
-        if (perItemMarginal == 0) return 0;
-        if (fixedOverhead >= GAS_TARGET) return 0;
-        return (GAS_TARGET - 1 - fixedOverhead) / perItemMarginal;
-    }
 
     // =========================================================================
     // (a) per-buy LOOTBOX marginal — a NON-settle-day STAGE (GAS-01)
     // =========================================================================
 
-    /// @notice The per-buy LOOTBOX marginal = (gas for N funded lootbox subs − gas for N−1) / 1, measured the
-    ///         ROBUST snapshot/revert way (both runs from one clean baseline) over a NON-settle-day STAGE
-    ///         advance (processDay % SETTLE_PERIOD != 0 — the everyday cheap buy, no _settleQuest). The v56
-    ///         everyday lootbox buy is a warm box-stamp + the mode-agnostic in-slot accrue, NO per-buy
-    ///         cross-contract storm (that is deferred to the ~10-day settle). Asserts the marginal alone
-    ///         trivially fits the 16.7M ceiling; emits the informational comparison vs the v55 ~206k reference
-    ///         and the ~130-140k GAS-01 target band (the MEASURED number is the deliverable, NOT a hard pin).
+    /// @notice Measure the extra funded lootbox subscription against the current item reservation.
     function testPerBuyLootboxMarginal() public {
         uint256 snap = vm.snapshotState();
         uint256 gasN = _measureStageAdvanceGas(N_HI, "blMhi_", false, false);
@@ -261,7 +150,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         assertGt(gasN, gasNm1, "per-buy lootbox marginal: N subs cost strictly more than N-1 (the Nth sub did real work)");
         uint256 perBuyLootbox = gasN - gasNm1; // (gas for N − gas for N−1) / 1 — the loop-N-divide MARGINAL
 
-        assertLt(perBuyLootbox, EFFECTIVE_GAS_CEILING, "per-buy lootbox marginal trivially fits the 16.7M ceiling");
+        assertLe(perBuyLootbox, GasBounds.SUBSCRIBER_ITEM_GAS, "lootbox marginal exceeds the current item reservation");
 
         string memory band;
         if (perBuyLootbox <= V56_LOOTBOX_TARGET_HI) {
@@ -285,11 +174,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     // (b) per-buy TICKET marginal — the new minimal-write primitive (GAS-01)
     // =========================================================================
 
-    /// @notice The per-buy TICKET marginal = (gas for N funded ticket subs − gas for N−1) / 1, NON-settle-day
-    ///         STAGE, snapshot/revert. The ticket leg is the NEW minimal-write `_queueEntriesScaled` primitive
-    ///         + the buyerOwedFlip in-slot accrue (off the old ~262k purchaseWith heavyweight that dragged
-    ///         in recordMint + the whole quests/affiliate/coinflip work). Asserts under the ceiling; emits the
-    ///         structural-win comparison vs the ~262k purchaseWith reference.
+    /// @notice Measure the extra funded ticket subscription against the current item reservation.
     function testPerBuyTicketMarginal() public {
         uint256 snap = vm.snapshotState();
         uint256 gasN = _measureStageAdvanceGas(N_HI, "btMhi_", true, false);
@@ -299,7 +184,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         assertGt(gasN, gasNm1, "per-buy ticket marginal: N subs cost strictly more than N-1 (the Nth sub did real work)");
         uint256 perBuyTicket = gasN - gasNm1;
 
-        assertLt(perBuyTicket, EFFECTIVE_GAS_CEILING, "per-buy ticket marginal trivially fits the 16.7M ceiling");
+        assertLe(perBuyTicket, GasBounds.SUBSCRIBER_ITEM_GAS, "ticket marginal exceeds the current item reservation");
 
         emit log_named_string(
             "per_buy_ticket_vs_purchasewith",
@@ -315,20 +200,10 @@ contract V56AfkingGasMarginal is DeployProtocol {
     }
 
     // =========================================================================
-    // (c) per-OPEN marginal + the OPEN_BATCH chunk dual bound (GAS-01)
+    // (c) Per-box marginal against the native open reservation
     // =========================================================================
 
-    /// @notice The per-open marginal = (gas for N opens − gas for N−1 opens) / 1, snapshot/revert. The afking
-    ///         open leg is mineFlip's AFKing stage (`runAfkingWork`); each afking box rolls boons
-    ///         like a human box (~75k/box, uniform O(1) — a cheap stamp-derived resolve, no boxQueue walk /
-    ///         no entry-word read, the anti-gas-DoS property the human openLootBox lacks). All numbers
-    ///         are EMITTED first (the measured per-box marginal + the OPEN_BATCH chunk + the derived max-safe
-    ///         batch ARE the deliverable). HARD safety asserts (the never-breach floor): per-box is uniform
-    ///         O(1), a derived max-safe batch > 0 exists, the chunk AT the derived max-safe batch is < 10M
-    ///         (the derivation is sound), and the OPEN_BATCH chunk stays ≤ 16.7M (the never-exceed ceiling).
-    ///         The < 10M TARGET at the CURRENT OPEN_BATCH is reported as a needs-retune FLAG for 355-03, NOT a
-    ///         hard revert — re-sizing OPEN_BATCH to the < 10M target is 355-03's explicit charge (and at
-    ///         ~75k/box, 200 boxes ≈ 15M > the 10M target, so the flag is expected to direct a shrink).
+    /// @notice Measure one additional stamp-day box; complete cold envelopes are covered by the native suite.
     function testPerOpenMarginal() public {
         uint256 snap = vm.snapshotState();
         // SHARED prefix across the N and N-1 runs: each box's boon-roll seed is keccak(stamp-day word, player,
@@ -343,34 +218,11 @@ contract V56AfkingGasMarginal is DeployProtocol {
         assertGt(gasN, gasNm1, "per-open marginal: N opens cost strictly more than N-1 (the Nth box materialized)");
         uint256 perOpen = gasN - gasNm1; // (gas for N − gas for N−1) / 1 — the loop-N-divide MARGINAL
 
-        // Derive the OPEN_BATCH chunk. fixed_open_overhead = the open-leg tx overhead at N opens minus the N
-        // per-box marginals (the constant mineFlip entry/exit + advance-check + bounty cost shared by any
-        // open chunk size). The chunk at a batch B = fixed + B×perOpen.
-        // The fixed overhead is now the whole stamp-day session's keeper gas outside the boxes.
-        uint256 fixedOpenOverhead = gasN > perOpen * N_HI ? gasN - perOpen * N_HI : 0;
-        uint256 derivedMaxSafeOpenBatch = _maxSafeBatch(fixedOpenOverhead, perOpen);
-        uint256 chunkAtDerived = fixedOpenOverhead + derivedMaxSafeOpenBatch * perOpen;
-
-        // EMIT-FIRST — the measured numbers + the derived max-safe batch.
         emit log_named_uint("per_open_marginal_gas", perOpen);
         emit log_named_uint("per_open_gas_n", gasN);
         emit log_named_uint("per_open_gas_n_minus_1", gasNm1);
-        emit log_named_uint("open_fixed_overhead_gas", fixedOpenOverhead);
-        emit log_named_uint("derived_max_safe_open_batch", derivedMaxSafeOpenBatch);
-        emit log_named_uint("open_chunk_at_derived_max_safe_batch_gas", chunkAtDerived);
-        emit log_named_uint("declared_AFKING_OPEN_GAS", GasBounds.AFKING_OPEN_GAS);
-
-        // HARD safety asserts (the never-breach floor; the 10M target at the current constant is a logged
-        // 355-03 finding, NOT a hard revert):
-        // (1) the per-box marginal is a cheap uniform-O(1) resolve (no cold-ledger walk).
-        assertLt(perOpen, 200_000, "per-open afking marginal is a cheap uniform-O(1) stamp-derived resolve (no cold-ledger walk)");
-        // (2) a < 10M-safe batch is ACHIEVABLE (the derivation found a positive max-safe N).
-        assertGt(derivedMaxSafeOpenBatch, 0, "a < 10M-safe open batch is achievable (derived max-safe N > 0)");
-        // (3) the derivation is sound: the chunk AT the derived max-safe batch is under the 10M target.
-        assertLt(chunkAtDerived, GAS_TARGET, "the chunk at the derived max-safe open batch is under the 10M TARGET (derivation sound)");
-        // (4) per-chunk: the fixed OPEN_BATCH crank is gone; each box is its own AFKing checkpoint admitted
-        //     under the declared AFKING_OPEN_GAS bound, so the measured box must fit that bound, itself
-        //     inside the 10M realistic chunk limit.
+        // A marginal can detect regressions but does not include a complete cold
+        // call and return tail; the native suite measures that envelope directly.
         assertLe(perOpen, GasBounds.AFKING_OPEN_GAS, "per-open marginal fits the declared AFKING checkpoint bound");
         assertLe(GasBounds.AFKING_OPEN_GAS + GasBounds.AFKING_TAIL_GAS, GAS_TARGET, "AFKING checkpoint bound inside the 10M chunk limit");
     }
@@ -379,15 +231,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     // (d) per-EVICT-finalize marginal — the heavier in-stage branch (GAS-03)
     // =========================================================================
 
-    /// @notice The per-evict marginal = (gas for N evicting subs - gas for N-1) / 1, snapshot/revert. An
-    ///         in-stage sub-ending finalize (funding-kill / cancel-reclaim) does a cross-contract
-    ///         DegenerusQuests read (playerQuestStates) + streak write (finalizeAfking) that the now call-free
-    ///         local buy does not. Emits the WARM-measured ceil(evict/buy) for reference, but note it is
-    ///         warm-distorted: warm same-tx slots make evict ≈ 1.4x a buy, whereas the cold-sized weight is 1
-    ///         (cold evict ≈18k < lootbox ≈34k, the large-scale bench — see testColdMarginalCalibration). The
-    ///         binding evict safety is the all-evict chunk-under-ceiling proven in testResidualR1, not this
-    ///         warm ratio. Subs are funding-killed (their afkingFunding bucket drained to 0 so the STAGE's
-    ///         cover-buy finds itself unfunded) — membership never ends on a level crossing.
+    /// @notice Measure one additional funding expiry, including its quest finalization.
     function testEvictFinalizeMarginal() public {
         uint256 snap = vm.snapshotState();
         uint256 gasN = _measureEvictStageGas(N_HI, "evHi_");
@@ -396,74 +240,11 @@ contract V56AfkingGasMarginal is DeployProtocol {
 
         assertGt(gasN, gasNm1, "per-evict marginal: N evicting subs cost strictly more than N-1");
         uint256 perEvict = gasN - gasNm1;
-        assertLt(perEvict, EFFECTIVE_GAS_CEILING, "per-evict marginal fits the 16.7M ceiling");
+        assertLe(perEvict, GasBounds.SUBSCRIBER_ITEM_GAS, "eviction marginal exceeds the current item reservation");
 
-        // The lootbox buy marginal (the box-stamp path) to weight the evict against.
-        vm.revertToState(snap);
-        uint256 buyN = _measureStageAdvanceGas(N_HI, "evbHi_", false, false);
-        vm.revertToState(snap);
-        uint256 buyNm1 = _measureStageAdvanceGas(N_LO, "evbLo_", false, false);
-        uint256 perBuy = buyN > buyNm1 ? buyN - buyNm1 : 1;
-
-        uint256 warmDerivedEvictWeight = (perEvict + perBuy - 1) / perBuy; // ceil(warm evict / warm buy)
         emit log_named_uint("per_evict_finalize_marginal_gas", perEvict);
-        emit log_named_uint("per_buy_lootbox_marginal_gas", perBuy);
-        emit log_named_uint("warm_derived_evict_weight_W", warmDerivedEvictWeight);
-        emit log_named_uint("current_sub_stage_evict_weight", SUB_STAGE_EVICT_WEIGHT);
-        emit log_named_string(
-            "evict_weight_finding",
-            "WARM ceil(evict/buy) over-states the weight (warm evict ~= 1.4x a warm buy); the cold-sized weight "
-            "is 1 (cold evict ~18k < lootbox ~34k, large-scale bench -- see testColdMarginalCalibration). The "
-            "all-evict chunk safety is proven directly in testResidualR1, not by this warm ratio."
-        );
     }
 
-    // =========================================================================
-    // (e) worst-case STAGE chunk under the weighted budget at the cap (GAS-03)
-    // =========================================================================
-
-    /// @notice The weighted budget caps a chunk at SUB_STAGE_WEIGHT_BUDGET weight. The all-cheap-buys chunk
-    ///         (BUDGET buys) is one worst-case extreme; an all-evicts chunk is BUDGET/W evicts (each ~= W buys),
-    ///         so by construction both bound to roughly the same gas. Asserts the all-buys chunk at the current
-    ///         budget stays <= the 16.7M never-exceed ceiling and derives the max-safe budget for the <10M target.
-    function testWorstCaseStageChunkUnderBudget() public {
-        uint256 snap = vm.snapshotState();
-        // BINDING mode = TICKET (the cold ticketQueue push dominates; lootbox reuses the warm Sub slot).
-        uint256 chunkAllBuys = _measureFullBudgetBuyChunk("wcb_");
-        vm.revertToState(snap);
-
-        uint256 buyN = _measureStageAdvanceGas(N_HI, "wcmHi_", true, false);
-        vm.revertToState(snap);
-        uint256 buyNm1 = _measureStageAdvanceGas(N_LO, "wcmLo_", true, false);
-        uint256 perBuy = buyN > buyNm1 ? buyN - buyNm1 : 1;
-
-        // A budget-B chunk holds B/SUB_STAGE_TICKET_WEIGHT ticket buys (the binding worst case).
-        uint256 ticketsInChunk = SUB_STAGE_WEIGHT_BUDGET / SUB_STAGE_TICKET_WEIGHT;
-        uint256 fixedOverhead = chunkAllBuys > perBuy * ticketsInChunk
-            ? chunkAllBuys - perBuy * ticketsInChunk
-            : 0;
-        // _maxSafeBatch returns max ticket COUNT under the 10M target; the budget is that × weight.
-        uint256 derivedMaxSafeBudget = _maxSafeBatch(fixedOverhead, perBuy) * SUB_STAGE_TICKET_WEIGHT;
-
-        emit log_named_uint("stage_all_buys_chunk_at_budget_gas", chunkAllBuys);
-        emit log_named_uint("per_buy_lootbox_marginal_gas", perBuy);
-        emit log_named_uint("stage_fixed_overhead_gas", fixedOverhead);
-        emit log_named_uint("derived_max_safe_weight_budget", derivedMaxSafeBudget);
-        emit log_named_uint("current_sub_stage_weight_budget", SUB_STAGE_WEIGHT_BUDGET);
-        emit log_named_uint(
-            "chunk_headroom_to_16p7M_gas",
-            EFFECTIVE_GAS_CEILING > chunkAllBuys ? EFFECTIVE_GAS_CEILING - chunkAllBuys : 0
-        );
-        emit log_named_string(
-            "weight_budget_finding",
-            chunkAllBuys < GAS_TARGET
-                ? "all-buys chunk at SUB_STAGE_WEIGHT_BUDGET < 10M target AND <= 16.7M ceiling - headroom to raise"
-                : "all-buys chunk EXCEEDS the 10M target (measure vs 16.7M) - 355-03 may shrink the budget"
-        );
-
-        assertGt(derivedMaxSafeBudget, 0, "a < 10M-safe weight budget is achievable");
-        assertLe(chunkAllBuys, EFFECTIVE_GAS_CEILING, "all-buys chunk at the current budget stays <= the 16.7M ceiling");
-    }
 
     // =========================================================================
     // (f) D-06 / GAS-06 — the per-tx gap-resume ceiling + the gap/jackpot decouple (D-07)
@@ -679,50 +460,12 @@ contract V56AfkingGasMarginal is DeployProtocol {
         assertLt(modeledGas, NATIVE_EVICTION_CALL_GAS, "R1: measured item costs leave the modeled checkpoint reserve");
     }
 
-    // =========================================================================
-    // (h) D-06 residual R2 — heaviest single ticket entry at a full write budget
-    // =========================================================================
-
-    /// @notice Residual R2: the per-entry cap (writesBudget - used) stops one entry overrunning the budget, but
-    ///         the heaviest single TICKET buy (the minimal-write _queueEntriesScaled primitive — the in-stage
-    ///         per-sub ticket leg, the cold ticketQueue push that dominates the STAGE weight at
-    ///         SUB_STAGE_TICKET_WEIGHT) is asserted bounded at the cap. The deferred trait-resolution
-    ///         ticket worker (runTicketWork) is write-budgeted and O(1)-queued, so the heaviest
-    ///         in-stage ticket entry is the per-buy ticket marginal; assert it is bounded and weight-faithful
-    ///         (<= SUB_STAGE_TICKET_WEIGHT buy-units).
-    function testResidualR2HeaviestTicketEntry() public {
-        uint256 snap = vm.snapshotState();
-        uint256 tN = _measureStageAdvanceGas(N_HI, "r2tkHi_", true, false);
-        vm.revertToState(snap);
-        uint256 tNm1 = _measureStageAdvanceGas(N_LO, "r2tkLo_", true, false);
-        require(tN > tNm1, "R2: the Nth ticket buy did real work");
-        uint256 perTicket = tN - tNm1;
-
-        vm.revertToState(snap);
-        uint256 lN = _measureStageAdvanceGas(N_HI, "r2lbHi_", false, false);
-        vm.revertToState(snap);
-        uint256 lNm1 = _measureStageAdvanceGas(N_LO, "r2lbLo_", false, false);
-        uint256 perLootbox = lN > lNm1 ? lN - lNm1 : 1;
-
-        emit log_named_uint("r2_heaviest_ticket_entry_gas", perTicket);
-        emit log_named_uint("r2_per_lootbox_unit_gas", perLootbox);
-        emit log_named_uint("r2_ticket_weight_units", SUB_STAGE_TICKET_WEIGHT);
-
-        // R2: the heaviest single ticket entry is bounded by the ceiling and weight-faithful (<= its
-        // SUB_STAGE_TICKET_WEIGHT allocation in lootbox-buy units) — one entry can never overrun the budget.
-        assertLt(perTicket, EFFECTIVE_GAS_CEILING, "R2: the heaviest single ticket entry trivially fits the 16.7M ceiling");
-        assertLe(perTicket, perLootbox * SUB_STAGE_TICKET_WEIGHT, "R2: the heaviest ticket entry <= its SUB_STAGE_TICKET_WEIGHT allocation");
-    }
 
     // =========================================================================
-    // (i) D-06 residual R3 — mixed-stamp-day OPEN_BATCH (defeats the cachedDay/cachedWord short-circuit)
+    // (i) Forced ETH-spin box marginal
     // =========================================================================
 
-    /// @notice Residual R3: the per-open marginal harness measures a UNIFORM stamp day (the cachedDay/cachedWord
-    ///         short-circuit at GameAfkingModule:1157-1163 hits, reading rngWordByDay once per pass). The
-    ///         cache-defeating case — boxes spanning DISTINCT stamp days — re-reads rngWordByDay PER box (a cold
-    ///         SLOAD each), the higher per-box marginal. This measures a mixed-day open and asserts both the
-    ///         per-box marginal and the full OPEN_BATCH chunk at the mixed-day cost stay < the EIP cap.
+    /// @notice Force each stamp-day box to take the ETH-spin branch and check its marginal.
     function testResidualR3MixedStampDayOpenBatch() public {
         // Premise change: a box now always opens in the session of its own stamp day (the next request
         // waits for every read consumer, and only today's/yesterday's words are retained), so the
@@ -775,7 +518,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         vm.recordLogs();
         sessionGas = _sessionGas(word);
         VmSafe.Log[] memory logs = vm.getRecordedLogs();
-        bytes32 boxSpinSig = keccak256("BoxSpin(address,uint64,uint256,uint256,uint256)");
+        bytes32 boxSpinSig = keccak256("BoxSpin(uint32,uint64,uint256,uint256,uint256)");
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics.length != 0 && logs[i].topics[0] == boxSpinSig) {
                 (uint64 betId, , , ) = abi.decode(logs[i].data, (uint64, uint256, uint256, uint256));
@@ -809,7 +552,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     ///         state is the funding-kill finalize (R1's evict branch) and the heaviest open (R3's mixed-day,
     ///         cold-SLOAD-per-box). This asserts the heaviest of {evict marginal, mixed-day open marginal} is
     ///         still a bounded O(1) per-iter cost (no marginal scales with player magnitude), so the
-    ///         weight-budget / OPEN_BATCH chunk bounds hold at the heaviest reachable state.
+    ///         native per-item reservations cover the measured marginal.
     function testResidualR4HeaviestPerIterState() public {
         uint256 snap = vm.snapshotState();
         uint256 evN = _measureEvictStageGas(N_HI, "r4evHi_");
@@ -1107,19 +850,6 @@ contract V56AfkingGasMarginal is DeployProtocol {
         require(_subscriberCount() < preCount, "evict non-vacuity: the stage funding-killed subs");
     }
 
-    /// @dev Measure a full-budget all-buys STAGE chunk: SUB_STAGE_WEIGHT_BUDGET funded lootbox subs, one
-    ///      new-day advance, bracketed. The weight budget caps the work; this is the all-cheap-buys worst case.
-    function _measureFullBudgetBuyChunk(string memory prefix) internal returns (uint256 chunkGas) {
-        _settleClean(uint256(keccak256(abi.encodePacked(prefix, "base"))) | 1);
-        // Weighted budget: a ticket buy costs SUB_STAGE_TICKET_WEIGHT, so BUDGET/WEIGHT ticket
-        // subs (+2 margin so the loop fills the budget, not the set) fill the chunk.
-        _setupFundedSubs(SUB_STAGE_WEIGHT_BUDGET / SUB_STAGE_TICKET_WEIGHT + 2, prefix, 50 ether, true);
-        _warpToBoundary(false);
-        require(game.advanceDue(), "fixture: advanceDue on the new day");
-        uint256 gasBefore = gasleft();
-        game.mineFlip();
-        chunkGas = gasBefore - gasleft();
-    }
 
     // =========================================================================
     // Driving harness (ported + extended)
@@ -1127,7 +857,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
 
     /// @dev Measure a fresh-state new-day advance whose STAGE processes N funded LOOTBOX subs, returning the
     ///      bracketed advance gas. Settles to a clean baseline FIRST (so a prior measurement's unfulfilled
-    ///      RNG cannot leave the game rngLocked). n + 2 deploy subs < SUB_STAGE_BATCH so ONE advance stamps
+    ///      RNG cannot leave the game rngLocked). The small cohort fits the supplied gas, so one advance stamps
     ///      the whole set in the first chunk; the everything-else of the advance (empty ticket queue) is
     ///      identical across N and N−1 — the (gasN − gasNm1) difference isolates the Nth sub's STAGE cost.
     ///      `landOnSettleDay` warps so the advanced processDay lands on (true) or off (false) a settle
@@ -1430,7 +1160,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         vm.store(address(game), bytes32(uint256(HEADER_SLOT)), bytes32(cur));
     }
 
-    /// @dev Read the STAGE cursor `_subCursor` (slot 56, byte 0, uint16) — advances by SUB_STAGE_BATCH on a
+    /// @dev Read the STAGE cursor `_subCursor` (slot 56, byte 0, uint16) — advances across admitted subscribers on a
     ///      full chunk.
     function _subCursor() internal view returns (uint256) {
         return uint256(vm.load(address(game), bytes32(uint256(SUBCURSOR_SLOT)))) & 0xFFFF;
@@ -1501,21 +1231,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     // (m) Q2 INVESTIGATION — warm-vs-cold weight calibration (vm.cool cold marginals)
     // =========================================================================
 
-    /// @notice WARM-vs-COLD calibration (Q2). The snapshot/revert marginals elsewhere in this harness measure
-    ///         WARM same-tx Sub slots (the subs were funded + stamped in the SAME test tx, so their slots are
-    ///         warm when the bracketed advance reads them). This re-measures the SAME lootbox/ticket/evict
-    ///         marginals with `vm.cool(address(game))` re-colding the game storage immediately before the
-    ///         bracketed advance — the realistic daily-advance regime where each sub was funded/stamped on a
-    ///         PRIOR tx, so its Sub slot + afkingFunding entry are a cold first-touch. Empirical result: vm.cool
-    ///         raises each absolute marginal ~3x (warm understates by ~3x — the artifact is real and large), BUT
-    ///         the isolated N-vs-(N-1) marginal FLATTENS the per-op ratios toward ~1:1:1 (the cold-slot premium
-    ///         is ~uniform per op), so it does NOT reproduce the large-scale-bench weight set 2:4:1. Those
-    ///         ratios are a CUMULATIVE per-op WORK effect (ticket-queue growth, the lighter evict finalize) that
-    ///         only manifests at scale, which is why the large-scale bench — not this isolated-marginal harness —
-    ///         is authoritative for the weight RATIOS. This harness's job is the absolute O(1) boundedness + the
-    ///         chunk-under-ceiling safety proof, both of which hold. Diagnostic: emits warm + cold side by side;
-    ///         the only hard asserts are that cooling RAISES the marginal (artifact direction) and each cold
-    ///         marginal stays a bounded O(1).
+    /// @notice Compare warm and cooled state for funded buys and expiries. These are relative cost diagnostics.
     function testColdMarginalCalibration() public {
         uint256 snap = vm.snapshotState();
 
@@ -1564,17 +1280,6 @@ contract V56AfkingGasMarginal is DeployProtocol {
         emit log_named_uint("cold_over_warm_lootbox_x100", coldLootbox * 100 / warmLootbox);
         emit log_named_uint("cold_ticket_over_lootbox_x100", coldTicket * 100 / coldLootbox);
         emit log_named_uint("cold_evict_over_lootbox_x100", coldEvict * 100 / coldLootbox);
-        emit log_named_uint("weightset_ticket_over_lootbox_x100", SUB_STAGE_TICKET_WEIGHT * 100 / SUB_STAGE_LOOTBOX_WEIGHT);
-        emit log_named_uint("weightset_evict_over_lootbox_x100", SUB_STAGE_EVICT_WEIGHT * 100 / SUB_STAGE_LOOTBOX_WEIGHT);
-        emit log_named_string(
-            "cold_calibration_finding",
-            "vm.cool raises each absolute marginal ~3x (warm same-tx slots understate; the artifact is real). The "
-            "isolated N-vs-(N-1) marginal flattens the per-op ratios toward ~1:1:1 (the cold-slot premium is "
-            "~uniform per op), so it does NOT reproduce the large-scale-bench 2:4:1 -- those ratios are a "
-            "cumulative per-op WORK effect (ticket-queue growth / lighter evict finalize) only seen at scale. The "
-            "large-scale bench is authoritative for the weight ratios; this harness proves O(1) + chunk<ceiling."
-        );
-
         // Artifact direction: cooling RAISES each marginal (a cold first-touch costs more than the warm same-tx
         // slot) — the empirical confirmation that the warm marginals elsewhere understate the realistic cost.
         assertGt(coldLootbox, warmLootbox, "cold-calib: vm.cool raises the lootbox marginal (warm same-tx understates)");
@@ -1590,7 +1295,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     /// @dev COLD variant of _measureStageAdvanceGas: identical setup, but vm.cool's the game storage right
     ///      before the bracketed advance so the STAGE reads each sub's Sub slot + afkingFunding entry as a COLD
     ///      first-touch (the realistic daily advance — subs funded/stamped on a prior tx). The marginal isolates
-    ///      the Nth sub's COLD STAGE cost, the regime the cold-sized weight set is calibrated against.
+    ///      the Nth sub's COLD STAGE cost, the regime the native subscriber reservation must cover.
     function _measureStageAdvanceGasCold(uint256 n, string memory prefix, bool isTicket)
         internal
         returns (uint256 advGas)
@@ -1617,7 +1322,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
 
     /// @dev COLD variant of _measureEvictStageGas: identical funding-kill setup, vm.cool before the
     ///      bracketed advance so each killed sub's cross-contract finalize (quest read + streak write) is a
-    ///      cold first-touch — the realistic cold evict marginal that sets SUB_STAGE_EVICT_WEIGHT.
+    ///      cold first-touch. Complete cold operations are measured by SubscriberAfkingNativeGas.
     function _measureEvictStageGasCold(uint256 n, string memory prefix) internal returns (uint256 advGas) {
         _settleClean(uint256(keccak256(abi.encodePacked(prefix, "base"))) | 1);
         address[] memory subs = new address[](n);
@@ -1761,10 +1466,10 @@ contract V56AfkingGasMarginal is DeployProtocol {
     }
 
     function _recordNativeEvictions(Vm.Log[] memory logs) private returns (uint256 evicted) {
-        bytes32 expired = keccak256("SubscriptionExpired(address,uint8)");
+        bytes32 expired = keccak256("SubscriptionExpired(uint32,uint8)");
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(game) || logs[i].topics.length != 2 || logs[i].topics[0] != expired) continue;
-            address player = address(uint160(uint256(logs[i].topics[1])));
+            address player = _fixturePayee(uint32(uint256(logs[i].topics[1])));
             assertTrue(_nativeEvictionExpected[player], "LIVE: no unrelated subscriber is evicted");
             assertFalse(_nativeEvictionSeen[player], "LIVE: no duplicate expiry across resumed calls");
             assertEq(abi.decode(logs[i].data, (uint8)), 1, "LIVE: ordinary insufficient-funding expiry");
@@ -1773,68 +1478,6 @@ contract V56AfkingGasMarginal is DeployProtocol {
         }
     }
 
-    // =========================================================================
-    // (n) SUBS+JACKPOT COINCIDENCE — the RNGREUSE-clamp re-run composition
-    // =========================================================================
-
-    /// @notice ALL-SKIP CHUNK BOUND. The subs+jackpot coincident SUM is retired: the VRF-outstanding
-    ///         entry gate (AdvanceModule) means the subscriber STAGE never runs while rngLockedFlag is
-    ///         set, and a buffered word only exists locked — so a completing chunk can never share a tx
-    ///         with a jackpot apply at ANY ring size (proven organically by
-    ///         test_BufferedClampReopen_GateSkipsStageUnderLock). What remains gas-relevant is the
-    ///         STANDALONE all-skip chunk: with SUB_STAGE_SKIP_WEIGHT = 2, a chunk carries at most
-    ///         SUB_STAGE_WEIGHT_BUDGET / 2 = 1250 skip visits regardless of the 2000-coin ring, so the
-    ///         worst all-skip tx = fixedOverhead + 1250 × perSkip. This measures the COLD per-skip and
-    ///         per-lootbox marginals (N vs N-1) and asserts the composed worst chunk sits on the <10M
-    ///         per-tx target with deep headroom to the 16,777,216 EIP-7825 cap.
-    function test_SubsJackpotCoincidence_WorstCompletingChunk() public {
-        uint256 snap = vm.snapshotState();
-
-        // (1) per-SKIP cold marginal: N vs N-1 skip-dominated subs (the old-sub-stamped-to-R skip at :1324).
-        uint256 sN = _measureSkipStageGasCold(N_HI, "sjcSkHi_");
-        vm.revertToState(snap);
-        uint256 sNm1 = _measureSkipStageGasCold(N_LO, "sjcSkLo_");
-        require(sN > sNm1, "the Nth skip did real work (cold slot read + PlayerSkipped emit)");
-        uint256 perSkip = sN - sNm1;
-
-        // (2) per-LOOTBOX-BUY cold marginal (the new-sub real buy that reaches the jackpot — no ticketQueue push).
-        vm.revertToState(snap);
-        uint256 lN = _measureStageAdvanceGasCold(N_HI, "sjcLbHi_", false);
-        vm.revertToState(snap);
-        uint256 lNm1 = _measureStageAdvanceGasCold(N_LO, "sjcLbLo_", false);
-        require(lN > lNm1, "the Nth lootbox buy did real work");
-        uint256 perLootbox = lN - lNm1;
-
-        // (3) The worst STANDALONE all-skip chunk: SUB_STAGE_SKIP_WEIGHT = 2 ends a pure-skip chunk at
-        //     SUB_STAGE_WEIGHT_BUDGET / 2 = 1250 visits — the budget binds BEFORE the 2000-coin ring does,
-        //     so ring growth can no longer grow the chunk. (The coincident-with-jackpot sum is retired:
-        //     the AdvanceModule entry gate keeps the STAGE out of every locked/buffered tx, so a chunk
-        //     and a jackpot apply are never tx-neighbors — proven organically by
-        //     test_BufferedClampReopen_GateSkipsStageUnderLock.)
-        uint256 fixedOverhead = sN > perSkip * N_HI ? sN - perSkip * N_HI : 0;
-        uint256 maxSkipsPerChunk = SUB_STAGE_WEIGHT_BUDGET / SUB_STAGE_SKIP_WEIGHT; // 1250 < the 2000 ring
-        uint256 allSkipChunk = fixedOverhead + maxSkipsPerChunk * perSkip;
-
-        emit log_named_uint("per_skip_cold_marginal_gas", perSkip);
-        emit log_named_uint("per_lootbox_buy_cold_marginal_gas", perLootbox);
-        emit log_named_uint("max_skips_per_chunk_budget_bound", maxSkipsPerChunk);
-        emit log_named_uint("all_skip_worst_chunk_gas", allSkipChunk);
-        emit log_named_uint("eip7825_tx_gas_cap", EIP7825_TX_GAS_CAP);
-        emit log_named_uint("all_skip_chunk_headroom_gas", EIP7825_TX_GAS_CAP - allSkipChunk);
-        emit log_named_string(
-            "FINDING",
-            "The all-skip chunk is budget-bound (1250 visits at SUB_STAGE_SKIP_WEIGHT=2), independent of the "
-            "2000-coin ring, and the entry gate keeps every chunk out of locked/buffered txs -- no composition "
-            "with jackpot legs exists at any cap. The standalone chunk sits on the <10M per-tx target."
-        );
-
-        // The standalone worst all-skip chunk honors the <10M per-tx target (and trivially the hard cap).
-        assertLt(allSkipChunk, 10_500_000, "worst all-skip chunk lands on the <10M per-tx target");
-        assertLt(allSkipChunk, EIP7825_TX_GAS_CAP, "worst all-skip chunk is far under the EIP-7825 cap");
-        // Marginals are bounded O(1) (non-vacuity sanity).
-        assertLt(perSkip, 200_000, "per-skip is a bounded O(1) cold slot read");
-        assertLt(perLootbox, 200_000, "per-lootbox-buy is a bounded O(1)");
-    }
 
     /// @notice STRUCTURAL PROTECTION PROOF: the subscriber-chunk + jackpot composition (buffered-clamp re-open)
     ///         cannot carry a HEAVY chunk, because the clamp requires the RNG lock (AdvanceModule:211 `locked`)
@@ -1888,7 +1531,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         // draining under the same lock until dailyIdx advances. The gate is why a completing
         // subscriber chunk and a buffered-word jackpot apply can never share one tx.
         uint32 idxBeforeConsume = _dailyIdx();
-        bytes32 skippedSig = keccak256("PlayerSkipped(address,uint8)");
+        bytes32 skippedSig = keccak256("PlayerSkipped(uint32,uint8)");
         uint256 consumeCalls;
         while (_dailyIdx() == idxBeforeConsume && consumeCalls < DRAIN_MAX_ITERATIONS) {
             vm.recordLogs();
@@ -1916,36 +1559,5 @@ contract V56AfkingGasMarginal is DeployProtocol {
         require(old.length == 1, "fixture: old sub intact");
     }
 
-    /// @dev Measure a cold new-day advance whose STAGE processes N SKIP-dominated subs (each poked so
-    ///      lastAutoBoughtDay == lastOpenedDay >= processDay -> the AlreadyAutoBoughtToday skip at
-    ///      GameAfkingModule:1324, weight 1, a cold Sub-slot read + PlayerSkipped emit). Both runs from one clean
-    ///      baseline; the (gasN - gasNm1) marginal isolates one skip. Models the RNGREUSE-replay old sub stamped
-    ///      to the request-pass day R (>= the clamped processDay).
-    function _measureSkipStageGasCold(uint256 n, string memory prefix) internal returns (uint256 advGas) {
-        _settleClean(uint256(keccak256(abi.encodePacked(prefix, "base"))) | 1);
-        address[] memory subs = _setupFundedSubs(n, prefix, 5 ether, false);
-        // Open the grounded cover boxes so lastOpenedDay == the stamp day (not behind it) -> the no-orphan guard
-        // (:1287, lastOpenedDay < lastAutoBoughtDay) does NOT fire; the skip routes through :1324 instead.
-        vm.startPrank(makeAddr(string(abi.encodePacked(prefix, "open"))));
-        _mineAll(64);
-        vm.stopPrank();
 
-        _warpToBoundary(false);
-        uint32 processDay = _simulatedDayIndex();
-        // Poke lastAutoBoughtDay AND lastOpenedDay to a day >= processDay so :1287 is false and :1324 skips.
-        for (uint256 i; i < n; ++i) {
-            _pokeLastBoughtDay(subs[i], processDay + 5);
-            _pokeLastOpenedDay(subs[i], processDay + 5);
-        }
-        require(game.advanceDue(), "fixture: advanceDue on the new day");
-        vm.cool(address(game)); // cold first-touch -> each skip is a realistic cold Sub-slot read
-        uint256 gasBefore = gasleft();
-        game.mineFlip();
-        advGas = gasBefore - gasleft();
-
-        // Non-vacuity: each sub SKIPPED (still stamped to the poked future day, NOT re-stamped to processDay).
-        for (uint256 i; i < n; ++i) {
-            require(_lastBoughtDayOf(subs[i]) == processDay + 5, "skip non-vacuity: each sub skipped (not re-stamped)");
-        }
-    }
 }

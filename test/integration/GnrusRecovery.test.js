@@ -110,7 +110,7 @@ describe("GnrusRecovery", function () {
   async function manufactureHolder(gnrus, sdgnrs, deployer, voter, holder, gameAddress) {
     const slot = 5; // non-locked (>= LOCKED_SLOTS)
     await gnrus.connect(deployer).setCharity(slot, holder.address);
-    await giveSDGNRS(sdgnrs, gameAddress, voter.address, eth("100"));
+    await giveSDGNRS(sdgnrs, gameAddress, voter.address, hre.ethers.parseUnits("100", 12));
     await gnrus.connect(voter).vote(slot);
     await runLevelTransitionViaGame(gnrus, gameAddress, 0); // pickCharity(0) via game impersonation
     return gnrus.balanceOf(holder.address);

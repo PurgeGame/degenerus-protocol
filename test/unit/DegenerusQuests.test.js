@@ -1026,8 +1026,8 @@ describe("DegenerusQuests", function () {
         (5n << 48n) | ((BigInt(lvl) + 1n) << 96n) | (400n << 208n);
       const slot = hreEthers.keccak256(
         hreEthers.AbiCoder.defaultAbiCoder().encode(
-          ["address", "uint256"],
-          [player, 9n]
+          ["uint32", "uint256"],
+          [await giveWalletId(game, player), 9n]
         )
       );
       await hreEthers.provider.send("hardhat_setStorageAt", [

@@ -19,7 +19,7 @@ contract LootboxCoverBoxOpen is DeployProtocol {
     address internal actor;
 
     bytes32 internal constant OPENED =
-        keccak256("LootBoxOpened(address,uint48,uint256,uint24,uint32,uint256,bool)");
+        keccak256("LootBoxOpened(uint32,uint48,uint256,uint24,uint32,uint256,bool)");
 
     function setUp() public {
         _deployProtocol();
@@ -104,12 +104,12 @@ contract LootboxCoverBoxOpen is DeployProtocol {
     /// @dev Count the opens for `who` under entry tag `tag`, with the smallest and largest amount opened.
     function _openedOf(Vm.Log[] memory logs, address who, uint48 tag)
         internal
-        pure
+        view
         returns (uint256 n, uint256 lo, uint256 hi)
     {
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].topics[0] != OPENED) continue;
-            if (address(uint160(uint256(logs[i].topics[1]))) != who) continue;
+            if (uint32(uint256(logs[i].topics[1])) != game.walletIdOf(who)) continue;
             if (uint48(uint256(logs[i].topics[2])) != tag) continue;
             (uint256 a,,,,) = abi.decode(logs[i].data, (uint256, uint24, uint32, uint256, bool));
             if (n == 0 || a < lo) lo = a;

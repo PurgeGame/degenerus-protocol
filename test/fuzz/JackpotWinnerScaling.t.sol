@@ -152,7 +152,7 @@ contract JackpotWinnerScalingTest is Test {
                     ++t.slots[q];
                     t.eth += amount;
                 } else if (logs[i].topics[0] == PASS_WIN) {
-                    uint160 w = uint160(uint256(logs[i].topics[1]));
+                    uint160 w = uint160(h.walletKeyOf(uint32(uint256(logs[i].topics[1]))));
                     (uint256 halves,) = abi.decode(logs[i].data, (uint256, uint8));
                     t.halves[(w - BASE) / 0x10000] += halves;
                 }

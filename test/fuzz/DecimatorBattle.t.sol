@@ -70,7 +70,7 @@ contract DecimatorBattleTest is Test {
         returns (uint64)
     {
         vm.prank(ContractAddresses.COIN);
-        return target.recordDecBurn(p, lvl, amount, mult, 0);
+        return target.recordFor(p, lvl, amount, mult, 0);
     }
 
     function _sampled(uint256 word, uint24 lvl, uint64 id, uint256 total) internal pure returns (bool) {
@@ -147,14 +147,14 @@ contract DecimatorBattleTest is Test {
 
     function test_RecordAccessAndSealGuards() public {
         vm.expectRevert();
-        h.recordDecBurn(address(1), LVL, 1000, 10_000, 0);
+        h.recordFor(address(1), LVL, 1000, 10_000, 0);
         vm.startPrank(ContractAddresses.COIN);
         vm.expectRevert();
-        h.recordDecBurn(address(1), LVL + 1, 1000, 10_000, 0);
+        h.recordFor(address(1), LVL + 1, 1000, 10_000, 0);
         vm.expectRevert();
-        h.recordDecBurn(address(1), LVL, 1000, 20_001, 0);
+        h.recordFor(address(1), LVL, 1000, 20_001, 0);
         vm.expectRevert();
-        h.recordDecBurn(address(0), LVL, 1000, 10_000, 0);
+        h.recordFor(address(0), LVL, 1000, 10_000, 0);
         vm.stopPrank();
         _burn(h, address(1), LVL, 1000, 10_000);
         vm.expectRevert();
@@ -162,7 +162,7 @@ contract DecimatorBattleTest is Test {
         h.seal(LVL, 1 ether, 123);
         vm.prank(ContractAddresses.COIN);
         vm.expectRevert();
-        h.recordDecBurn(address(1), LVL, 1000, 10_000, 0);
+        h.recordFor(address(1), LVL, 1000, 10_000, 0);
         assertEq(h.seal(LVL, 1 ether, 456), 1 ether);
         assertEq(h.activeWord(), 123);
         assertEq(h.reserved(), 1 ether);
@@ -472,13 +472,13 @@ contract DecimatorBattleTest is Test {
         vm.startPrank(ContractAddresses.COIN);
         for (uint256 i; i < bad.length; ++i) {
             vm.expectRevert();
-            h.recordDecBurn(address(1), LVL, 1000, 10_000, bad[i]);
+            h.recordFor(address(1), LVL, 1000, 10_000, bad[i]);
         }
         uint32 seven = 3 | 3 << 3 | 1 << 6;
-        h.recordDecBurn(address(1), LVL, 1000, 10_000, seven);
+        h.recordFor(address(1), LVL, 1000, 10_000, seven);
         assertEq(h.entryOf(LVL, 1).chips, seven);
         // A later burn sets the board; the stack keeps accumulating.
-        h.recordDecBurn(address(1), LVL, 1000, 10_000, 1 << 27);
+        h.recordFor(address(1), LVL, 1000, 10_000, 1 << 27);
         vm.stopPrank();
         assertEq(h.entryOf(LVL, 1).chips, 1 << 27);
         assertEq(h.entryOf(LVL, 1).stack, 2000);
@@ -490,7 +490,7 @@ contract DecimatorBattleTest is Test {
         uint256 word = 2;
         while (!_sampled(word, LVL, 1, 2) || _sampled(word, LVL, 2, 2)) ++word;
         vm.prank(ContractAddresses.COIN);
-        h.recordDecBurn(address(1), LVL, 1000, 10_000, 2 | 3 << 12 | 1 << 21);
+        h.recordFor(address(1), LVL, 1000, 10_000, 2 | 3 << 12 | 1 << 21);
         _burn(h, address(2), LVL, 1000, 10_000);
         h.seal(LVL, 1 ether, word);
         _drain(h); // the probe reverts unless chips, scatter count and boost all match
@@ -687,7 +687,7 @@ contract DecimatorBattleTest is Test {
         assertEq(h.entryOf(LVL, 1).stack, 1001);
         vm.prank(ContractAddresses.COIN);
         vm.expectRevert();
-        h.recordDecBurn(address(2), LVL, 0, 10_000, 0);
+        h.recordFor(address(2), LVL, 0, 10_000, 0);
     }
 
     /// @dev Past 2^66 FLIP the stack saturates: later burns still record, and the owner and board
@@ -696,7 +696,7 @@ contract DecimatorBattleTest is Test {
         _burn(h, address(1), LVL, type(uint64).max, 10_000);
         vm.prank(ContractAddresses.COIN);
         vm.expectRevert();
-        h.recordDecBurn(address(1), LVL, 2000, 20_000, 3);
+        h.recordFor(address(1), LVL, 2000, 20_000, 3);
         DecimatorBattleHarness.Entry memory e = h.entryOf(LVL, 1);
         assertEq(e.stack, type(uint64).max);
         assertEq(e.owner, address(1));

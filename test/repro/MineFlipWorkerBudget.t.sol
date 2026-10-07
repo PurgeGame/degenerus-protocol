@@ -172,8 +172,8 @@ contract MineFlipDecimatorBudgetTest is Test {
         host = new BudgetDecimatorFixture();
         vm.etch(ContractAddresses.CRAPS_ENGINE, type(BudgetBoundedEngine).runtimeCode);
         host.open(LVL);
-        vm.prank(ContractAddresses.COIN); host.recordDecBurn(address(0xA11CE), LVL, 2000, 10_000, 0);
-        vm.prank(ContractAddresses.COIN); host.recordDecBurn(address(0xB0B), LVL, 2000, 10_000, 0);
+        vm.prank(ContractAddresses.COIN); host.recordFor(address(0xA11CE), LVL, 2000, 10_000, 0);
+        vm.prank(ContractAddresses.COIN); host.recordFor(address(0xB0B), LVL, 2000, 10_000, 0);
         uint256 word = 2;
         while (Sample.at(word, LVL, 2, 0) != 1) ++word;
         host.seal(LVL, 30 ether, word);

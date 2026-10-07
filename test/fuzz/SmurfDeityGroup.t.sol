@@ -21,14 +21,12 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 ///      (GameOverModule); the suite checks that the price lands under the deity account's ID
 ///      rather than driving a game over.
 contract SmurfDeityGroupTest is SmurfFixture {
-    bytes32 private constant DEITY_BOON_ISSUED = keccak256("DeityBoonIssued(address,address,uint24,uint8,uint8)");
+    bytes32 private constant DEITY_BOON_ISSUED = keccak256("DeityBoonIssued(uint32,uint32,uint24,uint8,uint8)");
     uint256 private constant DEITY_PRICE_CAP = 30 ether;
 
     address private owner;
     uint32 private ownerId;
-    address private smurfKey;
     uint32 private smurfId;
-    address private sibling;
     uint32 private siblingId;
     address private other;
     uint32 private otherId;
@@ -38,8 +36,8 @@ contract SmurfDeityGroupTest is SmurfFixture {
     function setUp() public {
         _setUpSmurfFixture();
         (owner, ownerId) = _wallet("deity_owner");
-        (smurfId, smurfKey) = _createSmurf(owner);
-        (siblingId, sibling) = _createSmurf(owner);
+        smurfId = _createSmurf(owner);
+        siblingId = _createSmurf(owner);
         (other, otherId) = _wallet("deity_other");
         (stranger, strangerId) = _wallet("deity_stranger");
         // issueDeityBoon reads the preceding day's recorded word.
@@ -80,7 +78,7 @@ contract SmurfDeityGroupTest is SmurfFixture {
         _expectAlreadyOwns(owner, smurfId, 4); // the deity account itself
 
         // A smurf created after the deity is in the same group.
-        (uint32 lateId,) = _createSmurf(owner);
+        uint32 lateId = _createSmurf(owner);
         _expectAlreadyOwns(owner, lateId, 4);
 
         // An unrelated wallet still buys.
@@ -114,7 +112,7 @@ contract SmurfDeityGroupTest is SmurfFixture {
         _buyDeity(operator, smurfId, 3);
         assertEq(deityPass.ownerOf(3), owner, "the NFT mints to the smurf's main wallet");
         assertEq(deityPass.balanceOf(operator), 0, "the operator holds no pass");
-        assertTrue(game.hasDeityPass(smurfKey), "HAS_DEITY_PASS on the smurf");
+        assertTrue(_fixtureHasDeity(smurfId), "HAS_DEITY_PASS on the smurf");
         _expectAlreadyOwns(owner, 0, 4);
         // The operator's own group is separate.
         _buyDeity(operator, 0, 4);
@@ -127,18 +125,17 @@ contract SmurfDeityGroupTest is SmurfFixture {
 
     function test_SmurfDeityStateFollowsItsId() public {
         uint24 passLevel = game.level() + 1;
-        uint32 smurfEntries = game.entriesOwedView(passLevel, smurfKey);
-        uint32 ownerEntries = game.entriesOwedView(passLevel, owner);
+        uint32 smurfEntries = _fixtureEntries(passLevel, smurfId);
+        uint32 ownerEntries = _fixtureEntries(passLevel, owner);
 
         _buyDeity(owner, smurfId, 3);
 
         assertEq(deityPass.ownerOf(3), owner, "the NFT mints to the owner");
-        assertEq(deityPass.balanceOf(smurfKey), 0, "no pass at the smurf key");
-        assertTrue(game.hasDeityPass(smurfKey), "HAS_DEITY_PASS sits on the buying account's word");
-        assertFalse(game.hasDeityPass(owner), "the owner's word carries no deity bit");
+        assertTrue(_fixtureHasDeity(smurfId), "HAS_DEITY_PASS sits on the buying account's word");
+        assertFalse(_fixtureHasDeity(owner), "the owner's word carries no deity bit");
         assertEq(ext.x_deityIdAt(2), smurfId, "the deity lane holds the smurf's ID");
-        assertGt(game.entriesOwedView(passLevel, smurfKey), smurfEntries, "the perpetual tickets queue for the smurf");
-        assertEq(game.entriesOwedView(passLevel, owner), ownerEntries, "no deity tickets for the owner");
+        assertGt(_fixtureEntries(passLevel, smurfId), smurfEntries, "the perpetual tickets queue for the smurf");
+        assertEq(_fixtureEntries(passLevel, owner), ownerEntries, "no deity tickets for the owner");
         assertGt(ext.x_deityPricePaid(smurfId), 0, "the refundable price is held under the smurf's ID");
         assertEq(ext.x_deityPricePaid(ownerId), 0, "nothing under the owner's ID");
         assertEq(
@@ -146,7 +143,6 @@ contract SmurfDeityGroupTest is SmurfFixture {
             ext.x_deityPricePaid(smurfId),
             "layout: deityPassPricePaid slot"
         );
-        _assertHoldsNothing(smurfKey);
     }
 
     function test_OwnerIssuesBoonsAsTheSmurfDeity() public {
@@ -160,14 +156,14 @@ contract SmurfDeityGroupTest is SmurfFixture {
         bool issued;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(game) || logs[i].topics[0] != DEITY_BOON_ISSUED) continue;
-            assertEq(address(uint160(uint256(logs[i].topics[1]))), smurfKey, "the deity is the smurf account");
-            assertEq(address(uint160(uint256(logs[i].topics[2]))), stranger, "the recipient");
+            assertEq(uint32(uint256(logs[i].topics[1])), _fixtureId(smurfId), "the deity is the smurf account");
+            assertEq(uint32(uint256(logs[i].topics[2])), game.walletIdOf(stranger), "the recipient");
             assertEq(uint256(logs[i].topics[3]), day, "today");
             issued = true;
         }
         assertTrue(issued, "the boon was issued");
 
-        (,, uint8 smurfMask,,) = game.deityBoonData(smurfKey);
+        (,, uint8 smurfMask,,) = game.deityBoonDataById(smurfId);
         (,, uint8 ownerMask,,) = game.deityBoonData(owner);
         assertEq(smurfMask, 1, "slot 0 used on the smurf deity's ID");
         assertEq(ownerMask, 0, "the owner's own boon slots are untouched");
@@ -200,7 +196,6 @@ contract SmurfDeityGroupTest is SmurfFixture {
         vm.prank(stranger);
         vm.expectRevert(abi.encodeWithSignature("Unauthorized()"));
         game.smite(3, otherId);
-        _assertHoldsNothing(smurfKey);
     }
 
     // ---------------------------------------------------------------------
@@ -245,8 +240,8 @@ contract SmurfDeityGroupTest is SmurfFixture {
         bool issued;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(game) || logs[i].topics[0] != DEITY_BOON_ISSUED) continue;
-            assertEq(address(uint160(uint256(logs[i].topics[1]))), smurfKey, "the deity is the smurf account");
-            assertEq(address(uint160(uint256(logs[i].topics[2]))), owner, "the owner receives the boon");
+            assertEq(uint32(uint256(logs[i].topics[1])), _fixtureId(smurfId), "the deity is the smurf account");
+            assertEq(uint32(uint256(logs[i].topics[2])), game.walletIdOf(owner), "the owner receives the boon");
             issued = true;
         }
         assertTrue(issued, "the smurf deity boons its owner");
@@ -256,7 +251,7 @@ contract SmurfDeityGroupTest is SmurfFixture {
         _buyDeity(owner, smurfId, 3);
         vm.prank(owner);
         game.issueDeityBoon(smurfId, siblingId, 1);
-        (,, uint8 mask,,) = game.deityBoonData(smurfKey);
+        (,, uint8 mask,,) = game.deityBoonDataById(smurfId);
         assertEq(mask, 2, "slot 1 used");
     }
 }

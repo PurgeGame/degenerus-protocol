@@ -61,7 +61,7 @@ contract FoilAfkingFunding is DeployProtocol {
     /// @dev Set `who`'s claimable winnings to `amt`, keeping the afking half, the `claimablePool`
     ///      total and the contract's ETH backing in step so the solvency identity still holds.
     function _seedClaimable(address who, uint256 amt) internal {
-        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), BALANCES_PACKED_SLOT));
+        bytes32 slot = keccak256(abi.encode(uint256(_aid(who)), BALANCES_PACKED_SLOT));
         uint256 packed = uint256(vm.load(address(game), slot));
         uint256 prev = uint128(packed);
         vm.store(

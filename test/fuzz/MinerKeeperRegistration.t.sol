@@ -82,7 +82,7 @@ contract MinerKeeperRegistration is DeployProtocol {
     function _assertIdTruth(address who, uint32 id) private view {
         assertGt(id, 0, "registered");
         assertEq(game.walletIdOf(who), id, "walletIdOf");
-        assertEq(_mintWord(who) >> BitPackingLib.WALLET_ID_SHIFT, id, "mint word carries the ID");
+        assertEq(game.walletIdOf(who), id, "mint word carries the ID");
         assertEq(address(uint160(_element(id))), who, "wallet-table element holds the key");
     }
 
@@ -184,7 +184,7 @@ contract MinerKeeperRegistration is DeployProtocol {
         assertGt(o.used, MineFlipGas.MIN_REWARDED_GAS, "the paid-size work ran");
         assertEq(o.registrations, 0, "nothing registered");
         assertEq(game.walletIdOf(keeper), 0, "keeper still has no ID");
-        assertEq(_mintWord(keeper) >> BitPackingLib.WALLET_ID_SHIFT, 0, "no ID in the mint word");
+        assertEq(game.walletIdOf(keeper), 0, "no ID in the mint word");
         assertEq(_walletsLength(), full, "table unchanged");
         assertEq(o.bounties, 0, "no MinerBounty");
         assertEq(o.reward, 0, "MinerWork reports a zero reward");

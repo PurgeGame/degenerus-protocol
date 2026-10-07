@@ -19,8 +19,8 @@ const rootOf = (label) => BigInt(layoutEntry(label).slot);
 
 const TRAIT_SLOT = rootOf("lvlTraitEntry");
 const OWNER_SLOT = rootOf("wallets");
-const MINT_PACKED_SLOT = rootOf("mintPacked_");
-const WALLET_ID_SHIFT = 224n;
+const WALLET_IDS_SLOT = rootOf("walletIds");
+
 const QUEUE_SLOT = rootOf("ticketQueue");
 const PENDING_SLOT = rootOf("ticketPending");
 const FAR_FUTURE_OWED_SLOT = rootOf("farFutureOwed");
@@ -99,16 +99,15 @@ async function seedTraitBucket(addr, lvl, trait, holders, opts = {}) {
 }
 
 async function registerOwner(addr, holder, ownerSlot = OWNER_SLOT) {
-  const mintSlot = mapSlot(BigInt(holder), MINT_PACKED_SLOT);
-  const word = await getStorage(addr, mintSlot);
-  let id = (word >> WALLET_ID_SHIFT) & LANE_MASK;
+  const idSlot = mapSlot(BigInt(holder), WALLET_IDS_SLOT);
+  let id = (await getStorage(addr, idSlot)) & LANE_MASK;
   if (id === 0n) {
     const count = await getStorage(addr, ownerSlot);
     id = count;
     if (id > LANE_MASK) throw new Error('wallet id namespace exhausted');
     await setStorage(addr, dataBase(ownerSlot) + count, BigInt(holder));
     await setStorage(addr, ownerSlot, count + 1n);
-    await setStorage(addr, mintSlot, word | (id << WALLET_ID_SHIFT));
+    await setStorage(addr, idSlot, id);
   }
   return id;
 }
@@ -139,7 +138,7 @@ async function seedTicketQueue(addr, key, holders) {
 }
 
 async function ownerIdOf(addr, player) {
-  return ((await getStorage(addr, mapSlot(BigInt(player), MINT_PACKED_SLOT))) >> WALLET_ID_SHIFT) & LANE_MASK;
+  return (await getStorage(addr, mapSlot(BigInt(player), WALLET_IDS_SLOT))) & LANE_MASK;
 }
 
 /** Far-future lanes recycle 100 circular level positions, authenticated by the queue level tag. */

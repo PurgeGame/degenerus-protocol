@@ -51,7 +51,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
     // terms left the market's reads entirely (settlement arrives as a pushed bit).
     bytes4 private constant GROWTH_STATE = bytes4(keccak256("growthState(uint24)"));
     bytes4 private constant MARKET_GATES =
-        bytes4(keccak256("marketBetGates(address,uint24)"));
+        bytes4(keccak256("marketBetGates(uint32,uint24)"));
 
     uint256 private constant STAKE = 1_000;
 
@@ -80,7 +80,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         _fundNoGate(who, amount);
         vm.mockCall(
             address(quests),
-            abi.encodeWithSelector(MARKET_GATES, who),
+            abi.encodeWithSelector(MARKET_GATES, _giveWalletId(who)),
             abi.encode(true, true, _giveWalletId(who))
         );
     }
@@ -643,8 +643,8 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         vm.mockCall(
             address(game),
             abi.encodeWithSelector(
-                bytes4(keccak256("mintPackedFor(address)")),
-                alice
+                bytes4(keccak256("mintPackedOfId(uint32)")),
+                _giveWalletId(alice)
             ),
             abi.encode(uint256(20) << BitPackingLib.CURSE_COUNT_SHIFT)
         );
@@ -659,11 +659,11 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         uint32 aliceId = _giveWalletId(alice);
         vm.prank(alice);
         vm.expectRevert();
-        quests.recordGrowthBet(aliceId, alice, 50, 150);
+        quests.recordGrowthBet(aliceId, 50, 150);
 
         vm.prank(address(game));
         vm.expectRevert();
-        quests.recordGrowthBet(aliceId, alice, 50, 150);
+        quests.recordGrowthBet(aliceId, 50, 150);
     }
 
     // =====================================================================
@@ -787,8 +787,8 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         vm.mockCall(
             address(game),
             abi.encodeWithSelector(
-                bytes4(keccak256("mintPackedFor(address)")),
-                alice
+                bytes4(keccak256("mintPackedOfId(uint32)")),
+                _giveWalletId(alice)
             ),
             abi.encode(packedMint)
         );

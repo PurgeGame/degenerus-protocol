@@ -42,7 +42,7 @@ describe("Whale bulk commission", function () {
         const ticketPrice = hre.ethers.parseEther(level < 4 ? "0.01" : "0.02");
         const rateBps = level < 3 ? 2500n : 2000n;
         const bulkDivisor = quantity >= 5 ? 2n : 1n;
-        const expected = price * hre.ethers.parseEther("1000") / ticketPrice * rateBps / 10_000n / bulkDivisor;
+        const expected = price * 1000n / ticketPrice * rateBps / 10_000n / bulkDivisor;
         expect(await affiliate.totalAffiliateScore(level + 1)).to.equal(expected);
       });
     }
@@ -59,7 +59,7 @@ describe("Whale bulk commission", function () {
       await game.connect(bob).purchaseWhalePass(0, 5, code, { value: fresh });
       const conversion = 100_000n;
       expect(await affiliate.totalAffiliateScore(1)).to.equal(
-        fresh * conversion / 8n + (price - fresh) * conversion / 20n,
+        (fresh * conversion / 8n + (price - fresh) * conversion / 20n) / hre.ethers.parseEther("1"),
       );
     });
   }

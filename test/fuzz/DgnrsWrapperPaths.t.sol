@@ -19,6 +19,24 @@ contract DgnrsWrapperPaths is DeployProtocol {
         _deployProtocol();
     }
 
+    function test_TwelveDecimalsAndWrappedBurnPreserveEveryRawUnit() public {
+        assertEq(sdgnrs.decimals(), 12);
+        assertEq(dgnrs.decimals(), 12);
+        assertEq(sdgnrs.totalSupply(), 1e24);
+        address owner = ContractAddresses.CREATOR;
+        _giveWalletId(owner);
+        uint256 amount = 1e12 + 1;
+        uint256 before = dgnrs.balanceOf(owner);
+        uint256 supply = dgnrs.totalSupply();
+        (uint32 batchId,,,) = sdgnrs.redemptionBatchState();
+        vm.prank(owner); sdgnrs.burnWrapped(amount);
+        assertEq(before - dgnrs.balanceOf(owner), amount);
+        assertEq(supply - dgnrs.totalSupply(), amount);
+        assertEq(sdgnrs.balanceOf(ContractAddresses.DGNRS), dgnrs.totalSupply());
+        (uint80 pending,) = sdgnrs.pendingRedemptions(game.walletIdOf(owner), batchId);
+        assertEq(pending, amount, "the last raw unit is included in the packed claim");
+    }
+
     /// @notice `unwrapTo` burns DGNRS from the vault owner and forwards an equal amount of
     ///         soulbound sDGNRS to the recipient. Both `DGNRS.totalSupply()` and
     ///         `sDGNRS.balanceOf(DGNRS)` fall by exactly `amount` (the paired decrement), the
@@ -26,7 +44,7 @@ contract DgnrsWrapperPaths is DeployProtocol {
     function test_unwrapToPairedDecrement() public {
         address owner = ContractAddresses.CREATOR; // vault owner + DGNRS holder at deploy
         address recipient = address(0xBEEF);
-        uint256 amount = 1_000_000_000 * 1e18; // 1B DGNRS, < CREATOR_INITIAL (50B)
+        uint256 amount = 1_000_000_000 * 1e12; // 1B DGNRS, < CREATOR_INITIAL (50B)
 
         require(!game.rngLocked(), "fixture: RNG must be unlocked at genesis for unwrapTo");
         // Equality holds at deploy: DGNRS.totalSupply == sDGNRS.balanceOf(DGNRS).
@@ -72,7 +90,7 @@ contract DgnrsWrapperPaths is DeployProtocol {
         _reachGameOver();
 
         address owner = ContractAddresses.CREATOR; // holds CREATOR_INITIAL DGNRS
-        uint256 amount = 1_000_000_000 * 1e18; // 1B, < CREATOR_INITIAL (50B)
+        uint256 amount = 1_000_000_000 * 1e12; // 1B, < CREATOR_INITIAL (50B)
 
         uint256 dgnrsSupplyBefore = dgnrs.totalSupply();
         uint256 sdgnrsSupplyBefore = sdgnrs.totalSupply();
@@ -121,19 +139,19 @@ contract DgnrsWrapperPaths is DeployProtocol {
     ///         cap exactly, anything past it reverts, and the counter reads the running total.
     function test_unwrapToLifetimeCap() public {
         address owner = ContractAddresses.CREATOR; // holds CREATOR_INITIAL (50B), above the cap
-        uint256 cap = 40_000_000_000 * 1e18;
+        uint256 cap = 40_000_000_000 * 1e12;
 
         vm.startPrank(owner);
-        dgnrs.unwrapTo(address(0xBEEF), cap - 1_000 ether);
+        dgnrs.unwrapTo(address(0xBEEF), cap - 1_000e12);
         vm.expectRevert(DGNRS.UnwrapCapExceeded.selector);
-        dgnrs.unwrapTo(address(0xBEEF), 1_000 ether + 1);
-        dgnrs.unwrapTo(address(0xCAFE), 1_000 ether);
+        dgnrs.unwrapTo(address(0xBEEF), 1_000e12 + 1);
+        dgnrs.unwrapTo(address(0xCAFE), 1_000e12);
         assertEq(dgnrs.totalUnwrapped(), cap, "lifetime total reached the cap exactly");
         vm.expectRevert(DGNRS.UnwrapCapExceeded.selector);
-        dgnrs.unwrapTo(address(0xBEEF), 1 ether);
+        dgnrs.unwrapTo(address(0xBEEF), 1e12);
         vm.stopPrank();
 
-        assertEq(dgnrs.balanceOf(owner), 10_000_000_000 * 1e18, "only the cap left the owner");
+        assertEq(dgnrs.balanceOf(owner), 10_000_000_000 * 1e12, "only the cap left the owner");
         assertEq(sdgnrs.balanceOf(address(0xBEEF)) + sdgnrs.balanceOf(address(0xCAFE)), cap, "recipients hold the cap");
     }
 
@@ -142,15 +160,15 @@ contract DgnrsWrapperPaths is DeployProtocol {
     function test_vestingAndUnwrapShareTheSlot() public {
         address owner = ContractAddresses.CREATOR;
         vm.prank(owner);
-        dgnrs.unwrapTo(address(0xBEEF), 7_000 ether);
+        dgnrs.unwrapTo(address(0xBEEF), 7_000e12);
 
         // Level 4 vests 50B + 4 x 5B = 70B, so 20B is claimable past the 50B released at deploy.
         vm.mockCall(ContractAddresses.GAME, abi.encodeWithSignature("level()"), abi.encode(uint24(4)));
         uint256 before = dgnrs.balanceOf(owner);
         vm.prank(owner);
         dgnrs.claimVested();
-        assertEq(dgnrs.balanceOf(owner), before + 20_000_000_000 * 1e18, "vested the level-4 tranche");
-        assertEq(dgnrs.totalUnwrapped(), 7_000 ether, "vesting left the unwrap total alone");
+        assertEq(dgnrs.balanceOf(owner), before + 20_000_000_000 * 1e12, "vested the level-4 tranche");
+        assertEq(dgnrs.totalUnwrapped(), 7_000e12, "vesting left the unwrap total alone");
 
         vm.prank(owner);
         vm.expectRevert(DGNRS.Insufficient.selector);

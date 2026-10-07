@@ -11,7 +11,7 @@ import {Vm} from "forge-std/Vm.sol";
 
 contract SubscriptionUpdateSeeder is DegenerusGameStorage {
     function sourceOf(address player) external view returns (address) {
-        return address(uint160(_fundingSourceOf[_walletIdOf(player)]));
+        return _walletKey(_fundingSourceOf[_walletIdOf(player)]);
     }
     function flagsOf(address player) external view returns (uint8) { return _subOf[_walletIdOf(player)].flags; }
 
@@ -22,9 +22,9 @@ contract SubscriptionUpdateSeeder is DegenerusGameStorage {
         require(_subOf[id].dailyQuantity == 0);
         require(_subOf[id].lastOpenedDay >= _subOf[id].lastAutoBoughtDay);
         uint256 index = _subOf[id].setPosition - 1;
-        uint256 tail = _subscribers[_subscribers.length - 1];
+        uint32 tail = _subscribers[_subscribers.length - 1];
         _subscribers[index] = tail;
-        _subOf[uint32(tail >> 160)].setPosition = uint32(index + 1);
+        _subOf[tail].setPosition = uint32(index + 1);
         _subscribers.pop();
         delete _subOf[id];
     }
@@ -65,8 +65,9 @@ contract SubscriptionUpdateGasTest is DeployProtocol {
         game.depositAfkingFunding{value: 100 ether}(_aid(PLAYER));
         game.depositAfkingFunding{value: 100 ether}(_aid(SOURCE_A));
         game.depositAfkingFunding{value: 100 ether}(_aid(SOURCE_B));
-        vm.prank(SOURCE_A); game.setOperatorApproval(0, PLAYER, true);
-        vm.prank(SOURCE_B); game.setOperatorApproval(0, PLAYER, true);
+        uint32 playerId = _aid(PLAYER);
+        vm.prank(SOURCE_A); game.setAfkingFundingApproval(0, playerId, true);
+        vm.prank(SOURCE_B); game.setAfkingFundingApproval(0, playerId, true);
         candidateCode = address(afkingModule).code;
         string memory path = vm.envOr("AFKING_UPDATE_BASELINE_FILE", string(""));
         if (bytes(path).length != 0) baselineCode = vm.parseJsonBytes(vm.readFile(path), ".runtime");

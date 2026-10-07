@@ -45,7 +45,7 @@ pragma solidity 0.8.34;
  *      [197-202] AFFILIATE_BONUS_POINTS_SHIFT - Cached affiliate bonus points (6 bits)
  *      [203-207] CURSE_COUNT_SHIFT           - Cashout/smite curse counter (5 bits, capped at 20)
  *      [208-223] LEVEL_UNITS_SHIFT           - Units purchased at current level (16 bits)
- *      [224-255] WALLET_ID_SHIFT             - Permanent wallet ID (32 bits; written only at registration)
+ *      [224-255] Free                         - Identity is stored separately by wallet ID
  */
 library BitPackingLib {
     // -------------------------------------------------------------------------
@@ -98,10 +98,8 @@ library BitPackingLib {
     ///         at 1,000 but keeps no per-account record of its own.
     uint256 internal constant SEAT_CLAIMED_SHIFT = 146;
 
-    /// @notice Bit position for the smurf flag (bit 147). Set once, by createSmurf, on
-    ///         a smurf key's mint word. A path holding a mint word decides the payee
-    ///         from it: clear means the key is the payee; set means the owner lane of
-    ///         the wallet-table element names the payee.
+    /// @notice Subaccount flag (bit 147), set once by createSmurf on the ID-keyed mint word.
+    ///         The wallet table's owner-ID lane determines its payout recipient.
     uint256 internal constant SMURF_FLAG_SHIFT = 147;
 
     /// @notice Bit position for last level credited for mint streak (bits 148-171)
@@ -122,9 +120,7 @@ library BitPackingLib {
     /// @notice Bit position for level units count (bits 208-223)
     uint256 internal constant LEVEL_UNITS_SHIFT = 208;
 
-    /// @notice Bit position for the permanent wallet ID (bits 224-255). The ID is the
-    ///         wallet's position in the Game wallet table; zero means unregistered.
-    uint256 internal constant WALLET_ID_SHIFT = 224;
+    // Bits 224..255 are unused; identity lives in the separate wallet registry.
 
     // -------------------------------------------------------------------------
     // Packing Functions

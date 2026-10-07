@@ -14,26 +14,11 @@ import {MintBucketSeed} from "../helpers/MintBucketSeed.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
-/// @title AdvanceStageWorstCaseGas — Phase 367 (GASCEIL) measured per-stage mineFlip ceiling
-/// @notice Phase 367 REDO. The prior pass reported the standalone 305-winner daily jackpot stage
-///         as "~15.08M" — that 15M was actually the now-DECOUPLED gap-backfill+jackpot COMPOSITION
-///         (which the v56 Stage-4 decouple `break` made unreachable in one tx). This harness measures
-///         the REAL worst-case gas of each mineFlip stage's bounding loop, pushed to its capped
-///         maximum, with forge gasleft()-delta around the live production code path.
-///
-///         mineFlip (DegenerusGameAdvanceModule.mineFlip, do{}while(false) one-stage-per-call)
-///         splits into TWO loop shapes:
-///           (A) single-shot, internally winner-capped jackpot distributions (stages 8/11/12) — the
-///               305-winner ETH leg `_processDailyEth -> _processBucket -> _addClaimableEth`;
-///           (B) write/weight-budgeted chunked loops (stages 0/1/5/6/7 ticket batch; stage 2 subs).
-///
-///         This file measures (A) the 305-winner ETH jackpot and the 50-winner coin leg directly by
-///         extending the production module (seeding lvlTraitEntry, then driving the live external
-///         entry with the msg.sender==GAME prank), and (B) the worst-case ticket-worker
-///         (`runTicketWork`) chunk. The subscriber STAGE (2), the gap-backfill (4) and the OPEN_BATCH
-///         router are measured by the sibling harness V56AfkingGasMarginal (referenced, not re-run).
-/// @dev Test-only. NO contracts/*.sol is mutated. The two harness subclasses add only seeders +
-///      read-only views; they override NO production logic.
+/// @title Fixed-work gas diagnostics for terminal awards and ticket drains.
+/// @notice These fixtures measure live worker code at explicit cohort sizes. They
+///         do not describe a fixed stage per mineFlip call or a fixed write budget.
+///         RoundDrainChunkGas and the native worker suites test admission envelopes;
+///         AdvanceGasCeilingFuzz tests resumable terminal completion at bounded gas.
 
 // =============================================================================
 // Harness A — live 305-winner daily-ETH jackpot (stages 8 / 11 / 12 ETH leg)
@@ -56,11 +41,7 @@ contract JackpotStageHarness is DegenerusGameJackpotModule, BucketSeed {
 // Harness B — live ticket-worker worst-case chunk (stages 0/1/5/6/7)
 // =============================================================================
 
-/// @dev Extends the production mint module and delegatecalls the production ticket worker
-///      (`runTicketWork`) so the live per-entry trait-mint loop runs in THIS contract's storage.
-///      The seeder pushes N players into the read-slot ticketQueue with `owed` traits each and
-///      sets the lootbox RNG entropy word the batch reads at index 1. A worst-case batch mints up
-///      to WRITES_BUDGET_SAFE write-units of cold lvlTraitEntry SSTOREs in one call.
+/// @dev Queue seeder and delegatecall host for the live metered ticket worker.
 contract TicketBatchStageHarness is MintBucketSeed {
     /// @dev The mint module answers the liveness tail through the Game's view; this harness is
     ///      not deployed at the Game's address, so it evaluates the tail in place.
@@ -98,23 +79,20 @@ contract TicketBatchStageHarness is MintBucketSeed {
         }
     }
 
-    /// @dev Seed the queue and force the (ticketLevel != lvl) reset path -> cursor 0, first-batch
-    ///      cold-scale.
+    /// @notice Seed the queue and force the ticket-level reset path at cursor zero.
     function seedTicketQueue(uint24 lvl, uint256 n, uint32 owedEach, uint160 base) external {
         _seedQueue(lvl, n, owedEach, base);
         ticketCursor = 0;
         ticketLevel = 0;
     }
 
-    /// @dev Seed the queue AND pin (ticketLevel == lvl, ticketCursor == startCursor) so the batch runs at
-    ///      the FULL warm WRITES_BUDGET_SAFE=1000 budget (NOT the 35%-cold-scaled 650 of the first batch).
-    ///      This is the heavier resume-batch worst case (a level whose first batch already ran).
+    /// @notice Seed a resumed queue with earlier entries already retired.
     function seedTicketQueueWarmResume(uint24 lvl, uint256 n, uint32 owedEach, uint160 base, uint32 startCursor)
         external
     {
         _seedQueue(lvl, n, owedEach, base);
         // Pin level == lvl so runTicketWork does NOT reset the cursor, and start at a non-zero cursor
-        // so idx != 0 -> the full (non-cold-scaled) 550 write budget is used.
+        // so the worker resumes after earlier retired entries.
         ticketLevel = lvl;
         ticketCursor = startCursor;
     }
@@ -146,19 +124,8 @@ contract AdvanceStageWorstCaseGas is Test {
     JackpotStageHarness internal jp;
     TicketBatchStageHarness internal tb;
 
-    // Production caps, re-attested against the frozen audit subject c4d48008
-    // (JackpotModule: terminal winners 305, DAILY_COIN_MAX_WINNERS 50;
-    //  MintModule: WRITES_BUDGET_SAFE 1000).
+    // Current terminal geometry; historical test/log names preserve baseline comparison.
     uint16 internal constant DAILY_ETH_MAX_WINNERS = 305;
-    uint16 internal constant DAILY_COIN_MAX_WINNERS = 50;
-    uint32 internal constant WRITES_BUDGET_SAFE = 1000;
-
-    /// @dev The hard EIP-7825 per-transaction gas cap. A breach = mineFlip DoS.
-    uint256 internal constant EIP7825_TX_GAS_CAP = 16_777_216;
-    /// @dev The 10M soft design comfort target (USER dual bound).
-    uint256 internal constant GAS_TARGET = 10_000_000;
-    /// @dev The real mainnet block gas limit (foundry inflates block_gas_limit to 30e9 for the harness).
-    uint256 internal constant MAINNET_BLOCK_GAS_LIMIT = 30_000_000;
 
     /// @dev Terminal pool; the terminal geometry is the fixed 152/104/48/1 = 305.
     uint256 internal constant POOL_WEI = 1000 ether;
@@ -209,18 +176,10 @@ contract AdvanceStageWorstCaseGas is Test {
     }
 
     // =========================================================================
-    // STAGE 8 / 11 / 12 — the 305-winner daily-ETH jackpot (BINDING single-shot)
+    // Fixed-work terminal distribution measurement
     // =========================================================================
 
-    /// @notice MEASURED worst-case for the daily-ETH jackpot distribution at the DAILY_ETH_MAX_WINNERS=305
-    ///         hard cap (buckets 152/104/48/1 at max scale). This is the IDENTICAL `_processDailyEth` loop
-    ///         that stages 8 (purchase-phase runDailyJackpot), 11 (jackpot-phase fresh daily) and 12
-    ///         (game-over runTerminalJackpotWork) all execute. Drives the live external entry with the
-    ///         msg.sender==GAME guard satisfied via prank and brackets the call with gasleft().
-    ///
-    ///         CORRECTION vs the prior 367 pass: the standalone 305-winner jackpot is NOT ~15.08M. The
-    ///         15M figure was the gap-backfill (~7.3M) COMPOSED with the jackpot — a composition the v56
-    ///         Stage-4 decouple `break` makes unreachable in one tx. The real standalone number is here.
+    /// @notice Measure the complete live 305-winner distribution at a fixed work size.
     function test_Stage8_11_12_DailyEthJackpot_305Winners_Measured() public {
         (uint8[4] memory traitIds, uint256 effEntropy) = _deriveTraits(_word());
 
@@ -236,30 +195,16 @@ contract AdvanceStageWorstCaseGas is Test {
 
         vm.prank(ContractAddresses.GAME);
         uint256 gasBefore = gasleft();
-        (, uint256 paidWei) = jp.runTerminalJackpotWork(POOL_WEI, TARGET_LVL, _word(), gasleft());
+        (MineFlipGas.Result memory result, uint256 paidWei) = jp.runTerminalJackpotWork(POOL_WEI, TARGET_LVL, _word(), gasleft());
         uint256 gasUsed = gasBefore - gasleft();
 
+        assertTrue(result.done, "fixed-work measurement covers the whole terminal distribution");
         assertGt(paidWei, 0, "the measured worst-case jackpot actually paid out");
 
         emit log_named_uint("STAGE_8_11_12_daily_eth_jackpot_305_winner_gas", gasUsed);
-        emit log_named_uint("eip7825_tx_gas_cap", EIP7825_TX_GAS_CAP);
-        emit log_named_uint("headroom_to_16p7M_gas", EIP7825_TX_GAS_CAP - gasUsed);
+        // Total fixed-work cost is diagnostic. This worker may checkpoint its
+        // winners; admission safety is checked per award/group in native suites.
 
-        // The headline ceiling assertion: the binding single-shot stage clears the EIP-7825 cap with
-        // very large headroom — and is FAR below the prior pass's mis-attributed ~15.08M figure.
-        assertLt(
-            gasUsed,
-            EIP7825_TX_GAS_CAP,
-            "STAGE 8/11/12: the 305-winner daily-ETH jackpot is strictly < 16,777,216 (EIP-7825)"
-        );
-        // It also clears the 10M soft comfort target (the real standalone number is ~7.5M, not ~15M).
-        assertLt(
-            gasUsed,
-            GAS_TARGET,
-            "STAGE 8/11/12: the standalone 305-winner jackpot also clears the 10M soft target (it is ~7.5M, NOT ~15M)"
-        );
-        // Sanity: it fits the real mainnet block too, with margin.
-        assertLt(gasUsed, MAINNET_BLOCK_GAS_LIMIT, "fits the 30M mainnet block with margin");
     }
 
     /// @notice Per-ETH-winner marginal, measured loop-N-divide: (gas at 305 winners − gas at 4 winners)/301.
@@ -322,16 +267,9 @@ contract AdvanceStageWorstCaseGas is Test {
     // STAGE 0 / 1 / 5 / 6 / 7 — the write-budgeted ticket batch (chunked)
     // =========================================================================
 
-    /// @notice MEASURED worst-case for ONE ticket-worker chunk — the loop shared by
-    ///         every chunked ticket stage (0 mid-day drain, 1 daily drain gate, 5 FF drain, 6 prepare
-    ///         future tickets, 7 current-level batch). Each chunk mints up to WRITES_BUDGET_SAFE=1000 write
-    ///         units of cold lvlTraitEntry SSTOREs (the first batch is cold-scaled to ~357). We seed a
-    ///         deep queue (1 player owing a large trait count) so one batch saturates the budget, and
-    ///         measure the live ticket worker `runTicketWork`.
+    /// @notice Measure ticket progress at a 10M caller allowance for one deep queue entry.
     function test_Stage0_1_5_6_7_TicketBatch_WriteBudget_Measured() public {
-        // ONE player owing a large trait count: the batch mints up to the (cold-scaled) write budget of
-        // traits in one call, then breaks at the budget — the maximal single-tx ticket-batch chunk.
-        uint32 owed = 600; // > the cold-scaled budget so the batch saturates and breaks mid-player.
+        uint32 owed = 600;
         tb.seedTicketQueue(TARGET_LVL, 1, owed, uint160(0x20000));
         assertEq(tb.queueLen(TARGET_LVL), 1, "fixture: one deep-owed player queued");
 
@@ -346,19 +284,12 @@ contract AdvanceStageWorstCaseGas is Test {
         emit log_named_uint("ticket_batch_cursor_after", tb.cursor());
     }
 
-    /// @notice MEASURED worst-case for a WARM resume ticket batch — the heavier case where the level's
-    ///         first (cold-scaled) batch already ran, so this batch uses the FULL WRITES_BUDGET_SAFE=1000
-    ///         budget (not the 35%-scaled 357). Seed one deep-owed player at a non-zero cursor so idx != 0.
-    ///         This is the true single-tx ticket-stage worst case; the cold first batch (~6.5M) is lighter.
+    /// @notice Measure ticket progress from a nonzero cursor at the same 10M caller allowance.
     function test_Stage7_TicketBatch_WarmResume_FullBudget_Measured() public {
-        // Player[0] cheap (owed small, advances fast); player[1] deep-owed; cursor pinned at index 1 so
-        // the batch enters the deep player with idx==1 -> the full 1000 budget (no cold scale).
-        // We seed 2 entries: index 0 a 1-owed cheap entry, index 1 a 700-owed deep entry; cursor=1.
-        // seedTicketQueueWarmResume seeds n uniform-owed players; to get the mixed shape we seed 2 deep
-        // players and start at cursor 1 (so only the second is processed this batch at full budget).
+        // Two deep entries, with the first already retired.
         tb.seedTicketQueueWarmResume(TARGET_LVL, 2, 700, uint160(0x50000), 1);
         assertEq(tb.queueLen(TARGET_LVL), 2, "fixture: 2 players queued");
-        assertEq(tb.cursor(), 1, "fixture: cursor starts at index 1 (warm, no cold-scale)");
+        assertEq(tb.cursor(), 1, "fixture: cursor starts at index 1");
 
         uint256 g0 = gasleft();
         MineFlipGas.Result memory r = tb.runTicketWork{gas: CHUNK_GAS}(TARGET_LVL, CHUNK_GAS);
@@ -370,10 +301,7 @@ contract AdvanceStageWorstCaseGas is Test {
         emit log_named_uint("ticket_batch_warm_finished", finished ? 1 : 0);
     }
 
-    /// @notice Per-trait marginal for the ticket batch, measured loop-N-divide across two deep-owed
-    ///         counts that both fit in ONE (non-cold-scaled) batch, isolating the per-trait cold SSTORE.
-    ///         The deep-owed single player's later batches use the full 1000 budget (no cold-scale), so we
-    ///         drive a first cheap batch to advance off cursor 0, then measure the second batch's marginal.
+    /// @notice Compare completed 200-entry and 100-entry drains at the same caller allowance. The difference is diagnostic, not a proof for an extrapolated batch size.
     function test_PerTraitMarginal_TicketBatch_Measured() public {
         // Two runs from one baseline: a player owing M traits vs M-K, both within one warm batch.
         // The marginal = (gas(M) - gas(M-K)) / K, the cold lvlTraitEntry push per trait.
@@ -402,13 +330,8 @@ contract AdvanceStageWorstCaseGas is Test {
         if (gasHi > gasLo) {
             uint256 perTrait = (gasHi - gasLo) / (mHi - mLo);
             emit log_named_uint("per_trait_marginal_gas", perTrait);
-            // Per-trait cold array push is a bounded O(1); a 1000-write budget × this stays < the cap.
+            // Comparative marginal only; RoundDrainChunkGas tests the live operation envelopes.
             assertLt(perTrait, 200_000, "per-trait cold push is a bounded O(1) write");
-            // Analytic-from-measured cross-check: a worst-case 1000-write-unit chunk (~167 traits, each
-            // ~2 write units) at this per-trait cost stays well under the EIP cap.
-            uint256 analytic1000 = 500_000 + perTrait * 167; // fixed overhead + ~167 traits
-            emit log_named_uint("analytic_1000_write_chunk_from_measured_marginal", analytic1000);
-            assertLt(analytic1000, EIP7825_TX_GAS_CAP, "analytic 1000-write chunk from the measured per-trait marginal < the EIP cap");
         } else {
             // Guard the probe's precondition so a degenerate measurement FAILS rather than silently
             // skipping the per-trait marginal + analytic bound: the 200-owed batch MUST cost more

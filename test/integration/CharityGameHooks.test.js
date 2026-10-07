@@ -244,7 +244,7 @@ describe("CharityGameHooks", function () {
       await sdgnrs.connect(gameSigner).transferFromPool(
         POOL_REWARD,
         alice.address,
-        hre.ethers.parseEther("100")
+        hre.ethers.parseUnits("100", 12)
       );
       await hre.network.provider.request({
         method: "hardhat_stopImpersonatingAccount",

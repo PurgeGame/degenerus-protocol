@@ -27,13 +27,13 @@ function wilsonHilfertyZ(chi2, df) {
 const BOX_OPEN_TAG = 0x426f784f70656en;
 function deriveSeed(rngWord, player) {
   return BigInt(hre.ethers.keccak256(hre.ethers.AbiCoder.defaultAbiCoder().encode(
-    ["uint256", "address"], [rngWord, player]
+    ["uint256", "uint32"], [rngWord, player]
   )));
 }
 function redemptionSeed(rngWord, player, nonce = 1) {
   const entropy = deriveSeed(rngWord, player);
   return BigInt(hre.ethers.keccak256(hre.ethers.AbiCoder.defaultAbiCoder().encode(
-    ["uint256", "address", "uint256", "uint256"], [entropy, player, BOX_OPEN_TAG, nonce]
+    ["uint256", "uint32", "uint256", "uint256"], [entropy, player, BOX_OPEN_TAG, nonce]
   )));
 }
 
@@ -42,7 +42,7 @@ function makeCallerBSeeds(N) {
   const seeds = [];
   for (let i = 0; i < N; i++) {
     const rngWord = BigInt(hre.ethers.keccak256("0x" + ("d2" + i.toString(16).padStart(62, "0"))));
-    const player = "0x" + (BigInt(0x2000) + BigInt(i)).toString(16).padStart(40, "0");
+    const player = 0x2000n + BigInt(i);
     seeds.push(deriveSeed(rngWord, player));
   }
   return seeds;
@@ -53,7 +53,7 @@ function makeCallerCSeeds(N) {
   const seeds = [];
   for (let i = 0; i < N; i++) {
     const rngWord = BigInt(hre.ethers.keccak256("0x" + ("c0275c" + i.toString(16).padStart(58, "0"))));
-    const player = "0x" + (BigInt(0x3a00) + BigInt(i)).toString(16).padStart(40, "0");
+    const player = 0x3a00n + BigInt(i);
     seeds.push(redemptionSeed(rngWord, player));
   }
   return seeds;
@@ -63,7 +63,7 @@ function makeCallerDSeeds(N) {
   // All twenty box nonces for one beneficiary across successive synthetic sessions.
   const seeds = [];
   let rngWord = BigInt(hre.ethers.keccak256("0x" + "d4".padStart(64, "0")));
-  const player = "0x" + BigInt(0x4000).toString(16).padStart(40, "0");
+  const player = 0x4000n;
   for (let i = 0; i < N; i++) {
     if (i % 20 === 0) {
       rngWord = BigInt(hre.ethers.keccak256(hre.ethers.AbiCoder.defaultAbiCoder().encode(["uint256"], [rngWord])));

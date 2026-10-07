@@ -2,58 +2,20 @@
 pragma solidity ^0.8.26;
 
 import {Test} from "forge-std/Test.sol";
-import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
 
-/// @title TicketEdgeCasesHarness -- Combines routing (Phase 75) and simplified processing (Phase 76)
-///        to exercise cross-cutting edge cases around EDGE-01 and EDGE-02.
-/// @dev Routing via _queueEntries (uses isFarFuture check at deposit time) and
-///      simplified processBatch (dual-queue drain with FF bit) from TicketProcessingFFHarness.
-contract TicketEdgeCasesHarness is DegenerusGameStorage, WalletSeed {
-    uint32 public constant BUDGET = 10;
-
-    // -- Routing wrapper (from TicketRoutingHarness pattern) --
-
+/// @dev Exercises production near/far routing and owed records across a level transition.
+contract TicketEdgeCasesHarness is WalletSeed {
     function queueTickets(address buyer, uint24 targetLevel, uint32 quantity) external {
         _queueEntries(_seedWallet(buyer), targetLevel, quantity, false);
     }
-
-    // -- State setters --
 
     function setLevel(uint24 lvl) external {
         level = lvl;
     }
 
-    function setTicketQueue(uint24 key, uint256 count) external {
-        for (uint256 i = 0; i < count; i++) {
-            _tqAppend(key, _seedWallet(address(uint160(i + 1))));
-        }
-    }
-
-    function setTicketLevel(uint24 v) external {
-        ticketLevel = v;
-    }
-
-    function setTicketCursor(uint32 v) external {
-        ticketCursor = v;
-    }
-
     function setTicketWriteSlot(bool v) external {
         ticketWriteSlot = v;
-    }
-
-    function setRngWordCurrent(uint256 v) external {
-        rngWordCurrent = v == 0 ? RNG_WORD_WAITING : (v == 1 ? 0 : v);
-    }
-
-    // -- State getters --
-
-    function getTicketLevel() external view returns (uint24) {
-        return ticketLevel;
-    }
-
-    function getTicketCursor() external view returns (uint32) {
-        return ticketCursor;
     }
 
     function getQueueLength(uint24 key) external view returns (uint256) {
@@ -64,106 +26,16 @@ contract TicketEdgeCasesHarness is DegenerusGameStorage, WalletSeed {
         return _owedOf(key, player);
     }
 
-    // -- Key helpers (exposed) --
-
     function tqWriteKey(uint24 lvl) external view returns (uint24) {
         return _tqWriteKey(lvl);
-    }
-
-    function tqReadKey(uint24 lvl) external view returns (uint24) {
-        return _tqReadKey(lvl);
     }
 
     function tqFarFutureKey(uint24 lvl) external pure returns (uint24) {
         return _tqFarFutureKey(lvl);
     }
 
-    // -- Simplified processBatch replicating dual-queue drain logic --
-    // Copied verbatim from TicketProcessingFFHarness (Phase 76).
-    // Each queue entry costs 1 write unit. Budget = BUDGET (10).
-    // Returns (worked, finished).
-
-    function processBatch(uint24 lvl) external returns (bool worked, bool finished) {
-        // Phase detection: are we resuming FF processing?
-        bool inFarFuture = (ticketLevel == (lvl | TICKET_FAR_FUTURE_BIT));
-        uint24 rk = inFarFuture ? _tqFarFutureKey(lvl) : _tqReadKey(lvl);
-        uint256[] storage queue = ticketQueue[_ticketQueueStorageKey(rk)];
-        uint256 total = queue.length;
-
-        // Exit point 1: current queue empty
-        if (total == 0) {
-            if (!inFarFuture) {
-                uint24 ffk = _tqFarFutureKey(lvl);
-                if (_ticketQueueLength(ffk) > 0) {
-                    ticketLevel = lvl | TICKET_FAR_FUTURE_BIT;
-                    ticketCursor = 0;
-                    return (false, false); // FF queue pending
-                }
-            }
-            ticketCursor = 0;
-            ticketLevel = 0;
-            return (false, true); // Both empty
-        }
-
-        // Level switch (read-side only)
-        if (!inFarFuture && ticketLevel != lvl) {
-            ticketLevel = lvl;
-            ticketCursor = 0;
-        }
-
-        uint256 idx = ticketCursor;
-
-        // Exit point 2: cursor past end
-        if (idx >= total) {
-            _releaseTicketQueue(rk);
-            if (!inFarFuture) {
-                uint24 ffk = _tqFarFutureKey(lvl);
-                if (_ticketQueueLength(ffk) > 0) {
-                    ticketLevel = lvl | TICKET_FAR_FUTURE_BIT;
-                    ticketCursor = 0;
-                    return (false, false);
-                }
-            }
-            ticketCursor = 0;
-            ticketLevel = 0;
-            return (false, true);
-        }
-
-        // Simplified batch loop: each entry = 1 write unit
-        uint32 used;
-        while (idx < total && used < BUDGET) {
-            unchecked {
-                ++idx;
-                ++used;
-            }
-        }
-
-        worked = (used > 0);
-        ticketCursor = uint32(idx);
-
-        // Exit point 3: post-loop
-        finished = (idx >= total);
-        if (finished) {
-            _releaseTicketQueue(rk);
-            if (!inFarFuture) {
-                uint24 ffk = _tqFarFutureKey(lvl);
-                if (_ticketQueueLength(ffk) > 0) {
-                    ticketLevel = lvl | TICKET_FAR_FUTURE_BIT;
-                    ticketCursor = 0;
-                    finished = false;
-                } else {
-                    ticketCursor = 0;
-                    ticketLevel = 0;
-                }
-            } else {
-                ticketCursor = 0;
-                ticketLevel = 0;
-            }
-        }
-    }
 }
 
-/// @title TicketEdgeCasesTest -- Proves EDGE-01 (no double-counting) and EDGE-02 (no re-processing)
 contract TicketEdgeCasesTest is Test {
     TicketEdgeCasesHarness harness;
     uint24 constant FF_BIT = 1 << 22;
@@ -178,13 +50,6 @@ contract TicketEdgeCasesTest is Test {
         harness.setLevel(5);
         harness.setTicketWriteSlot(false);
     }
-
-    // =========================================================================
-    // Test 1 (EDGE-01): FF key and write key deposits for same level are
-    // tracked independently -- no double-counting.
-    // Scenario: player deposits to FF key at low level, same player deposits
-    // to write key at higher level. entriesOwedPacked entries are separate.
-    // =========================================================================
 
     function testEdge01NoDoubleCount_FFThenWriteKey() public {
         // At level=5, target=15: isFarFuture = 15 > mintCeiling(5)=6 -> FF key
@@ -222,51 +87,6 @@ contract TicketEdgeCasesTest is Test {
         assertTrue(ffKey != writeKey, "FF key and write key must be different keys");
     }
 
-    // =========================================================================
-    // Test 2 (EDGE-01): Both read-side and FF queues have entries for the
-    // same level. processBatch drains both sequentially without
-    // cross-contamination.
-    // =========================================================================
-
-    function testEdge01ProcessBothQueuesIndependently() public {
-        uint24 lvl = 15;
-        uint24 readKey = harness.tqReadKey(lvl);
-        uint24 ffKey = harness.tqFarFutureKey(lvl);
-
-        // Seed both queues: read-side 3 entries, FF 4 entries
-        harness.setTicketQueue(readKey, 3);
-        harness.setTicketQueue(ffKey, 4);
-
-        // Call 1: drains read-side (3 entries, within budget 10)
-        (bool worked1, bool finished1) = harness.processBatch(lvl);
-        assertTrue(worked1, "Call 1 should have worked (read-side drained)");
-        assertFalse(finished1, "Call 1 should NOT be finished (FF pending)");
-
-        // After read-side drain: ticketLevel encodes FF bit, cursor reset
-        assertEq(harness.getTicketLevel(), lvl | FF_BIT, "ticketLevel should encode FF bit");
-        assertEq(harness.getTicketCursor(), 0, "cursor should reset for FF phase");
-
-        // Read-side deleted, FF untouched
-        assertEq(harness.getQueueLength(readKey), 0, "read-side queue should be deleted");
-        assertEq(harness.getQueueLength(ffKey), 4, "FF queue should be untouched (4 entries)");
-
-        // Call 2: drains FF queue (4 entries, within budget 10)
-        (bool worked2, bool finished2) = harness.processBatch(lvl);
-        assertTrue(worked2, "Call 2 should have worked (FF drained)");
-        assertTrue(finished2, "Call 2 should be finished (both queues drained)");
-
-        // After full drain: clean state
-        assertEq(harness.getTicketLevel(), 0, "ticketLevel should be 0 after full drain");
-        assertEq(harness.getTicketCursor(), 0, "cursor should be 0 after full drain");
-        assertEq(harness.getQueueLength(ffKey), 0, "FF queue should be deleted");
-    }
-
-    // =========================================================================
-    // Test 3 (EDGE-02): After FF key for level L is drained (requiring
-    // currentLevel >= L-5), new deposits to level L go to write key, not FF
-    // key. Monotonic level progression makes this permanent.
-    // =========================================================================
-
     function testEdge02RoutingPreventsNewFFDeposits() public {
         // level=13: mintCeiling(13)=14, so level 14 is in the near-future window (not far-future)
         harness.setLevel(13);
@@ -298,65 +118,4 @@ contract TicketEdgeCasesTest is Test {
         // levels.
     }
 
-    // =========================================================================
-    // Test 4 (EDGE-02): After processBatch fully drains FF key, queue is
-    // deleted and cursor/ticketLevel are reset to clean state.
-    // =========================================================================
-
-    function testEdge02CleanupAfterDrain() public {
-        uint24 lvl = 8;
-        uint24 ffKey = harness.tqFarFutureKey(lvl);
-
-        // Set up: FF key for level 8 has 2 entries
-        harness.setTicketQueue(ffKey, 2);
-
-        // Pre-set ticketLevel to FF phase (as if read-side was already drained)
-        harness.setTicketLevel(lvl | FF_BIT);
-
-        // Drain FF queue (2 entries, within budget 10)
-        (bool worked, bool finished) = harness.processBatch(lvl);
-        assertTrue(worked, "Should have worked (FF drained)");
-        assertTrue(finished, "Should be finished (FF fully drained)");
-
-        // Verify clean state after drain
-        assertEq(harness.getQueueLength(ffKey), 0, "FF queue should be deleted");
-        assertEq(harness.getTicketLevel(), 0, "ticketLevel should be 0 after drain");
-        assertEq(harness.getTicketCursor(), 0, "cursor should be 0 after drain");
-
-        // Note: the simplified processBatch does not write entriesOwedPacked
-        // (it only simulates structural behavior). The full processing loop's
-        // per-player zeroing of entriesOwedPacked is verified by the RESEARCH.md
-        // code trace (MintModule lines 418-420: newPacked = 0 when remainingOwed == 0).
-    }
-
-    // =========================================================================
-    // Test 5 (EDGE-01 supplemental): Level was far-future and only received
-    // FF deposits (no write-key deposits). processBatch handles empty
-    // read-side correctly and processes FF entries.
-    // =========================================================================
-
-    function testEdge01FFOnlyQueue_NoReadSide() public {
-        uint24 lvl = 20;
-        uint24 readKey = harness.tqReadKey(lvl);
-        uint24 ffKey = harness.tqFarFutureKey(lvl);
-
-        // Only FF key has entries (5 entries). Read-side is empty.
-        harness.setTicketQueue(ffKey, 5);
-        assertEq(harness.getQueueLength(readKey), 0, "read-side should be empty");
-
-        // Call 1: read-side empty, detects FF queue, transitions
-        (bool worked1, bool finished1) = harness.processBatch(lvl);
-        assertFalse(worked1, "Call 1 should not have worked (just transitioned)");
-        assertFalse(finished1, "Call 1 should NOT be finished (FF pending)");
-        assertEq(harness.getTicketLevel(), lvl | FF_BIT, "ticketLevel should encode FF bit");
-
-        // Call 2: drains FF queue (5 entries, within budget 10)
-        (bool worked2, bool finished2) = harness.processBatch(lvl);
-        assertTrue(worked2, "Call 2 should have worked (FF drained)");
-        assertTrue(finished2, "Call 2 should be finished (FF fully drained)");
-
-        // Clean state after drain
-        assertEq(harness.getTicketLevel(), 0, "ticketLevel should be 0 after FF drain");
-        assertEq(harness.getQueueLength(ffKey), 0, "FF queue should be deleted");
-    }
 }

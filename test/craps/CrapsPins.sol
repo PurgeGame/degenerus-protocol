@@ -27,6 +27,14 @@ contract MockGame {
     function mintPackedFor(address player) external view returns (uint256) {
         return hasMintHistory[player] ? mintHistory[player] : uint256(3) << 24;
     }
+    mapping(uint32 => uint256) private accountMintHistory;
+    mapping(uint32 => bool) private hasAccountMintHistory;
+    function setMintHistoryById(uint32 id, uint256 value) external { accountMintHistory[id] = value; hasAccountMintHistory[id] = true; }
+    function mintPackedOfId(uint32 id) external view returns (uint256) {
+        if (hasAccountMintHistory[id]) return accountMintHistory[id];
+        address player = ownerOfId[id];
+        return hasMintHistory[player] ? mintHistory[player] : uint256(3) << 24;
+    }
     bool public rngLocked;
 
     uint8 private consumerStageOverride;
@@ -58,6 +66,7 @@ contract MockGame {
     ///      strict mode applies the Game's rule (the first paying contact allocates, a non-paying
     ///      contact returns the existing ID or zero).
     mapping(address => uint32) public walletIdOf;
+    function walletIdRoot() external pure returns (uint256 root) { assembly { root := walletIdOf.slot } }
     /// @dev The reverse direction, also mirrored into the wallet-table slots `extsload` serves, so
     ///      `WalletTableLib.ownerOf` resolves a mock ID exactly as it resolves a Game ID.
     mapping(uint32 => address) public ownerOfId;
@@ -88,12 +97,10 @@ contract MockGame {
     error E();
 
     /// @dev Allocate `key` as a smurf of `ownerId` (the next ID), as Game `createSmurf` does.
-    function registerSmurf(address key, uint32 ownerId) external returns (uint32 id) {
+    function registerSmurf(uint32 ownerId) external returns (uint32 id) {
         id = ++walletCount;
-        walletIdOf[key] = id;
-        ownerOfId[id] = key;
         smurfOwnerOf[id] = ownerId;
-        slots[GameSlotKeys.walletElement(id)] = bytes32(uint256(uint160(key)) | (uint256(ownerId) << 160));
+        slots[GameSlotKeys.walletElement(id)] = bytes32(uint256(ownerId) << 160);
     }
 
     function setOperatorApproval(uint32 id, address operator, bool approved) external {
@@ -393,13 +400,14 @@ abstract contract CrapsPins is Test {
     MockVault internal vault;
     MockQuests internal quests;
     address internal vaultOwner = makeAddr("vaultOwner");
+    uint256 private mockWalletIdRoot;
 
     /// @dev The Game-mock wallet ID of `who`, read straight from storage (`walletIdOf` is the
-    ///      mapping at slot 6) so a pending `vm.prank` / `vm.expectRevert` still reaches the next
+    ///      mapping root obtained from the mock compiler layout) so a pending `vm.prank` / `vm.expectRevert` still reaches the next
     ///      real call. An unregistered wallet is registered first, which does consume them: register
     ///      actors in `setUp` when the id is read between a prank and its call.
     function _idFor(address who) internal returns (uint32 id) {
-        id = uint32(uint256(vm.load(address(game), keccak256(abi.encode(who, uint256(6))))));
+        id = uint32(uint256(vm.load(address(game), keccak256(abi.encode(who, mockWalletIdRoot)))));
         if (id == 0) id = game.registerWallet(who, true);
     }
 
@@ -419,6 +427,7 @@ abstract contract CrapsPins is Test {
         vm.etch(ContractAddresses.JACKPOT_BATTLE, address(new JackpotBattle()).code);
         quests = MockQuests(ContractAddresses.QUESTS);
         game = MockGame(ContractAddresses.GAME);
+        mockWalletIdRoot = game.walletIdRoot();
         // Protocol wallets hold IDs 1..3 from deployment, as in the Game.
         game.registerWallet(ContractAddresses.VAULT, true);
         game.registerWallet(ContractAddresses.SDGNRS, true);

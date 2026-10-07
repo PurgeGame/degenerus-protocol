@@ -49,8 +49,8 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
 
     /// @dev Mirror of MintModule.FarFutureSwap for vm.expectEmit (player + buyer indexed topics).
     event FarFutureSwap(
-        address indexed player,
-        address indexed buyer,
+        uint32 indexed player,
+        uint32 indexed buyer,
         uint256 lineCount,
         uint256 totalBudgetWei,
         uint256 ticketWei,
@@ -109,7 +109,7 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
 
     /// @dev Set Coinflip.playerState[who].autoRebuyCarry (high 128 bits of struct slot +1).
     function _setCarry(address who, uint128 carry) internal {
-        bytes32 base = keccak256(abi.encode(who, PLAYERSTATE_SLOT));
+        bytes32 base = keccak256(abi.encode(game.walletIdOf(who), PLAYERSTATE_SLOT));
         bytes32 slot1 = bytes32(uint256(base) + 1);
         uint256 cur = uint256(vm.load(address(coinflip), slot1));
         uint256 lower = cur & ((uint256(1) << 128) - 1); // preserve autoRebuyStop
@@ -122,11 +122,10 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
     ///      lastClaim<<128 | autoRebuyStartDay<<152 | autoRebuyEnabled<<176; slot +1 packs
     ///      autoRebuyStop(0) | autoRebuyCarry<<128.
     function _seedRebuyCarry(address who, uint128 carry) internal {
-        bytes32 base = keccak256(abi.encode(who, PLAYERSTATE_SLOT));
+        bytes32 base = keccak256(abi.encode(game.walletIdOf(who), PLAYERSTATE_SLOT));
         uint256 slot0 = (uint256(type(uint24).max) << 128) // lastClaim = max -> settle is a no-op
             | (uint256(1) << 152) // autoRebuyStartDay
-            | (uint256(1) << 176) // autoRebuyEnabled = true
-            | (uint256(game.walletIdOf(who)) << 184); // cached wallet ID
+            | (uint256(1) << 176); // autoRebuyEnabled = true
         vm.store(address(coinflip), base, bytes32(slot0));
         vm.store(address(coinflip), bytes32(uint256(base) + 1), bytes32(uint256(carry) << 128));
     }
@@ -493,7 +492,7 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
         uint32 sdgnrsEntriesBefore = _ownedEntries(ContractAddresses.SDGNRS, L);
 
         vm.expectEmit(true, true, false, false, address(game));
-        emit FarFutureSwap(seller, ContractAddresses.SDGNRS, 0, 0, 0, 0, 0);
+        emit FarFutureSwap(_fixtureId(seller), uint32(2), 0, 0, 0, 0, 0);
         vm.prank(seller);
         game.sellFarFutureEntries(0, levels, qtys, idxs);
 
@@ -541,7 +540,7 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
         // first; a live transfer would ride tomorrow's stake instead of landing here).
         _seedRebuyCarry(ContractAddresses.SDGNRS, 5_000_000 ether);
         uint256 claimable = 50;
-        bytes32 base = keccak256(abi.encode(ContractAddresses.SDGNRS, PLAYERSTATE_SLOT));
+        bytes32 base = keccak256(abi.encode(uint32(2), PLAYERSTATE_SLOT));
         uint256 s0 = uint256(vm.load(address(coinflip), base));
         vm.store(address(coinflip), base, bytes32(s0 | uint256(uint128(claimable))));
 
@@ -658,7 +657,7 @@ contract FarFutureVaultFallbackTest is DeployProtocol {
         assertGt(bt, 0, "fixture: a FLIP leg to make the parity check meaningful");
 
         vm.expectEmit(true, true, true, true, address(game));
-        emit FarFutureSwap(seller, ContractAddresses.SDGNRS, 1, tb, tw, ec, bt);
+        emit FarFutureSwap(_fixtureId(seller), uint32(2), 1, tb, tw, ec, bt);
         vm.prank(seller);
         game.sellFarFutureEntries(0, levels, qtys, idxs);
     }

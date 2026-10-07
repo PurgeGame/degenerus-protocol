@@ -177,7 +177,7 @@ contract FoilSnapPayout is DeployProtocol {
             // fired ("re-seed the run") no matter which draw was replayed — 30 foil buyers still
             // produced zero. Re-seeding was never the remedy; reading the right lane is.
             flip += coinflip.coinflipAmount(_fb[i]);
-            wx += wwxrp.balanceOf(_fb[i]);
+            wx += wwxrp.claimable(game.walletIdOf(_fb[i]));
         }
     }
 

@@ -21,7 +21,7 @@ contract GrowthFoilGasSeeder is DegenerusGameStorage {
         presaleOver = true;
         _setPrizePools(10 ether, 10 ether);
         (uint32 id, ) = _registerWallet(player, 0);
-        mintPacked_[player] = (mintData & ~(uint256(type(uint32).max) << 224)) | (uint256(id) << 224);
+        mintPacked_[id] = mintData & ((uint256(1) << 224) - 1);
     }
 }
 
@@ -88,7 +88,7 @@ abstract contract GrowthFoilFixture is DeployProtocol {
         if (fullPurchase) {
             for (uint256 i; i < logs.length; ++i) {
                 if (logs[i].emitter == address(game) && logs[i].topics.length != 0
-                    && logs[i].topics[0] == keccak256("MintRecorded(address,uint256)")) {
+                    && logs[i].topics[0] == keccak256("MintRecorded(uint32,uint256)")) {
                     uint256 packed = abi.decode(logs[i].data, (uint256));
                     logs[i].data = abi.encode(packed & ~SCORE_CACHE_MASK);
                 }

@@ -11,7 +11,7 @@ import {WalletSeed} from "../helpers/WalletSeed.sol";
 contract GoldSixGasHarness is DegenerusGameTicketModule, WalletSeed {
     function seedGoldSix() external {
         _setTicketBufferLevel(1);
-        _bucketAppendRun(_traitBufferBase(1), 253, 0, 1, 1);
+        _bucketAppendRun(_traitBufferBase(1), 253, _seedWallet(address(0xBEEF)), 1, 1);
     }
     function seed(uint256 players, uint32 entriesScaled) external {
         level = 1;
@@ -35,7 +35,7 @@ contract GoldSixFoilGasHarness is DegenerusGameFoilPackModule, WalletSeed {
             uint256 owner = uint256(_seedWallet(who));
             foilRecord[1][_seedWallet(who)] = (uint256(20_000) << _FOIL_MULT_SHIFT) | (uint256(1) << _FOIL_LEVEL_SHIFT);
             uint256 slot = _foilSlot(_foilWriteKey(), i);
-            uint256 pack = (owner << 192) | (uint256(1) << 160) | uint160(who);
+            uint256 pack = (owner << 192) | (uint256(1) << 160);
             assembly ("memory-safe") { sstore(slot, pack) }
         }
         foilWriteCount = 8;

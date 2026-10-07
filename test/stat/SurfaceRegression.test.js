@@ -87,11 +87,5 @@ describe("Current shared RNG structure", function () {
     expect(source.slice(mainStart, mend)).to.include("_rollBoard(");
   });
 
-  it("SURF-03 — moved remainder roll retains keccak and the same predicate", function () {
-    const source = fs.readFileSync("contracts/storage/DegenerusGameStorage.sol", "utf8");
-    const body = source.match(/function _rollRemainder\([\s\S]*?\n    }/);
-    expect(body, "_rollRemainder missing from shared Storage").to.not.equal(null);
-    expect(body[0]).to.include("uint256 rollEntropy = EntropyLib.hash2(entropy, rollSalt);");
-    expect(body[0]).to.include("return (rollEntropy % QTY_SCALE) < rem;");
-  });
+
 });

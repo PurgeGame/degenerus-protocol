@@ -87,7 +87,7 @@ contract WrapperPathHandler is Test {
             vm.deal(actor, 10 ether);
             // Fund with DGNRS from CREATOR's deploy-time allocation (plain ERC20 transfer).
             vm.prank(ContractAddresses.CREATOR);
-            dgnrs.transfer(actor, 1_000_000 ether);
+            dgnrs.transfer(actor, 1_000_000e12);
         }
 
         // Vault-owner auth is not the property under test — grant it to actor 0 only, by

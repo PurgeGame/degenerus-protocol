@@ -13,52 +13,28 @@ import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
 
-/// @dev Constructs an Affiliate from code that holds no nonce of the test contract, so the
-///      bootstrap instance can be built before the Game exists without shifting any address.
-contract BootstrapAffiliateFactory {
-    function deploy(
-        address[] memory owners,
-        bytes32[] memory codes,
-        uint8[] memory kickbacks,
-        address[] memory players,
-        bytes32[] memory referralCodes
-    ) external returns (address) {
-        return address(new DegenerusAffiliate(owners, codes, kickbacks, players, referralCodes));
-    }
-}
-
-/// @notice Shared fixture: the protocol with an Affiliate that carries deploy-time bootstrap codes
-///         and referrals. The bootstrap instance is constructed while the Game address holds no
-///         code (any constructor-time Game call would revert), then its constructor-written slots
-///         are copied onto the Affiliate at its pinned address. The two instances run identical
-///         runtime code (no immutables), so the copy is the bootstrap deployment.
+/// @notice Real deployment fixture with constructor-registered affiliate owners and referrals.
 abstract contract AffiliateIdFixture is DeployProtocol {
     // DegenerusAffiliate roots (scripts/layout/golden/DegenerusAffiliate.json).
     uint256 internal constant CODE_ROOT = 0;
     uint256 internal constant EARNED_ROOT = 1;
     uint256 internal constant REFERRAL_ROOT = 2;
     uint256 internal constant LEVEL_SCORE_ROOT = 3;
-    uint256 internal constant BOOT_OWNER_ROOT = 4;
     /// @dev `Sub.affiliateBase` (uint32) starts at byte 19 of the `_subOf[id]` word.
     uint256 internal constant SUB_AFF_BASE_SHIFT = 19 * 8;
 
-    address internal constant FACTORY = address(0xB0075EED);
     bytes32 internal constant ROLL_TAG = keccak256("affiliate-payout-roll-v1");
     bytes32 internal constant LOCKED = bytes32(uint256(1));
     bytes32 internal constant VAULT_CODE = bytes32("VAULT");
     bytes32 internal constant DGNRS_CODE = bytes32("DGNRS");
 
     bytes32 internal constant WALLET_REGISTERED = keccak256("WalletRegistered(uint32,address)");
-    bytes32 internal constant REFERRAL_UPDATED = keccak256("ReferralUpdated(address,bytes32,uint32,bool)");
+    bytes32 internal constant REFERRAL_UPDATED = keccak256("ReferralUpdated(uint32,bytes32,uint32,bool)");
     bytes32 internal constant EARNINGS_RECORDED = keccak256("AffiliateEarningsRecorded(uint32,uint256)");
     bytes32 internal constant TOP_UPDATED = keccak256("AffiliateTopUpdated(uint24,uint32,uint96)");
-    bytes32 internal constant AFFILIATE_EVENT = keccak256("Affiliate(uint256,bytes32,address)");
+    bytes32 internal constant AFFILIATE_EVENT = keccak256("Affiliate(uint256,bytes32,uint32)");
     bytes32 internal constant STAKE_UPDATED = keccak256("CoinflipStakeUpdated(uint32,uint24,uint256,uint256)");
     bytes32 internal constant QUEST_COMPLETED = keccak256("QuestCompleted(uint32,uint24,uint8,uint8,uint32,uint256)");
-    bytes32 internal constant OLD_OWNER_REGISTERED = keccak256("AffiliateOwnerRegistered(bytes32,address)");
-    bytes32 internal constant OLD_REFERRAL_UPDATED = keccak256("ReferralUpdated(address,bytes32,address,bool)");
-    bytes32 internal constant OLD_EARNINGS_RECORDED = keccak256("AffiliateEarningsRecorded(address,uint256)");
-    bytes32 internal constant OLD_TOP_UPDATED = keccak256("AffiliateTopUpdated(uint24,address,uint96)");
 
     // Bootstrap codes: one per registration door, a self-referral owner and a protocol owner.
     address internal constant OWN_A = address(0xB00A);
@@ -89,7 +65,7 @@ abstract contract AffiliateIdFixture is DeployProtocol {
     address internal constant P_V = address(0xBA01);
     address internal constant P_DG = address(0xBA02);
 
-    address internal bootAffiliate;
+    Vm.Log[] internal bootstrapLogs;
     uint256 private _dummies;
 
     struct CodeInfo {
@@ -101,22 +77,21 @@ abstract contract AffiliateIdFixture is DeployProtocol {
     }
 
     function setUp() public virtual {
-        require(ContractAddresses.GAME.code.length == 0, "fixture expects no Game yet");
-        vm.etch(FACTORY, type(BootstrapAffiliateFactory).runtimeCode);
-        (
-            address[] memory owners,
-            bytes32[] memory codes,
-            uint8[] memory kicks,
-            address[] memory players,
-            bytes32[] memory refs
-        ) = _bootArrays();
-        bootAffiliate = BootstrapAffiliateFactory(FACTORY).deploy(owners, codes, kicks, players, refs);
+        vm.recordLogs();
         _deployProtocol();
-        bytes32[] memory slots = _bootSlots();
-        for (uint256 i; i < slots.length; ++i) {
-            vm.store(address(affiliate), slots[i], vm.load(bootAffiliate, slots[i]));
+        Vm.Log[] memory deployed = vm.getRecordedLogs();
+        for (uint256 i; i < deployed.length; ++i) {
+            if (deployed[i].emitter != address(affiliate) && deployed[i].topics[0] != WALLET_REGISTERED) continue;
+            Vm.Log storage saved = bootstrapLogs.push();
+            saved.emitter = deployed[i].emitter;
+            saved.topics = deployed[i].topics;
+            saved.data = deployed[i].data;
         }
     }
+
+    function _affiliateBootstrap() internal pure override returns (
+        address[] memory, bytes32[] memory, uint8[] memory, address[] memory, bytes32[] memory
+    ) { return _bootArrays(); }
 
     // ---------------------------------------------------------------------
     // Bootstrap configuration
@@ -165,21 +140,6 @@ abstract contract AffiliateIdFixture is DeployProtocol {
     /// @dev Every slot the bootstrap constructor writes: the two protocol code infos and their
     ///      referral words, each bootstrap code's info and side-map owner, and each bootstrap
     ///      player's referral word.
-    function _bootSlots() internal pure returns (bytes32[] memory s) {
-        (bytes32[6] memory c,,) = _bootCodes();
-        (address[7] memory p,) = _bootPlayers();
-        s = new bytes32[](4 + 12 + 7);
-        s[0] = _codeSlot(VAULT_CODE);
-        s[1] = _codeSlot(DGNRS_CODE);
-        s[2] = _refSlot(ContractAddresses.VAULT);
-        s[3] = _refSlot(ContractAddresses.SDGNRS);
-        for (uint256 i; i < 6; ++i) {
-            s[4 + 2 * i] = _codeSlot(c[i]);
-            s[5 + 2 * i] = _bootOwnerSlot(c[i]);
-        }
-        for (uint256 i; i < 7; ++i) s[16 + i] = _refSlot(p[i]);
-    }
-
     // ---------------------------------------------------------------------
     // Storage readers
     // ---------------------------------------------------------------------
@@ -188,12 +148,8 @@ abstract contract AffiliateIdFixture is DeployProtocol {
         return keccak256(abi.encode(code, CODE_ROOT));
     }
 
-    function _bootOwnerSlot(bytes32 code) internal pure returns (bytes32) {
-        return keccak256(abi.encode(code, BOOT_OWNER_ROOT));
-    }
-
-    function _refSlot(address player) internal pure returns (bytes32) {
-        return keccak256(abi.encode(player, REFERRAL_ROOT));
+    function _refSlot(address player) internal view returns (bytes32) {
+        return keccak256(abi.encode(game.walletIdOf(player), REFERRAL_ROOT));
     }
 
     function _earnSlot(uint24 lvl, uint32 id) internal pure returns (bytes32) {
@@ -211,10 +167,6 @@ abstract contract AffiliateIdFixture is DeployProtocol {
         c.upline1 = uint32(w >> 40);
         c.upline2 = uint32(w >> 72);
         c.flags = uint8(w >> 104);
-    }
-
-    function _bootOwner(bytes32 code) internal view returns (address) {
-        return address(uint160(uint256(vm.load(address(affiliate), _bootOwnerSlot(code)))));
     }
 
     function _refWord(address player) internal view returns (uint256) {
@@ -250,6 +202,13 @@ abstract contract AffiliateIdFixture is DeployProtocol {
     // ---------------------------------------------------------------------
 
     function _entropy(uint32 buyerId, bytes32 code) internal view returns (uint256) {
+        uint256 c = uint256(code);
+        if (c > 1 && c < (uint256(1) << 192)) {
+            // Stored ID words and explicit ID inputs share the canonical entropy word.
+            uint32 ownerId = c >> 32 == 1 || c >> 32 == (uint256(1) << 128)
+                ? uint32(c) : _id(address(uint160(c)));
+            code = bytes32((uint256(1) << 32) | ownerId);
+        }
         // vm.getBlockTimestamp: via-IR may fold repeated block.timestamp reads within one call.
         uint24 day = GameTimeLib.currentDayIndexAt(vm.getBlockTimestamp());
         return uint256(keccak256(abi.encodePacked(ROLL_TAG, day, buyerId, code)));
@@ -291,21 +250,42 @@ abstract contract AffiliateIdFixture is DeployProtocol {
         id = _id(buyer);
     }
 
+    function _settlementId(address sender, bytes32 code, uint32 hint) internal returns (uint32 id) {
+        id = _id(sender);
+        if (id == 0) {
+            vm.prank(address(coinflip));
+            id = game.registerWallet(sender, true);
+        }
+        if (hint == 0 || hint == id) return id;
+        uint256 stored = _refWord(sender);
+        bytes32 route = stored == 0 ? code : bytes32(stored);
+        if (route == 0 || route == LOCKED) route = VAULT_CODE;
+        if (stored == 1 || (stored == 0 && code == 0)) {
+            uint256 parity = _entropy(hint, VAULT_CODE) % 2;
+            while (_entropy(id, VAULT_CODE) % 2 != parity) vm.warp(vm.getBlockTimestamp() + 1 days);
+        } else {
+            uint8 branch = _class(hint, route);
+            while (_class(id, route) != branch) vm.warp(vm.getBlockTimestamp() + 1 days);
+        }
+    }
+
     function _payCombined(bytes32 code, address sender, uint32 senderId, uint24 lvl, uint256 freshFlip)
         internal
         returns (uint32 winnerId, uint256 credit, uint256 kickback)
     {
+        senderId = _settlementId(sender, code, senderId);
         vm.prank(address(game));
         (winnerId, credit, kickback) =
-            affiliate.payAffiliateCombined(code, sender, senderId, lvl, freshFlip, 0, 0, 0, 0);
+            affiliate.payAffiliateCombined(code, senderId, lvl, freshFlip, 0, 0, 0, 0);
     }
 
     function _pay(uint256 amount, bytes32 code, address sender, uint32 senderId, uint24 lvl)
         internal
         returns (uint256 kickback)
     {
+        senderId = _settlementId(sender, code, senderId);
         vm.prank(address(game));
-        kickback = affiliate.payAffiliate(amount, code, sender, senderId, lvl, true, 0);
+        kickback = affiliate.payAffiliate(amount, code, senderId, lvl, true, 0);
     }
 
     function _refer(address player, bytes32 code) internal {
@@ -327,8 +307,8 @@ abstract contract AffiliateIdFixture is DeployProtocol {
     }
 
     function _claim(address sub) internal {
-        address[] memory subs = new address[](1);
-        subs[0] = sub;
+        uint32[] memory subs = new uint32[](1);
+        subs[0] = _id(sub);
         affiliate.claim(subs);
     }
 
@@ -451,12 +431,12 @@ abstract contract AffiliateIdFixture is DeployProtocol {
         bytes32 code,
         uint32 referrerId,
         bool locked
-    ) internal pure {
+    ) internal view {
         uint256 found;
         for (uint256 i; i < logs.length; ++i) {
             Vm.Log memory l = logs[i];
             if (l.emitter != emitter || l.topics.length != 4 || l.topics[0] != REFERRAL_UPDATED) continue;
-            if (l.topics[1] != bytes32(uint256(uint160(player)))) continue;
+            if (l.topics[1] != bytes32(uint256(game.walletIdOf(player)))) continue;
             ++found;
             assertEq(l.topics[2], code, "ReferralUpdated.code");
             assertEq(uint256(l.topics[3]), uint256(referrerId), "ReferralUpdated.referrerId");
@@ -478,11 +458,11 @@ abstract contract AffiliateIdFixture is DeployProtocol {
     }
 
     /// @dev A bootstrap code after its first runtime use: canonical owner ID, no flags, no side map.
-    function _assertMaterialized(bytes32 code, address owner, uint8 kickback) internal view {
+    function _assertBootstrapCode(bytes32 code, address owner, uint8 kickback) internal view {
         uint32 id = _id(owner);
         assertGt(id, 0, "owner registered");
         _assertInfo(code, id, kickback, 0, 0, 0);
-        assertEq(_bootOwner(code), address(0), "side map cleared");
+
         (address o, uint32 oid, uint8 k) = affiliate.affiliateCode(code);
         assertEq(o, owner);
         assertEq(oid, id);
@@ -495,10 +475,11 @@ abstract contract AffiliateIdFixture is DeployProtocol {
 
     function _assertWordTruth(address p) internal view {
         uint256 w = _refWord(p);
-        if (w < (uint256(1) << 160) || w >= (uint256(1) << 192)) return;
-        uint32 id = uint32(w >> 160);
+        if (w <= 1 || w >= (uint256(1) << 192)) return;
+        uint32 id = uint32(w);
+        assertEq(w >> 32, 1, "default tag with no address payload");
         assertGt(id, 0, "default word carries an ID");
-        assertEq(_id(address(uint160(w))), id, "default word ID is the owner's canonical ID");
+        assertLt(id, _nextId(), "referrer ID is allocated");
     }
 
     function _assertCodeTruth(bytes32 code, address bootOwner) internal view {
@@ -602,8 +583,9 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         assertEq(uint96(lw >> 128), lscore, "root 3: leader score [128:224)");
         assertEq(uint32(lw >> 224), lid, "root 3: leader ID [224:256)");
         assertEq(lid, oid);
-        (address pendingOwner,,) = affiliate.affiliateCode(CODE_A);
-        assertEq(_bootOwner(CODE_A), pendingOwner, "root 4: _bootstrapOwner");
+        (address bootstrapOwner,,) = affiliate.affiliateCode(CODE_A);
+
+        assertEq(bootstrapOwner, OWN_A);
         (uint32 none, uint96 noScore) = affiliate.affiliateTop(5);
         assertEq(none, 0, "an empty level has no leader");
         assertEq(noScore, 0);
@@ -623,8 +605,8 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         uint32 id = _id(owner);
         assertGt(id, 0, "owner registered");
         assertEq(_countRegistered(logs, owner), 1, "one WalletRegistered for the owner");
-        assertEq(_countLogs(logs, address(game), WALLET_REGISTERED), 1, "nobody else registers");
-        assertEq(_refWord(player), uint256(uint160(owner)) | (uint256(id) << 160), "word = owner | id << 160");
+        assertEq(_countLogs(logs, address(game), WALLET_REGISTERED), 2, "caller and default-code owner register");
+        assertEq(_refWord(player), (uint256(1) << 32) | id, "word = default tag | owner ID");
         assertEq(affiliate.getReferrerId(player), id);
         assertEq(affiliate.getReferrer(player), owner);
         _assertReferralUpdated(logs, address(affiliate), player, _dflt(owner), id, false);
@@ -639,7 +621,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         uint32 id = _id(owner);
         assertGt(id, 0);
         assertEq(_countRegistered(logs, owner), 1, "one WalletRegistered for the owner");
-        assertEq(_refWord(buyer), uint256(uint160(owner)) | (uint256(id) << 160));
+        assertEq(_refWord(buyer), (uint256(1) << 32) | id);
         assertEq(affiliate.getReferrerId(buyer), id);
         assertEq(affiliate.getReferrer(buyer), owner);
         _assertReferralUpdated(logs, address(affiliate), buyer, _dflt(owner), id, false);
@@ -721,7 +703,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
 
     /// forge-config: default.fuzz.runs = 256
     function testFuzz_ForgedDefaultWordNeverRoutesToItsId(uint160 low, uint32 hi, uint32 senderId) public {
-        vm.assume(hi != 0);
+        vm.assume(hi > 1);
         bytes32 forged = bytes32(uint256(low) | (uint256(hi) << 160));
         address buyer = makeAddr("forgedFuzz");
         uint32 before = _id(address(low));
@@ -765,7 +747,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
             for (uint256 j; j < 4; ++j) assertTrue(reads[i] != forbidden[j], "default code read code info");
         }
         assertEq(_extsloads(acc), 0, "default-code chain decodes nothing");
-        assertEq(_refWord(fresh), uint256(route) | (uint256(_id(owner)) << 160));
+        assertEq(_refWord(fresh), (uint256(1) << 32) | _id(owner));
     }
 
     // =====================================================================
@@ -828,27 +810,6 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         assertEq(u2, 1);
     }
 
-    function test_BootstrapOwnerOwnPendingCodeLocksWithoutRegistering() public {
-        vm.startStateDiffRecording();
-        _pay(4000, CODE_S, OWN_S, 0, 1);
-        Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
-        assertEq(_refWord(OWN_S), 1, "locked");
-        assertEq(_id(OWN_S), 0, "not registered by the refused attempt");
-        assertEq(_registrations(acc), 0);
-        _assertInfo(CODE_S, 0, KICK_S, 0, 0, 1);
-        assertEq(_bootOwner(CODE_S), OWN_S, "still pending");
-    }
-
-    function test_BootstrapOwnerOwnPendingCodeOnPurchaseLocks() public {
-        vm.startStateDiffRecording();
-        _buy(OWN_S, CODE_S);
-        Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
-        assertEq(_refWord(OWN_S), 1, "locked");
-        assertEq(_registrations(acc), 0, "the Affiliate registers nobody");
-        _assertInfo(CODE_S, 0, KICK_S, 0, 0, 1);
-        assertEq(_bootOwner(CODE_S), OWN_S, "still pending");
-    }
-
     // =====================================================================
     // 8. Bootstrap
     // =====================================================================
@@ -858,27 +819,27 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         _assertInfo(DGNRS_CODE, 2, 0, 1, 2, 6);
         (bytes32[6] memory c, address[6] memory o, uint8[6] memory k) = _bootCodes();
         for (uint256 i; i < 6; ++i) {
-            _assertInfo(c[i], 0, k[i], 0, 0, 1);
-            assertEq(_bootOwner(c[i]), o[i], "side-map owner");
+            _assertInfo(c[i], _id(o[i]), k[i], 0, 0, 0);
+
             (address owner, uint32 oid, uint8 kick) = affiliate.affiliateCode(c[i]);
             assertEq(owner, o[i]);
-            assertEq(oid, 0);
+            assertEq(oid, _id(owner));
             assertEq(kick, k[i]);
         }
-        address[5] memory pending = [P_A, P_B, P_C, P_D, P_G];
+        address[5] memory players = [P_A, P_B, P_C, P_D, P_G];
         address[5] memory owners = [OWN_A, OWN_B, OWN_C, OWN_D, OWN_G];
         bytes32[5] memory codes = [CODE_A, CODE_B, CODE_C, CODE_D, CODE_G];
         for (uint256 i; i < 5; ++i) {
-            assertEq(affiliate.getReferrerId(pending[i]), 0, "pending referrer reads 0");
-            assertEq(affiliate.getReferrer(pending[i]), owners[i], "address view reads the side map");
-            (uint32 a, uint32 u1, uint32 u2) = affiliate.referrerIds(pending[i]);
-            assertEq(a, 0);
-            assertEq(u1, 0);
-            assertEq(u2, 0);
-            assertEq(_refWord(pending[i]), uint256(codes[i]));
-            assertEq(_id(pending[i]), 0);
+            assertEq(affiliate.getReferrerId(players[i]), _id(owners[i]), "registered referrer");
+            assertEq(affiliate.getReferrer(players[i]), owners[i], "address view resolves the owner ID");
+            (uint32 a, uint32 u1, uint32 u2) = affiliate.referrerIds(players[i]);
+            assertEq(a, _id(owners[i]));
+            assertEq(u1, 1);
+            assertEq(u2, 2);
+            assertEq(_refWord(players[i]), uint256(codes[i]));
+            assertGt(_id(players[i]), 0);
         }
-        for (uint256 i; i < 5; ++i) if (o[i] != OWN_G) assertEq(_id(o[i]), 0, "no bootstrap owner registered");
+        for (uint256 i; i < 5; ++i) if (o[i] != OWN_G) assertGt(_id(o[i]), 0, "bootstrap owner registered");
         assertEq(affiliate.getReferrerId(P_V), 1);
         (uint32 va, uint32 v1, uint32 v2) = affiliate.referrerIds(P_V);
         assertEq(va, 1);
@@ -890,70 +851,28 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         assertEq(d2, 2);
     }
 
-    function test_BootstrapConstructionTouchesNoProtocolContract() public {
-        (
-            address[] memory owners,
-            bytes32[] memory codes,
-            uint8[] memory kicks,
-            address[] memory players,
-            bytes32[] memory refs
-        ) = _bootArrays();
-        vm.recordLogs();
-        vm.startStateDiffRecording();
-        DegenerusAffiliate fresh = new DegenerusAffiliate(owners, codes, kicks, players, refs);
-        Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        _assertConstructorWrites(acc, address(fresh));
-        _assertReferralUpdated(logs, address(fresh), P_A, CODE_A, 0, false);
-        _assertReferralUpdated(logs, address(fresh), P_C, CODE_C, 0, false);
-        _assertReferralUpdated(logs, address(fresh), P_G, CODE_G, 0, false);
-        _assertReferralUpdated(logs, address(fresh), P_V, VAULT_CODE, 1, false);
-        _assertReferralUpdated(logs, address(fresh), P_DG, DGNRS_CODE, 2, false);
-        _assertReferralUpdated(logs, address(fresh), ContractAddresses.VAULT, DGNRS_CODE, 2, false);
-        _assertReferralUpdated(logs, address(fresh), ContractAddresses.SDGNRS, VAULT_CODE, 1, false);
-        assertEq(_countLogs(logs, address(fresh), OLD_OWNER_REGISTERED), 0, "AffiliateOwnerRegistered is gone");
-        assertEq(_countLogs(logs, address(fresh), AFFILIATE_EVENT), 2 + 2 + 6 + 7, "creation and referral events");
+    function test_BootstrapConstructionRegistersOwnersAndPlayersOnce() public view {
+        Vm.Log[] memory logs = bootstrapLogs;
+        (, address[6] memory owners,) = _bootCodes();
+        (address[7] memory players,) = _bootPlayers();
+        for (uint256 i; i < owners.length; ++i) assertEq(_countRegistered(logs, owners[i]), 1);
+        for (uint256 i; i < players.length; ++i) assertEq(_countRegistered(logs, players[i]), 1);
+        _assertReferralUpdated(logs, address(affiliate), P_A, CODE_A, _id(OWN_A), false);
+        _assertReferralUpdated(logs, address(affiliate), P_V, VAULT_CODE, 1, false);
+        _assertReferralUpdated(logs, address(affiliate), ContractAddresses.VAULT, DGNRS_CODE, 2, false);
+        assertEq(_countLogs(logs, address(affiliate), AFFILIATE_EVENT), 17);
     }
 
-    /// @dev The constructor calls no protocol contract and writes exactly the bootstrap slots,
-    ///      which the fixture copied onto the pinned Affiliate.
-    function _assertConstructorWrites(Vm.AccountAccess[] memory acc, address fresh) internal view {
-        bytes32[] memory expected = _bootSlots();
-        bool[] memory hit = new bool[](expected.length);
-        for (uint256 i; i < acc.length; ++i) {
-            address a = acc[i].account;
-            assertTrue(
-                a != address(game) && a != address(coinflip) && a != address(quests), "constructor called the protocol"
-            );
-            Vm.StorageAccess[] memory sa = acc[i].storageAccesses;
-            for (uint256 j; j < sa.length; ++j) {
-                if (!sa[j].isWrite || sa[j].account != fresh) continue;
-                bool known;
-                for (uint256 e; e < expected.length; ++e) {
-                    if (expected[e] == sa[j].slot) {
-                        known = true;
-                        hit[e] = true;
-                    }
-                }
-                assertTrue(known, "constructor wrote an unexpected slot");
-            }
-        }
-        for (uint256 e; e < expected.length; ++e) {
-            assertTrue(hit[e], "expected bootstrap slot written");
-            assertEq(vm.load(fresh, expected[e]), vm.load(address(affiliate), expected[e]), "fixture copy");
-        }
-    }
-
-    function test_BootstrapDoorFirstPurchaseRegistersOwnerOnce() public {
+    function test_BootstrapPurchaseCreditsRegisteredOwner() public {
         _bumpIdsUntil(CODE_A, 0);
         vm.recordLogs();
         vm.startStateDiffRecording();
         uint32 pid = _buy(P_A, bytes32(0));
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        assertEq(_countRegistered(logs, OWN_A), 1, "owner registered once");
-        assertEq(_registrations(acc), 1);
-        _assertMaterialized(CODE_A, OWN_A, KICK_A);
+        assertEq(_countRegistered(logs, OWN_A), 0, "owner registered once");
+        assertEq(_registrations(acc), 0);
+        _assertBootstrapCode(CODE_A, OWN_A, KICK_A);
         uint32 oid = _id(OWN_A);
         assertEq(affiliate.getReferrerId(P_A), oid);
         (uint32 id1,, uint32 w, uint256 credit) = _pair(acc);
@@ -972,55 +891,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         assertEq(w, oid);
     }
 
-    function test_BootstrapDoorReferPlayerRegistersOwnerOnce() public {
-        address q = makeAddr("doorB");
-        vm.recordLogs();
-        _refer(q, CODE_B);
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        assertEq(_countRegistered(logs, OWN_B), 1);
-        _assertMaterialized(CODE_B, OWN_B, KICK_B);
-        uint32 oid = _id(OWN_B);
-        _assertReferralUpdated(logs, address(affiliate), q, CODE_B, oid, false);
-        assertEq(affiliate.getReferrerId(P_B), oid, "the bootstrap referral resolves too");
-
-        _bumpIdsUntil(CODE_B, 0);
-        vm.recordLogs();
-        vm.startStateDiffRecording();
-        uint32 qid = _buy(q, bytes32(0));
-        Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
-        logs = vm.getRecordedLogs();
-        assertEq(_registrations(acc), 0, "a later touch registers nobody");
-        (uint32 id1,, uint32 w, uint256 credit) = _pair(acc);
-        assertEq(id1, qid);
-        assertEq(w, oid);
-        assertGt(credit, 0);
-        assertEq(_staked(logs, oid), credit, "credited by ID");
-    }
-
-    function test_BootstrapDoorSuppliedCodeRegistersOwnerOnce() public {
-        address q = makeAddr("doorB2");
-        _bumpIdsUntil(CODE_B, 0);
-        vm.recordLogs();
-        vm.startStateDiffRecording();
-        uint32 qid = _buy(q, CODE_B);
-        Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        assertEq(_countRegistered(logs, OWN_B), 1);
-        assertEq(_registrations(acc), 1);
-        _assertMaterialized(CODE_B, OWN_B, KICK_B);
-        uint32 oid = _id(OWN_B);
-        (uint32 id1,, uint32 w, uint256 credit) = _pair(acc);
-        assertEq(id1, qid);
-        assertEq(w, oid);
-        assertEq(_staked(logs, oid), credit);
-
-        vm.startStateDiffRecording();
-        _payCombined(bytes32(0), P_B, 3_000_000, 1, 4000);
-        acc = vm.stopAndReturnStateDiff();
-        assertEq(_registrations(acc), 0, "the bootstrap player's stored code registers nobody");
-    }
-
-    function test_BootstrapDoorUplineTraversalRegistersOwnerOnce() public {
+    function test_BootstrapUplineReceivesCredit() public {
         address x = makeAddr("doorC");
         bytes32 route = _dflt(P_C);
         _bumpIdsUntil(route, 1);
@@ -1031,12 +902,12 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint32 pcid = _id(P_C);
         assertGt(pcid, 0, "default-code owner registered");
-        assertEq(_countRegistered(logs, OWN_C), 1, "upline owner registered once");
-        _assertMaterialized(CODE_C, OWN_C, KICK_C);
+        assertEq(_countRegistered(logs, OWN_C), 0, "upline owner registered once");
+        _assertBootstrapCode(CODE_C, OWN_C, KICK_C);
         uint32 cid = _id(OWN_C);
         (uint32 id1,, uint32 w, uint256 credit) = _pair(acc);
         assertEq(id1, xid);
-        assertEq(w, cid, "the upline roll pays the materialized owner by ID");
+        assertEq(w, cid, "the upline roll pays the registered owner by ID");
         assertGt(credit, 0);
         assertEq(_staked(logs, cid), credit);
         uint256 ew = _earnWord(1, pcid);
@@ -1052,7 +923,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         assertEq(w, cid);
     }
 
-    function test_BootstrapDoorClaimRegistersOwnerOnce() public {
+    function test_BootstrapAfkingClaimPaysAllHops() public {
         uint32 sid = _giveWalletId(P_D);
         _seedBase(sid, 1000);
         vm.recordLogs();
@@ -1060,8 +931,8 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         _claim(P_D);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        assertEq(_countRegistered(logs, OWN_D), 1);
-        _assertMaterialized(CODE_D, OWN_D, KICK_D);
+        assertEq(_countRegistered(logs, OWN_D), 0);
+        _assertBootstrapCode(CODE_D, OWN_D, KICK_D);
         uint32 did = _id(OWN_D);
         bytes[] memory credits = _calls(acc, address(affiliate), address(coinflip), coinflip.creditFlip.selector);
         assertEq(credits.length, 3);
@@ -1075,18 +946,6 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         _claim(P_D);
         acc = vm.stopAndReturnStateDiff();
         assertEq(_registrations(acc), 0, "a second touch registers nobody");
-    }
-
-    function test_BootstrapProtocolOwnerMaterializesToItsReservedId() public {
-        address q = makeAddr("doorG");
-        vm.recordLogs();
-        _refer(q, CODE_G);
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        assertEq(_countLogs(logs, address(game), WALLET_REGISTERED), 0, "GNRUS keeps its reserved ID");
-        _assertInfo(CODE_G, 3, KICK_G, 0, 0, 0);
-        assertEq(_bootOwner(CODE_G), address(0));
-        assertEq(affiliate.getReferrerId(P_G), 3);
-        assertEq(affiliate.getReferrerId(q), 3);
     }
 
     function _assertCredit(bytes memory args, uint32 id, uint256 amount) internal pure {
@@ -1138,7 +997,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         for (uint256 d; d < 400 && !(seen[0] && seen[1] && seen[2]); ++d) {
             seen[_class(2, VAULT_CODE)] = true;
             vm.prank(address(game));
-            affiliate.payAffiliate(8000, bytes32(0), ContractAddresses.SDGNRS, 2, 1, true, 0);
+            affiliate.payAffiliate(8000, bytes32(0), 2, 1, true, 0);
             vm.warp(vm.getBlockTimestamp() + 1 days);
         }
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
@@ -1184,7 +1043,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         (uint32 w,,) = _payCombined(bytes32(0), buyer, s1, lvl, 4000);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         assertEq(w, _id(u1));
-        assertEq(_extsloads(acc), 1, "first upline1 win decodes the owner once");
+        assertEq(_extsloads(acc), 0, "ID-keyed first hop");
         uint256 ew = _earnWord(lvl, oid);
         assertEq(uint32(ew >> 128), _id(u1));
         assertEq((ew >> 192) & 3, 1, "upline1 valid");
@@ -1200,7 +1059,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         (w,,) = _payCombined(bytes32(0), buyer, s3, lvl, 4000);
         acc = vm.stopAndReturnStateDiff();
         assertEq(w, _id(u2));
-        assertEq(_extsloads(acc), 1, "hop one from the cache, one decode for hop two");
+        assertEq(_extsloads(acc), 0, "ID-keyed second hop");
         ew = _earnWord(lvl, oid);
         assertEq(uint32(ew >> 160), _id(u2));
         assertEq((ew >> 192) & 3, 3, "both valid");
@@ -1219,7 +1078,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         (uint32 w,,) = _payCombined(bytes32(0), buyer, s, 4, 4000);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         assertEq(w, _id(u2));
-        assertEq(_extsloads(acc), 2, "one decode per custom-code hop");
+        assertEq(_extsloads(acc), 0, "ID-keyed custom-code hops");
     }
 
     function test_DefaultCodeOwnerMissMakesNoExtsload() public {
@@ -1387,9 +1246,9 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         _seedBase(_giveWalletId(s1), 60);
         _buy(s2, bytes32(0));
         _seedBase(_id(s2), 41);
-        address[] memory subs = new address[](2);
-        subs[0] = s1;
-        subs[1] = s2;
+        uint32[] memory subs = new uint32[](2);
+        subs[0] = _id(s1);
+        subs[1] = _id(s2);
         vm.startStateDiffRecording();
         affiliate.claim(subs);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
@@ -1465,9 +1324,9 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         _refer(s1, bytes32("CL_A"));
         _seedBase(_giveWalletId(s1), 100);
         _seedBase(_giveWalletId(s2), 100);
-        address[] memory subs = new address[](2);
-        subs[0] = s1;
-        subs[1] = s2;
+        uint32[] memory subs = new uint32[](2);
+        subs[0] = _id(s1);
+        subs[1] = _id(s2);
         vm.expectRevert(DegenerusAffiliate.Insufficient.selector);
         affiliate.claim(subs);
     }
@@ -1477,9 +1336,9 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         address s = makeAddr("dupSub");
         _refer(s, bytes32("CL_A"));
         _seedBase(_giveWalletId(s), 1000);
-        address[] memory subs = new address[](2);
-        subs[0] = s;
-        subs[1] = s;
+        uint32[] memory subs = new uint32[](2);
+        subs[0] = _id(s);
+        subs[1] = _id(s);
         vm.startStateDiffRecording();
         affiliate.claim(subs);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
@@ -1519,9 +1378,9 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         // A pending bootstrap owner one hop up zeroes it and every later hop.
         address w = makeAddr("vwPendingUp");
         _refer(w, _dflt(P_A));
-        _assertIds(w, _id(P_A), 0, 0);
+        _assertIds(w, _id(P_A), _id(OWN_A), 1);
         assertEq(affiliate.getReferrerId(w), _id(P_A));
-        assertEq(_bootOwner(CODE_A), OWN_A, "views never materialize");
+
     }
 
     function _assertIds(address p, uint32 a, uint32 u1, uint32 u2) internal view {
@@ -1610,7 +1469,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
             address expWinner = _refWinner(codes[k], owners[k], sid);
             vm.prank(address(game));
             (uint32 w,,) = affiliate.payAffiliateCombined(
-                codes[k], address(uint160(0xE0000 + step)), sid, lvl, fresh, recycled, lbFresh, 0, score
+                codes[k], sid, lvl, fresh, recycled, lbFresh, 0, score
             );
             assertEq(w, _id(expWinner), "winner");
             _book(
@@ -1641,7 +1500,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
     // 15. Events
     // =====================================================================
 
-    function test_ChangedEventsCarryIdsAndOldSignaturesAreGone() public {
+    function test_ReferralAndEarningsEventsCarryIds() public {
         address o = makeAddr("evOwner");
         address p = makeAddr("evPlayer");
         address l = makeAddr("evLocked");
@@ -1661,11 +1520,6 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
             Vm.Log memory g = logs[i];
             if (g.emitter != address(affiliate)) continue;
             bytes32 t0 = g.topics[0];
-            assertTrue(
-                t0 != OLD_OWNER_REGISTERED && t0 != OLD_REFERRAL_UPDATED && t0 != OLD_EARNINGS_RECORDED
-                    && t0 != OLD_TOP_UPDATED,
-                "address-keyed event signature"
-            );
             if (t0 == EARNINGS_RECORDED) {
                 ++earned;
                 assertEq(uint256(g.topics[1]), uint256(oid));
@@ -1697,7 +1551,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         uint32 oid = _id(o);
         _assertCodeView(bytes32("AC_CUSTOM"), o, oid, 9);
         assertEq(_keyOf(oid), o);
-        _assertCodeView(CODE_A, OWN_A, 0, KICK_A);
+        _assertCodeView(CODE_A, OWN_A, _id(OWN_A), KICK_A);
         _assertCodeView(bytes32("AC_UNKNOWN"), address(0), 0, 0);
         _refer(makeAddr("acMaterialize"), CODE_A);
         _assertCodeView(CODE_A, OWN_A, _id(OWN_A), KICK_A);
@@ -1764,7 +1618,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         } else if (op == 3) {
             uint32 id = _giveWalletId(actor);
             vm.prank(address(game));
-            affiliate.payAffiliate(amount, code, actor, id, lvl, (r >> 72) & 1 == 0, uint16((r >> 80) % 300));
+            affiliate.payAffiliate(amount, code, id, lvl, (r >> 72) & 1 == 0, uint16((r >> 80) % 300));
         } else if (op == 4) {
             _seedBase(_giveWalletId(actor), uint32(amount));
             _claim(actor);
@@ -1807,7 +1661,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         vm.prank(buyer);
         game.purchaseDeityPass{value: 100 ether}(0, 3, bytes32("DY_A"));
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
-        assertEq(_calls(acc, address(game), address(affiliate), affiliate.referrerIds.selector).length, 1);
+        assertEq(_calls(acc, address(game), address(affiliate), affiliate.referrerIdsById.selector).length, 1);
         assertEq(_calls(acc, address(game), address(affiliate), affiliate.getReferrer.selector).length, 0);
         _assertIds(buyer, _id(a), _id(u1), _id(u2));
         address[] memory to = _deityRecipients(acc);
@@ -1818,7 +1672,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         assertEq(uint24(game.mintPackedFor(a) >> 120), 100, "the conferred whale pass lands on the affiliate's key");
     }
 
-    function test_DeityChainSkipsZeroUplineHops() public {
+    function test_DeityPurchasePaysBootstrapUplines() public {
         uint32 pbid = _giveWalletId(P_B);
         address buyer = makeAddr("dyPendingUp");
         vm.deal(buyer, 200 ether);
@@ -1826,31 +1680,25 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         vm.prank(buyer);
         game.purchaseDeityPass{value: 100 ether}(0, 4, _dflt(P_B));
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
-        _assertIds(buyer, pbid, 0, 0);
+        _assertIds(buyer, pbid, _id(OWN_B), 1);
         address[] memory to = _deityRecipients(acc);
-        assertEq(to.length, 1, "zero upline hops are skipped");
+        assertEq(to.length, 3, "all registered bootstrap hops are paid");
         assertEq(to[0], P_B);
-        assertEq(_bootOwner(CODE_B), OWN_B, "the pending upline stays pending");
+        assertEq(to[1], OWN_B);
+        assertEq(to[2], ContractAddresses.VAULT);
     }
 
-    function test_DeityPendingDirectAffiliateReverts() public {
-        vm.deal(P_A, 200 ether);
-        vm.expectRevert(bytes4(keccak256("E()")));
-        vm.prank(P_A);
-        game.purchaseDeityPass{value: 100 ether}(0, 5, bytes32(0));
-    }
-
-    function test_DeityLinkTouchMaterializesPendingAffiliate() public {
+    function test_DeityPurchasePaysBootstrapAffiliate() public {
         vm.deal(P_A, 200 ether);
         vm.startStateDiffRecording();
         vm.prank(P_A);
         game.purchaseDeityPass{value: 100 ether}(0, 5, CODE_A);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
-        _assertMaterialized(CODE_A, OWN_A, KICK_A);
+        _assertBootstrapCode(CODE_A, OWN_A, KICK_A);
         _assertIds(P_A, _id(OWN_A), 1, 2);
         address[] memory to = _deityRecipients(acc);
         assertGt(to.length, 0);
-        assertEq(to[0], OWN_A, "the materialized owner is paid");
+        assertEq(to[0], OWN_A, "the registered owner is paid");
     }
 }
 
@@ -1898,11 +1746,11 @@ contract AffiliateDegeneretteReferrerTest is AffiliateIdFixture {
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         logs = vm.getRecordedLogs();
         assertEq(game.degeneretteBetInfo(IDX, 1), 0, "resolved");
-        bytes[] memory reads = _calls(acc, address(game), address(affiliate), affiliate.getReferrerId.selector);
+        bytes[] memory reads = _calls(acc, address(game), address(affiliate), affiliate.getReferrerIdById.selector);
         assertEq(reads.length, 1, "one referrer read");
-        assertEq(abi.decode(reads[0], (address)), player);
+        assertEq(abi.decode(reads[0], (uint32)), _id(player));
         assertEq(_calls(acc, address(game), address(affiliate), affiliate.getReferrer.selector).length, 0);
-        uint256 at = _firstIndex(acc, address(game), address(affiliate), affiliate.getReferrerId.selector);
+        uint256 at = _firstIndex(acc, address(game), address(affiliate), affiliate.getReferrerIdById.selector);
         for (uint256 i = at + 1; i < acc.length; ++i) {
             if (_match(acc[i], address(game), address(coinflip), coinflip.creditFlip.selector)) {
                 (id, amount) = abi.decode(_args(acc[i].data), (uint32, uint256));
@@ -1929,12 +1777,12 @@ contract AffiliateDegeneretteReferrerTest is AffiliateIdFixture {
         assertEq(_staked(logs, oid), amount, "lands on the referrer's ID lane");
     }
 
-    function test_PendingBootstrapReferrerIsANoOpCredit() public {
+    function test_BootstrapReferrerReceivesDegeneretteCredit() public {
         (uint32 id, uint256 amount, Vm.Log[] memory logs) = _resolve(P_A);
-        assertEq(id, 0, "an unregistered bootstrap owner reads 0");
+        assertEq(id, _id(OWN_A), "bootstrap referrer already registered");
         assertGt(amount, 0);
-        assertEq(_stakeEvents(logs, 0), 0, "ID 0 credits nothing");
-        assertEq(_bootOwner(CODE_A), OWN_A, "the view registers nobody");
-        assertEq(_id(OWN_A), 0);
+        assertEq(_stakeEvents(logs, id), 1, "registered referrer credited");
+
+        assertGt(_id(OWN_A), 0);
     }
 }

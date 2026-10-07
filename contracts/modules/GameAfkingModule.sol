@@ -69,7 +69,7 @@ interface ISeatToken {
  *
  * @dev DELEGATECALL CONTEXT: the module inherits `DegenerusGameStorage` (via
  *      `DegenerusGameMintStreakUtils`), so the subscriber set
- *      (`_subOf` by wallet ID, `_subscribers` of address|ID words), the cursors
+ *      (`_subOf` by wallet ID, `_subscribers` of packed uint32 IDs), the cursors
  *      (`_subCursor`/`_subOpenCursor`), the `subsFullyProcessed` STAGE
  *      drain-completion flag, the `afkingFunding` ledger, `claimablePool`, `operatorApprovals`,
  *      and the activity-score helpers are all in-context plain SLOADs/SSTOREs.
@@ -140,21 +140,21 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      `fundingSource` is the external funding account's key (address(0) = self);
     ///      indexed so a source can filter the log for every account it funds.
     event SubscriptionUpdated(
-        address indexed player,
+        uint32 indexed player,
         uint8 dailyQuantity,
         bool drainGameCreditFirst,
         bool useTickets,
-        address indexed fundingSource
+        uint32 indexed fundingSource
     );
     /// @dev Per-player pre-check skip inside the process pass. `reason`:
     ///        2 = AlreadyAutoBoughtToday (sub.lastAutoBoughtDay >= today)
     ///        3 = InsufficientPool  (afkingFunding[src] < ethValue) — funding skip
     ///      lastAutoBoughtDay is UNCHANGED on a skip.
-    event PlayerSkipped(address indexed player, uint8 reason);
+    event PlayerSkipped(uint32 indexed player, uint8 reason);
     /// @dev Subscription removed from the iterable set. `reason`:
     ///        1 = AutoPause (funding-skip kill of a NORMAL sub)
     ///        2 = CancelReclaim (in-pass reclaim of an externally-cancelled tombstone)
-    event SubscriptionExpired(address indexed player, uint8 reason);
+    event SubscriptionExpired(uint32 indexed player, uint8 reason);
     /// @dev A pending-box count with no openable stamp behind it was cleared so the read
     ///      cohort can complete; the stamps' ETH stays in the prize pools.
     event AfkingBoxCountForfeited(uint16 count);
@@ -163,20 +163,16 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @dev `source` is the funding account's key (the stETH leaves its payee). Any
     ///      share-rounding excess remains in the source's prepaid balance.
     event AfkingStethFunded(
-        address indexed subscriber,
-        address indexed source,
+        uint32 indexed subscriber,
+        uint32 indexed source,
         uint256 shortfall,
         uint256 received
     );
 
     /// @notice Emitted for an afking subscribe-time cover-buy box. Same signature/topic as the
     ///         mint + whale `LootBoxBuy` — one box-buy event across every path.
-    /// @param buyer The box recipient.
-    /// @param index The physical write buffer (0/1) the entry joined.
-    /// @param position The entry's zero-based position in that buffer.
-    /// @param amount The box ETH spend (boons off ⇒ raw spend).
     event LootBoxBuy(
-        address indexed buyer,
+        uint32 indexed buyer,
         uint48 indexed index,
         uint32 position,
         uint256 amount
@@ -187,8 +183,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///         Carries the post-accrue accumulator balances so the in-slot accrual
     ///         (slot-0 reward + ticket buyer-bonus into `pendingFlip`, flat 7% into
     ///         `affiliateBase`, both saturating) is observable without a storage read.
-    /// @param player The subscriber the afking buy was delivered to.
-    /// @param packed The four payload fields in one word; layout below.
     /// @dev The hottest log in the protocol — up to 250 per advance chunk — so its four
     ///      fields ride one word instead of four. Each was a full 32-byte slot for at most
     ///      32 bits of payload; packed they cost 256 gas instead of 1,024.
@@ -202,22 +196,18 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      field's size must rename the event rather than shift bits under a live decoder.
     ///      The claimable leg of `weiIn` is itemised by the ClaimableSpent emitted in the
     ///      same receipt, and only when the drain actually moves money.
-    event AfkingDelivered(address indexed player, uint256 packed);
+    event AfkingDelivered(uint32 indexed player, uint256 packed);
 
     /// @notice Emitted when the affiliate claim drains a sub's accrued `affiliateBase`
     ///         to the upline tree — attributes afking-sourced affiliate income to the
     ///         subscriber whose buys generated it. Zero drains (already drained /
     ///         never accrued) do not emit.
-    /// @param sub The subscriber whose base was drained.
-    /// @param base The drained whole-FLIP affiliate base.
-    event AffiliateBaseDrained(address indexed sub, uint256 base);
+    event AffiliateBaseDrained(uint32 indexed sub, uint256 base);
 
     /// @notice Emitted when a sub's accrued `pendingFlip` is settled (player-pull
     ///         claim or the finalize path) — the zeroing half of the balance
     ///         `AfkingDelivered.pendingFlipAfter` reports accruing.
-    /// @param player The subscriber credited.
-    /// @param owed The settled whole-FLIP amount.
-    event AfkingFlipClaimed(address indexed player, uint256 owed);
+    event AfkingFlipClaimed(uint32 indexed player, uint256 owed);
 
     /*------------------------------------------------------------------
                               Constants
@@ -265,6 +255,18 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /*------------------------------------------------------------------
                           Subscription entrypoint
     ------------------------------------------------------------------*/
+    event AfkingFundingApproval(uint32 indexed funderId, uint32 indexed subscriberId, bool approved);
+
+    function setAfkingFundingApproval(uint32 funderId, uint32 subscriberId, bool approved) external {
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
+        if (funderId == 0) funderId = _requireWalletId(msg.sender);
+        _requireAllocated(funderId);
+        _requireAllocated(subscriberId);
+        if (_payee(_walletElement(funderId)) != msg.sender) revert NotApproved();
+        afkingFundingApprovals[funderId][subscriberId] = approved;
+        emit AfkingFundingApproval(funderId, subscriberId, approved);
+    }
+
     /// @notice The SINGLE subscription entrypoint — create, replace, or cancel a
     ///         daily subscription for account `id` (0 = caller). dailyQuantity >= 1 upserts
     ///         (create-or-replace in place); dailyQuantity == 0 cancels (writes the
@@ -304,8 +306,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @param fundingSourceId Account whose `afkingFunding` funds this sub; 0 (or the
     ///        subscriber's own ID) = self. An external source must be allocated and must
     ///        consent: it shares the subscriber's main wallet (equal payees: an owner and its
-    ///        smurfs, in any pairing) or it approved the subscriber's key
-    ///        as an operator.
+    ///        smurfs, in any pairing) or its owner granted funding approval to the subscriber ID.
     /// @param seatId Seat serial burned when this call starts a new run (ignored otherwise).
     function subscribe(
         uint32 id,
@@ -335,14 +336,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         if (_livenessTriggered()) revert GameOver();
 
         // The account rule: the caller for id 0, else an account the caller may act for.
-        (address subscriber, address payee) = _resolveAccount(id);
-
-        // Subscribing is a paying action, so it registers the subscriber before anything
-        // else loads its mint word. A cancel pays nothing and only reads the ID: an
-        // unregistered caller holds no sub and reverts NotSubscribed below.
-        uint32 subId;
-        if (dailyQuantity != 0) (subId, ) = _registerWallet(subscriber, msg.value);
-        else subId = _walletIdOf(subscriber);
+        uint32 subId = _resolveAccountId(id);
+        if (dailyQuantity != 0) subId = _registerCallerAccount(subId, msg.value);
 
         // An external funding source (an ID other than 0 and the subscriber's own) must be
         // allocated and must consent: the same main wallet as the subscriber (equal payees)
@@ -350,13 +345,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // operator. Prepaid draws retain this consent; stETH pulls from the source's payee
         // re-check it live.
         uint32 fundId = subId;
-        address source;
         if (fundingSourceId != 0 && fundingSourceId != subId) {
-            address sourcePayee;
-            (source, sourcePayee) = _accountKeys(fundingSourceId);
-            if (sourcePayee != payee && !operatorApprovals[fundingSourceId][subscriber]) {
-                revert NotApproved();
-            }
+            _requireAllocated(fundingSourceId);
+            if (!_afkingFundingAllowed(subId, fundingSourceId)) revert NotApproved();
             fundId = fundingSourceId;
         }
 
@@ -386,12 +377,12 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             // slot (wiping both accumulators), so leaving them for a later pull would
             // lose them in that race. Pay the sub its own pendingFlip (CEI: zero
             // first), then settle the upline affiliate tree, THEN finalize + tombstone.
-            _settlePendingFlip(subscriber, subId, c);
+            _settlePendingFlip(subId, c);
             // Drain affiliateBase to the 75/20/5 upline tree (50/50 VAULT/DGNRS if no
             // referrer). The affiliate consumes the base via the AFFILIATE-only
             // drainAffiliateBase callback, so this must run while the slot still holds it.
-            address[] memory drainOne = new address[](1);
-            drainOne[0] = subscriber;
+            uint32[] memory drainOne = new uint32[](1);
+            drainOne[0] = subId;
             IDegenerusAffiliate(ContractAddresses.AFFILIATE).claim(drainOne);
 
             // Hand the afking-computed streak back to the manual quest system, then tombstone.
@@ -402,13 +393,13 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             // is set (the upsert writes/clears both together), so the common self-funded
             // cancel emits address(0) straight from the already-loaded flags — no map read.
             emit SubscriptionUpdated(
-                subscriber,
+                subId,
                 0,
                 (c.flags & FLAG_DRAIN_FIRST) != 0,
                 (c.flags & FLAG_USE_TICKETS) != 0,
                 (c.flags & FLAG_EXTERNAL_FUNDING) != 0
-                    ? address(uint160(_fundingSourceOf[subId]))
-                    : address(0)
+                    ? _fundingSourceOf[subId]
+                    : 0
             );
             return;
         }
@@ -429,18 +420,17 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // vault); they are exempt from the seat burn and the
         // purchase-grounded gate below, keyed on the un-spoofable resolved
         // subscriber identity. Every other sub must clear both.
-        bool exemptSub = subscriber == ContractAddresses.VAULT ||
-            subscriber == ContractAddresses.SDGNRS;
+        bool exemptSub = subId == VAULT_WALLET_ID || subId == SDGNRS_WALLET_ID;
 
         if (wasActive) {
             // Settle the prior run's pendingFlip under its CURRENT flag + dailyQuantity before
             // the overwrite below, so the presale-box credit keys on the state in force during
             // accrual.
-            _settlePendingFlip(subscriber, subId, s);
+            _settlePendingFlip(subId, s);
         } else if (!exemptSub) {
             // A new run burns one seat held by the subscriber's payee, before the run is
             // written. The token makes no callback into the Game.
-            ISeatToken(ContractAddresses.AFKING_SUB_TOKEN).consumeSeat(payee, seatId);
+            ISeatToken(ContractAddresses.AFKING_SUB_TOKEN).consumeSeat(_payee(_walletElement(subId)), seatId);
         }
 
         s.dailyQuantity = dailyQuantity;
@@ -452,11 +442,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // self-funded subscribe clears it, so re-pointing an externally funded sub back to
         // self does not strand a stale funder. Re-pointing the source IS a re-subscribe,
         // which re-runs the consent gate.
-        uint256 subWord = uint256(uint160(subscriber)) | (uint256(subId) << 160);
-        uint256 srcWord = subWord;
         if (fundId != subId) {
-            srcWord = uint256(uint160(source)) | (uint256(fundId) << 160);
-            _fundingSourceOf[subId] = srcWord;
+            _fundingSourceOf[subId] = fundId;
             s.flags |= FLAG_EXTERNAL_FUNDING;
         } else {
             // A live self-funded run has already cleared this map at its start.
@@ -501,10 +488,10 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                             _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0,
                             srcFunding
                         );
-                    srcFunding = _tryFundAfkingSteth(subWord, srcWord, ethValue, srcFunding);
+                    srcFunding = _tryFundAfkingSteth(subId, fundId, ethValue, srcFunding);
                     if (srcFunding >= ethValue) {
                         _deliverAfkingBuy(
-                            uint256(uint160(subscriber)) | (uint256(subId) << 160),
+                            subId,
                             s,
                             today,
                             mp,
@@ -568,11 +555,11 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                             _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0,
                             srcFunding
                         );
-                    srcFunding = _tryFundAfkingSteth(subWord, srcWord, ethValue, srcFunding);
+                    srcFunding = _tryFundAfkingSteth(subId, fundId, ethValue, srcFunding);
                     if (srcFunding >= ethValue) {
                         _setStreakBase(s, snap); // funded day-0 — keep the snapshot
                         _deliverAfkingBuy(
-                            uint256(uint160(subscriber)) | (uint256(subId) << 160),
+                            subId,
                             s,
                             today,
                             mp,
@@ -599,13 +586,13 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             }
         }
 
-        _addToSet(s, subscriber, subId);
+        _addToSet(s, subId);
         emit SubscriptionUpdated(
-            subscriber,
+            subId,
             dailyQuantity,
             drainGameCreditFirst,
             useTickets,
-            source
+            fundId == subId ? 0 : fundId
         );
     }
 
@@ -617,8 +604,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @param funding The funding account in the same layout; equal to `subscriber` when
     ///        self-funded.
     function _tryFundAfkingSteth(
-        uint256 subscriber,
-        uint256 funding,
+        uint32 subscriber,
+        uint32 funding,
         uint256 ethValue,
         uint256 srcFunding
     ) private returns (uint256) {
@@ -644,42 +631,33 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      the subscriber's own key. Never reverts.
     /// @param subscriber The sub's set element (key | ID << 160).
     /// @param funding The funding account's element in the same layout.
-    function _stethSource(uint256 subscriber, uint256 funding)
-        private
-        view
-        returns (address source, bool allowed)
+    function _stethSource(uint32 subscriber, uint32 funding)
+        private view returns (address source, bool allowed)
     {
-        uint32 fundId = uint32(funding >> 160);
-        source = _payee(_walletElement(fundId));
-        address key = address(uint160(subscriber));
+        source = _payee(_walletElement(funding));
         allowed = source != ContractAddresses.SDGNRS && source != ContractAddresses.VAULT
-            && (funding == subscriber || source == key
-                || source == _payee(_walletElement(uint32(subscriber >> 160)))
-                || operatorApprovals[fundId][key]);
+            && _afkingFundingAllowed(subscriber, funding);
     }
 
     /// @notice Atomic, gas-capped stETH funding operation, callable only by GAME itself.
     /// @dev Each token operation is caught, and the caller catches this whole frame:
     ///      malformed return data or bad receipts therefore
     ///      roll back the token transfer and its allowance consumption as well.
-    /// @param subWord The sub's set element: its key (bits 0..159) and wallet ID (160..191).
+    /// @param subId The subscriber account ID.
     /// @param source The funding account's payee, where the stETH comes from.
-    function pullAfkingSteth(uint256 subWord, address source, uint256 shortfall)
+    function pullAfkingSteth(uint32 subId, address source, uint256 shortfall)
         external returns (uint256 received)
     {
         if (address(this) != ContractAddresses.GAME || msg.sender != address(this)) revert E();
-        // The self-call carries the sub's set element (key and wallet ID); the funding word
-        // carries the source's key and wallet ID, and a self-funded sub is its own source.
-        uint32 subId = uint32(subWord >> 160);
+        // Recheck the subscriber's current funder ID and consent before pulling from its payee.
         Sub storage sub = _subOf[subId];
-        uint256 srcWord = (sub.flags & FLAG_EXTERNAL_FUNDING) != 0
+        uint32 sourceId = (sub.flags & FLAG_EXTERNAL_FUNDING) != 0
             ? _fundingSourceOf[subId]
-            : subWord;
-        (address expected, bool allowed) = _stethSource(subWord, srcWord);
+            : subId;
+        (address expected, bool allowed) = _stethSource(subId, sourceId);
         if (shortfall == 0 || sub.dailyQuantity == 0 || !allowed || source != expected) {
             revert AfkingStethPullFailed();
         }
-        uint32 sourceId = uint32(srcWord >> 160);
 
         IStETH token = IStETH(ContractAddresses.STETH_TOKEN);
         uint256 balanceBefore;
@@ -718,24 +696,23 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         ) revert AfkingStethPullFailed();
 
         _creditAfkingValue(sourceId, received);
-        emit AfkingStethFunded(address(uint160(subWord)), address(uint160(srcWord)), shortfall, received);
+        emit AfkingStethFunded(subId, sourceId, shortfall, received);
     }
 
     /*------------------------------------------------------------------
                           Iterable set (hand-inlined OZ EnumerableSet)
     ------------------------------------------------------------------*/
-    /// @dev Iterable set insert. Idempotent on already-in-set. Pushes the element word
-    ///      (address bits 0..159 | wallet ID bits 160..191) and records its 1-indexed position
+    /// @dev Iterable set insert. Idempotent on already-in-set. Pushes the subscriber ID
+    ///      and records its 1-indexed position
     ///      in the subscriber's `Sub.setPosition` (0 = not in set). The set is bounded without a
     ///      runtime cap: every non-exempt entry burned a seat, and the seat token caps live
     ///      seats plus set entries at 2,000.
     /// @param s The subscriber's record (`_subOf[id]`).
-    /// @param player The subscriber's address.
     /// @param id The subscriber's wallet ID.
-    function _addToSet(Sub storage s, address player, uint32 id) internal {
+    function _addToSet(Sub storage s, uint32 id) internal {
         if (s.setPosition == 0) {
             uint256 len = _subscribers.length;
-            _subscribers.push(uint256(uint160(player)) | (uint256(id) << 160));
+            _subscribers.push(id);
             s.setPosition = uint32(len + 1);
         }
     }
@@ -750,9 +727,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     function _removeFromSet(uint256 position) internal {
         uint256 last = _subscribers.length;
         if (position != last) {
-            uint256 mover = _subscribers[last - 1];
+            uint32 mover = _subscribers[last - 1];
             _subscribers[position - 1] = mover;
-            _subOf[uint32(mover >> 160)].setPosition = uint32(position); // mover takes the vacated slot
+            _subOf[mover].setPosition = uint32(position); // mover takes the vacated slot
         }
         _subscribers.pop();
     }
@@ -866,8 +843,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      subscribe runs after the day's word is public). Pool routing also differs: the STAGE
     ///      accrues the cost into the caller's batched per-chunk credit; the cover-buy (a single
     ///      buy) routes inline here.
-    /// @param element The subscriber being delivered to (the credit recipient): its address
-    ///        (bits 0..159) and wallet ID (bits 160..191), the `_subscribers` element word.
+    /// @param element The subscriber ID receiving the delivery.
     /// @param sub The subscriber's record (storage ref — stamped/accrued here).
     /// @param processDay The delivered day (the stamp's frozen seed day + the streak marker).
     /// @param mp The in-context mint price.
@@ -883,7 +859,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @param coverBuy True = subscribe-time grounding buy (indexed box + inline pool routing);
     ///        false = daily STAGE buy (Sub-stamp box + caller-batched pool routing).
     function _deliverAfkingBuy(
-        uint256 element,
+        uint32 element,
         Sub storage sub,
         uint24 processDay,
         uint256 mp,
@@ -903,7 +879,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // guarantees claimableUse <= claimable - 1, so this never underflows. claimableWinnings
         // rides in claimablePool, so the pool moves in tandem (the solvency invariant).
         if (claimableUse != 0) {
-            uint32 id = uint32(element >> 160);
+            uint32 id = element;
             _debitClaimable(id, claimableUse);
             // The drain is the one claimable debit with no event of its own, which forces a
             // reader to carry the balance forward from every prior credit. ClaimableSpent
@@ -941,7 +917,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
 
             // The x00 century quantity bonus is a manual-mint mechanic; afking
             // deliveries queue the paid quantity as-is.
-            _queueEntriesScaled(uint32(element >> 160), targetLevel, uint32(amount));
+            _queueEntriesScaled(element, targetLevel, uint32(amount));
 
             // 10%/15% ticket buyer-bonus → claimable pendingFlip (pulled via
             // claimAfkingFlip). Uses the pre-bonus `amount`; whole FLIP with the ~16.7M (2^24-1) clamp.
@@ -968,7 +944,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             // (the EV input at open, off the compute-on-read streak — no STATICCALL) is computed
             // once for either box shape.
             uint256 activityScore = _playerActivityScoreCachedAt(
-                address(uint160(element)),
+                element,
                 preBuyStreak,
                 // Streak basis is the phase-correct active ticket level (== the level the manual mint
                 // streak is recorded against), NOT the EV-cap/resolver open level (currentLevel + 1):
@@ -988,7 +964,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 // so the markers go box-clean (lastOpenedDay == lastAutoBoughtDay) and the
                 // no-orphan guard never trips on a freshly-subscribed sub.
                 _recordAfkingCoverBox(
-                    address(uint160(element)),
+                    element,
                     currentLevel,
                     amount,
                     score
@@ -1046,7 +1022,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // off-chain ETH-in total free of double counting.
         uint256 weiIn = (isTicket || !coverBuy) ? ethValue + claimableUse : 0;
         emit AfkingDelivered(
-            address(uint160(element)),
+            element,
             uint128(weiIn) |
                 (uint256(processDay) << 128) |
                 (uint256(sub.pendingFlip) << 152) |
@@ -1091,7 +1067,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @param amount The lootbox spend in wei (boons off ⇒ no boost; amount == spend).
     /// @param score The frozen activity score EV input.
     function _recordAfkingCoverBox(
-        address player,
+        uint32 player,
         uint24 currentLevel,
         uint256 amount,
         uint16 score
@@ -1161,10 +1137,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      then pay the whole-FLIP owed in ONE `creditFlip`. Always credits the sub,
     ///      never the caller; no-op at owed == 0. Keyed on the record's CURRENT flags +
     ///      dailyQuantity, so the credit reflects the state in force during accrual.
-    /// @param player The subscriber credited.
     /// @param id The subscriber's wallet ID (keys the presale-box credit).
     /// @param s The subscriber's record (storage ref — pendingFlip zeroed here).
-    function _settlePendingFlip(address player, uint32 id, Sub storage s) private {
+    function _settlePendingFlip(uint32 id, Sub storage s) private {
         uint256 owed = uint256(s.pendingFlip); // whole FLIP
         if (owed == 0) return;
         s.pendingFlip = 0;
@@ -1174,7 +1149,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 credit /= (s.dailyQuantity >= 10 ? 3 : 2);
             presaleBoxCredit[id] += credit;
         }
-        emit AfkingFlipClaimed(player, owed);
+        emit AfkingFlipClaimed(id, owed);
         coinflip.creditFlip(id, owed); // whole → base units
     }
 
@@ -1294,11 +1269,10 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
 
         // Reserve the largest per-subscriber branch before reading or mutating it.
         while (cursor < len && MineFlipGas.canRun(meter, SUBSCRIBER_ITEM_GAS, SUBSCRIBER_TAIL_GAS)) {
-            // One element read yields both identities: the address for stETH pulls, the box
-            // leg's mint history, quests and events; the wallet ID for `_subOf` and balances.
-            uint256 element = _subscribers[cursor];
-            address player = address(uint160(element));
-            uint32 id = uint32(element >> 160);
+            // Packed subscriber IDs key mint history, quests, events and balances directly.
+            uint32 element = _subscribers[cursor];
+            uint32 player = element;
+            uint32 id = element;
             Sub storage sub = _subOf[id];
 
             // (-1) NO-ORPHAN guard (the load-bearing correctness rule). A box is
@@ -1373,14 +1347,14 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             // is detected from the already-loaded `sub.flags` (FLAG_EXTERNAL_FUNDING clear
             // ⇒ the source is the subscriber's own element) and skips the `_fundingSourceOf`
             // SLOAD entirely; only the rare operator-funded sub (flag set) reads the sparse
-            // map, whose word holds the funder's address and wallet ID together. Both the
+            // map holding its funder ID. Both the
             // funding skip-gate read and the debit key on this same source ID. The
             // VAULT/SDGNRS exemption below stays keyed on the un-spoofable `player`, never
             // the source.
-            uint256 srcWord = (sub.flags & FLAG_EXTERNAL_FUNDING) != 0
+            uint32 srcWord = (sub.flags & FLAG_EXTERNAL_FUNDING) != 0
                 ? _fundingSourceOf[id]
                 : element;
-            uint256 srcFunding = _afkingOf(uint32(srcWord >> 160));
+            uint256 srcFunding = _afkingOf(srcWord);
 
             // Funding resolution (cost + ethValue slice). The slice builder computes
             // everything revert-free by construction off this same `srcFunding` (the
@@ -1402,8 +1376,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             // pinned-address branch only; there is no flag.
             if (srcFunding < ethValue) {
                 if (
-                    player == ContractAddresses.VAULT ||
-                    player == ContractAddresses.SDGNRS
+                    player == VAULT_WALLET_ID ||
+                    player == SDGNRS_WALLET_ID
                 ) {
                     emit PlayerSkipped(player, 3);
                     unchecked {
@@ -1447,7 +1421,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 mp,
                 currentLevel,
                 ticketTargetLevel,
-                uint32(srcWord >> 160),
+                srcWord,
                 ethValue,
                 claimableUse,
                 amount,
@@ -1569,11 +1543,10 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      `resolveAfkingBox` is the one freeze-correct seam (the public
     ///      `resolveLootboxDirect` derives its seed from the live day and would NOT freeze the
     ///      seed `day`). No stored baseLevel/index — the live roll needs no floor.
-    /// @param element The subscriber whose box is materialized: its `_subscribers` element
-    ///        word (address bits 0..159, wallet ID bits 160..191).
+    /// @param element The subscriber ID whose stamped box is materialized.
     /// @param sub The subscriber's stamped record (storage ref — the marker advances here).
     /// @param word The published active session word, read once by the caller.
-    function _openAfkingBox(uint256 element, Sub storage sub, uint256 word) private {
+    function _openAfkingBox(uint32 element, Sub storage sub, uint256 word) private {
         // lastAutoBoughtDay is the frozen stamp day used in the seed domain.
         uint24 day = sub.lastAutoBoughtDay;
         // Advance the day-keyed no-double-open marker BEFORE the resolve (effects-first; a
@@ -1599,8 +1572,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             .delegatecall(
                 abi.encodeWithSelector(
                     IDegenerusGameLootboxModule.resolveAfkingBox.selector,
-                    address(uint160(element)),
-                    uint32(element >> 160),
+                    element,
                     _unpackMilliEthToWei(uint64(sub.amount)), // milli-ETH → wei
                     day,
                     word,
@@ -1629,8 +1601,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         uint256 scanned;
         while (scanned < len) {
             if (cursor >= len) cursor = 0;
-            uint256 element = _subscribers[cursor];
-            Sub storage sub = _subOf[uint32(element >> 160)];
+            uint32 element = _subscribers[cursor];
+            Sub storage sub = _subOf[element];
             uint24 stampDay = sub.lastAutoBoughtDay;
             bool skip = sub.lastOpenedDay >= stampDay || stampDay > sealedDay;
             if (!MineFlipGas.canRun(meter, skip ? AFKING_SKIP_GAS : AFKING_OPEN_GAS, AFKING_TAIL_GAS)) break;
@@ -1761,7 +1733,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             if (id == 0) id = self;
             Sub storage s = _subOf[id];
             // Only an allocated account accrues, so the key read is in bounds.
-            if (s.pendingFlip != 0) _settlePendingFlip(_walletKey(id), id, s);
+            if (s.pendingFlip != 0) _settlePendingFlip(id, s);
             unchecked {
                 ++i;
             }
@@ -1780,17 +1752,15 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      pre-load bases into a memory array. Only `ContractAddresses.AFFILIATE` may drain,
     ///      so a non-affiliate caller can never redirect a sub's base to a wrong recipient.
     ///      Runs in the Game's storage context; `msg.sender` is the original caller.
-    /// @param sub The subscriber whose affiliate base is drained.
+    /// @param id The subscriber whose affiliate base is drained.
     /// @return base The drained whole-FLIP affiliate base (0 if already drained / never accrued).
-    /// @return id The sub's wallet ID, so the affiliate compares uplines by ID.
-    function drainAffiliateBase(address sub) external returns (uint256 base, uint32 id) {
+    function drainAffiliateBase(uint32 id) external returns (uint256 base) {
         if (msg.sender != ContractAddresses.AFFILIATE) revert NotApproved();
-        id = _walletIdOf(sub);
         Sub storage s = _subOf[id];
         base = s.affiliateBase;
         if (base != 0) {
             s.affiliateBase = 0;
-            emit AffiliateBaseDrained(sub, base);
+            emit AffiliateBaseDrained(id, base);
         }
     }
 
@@ -1832,10 +1802,10 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Emitted when a curse is cleared via the permissionless paid cure.
-    event Decursed(address indexed curer, address indexed target);
+    event Decursed(address indexed curer, uint32 indexed target);
 
     /// @notice Emitted when a deity adds a curse stack to a smitee.
-    event Smited(uint256 indexed deityId, address indexed smitee);
+    event Smited(uint256 indexed deityId, uint32 indexed smitee);
 
     /// @notice Cashout-curse SET (delegatecall target from the Game's claimWinnings): a stale
     ///         ghost-cashout adds a saturating +2 stack. Cheapest-first bails skip the SSTORE
@@ -1843,11 +1813,11 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///         non-stale claimant, deity holders, active lazy/whale-pass holders, an
     ///         already-capped counter, and an active afker. Net: +2 only on a stale
     ///         cashout by a non-exempt, below-cap player.
-    function maybeCurse(address player) external {
+    function maybeCurse(uint32 player) external {
         if (
-            player == ContractAddresses.VAULT ||
-            player == ContractAddresses.SDGNRS ||
-            player == ContractAddresses.GNRUS
+            player == VAULT_WALLET_ID ||
+            player == SDGNRS_WALLET_ID ||
+            player == GNRUS_WALLET_ID
         ) return;
         if (gameOver) return;
         uint256 packed = mintPacked_[player];
@@ -1864,7 +1834,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         );
         if (frozenUntilLevel >= level && (passType == 1 || passType == 3)) return;
         if ((packed >> BitPackingLib.CURSE_COUNT_SHIFT) & BitPackingLib.MASK_5 >= CURSE_COUNT_CAP) return;
-        if (_subOf[uint32(packed >> BitPackingLib.WALLET_ID_SHIFT)].dailyQuantity != 0) return;
+        if (_subOf[player].dailyQuantity != 0) return;
         _applyCurseStack(player);
     }
 
@@ -1874,8 +1844,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      the caller never wastes the burn.
     /// @param id The cursed account (0 = caller; otherwise allocated).
     function decurse(uint32 id) external {
-        address target = msg.sender;
-        if (id != 0) (target, ) = _accountKeys(id);
+        uint32 target = _creditAccountId(id);
         uint256 curse = (mintPacked_[target] >> BitPackingLib.CURSE_COUNT_SHIFT) &
             BitPackingLib.MASK_5;
         if (curse == 0) revert NothingToClaim();
@@ -1897,18 +1866,17 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             IDegenerusDeityPassOwner(ContractAddresses.DEITY_PASS).ownerOf(deityId) !=
             msg.sender
         ) revert Unauthorized();
-        address smitee = msg.sender;
-        if (smiteeId != 0) (smitee, ) = _accountKeys(smiteeId);
+        uint32 smitee = _creditAccountId(smiteeId);
         uint256 packed = mintPacked_[smitee];
-        if (_subOf[uint32(packed >> BitPackingLib.WALLET_ID_SHIFT)].dailyQuantity != 0) {
+        if (_subOf[smitee].dailyQuantity != 0) {
             revert SmiteeAfkingImmune(); // active-afker immunity
         }
         uint256 curse = (packed >> BitPackingLib.CURSE_COUNT_SHIFT) & BitPackingLib.MASK_5;
         if (curse >= 10) revert SmiteCeilingReached(); // 5-stack smite ceiling (1 stack = 2 points)
         if (
-            smitee == ContractAddresses.VAULT ||
-            smitee == ContractAddresses.SDGNRS ||
-            smitee == ContractAddresses.GNRUS
+            smitee == VAULT_WALLET_ID ||
+            smitee == SDGNRS_WALLET_ID ||
+            smitee == GNRUS_WALLET_ID
         ) revert Unauthorized(); // protocol-addr skip
         coin.burnCoin(msg.sender, PRICE_COIN_UNIT / 5);
         _applyCurseStack(smitee);

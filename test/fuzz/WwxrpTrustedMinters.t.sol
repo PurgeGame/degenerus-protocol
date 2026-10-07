@@ -23,6 +23,7 @@ contract WwxrpTrustedMintersTest is DeployProtocol {
     address private stranger;
     address private futureGame;
     address private player;
+    uint32 private playerId;
 
     event TrustedMinterSet(address indexed account, bool trusted);
 
@@ -32,7 +33,7 @@ contract WwxrpTrustedMintersTest is DeployProtocol {
         stranger = makeAddr("wwxrp_stranger");
         futureGame = makeAddr("wwxrp_future_game");
         player = makeAddr("wwxrp_player");
-        _giveWalletId(player);
+        playerId = _giveWalletId(player);
         // Vault ownership is a DGVE-majority check on the vault; mock it for `owner` only.
         vm.mockCall(
             ContractAddresses.VAULT,
@@ -124,7 +125,7 @@ contract WwxrpTrustedMintersTest is DeployProtocol {
 
         vm.prank(futureGame);
         vm.expectRevert(abi.encodeWithSignature("OnlyMinter()"));
-        wwxrp.consumeBoon(player);
+        wwxrp.consumeBoon(playerId);
         assertEq(_slot1(player), before, "boon untouched");
     }
 
@@ -140,14 +141,14 @@ contract WwxrpTrustedMintersTest is DeployProtocol {
         uint256 othersBefore = _slot1(player) & ((uint256(1) << WWXRP_LANE_SHIFT) - 1);
 
         vm.prank(futureGame);
-        assertEq(wwxrp.consumeBoon(player), 1200, "tier 3 pays +12%");
+        assertEq(wwxrp.consumeBoon(playerId), 1200, "tier 3 pays +12%");
         uint256 s1 = _slot1(player);
         assertEq((s1 >> WWXRP_LANE_SHIFT) & LANE_MASK, 0, "WWXRP lane spent");
         assertEq(s1, othersBefore, "craps/ETH/FLIP lanes untouched");
         assertEq(uint256(vm.load(address(game), _slot0Key(player))), s0, "slot0 boons untouched");
 
         vm.prank(futureGame);
-        assertEq(wwxrp.consumeBoon(player), 0, "boon spends once");
+        assertEq(wwxrp.consumeBoon(playerId), 0, "boon spends once");
     }
 
     function testRevokedAddressCannotConsumeBoons() public {
@@ -159,7 +160,7 @@ contract WwxrpTrustedMintersTest is DeployProtocol {
 
         vm.prank(futureGame);
         vm.expectRevert(abi.encodeWithSignature("OnlyMinter()"));
-        wwxrp.consumeBoon(player);
+        wwxrp.consumeBoon(playerId);
     }
 
     function _slot1(address who) private view returns (uint256) {

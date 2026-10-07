@@ -99,11 +99,11 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
 
     /// @dev PayoutCapped topic0 — one per ETH spin that flipped into the lootbox. Event shape
     ///      is unchanged: PayoutCapped(address indexed player, uint256 cappedEthPayout, uint256 excessConverted).
-    bytes32 private constant PAYOUT_CAPPED_SIG = keccak256("PayoutCapped(address,uint256,uint256)");
+    bytes32 private constant PAYOUT_CAPPED_SIG = keccak256("PayoutCapped(uint32,uint256,uint256)");
     /// @dev BoxSpin topic0 — one per internal (non-placed-bet) Degenerette spin, e.g. a bet's
     ///      lootbox-share recirculating into a nested WWXRP/FLIP/ETH box roll.
     bytes32 private constant BOX_SPIN_SIG =
-        keccak256("BoxSpin(address,uint64,uint256,uint256,uint256)");
+        keccak256("BoxSpin(uint32,uint64,uint256,uint256,uint256)");
 
     address private player;
     uint32 private playerId;

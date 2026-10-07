@@ -28,7 +28,7 @@ pragma solidity 0.8.34;
 /// @notice Interface for the affiliate referral system (contract-to-contract calls only).
 /// @dev Implements 3-tier referral structure: Player -> Affiliate (75%) -> Upline1 (20%) -> Upline2 (5%).
 ///      Code owners, uplines, earnings, scores and the per-level leader are keyed by uint32 wallet
-///      ID; referral words stay address-keyed (the player's forward word). Protocol owners are
+///      ID; referral words are keyed by the player ID. Protocol owners are
 ///      the constant IDs VAULT 1 and SDGNRS 2. Wallet ID 0 means "no wallet".
 interface IDegenerusAffiliate {
     /// @notice Process affiliate rewards for a purchase or gameplay action.
@@ -41,7 +41,7 @@ interface IDegenerusAffiliate {
     ///      link-only touch).
     /// @param amount Base reward amount (0 decimals).
     /// @param code Affiliate code provided with the transaction (may be bytes32(0)).
-    /// @param sender The player making the purchase.
+
     /// @param senderId The player's wallet ID (seeds the winner roll).
     /// @param lvl Current game level (for leaderboard tracking).
     /// @param isFreshEth True if payment is with fresh ETH, false if recycled (claimable).
@@ -50,7 +50,6 @@ interface IDegenerusAffiliate {
     function payAffiliate(
         uint256 amount,
         bytes32 code,
-        address sender,
         uint32 senderId,
         uint24 lvl,
         bool isFreshEth,
@@ -65,7 +64,7 @@ interface IDegenerusAffiliate {
     ///      `creditFlipPair(senderId, playerKickback, winnerId, winnerCredit)`. The winner is
     ///      rolled among the stored owner and upline IDs, so nothing is decoded.
     /// @param code Referral code supplied with the buy (resolved + locked once).
-    /// @param sender The buyer.
+
     /// @param senderId The buyer's wallet ID (seeds the winner roll).
     /// @param lvl Leaderboard level for all legs (ticket and lootbox both freeze at level + 1).
     /// @param tktFreshFlip Ticket-leg fresh spend in FLIP base units.
@@ -82,7 +81,6 @@ interface IDegenerusAffiliate {
     /// @custom:reverts OnlyAuthorized If caller is not GAME.
     function payAffiliateCombined(
         bytes32 code,
-        address sender,
         uint32 senderId,
         uint24 lvl,
         uint256 tktFreshFlip,
@@ -95,15 +93,15 @@ interface IDegenerusAffiliate {
     /// @notice Copy the smurf owner's resolved referral word to a new smurf, locked.
     /// @dev GAME only, called once by `createSmurf` after Game resolved the owner's referral
     ///      (a zero-amount `payAffiliate` touch, so the owner's word is nonzero: a referrer word
-    ///      or REF_CODE_LOCKED). Writes `playerReferralCode[smurfKey] = playerReferralCode[ownerKey]`
+    ///      or REF_CODE_LOCKED). Writes `playerReferralCode[smurfId] = playerReferralCode[ownerId]`
     ///      verbatim, so the smurf's direct affiliate and uplines are the owner's referrer chain
     ///      (never the owner) and an unreferred owner gives an unreferred smurf. Any nonzero word
-    ///      is permanent, so the copy is locked. Emits `ReferralUpdated` for the smurf key. Never
+    ///      is permanent, so the copy is locked. Emits `ReferralUpdated` for the subaccount ID. Never
     ///      registers anyone and moves no value.
-    /// @param ownerKey The smurf owner's address (its referral word is already resolved).
-    /// @param smurfKey The new smurf's account key (its referral word is still zero).
+    /// @param ownerId The smurf owner's address (its referral word is already resolved).
+    /// @param smurfId The new subaccount ID (its referral word is still zero).
     /// @custom:reverts OnlyAuthorized If the caller is not GAME.
-    function copyReferral(address ownerKey, address smurfKey) external;
+    function copyReferral(uint32 ownerId, uint32 smurfId) external;
 
     /// @notice Settle a batch of afking subs' accrued affiliate base to the upline chain.
     /// @dev Permissionless. All `subs` must resolve to the same direct affiliate `A` (else revert).
@@ -111,7 +109,11 @@ interface IDegenerusAffiliate {
     ///      75/20/5 (floored, remainder to A) and pays A / U1 / U2 directly via `creditFlip`; no-referrer
     ///      subs split 50/50 VAULT/sDGNRS. Fixed split (no roll, no seed). Leaderboard credits A once.
     /// @param subs Afking subscribers to settle; all must share the same direct affiliate `A`.
-    function claim(address[] calldata subs) external;
+    function claim(uint32[] calldata subs) external;
+    function defaultCodeById(uint32 id) external pure returns (bytes32);
+    function getReferrerById(uint32 playerId) external view returns (address);
+    function getReferrerIdById(uint32 playerId) external view returns (uint32);
+    function referrerIdsById(uint32 playerId) external view returns (uint32 affiliate, uint32 upline1, uint32 upline2);
 
     /// @notice Get the top affiliate for a given game level.
     /// @dev Returns the affiliate with the highest earnings for that level.

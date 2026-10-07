@@ -70,7 +70,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
     event StEthStakeFailed(uint256 amount);
     event AffiliateDgnrsReward(address indexed affiliate, uint24 indexed level, uint256 dgnrsAmount);
     event LevelDgnrsAllocated(uint24 indexed level, uint256 allocation);
-    event SubDrawWon(address indexed winner, uint24 day, uint24 spanDays, uint256 flipAmount);
+    event SubDrawWon(uint32 indexed winner, uint24 day, uint24 spanDays, uint256 flipAmount);
 
     uint8 private constant STAGE_TRANSITION_DONE = 3;
     uint8 private constant STAGE_PURCHASE_DAILY = 6;
@@ -206,8 +206,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
             // when both ring slots are stale, empty or already drawn.
             if (day > 1) {
                 uint24 poolDay = day - 1;
-                ProtocolBoonPool storage vaultPool = protocolBoonPools[ContractAddresses.VAULT][poolDay & 1];
-                ProtocolBoonPool storage sdgnrsPool = protocolBoonPools[ContractAddresses.SDGNRS][poolDay & 1];
+                ProtocolBoonPool storage vaultPool = protocolBoonPools[VAULT_WALLET_ID][poolDay & 1];
+                ProtocolBoonPool storage sdgnrsPool = protocolBoonPools[SDGNRS_WALLET_ID][poolDay & 1];
                 if ((vaultPool.day == poolDay && vaultPool.totalWeight != 0 && vaultPool.awardedMask == 0)
                     || (sdgnrsPool.day == poolDay && sdgnrsPool.totalWeight != 0 && sdgnrsPool.awardedMask == 0)) {
                     (bool ok, bytes memory data) = ContractAddresses.GAME_BOON_MODULE.delegatecall(
@@ -948,9 +948,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         uint256 word = _recordedDailyWord(day);
         if (len < 2 || word == 0) return;
         uint256 idx = 1 + (uint256(keccak256(abi.encodePacked("SEATDRAW", word))) % (len - 1));
-        uint256 element = _subscribers[idx];
-        address winner = address(uint160(element));
-        Sub storage s = _subOf[uint32(element >> 160)];
+        uint32 winner = _subscribers[idx];
+        Sub storage s = _subOf[winner];
         uint24 startDay = s.afkingStartDay;
         uint24 covered = s.afkCoveredThroughDay;
         if (s.dailyQuantity == 0 || startDay == 0 || covered <= startDay) return;
@@ -960,7 +959,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         }
         uint256 prize = spanDays * SEAT_DRAW_FLIP_PER_DAY;
         if (prize > SEAT_DRAW_MAX_FLIP) prize = SEAT_DRAW_MAX_FLIP;
-        coinflip.creditFlip(uint32(element >> 160), prize);
+        coinflip.creditFlip(winner, prize);
         emit SubDrawWon(winner, day, uint24(spanDays), prize);
     }
 

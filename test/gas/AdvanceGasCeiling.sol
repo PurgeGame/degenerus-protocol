@@ -9,34 +9,12 @@ import {BucketSeed} from "../helpers/BucketSeed.sol";
 import {TicketQueueStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
 import {Vm} from "forge-std/Vm.sol";
 
-/// @title AdvanceGasCeiling — the REUSABLE EIP-7825 gas-ceiling property component
-/// @notice mineFlip() is the mandatory permissionless heartbeat. A single mineFlip tx that
-///         exceeds the EIP-7825 per-tx gas cap (16,777,216) can never complete -> permanent,
-///         unrecoverable game-over (the protocol bricks). This file factors the v60 one-shot
-///         (test/gas/GameOverCompositionAdvanceGas.t.sol) into a shared, parameterized component so
-///         FUZZ-03 can exercise it over many reachable pre-states AND Phase 384 / COMPO-02 can drive
-///         the SAME seeder + measure loop against the real mineFlip over its own fuzzed states
-///         without re-authoring the etch-seed-measure mechanism.
-///
-///         The three reusable seams (FUZZ-03 SC3):
-///           (a) _etchSeedRestore(...)        — etch the GameSeeder overlay, write a worst-case
-///                                              mineFlip pre-state from PARAMETERS, restore the
-///                                              real production code so the measured tx runs the exact
-///                                              production mineFlip() bytecode, fund + warp.
-///           (b) _driveAndAssertUnderCap(...) — drive the real game.mineFlip() in a bounded loop,
-///                                              measure gasleft() per tx, assertLe(txGas, cap) on EACH
-///                                              tx, track the max (for the 10M soft target), and report
-///                                              whether the heavy branch (gameOver()/terminal jackpot)
-///                                              was actually reached (non-vacuity).
-///           (c) the EIP7825_TX_GAS_CAP / GAS_TARGET constants the assertions key off.
-///
-/// @dev TEST-INFRA ONLY. NO contracts/*.sol is mutated. The GameSeeder is a clean DegenerusGame
-///      subclass — etch-safe because type().runtimeCode carries no constructor side effects, so
-///      vm.etch'ing it onto the live game then restoring the real code leaves the measured tx running
-///      production bytecode against storage the overlay seeded. Storage symbol names (level,
-///      purchaseStartDay, dailyIdx, levelPrizePool, rngWordByDay, ticketQueue, entriesOwedPacked,
-///      ticketCursor, ticketLevel, lvlTraitEntry, lootboxRngWordByIndex, _lrWrite/LR_INDEX_*) are
-///      the live c4d48008 names (confirmed against 380-01-LAYOUT-KEY.md / forge inspect storageLayout).
+/// @title Shared terminal-progress witness at a bounded caller allowance.
+/// @notice Seeds committed and later ticket cohorts, then drives live mineFlip at
+///         10M execution gas per call. Every call must progress, all 305 terminal
+///         awards must execute, and the ending must finish within the call budget.
+///         Total call gas is diagnostic: mineFlip composes admitted checkpoints.
+///         Native gas suites separately verify each operation plus its return tail.
 
 /// @dev Seeder overlay: writes a worst-case mineFlip pre-state directly into the live game storage.
 ///      Both entrypoints share one body so the named v60 game-over regression keeps the EXACT pre-state
@@ -137,16 +115,11 @@ contract GameSeeder is DegenerusGame, BucketSeed {
     }
 }
 
-/// @dev Reusable property base. Inherit it, call _etchSeedRestore(...) with a worst-case pre-state,
-///      then _driveAndAssertUnderCap(...) to assert every mineFlip tx clears the EIP-7825 cap and
-///      to learn the per-tx max + whether the heavy branch was exercised. Phase 384 / COMPO-02 import
-///      THIS — they do not re-author the seeder or the measure loop.
+/// @dev Shared seeding and bounded-progress driver for gas and composition tests.
 abstract contract AdvanceGasCeilingBase is DeployProtocol {
     /// @dev The word the seeded winning buckets are derived from; answers the terminal request.
     uint256 internal _terminalWord;
 
-    /// @dev EIP-7825 per-transaction gas cap. A single mineFlip tx above this = permanent DoS.
-    uint256 internal constant EIP7825_TX_GAS_CAP = 16_777_216;
     uint256 internal constant TX_INTRINSIC = 21_064;
     /// @dev A realistic per-call mineFlip allowance (owner gas rule, 2026-10-03).
     uint256 internal constant REALISTIC_CALL_GAS = 10_000_000;

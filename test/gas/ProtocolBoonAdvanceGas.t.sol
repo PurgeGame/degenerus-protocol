@@ -60,14 +60,15 @@ contract ProtocolBoonAdvanceGasTest is DeployProtocol {
     function testColdAdvanceAwardsSixAtMaximumSearchDepthAndResumes() public {
         vm.recordLogs();
         uint256 beforeGas = gasleft();
-        game.mineFlip{gas: 12_000_000}();
+        game.mineFlip{gas: 10_000_000}();
         uint256 used = beforeGas - gasleft() + 21_064;
         emit log_named_uint("cold RNG settlement plus six automatic boons including intrinsic", used);
-        assertLe(used, 10_000_000, "the complete composed engine transaction stays bounded");
+        // This call must make progress with the supplied allowance and commit all six awards.
+        // The separate native phase test checks DAILY_APPLY; a whole engine call may compose more work.
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 awarded;
         for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics[0] == keccak256("ProtocolBoonDrawAwarded(address,address,uint24,uint8,uint32,uint8)")) ++awarded;
+            if (logs[i].topics[0] == keccak256("ProtocolBoonDrawAwarded(uint32,uint32,uint24,uint8,uint32,uint8)")) ++awarded;
         }
         assertEq(awarded, 6, "all six awards committed without a player claim");
         DegenerusGameLens lens = new DegenerusGameLens();
@@ -79,7 +80,7 @@ contract ProtocolBoonAdvanceGasTest is DeployProtocol {
         game.mineFlip();
         logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
-            assertTrue(logs[i].topics[0] != keccak256("ProtocolBoonDrawAwarded(address,address,uint24,uint8,uint32,uint8)"), "resume re-awarded a slot");
+            assertTrue(logs[i].topics[0] != keccak256("ProtocolBoonDrawAwarded(uint32,uint32,uint24,uint8,uint32,uint8)"), "resume re-awarded a slot");
         }
     }
 
@@ -98,7 +99,7 @@ contract ProtocolBoonAdvanceGasTest is DeployProtocol {
         uint256 applies;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics.length == 0) continue;
-            if (logs[i].topics[0] == keccak256("ProtocolBoonDrawAwarded(address,address,uint24,uint8,uint32,uint8)")) ++awards;
+            if (logs[i].topics[0] == keccak256("ProtocolBoonDrawAwarded(uint32,uint32,uint24,uint8,uint32,uint8)")) ++awards;
             if (logs[i].topics[0] == keccak256("DailyRngApplied(uint24,uint256,uint256,uint256)")) ++applies;
         }
         assertEq(awards, 6, "all maximum-depth draws must run inside the measured phase");

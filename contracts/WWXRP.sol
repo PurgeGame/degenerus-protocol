@@ -113,12 +113,11 @@ interface IDrawGame {
     /// @notice DegenerusGame's recorded VRF word for `day` (0 if none recorded yet).
     function rngWordForDay(uint24 day) external view returns (uint256);
 
-    /// @notice DegenerusGame's activity score for `player` plus its wallet ID, read from the
-    ///         same mint word (ID 0 = unregistered; never allocates).
-    function playerActivityScoreCached(address player) external returns (uint256 score, uint32 id);
+    /// @notice Activity score for an existing account; may refresh its affiliate-score cache.
+    function playerActivityScoreCachedById(uint32 id) external returns (uint256 score);
 
     /// @notice Game's wallet-ID hook: the existing ID, or with `allocate` a new one (paid
-    ///         admission applies; reverts for a new wallet past it). `enter` pays, so it allocates.
+    ///         admission applies; a non-ETH token burn cannot bypass the free-ID threshold).
     function registerWallet(address owner, bool allocate) external returns (uint32 id);
 
     /// @notice `player`'s permanent Game wallet ID (0 = none; never allocates).
@@ -182,6 +181,11 @@ contract WWXRP {
         uint256 amount
     );
 
+    /// @notice Unminted WWXRP awarded to a Game account, after the game reward scale.
+    event PrizeCredited(uint32 indexed id, uint256 amount, uint256 claimableAfter);
+    event PrizeWithdrawn(uint32 indexed id, address indexed payee, uint256 amount);
+    event PrizeConsumed(uint32 indexed id, uint256 amount, uint256 claimableAfter);
+
     /// @notice Emitted for every recorded daily-draw entry
     /// @param day Participation day (settles on rngWordForDay(day + 1))
     /// @param player Key of the entrant account (the caller for a self entry)
@@ -194,7 +198,7 @@ contract WWXRP {
     ///        (whole-WWXRP units)
     event DrawEntered(
         uint24 indexed day,
-        address indexed player,
+        uint32 indexed player,
         uint8 bucket,
         uint32 entryIndex,
         uint256 burnAmount,
@@ -229,7 +233,7 @@ contract WWXRP {
     ///        burn (whole tokens units)
     event IncineratorEntered(
         uint24 indexed bracket,
-        address indexed player,
+        uint32 indexed player,
         uint32 entryIndex,
         uint256 burnAmount,
         uint256 effectiveScore,
@@ -499,6 +503,10 @@ contract WWXRP {
         }
     }
 
+    /// @notice Earned WWXRP awaiting withdrawal or gameplay consumption, keyed by account ID.
+    /// @dev Unminted rewards are outside ERC20 totalSupply and never shared between subaccounts.
+    mapping(uint32 => uint256) public claimable;
+
     /*+======================================================================+
       |                       ERC20 FUNCTIONS                                |
       +======================================================================+
@@ -599,29 +607,89 @@ contract WWXRP {
     /// @custom:reverts OnlyMinter When caller is not an authorized minter
     ///      A zero recipient mints nothing.
     function mintPrize(address to, uint256 amount) external {
-        if (
-            msg.sender == MINTER_GAME ||
-            msg.sender == MINTER_COINFLIP ||
-            msg.sender == MINTER_JACKPOTS
-        ) {
-            uint256 scale = gameMintScale;
-            amount = scale != 0 && amount > type(uint256).max / scale
-                ? type(uint256).max
-                : amount * scale;
-        } else if (!trustedMinter[msg.sender]) {
-            revert OnlyMinter();
-        }
+        _mint(to, _scaledPrize(amount));
+    }
 
-        _mint(to, amount);
+    /// @notice Credit a prize without minting tokens or resolving a wallet address.
+    /// @dev Producers supply an allocated ID. Zero is a no-op. Both multiplication and the
+    ///      per-account sum saturate, so vault-controlled inflation cannot brick settlement.
+    function creditPrize(uint32 id, uint256 amount) external {
+        amount = _scaledPrize(amount);
+        if (id == 0 || amount == 0) return;
+        uint256 prior = claimable[id];
+        uint256 room = type(uint256).max - prior;
+        if (amount > room) amount = room;
+        if (amount == 0) return;
+        claimable[id] = prior + amount;
+        emit PrizeCredited(id, amount, prior + amount);
+    }
+
+    /// @dev Scale exactly once, at award time. Trusted apps retain their existing exact-unit policy.
+    function _scaledPrize(uint256 amount) private view returns (uint256) {
+        if (msg.sender == MINTER_GAME || msg.sender == MINTER_COINFLIP || msg.sender == MINTER_JACKPOTS) {
+            uint256 scale = gameMintScale;
+            return scale != 0 && amount > type(uint256).max / scale ? type(uint256).max : amount * scale;
+        }
+        if (!trustedMinter[msg.sender]) revert OnlyMinter();
+        return amount;
+    }
+
+    /// @notice Mint earned rewards to the selected account's owner (0 = caller).
+    /// @param amount Maximum to withdraw; zero withdraws all available rewards.
+    /// @dev Operators may trigger withdrawal but cannot redirect it. Any amount that cannot
+    ///      fit below the ERC20 supply ceiling remains claimable instead of being discarded.
+    function withdraw(uint32 id, uint256 amount) external returns (uint256 withdrawn) {
+        address payee = msg.sender;
+        if (id == 0) {
+            id = game.walletIdOf(msg.sender);
+            if (id == 0) return 0;
+        } else {
+            bool authorized;
+            (, payee, authorized) = game.resolveAccount(id, msg.sender);
+            if (!authorized) revert NotApproved();
+        }
+        uint256 balance = claimable[id];
+        withdrawn = amount == 0 || amount > balance ? balance : amount;
+        uint256 room = type(uint256).max - totalSupply;
+        if (withdrawn > room) withdrawn = room;
+        if (withdrawn == 0) return 0;
+        claimable[id] = balance - withdrawn;
+        _mint(payee, withdrawn);
+        emit PrizeWithdrawn(id, payee, withdrawn);
+    }
+
+    /// @dev Consume this account's rewards first, returning only the held-token shortfall.
+    ///      Unminted consumption never touches ERC20 balances or totalSupply.
+    function _consumePrize(uint32 id, uint256 amount) private returns (uint256 shortfall) {
+        uint256 balance = claimable[id];
+        uint256 used = amount < balance ? amount : balance;
+        if (used != 0) {
+            claimable[id] = balance - used;
+            emit PrizeConsumed(id, used, balance - used);
+        }
+        return amount - used;
+    }
+
+    /// @notice Spend an account's claimable WWXRP, then its owner's held tokens if necessary.
+    /// @dev Game or trusted app only; the caller owns the gameplay authorization check.
+    function burnForAccount(uint32 id, uint256 amount) external {
+        if (msg.sender != MINTER_GAME && !trustedMinter[msg.sender]) revert OnlyMinter();
+        if (amount == 0) return;
+        if (id == 0) revert InsufficientBalance();
+        uint256 shortfall = _consumePrize(id, amount);
+        if (shortfall != 0) {
+            (, address payee, ) = game.resolveAccount(id, address(0));
+            _burn(payee, shortfall);
+        }
     }
 
     /// @notice Set the scale applied to WWXRP the game prints (vault owner only).
     /// @dev 1 = 1x (the deploy default), 0 stops game minting, no upper bound. Applies to mints
     ///      requested by the Game and its modules, Coinflip and Jackpots; the game's own
     ///      events keep reporting the unscaled amount, the Transfer shows what minted. The
-    ///      scale applies when the mint happens, not when the prize was won: a prize minted
-    ///      while it is 0 mints nothing and is never paid later, and an unclaimed award (such
-    ///      as a BAF consolation, claimable by anyone) pays at the scale set when it is claimed.
+    ///      scale applies when a producer awards a mint or claimable credit. Withdrawals do
+    ///      not rescale earned credits. A prize awarded while scale is 0 pays nothing; an
+    ///      unsettled BAF consolation uses the scale when its claim credits the account.
     /// @param scale New whole-number multiplier on the requested amount.
     /// @custom:reverts NotVaultOwner When the caller is not the vault owner.
     function setGameMintScale(uint256 scale) external {
@@ -655,9 +723,9 @@ contract WWXRP {
     ///      The boon is keyed by the player's Game wallet ID; a wallet without one has no boon
     ///      (the Game returns 0 for ID 0).
     /// @custom:reverts OnlyMinter When the caller is not currently a trusted minter.
-    function consumeBoon(address player) external returns (uint16 boonBps) {
+    function consumeBoon(uint32 playerId) external returns (uint16 boonBps) {
         if (!trustedMinter[msg.sender]) revert OnlyMinter();
-        return game.consumeCoinflipBoon(game.walletIdOf(player));
+        return game.consumeCoinflipBoon(playerId);
     }
 
     /// @notice Mint any amount of WWXRP for free (a zero recipient mints nothing).
@@ -714,11 +782,10 @@ contract WWXRP {
     ///                 register past paid admission.
     function enter(uint32 id, uint256 amount) external {
         if (amount < MIN_BURN) revert BelowMinBurn();
-        address key = msg.sender;
         address payee = msg.sender;
         if (id != 0) {
             bool authorized;
-            (key, payee, authorized) = game.resolveAccount(id, msg.sender);
+            (, payee, authorized) = game.resolveAccount(id, msg.sender);
             if (!authorized) revert NotApproved();
         }
 
@@ -726,12 +793,11 @@ contract WWXRP {
         // call needed. Words for day+1 cannot exist yet: the game only ever
         // records words for days <= the current wall day.
         uint24 day = GameTimeLib.currentDayIndex();
-        // The activity read carries the account's wallet ID from the same mint word (for a
-        // resolved account, `id` itself); a first-time self entrant registers (the burn pays)
-        // before anything keys on the ID.
-        uint256 score;
-        (score, id) = game.playerActivityScoreCached(key);
+        // Self entrants resolve or register through the canonical Game registry before
+        // activity and reward records use the ID. Registration follows the free-ID policy;
+        // this token burn does not provide a qualifying ETH quote beyond that limit.
         if (id == 0) id = game.registerWallet(msg.sender, true);
+        uint256 score = game.playerActivityScoreCachedById(id);
         // Consume once for the whole burn. Both draws share the same activity/boon snapshot;
         // both daily and century weights floor to whole WWXRP at the same BPS boundaries.
         // The Game's consume returns 0 with no write and no event when the WWXRP lane's tier is
@@ -766,14 +832,15 @@ contract WWXRP {
         // draw (at whole-token precision there — no whole-token truncation).
         uint24 lvl = game.level();
         if (lvl % 100 == 99) {
-            _recordIncineratorEntry(lvl + 1, key, id, amount, fullWeight);
+            _recordIncineratorEntry(lvl + 1, id, amount, fullWeight);
         }
 
-        _burn(payee, amount);
+        uint256 shortfall = _consumePrize(id, amount);
+        if (shortfall != 0) _burn(payee, shortfall);
 
         emit DrawEntered(
             day,
-            key,
+            id,
             bucket,
             uint32(count),
             amount,
@@ -1043,7 +1110,6 @@ contract WWXRP {
     /// @custom:reverts ScoreOverflow When the bracket entry count would overflow.
     function _recordIncineratorEntry(
         uint24 bracket,
-        address key,
         uint32 id,
         uint256 amount,
         uint256 effective
@@ -1064,7 +1130,7 @@ contract WWXRP {
 
         emit IncineratorEntered(
             bracket,
-            key,
+            id,
             uint32(count),
             amount,
             effective,

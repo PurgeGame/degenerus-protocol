@@ -28,6 +28,7 @@ contract StoragePackingTest is Test {
     uint32 private constant SEAT_ID = 5;
 
     function testFuzz_ClaimSiblingStampsAndRollover(uint24 a, uint24 b, uint24 c, address player) public {
+        vm.assume(player != address(0)); // Claimants must have an allocatable wallet.
         ClaimPackingHarness h = new ClaimPackingHarness();
         a &= ~uint24(1);
         b |= 1;

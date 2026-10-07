@@ -61,7 +61,7 @@
     "label": "_voterWord",
     "offset": 0,
     "slot": 3,
-    "typeLabel": "mapping(address => uint256)"
+    "typeLabel": "mapping(uint32 => uint256)"
   },
   {
     "bytes": "640",

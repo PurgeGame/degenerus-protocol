@@ -15,12 +15,7 @@ import {WalletSeed} from "../helpers/WalletSeed.sol";
 contract FoilHeroSpinStub {
     event FoilHeroSpin(bytes4 selector, uint8 symbol);
     fallback() external {
-        uint8 symbol;
-        if (msg.sig == IDegenerusGameDegeneretteModule.resolveEthSpinFromBox.selector) {
-            (,,,,, symbol) = abi.decode(msg.data[4:], (address, uint32, uint256, uint16, uint256, uint8));
-        } else {
-            (,,,, symbol) = abi.decode(msg.data[4:], (address, uint256, uint16, uint256, uint8));
-        }
+        (,,,, uint8 symbol) = abi.decode(msg.data[4:], (uint32, uint256, uint16, uint256, uint8));
         require(symbol < 24, "foil award selected Dice");
         emit FoilHeroSpin(msg.sig, symbol);
         assembly ("memory-safe") { mstore(0, 0) return(0, 32) }
@@ -59,7 +54,7 @@ contract FoilCohortHarness is DegenerusGameFoilPackModule, WalletSeed {
         uint256 id = uint256(_seedWallet(player));
         uint32 position = foilWriteCount;
         uint256 slot = _foilSlot(_foilWriteKey(), position);
-        uint256 pack = (id << 192) | (uint256(lvl) << 160) | uint160(player);
+        uint256 pack = (id << 192) | (uint256(lvl) << 160);
         assembly ("memory-safe") { sstore(slot, pack) }
         foilWriteCount = position + 1;
     }

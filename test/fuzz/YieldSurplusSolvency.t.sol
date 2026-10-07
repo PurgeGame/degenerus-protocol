@@ -56,8 +56,8 @@ contract YieldHarness is DegenerusGameJackpotModule {
         return yieldAccumulator;
     }
 
-    function getClaimable(address a) external view returns (uint256) {
-        return _claimableOf(_walletIdOf(a));
+    function getClaimable(uint32 id) external view returns (uint256) {
+        return _claimableOf(id);
     }
 
     /// @dev Mirrors the live-pool liability terms in distributeYieldSurplus.
@@ -122,9 +122,9 @@ contract YieldSurplusSolvencyTest is Test {
 
         assertEq(harness.getClaimablePool(), CP, "claimablePool must not grow");
         assertEq(harness.getYieldAccumulator(), YA, "yieldAccumulator must not grow");
-        assertEq(harness.getClaimable(ContractAddresses.VAULT), 0, "vault must not be credited");
-        assertEq(harness.getClaimable(ContractAddresses.SDGNRS), 0, "sDGNRS must not be credited");
-        assertEq(harness.getClaimable(ContractAddresses.GNRUS), 0, "charity must not be credited");
+        assertEq(harness.getClaimable(1), 0, "vault must not be credited");
+        assertEq(harness.getClaimable(2), 0, "sDGNRS must not be credited");
+        assertEq(harness.getClaimable(3), 0, "charity must not be credited");
     }
 
     /// @dev Genuine stETH surplus on top of obligations+pending is still distributed,
@@ -136,9 +136,9 @@ contract YieldSurplusSolvencyTest is Test {
         harness.distributeYieldSurplus(RNG);
 
         uint256 quarter = (Y * 2300) / 10_000; // 23 ether
-        assertEq(harness.getClaimable(ContractAddresses.VAULT), quarter, "vault gets 23% of Y only");
-        assertEq(harness.getClaimable(ContractAddresses.SDGNRS), quarter, "sDGNRS gets 23% of Y only");
-        assertEq(harness.getClaimable(ContractAddresses.GNRUS), quarter, "charity gets 23% of Y only");
+        assertEq(harness.getClaimable(1), quarter, "vault gets 23% of Y only");
+        assertEq(harness.getClaimable(2), quarter, "sDGNRS gets 23% of Y only");
+        assertEq(harness.getClaimable(3), quarter, "charity gets 23% of Y only");
         assertEq(harness.getYieldAccumulator(), YA + quarter, "accumulator grows by 23% of Y");
         assertEq(harness.getClaimablePool(), CP + 3 * quarter, "claimablePool grows by 69% of Y");
     }

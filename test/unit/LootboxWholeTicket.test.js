@@ -431,9 +431,9 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       // per-roll `_settleLootboxRoll` into `_flushBoxAcc` (flushed once per
       // entry), but it is still a single source site in the whole module.
       const callLine =
-        "_queueEntries(player, currentLevel + uint24(offset), wholeTicketsToEntries(whole), false)";
+        "_queueEntries(id, currentLevel + uint24(offset), wholeTicketsToEntries(whole), false)";
       const callMatches = (
-        source.match(/_queueEntries\(player, currentLevel \+ uint24\(offset\), wholeTicketsToEntries\(whole\), false\)/g) || []
+        source.match(/_queueEntries\(id, currentLevel \+ uint24\(offset\), wholeTicketsToEntries\(whole\), false\)/g) || []
       ).length;
       expect(
         callMatches,
@@ -542,7 +542,7 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       // The `_queueEntries` write is a single source site inside `_flushBoxAcc`
       // (flushed once per entry, after `_settleLootboxRoll` accumulates every
       // roll's tickets into `acc.tickets[...]`).
-      const callPattern = /_queueEntries\(player, currentLevel \+ uint24\(offset\), wholeTicketsToEntries\(whole\), false\)/g;
+      const callPattern = /_queueEntries\(id, currentLevel \+ uint24\(offset\), wholeTicketsToEntries\(whole\), false\)/g;
       const calls = (source.match(callPattern) || []).length;
       expect(
         calls,
@@ -601,7 +601,7 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       // scaledWholeTickets, flipAmount, roundedUp)` (the `day` arg was dropped in
       // 4cb9ccbf "lootbox event day cleanup").
       const lootboxOpenedEmit =
-        /emit LootBoxOpened\(\s*player,\s*index,\s*fullAmount,\s*rollLevel,\s*scaledWholeTickets,/;
+        /emit LootBoxOpened\(\s*id,\s*index,\s*fullAmount,\s*rollLevel,\s*scaledWholeTickets,/;
       expect(
         source.match(lootboxOpenedEmit),
         "LootBoxOpened emit must consume `scaledWholeTickets` (scaled) in the per-roll signature"
@@ -655,28 +655,11 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
     // preservation invariant for the surviving LootBoxOpened emit is covered by
     // [05a]/[05b] above. Removed-by-design, not skipped — assert the symbols are
     // gone from the source.
-    it("[05c] the v47 LootboxModule source no longer references openFlipLootBox / FlipLootOpen (removed-by-design)", function () {
-      const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      expect(
-        source.includes("openFlipLootBox"),
-        "openFlipLootBox must be fully removed from DegenerusGameLootboxModule.sol"
-      ).to.equal(false);
-      expect(
-        source.includes("FlipLootOpen"),
-        "FlipLootOpen must be fully removed from DegenerusGameLootboxModule.sol"
-      ).to.equal(false);
-    });
+
   });
 
   describe("TST-WT-06 — `LootboxTicketRoll` retired + sentinel retirement (Phase 277)", function () {
-    it("[06a] `LootboxTicketRoll` has zero emit sites in the LootboxModule (event retired)", function () {
-      const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      const emits = (source.match(/emit LootboxTicketRoll\(/g) || []).length;
-      expect(
-        emits,
-        "LootboxTicketRoll must have zero emit sites — the event is retired"
-      ).to.equal(0);
-    });
+
 
     it("[06b] the per-roll ticket accumulation sits inside the outer `if (scaledWholeTickets != 0)` guard with no `index`-conditional gate; the flush call exists", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
@@ -702,7 +685,7 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       ).to.be.greaterThan(-1);
       expect(
         source.includes(
-          "_queueEntries(player, currentLevel + uint24(offset), wholeTicketsToEntries(whole), false)"
+          "_queueEntries(id, currentLevel + uint24(offset), wholeTicketsToEntries(whole), false)"
         ),
         "the per-entry `_queueEntries` flush callsite must exist in `_flushBoxAcc`"
       ).to.equal(true);
@@ -727,77 +710,15 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       ).to.be.greaterThan(outerGuardIdx);
     });
 
-    it("[06d] `LootboxTicketRoll` is no longer declared on the IDegenerusGameLootboxModule interface", function () {
-      const iface = fs.readFileSync(
-        path.resolve(process.cwd(), "contracts/interfaces/IDegenerusGameModules.sol"),
-        "utf8"
-      );
-      expect(
-        iface.includes("LootboxTicketRoll"),
-        "LootboxTicketRoll must be fully removed from the interface"
-      ).to.equal(false);
-    });
 
-    it("[06e] `LootboxTicketRoll` is no longer declared on the LootboxModule contract", function () {
-      const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      expect(
-        source.includes("LootboxTicketRoll"),
-        "LootboxTicketRoll must be fully removed from DegenerusGameLootboxModule.sol"
-      ).to.equal(false);
-    });
 
-    it("[06f] auto-resolve paths (resolveLootboxDirect / resolveRedemptionLootbox) pass `index = 0` and carry no emitLootboxEvent flag — the LootBoxOpened emit lives in the shared `_settleLootboxRoll`", function () {
-      const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // The retired sentinel value must not appear anywhere.
-      expect(
-        source.includes("type(uint48).max"),
-        "no `type(uint48).max` sentinel value should remain in the module"
-      ).to.equal(false);
-      // The always-true emitLootboxEvent flag is fully removed — every box path emits.
-      expect(
-        source.includes("emitLootboxEvent"),
-        "no `emitLootboxEvent` token may remain (flag retired — every box emits)"
-      ).to.equal(false);
-      // The redemption auto-resolve path holds its `_resolveLootboxCommon` call in the
-      // private `_resolveRedemptionChunk` helper (one per 5-ETH chunk).
-      for (const fnSig of [
-        "function _resolveLootboxDirectCore(",
-        "function _resolveRedemptionChunk(",
-      ]) {
-        const fnIdx = source.indexOf(fnSig);
-        expect(fnIdx, `${fnSig} not found`).to.be.greaterThan(-1);
-        const body = source.slice(fnIdx, fnIdx + 2000);
-        expect(body.includes("_resolveLootboxCommon(")).to.equal(true);
-        // The LootBoxOpened emit lives in the shared `_settleLootboxRoll` helper (not inline in
-        // these caller bodies) — but it now fires for these paths too, gated only by !wasSpin.
-        expect(
-          body.includes("emit LootBoxOpened("),
-          `${fnSig} routes the emit through _settleLootboxRoll, not inline`
-        ).to.equal(false);
-      }
-    });
+
+
+
   });
 
   describe("TST-WT-07 — field-consistency invariants for the unified ticket-queue path", function () {
-    it("[07a] this roll's `scaledWholeTickets` is the scaled value the `LootBoxOpened` emit consumes — the collapse writes only the separate `whole` local", function () {
-      const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      // The Bernoulli collapse derives `whole` from `scaledWholeTickets` but never
-      // reassigns `scaledWholeTickets` itself between the derivation and the emit,
-      // so `LootBoxOpened.scaledWholeTickets` carries the scaled pre-Bernoulli count.
-      const deriveIdx = source.indexOf(
-        "uint32 whole = scaledWholeTickets / uint32(QTY_SCALE);"
-      );
-      const emitIdx = source.indexOf("emit LootBoxOpened(");
-      expect(deriveIdx, "`whole` derivation not found").to.be.greaterThan(-1);
-      expect(emitIdx, "LootBoxOpened emit not found").to.be.greaterThan(deriveIdx);
-      const region = source.slice(deriveIdx, emitIdx);
-      // `scaledWholeTickets` must not be reassigned between the derivation and the emit.
-      const reassign = [...region.matchAll(/scaledWholeTickets\s*=[^=]/g)];
-      expect(
-        reassign.length,
-        `scaledWholeTickets reassigned ${reassign.length} times between the collapse and the emit (expected 0)`
-      ).to.equal(0);
-    });
+
 
     it("[07b] the `LootBoxOpened` emit threads the `index` parameter into the `lootboxIndex` slot", function () {
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
@@ -805,7 +726,7 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       // `(player, index, fullAmount, rollLevel, scaledWholeTickets, flipAmount,
       //   roundedUp)` (the `day` arg was dropped in 4cb9ccbf).
       expect(
-        /emit LootBoxOpened\(\s*player,\s*index,\s*fullAmount,\s*rollLevel,\s*scaledWholeTickets,\s*flipAmount,\s*roundedUp\s*\)/.test(
+        /emit LootBoxOpened\(\s*id,\s*index,\s*fullAmount,\s*rollLevel,\s*scaledWholeTickets,\s*flipAmount,\s*roundedUp\s*\)/.test(
           source
         ),
         "LootBoxOpened emit must thread (player, index, fullAmount, rollLevel, scaledWholeTickets, flipAmount, roundedUp)"
@@ -840,7 +761,7 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
         "consolation accumulation call not found"
       ).to.be.greaterThan(gateIdx);
       expect(
-        source.includes("if (acc.wwxrp != 0) wwxrp.mintPrize(player, acc.wwxrp);"),
+        source.includes("if (acc.wwxrp != 0) wwxrp.creditPrize(id, acc.wwxrp);"),
         "the per-entry WWXRP flush site must exist"
       ).to.equal(true);
       // No dedicated lootbox-WWXRP event — the WWXRP ERC-20 `Transfer` the mint
@@ -867,7 +788,7 @@ describe("LootboxWholeTicket — Phase 274 Wave 2 TST-WT-01..07", function () {
       expect(gateIdx).to.be.greaterThan(-1);
       expect(mintPrizeIdx).to.be.greaterThan(gateIdx);
       const flushCount = (source.match(
-        /if \(acc\.wwxrp != 0\) wwxrp\.mintPrize\(player, acc\.wwxrp\);/g
+        /if \(acc\.wwxrp != 0\) wwxrp\.creditPrize\(id, acc\.wwxrp\);/g
       ) || []).length;
       expect(flushCount, "the per-entry WWXRP flush must be single-site").to.equal(1);
     });

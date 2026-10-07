@@ -73,7 +73,7 @@ contract SdgnrsCenturyTransitionTest is BoundaryGasFixture {
     function setUp() public {
         _deployProtocol();
         vm.prank(address(game));
-        sdgnrs.transferFromPool(sDGNRS.Pool.Whale, address(sdgnrs), 100 ether);
+        sdgnrs.transferFromPool(sDGNRS.Pool.Whale, address(sdgnrs), 100e12);
         bytes memory realCode = address(game).code;
         PhaseEndSeeder seeder = _etchSeedRestore();
         seeder.seedTransitionDone(100, RNG_WORD);
@@ -100,8 +100,8 @@ contract SdgnrsCenturyTransitionTest is BoundaryGasFixture {
 
         game.mineFlip();
         assertEq(sdgnrs.lastRecycledCentury(), 1, "transition closes and refills in one advance");
-        assertEq(sdgnrs.totalSupply(), beforeSupply + REFILL_PERCENT * 1 ether);
-        assertEq(sdgnrs.centurySupplyCheckpoint(), beforeSupply + REFILL_PERCENT * 1 ether);
+        assertEq(sdgnrs.totalSupply(), beforeSupply + REFILL_PERCENT * 1e12);
+        assertEq(sdgnrs.centurySupplyCheckpoint(), beforeSupply + REFILL_PERCENT * 1e12);
         assertFalse(game.rngLocked(), "lock released at transition close");
         // The unminted level is not touched by the transition: every owner still owes its entries
         // on the far-future key, and the queue is not released.
@@ -121,17 +121,17 @@ contract SdgnrsCenturyTransitionTest is BoundaryGasFixture {
         }
         assertTrue(idle, "the same day runs out of work");
         assertEq(sdgnrs.lastRecycledCentury(), 1);
-        assertEq(sdgnrs.totalSupply(), beforeSupply + REFILL_PERCENT * 1 ether, "exactly one refill");
+        assertEq(sdgnrs.totalSupply(), beforeSupply + REFILL_PERCENT * 1e12, "exactly one refill");
     }
 
     function testRecordedTransitionCanCloseAfterCalendarGapWithoutExtraRefill() public {
         vm.warp(block.timestamp + 3 days);
         game.mineFlip();
         assertEq(sdgnrs.lastRecycledCentury(), 1);
-        assertEq(sdgnrs.totalSupply(), 1e30 - 100 ether + REFILL_PERCENT * 1 ether);
+        assertEq(sdgnrs.totalSupply(), 1e24 - 100e12 + REFILL_PERCENT * 1e12);
         vm.prank(address(game));
         sdgnrs.recycleCentury(100, RNG_WORD + 1);
-        assertEq(sdgnrs.totalSupply(), 1e30 - 100 ether + REFILL_PERCENT * 1 ether);
+        assertEq(sdgnrs.totalSupply(), 1e24 - 100e12 + REFILL_PERCENT * 1e12);
     }
 
     function _prepareRequest(uint8 compression) private {
@@ -158,7 +158,7 @@ contract SdgnrsCenturyTransitionTest is BoundaryGasFixture {
         assertFalse(game.gameOver());
         assertEq(sdgnrs.lastRecycledCentury(), 1, "century completed through actual jackpot path");
         assertLe(sdgnrs.totalSupply(), sdgnrs.centurySupplyCheckpoint());
-        assertLt(sdgnrs.centurySupplyCheckpoint(), 1e30);
+        assertLt(sdgnrs.centurySupplyCheckpoint(), 1e24);
     }
 
     function testRequestAndRetryDoNotRecycleBeforeCompletion() public {

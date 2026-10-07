@@ -48,7 +48,7 @@ import {WalletSeed} from "./WalletSeed.sol";
 ///      context makes msg.sender the Game, which is a whitelisted WWXRP minter.
 interface IWwxrpMintPrize {
     /// @notice Mint WWXRP to a recipient (WWXRP, authorized minters only).
-    function mintPrize(address to, uint256 amount) external;
+    function creditPrize(uint32 to, uint256 amount) external;
 }
 
 /**
@@ -1276,8 +1276,8 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
             }
         }
         if (wwxrpAward != 0) {
-            IWwxrpMintPrize(ContractAddresses.WWXRP).mintPrize(
-                winner,
+            IWwxrpMintPrize(ContractAddresses.WWXRP).creditPrize(
+                _seedWallet(winner),
                 wwxrpAward
             );
         }

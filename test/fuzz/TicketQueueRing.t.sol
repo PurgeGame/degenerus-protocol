@@ -27,8 +27,8 @@ contract TicketQueueRingHarness is TicketLevelPrep, WalletSeed {
         uint256 n = _ticketQueueLength(key);
         for (uint256 i; i < n; ++i) {
             uint32 pos = _tqPositionAt(q, i);
-            uint80 packed = uint80(_entryRecordOf(key, pos) >> 160);
-            _bucketAppendRun(_traitBufferBase(lvl), trait, pos - 1, uint32(packed >> 8), lvl);
+            uint80 packed = _entryPacked(key, pos);
+            _bucketAppendRun(_traitBufferBase(lvl), trait, pos, uint32(packed >> 8), lvl);
             _setEntryOwed(key, pos, 0);
         }
         _releaseTicketQueue(key);

@@ -59,12 +59,12 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
     address internal alice;
     address internal bob;
 
-    bytes32 internal constant OPENED = keccak256("LootBoxOpened(address,uint48,uint256,uint24,uint32,uint256,bool)");
+    bytes32 internal constant OPENED = keccak256("LootBoxOpened(uint32,uint48,uint256,uint24,uint32,uint256,bool)");
     bytes32 internal constant PRESALE_OPENED =
-        keccak256("PresaleBoxOpened(address,uint48,uint256,uint256,uint256,uint256,bool,uint32,uint32)");
-    bytes32 internal constant REMAINDER = keccak256("PresaleBoxRemainderSwept(address,uint256)");
-    bytes32 internal constant BOX_BUY = keccak256("LootBoxBuy(address,uint48,uint32,uint256)");
-    bytes32 internal constant PRESALE_BUY = keccak256("PresaleBoxBuy(address,uint48,uint32,uint256,bool)");
+        keccak256("PresaleBoxOpened(uint32,uint48,uint256,uint256,uint256,uint256,bool,uint32,uint32)");
+    bytes32 internal constant REMAINDER = keccak256("PresaleBoxRemainderSwept(uint32,uint256)");
+    bytes32 internal constant BOX_BUY = keccak256("LootBoxBuy(uint32,uint48,uint32,uint256)");
+    bytes32 internal constant PRESALE_BUY = keccak256("PresaleBoxBuy(uint32,uint48,uint32,uint256,bool)");
 
     uint256 internal constant QUEUED_ORDER_DOMAIN = 0x5175657565644f72646572;
     uint256 internal constant BOX_OPEN_TAG = 0x426f784f70656e;
@@ -503,7 +503,7 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
             if (logs[i].topics[0] == REMAINDER) {
                 assertEq(swept, type(uint256).max, "one sweep");
                 swept = i;
-                assertEq(address(uint160(uint256(logs[i].topics[1]))), bob, "to the closing wallet");
+                assertEq(uint32(uint256(logs[i].topics[1])), _id(bob), "to the closing wallet");
             }
         }
         assertLt(openedA, openedB);
@@ -607,7 +607,7 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
         _assertSeeded(logs, _ref(b, p), _root(WORD, b, p), id, 10);
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics.length == 3 && logs[i].topics[0] == OPENED && uint256(logs[i].topics[2]) == _ref(b, p)) {
-                assertEq(address(uint160(uint256(logs[i].topics[1]))), bob, "account key decoded once for payouts");
+                assertEq(uint32(uint256(logs[i].topics[1])), id, "resolution retains the committed ID when its key changes");
             }
         }
     }

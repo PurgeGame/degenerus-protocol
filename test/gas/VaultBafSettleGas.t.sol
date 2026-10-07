@@ -29,7 +29,7 @@ import {VaultBafRig} from "../repro/VaultBafSettlement.t.sol";
 contract VaultSettleSeeder is CoinflipStakeSetter {
     function seedVaultHistory(uint24 latest, uint24 gap, bool rebuy) external {
         address v = ContractAddresses.VAULT;
-        PlayerCoinflipState storage s = playerState[v];
+        PlayerCoinflipState storage s = playerState[degenerusGame.walletIdOf(v)];
         uint24 last = latest - gap;
         s.claimableStored = 0;
         s.lastClaim = last;
@@ -108,7 +108,7 @@ abstract contract VaultSettleCallGas is DeployProtocol {
         uint256 used = vm.lastCallGas().gasTotalUsed;
         emit log_named_uint("vault_settle_call_days", _gap());
         emit log_named_uint("vault_settle_call_gas", used);
-        uint256 state = uint256(vm.load(address(coinflip), keccak256(abi.encode(ContractAddresses.VAULT, uint256(2)))));
+        uint256 state = uint256(vm.load(address(coinflip), keccak256(abi.encode(uint32(1), uint256(2)))));
         assertEq(uint24(state >> 128), LATEST, "the walk settles every resolved day");
         assertLe(used, GasBounds.BAF_VAULT_SETTLE, "the settle call fits its declared reserve");
     }

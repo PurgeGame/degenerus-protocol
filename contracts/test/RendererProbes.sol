@@ -77,10 +77,7 @@ contract SeatRendererOk {
         uint24,
         string calldata,
         string calldata,
-        bool,
-        bool,
-        string calldata,
-        string calldata
+        bool
     ) external pure returns (string memory) {
         return OUT;
     }
@@ -95,10 +92,7 @@ contract SeatRendererEmpty {
         uint24,
         string calldata,
         string calldata,
-        bool,
-        bool,
-        string calldata,
-        string calldata
+        bool
     ) external pure returns (string memory) {
         return "";
     }
@@ -115,10 +109,7 @@ contract SeatRendererRevert {
         uint24,
         string calldata,
         string calldata,
-        bool,
-        bool,
-        string calldata,
-        string calldata
+        bool
     ) external pure returns (string memory) {
         revert Nope();
     }

@@ -55,7 +55,9 @@ TICKET_AUTH_GUARDS = {
     ("modules/DegenerusGameTicketModule.sol", "registerWallet",
      "&&msg.sender!=ContractAddresses.PARIMUTUEL&&msg.sender!=ContractAddresses.WWXRP"),
     ("modules/DegenerusGameTicketModule.sol", "registerWallet",
-     "&&msg.sender!=ContractAddresses.ADMIN&&msg.sender!=ContractAddresses.COIN)revertE();"),
+     "&&msg.sender!=ContractAddresses.ADMIN&&msg.sender!=ContractAddresses.COIN"),
+    ("modules/DegenerusGameTicketModule.sol", "registerWallet",
+     "&&msg.sender!=ContractAddresses.GNRUS)revertE();"),
 }
 
 

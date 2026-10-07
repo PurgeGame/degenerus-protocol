@@ -298,7 +298,7 @@ contract KeeperFaucetResistance is DeployProtocol {
             vm.prank(address(game));
             coin.mintForGame(player, 100_000_000);
         }
-        if (shape == 2) _warmBoonRing(address(vault), n + 5);
+        if (shape == 2) _warmBoonRing(1, n + 5);
         uint256 placeGas;
         for (uint256 i; i < n; ++i) {
             vm.prank(player);
@@ -313,7 +313,7 @@ contract KeeperFaucetResistance is DeployProtocol {
             // The warm-ring shape really entered the boon draw: the ring slot now holds today.
             uint24 d = game.currentDayView();
             uint256 w = uint256(vm.load(address(game), keccak256(abi.encode(uint256(d & 1),
-                keccak256(abi.encode(address(vault), GameSlots.PROTOCOL_BOON_POOLS))))));
+                keccak256(abi.encode(uint32(1), GameSlots.PROTOCOL_BOON_POOLS))))));
             assertEq(uint24(w >> 216), d, "ring slot not retagged to today");
             assertEq(uint32(w >> 176), n, "every bet entered the boon draw");
         }
@@ -349,16 +349,16 @@ contract KeeperFaucetResistance is DeployProtocol {
     /// @dev Steady state of the protocol boon draw's two-day ring: the pool slot two days back holds
     ///      an older, drawn day and its entry slots hold old entries, so a new day's entries rewrite
     ///      warm-shaped slots (the cheapest boon-draw placement there is).
-    function _warmBoonRing(address issuer, uint256 entries) internal {
+    function _warmBoonRing(uint32 issuer, uint256 entries) internal {
         uint24 d = game.currentDayView();
         uint256 ring = uint256(d & 1);
-        bytes32 poolRoot = keccak256(abi.encode(issuer, uint256(48)));
-        bytes32 entryRoot = keccak256(abi.encode(ring, keccak256(abi.encode(issuer, uint256(49)))));
+        bytes32 poolRoot = keccak256(abi.encode(issuer, GameSlots.PROTOCOL_BOON_POOLS));
+        bytes32 entryRoot = keccak256(abi.encode(ring, keccak256(abi.encode(issuer, GameSlots.PROTOCOL_BOON_ENTRIES))));
         uint256 old = uint256(d - 2);
         vm.store(address(game), keccak256(abi.encode(ring, poolRoot)),
             bytes32((old << 216) | (uint256(7) << 208) | (uint256(entries) << 176) | (uint256(1) << 112) | 1));
         for (uint256 i; i < entries; ++i) {
-            vm.store(address(game), keccak256(abi.encode(i, entryRoot)), bytes32((uint256(i + 1) << 160) | 0xBEEF));
+            vm.store(address(game), keccak256(abi.encode(i, entryRoot)), bytes32((uint256(i + 1) << 32) | _fixtureId(player)));
         }
     }
 
@@ -595,7 +595,7 @@ contract KeeperFaucetResistance is DeployProtocol {
 
     /// @dev Grant `who` the permanent deity bit (mintPacked_ is slot 9).
     function _grantDeityPass(address who) internal {
-        bytes32 slot = keccak256(abi.encode(who, uint256(MINTPACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(game.walletIdOf(who), uint256(MINTPACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         packed |= (uint256(1) << DEITY_SHIFT);
         vm.store(address(game), slot, bytes32(packed));

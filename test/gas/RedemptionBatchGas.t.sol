@@ -20,7 +20,7 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
         vm.cool(ContractAddresses.GAME_DEGENERETTE_MODULE);
     }
 
-    /// @dev Forward pricing may grow a claim far beyond the submit-time wallet cap.
+    /// @dev Redemption amounts can span the full available backing.
     /// The full custom order stays bounded by twenty boxes even at aggregate ETH scale.
     function testFuzz_ColdLargeLootboxFitsOrderBound(uint256 seed, uint128 size, bool stethOnly) public {
         uint256 amount = bound(size, 20 ether, 120_000_000 ether);
@@ -28,17 +28,19 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
             vm.deal(address(sdgnrs), 0);
             mockStETH.mint(address(sdgnrs), amount);
         } else vm.deal(address(sdgnrs), amount);
-        _coolSettlementState();
         uint256 word = uint256(keccak256(abi.encode(seed))) | 2;
         uint32 aliceId = game.walletIdOf(alice);
+        _coolSettlementState();
         uint256 before = gasleft();
         vm.prank(address(sdgnrs));
-        game.resolveRedemptionLootbox{value: stethOnly ? 0 : amount}(alice, aliceId, amount, word, 3000, 1);
+        game.resolveRedemptionLootbox{value: stethOnly ? 0 : amount}(aliceId, amount, word, 3000, 1);
         uint256 used = before - gasleft() + 21_000;
         assertLe(used, GasBounds.HUMAN_ENTRY_GAS + 20 * GasBounds.HUMAN_BOX_GAS);
     }
 
-    function testFuzz_ColdWholeClaimFitsItsReservation(uint256 word, uint16 rollSeed, uint8 fundingMode) public {
+    function testFuzz_ColdWholeClaimFitsItsReservation(uint256 word, uint16 rollSeed, uint8 fundingMode, uint128 backingSeed) public {
+        // The retired 160 ETH cap no longer limits a beneficiary.
+        vm.deal(address(sdgnrs), bound(backingSeed, 10_000 ether, 120_000_000 ether));
         uint32 day = _openBatchId();
         _burn(alice, sdgnrs.totalSupply() * 16 / 1000);
         uint16 roll = uint16(21 + uint256(rollSeed) % 155);
@@ -49,6 +51,8 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
             vm.deal(address(sdgnrs), ethPart);
             mockStETH.mint(address(sdgnrs), reserve - ethPart);
         }
+        uint256 rolled = _claimBase(alice, day) * roll / 100;
+        uint256 chunks = _boxes(rolled - rolled / 2);
         _coolSettlementState();
         vm.prank(address(game));
         uint256 beforeGas = gasleft();
@@ -56,7 +60,6 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
         uint256 used = beforeGas - gasleft() + 21_000;
         assertTrue(done);
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
-        uint256 chunks = _boxes((uint256(160 ether) * uint256(roll) / 100) / 2);
         assertLe(used, _declared(chunks), "whole beneficiary fits admission bound");
     }
 
@@ -131,14 +134,14 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
             "maximum beneficiary admission is one realistic chunk");
     }
 
-    function test_ColdMaxBeneficiaryThroughRouter() public {
+    function test_ColdTwentyBoxBeneficiaryThroughRouter() public {
         uint32 day = _openBatchId();
         _burn(alice, sdgnrs.totalSupply() * 16 / 1000);
         _resolve(day, 175, 99);
         assertEq(_claimBase(alice, day), 160 ether);
         uint256 used = _coldRouterGas();
         emit log_named_uint("cold_maximum_redemption_router_gas", used);
-        // Per-chunk: the maximum beneficiary is one indivisible chunk whose declared admission
+        // Per-chunk: the twenty-box beneficiary is one indivisible chunk whose declared admission
         // bound stays inside the 10M realistic chunk limit (its actual cost is pinned against the
         // bound by testFuzz_ColdWholeClaimFitsItsReservation).
         assertLe(
@@ -146,7 +149,7 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
             uint256(10_000_000),
             "maximum beneficiary chunk bound"
         );
-        assertEq(sdgnrs.pendingRedemptionEthValue(), 0, "real maximum claim settled");
+        assertEq(sdgnrs.pendingRedemptionEthValue(), 0, "the twenty-box claim settled");
     }
     uint256 private cohortSize;
 
@@ -175,11 +178,11 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
         used = beforeGas - gasleft() + 21_000;
     }
 
-    function test_ColdMultipleMaximumBeneficiariesAndContinuation() public {
+    function test_ColdMultipleTwentyBoxBeneficiariesAndContinuation() public {
         uint32 day = _openBatchId();
         address[] memory players = _queueBurners(3, sdgnrs.totalSupply() * 16 / 1000);
         _resolve(day, 175, 99);
-        // A 4M allowance admits two maximum beneficiaries; the third's admission no longer fits.
+        // A 4M allowance admits two twenty-box beneficiaries; the third's admission no longer fits.
         emit log_named_uint("cold_two_maximum_router_gas", _coldRouterGasWith(4_000_000));
         (uint128 base,) = sdgnrs.pendingRedemptions(game.walletIdOf(players[2]), day);
         assertGt(base, 0, "next beneficiary remains whole");
@@ -191,17 +194,17 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
 
     function test_ColdManyMinimumBeneficiaries() public {
         uint32 day = _openBatchId();
-        _queueBurners(45, 1 ether);
+        _queueBurners(45, 1e12);
         _resolve(day, 175, 99);
         emit log_named_uint("cold_45_dust_router_gas", _coldRouterGas());
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
         assertFalse(sdgnrs.redemptionSettlementPending());
     }
 
-    function test_ColdMaximumMiddleOfMixedBatch() public {
+    function test_ColdTwentyBoxBeneficiaryMiddleOfMixedBatch() public {
         uint32 day = _openBatchId();
-        address[] memory players = _queueBurners(3, 1 ether);
-        uint256 topup = (sdgnrs.totalSupply() + _escrow()) * 16 / 1000 - 1 ether;
+        address[] memory players = _queueBurners(3, 1e12);
+        uint256 topup = (sdgnrs.totalSupply() + _escrow()) * 16 / 1000 - 1e12;
         vm.prank(address(game));
         assertEq(sdgnrs.transferFromPool(sDGNRS.Pool.Whale, players[1], topup), topup);
         _burn(players[1], topup);
@@ -241,14 +244,14 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
     function test_ColdLongCohortFinishClearsInConstantTime() public {
         uint32 day = _openBatchId();
         uint256 snap = vm.snapshotState();
-        _queueBurners(2, 1 ether);
+        _queueBurners(2, 1e12);
         _resolve(day, 100, 99);
         _drainToLastClaim();
         uint256 shortFinish = _coldRouterGas();
         assertFalse(sdgnrs.redemptionSettlementPending());
         assertTrue(vm.revertToState(snap));
 
-        _queueBurners(2000, 1 ether);
+        _queueBurners(2000, 1e12);
         _resolve(day, 100, 99);
         _drainToLastClaim();
         uint256 used = _coldRouterGas();

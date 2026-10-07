@@ -78,5 +78,13 @@
     "offset": 0,
     "slot": 9,
     "typeLabel": "uint256"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "claimable",
+    "offset": 0,
+    "slot": 10,
+    "typeLabel": "mapping(uint32 => uint256)"
   }
 ]
