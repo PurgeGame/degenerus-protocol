@@ -104,7 +104,9 @@ jobs:
     timeout-minutes: 330
     strategy:
       fail-fast: false
-      max-parallel: 4
+      # Each group has its own hosted VM. Start all seven so the long cold and
+      # invariant campaigns do not wait behind unrelated fuzz compilations.
+      max-parallel: 7
       matrix:
         group: [repro-symbolic, fuzz-1, fuzz-2, fuzz-3, fuzz-4, invariants, integration-gas]
     steps:
