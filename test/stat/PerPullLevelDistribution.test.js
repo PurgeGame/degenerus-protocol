@@ -252,7 +252,7 @@ async function driveOneFullDay(game, deployer, mockVRF, advanceModule, seed) {
   await advanceToNextDay();
 
   // Step 2: request VRF.
-  await game.connect(deployer).mineFlip();
+  await game.connect(deployer).mineFlip(0);
   expect(await game.rngLocked()).to.equal(true);
 
   // Step 3: fulfill VRF with the named seed.
@@ -264,7 +264,7 @@ async function driveOneFullDay(game, deployer, mockVRF, advanceModule, seed) {
   const receipts = [];
   for (let i = 0; i < 100; i++) {
     if (!(await game.rngLocked())) break;
-    const tx = await game.connect(deployer).mineFlip();
+    const tx = await game.connect(deployer).mineFlip(0);
     const receipt = await tx.wait();
     receipts.push({ tx, receipt });
   }

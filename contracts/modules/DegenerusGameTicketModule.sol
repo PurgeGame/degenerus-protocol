@@ -138,6 +138,7 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
                 if (!MineFlipGas.canRun(meter, 10_000, TAIL)) break;
                 ++q;
                 result.progressed = true;
+                MineFlipGas.markProgress(meter);
                 continue;
             }
             while (i < count) {
@@ -157,6 +158,7 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
                     _materializeJackpotRound(plan.queueLvl, group.lanes, group.count, seed);
                     ++round;
                     result.progressed = true;
+                    MineFlipGas.markProgress(meter);
                 } while (round < rounds && MineFlipGas.canRun(meter, roundBound, TAIL));
                 if (round < rounds) break;
                 emit JackpotTicketBatchWin(plan.sourceLvl, plan.queueLvl, plan.traits[q],
@@ -192,6 +194,7 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
                 if (!MineFlipGas.canRun(meter, 10_000, GasBounds.JACKPOT_TAIL_GAS)) break;
                 ++q;
                 result.progressed = true;
+                MineFlipGas.markProgress(meter);
                 continue;
             }
             uint8 trait = plan.traits[q];
@@ -208,6 +211,7 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
                     (end - i) * (GasBounds.JACKPOT_TICKET_DRAW_GAS_MAX + GasBounds.JACKPOT_TICKET_AWARD_GAS_MAX), GasBounds.JACKPOT_TAIL_GAS)) break;
                 if (i == 0) _assertReadableTicketLevel(plan.sourceLvl);
                 result.progressed = true;
+                MineFlipGas.markProgress(meter);
                 result.rewardBasis += end - i;
                 for (; i < end; ++i) {
                     (uint32 winner, uint256 index) = _drawBucketEntry(
@@ -343,6 +347,7 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
                 if (_lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) == MID_DAY_FUTURE_POOL) {
                     _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, 1);
                     result.progressed = true;
+                    MineFlipGas.markProgress(meter);
                     // The isolated pool's word does not commit the ordinary write queue.
                     result.done = !rngLockedFlag && !_foilDrainPending();
                 }
@@ -351,13 +356,14 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
             if (entropy == 0) break;
             if (foil) {
                 if (!MineFlipGas.canRun(meter, FOIL_CALL_MAX, TAIL)) break;
-                uint256 body = MineFlipGas.remaining(meter) - TAIL - CALL_OVERHEAD;
+                uint256 body = MineFlipGas.child(meter, TAIL + CALL_OVERHEAD);
                 (bool ok, bytes memory data) = ContractAddresses.GAME_FOILPACK_MODULE.delegatecall(
                     abi.encodeWithSelector(IDegenerusGameFoilPackModule.runFoilWork.selector, body)
                 );
                 if (!ok) _revertTicket(data);
                 MineFlipGas.Result memory step = abi.decode(data, (MineFlipGas.Result));
                 result.progressed = result.progressed || step.progressed;
+                if (step.progressed) MineFlipGas.markProgress(meter);
                 result.rewardBasis += step.rewardBasis;
                 if (!step.progressed) break;
                 continue;
@@ -366,6 +372,7 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
             if (!_prepareTicketLevelAfterFoil(lvl)) revert E();
             (bool moved, bool done, uint256 emitted) = _drainQueue(rk, lvl, entropy, meter);
             result.progressed = result.progressed || moved;
+            if (moved) MineFlipGas.markProgress(meter);
             result.rewardBasis += emitted;
             if (!done) break;
         }
@@ -458,6 +465,7 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
             );
             if (!moved) break;
             progressed = true;
+            MineFlipGas.markProgress(meter);
             emitted += count;
             if (complete) {
                 if (seats != 0) ticketSeats = seats >> 32;
@@ -492,8 +500,15 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
         // any of the reserve needed to write its complete continuation state.
         uint256 actual = gasleft();
         if (actual < available) available = actual;
-        if (available <= TAIL + SOLO_BASE + MineFlipGas.CHECK_RESERVE) return (false, false, 0);
-        uint256 maxCount = (available - TAIL - SOLO_BASE - MineFlipGas.CHECK_RESERVE) / ENTRY_MAX;
+        uint256 overhead = MineFlipGas.scale(meter, TAIL + SOLO_BASE + MineFlipGas.CHECK_RESERVE);
+        uint256 entryGas = MineFlipGas.scale(meter, ENTRY_MAX);
+        uint256 maxCount = available > overhead ? (available - overhead) / entryGas : 0;
+        // Sixteen aligned entries, or the indivisible last group plus its fraction.
+        // An obsolete estimate may reduce throughput but cannot refuse this unit.
+        if (meter.mustProgress) {
+            uint256 minimum = owed <= 16 ? uint256(owed) + (rem == 0 ? 0 : 1) : 16;
+            if (maxCount < minimum) maxCount = minimum;
+        }
         // Larger supplied gas resumes more aligned runs, never one larger chunk.
         if (maxCount > SOLO_MAX_ENTRIES) maxCount = SOLO_MAX_ENTRIES;
         uint256 whole = owed;
@@ -531,6 +546,7 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
             _setEntryOwed(rk, ownerPos, remaining);
             ticketSoloOffset = uint32(uint256(offset) + whole);
         }
+        MineFlipGas.markProgress(meter);
         return (true, complete, emitted);
     }
 
@@ -689,6 +705,7 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
                 _seatEntry(st, st.cur, lvl, entropy, snapDone, shift);
                 ++st.cur;
                 progressed = true;
+                MineFlipGas.markProgress(meter);
             }
             // Complete canonical selection before rolling. A partial fill must
             // neither roll with four seats nor fall through to later solo owners.
@@ -698,6 +715,7 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
             _runRound(st, lvl, levelSlot, round, entropy);
             unchecked { ++round; }
             progressed = true;
+            MineFlipGas.markProgress(meter);
         }
         if (ticketRound != round) ticketRound = round;
         uint256 word;

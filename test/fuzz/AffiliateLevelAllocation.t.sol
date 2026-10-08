@@ -98,7 +98,7 @@ contract AffiliateLevelAllocation is DeployProtocol {
             _buyTickets(4000);
             for (uint256 j; j < 80 && game.level() < 1; ++j) {
                 _fulfillVrfIfPending();
-                (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+                (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
                 if (!ok) break;
             }
         }

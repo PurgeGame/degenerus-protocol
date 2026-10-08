@@ -645,7 +645,7 @@ contract AnyInputHandler is Test {
         ++calls[79];
         uint24 lvl = game.level();
         vm.prank(currentActor);
-        try game.mineFlip() {
+        try game.mineFlip(0) {
             ++oks[79];
             ++ghost_mines;
         } catch {}
@@ -678,7 +678,7 @@ contract AnyInputHandler is Test {
         for (uint256 i; i < 40; ++i) {
             _fulfill(uint256(keccak256(abi.encode(word, i))));
             vm.prank(currentActor);
-            try game.mineFlip() {
+            try game.mineFlip(0) {
                 any = true;
                 ++ghost_mines;
             } catch {
@@ -889,7 +889,7 @@ contract AnyInputHandler is Test {
         for (uint256 i; i < 40; ++i) {
             _fulfill(uint256(keccak256(abi.encode(word, i, "aligned"))));
             vm.prank(currentActor);
-            try game.mineFlip() {
+            try game.mineFlip(0) {
                 any = true;
                 ++ghost_mines;
             } catch {
@@ -912,7 +912,7 @@ contract AnyInputHandler is Test {
         for (uint256 i; i < 80; ++i) {
             _fulfill(uint256(keccak256(abi.encode(gate, i, "deadman"))));
             vm.prank(currentActor);
-            try game.mineFlip() {} catch {
+            try game.mineFlip(0) {} catch {
                 if (!_fulfill(uint256(keccak256(abi.encode(gate, i, "deadman-r"))))) break;
             }
         }

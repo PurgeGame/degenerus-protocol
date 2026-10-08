@@ -141,7 +141,7 @@ abstract contract SmurfFixture is DeployProtocol {
         vm.recordLogs();
         for (uint256 calls; calls < 16; ++calls) {
             vm.prank(makeAddr("bet_keeper"));
-            try game.mineFlip() {} catch (bytes memory reason) {
+            try game.mineFlip(0) {} catch (bytes memory reason) {
                 bytes4 sel = bytes4(reason);
                 if (reason.length == 4 && (sel == bytes4(keccak256("NoWork()")) || sel == bytes4(keccak256("RngNotReady()")))) {
                     break;

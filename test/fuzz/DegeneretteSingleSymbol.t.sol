@@ -68,7 +68,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         RecyclingState.seedWord(address(game), 1, bytes32(word));
         RecyclingState.seedDailyWord(address(game), game.currentDayView(), word);
         vm.recordLogs();
-        game.mineFlip{gas: 15_000_000}();
+        game.mineFlip{gas: 15_000_000}(0);
         resolvedLogs = vm.getRecordedLogs();
     }
 

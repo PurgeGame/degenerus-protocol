@@ -39,6 +39,9 @@ contract MockVRFCoordinator {
         uint96 bal = subs[subId].balance;
         delete subs[subId];
         if (bal > 0) {
+            // fundSubscription records a synthetic LINK balance without funding ETH.
+            // Distinguish that fixture limitation from an empty/OOG call failure.
+            require(address(this).balance >= bal, "mock refund unfunded");
             (bool ok, ) = to.call{value: bal}("");
             require(ok);
         }

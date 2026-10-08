@@ -132,7 +132,7 @@ contract PoolFlowHandler is Test {
 
         for (uint256 i; i < 3; i++) {
             vm.prank(currentActor);
-            try game.mineFlip() {
+            try game.mineFlip(0) {
                 ghost_advances++; // a consolidation/skim/jackpot transfer pass ran — non-vacuity witness
             } catch {}
             uint256 reqId = vrf.lastRequestId();

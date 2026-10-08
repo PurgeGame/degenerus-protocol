@@ -31,7 +31,7 @@ contract CrapsArmRequestBatchingTest is DeployProtocol {
             }
             if (!game.advanceDue()) return;
             vm.prank(KEEPER);
-            game.mineFlip();
+            game.mineFlip(0);
         }
         revert("fixture did not settle");
     }
@@ -66,7 +66,7 @@ contract CrapsArmRequestBatchingTest is DeployProtocol {
         vm.recordLogs();
         vm.prank(KEEPER);
         uint256 start = gasleft();
-        game.mineFlip{gas: gasLimit}();
+        game.mineFlip{gas: gasLimit}(0);
         used = start - gasleft();
         armed = _armedIn(vm.getRecordedLogs(), slot);
         requested = mockVRF.lastRequestId() != before;

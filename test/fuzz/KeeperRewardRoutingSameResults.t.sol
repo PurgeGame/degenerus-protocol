@@ -82,7 +82,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     function _settleGame(uint256 vrfWord) internal {
         for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.mineFlip();
+            game.mineFlip(0);
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != _lastFulfilledReqId && reqId > 0) {
                 (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
@@ -109,7 +109,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(caller);
-        game.mineFlip{gas: 15_000_000}();
+        game.mineFlip{gas: 15_000_000}(0);
 
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 workEvents;
@@ -162,7 +162,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         bool lockedAtStart = game.rngLocked();
         vm.recordLogs();
         vm.prank(keeper);
-        game.mineFlip();
+        game.mineFlip(0);
 
         // Read the recorded logs ONCE (vm.getRecordedLogs drains them) and derive BOTH the count and the
         // credited amount in a single pass, so the amount is not lost to a prior drain.
@@ -245,7 +245,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     function testRngLockedWorkPaysDouble() public {
         _settleGame(0x10CC0001);
         vm.warp(block.timestamp + 1 days);
-        for (uint256 i; i < DRAIN_MAX_ITERATIONS && !game.rngLocked(); i++) game.mineFlip();
+        for (uint256 i; i < DRAIN_MAX_ITERATIONS && !game.rngLocked(); i++) game.mineFlip(0);
         assertTrue(game.rngLocked(), "pre: the daily request holds the lock");
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 0x10CC0002);
 
@@ -292,7 +292,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         bool lockedAtStart = game.rngLocked();
         vm.recordLogs();
         vm.prank(keeper);
-        game.mineFlip{gas: 9_500_000}();
+        game.mineFlip{gas: 9_500_000}(0);
 
         uint256 count;
         (count, amount) = _keeperCreditCountAndAmount(rewardPrice, elapsed, lockedAtStart);
@@ -319,7 +319,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         vm.recordLogs();
         vm.prank(keeper);
         vm.expectRevert(); // GameAfkingModule.NoWork() — no sweep pending, no free idle crank
-        game.mineFlip();
+        game.mineFlip(0);
 
         // Nothing credited (the revert rolls back, but assert zero regardless of the count oracle).
         assertEq(
@@ -653,7 +653,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
             // starves the drain and manufactures a fake liveness trip.
             for (uint256 j; j < 4000; j++) {
                 _fulfillVrfIfPending(uint256(keccak256(abi.encode(simTime, j, "ffdrain"))));
-                (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+                (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
                 if (!ok) break;
             }
         }

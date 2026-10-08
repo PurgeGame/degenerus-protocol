@@ -102,8 +102,8 @@ contract OpenBountyCarry is DeployProtocol {
     function _mintFlipKeeperCredit(address keeper, uint256 allowance) internal returns (uint256 total, uint256 used) {
         vm.recordLogs();
         vm.prank(keeper);
-        if (allowance == 0) game.mineFlip();
-        else game.mineFlip{gas: allowance}();
+        if (allowance == 0) game.mineFlip(0);
+        else game.mineFlip{gas: allowance}(0);
         VmSafe.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             if (
@@ -159,7 +159,7 @@ contract OpenBountyCarry is DeployProtocol {
             }
             _finishReadConsumers();
             if (!game.advanceDue() && game.rngComplete()) return;
-            if (game.advanceDue()) game.mineFlip();
+            if (game.advanceDue()) game.mineFlip(0);
         }
         revert("harness: cohorts never settled");
     }
@@ -171,12 +171,12 @@ contract OpenBountyCarry is DeployProtocol {
         while (hi - lo > 1_000) {
             uint256 mid = (lo + hi) / 2;
             uint256 snap = vm.snapshotState();
-            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip()"));
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             vm.revertToStateAndDelete(snap);
             if (ok) hi = mid;
             else lo = mid;
         }
-        game.mineFlip{gas: hi}();
+        game.mineFlip{gas: hi}(0);
     }
 
     function _pendingCount() internal view returns (uint256) {
@@ -211,7 +211,7 @@ contract OpenBountyCarry is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked() && _wallDaySealed()) break;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked() && _wallDaySealed()) break;
-            game.mineFlip();
+            game.mineFlip(0);
             _fulfillPending(vrfWord);
         }
     }
@@ -221,7 +221,7 @@ contract OpenBountyCarry is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked() && _wallDaySealed()) return;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked() && _wallDaySealed()) return;
-            game.mineFlip();
+            game.mineFlip(0);
             _fulfillPending(vrfWord);
         }
     }

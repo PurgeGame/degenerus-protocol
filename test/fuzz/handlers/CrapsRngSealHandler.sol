@@ -376,7 +376,7 @@ contract CrapsRngSealHandler is Test {
         }
         vm.recordLogs();
         if (asActor) vm.prank(currentActor);
-        try game.mineFlip() {} catch {}
+        try game.mineFlip(0) {} catch {}
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < n; i++) {
             uint64 slot = armedSlots[i];
@@ -471,7 +471,7 @@ contract CrapsRngSealHandler is Test {
     ///      progress, so the engine stops at the next checkpoint it cannot admit.
     function _minimalEngineStep() internal returns (bool ok) {
         for (uint256 g = 1_000_000; g <= 16_750_000; g += 250_000) {
-            (ok, ) = address(game).call{gas: g}(abi.encodeWithSignature("mineFlip()"));
+            (ok, ) = address(game).call{gas: g}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (ok) return true;
         }
     }

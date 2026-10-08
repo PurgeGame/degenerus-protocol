@@ -65,7 +65,7 @@ contract FoilSnapPayout is DeployProtocol {
     // ──────────────────────────────────────────────────────────────────────
 
     function _advance() internal {
-        try game.mineFlip() {} catch {}
+        try game.mineFlip(0) {} catch {}
     }
 
     function _completeDay(uint256 vrfWord) internal {

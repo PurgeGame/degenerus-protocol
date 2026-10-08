@@ -83,7 +83,7 @@ contract DecimatorGasHost is DecimatorJackpotHarness, BucketSeed {
     }
     function mine() external returns (uint256 actualBasefee) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_MINER_MODULE.delegatecall(
-            abi.encodeCall(DegenerusGameMinerModule.mineFlip, ()));
+            abi.encodeCall(DegenerusGameMinerModule.mineFlip, (uint32(0))));
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
         return block.basefee;
     }

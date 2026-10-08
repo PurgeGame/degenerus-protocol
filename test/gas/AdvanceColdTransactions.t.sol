@@ -62,7 +62,7 @@ contract ColdSubscriberSeeder is DegenerusGame, WalletSeed {
 
 /// @dev Setup completes before the measured transaction, including every funding/storage write.
 abstract contract ColdSubscriberFixture is DeployProtocol {
-    uint256 internal constant INTRINSIC = 21_064;
+    uint256 internal constant INTRINSIC = 21_192;
     uint256 internal constant REALISTIC_ALLOWANCE = 10_000_000;
     uint256 internal constant CHUNK_GAS_TARGET = 10_000_000;
     bytes32 internal constant ADVANCE_EVENT = keccak256("Advance(uint8,uint24)");
@@ -161,7 +161,7 @@ abstract contract ColdSubscriberFixture is DeployProtocol {
                 if (!fulfilled) mockVRF.fulfillRandomWords(id, uint256(keccak256("cold-subscriber-setup")) | 1);
             }
             if (!game.advanceDue() && !game.rngLocked()) return;
-            game.mineFlip();
+            game.mineFlip(0);
         }
         revert("setup did not settle");
     }
@@ -207,7 +207,7 @@ abstract contract ColdSubscriberFixture is DeployProtocol {
             vm.recordLogs();
             vm.startStateDiffRecording();
             uint256 before = gasleft();
-            game.mineFlip{gas: allowance}();
+            game.mineFlip{gas: allowance}(0);
             uint256 used = before - gasleft() + INTRINSIC;
             assertTrue(_storageChanged(vm.stopAndReturnStateDiff()), "a successful call makes engine progress");
             Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -229,13 +229,13 @@ abstract contract ColdSubscriberFixture is DeployProtocol {
         uint256 lo = 200_000;
         hi = REALISTIC_ALLOWANCE;
         uint256 snap = vm.snapshotState();
-        (bool ok,) = address(game).call{gas: hi}(abi.encodeWithSignature("mineFlip()"));
+        (bool ok,) = address(game).call{gas: hi}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
         vm.revertToState(snap);
         assertTrue(ok, "next chunk admitted under a realistic 10M allowance");
         while (hi - lo > 5_000) {
             uint256 mid = (lo + hi) / 2;
             bytes memory err;
-            (ok, err) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip()"));
+            (ok, err) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             vm.revertToState(snap);
             if (ok) {
                 hi = mid;

@@ -221,7 +221,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
         for (uint256 i; i < 12 && !game.rngLocked(); i++) {
             vm.warp(block.timestamp + 1 days);
             vm.prank(actor);
-            try game.mineFlip() {} catch {}
+            try game.mineFlip(0) {} catch {}
             if (game.rngLocked()) break;
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != 0) {
@@ -240,7 +240,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
                 }
             }
             vm.prank(actor);
-            try game.mineFlip() {} catch {}
+            try game.mineFlip(0) {} catch {}
         }
     }
 
@@ -256,7 +256,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
             }
             if (!game.rngLocked() && !game.advanceDue() && game.rngComplete() && !_requestOutstanding()) return;
             vm.prank(actor);
-            try game.mineFlip() {} catch {}
+            try game.mineFlip(0) {} catch {}
         }
         revert("fixture: the game never went idle");
     }
@@ -376,7 +376,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
             ++calls;
             uint256 gasBefore = gasleft();
             vm.prank(actor);
-            game.mineFlip{gas: allowance}();
+            game.mineFlip{gas: allowance}(0);
             uint256 gasUsed = gasBefore - gasleft();
             emit log_named_uint("mineFlip chunk gas", gasUsed);
 
@@ -444,7 +444,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
         uint256 keeperFlipBefore = coinflip.coinflipAmount(actor);
         vm.prank(actor);
         uint256 gasBefore = gasleft();
-        game.mineFlip{gas: TEN_M_TARGET}();
+        game.mineFlip{gas: TEN_M_TARGET}(0);
         emit log_named_uint("first chunk gas", gasBefore - gasleft());
 
         (bool afterDone, uint48 afterCur) = _frontier();
@@ -457,7 +457,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
         uint48 resumed = afterCur;
         for (uint256 i; i < 16 && !_settled(livePos); ++i) {
             vm.prank(actor);
-            game.mineFlip{gas: TEN_M_TARGET}();
+            game.mineFlip{gas: TEN_M_TARGET}(0);
             (afterDone, afterCur) = _frontier();
             assertTrue(afterDone || afterCur > resumed, "regression: each keeper call resumes past the committed cursor");
             resumed = afterCur;
@@ -486,11 +486,11 @@ contract SweepWorstCaseDrain is DeployProtocol {
                 if (!fulfilled) mockVRF.fulfillRandomWords(reqId, uint256(keccak256(abi.encode("quiet", i))) | 1);
             }
             for (uint256 j; j < 4 && game.advanceDue(); j++) {
-                try game.mineFlip() {} catch {}
+                try game.mineFlip(0) {} catch {}
             }
             _quietCrapsTable();
             vm.prank(actor);
-            try game.mineFlip() {}
+            try game.mineFlip(0) {}
             catch (bytes memory err) {
                 idle = bytes4(err) == bytes4(keccak256("NoWork()"));
             }
@@ -498,7 +498,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
         require(idle, "fixture: the router never went idle after quieting");
         vm.prank(actor);
         vm.expectRevert(abi.encodeWithSignature("NoWork()"));
-        game.mineFlip();
+        game.mineFlip(0);
     }
 
     /// @dev The read frontier is (humanReadComplete, boxCursor) of the one sealed cohort (two
@@ -521,7 +521,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
         _quietCrapsTable();
         vm.prank(actor);
         vm.expectRevert(abi.encodeWithSignature("NoWork()"));
-        game.mineFlip();
+        game.mineFlip(0);
         (bool afterDone, uint48 afterCur) = _frontier();
         assertEq(afterDone, beforeDone, "genesis no-work leaves the completion flag unchanged");
         assertEq(afterCur, beforeCur, "genesis no-work leaves the raw cursor unchanged");
@@ -538,7 +538,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
         assertEq(afterCur, 0, "the seal resets the cursor");
         vm.prank(actor);
         vm.expectRevert(abi.encodeWithSignature("RngNotReady()"));
-        game.mineFlip();
+        game.mineFlip(0);
         (afterDone, afterCur) = _frontier();
         assertFalse(afterDone, "unworded-cohort probe cannot commit completion as work");
         assertEq(afterCur, 0, "unworded-cohort probe leaves the entry cursor unchanged");
@@ -552,7 +552,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
         game.rawFulfillRandomWords(requestId, words);
         assertTrue(game.isRngFulfilled(), "fixture: the callback landed the word");
         vm.prank(actor);
-        game.mineFlip();
+        game.mineFlip(0);
         (afterDone, afterCur) = _frontier();
         assertTrue(afterDone, "worded empty cohort completes and commits the frontier");
         assertEq(afterCur, 0, "empty cohort leaves the entry cursor zero");
@@ -560,7 +560,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
         _quietCrapsTable();
         vm.prank(actor);
         vm.expectRevert(abi.encodeWithSignature("NoWork()"));
-        game.mineFlip();
+        game.mineFlip(0);
         (bool finalDone, uint48 finalCur) = _frontier();
         assertTrue(finalDone, "the stationary follow-up keeps the completed frontier");
         assertEq(finalCur, 0, "the stationary follow-up leaves the cursor zero");

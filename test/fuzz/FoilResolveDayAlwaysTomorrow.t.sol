@@ -34,7 +34,7 @@ contract FoilGenerationFreshRequest is DeployProtocol {
 
         _t += 1 days;
         vm.warp(_t);
-        game.mineFlip();
+        game.mineFlip(0);
         uint24 R = game.currentDayView();
         uint256 reqR = mockVRF.lastRequestId();
         assertTrue(game.rngLocked(), "R requested on its own day");
@@ -54,7 +54,7 @@ contract FoilGenerationFreshRequest is DeployProtocol {
 
         mockVRF.fulfillRandomWords(fresh, WORD_FRESH);
         _lastFulfilledReqId = fresh;
-        game.mineFlip();
+        game.mineFlip(0);
         assertTrue(game.rngWordForDay(W) != 0, "W's word recorded by the fulfil crank");
         assertEq(_dailyIdx(), W - 1, "gap days skipped");
         assertTrue(game.rngLocked(), "W's jackpot still owed under the lock");
@@ -78,7 +78,7 @@ contract FoilGenerationFreshRequest is DeployProtocol {
         _t += 1 days;
         vm.warp(_t);
         assertEq(game.rngWordForDay(W + 1), 0, "W+1 unrequested before its own day");
-        game.mineFlip();
+        game.mineFlip(0);
         assertTrue(game.rngLocked(), "W+1 requested on its own day");
     }
 
@@ -127,7 +127,7 @@ contract FoilGenerationFreshRequest is DeployProtocol {
             _fulfillPending(vrfWord);
             if (!game.rngLocked()) _finishReadConsumers();
             if (_settled()) return;
-            if (game.advanceDue()) game.mineFlip();
+            if (game.advanceDue()) game.mineFlip(0);
         }
         revert("harness: day never settled");
     }
@@ -147,7 +147,7 @@ contract FoilGenerationFreshRequest is DeployProtocol {
     /// @dev Crank until the engine issues a request after `previous`; returns its id.
     function _crankUntilFreshRequest(uint256 previous) internal returns (uint256 id) {
         for (uint256 i; i < 64; ++i) {
-            game.mineFlip();
+            game.mineFlip(0);
             id = mockVRF.lastRequestId();
             if (id != previous) return id;
         }
@@ -168,7 +168,7 @@ contract FoilGenerationFreshRequest is DeployProtocol {
     function _advanceUntilUnlocked() internal {
         for (uint256 i; i < 64; i++) {
             if (!game.rngLocked()) return;
-            game.mineFlip();
+            game.mineFlip(0);
         }
         revert("harness: lock never released");
     }

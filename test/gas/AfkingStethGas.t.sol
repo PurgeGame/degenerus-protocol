@@ -195,47 +195,31 @@ contract AfkingStethGasTest is DeployProtocol {
         faulty = AdversarialAfkingSteth(payable(address(mockStETH)));
     }
 
-    function test_GasFullStipendFailureFinalizesEvictionAndFollowingSubscriber() public {
+    function test_PostTransferGasExhaustionRollsBackWithoutEviction() public {
         AdversarialAfkingSteth faulty = _failedFixture(true);
-        uint256 initial = vm.snapshotState();
-        uint32 playerId = game.walletIdOf(PLAYER);
-        vm.prank(FUNDER);
-        game.setAfkingFundingApproval(0, playerId, false);
-        MineFlipGas.Result memory baselineResult;
-        uint256 baseline;
-        (baselineResult, baseline) = host.measuredSubWork{gas: WORK_GAS}(WORK_GAS);
-        assertTrue(baselineResult.done);
-        assertEq(baselineResult.rewardBasis, 2);
-        vm.revertToState(initial);
-
         faulty.configureFault(AdversarialAfkingSteth.Operation.BalanceAfter, AdversarialAfkingSteth.Fault.BurnGas);
         uint256 sourceShares = mockStETH.sharesOf(FUNDER);
         uint256 gameShares = mockStETH.sharesOf(address(game));
         uint256 allowanceBefore = mockStETH.allowance(FUNDER, address(game));
-        MineFlipGas.Result memory result;
-        uint256 grossGas;
-        (result, grossGas) = host.measuredSubWork{gas: WORK_GAS}(WORK_GAS);
-        assertTrue(result.progressed && result.done);
-        assertEq(result.rewardBasis, 2, "failed payer and swapped-in subscriber processed");
-        assertEq(host.memberCount(), 1, "unpaid payer evicted");
-        assertEq(mockStETH.sharesOf(FUNDER), sourceShares, "post-transfer failure rolls back source debit");
-        assertEq(mockStETH.sharesOf(address(game)), gameShares, "post-transfer failure rolls back receipt");
-        assertEq(mockStETH.allowance(FUNDER, address(game)), allowanceBefore, "allowance rollback");
+        vm.expectRevert();
+        host.measuredSubWork{gas: WORK_GAS}(WORK_GAS);
+        assertEq(host.memberCount(), 2, "failed execution cannot evict");
+        assertEq(mockStETH.sharesOf(FUNDER), sourceShares);
+        assertEq(mockStETH.sharesOf(address(game)), gameShares);
+        assertEq(mockStETH.allowance(FUNDER, address(game)), allowanceBefore);
+        faulty.configureFault(AdversarialAfkingSteth.Operation.BalanceAfter, AdversarialAfkingSteth.Fault.None);
+        (MineFlipGas.Result memory result,) = host.measuredSubWork{gas: WORK_GAS}(WORK_GAS);
+        assertTrue(result.done);
+        _assertDelivered(PLAYER, true);
         _assertDelivered(PLAYER_TWO, true);
-        (uint24 bought,) = host.delivered(PLAYER);
-        assertEq(bought, 0, "evicted record cleared");
-        assertLe(grossGas, 2 * GasBounds.SUBSCRIBER_ITEM_GAS + GasBounds.SUBSCRIBER_TAIL_GAS);
-        emit log_named_uint("production_eviction_and_following_prepaid_worker_gross_gas", baseline);
-        emit log_named_uint("production_full_stipend_eviction_and_following_worker_gross_gas", grossGas);
-        emit log_named_uint("production_full_stipend_failure_additional_gross_gas", grossGas - baseline);
     }
 
-    function test_GasFullStipendSingleEvictionFitsAdmissionBound() public {
+    function test_TransferGasExhaustionPreservesSubscription() public {
         AdversarialAfkingSteth faulty = _failedFixture(false);
         faulty.configureFault(AdversarialAfkingSteth.Operation.Transfer, AdversarialAfkingSteth.Fault.BurnGas);
-        uint256 used = _work();
-        assertEq(host.memberCount(), 0);
-        emit log_named_uint("production_full_stipend_single_eviction_gross_gas", used);
+        vm.expectRevert();
+        host.measuredSubWork{gas: WORK_GAS}(WORK_GAS);
+        assertEq(host.memberCount(), 1);
     }
 
     function test_InsufficientAdmissionAllowanceDefersWithoutChargingOrEvicting() public {

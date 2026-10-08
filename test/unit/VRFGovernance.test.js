@@ -58,7 +58,7 @@ describe("VRF Governance", function () {
         }
       }
       if (delivered && await game.lastVrfProcessed() > before && !(await game.rngLocked())) return;
-      await game.connect(caller).mineFlip({ gasLimit: 12_000_000 });
+      await game.connect(caller).mineFlip(0, { gasLimit: 12_000_000 });
     }
     throw new Error("VRF recovery did not request, deliver and apply a new daily word");
   }
@@ -440,7 +440,7 @@ describe("VRF Governance", function () {
       // Advance to next day and call mineFlip to trigger VRF request,
       // which sets rngLockedFlag = true
       await advanceToNextDay();
-      await game.connect(deployer).mineFlip();
+      await game.connect(deployer).mineFlip(0);
 
       await expect(
         dgnrs.connect(deployer).unwrapTo(alice.address, amount)

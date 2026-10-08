@@ -302,7 +302,7 @@ contract ActivityScorePointFloorTest is DeployProtocol {
             if (_daySealed()) break;
             _fulfillPending(vrfWord);
             if (_daySealed()) break;
-            game.mineFlip();
+            game.mineFlip(0);
             _fulfillPending(vrfWord);
         }
     }
@@ -312,7 +312,7 @@ contract ActivityScorePointFloorTest is DeployProtocol {
             if (_daySealed()) return;
             _fulfillPending(vrfWord);
             if (_daySealed()) return;
-            game.mineFlip();
+            game.mineFlip(0);
             _fulfillPending(vrfWord);
         }
     }

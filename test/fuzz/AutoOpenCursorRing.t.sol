@@ -180,7 +180,7 @@ contract AutoOpenCursorRing is DeployProtocol {
         _grantDeityPass(keeper); // retain the original eligible keeper fixture
         require(uint8(game.nextMinerAction()) == 9 && !game.rngLocked(), "fixture: AFK is the selected consumer");
         vm.prank(keeper);
-        game.mineFlip(); // MUST NOT revert NoWork — the open category had work below the cursor
+        game.mineFlip(0); // MUST NOT revert NoWork — the open category had work below the cursor
 
         for (uint256 i; i < subs.length; i++) {
             assertEq(_lastOpenedDayOf(subs[i]), _lastBoughtDayOf(subs[i]), "ring(keeper): stranded box opened");
@@ -209,7 +209,7 @@ contract AutoOpenCursorRing is DeployProtocol {
         _grantDeityPass(keeper);
         require(uint8(game.nextMinerAction()) == 9 && !game.rngLocked(), "fixture: AFK is the selected consumer");
         vm.prank(keeper);
-        game.mineFlip(); // MUST NOT revert NoWork — there IS open work
+        game.mineFlip(0); // MUST NOT revert NoWork — there IS open work
 
         // Every afking box is now opened: the whole afking ring is drained (the ring scan reached the
         // stranded [0, cursor) subs, not just the suffix).
@@ -237,7 +237,7 @@ contract AutoOpenCursorRing is DeployProtocol {
         assertEq(uint8(game.nextMinerAction()), 0, "all consumer and maintenance work is idle");
         vm.prank(keeper);
         vm.expectRevert(abi.encodeWithSignature("NoWork()"));
-        game.mineFlip();
+        game.mineFlip(0);
     }
 
     // =========================================================================
@@ -339,7 +339,7 @@ contract AutoOpenCursorRing is DeployProtocol {
         vm.warp(_t);
         // Reach a real commitment with the normal keeper, then use guarded
         // production worker checkpoints to stop immediately before AFK opens.
-        for (uint256 i; i < 128 && !game.rngLocked(); ++i) game.mineFlip();
+        for (uint256 i; i < 128 && !game.rngLocked(); ++i) game.mineFlip(0);
         require(game.rngLocked(), "fixture: new daily request");
         _fulfillPending(vrfWord);
         bytes memory productionCode = address(game).code;
@@ -358,7 +358,7 @@ contract AutoOpenCursorRing is DeployProtocol {
             if (_daySealed()) break;
             _fulfillPending(vrfWord);
             if (_daySealed()) break;
-            game.mineFlip();
+            game.mineFlip(0);
             _fulfillPending(vrfWord);
         }
     }
@@ -368,7 +368,7 @@ contract AutoOpenCursorRing is DeployProtocol {
             if (_daySealed()) return;
             _fulfillPending(vrfWord);
             if (_daySealed()) return;
-            game.mineFlip();
+            game.mineFlip(0);
             _fulfillPending(vrfWord);
         }
     }

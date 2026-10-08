@@ -142,7 +142,7 @@ describe("BafCreditRouting", function () {
       throw new Error("word must be odd for a winning daily flip");
     }
     await advanceToNextDay();
-    await game.connect(deployer).mineFlip();
+    await game.connect(deployer).mineFlip(0);
     const requestId = await getLastVRFRequestId(mockVRF);
     try {
       await mockVRF.fulfillRandomWords(requestId, word);
@@ -152,7 +152,7 @@ describe("BafCreditRouting", function () {
     for (let i = 0; i < 30; i++) {
       if (!(await game.rngLocked())) break;
       try {
-        await game.connect(deployer).mineFlip();
+        await game.connect(deployer).mineFlip(0);
       } catch {
         break;
       }

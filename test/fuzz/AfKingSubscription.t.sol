@@ -35,7 +35,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///      compare `currentLevel <= sub.validThroughLevel`, GameAfkingModule.sol:612 — only the crossing
 ///      branch re-reads the horizon).
 ///   Δ2 subscribe: `afKing.subscribe(...)` -> `game.subscribe(...)` (identical 6-arg sig).
-///   Δ3 doWork: `afKing.doWork()` -> `game.mineFlip()`.
+///   Δ3 doWork: `afKing.doWork()` -> `game.mineFlip(0)`.
 ///   Δ4 autoBuy: `afKing.autoBuy(N)` -> the per-sub buy folded into `mineFlip()`'s STAGE; driven via
 ///      a new-day mineFlip + the `_settleGame` VRF drain.
 ///   Δ5 views/cancel: `afKing.subscriptionOf(x).field` -> read `_subOf[x]` via vm.load (RE-DERIVED
@@ -171,7 +171,7 @@ contract AfKingSubscription is DeployProtocol {
         }
         vm.recordLogs();
         vm.prank(keeper);
-        game.mineFlip();
+        game.mineFlip(0);
         uint256 credits = _countCreditFlipTo(keeper);
         uint256 reward;
         uint256 works;
@@ -275,7 +275,7 @@ contract AfKingSubscription is DeployProtocol {
     ///      during rngLock).
     function _runStageOnce() internal {
         vm.warp(block.timestamp + 1 days);
-        game.mineFlip();
+        game.mineFlip(0);
     }
 
     /// @dev Settle the game to a clean state: drive mineFlip + deliver the mock VRF word until
@@ -283,7 +283,7 @@ contract AfKingSubscription is DeployProtocol {
     function _settleGame(uint256 vrfWord) internal {
         for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.mineFlip();
+            game.mineFlip(0);
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != _lastFulfilledReqId && reqId > 0) {
                 (, , bool fulfilled) = mockVRF.pendingRequests(reqId);

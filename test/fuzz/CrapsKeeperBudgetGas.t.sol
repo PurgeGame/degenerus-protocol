@@ -31,7 +31,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
                 if (!done) mockVRF.fulfillRandomWords(request, 0xC01D);
             }
             if (!game.advanceDue() && !game.rngLocked() && game.rngComplete()) break;
-            game.mineFlip{gas: 15_000_000}();
+            game.mineFlip{gas: 15_000_000}(0);
         }
         assertTrue(game.rngComplete());
         crapsBattle.setBattleCreator(address(this), true);
@@ -46,11 +46,11 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         vm.warp(vm.getBlockTimestamp() + 60);
         index = crapsBattle.closeBattle(slot);
         uint256 prior = mockVRF.lastRequestId();
-        for (uint256 i; i < 100 && mockVRF.lastRequestId() == prior; ++i) game.mineFlip{gas: 15_000_000}();
+        for (uint256 i; i < 100 && mockVRF.lastRequestId() == prior; ++i) game.mineFlip{gas: 15_000_000}(0);
         assertGt(mockVRF.lastRequestId(), prior, "real request seals the custom field");
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 0xBADC0DE);
         // Publish and empty preceding categories, stopping safely before the first whole seat.
-        for (uint256 i; i < 100 && game.rngConsumerStage() != 6; ++i) game.mineFlip{gas: 800_000}();
+        for (uint256 i; i < 100 && game.rngConsumerStage() != 6; ++i) game.mineFlip{gas: 800_000}(0);
         assertEq(game.rngConsumerStage(), 6);
         assertEq(RecyclingState.readBuffer(address(game)), index);
         assertEq(crapsBattle.bonusCursorOf(slot), 0);
@@ -90,8 +90,8 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         vm.recordLogs();
         vm.prank(MINER);
         uint256 before = gasleft();
-        game.mineFlip{gas: 9_500_000}();
-        uint256 used = before - gasleft() + 21_064;
+        game.mineFlip{gas: 9_500_000}(0);
+        uint256 used = before - gasleft() + 21_192;
         emit log_named_uint("cold_real_craps_miner_including_intrinsic", used);
         assertLt(used, 9_530_000, "execution fits supplied gas plus intrinsic/frame");
         assertGt(crapsBattle.bonusCursorOf(slot), 0);
@@ -125,7 +125,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         uint256 lockFactor = game.rngLocked() ? 2 : 1;
         vm.recordLogs();
         vm.prank(MINER);
-        game.mineFlip{gas: 9_500_000}();
+        game.mineFlip{gas: 9_500_000}(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 workEvents;
         for (uint256 i; i < logs.length; ++i) {
@@ -184,14 +184,14 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         _finish(14_000_000, true);
         (uint256 request, uint64 finalSlot) = _requestSingleSeatField();
         mockVRF.fulfillRandomWords(request, 0xC002);
-        for (uint256 i; i < 100 && game.rngConsumerStage() != 6; ++i) game.mineFlip{gas: 800_000}();
+        for (uint256 i; i < 100 && game.rngConsumerStage() != 6; ++i) game.mineFlip{gas: 800_000}(0);
         assertEq(game.rngConsumerStage(), 6);
         assertEq(crapsBattle.bonusCursorOf(finalSlot), 0);
         assertFalse(game.rngComplete(), "one final seat remains");
         uint256 prior = coinflip.coinflipAmount(MINER);
         vm.recordLogs();
         vm.prank(MINER);
-        game.mineFlip{gas: 15_000_000}();
+        game.mineFlip{gas: 15_000_000}(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 workEvents;
         for (uint256 i; i < logs.length; ++i) {
@@ -222,7 +222,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         vm.warp(vm.getBlockTimestamp() + 60);
         crapsBattle.closeBattle(nextSlot);
         uint256 prior = mockVRF.lastRequestId();
-        for (uint256 i; i < 100 && mockVRF.lastRequestId() == prior; ++i) game.mineFlip{gas: 15_000_000}();
+        for (uint256 i; i < 100 && mockVRF.lastRequestId() == prior; ++i) game.mineFlip{gas: 15_000_000}(0);
         request = mockVRF.lastRequestId();
         assertGt(request, prior);
     }
@@ -252,10 +252,10 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         assertEq(game.nextMinerAction(), uint8(DegenerusGameStorage.MinerAction.Wait));
         vm.prank(ContractAddresses.CREATOR);
         vm.expectRevert();
-        game.mineFlip{gas: 15_000_000}();
+        game.mineFlip{gas: 15_000_000}(0);
         vm.prank(MINER);
         vm.expectRevert();
-        game.mineFlip{gas: 15_000_000}();
+        game.mineFlip{gas: 15_000_000}(0);
         assertEq(mockVRF.lastRequestId(), request, "neither caller can retry through mining");
     }
 
@@ -269,11 +269,8 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         vm.warp(vm.getBlockTimestamp() + 31 minutes);
         mockVRF.fulfillRandomWordsRaw(request, address(game), 0xAABBCC);
         assertEq(_requestedAt(), requested, "duplicate callback cannot reset age");
-        // A call that cannot fit one whole seat makes no progress, and a zero-progress mineFlip
-        // reverts instead of committing a no-op (be793ed7c).
-        vm.prank(MINER);
-        vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
-        game.mineFlip{gas: 800_000}();
+        // Starve actual execution, rather than relying on an obsolete soft estimate.
+        _underfundedMine();
         assertEq(crapsBattle.bonusCursorOf(slot), 0);
         assertEq(_requestedAt(), requested, "no-op checkpoint cannot reset age");
 
@@ -282,7 +279,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         uint256 lockFactor = game.rngLocked() ? 2 : 1;
         vm.recordLogs();
         vm.prank(MINER);
-        game.mineFlip{gas: 9_500_000}();
+        game.mineFlip{gas: 9_500_000}(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 workEvents;
         for (uint256 i; i < logs.length; ++i) {
@@ -345,14 +342,26 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         assertEq(_finish(14_000_000, false), small);
     }
 
-    function test_SubSeatGasMakesNoProgressAndEarnsNoReward() public {
-        uint256 prior = coinflip.coinflipAmount(MINER);
-        // Sub-seat gas cannot admit the atomic seat; the zero-progress call reverts (be793ed7c).
+    function _underfundedMine() private {
         vm.prank(MINER);
-        vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
-        game.mineFlip{gas: 800_000}();
+        (bool ok,) = address(game).call{gas: 50_000}(
+            abi.encodeCall(game.mineFlip, (type(uint32).max))
+        );
+        assertFalse(ok, "actual underfunding must roll back");
+    }
+
+    function test_FirstSeatIgnoresEstimateButActualUnderfundingRollsBack() public {
+        uint256 prior = coinflip.coinflipAmount(MINER);
+        _underfundedMine();
         assertEq(crapsBattle.bonusCursorOf(slot), 0);
         assertEq(coinflip.coinflipAmount(MINER), prior);
+
+        // The old 800k refusal was estimate-only. The actual first seat fits, even
+        // at maximum calibration; its successor waits for the next call.
+        vm.prank(MINER);
+        game.mineFlip{gas: 800_000}(type(uint32).max);
+        assertEq(crapsBattle.bonusCursorOf(slot), 1);
+        assertEq(coinflip.coinflipAmount(MINER), prior, "less than one million gas earns no bounty");
         _finish(14_000_000, true);
     }
 }

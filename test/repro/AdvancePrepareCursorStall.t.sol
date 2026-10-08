@@ -114,7 +114,7 @@ contract AdvancePrepareCursorStall is DeployProtocol {
         // 3) Cross the wall-day. Advances first finish the previous word's consumers,
         //    then request the daily word and swap write->read (_swapAndFreeze).
         vm.warp(block.timestamp + 1 days + 1);
-        for (uint256 i; i < 512 && !game.rngLocked(); ++i) game.mineFlip();
+        for (uint256 i; i < 512 && !game.rngLocked(); ++i) game.mineFlip(0);
         require(game.rngLocked(), "daily VRF request is in flight (word swapped in)");
 
         uint24 rk = _readKey(lvl);
@@ -134,7 +134,7 @@ contract AdvancePrepareCursorStall is DeployProtocol {
         for (uint256 i = 0; i < 200; i++) {
             iters++;
             _fulfillVrf();
-            (bool ok, ) = address(game).call{gas: 10_000_000}(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, ) = address(game).call{gas: 10_000_000}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             require(ok, "mineFlip must not revert");
             require(!game.gameOver(), "must not escape via game-over");
 
@@ -175,7 +175,7 @@ contract AdvancePrepareCursorStall is DeployProtocol {
             if (game.jackpotPhase()) return;
 
             _fulfillVrf();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) {
                 vm.warp(block.timestamp + 1 days + 1);
                 _seedNextPrizePool(49.9 ether);
@@ -199,7 +199,7 @@ contract AdvancePrepareCursorStall is DeployProtocol {
                 if (done) return;
                 _fulfillVrf();
             } else {
-                game.mineFlip();
+                game.mineFlip(0);
             }
         }
         revert("harness: mid-day work did not settle");
@@ -209,7 +209,7 @@ contract AdvancePrepareCursorStall is DeployProtocol {
         for (uint256 i = 0; i < 120; i++) {
             if (!game.rngLocked()) return;
             _fulfillVrf();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) return;
         }
     }

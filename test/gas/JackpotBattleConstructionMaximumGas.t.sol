@@ -224,7 +224,7 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol {
         bytes memory reason;
         Vm.Gas memory used;
         (ok, used, reason) = paidProbe.run(address(game), MINER, supplied);
-        transactionGas = used.gasTotalUsed + 21_064;
+        transactionGas = used.gasTotalUsed + 21_192;
         if (ok) assertEq(used.gasRefunded, 0, "gross transaction measurement");
         else assertEq(bytes4(reason), MineFlipGas.InsufficientExecutionGas.selector,
             "low-gas call must refuse before work, not exhaust gas midway");

@@ -16,6 +16,7 @@ contract LargeAtomicGasHarness {
             uint256 offset = completed * 512;
             for (uint256 i; i < 512; ++i) writes[offset + i] = 1;
             ++completed;
+            MineFlipGas.markProgress(meter);
         }
         MineFlipGas.finish(meter);
         return completed;
@@ -60,4 +61,30 @@ contract MineFlipGasAdmissionTest is Test {
         assertEq(h.run{gas: 16_000_000}(15_000_000, 2), 2);
         assertEq(h.writes(1023), 1);
     }
+    function test_ExtremeCalibrationAlwaysAttemptsOneFundedAtomicChunk() public {
+        uint256 budget = MineFlipGas.budget(15_000_000, type(uint32).max, true);
+        assertEq(h.run{gas: 16_000_000}(budget, 2), 1);
+        assertEq(h.run{gas: 16_000_000}(budget, 2), 2);
+    }
+
+    function test_UnderfundedMandatoryChunkRollsBackAndCanRetry() public {
+        uint256 budget = MineFlipGas.budget(15_000_000, 10_000, true);
+        vm.expectRevert();
+        h.run{gas: 1_000_000}(budget, 1);
+        assertEq(h.completed(), 0);
+        assertEq(h.writes(0), 0);
+        assertEq(h.run{gas: 16_000_000}(budget, 1), 1);
+    }
+
+    function test_ScaleRoundsUpAndSaturates() public pure {
+        MineFlipGas.Meter memory meter;
+        meter.multiplierBps = 15_000;
+        assertEq(MineFlipGas.scale(meter, 1), 2);
+        assertEq(MineFlipGas.scale(meter, 10_000), 15_000);
+        assertEq(MineFlipGas.scale(meter, type(uint256).max), type(uint256).max);
+        assertEq(MineFlipGas.normalize(0), 10_000);
+        assertEq(MineFlipGas.consumed(100, 200), 0);
+        assertEq(MineFlipGas.consumed(200, 100), 100);
+    }
+
 }

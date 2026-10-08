@@ -251,7 +251,7 @@ contract GameFSMProductionTransitionTest is Test {
         vm.warp(block.timestamp + uint256(elapsedDays) * 1 days);
         // Before the 30-day sweep a finished ending has no engine work: mineFlip reverts NoWork and
         // changes nothing (an idle engine refuses the call instead of returning, be793ed7c).
-        (bool ok, bytes memory result) = address(machine).call(abi.encodeCall(DegenerusGameMinerModule.mineFlip, ()));
+        (bool ok, bytes memory result) = address(machine).call(abi.encodeCall(DegenerusGameMinerModule.mineFlip, (uint32(0))));
         assert(!ok);
         assert(result.length == 4 && bytes4(result) == DegenerusGameMinerModule.NoWork.selector);
         assert(machine.gameOver());
@@ -262,7 +262,7 @@ contract GameFSMProductionTransitionTest is Test {
     function _lastPurchase_promotesOnceAcrossRetry(uint16 initialLevel) private {
         vm.warp(_dayStart(31) + 120);
         machine.seed(initialLevel, 30, 30, true);
-        _mustCall(abi.encodeCall(DegenerusGameMinerModule.mineFlip, ()));
+        _mustCall(abi.encodeCall(DegenerusGameMinerModule.mineFlip, (uint32(0))));
         assert(machine.level() == uint24(initialLevel) + 1);
         (bool locked, uint48 requestTime, uint256 requestId) = machine.requestState();
         assert(locked && requestId == 1);
@@ -306,14 +306,14 @@ contract GameFSMProductionTransitionTest is Test {
         uint24 day = uint24(initialDay) + uint24(gap) + 1;
         vm.warp(_dayStart(day) + 120);
         machine.seed(1, initialDay, initialDay, false);
-        _mustCall(abi.encodeCall(DegenerusGameMinerModule.mineFlip, ()));
+        _mustCall(abi.encodeCall(DegenerusGameMinerModule.mineFlip, (uint32(0))));
         assert(machine.sealedDay() == initialDay);
         assert(FSMEmptyDependencies(ContractAddresses.VRF_COORDINATOR).requests() == 1);
         machine.recordDeliveredWord(42);
         // One mineFlip composes the delivered day's checkpoints (60d31f775): publish, tickets, the gap
         // and word application, the battle, the purchase daily and its seal, then the read consumers.
         // The jackpot legs' witnesses record the state each checkpoint saw.
-        _mustCall(abi.encodeCall(DegenerusGameMinerModule.mineFlip, ()));
+        _mustCall(abi.encodeCall(DegenerusGameMinerModule.mineFlip, (uint32(0))));
         FSMEmptyDependencies deps = FSMEmptyDependencies(ContractAddresses.COINFLIP);
         uint24 afterGap = gap == 0 ? uint24(initialDay) : day - 1;
         assert(afterGap >= initialDay);
@@ -338,7 +338,7 @@ contract GameFSMProductionTransitionTest is Test {
         assert(!locked && !machine.requestActive() && requestTime != 0 && requestId == 1);
         assert(machine.level() == 1);
         assert(FSMEmptyDependencies(ContractAddresses.COINFLIP).settlements() == uint256(gap) + 1);
-        (bool repeated,) = address(machine).call(abi.encodeCall(DegenerusGameMinerModule.mineFlip, ()));
+        (bool repeated,) = address(machine).call(abi.encodeCall(DegenerusGameMinerModule.mineFlip, (uint32(0))));
         assert(!repeated);
         assert(machine.sealedDay() == day);
     }

@@ -40,7 +40,7 @@ contract MinerRewardMinimum is DeployProtocol {
             uint256 pre = coinflip.coinflipAmount(keeper);
             vm.recordLogs();
             vm.prank(keeper);
-            game.mineFlip();
+            game.mineFlip(0);
             (uint256 used, uint256 reward, uint256 bounty, uint256 bountyCount) = _work(vm.getRecordedLogs());
             if (used <= MineFlipGas.MIN_REWARDED_GAS) {
                 sawUnpaidPrep = true;
@@ -77,7 +77,7 @@ contract MinerRewardMinimum is DeployProtocol {
         uint256 pre = coinflip.coinflipAmount(keeper);
         vm.recordLogs();
         vm.prank(keeper);
-        game.mineFlip();
+        game.mineFlip(0);
         uint256 count;
         (measured, reward, bounty, count) = _work(vm.getRecordedLogs());
         if (count == 0) assertEq(reward, 0, "a call without MinerBounty reports zero reward");

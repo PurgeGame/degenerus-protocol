@@ -58,7 +58,7 @@ contract LootboxBudgetResume is DeployProtocol {
         for (uint256 i; i < 10 && !game.rngLocked(); i++) {
             vm.warp(block.timestamp + 1 days);
             vm.prank(actor);
-            try game.mineFlip() {} catch {}
+            try game.mineFlip(0) {} catch {}
             if (game.rngLocked()) break;
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != 0) {
@@ -77,7 +77,7 @@ contract LootboxBudgetResume is DeployProtocol {
                 }
             }
             vm.prank(actor);
-            try game.mineFlip() {} catch {}
+            try game.mineFlip(0) {} catch {}
         }
         // A fresh request waits for every read consumer of the day's cohort to finish. A shut
         // craps window the day bound to the write buffer rides the next request, which the engine
@@ -92,7 +92,7 @@ contract LootboxBudgetResume is DeployProtocol {
             if (!game.advanceDue() && game.rngComplete()) break;
             if (!game.advanceDue()) continue; // a fresh request waits for its word
             vm.prank(actor);
-            game.mineFlip();
+            game.mineFlip(0);
         }
         assertTrue(game.rngComplete(), "harness: the day's cohorts all completed");
     }
@@ -132,6 +132,23 @@ contract LootboxBudgetResume is DeployProtocol {
         }
     }
 
+    /// @dev Completion can be its own mandatory checkpoint after the last funded open.
+    function _finishTailWithoutReplay(uint256 budget) internal {
+        if (_readComplete()) return;
+        assertEq(_cursor(), 5, "completion waits until all entries settled");
+        vm.recordLogs();
+        vm.prank(actor);
+        game.mineFlip{gas: budget}(0);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter == address(game) && logs[i].topics.length != 0) {
+                assertTrue(logs[i].topics[0] != OPENED, "completion must not replay a box");
+            }
+        }
+        assertTrue(_readComplete(), "the next mandatory checkpoint completes the cohort");
+        assertEq(_cursor(), 5, "completion leaves the settled cursor untouched");
+    }
+
     /// @dev The smallest mineFlip allowance that settles `entries` entries (bisection over snapshots).
     function _minimalOpenAllowance(uint256 entries) internal returns (uint256) {
         uint256 before = _cursor();
@@ -141,7 +158,7 @@ contract LootboxBudgetResume is DeployProtocol {
             uint256 mid = (lo + hi) / 2;
             uint256 snap = vm.snapshotState();
             vm.prank(actor);
-            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip()"));
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             bool opened = ok && _cursor() >= before + entries;
             vm.revertToStateAndDelete(snap);
             if (opened) hi = mid;
@@ -166,20 +183,21 @@ contract LootboxBudgetResume is DeployProtocol {
         uint256 budget = _minimalOpenAllowance(1);
         emit log_named_uint("one-entry mineFlip allowance", budget);
         vm.prank(actor);
-        game.mineFlip{gas: budget}();
+        game.mineFlip{gas: budget}(0);
         assertEq(_cursor(), 1, "one entry settled, four still owed");
         assertFalse(_readComplete(), "no early completion while entries remain");
         assertTrue(game.boxesPending(), "the walk still reports the index pending");
 
         // Resume until the walk reports nothing pending: every entry settles exactly once, in order.
         uint256 calls = 1;
-        while (game.boxesPending() && calls < 12) {
+        while (_cursor() < 5 && calls < 12) {
             vm.prank(actor);
-            game.mineFlip{gas: budget}();
+            game.mineFlip{gas: budget}(0);
             calls++;
             assertEq(_cursor(), calls, "each call settles exactly the next entry; none is replayed");
-            assertEq(_readComplete(), calls == 5, "completion only after the last entry");
+            if (calls < 5) assertFalse(_readComplete(), "no completion while entries remain");
         }
+        _finishTailWithoutReplay(budget);
         assertFalse(game.boxesPending(), "the index drains within a bounded number of calls");
         assertEq(calls, 5, "five entries, five one-entry calls");
         assertEq(_cursor(), 5, "the cursor stays at the read count after completion");
@@ -202,16 +220,19 @@ contract LootboxBudgetResume is DeployProtocol {
         assertGt(_word(N), 0, "the daily word landed at the index");
 
         uint256 calls;
-        while (game.boxesPending() && calls < 12) {
+        uint256 lastBudget;
+        while (_cursor() < 5 && calls < 12) {
             uint256 before = _cursor();
             uint256 one = _minimalOpenAllowance(1);
             uint256 budget = before + 1 < 5 ? one + (_minimalOpenAllowance(2) - one) / 2 : one + 30_000;
+            lastBudget = budget;
             vm.prank(actor);
-            game.mineFlip{gas: budget}();
+            game.mineFlip{gas: budget}(0);
             assertEq(_cursor() - before, 1, "one entry per call: the second never fits the budget");
             calls++;
-            assertEq(_readComplete(), calls == 5, "completion only after the last entry");
+            if (calls < 5) assertFalse(_readComplete(), "no completion while entries remain");
         }
+        _finishTailWithoutReplay(lastBudget);
         assertEq(calls, 5, "five entries, five calls");
         assertEq(_cursor(), 5, "every entry settled");
         _assertEntriesUnchanged(N, entries);
@@ -236,7 +257,7 @@ contract LootboxBudgetResume is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(actor);
-        game.mineFlip();
+        game.mineFlip(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter == address(game) && logs[i].topics.length != 0) {

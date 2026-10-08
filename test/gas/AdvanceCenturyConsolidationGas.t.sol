@@ -662,7 +662,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         // very first mineFlip can skip directly to the request.
         for (uint256 calls; mockVRF.lastRequestId() == beforeRequest; ++calls) {
             assertLt(calls, 512, "century request preparation stalled");
-            game.mineFlip{gas: 12_000_000}();
+            game.mineFlip{gas: 12_000_000}(0);
         }
         assertEq(mockVRF.lastRequestId(), beforeRequest + 1, "one real daily request");
         mockVRF.fulfillRandomWords(beforeRequest + 1, word);
@@ -694,9 +694,9 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         for (uint256 a; a < allowances.length; ++a) {
             uint256 snapshot = vm.snapshotState();
             vm.recordLogs();
-            (bool ok,) = address(game).call{gas: allowances[a]}(abi.encodeWithSignature("mineFlip()"));
+            (bool ok,) = address(game).call{gas: allowances[a]}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             uint256 used = vm.lastCallGas().gasTotalUsed;
-            if (!vm.envOr("FOUNDRY_ISOLATE", false)) used += 21_064;
+            if (!vm.envOr("FOUNDRY_ISOLATE", false)) used += 21_192;
             assertTrue(ok, "a realistic miner allowance succeeds");
             assertGt(_countTopic(vm.getRecordedLogs(), keccak256("Advance(uint8,uint24)")), 0, "and makes progress");
             emit log_named_uint(string.concat(label, a == 0 ? "_at_10M" : "_at_16_7M"), used);
@@ -755,7 +755,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
 
     function _coldCallGas() private returns (uint256 used) {
         used = vm.lastCallGas().gasTotalUsed;
-        if (!vm.envOr("FOUNDRY_ISOLATE", false)) used += 21_064;
+        if (!vm.envOr("FOUNDRY_ISOLATE", false)) used += 21_192;
     }
 
     function _nativePhaseTx() private returns (uint8 stage, uint256 used, Vm.Log[] memory logs) {

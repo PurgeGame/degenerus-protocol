@@ -122,7 +122,7 @@ contract RedemptionHandler is Test {
         } else {
             vm.prank(actor);
             try sdgnrs.claimParkedRedemption(0, id) {} catch {}
-            try game.mineFlip() {} catch {}
+            try game.mineFlip(0) {} catch {}
         }
         _recordClaims(vm.getRecordedLogs());
         // Canonical events from a second claim are a double payment, even for a dust claim.
@@ -157,7 +157,7 @@ contract RedemptionHandler is Test {
     }
     function _crank() private {
         vm.recordLogs();
-        try game.mineFlip() {} catch {}
+        try game.mineFlip(0) {} catch {}
         _recordClaims(vm.getRecordedLogs());
     }
     function _recordClaims(Vm.Log[] memory logs) private {

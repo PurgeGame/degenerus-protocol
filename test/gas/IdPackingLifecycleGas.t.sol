@@ -54,7 +54,7 @@ contract IdPackingLifecycleGasTest is DeployProtocol {
         vm.store(address(game), bytes32(0), bytes32((state & ~(uint256(0xffffff) << 24))
             | (uint256(game.currentDayView()) << 24) | (uint256(1) << 192)));
         vm.record();
-        game.mineFlip();
+        game.mineFlip(0);
         total += _sample(string.concat(prefix, "-resolve"), address(game));
         assertTrue(game.boxIndexComplete(1));
         emit log_named_uint(string.concat(prefix, "-lifecycle"), total);

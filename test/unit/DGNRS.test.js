@@ -672,7 +672,7 @@ describe("DGNRS", function () {
     it("anyone can call gameAdvance", async function () {
       const { sdgnrs, alice } = await loadFixture(deployFullProtocol);
       await advanceToNextDay();
-      await expect(sdgnrs.connect(alice).gameAdvance()).to.not.be.reverted;
+      await expect(sdgnrs.connect(alice).gameAdvance(0)).to.not.be.reverted;
     });
   });
 

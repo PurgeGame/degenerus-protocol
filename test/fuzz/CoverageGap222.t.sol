@@ -77,7 +77,7 @@ contract CoverageGap222 is DeployProtocol {
 
         // Advance to next day and try mineFlip.
         vm.warp(block.timestamp + 1 days);
-        (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+        (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
         ok;
 
         // Observable effect: game contract is still live.
@@ -930,7 +930,7 @@ contract CoverageGap222 is DeployProtocol {
         );
         vm.prank(buyer);
         (bool o5, ) = address(sdgnrs).call(
-            abi.encodeWithSignature("gameAdvance()")
+            abi.encodeWithSignature("gameAdvance(uint32)", uint32(0))
         );
         assertFalse(o1, "sdgnrs.closeRedemptionBatch rejected non-authorized caller");
         assertFalse(o2, "sdgnrs.claimRedemption rejected caller with no pending redemption");
@@ -1013,7 +1013,7 @@ contract CoverageGap222 is DeployProtocol {
     function test_gap_vault_game_passthrough_guards() public {
         vm.prank(buyer);
         (bool o1, ) = address(vault).call(
-            abi.encodeWithSignature("gameAdvance()")
+            abi.encodeWithSignature("gameAdvance(uint32)", uint32(0))
         );
         vm.prank(buyer);
         (bool o2, ) = address(vault).call(

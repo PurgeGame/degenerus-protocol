@@ -71,7 +71,7 @@ contract RouterWorstCaseGas is DeployProtocol {
     function _realisticCall(address caller, uint256 maxSoFar) internal returns (uint256) {
         vm.prank(caller);
         uint256 gasBefore = gasleft();
-        game.mineFlip{gas: REALISTIC_CALL_GAS}();
+        game.mineFlip{gas: REALISTIC_CALL_GAS}(0);
         uint256 used = gasBefore - gasleft();
         emit log_named_uint("mintflip_advance_call_gas", used);
         return used > maxSoFar ? used : maxSoFar;

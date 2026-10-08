@@ -418,7 +418,7 @@ describe("DegenerusGame", function () {
     it("can be called by anyone", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       await advanceToNextDay();
-      await expect(game.connect(alice).mineFlip()).to.not.be.reverted;
+      await expect(game.connect(alice).mineFlip(0)).to.not.be.reverted;
     });
 
     it("mineFlip is handled gracefully when caller has no mint (no-op or gate revert)", async function () {
@@ -426,7 +426,7 @@ describe("DegenerusGame", function () {
       // Requires daily mint to trigger advancement. Alice hasn't minted,
       // so the call either no-ops gracefully or reverts. Both are acceptable.
       try {
-        await game.connect(alice).mineFlip();
+        await game.connect(alice).mineFlip(0);
       } catch (e) {
         expect(e.message).to.satisfy(
           (msg) => msg.includes("revert") || msg.includes("reverted")

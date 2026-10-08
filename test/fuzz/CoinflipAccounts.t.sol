@@ -530,7 +530,7 @@ contract CoinflipAccountsTest is DeployProtocol {
             _buyTickets(buyer, 4_000);
             for (uint256 j; j < 80; ++j) {
                 _fulfillVrf();
-                (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+                (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
                 if (!ok) break;
             }
         }

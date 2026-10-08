@@ -176,7 +176,7 @@ contract WhaleSybilHandler is Test {
         }
 
         vm.prank(caller);
-        try game.mineFlip() {} catch {}
+        try game.mineFlip(0) {} catch {}
     }
 
     /// @notice Fulfill VRF

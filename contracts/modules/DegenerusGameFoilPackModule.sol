@@ -887,6 +887,7 @@ contract DegenerusGameFoilPackModule is
             }
             _resolveFoilBuyer(pack, entropy, terminal, counts, touchedTraits);
             result.progressed = true;
+            MineFlipGas.markProgress(meter);
             result.rewardBasis += FOIL_PACK_ENTRIES;
             ++cursor;
         }

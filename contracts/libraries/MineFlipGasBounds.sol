@@ -3,9 +3,10 @@ pragma solidity 0.8.34;
 
 /// @notice Precomputed cold-path admission bounds for the mining engine.
 /// @dev Constants include the named operation only; callers additionally reserve their
-///      complete checkpoint/return tail. Every operation plus its tail stays at or below
-///      10M gas. These bounds are part of the gas calibration contract and must be
-///      revalidated when an operation or compiler setting changes.
+///      complete checkpoint/return tail. The baseline targets at most 10M per operation
+///      and tail on the measured schedule. Continuations apply caller calibration;
+///      mandatory first progress bypasses estimates. Revalidate these measurements when
+///      an operation, compiler setting or gas schedule changes.
 ///      Each bound is its cold measured cost plus a modest margin; the measurement is noted
 ///      beside it.
 library MineFlipGasBounds {
@@ -61,10 +62,9 @@ library MineFlipGasBounds {
     uint256 internal constant TICKET_CALL_OVERHEAD = 35_000;
 
     // AFK
-    // Includes a failed full-stipend stETH attempt followed by normal eviction,
-    // or a successful pull followed by the most expensive subscriber delivery.
+    // Includes successful stETH funding plus the most expensive subscriber delivery.
+    // A failed dependency call reverts instead of admitting eviction.
     uint256 internal constant SUBSCRIBER_ITEM_GAS = 400_000;
-    uint256 internal constant AFKING_STETH_PULL_GAS = 160_000;
     // Cold sDGNRS 100-pass purchase: 1.07M measured.
     uint256 internal constant SUBSCRIBER_WHALE_GAS = 1_300_000;
     uint256 internal constant SUBSCRIBER_TAIL_GAS = 150_000;
@@ -106,8 +106,8 @@ library MineFlipGasBounds {
     // Scale witness: cold saved-board/heap item plus 511-roll engine totals 456,226.
     // Keep the established generated admission; checkpoint/return tail is separate.
     uint256 internal constant DECIMATOR_GENERATED_GAS_MAX = 469_000;
-    // Opposite-phase stratum: 4,973 incremental cold gas, rounded to the next 1k.
-    uint256 internal constant DECIMATOR_SAMPLE_SKIP_GAS_MAX = 5_000;
+    // Opposite-phase stratum with calibrated metering: 5,112 incremental cold gas.
+    uint256 internal constant DECIMATOR_SAMPLE_SKIP_GAS_MAX = 6_000;
     // Cold four-cohort initialization including the worker frame: 59,983 gas.
     uint256 internal constant DECIMATOR_PLAN_GAS_MAX = 60_000;
 

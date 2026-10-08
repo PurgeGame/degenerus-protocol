@@ -37,7 +37,7 @@ contract VRFStallEdgeCases is DeployProtocol {
 
     function _completeDay(uint256 vrfWord) internal {
         _finishReadConsumers();
-        game.mineFlip();
+        game.mineFlip(0);
         uint256 reqId = mockVRF.lastRequestId();
         if (reqId != _lastFulfilledReqId && reqId > 0) {
             mockVRF.fulfillRandomWords(reqId, vrfWord);
@@ -45,7 +45,7 @@ contract VRFStallEdgeCases is DeployProtocol {
         }
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked()) break;
-            game.mineFlip();
+            game.mineFlip(0);
         }
             _finishReadConsumers();
     }
@@ -75,7 +75,7 @@ contract VRFStallEdgeCases is DeployProtocol {
     /// @dev One engine step. The miner's explicit stop signals (waiting on a word, nothing to
     ///      do) end a drive loop; any other revert is a real failure and fails the test.
     function _step() internal returns (bool moved) {
-        try game.mineFlip() {
+        try game.mineFlip(0) {
             return true;
         } catch (bytes memory err) {
             bytes4 sel = bytes4(err);
@@ -95,7 +95,7 @@ contract VRFStallEdgeCases is DeployProtocol {
     function _resumeAfterSwap(MockVRFCoordinator newVRF, uint256 vrfWord) internal {
         uint256 reqId = newVRF.lastRequestId();
         if (reqId == 0) {
-            game.mineFlip();
+            game.mineFlip(0);
             reqId = newVRF.lastRequestId();
         }
         uint48 sealedBefore = _readDailyIdx();
@@ -128,7 +128,7 @@ contract VRFStallEdgeCases is DeployProtocol {
     /// @dev The mid-day request through mineFlip, its only door, as the engine's next action.
     function _mineMiddayRequest() internal returns (uint256 reqId) {
         uint256 prior = mockVRF.lastRequestId();
-        game.mineFlip();
+        game.mineFlip(0);
         reqId = mockVRF.lastRequestId();
         assertGt(reqId, prior, "mineFlip issued the mid-day request");
         assertFalse(game.rngLocked(), "a mid-day request, not the daily one");
@@ -196,7 +196,7 @@ contract VRFStallEdgeCases is DeployProtocol {
 
         // Warp to the next day (day 3 absolute), trigger VRF request (will stall)
         vm.warp(3 * 86400);
-        game.mineFlip();
+        game.mineFlip(0);
         assertTrue(game.rngLocked(), "Day 3 VRF pending");
 
         // Stall for 5 gap days: warp to day 8 (absolute ts), swap coordinator
@@ -240,7 +240,7 @@ contract VRFStallEdgeCases is DeployProtocol {
 
         // Warp to the next day (day 3 absolute), trigger VRF request (will stall)
         vm.warp(3 * 86400);
-        game.mineFlip();
+        game.mineFlip(0);
         assertTrue(game.rngLocked(), "Day 3 VRF pending");
 
         // Stall 10 gap days: warp to day 13 (absolute), swap coordinator
@@ -269,7 +269,7 @@ contract VRFStallEdgeCases is DeployProtocol {
 
         // Warp to the next day (day 3 absolute), trigger VRF request (will stall)
         vm.warp(3 * 86400);
-        game.mineFlip();
+        game.mineFlip(0);
         assertTrue(game.rngLocked(), "Day 3 VRF pending");
 
         // Stall into day 5, swap coordinator: day 3 finishes on its late word, day 4 is the gap
@@ -305,7 +305,7 @@ contract VRFStallEdgeCases is DeployProtocol {
 
         // Warp to the next day (day 3 absolute), trigger VRF request (will stall)
         vm.warp(3 * 86400);
-        game.mineFlip();
+        game.mineFlip(0);
         assertTrue(game.rngLocked(), "Day 3 VRF pending");
 
         // Stall 3 gap days: warp to day 6, swap coordinator. The daily request in flight
@@ -359,7 +359,7 @@ contract VRFStallEdgeCases is DeployProtocol {
 
         // Warp to the next day (day 3 absolute), trigger VRF request (will stall)
         vm.warp(3 * 86400);
-        game.mineFlip();
+        game.mineFlip(0);
         assertTrue(game.rngLocked(), "Day 3 VRF pending");
 
         // Stall + swap: warp to day 6
@@ -396,7 +396,7 @@ contract VRFStallEdgeCases is DeployProtocol {
         // Nobody advances until day 32: one more day and the deadman ends the game
         vm.warp(32 * 86400);
         assertFalse(game.livenessTriggered(), "inside the deadman window");
-        game.mineFlip();
+        game.mineFlip(0);
         assertTrue(game.rngLocked(), "Day 32 requested");
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 0xAA300001);
 
@@ -405,13 +405,13 @@ contract VRFStallEdgeCases is DeployProtocol {
         // An allowance of DAILY_GAP plus the engine reserves can never admit DAILY_GAP plus its
         // check reserve, so these calls stop before it.
         for (uint256 i; i < 8 && game.nextMinerAction() != ACTION_DAILY_GAP; ++i) {
-            game.mineFlip{gas: GasBounds.DAILY_GAP + GasBounds.ENGINE_BOUNDARY + GasBounds.ENGINE_RETURN}();
+            game.mineFlip{gas: GasBounds.DAILY_GAP + GasBounds.ENGINE_BOUNDARY + GasBounds.ENGINE_RETURN}(0);
         }
         assertEq(game.nextMinerAction(), ACTION_DAILY_GAP, "next chunk is the 29-day gap");
 
         // (a) A realistic allowance succeeds and progresses through the gap.
         uint256 snap = vm.snapshotState();
-        game.mineFlip{gas: 10_000_000}();
+        game.mineFlip{gas: 10_000_000}(0);
         assertTrue(game.rngWordForDay(31) != 0, "a 10M call derives the skipped days");
         vm.revertToState(snap);
 
@@ -419,7 +419,7 @@ contract VRFStallEdgeCases is DeployProtocol {
         // boundary/return reserves: it must fit there, and stay under the 10M chunk ceiling.
         uint256 supplied = GasBounds.DAILY_GAP + GasBounds.ENGINE_BOUNDARY + GasBounds.ENGINE_RETURN + 200_000;
         uint256 gasBefore = gasleft();
-        game.mineFlip{gas: supplied}();
+        game.mineFlip{gas: supplied}(0);
         uint256 gasUsed = gasBefore - gasleft();
         assertEq(game.nextMinerAction(), ACTION_DAILY_APPLY, "exactly the gap chunk ran");
         assertTrue(game.rngWordForDay(31) != 0, "every skipped day derived in that chunk");
@@ -451,7 +451,7 @@ contract VRFStallEdgeCases is DeployProtocol {
 
         // Warp to the next day (day 3 absolute), trigger VRF request -> rngLocked=true, vrfRequestId!=0, rngRequestTime!=0
         vm.warp(3 * 86400);
-        game.mineFlip();
+        game.mineFlip(0);
         assertTrue(game.rngLocked(), "Day 2 VRF pending");
         uint256 preSwapVrfRequestId = _readVrfRequestId();
         assertTrue(preSwapVrfRequestId != 0, "vrfRequestId set");
@@ -525,7 +525,7 @@ contract VRFStallEdgeCases is DeployProtocol {
 
         // Warp to the next day (day 3 absolute), trigger VRF request, then swap
         vm.warp(3 * 86400);
-        game.mineFlip();
+        game.mineFlip(0);
         _doCoordinatorSwap();
 
         // totalFlipReversals must be preserved
@@ -592,7 +592,7 @@ contract VRFStallEdgeCases is DeployProtocol {
         // Fulfil the re-issued mid-day request on the new coordinator -> word lands in [reservedIndex].
         // The callback only stores the word; publication is the keeper's first action.
         newVRF.fulfillRandomWords(reissued, 0xDD030001);
-        game.mineFlip();
+        game.mineFlip(0);
         assertEq(
             _lootboxRngWord(reservedIndex),
             0xDD030001,
@@ -608,7 +608,7 @@ contract VRFStallEdgeCases is DeployProtocol {
 
         // Game proceeds without NotTimeYet: advance into the next day
         vm.warp(4 * 86400);
-        game.mineFlip();
+        game.mineFlip(0);
     }
 
     /// @notice Unit: a mid-day lootbox RNG request that stalls across midnight is no longer
@@ -654,7 +654,7 @@ contract VRFStallEdgeCases is DeployProtocol {
         // The mid-day VRF stalls across midnight: the next day's advance waits on it.
         vm.warp(4 * 86400);
         vm.expectRevert(RNG_NOT_READY);
-        game.mineFlip();
+        game.mineFlip(0);
         assertEq(mockVRF.lastRequestId(), stalledReqId, "no daily request while the mid-day word is outstanding");
         assertFalse(game.rngLocked(), "the daily lock is not taken over the stalled mid-day request");
 
@@ -678,7 +678,7 @@ contract VRFStallEdgeCases is DeployProtocol {
         // day's fresh daily request follows.
         mockVRF.fulfillRandomWords(retryReqId, 0xCAFE0BAD);
         vm.recordLogs();
-        game.mineFlip();
+        game.mineFlip(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bool applied;
         for (uint256 i = 0; i < logs.length; i++) {
@@ -719,7 +719,7 @@ contract VRFStallEdgeCases is DeployProtocol {
         // request seals the other physical buffer and retires the first day's session (two
         // physical buffers, 6d0e64b09), so the swap is judged against the post-request state.
         vm.warp(3 * 86400);
-        game.mineFlip();
+        game.mineFlip(0);
         uint48 preSwapIndex = (_lootboxRngIndex() ^ 1);
         assertEq(preSwapIndex, firstDayIndex ^ 1, "the request sealed the other buffer");
         uint256 preSwapWord = _lootboxRngWord(preSwapIndex);
@@ -748,7 +748,7 @@ contract VRFStallEdgeCases is DeployProtocol {
         assertEq(_lootboxRngWord(0), 0, "No word at index 0 at game start");
 
         // Trigger VRF request (day 1) -- increments lootboxRngIndex from 1 to 2
-        game.mineFlip();
+        game.mineFlip(0);
         assertTrue(game.rngLocked(), "Day 1 VRF request pending");
 
         // Coordinator swap at game start (edge case): the daily request is re-sent for the
@@ -780,7 +780,7 @@ contract VRFStallEdgeCases is DeployProtocol {
 
         // Warp to the next day (day 3 absolute), trigger VRF request (will stall)
         vm.warp(3 * 86400);
-        game.mineFlip();
+        game.mineFlip(0);
         assertTrue(game.rngLocked(), "Day 3 VRF pending");
 
         // Coordinator swap to a valid new coordinator (daily in flight -> preserve+re-issue)
@@ -832,7 +832,7 @@ contract VRFStallEdgeCases is DeployProtocol {
 
         // Warp to the next day (day 3 absolute), trigger VRF request (will stall)
         vm.warp(3 * 86400);
-        game.mineFlip();
+        game.mineFlip(0);
         assertTrue(game.rngLocked(), "Day 3 VRF pending");
 
         // Stall 3 gap days: warp to day 6

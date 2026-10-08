@@ -32,7 +32,7 @@ import {IVaultCoin} from "./interfaces/IVaultCoin.sol";
 /// @notice Interface for game player actions on DegenerusGame contract used by DegenerusVault.
 interface IDegenerusGamePlayerActions {
     /// @notice Crank the unified keeper router (advance + box opens), paying any earned bounty.
-    function mineFlip() external;
+    function mineFlip(uint32 gasMultiplierBps) external;
     /// @notice Start or extend a daily afking subscription for account `id` (0 = caller).
     /// @dev The afking subscription surface is GAME-resident. The vault self-subscribes with
     ///      `id == 0` and `fundingSourceId == 0`. VAULT's subscription is exempt from the seat
@@ -649,8 +649,9 @@ contract DegenerusVault {
     /// @dev Requires caller to hold >50.1% of DGVE supply. Routes through mineFlip so the
     ///      vault earns the keeper bounty for the work; reverts NoWork() when nothing is due.
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
-    function gameAdvance() external onlyVaultOwner {
-        gamePlayer.mineFlip();
+    /// @param gasMultiplierBps Forwarded to mineFlip unchanged; 0 selects the 1x default.
+    function gameAdvance(uint32 gasMultiplierBps) external onlyVaultOwner {
+        gamePlayer.mineFlip(gasMultiplierBps);
     }
 
     /// @notice Purchase tickets and lootboxes for the vault

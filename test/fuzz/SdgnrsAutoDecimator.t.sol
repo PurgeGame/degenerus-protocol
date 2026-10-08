@@ -253,8 +253,8 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         // (see runTicketWork's far-future continuation block). That first call resolves
         // the pool and returns early (STAGE_TICKETS_WORKING); the second call finds the gate
         // clear and reaches rngGate, where the opening-day decimator burn fires.
-        game.mineFlip();
-        game.mineFlip();
+        game.mineFlip(0);
+        game.mineFlip(0);
         (uint256 spent, uint256 count) = _burned(vm.getRecordedLogs());
         assertEq(spent, CAP);
         assertEq(count, 1);
@@ -273,8 +273,8 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         // and genesis queued VAULT+SDGNRS perpetual entries into level 100's far-future pool at
         // deploy. The first mineFlip() call mints that pool inside the daily drain gate and
         // returns early; the second reaches rngGate and the opening-day decimator entry.
-        game.mineFlip();
-        game.mineFlip();
+        game.mineFlip(0);
+        game.mineFlip(0);
         (uint256 weight,) = harness.entry(100);
         assertGt(weight, 0);
         (uint256 previousWeight,) = harness.entry(99);
@@ -292,11 +292,11 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         // The real daily request is the keeper engine's RequestDaily action (the advance module
         // only applies a delivered word); the word is then published and applied by the engine.
         uint256 requestBefore = mockVRF.lastRequestId();
-        for (uint256 i; i < 20 && mockVRF.lastRequestId() == requestBefore; ++i) game.mineFlip();
+        for (uint256 i; i < 20 && mockVRF.lastRequestId() == requestBefore; ++i) game.mineFlip(0);
         assertGt(mockVRF.lastRequestId(), requestBefore, "real daily request");
         assertTrue(game.rngLocked());
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 3);
-        for (uint256 i; i < 20 && game.rngWordForDay(22) == 0; ++i) game.mineFlip();
+        for (uint256 i; i < 20 && game.rngWordForDay(22) == 0; ++i) game.mineFlip(0);
         assertGt(game.rngWordForDay(22), 0, "day 22 word applied");
         assertTrue(game.decWindow());
         assertGt(coinflip.previewFlipBacking(HOUSE), CAP);

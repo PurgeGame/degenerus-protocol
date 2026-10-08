@@ -66,7 +66,7 @@ contract V62GasBrickCompose is DeployProtocol {
     uint256 internal constant EIP7825_TX_GAS_CAP = 16_777_216;
 
     /// @dev The realistic per-leg allowance (a 10M transaction less its intrinsic gas).
-    uint256 internal constant LEG_ALLOWANCE = 10_000_000 - 21_064;
+    uint256 internal constant LEG_ALLOWANCE = 10_000_000 - 21_192;
 
     /// @dev SUB_STAGE_WEIGHT_BUDGET (AdvanceModule): the per-chunk gas-weight budget. With
     ///      SUB_STAGE_EVICT_WEIGHT = 8 the budget admits BUDGET/EVICT_WEIGHT = 312 evicts per chunk
@@ -257,7 +257,7 @@ contract V62GasBrickCompose is DeployProtocol {
             // Each leg gets a realistic allowance: the engine admits work only while the allowance
             // covers the next chunk's declared bound, so the leg must succeed and progress.
             uint256 gasBefore = gasleft();
-            game.mineFlip{gas: LEG_ALLOWANCE}();
+            game.mineFlip{gas: LEG_ALLOWANCE}(0);
             uint256 gasUsed = gasBefore - gasleft();
 
             uint256 subsNow = _subscriberCount();
@@ -376,7 +376,7 @@ contract V62GasBrickCompose is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) return;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) return;
-            game.mineFlip();
+            game.mineFlip(0);
             _fulfillPending(vrfWord);
         }
     }

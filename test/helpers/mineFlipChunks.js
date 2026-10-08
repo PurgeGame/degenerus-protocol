@@ -34,7 +34,7 @@ export async function stagesOf(tx, advanceModule) {
 
 /** One mineFlip under a bounded caller allowance; success implies progress. */
 export async function mine(game, signer, gasLimit = REALISTIC_ALLOWANCE) {
-  const tx = await game.connect(signer).mineFlip({ gasLimit });
+  const tx = await game.connect(signer).mineFlip(0, { gasLimit });
   const receipt = await tx.wait();
   expect(receipt.status, `mineFlip with a ${gasLimit} allowance must succeed`).to.equal(1);
   return { tx, receipt };
@@ -53,11 +53,11 @@ export async function minimumProgressAllowance(game, signer) {
   // number of chunks a single huge eth_call composes.)
   let lo = 400_000;
   let hi = REALISTIC_ALLOWANCE;
-  try { await game.connect(signer).mineFlip.staticCall({ gasLimit: hi }); }
+  try { await game.connect(signer).mineFlip.staticCall(0, { gasLimit: hi }); }
   catch (e) { expect.fail(`next chunk is not admitted under a realistic ${hi} allowance: ${e.message.slice(0, 120)}`); }
   while (hi - lo > 25_000) {
     const mid = Math.floor((lo + hi) / 2);
-    try { await game.connect(signer).mineFlip.staticCall({ gasLimit: mid }); hi = mid; }
+    try { await game.connect(signer).mineFlip.staticCall(0, { gasLimit: mid }); hi = mid; }
     catch { lo = mid; }
   }
   return hi;

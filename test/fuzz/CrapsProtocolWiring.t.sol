@@ -168,14 +168,14 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         // consumers (tickets, boxes, bets, Decimator) have finished: the read-cohort gate
         // (6d0e64b09). Small engine calls run those stages and stop before the first whole seat,
         // leaving the field to the read stage itself.
-        for (uint256 i; i < 32 && game.rngConsumerStage() != 6; ++i) game.mineFlip{gas: 800_000}();
+        for (uint256 i; i < 32 && game.rngConsumerStage() != 6; ++i) game.mineFlip{gas: 800_000}(0);
         assertEq(game.rngConsumerStage(), 6, "the cohort reached its Craps read stage");
         assertEq(crapsBattle.bonusCursorOf(slot), 0, "the field is still unsettled for the read stage");
 
         // Any caller's mineFlip runs the read stage; the money goes to the slip's owner.
         uint256 stakeBefore = coinflip.coinflipAmount(PLAYER);
         vm.prank(STRANGER);
-        game.mineFlip();
+        game.mineFlip(0);
 
         // The win ships as next-day coinflip stake, not liquid FLIP: `creditFlip` against the
         // REAL Coinflip is the payout lane now, so the balance must stay at zero and the stake
@@ -334,7 +334,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         require(msg.sender == address(this));
         vm.fee(1 gwei);
         vm.prank(KEEPER);
-        game.mineFlip();
+        game.mineFlip(0);
     }
 
     /// @dev THE ADVANCE STILL COMES FIRST. The craps leg is deliberately in the ELSE branch: an
@@ -356,7 +356,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         assertTrue(game.advanceDue(), "the fixture owes no advance, so nothing is being preempted");
 
         vm.prank(KEEPER);
-        try game.mineFlip() {} catch {}
+        try game.mineFlip(0) {} catch {}
         assertEq(crapsBattle.slotIndexOf(slot), 0, "the craps leg ran alongside an advance");
     }
 
@@ -397,7 +397,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
 
         uint256 g = gasleft();
         vm.prank(KEEPER);
-        game.mineFlip{gas: REALISTIC_CALL_GAS}(); // the walk, at a realistic allowance
+        game.mineFlip{gas: REALISTIC_CALL_GAS}(0); // the walk, at a realistic allowance
         uint256 used = g - gasleft();
         uint64 walked = crapsBattle.bonusCursorOf(slot);
 
@@ -414,7 +414,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
 
         // And the rest follows on later cranks rather than being stranded.
         vm.prank(KEEPER);
-        game.mineFlip{gas: REALISTIC_CALL_GAS}();
+        game.mineFlip{gas: REALISTIC_CALL_GAS}(0);
         assertGt(crapsBattle.bonusCursorOf(slot), walked, "the tail of the field was stranded");
     }
 
@@ -481,7 +481,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         uint256 before = coinflip.coinflipAmount(KEEPER);
         vm.prank(KEEPER);
         vm.expectRevert(DegenerusGame.NoWork.selector);
-        game.mineFlip();
+        game.mineFlip(0);
         assertEq(coinflip.coinflipAmount(KEEPER), before, "an idle table still paid the crank");
     }
 
@@ -555,7 +555,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
                 _landTableWordW(pending - 1, uint256(keccak256(abi.encode("cursor-feed", at))));
             }
             vm.prank(KEEPER);
-            game.mineFlip();
+            game.mineFlip(0);
             ++cranks;
             index = crapsBattle.slotIndexOf(slot);
         }

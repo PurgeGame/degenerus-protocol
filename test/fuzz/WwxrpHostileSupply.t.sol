@@ -31,7 +31,7 @@ contract WwxrpHostileSupply is DeployProtocol {
         vm.warp(vm.getBlockTimestamp() + 1 days);
         for (uint256 i; i < 200; ++i) {
             _fulfill();
-            (bool ok, bytes memory ret) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, bytes memory ret) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) {
                 bytes4 sel = ret.length >= 4 ? bytes4(ret) : bytes4(0);
                 return sel == bytes4(keccak256("NotTimeYet()"));

@@ -255,7 +255,7 @@ contract V61AfkingSpendHandler is Test {
 
         for (uint256 i; i < 3; i++) {
             vm.prank(currentActor);
-            try game.mineFlip() {} catch {}
+            try game.mineFlip(0) {} catch {}
             uint256 reqId = vrf.lastRequestId();
             if (reqId != 0) {
                 (, , bool fulfilled) = vrf.pendingRequests(reqId);

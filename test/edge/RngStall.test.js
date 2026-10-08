@@ -51,7 +51,7 @@ async function drainCommittedWork(game, caller, mockVRF) {
         await (await mockVRF.fulfillRandomWords(id, 5n)).wait();
       }
     }
-    await (await game.connect(caller).mineFlip({ gasLimit: 15_000_000 })).wait();
+    await (await game.connect(caller).mineFlip(0, { gasLimit: 15_000_000 })).wait();
   }
   throw new Error("committed RNG consumer cycle did not complete");
 }
@@ -62,7 +62,7 @@ async function drainCommittedWork(game, caller, mockVRF) {
  */
 async function issueFirstRequest(game, caller) {
   for (let i = 0; i < 256; i++) {
-    const tx = await game.connect(caller).mineFlip({ gasLimit: 15_000_000 });
+    const tx = await game.connect(caller).mineFlip(0, { gasLimit: 15_000_000 });
     await tx.wait();
     expect(await game.gameOver()).to.equal(false, "request fixture must stay live");
     if ((await game.rngLocked()) && !(await game.isRngFulfilled())) return tx;
@@ -193,7 +193,7 @@ describe("RngStall", function () {
       await advanceTime(3600); // 1 hour — well under the 20h threshold.
 
       await expect(
-        game.connect(deployer).mineFlip()
+        game.connect(deployer).mineFlip(0)
       ).to.be.revertedWithCustomError(advanceModule, "RngNotReady");
     });
 
@@ -208,7 +208,7 @@ describe("RngStall", function () {
       await advanceTime(6 * 3600); // 6 hours — under the 20h threshold.
 
       await expect(
-        game.connect(deployer).mineFlip()
+        game.connect(deployer).mineFlip(0)
       ).to.be.revertedWithCustomError(advanceModule, "RngNotReady");
     });
 
@@ -465,7 +465,7 @@ describe("RngStall", function () {
       await advanceTime(30 * 60);
 
       await expect(
-        game.connect(deployer).mineFlip()
+        game.connect(deployer).mineFlip(0)
       ).to.be.revertedWithCustomError(advanceModule, "RngNotReady");
     });
 
@@ -623,7 +623,7 @@ describe("RngStall", function () {
 
       // Day 2: fresh normal advance must succeed without errors (no brick).
       await advanceToNextDay();
-      const tx = await game.connect(deployer).mineFlip();
+      const tx = await game.connect(deployer).mineFlip(0);
       const receipt = await tx.wait();
       expect(receipt.status).to.equal(1);
 
@@ -634,7 +634,7 @@ describe("RngStall", function () {
       let newId = await getLastVRFRequestId(mockVRF);
       for (let i = 0; i < 10 && newId <= retryId; i++) {
         if (await game.jackpotPhase()) break;
-        await game.connect(deployer).mineFlip();
+        await game.connect(deployer).mineFlip(0);
         newId = await getLastVRFRequestId(mockVRF);
       }
       expect(newId).to.be.gt(retryId);

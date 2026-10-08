@@ -72,7 +72,7 @@ contract CompositionHandler is Test {
 
         // Now advance
         vm.prank(currentActor);
-        try game.mineFlip() {} catch {}
+        try game.mineFlip(0) {} catch {}
 
         _checkCompositionInvariants();
     }
@@ -136,7 +136,7 @@ contract CompositionHandler is Test {
         // Try to advance 3 times (may trigger VRF, jackpot, etc.)
         for (uint256 i = 0; i < 3; i++) {
             vm.prank(currentActor);
-            try game.mineFlip() {} catch {}
+            try game.mineFlip(0) {} catch {}
         }
 
         // Try to fulfill VRF if pending
@@ -150,7 +150,7 @@ contract CompositionHandler is Test {
 
         // Advance again after VRF
         vm.prank(currentActor);
-        try game.mineFlip() {} catch {}
+        try game.mineFlip(0) {} catch {}
 
         _checkCompositionInvariants();
     }

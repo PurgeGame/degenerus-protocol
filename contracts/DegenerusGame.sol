@@ -135,6 +135,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
     error RngNotReady();
     /// @notice mineFlip could not admit any useful execution step with the supplied gas.
     error InsufficientExecutionGas();
+    /// @notice A nonzero gas-estimate multiplier must be at least 10,000 basis points.
+    error InvalidGasMultiplier();
     /// @notice Thrown when a tunable parameter is set outside its permitted range.
     error OutOfBounds();
 
@@ -335,8 +337,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
     }
 
     /// @notice Atomic stETH funding operation, callable only by GAME itself.
-    /// @dev The AFKing caller catches this whole frame, including token return-data
-    ///      decoding and post-transfer checks, so failure rolls back the token move.
+    /// @dev Token failures, malformed return data and invalid receipts propagate
+    ///      through the AFKing worker, rolling back the attempt without evicting a subscriber.
     function pullAfkingSteth(uint32, address, uint256) external returns (uint256) {
         if (msg.sender != address(this)) revert OnlySelf();
         (bool ok, bytes memory data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(msg.data);
@@ -346,9 +348,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
 
     /// @notice Run the next ordered game actions through safe gas checkpoints.
     /// @dev Only this entry pays miners, after sufficient measured execution and actual progress.
-    function mineFlip() external {
+    /// @param gasMultiplierBps Gas-estimate factor: 0 or 10,000 = 1x; 50,000 = 5x.
+    ///      The first eligible checkpoint ignores estimates; actual gas must still fund it.
+    function mineFlip(uint32 gasMultiplierBps) external {
         (bool ok, bytes memory data) = ContractAddresses.GAME_MINER_MODULE.delegatecall(
-            abi.encodeWithSelector(IDegenerusGameMinerModule.mineFlip.selector)
+            abi.encodeWithSelector(IDegenerusGameMinerModule.mineFlip.selector, gasMultiplierBps)
         );
         if (!ok) _revertDelegate(data);
     }

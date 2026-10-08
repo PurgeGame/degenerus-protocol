@@ -10,6 +10,7 @@ import {DegenerusParimutuel} from "../../contracts/DegenerusParimutuel.sol";
 import {IDegenerusParimutuel} from "../../contracts/interfaces/IDegenerusParimutuel.sol";
 import {Coinflip} from "../../contracts/Coinflip.sol";
 import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
@@ -220,6 +221,31 @@ contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
         for (uint256 i; i < nWin + nLose; ++i) _bet(firstId + uint32(i), i < nWin ? over : !over);
         _seal(round, over);
         payout = nWin == 0 ? 0 : (STAKE * (nWin + nLose)) / nWin;
+    }
+
+    function test_GasAwareGrowthMatchesCountedSettlementAtAllMultipliers() public {
+        _round(1, 10, 123, 17, true);
+        uint256 snap = vm.snapshotState();
+        while (!_settle(100)) {}
+        bytes32 expected;
+        for (uint32 id = 10; id < 150; ++id) expected = keccak256(abi.encode(expected, _stake(id)));
+        uint32[4] memory factors = [uint32(10_000), 15_000, 50_000, type(uint32).max];
+        for (uint256 f; f < factors.length; ++f) {
+            vm.revertToState(snap);
+            bool finished;
+            for (uint256 calls; calls < 130; ++calls) {
+                vm.prank(ContractAddresses.GAME);
+                MineFlipGas.Result memory r = pari.runGrowthWork{gas: 9_000_000}(
+                    MineFlipGas.budget(8_500_000, factors[f], true));
+                assertTrue(r.progressed || r.done);
+                if (f == 3) assertLe(r.rewardBasis, 1, "extreme factor still pays a winner");
+                if (r.done) { finished = true; break; }
+            }
+            assertTrue(finished);
+            bytes32 actual;
+            for (uint32 id = 10; id < 150; ++id) actual = keccak256(abi.encode(actual, _stake(id)));
+            assertEq(actual, expected);
+        }
     }
 
     // ---------------------------------------------------------------- bets
@@ -928,7 +954,7 @@ contract ParimutuelSettlementSelectorTest is Test {
     }
 
     function _settleCall() private pure returns (bytes memory) {
-        return abi.encodeCall(IDegenerusParimutuel.settleGrowth, (MineFlipGasBounds.GROWTH_SETTLE_WINNERS));
+        return abi.encodeWithSelector(IDegenerusParimutuel.runGrowthWork.selector);
     }
 
     /// The stage passes the fixed chunk once and clears the bit when settleGrowth reports done.
@@ -936,9 +962,9 @@ contract ParimutuelSettlementSelectorTest is Test {
         game.seed(DegenerusGameStorage.MinerAction.Idle);
         game.setGrowthPending(true);
         vm.etch(ContractAddresses.PARIMUTUEL, hex"00");
-        vm.mockCall(ContractAddresses.PARIMUTUEL, _settleCall(), abi.encode(true));
+        vm.mockCall(ContractAddresses.PARIMUTUEL, _settleCall(), abi.encode(true, true, uint256(0)));
         vm.expectCall(ContractAddresses.PARIMUTUEL, _settleCall(), 1);
-        game.mineFlip{gas: 16_000_000}();
+        game.mineFlip{gas: 16_000_000}(0);
         assertFalse(game.growthPending(), "done clears the bit");
         assertEq(game.select(), uint8(DegenerusGameStorage.MinerAction.Idle));
     }
@@ -951,9 +977,9 @@ contract ParimutuelSettlementSelectorTest is Test {
         game.seed(DegenerusGameStorage.MinerAction.RequestMidday);
         game.setGrowthPending(true);
         vm.etch(ContractAddresses.PARIMUTUEL, hex"00");
-        vm.mockCall(ContractAddresses.PARIMUTUEL, _settleCall(), abi.encode(false));
+        vm.mockCall(ContractAddresses.PARIMUTUEL, _settleCall(), abi.encode(true, false, uint256(1)));
         vm.expectCall(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("requestMinerRng()"), 0);
-        game.mineFlip{gas: 4_400_000}();
+        game.mineFlip{gas: 4_400_000}(0);
         assertTrue(game.growthPending(), "not done keeps the bit");
         assertEq(game.select(), GROWTH_SETTLE, "still ahead of the eligible mid-day request");
     }
@@ -1063,7 +1089,7 @@ abstract contract PariSettlementProtocolBase is DeployProtocol, PariSettlementSl
         vm.warp(simTime);
         for (uint256 j = 0; j < 200; j++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) break;
         }
     }
@@ -1072,7 +1098,7 @@ abstract contract PariSettlementProtocolBase is DeployProtocol, PariSettlementSl
     ///      Needs live gas metering.
     function _mineStep() internal returns (bool ok) {
         for (uint256 g = 1_000_000; g <= 16_750_000; g += 250_000) {
-            (ok, ) = address(game).call{gas: g}(abi.encodeWithSignature("mineFlip()"));
+            (ok, ) = address(game).call{gas: g}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (ok) return true;
         }
     }
@@ -1195,47 +1221,35 @@ contract ParimutuelSettlementProtocolTest is PariSettlementProtocolBase {
         assertEq(bountyEvent, bounty, "MinerBounty reports the credited bounty");
     }
 
-    function _checkSingleRun(Vm.Log[] memory logs, uint256 firstIndex, uint256 count) private view {
+    /// @dev Gas selects batch size; emitted runs must cover one contiguous prefix.
+    function _keeperChunkCall(uint256 paidBefore) private returns (uint256 paidThis) {
+        uint256 keeperBefore = _stakeOn(chunkDay, chunkKeeperId);
+        vm.recordLogs();
+        vm.prank(KEEPER);
+        game.mineFlip{gas: 4_400_000}(0);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
         PaidRun[] memory runs = _paidRuns(logs);
-        assertEq(runs.length, 1);
-        assertEq(runs[0].firstIndex, firstIndex);
-        assertEq(runs[0].count, count);
-        assertEq(runs[0].payout, chunkPayout);
-    }
-
-    function _checkChunkState(uint256 c) private view {
+        for (uint256 i; i < runs.length; ++i) {
+            assertEq(runs[i].firstIndex, paidBefore + paidThis);
+            assertEq(runs[i].payout, chunkPayout);
+            paidThis += runs[i].count;
+        }
         (uint24 r, uint256 paid) = _cursor();
-        if (c < 2) {
-            assertTrue(_pending(), "not done: the bit stays");
+        if (_pending()) {
             assertEq(game.nextMinerAction(), GROWTH_SETTLE);
             assertEq(r, 1);
-            assertEq(paid, 100 * (c + 1), "one chunk per call");
+            assertEq(paid, paidBefore + paidThis);
         } else {
-            assertFalse(_pending(), "done clears the bit");
             assertEq(r, 2);
             assertEq(paid, 0);
             assertEq(game.nextMinerAction(), chunkIdle);
             assertFalse(game.advanceDue());
         }
-    }
-
-    /// @dev Chunk `c` (0..2) of a 250-winner round through a one-chunk keeper mineFlip.
-    function _keeperChunkCall(uint256 c) private {
-        uint256 keeperBefore = _stakeOn(chunkDay, chunkKeeperId);
-        vm.recordLogs();
-        vm.prank(KEEPER);
-        game.mineFlip{gas: 4_400_000}();
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        _checkChunkState(c);
         uint256 bounty = _checkKeeperBounty(logs);
-        assertEq(_stakeOn(chunkDay, chunkKeeperId) - keeperBefore, bounty, "bounty credited to the keeper's ID");
-        _checkSingleRun(logs, 100 * c, c < 2 ? 100 : 50);
+        assertEq(_stakeOn(chunkDay, chunkKeeperId) - keeperBefore, bounty);
     }
 
-    /// The Game stage pays a 250-winner round in fixed chunks of 100 across three calls sized
-    /// for one chunk: the bit and the selector stay on the stage until the call whose
-    /// settleGrowth reports done, which clears the bit; every winner is credited once by ID;
-    /// each call earns the keeper the ordinary measured-gas bounty.
+    /// Gas-aware batches pay the whole round exactly once and clear the pending bit.
     function test_StageSettlesInChunksAndClearsOnDone() public {
         vm.pauseGasMetering();
         chunkIdle = game.nextMinerAction();
@@ -1252,9 +1266,12 @@ contract ParimutuelSettlementProtocolTest is PariSettlementProtocolBase {
         chunkDay = _stakeDay();
         chunkPayout = (STAKE * 253) / 250;
         vm.resumeGasMetering();
-        _keeperChunkCall(0);
-        _keeperChunkCall(1);
-        _keeperChunkCall(2);
+        uint256 paid;
+        uint256 calls;
+        while (_pending() && calls++ < 10) paid += _keeperChunkCall(paid);
+        assertEq(paid, 250);
+        assertFalse(_pending());
+        assertGt(calls, 1, "large round spans transactions");
         vm.pauseGasMetering();
         for (uint256 i; i < winners.length; ++i) assertEq(_stakeOn(chunkDay, winners[i]), chunkPayout, "winner credited once");
         for (uint256 i; i < losers.length; ++i) assertEq(_stakeOn(chunkDay, losers[i]), 0, "loser never credited");
@@ -1275,7 +1292,7 @@ contract ParimutuelSettlementProtocolTest is PariSettlementProtocolBase {
         uint256 calls;
         while (game.nextMinerAction() == GROWTH_SETTLE) {
             (uint24 br, uint256 bp) = _cursor();
-            game.mineFlip{gas: gasPerCall}();
+            game.mineFlip{gas: gasPerCall}(0);
             (uint24 ar, uint256 ap) = _cursor();
             assertTrue(!_pending() || ar != br || ap != bp, "selected stage progresses");
             if (!_pending()) {
@@ -1372,7 +1389,7 @@ contract ParimutuelSettlementProtocolTest is PariSettlementProtocolBase {
         vm.recordLogs();
         for (uint256 i; i < 8; ++i) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) break;
         }
         assertEq(_paidRuns(vm.getRecordedLogs()).length, 0, "no settlement on the terminal path");

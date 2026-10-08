@@ -29,7 +29,7 @@ contract AfKingSeatToken is SeatFixture {
         uint256 beforeRequest = mockVRF.lastRequestId();
         // Subscription preparation and maintenance can consume an earlier
         // call. Stop only when the engine has actually issued the request.
-        for (uint256 i; i < 64 && !game.rngLocked(); ++i) game.mineFlip();
+        for (uint256 i; i < 64 && !game.rngLocked(); ++i) game.mineFlip(0);
         assertTrue(game.rngLocked(), "engine should open a VRF request");
         assertGt(mockVRF.lastRequestId(), beforeRequest, "fresh request opened");
     }

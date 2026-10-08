@@ -175,7 +175,7 @@ abstract contract SeatFixture is DeployProtocol {
         vm.warp(vm.getBlockTimestamp() + 1 days);
         for (uint256 i; i < 400; ++i) {
             _fulfillPending();
-            try game.mineFlip() {} catch (bytes memory reason) {
+            try game.mineFlip(0) {} catch (bytes memory reason) {
                 bytes4 sel = bytes4(reason);
                 if (reason.length == 4 && sel == NO_WORK) return;
                 if (reason.length == 4 && sel == RNG_NOT_READY) {

@@ -76,7 +76,7 @@ contract DegeneretteV73SolvencyFuzz is DeployProtocol {
         // Bets resolve only as the engine's Degenerette read consumer (mineFlip).
         vm.recordLogs();
         vm.prank(player);
-        game.mineFlip();
+        game.mineFlip(0);
         (uint8 score, uint8 wilds) = _firstSpin();
         assertLe(wilds, 4, "at most four house wilds");
         uint256 payout = math.payout(score, wilds, CURRENCY_FLIP, DQ.stake(bet), DQ.activity(bet));

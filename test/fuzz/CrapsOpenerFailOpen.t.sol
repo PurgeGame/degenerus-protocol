@@ -69,7 +69,7 @@ contract CrapsOpenerFailOpen is DeployProtocol {
 
     function _crank() internal {
         vm.prank(keeper);
-        try game.mineFlip() {}
+        try game.mineFlip(0) {}
         catch (bytes memory err) {
             bytes4 sel = bytes4(err);
             if (sel == bytes4(keccak256("NotTimeYet()")) || sel == bytes4(keccak256("RngNotReady()"))) return;

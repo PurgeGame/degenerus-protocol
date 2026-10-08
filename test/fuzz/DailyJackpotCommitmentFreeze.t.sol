@@ -145,7 +145,7 @@ contract DailyJackpotCommitmentFreezeTest is DeployProtocol {
         Vm.Log[] memory logs;
         for (uint256 r; r < ladder.length; ++r) {
             vm.recordLogs();
-            try game.mineFlip{gas: ladder[r]}() {
+            try game.mineFlip{gas: ladder[r]}(0) {
                 logs = vm.getRecordedLogs();
                 break;
             } catch (bytes memory err) {

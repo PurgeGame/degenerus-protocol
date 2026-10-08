@@ -551,7 +551,7 @@ contract V61AfpayWaterfall is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) break;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.mineFlip();
+            game.mineFlip(0);
             _fulfillPending(vrfWord);
         }
     }
@@ -561,7 +561,7 @@ contract V61AfpayWaterfall is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) return;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) return;
-            game.mineFlip();
+            game.mineFlip(0);
             _fulfillPending(vrfWord);
         }
     }

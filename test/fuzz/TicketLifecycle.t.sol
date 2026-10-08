@@ -613,7 +613,7 @@ contract TicketLifecycleTest is DeployProtocol {
             for (uint256 j = 0; j < 80; j++) {
                 _fulfillVrfIfPending();
                 (bool ok, ) = address(game).call(
-                    abi.encodeWithSignature("mineFlip()")
+                    abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
                 );
                 if (!ok) break;
             }
@@ -1187,7 +1187,7 @@ contract TicketLifecycleTest is DeployProtocol {
             for (uint256 j = 0; j < 50; j++) {
                 _fulfillVrfIfPending();
                 (bool ok, ) = address(game).call(
-                    abi.encodeWithSignature("mineFlip()")
+                    abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
                 );
                 if (!ok) break;
             }
@@ -1270,7 +1270,7 @@ contract TicketLifecycleTest is DeployProtocol {
             for (uint256 j = 0; j < 80; j++) {
                 _fulfillVrfIfPending();
                 (bool ok, ) = address(game).call(
-                    abi.encodeWithSignature("mineFlip()")
+                    abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
                 );
                 if (!ok) break;
             }
@@ -1735,7 +1735,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // Drive mineFlip to complete daily cycle
         for (uint256 i = 0; i < 50; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) break;
         }
 
@@ -1760,7 +1760,7 @@ contract TicketLifecycleTest is DeployProtocol {
         vm.warp(simTime);
         for (uint256 i = 0; i < 50; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) break;
         }
     }
@@ -1789,7 +1789,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // Drive mineFlip through daily + potentially mid-day cycle
         for (uint256 i = 0; i < 80; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) break;
         }
 
@@ -1821,7 +1821,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         for (uint256 i = 0; i < 50; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) break;
         }
 
@@ -1863,7 +1863,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // Complete daily cycle (swap happens, tickets process)
         for (uint256 i = 0; i < 80; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) break;
         }
 
@@ -1877,7 +1877,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // Drive mid-day mineFlip
         for (uint256 i = 0; i < 50; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) break;
         }
 
@@ -1912,7 +1912,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         for (uint256 i = 0; i < 80; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) break;
         }
 
@@ -1936,7 +1936,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // Drive mid-day mineFlip to process anything pending
         for (uint256 i = 0; i < 50; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) break;
         }
 
@@ -1965,7 +1965,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         for (uint256 i = 0; i < 80; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) break;
         }
 
@@ -1984,7 +1984,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // Drive mid-day processing — may take multiple calls due to large queue
         for (uint256 i = 0; i < 100; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) break;
         }
 
@@ -2013,7 +2013,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
         // Run ONE mineFlip call — this swaps and starts processing but may not finish
         _fulfillVrfIfPending();
-        (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+        (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
         // Don't drain fully — the read slot should still have entries
 
         // Record write slot
@@ -2034,7 +2034,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // Drive everything to completion via daily path
         for (uint256 i = 0; i < 100; i++) {
             _fulfillVrfIfPending();
-            (bool ok2, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok2, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok2) break;
         }
 
@@ -2063,7 +2063,7 @@ contract TicketLifecycleTest is DeployProtocol {
         _buyTickets(buyer1, 4000);
         for (uint256 i = 0; i < 80; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) break;
         }
 
@@ -2073,7 +2073,7 @@ contract TicketLifecycleTest is DeployProtocol {
         _tryMiddayRequest();
         _fulfillVrfIfPending();
         for (uint256 i = 0; i < 50; i++) {
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) break;
             _fulfillVrfIfPending();
         }
@@ -2085,7 +2085,7 @@ contract TicketLifecycleTest is DeployProtocol {
         _tryMiddayRequest();
         _fulfillVrfIfPending();
         for (uint256 i = 0; i < 50; i++) {
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) break;
             _fulfillVrfIfPending();
         }
@@ -2096,7 +2096,7 @@ contract TicketLifecycleTest is DeployProtocol {
         _tryMiddayRequest();
         _fulfillVrfIfPending();
         for (uint256 i = 0; i < 50; i++) {
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) break;
             _fulfillVrfIfPending();
         }
@@ -2133,7 +2133,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // Read rngLockedFlag before mineFlip (slot 0, offset 19 = bit 152)
         // The daily drain gate (AM:204-219) should process tickets and return
         // before ever reaching rngGate.
-        (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+        (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
         assertTrue(ok, "mineFlip should succeed (STAGE_TICKETS_WORKING)");
 
         // Check that read queue still has entries (not fully drained in one call)
@@ -2146,7 +2146,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // Drive all remaining processing calls
         for (uint256 i = 0; i < 100; i++) {
             _fulfillVrfIfPending();
-            (bool ok2, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok2, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok2) break;
         }
 
@@ -2174,7 +2174,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // Run mineFlip a few times — enough to swap but NOT fully drain
         for (uint256 i = 0; i < 5; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) break;
         }
 
@@ -2189,13 +2189,13 @@ contract TicketLifecycleTest is DeployProtocol {
         // stage order and reaches the mid-day request only if the cohort completes. It may also
         // find nothing to do (threshold, LINK, timing); that is acceptable. The swap decision
         // is tested in testMidDaySwapSkipped_ReadNotDrained.
-        (bool midOk, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+        (bool midOk, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
         midOk;
 
         // Regardless of mid-day outcome, continue daily processing
         for (uint256 i = 0; i < 100; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) break;
         }
 
@@ -2249,7 +2249,7 @@ contract TicketLifecycleTest is DeployProtocol {
         for (uint256 j = 0; j < 80; j++) {
             _fulfillVrfIfPending();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("mineFlip()")
+                abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
             );
             if (!ok) break;
         }
@@ -2322,7 +2322,7 @@ contract TicketLifecycleTest is DeployProtocol {
         _buyTickets(buyer1, 400);
         for (uint256 i = 0; i < 50; i++) {
             _fulfillVrfIfPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) break;
         }
     }
@@ -2384,7 +2384,7 @@ contract TicketLifecycleTest is DeployProtocol {
             _fulfillVrfIfPending();
             if (!game.rngLocked() && game.rngComplete()
                 && game.rngWordForDay(game.currentDayView()) != 0) return;
-            (bool ok, bytes memory err) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, bytes memory err) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) {
                 bytes4 sel = bytes4(err);
                 assertTrue(
@@ -2406,12 +2406,12 @@ contract TicketLifecycleTest is DeployProtocol {
         mockVRF.fundSubscription(subId, 100e18); // the mid-day path keeps a LINK floor
         uint256 priorReq = mockVRF.lastRequestId();
         vm.prank(requester);
-        game.mineFlip(); // the mid-day request: mineFlip is its only door
+        game.mineFlip(0); // the mid-day request: mineFlip is its only door
         uint256 reqId = mockVRF.lastRequestId();
         assertGt(reqId, priorReq, "harness: mineFlip issued the mid-day request");
         mockVRF.fulfillRandomWords(reqId, word);
         for (uint256 i = 0; i < 50 && !game.rngComplete(); i++) {
-            (bool ok, bytes memory err) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, bytes memory err) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) {
                 assertEq(bytes4(err), bytes4(keccak256("RngNotReady()")), "harness: mid-day consumers stalled");
                 _fulfillVrfIfPending();
@@ -2424,7 +2424,7 @@ contract TicketLifecycleTest is DeployProtocol {
     ///      action for a creditless caller; otherwise nothing (the request would be refused).
     function _tryMiddayRequest() internal returns (bool requested) {
         if (game.nextMinerAction() != 18) return false;
-        game.mineFlip();
+        game.mineFlip(0);
         return true;
     }
 
@@ -2615,7 +2615,7 @@ contract TicketLifecycleTest is DeployProtocol {
         for (uint256 w = 0; w < 30; w++) {
             _fulfillVrfIfPending();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("mineFlip()")
+                abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
             );
             if (!ok) break;
         }
@@ -2640,14 +2640,14 @@ contract TicketLifecycleTest is DeployProtocol {
                 _fulfillVrfIfPending();
 
                 (bool ok, ) = address(game).call(
-                    abi.encodeWithSignature("mineFlip()")
+                    abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
                 );
                 if (!ok) {
                     // Fulfill VRF one more time in case the failed call generated a request
                     _fulfillVrfIfPending();
                     // Retry once — the fulfillment may have unblocked progress
                     (ok, ) = address(game).call(
-                        abi.encodeWithSignature("mineFlip()")
+                        abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
                     );
                     if (!ok) break;
                 }

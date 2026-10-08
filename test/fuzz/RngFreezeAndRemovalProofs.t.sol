@@ -93,7 +93,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
             "pre-condition: box index word not yet landed (frozen window)"
         );
         vm.prank(cranker);
-        game.mineFlip{gas: 2_000_000}();
+        game.mineFlip{gas: 2_000_000}(0);
         assertGt(
             _boxUnsettled(idx, boxOwner),
             0,
@@ -104,7 +104,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         // open advances the box cursor past the entry; the entry word itself is never rewritten.
         _injectLootboxRngWord(idx, FIXED_WORD);
         vm.prank(cranker);
-        game.mineFlip();
+        game.mineFlip(0);
         assertEq(
             _boxUnsettled(idx, boxOwner),
             0,
@@ -523,7 +523,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
     function _crankBets(uint48 index, uint64 betId) internal {
         for (uint256 i; i < 8 && !_betProcessed(index, betId); ++i) {
             vm.prank(cranker);
-            game.mineFlip{gas: 2_000_000}();
+            game.mineFlip{gas: 2_000_000}(0);
         }
     }
 

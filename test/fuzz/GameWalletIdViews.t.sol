@@ -613,7 +613,7 @@ contract GameWalletIdViews is DeployProtocol {
         vm.store(address(game), bytes32(0), bytes32(slot0));
         vm.recordLogs();
         vm.prank(makeAddr("degen_crank"));
-        game.mineFlip();
+        game.mineFlip(0);
         logs = vm.getRecordedLogs();
     }
 

@@ -193,7 +193,7 @@ abstract contract VaultSealChunkGas is VaultBafRig {
         uint256 before = mockVRF.lastRequestId();
         for (uint256 calls; mockVRF.lastRequestId() == before; ++calls) {
             require(calls < 64, "harness: the latch-day request stalled");
-            game.mineFlip{gas: 12_000_000}();
+            game.mineFlip{gas: 12_000_000}(0);
         }
         _fulfillPending();
         vm.etch(address(game), type(VaultSettleHost).runtimeCode);

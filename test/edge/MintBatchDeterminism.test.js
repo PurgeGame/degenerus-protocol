@@ -50,7 +50,7 @@ async function drainFixture() {
   const beforeRequest = await getLastVRFRequestId(mockVRF);
   let request = beforeRequest;
   for (let i = 0; i < 100 && request === beforeRequest; ++i) {
-    await game.connect(deployer).mineFlip({ gasLimit: 12_000_000 });
+    await game.connect(deployer).mineFlip(0, { gasLimit: 12_000_000 });
     request = await getLastVRFRequestId(mockVRF);
   }
   expect(request).not.to.equal(beforeRequest, "engine must commit a new request");
@@ -60,7 +60,7 @@ async function drainFixture() {
   for (let i = 0; i < 300; ++i) {
     // The engine bounds each step; a larger transaction can execute several.
     // Keep this replay fixture's entire transaction below its asserted ceiling.
-    const tx = await game.connect(deployer).mineFlip({ gasLimit: 9_000_000 });
+    const tx = await game.connect(deployer).mineFlip(0, { gasLimit: 9_000_000 });
     const receipt = await tx.wait();
     expect(receipt.gasUsed).to.be.lte(10_000_000n);
     const inventory = parseInventory(receipt, storage.interface);

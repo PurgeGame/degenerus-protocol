@@ -222,6 +222,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
             if (!MineFlipGas.canRun(meter, GasBounds.DECIMATOR_PLAN_GAS_MAX, WORK_TAIL_GAS)) return (result, 0);
             _initializeJackpot(lvl, round, plan, terms);
             result.progressed = true;
+            MineFlipGas.markProgress(meter);
             ++result.rewardBasis;
         }
         Sampling.Field memory field = Sampling.field(terms.word, lvl, uint256(round.count) + plan.generatedEntries);
@@ -238,6 +239,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
             ++plan.cursor;
             ++result.rewardBasis;
             result.progressed = true;
+            MineFlipGas.markProgress(meter);
             assembly ("memory-safe") { mstore(0x40, free) }
         }
         result.done = plan.cursor == field.count;
@@ -356,12 +358,14 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
                         : GasBounds.DECIMATOR_SAMPLE_SKIP_GAS_MAX, WORK_TAIL_GAS)) break;
                     if (original) winners = _run(lvl, id, word, seed, capacity, winners);
                     ++cursor;
+                    MineFlipGas.markProgress(meter);
                     ++result.rewardBasis;
                     assembly ("memory-safe") { mstore(0x40, free) }
                 }
                 if (cursor != round.cursor) {
                     round.cursor = cursor;
                     result.progressed = true;
+                    MineFlipGas.markProgress(meter);
                 }
                 if (winners != winnersBefore) round.winners = uint8(winners);
             }
@@ -370,6 +374,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
             if (cursor == field.count && MineFlipGas.canRun(meter, RANK_GAS_MAX, WORK_TAIL_GAS)) {
                 _rank(lvl, round, word);
                 result.progressed = true;
+                MineFlipGas.markProgress(meter);
                 ++result.rewardBasis;
             }
         }
@@ -398,15 +403,18 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
                     emit DecimatorClaimed(owner, lvl, id, base + perEth, 0);
                 }
                 ++paid;
+                MineFlipGas.markProgress(meter);
                 ++result.rewardBasis;
             }
             if (paid != round.paid) {
                 round.paid = uint8(paid);
                 result.progressed = true;
+                MineFlipGas.markProgress(meter);
             }
             if (paid == winners && MineFlipGas.canRun(meter, 30_000, WORK_TAIL_GAS)) {
                 _finish(round);
                 result.progressed = true;
+                MineFlipGas.markProgress(meter);
             }
         }
         result.done = decBattleQueue == 0;

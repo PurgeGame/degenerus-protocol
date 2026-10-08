@@ -92,12 +92,19 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         );
     }
 
-    /// @dev One keeper call at a 2M allowance. The engine admits work by declared gas bounds
-    ///      (60d31f775): the AFKing scan admits one entry per AFKING_SKIP_GAS/AFKING_OPEN_GAS, so
-    ///      a bounded call walks a bounded prefix, and 2M can never admit a fresh request
-    ///      (RNG_REQUEST plus tail), so the session under test is never sealed behind the test.
+    /// @dev Fund the mandatory ring scan/open; extreme calibration prevents later requests.
     function _keep() private {
-        game.mineFlip{gas: 2_000_000}();
+        game.mineFlip{gas: 12_000_000}(type(uint32).max);
+    }
+
+    function _underfundedKeep() private {
+        (bool ok,) = address(game).call{gas: 2_000_000}(
+            abi.encodeCall(game.mineFlip, (type(uint32).max)));
+        assertFalse(ok, "underfunded mandatory scan must roll back");
+    }
+
+    function _finishRead() private {
+        for (uint256 i; i < 8 && !game.rngComplete(); ++i) _keep();
     }
 
     function _buyWriteBox() private {
@@ -107,16 +114,15 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         );
     }
 
-    function test_PartialAfkingScanCannotCompleteSessionThroughEmptyHumanQueue() public {
+    function test_UnderfundedAfkingScanCannotCompleteSessionThroughEmptyHumanQueue() public {
         uint24 day = game.currentDayView();
         _seed(day, day, 1900, false);
 
-        // A bounded keeper call walks only part of the 1900-entry clean prefix: the final
-        // stamped box stays pending. The shared consumer order (60d31f775) runs human boxes only
-        // after AFKing finishes, so the empty human queue cannot complete the session early.
-        _keep();
+        // The mandatory unit includes reaching the first stamped box through the clean
+        // prefix. An underfunded attempt cannot certify the empty human queue or the session.
+        _underfundedKeep();
         assertFalse(_humanComplete(), "the indexed consumer completed its empty read queue");
-        assertEq(_pending(), 1, "weighted walk preserved the final stamped box");
+        assertEq(_pending(), 1, "failed attempt preserved the final stamped box");
         assertFalse(game.rngComplete(), "the pending AFKing consumer retains the session");
 
         uint256 requestId = mockVRF.lastRequestId();
@@ -130,6 +136,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         _expectStampedResolve(day);
         vm.recordLogs();
         for (uint256 i; i < 64 && _pending() != 0; ++i) _keep();
+        _finishRead();
         assertEq(mockVRF.lastRequestId(), requestId, "final-drain call did not request new entropy");
         assertEq(_pending(), 0);
         if (_openedDay() != day) {
@@ -159,21 +166,21 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         assertTrue(game.nextMinerAction() != 9, "prior published word cannot open a new STAGE stamp"); // Afking
 
         uint256 oldRequest = mockVRF.lastRequestId();
-        for (uint256 i; i < 32 && mockVRF.lastRequestId() == oldRequest; ++i) game.mineFlip();
+        for (uint256 i; i < 32 && mockVRF.lastRequestId() == oldRequest; ++i) game.mineFlip(0);
         assertGt(mockVRF.lastRequestId(), oldRequest, "new stamps do not deadlock their first request");
         assertEq(_openedDay(), day - 1, "prior published word cannot open a new STAGE stamp");
         assertFalse(game.rngComplete());
         assertTrue(game.rngLocked());
         // Under the request lock the engine only waits for the word.
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        game.mineFlip();
+        game.mineFlip(0);
         assertEq(_pending(), 1, "request lock also retains the stamp");
 
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), SESSION_WORD);
         // The new session's read consumers run right after the unlock, in the keeper's own flow
         // (60d31f775); the stamp must resolve on the NEW word with its own day, whoever opens it.
         _expectStampedResolve(day);
-        for (uint256 i; i < 256 && game.rngLocked(); ++i) game.mineFlip();
+        for (uint256 i; i < 256 && game.rngLocked(); ++i) game.mineFlip(0);
         assertFalse(game.rngLocked(), "daily work reaches unlock");
         _mineAll(64);
         assertEq(_pending(), 0);
@@ -189,7 +196,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         assertEq(RecyclingState.dailyWord(address(game), stampDay), 0, "old daily cache entry was recycled");
 
         _expectStampedResolve(stampDay);
-        game.mineFlip();
+        game.mineFlip(0);
         assertEq(_pending(), 0, "delayed fulfillment needs no retained stamp-day word");
         assertEq(_openedDay(), stampDay, "frozen day remains the reward domain input");
         assertTrue(game.rngComplete());
@@ -202,7 +209,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         // The no-orphan rule retains the stamp while the eventual request binds its own day.
         vm.warp(vm.getBlockTimestamp() + 3 days);
         uint256 oldRequest = mockVRF.lastRequestId();
-        for (uint256 i; i < 32 && mockVRF.lastRequestId() == oldRequest; ++i) game.mineFlip();
+        for (uint256 i; i < 32 && mockVRF.lastRequestId() == oldRequest; ++i) game.mineFlip(0);
         assertTrue(game.rngLocked());
         assertGt(mockVRF.lastRequestId(), oldRequest);
 
@@ -218,7 +225,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         // stops on the seal.
         _expectStampedResolve(stampDay);
         vm.recordLogs();
-        for (uint256 i; i < 256 && _dailyIdx() < requestDay; ++i) game.mineFlip();
+        for (uint256 i; i < 256 && _dailyIdx() < requestDay; ++i) game.mineFlip(0);
         assertEq(_dailyIdx(), requestDay, "delayed request applied and unlocked");
         assertEq(RecyclingState.dailyWord(address(game), stampDay), 0, "gap processing retained only recent daily words");
         _mineAll(64);
@@ -247,13 +254,14 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
     function test_NewWriteBoxesDoNotKeepCompletedReadSessionOpen() public {
         uint24 day = game.currentDayView();
         _seed(day, day, 1900, false);
-        _keep();
+        _underfundedKeep();
         _buyWriteBox();
         uint48 write = RecyclingState.writeBuffer(address(game));
         assertGt(RecyclingState.boxCount(address(game), write), 0);
 
         _expectStampedResolve(day);
         for (uint256 i; i < 64 && _pending() != 0; ++i) _keep();
+        _finishRead();
         assertEq(_pending(), 0);
         assertTrue(game.rngComplete(), "only the sealed read session must finish");
         assertGt(RecyclingState.boxCount(address(game), write), 0, "new write orders remain queued");
@@ -269,7 +277,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         _seed(day, day, 0, false);
         // The pending AFKing consumer, not a mid-day request, is the engine's next work.
         assertEq(game.nextMinerAction(), 9, "no mid-day request while the AFKing stamp is pending"); // Afking
-        game.mineFlip();
+        game.mineFlip(0);
         assertTrue(game.rngComplete());
         _buyWriteBox();
         vm.prank(address(admin));
@@ -278,10 +286,10 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         uint8 next = game.minerAction();
         assertEq(next, 18, "the drained session admits the donor's mid-day request"); // RequestMidday
         vm.prank(PLAYER);
-        game.mineFlip();
+        game.mineFlip(0);
         assertFalse(game.rngComplete());
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 0xF12345);
-        for (uint256 i; i < 256 && !game.rngComplete(); ++i) game.mineFlip();
+        for (uint256 i; i < 256 && !game.rngComplete(); ++i) game.mineFlip(0);
         assertTrue(game.rngComplete(), "next midday session drains normally");
         assertEq(_pending(), 0);
         assertEq(_openedDay(), day, "completed AFKing stamp is not consumed a second time");

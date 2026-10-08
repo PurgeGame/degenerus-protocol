@@ -77,7 +77,7 @@ contract DegradeCertifyReadTest is DeployProtocol {
         uint256 balanceBefore = address(game).balance;
 
         vm.prank(makeAddr("certify-miner"));
-        game.mineFlip();
+        game.mineFlip(0);
 
         assertTrue(game.rngComplete(), "the call certified the session");
         assertTrue(game.minerAction() != CERTIFY_READ, "CertifyRead is not reselected");

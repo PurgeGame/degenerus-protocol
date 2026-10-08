@@ -185,7 +185,7 @@ contract VRFPathHandler is Test {
         // terminal flow (gap backfill not owed from then on).
         if (_livenessMirror()) ghost_livenessLatched = true;
 
-        try game.mineFlip() {} catch {
+        try game.mineFlip(0) {} catch {
             return;
         }
 
@@ -278,7 +278,7 @@ contract VRFPathHandler is Test {
         uint256 reqBefore = vrf.lastRequestId();
         bool unansweredBefore = _unansweredRequest();
 
-        try game.mineFlip() {} catch {
+        try game.mineFlip(0) {} catch {
             return;
         }
 

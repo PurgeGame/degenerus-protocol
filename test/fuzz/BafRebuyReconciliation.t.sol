@@ -125,7 +125,7 @@ contract BafRebuyReconciliationTest is DeployProtocol {
                     stageChecked = true;
                     continue;
                 }
-                (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+                (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
                 if (!ok) break;
             }
         }
@@ -150,7 +150,7 @@ contract BafRebuyReconciliationTest is DeployProtocol {
         for (uint256 i; i < 256; ++i) {
             _fulfillVrfIfPending();
             uint256 snap = vm.snapshotState();
-            (bool ok, ) = address(game).call{gas: 6_000_000}(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, ) = address(game).call{gas: 6_000_000}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (game.jackpotPhase()) {
                 vm.revertToState(snap);
                 break;

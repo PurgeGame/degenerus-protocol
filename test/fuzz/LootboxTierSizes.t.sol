@@ -64,7 +64,7 @@ contract LootboxTierSizes is DeployProtocol {
     function _mineMiddayRequest(address caller) internal returns (uint256 reqId) {
         uint256 prior = mockVRF.lastRequestId();
         vm.prank(caller);
-        game.mineFlip();
+        game.mineFlip(0);
         reqId = mockVRF.lastRequestId();
         assertGt(reqId, prior, "mineFlip issued the mid-day request");
         assertFalse(game.rngLocked(), "a mid-day request, not the daily one");
@@ -79,7 +79,7 @@ contract LootboxTierSizes is DeployProtocol {
         for (uint256 i; i < 10 && !game.rngLocked(); i++) {
             vm.warp(block.timestamp + 1 days);
             vm.prank(actor);
-            try game.mineFlip() {} catch {}
+            try game.mineFlip(0) {} catch {}
             if (game.rngLocked()) break;
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != 0) {
@@ -98,7 +98,7 @@ contract LootboxTierSizes is DeployProtocol {
                 }
             }
             vm.prank(actor);
-            try game.mineFlip() {} catch {}
+            try game.mineFlip(0) {} catch {}
         }
         // A fresh request waits for every read consumer of the day's cohort to finish. A shut
         // craps window the day bound to the write buffer rides the next request, which the engine
@@ -113,7 +113,7 @@ contract LootboxTierSizes is DeployProtocol {
             if (!game.advanceDue() && game.rngComplete()) break;
             if (!game.advanceDue()) continue; // a fresh request waits for its word
             vm.prank(actor);
-            game.mineFlip();
+            game.mineFlip(0);
         }
         assertTrue(game.rngComplete(), "harness: the day's cohorts all completed");
     }
@@ -147,7 +147,7 @@ contract LootboxTierSizes is DeployProtocol {
             // read consumers.
             vm.recordLogs();
             vm.prank(actor);
-            game.mineFlip();
+            game.mineFlip(0);
             Vm.Log[] memory logs = vm.getRecordedLogs();
             assertGt(_word(N), 0, "the word landed for the entry's buffer");
             assertTrue(game.boxIndexComplete(N), "the walk opened the entry");

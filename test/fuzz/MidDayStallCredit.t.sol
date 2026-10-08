@@ -115,7 +115,7 @@ abstract contract StallCreditBase is DeployProtocol {
     /// @dev Advance as a caller who is not the vault owner (never fires the owner's retry).
     function _adv() internal {
         vm.prank(stranger);
-        game.mineFlip();
+        game.mineFlip(0);
     }
 
     /// @dev During a stall: advance as a stranger until the advance reverts (the day's afking
@@ -123,7 +123,7 @@ abstract contract StallCreditBase is DeployProtocol {
     function _advUntilBlocked() internal {
         for (uint256 i; i < 40; ++i) {
             vm.prank(stranger);
-            try game.mineFlip() {} catch (bytes memory err) {
+            try game.mineFlip(0) {} catch (bytes memory err) {
                 assertEq(bytes4(err), bytes4(keccak256("RngNotReady()")), "blocked waiting for the word");
                 assertFalse(game.rngLocked(), "blocked with no daily lock");
                 return;
@@ -200,7 +200,7 @@ abstract contract StallCreditBase is DeployProtocol {
         vm.prank(donor);
         assertEq(game.minerAction(), 18, "harness: the donor's next engine action is the mid-day request");
         vm.prank(donor);
-        game.mineFlip();
+        game.mineFlip(0);
     }
 
     function _warpDays(uint256 n) internal {
@@ -372,7 +372,7 @@ contract MidDayStallCreditTest is StallCreditBase {
         _warpToDay(s + 1);
         assertTrue(game.livenessTriggered(), "caught-up day past the deadline");
         vm.prank(stranger);
-        game.mineFlip();
+        game.mineFlip(0);
         (bool goLvl,) = _latches();
         assertTrue(goLvl, "a plain keeper crank latched the ending");
         _warpToDay(s + 2);
@@ -496,7 +496,8 @@ contract MidDayStallCreditTest is StallCreditBase {
         _warpToDay(x + 1);
         assertTrue(game.livenessTriggered(), "caught-up day past the deadline");
 
-        vm.mockCallRevert(address(vrf), abi.encodeWithSelector(MockVRFCoordinator.requestRandomWords.selector), "");
+        vm.mockCallRevert(address(vrf), abi.encodeWithSelector(MockVRFCoordinator.requestRandomWords.selector),
+            abi.encodeWithSignature("RequestRefused()"));
         for (uint256 i; i < 20; ++i) {
             // Each advance is on the game-over path: the first latches the ending (game over
             // itself waits for the ending's own terminal word, 60d31f775).
@@ -641,14 +642,14 @@ contract MidDayStallCreditGas is StallCreditBase {
         _answer();
         vm.warp(vm.getBlockTimestamp() + 1 hours);
         vm.prank(stranger);
-        game.mineFlip();
+        game.mineFlip(0);
         _log("GAS backfillAdvanceAfterLateMidday used/refund");
     }
 
     function _measureRequestAdvance(string memory label) private {
         for (uint256 i; i < 60; ++i) {
             vm.prank(stranger);
-            game.mineFlip();
+            game.mineFlip(0);
             Vm.Gas memory g = vm.lastCallGas(); // before the rngLocked() probe replaces it
             if (game.rngLocked()) {
                 console.log(label);

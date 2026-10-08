@@ -82,7 +82,7 @@ contract JackpotMergeAdvanceTest is DeployProtocol {
     bytes32 private constant ADVANCE = keccak256("Advance(uint8,uint24)");
     /// @dev Admits bounded 50-entry checkpoints; cheaper storage can fit multiple groups.
     uint256 private constant DRAW_GAS = 5_000_000;
-    uint256 private constant SETTLE_GAS = 10_500_000 - 21_064;
+    uint256 private constant SETTLE_GAS = 10_500_000 - 21_192;
 
     function setUp() public {
         _deployProtocol();
@@ -111,7 +111,7 @@ contract JackpotMergeAdvanceTest is DeployProtocol {
     /// @dev One call at `gas`; every progress marker of the call, in order, and its gas.
     function _step(uint256 gas) private returns (uint8[] memory stages, uint256 gasUsed) {
         vm.recordLogs();
-        game.mineFlip{gas: gas}();
+        game.mineFlip{gas: gas}(0);
         gasUsed = vm.lastCallGas().gasTotalUsed;
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 n;
@@ -339,7 +339,7 @@ contract JackpotMergeAdvanceTest is DeployProtocol {
         _prepare(false,false,false,3,8); _requestAndApply();
         vm.mockCallRevert(ContractAddresses.JACKPOT_BATTLE,
             abi.encodeWithSelector(JackpotBattle.prepareJackpotBattle.selector), hex"deadbeef");
-        vm.expectRevert(bytes4(0xdeadbeef)); game.mineFlip{gas: DRAW_GAS}();
+        vm.expectRevert(bytes4(0xdeadbeef)); game.mineFlip{gas: DRAW_GAS}(0);
         assertTrue(game.rngLocked());
         vm.clearMockedCalls(); _drain(false,false);
     }

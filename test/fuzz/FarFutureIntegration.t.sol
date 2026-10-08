@@ -131,7 +131,7 @@ contract FarFutureIntegrationTest is DeployProtocol {
                 _fulfillVrfIfPending();
 
                 (bool ok, ) = address(game).call(
-                    abi.encodeWithSignature("mineFlip()")
+                    abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
                 );
                 if (!ok) break; // NotTimeYet = done for this day
             }

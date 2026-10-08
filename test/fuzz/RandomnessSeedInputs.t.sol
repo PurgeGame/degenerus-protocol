@@ -68,7 +68,7 @@ contract RandomnessSeedInputsTest is DeployProtocol {
         SeedInputSeeder host = SeedInputSeeder(payable(address(game)));
         host.seed(PLAYER, word, amount, route == 3);
         vm.recordLogs();
-        if (route == 0 || route == 3) game.mineFlip();
+        if (route == 0 || route == 3) game.mineFlip(0);
         else if (route == 1) host.afking(PLAYER, amount, word);
         else {
             uint32 id = game.walletIdOf(PLAYER);

@@ -78,14 +78,14 @@ contract DecimatorAdvanceFlowTest is DeployProtocol {
             uint256 beforeRequest = mockVRF.lastRequestId();
             for (uint256 calls; mockVRF.lastRequestId() == beforeRequest; ++calls) {
                 assertLt(calls, 1000, "public request stalled");
-                game.mineFlip{gas: 10_000_000}();
+                game.mineFlip{gas: 10_000_000}(0);
             }
             ++requests;
             assertTrue(game.rngLocked());
             mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), WORD + day);
             for (uint256 calls; calls < 1000; ++calls) {
                 vm.recordLogs();
-                game.mineFlip{gas: 10_000_000}();
+                game.mineFlip{gas: 10_000_000}(0);
                 Vm.Log[] memory logs = vm.getRecordedLogs();
                 for (uint256 i; i < logs.length; ++i) {
                     if (logs[i].emitter != address(game) || logs[i].topics.length == 0) continue;

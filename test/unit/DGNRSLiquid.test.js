@@ -39,7 +39,7 @@ async function triggerGameOver(game, caller, mockVRF) {
   for (let i = 0; i < 12; i++) {
     const reqBefore = await getLastVRFRequestId(mockVRF);
     try {
-      await game.connect(caller).mineFlip();
+      await game.connect(caller).mineFlip(0);
     } catch {
       /* may revert mid-sequence; keep driving */
     }
@@ -522,7 +522,7 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
       const { sdgnrs, alice } = await loadFixture(deployFullProtocol);
       await advanceToNextDay();
       // Alice has no sDGNRS — should still work
-      await expect(sdgnrs.connect(alice).gameAdvance()).to.not.be.reverted;
+      await expect(sdgnrs.connect(alice).gameAdvance(0)).to.not.be.reverted;
     });
 
     it("sDGNRS's whale pass is claimable by anyone (no auth gate; reverts only because nothing is pending)", async function () {

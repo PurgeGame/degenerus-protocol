@@ -186,13 +186,13 @@ contract KeeperNonBrick is DeployProtocol {
     ///      (subscribe blocks during rngLock). The 351-02 _runStageOnce pattern.
     function _runStageOnce() internal {
         vm.warp(block.timestamp + 1 days);
-        game.mineFlip();
+        game.mineFlip(0);
     }
 
     function _settleGame(uint256 vrfWord) internal {
         for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.mineFlip();
+            game.mineFlip(0);
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != _lastFulfilledReqId && reqId > 0) {
                 (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
@@ -209,7 +209,7 @@ contract KeeperNonBrick is DeployProtocol {
     function _settleClean(uint256 vrfWord) internal {
         for (uint256 d; d < 240; d++) {
             if (!game.advanceDue() && !game.rngLocked()) return;
-            game.mineFlip();
+            game.mineFlip(0);
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != _lastFulfilledReqId && reqId > 0) {
                 (, , bool fulfilled) = mockVRF.pendingRequests(reqId);

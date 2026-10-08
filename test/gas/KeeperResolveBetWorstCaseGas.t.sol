@@ -427,7 +427,7 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
             _cool();
             vm.recordLogs();
             vm.prank(cranker);
-            game.mineFlip{gas: 10_000_000 - 21_000}();
+            game.mineFlip{gas: 10_000_000 - 21_000}(0);
             uint256 used = vm.snapshotGasLastCall("correlated-eth-bet-keeper");
             emit log_named_uint("correlated keeper gross call gas", used);
             Vm.Log[] memory rows = vm.getRecordedLogs();
@@ -600,14 +600,14 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol {
         _cool();
         vm.prank(cranker);
         uint256 g = gasleft();
-        game.mineFlip();
+        game.mineFlip(0);
         uint256 baseline = g - gasleft();
         vm.revertToStateAndDelete(snap);
         _cool();
         vm.recordLogs();
         vm.prank(cranker);
         g = gasleft();
-        game.mineFlip();
+        game.mineFlip(0);
         gasUsed = g - gasleft();
         stageGas = gasUsed - baseline;
         emit log_named_uint("cold mineFlip gas", gasUsed);

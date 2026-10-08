@@ -13,7 +13,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 interface IDegeneretteCallbackGame {
     function degeneretteBetInfo(uint48 index, uint64 betId) external view returns (uint256);
     function boxIndexComplete(uint48 index) external view returns (bool);
-    function mineFlip() external;
+    function mineFlip(uint32 gasMultiplierBps) external;
 }
 
 /// @dev Adversarial replacement for the trusted mint sink, installed only after placement.
@@ -32,7 +32,7 @@ contract DegeneretteCallbackMint {
         ++calls;
         exposedLiveBet = game.degeneretteBetInfo(1, 1) != 0;
         exposedComplete = game.boxIndexComplete(1);
-        if (calls == 1) (reentrySucceeded,) = address(game).call(abi.encodeCall(game.mineFlip, ()));
+        if (calls == 1) (reentrySucceeded,) = address(game).call(abi.encodeCall(game.mineFlip, (uint32(0))));
     }
 }
 
@@ -115,7 +115,7 @@ contract DegeneretteSweep is DeployProtocol {
     ///      mineFlip. One unbounded call runs the cohort's whole consumer chain.
     function _resolveCohort() private {
         vm.prank(makeAddr("sweepCrank"));
-        game.mineFlip();
+        game.mineFlip(0);
     }
 
     /// @dev Resolved bets in a recorded log window.
@@ -123,9 +123,8 @@ contract DegeneretteSweep is DeployProtocol {
         for (uint256 i; i < logs.length; ++i) if (logs[i].topics[0] == RESOLVED_SIG) ++n;
     }
 
-    /// @dev One mineFlip given the smallest allowance that still resolves a bet: the engine admits a
-    ///      bet only when the remaining allowance covers its declared bound, so at the minimum the
-    ///      call resolves exactly the next bet. Found by bisection over snapshots of the same state.
+    /// @dev Find the smallest funded first checkpoint by bisection over the same state.
+    ///      Re-measure after each bet: setup and warm-storage costs change between calls.
     function _crankOneBet() private returns (uint256 resolved, uint256 supplied) {
         uint256 lo = 300_000;
         uint256 hi = 30_000_000;
@@ -134,7 +133,7 @@ contract DegeneretteSweep is DeployProtocol {
             uint256 snap = vm.snapshotState();
             vm.recordLogs();
             vm.prank(makeAddr("sweepCrank"));
-            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip()"));
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             uint256 n = ok ? _countResolved(vm.getRecordedLogs()) : 0;
             vm.revertToStateAndDelete(snap);
             if (n != 0) hi = mid;
@@ -147,7 +146,7 @@ contract DegeneretteSweep is DeployProtocol {
     function _crankWith(uint256 supplied) private returns (uint256 resolved) {
         vm.recordLogs();
         vm.prank(makeAddr("sweepCrank"));
-        game.mineFlip{gas: supplied}();
+        game.mineFlip{gas: supplied}(0);
         resolved = _countResolved(vm.getRecordedLogs());
     }
 
@@ -309,26 +308,22 @@ contract DegeneretteSweep is DeployProtocol {
         Fingerprint memory handPrint = _fingerprint();
         vm.revertToState(snap);
 
-        // The walk-unit budget became a gas allowance (60d31f775: each bet is admitted only while
-        // the remaining allowance covers its declared bound). The first call gets the smallest
-        // allowance that resolves a bet at all, so it resolves exactly one; every later call reuses
-        // that same allowance, which no longer has to cover the earlier stages, so no call fits
-        // more than two and the queue drains over several calls.
+        // Re-measure the smallest first checkpoint after each bet. Reusing the initial
+        // allowance can fit many later bets once the earlier engine stages are complete.
         (uint256 calls, uint256 resolvedTotal) = (1, 0);
         (uint256 first, uint256 allowance) = _crankOneBet();
         assertEq(first, 1, "the starved first call resolves exactly one bet");
         resolvedTotal = first;
         emit log_named_uint("per-call allowance", allowance);
         while (!game.boxIndexComplete(IDX)) {
-            uint256 n = _crankWith(allowance);
-            assertGt(n, 0, "every call makes progress");
-            assertLe(n, 2, "the budget splits the queue");
+            (uint256 n,) = _crankOneBet();
+            assertEq(n, 1, "each minimum funded checkpoint resolves one bet");
             resolvedTotal += n;
             ++calls;
             require(calls < 20, "sweep stalled");
         }
         assertEq(resolvedTotal, 12, "each bet resolved exactly once");
-        assertGe(calls, 6, "the budget split the queue across calls");
+        assertEq(calls, 12, "one checkpoint per bet");
         _assertSame(handPrint, _fingerprint());
     }
 
@@ -380,7 +375,7 @@ contract DegeneretteSweep is DeployProtocol {
     function testSweepHoldsQueueWhilePoolFrozen() public {
         _placeMixedQueue();
         uint256 before = mockVRF.lastRequestId();
-        for (uint256 i; i < 64 && mockVRF.lastRequestId() == before; ++i) game.mineFlip();
+        for (uint256 i; i < 64 && mockVRF.lastRequestId() == before; ++i) game.mineFlip(0);
         uint256 reqId = mockVRF.lastRequestId();
         assertTrue(reqId != before, "the daily request went out");
         assertTrue(_poolFrozen(), "the daily request froze the pool");
@@ -390,7 +385,7 @@ contract DegeneretteSweep is DeployProtocol {
         // Frozen and waiting on the word: the consumer stage is closed and the queue holds.
         assertEq(game.nextMinerAction(), uint8(DegenerusGameStorage.MinerAction.Wait), "waiting on the word");
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        game.mineFlip();
+        game.mineFlip(0);
         assertTrue(game.degeneretteBetInfo(IDX, 1) != 0, "bet still queued");
         assertFalse(game.boxIndexComplete(IDX), "frontier holds at the queue");
 
@@ -409,7 +404,7 @@ contract DegeneretteSweep is DeployProtocol {
                 );
             }
             vm.prank(makeAddr("sweepCrank"));
-            game.mineFlip();
+            game.mineFlip(0);
         }
         Vm.Log[] memory logs = vm.getRecordedLogs();
         assertGt(frozenSteps, 0, "fixture: the delivered day cranked while still frozen");
@@ -511,7 +506,7 @@ contract DegeneretteSweep is DeployProtocol {
         require(msg.sender == address(this));
         vm.fee(1 gwei);
         vm.prank(keeper);
-        game.mineFlip();
+        game.mineFlip(0);
     }
 
     /// @notice A plain mineFlip resolves the whole queue. Pay is priced on measured gas, and the
@@ -590,7 +585,7 @@ contract DegeneretteSweep is DeployProtocol {
         uint256 first = game.degeneretteBetInfo(IDX, 1);
         sink.setFail(true);
         vm.expectRevert(bytes("mint failed"));
-        game.mineFlip();
+        game.mineFlip(0);
         assertEq(game.degeneretteBetInfo(IDX, 1), first, "failed payout consumed a bet");
         assertFalse(game.boxIndexComplete(IDX));
         sink.setFail(false);

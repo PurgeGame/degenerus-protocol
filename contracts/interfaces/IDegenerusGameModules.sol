@@ -49,7 +49,7 @@ interface IDegenerusGameMinerModule {
     function playerActivityScoreCachedById(uint32 id) external returns (uint256);
     error NoWork();
     error RngNotReady();
-    function mineFlip() external;
+    function mineFlip(uint32 gasMultiplierBps) external;
     function minerAction() external view returns (uint8);
 }
 

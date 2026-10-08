@@ -51,7 +51,7 @@ contract RngLockDeterminism is DeployProtocol {
 
     function _completeDay(uint256 vrfWord) internal {
         _finishReadConsumers();
-        game.mineFlip();
+        game.mineFlip(0);
         uint256 reqId = mockVRF.lastRequestId();
         if (reqId != _lastFulfilledReqId && reqId > 0) {
             mockVRF.fulfillRandomWords(reqId, vrfWord);
@@ -59,7 +59,7 @@ contract RngLockDeterminism is DeployProtocol {
         }
         for (uint256 i = 0; i < DRAIN_MAX_ITERATIONS; i++) {
             if (!game.rngLocked()) break;
-            game.mineFlip();
+            game.mineFlip(0);
         }
             _finishReadConsumers();
         _settleMidday();
@@ -81,7 +81,7 @@ contract RngLockDeterminism is DeployProtocol {
                 mockVRF.fulfillRandomWords(id, uint256(keccak256(abi.encode("midday", id))));
                 _lastFulfilledReqId = id;
             } else {
-                game.mineFlip();
+                game.mineFlip(0);
             }
         }
         fail("harness: mid-day work did not settle");
@@ -123,7 +123,7 @@ contract RngLockDeterminism is DeployProtocol {
     ///      6-phase template fuzz functions that follow the daily-RNG cycle.
     function _advanceToVrfRequestBoundary() internal returns (uint256 reqId) {
         vm.warp(block.timestamp + 1 days);
-        game.mineFlip();
+        game.mineFlip(0);
         reqId = mockVRF.lastRequestId();
         require(reqId != 0, "harness: VRF request must be pending");
         require(game.rngLocked(), "harness: rngLock must engage");
@@ -147,7 +147,7 @@ contract RngLockDeterminism is DeployProtocol {
         for (uint256 i = 0; i < DRAIN_MAX_ITERATIONS; i++) {
             if (!game.rngLocked()) break;
             if (uint24(uint256(vm.load(address(game), bytes32(uint256(SLOT_PACKED_0)))) >> 24) > sealedBefore) break;
-            game.mineFlip();
+            game.mineFlip(0);
         }
     }
 
@@ -173,10 +173,10 @@ contract RngLockDeterminism is DeployProtocol {
 
     // 9 legacy v43 classes (0..8) + 2 engine classes (9..10) + 1 v50 whale-pass-claim
     // class (11).
-    // cls 9 = game.mineFlip() — the v55 unified router (the Δ3 doWork successor) fired
+    // cls 9 = game.mineFlip(0) — the v55 unified router (the Δ3 doWork successor) fired
     //   same-tx inside the locked window (RD-1..5): the advance-consume `cw +=
     //   totalFlipReversals` (DegenerusGameAdvanceModule.sol:257) must read only FROZEN state.
-    // cls 10 = game.mineFlip{gas: 1.5M}() — a bounded-allowance engine step fired during
+    // cls 10 = game.mineFlip{gas: 1.5M}(0) — a bounded-allowance engine step fired during
     //   rngLock: it stops at its first checkpoint (or waits for the word), and must never
     //   abort the lock nor alter the consumed VRF-derived output.
     // cls 11 = DegenerusGame.claimWhalePass(player) — the v50 WHALE-04 freeze leg:
@@ -242,7 +242,7 @@ contract RngLockDeterminism is DeployProtocol {
             // Mid-day stall recovery is now folded into the daily advance: warp past the
             // stall timeout + a day boundary and crank mineFlip (the takeover path).
             vm.warp(block.timestamp + 1 days + 4 hours + 1);
-            try game.mineFlip() {} catch { return; }
+            try game.mineFlip(0) {} catch { return; }
         } else if (cls == 9) {
             // v55 game-resident router (Δ3 doWork→mineFlip): fire the one-category router
             // same-tx inside the locked window. mineFlip routes advance → afking-box open by
@@ -252,14 +252,14 @@ contract RngLockDeterminism is DeployProtocol {
             // that (the freeze proof is the byte-identity of the consumed word, not whether
             // mineFlip found work).
             vm.prank(actor);
-            try game.mineFlip() {} catch { return; }
+            try game.mineFlip(0) {} catch { return; }
         } else if (cls == 10) {
             // A bounded-allowance engine step inside the locked window: box stages are read
             // consumers that never run under the daily lock, so the step can only wait for the
             // word or take the lock's own next checkpoint. It must never abort the lock nor
             // alter the consumed VRF-derived output.
             vm.prank(actor);
-            try game.mineFlip{gas: 1_500_000}() {} catch { return; }
+            try game.mineFlip{gas: 1_500_000}(0) {} catch { return; }
         } else if (cls == 11) {
             // v50 WHALE-04 freeze leg: the deferred whale-pass materialization endpoint
             // fired same-tx inside the locked window. Per 334-WHALE04-FREEZE-PROOF.md §2,
@@ -360,7 +360,7 @@ contract RngLockDeterminism is DeployProtocol {
         if (action == 9) {
             // Box opening is permissionless: mineFlip's in-order box stages credit the box
             // owner regardless of caller, so the perturbation drains whatever is pending.
-            try game.mineFlip() {} catch { return; }
+            try game.mineFlip(0) {} catch { return; }
             return;
         }
         if (action == 10) {
@@ -422,7 +422,7 @@ contract RngLockDeterminism is DeployProtocol {
         if (action == 19) {
             // Permissionless: anyone cranks mineFlip, whose decimator leg settles winning entries
             // (the vault's included) in list order.
-            try game.mineFlip() {} catch { return; }
+            try game.mineFlip(0) {} catch { return; }
             return;
         }
         if (action == 20) {
@@ -573,7 +573,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint256 preLockSnap = _snapshotPreLock();
 
         vm.recordLogs();
-        game.mineFlip();
+        game.mineFlip(0);
         uint256 reqId = mockVRF.lastRequestId();
         assertTrue(game.rngLocked(), "StakedStonkRedemption: rngLock must engage");
         assertTrue(reqId != 0, "StakedStonkRedemption: VRF request must be pending");
@@ -597,7 +597,7 @@ contract RngLockDeterminism is DeployProtocol {
 
         _revertToPreLock(preLockSnap);
         vm.recordLogs();
-        game.mineFlip();
+        game.mineFlip(0);
         uint256 reqIdBaseline = mockVRF.lastRequestId();
         _deliverMockVrf(reqIdBaseline, vrfWord);
         bytes32 baselineOutputs = _captureStonkRedemptionOutputs(batchId, holderId);
@@ -732,7 +732,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint256 preLockSnap = _snapshotPreLock();
 
         // ---- perturbed run: doWork()/autoBuy(0) fires inside the locked window ----
-        game.mineFlip();
+        game.mineFlip(0);
         uint256 reqId = mockVRF.lastRequestId();
         assertTrue(game.rngLocked(), "TST-01: rngLock must engage at the VRF boundary");
         assertTrue(reqId != 0, "TST-01: VRF request must be pending");
@@ -764,7 +764,7 @@ contract RngLockDeterminism is DeployProtocol {
             _readTotalFlipReversals(), movedReversals,
             "TST-01: reversals must survive the revert (part of the frozen pre-lock state)"
         );
-        game.mineFlip();
+        game.mineFlip(0);
         uint256 baselineReqId = mockVRF.lastRequestId();
         vm.recordLogs();
         _deliverMockVrf(baselineReqId, vrfWord);
@@ -782,7 +782,7 @@ contract RngLockDeterminism is DeployProtocol {
         _revertToPreLock(preLockSnap);
         _zeroTotalFlipReversals();
         assertEq(_readTotalFlipReversals(), 0, "TST-01 control: reversals zeroed");
-        game.mineFlip();
+        game.mineFlip(0);
         uint256 controlReqId = mockVRF.lastRequestId();
         vm.recordLogs();
         _deliverMockVrf(controlReqId, vrfWord);
@@ -891,7 +891,7 @@ contract RngLockDeterminism is DeployProtocol {
         uint256 preLockSnap = _snapshotPreLock();
 
         // ---- perturbed run: claimWhalePass() fires inside the locked window ----
-        game.mineFlip();
+        game.mineFlip(0);
         uint256 reqId = mockVRF.lastRequestId();
         assertTrue(game.rngLocked(), "TST-01 claim: rngLock must engage at the VRF boundary");
         assertTrue(reqId != 0, "TST-01 claim: VRF request must be pending");
@@ -952,7 +952,7 @@ contract RngLockDeterminism is DeployProtocol {
             _readWhalePassClaims(claimant), preloadedClaims,
             "TST-01 claim: whalePassClaims pre-load must survive the revert (frozen pre-lock state)"
         );
-        game.mineFlip();
+        game.mineFlip(0);
         uint256 baselineReqId = mockVRF.lastRequestId();
         vm.recordLogs();
         _deliverMockVrf(baselineReqId, vrfWord);
@@ -972,7 +972,7 @@ contract RngLockDeterminism is DeployProtocol {
         _revertToPreLock(preLockSnap);
         _zeroTotalFlipReversals();
         assertEq(_readTotalFlipReversals(), 0, "TST-01 claim control: reversals zeroed");
-        game.mineFlip();
+        game.mineFlip(0);
         uint256 controlReqId = mockVRF.lastRequestId();
         vm.recordLogs();
         _deliverMockVrf(controlReqId, vrfWord);
@@ -1000,7 +1000,7 @@ contract RngLockDeterminism is DeployProtocol {
         game.purchase{value: 1.01 ether}(
             0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
-        game.mineFlip();
+        game.mineFlip(0);
         assertTrue(game.rngLocked(), "autoOpen-noop: rngLock must be engaged");
 
         // boxesPending() is FALSE during rngLock (the router routes past the open leg).
@@ -1013,7 +1013,7 @@ contract RngLockDeterminism is DeployProtocol {
         // waits (RngNotReady), and no box stage runs under the lock.
         address keeperCaller = makeAddr("tst01-autoopen-keeper");
         vm.prank(keeperCaller);
-        try game.mineFlip() {} catch {} // must not abort the lock
+        try game.mineFlip(0) {} catch {} // must not abort the lock
         assertTrue(game.rngLocked(), "autoOpen-noop: the keeper call does not abort the lock");
         assertFalse(_boxSettled(boxIndex, buyer), "autoOpen-noop: no box opens during rngLock");
         assertTrue(_boxQueued(boxIndex, buyer), "autoOpen-noop: the queued box is deferred, not dropped");
@@ -1094,7 +1094,7 @@ contract RngLockDeterminism is DeployProtocol {
         assertTrue(game.rngLocked(), "no-maroon: rngLock engaged");
         assertFalse(game.boxesPending(), "no-maroon: boxesPending() false during lock (RD-3)");
         vm.prank(keeper);
-        try game.mineFlip() {} catch {} // the engine: must not abort the lock (box stages never run under it)
+        try game.mineFlip(0) {} catch {} // the engine: must not abort the lock (box stages never run under it)
         assertTrue(
             _boxQueued(boxIndex, boxOwner),
             "no-maroon: the queued box is NOT consumed by the lock (deferred, not dropped)"
@@ -1144,7 +1144,7 @@ contract RngLockDeterminism is DeployProtocol {
         assertTrue(game.boxesPending(), "no-maroon: boxesPending() true once the finalized-index word lands");
         vm.recordLogs();
         vm.prank(keeper);
-        game.mineFlip();
+        game.mineFlip(0);
         assertTrue(
             _boxOpened(vm.getRecordedLogs(), boxOwner2),
             "no-maroon: the cursor-opened box materialized (signal zeroed) - none marooned"

@@ -139,7 +139,7 @@ contract DegeneretteHandler is Test {
         // Bets resolve only as the engine's Degenerette read consumer of the published word
         // (mineFlip).
         vm.prank(currentActor);
-        try game.mineFlip() {
+        try game.mineFlip(0) {
             uint256 claimableAfter = game.claimableWinningsOf(currentActor);
             if (claimableAfter > claimableBefore) {
                 ghost_totalEthPayout += (claimableAfter - claimableBefore);
@@ -202,7 +202,7 @@ contract DegeneretteHandler is Test {
         if (game.gameOver()) return;
 
         vm.prank(currentActor);
-        try game.mineFlip() {} catch {}
+        try game.mineFlip(0) {} catch {}
     }
 
     // --- Internal helpers ---

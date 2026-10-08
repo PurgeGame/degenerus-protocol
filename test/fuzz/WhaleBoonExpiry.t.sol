@@ -162,7 +162,7 @@ contract WhaleBoonExpiry is DeployProtocol {
     function _triggerSweep(address player, uint48 index) internal {
         _setupLootbox(player, index, 10 ether);
         vm.prank(player);
-        game.mineFlip();
+        game.mineFlip(0);
         assertTrue(game.boxIndexComplete(index), "the sweep opened the forged entry");
     }
 

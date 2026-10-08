@@ -36,7 +36,7 @@ import {MineFlipGas} from "./libraries/MineFlipGas.sol";
 /// @notice Interface for game contract player-facing functions used by sDGNRS.
 interface IDegenerusGamePlayer {
     /// @notice Crank the unified miner router (advance + box opens), paying any earned bounty.
-    function mineFlip() external;
+    function mineFlip(uint32 gasMultiplierBps) external;
     /// @notice Start or extend a daily afking subscription for account `id` (0 = caller).
     /// @dev The afking subscription surface is GAME-resident. sDGNRS self-subscribes with
     ///      `id == 0` and `fundingSourceId == 0`. SDGNRS's subscription is exempt from the seat
@@ -528,6 +528,7 @@ contract sDGNRS {
             uint16 flipReward = (synth & 1) == 1 ? FlipRoundLib.coinflipRewardPercent(0, synth, uint24(id)) : 0;
             reserveLeft = _resolveBatch(id, batch, _rollFromWord(word), flipReward);
             result.progressed = true;
+            MineFlipGas.markProgress(meter);
         } else {
             reserveLeft = _settlingReserveLeft;
         }
@@ -545,6 +546,7 @@ contract sDGNRS {
             if (claimTokens == 0) {
                 if (!MineFlipGas.canRun(meter, 15_000, REDEMPTION_TAIL_GAS)) break;
                 _redemptionCursor = uint32(++cursor);
+                MineFlipGas.markProgress(meter);
                 continue;
             }
             (uint256 rolled, , uint256 lootbox,) =
@@ -562,6 +564,7 @@ contract sDGNRS {
             delete players[cursor++];
             // Commit the frontier before any nested calls.
             _redemptionCursor = uint32(cursor);
+            MineFlipGas.markProgress(meter);
             // Paid or parked, the claim's rolled share leaves the batch's remaining reserve; a
             // parked claim keeps it in the global reserve until claimParkedRedemption pays it.
             reserveLeft -= rolled;
@@ -574,7 +577,7 @@ contract sDGNRS {
                 emit RedemptionParked(walletId, id, reason);
             }
         }
-        if (cursor != initialCursor) result.progressed = true;
+        if (cursor != initialCursor) { result.progressed = true; MineFlipGas.markProgress(meter); }
         result.done = cursor == total;
         if (result.done) {
             _finishRedemptionSettlement(id, reserveLeft);
@@ -824,8 +827,9 @@ contract sDGNRS {
     /// @notice Crank the game miner router on behalf of sDGNRS (advance + box opens)
     /// @dev Routes through mineFlip so sDGNRS earns the miner bounty for the work;
     ///      reverts NoWork() when nothing is due.
-    function gameAdvance() external {
-        game.mineFlip();
+    /// @param gasMultiplierBps Forwarded to mineFlip unchanged; 0 selects the 1x default.
+    function gameAdvance(uint32 gasMultiplierBps) external {
+        game.mineFlip(gasMultiplierBps);
     }
 
     // =====================================================================

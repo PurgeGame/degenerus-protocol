@@ -61,7 +61,7 @@ contract MinerCallerIndependenceTest is DeployProtocol {
                 if (!fulfilled) mockVRF.fulfillRandomWords(id, 0xC011AB1E);
             }
             if (game.rngComplete() && !game.advanceDue() && !game.rngLocked()) return;
-            game.mineFlip{gas: 15_000_000}();
+            game.mineFlip{gas: 15_000_000}(0);
         }
         revert("fixture: engine did not reach idle");
     }
@@ -118,10 +118,10 @@ contract MinerCallerIndependenceTest is DeployProtocol {
         bytes32 state = _commitmentDigest();
         vm.prank(DONOR);
         vm.expectRevert(bytes4(keccak256("NoWork()")));
-        game.mineFlip{gas: 15_000_000}();
+        game.mineFlip{gas: 15_000_000}(0);
         vm.prank(OUTSIDER);
         vm.expectRevert(bytes4(keccak256("NoWork()")));
-        game.mineFlip{gas: 15_000_000}();
+        game.mineFlip{gas: 15_000_000}(0);
         assertEq(_creditDigest(), credits);
         assertEq(_commitmentDigest(), state);
     }
@@ -140,12 +140,12 @@ contract MinerCallerIndependenceTest is DeployProtocol {
         bytes32 state = _commitmentDigest();
         vm.prank(OUTSIDER);
         vm.expectRevert(bytes4(keccak256("NoWork()")));
-        game.mineFlip{gas: 15_000_000}();
+        game.mineFlip{gas: 15_000_000}(0);
         assertEq(_creditDigest(), credits, "an outsider's call spends no one's credit");
         assertEq(_commitmentDigest(), state, "an outsider's call cannot waive the value threshold");
         uint256 prior = mockVRF.lastRequestId();
         vm.prank(DONOR);
-        game.mineFlip{gas: 15_000_000}();
+        game.mineFlip{gas: 15_000_000}(0);
         assertGt(mockVRF.lastRequestId(), prior, "the donor's mineFlip reaches the coordinator");
         _assertOnlyDonorCharged();
         assertFalse(game.rngLocked(), "the donor's request is a midday cohort");
@@ -166,7 +166,7 @@ contract MinerCallerIndependenceTest is DeployProtocol {
         uint256 prior = mockVRF.lastRequestId();
         vm.recordLogs();
         vm.prank(caller);
-        game.mineFlip{gas: 15_000_000}();
+        game.mineFlip{gas: 15_000_000}(0);
         assertGt(mockVRF.lastRequestId(), prior, "automatic path actually requested a word");
         assertEq(_creditDigest(), credits, "automatic request does not spend any credit");
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -182,7 +182,7 @@ contract MinerCallerIndependenceTest is DeployProtocol {
         _buy(0.5 ether);
         uint256 prior = mockVRF.lastRequestId();
         vm.prank(DONOR);
-        game.mineFlip{gas: 15_000_000}();
+        game.mineFlip{gas: 15_000_000}(0);
         uint256 id = mockVRF.lastRequestId();
         assertGt(id, prior, "the donor's mineFlip requested a mid-day word");
         vm.warp(vm.getBlockTimestamp() + 20 hours + 2);
@@ -190,10 +190,10 @@ contract MinerCallerIndependenceTest is DeployProtocol {
         assertEq(_selectionParity(), 2, "every miner waits for the same unanswered request");
         vm.prank(OWNER);
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        game.mineFlip{gas: 15_000_000}();
+        game.mineFlip{gas: 15_000_000}(0);
         vm.prank(DONOR);
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        game.mineFlip{gas: 15_000_000}();
+        game.mineFlip{gas: 15_000_000}(0);
         assertEq(mockVRF.lastRequestId(), id, "retry is a separate authorized transport action");
         _assertOnlyDonorCharged();
     }

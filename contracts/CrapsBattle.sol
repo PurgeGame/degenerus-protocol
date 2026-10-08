@@ -653,6 +653,7 @@ contract CrapsBattle is CrapsBattleStorage {
                 ++k;
             }
             done = n;
+            MineFlipGas.markProgress(meter);
         }
         // Reserve the cursor write in _SETTLE_TAIL_GAS even on a budget stop.
         // No admitted seat means no write. The fresh masked write preserves the

@@ -47,7 +47,7 @@ contract RngStructuralLivenessReviewTest is DeployProtocol {
                 if (!fulfilled) mockVRF.fulfillRandomWords(request, 0xA11D17);
             }
             if (game.rngComplete() && !game.advanceDue()) return;
-            game.mineFlip{gas: 15_000_000}();
+            game.mineFlip{gas: 15_000_000}(0);
         }
         fail("engine failed to reach idle");
     }
@@ -65,7 +65,7 @@ contract RngStructuralLivenessReviewTest is DeployProtocol {
     function _requestMidday(uint256 word) private returns (uint48 read) {
         uint256 previous = mockVRF.lastRequestId();
         for (uint256 i; i < 100 && mockVRF.lastRequestId() == previous; ++i) {
-            game.mineFlip{gas: 15_000_000}();
+            game.mineFlip{gas: 15_000_000}(0);
         }
         assertGt(mockVRF.lastRequestId(), previous, "fresh request actually issued");
         assertFalse(game.rngLocked(), "test exercises unlocked midday window");
@@ -78,7 +78,7 @@ contract RngStructuralLivenessReviewTest is DeployProtocol {
         vm.recordLogs();
         for (uint256 i; i < 200 && !game.rngComplete(); ++i) {
             vm.prank(keeper);
-            game.mineFlip{gas: gasBudget}();
+            game.mineFlip{gas: gasBudget}(0);
             ++calls;
         }
         assertTrue(game.rngComplete(), "sealed cohort drains without a permanent revert");

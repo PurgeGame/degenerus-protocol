@@ -121,9 +121,9 @@ contract DegradeTerminalMissingWordTest is DeployProtocol {
         vm.prank(address(game));
         affiliate.payAffiliate(1000 ether, bytes32(uint256(uint160(TOP))), 0xB001, 11, true, 0);
         assertTrue(game.livenessTriggered(), "caught up past the deadline");
-        game.mineFlip(); // latch + terminal request
+        game.mineFlip(0); // latch + terminal request
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), WORD);
-        game.mineFlip(); // apply the word
+        game.mineFlip(0); // apply the word
         assertFalse(game.gameOver(), "applying the word does not pay out");
     }
 
@@ -132,10 +132,10 @@ contract DegradeTerminalMissingWordTest is DeployProtocol {
         _reachPayout();
         _fixture(abi.encodeCall(MissingWordSeeder.dropTerminalWord, ()));
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        game.mineFlip();
+        game.mineFlip(0);
         vm.warp(block.timestamp + 14 days);
         vm.recordLogs();
-        for (uint256 i; i < 20 && !game.gameOver(); ++i) game.mineFlip();
+        for (uint256 i; i < 20 && !game.gameOver(); ++i) game.mineFlip(0);
         assertTrue(game.gameOver(), "dead ending reached game over");
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {

@@ -340,7 +340,7 @@ contract JackpotPhaseStageSequence is DeployProtocol {
                 }
             }
             vm.recordLogs();
-            game.mineFlip();
+            game.mineFlip(0);
             Vm.Log[] memory logs = vm.getRecordedLogs();
             bool sealedNow;
             for (uint256 j; j < logs.length; ++j) {

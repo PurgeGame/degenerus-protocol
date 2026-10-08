@@ -387,7 +387,7 @@ contract SdgnrsCenturyRecycleTest is RedemptionCloseTools {
         vm.warp(block.timestamp + 400 days);
         for (uint256 i; i < 240 && !game.gameOver(); ++i) {
             if (game.advanceDue() || game.rngLocked()) {
-                try game.mineFlip() {} catch {}
+                try game.mineFlip(0) {} catch {}
             }
             uint256 req = mockVRF.lastRequestId();
             if (req != 0) {

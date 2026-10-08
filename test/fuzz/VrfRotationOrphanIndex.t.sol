@@ -68,7 +68,7 @@ contract VrfRotationOrphanIndex is DeployProtocol {
     /// @dev Complete a full day: mineFlip -> VRF fulfill -> drain until unlocked.
     function _completeDay(uint256 vrfWord) internal {
         _finishReadConsumers();
-        game.mineFlip();
+        game.mineFlip(0);
         uint256 reqId = mockVRF.lastRequestId();
         if (reqId != _lastFulfilledReqId && reqId > 0) {
             mockVRF.fulfillRandomWords(reqId, vrfWord);
@@ -76,7 +76,7 @@ contract VrfRotationOrphanIndex is DeployProtocol {
         }
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked()) break;
-            game.mineFlip();
+            game.mineFlip(0);
         }
         _finishReadConsumers();
     }
@@ -84,7 +84,7 @@ contract VrfRotationOrphanIndex is DeployProtocol {
     /// @dev The mid-day request through mineFlip, its only door, as the engine's next action.
     function _mineMiddayRequest() internal {
         uint256 prior = mockVRF.lastRequestId();
-        game.mineFlip();
+        game.mineFlip(0);
         assertGt(mockVRF.lastRequestId(), prior, "mineFlip issued the mid-day request");
         assertFalse(game.rngLocked(), "a mid-day request, not the daily one");
     }

@@ -78,7 +78,7 @@ abstract contract DeployProtocol is Test {
             if (game.rngComplete()
                 || RecyclingState.currentWord(address(game)) != initialWord
                 || RecyclingState.readBuffer(address(game)) != initialRead) return;
-            game.mineFlip();
+            game.mineFlip(0);
         }
         fail("fixture committed session did not drain through state engine");
     }
@@ -135,7 +135,7 @@ abstract contract DeployProtocol is Test {
     /// @return calls Successful mineFlip calls made.
     function _mineAll(uint256 maxCalls) internal returns (uint256 calls) {
         for (; calls < maxCalls; ++calls) {
-            try game.mineFlip() {} catch (bytes memory reason) {
+            try game.mineFlip(0) {} catch (bytes memory reason) {
                 bytes4 sel = bytes4(reason);
                 if (reason.length == 4 && (sel == bytes4(keccak256("NoWork()")) || sel == bytes4(keccak256("RngNotReady()")))) {
                     return calls;

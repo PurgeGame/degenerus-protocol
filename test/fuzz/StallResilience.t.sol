@@ -24,12 +24,12 @@ contract StallResilience is DeployProtocol {
     /// @dev Complete a full day: mineFlip -> VRF fulfill -> loop until unlocked.
     function _completeDay(uint256 vrfWord) internal {
         _finishReadConsumers();
-        game.mineFlip();
+        game.mineFlip(0);
         uint256 reqId = mockVRF.lastRequestId();
         mockVRF.fulfillRandomWords(reqId, vrfWord);
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked()) break;
-            game.mineFlip();
+            game.mineFlip(0);
         }
         _finishReadConsumers();
     }
@@ -72,7 +72,7 @@ contract StallResilience is DeployProtocol {
     /// @dev One engine step. The miner's explicit stop signals (waiting on a word, nothing to
     ///      do) end a drive loop; any other revert is a real failure and fails the test.
     function _step() internal returns (bool moved) {
-        try game.mineFlip() {
+        try game.mineFlip(0) {
             return true;
         } catch (bytes memory err) {
             bytes4 sel = bytes4(err);
@@ -92,7 +92,7 @@ contract StallResilience is DeployProtocol {
     function _resumeAfterSwap(MockVRFCoordinator newVRF, uint256 vrfWord) internal {
         uint256 reqId = newVRF.lastRequestId();
         if (reqId == 0) {
-            game.mineFlip();
+            game.mineFlip(0);
             reqId = newVRF.lastRequestId();
         }
         uint24 sealedBefore = _dailyIdx();
@@ -133,7 +133,7 @@ contract StallResilience is DeployProtocol {
 
         // Warp to the next day, trigger VRF request (this will stall)
         vm.warp(block.timestamp + 1 days);
-        game.mineFlip();
+        game.mineFlip(0);
         assertTrue(game.rngLocked(), "Day 3 VRF request pending");
 
         // Stall: warp +3 days without fulfilling (gap days: 3, 4, 5; current day after warp: 6)
@@ -190,7 +190,7 @@ contract StallResilience is DeployProtocol {
 
         // Warp to the next day (day 3), trigger VRF request (will stall)
         vm.warp(block.timestamp + 1 days);
-        game.mineFlip();
+        game.mineFlip(0);
         assertTrue(game.rngLocked(), "Day 3 VRF pending");
 
         // Purchase during stall at day 3 (stakes go to day 4)
@@ -256,7 +256,7 @@ contract StallResilience is DeployProtocol {
 
         // mineFlip triggers VRF request, which reserves lootbox index preStallIndex (2)
         // and increments lootboxRngIndex to 3
-        game.mineFlip();
+        game.mineFlip(0);
         assertTrue(game.rngLocked(), "Day 2 VRF pending");
 
         // The stalled request reserved preStallIndex
@@ -275,7 +275,7 @@ contract StallResilience is DeployProtocol {
         // first action of the next call, before any consumer reads the word.
         newVRF.fulfillRandomWords(newVRF.lastRequestId(), 0x1007CAFE);
         vm.recordLogs();
-        game.mineFlip();
+        game.mineFlip(0);
         assertTrue(_lootboxRngWord(orphanedIndex) != 0, "Reserved index finalized by the reissued word");
 
         // The engine steps on that index without an unexpected error, and the box bought into

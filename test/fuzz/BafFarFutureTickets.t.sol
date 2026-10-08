@@ -131,7 +131,7 @@ contract BafFarFutureTicketsTest is DeployProtocol {
         for (uint256 j = 0; j < MAX_CRANKS_PER_DAY; j++) {
             _fulfillVrfIfPending(vrfSeed);
             (bool ok, bytes memory err) = address(game).call{gas: CRANK_GAS}(
-                abi.encodeWithSignature("mineFlip()")
+                abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
             );
             if (ok) continue;
             bytes4 sel = err.length >= 4 ? bytes4(err) : bytes4(0);

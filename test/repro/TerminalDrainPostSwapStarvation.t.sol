@@ -113,7 +113,7 @@ contract TerminalDrainPostSwapStarvationTest is DeployProtocol {
         assertTrue(game.livenessTriggered(), "deadline passed, caught up, VRF alive");
 
         uint256 req0 = mockVRF.lastRequestId();
-        game.mineFlip(); // the one terminal swap + terminal request
+        game.mineFlip(0); // the one terminal swap + terminal request
         (uint256 rl, uint256 wl, uint256 sw) = _queues();
         assertEq(sw, 1, "swap latch set");
         assertEq(rl, owners, "the cohort moved to the read side");
@@ -122,7 +122,7 @@ contract TerminalDrainPostSwapStarvationTest is DeployProtocol {
         assertGt(req, req0, "terminal request sent");
 
         mockVRF.fulfillRandomWords(req, word);
-        game.mineFlip(); // applies the terminal word; returns before any drain
+        game.mineFlip(0); // applies the terminal word; returns before any drain
         assertTrue(game.rngWordForDay(game.currentDayView()) != 0, "terminal word recorded");
         assertFalse(game.gameOver(), "not over yet");
         (rl,,) = _queues();
@@ -132,7 +132,7 @@ contract TerminalDrainPostSwapStarvationTest is DeployProtocol {
 
         for (uint256 i; i < preBatches; ++i) {
             _coolEngine();
-            game.mineFlip{gas: 3_500_000}();
+            game.mineFlip{gas: 3_500_000}(0);
             assertFalse(game.gameOver(), "pre-batch returned before the payout");
         }
         (rl,,) = _queues();
@@ -162,7 +162,7 @@ contract TerminalDrainPostSwapStarvationTest is DeployProtocol {
     function _finish() private {
         for (uint256 i; i < 100 && _jackpotPaid() == 0; ++i) {
             _coolEngine();
-            game.mineFlip{gas: 12_000_000}();
+            game.mineFlip{gas: 12_000_000}(0);
             _assertNoPrematurePayout();
         }
         assertTrue(game.gameOver(), "ending completes");
@@ -219,7 +219,7 @@ contract TerminalDrainPostSwapStarvationTest is DeployProtocol {
             uint256 createdBefore = _bucketTotal();
             _coolEngine();
             vm.recordLogs();
-            (bool ok,) = address(game).call{gas: limits[i]}(abi.encodeCall(game.mineFlip, ()));
+            (bool ok,) = address(game).call{gas: limits[i]}(abi.encodeCall(game.mineFlip, (uint32(0))));
             _assertNoPrematurePayout();
             if (!game.gameOver()) ++pauses;
             (uint256 queued,,) = _queues();

@@ -71,6 +71,30 @@ contract MineFlipHumanBudgetTest is DeployProtocol {
         assertEq(BoxOrderLib.boCount(host.order()), 100);
         assertEq(BoxOrderLib.boId(host.order()), game.walletIdOf(BUYER));
     }
+    function test_PublicRouterAttemptsWideBoxAtMaximumCalibration() public {
+        _queueWideBox();
+        game.mineFlip{gas: 12_000_000}(type(uint32).max);
+        assertEq(host.order(), 0);
+        assertEq(host.cursor(), 1);
+    }
+    function test_InvalidMultiplierCannotMutatePendingBox() public {
+        _queueWideBox();
+        uint256 beforeOrder = host.order();
+        vm.expectRevert(MineFlipGas.InvalidGasMultiplier.selector);
+        game.mineFlip(9_999);
+        assertEq(host.order(), beforeOrder);
+    }
+    function test_ZeroAndExplicitBaselineProduceSameBoxOutcome() public {
+        _queueWideBox();
+        uint256 snap = vm.snapshotState();
+        game.mineFlip{gas: 12_000_000}(0);
+        uint256 expected = game.claimableWinningsOf(BUYER);
+        uint256 cursor = host.cursor();
+        vm.revertToStateAndDelete(snap);
+        game.mineFlip{gas: 12_000_000}(10_000);
+        assertEq(game.claimableWinningsOf(BUYER), expected);
+        assertEq(host.cursor(), cursor);
+    }
     function test_FirstWideBoxWaitsForItsAtomicAllowance() public {
         _queueWideBox();
         uint256 beforeOrder = host.order();
@@ -94,6 +118,15 @@ contract MineFlipHumanBudgetTest is DeployProtocol {
             assertEq(host.order(), beforeOrder);
             assertEq(host.cursor(), 0);
         }
+    }
+    function test_ExtremeCalibrationAttemptsOneWholeBet() public {
+        vm.prank(BUYER);
+        game.placeDegeneretteBet{value: 0.125 ether}(0, 0, uint128(0.005 ether), 25, 9);
+        host.publishRead();
+        MineFlipGas.Result memory result = host.workBet{gas: 10_000_000}(
+            MineFlipGas.budget(9_000_000, type(uint32).max, true));
+        assertTrue(result.progressed);
+        assertEq(host.betCursor(), 1);
     }
     function test_BetReservesWholeSlipBeforeMutation() public {
         vm.prank(BUYER);
@@ -178,6 +211,19 @@ contract MineFlipDecimatorBudgetTest is Test {
         uint256 word = 2;
         while (Sample.at(word, LVL, 2, 0) != 1) ++word;
         host.seal(LVL, 30 ether, word);
+    }
+    function test_ExtremeCalibrationFinishesSimulationRankingAndPayment() public {
+        uint256 calls;
+        while (host.queue() != 0 && calls++ < 10) {
+            MineFlipGas.Result memory result = host.runDecimatorWork{gas: 10_000_000}(
+                MineFlipGas.budget(9_000_000, type(uint32).max, true));
+            assertTrue(result.progressed, "each subphase persists a checkpoint");
+        }
+        assertEq(host.queue(), 0);
+        assertEq(host.roundOf(LVL).phase, 3);
+        assertEq(host.balanceOf(address(0xA11CE)), 16.5 ether);
+        assertEq(host.passesOf(address(0xA11CE)), 6);
+        assertGt(calls, 1);
     }
     function test_RunReservesBeforeMutationThenChainsRankAndPay() public {
         MineFlipGas.Result memory result = host.runDecimatorWork(500_000);

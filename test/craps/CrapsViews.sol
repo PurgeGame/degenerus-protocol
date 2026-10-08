@@ -698,7 +698,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
         if (allowance == 0) return result;
         MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
         if (!MineFlipGas.canRun(meter, _SEAT_GAS_MAX, _SETTLE_TAIL_GAS + _CREDIT_GAS_MAX + _WORK_TAIL_GAS)) return result;
-        result = this.resolveRngSlot(slot, _resolverAllowance(MineFlipGas.remaining(meter)));
+        result = this.resolveRngSlot(slot, MineFlipGas.child(meter, _WORK_TAIL_GAS + 30_000));
         MineFlipGas.finish(meter);
     }
 

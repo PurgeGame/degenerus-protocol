@@ -91,7 +91,7 @@ contract BafStagedGameOverTest is BafBracketFixture {
         for (uint256 i; i < 120 && !game.gameOver(); ++i) {
             _answer();
             vm.recordLogs();
-            try game.mineFlip() {} catch {}
+            try game.mineFlip(0) {} catch {}
             Vm.Log[] memory logs = vm.getRecordedLogs();
             _assertNoBafAward(logs);
             for (uint256 j; j < logs.length; ++j) {

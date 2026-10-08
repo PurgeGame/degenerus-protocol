@@ -31,12 +31,12 @@ contract VRFPathCoverage is DeployProtocol {
     /// @dev Complete a full day: mineFlip -> VRF fulfill -> loop until unlocked.
     function _completeDay(uint256 vrfWord) internal {
         _finishReadConsumers();
-        game.mineFlip();
+        game.mineFlip(0);
         uint256 reqId = mockVRF.lastRequestId();
         mockVRF.fulfillRandomWords(reqId, vrfWord);
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked()) break;
-            game.mineFlip();
+            game.mineFlip(0);
         }
             _finishReadConsumers();
     }
@@ -45,7 +45,7 @@ contract VRFPathCoverage is DeployProtocol {
     /// @dev The mid-day request through mineFlip, its only door, as the engine's next action.
     function _mineMiddayRequest() internal returns (uint256 reqId) {
         uint256 prior = mockVRF.lastRequestId();
-        game.mineFlip();
+        game.mineFlip(0);
         reqId = mockVRF.lastRequestId();
         assertGt(reqId, prior, "mineFlip issued the mid-day request");
         assertFalse(game.rngLocked(), "a mid-day request, not the daily one");
@@ -89,7 +89,7 @@ contract VRFPathCoverage is DeployProtocol {
     /// @dev One engine step. The miner's explicit stop signals (waiting on a word, nothing to
     ///      do) end a drive loop; any other revert is a real failure and fails the test.
     function _step() internal returns (bool moved) {
-        try game.mineFlip() {
+        try game.mineFlip(0) {
             return true;
         } catch (bytes memory err) {
             bytes4 sel = bytes4(err);
@@ -107,7 +107,7 @@ contract VRFPathCoverage is DeployProtocol {
     function _resumeAfterSwap(MockVRFCoordinator newVRF, uint256 vrfWord) internal {
         uint256 reqId = newVRF.lastRequestId();
         if (reqId == 0) {
-            game.mineFlip();
+            game.mineFlip(0);
             reqId = newVRF.lastRequestId();
         }
         bool daily = game.rngLocked();
@@ -142,7 +142,7 @@ contract VRFPathCoverage is DeployProtocol {
     function _stallDay3AndResume(uint256 resumeDay) internal returns (MockVRFCoordinator newVRF) {
         _completeDay(0xDEAD0001);
         vm.warp(3 * 86400);
-        game.mineFlip();
+        game.mineFlip(0);
         assertTrue(game.rngLocked(), "Day 3 VRF pending");
 
         vm.warp(resumeDay * 86400);
@@ -254,7 +254,7 @@ contract VRFPathCoverage is DeployProtocol {
 
         vm.warp(46 * 86400);
         assertFalse(game.livenessTriggered(), "inside the deadman window");
-        game.mineFlip();
+        game.mineFlip(0);
         assertTrue(game.rngLocked(), "Day 46 requested");
         newVRF.fulfillRandomWords(newVRF.lastRequestId(), vrfWord);
 
@@ -262,18 +262,18 @@ contract VRFPathCoverage is DeployProtocol {
         // An allowance of DAILY_GAP plus the engine reserves can never admit DAILY_GAP plus its
         // check reserve: these calls stop before it.
         for (uint256 i; i < 8 && game.nextMinerAction() != ACTION_DAILY_GAP; ++i) {
-            game.mineFlip{gas: GasBounds.DAILY_GAP + GasBounds.ENGINE_BOUNDARY + GasBounds.ENGINE_RETURN}();
+            game.mineFlip{gas: GasBounds.DAILY_GAP + GasBounds.ENGINE_BOUNDARY + GasBounds.ENGINE_RETURN}(0);
         }
         assertEq(game.nextMinerAction(), ACTION_DAILY_GAP, "next chunk is the 29-day gap");
         // (a) a realistic allowance succeeds and progresses through the gap
         snap = vm.snapshotState();
-        game.mineFlip{gas: 10_000_000}();
+        game.mineFlip{gas: 10_000_000}(0);
         assertTrue(game.rngWordForDay(45) != 0, "a 10M call derives the skipped days");
         vm.revertToState(snap);
         // (b) the gap chunk alone, at its declared admission bound plus the engine reserves
         uint256 supplied = GasBounds.DAILY_GAP + GasBounds.ENGINE_BOUNDARY + GasBounds.ENGINE_RETURN + 200_000;
         uint256 gasBefore = gasleft();
-        game.mineFlip{gas: supplied}();
+        game.mineFlip{gas: supplied}(0);
         uint256 gasUsed = gasBefore - gasleft();
         assertEq(game.nextMinerAction(), ACTION_DAILY_APPLY, "exactly the gap chunk ran");
         assertTrue(game.rngWordForDay(45) != 0, "every skipped day derived in that chunk");
@@ -328,7 +328,7 @@ contract VRFPathCoverage is DeployProtocol {
         uint256 reissued = newVRF.lastRequestId();
         newVRF.fulfillRandomWords(reissued, 0xDEAD0004);
         vm.recordLogs();
-        game.mineFlip();
+        game.mineFlip(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bool filled;
         for (uint256 i = 0; i < logs.length; i++) {
@@ -403,7 +403,7 @@ contract VRFPathCoverage is DeployProtocol {
 
         // Warp to the next day (day 3 absolute), trigger VRF request (will stall)
         vm.warp(3 * 86400);
-        game.mineFlip();
+        game.mineFlip(0);
         assertTrue(game.rngLocked(), "Day 3 VRF pending");
         uint48 indexAfterDay3Request = _lootboxRngIndex();
 
@@ -426,7 +426,7 @@ contract VRFPathCoverage is DeployProtocol {
         // it on the sealed buffer before anything else.
         newVRF.fulfillRandomWords(newVRF.lastRequestId(), vrfWord);
         vm.recordLogs();
-        game.mineFlip();
+        game.mineFlip(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 published;
         uint48 publishedIndex;

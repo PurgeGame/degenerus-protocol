@@ -70,7 +70,7 @@ contract RngRetryLootboxStallTest is DeployProtocol {
         //    rngLockedFlag = false).
         uint256 priorReqId = mockVRF.lastRequestId();
         vm.prank(attacker);
-        game.mineFlip();
+        game.mineFlip(0);
         uint256 lootboxReqId = mockVRF.lastRequestId();
         assertGt(lootboxReqId, priorReqId, "mineFlip issued the mid-day request");
         assertFalse(game.rngLocked(), "the request is a mid-day one");
@@ -129,7 +129,7 @@ contract RngRetryLootboxStallTest is DeployProtocol {
                     (, , lpd2, rngL2, ) = game.purchaseInfo();
                     if (lpd2 && !rngL2) return game.level();
                 }
-                (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+                (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
                 if (!ok) break;
             }
         }
@@ -161,7 +161,7 @@ contract RngRetryLootboxStallTest is DeployProtocol {
 
             if (game.level() != L0) return game.level();
 
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) {
                 // Need a fresh wall-clock day (e.g. NotTimeYet / death-clock pacing).
                 simTime += 1 days + 1;
@@ -185,7 +185,7 @@ contract RngRetryLootboxStallTest is DeployProtocol {
                 if (done) return;
                 _fulfillVrfIfPending();
             } else {
-                game.mineFlip();
+                game.mineFlip(0);
             }
         }
         revert("harness: mid-day work did not settle");

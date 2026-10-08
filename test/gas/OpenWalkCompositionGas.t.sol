@@ -26,7 +26,7 @@ contract OpenWalkCompositionGas is DeployProtocol {
     uint256 private constant SUBSCRIBERS_SLOT = GameSlots.SUBSCRIBERS; // packed uint32[]
     uint256 private constant OFF_LASTBOUGHT = 7;
     uint256 private constant OFF_LASTOPENED = 10;
-    uint256 internal constant INTRINSIC_TX_GAS = 21_064;
+    uint256 internal constant INTRINSIC_TX_GAS = 21_192;
     uint256 internal constant RING_1000_NEW_SUBS = 998;
     uint256 internal constant RING_500_NEW_SUBS = 500;
     uint256 internal constant RING_100_NEW_SUBS = 100;
@@ -150,13 +150,13 @@ contract OpenWalkCompositionGas is DeployProtocol {
             if (!game.advanceDue() && !game.isRngFulfilled() && !game.rngLocked()) {
                 // Whatever the engine still finds (read-cohort settlement, maintenance, a mid-day
                 // request) runs here; a NoWork revert means the crank is quiet.
-                try game.mineFlip() {} catch { break; }
+                try game.mineFlip(0) {} catch { break; }
             }
         }
         _coolProtocol();
         vm.prank(makeAddr(string(abi.encodePacked(prefix, "probe"))));
         uint256 gasBefore = gasleft();
-        (bool ok, bytes memory reason) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+        (bool ok, bytes memory reason) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
         gasUsed = gasBefore - gasleft();
         require(!ok, "fixture: the NoWork probe reverted as expected (drained ring, zero human work)");
         assertEq(reason, abi.encodeWithSignature("NoWork()"), "measure NoWork, not another refusal");
@@ -200,7 +200,7 @@ contract OpenWalkCompositionGas is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) break;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.mineFlip();
+            game.mineFlip(0);
             _fulfillPending(vrfWord);
         }
     }
@@ -212,7 +212,7 @@ contract OpenWalkCompositionGas is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) return;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) return;
-            game.mineFlip();
+            game.mineFlip(0);
             _fulfillPending(vrfWord);
         }
     }

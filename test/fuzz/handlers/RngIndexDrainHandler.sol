@@ -243,7 +243,7 @@ contract RngIndexDrainHandler is RngIndexDrainOracle {
         bool ok;
         for (uint256 k; k < 3 && !ok; ++k) {
             vm.recordLogs();
-            try game.mineFlip{gas: allowances[k]}() {
+            try game.mineFlip{gas: allowances[k]}(0) {
                 ok = true;
             } catch (bytes memory err) {
                 // Reverted logs are not committed state and must not be scored.

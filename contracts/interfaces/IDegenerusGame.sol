@@ -58,6 +58,9 @@ enum MintPaymentKind {
 ///      - Third-party recipients (deity-boon recipient, AFKing deposit beneficiary, AFKing
 ///        funding source) are IDs that must already exist: 0 or an unallocated ID reverts `E`.
 interface IDegenerusGame {
+    /// @notice Execute ordered game work. Zero selects the 10,000-bps default estimate factor.
+    function mineFlip(uint32 gasMultiplierBps) external;
+
     function liquidateAccount(uint32 id, uint256 minEthOut) external;
     function previewLiquidateAccount(uint32 id) external returns (LiquidationQuote memory);
     function harvestAcquiredAccounts(uint32 buyer, uint32[] calldata ids) external returns (uint256);

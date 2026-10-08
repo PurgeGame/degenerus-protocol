@@ -60,8 +60,8 @@ contract ProtocolBoonAdvanceGasTest is DeployProtocol {
     function testColdAdvanceAwardsSixAtMaximumSearchDepthAndResumes() public {
         vm.recordLogs();
         uint256 beforeGas = gasleft();
-        game.mineFlip{gas: 10_000_000}();
-        uint256 used = beforeGas - gasleft() + 21_064;
+        game.mineFlip{gas: 10_000_000}(0);
+        uint256 used = beforeGas - gasleft() + 21_192;
         emit log_named_uint("cold RNG settlement plus six automatic boons including intrinsic", used);
         // This call must make progress with the supplied allowance and commit all six awards.
         // The separate native phase test checks DAILY_APPLY; a whole engine call may compose more work.
@@ -77,7 +77,7 @@ contract ProtocolBoonAdvanceGasTest is DeployProtocol {
         assertEq(lens.protocolBoonPool(address(game), address(sdgnrs), day - 1).awardedMask, 7);
         vm.warp(vm.getBlockTimestamp() + 1 days);
         vm.recordLogs();
-        game.mineFlip();
+        game.mineFlip(0);
         logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
             assertTrue(logs[i].topics[0] != keccak256("ProtocolBoonDrawAwarded(uint32,uint32,uint24,uint8,uint32,uint8)"), "resume re-awarded a slot");
@@ -91,7 +91,7 @@ contract ProtocolBoonAdvanceGasTest is DeployProtocol {
         vm.recordLogs();
         host.applyOnly{gas: 12_000_000}();
         uint256 used = vm.lastCallGas().gasTotalUsed;
-        if (!vm.envOr("FOUNDRY_ISOLATE", false)) used += 21_064;
+        if (!vm.envOr("FOUNDRY_ISOLATE", false)) used += 21_192;
         emit log_named_uint("native_daily_apply_six_boons_including_intrinsic", used);
         assertLt(used, GasBounds.DAILY_APPLY, "complete native daily phase exceeds saved admission bound");
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -109,7 +109,7 @@ contract ProtocolBoonAdvanceGasTest is DeployProtocol {
 
     function testInsufficientGasCannotDiscardOrSealAwards() public {
         uint24 day = game.currentDayView();
-        (bool ok,) = address(game).call{gas: 100_000}(abi.encodeCall(game.mineFlip, ()));
+        (bool ok,) = address(game).call{gas: 100_000}(abi.encodeCall(game.mineFlip, (uint32(0))));
         // A low-gas call may return without progress or fail naturally; neither may
         // consume the day word or drop any owed boon.
         ok;
@@ -117,7 +117,7 @@ contract ProtocolBoonAdvanceGasTest is DeployProtocol {
         assertEq(game.rngWordForDay(day), 0, "failed advance cannot record the word");
         assertEq(lens.protocolBoonPool(address(game), address(vault), day - 1).awardedMask, 0);
         assertEq(lens.protocolBoonPool(address(game), address(sdgnrs), day - 1).awardedMask, 0);
-        game.mineFlip();
+        game.mineFlip(0);
         assertEq(lens.protocolBoonPool(address(game), address(vault), day - 1).awardedMask, 7);
         assertEq(lens.protocolBoonPool(address(game), address(sdgnrs), day - 1).awardedMask, 7);
     }

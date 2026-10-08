@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameGameOverModule} from "../../contracts/modules/DegenerusGameGameOverModule.sol";
 import {IVRFCoordinator, VRFRandomWordsRequest} from "../../contracts/interfaces/IVRFCoordinator.sol";
@@ -121,18 +122,25 @@ contract TerminalRngCheckpointsTest is Test {
         assertTrue(active && published);
     }
 
-    /// @dev With its whole stipend guaranteed, a coordinator that exhausts it cannot have been
-    ///      starved by the caller: it is a refusal, so the one-shot dead timer arms.
-    function test_CoordinatorGasFailureWithinFullStipendArmsTimerLikeARefusal() public {
+    function test_ExtremeCalibrationCannotPreventFirstTerminalRequest() public {
+        (,,, bool progressed) = h.runGameOverAdvance{gas: 4_000_000}(
+            priorDay, 10, MineFlipGas.budget(4_000_000, type(uint32).max, true));
+        assertTrue(progressed);
+        assertEq(vrf.calls(), 1);
+    }
+
+    function test_CoordinatorGasFailureDoesNotArmRefusalTimer() public {
         vrf.setMode(2);
-        _advance(priorDay, 4_000_000);
-        assertEq(vrf.calls(), 0, "no request was accepted");
+        vm.expectRevert();
+        h.runGameOverAdvance{gas: 4_000_000}(
+            priorDay, 10, MineFlipGas.budget(4_000_000, type(uint32).max, true));
         (uint24 day, uint48 at, bool active,) = h.identity();
-        assertEq(day, priorDay + 1);
-        assertGt(at, 0);
+        assertEq(day, 0);
+        assertEq(at, 0);
         assertFalse(active);
-        vm.warp(uint256(at) + 14 days + 1);
-        assertTrue(h.dead());
+        vrf.setMode(0);
+        assertTrue(_advance(priorDay, 4_000_000));
+        assertEq(vrf.calls(), 1, "same request remains retryable");
     }
 
     function test_SemanticRefusalRetainsFirstTimerAndEventuallyExpires() public {

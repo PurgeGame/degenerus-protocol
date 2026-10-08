@@ -393,7 +393,7 @@ describe("DegenerusVault", function () {
     it("gameAdvance reverts when caller is not vault owner", async function () {
       const { vault, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        vault.connect(alice).gameAdvance()
+        vault.connect(alice).gameAdvance(0)
       ).to.be.revertedWithCustomError(vault, "NotVaultOwner");
     });
 
@@ -437,7 +437,7 @@ describe("DegenerusVault", function () {
       await advanceToNextDay();
       // Deployer holds 100% DGVE initially
       await expect(
-        vault.connect(deployer).gameAdvance()
+        vault.connect(deployer).gameAdvance(0)
       ).to.not.be.reverted;
     });
 

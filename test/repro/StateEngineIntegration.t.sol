@@ -51,8 +51,8 @@ contract StateEngineIntegrationTest is RedemptionCloseTools {
         vm.recordLogs();
         vm.prank(MINER);
         uint256 before = gasleft();
-        game.mineFlip{gas: supplied}();
-        used = before - gasleft() + 21_064;
+        game.mineFlip{gas: supplied}(0);
+        used = before - gasleft() + 21_192;
         assertLe(used, supplied + 30_000, "engine call exceeds supplied gas plus intrinsic/frame");
         if (used > largestCall) largestCall = used;
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -277,7 +277,7 @@ contract StateEngineIntegrationTest is RedemptionCloseTools {
         _driveCycle(false);
         assertEq(jackpotTranscript, expectedTranscript, "partitions changed ordered ETH/ticket winners");
         assertEq(_cycleBalances(), expectedBalances, "partitions changed balances, pools or request sequence");
-        assertGt(largestCall - 21_064, 10_000_000, "real composed execution exceeds the removed transaction cap");
+        assertGt(largestCall - 21_192, 10_000_000, "real composed execution exceeds the removed transaction cap");
         emit log_named_uint("full_cycle_maximum_cold_engine_gas_with_intrinsic", largestCall);
     }
 

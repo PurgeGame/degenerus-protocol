@@ -428,6 +428,7 @@ contract DegenerusGameDegeneretteModule is
             _setActiveDegeneretteCursor(pos + 1);
             ++result.rewardBasis;
             _resolveBet(bet, uint32(index), uint64(pos), rngWord, acc);
+            MineFlipGas.markProgress(meter);
         }
         _flushOwner(acc);
         _flushPool(acc);

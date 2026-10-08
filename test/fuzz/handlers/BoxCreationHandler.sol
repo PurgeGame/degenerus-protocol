@@ -382,7 +382,7 @@ contract BoxCreationHandler is Test {
         ReadState memory pre = readState();
         vm.recordLogs();
         vm.prank(currentActor);
-        try game.mineFlip() {
+        try game.mineFlip(0) {
             ok = true;
         } catch {}
         Vm.Log[] memory logs = vm.getRecordedLogs();

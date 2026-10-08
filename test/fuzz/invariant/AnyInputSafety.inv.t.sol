@@ -253,7 +253,7 @@ contract AnyInputSafety is DeployProtocol {
             _coolProtocol();
             uint256 g0 = gasleft();
             vm.prank(keeper);
-            (bool ok, bytes memory ret) = address(game).call{gas: CRANK_GAS}(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, bytes memory ret) = address(game).call{gas: CRANK_GAS}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             uint256 used = g0 - gasleft();
             if (used > r.maxGas) r.maxGas = used;
             if (ok) continue;
@@ -391,7 +391,7 @@ contract AnyInputSafety is DeployProtocol {
         for (uint256 k; k < 4; ++k) {
             _fulfillLast(k);
             vm.prank(address(0x4B33E5));
-            try game.mineFlip() { console.log("ok", k); } catch (bytes memory r) { console.logBytes(r); }
+            try game.mineFlip(0) { console.log("ok", k); } catch (bytes memory r) { console.logBytes(r); }
         }
     }
 
@@ -399,7 +399,7 @@ contract AnyInputSafety is DeployProtocol {
         vm.warp(block.timestamp + 1 days);
         for (uint256 i; i < 200; ++i) {
             _fulfillLast(salt * 1000 + i);
-            try game.mineFlip() {} catch (bytes memory reason) {
+            try game.mineFlip(0) {} catch (bytes memory reason) {
                 if (bytes4(reason) == NO_WORK) return;
                 if (bytes4(reason) == RNG_NOT_READY && _fulfillLast(salt * 1000 + i + 500)) continue;
                 return;

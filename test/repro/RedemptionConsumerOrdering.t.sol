@@ -36,12 +36,12 @@ contract RedemptionConsumerOrderingTest is RedemptionCloseTools {
     }
 
     function _request() private {
-        for (uint256 i; i < 200 && !game.rngLocked(); ++i) game.mineFlip();
+        for (uint256 i; i < 200 && !game.rngLocked(); ++i) game.mineFlip(0);
         assertTrue(game.rngLocked(), "real request established");
     }
 
     function _complete() private {
-        for (uint256 i; i < 500 && !game.rngComplete(); ++i) game.mineFlip();
+        for (uint256 i; i < 500 && !game.rngComplete(); ++i) game.mineFlip(0);
         assertTrue(game.rngComplete(), "all committed work completes");
     }
 
@@ -59,7 +59,7 @@ contract RedemptionConsumerOrderingTest is RedemptionCloseTools {
         vm.mockCall(address(sdgnrs), abi.encodeWithSignature("runRedemptionWork(uint256,uint256)"),
             abi.encode(false, false, uint256(0)));
         for (uint256 i; i < 100 && game.rngConsumerStage() != 1; ++i) {
-            try game.mineFlip{gas: 10_000_000}() {} catch {
+            try game.mineFlip{gas: 10_000_000}(0) {} catch {
                 assertEq(game.rngConsumerStage(), 1, "only the held worker may stop progress");
             }
         }
@@ -75,11 +75,11 @@ contract RedemptionConsumerOrderingTest is RedemptionCloseTools {
         uint256 reserved = sdgnrs.pendingRedemptionEthValue();
         for (uint256 g = 800_000; g <= 9_000_000; g += 25_000) {
             uint256 snap = vm.snapshotState();
-            (bool ok,) = address(game).call{gas: g}(abi.encodeWithSignature("mineFlip()"));
+            (bool ok,) = address(game).call{gas: g}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             bool settled = ok && sdgnrs.pendingRedemptionEthValue() != reserved;
             assertTrue(vm.revertToState(snap));
             if (settled) {
-                game.mineFlip{gas: g}();
+                game.mineFlip{gas: g}(0);
                 return;
             }
         }

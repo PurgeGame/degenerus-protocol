@@ -32,7 +32,7 @@ contract StallDaysNeverHappened is DeployProtocol {
 
         _t += 1 days;
         vm.warp(_t);
-        game.mineFlip();
+        game.mineFlip(0);
         uint24 R = game.currentDayView();
         uint256 reqR = mockVRF.lastRequestId();
         assertTrue(game.rngLocked(), "day R: request outstanding");
@@ -53,7 +53,7 @@ contract StallDaysNeverHappened is DeployProtocol {
         assertEq(game.rngWordForDay(R + 1), 0, "R+1 untouched by R's word");
 
         // W requests fresh; on delivery the gap R+1..W-1 is backfilled and skipped.
-        if (!game.rngLocked()) game.mineFlip();
+        if (!game.rngLocked()) game.mineFlip(0);
         assertTrue(game.rngLocked(), "W requested fresh");
         assertTrue(mockVRF.lastRequestId() != reqR, "W's request is a new one");
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), WORD_FRESH);
@@ -61,10 +61,10 @@ contract StallDaysNeverHappened is DeployProtocol {
         // chunk (DAILY_GAP plus the engine reserves never admits DAILY_GAP plus its check reserve,
         // so the lead-in calls stop before it).
         for (uint256 i; i < 8 && game.nextMinerAction() != 5; ++i) {
-            game.mineFlip{gas: GasBounds.DAILY_GAP + GasBounds.ENGINE_BOUNDARY + GasBounds.ENGINE_RETURN}();
+            game.mineFlip{gas: GasBounds.DAILY_GAP + GasBounds.ENGINE_BOUNDARY + GasBounds.ENGINE_RETURN}(0);
         }
         assertEq(game.nextMinerAction(), 5, "next chunk is the gap backfill");
-        game.mineFlip{gas: GasBounds.DAILY_GAP + GasBounds.ENGINE_BOUNDARY + GasBounds.ENGINE_RETURN + 200_000}(); // backfill tx
+        game.mineFlip{gas: GasBounds.DAILY_GAP + GasBounds.ENGINE_BOUNDARY + GasBounds.ENGINE_RETURN + 200_000}(0); // backfill tx
         assertTrue(game.rngLocked(), "lock still held after the backfill");
         assertEq(game.rngWordForDay(R + 1), 0, "older gap word is not retained in the two-day ring");
         assertTrue(game.rngWordForDay(R + 2) != 0, "R+2 has a derived word");
@@ -74,7 +74,7 @@ contract StallDaysNeverHappened is DeployProtocol {
         assertEq(_foilDraw(R + 2), 0, "no daily draw for R+2");
         // The word-application checkpoint records W while the lock is still held.
         assertEq(game.nextMinerAction(), 6, "next chunk applies W's word");
-        game.mineFlip{gas: GasBounds.DAILY_APPLY + GasBounds.ENGINE_BOUNDARY + GasBounds.ENGINE_RETURN + 200_000}();
+        game.mineFlip{gas: GasBounds.DAILY_APPLY + GasBounds.ENGINE_BOUNDARY + GasBounds.ENGINE_RETURN + 200_000}(0);
         assertTrue(game.rngWordForDay(W) != 0, "W recorded");
         assertTrue(game.rngLocked(), "W's word is recorded under the lock");
         assertEq(_dailyIdx(), W - 1, "W not sealed when its word is recorded");
@@ -93,7 +93,7 @@ contract StallDaysNeverHappened is DeployProtocol {
         _t += 1 days;
         vm.warp(_t);
         assertEq(game.rngWordForDay(W + 1), 0, "W+1 unrequested before its day");
-        game.mineFlip();
+        game.mineFlip(0);
         assertTrue(game.rngLocked(), "W+1 requested on its own day");
     }
 
@@ -104,7 +104,7 @@ contract StallDaysNeverHappened is DeployProtocol {
         _runStageNewDay(WORD_NORMAL ^ 1);
         _t += 1 days;
         vm.warp(_t);
-        game.mineFlip();
+        game.mineFlip(0);
         uint256 reqR = mockVRF.lastRequestId();
 
         _t += 130 days;
@@ -112,7 +112,7 @@ contract StallDaysNeverHappened is DeployProtocol {
         assertTrue(game.livenessTriggered(), "no sealed day for 130 days: liveness fired");
         mockVRF.fulfillRandomWords(reqR, WORD_LATE);
         for (uint256 i; i < 40 && !game.gameOver(); ++i) {
-            game.mineFlip();
+            game.mineFlip(0);
             uint256 reqId = mockVRF.lastRequestId();
             (,, bool fulfilled) = mockVRF.pendingRequests(reqId);
             if (reqId != 0 && !fulfilled) mockVRF.fulfillRandomWords(reqId, WORD_FRESH + i);
@@ -152,7 +152,7 @@ contract StallDaysNeverHappened is DeployProtocol {
             if (!game.rngLocked()) _finishReadConsumers();
             _fulfillPending(vrfWord);
             if (!game.rngLocked() && game.nextMinerAction() == 0) return;
-            game.mineFlip();
+            game.mineFlip(0);
             _fulfillPending(vrfWord);
         }
         revert("harness: day never settled");
@@ -175,7 +175,7 @@ contract StallDaysNeverHappened is DeployProtocol {
                 _finishReadConsumers();
                 return;
             }
-            game.mineFlip();
+            game.mineFlip(0);
         }
         revert("harness: lock never released");
     }
@@ -185,7 +185,7 @@ contract StallDaysNeverHappened is DeployProtocol {
     function _advanceUntilSealed(uint24 day) internal {
         for (uint256 i; i < 64; i++) {
             if (_dailyIdx() >= day) return;
-            game.mineFlip();
+            game.mineFlip(0);
         }
         revert("harness: day never sealed");
     }

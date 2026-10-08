@@ -192,7 +192,7 @@ async function placeEthBet(game, signer, quadrant, symbol) {
 // inside the mineFlip chain consume rngWordByDay[day] = word.
 async function pinDailyEntropy(game, deployer, mockVRF, word) {
   await advanceToNextDay();
-  await game.connect(deployer).mineFlip();
+  await game.connect(deployer).mineFlip(0);
   const requestId = await getLastVRFRequestId(mockVRF);
   try {
     await mockVRF.fulfillRandomWords(requestId, word);
@@ -907,7 +907,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
 
               let tx;
               try {
-                tx = await game.connect(deployer).mineFlip();
+                tx = await game.connect(deployer).mineFlip(0);
               } catch {
                 // Drain ended (NotTimeYet, etc.).
                 break;
@@ -1123,7 +1123,7 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
 
               let tx;
               try {
-                tx = await game.connect(deployer).mineFlip();
+                tx = await game.connect(deployer).mineFlip(0);
               } catch {
                 break;
               }

@@ -49,7 +49,7 @@ contract MinerKeeperRegistration is DeployProtocol {
         preSnapshot = vm.snapshotState();
         for (uint256 i; i < 16 && !game.rngLocked(); ++i) {
             vm.prank(preparer);
-            game.mineFlip();
+            game.mineFlip(0);
         }
         assertTrue(game.rngLocked(), "the request took the daily lock");
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), uint256(keccak256("registration_word")));
@@ -89,7 +89,7 @@ contract MinerKeeperRegistration is DeployProtocol {
     function _mine(address who) private returns (Outcome memory o) {
         vm.recordLogs();
         vm.prank(who);
-        game.mineFlip();
+        game.mineFlip(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 works;
         for (uint256 i; i < logs.length; ++i) {
@@ -262,7 +262,7 @@ contract MinerKeeperRegistration is DeployProtocol {
             address caller = address(uint160(0x7E3A1000 + i));
             vm.recordLogs();
             vm.prank(caller);
-            try game.mineFlip() {} catch (bytes memory reason) {
+            try game.mineFlip(0) {} catch (bytes memory reason) {
                 // The terminal cohort waits on its word: deliver it and keep cranking.
                 assertEq(bytes4(reason), bytes4(keccak256("RngNotReady()")), "only a word wait stops the terminal path");
                 mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), uint256(keccak256(abi.encode("terminal_word", i))));
@@ -291,7 +291,7 @@ contract MinerKeeperRegistration is DeployProtocol {
         // A game-over mineFlip (if any work remains) never registers either.
         address late = address(0x7E3A2000);
         vm.prank(late);
-        try game.mineFlip() {} catch {}
+        try game.mineFlip(0) {} catch {}
         assertEq(game.walletIdOf(late), 0, "game-over caller has no ID");
     }
 }

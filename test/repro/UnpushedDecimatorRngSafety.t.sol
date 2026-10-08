@@ -196,7 +196,7 @@ contract UnpushedDecimatorRngSafety is DeployProtocol {
         assertEq(sum, POOL, "all payouts finish before the next request");
         // With the round complete the engine issues the mid-day request itself.
         uint256 requestBefore = mockVRF.lastRequestId();
-        game.mineFlip();
+        game.mineFlip(0);
         assertGt(mockVRF.lastRequestId(), requestBefore);
         assertEq(RecyclingState.currentWord(address(game)), 0, "only the completed round releases its word");
         vm.expectRevert(); lens.decWinnerAt(address(game), LVL, 0);

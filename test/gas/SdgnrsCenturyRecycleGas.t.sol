@@ -145,8 +145,8 @@ abstract contract SdgnrsRecycleGasFixture is BoundaryGasFixture {
         // bounded (the per-chunk bound is _checkColdCloseChunk).
         vm.recordLogs();
         uint256 beforeGas = gasleft();
-        game.mineFlip{gas: 10_000_000}();
-        uint256 used = beforeGas - gasleft() + 21_064;
+        game.mineFlip{gas: 10_000_000}(0);
+        uint256 used = beforeGas - gasleft() + 21_192;
         emit log_named_uint("century refill + seed + 32 deity grants, cold gas including intrinsic", used);
         bool recycled;
         bool seeded;

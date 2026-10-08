@@ -122,7 +122,7 @@ contract DgnrsWrapperPaths is DeployProtocol {
         for (uint256 d; d < 240 && !game.gameOver(); d++) {
             uint256 word = uint256(keccak256(abi.encode("go", d))) | 1;
             if (game.advanceDue() || game.rngLocked()) {
-                try game.mineFlip() {} catch {}
+                try game.mineFlip(0) {} catch {}
             }
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != 0) {

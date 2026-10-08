@@ -687,7 +687,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         for (uint256 j = 0; j < 200; j++) {
             _fulfillVrfIfPending();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("mineFlip()")
+                abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
             );
             if (!ok) break;
         }
@@ -700,7 +700,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
     ///      stages is observable. Needs live gas metering (the engine meters with gasleft()).
     function _mineStep() internal returns (bool ok) {
         for (uint256 g = 1_000_000; g <= 16_750_000; g += 250_000) {
-            (ok, ) = address(game).call{gas: g}(abi.encodeWithSignature("mineFlip()"));
+            (ok, ) = address(game).call{gas: g}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (ok) return true;
         }
     }
@@ -751,7 +751,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         _finishReadConsumers();
         bool ok;
         for (uint256 i; i < 100 && !game.rngLocked(); ++i) {
-            (ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             require(ok, "harness: prerequisites and daily request must progress");
         }
         require(game.rngLocked(), "harness: the day's word must be in flight");

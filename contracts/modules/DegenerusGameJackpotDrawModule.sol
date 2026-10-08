@@ -162,13 +162,14 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
         if (started) {
             if (complete) result.done = true;
             else {
-                uint256 childAllowance = MineFlipGas.forwardable(MineFlipGas.remaining(meter), 100_000);
+                uint256 childAllowance = MineFlipGas.child(meter, 100_000);
                 if (childAllowance == 0) return result;
                 result = IJackpotBattleMeter(ContractAddresses.CRAPS).runDailyBattleWork(childAllowance);
             }
             if (result.done) {
                 dailyTicketBudgetsPacked &= ~_JACKPOT_BATTLE_PENDING;
                 result.progressed = true;
+                MineFlipGas.markProgress(meter);
             }
             MineFlipGas.finish(meter);
             return result;
@@ -186,6 +187,7 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
             bool last = exhausted || winners.length == remaining;
             battle.appendJackpotBattle(field, next, last);
             result.progressed = true;
+            MineFlipGas.markProgress(meter);
             result.rewardBasis += winners.length;
             if (last) break;
             // Append persists the exact walk position. Read the accepted-unit count back
@@ -398,11 +400,13 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
                 }
             }
             ++result.rewardBasis;
+            MineFlipGas.markProgress(meter);
         }
         if (i != work.winner) {
             work.paid -= uint128(credited);
             work.winner = uint16(i);
             result.progressed = true;
+            MineFlipGas.markProgress(meter);
         }
         if (i == n) {
             uint256 residue = work.paid;
@@ -411,6 +415,7 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
             delete jackpotWork;
             result.done = true;
             result.progressed = true;
+            MineFlipGas.markProgress(meter);
         }
         MineFlipGas.finish(meter);
     }

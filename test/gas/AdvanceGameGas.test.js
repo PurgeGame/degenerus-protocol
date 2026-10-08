@@ -126,19 +126,19 @@ describe("AdvanceGame Gas Benchmarks", function () {
 
   /** Trigger game over at level 0 (multi-step VRF flow). */
   async function triggerGameOverAtLevel0(game, deployer, mockVRF) {
-    await game.connect(deployer).mineFlip();
+    await game.connect(deployer).mineFlip(0);
     const requestId = await getLastVRFRequestId(mockVRF);
     if (requestId > 0n) {
       await mockVRF.fulfillRandomWords(requestId, 42n);
     }
-    await game.connect(deployer).mineFlip();
+    await game.connect(deployer).mineFlip(0);
     // Drain any queued tickets: with non-empty queues the terminal stage takes
     // several mineFlip calls before the game-over drain runs and latches
     // gameOver=true.
     for (let i = 0; i < 50; i++) {
       if (await game.gameOver()) return;
       try {
-        await game.connect(deployer).mineFlip();
+        await game.connect(deployer).mineFlip(0);
       } catch {
         return;
       }
@@ -423,7 +423,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
       for (let i = 0; i < 50; i++) {
         if (await game.gameOver()) break;
         try {
-          await game.connect(deployer).mineFlip();
+          await game.connect(deployer).mineFlip(0);
         } catch {
           break;
         }
@@ -639,7 +639,7 @@ describe("AdvanceGame Gas Benchmarks", function () {
       await advanceToNextDay();
 
       // mineFlip() triggers the VRF request (stage=1, rngLockedFlag=true)
-      await game.connect(deployer).mineFlip();
+      await game.connect(deployer).mineFlip(0);
       const requestId = await getLastVRFRequestId(mockVRF);
 
       // Fulfill: this is rawFulfillRandomWords() — capture the full receipt.

@@ -69,7 +69,7 @@ describe("JackpotDuration", function () {
    * day != dailyIdx (mineFlip reverts with NotTimeYet otherwise).
    */
   async function driveOneCycleSameDay(game, deployer, mockVRF, advanceModule, word) {
-    await game.connect(deployer).mineFlip();
+    await game.connect(deployer).mineFlip(0);
     const requestId = await getLastVRFRequestId(mockVRF);
     try {
       await mockVRF.fulfillRandomWords(requestId, word);
@@ -79,7 +79,7 @@ describe("JackpotDuration", function () {
     let lastStage = -1n;
     for (let i = 0; i < 200; i++) {
       try {
-        const tx = await game.connect(deployer).mineFlip();
+        const tx = await game.connect(deployer).mineFlip(0);
         const events = await getAdvanceEvents(tx, advanceModule);
         if (events.length > 0) {
           lastStage = events[0].args.stage;
@@ -337,7 +337,7 @@ describe("JackpotDuration", function () {
 
       // Advance to day 2 before calling mineFlip → purchaseDays = 2 - 1 = 1
       await advanceToNextDay();
-      await game.connect(deployer).mineFlip();
+      await game.connect(deployer).mineFlip(0);
       // purchaseDays=1 triggers turbo (one-day schedule)
       const days = await game.jackpotDuration();
       expect(days).to.equal(1, "Turbo should activate on day 2 (purchaseDays=1)");

@@ -88,7 +88,7 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
         for (uint256 i = 0; i < 200; i++) {
             if (!game.advanceDue()) break;
             vm.prank(crank);
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) break;
         }
         // The router only advances while advanceDue() says so; whatever it left must be
@@ -123,7 +123,7 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
         vm.warp(simTime);
         for (uint256 i; i < 400 && !_foilResolved(); ++i) {
             _fulfillPending();
-            (bool ok, bytes memory ret) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, bytes memory ret) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) assertTrue(_selector(ret) != SEL_NOT_TIME_YET, "harness: the crank idled before the foil generated");
         }
         assertTrue(_foilResolved(), "the next daily commitment must finish the paid foil");
@@ -182,7 +182,7 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
             game.setCrapsRngPending(crapsWindowBuffer, true);
             uint256 priorReq = mockVRF.lastRequestId();
             vm.prank(crank);
-            game.mineFlip();
+            game.mineFlip(0);
             assertGt(mockVRF.lastRequestId(), priorReq, "mineFlip issued the mid-day request");
         } else {
             _middayRequest();
@@ -218,7 +218,7 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
         assertEq(game.minerAction(), 18, "a stuck latch refuses the next request");
         uint256 priorReq = mockVRF.lastRequestId();
         vm.prank(crank);
-        (bool ok, bytes memory ret) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+        (bool ok, bytes memory ret) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
         if (!ok) {
             assertTrue(_selector(ret) != SEL_RNG_NOT_READY, "a stuck latch refuses the next request");
             revert("a second mid-day request must be accepted");
@@ -245,7 +245,7 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
                 && game.rngWordForDay(game.currentDayView()) != 0 && game.rngComplete()
                 && !game.advanceDue()) return lvl;
             _fulfillPending();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) {
                 simTime += 1 days + 1;
                 vm.warp(simTime);
@@ -261,7 +261,7 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
 
     function _crankAdvance(uint256 n) internal returns (bytes4 last) {
         for (uint256 i = 0; i < n; i++) {
-            (bool ok, bytes memory ret) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, bytes memory ret) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) return _selector(ret);
         }
     }
@@ -295,7 +295,7 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
         game.purchase{value: 2 ether}(0, 0, BoxOrderLib.boCustom(2 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         uint256 priorReq = mockVRF.lastRequestId();
         vm.prank(crank);
-        (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+        (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
         require(ok && mockVRF.lastRequestId() > priorReq, "harness: mineFlip must issue the mid-day request");
     }
 

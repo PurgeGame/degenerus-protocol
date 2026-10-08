@@ -26,7 +26,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 /// @title KeeperRouterOneCategory -- TST-02 (Phase 351, v55.0 game-resident): one-rewarded-category-per-tx
 ///        (no bounty-stacking) on `mineFlip()` + the router->game->creditFlip double-pay disposition.
 ///
-/// @notice The v55 router (`game.mineFlip()`, GameAfkingModule.sol:985) is a STRUCTURAL one-category
+/// @notice The v55 router (`game.mineFlip(0)`, GameAfkingModule.sol:985) is a STRUCTURAL one-category
 ///         early-return: `if (advanceDue) {advance leg} else {open leg}` (GameAfkingModule.sol:993 vs :1000).
 ///         There are exactly TWO router categories — advance (the buy folded into mineFlip's required-path
 ///         STAGE, so it rides the advance bounty) and the box open (afking boxes first, then human boxes with
@@ -62,7 +62,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///   (testMintFlipOpensHumanBoxAndPaysBounty).
 ///
 /// @dev The five call-site deltas applied (D-351-01):
-///   Δ3 doWork->mineFlip: `afKing.doWork()` -> `game.mineFlip()` (all sites).
+///   Δ3 doWork->mineFlip: `afKing.doWork()` -> `game.mineFlip(0)` (all sites).
 ///   Δ4 autoBuy: the per-sub buy folded into `mineFlip()`'s STAGE — driven via a new-day mineFlip()
 ///      + the `_settleGame` VRF drain; the standalone `autoBuy(count)` has NO successor.
 ///   Δ5 views: `afKing.subscriberCount()`/`autoBuyProgress()` -> read `_subscribers.length`/`_subCursor` via
@@ -142,7 +142,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
     function _settleGame(uint256 vrfWord) internal {
         for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.mineFlip();
+            game.mineFlip(0);
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != _lastFulfilledReqId && reqId > 0) {
                 (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
@@ -164,7 +164,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
             uint256 packed = uint256(vm.load(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED)));
             if (packed & (uint256(1) << (250 + RecyclingState.writeBuffer(address(game)))) == 0) break;
             // A shut window waives the mid-day value gates, so the engine requests its word.
-            game.mineFlip();
+            game.mineFlip(0);
             uint256 reqId = mockVRF.lastRequestId();
             (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
             if (!fulfilled) mockVRF.fulfillRandomWords(reqId, vrfWord + i);
@@ -207,7 +207,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
         // The day's request is its own call: a request commits the next cohort and ends the call.
         vm.recordLogs();
         vm.prank(keeper);
-        game.mineFlip();
+        game.mineFlip(0);
         Vm.Log[] memory requestLogs = vm.getRecordedLogs();
         assertTrue(game.rngLocked(), "pre: the day's request took the daily lock");
         (, , uint256 requestReward) = _minerWork(requestLogs);
@@ -218,7 +218,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(keeper);
-        game.mineFlip();
+        game.mineFlip(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         (, uint256 measured, uint256 reward) = _minerWork(logs);
@@ -254,7 +254,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
         vm.recordLogs();
         vm.prank(keeper);
         vm.expectRevert(bytes4(keccak256("NoWork()"))); // no sweep pending, no free idle crank
-        game.mineFlip();
+        game.mineFlip(0);
 
         // ZERO creditFlips — the idle crank reverted before any bounty could pay.
         assertEq(_countCoinflipStakeUpdated(), 0, "GAMEOVER idle: zero creditFlip emissions on the NoWork revert");
@@ -280,7 +280,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
         vm.recordLogs();
         vm.prank(keeper);
         vm.expectRevert(); // GameAfkingModule.NoWork()
-        game.mineFlip();
+        game.mineFlip(0);
 
         // Nothing credited (the revert rolls back, but assert the count is zero regardless).
         assertEq(_countCoinflipStakeUpdated(), 0, "NoWork: zero creditFlip emissions on the empty-work revert");
@@ -298,7 +298,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
     function testMintFlipReentrancyStructurallySafeSourceAttest() public view {
         string memory miner = _stripComments(vm.readFile(MINER_SRC));
         string memory afking = _stripComments(vm.readFile(AFKING_SRC));
-        string memory dispatch = _extractFunctionBody(miner, "function mineFlip() external {");
+        string memory dispatch = _extractFunctionBody(miner, "function mineFlip(uint32 gasMultiplierBps) external {");
         assertGt(bytes(dispatch).length, 0, "D-01: shared dispatcher extracted");
         assertEq(_countOccurrences(dispatch, "for (uint256 transitions; transitions < 32; ++transitions) {"), 1, "one bounded dispatch loop");
         assertEq(_countOccurrences(dispatch, "MinerAction action = transitions == 0 ? first : _nextMinerAction(msg.sender);"), 1, "every dispatch reselects from storage");
@@ -308,7 +308,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
         assertEq(_countOccurrences(dispatch, "if (numerator >= (denominator - 1) / 1e18 + 1) {"), 1, "zero credit is skipped");
         // CEI-last: the credit follows the loop's exit check and the gas measurement.
         uint256 credit = _indexOf(dispatch, "coinflip.creditFlip(minerId, reward);");
-        uint256 measured = _indexOf(dispatch, "uint256 used = rewardStart - gasleft() - unpaidAttemptGas;");
+        uint256 measured = _indexOf(dispatch, "uint256 used = MineFlipGas.consumed(rewardStart, gasleft());");
         uint256 loopExit = _indexOf(dispatch, "if (!moved) revert MineFlipGas.InsufficientExecutionGas();");
         assertGt(measured, loopExit, "gas is measured after every worker returned");
         assertGt(credit, measured, "the credit is the last external effect");
@@ -358,7 +358,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(keeper);
-        game.mineFlip();
+        game.mineFlip(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         // Every human box opened via mineFlip (first-deposit signal zeroed).

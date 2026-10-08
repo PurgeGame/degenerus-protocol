@@ -69,7 +69,7 @@ contract GameOverBestEffortDrainTest is DeployProtocol {
     {
         vm.recordLogs();
         for (uint256 i = 0; i < 30; i++) {
-            try game.mineFlip() {} catch {
+            try game.mineFlip(0) {} catch {
                 // Revert is acceptable while waiting on VRF.
             }
             Vm.Log[] memory iterLogs = vm.getRecordedLogs();

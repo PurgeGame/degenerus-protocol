@@ -531,7 +531,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         vm.warp(simTime);
         for (uint256 j = 0; j < 60 && !game.gameOver(); j++) {
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("mineFlip()")
+                abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
             );
             ok;
             _fulfillPending();
@@ -559,7 +559,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         );
         simTime += 1 days + 1;
         vm.warp(simTime);
-        for (uint256 i; i < 512 && !game.rngLocked(); ++i) game.mineFlip();
+        for (uint256 i; i < 512 && !game.rngLocked(); ++i) game.mineFlip(0);
         require(game.rngLocked(), "harness: the daily request must be in flight");
         // Stall-window cohort: the daily lock does not block ticket buys (they land
         // on the fresh write buffer), so bypass the checked helper's lock-skip.
@@ -579,7 +579,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
             vm.warp(simTime);
             for (uint256 j = 0; j < 40; j++) {
                 (bool ok, ) = address(game).call(
-                    abi.encodeWithSignature("mineFlip()")
+                    abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
                 );
                 if (!ok) break;
             }
@@ -767,11 +767,11 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
     function _runPromotedCrossingDay() internal {
         simTime += 1 days + 1;
         vm.warp(simTime);
-        (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+        (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
         ok; // the promotion entry may or may not revert once its stage breaks
         for (uint256 i = 0; i < 300; i++) {
             _fulfillPending();
-            (ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) break;
         }
     }
@@ -841,7 +841,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         uint256 priorReq = mockVRF.lastRequestId();
         vm.prank(crank);
         (bool ok, ) = address(game).call(
-            abi.encodeWithSignature("mineFlip()")
+            abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
         );
         require(ok && mockVRF.lastRequestId() > priorReq, "harness: mineFlip must issue the mid-day request");
         swapped = _ticketWriteSlot() != before;
@@ -852,7 +852,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
     function _settleIdle() internal {
         for (uint256 i; i < 300; ++i) {
             _fulfillPending();
-            (bool ok, bytes memory err) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, bytes memory err) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) {
                 require(bytes4(err) == bytes4(keccak256("NoWork()")), "harness: the day must settle idle");
                 return;
@@ -872,7 +872,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
             uint256[6] memory ladder = [uint256(2_700_000), 3_500_000, 4_500_000, 6_000_000, 9_000_000, 16_777_216];
             bool progressed;
             for (uint256 r; r < ladder.length && !progressed; ++r) {
-                (bool ok, bytes memory err) = address(game).call{gas: ladder[r]}(abi.encodeWithSignature("mineFlip()"));
+                (bool ok, bytes memory err) = address(game).call{gas: ladder[r]}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
                 if (ok) progressed = true;
                 else if (bytes4(err) == bytes4(keccak256("NoWork()"))) return;
                 else require(bytes4(err) == MineFlipGas.InsufficientExecutionGas.selector, "harness: reads settle");
@@ -887,7 +887,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         _fulfillPending();
         for (uint256 i = 0; i < 100; i++) {
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("mineFlip()")
+                abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
             );
             if (!ok) break;
         }
@@ -900,7 +900,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         for (uint256 i = 0; i < 300; i++) {
             _fulfillPending();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("mineFlip()")
+                abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
             );
             if (!ok) break;
         }
@@ -913,7 +913,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
             if (game.jackpotPhase()) return;
             _fulfillPending();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("mineFlip()")
+                abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
             );
             if (!ok) {
                 simTime += 1 days + 1;
@@ -948,7 +948,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
             if (!inJackpot && lpd && !rngL) return lvl;
             _fulfillPending();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("mineFlip()")
+                abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
             );
             if (!ok) {
                 simTime += 1 days + 1;
@@ -970,7 +970,7 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
             if (!game.rngLocked()) return;
             _fulfillPending();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("mineFlip()")
+                abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
             );
             if (!ok) return;
         }

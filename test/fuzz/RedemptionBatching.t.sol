@@ -52,7 +52,7 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         uint256 snap = vm.snapshotState();
         for (g = 1_000_000; g <= ceiling; g += 100_000) {
             vm.prank(keeper);
-            try game.mineFlip{gas: g}() {
+            try game.mineFlip{gas: g}(0) {
                 assertTrue(vm.revertToState(snap));
                 return g;
             } catch {
@@ -73,7 +73,7 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         uint256 prior = coinflip.coinflipAmount(keeper);
         vm.recordLogs();
         vm.prank(keeper);
-        game.mineFlip{gas: gasLimit}();
+        game.mineFlip{gas: gasLimit}(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 credits;
         uint256 works;
@@ -139,6 +139,23 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         vm.deal(buyer, price * count);
         vm.prank(buyer);
         game.purchase{value: price * count}(0, 0, BoxOrderLib.boSmalls(count), bytes32(0), MintPaymentKind.DirectEth, false);
+    }
+
+    function test_ExtremeCalibrationSettlesEveryBeneficiaryWithoutParking() public {
+        uint32 day = _openBatchId();
+        _burn(alice, sdgnrs.totalSupply() / 1000);
+        _burn(bob, sdgnrs.totalSupply() / 1000);
+        _resolve(day, 100, 99);
+        uint256 calls;
+        while (sdgnrs.redemptionSettlementPending() && calls++ < 8) {
+            vm.prank(address(game));
+            MineFlipGas.Result memory result = sdgnrs.runRedemptionWork{gas: 10_000_000}(
+                settlementWord, MineFlipGas.budget(9_000_000, type(uint32).max, true));
+            assertTrue(result.progressed);
+        }
+        assertFalse(sdgnrs.redemptionSettlementPending());
+        assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
+        assertGt(calls, 1);
     }
 
     function test_MoreThanOneBeneficiarySettlesWithExactExistingBounty() public {
@@ -291,7 +308,7 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         for (uint256 s; s < ladder.length; ++s) {
             uint256 snap = vm.snapshotState();
             vm.prank(keeper);
-            (bool ok, bytes memory err) = address(game).call{gas: ladder[s]}(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, bytes memory err) = address(game).call{gas: ladder[s]}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             vm.revertToState(snap);
             if (ok) return ladder[s];
             assertEq(bytes4(err), MineFlipGas.InsufficientExecutionGas.selector, "a short allowance is refused, nothing else");
@@ -322,13 +339,13 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         // keeps admitting chunks while a larger allowance covers the next declared bound.
         uint256 boundary = _boundaryAllowance(10_000_000);
         emit log_named_uint("maximum_redemption_admission_boundary_allowance", boundary);
-        vm.prank(keeper); game.mineFlip{gas: boundary}();
+        vm.prank(keeper); game.mineFlip{gas: boundary}(0);
         (uint256 count, uint256 cursor, bool complete) = _boxState(pos);
         assertEq(count, 100); assertEq(cursor, 0); assertFalse(complete);
         assertGt(sdgnrs.pendingRedemptionEthValue(), 0, "next maximum claim retains its reserve");
         assertTrue(sdgnrs.redemptionSettlementPending());
         for (uint256 i; i < 4 && count != 0; ++i) {
-            vm.prank(keeper); game.mineFlip{gas: 10_000_000}();
+            vm.prank(keeper); game.mineFlip{gas: 10_000_000}(0);
             (count,, complete) = _boxState(pos);
         }
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
@@ -351,7 +368,7 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         emit log_named_uint("maximum_redemption_admission_boundary_allowance", boundary);
         vm.prank(keeper);
         uint256 beforeGas = gasleft();
-        game.mineFlip{gas: boundary}();
+        game.mineFlip{gas: boundary}(0);
         uint256 used = beforeGas - gasleft() + 21_000;
         emit log_named_uint("cold_maximum_redemption_call_gas_including_intrinsic", used);
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
@@ -359,7 +376,7 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         assertEq(count, 100, "next indivisible order remains whole"); assertEq(cursor, 0);
         // Both orders fit individually; continuation follows their committed FIFO.
         for (uint256 i; i < 3 && count != 0; ++i) {
-            vm.prank(keeper); game.mineFlip{gas: 10_000_000}();
+            vm.prank(keeper); game.mineFlip{gas: 10_000_000}(0);
             (count,,) = _boxState(second);
         }
         (count,,) = _boxState(first); assertEq(count, 0);
@@ -382,16 +399,16 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         uint256 allowance;
         for (allowance = 1_000_000; allowance <= 8_000_000; allowance += 25_000) {
             uint256 snap = vm.snapshotState();
-            vm.prank(keeper); try game.mineFlip{gas: allowance}() {} catch {}
+            vm.prank(keeper); try game.mineFlip{gas: allowance}(0) {} catch {}
             bool done = !sdgnrs.redemptionSettlementPending();
             assertTrue(vm.revertToState(snap));
             if (done) break;
         }
-        vm.prank(keeper); game.mineFlip{gas: allowance}();
+        vm.prank(keeper); game.mineFlip{gas: allowance}(0);
         assertFalse(sdgnrs.redemptionSettlementPending());
         (uint256 count, uint256 cursor, bool complete) = _boxState(pos);
         assertEq(count, 1); assertEq(cursor, 0); assertFalse(complete);
-        vm.prank(keeper); game.mineFlip();
+        vm.prank(keeper); game.mineFlip(0);
         (count,, complete) = _boxState(pos);
         assertEq(count, 0);
     }
@@ -408,15 +425,15 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         for (; allowance < 10_000_000; allowance += 25_000) {
             uint256 snap = vm.snapshotState();
             vm.prank(keeper);
-            try game.mineFlip{gas: allowance}() {} catch {}
+            try game.mineFlip{gas: allowance}(0) {} catch {}
             bool settled = !sdgnrs.redemptionSettlementPending();
             assertTrue(vm.revertToState(snap));
             if (settled) break;
         }
-        vm.prank(keeper); game.mineFlip{gas: allowance}();
+        vm.prank(keeper); game.mineFlip{gas: allowance}(0);
         assertFalse(sdgnrs.redemptionSettlementPending());
         assertGt(game.degeneretteBetInfo(index, 1), 0, "remainder cannot fund first whole bet");
-        vm.prank(keeper); game.mineFlip();
+        vm.prank(keeper); game.mineFlip(0);
         assertEq(game.degeneretteBetInfo(index, 1), 0, "fresh allowance resolves deferred bet");
     }
 }

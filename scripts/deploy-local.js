@@ -218,7 +218,7 @@ async function main() {
       await hre.network.provider.send("evm_increaseTime", [86400]);
       await hre.network.provider.send("evm_mine", []);
 
-      await game.connect(deployer).mineFlip({ gasLimit: 12_000_000 });
+      await game.connect(deployer).mineFlip(0, { gasLimit: 12_000_000 });
       console.log("  VRF request issued (mineFlip).");
 
       // Fulfill VRF with the mock (honest seed word).
@@ -230,7 +230,7 @@ async function main() {
       let drainCount = 0;
       for (let i = 0; i < 30; i++) {
         if (!(await game.rngLocked())) break;
-        await game.connect(deployer).mineFlip({ gasLimit: 12_000_000 });
+        await game.connect(deployer).mineFlip(0, { gasLimit: 12_000_000 });
         drainCount++;
       }
       console.log(`  Ticket processing drained (${drainCount} advance calls).`);

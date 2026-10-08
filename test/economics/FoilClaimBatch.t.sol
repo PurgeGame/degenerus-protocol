@@ -82,7 +82,7 @@ contract FoilClaimBatch is DeployProtocol {
     // ──────────────────────────────────────────────────────────────────────
 
     function _advance() internal {
-        try game.mineFlip() {} catch {}
+        try game.mineFlip(0) {} catch {}
     }
 
     function _completeDay(uint256 vrfWord) internal {
@@ -411,7 +411,7 @@ contract FoilClaimBatch is DeployProtocol {
     function _tick() internal {
         _fulfillPendingVrf();
         uint256 requestBefore = mockVRF.lastRequestId();
-        (bool ok, ) = address(game).call{gas: 12_000_000}(abi.encodeWithSignature("mineFlip()"));
+        (bool ok, ) = address(game).call{gas: 12_000_000}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
         // A refused optional midday request may now return a successful no-op.
         // Move to the next daily boundary instead of replaying that same refusal.
         bool waitingForDaily = mockVRF.lastRequestId() == requestBefore

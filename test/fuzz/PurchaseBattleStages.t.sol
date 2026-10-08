@@ -111,7 +111,7 @@ contract PurchaseBattleStagesTest is PurchaseBattleStagesBase {
         assertEq(tickets.ethWins + tickets.battleEntries + tickets.flipWins, 0);
         assertFalse(game.rngLocked());
         vm.recordLogs();
-        (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+        (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
         // A same-day no-work call may revert; either outcome must not replay the draw.
         ok;
         assertEq(_countTopic(vm.getRecordedLogs(), BATTLE_ENTRY_SIG), 0, "the battle replayed");
@@ -151,7 +151,7 @@ contract PurchaseBattleStagesTest is PurchaseBattleStagesBase {
             ContractAddresses.CRAPS, abi.encodeWithSelector(IJackpotBattle.prepareJackpotBattle.selector), hex"deadbeef"
         );
         vm.expectRevert(bytes4(0xdeadbeef));
-        game.mineFlip();
+        game.mineFlip(0);
         assertTrue(game.rngLocked());
         vm.clearMockedCalls();
         _battle();

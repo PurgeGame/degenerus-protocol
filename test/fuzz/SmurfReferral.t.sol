@@ -477,7 +477,7 @@ contract SmurfReferralTest is DeployProtocol {
                         try mockVRF.fulfillRandomWords(reqId, uint256(keccak256(abi.encode(block.timestamp, reqId)))) {} catch {}
                     }
                 }
-                (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+                (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
                 if (!ok) break;
             }
         }

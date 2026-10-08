@@ -260,6 +260,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
                 coinflip.armCenturySeed(lvl);
             }
             result.progressed = true;
+            MineFlipGas.markProgress(meter);
             result.done = true;
             stage = STAGE_TRANSITION_DONE;
         } else if (jackpotWork.kind == 7) {
@@ -272,7 +273,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
             // Pricing can set ticket-leg flags before the ETH quadrants have finished.
             result = _runJackpotWork(abi.encodeWithSelector(
                 IDegenerusGameJackpotModule.runDailyJackpot.selector,
-                inJackpot, inJackpot ? lvl : purchaseLevel, word, MineFlipGas.remaining(meter) - sealTail
+                inJackpot, inJackpot ? lvl : purchaseLevel, word, MineFlipGas.child(meter, sealTail)
             ));
             if (result.done && !inJackpot && !_purchaseTicketLegPending()) {
                 _sealPurchaseDay(purchaseLevel, day, _simulatedDayIndex(), purchaseStartDay);
@@ -281,7 +282,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         } else if (!inJackpot) {
             if (_purchaseTicketLegPending()) {
                 result = _runJackpotWork(abi.encodeWithSelector(
-                    IDegenerusGameJackpotModule.runPurchaseDailyTickets.selector, word, MineFlipGas.remaining(meter) - sealTail
+                    IDegenerusGameJackpotModule.runPurchaseDailyTickets.selector, word, MineFlipGas.child(meter, sealTail)
                 ));
                 if (result.done) _sealPurchaseDay(purchaseLevel, day, _simulatedDayIndex(), purchaseStartDay);
                 stage = STAGE_PURCHASE_DAILY_TICKETS;
@@ -291,11 +292,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
                     IDegenerusGame(address(this)).emitDailyWinningTraits(word);
                     _payDailyCoinJackpot(1, word, 1, 1);
                     result.progressed = true;
+                    MineFlipGas.markProgress(meter);
                     result.done = true;
                 } else {
                     result = _runJackpotWork(abi.encodeWithSelector(
                         IDegenerusGameJackpotModule.runDailyJackpot.selector,
-                        false, purchaseLevel, word, MineFlipGas.remaining(meter) - sealTail
+                        false, purchaseLevel, word, MineFlipGas.child(meter, sealTail)
                     ));
                 }
                 if (result.done && !_purchaseTicketLegPending()) {
@@ -321,6 +323,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
                 lastPurchaseDay = false;
                 quests.rollLevelQuest(word);
                 result.progressed = true;
+                MineFlipGas.markProgress(meter);
                 result.done = true;
                 stage = STAGE_ENTERED_JACKPOT;
             }
@@ -353,13 +356,11 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
     }
 
     function _phaseAllowance(MineFlipGas.Meter memory meter) private view returns (uint256) {
-        return MineFlipGas.remaining(meter) - GasBounds.DAILY_PHASE_TAIL;
+        return MineFlipGas.child(meter, GasBounds.DAILY_PHASE_TAIL);
     }
 
     function _runJackpotWork(bytes memory callData) private returns (MineFlipGas.Result memory) {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_JACKPOT_MODULE.delegatecall{
-            gas: MineFlipGas.forwardable(gasleft(), 150_000)
-        }(callData);
+        (bool ok, bytes memory data) = ContractAddresses.GAME_JACKPOT_MODULE.delegatecall(callData);
         if (!ok) _revertDelegate(data);
         return abi.decode(data, (MineFlipGas.Result));
     }
@@ -369,7 +370,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
         if (!MineFlipGas.canRun(meter, 100_000, 150_000)) return result;
         if (address(this) != ContractAddresses.GAME || (!gameOver && !_livenessTriggered())) revert E();
-        (bool handled, uint8 stage, bool progressed) = _handleGameOverPath(_simulatedDayIndex(), level, MineFlipGas.remaining(meter) - GasBounds.DAILY_PHASE_TAIL);
+        (bool handled, uint8 stage, bool progressed) = _handleGameOverPath(_simulatedDayIndex(), level, MineFlipGas.child(meter, GasBounds.DAILY_PHASE_TAIL));
         MineFlipGas.finish(meter);
         if (!handled) revert E();
         result.progressed = progressed;
@@ -883,9 +884,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         uint256 reserve = claimablePool;
         if (ethBal <= reserve) return;
         uint256 stakeable = ethBal - reserve;
-        MineFlipGas.requireStipend(500_000);
-        try steth.submit{value: stakeable, gas: 500_000}(address(0)) returns (uint256) {}
-        catch {
+        try steth.submit{value: stakeable}(address(0)) returns (uint256) {}
+        catch (bytes memory reason) {
+            MineFlipGas.rethrowGasFailure(reason);
             emit StEthStakeFailed(stakeable);
         }
     }

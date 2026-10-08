@@ -124,6 +124,36 @@ contract TicketCheckpointDeterminismTest is Test {
         h.commit(WORD, false);
         compare(1, 2, 1_300_000, true);
     }
+    function test_ExtremeCalibrationPreservesSeatedRoundAndNestedFoil() public {
+        for (uint256 i; i < 9; ++i) h.credit(player(i), 1, uint32(4_075 + i * 100));
+        h.seedFoil(player(0), 1);
+        h.commit(WORD, false);
+        compare(1, 2, MineFlipGas.budget(FULL, type(uint32).max, true), false);
+    }
+    function test_ExtremeCalibrationPreservesOrderedSoloTicketsAndFraction() public {
+        h.credit(player(0), 1, 16_075);
+        h.commit(WORD, false);
+        uint256 snap = vm.snapshotState();
+        finish(2, FULL, false);
+        (bytes32 expected, uint256 count) = h.digest(1);
+        bytes32 control = h.control();
+        vm.revertToStateAndDelete(snap);
+        uint256 budget = MineFlipGas.budget(9_000_000, type(uint32).max, true);
+        for (uint256 calls; calls < 100; ++calls) {
+            MineFlipGas.Result memory result = h.runTicketWork{gas: 10_000_000}(2, budget);
+            assertTrue(result.progressed || result.done, "mandatory ticket progress");
+            if (result.done) {
+                (bytes32 actual, uint256 actualCount) = h.digest(1);
+                assertEq(actual, expected);
+                assertEq(actualCount, count);
+                assertEq(h.control(), control);
+                assertGt(calls, 1, "calibration partitions the work");
+                return;
+            }
+        }
+        fail("conservative calls must finish");
+    }
+
     function test_largerAllowanceRunsMoreBoundedSoloChunksAndPreservesInventory() public {
         h.credit(player(0), 1, 300_075);
         h.commit(WORD, false);

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {CrapsViews} from "./CrapsViews.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {Craps} from "../../contracts/Craps.sol";
@@ -79,6 +80,15 @@ contract CrapsResolveBudgetTest is CrapsPins {
 
     /// @dev A BIGGER BUDGET IS NEVER FEWER SEATS. Monotone by construction — the stop is a
     ///      threshold on consumed gas — and this walks a ladder of budgets to say so.
+    function test_ExtremeCalibrationSettlesOneSeatAndFlushesItsCredit() public {
+        (uint64 slot,) = _field(PLAIN_WORD, uint256(keccak256("calibration")));
+        uint256 budget = MineFlipGas.budget(9_000_000, type(uint32).max, true);
+        craps.settleGas{gas: 10_000_000}(slot, budget);
+        assertEq(craps.bonusCursorOf(slot), 1);
+        craps.settleGas{gas: 10_000_000}(slot, budget);
+        assertEq(craps.bonusCursorOf(slot), 2);
+    }
+
     function test_moreBudgetIsNeverFewerSeats() public {
         uint64[6] memory budgets = [uint64(0), 1_000_000, 2_000_000, 3_000_000, 5_000_000, 9_000_000];
         uint256 last;

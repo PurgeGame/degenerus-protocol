@@ -38,7 +38,7 @@ async function triggerGameOverAtLevel0(game, caller, mockVRF) {
   for (let i = 0; i < 12; i++) {
     const reqBefore = await getLastVRFRequestId(mockVRF);
     try {
-      await game.connect(caller).mineFlip();
+      await game.connect(caller).mineFlip(0);
     } catch {
       /* may revert mid-sequence; keep driving */
     }
@@ -371,7 +371,7 @@ describe("SecurityEconHardening", function () {
 
       // Calling mineFlip again should not increase claimable (drain already done)
       try {
-        await game.connect(deployer).mineFlip();
+        await game.connect(deployer).mineFlip(0);
       } catch {
         // May revert or be a no-op
       }

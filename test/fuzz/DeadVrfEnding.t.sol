@@ -216,7 +216,7 @@ contract DeadVrfEndingTest is DeployProtocol {
     }
 
     function _endGame() private {
-        for (uint256 i; i < 20 && !game.gameOver(); ++i) game.mineFlip();
+        for (uint256 i; i < 20 && !game.gameOver(); ++i) game.mineFlip(0);
         assertTrue(game.gameOver(), "dead ending reached game over");
     }
 
@@ -360,7 +360,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         _seedHoldings();
         _endGame();
         vm.warp(block.timestamp + 31 days);
-        game.mineFlip(); // final sweep
+        game.mineFlip(0); // final sweep
         uint256[] memory one = new uint256[](1);
         one[0] = _ref(1, TLVL | (uint24(1) << 23), davePos);
         uint32 daveId = game.walletIdOf(dave);
@@ -386,7 +386,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         _restore();
         // The synthetic 200-day setup also owes expired scheduled-day maintenance (one engine
         // checkpoint per call) before the daily commitment, as in test_swapSpendsTheDailyRetry.
-        for (uint256 i; i < 256 && !game.rngLocked(); ++i) game.mineFlip();
+        for (uint256 i; i < 256 && !game.rngLocked(); ++i) game.mineFlip(0);
         uint24 r = game.currentDayView();
         uint256 req = mockVRF.lastRequestId();
         assertTrue(game.rngLocked(), "day R requested");
@@ -395,7 +395,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         assertTrue(game.livenessTriggered(), "VRF dead after 14 days with nothing delivered");
         mockVRF.fulfillRandomWords(req, 0xDEAD); // lands late, before anyone advanced
         assertFalse(game.livenessTriggered(), "a delivered word means VRF works");
-        for (uint256 i; i < 64 && uint24(uint256(vm.load(address(game), bytes32(uint256(0)))) >> 24) < r; ++i) game.mineFlip();
+        for (uint256 i; i < 64 && uint24(uint256(vm.load(address(game), bytes32(uint256(0)))) >> 24) < r; ++i) game.mineFlip(0);
         assertEq(uint24(uint256(vm.load(address(game), bytes32(uint256(0)))) >> 24), r, "stalled day completed");
         assertEq(game.rngWordForDay(r), 0, "old processing word is not claim history");
         _assertCoinflipResult(r, 0xDEAD);
@@ -415,7 +415,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         uint256 before = mockVRF.lastRequestId();
         vm.recordLogs();
         for (uint256 i; i < 20 && !game.gameOver(); ++i) {
-            game.mineFlip();
+            game.mineFlip(0);
             uint256 id = mockVRF.lastRequestId();
             if (id != before) {
                 (,, bool done) = mockVRF.pendingRequests(id);
@@ -474,11 +474,11 @@ contract DeadVrfEndingTest is DeployProtocol {
     ///      `caller`'s mineFlip issues the mid-day request, the engine's last stage.
     function _mineMiddayRequest(address caller) private returns (uint256 id) {
         uint48 read = RecyclingState.readBuffer(address(game));
-        for (uint256 i; i < 50 && !game.boxIndexComplete(read); ++i) game.mineFlip{gas: 2_000_000}();
+        for (uint256 i; i < 50 && !game.boxIndexComplete(read); ++i) game.mineFlip{gas: 2_000_000}(0);
         assertTrue(game.boxIndexComplete(read), "the test's prior delivered read cohort must finish");
         uint256 before = mockVRF.lastRequestId();
         vm.prank(caller);
-        game.mineFlip();
+        game.mineFlip(0);
         id = mockVRF.lastRequestId();
         assertGt(id, before, "mineFlip issued the mid-day request");
         assertFalse(game.rngLocked(), "the request is a mid-day one");
@@ -493,11 +493,11 @@ contract DeadVrfEndingTest is DeployProtocol {
         _restore();
 
         // The synthetic 200-day setup owes expired scheduled-day maintenance first.
-        for (uint256 i; i < 256 && !game.rngLocked(); ++i) game.mineFlip();
+        for (uint256 i; i < 256 && !game.rngLocked(); ++i) game.mineFlip(0);
         uint256 dailyId = mockVRF.lastRequestId();
         assertTrue(game.rngLocked(), "deadline day's daily request");
         mockVRF.fulfillRandomWords(dailyId, 0xBEEF);
-        for (uint256 i; i < 50 && game.rngLocked(); ++i) game.mineFlip();
+        for (uint256 i; i < 50 && game.rngLocked(); ++i) game.mineFlip(0);
         assertFalse(game.rngLocked(), "deadline day sealed");
         assertFalse(game.livenessTriggered(), "deadline day remains open");
 
@@ -519,7 +519,7 @@ contract DeadVrfEndingTest is DeployProtocol {
 
         vm.warp(sent + 1 days);
         assertTrue(game.livenessTriggered(), "unmet purchase deadline fires");
-        game.mineFlip(); // terminal path latches and waits on the mid-day request
+        game.mineFlip(0); // terminal path latches and waits on the mid-day request
         assertFalse(game.gameOver(), "the request is still inside its window");
 
         vm.warp(sent + 14 days - 1);
@@ -540,7 +540,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         _restore();
 
         // The synthetic 200-day setup owes expired scheduled-day maintenance first.
-        for (uint256 i; i < 256 && !game.rngLocked(); ++i) game.mineFlip();
+        for (uint256 i; i < 256 && !game.rngLocked(); ++i) game.mineFlip(0);
         assertTrue(game.rngLocked(), "deadline day requested; VRF stalls");
 
         vm.warp(block.timestamp + 21 hours);
@@ -567,7 +567,7 @@ contract DeadVrfEndingTest is DeployProtocol {
                 if (game.level() == 2 && !game.jackpotPhase() && !game.rngLocked()) return;
                 assertFalse(game.gameOver(), "rescued level must not end");
                 _answer(fresh); // the swap re-sent the request and spent the retry: answer it first
-                game.mineFlip();
+                game.mineFlip(0);
                 uint256 id = fresh.lastRequestId();
                 if (id != 0) {
                     (,, bool done) = fresh.pendingRequests(id);
@@ -588,7 +588,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         for (uint256 i; i < 1024; ++i) {
             if (game.gameOver()) return;
             _answer(vrf); // a request already in flight must land before the advance can use it
-            game.mineFlip();
+            game.mineFlip(0);
             _answer(vrf);
             if (!game.rngLocked() && !game.advanceDue()) return;
         }
@@ -638,7 +638,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         assertLt(game.middayRngCredits(donor), 1 ether, "the donor's credit paid the threshold gate");
 
         vm.warp(block.timestamp + 1 days);
-        game.mineFlip();
+        game.mineFlip(0);
         assertFalse(game.gameOver(), "the ending waits on the request in flight");
 
         MockVRFCoordinator fresh = _freshCoordinator();
@@ -690,7 +690,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         _restore();
         // The synthetic 200-day setup also owes expired scheduled-day maintenance.
         // Wait for the actual daily commitment before testing its retry allowance.
-        for (uint256 i; i < 256 && !game.rngLocked(); ++i) game.mineFlip();
+        for (uint256 i; i < 256 && !game.rngLocked(); ++i) game.mineFlip(0);
         assertTrue(game.rngLocked(), "daily request stalls");
 
         vm.warp(block.timestamp + 13 hours);
@@ -747,7 +747,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         // the reference batch is a 10M call, not an unbounded one): one call's cost, then the
         // cost of the call that swaps and sends the terminal request.
         uint256 g0 = gasleft();
-        game.mineFlip{gas: 10_000_000}();
+        game.mineFlip{gas: 10_000_000}(0);
         uint256 batchGas = g0 - gasleft();
         (uint256 readLen,, uint256 swapped) = _terminalQueues();
         assertEq(swapped, 0, "a batch call leaves the swap window open");
@@ -755,7 +755,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         uint256 requestGas;
         for (uint256 i; i < 400 && swapped == 0; ++i) {
             g0 = gasleft();
-            game.mineFlip{gas: 10_000_000}();
+            game.mineFlip{gas: 10_000_000}(0);
             requestGas = g0 - gasleft();
             (,, swapped) = _terminalQueues();
         }
@@ -764,21 +764,26 @@ contract DeadVrfEndingTest is DeployProtocol {
         else assertGt(mockVRF.lastRequestId(), req0, "the terminal request went out");
         vm.revertToState(snap);
 
-        // Starve the batch at every depth. A survivor ran a bounded checkpoint and must leave the
-        // window open with no request. A starved call reverts only with the engine's own gas
-        // failure: an out-of-gas module call (EmptyRevert) is re-raised as InsufficientExecutionGas
-        // by the engine (23fa56298), so no worker error of its own can surface either.
+        // Probe down through the mandatory first unit's actual cost. A survivor must leave
+        // the window open with no request. At the lowest allowances even the root can OOG
+        // without enough gas to wrap the empty failure; no semantic worker error is allowed.
         uint256 witnessGas;
         uint256 leakGas;
         uint256 step = batchGas / 128;
-        for (uint256 g = batchGas; g > step * 8; g -= step) {
+        for (uint256 g = batchGas; g > step; g -= step) {
             snap = vm.snapshotState();
-            try game.mineFlip{gas: g}() {
+            try game.mineFlip{gas: g}(0) {
                 (,, swapped) = _terminalQueues();
                 if (leakGas == 0 && (swapped != 0 || mockVRF.lastRequestId() != req0)) leakGas = g;
             } catch (bytes memory err) {
-                assertEq(err.length, 4, "no error of its own");
-                assertEq(bytes4(err), MineFlipGas.InsufficientExecutionGas.selector, "no error of its own");
+                // If the miner frame itself exhausts gas, the outer facade wraps its
+                // empty revert as EmptyRevert. A spent worker allowance uses WorkGasBound.
+                bytes4 selector = bytes4(err);
+                assertTrue(err.length == 0 || (err.length == 4 && (
+                    selector == MineFlipGas.InsufficientExecutionGas.selector
+                    || selector == MineFlipGas.EmptyRevert.selector
+                    || selector == MineFlipGas.WorkGasBound.selector
+                )), "no semantic worker error");
                 witnessGas = g;
             }
             vm.revertToState(snap);
@@ -791,10 +796,10 @@ contract DeadVrfEndingTest is DeployProtocol {
 
         // End to end: a starved call first (the leak if one exists, else the witness), then full
         // gas. The read side drains, the write cohort swaps in and draws on the terminal word.
-        try game.mineFlip{gas: leakGas != 0 ? leakGas : witnessGas}() {} catch {}
+        try game.mineFlip{gas: leakGas != 0 ? leakGas : witnessGas}(0) {} catch {}
         if (refusing) vm.clearMockedCalls();
         for (uint256 i; i < 80 && !game.gameOver(); ++i) {
-            game.mineFlip();
+            game.mineFlip(0);
             _answer(mockVRF);
         }
         assertTrue(game.gameOver(), "ended");

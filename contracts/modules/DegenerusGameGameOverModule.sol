@@ -225,6 +225,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             dailyTicketBudgetsPacked = 0;
             dailyJackpotCoinTicketsPending = false;
             work.progressed = true;
+            MineFlipGas.markProgress(meter);
         }
 
         // --- Deterministic ending ---
@@ -232,6 +233,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             if (_lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK) == 0) {
                 _latchDeadEnding();
                 work.progressed = true;
+                MineFlipGas.markProgress(meter);
             }
             // These are the persisted tally frontiers, including empty-cohort stage advances.
             bytes32 beforeTally = _deadTallyCheckpoint();
@@ -261,6 +263,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             _setRngRequestActive(false);
             rngLockedFlag = false;
             work.progressed = true;
+            MineFlipGas.markProgress(meter);
             return (true, STAGE_GAMEOVER, false);
         }
 
@@ -306,6 +309,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                 if (_lrRead(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK) == 0) {
                     _lrWrite(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK, 1);
                     work.progressed = true;
+                    MineFlipGas.markProgress(meter);
                 }
             }
             // Request the terminal word, or apply it once it has landed. Either way this
@@ -342,11 +346,10 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             _setRngSessionPublished(false);
             rngWordCurrent = RNG_WORD_WAITING;
             work.progressed = true;
+            MineFlipGas.markProgress(meter);
         }
-        // The admitted bound covers coordinator gas, EIP-150 and all request
-        // bookkeeping. With its whole stipend guaranteed, any failure is a refusal.
-        MineFlipGas.requireStipend(GasBounds.RNG_REQUEST - 300_000);
-        try vrfCoordinator.requestRandomWords{gas: GasBounds.RNG_REQUEST - 300_000}(VRFRandomWordsRequest({
+        // Forward actual gas; obsolete fixed stipends cannot trap a funded request.
+        try vrfCoordinator.requestRandomWords(VRFRandomWordsRequest({
             keyHash: vrfKeyHash, subId: vrfSubscriptionId,
             requestConfirmations: VRF_REQUEST_CONFIRMATIONS,
             callbackGasLimit: VRF_CALLBACK_GAS_LIMIT, numWords: 1, extraArgs: hex""
@@ -363,7 +366,9 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             if (jackpotPhaseFlag && _isFinalJackpotDay(jackpotCounter, jackpotFlags)) _setTicketRedemptionOpen(false);
             requested = true;
             work.progressed = true;
+            MineFlipGas.markProgress(meter);
         } catch (bytes memory reason) {
+            MineFlipGas.rethrowGasFailure(reason);
             // Native mining bubbles a repeated refusal when nothing else advanced.
             // Compatibility request helpers retain their best-effort boolean result.
             work.refusal = reason;
@@ -402,6 +407,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             dgnrs.resolveTerminalRedemptions();
             _finalizeLootboxRng(currentWord);
             work.progressed = true;
+            MineFlipGas.markProgress(meter);
             return;
         }
         if (!_rngRequestActive()) _requestTerminalRng(day, meter, work);
@@ -423,7 +429,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     ///      the whole undrained cohort.
     /// @return ran True if a batch ran, finished or not.
     function _terminalDrainBatch(uint24 drainLevel, MineFlipGas.Meter memory meter, TerminalWork memory work) private returns (bool ran) {
-        uint256 allowance = MineFlipGas.forwardable(MineFlipGas.remaining(meter), 100_000);
+        uint256 allowance = MineFlipGas.child(meter, 100_000);
         if (allowance == 0) return true;
         (bool ok, bytes memory data) = ContractAddresses.GAME_TICKET_MODULE.delegatecall(
             abi.encodeWithSelector(IDegenerusGameTicketModule.runTicketWork.selector,
@@ -437,6 +443,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         // supplied gas must not turn unprocessed entries into forfeited entries.
         MineFlipGas.Result memory result = abi.decode(data, (MineFlipGas.Result));
         work.progressed = work.progressed || result.progressed;
+        if (result.progressed) MineFlipGas.markProgress(meter);
         return true;
     }
 
@@ -461,7 +468,8 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         // At most 32 deity refunds, terminal burns and accounting, with no draw
         // admitted until the remaining allowance is measured after this setup.
         if (!MineFlipGas.canRun(meter, GasBounds.TERMINAL_SETUP, GasBounds.TERMINAL_TAIL)) return false;
-        work.progressed = true; // Admitted setup below sets gameOver or latches the dead ending.
+        work.progressed = true;
+        MineFlipGas.markProgress(meter); // Admitted setup below sets gameOver or latches the dead ending.
 
         bool dead = _lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK) != 0;
         uint24 lvl = level;
@@ -608,13 +616,14 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     }
 
     function _resumeTerminalPayout(uint24 day, MineFlipGas.Meter memory meter, TerminalWork memory work) private returns (bool done) {
-        uint256 allowance = MineFlipGas.forwardable(MineFlipGas.remaining(meter), 100_000);
+        uint256 allowance = MineFlipGas.child(meter, 100_000);
         if (allowance == 0) return false;
         (MineFlipGas.Result memory result,) = IDegenerusGame(address(this)).runTerminalJackpotWork(
             jackpotWork.budget, jackpotWork.lvl, _lootboxWord(_rngReadBuffer()), allowance
         );
         work.progressed = work.progressed || result.progressed;
-        if (result.done) { _finishTerminalPayout(); work.progressed = true; }
+        if (result.progressed) MineFlipGas.markProgress(meter);
+        if (result.done) { _finishTerminalPayout(); work.progressed = true; MineFlipGas.markProgress(meter); }
         return result.done;
     }
 
@@ -648,7 +657,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         claimablePool = 0;
 
         // Shutdown VRF subscription (fire-and-forget; failure must not block sweep)
-        try admin.shutdownVrf() {} catch {}
+        try admin.shutdownVrf() {} catch (bytes memory reason) { MineFlipGas.rethrowGasFailure(reason); }
 
         uint256 ethBal = address(this).balance;
         uint256 stBal = steth.balanceOf(address(this));
@@ -740,6 +749,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                     uint32 id = _tqPositionAt(queue, pos);
                     uncreated += _deadWeight(_entryPacked(key, id), shift);
                     unchecked { ++pos; }
+                    MineFlipGas.markProgress(meter);
                 }
                 pos = 0;
                 unchecked { ++dd; }
@@ -770,6 +780,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                         }
                         unchecked {
                             ++idx;
+                            MineFlipGas.markProgress(meter);
                         }
                     } while (idx < n);
                 }
@@ -780,6 +791,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                 }
                 unchecked {
                     ++dd;
+                    MineFlipGas.markProgress(meter);
                 }
                 idx = dd <= 2 && dd - 1 == _foilReadKey() ? foilCursor : 0;
             }

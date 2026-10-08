@@ -146,7 +146,7 @@ contract RecoveredStallIntegrationTest is RedemptionCloseTools {
         uint24 d = game.currentDayView();
         // setUp's synthetic 500-day jump leaves expired scheduled Craps days as maintenance
         // checkpoints ahead of the first daily request (see MidDayStallCredit._sealDay).
-        for (uint256 i; i < 800 && !game.rngLocked(); ++i) game.mineFlip();
+        for (uint256 i; i < 800 && !game.rngLocked(); ++i) game.mineFlip(0);
         assertTrue(game.rngLocked(), "day D requested; VRF stalls");
         (uint24 psd0,) = _clock();
 
@@ -160,7 +160,7 @@ contract RecoveredStallIntegrationTest is RedemptionCloseTools {
         // The late word lands; the advance finishes the stalled day on it (RNGREUSE clamp).
         _answer();
         for (uint256 i; i < 200 && game.rngLocked(); ++i) {
-            game.mineFlip();
+            game.mineFlip(0);
             _answer();
         }
         assertFalse(game.rngLocked(), "the stalled day finished");
@@ -179,7 +179,7 @@ contract RecoveredStallIntegrationTest is RedemptionCloseTools {
         for (uint256 i; i < 200; ++i) {
             assertFalse(game.gameOver(), "the level must not end");
             _answer();
-            game.mineFlip();
+            game.mineFlip(0);
             _answer();
             if (!game.rngLocked() && game.rngWordForDay(w) != 0) break;
         }
@@ -315,7 +315,7 @@ contract DecimatorLegEndingIdleTest is RedemptionCloseTools {
         address keeper = makeAddr("battle-keeper");
         uint256 before = coinflip.coinflipAmount(keeper);
         vm.recordLogs();
-        vm.prank(keeper); game.mineFlip();
+        vm.prank(keeper); game.mineFlip(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 used;
         uint256 reward;
@@ -381,7 +381,7 @@ contract DecimatorLegEndingIdleTest is RedemptionCloseTools {
                 warped = true;
                 continue;
             }
-            game.mineFlip();
+            game.mineFlip(0);
             vm.etch(address(game), type(ReviewClaimSeeder).runtimeCode);
             swept = ReviewClaimSeeder(payable(address(game))).swept();
             vm.etch(address(game), realCode);

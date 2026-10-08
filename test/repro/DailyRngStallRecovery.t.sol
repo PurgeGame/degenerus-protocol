@@ -67,7 +67,7 @@ contract DailyRngStallRecovery is DeployProtocol {
             if (!game.rngLocked()) _finishReadConsumers();
             _fulfillPending();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("mineFlip()")
+                abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
             );
             if (!ok) break;
         }
@@ -96,7 +96,7 @@ contract DailyRngStallRecovery is DeployProtocol {
         vm.warp(simTime);
         // Scheduled-table arming may checkpoint before the fresh daily request.
         for (uint256 i; i < 100 && !game.rngLocked(); ++i) {
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             require(ok, "harness: the daily request advance must succeed");
         }
         require(game.rngLocked(), "harness: the daily word must be in flight");
@@ -116,7 +116,7 @@ contract DailyRngStallRecovery is DeployProtocol {
 
         vm.warp(simTime + 19 hours);
         vm.prank(keeper);
-        (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+        (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
         assertFalse(ok, "the gate must still block inside the 20-hour window");
         vm.prank(owner);
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
@@ -140,7 +140,7 @@ contract DailyRngStallRecovery is DeployProtocol {
         assertEq(publicAction, ownerAction, "pending work selection is independent of caller");
         vm.prank(owner);
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        game.mineFlip();
+        game.mineFlip(0);
         vm.prank(keeper);
         vm.expectRevert(bytes4(keccak256("NotOwner()")));
         admin.retryGameRng();
@@ -227,7 +227,7 @@ contract DailyRngStallRecovery is DeployProtocol {
         mockVRF.fulfillRandomWords(retryReqId, word);
         for (uint256 j = 0; j < 200; j++) {
             (bool adv, ) = address(game).call(
-                abi.encodeWithSignature("mineFlip()")
+                abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
             );
             if (!adv) break;
         }
@@ -279,7 +279,7 @@ contract DailyRngStallRecovery is DeployProtocol {
         vm.recordLogs();
         for (uint256 j = 0; j < 200; j++) {
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("mineFlip()")
+                abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
             );
             if (!ok) break;
         }
@@ -370,7 +370,7 @@ contract DailyRngStallRecovery is DeployProtocol {
         _fulfillPending();
         for (uint256 j = 0; j < 200; j++) {
             (bool adv, ) = address(game).call(
-                abi.encodeWithSignature("mineFlip()")
+                abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
             );
             if (!adv) break;
         }
@@ -435,7 +435,7 @@ contract DailyRngStallRecovery is DeployProtocol {
             if (!game.rngLocked()) _finishReadConsumers();
             _fulfillPending();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("mineFlip()")
+                abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
             );
             if (!ok) {
                 simTime += 1 days + 1;
@@ -462,7 +462,7 @@ contract DailyRngStallRecovery is DeployProtocol {
             if (!game.rngLocked()) _finishReadConsumers();
             _fulfillPending();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("mineFlip()")
+                abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
             );
             if (!ok) return;
         }
@@ -482,7 +482,7 @@ contract DailyRngStallRecovery is DeployProtocol {
                 if (done) return;
                 _fulfillPending();
             } else {
-                game.mineFlip();
+                game.mineFlip(0);
             }
         }
         revert("harness: mid-day work did not settle");
@@ -497,7 +497,7 @@ contract DailyRngStallRecovery is DeployProtocol {
         for (uint256 i = 0; i < 100; i++) {
             if (game.rngLocked()) return;
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("mineFlip()")
+                abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
             );
             if (!ok) break;
         }
@@ -579,7 +579,7 @@ contract DailyRngStallRecovery is DeployProtocol {
         vm.warp(simTime);
         assertTrue(game.livenessTriggered(), "14 days with nothing delivered: VRF dead");
         for (uint256 j = 0; j < 20 && !game.gameOver(); j++) {
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) break;
         }
         assertTrue(game.gameOver(), "the deterministic ending completes");
@@ -604,7 +604,7 @@ contract DailyRngStallRecovery is DeployProtocol {
             if (game.gameOver()) break;
             _fulfillPending();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("mineFlip()")
+                abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
             );
             if (!ok) break;
         }

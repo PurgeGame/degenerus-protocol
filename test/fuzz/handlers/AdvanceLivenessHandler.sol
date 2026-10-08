@@ -232,7 +232,7 @@ contract AdvanceLivenessHandler is Test {
         uint8 next = game.minerAction();
         if (next != 9 && next != 10) return;
         vm.prank(a);
-        (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+        (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
         ok;
     }
 
@@ -267,9 +267,9 @@ contract AdvanceLivenessHandler is Test {
             bool ok;
             if ((bits >> (32 + (i % 32))) & 1 != 0) {
                 vm.prank(_actor(bits >> 64));
-                (ok,) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+                (ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             } else {
-                (ok,) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+                (ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             }
             if (!ok && (bits >> 100) & 1 == 0) break;
         }
@@ -379,7 +379,7 @@ contract AdvanceLivenessHandler is Test {
         uint256 n = bound(seed >> 48, 1, 30);
         for (uint256 i = 0; i < n; i++) {
             vm.prank(a);
-            (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) break;
         }
         lvl;
@@ -444,7 +444,7 @@ contract AdvanceLivenessHandler is Test {
             if (game.minerAction() == 18) {
                 uint256 prior = vrf.lastRequestId();
                 vm.prank(probe);
-                (ok,) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+                (ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
                 ok = ok && vrf.lastRequestId() > prior;
             }
             if (ok) {
@@ -478,7 +478,7 @@ contract AdvanceLivenessHandler is Test {
         for (cranks = 0; cranks < MAX_CRANKS; cranks++) {
             if (game.gameOver()) return (true, bytes4(0), cranks);
             _fulfillPending();
-            (bool ok, bytes memory ret) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, bytes memory ret) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) {
                 // One engine selects every action (60d31f775): its idle stop is NoWork().
                 return (true, _sel(ret), cranks);
@@ -580,7 +580,7 @@ contract AdvanceLivenessHandler is Test {
         if (game.minerAction() != 18) return;
         uint256 prior = vrf.lastRequestId();
         vm.prank(who);
-        (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+        (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
         if (!ok || vrf.lastRequestId() == prior) return;
         ghost_middayRequests++;
         if (who == address(uint160(0xD0D0D0))) ghost_middayAsCraps++;
@@ -600,12 +600,12 @@ contract AdvanceLivenessHandler is Test {
             bool ok;
             if (useMineFlip) {
                 vm.prank(actors[0]);
-                (ok,) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+                (ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
                 if (ok && !game.advanceDue()) {
-                    (ok,) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+                    (ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
                 }
             } else {
-                (ok,) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+                (ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             }
             if (!ok) return;
         }

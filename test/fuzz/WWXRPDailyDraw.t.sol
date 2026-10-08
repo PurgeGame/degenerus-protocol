@@ -39,7 +39,7 @@ contract WWXRPDailyDrawTest is DeployProtocol {
     /// @dev Complete a full day: mineFlip -> VRF fulfill -> drain to unlock.
     function _completeDay(uint256 vrfWord) internal {
         _finishReadConsumers();
-        game.mineFlip();
+        game.mineFlip(0);
         uint256 reqId = mockVRF.lastRequestId();
         if (reqId != _lastFulfilledReqId && reqId > 0) {
             mockVRF.fulfillRandomWords(reqId, vrfWord);
@@ -47,7 +47,7 @@ contract WWXRPDailyDrawTest is DeployProtocol {
         }
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked()) break;
-            game.mineFlip();
+            game.mineFlip(0);
         }
         _finishReadConsumers();
     }

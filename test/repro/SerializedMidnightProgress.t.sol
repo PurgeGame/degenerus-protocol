@@ -77,7 +77,7 @@ contract SerializedMidnightProgressTest is MiddayFrozenPoolLatch {
         vm.recordLogs();
         for (uint256 i; i < 1024 && mockVRF.lastRequestId() == previousRequest; ++i) {
             vm.prank(MINER);
-            game.mineFlip{gas: 12_000_000}();
+            game.mineFlip{gas: 12_000_000}(0);
             _assertContinuation(previousRequest, committedWord, committedRead);
         }
         (uint256 bounties, uint256 callsAboveUnpaidFloor, bool ticketWork) = _scanMidnightLogs(vm.getRecordedLogs());
@@ -123,7 +123,7 @@ contract SerializedMidnightProgressTest is MiddayFrozenPoolLatch {
         for (uint256 s; s < ladder.length; ++s) {
             uint256 snap = vm.snapshotState();
             vm.prank(MINER);
-            try game.mineFlip{gas: ladder[s]}() {
+            try game.mineFlip{gas: ladder[s]}(0) {
                 vm.revertToState(snap);
                 return ladder[s];
             } catch (bytes memory err) {
@@ -143,7 +143,7 @@ contract SerializedMidnightProgressTest is MiddayFrozenPoolLatch {
         vm.recordLogs();
         vm.startStateDiffRecording();
         vm.prank(MINER);
-        game.mineFlip{gas: allowance}();
+        game.mineFlip{gas: allowance}(0);
         Vm.AccountAccess[] memory accesses = vm.stopAndReturnStateDiff();
         for (uint256 a; a < accesses.length && !progressed; ++a) {
             // Module work runs by delegatecall: the frame's account is the module, the written
@@ -267,7 +267,7 @@ contract SerializedMidnightProgressTest is MiddayFrozenPoolLatch {
         assertFalse(game.rngLocked(), "retry preserves the original midday request mode");
         assertEq(RecyclingState.readBuffer(address(game)), committedRead, "retry preserves the committed cohort");
         _fulfillPending();
-        for (uint256 i; i < 1024 && !game.rngLocked(); ++i) game.mineFlip();
+        for (uint256 i; i < 1024 && !game.rngLocked(); ++i) game.mineFlip(0);
         assertTrue(game.rngLocked(), "after the midday cohort drains the next daily request locks");
     }
     // The two live protocol seats also consume the 2,000 cap: 1,998 subscriptions fit.

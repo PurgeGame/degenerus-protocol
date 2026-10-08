@@ -88,7 +88,7 @@ describe("LivenessMidJackpot", function () {
   }
 
   async function driveOneCycleSameDay(game, deployer, mockVRF, word) {
-    await game.connect(deployer).mineFlip();
+    await game.connect(deployer).mineFlip(0);
     const reqId = await getLastVRFRequestId(mockVRF);
     try {
       await mockVRF.fulfillRandomWords(reqId, word);
@@ -97,7 +97,7 @@ describe("LivenessMidJackpot", function () {
     }
     for (let i = 0; i < 200; i++) {
       try {
-        await game.connect(deployer).mineFlip();
+        await game.connect(deployer).mineFlip(0);
       } catch {
         break;
       }
@@ -119,7 +119,7 @@ describe("LivenessMidJackpot", function () {
   async function driveToGameOver(game, deployer, mockVRF) {
     for (let i = 0; i < 600; i++) {
       try {
-        await game.connect(deployer).mineFlip();
+        await game.connect(deployer).mineFlip(0);
       } catch {
         await advanceToNextDay();
       }

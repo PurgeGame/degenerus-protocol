@@ -87,7 +87,7 @@ contract IdAuthorizationReviewTest is DeployProtocol {
                 if (!fulfilled) mockVRF.fulfillRandomWords(request, 0x1DA0D17);
             }
             if (game.rngComplete() && !game.advanceDue()) break;
-            game.mineFlip{gas: 15_000_000}();
+            game.mineFlip{gas: 15_000_000}(0);
         }
         assertTrue(game.rngComplete());
         owner = address(new IdReviewSeller());

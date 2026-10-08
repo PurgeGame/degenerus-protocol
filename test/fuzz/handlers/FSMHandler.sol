@@ -113,7 +113,7 @@ contract FSMHandler is Test {
         bool gameOverBefore = game.gameOver();
 
         vm.prank(currentActor);
-        try game.mineFlip() {} catch {}
+        try game.mineFlip(0) {} catch {}
 
         _postAction(levelBefore, gameOverBefore);
     }
@@ -177,7 +177,7 @@ contract FSMHandler is Test {
             if (!game.advanceDue() && !game.rngLocked()) break;
 
             vm.prank(cranker);
-            try game.mineFlip() {} catch {
+            try game.mineFlip(0) {} catch {
                 break;
             }
         }

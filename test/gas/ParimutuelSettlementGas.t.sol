@@ -177,7 +177,7 @@ contract ParimutuelSettlementGasTest is DeployProtocol {
                 (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
                 if (!fulfilled) try mockVRF.fulfillRandomWords(reqId, uint256(keccak256(abi.encode(reqId)))) {} catch {}
             }
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) break;
         }
     }
@@ -213,14 +213,14 @@ contract ParimutuelSettlementGasTest is DeployProtocol {
         vm.recordLogs();
         vm.prank(keeper);
         uint256 g0 = gasleft();
-        game.mineFlip{gas: 4_400_000}();
+        game.mineFlip{gas: 4_400_000}(0);
         uint256 total = g0 - gasleft();
         uint256 executionGas = _executionGas(vm.getRecordedLogs());
         console.log("mineFlip GrowthSettle stage, 100 fresh cold winners, MinerWork.executionGas:", executionGas);
         console.log("mineFlip GrowthSettle stage, caller-measured total incl. bounty credit:", total);
         (uint24 r, uint256 paid) = _cursor();
-        assertEq(r, 1);
-        assertEq(paid, CHUNK);
+        assertEq(r, 2, "completed round cursor is released in the same call");
+        assertEq(paid, 0);
         assertLe(executionGas, MineFlipGasBounds.GROWTH_SETTLE_GAS + MineFlipGasBounds.ENGINE_BOUNDARY);
     }
 }

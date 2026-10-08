@@ -74,15 +74,15 @@ contract DegradeTerminalRetiredStampTest is DeployProtocol {
         _fixture(abi.encodeCall(RetiredStampSeeder.seedEnding, (HOLDER)));
         vm.deal(address(game), 100 ether);
         assertTrue(game.livenessTriggered(), "caught up past the deadline");
-        game.mineFlip(); // latches the cohort level and requests the terminal word
+        game.mineFlip(0); // latches the cohort level and requests the terminal word
         uint256 requestId = mockVRF.lastRequestId();
         mockVRF.fulfillRandomWords(requestId, WORD);
-        game.mineFlip(); // applies the word in its own transaction
+        game.mineFlip(0); // applies the word in its own transaction
         assertFalse(game.gameOver(), "applying the word does not pay out");
     }
 
     function _finishTerminal() private {
-        for (uint256 i; i < 20 && !game.gameOver(); ++i) game.mineFlip();
+        for (uint256 i; i < 20 && !game.gameOver(); ++i) game.mineFlip(0);
         assertTrue(game.gameOver(), "terminal payout completed");
     }
 
@@ -116,10 +116,10 @@ contract DegradeTerminalRetiredStampTest is DeployProtocol {
         assertEq(liability, 0, "no cohort was credited");
         assertEq(address(game).balance, 100 ether, "nothing left the game at the payout");
         vm.expectRevert();
-        game.mineFlip(); // idle until the sweep opens: nothing pays twice
+        game.mineFlip(0); // idle until the sweep opens: nothing pays twice
 
         vm.warp(block.timestamp + 30 days);
-        game.mineFlip();
+        game.mineFlip(0);
         (,, uint256 swept,) = _endingState();
         assertEq(swept, 1, "final sweep ran");
         assertEq(address(game).balance, 0, "the unpaid quadrant shares left with the sweep");
@@ -141,7 +141,7 @@ contract DegradeTerminalRetiredStampTest is DeployProtocol {
         _fixture(abi.encodeCall(RetiredStampSeeder.retireBuffer, (tlvl)));
 
         assertTrue(game.livenessTriggered(), "request unanswered 15 days");
-        for (uint256 i; i < 20 && !game.gameOver(); ++i) game.mineFlip();
+        for (uint256 i; i < 20 && !game.gameOver(); ++i) game.mineFlip(0);
         assertTrue(game.gameOver(), "dead ending reached game over");
 
         vm.etch(address(game), type(DeadVrfSeeder).runtimeCode);

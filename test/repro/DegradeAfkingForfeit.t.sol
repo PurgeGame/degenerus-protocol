@@ -125,7 +125,7 @@ contract DegradeAfkingForfeitTest is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(makeAddr("afking-miner"));
-        game.mineFlip();
+        game.mineFlip(0);
 
         bool forfeited;
         Vm.Log[] memory logs = vm.getRecordedLogs();

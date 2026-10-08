@@ -1742,7 +1742,7 @@ contract AffiliateDegeneretteReferrerTest is AffiliateIdFixture {
         vm.recordLogs();
         vm.startStateDiffRecording();
         vm.prank(makeAddr("degCrank"));
-        game.mineFlip();
+        game.mineFlip(0);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         logs = vm.getRecordedLogs();
         assertEq(game.degeneretteBetInfo(IDX, 1), 0, "resolved");

@@ -44,7 +44,7 @@ contract RedemptionCommitmentBindingTest is RedemptionFixture {
         for (uint256 i; i < 200; ++i) {
             (, settling,,) = sdgnrs.redemptionBatchState();
             if (settling != id) break;
-            game.mineFlip{gas: allowance}();
+            game.mineFlip{gas: allowance}(0);
         }
         (, settling,,) = sdgnrs.redemptionBatchState();
         assertTrue(settling != id, "the committed batch finished");

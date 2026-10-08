@@ -65,7 +65,7 @@ abstract contract RedemptionFixture is DeployProtocol {
     function _complete(uint256 word) internal {
         for (uint256 i; i < 500; ++i) {
             if (!game.advanceDue() && !game.rngLocked() && game.rngComplete()) return;
-            game.mineFlip();
+            game.mineFlip(0);
             _fulfillPending(word);
         }
         revert("fixture did not finish");
@@ -78,7 +78,7 @@ abstract contract RedemptionFixture is DeployProtocol {
             uint8 action = game.nextMinerAction();
             if (action == 0) return false; // Idle
             require(action != 2, "harness: an unanswered request is waiting"); // Wait
-            game.mineFlip();
+            game.mineFlip(0);
             if (mockVRF.lastRequestId() != before) return true;
         }
         revert("harness: engine did not settle");
@@ -101,7 +101,7 @@ abstract contract RedemptionFixture is DeployProtocol {
         for (uint256 i; i < 200; ++i) {
             _fulfillPending(word);
             if (game.gameOver()) return;
-            game.mineFlip();
+            game.mineFlip(0);
         }
         revert("harness: the ending did not reach game over");
     }

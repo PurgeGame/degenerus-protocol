@@ -82,7 +82,7 @@ contract QuestRetryDoubleRoll is DeployProtocol {
         vm.roll(block.number + 100);
         vm.warp(block.timestamp + 1 days + 1);
         vm.recordLogs();
-        game.mineFlip();
+        game.mineFlip(0);
         assertEq(game.level(), oldLevel + 1, "fresh request advances the level");
         assertTrue(game.rngLocked(), "request returns with word still pending");
         // The level-promoting RNG request (_finalizeRngRequest) no longer writes this
@@ -177,7 +177,7 @@ contract QuestRetryDoubleRoll is DeployProtocol {
                     (, , lpd2, rngL2, ) = game.purchaseInfo();
                     if (lpd2 && !rngL2) return game.level();
                 }
-                (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+                (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
                 if (!ok) break;
             }
         }
@@ -201,7 +201,7 @@ contract QuestRetryDoubleRoll is DeployProtocol {
 
             for (uint256 j = 0; j < 30; j++) {
                 QuestInfo[2] memory pre = quests.getActiveQuests();
-                (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+                (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
                 if (!ok) break;
 
                 QuestInfo[2] memory post = quests.getActiveQuests();
@@ -239,7 +239,7 @@ contract QuestRetryDoubleRoll is DeployProtocol {
                 if (done) return;
                 _fulfillVrfIfPending();
             } else {
-                game.mineFlip();
+                game.mineFlip(0);
             }
         }
         revert("harness: mid-day work did not settle");

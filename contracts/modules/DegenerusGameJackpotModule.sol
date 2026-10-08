@@ -290,6 +290,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
             work.traits = _rollBoard(rngWord, _NO_QUADRANT_BAN);
             work.finalDay = true;
             result.progressed = true;
+            MineFlipGas.markProgress(meter);
         }
         uint256 beforePaid = work.paid;
         _resumeEth(work, rngWord, meter, result);
@@ -343,6 +344,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
             if (!MineFlipGas.canRun(meter, JACKPOT_SETUP_GAS, JACKPOT_TAIL_GAS)) return result;
             _startDailyEth(work, kind, lvl, randWord);
             result.progressed = true;
+            MineFlipGas.markProgress(meter);
         }
         _resumeEth(work, randWord, meter, result);
         if (result.done) {
@@ -465,7 +467,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
                     d.lvl, q, d.traits[q], count, perWinner, converts ? d.shares[q] : 0,
                     EntropyLib.hash2(entropy, q), armGold && q == d.solo, pos, meter
                 );
-                if (pos != start) result.progressed = true;
+                if (pos != start) { result.progressed = true; MineFlipGas.markProgress(meter); }
                 if (paid != 0) {
                     work.paid += uint128(paid);
                     if (liability != 0) claimablePool += uint128(liability);
@@ -481,6 +483,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
             ++cursor;
             ++result.rewardBasis;
             result.progressed = true;
+            MineFlipGas.markProgress(meter);
         }
         if (cursor != work.quadrant) work.quadrant = cursor;
         if (pos != work.winner) work.winner = uint16(pos);
@@ -491,15 +494,16 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     function _resumeDecimatorEth(JackpotWork storage work, EthDraw memory d, uint256 entropy, uint256 word,
         MineFlipGas.Meter memory meter, MineFlipGas.Result memory result) private
     {
-        uint256 childGas = MineFlipGas.forwardable(MineFlipGas.remaining(meter), JACKPOT_TAIL_GAS);
-        if (childGas < GasBounds.DECIMATOR_PLAN_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS + 40_000) return;
+        uint256 childGas = MineFlipGas.forwardable(meter, JACKPOT_TAIL_GAS);
+        if (!MineFlipGas.canRun(meter, GasBounds.DECIMATOR_PLAN_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS + 40_000, JACKPOT_TAIL_GAS)) return;
         DecimatorJackpotTerms memory terms = DecimatorJackpotTerms(word, d.shares, d.counts, d.solo);
         (bool ok, bytes memory data) = ContractAddresses.GAME_DECIMATOR_MODULE.delegatecall{gas: childGas}(
-            abi.encodeWithSelector(IDegenerusGameDecimatorModule.runDecimatorJackpotAwards.selector, terms, childGas)
+            abi.encodeWithSelector(IDegenerusGameDecimatorModule.runDecimatorJackpotAwards.selector, terms, MineFlipGas.child(meter, JACKPOT_TAIL_GAS))
         );
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
         (MineFlipGas.Result memory generated, uint256 soloAmount) = abi.decode(data, (MineFlipGas.Result, uint256));
         result.progressed = result.progressed || generated.progressed;
+        if (generated.progressed) MineFlipGas.markProgress(meter);
         result.rewardBasis += generated.rewardBasis;
         if (!generated.done) return;
         uint256 passShare = soloAmount >= 8 * HALF_WHALE_PASS_PRICE ? soloAmount : 0;
@@ -525,6 +529,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
         }
         work.quadrant = 4;
         result.progressed = true;
+        MineFlipGas.markProgress(meter);
         result.done = true;
         ++result.rewardBasis;
     }
@@ -664,18 +669,20 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
             // across checkpoints and wall-day stalls, including the final jackpot day.
             (, work.traits,) = _foilDrawFor(uint256(dailyIdx) + 1);
             result.progressed = true;
+            MineFlipGas.markProgress(meter);
         }
         if (MineFlipGas.canRun(meter, JACKPOT_PLAN_GAS, JACKPOT_TAIL_GAS)) {
             TicketWorkPlan memory plan = _ticketWorkPlan(work, word);
             if (work.quadrant < 4) {
                 // delegatecall-alignment: justified — IDegenerusGameTicketModule selector forwarded to GAME_TICKET_MODULE by the gas-capped delegatecall below
                 (bool ok, bytes memory data) = ContractAddresses.GAME_TICKET_MODULE.delegatecall{
-                    gas: MineFlipGas.forwardable(MineFlipGas.remaining(meter), JACKPOT_TAIL_GAS)
+                    gas: MineFlipGas.forwardable(meter, JACKPOT_TAIL_GAS)
                 }(abi.encodeWithSelector(IDegenerusGameTicketModule.runJackpotTicketAwards.selector,
-                    plan, MineFlipGas.remaining(meter) - JACKPOT_TAIL_GAS));
+                    plan, MineFlipGas.child(meter, JACKPOT_TAIL_GAS)));
                 if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
                 MineFlipGas.Result memory step = abi.decode(data, (MineFlipGas.Result));
                 result.progressed = result.progressed || step.progressed;
+                if (step.progressed) MineFlipGas.markProgress(meter);
                 result.rewardBasis += step.rewardBasis;
             }
             uint256 finalGas = JACKPOT_FINAL_GAS + (plan.fullPasses == 0 ? 0 : 3 * PASS_AWARD_GAS);
@@ -690,6 +697,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
                 }
                 delete jackpotWork;
                 result.progressed = true;
+                MineFlipGas.markProgress(meter);
                 result.done = true;
             }
         }
@@ -1176,6 +1184,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
             }
             if (armGold && first != 0) _armGoldenTicket(first, lvl, trait);
             pos = end;
+            MineFlipGas.markProgress(meter);
         }
         return (pos, paid, liability);
     }

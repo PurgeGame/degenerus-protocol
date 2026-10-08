@@ -92,7 +92,7 @@ contract StorageRecyclingLifecycleTest is DeployProtocol {
                 }
             }
             vm.prank(buyers[0]);
-            try game.mineFlip() {
+            try game.mineFlip(0) {
                 keeperRefund += _refundLastCall();
                 uint256 used = vm.snapshotGasLastCall("lifecycle-keeper");
                 keeperGas += used;

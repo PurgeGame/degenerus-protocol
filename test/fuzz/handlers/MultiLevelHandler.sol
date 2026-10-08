@@ -146,7 +146,7 @@ contract MultiLevelHandler is Test {
         uint256 levelBefore = game.level();
 
         vm.prank(currentActor);
-        try game.mineFlip() {} catch {}
+        try game.mineFlip(0) {} catch {}
 
         _checkLevelTransition(levelBefore);
     }

@@ -9,7 +9,7 @@ pragma solidity 0.8.34;
 //    (inlined into consolidation in v20.0, commit d8dbd9e3).
 //    D-03 forbids re-extracting it.
 //  - D-02 requires tests exercise the full pipeline in the single test
-//    file (no splitting). Full-pipeline tests drive game.mineFlip()
+//    file (no splitting). Full-pipeline tests drive game.mineFlip(0)
 //    through DeployProtocol so the consolidation flow runs end-to-end.
 //  - SkimHarness is retained (D-03 pattern) for the pure-math fuzz tests
 //    that exercise the _nextToFutureBps pure function and the packed-slot
@@ -19,7 +19,7 @@ pragma solidity 0.8.34;
 //
 // NOTE on coverage reachability: _consolidatePoolsAndRewardJackpots is
 // declared `private` on DegenerusGameAdvanceModule; a SkimHarness cannot
-// invoke it directly. The only production entry is game.mineFlip()
+// invoke it directly. The only production entry is game.mineFlip(0)
 // which has deep state preconditions (ticket processing, VRF, level
 // counters, purchaseStartDay offsets). This file drives mineFlip()
 // through DeployProtocol to exercise the consolidation flow from the
@@ -76,7 +76,7 @@ contract SkimHarness is DegenerusGameAdvanceModule {
 /// @title FuturepoolSkimTest -- Full-pipeline integration + pure-math
 ///        coverage of the time-based future-take skim. Inherits
 ///        DeployProtocol so integration tests drive the real consolidation
-///        flow via game.mineFlip(). Full-pipeline invariants relevant
+///        flow via game.mineFlip(0). Full-pipeline invariants relevant
 ///        to the skim (conservation, insurance, bps curve shape) live in
 ///        this one file per D-02's "no splitting" rule.
 contract FuturepoolSkimTest is DeployProtocol {
@@ -119,7 +119,7 @@ contract FuturepoolSkimTest is DeployProtocol {
             uint256 nextBefore = game.nextPrizePoolView();
             uint256 futureBefore = game.futurePrizePoolView();
             vm.recordLogs();
-            game.mineFlip();
+            game.mineFlip(0);
             Vm.Log[] memory logs = vm.getRecordedLogs();
             for (uint256 i; i < logs.length; ++i) {
                 if (logs[i].topics[0] != skimSig) continue;

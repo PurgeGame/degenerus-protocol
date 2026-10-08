@@ -636,7 +636,7 @@ contract SeatCapHandler is Test {
         vm.warp(block.timestamp + 1 days);
         for (uint256 i; i < 300; ++i) {
             _fulfill();
-            try game.mineFlip() {
+            try game.mineFlip(0) {
                 ++dayCranks;
             } catch (bytes memory r) {
                 if (r.length == 4 && bytes4(r) == RNG_NOT_READY && _fulfill()) continue;
@@ -652,7 +652,7 @@ contract SeatCapHandler is Test {
     function mineFlip(uint256) external {
         ++calls[A_MINE];
         _fulfill();
-        try game.mineFlip() {
+        try game.mineFlip(0) {
             ++oks[A_MINE];
         } catch (bytes memory r) {
             _noteRevert(A_MINE, r);

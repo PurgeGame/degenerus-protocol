@@ -52,7 +52,7 @@ contract ResolutionCleanupGasTest is DeployProtocol {
         uint256 resolveGas;
         // The miner preserves one-field finalization per transaction.
         for (uint256 i; i < 5; ++i) {
-            game.mineFlip();
+            game.mineFlip(0);
             resolveGas += vm.lastCallGas().gasTotalUsed;
         }
         assertTrue(game.rngComplete(), "five fields must drain in five transactions");

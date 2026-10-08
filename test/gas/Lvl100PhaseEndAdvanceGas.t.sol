@@ -300,8 +300,8 @@ contract Lvl100TransitionDoneGas is BoundaryGasFixture {
         // One call at a realistic 10M allowance must close the transition: the close is one
         // admitted checkpoint (TRANSITION_CLOSE).
         vm.recordLogs();
-        game.mineFlip{gas: 10_000_000}();
-        uint256 used = vm.lastCallGas().gasTotalUsed + 21_064;
+        game.mineFlip{gas: 10_000_000}(0);
+        uint256 used = vm.lastCallGas().gasTotalUsed + 21_192;
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bool seedArmed;
         for (uint256 i; i < logs.length; ++i) {

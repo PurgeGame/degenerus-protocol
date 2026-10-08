@@ -574,7 +574,7 @@ contract V56SecUnmanipulable is DeployProtocol {
         vm.recordLogs();
         _t += 1 days;
         vm.warp(_t);
-        for (uint256 i; i < 64 && !game.rngLocked(); ++i) game.mineFlip();
+        for (uint256 i; i < 64 && !game.rngLocked(); ++i) game.mineFlip(0);
         assertTrue(game.rngLocked(), "the STAGE ran and the day's request went out");
 
         // UNTOUCHED: the stamp markers are byte-identical, the sub stays in-set, no expiry event fired.
@@ -643,7 +643,7 @@ contract V56SecUnmanipulable is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) break;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.mineFlip();
+            game.mineFlip(0);
             _fulfillPending(vrfWord);
         }
     }
@@ -654,7 +654,7 @@ contract V56SecUnmanipulable is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) return;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) return;
-            game.mineFlip();
+            game.mineFlip(0);
             _fulfillPending(vrfWord);
         }
     }

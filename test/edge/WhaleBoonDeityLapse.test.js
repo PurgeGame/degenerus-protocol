@@ -114,7 +114,7 @@ describe("WhaleBoonDeityLapse", function () {
       }
       if (fulfilled && !(await game.rngLocked()) && !(await game.advanceDue())) break;
       // The keeper also resolves prior read consumers and pre-request work.
-      await game.connect(deployer).mineFlip();
+      await game.connect(deployer).mineFlip(0);
     }
     expect(fulfilled, "the day requested and received a fresh word").to.equal(true);
     expect(await game.rngLocked()).to.equal(false);

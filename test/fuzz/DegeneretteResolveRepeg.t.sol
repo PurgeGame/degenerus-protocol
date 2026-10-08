@@ -210,8 +210,8 @@ contract DegeneretteResolveRepeg is DeployProtocol {
     function _crank(uint256 allowance) internal returns (uint256 resolved) {
         vm.recordLogs();
         vm.prank(makeAddr("degen_resolve_crank"));
-        if (allowance == type(uint256).max) game.mineFlip();
-        else game.mineFlip{gas: allowance}();
+        if (allowance == type(uint256).max) game.mineFlip(0);
+        else game.mineFlip{gas: allowance}(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) if (logs[i].topics[0] == DQ.RESOLVED_SIG) ++resolved;
     }
@@ -227,7 +227,7 @@ contract DegeneretteResolveRepeg is DeployProtocol {
             uint256 snap = vm.snapshotState();
             vm.prank(makeAddr("degen_resolve_crank"));
             vm.recordLogs();
-            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip()"));
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             uint256 n;
             if (ok) {
                 Vm.Log[] memory logs = vm.getRecordedLogs();

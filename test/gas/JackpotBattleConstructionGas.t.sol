@@ -18,7 +18,7 @@ import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 /// @dev Foundry isolation resets basefee to zero for a promoted non-static call.
 /// Set it inside that transaction, then measure only the nested, unmodified Game
-/// call. Fixture setup and this adapter are excluded; add mineFlip's 21,064 intrinsic.
+/// call. Fixture setup and this adapter are excluded; add mineFlip(0)'s 21,192 intrinsic.
 contract BattlePaidMinerProbe {
     Vm private constant VM = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
@@ -27,7 +27,7 @@ contract BattlePaidMinerProbe {
     {
         VM.fee(1 gwei);
         VM.prank(miner);
-        (ok, reason) = game.call{gas: supplied}(abi.encodeWithSignature("mineFlip()"));
+        (ok, reason) = game.call{gas: supplied}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
         used = VM.lastCallGas();
     }
 }
@@ -296,7 +296,7 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
         }
     }
 
-    function test_AdmissionDefersAtPolicyAndActualGasThresholdsWithoutCommittingField() public {
+    function test_LegacyAdmissionDefersButPublicFirstChunkBypassesEstimates() public {
         _seed(150, 0);
         uint256 comps = coin.crapsCompAllowance();
         _cool();
@@ -310,16 +310,28 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
         );
         assertFalse(result.progressed, "insufficient actual gas must defer before prepare");
         vm.etch(address(game), gameCode);
-        _cool();
-        vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
-        vm.prank(MINER);
-        game.mineFlip{gas: GasBounds.JACKPOT_BATTLE_DRAW}();
         (CrapsBattleStorage.JackpotRound memory round,,) = JackpotBattle(address(crapsBattle)).jackpotBattleOf(slot);
         assertEq(round.drawWord, 0, "deferral must not initialize a draw");
         assertEq(round.drawnCount, 0);
         assertEq(round.word, 0, "deferral must not seal a field");
         assertEq(coin.crapsCompAllowance(), comps);
         assertEq(coinflip.coinflipAmount(MINER), 0, "no-work deferral cannot pay a miner");
+
+        _cool();
+        vm.prank(MINER);
+        (bool ok,) = address(game).call{gas: 100_000}(
+            abi.encodeCall(game.mineFlip, (type(uint32).max)));
+        assertFalse(ok, "an unfunded construction must roll back");
+        (round,,) = JackpotBattle(address(crapsBattle)).jackpotBattleOf(slot);
+        assertEq(round.drawnCount, 0);
+
+        _cool();
+        vm.prank(MINER);
+        game.mineFlip{gas: GasBounds.JACKPOT_BATTLE_DRAW}(type(uint32).max);
+        (round,,) = JackpotBattle(address(crapsBattle)).jackpotBattleOf(slot);
+        assertGt(round.drawWord, 0, "funded first chunk initialized the draw");
+        assertEq(round.drawnCount, 50, "one canonical award group despite extreme estimates");
+        assertEq(round.word, 0, "remaining groups must precede the field seal");
     }
 
     function test_ColdProductionMineFlipConstructionSealAndMinerPaymentWithin10M() public {
@@ -330,7 +342,7 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
         _cool();
         (bool ok, Vm.Gas memory observed,) = paidProbe.run(address(game), MINER, 12_000_000);
         assertTrue(ok);
-        uint256 used = observed.gasTotalUsed + 21_064;
+        uint256 used = observed.gasTotalUsed + 21_192;
         emit log_named_uint("cold complete mineFlip battle construction incl intrinsic", used);
         assertLt(used, 10_000_000);
         (CrapsBattleStorage.JackpotRound memory round,, uint64 resolved) =

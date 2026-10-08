@@ -85,7 +85,7 @@ contract WalletIdEntropyDegeneretteTest is DeployProtocol {
         RecyclingState.seedWriteBuffer(address(game), INDEX ^ 1);
         vm.recordLogs();
         vm.prank(keeper);
-        game.mineFlip();
+        game.mineFlip(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bool found;
         for (uint256 i; i < logs.length; ++i) {

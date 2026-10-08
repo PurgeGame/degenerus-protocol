@@ -70,7 +70,7 @@ contract WardenLbxClosingBoxOrder is DeployProtocol {
         while (hi - lo > 1_000) {
             uint256 mid = (lo + hi) / 2;
             uint256 snap = vm.snapshotState();
-            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip()"));
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             bool opened = ok && _cursor() > before;
             vm.revertToStateAndDelete(snap);
             if (opened) hi = mid;
@@ -156,7 +156,7 @@ contract WardenLbxClosingBoxOrder is DeployProtocol {
         // closer.
         for (uint256 i; i < 3; ++i) {
             assertEq(sdgnrs.balanceOf(closer), 0, "closer cannot front-run -- still unopened while cohort drains");
-            game.mineFlip{gas: _oneEntryBudget()}();
+            game.mineFlip{gas: _oneEntryBudget()}(0);
             assertEq(_cursor(), pos[i] + 1, "exactly the next cohort entry opened");
             assertGt(sdgnrs.balanceOf(v[i]), 0, "cohort-first: DGNRS-branch victim is paid");
         }
@@ -170,7 +170,7 @@ contract WardenLbxClosingBoxOrder is DeployProtocol {
         uint256 closerBalBefore = sdgnrs.balanceOf(closer);
         uint256 closerBudget = _oneEntryBudget();
         vm.recordLogs();
-        game.mineFlip{gas: closerBudget}();
+        game.mineFlip{gas: closerBudget}(0);
         assertEq(_cursor(), closerPos + 1, "exactly the closer's one entry opened");
         uint256 sweptRemainder = _remainderSweptIn(vm.getRecordedLogs());
         uint256 closerOwnRoll = sdgnrs.balanceOf(closer) - closerBalBefore - sweptRemainder;

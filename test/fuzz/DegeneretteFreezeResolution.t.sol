@@ -785,7 +785,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         assertEq(game.rngConsumerStage(), 0, "no read consumer runs once liveness triggers");
         assertEq(game.nextMinerAction(), uint8(DegenerusGameStorage.MinerAction.Terminal), "only the terminal path remains");
         vm.recordLogs();
-        game.mineFlip();
+        game.mineFlip(0);
         assertEq(_countTopic(vm.getRecordedLogs(), DQ.RESOLVED_SIG), 0, "the terminal step resolves no pending bet");
         assertEq(game.claimableWinningsOf(player), 0, "the terminal step credits the bettor nothing");
     }
@@ -1072,7 +1072,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
     ///      mineFlip. One unbounded call runs the cohort's whole consumer chain.
     function _resolveCohort() internal {
         vm.prank(makeAddr("degen_freeze_crank"));
-        game.mineFlip();
+        game.mineFlip(0);
     }
 
     /// @dev One mineFlip given the smallest allowance that still resolves a bet: the engine admits a
@@ -1086,7 +1086,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
             uint256 snap = vm.snapshotState();
             vm.recordLogs();
             vm.prank(makeAddr("degen_freeze_crank"));
-            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip()"));
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             uint256 n = ok ? _countTopic(vm.getRecordedLogs(), DQ.RESOLVED_SIG) : 0;
             vm.revertToStateAndDelete(snap);
             if (n != 0) hi = mid;
@@ -1094,7 +1094,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         }
         vm.recordLogs();
         vm.prank(makeAddr("degen_freeze_crank"));
-        game.mineFlip{gas: hi}();
+        game.mineFlip{gas: hi}(0);
         resolved = _countTopic(vm.getRecordedLogs(), DQ.RESOLVED_SIG);
     }
 

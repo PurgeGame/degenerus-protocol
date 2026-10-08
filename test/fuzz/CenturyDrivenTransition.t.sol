@@ -134,7 +134,7 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
         for (uint256 j = 0; j < 300; j++) {
             _fulfillVrfIfPending();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("mineFlip()")
+                abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
             );
             if (!ok) break;
         }

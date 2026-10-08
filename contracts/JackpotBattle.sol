@@ -137,13 +137,15 @@ contract JackpotBattle is CrapsBattleStorage {
                 _completeRngSlot(slot, index);
                 ++pos;
                 result.progressed = true;
+                MineFlipGas.markProgress(meter);
                 emit CrapsScheduledExpired(slot);
                 continue;
             }
             if (!MineFlipGas.canRun(meter, _SEAT_GAS_MAX, _SETTLE_TAIL_GAS + _CREDIT_GAS_MAX + _WORK_TAIL_GAS)) break;
-            uint256 childAllowance = _resolverAllowance(MineFlipGas.remaining(meter));
+            uint256 childAllowance = MineFlipGas.child(meter, _WORK_TAIL_GAS + 30_000);
             MineFlipGas.Result memory child = IReadCohortLifecycle(address(this)).resolveRngSlot(slot, childAllowance);
             result.progressed = result.progressed || child.progressed;
+            if (child.progressed) MineFlipGas.markProgress(meter);
             result.rewardBasis += child.rewardBasis;
             if (child.done) ++pos;
             // One field per batch preserves the established finalization boundary.
@@ -990,6 +992,7 @@ contract JackpotBattle is CrapsBattleStorage {
                 Window memory w = _windowTerms(day, (uint256(cur) % _BONUS_SLOTS_PER_DAY) - 1);
                 _armSlot(cur, w);
                 result.progressed = true;
+                MineFlipGas.markProgress(meter);
                 // Re-examine the armed slot: a field ends maintenance (done) so the same miner
                 // call can request its word; an empty one steps on to the next head.
                 continue;
@@ -1001,7 +1004,7 @@ contract JackpotBattle is CrapsBattleStorage {
             result.done = true;
             break;
         }
-        if (cur != _keeperSlot) { _keeperSlot = cur; result.progressed = true; }
+        if (cur != _keeperSlot) { _keeperSlot = cur; result.progressed = true; MineFlipGas.markProgress(meter); }
         result.rewardBasis = result.progressed ? 1 : 0;
         MineFlipGas.finish(meter);
     }
@@ -1034,6 +1037,7 @@ contract JackpotBattle is CrapsBattleStorage {
                 if (slot == daySlot_) _credit(uint32(header), high, 1);
                 else comps += _windowAheadPrice(slot - daySlot_ - 1, high);
                 moved = true;
+                MineFlipGas.markProgress(meter);
             }
             if (done != _bonusCursorOf(slot)) _setBonusCursor(slot, done);
         }
@@ -1102,7 +1106,7 @@ contract JackpotBattle is CrapsBattleStorage {
             return result;
         }
         if (!MineFlipGas.canRun(meter, _SEAT_GAS_MAX, _SETTLE_TAIL_GAS + _CREDIT_GAS_MAX + _WORK_TAIL_GAS)) return result;
-        uint256 childAllowance = _resolverAllowance(MineFlipGas.remaining(meter));
+        uint256 childAllowance = MineFlipGas.child(meter, _WORK_TAIL_GAS + 30_000);
         result = IReadCohortLifecycle(address(this)).resolveRngSlot(slot, childAllowance);
         MineFlipGas.finish(meter);
     }

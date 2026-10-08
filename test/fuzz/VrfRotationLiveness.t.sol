@@ -119,7 +119,7 @@ contract VrfRotationLiveness is DeployProtocol {
     ///      re-thrown so the defect mode fails the test naturally.
     /// @return progressed False if NoWork() halted progress for this wall-clock day.
     function _advanceTolerant() internal returns (bool progressed) {
-        try game.mineFlip() {
+        try game.mineFlip(0) {
             return true;
         } catch (bytes memory err) {
             if (err.length >= 4 && bytes4(err) == NO_WORK) {
@@ -180,7 +180,7 @@ contract VrfRotationLiveness is DeployProtocol {
     ///      on whichever coordinator is wired.
     function _mineMiddayRequest(MockVRFCoordinator vrf) internal {
         uint256 prior = vrf.lastRequestId();
-        game.mineFlip();
+        game.mineFlip(0);
         assertGt(vrf.lastRequestId(), prior, "mineFlip issued the mid-day request");
         assertFalse(game.rngLocked(), "a mid-day request, not the daily one");
     }
@@ -261,7 +261,7 @@ contract VrfRotationLiveness is DeployProtocol {
         // before the drained cohort lets the engine move on.
         uint256 reissued = newVRF.lastRequestId();
         vm.recordLogs();
-        game.mineFlip();
+        game.mineFlip(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 landed;
         for (uint256 i = 0; i < logs.length; i++) {
@@ -298,7 +298,7 @@ contract VrfRotationLiveness is DeployProtocol {
 
         // Warp to a new day and fire the daily request (locked, word not yet delivered).
         vm.warp(block.timestamp + 1 days);
-        game.mineFlip();
+        game.mineFlip(0);
         assertTrue(game.rngLocked(), "daily VRF request must be in flight (locked)");
         assertEq(_readRngWordCurrent(), 0, "daily word not yet delivered before rotation");
 
@@ -337,7 +337,7 @@ contract VrfRotationLiveness is DeployProtocol {
 
         // Warp to a new day and fire the daily request.
         vm.warp(block.timestamp + 1 days);
-        game.mineFlip();
+        game.mineFlip(0);
         assertTrue(game.rngLocked(), "daily VRF request must be in flight");
 
         uint32 day = game.currentDayView();
@@ -416,7 +416,7 @@ contract VrfRotationLiveness is DeployProtocol {
         // The re-issue stalls across the next-day boundary: the daily advance waits on it.
         vm.warp(block.timestamp + 1 days + MIDDAY_RNG_STALL_TIMEOUT + 1);
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        game.mineFlip();
+        game.mineFlip(0);
         assertEq(newVRF.lastRequestId(), reissueReqId, "no daily request while the mid-day word is outstanding");
         assertFalse(game.rngLocked(), "the daily lock is not taken over the stalled re-issue");
 
@@ -440,7 +440,7 @@ contract VrfRotationLiveness is DeployProtocol {
         newVRF.fulfillRandomWords(retryReqId, vrfWord);
         _lastFulfilledReqId = retryReqId;
         vm.recordLogs();
-        game.mineFlip();
+        game.mineFlip(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bool landed;
         for (uint256 i = 0; i < logs.length; i++) {
@@ -467,7 +467,7 @@ contract VrfRotationLiveness is DeployProtocol {
         // --- Complete a daily-branch rotation so the game is past the rotation, unlocked. ---
         _completeDay(0xDEAD0001);
         vm.warp(block.timestamp + 1 days);
-        game.mineFlip();
+        game.mineFlip(0);
         assertTrue(game.rngLocked(), "daily VRF request in flight");
 
         MockVRFCoordinator newVRF = _rotateTo();

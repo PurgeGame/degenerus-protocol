@@ -208,8 +208,8 @@ contract DegeneretteFlipRoundAntiGrind is DeployProtocol {
         uint256 before = coin.balanceOf(player);
         uint256 allowance = budget == type(uint256).max ? 0 : _minimalAllowance();
         vm.prank(keeper);
-        if (allowance == 0) game.mineFlip();
-        else game.mineFlip{gas: allowance}();
+        if (allowance == 0) game.mineFlip(0);
+        else game.mineFlip{gas: allowance}(0);
         minted = coin.balanceOf(player) - before;
     }
 
@@ -224,7 +224,7 @@ contract DegeneretteFlipRoundAntiGrind is DeployProtocol {
             uint256 snap = vm.snapshotState();
             vm.recordLogs();
             vm.prank(keeper);
-            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip()"));
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             bool resolved;
             if (ok) {
                 Vm.Log[] memory logs = vm.getRecordedLogs();

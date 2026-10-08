@@ -128,7 +128,7 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
         _quietCrapsTable();
         vm.prank(keeper);
         vm.expectRevert(abi.encodeWithSignature("NoWork()"));
-        game.mineFlip();
+        game.mineFlip(0);
     }
 
     /// @notice Load-bearing isolation: prove a SINGLE bounded mineFlip call does NOT
@@ -270,7 +270,7 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
         _quietCrapsTable();
         vm.prank(keeper);
         vm.expectRevert(abi.encodeWithSignature("NoWork()"));
-        game.mineFlip();
+        game.mineFlip(0);
     }
 
     // =========================================================================
@@ -384,7 +384,7 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
             if (!game.advanceDue()) continue;
             uint256 before = _countPending(subs);
             vm.prank(keeper);
-            game.mineFlip{gas: BOUNDED_OPEN_ALLOWANCE}(); // MUST NOT revert while boxes remain
+            game.mineFlip{gas: BOUNDED_OPEN_ALLOWANCE}(0); // MUST NOT revert while boxes remain
             if (_countPending(subs) < before) openCalls++;
         }
         assertEq(_countPending(subs), 0, "harness: the day's stamped boxes all opened");
@@ -400,7 +400,7 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
             }
             _finishReadConsumers();
             if (!game.advanceDue() && game.rngComplete()) return;
-            if (game.advanceDue()) game.mineFlip();
+            if (game.advanceDue()) game.mineFlip(0);
         }
         revert("harness: cohorts never settled");
     }
@@ -412,19 +412,19 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
         while (hi - lo > 1_000) {
             uint256 mid = (lo + hi) / 2;
             uint256 snap = vm.snapshotState();
-            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip()"));
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             vm.revertToStateAndDelete(snap);
             if (ok) hi = mid;
             else lo = mid;
         }
-        game.mineFlip{gas: hi}();
+        game.mineFlip{gas: hi}(0);
     }
 
     /// @dev One engine call with a bounded gas allowance; returns how many of `subs` it opened.
     function _openViaValveWith(address[] memory subs, uint256 allowance) internal returns (uint256 opened) {
         uint256 before = _countPending(subs);
         vm.prank(makeAddr("life_opener"));
-        game.mineFlip{gas: allowance}();
+        game.mineFlip{gas: allowance}(0);
         opened = before - _countPending(subs);
     }
 
@@ -448,7 +448,7 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
         uint256 snap = vm.snapshotState();
         bool noWork;
         vm.prank(keeper);
-        try game.mineFlip() {
+        try game.mineFlip(0) {
             noWork = false; // a category had work -> not NoWork
         } catch (bytes memory reason) {
             noWork = (reason.length == 4 && bytes4(reason) == bytes4(keccak256("NoWork()")));
@@ -471,7 +471,7 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) break;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.mineFlip();
+            game.mineFlip(0);
             _fulfillPending(vrfWord);
         }
     }
@@ -482,7 +482,7 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) return;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) return;
-            game.mineFlip();
+            game.mineFlip(0);
             _fulfillPending(vrfWord);
         }
     }

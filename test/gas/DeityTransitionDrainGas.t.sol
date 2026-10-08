@@ -68,8 +68,8 @@ contract DeityTransitionDrainGasTest is BoundaryGasFixture {
         // (same 32 cold grants) is bounded in isolation by SdgnrsCenturyRecycleGas'
         // testColdCloseChunk* tests.
         uint256 beforeGas = gasleft();
-        game.mineFlip{gas: 10_000_000}();
-        uint256 used = beforeGas - gasleft() + 21_064;
+        game.mineFlip{gas: 10_000_000}(0);
+        uint256 used = beforeGas - gasleft() + 21_192;
         emit log_named_uint("cold 32-deity renewal transition close including intrinsic", used);
         _checkOwners();
         assertFalse(game.rngLocked(), "transition closes in this advance");
@@ -82,7 +82,7 @@ contract DeityTransitionDrainGasTest is BoundaryGasFixture {
         // day (the day-400 fixture's Craps maintenance catch-up) ends idle (NoWork; was NotTimeYet).
         bool idle;
         for (uint256 i; i < 1000 && !idle; ++i) {
-            try game.mineFlip{gas: 10_000_000}() {} catch (bytes memory err) {
+            try game.mineFlip{gas: 10_000_000}(0) {} catch (bytes memory err) {
                 assertEq(bytes4(err), bytes4(keccak256("NoWork()")), "same day ends idle");
                 idle = true;
             }

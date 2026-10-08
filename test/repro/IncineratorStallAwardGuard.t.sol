@@ -142,7 +142,7 @@ contract IncineratorStallAwardGuard is DeployProtocol {
     }
 
     function _advance() internal returns (bool ok) {
-        (ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+        (ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
     }
 
     function testStalledCenturyIncineratorStaysCoupledToTheArmedDay() public {

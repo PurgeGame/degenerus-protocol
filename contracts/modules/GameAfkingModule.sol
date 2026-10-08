@@ -600,8 +600,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
 
     /// @dev Keep the original claimable/prepaid split: top up its residual only,
     ///      without resolving the purchase again against the new prepaid balance.
-    ///      A fully admitted pull may fail for any reason, including exhausting
-    ///      its stipend. Ordinary insufficient-funding handling owns the outcome.
+    ///      A refused token top-up uses the ordinary insufficient-funding policy.
+    ///      Empty/OOG and known metering failures still propagate, so caller starvation
+    ///      cannot expire a funded subscription.
     /// @param subscriber The sub's set element: its key (bits 0..159) and wallet ID (160..191).
     /// @param funding The funding account in the same layout; equal to `subscriber` when
     ///        self-funded.
@@ -614,11 +615,12 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         if (srcFunding >= ethValue) return srcFunding;
         (address source, bool allowed) = _stethSource(subscriber, funding);
         if (!allowed) return srcFunding;
-        try IDegenerusGame(address(this)).pullAfkingSteth{gas: GasBounds.AFKING_STETH_PULL_GAS}(
+        try IDegenerusGame(address(this)).pullAfkingSteth(
             subscriber, source, ethValue - srcFunding
         ) returns (uint256 received) {
             return srcFunding + received;
-        } catch {
+        } catch (bytes memory reason) {
+            MineFlipGas.rethrowGasFailure(reason);
             return srcFunding;
         }
     }
@@ -641,10 +643,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             && _afkingFundingAllowed(subscriber, funding);
     }
 
-    /// @notice Atomic, gas-capped stETH funding operation, callable only by GAME itself.
-    /// @dev Each token operation is caught, and the caller catches this whole frame:
-    ///      malformed return data or bad receipts therefore
-    ///      roll back the token transfer and its allowance consumption as well.
+    /// @notice Atomic stETH funding operation, callable only by GAME itself.
+    /// @dev Dependency failures and invalid receipts roll back the entire attempt.
+    ///      Zero is returned only after successful reads prove missing consent/funds.
     /// @param subId The subscriber account ID.
     /// @param source The funding account's payee, where the stETH comes from.
     function pullAfkingSteth(uint32 subId, address source, uint256 shortfall)
@@ -662,29 +663,16 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         }
 
         IStETH token = IStETH(ContractAddresses.STETH_TOKEN);
-        uint256 balanceBefore;
-        try token.balanceOf(address(this)) returns (uint256 value) {
-            balanceBefore = value;
-        } catch { revert AfkingStethPullFailed(); }
-
-        uint256 shares;
-        try token.getSharesByPooledEth(shortfall) returns (uint256 value) {
-            shares = value;
-        } catch { revert AfkingStethPullFailed(); }
-        try token.getPooledEthByShares(shares) returns (uint256 value) {
-            // Lido floors both conversions. One additional share is the minimum
-            // sufficient amount whenever the round-trip quote falls short.
-            if (value < shortfall) ++shares;
-        } catch { revert AfkingStethPullFailed(); }
-
-        uint256 transferred;
-        try token.transferSharesFrom(source, address(this), shares) returns (uint256 value) {
-            transferred = value;
-        } catch { revert AfkingStethPullFailed(); }
-        try token.balanceOf(address(this)) returns (uint256 value) {
-            if (value < balanceBefore) revert AfkingStethPullFailed();
-            received = value - balanceBefore;
-        } catch { revert AfkingStethPullFailed(); }
+        uint256 balanceBefore = token.balanceOf(address(this));
+        uint256 shares = token.getSharesByPooledEth(shortfall);
+        // Lido floors both conversions; include the one rounding share if needed.
+        if (token.getPooledEthByShares(shares) < shortfall) ++shares;
+        uint256 quote = token.getPooledEthByShares(shares);
+        if (token.sharesOf(source) < shares || token.allowance(source, address(this)) < quote) return 0;
+        uint256 transferred = token.transferSharesFrom(source, address(this), shares);
+        uint256 afterBalance = token.balanceOf(address(this));
+        if (afterBalance < balanceBefore) revert AfkingStethPullFailed();
+        received = afterBalance - balanceBefore;
 
         // The recipient's pre-existing fractional share value can contribute
         // one extra wei to its balance delta. Subtraction avoids return+1 overflow.
@@ -1263,6 +1251,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             if (!ok) _revertDelegate(data);
             abi.decode(data, (uint256)); // Authenticate the pinned worker's return shape.
             result.progressed = true;
+            MineFlipGas.markProgress(meter);
         }
 
         uint256 cursor = _subCursor;
@@ -1283,6 +1272,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
 
         // Reserve the largest per-subscriber branch before reading or mutating it.
         while (cursor < len && MineFlipGas.canRun(meter, SUBSCRIBER_ITEM_GAS, SUBSCRIBER_TAIL_GAS)) {
+            MineFlipGas.markProgress(meter);
             // Packed subscriber IDs key mint history, quests, events and balances directly.
             uint32 element = _subscribers[cursor];
             uint32 player = element;
@@ -1493,6 +1483,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         if (result.done) {
             subsFullyProcessed = true;
             result.progressed = true;
+            MineFlipGas.markProgress(meter);
         }
         MineFlipGas.finish(meter);
     }
@@ -1631,6 +1622,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             if (!MineFlipGas.canRun(meter, skip ? AFKING_SKIP_GAS : AFKING_OPEN_GAS, AFKING_TAIL_GAS)) break;
             if (!skip) {
                 _openAfkingBox(element, sub, word);
+                MineFlipGas.markProgress(meter);
                 ++result.rewardBasis;
             }
             ++cursor;
@@ -1696,11 +1688,13 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             if (!ok) _revertDelegate(data);
             ++cur;
             result.progressed = true;
+            MineFlipGas.markProgress(meter);
             result.rewardBasis += boxes + (presale ? 1 : 0);
         }
         if (cur == qlen && MineFlipGas.canRun(meter, 0, HUMAN_TAIL_GAS)) {
             humanReadComplete = true;
             result.progressed = true;
+            MineFlipGas.markProgress(meter);
             result.done = true;
             _tryCompleteRng();
         }

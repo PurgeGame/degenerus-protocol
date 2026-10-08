@@ -51,21 +51,19 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
         score = _playerActivityScoreCached(id, _effectiveQuestStreak(id));
     }
 
-    function mineFlip() external {
+    function mineFlip(uint32 gasMultiplierBps) external {
         if (address(this) != ContractAddresses.GAME) revert E();
+        gasMultiplierBps = MineFlipGas.normalize(gasMultiplierBps);
         uint256 rewardStart = gasleft();
         MinerAction first = _nextMinerAction(msg.sender);
         if (first == MinerAction.Idle) revert NoWork();
         if (first == MinerAction.Wait) revert RngNotReady();
-        if (gasleft() < WORKER_BOUNDARY + RETURN_RESERVE + MineFlipGas.CHECK_RESERVE) {
-            revert MineFlipGas.InsufficientExecutionGas();
-        }
         bool rewardEligible = first != MinerAction.Terminal;
         uint256 rewardPrice = PriceLookupLib.priceForLevel(_activeTicketLevel());
         uint256 rewardDueAt = _minerRewardDueAt();
         // Read before work, like the clock: the call that releases the lock still earns the locked rate.
         bool lockedAtStart = rngLockedFlag;
-        MineFlipGas.Meter memory meter = MineFlipGas.start(MineFlipGas.available());
+        MineFlipGas.Meter memory meter = MineFlipGas.start(MineFlipGas.budget(gasleft(), gasMultiplierBps, true));
         bool moved;
         uint256 unpaidAttemptGas;
 
@@ -75,6 +73,7 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
             // Every later iteration must reselect after the preceding worker's changes.
             MinerAction action = transitions == 0 ? first : _nextMinerAction(msg.sender);
             if (action == MinerAction.Idle || action == MinerAction.Wait) break;
+            if (moved) MineFlipGas.markProgress(meter);
             if (!MineFlipGas.canRun(meter, WORKER_BOUNDARY, RETURN_RESERVE)) break;
 
             if (action == MinerAction.CertifyRead) {
@@ -83,6 +82,7 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
                 // the action can never be reselected in the same state.
                 _setRngComplete(true);
                 moved = true;
+                MineFlipGas.markProgress(meter);
                 continue;
             }
 
@@ -91,9 +91,11 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
                 // cursor at least one step (pays a winner or steps past a paid sealed round), or
                 // reports every sealed round paid and clears the bit, so the stage always
                 // progresses. Settlement is revert-free for committed state.
-                if (!MineFlipGas.canRun(meter, GasBounds.GROWTH_SETTLE_GAS, RETURN_RESERVE + WORKER_BOUNDARY)) break;
-                if (parimutuel.settleGrowth(GasBounds.GROWTH_SETTLE_WINNERS)) _setGrowthSettlePending(false);
-                moved = true;
+                MineFlipGas.Result memory growth = parimutuel.runGrowthWork(
+                    MineFlipGas.child(meter, RETURN_RESERVE + WORKER_BOUNDARY));
+                if (growth.done) _setGrowthSettlePending(false);
+                moved = moved || growth.progressed || growth.done;
+                if (!growth.done) break;
                 continue;
             }
 
@@ -103,11 +105,11 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
                 _subCursor = 0;
                 subsFullyProcessed = false;
                 moved = true;
+                MineFlipGas.markProgress(meter);
+                if (!MineFlipGas.canRun(meter, WORKER_BOUNDARY, RETURN_RESERVE)) break;
             }
 
-            uint256 left = MineFlipGas.remaining(meter);
-            if (left <= WORKER_BOUNDARY + RETURN_RESERVE) break;
-            uint256 allowance = left - WORKER_BOUNDARY - RETURN_RESERVE;
+            uint256 allowance = MineFlipGas.child(meter, WORKER_BOUNDARY + RETURN_RESERVE);
             address target;
             bytes memory callData;
             bool externalWorker;
@@ -142,7 +144,6 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
                 }
                 // Request/boundary work is indivisible; leave it for the next call if needed.
                 if (!MineFlipGas.canRun(meter, GasBounds.RNG_REQUEST, RETURN_RESERVE + WORKER_BOUNDARY)) break;
-                allowance = GasBounds.RNG_REQUEST;
             } else {
                 basicResult = true;
                 if (action == MinerAction.Tickets) {
@@ -181,7 +182,7 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
                 }
             }
 
-            uint256 forwarded = MineFlipGas.forwardable(MineFlipGas.remaining(meter), RETURN_RESERVE);
+            uint256 forwarded = MineFlipGas.forwardable(meter, RETURN_RESERVE);
             uint256 beforeCall = gasleft();
             bool ok;
             bytes memory result;
@@ -192,7 +193,7 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
                 // Accounting/invariant errors still bubble, including WorkGasBound.
                 if (!moved || !(_checkpointRefusal(result)
                     || (action == MinerAction.RequestMidday && _middayRefusal(result)))) _revertWork(result);
-                unpaidAttemptGas = beforeCall - gasleft();
+                unpaidAttemptGas = MineFlipGas.consumed(beforeCall, gasleft());
                 break;
             }
 
@@ -201,16 +202,17 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
                 (bool progressed, bool done,) = abi.decode(result, (bool, bool, uint256));
                 if (action == MinerAction.Tickets && done) {
                     // An empty queue can still advance its one-time certificate.
-                    if (!ticketsFullyProcessed) { ticketsFullyProcessed = true; progressed = true; }
+                    if (!ticketsFullyProcessed) { ticketsFullyProcessed = true; progressed = true; MineFlipGas.markProgress(meter); }
                     if (_lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) != 0) {
                         _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, 0);
                         progressed = true;
+                        MineFlipGas.markProgress(meter);
                     }
                 }
                 if (!progressed) {
                     // done describes eligibility/completion, not work performed.
                     // Never redispatch an unchanged worker, even if it says done.
-                    unpaidAttemptGas = beforeCall - gasleft();
+                    unpaidAttemptGas = MineFlipGas.consumed(beforeCall, gasleft());
                     if (!moved) {
                         if (done) revert NoWork();
                         revert MineFlipGas.InsufficientExecutionGas();
@@ -218,8 +220,9 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
                     break;
                 }
                 moved = true;
+                MineFlipGas.markProgress(meter);
                 if (!done) break;
-            } else moved = true;
+            } else { moved = true; MineFlipGas.markProgress(meter); }
             // A request commits the next cohort; terminal stages own their continuation.
             if (action == MinerAction.Terminal || request) break;
         }
@@ -228,7 +231,8 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
         if (!moved) revert MineFlipGas.InsufficientExecutionGas();
         // This top-level meter starts with all available gas; worker allowance checks
         // retain the actual bounds. No successful call can overspend this initial amount.
-        uint256 used = rewardStart - gasleft() - unpaidAttemptGas;
+        uint256 used = MineFlipGas.consumed(rewardStart, gasleft());
+        used = used > unpaidAttemptGas ? used - unpaidAttemptGas : 0;
         uint256 reward;
         // Every call's first MIN_REWARDED_GAS is unpaid. Splitting work into small calls forfeits
         // another unpaid million per call; the only thing an extra qualifying call can gain is the

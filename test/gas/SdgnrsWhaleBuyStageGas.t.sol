@@ -88,7 +88,7 @@ contract SdgnrsWhaleBuyStageGas is DeployProtocol {
         vm.cool(address(afkingSubToken));
         // A realistic allowance succeeds; the engine keeps admitting chunks while it lasts.
         uint256 before = gasleft();
-        game.mineFlip{gas: KEEPER_ALLOWANCE}();
+        game.mineFlip{gas: KEEPER_ALLOWANCE}(0);
         used = before - gasleft();
 
         // The attempt latches the level either way; the claimable debit tells buy from no-buy.

@@ -84,7 +84,7 @@ contract TicketTrackingHandler is Test {
     /// @notice Interleave queue draining with purchases and the separately targeted VRF handler.
     function advance(uint256 actorSeed) external useActor(actorSeed) {
         vm.prank(currentActor);
-        try game.mineFlip() {} catch {}
+        try game.mineFlip(0) {} catch {}
     }
 
     /// @notice Attest all three cohorts and the address-facing view against raw position records.

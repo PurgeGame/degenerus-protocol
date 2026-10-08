@@ -19,7 +19,7 @@ contract CustomRngCohortGasTest is DeployProtocol {
         mockVRF.fundSubscription(1, 100 ether);
         vm.warp(vm.getBlockTimestamp() + 1 days);
         for (uint256 i; i < 128 && (game.advanceDue() || game.rngLocked()); ++i) {
-            game.mineFlip();
+            game.mineFlip(0);
             uint256 request = mockVRF.lastRequestId();
             if (request != 0) {
                 (,, bool fulfilled) = mockVRF.pendingRequests(request);
@@ -46,14 +46,14 @@ contract CustomRngCohortGasTest is DeployProtocol {
         uint48 buffer = crapsBattle.closeBattle(slot);
         assertEq(mockVRF.lastRequestId(), requestBefore, "the close makes no request of its own");
         assertEq(buffer, RecyclingState.writeBuffer(address(game)), "the shut field binds the write buffer");
-        game.mineFlip();
+        game.mineFlip(0);
         uint256 request = mockVRF.lastRequestId();
         assertGt(request, requestBefore, "the ordinary mid-day request seals the shut field");
         assertEq(RecyclingState.readBuffer(address(game)), buffer, "the request sealed the field's buffer");
         (,, bool fulfilled) = mockVRF.pendingRequests(request);
         assertFalse(fulfilled, "custom close requests its fresh session");
         mockVRF.fulfillRandomWords(request, uint256(keccak256("cold deep high custom")) | 2);
-        game.mineFlip(); // Publication is required before any consumer uses the word.
+        game.mineFlip(0); // Publication is required before any consumer uses the word.
         (bytes32 key,,) = crapsBattle.customBattleOf(slot);
         uint256 maxGas;
         uint256 finalGas;
@@ -66,8 +66,8 @@ contract CustomRngCohortGasTest is DeployProtocol {
             vm.cool(ContractAddresses.CRAPS_ENGINE);
             vm.cool(ContractAddresses.JACKPOT_BATTLE);
             uint256 beforeGas = gasleft();
-            game.mineFlip{gas: CAP - 21_064}();
-            uint256 used = beforeGas - gasleft() + 21_064;
+            game.mineFlip{gas: CAP - 21_192}(0);
+            uint256 used = beforeGas - gasleft() + 21_192;
             assertLt(used, CAP, "custom cohort keeper transaction exceeds the ceiling");
             if (used > maxGas) maxGas = used;
             if (crapsBattle.battleOf(key).finalized) finalGas = used;

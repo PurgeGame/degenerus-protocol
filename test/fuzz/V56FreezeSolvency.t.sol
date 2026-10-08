@@ -420,7 +420,7 @@ contract V56FreezeSolvency is DeployProtocol {
         vm.recordLogs();
         _settleClean(0xC0FFEEFACE);
         vm.prank(makeAddr("freeze_opener"));
-        try game.mineFlip() {} catch {}
+        try game.mineFlip(0) {} catch {}
         return _decodeLootBoxOpenedFor(afk);
     }
 
@@ -518,7 +518,7 @@ contract V56FreezeSolvency is DeployProtocol {
         _t += 1 days;
         vm.warp(_t);
         uint256 before = mockVRF.lastRequestId();
-        for (uint256 i; i < DRAIN_MAX_ITERATIONS && mockVRF.lastRequestId() == before; ++i) game.mineFlip();
+        for (uint256 i; i < DRAIN_MAX_ITERATIONS && mockVRF.lastRequestId() == before; ++i) game.mineFlip(0);
         assertGt(mockVRF.lastRequestId(), before, "harness: the new day's request is in flight");
     }
 
@@ -528,7 +528,7 @@ contract V56FreezeSolvency is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) break;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.mineFlip();
+            game.mineFlip(0);
             _fulfillPending(vrfWord);
         }
     }
@@ -541,7 +541,7 @@ contract V56FreezeSolvency is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) return;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) return;
-            game.mineFlip();
+            game.mineFlip(0);
             _fulfillPending(vrfWord);
         }
     }

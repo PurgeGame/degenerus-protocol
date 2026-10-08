@@ -187,7 +187,7 @@ contract RedemptionForwardBatchesTest is RedemptionFixture {
             (, settling) = _state();
             if (settling != first + 1) break;
             require(game.nextMinerAction() != 2, "harness: only the mid-day word is answered");
-            game.mineFlip();
+            game.mineFlip(0);
         }
         (, settling) = _state();
         assertTrue(settling != first + 1, "bob's batch settled on the mid-day session");
@@ -368,7 +368,7 @@ contract RedemptionForwardBatchesTest is RedemptionFixture {
 
         vm.warp(vm.getBlockTimestamp() + 14 days);
         assertTrue(game.livenessTriggered(), "unanswered for the dead window");
-        for (uint256 i; i < 200 && !game.gameOver(); ++i) game.mineFlip();
+        for (uint256 i; i < 200 && !game.gameOver(); ++i) game.mineFlip(0);
         assertTrue(game.gameOver(), "deterministic ending reached game over");
 
         (, uint256 ethBase,, uint16 roll, uint16 flip) = _batch(first);

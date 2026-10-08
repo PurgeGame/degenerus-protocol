@@ -145,7 +145,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
                 if (!done) mockVRF.fulfillRandomWords(request, seed);
             }
             if (!game.rngLocked() && game.rngWordForDay(game.currentDayView()) != 0) return;
-            if (game.advanceDue()) game.mineFlip();
+            if (game.advanceDue()) game.mineFlip(0);
         }
         fail("daily advance must finish after the boon stage");
     }
@@ -324,7 +324,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         assertEq(lens.protocolBoonPool(address(game), address(sdgnrs), day).awardedMask, 7);
     }
     function testEthEntriesStayOpenBeforeAndAfterDailyVrfFulfillmentWhileLocked() public {
-        for (uint256 i; i < 150 && !game.rngLocked(); ++i) game.mineFlip();
+        for (uint256 i; i < 150 && !game.rngLocked(); ++i) game.mineFlip(0);
         assertTrue(game.rngLocked());
         assertEq(game.rngWordForDay(day), 0);
         vm.prank(bettor); _bet(0, 0.005 ether);
@@ -464,7 +464,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
             }
             bool finished;
             for (uint256 i; i < 150; ++i) {
-                game.mineFlip();
+                game.mineFlip(0);
                 uint256 request = mockVRF.lastRequestId();
                 if (request > fulfilled) {
                     mockVRF.fulfillRandomWords(request, 12345 + d);

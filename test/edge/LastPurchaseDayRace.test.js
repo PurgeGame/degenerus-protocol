@@ -88,7 +88,7 @@ describe("LastPurchaseDayRace (turbo + gap-day backfill)", function () {
             }
             const caller = allBuyers[rand() % allBuyers.length];
             try {
-              await game.connect(caller).mineFlip();
+              await game.connect(caller).mineFlip(0);
             } catch (e) {
               const msg = (e && (e.shortMessage || e.message)) || "";
               if (msg.includes("0x11") || msg.toLowerCase().includes("panic")) {
@@ -133,7 +133,7 @@ describe("LastPurchaseDayRace (turbo + gap-day backfill)", function () {
       await heavyPurchases(game, buyers);
 
       await advanceToNextDay();
-      await game.connect(alice).mineFlip();
+      await game.connect(alice).mineFlip(0);
 
       expect(await game.jackpotDuration()).to.equal(
         1n,

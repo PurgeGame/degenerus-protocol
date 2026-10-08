@@ -32,6 +32,6 @@ contract SimAdvanceOverflow is DeployProtocol {
             game.purchase{value: 1 ether}(0, 400, BoxOrderLib.boCustomFloor(0.5 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         }
         vm.warp(block.timestamp + 1 days + 1861);
-        game.mineFlip();
+        game.mineFlip(0);
     }
 }

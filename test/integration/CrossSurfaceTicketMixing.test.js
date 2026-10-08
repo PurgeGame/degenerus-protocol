@@ -218,7 +218,7 @@ describe("Cross-surface ticket events and remainder preservation", function () {
         const snapshot = await hre.ethers.provider.send("evm_snapshot", []);
         await mockVRF.fulfillRandomWords(request, word);
         // Publication is a keeper step; the callback only stores the final word.
-        await game.connect(deployer).mineFlip({ gasLimit: 1_000_000 });
+        await game.connect(deployer).mineFlip(0, { gasLimit: 1_000_000 });
         expect(await game.rngConsumerStage(), "publication checkpoint leaves human boxes ready").to.equal(3n);
         const receipts = await mineAll(game, deployer);
         const ticketAward = receipts.flatMap((receipt) => receipt.logs).some((log) => {
@@ -230,7 +230,7 @@ describe("Cross-surface ticket events and remainder preservation", function () {
         await hre.ethers.provider.send("evm_revert", [snapshot]);
         if (ticketAward) {
           await mockVRF.fulfillRandomWords(request, word);
-          await game.connect(deployer).mineFlip({ gasLimit: 1_000_000 });
+          await game.connect(deployer).mineFlip(0, { gasLimit: 1_000_000 });
           expect(await game.rngConsumerStage(), "selected trial remains unopened").to.equal(3n);
           return index;
         }

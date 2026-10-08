@@ -104,6 +104,12 @@ contract JackpotCheckpointsTest is Test {
     }
 
     function test_TerminalQuadrantsPreserveTranscriptSharesAndLiabilities() public {
+        _terminalParity(6_700_000);
+    }
+    function test_ExtremeCalibrationPreservesTerminalWinners() public {
+        _terminalParity(MineFlipGas.budget(9_000_000, type(uint32).max, true));
+    }
+    function _terminalParity(uint256 splitBudget) private {
         h.seed(LVL, WORD, false);
         uint256 snap = vm.snapshotState();
         vm.recordLogs();
@@ -127,9 +133,9 @@ contract JackpotCheckpointsTest is Test {
         uint256 paidSplit;
         bool done;
         uint256 calls;
-        while (!done && calls < 8) {
+        while (!done && calls < 512) {
             vm.recordLogs();
-            (MineFlipGas.Result memory result, uint256 delta) = _terminal(6_700_000);
+            (MineFlipGas.Result memory result, uint256 delta) = _terminal(splitBudget);
             digestSplit = _digest(digestSplit, vm.getRecordedLogs());
             assertTrue(result.progressed);
             paidSplit += delta;
@@ -144,6 +150,12 @@ contract JackpotCheckpointsTest is Test {
     }
 
     function test_ConcentratedTicketsAwardInFixedGroups() public {
+        _ticketParity(1_000_000);
+    }
+    function test_ExtremeCalibrationPreservesNestedTicketGroups() public {
+        _ticketParity(MineFlipGas.budget(1_000_000, type(uint32).max, true));
+    }
+    function _ticketParity(uint256 splitBudget) private {
         h.seed(LVL, WORD, true);
         uint256 snap = vm.snapshotState();
         vm.recordLogs();
@@ -164,10 +176,10 @@ contract JackpotCheckpointsTest is Test {
         bool done;
         bool midQuadrant;
         uint256 calls;
-        while (!done && calls < 32) {
+        while (!done && calls < 128) {
             vm.recordLogs();
             // Small calls stop between eight-winner groups inside the 128-winner quadrant.
-            MineFlipGas.Result memory result = _earlyBird(1_000_000, 1_500_000);
+            MineFlipGas.Result memory result = _earlyBird(splitBudget, 1_500_000);
             Vm.Log[] memory logs = vm.getRecordedLogs();
             digestSplit = _digest(digestSplit, logs);
             for (uint256 i; i < logs.length; ++i) {

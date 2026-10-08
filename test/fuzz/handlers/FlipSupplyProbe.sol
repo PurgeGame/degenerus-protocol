@@ -173,7 +173,7 @@ contract FlipSupplyProbe is Test {
             }
             if (!game.advanceDue() && !game.rngLocked()) break;
             vm.prank(cranker);
-            try game.mineFlip() {} catch { break; }
+            try game.mineFlip(0) {} catch { break; }
         }
         _reconcile(t0, v0);
     }

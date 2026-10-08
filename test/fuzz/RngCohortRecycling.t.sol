@@ -133,7 +133,7 @@ contract GameCrapsPendingMirrorTest is DeployProtocol {
         uint256 state = uint256(game.extsload(bytes32(0))) | (uint256(1) << 192);
         vm.store(address(game), bytes32(0), bytes32(state));
         assertTrue(game.boxesPending(), "empty read frontier must be traversed");
-        game.mineFlip();
+        game.mineFlip(0);
         assertFalse(game.boxesPending());
         vm.prank(ContractAddresses.CRAPS); game.setCrapsRngPending(0, true);
         assertTrue(game.boxesPending(), "Craps-only work is discoverable");

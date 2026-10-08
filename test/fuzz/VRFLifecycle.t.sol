@@ -25,7 +25,7 @@ contract VRFLifecycle is DeployProtocol {
 
         // Trigger a VRF request by calling mineFlip
         // At deploy time (timestamp=86400), dayIndex=1 > dailyIdx=0, so mineFlip proceeds
-        game.mineFlip();
+        game.mineFlip(0);
 
         // VRF request should have been sent
         assertTrue(game.rngLocked(), "rngLocked should be true after mineFlip");
@@ -63,7 +63,7 @@ contract VRFLifecycle is DeployProtocol {
 
         // Trigger VRF request. The engine runs one action per checkpoint and may first prepare
         // the day (subscriptions, scheduled Craps maintenance) before the request (60d31f775).
-        for (uint256 i = 0; i < 16 && !game.rngLocked(); i++) game.mineFlip();
+        for (uint256 i = 0; i < 16 && !game.rngLocked(); i++) game.mineFlip(0);
         assertTrue(game.rngLocked(), "rngLocked after mineFlip");
 
         // Fulfill VRF
@@ -73,7 +73,7 @@ contract VRFLifecycle is DeployProtocol {
         // Drive advances until RNG unlocks
         for (uint256 i = 0; i < 30; i++) {
             if (!game.rngLocked()) break;
-            game.mineFlip();
+            game.mineFlip(0);
         }
 
         assertFalse(game.rngLocked(), "rngLocked should be false after full cycle");
@@ -130,7 +130,7 @@ contract VRFLifecycle is DeployProtocol {
         // triggers turbo mode (jackpotFlags=2) at level 0, causing a
         // purchaseLevel=0 underflow in _consolidatePoolsAndRewardJackpots.
         {
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (ok) {
                 uint256 reqId = mockVRF.lastRequestId();
                 if (reqId > 0) {
@@ -151,7 +151,7 @@ contract VRFLifecycle is DeployProtocol {
                             } catch {}
                         }
                     }
-                    (ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+                    (ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
                     if (!ok) break;
                 }
             }
@@ -173,7 +173,7 @@ contract VRFLifecycle is DeployProtocol {
             }
 
             // Try mineFlip -- may revert if not ready
-            try game.mineFlip() {} catch { continue; }
+            try game.mineFlip(0) {} catch { continue; }
 
             // Fulfill VRF if a new request was fired
             reqId = mockVRF.lastRequestId();
@@ -198,7 +198,7 @@ contract VRFLifecycle is DeployProtocol {
                         } catch {}
                     }
                 }
-                (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+                (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
                 if (!ok) break;
             }
 
@@ -218,7 +218,7 @@ contract VRFLifecycle is DeployProtocol {
         assertEq(vrfHandler.ghost_vrfFulfillments(), 0, "No-op when no requests");
 
         // Trigger a VRF request
-        game.mineFlip();
+        game.mineFlip(0);
         assertTrue(game.rngLocked(), "rngLocked after mineFlip");
 
         // Fulfill via handler

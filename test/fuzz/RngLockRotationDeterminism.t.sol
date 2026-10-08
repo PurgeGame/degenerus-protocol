@@ -102,7 +102,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
     ///      including RngNotReady() -- is re-thrown verbatim so a defect mode
     ///      fails the test naturally.
     function _advanceTolerant() internal returns (bool progressed) {
-        try game.mineFlip() {
+        try game.mineFlip(0) {
             return true;
         } catch (bytes memory err) {
             if (err.length >= 4 && bytes4(err) == NOT_TIME_YET) {
@@ -291,7 +291,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
     function _mineMiddayRequest() internal returns (bool) {
         if (game.nextMinerAction() != 18) return false;
         uint256 prior = mockVRF.lastRequestId();
-        try game.mineFlip() {} catch {
+        try game.mineFlip(0) {} catch {
             return false;
         }
         return mockVRF.lastRequestId() > prior;
@@ -328,7 +328,7 @@ contract RngLockRotationDeterminism is DeployProtocol {
                 c.fulfillRandomWords(id, uint256(keccak256(abi.encode("rotation-midday", id))));
                 _lastFulfilledReqId = id;
             } else {
-                game.mineFlip();
+                game.mineFlip(0);
             }
         }
         revert("harness: mid-day work did not settle");

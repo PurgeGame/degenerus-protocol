@@ -29,7 +29,7 @@ contract LootboxCrapsPasses is DeployProtocol {
 
     function _completeDay(uint256 vrfWord) internal {
         _finishReadConsumers();
-        game.mineFlip();
+        game.mineFlip(0);
         uint256 reqId = mockVRF.lastRequestId();
         if (reqId != _lastFulfilledReqId && reqId > 0) {
             mockVRF.fulfillRandomWords(reqId, vrfWord);
@@ -37,7 +37,7 @@ contract LootboxCrapsPasses is DeployProtocol {
         }
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked()) break;
-            game.mineFlip();
+            game.mineFlip(0);
         }
         _finishReadConsumers();
     }
@@ -71,7 +71,7 @@ contract LootboxCrapsPasses is DeployProtocol {
         _setupLootbox(player, index, size, word);
         vm.recordLogs();
         vm.prank(player);
-        game.mineFlip();
+        game.mineFlip(0);
         return _passEventIn(vm.getRecordedLogs());
     }
 

@@ -125,7 +125,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
     ///      single advance never reaches the level-transition charity call. Subs must be pre-registered.
     function _runStageOnce() internal {
         vm.warp(block.timestamp + 1 days);
-        game.mineFlip();
+        game.mineFlip(0);
     }
 
     /// @dev Arm the charged-slice oracle for the single tracked sub, run the STAGE once, drain logs.
@@ -142,7 +142,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
     function _settleGame(uint256 vrfWord) internal {
         for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.mineFlip();
+            game.mineFlip(0);
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != _lastFulfilledReqId && reqId > 0) {
                 (, , bool fulfilled) = mockVRF.pendingRequests(reqId);

@@ -90,7 +90,7 @@ contract GameHandler is Test {
         if (game.gameOver()) return;
 
         vm.prank(currentActor);
-        try game.mineFlip() {
+        try game.mineFlip(0) {
             ghost_successfulAdvances++;
             uint256 currentLevel = game.level();
             if (currentLevel > ghost_maxLevelReached) {

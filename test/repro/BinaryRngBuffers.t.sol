@@ -29,7 +29,7 @@ contract CompletionCheckingCoordinator {
     }
     function requestRandomWords(VRFRandomWordsRequest calldata) external returns (uint256) {
         require(!game.rngComplete(), "completion remained true during request");
-        try game.mineFlip() { revert("nested fresh request was accepted"); }
+        try game.mineFlip(0) { revert("nested fresh request was accepted"); }
         catch (bytes memory reason) {
             require(bytes4(reason) == bytes4(keccak256("RngNotReady()")), "nested request reached another gate");
         }
@@ -47,7 +47,7 @@ contract BinaryRngBuffersTest is DeployProtocol {
         uint24 today = game.currentDayView();
         for (uint256 i; i < 1024; ++i) {
             if (uint24(uint256(game.extsload(bytes32(0))) >> 24) == today && !game.rngLocked()) break;
-            game.mineFlip();
+            game.mineFlip(0);
             if (game.rngLocked() && !game.isRngFulfilled()) mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 0xB0B5);
         }
         // The state engine requests mid-day words on its own once the day seals (a closed Craps
@@ -62,7 +62,7 @@ contract BinaryRngBuffersTest is DeployProtocol {
                 if (done) break;
                 mockVRF.fulfillRandomWords(id, uint256(keccak256(abi.encode("setup-midday", id))));
             } else {
-                game.mineFlip();
+                game.mineFlip(0);
             }
         }
         _finishReadConsumers();
@@ -81,11 +81,11 @@ contract BinaryRngBuffersTest is DeployProtocol {
     ///      test, not the engine's own mid-day request for pending write-side value, decides
     ///      when the next session is sealed.
     function _drainSession() private {
-        for (uint256 i; i < 1024 && !game.rngComplete(); ++i) game.mineFlip{gas: 2_000_000}();
+        for (uint256 i; i < 1024 && !game.rngComplete(); ++i) game.mineFlip{gas: 2_000_000}(0);
     }
     /// @dev The buyer's mineFlip, with the read session complete, issues the mid-day request.
     function _request() private returns(uint256 id) {
-        uint256 old = mockVRF.lastRequestId(); vm.prank(buyer); game.mineFlip();
+        uint256 old = mockVRF.lastRequestId(); vm.prank(buyer); game.mineFlip(0);
         id = mockVRF.lastRequestId(); assertGt(id, old, "fresh production request");
     }
     /// @dev No fresh request is reachable: the engine selects none for the credited buyer, and the
@@ -115,13 +115,13 @@ contract BinaryRngBuffersTest is DeployProtocol {
         // Publication leaves the actual box/bet consumers outstanding. The keeper continues into
         // the consumers within the same call when the allowance covers them (60d31f775), so the
         // publication-only step is a 400k call: it can never admit a human-box entry.
-        game.mineFlip{gas: 400_000}();
+        game.mineFlip{gas: 400_000}(0);
         assertFalse(game.rngComplete());
         _assertNextRequestBlocked(id);
         _drainSession();
         assertTrue(game.rngComplete());
         vm.warp(vm.getBlockTimestamp() + 1 days);
-        for (uint256 i; i < 128 && !game.rngLocked(); ++i) game.mineFlip();
+        for (uint256 i; i < 128 && !game.rngLocked(); ++i) game.mineFlip(0);
         assertTrue(game.rngLocked(), "next daily request holds the lock");
         _assertNextRequestBlocked(mockVRF.lastRequestId());
     }
@@ -130,7 +130,7 @@ contract BinaryRngBuffersTest is DeployProtocol {
         CompletionCheckingCoordinator observer = new CompletionCheckingCoordinator(game);
         vm.prank(address(admin));
         game.updateVrfCoordinatorAndSub(address(observer), 1, bytes32(uint256(1)));
-        vm.prank(buyer); game.mineFlip();
+        vm.prank(buyer); game.mineFlip(0);
         assertFalse(game.rngComplete());
         assertEq(uint256(game.extsload(bytes32(uint256(4)))), 90001);
     }
@@ -141,7 +141,7 @@ contract BinaryRngBuffersTest is DeployProtocol {
         uint256 credit = game.middayRngCredits(buyer);
         uint256 id = mockVRF.lastRequestId();
         vm.mockCallRevert(address(mockVRF), abi.encodeWithSelector(IVRFCoordinator.requestRandomWords.selector), "coordinator unavailable");
-        vm.prank(buyer); vm.expectRevert(bytes("coordinator unavailable")); game.mineFlip();
+        vm.prank(buyer); vm.expectRevert(bytes("coordinator unavailable")); game.mineFlip(0);
         assertEq(game.extsload(bytes32(0)), state, "failed request changed buffer or completion");
         assertEq(game.extsload(bytes32(GameSlots.LOOTBOX_RNG_PACKED)), cursor, "failed request changed pending commitments");
         assertEq(game.middayRngCredits(buyer), credit);

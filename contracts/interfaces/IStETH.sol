@@ -38,6 +38,9 @@ interface IStETH {
     /// @return The amount of stETH held by the account
     function balanceOf(address account) external view returns (uint256);
 
+    function sharesOf(address account) external view returns (uint256);
+    function allowance(address owner, address spender) external view returns (uint256);
+
     /// @notice Transfer stETH to a recipient
     /// @param to The address to transfer stETH to
     /// @param amount The amount of stETH to transfer

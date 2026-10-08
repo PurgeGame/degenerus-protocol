@@ -880,7 +880,7 @@ contract WalletIdTruthHandler is Test {
         address keeper = _actor(a);
         uint24 lvl = game.level();
         vm.fee(1 gwei);
-        _call(36, keeper, GAME, 0, abi.encodeWithSignature("mineFlip()"), false);
+        _call(36, keeper, GAME, 0, abi.encodeWithSignature("mineFlip(uint32)", uint32(0)), false);
         vm.fee(0);
         if (game.level() > lvl) ghost_levels += game.level() - lvl;
     }
@@ -902,7 +902,7 @@ contract WalletIdTruthHandler is Test {
         vm.fee(1 gwei);
         for (uint256 i; i < 40; ++i) {
             _fulfill(39, uint256(keccak256(abi.encode(word, i))));
-            (bool ok,) = _call(39, keeper, GAME, 0, abi.encodeWithSignature("mineFlip()"), false);
+            (bool ok,) = _call(39, keeper, GAME, 0, abi.encodeWithSignature("mineFlip(uint32)", uint32(0)), false);
             if (!ok && !_fulfill(39, uint256(keccak256(abi.encode(word, i, "r"))))) break;
         }
         vm.fee(0);
@@ -919,7 +919,7 @@ contract WalletIdTruthHandler is Test {
         vm.fee(1 gwei);
         for (uint256 i; i < 40; ++i) {
             _fulfill(42, uint256(keccak256(abi.encode(word, i, "aligned"))));
-            (bool ok,) = _call(42, keeper, GAME, 0, abi.encodeWithSignature("mineFlip()"), false);
+            (bool ok,) = _call(42, keeper, GAME, 0, abi.encodeWithSignature("mineFlip(uint32)", uint32(0)), false);
             if (!ok && !_fulfill(42, uint256(keccak256(abi.encode(word, i, "aligned-r"))))) break;
         }
         vm.fee(0);

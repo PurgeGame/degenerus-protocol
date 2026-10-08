@@ -214,12 +214,12 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
         uint256[3] memory allowances = [uint256(1_500_000), 4_500_000, 8_700_000];
         for (uint256 k; k < 3; ++k) {
             (bool ok, bytes memory err) =
-                address(game).call{gas: allowances[k]}(abi.encodeWithSignature("mineFlip()"));
+                address(game).call{gas: allowances[k]}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (ok) return true;
             if (err.length == 0 || (err.length == 4 && bytes4(err) == INSUFFICIENT_GAS)) continue;
             return false;
         }
-        (bool okFull, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+        (bool okFull, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
         return okFull;
     }
 
@@ -301,7 +301,7 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
         for (uint256 i = 0; i < 120; i++) {
             if (!game.rngLocked()) return;
             _fulfillVrf();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) return;
         }
     }
@@ -311,7 +311,7 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
         for (uint256 i = 0; i < 120; i++) {
             if (game.rngWordForDay(day) != 0) break;
             _fulfillVrf();
-            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+            (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (!ok) break;
         }
         return game.rngWordForDay(day);

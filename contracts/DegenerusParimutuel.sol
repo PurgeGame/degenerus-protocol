@@ -30,6 +30,7 @@ import {IDegenerusCoin} from "./interfaces/IDegenerusCoin.sol";
 import {ICoinflip} from "./interfaces/ICoinflip.sol";
 import {IDegenerusQuests} from "./interfaces/IDegenerusQuests.sol";
 import {IDegenerusParimutuel} from "./interfaces/IDegenerusParimutuel.sol";
+import {MineFlipGas} from "./libraries/MineFlipGas.sol";
 
 /**
  * @title DegenerusParimutuel
@@ -269,6 +270,56 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
     // =========================================================================
     // Settlement (GAME only)
     // =========================================================================
+
+    /// @notice Gas-adaptive settlement; a winner or sealed-round advance is resumable.
+    /// @dev Credits remain aggregated in memory. Every admitted winner reserves its
+    /// complete cold credit, and batches reuse the existing canonical cursor.
+    function runGrowthWork(uint256 budget) external returns (MineFlipGas.Result memory result) {
+        if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
+        MineFlipGas.Meter memory meter = MineFlipGas.start(budget);
+        uint256 cursor = growthSettlement;
+        uint24 round = uint24(cursor);
+        uint256 pos = uint64(cursor >> 24);
+        uint32[] memory ids = new uint32[](100);
+        uint256[] memory amounts = new uint256[](100);
+        uint256 n;
+        while (true) {
+            uint8 outcome = _readOutcome(round);
+            if (outcome == 0) { result.done = true; break; }
+            uint256 counts = growthCounts[round];
+            uint256 winCount = _winCount(counts, outcome);
+            if (pos == winCount) {
+                if (!MineFlipGas.canRun(meter, 10_000, 30_000 + n * 32_000)) break;
+                ++round;
+                pos = 0;
+            } else {
+                if (!MineFlipGas.canRun(meter, 10_000, 30_000 + (n + 1) * 32_000)) break;
+                // Coalesce this round's admitted winners into one packed read/event run.
+                uint256 take = 1;
+                uint256 room = 100 - n;
+                while (take < room && pos + take < winCount
+                    && MineFlipGas.canRunAfterFirst(meter, (take + 1) * 10_000, 30_000 + (n + take + 1) * 32_000)) {
+                    ++take;
+                }
+                _payRun(ids, amounts, n, round, outcome, counts, pos, take);
+                n += take;
+                pos += take;
+                result.rewardBasis += take;
+            }
+            result.progressed = true;
+            MineFlipGas.markProgress(meter);
+            if (n == 100) {
+                coinflip.creditFlipBatch(ids, amounts);
+                n = 0;
+            }
+        }
+        growthSettlement = uint256(round) | (pos << 24);
+        if (n != 0) {
+            assembly ("memory-safe") { mstore(ids, n) mstore(amounts, n) }
+            coinflip.creditFlipBatch(ids, amounts);
+        }
+        MineFlipGas.finish(meter);
+    }
 
     /// @inheritdoc IDegenerusParimutuel
     function recordGrowth(uint24 round, bool over) external returns (bool settlementPending) {

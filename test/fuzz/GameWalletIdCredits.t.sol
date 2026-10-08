@@ -649,7 +649,7 @@ contract GameWalletIdCredits is DeployProtocol {
         _finishReadConsumers();
         vm.warp(vm.getBlockTimestamp() + 1 days);
         uint256 before = mockVRF.lastRequestId();
-        for (uint256 i; i < 50 && mockVRF.lastRequestId() == before; ++i) game.mineFlip();
+        for (uint256 i; i < 50 && mockVRF.lastRequestId() == before; ++i) game.mineFlip(0);
         uint256 reqId = mockVRF.lastRequestId();
         if (reqId != _lastFulfilledReqId && reqId > 0) {
             mockVRF.fulfillRandomWords(reqId, vrfWord);
@@ -657,7 +657,7 @@ contract GameWalletIdCredits is DeployProtocol {
         }
         for (uint256 i; i < 50; ++i) {
             if (!game.rngLocked()) break;
-            game.mineFlip();
+            game.mineFlip(0);
         }
         _finishReadConsumers();
     }

@@ -199,7 +199,7 @@ contract TransientLivenessIntegrationTest is DeployProtocol {
     }
 
     function _advanceWithVrf() private {
-        game.mineFlip{gas: 15_000_000}();
+        game.mineFlip{gas: 15_000_000}(0);
         uint256 id = mockVRF.lastRequestId();
         if (id != 0) {
             (, , bool fulfilled) = mockVRF.pendingRequests(id);

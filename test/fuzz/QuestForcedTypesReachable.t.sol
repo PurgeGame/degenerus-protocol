@@ -149,7 +149,7 @@ contract QuestForcedTypesReachableTest is DeployProtocol {
         for (uint256 j = 0; j < 80; j++) {
             _fulfillVrf();
             (bool ok, ) = address(game).call(
-                abi.encodeWithSignature("mineFlip()")
+                abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
             );
             if (!ok) break;
         }

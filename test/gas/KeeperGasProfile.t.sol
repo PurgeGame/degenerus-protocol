@@ -102,7 +102,7 @@ contract KeeperGasProfileTest is DeployProtocol {
             vm.recordLogs();
             bool sample = false; ++callNo;
             if (sample) vm.resumeTracing();
-            try game.mineFlip{gas: KEEPER_CALL_GAS}() {
+            try game.mineFlip{gas: KEEPER_CALL_GAS}(0) {
                 keeperRefund += _refundLastCall();
                 uint256 used = vm.snapshotGasLastCall("lifecycle-keeper");
                 keeperGas += used;

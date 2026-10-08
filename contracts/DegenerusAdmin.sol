@@ -26,6 +26,7 @@ pragma solidity 0.8.34;
 
 import {IDegenerusGame} from "./interfaces/IDegenerusGame.sol";
 
+import {MineFlipGas} from "./libraries/MineFlipGas.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
 
 /**
@@ -1227,7 +1228,7 @@ contract DegenerusAdmin {
 
         try IVRFCoordinatorV2_5Owner(coordinator).cancelSubscription(subId, target) {
             emit SubscriptionCancelled(subId, target);
-        } catch {}
+        } catch (bytes memory reason) { MineFlipGas.rethrowGasFailure(reason); }
 
         uint256 bal = linkToken.balanceOf(address(this));
         if (bal != 0) {
@@ -1236,7 +1237,7 @@ contract DegenerusAdmin {
                     emit SubscriptionShutdown(subId, target, bal);
                     return;
                 }
-            } catch {}
+            } catch (bytes memory reason) { MineFlipGas.rethrowGasFailure(reason); }
         }
 
         emit SubscriptionShutdown(subId, target, 0);

@@ -1198,7 +1198,7 @@ abstract contract BafTranscriptFixture is DeployProtocol {
         uint256 beforeRequest = mockVRF.lastRequestId();
         for (uint256 calls; mockVRF.lastRequestId() == beforeRequest; ++calls) {
             assertLt(calls, 512, "request preparation stalled");
-            game.mineFlip{gas: 12_000_000}();
+            game.mineFlip{gas: 12_000_000}(0);
         }
         assertEq(mockVRF.lastRequestId(), beforeRequest + 1, "one real daily request");
         mockVRF.fulfillRandomWords(beforeRequest + 1, w);

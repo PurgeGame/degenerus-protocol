@@ -83,7 +83,7 @@ contract DegeneretteSweepGas is DeployProtocol {
         _cool();
         vm.recordLogs();
         uint256 g = gasleft();
-        game.mineFlip();
+        game.mineFlip(0);
         gasUsed = g - gasleft();
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 resolved;

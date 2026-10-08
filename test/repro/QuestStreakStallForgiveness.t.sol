@@ -64,7 +64,7 @@ contract QuestStreakStallForgiveness is DeployProtocol {
         assertEq(initialStreak, 1, "fixture starts a one-day streak");
 
         vm.warp(block.timestamp + 1 days);
-        for (uint256 i; i < 20 && !game.rngLocked(); ++i) game.mineFlip();
+        for (uint256 i; i < 20 && !game.rngLocked(); ++i) game.mineFlip(0);
         assertTrue(game.rngLocked(), "daily request entered the stalled window");
         uint256 stalledRequest = mockVRF.lastRequestId();
 
@@ -74,7 +74,7 @@ contract QuestStreakStallForgiveness is DeployProtocol {
         // The stale buffered word only seals its request day (quest stays unrolled — forgiven);
         // the wall day resolves from a fresh request, so keep fulfilling as the walk advances.
         for (uint256 i; i < 40 && _activeQuestDay() != recoveryDay; ++i) {
-            game.mineFlip();
+            game.mineFlip(0);
             _fulfillLatest(0xF0110001);
         }
 
@@ -473,7 +473,7 @@ contract QuestStreakStallForgiveness is DeployProtocol {
     function _driveUntilDelivered(address player) private {
         uint24 today = uint24(game.currentDayView());
         for (uint256 i; i < 20 && _subField(player, OFF_SUB_LAST_AUTO, 24) != today; ++i) {
-            game.mineFlip();
+            game.mineFlip(0);
         }
         assertEq(_subField(player, OFF_SUB_LAST_AUTO, 24), today, "subscriber stage delivered current day");
     }
@@ -482,7 +482,7 @@ contract QuestStreakStallForgiveness is DeployProtocol {
         for (uint256 i; i < 120; ++i) {
             _fulfillLatest(word);
             if (!game.advanceDue() && !game.rngLocked()) return;
-            game.mineFlip();
+            game.mineFlip(0);
             _fulfillLatest(word);
         }
         revert("fixture failed to settle current game day");

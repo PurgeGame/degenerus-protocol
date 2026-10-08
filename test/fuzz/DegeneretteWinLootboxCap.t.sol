@@ -231,7 +231,7 @@ contract DegeneretteWinLootboxCap is DeployProtocol {
     function _sweepAmounts() private returns (uint256[] memory amounts) {
         _land();
         vm.recordLogs();
-        game.mineFlip();
+        game.mineFlip(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 count;
         for (uint256 i; i < logs.length; ++i) if (logs[i].topics[0] == OPENED) ++count;
@@ -316,7 +316,7 @@ contract DegeneretteWinLootboxCap is DeployProtocol {
         vm.cool(address(degeneretteModule));
         vm.recordLogs();
         uint256 beforeGas = gasleft();
-        game.mineFlip();
+        game.mineFlip(0);
         emit log_named_uint(name, beforeGas - gasleft());
         assertEq(_resolvedCount(vm.getRecordedLogs()), 1, "the measured call resolved the bet");
     }
@@ -336,7 +336,7 @@ contract DegeneretteWinLootboxCap is DeployProtocol {
         vm.cool(address(degeneretteModule));
         vm.recordLogs();
         uint256 beforeGas = gasleft();
-        game.mineFlip();
+        game.mineFlip(0);
         uint256 used = beforeGas - gasleft();
         assertEq(_resolvedCount(vm.getRecordedLogs()), 11);
         emit log_named_uint("cap_batch_11", used);

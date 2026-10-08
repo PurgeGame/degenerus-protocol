@@ -62,7 +62,7 @@ contract JackpotCommitmentSeeder is DegenerusGame, WalletSeed {
 }
 
 /// @notice A request-to-settlement freeze proof over the real Game, table, engine and Coinflip.
-///         The attacker acts before fulfillment and between every pair of 150-seat draw chunks.
+///         The attacker acts before fulfillment and between every pair of 50-seat draw chunks.
 contract JackpotCommitmentFreezeTest is DeployProtocol {
     address private constant ATTACKER = address(0xA11CE);
     address private constant NEWCOMER = address(0xBADB0B);
@@ -170,7 +170,7 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
         uint256 before = mockVRF.lastRequestId();
         for (uint256 i; i < 1000 && mockVRF.lastRequestId() == before; ++i) {
             assertFalse(game.rngLocked(), "no lock before the daily request");
-            game.mineFlip();
+            game.mineFlip(0);
         }
         assertTrue(game.rngLocked(), "request did not engage the lock");
         (uint64 locked,, bool started,) = api.jackpotProgress();
@@ -193,10 +193,9 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
             if (perturb) _perturb();
             (CrapsBattleStorage.JackpotRound memory beforeRound,,) = reader.jackpotBattleOf(slot);
             vm.recordLogs();
-            // A call keeps drawing 50-entry field groups while another 3.3M group bound fits.
-            // Packed appends made the old 5M allowance fit two; keep this probe at one so it runs
-            // between every pair of actual field chunks.
-            game.mineFlip{gas: ONE_GROUP_GAS}();
+            // Calibrate continuation estimates to force one 50-entry draw group,
+            // independent of the first group's actual cost. Settlement can batch normally.
+            game.mineFlip{gas: ONE_GROUP_GAS}(beforeRound.drawnCount < 500 ? 50_000 : 0);
             Vm.Log[] memory logs = vm.getRecordedLogs();
             for (uint256 j; j < logs.length; ++j) {
                 // Include every table event (exact field/boards, seat outcomes and bounty
@@ -248,7 +247,7 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
         assertTrue(reserve.resolved);
         assertGt(reserve.eligible, 0, "reserve draw must have a real high entrant");
         result.finalState = keccak256(abi.encode(round, board, cursor, reserve, reader.highRollerReserve()));
-        for (uint256 i; i < 40 && game.rngLocked(); ++i) game.mineFlip();
+        for (uint256 i; i < 40 && game.rngLocked(); ++i) game.mineFlip(0);
         assertFalse(game.rngLocked(), "completed daily chain did not unlock");
     }
 

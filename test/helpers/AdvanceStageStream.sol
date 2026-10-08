@@ -43,11 +43,11 @@ abstract contract AdvanceStageStream is DeployProtocol {
         for (uint256 r; r < ladder.length; ++r) {
             vm.recordLogs();
             bytes memory err;
-            (ok, err) = address(game).call{gas: ladder[r]}(abi.encodeWithSignature("mineFlip()"));
+            (ok, err) = address(game).call{gas: ladder[r]}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             uint256 used = vm.lastCallGas().gasTotalUsed;
             Vm.Log[] memory logs = vm.getRecordedLogs();
             if (ok) {
-                if (!vm.envOr("FOUNDRY_ISOLATE", false)) used += 21_064;
+                if (!vm.envOr("FOUNDRY_ISOLATE", false)) used += 21_192;
                 uint256 callIndex = streamCallGas.length;
                 streamCallGas.push(used);
                 streamLockedAfter.push(game.rngLocked());

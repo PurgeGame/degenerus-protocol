@@ -303,7 +303,7 @@ contract CrapsPassAwards is DeployProtocol {
         _finalizeIndex(index);
         vm.expectEmit(address(game));
         emit PresaleBoxOpened(_fixtureId(p), (uint48(1) << 46) | index, amount, flipOut, 0, 0, false, 0, 0);
-        game.mineFlip();
+        game.mineFlip(0);
 
         (uint256 cn, uint256 ch) = crapsBattle.passCreditsOf(p);
         assertEq(cn | ch, 0, "the FLIP side banks no passes");
@@ -327,7 +327,7 @@ contract CrapsPassAwards is DeployProtocol {
         emit CrapsPassesCredited(game.walletIdOf(p), false, n);
         vm.expectEmit(address(game));
         emit PresaleBoxOpened(_fixtureId(p), (uint48(1) << 46) | index, amount, 0, 0, 0, false, n, 0);
-        game.mineFlip();
+        game.mineFlip(0);
 
         (uint256 cn, uint256 ch) = crapsBattle.passCreditsOf(p);
         assertEq(cn, n, "normal credits banked");
@@ -352,7 +352,7 @@ contract CrapsPassAwards is DeployProtocol {
         emit CrapsPassesCredited(game.walletIdOf(p), true, h);
         vm.expectEmit(address(game));
         emit PresaleBoxOpened(_fixtureId(p), (uint48(1) << 46) | index, amount, 0, 0, 0, false, 0, h);
-        game.mineFlip();
+        game.mineFlip(0);
 
         (uint256 cn, uint256 ch) = crapsBattle.passCreditsOf(p);
         assertEq(cn, 0, "no normal credits in the high lane");
@@ -377,7 +377,7 @@ contract CrapsPassAwards is DeployProtocol {
         emit CrapsPassesCredited(game.walletIdOf(p), true, HIGH_CAP);
         vm.expectEmit(address(game));
         emit PresaleBoxOpened(_fixtureId(p), (uint48(1) << 46) | index, amount, flipLeft, 0, 0, false, 0, uint32(HIGH_CAP));
-        game.mineFlip();
+        game.mineFlip(0);
 
         (, uint256 ch) = crapsBattle.passCreditsOf(p);
         assertEq(ch, HIGH_CAP, "twelve high credits banked");
@@ -410,7 +410,7 @@ contract CrapsPassAwards is DeployProtocol {
 
         vm.expectEmit(address(game));
         emit PresaleBoxOpened(_fixtureId(p), (uint48(1) << 46) | index, amount, 0, 0, 0, false, 1, 0);
-        game.mineFlip();
+        game.mineFlip(0);
 
         (uint256 cn,) = crapsBattle.passCreditsOf(p);
         assertEq(cn, 1, "the winning fraction pays one whole normal pass");
@@ -426,7 +426,7 @@ contract CrapsPassAwards is DeployProtocol {
 
         vm.expectEmit(address(game));
         emit PresaleBoxOpened(_fixtureId(p), (uint48(1) << 46) | index, amount, 0, 0, WWXRP_DUD, false, 0, 0);
-        game.mineFlip();
+        game.mineFlip(0);
 
         (uint256 cn, uint256 ch) = crapsBattle.passCreditsOf(p);
         assertEq(cn | ch, 0, "the losing fraction banks no passes");

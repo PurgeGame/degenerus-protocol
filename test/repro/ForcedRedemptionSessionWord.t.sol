@@ -16,14 +16,14 @@ contract ForcedRedemptionSessionWordTest is RedemptionCloseTools {
     uint256 private constant OWNERS = 30;
 
     function _request() private {
-        for (uint256 i; i < 100 && !game.rngLocked(); ++i) game.mineFlip();
+        for (uint256 i; i < 100 && !game.rngLocked(); ++i) game.mineFlip(0);
         assertTrue(game.rngLocked(), "real daily request");
     }
 
     function _complete() private {
         uint256 requestBefore = mockVRF.lastRequestId();
         for (uint256 i; i < 500 && !game.rngComplete() && mockVRF.lastRequestId() == requestBefore; ++i) {
-            game.mineFlip();
+            game.mineFlip(0);
         }
         // After a stall the call that completes the session also issues the overdue daily request;
         // that request proves completion, since a fresh request waits for every read consumer.
@@ -37,11 +37,11 @@ contract ForcedRedemptionSessionWordTest is RedemptionCloseTools {
         uint256 reserved = sdgnrs.pendingRedemptionEthValue();
         for (uint256 g = 800_000; g <= 9_000_000; g += 25_000) {
             uint256 snap = vm.snapshotState();
-            (bool ok,) = address(game).call{gas: g}(abi.encodeWithSignature("mineFlip()"));
+            (bool ok,) = address(game).call{gas: g}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             bool settled = ok && sdgnrs.pendingRedemptionEthValue() != reserved;
             assertTrue(vm.revertToState(snap));
             if (settled) {
-                game.mineFlip{gas: g}();
+                game.mineFlip{gas: g}(0);
                 return;
             }
         }
@@ -72,7 +72,7 @@ contract ForcedRedemptionSessionWordTest is RedemptionCloseTools {
             uint256 snap = vm.snapshotState();
             bool stepped;
             for (uint256 g = 9_000_000; g >= 400_000 && !stepped; g -= 100_000) {
-                try game.mineFlip{gas: g}() {
+                try game.mineFlip{gas: g}(0) {
                     // Stop with at least two claims still unsettled for later engine calls.
                     if (_unsettled(day) >= 2) stepped = true;
                     else assertTrue(vm.revertToState(snap));
@@ -154,7 +154,7 @@ contract ForcedRedemptionSessionWordTest is RedemptionCloseTools {
             for (uint256 i; i < 1000 && !game.gameOver(); ++i) {
                 // While the unanswered terminal request waits out its dead-VRF timeout the engine
                 // reports RngNotReady (nothing to do yet), not progress.
-                try game.mineFlip() {} catch (bytes memory err) {
+                try game.mineFlip(0) {} catch (bytes memory err) {
                     assertEq(bytes4(err), bytes4(keccak256("RngNotReady()")), "only waiting on the terminal word");
                 }
                 if (game.rngLocked() && !game.isRngFulfilled()) vm.warp(vm.getBlockTimestamp() + 13 hours);

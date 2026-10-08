@@ -28,7 +28,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 //      the fixture's sub-1x multiplier, where it must stay net negative. The history below is kept for
 //      the requirement IDs.
 /// @title KeeperFaucetResistance -- Proves the v55.0 game-resident permissionless router
-///        (`game.mineFlip()` advance/open legs, including the queued-bet sweep) is faucet-bounded by three
+///        (`game.mineFlip(0)` advance/open legs, including the queued-bet sweep) is faucet-bounded by three
 ///        caller-independent locks:
 ///        (1) the purchase-gate (an item must already be a real, purchased, RNG-ready bet/box/stamp),
 ///        (2) the flat-per-tx LIVE-unit reward judged against the REAL prevailing gas of the identical
@@ -51,7 +51,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///         block (an attempt before the word lands skips, no reward).
 ///
 /// @dev The five call-site deltas applied (D-351-01):
-///   Δ3 doWork->mineFlip: `afKing.doWork()` -> `game.mineFlip()`.
+///   Δ3 doWork->mineFlip: `afKing.doWork()` -> `game.mineFlip(0)`.
 ///   Δ4 autoBuy: the per-sub buy folded into `mineFlip()`'s STAGE; the standalone autoBuy has NO
 ///      successor. The faucet BUY-leg round-trip reframes onto the ADVANCE-leg bounty (the buy reward rides
 ///      `unit * ADVANCE_RATIO_NUM * mult`; there is NO separate flat-1.5x buy bounty in v55). The faucet
@@ -167,7 +167,7 @@ contract KeeperFaucetResistance is DeployProtocol {
         vm.fee(1 gwei);
         vm.recordLogs();
         vm.prank(player);
-        game.mineFlip();
+        game.mineFlip(0);
         (, uint256 measured, uint256 reward) = _minerWork(vm.getRecordedLogs());
         assertEq(game.degeneretteBetInfo(INDEX, betId), 0, "resolved bet is marked processed (one-reward lock)");
         assertEq(reward, _expectedPay(measured, false, false), "the resolving crank is paid its measured gas only");
@@ -176,7 +176,7 @@ contract KeeperFaucetResistance is DeployProtocol {
         uint256 stakeBeforeSecond = coinflip.coinflipAmount(sybil);
         vm.prank(sybil);
         vm.expectRevert(bytes4(keccak256("NoWork()")));
-        game.mineFlip();
+        game.mineFlip(0);
         assertEq(coinflip.coinflipAmount(sybil), stakeBeforeSecond, "re-sweeping a resolved queue yields nothing");
     }
 
@@ -192,7 +192,7 @@ contract KeeperFaucetResistance is DeployProtocol {
 
         vm.prank(opener);
         uint256 gasBefore = gasleft();
-        game.mineFlip(); // takes the open leg (advance not due): opens up to OPEN_BATCH=200, i.e. all k
+        game.mineFlip(0); // takes the open leg (advance not due): opens up to OPEN_BATCH=200, i.e. all k
         uint256 gasUsed = gasBefore - gasleft();
         uint256 stakeDelta = coinflip.coinflipAmount(opener) - preStake;
 
@@ -244,7 +244,7 @@ contract KeeperFaucetResistance is DeployProtocol {
             pre = coinflip.coinflipAmount(keeper);
             vm.recordLogs();
             vm.prank(keeper);
-            game.mineFlip();
+            game.mineFlip(0);
             (, uint256 prepGas, uint256 prepReward) = _minerWork(vm.getRecordedLogs());
             assertEq(prepReward, _expectedPay(prepGas, false, false), "preparation call: reward == measured-gas formula");
             assertEq(coinflip.coinflipAmount(keeper) - pre, _whole(prepReward), "preparation call: the credit is the reported reward");
@@ -257,7 +257,7 @@ contract KeeperFaucetResistance is DeployProtocol {
         pre = coinflip.coinflipAmount(keeper);
         vm.recordLogs();
         vm.prank(keeper);
-        game.mineFlip();
+        game.mineFlip(0);
         (, uint256 measured, uint256 reward) = _minerWork(vm.getRecordedLogs());
         emit log_named_uint("advance call measured gas", measured);
         emit log_named_uint("advance call reward", reward);
@@ -330,7 +330,7 @@ contract KeeperFaucetResistance is DeployProtocol {
         vm.recordLogs();
         vm.prank(sweeper);
         uint256 g0 = gasleft();
-        game.mineFlip();
+        game.mineFlip(0);
         uint256 crankGas = g0 - gasleft();
         Vm.Log[] memory sweepLogs = vm.getRecordedLogs();
         uint256 bounty = coinflip.coinflipAmount(sweeper) - preStake;
@@ -381,7 +381,7 @@ contract KeeperFaucetResistance is DeployProtocol {
         uint256 preStake = coinflip.coinflipAmount(player);
         vm.recordLogs();
         vm.prank(player);
-        game.mineFlip();
+        game.mineFlip(0);
         uint256 bounty = coinflip.coinflipAmount(player) - preStake;
         (, uint256 measured,) = _minerWork(vm.getRecordedLogs());
         for (uint64 id = 1; id <= 8; ++id) assertEq(game.degeneretteBetInfo(INDEX, id), 0, "the crank resolved every bet");
@@ -523,7 +523,7 @@ contract KeeperFaucetResistance is DeployProtocol {
     function _settleGame(uint256 vrfWord) internal {
         for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.mineFlip();
+            game.mineFlip(0);
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != _lastFulfilledReqId && reqId > 0) {
                 (, , bool fulfilled) = mockVRF.pendingRequests(reqId);

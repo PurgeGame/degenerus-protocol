@@ -122,7 +122,7 @@ contract MiddayRngCreditTest is DeployProtocol {
                 if (!fulfilled) mockVRF.fulfillRandomWords(id, 0xC0FFEE);
             }
             if (game.rngComplete() && !game.advanceDue() && !game.rngLocked()) return;
-            game.mineFlip{gas: 15_000_000}();
+            game.mineFlip{gas: 15_000_000}(0);
         }
         revert("fixture: engine did not reach idle");
     }
@@ -142,7 +142,7 @@ contract MiddayRngCreditTest is DeployProtocol {
     function _mineRequest(address who) internal returns (uint256 id) {
         uint256 prior = mockVRF.lastRequestId();
         vm.prank(who);
-        game.mineFlip();
+        game.mineFlip(0);
         id = mockVRF.lastRequestId();
         assertGt(id, prior, "mineFlip issued the mid-day request");
         assertFalse(game.rngLocked(), "a mid-day request, not the daily one");
@@ -155,7 +155,7 @@ contract MiddayRngCreditTest is DeployProtocol {
         assertEq(_actionFor(who), 0, "the refused request is not selected (Idle)");
         vm.prank(who);
         vm.expectRevert(bytes4(keccak256("NoWork()")));
-        game.mineFlip();
+        game.mineFlip(0);
         assertEq(mockVRF.lastRequestId(), prior, "a refused request asked for no word");
     }
 
@@ -209,7 +209,7 @@ contract MiddayRngCreditTest is DeployProtocol {
         // empty ticket frontier; marking only dailyIdx would leave genesis tickets pending.
         uint24 day = game.currentDayView();
         for (uint256 i; i < 100 && (uint24(uint256(game.extsload(bytes32(0))) >> 24) != day || game.rngLocked()); ++i) {
-            game.mineFlip();
+            game.mineFlip(0);
         }
         assertEq(uint24(uint256(game.extsload(bytes32(0))) >> 24), day, "real daily stage completed");
         _idleRequestRouter();
@@ -234,7 +234,7 @@ contract MiddayRngCreditTest is DeployProtocol {
         assertTrue(game.advanceDue(), "the delivered cohort owes a keeper publication");
         assertTrue(game.isRngFulfilled());
         vm.recordLogs();
-        game.mineFlip();
+        game.mineFlip(0);
         Vm.Log[] memory published = vm.getRecordedLogs();
         uint256 count;
         for (uint256 i; i < published.length; ++i) {
@@ -252,7 +252,7 @@ contract MiddayRngCreditTest is DeployProtocol {
         assertEq(RecyclingState.currentWord(address(game)), 42, "retained ID cannot authorize a duplicate");
         // The real daily stage also awards tickets. Drain those through the required
         // production advance category before completing the box frontier.
-        for (uint256 i; i < 100 && game.advanceDue(); ++i) game.mineFlip();
+        for (uint256 i; i < 100 && game.advanceDue(); ++i) game.mineFlip(0);
         assertEq(mockVRF.lastRequestId(), id, "drain does not create another request");
         _finishReadConsumers();
         assertTrue(game.rngComplete(), "the session traverses the production completion frontier");
@@ -443,7 +443,7 @@ contract MiddayRngCreditTest is DeployProtocol {
 
         vm.prank(donor);
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        game.mineFlip();
+        game.mineFlip(0);
         assertEq(game.middayRngCredits(donor), charge * 2, "the request was charged more than once");
     }
 

@@ -157,7 +157,7 @@ contract VaultAfkingFunding is DeployProtocol {
 
         vm.warp(block.timestamp + 30 days + 1);
         vm.prank(keeper);
-        game.mineFlip();
+        game.mineFlip(0);
         assertTrue(game.isFinalSwept(), "harness: the sweep ran");
 
         assertEq(ContractAddresses.VAULT.balance - v0, owedV + third, "vault: claimable + afking + a third");
@@ -197,7 +197,7 @@ contract VaultAfkingFunding is DeployProtocol {
         vm.warp(block.timestamp + 370 days);
         for (uint256 i; i < 40 && !game.gameOver(); i++) {
             vm.prank(keeper);
-            try game.mineFlip() {} catch {}
+            try game.mineFlip(0) {} catch {}
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != 0) {
                 (,, bool fulfilled) = mockVRF.pendingRequests(reqId);

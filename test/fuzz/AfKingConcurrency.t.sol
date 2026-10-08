@@ -212,7 +212,7 @@ contract AfKingConcurrency is DeployProtocol {
     ///      Subscribers must already be registered (subscribe blocks during rngLock).
     function _runStageOnce() internal {
         vm.warp(block.timestamp + 1 days);
-        game.mineFlip();
+        game.mineFlip(0);
     }
 
     /// @dev Settle the game to a clean state: drive mineFlip + deliver the mock VRF word until
@@ -221,7 +221,7 @@ contract AfKingConcurrency is DeployProtocol {
     function _settleGame(uint256 vrfWord) internal {
         for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.mineFlip();
+            game.mineFlip(0);
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != _lastFulfilledReqId && reqId > 0) {
                 (, , bool fulfilled) = mockVRF.pendingRequests(reqId);

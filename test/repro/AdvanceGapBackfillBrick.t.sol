@@ -56,14 +56,14 @@ contract AdvanceGapBackfillBrick is DeployProtocol {
         mockVRF.fulfillRandomWords(reqId, vrfWord);
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked()) break;
-            game.mineFlip();
+            game.mineFlip(0);
         }
     }
 
     /// @dev A new daily request first drains the previous word's boxes/bets/fields.
     ///      Keep the clock fixed and let production routing do that bounded work.
     function _requestDailyAfterDraining() private {
-        for (uint256 i; i < 512 && !game.rngLocked(); ++i) game.mineFlip();
+        for (uint256 i; i < 512 && !game.rngLocked(); ++i) game.mineFlip(0);
         assertTrue(game.rngLocked(), "prior cohort drained and daily request started");
     }
 
@@ -92,7 +92,7 @@ contract AdvanceGapBackfillBrick is DeployProtocol {
     }
 
     function _advanceAndFulfill(uint256 salt) private {
-        try game.mineFlip() {
+        try game.mineFlip(0) {
             if (!game.rngLocked()) return;
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId == 0) return;

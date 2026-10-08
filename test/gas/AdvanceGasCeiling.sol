@@ -120,7 +120,7 @@ abstract contract AdvanceGasCeilingBase is DeployProtocol {
     /// @dev The word the seeded winning buckets are derived from; answers the terminal request.
     uint256 internal _terminalWord;
 
-    uint256 internal constant TX_INTRINSIC = 21_064;
+    uint256 internal constant TX_INTRINSIC = 21_192;
     /// @dev A realistic per-call mineFlip allowance (owner gas rule, 2026-10-03).
     uint256 internal constant REALISTIC_CALL_GAS = 10_000_000;
 
@@ -184,7 +184,7 @@ abstract contract AdvanceGasCeilingBase is DeployProtocol {
         vm.warp(block.timestamp + 200 days);
     }
 
-    /// @notice (b) Drive the REAL game.mineFlip() in a bounded loop at a realistic 10M allowance per call.
+    /// @notice (b) Drive the REAL game.mineFlip(0) in a bounded loop at a realistic 10M allowance per call.
     ///         Owner gas rule (2026-10-03): the engine admits checkpoints while the supplied allowance
     ///         covers the next declared bound (MineFlipGasBounds), so a whole-call figure only measures
     ///         the allowance it was given; what is asserted is that EVERY call at a realistic allowance
@@ -200,7 +200,7 @@ abstract contract AdvanceGasCeilingBase is DeployProtocol {
         for (uint256 i = 0; i < maxTxIters; ++i) {
             vm.recordLogs();
             uint256 g0 = gasleft();
-            try game.mineFlip{gas: REALISTIC_CALL_GAS}() {}
+            try game.mineFlip{gas: REALISTIC_CALL_GAS}(0) {}
             catch (bytes memory reason) {
                 emit log_named_bytes("mineFlip refused at a realistic allowance", reason);
                 fail("a terminal mineFlip at a realistic 10M allowance did not progress");

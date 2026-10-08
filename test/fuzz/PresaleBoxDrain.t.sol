@@ -143,7 +143,7 @@ contract PresaleBoxDrain is DeployProtocol {
         vm.recordLogs();
         for (uint256 calls; t.opened < buyers.length && calls < 100; ++calls) {
             uint256 before = t.opened;
-            game.mineFlip{gas: 8_000_000}();
+            game.mineFlip{gas: 8_000_000}(0);
             _scan(vm.getRecordedLogs(), index, base, buyers, amounts, t);
             assertGt(t.opened, before, "ready FIFO sweep advances");
         }
@@ -154,7 +154,7 @@ contract PresaleBoxDrain is DeployProtocol {
         }
         // Replay probe: whatever the engine does next (or NoWork / a pending word), it pays no entry twice.
         vm.recordLogs();
-        (bool replayed,) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+        (bool replayed,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
         replayed;
         Vm.Log[] memory replay = vm.getRecordedLogs();
         for (uint256 i; i < replay.length; ++i) {

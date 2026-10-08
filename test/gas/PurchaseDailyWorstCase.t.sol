@@ -192,7 +192,7 @@ abstract contract FreshWordLeg is AdvanceStageStream {
         uint8 st = 255;
         for (uint256 calls; calls < 1000 && mockVRF.lastRequestId() == before; ++calls) {
             vm.recordLogs();
-            game.mineFlip{gas: 16_700_000}();
+            game.mineFlip{gas: 16_700_000}(0);
             Vm.Log[] memory logs = vm.getRecordedLogs();
             for (uint256 i; i < logs.length; ++i) {
                 if (logs[i].topics[0] == keccak256("Advance(uint8,uint24)")) (st,) = abi.decode(logs[i].data, (uint8, uint24));
@@ -236,10 +236,10 @@ abstract contract FreshWordLeg is AdvanceStageStream {
     ///      (intrinsic included) and its logs.
     function _advanceTx(bool) internal returns (uint8 stage, uint256 used, Vm.Log[] memory logs) {
         vm.recordLogs();
-        game.mineFlip{gas: 10_000_000}();
+        game.mineFlip{gas: 10_000_000}(0);
         // With isolation, Foundry includes calldata intrinsic in the top-level CALL cost.
         used = vm.lastCallGas().gasTotalUsed;
-        if (!vm.envOr("FOUNDRY_ISOLATE", false)) used += 21_064;
+        if (!vm.envOr("FOUNDRY_ISOLATE", false)) used += 21_192;
         logs = vm.getRecordedLogs();
         stage = 255;
         for (uint256 i; i < logs.length; ++i) {
@@ -286,7 +286,8 @@ abstract contract FreshWordLeg is AdvanceStageStream {
     ///      markers, paying no ETH or ticket winner, closed by the day's own next stage.
     function _driveBattle(uint8 battleStage) internal returns (uint256 steps) {
         IJackpotBattle battle = IJackpotBattle(address(crapsBattle));
-        (uint8 stage, uint256 from, uint256 to, uint256 largest) = _nextStageRun(200);
+        // First-unit admission can settle just one of the 250 level-one battle seats.
+        (uint8 stage, uint256 from, uint256 to, uint256 largest) = _nextStageRun(400);
         assertEq(stage, battleStage, "a battle step runs from its own stage");
         assertEq(_dailyLegLogs(_streamSlice(from, to)), 0, "a battle step shares no daily leg");
         (,,, bool complete) = battle.jackpotProgress();
@@ -305,8 +306,8 @@ abstract contract PurchaseDailyFixture is AdvanceStageStream {
     uint256 internal constant EIP7825_TX_GAS_CAP = 16_777_216;
     /// @dev The 10M soft design target the drains are sized to (USER dual bound).
     uint256 internal constant GAS_TARGET = 10_000_000;
-    /// @dev Intrinsic cost of a zero-arg mineFlip() tx: 21,000 base + 4 non-zero calldata bytes.
-    uint256 internal constant INTRINSIC = 21_064;
+    /// @dev Intrinsic cost of mineFlip(0): 21,000 base + 4 nonzero selector bytes + 32 zero argument bytes.
+    uint256 internal constant INTRINSIC = 21_192;
 
     bytes32 internal constant ETH_WIN_SIG = keccak256("JackpotEthWin(uint32,uint24,uint16,uint256,uint256)");
     bytes32 internal constant TICKET_WIN_SIG =
@@ -438,7 +439,9 @@ abstract contract PurchaseDailyFixture is AdvanceStageStream {
     ///      stage, a tally of the logs it produced, and the largest call that carried them
     ///      (intrinsic included). Each call took the smallest admitting realistic allowance.
     function _measure() internal returns (uint256 used, Tally memory t) {
-        (uint8 stage, uint256 from, uint256 to, uint256 maxGas) = _nextStageRun(200);
+        // The largest fixture awards 500 seats. First-unit admission can settle
+        // one per call; leave room for draw/setup and closing markers too.
+        (uint8 stage, uint256 from, uint256 to, uint256 maxGas) = _nextStageRun(600);
         used = maxGas;
         t.stage = stage;
         delete lastLogs;

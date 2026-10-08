@@ -176,7 +176,7 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
     function _coldRouterGasWith(uint256 allowance) private returns (uint256 used) {
         _coolSettlementState();
         uint256 beforeGas = gasleft();
-        game.mineFlip{gas: allowance}();
+        game.mineFlip{gas: allowance}(0);
         used = beforeGas - gasleft() + 21_000;
     }
 

@@ -135,15 +135,15 @@ contract PendingBoxCountInvariant is DeployProtocol {
                 uint256 before = _pendingBoxCount();
                 uint256 starved = _oneBoxBudget();
                 vm.prank(makeAddr("pb_drain_a"));
-                game.mineFlip{gas: starved}();
+                game.mineFlip{gas: starved}(0);
                 _assertInvariant("after a starved engine drain");
                 assertEq(_pendingBoxCount(), before - 1, "the starved engine call opened exactly one box");
                 vm.prank(makeAddr("pb_drain_b"));
-                game.mineFlip{gas: 1_500_000}();
+                game.mineFlip{gas: 1_500_000}(0);
                 _assertInvariant("after a moderate engine drain");
                 if (game.nextMinerAction() == 9) {
                     vm.prank(makeAddr("pb_crank"));
-                    game.mineFlip{gas: 2_000_000}();
+                    game.mineFlip{gas: 2_000_000}(0);
                     _assertInvariant("after a rewarded mineFlip drain");
                 }
                 continue;
@@ -161,7 +161,7 @@ contract PendingBoxCountInvariant is DeployProtocol {
         while (hi - lo > 1_000) {
             uint256 mid = (lo + hi) / 2;
             uint256 snap = vm.snapshotState();
-            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip()"));
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             bool opened = ok && _pendingBoxCount() < before;
             vm.revertToStateAndDelete(snap);
             if (opened) hi = mid;
@@ -177,12 +177,12 @@ contract PendingBoxCountInvariant is DeployProtocol {
         while (hi - lo > 1_000) {
             uint256 mid = (lo + hi) / 2;
             uint256 snap = vm.snapshotState();
-            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip()"));
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             vm.revertToStateAndDelete(snap);
             if (ok) hi = mid;
             else lo = mid;
         }
-        game.mineFlip{gas: hi}();
+        game.mineFlip{gas: hi}(0);
     }
 
     // ---- invariant core ----

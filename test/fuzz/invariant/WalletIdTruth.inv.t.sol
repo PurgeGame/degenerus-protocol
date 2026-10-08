@@ -183,7 +183,7 @@ contract WalletIdTruthInvariant is DeployProtocol {
         vm.warp(block.timestamp + 1 days);
         for (uint256 i; i < 200; ++i) {
             _fulfillLast(salt * 1000 + i);
-            try game.mineFlip() {} catch (bytes memory reason) {
+            try game.mineFlip(0) {} catch (bytes memory reason) {
                 if (bytes4(reason) == NO_WORK) return;
                 if (bytes4(reason) == RNG_NOT_READY && _fulfillLast(salt * 1000 + i + 500)) continue;
                 return;

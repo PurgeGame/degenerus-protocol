@@ -21,23 +21,22 @@ REVIEWED = {
         "let ok := delegatecall(gas(), target, ptr, calldatasize(), 0, 0)"],
     ("libraries/MineFlipGas.sol", "available"): ["return gasleft();"],
     ("libraries/MineFlipGas.sol", "start"): [
-        "meter = Meter({start: gasleft(), allowance: allowance});"],
-    ("libraries/MineFlipGas.sol", "spent"): ["return meter.start - gasleft();"],
-    ("libraries/MineFlipGas.sol", "canRun"): ["return gasleft() >= required;"],
+        "uint256 entry = gasleft();"],
+    ("libraries/MineFlipGas.sol", "remaining"): ["uint256 current = gasleft();"],
+    ("libraries/MineFlipGas.sol", "finish"): ["if (gasleft() < meter.floor) revert WorkGasBound();"],
+    ("libraries/MineFlipGas.sol", "spent"): ["return consumed(meter.start, gasleft());"],
+    ("libraries/MineFlipGas.sol", "canRunAfterFirst"): ["return gasleft() >= required;"],
     ("libraries/MineFlipGas.sol", "forwardable"): ["uint256 available = gasleft();"],
     ("libraries/MineFlipGas.sol", "requireStipend"): [
         "if (gasleft() < stipend + stipend / 63 + 2 * CALL_RESERVE) revert InsufficientExecutionGas();"],
-    ("modules/DegenerusGameAdvanceModule.sol", "_runJackpotWork"): [
-        "gas: MineFlipGas.forwardable(gasleft(), 150_000)"],
     ("modules/DegenerusGameMinerModule.sol", "mineFlip"): [
         "uint256 rewardStart = gasleft();",
-        # Entry admission occurs before work or state writes; insufficient gas reverts.
-        "if (gasleft() < WORKER_BOUNDARY + RETURN_RESERVE + MineFlipGas.CHECK_RESERVE) {",
+        "MineFlipGas.Meter memory meter = MineFlipGas.start(MineFlipGas.budget(gasleft(), gasMultiplierBps, true));",
         "uint256 beforeCall = gasleft();",
         # Separate caught-refusal and successful-no-progress exits exclude their cost.
-        "unpaidAttemptGas = beforeCall - gasleft();",
-        "unpaidAttemptGas = beforeCall - gasleft();",
-        "uint256 used = rewardStart - gasleft() - unpaidAttemptGas;"],
+        "unpaidAttemptGas = MineFlipGas.consumed(beforeCall, gasleft());",
+        "unpaidAttemptGas = MineFlipGas.consumed(beforeCall, gasleft());",
+        "uint256 used = MineFlipGas.consumed(rewardStart, gasleft());"],
     ("modules/DegenerusGameTicketModule.sol", "_solo"): ["uint256 actual = gasleft();"],
 }
 GAS_READ = re.compile(r"\b(?:gasleft|gas)\s*\(")

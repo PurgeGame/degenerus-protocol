@@ -78,7 +78,7 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
     {
         _finishReadBoxes();
         vm.recordLogs();
-        game.mineFlip();
+        game.mineFlip(0);
         uint256 reqId = mockVRF.lastRequestId();
         if (reqId != lastFulfilledReqId && reqId > 0) {
             mockVRF.fulfillRandomWords(reqId, vrfWord);
@@ -86,7 +86,7 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
         }
         for (uint256 i = 0; i < 50; i++) {
             if (!game.rngLocked()) break;
-            game.mineFlip();
+            game.mineFlip(0);
         }
         logs = vm.getRecordedLogs();
     }
@@ -106,7 +106,7 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
                 mockVRF.fulfillRandomWords(id, uint256(keccak256(abi.encode("binding-midday", id))));
                 lastFulfilledReqId = id;
             } else {
-                game.mineFlip();
+                game.mineFlip(0);
             }
         }
         fail("harness: mid-day work did not settle");
@@ -115,7 +115,7 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
     function _advanceAndCheck(bool checkWrongWord) internal returns (uint256 batches, uint256 entries, uint256 buyerEntries) {
         DrainSnapshot memory snap = _snapshotDrain(game);
         vm.recordLogs();
-        game.mineFlip();
+        game.mineFlip(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         // Two physical buffers (6d0e64b09): the committed word is the read buffer's (write ^ 1).
         uint256 word = _wordAt(game, snap.index ^ 1);
@@ -204,7 +204,7 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
         //    word at index N (= the new LR_INDEX - 1). The word is NOT yet delivered. mineFlip
         //    is the only door to the request; with the read cohort finished it is the next action.
         uint256 priorReq = mockVRF.lastRequestId();
-        game.mineFlip();
+        game.mineFlip(0);
         assertGt(mockVRF.lastRequestId(), priorReq, "mineFlip issued the mid-day request");
         uint48 idxLive = _lrIndex();
         // Two physical buffers (6d0e64b09): the request seals N and the write side flips to N ^ 1.
@@ -240,7 +240,7 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
         // by the word requested before it was bought. The same call may drain the cohort and
         // seal box B's buffer for a further request, so the publications are read from events.
         vm.recordLogs();
-        game.mineFlip();
+        game.mineFlip(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 landedN;
         uint256 landedLive;

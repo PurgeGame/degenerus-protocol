@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {MineFlipGas} from "../libraries/MineFlipGas.sol";
+
 /*
  * TERMS OF INTERACTION — submitting a transaction to this contract accepts them.
  *
@@ -29,6 +31,7 @@ pragma solidity 0.8.34;
 /// @notice The game's view of the parimutuel market: the seal it pushes and the in-order
 ///         settlement stage it cranks, plus the player bet door.
 interface IDegenerusParimutuel {
+    function runGrowthWork(uint256 budget) external returns (MineFlipGas.Result memory);
     function marketStateById(uint32 playerId, uint24 round) external view returns (
         uint24 openRound, uint128 overCount, uint128 underCount, uint256 questReward,
         uint8 side, bool claimed, uint8 outcome, uint256 payout
@@ -50,7 +53,7 @@ interface IDegenerusParimutuel {
     ///      the moment round `round`'s three terms are all final. Must run after every
     ///      ratchet write the transition performs, so a century entry reads its pushed
     ///      achieved pool rather than zero. Seals the outcome only; winners are paid later by
-    ///      `settleGrowth`. Game sets its settlement-pending bit when this returns true.
+    ///      `runGrowthWork`. Game sets its settlement-pending bit when this returns true.
     /// @param round The growth round being settled.
     /// @param over True if the round resolved OVER, false for UNDER.
     /// @return settlementPending True when a sealed round now has unpaid winners (this round's
@@ -61,14 +64,13 @@ interface IDegenerusParimutuel {
 
     /// @notice Pay up to `maxWinners` winners of the sealed, unsettled growth rounds, oldest
     ///         round first, from the settlement cursor (round and array position in one word).
-    /// @dev GAME only: the in-order mineFlip settlement stage, run only while Game's pending bit
-    ///      is set, never on the terminal path and never ahead of RNG-consumer work. Walks only
+    /// @dev GAME-only counted settlement helper. Mining uses runGrowthWork instead. Walks only
     ///      the winning side's wallet-ID array (losers are never read) and credits each winner
     ///      the round's uniform payout `STAKE * total / winCount` through one
     ///      `creditFlipBatch(ids, amounts)` per call (Parimutuel is a flip creditor). The work is
     ///      a pure function of state and `maxWinners` (no `gasleft`). Revert-free for any
     ///      committed state; an empty winning side settles nothing.
-    /// @param maxWinners Fixed per-call winner bound chosen by the Game stage.
+    /// @param maxWinners Fixed per-call operation bound.
     /// @return done True when every sealed round's winners are paid (Game clears its bit).
     /// @custom:reverts OnlyGame If caller is not GAME.
     function settleGrowth(uint256 maxWinners) external returns (bool done);

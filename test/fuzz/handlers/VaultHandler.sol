@@ -145,7 +145,7 @@ contract VaultHandler is Test {
         if (game.gameOver()) return;
 
         vm.prank(currentActor);
-        try game.mineFlip() {} catch {}
+        try game.mineFlip(0) {} catch {}
     }
 
     /// @notice Fulfill VRF

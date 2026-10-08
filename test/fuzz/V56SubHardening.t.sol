@@ -411,7 +411,7 @@ contract V56SubHardening is DeployProtocol {
         assertTrue(game.bountyEligible(miner), "mining has no participant gate");
         vm.recordLogs();
         vm.prank(miner);
-        game.mineFlip();
+        game.mineFlip(0);
         _assertMinerProgress(miner);
     }
 
@@ -451,12 +451,12 @@ contract V56SubHardening is DeployProtocol {
         // runs each necessary step, without supplying a VRF response.
         for (uint256 i; i < 16 && !game.rngLocked(); ++i) {
             vm.prank(miner);
-            game.mineFlip();
+            game.mineFlip(0);
         }
         assertTrue(game.rngLocked(), "fixture: request is waiting for fulfillment");
         vm.prank(miner);
         vm.expectRevert(abi.encodeWithSignature("RngNotReady()"));
-        game.mineFlip();
+        game.mineFlip(0);
     }
 
     function testOpenMiningDoesNotBypassSubscriptionCoinRequirement() public {
@@ -472,14 +472,23 @@ contract V56SubHardening is DeployProtocol {
         assertEq(_subscriberIndexOf(miner), 0, "subscription credential still required");
         vm.recordLogs();
         vm.prank(miner);
-        game.mineFlip();
+        game.mineFlip(0);
         _assertMinerProgress(miner);
     }
 
-    /// @notice Vault keeper routing: DegenerusVault.gameAdvance() now routes through game.mineFlip()
+    /// @notice Vault keeper routing: DegenerusVault.gameAdvance(0) now routes through game.mineFlip(0)
     ///         (subject to the successful-work reward floor); it performs the crank when work is due and reverts NoWork() when
     ///         idle. The vault is owner-gated (onlyVaultOwner) — prank as CREATOR (the DGVE majority
     ///         owner). Mining participation itself has no ownership requirement. Both arms asserted.
+    function test_WrappersForwardCallerCalibration() public {
+        bytes memory callData = abi.encodeWithSignature("mineFlip(uint32)", uint32(50_000));
+        vm.mockCall(address(game), callData, bytes(""));
+        vm.expectCall(address(game), callData, 2);
+        vm.prank(ContractAddresses.CREATOR);
+        vault.gameAdvance(50_000);
+        sdgnrs.gameAdvance(50_000);
+    }
+
     function testVaultGameAdvanceRoutesThroughMintFlip() public {
         // Idle arm first: settle clean, do NOT roll the day -> nothing due -> NoWork().
         _settleClean(uint256(keccak256("vault_idle")) | 1);
@@ -492,18 +501,18 @@ contract V56SubHardening is DeployProtocol {
         _quietCrapsTable();
         vm.prank(ContractAddresses.CREATOR);
         vm.expectRevert(abi.encodeWithSignature("NoWork()"));
-        vault.gameAdvance();
+        vault.gameAdvance(0);
 
         // Work-due arm: roll a fresh day -> advance due -> gameAdvance cranks via mineFlip (no revert).
         _warpToDayBoundary(5);
         assertTrue(game.advanceDue(), "fixture: advance due for the vault crank");
         vm.recordLogs();
         vm.prank(ContractAddresses.CREATOR);
-        vault.gameAdvance();           // MUST NOT revert — routes through mineFlip and does the work
+        vault.gameAdvance(50_000);           // MUST NOT revert — routes through mineFlip and does the work
         _assertMinerProgress(address(vault));
     }
 
-    /// @notice sDGNRS keeper routing: sDGNRS.gameAdvance() routes through game.mineFlip()
+    /// @notice sDGNRS keeper routing: sDGNRS.gameAdvance(0) routes through game.mineFlip(0)
     ///         and is PERMISSIONLESS (no owner gate). It performs the crank when work is due and reverts
     ///         NoWork() when idle. These assertions cover routing, without assuming that a small
     ///         call earns compensation.
@@ -519,14 +528,14 @@ contract V56SubHardening is DeployProtocol {
         _quietCrapsTable();
         vm.prank(makeAddr("anyone_sdgnrs")); // permissionless — any caller
         vm.expectRevert(abi.encodeWithSignature("NoWork()"));
-        sdgnrs.gameAdvance();
+        sdgnrs.gameAdvance(0);
 
         // Work-due arm: roll a fresh day -> advance due -> gameAdvance cranks via mineFlip (no revert).
         _warpToDayBoundary(5);
         assertTrue(game.advanceDue(), "fixture: advance due for the sDGNRS crank");
         vm.recordLogs();
         vm.prank(makeAddr("anyone_sdgnrs2"));
-        sdgnrs.gameAdvance();          // MUST NOT revert — routes through mineFlip and does the work
+        sdgnrs.gameAdvance(50_000);          // MUST NOT revert — routes through mineFlip and does the work
         _assertMinerProgress(address(sdgnrs));
     }
 
@@ -593,7 +602,7 @@ contract V56SubHardening is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) break;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) break;
-            game.mineFlip();
+            game.mineFlip(0);
             _fulfillPending(vrfWord);
         }
     }
@@ -604,7 +613,7 @@ contract V56SubHardening is DeployProtocol {
             if (!game.advanceDue() && !game.rngLocked()) return;
             _fulfillPending(vrfWord);
             if (!game.advanceDue() && !game.rngLocked()) return;
-            game.mineFlip();
+            game.mineFlip(0);
             _fulfillPending(vrfWord);
         }
         fail("fixture: miner consumers did not settle");

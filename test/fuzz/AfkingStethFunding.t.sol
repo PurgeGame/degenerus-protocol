@@ -233,7 +233,7 @@ contract AfkingStethFundingTest is DeployProtocol {
         afkingModule.pullAfkingSteth(uint32(1), FUNDER, 1);
     }
 
-    function testFuzz_AllTokenFaultsEvictAndNextSubscriberContinues(uint8 operationSeed, uint8 faultSeed) public {
+    function testFuzz_TokenRefusalExpiresButGasFailureRollsBack(uint8 operationSeed, uint8 faultSeed) public {
         _adversarial();
         _add(PLAYER, FUNDER, false, true, 1, 0, 1);
         _add(NEXT, address(0), false, true, 1, host.price(), 0);
@@ -245,17 +245,32 @@ contract AfkingStethFundingTest is DeployProtocol {
         uint256 beforeSource = badToken.sharesOf(FUNDER);
         uint256 beforeGame = badToken.sharesOf(address(game));
         uint256 poolBefore = game.claimablePoolView();
-        _work();
-        _assertEvicted(PLAYER);
+        bool executionFailure = fault_ == AdversarialAfkingSteth.Fault.Malformed
+            || fault_ == AdversarialAfkingSteth.Fault.BurnGas;
+        if (executionFailure) {
+            vm.expectRevert();
+            host.subWork{gas: WORK_GAS}(WORK_GAS);
+            assertGt(host.stateOf(PLAYER).setPosition, 0, "execution failure preserves membership");
+            assertEq(game.claimablePoolView(), poolBefore);
+            assertLt(host.stateOf(NEXT).lastAutoBoughtDay, game.currentDayView(), "following subscriber is untouched");
+        } else {
+            _work();
+            _assertEvicted(PLAYER);
+            assertGt(host.entries(NEXT), 0, "token refusal cannot block the next funded subscriber");
+            assertEq(game.claimablePoolView(), poolBefore - host.price());
+        }
         assertEq(badToken.sharesOf(FUNDER), beforeSource, "failed pull rolls source shares back");
         assertEq(badToken.sharesOf(address(game)), beforeGame, "failed pull rolls receipt back");
         assertEq(badToken.allowance(FUNDER, address(game)), 1 ether, "failed pull rolls allowance back");
         assertEq(badToken.transferCalls(), 0, "failed post-transfer read rolls token state back");
         assertEq(game.afkingFundingOf(FUNDER), 0);
         assertEq(host.claimableOf(PLAYER), 1);
-        assertEq(game.claimablePoolView(), poolBefore - host.price());
-        assertEq(host.stateOf(NEXT).lastAutoBoughtDay, game.currentDayView(), "moved next member is processed");
-        assertGt(host.entries(NEXT), 0);
+        if (executionFailure) {
+            badToken.configureFault(op, AdversarialAfkingSteth.Fault.None);
+            _work();
+            assertGt(host.entries(PLAYER), 0, "retry pays the original subscriber");
+            assertGt(host.entries(NEXT), 0);
+        }
     }
 
     function testFuzz_InvalidTransferReceiptsRollBack(uint8 faultSeed) public {
@@ -458,6 +473,21 @@ contract AfkingStethFundingTest is DeployProtocol {
         _assertEvicted(PLAYER);
         assertEq(game.claimablePoolView(), type(uint128).max);
         assertEq(mockStETH.balanceOf(PLAYER), 1 ether);
+    }
+
+    function test_ExtremeCalibrationFundsExactlyOneSubscriberThenResumes() public {
+        _add(PLAYER, address(0), false, true, 1, 0, 0);
+        _add(NEXT, address(0), false, true, 1, host.price(), 0);
+        mockStETH.mint(PLAYER, 1 ether);
+        _authorize(PLAYER, PLAYER, type(uint256).max);
+        uint256 budget = MineFlipGas.budget(WORK_GAS, type(uint32).max, true);
+        MineFlipGas.Result memory result = host.subWork{gas: WORK_GAS}(budget);
+        assertTrue(result.progressed);
+        assertGt(host.entries(PLAYER), 0);
+        assertEq(host.entries(NEXT), 0);
+        result = host.subWork{gas: WORK_GAS}(budget);
+        assertTrue(result.progressed);
+        assertGt(host.entries(NEXT), 0);
     }
 
     function test_LowWorkerAllowanceDefersBeforeAttemptThenSucceeds() public {

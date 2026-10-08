@@ -125,7 +125,7 @@ contract C1BoxAutoOpen is DeployProtocol {
         for (uint256 i; i < 10 && !game.rngLocked(); i++) {
             vm.warp(block.timestamp + 1 days);
             vm.prank(actor);
-            try game.mineFlip() {} catch {}
+            try game.mineFlip(0) {} catch {}
             if (game.rngLocked()) break;
             uint256 reqId = mockVRF.lastRequestId();
             if (reqId != 0) {
@@ -144,7 +144,7 @@ contract C1BoxAutoOpen is DeployProtocol {
                 }
             }
             vm.prank(actor);
-            try game.mineFlip() {} catch {}
+            try game.mineFlip(0) {} catch {}
         }
     }
 
@@ -163,7 +163,7 @@ contract C1BoxAutoOpen is DeployProtocol {
                 mockVRF.fulfillRandomWords(id, uint256(keccak256(abi.encode("c1_midday", id))) | 2);
             } else {
                 vm.prank(actor);
-                game.mineFlip();
+                game.mineFlip(0);
             }
         }
         fail("harness: mid-day work did not settle");
@@ -201,7 +201,7 @@ contract C1BoxAutoOpen is DeployProtocol {
         // VRF AND seals buffer N (the write side flips to N ^ 1) before the word lands.
         assertEq(game.nextMinerAction(), 18, "the mid-day request is the engine's next work"); // RequestMidday
         vm.prank(actor);
-        game.mineFlip();
+        game.mineFlip(0);
         assertEq(_idx(), N ^ 1, "the mid-day request sealed buffer N before the word lands");
 
         // Fulfill the mid-day VRF (not locked) => the word is written at _lootboxWord(N).
@@ -215,7 +215,7 @@ contract C1BoxAutoOpen is DeployProtocol {
         // the consumer order puts human boxes after ticket materialization (60d31f775). A 1.1M
         // allowance can never admit a human-box entry (HUMAN_ENTRY_GAS + tail), so these calls
         // stop with the box still closed, leaving its open to the human-box stage below.
-        for (uint256 i; i < 20 && game.nextMinerAction() != 10; i++) game.mineFlip{gas: 1_100_000}();
+        for (uint256 i; i < 20 && game.nextMinerAction() != 10; i++) game.mineFlip{gas: 1_100_000}(0);
         assertEq(game.nextMinerAction(), 10, "the human-box stage is next");
         assertGt(_word(N), 0, "the VRF word landed at _lootboxWord(N) (box at N IS ready)");
         assertEq(_idx(), N ^ 1, "LR_INDEX is N+1 while the ready word sits at N");
@@ -226,7 +226,7 @@ contract C1BoxAutoOpen is DeployProtocol {
 
         // The engine's human-box stage must open the box at N.
         vm.prank(actor);
-        game.mineFlip();
+        game.mineFlip(0);
 
         emit log_named_uint("owed entry word[N][pos] AFTER the human-box stage", _base(N, pos));
         emit log_named_uint("N", N);
@@ -253,7 +253,7 @@ contract C1BoxAutoOpen is DeployProtocol {
         for (uint256 i; i < 10 && !game.rngLocked(); i++) {
             vm.warp(block.timestamp + 1 days);
             vm.prank(actor);
-            game.mineFlip();
+            game.mineFlip(0);
         }
         assertTrue(game.rngLocked(), "the daily request is in flight");
         uint48 nowIdx = _idx();
@@ -270,7 +270,7 @@ contract C1BoxAutoOpen is DeployProtocol {
         vm.recordLogs();
         for (uint256 i; i < 20 && game.rngLocked(); i++) {
             vm.prank(actor);
-            game.mineFlip();
+            game.mineFlip(0);
         }
         assertFalse(game.rngLocked(), "post daily cycle: not locked");
         Vm.Log[] memory logs = vm.getRecordedLogs();

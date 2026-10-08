@@ -73,12 +73,12 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
         mockVRF.fundSubscription(1, 100e18);
         vm.warp(block.timestamp + 1 days);
         for (uint256 i; i < 50 && !game.rngLocked(); ++i) {
-            game.mineFlip();
+            game.mineFlip(0);
         }
         assertTrue(game.rngLocked(), "bootstrap reached a real daily request");
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 0xB007);
         for (uint256 i; i < 100 && game.rngLocked(); ++i) {
-            game.mineFlip();
+            game.mineFlip(0);
         }
         assertFalse(game.rngLocked(), "bootstrap daily processing finished");
         _settleIdle();
@@ -98,7 +98,7 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
             }
             _finishReadConsumers();
             if (!game.advanceDue() && game.rngComplete()) return;
-            if (game.advanceDue()) game.mineFlip();
+            if (game.advanceDue()) game.mineFlip(0);
         }
         revert("harness: cohorts never settled");
     }
@@ -112,12 +112,12 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
         while (hi - lo > 1_000) {
             uint256 mid = (lo + hi) / 2;
             uint256 snap = vm.snapshotState();
-            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip()"));
+            (bool ok,) = address(game).call{gas: mid}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             vm.revertToStateAndDelete(snap);
             if (ok) hi = mid;
             else lo = mid;
         }
-        game.mineFlip{gas: hi}();
+        game.mineFlip{gas: hi}(0);
     }
 
     function _index() private view returns (uint48) {
@@ -363,7 +363,7 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
             uint256(id) | (uint256(1) << 32) | (uint256(1) << 56) | (uint256(1) << 121) | (uint256(1e9) << 128);
         assertEq(_entry(index, position), committed, "real purchase committed level one, score one, one unboosted box");
         // The purchase's pending ETH clears the threshold: the engine's mid-day request.
-        game.mineFlip();
+        game.mineFlip(0);
         uint256 request = mockVRF.lastRequestId();
         assertGt(request, 0);
         (,, bool fulfilled) = mockVRF.pendingRequests(request);
@@ -396,7 +396,7 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
         uint256 keeperFlip = coinflip.coinflipAmount(KEEPER);
         vm.recordLogs();
         vm.prank(KEEPER);
-        game.mineFlip();
+        game.mineFlip(0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         // One parent spin and its one recirculated child: exactly one committed ordinary box consumed.
         _assertEvents(logs, e);
@@ -438,7 +438,7 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
         // Replay probe: whatever the engine does next (or NoWork / a pending word), it opens nothing.
         vm.recordLogs();
         vm.prank(KEEPER);
-        (bool replayed,) = address(game).call(abi.encodeWithSignature("mineFlip()"));
+        (bool replayed,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
         replayed;
         assertEq(_boxResults(vm.getRecordedLogs()), 0, "spent parent and child cannot replay");
         assertEq(keccak256(abi.encode(_balances())), keccak256(abi.encode(afterState)), "replay has no balance effects");
