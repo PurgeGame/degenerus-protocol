@@ -60,6 +60,7 @@ async function main() {
  if (mode === "drift") fs.writeFileSync("contracts/Game.sol", "changed\n");
  if (mode === "add_source") fs.writeFileSync("contracts/Unexpected.sol", "unexpected\n");
  if (mode === "golden_drift") fs.writeFileSync("scripts/layout/golden/DegenerusGame.json", "{}\n");
+ if (mode === "dependency_drift") fs.writeFileSync("lib/forge-std/Library.sol", "changed dependency\n");
  const doc = process.env.FAKE_DOC_PATH || "docs/AUDIT.md";
  if (mode === "doc_add") { fs.mkdirSync(require("node:path").dirname(doc),{recursive:true}); fs.writeFileSync(doc, "added\n"); }
  if (mode === "doc_remove") fs.unlinkSync(doc);
@@ -139,6 +140,26 @@ class HardhatGroupsDriverTest(unittest.TestCase):
         self.assertIn("Unassigned Hardhat test sources", done.stderr)
         self.assertIn(paths[0], done.stderr)
         self.assertFalse((self.root / "calls.json").exists())
+
+    def test_symlinked_libraries_are_captured_and_drift_fails(self):
+        self.sources("first", 1)
+        shared = self.root / "shared-library"
+        shared.mkdir()
+        (shared / "Library.sol").write_text("original dependency\n")
+        (shared / "cycle").symlink_to(shared, target_is_directory=True)
+        for directory, name in (("lib", "forge-std"), ("node_modules", "linked")):
+            (self.root / directory).mkdir(exist_ok=True)
+            (self.root / directory / name).symlink_to(shared, target_is_directory=True)
+        done = self.run_driver()
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        row = self.rows()[-1]
+        inputs = json.loads((self.root / ".audit-test-logs/hardhat" / row["source_manifest"]).read_text())
+        for path in ("lib/forge-std/Library.sol", "node_modules/linked/Library.sol"):
+            self.assertEqual(inputs.get(path), hashlib.sha256(b"original dependency\n").hexdigest())
+        self.assertFalse(any("/cycle/" in path for path in inputs))
+        done = self.run_driver(FAKE_MODE="dependency_drift")
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("lib/forge-std/Library.sol", self.rows()[-1]["source_drift"])
 
     def test_override_and_flags_preserve_explicit_order(self):
         paths = self.sources("first", 3)

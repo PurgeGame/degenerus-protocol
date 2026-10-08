@@ -19,6 +19,10 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Match the toolchain used for the audit regression, cold-gas and deep campaigns.
+  AUDIT_FOUNDRY_VERSION: nightly-c07d504b4ae67754584f4e05ff0c547a43c50f7b
+
 jobs:
   foundry-build:
     name: Production build + assurance gates
@@ -52,6 +56,8 @@ jobs:
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: ${{ env.AUDIT_FOUNDRY_VERSION }}
 
       - name: Install npm deps (OpenZeppelin, etc.)
         run: npm ci
@@ -109,6 +115,8 @@ jobs:
         with:
           node-version: '20'
       - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: ${{ env.AUDIT_FOUNDRY_VERSION }}
       - run: npm ci
       - name: Add swap space for bounded via-IR compilations
         run: |
@@ -125,7 +133,7 @@ jobs:
           if [ "$TEST_GROUP" = integration-gas ]; then
             FOUNDRY_ISOLATE=true python3 scripts/test-foundry-groups.py --group "$TEST_GROUP" --max-files 5 --threads 1 -vvv
           else
-            FOUNDRY_ISOLATE=false python3 scripts/test-foundry-groups.py --group "$TEST_GROUP" --max-files 10 --threads 1 -vvv
+            FOUNDRY_ISOLATE=false python3 scripts/test-foundry-groups.py --group "$TEST_GROUP" --max-files 5 --threads 1 -vvv
           fi
       - name: Preserve group evidence, including failed batches
         if: always()
@@ -160,6 +168,8 @@ jobs:
         with:
           node-version: '20'
       - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: ${{ env.AUDIT_FOUNDRY_VERSION }}
       - run: npm ci
       - name: Full configured Hardhat selection
         run: python3 scripts/test-hardhat-groups.py
@@ -181,6 +191,8 @@ jobs:
         with:
           submodules: recursive
       - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: ${{ env.AUDIT_FOUNDRY_VERSION }}
       - run: npm ci
       - name: Run Slither
         uses: crytic/slither-action@v0.4.0
@@ -200,6 +212,8 @@ jobs:
         with:
           node-version: '20'
       - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: ${{ env.AUDIT_FOUNDRY_VERSION }}
       - run: npm ci
       - name: Install Aderyn
         # crates.io still serves 0.1.9, which rejects the pinned Osaka EVM.
@@ -232,6 +246,8 @@ jobs:
           submodules: recursive
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: ${{ env.AUDIT_FOUNDRY_VERSION }}
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -301,6 +317,8 @@ jobs:
         with:
           node-version: '20'
       - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: ${{ env.AUDIT_FOUNDRY_VERSION }}
       - run: npm ci
       - name: Deep invariant partition (runs=1000 / depth=256, existing suite overrides retained)
         env:

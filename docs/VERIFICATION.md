@@ -83,7 +83,15 @@ the subsequent smurf feature, which has not started at this checkpoint.
 Use Node 20 (as in CI), Python 3, Bash, Git and Foundry. Solidity 0.8.34, via IR,
 1,000 optimizer runs and EVM Osaka are set in both compiler configurations.
 The npm dependencies and forge-std revision are locked in the repository. Foundry
-CI currently follows nightly; record the actual version when reproducing a run.
+CI pins `nightly-c07d504b4ae67754584f4e05ff0c547a43c50f7b`, the build used by
+the audit campaign. Record the actual version when reproducing a run; use the
+same release for comparable gas and invariant evidence.
+
+The Foundry runner rebuilds a coherent artifact set for each physical batch.
+Incremental artifacts from a different selection can otherwise disagree with the
+handler runtime embedded in a cached invariant test. Both runners fingerprint
+symlinked library directories, stop directory cycles and fail on dependency drift.
+CI limits ordinary batches to five roots without reducing test or fuzz budgets.
 
 ```sh
 git rev-parse HEAD

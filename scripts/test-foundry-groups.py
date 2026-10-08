@@ -71,16 +71,30 @@ def write_json(path, value):
     temporary.replace(path)
 
 
+def captured_files(folder):
+    """Follow dependency-directory links, retaining aliases and stopping cycles."""
+    pending = [(Path(folder), frozenset())]
+    while pending:
+        path, ancestors = pending.pop()
+        if path.is_dir():
+            target = path.resolve()
+            if target not in ancestors:
+                parents = ancestors | {target}
+                pending.extend((child, parents) for child in path.iterdir())
+        elif path.is_file():
+            yield path
+
+
 def source_identity():
     # Include the complete source tree, imported Solidity libraries, and build/pin inputs.
     # The manifest is captured AFTER patchForFoundry, so its addresses match compilation.
     paths = set()
     for directory in ("contracts", "test", "lib", "node_modules"):
-        paths.update(p for p in Path(directory).rglob("*.sol") if p.is_file())
+        paths.update(p for p in captured_files(directory) if p.suffix == ".sol")
     # Gas/reference tests deploy checked-in bytecode read through vm.readFile.
     # These blobs affect execution even though solc never imports them.
     for directory in ("contracts", "test"):
-        paths.update(p for p in Path(directory).rglob("*.hex") if p.is_file())
+        paths.update(p for p in captured_files(directory) if p.suffix == ".hex")
     paths.update(p for p in Path("scripts/lib").glob("*.js") if p.is_file())
     paths.add(Path("scripts/test-foundry-groups.py"))
     for name in ("foundry.toml", "remappings.txt", "package.json", "package-lock.json", "yarn.lock"):
@@ -265,7 +279,12 @@ def main():
         for group, name, keep in batches:
             (run_dir / f"{name}-files.txt").write_text("".join(f"{p}\n" for p in sorted(keep)))
             skip = [arg for p in files if p not in keep | support for arg in ("--skip", str(p))]
-            command = ["forge", "test", "-vv", *skip, *forge_args]
+            # Changing the selected roots can rebuild a shared handler while reusing
+            # a test whose constructor embeds its previous runtime. Forge then cannot
+            # associate that deployed handler with an artifact for invariant targeting.
+            # Compile one coherent artifact set for every physical batch.
+            fresh = [] if "--force" in forge_args else ["--force"]
+            command = ["forge", "test", "-vv", *skip, *fresh, *forge_args]
             identity = source_identity()
             input_path = run_dir / f"{name}-inputs.json"
             write_json(input_path, identity)

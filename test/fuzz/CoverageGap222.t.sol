@@ -18,6 +18,10 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
+import {
+    IDegenerusGameJackpotModule,
+    IDegenerusGameJackpotDrawModule
+} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 
 contract CoverageGap222 is DeployProtocol {
     address internal buyer;
@@ -1610,13 +1614,16 @@ contract CoverageGap222 is DeployProtocol {
     ///      progresses nothing and writes nothing.
     function test_gap_runBafAwards_withoutBafWorkIsDone() public {
         address[2] memory targets = [address(jackpotModule), address(jackpotDrawModule)];
+        uint8[3] memory traits = [uint8(0), uint8(64), uint8(128)];
+        bytes[2] memory calls = [
+            abi.encodeCall(IDegenerusGameJackpotModule.runBafAwards, (uint256(1), uint256(9_000_000))),
+            abi.encodeCall(IDegenerusGameJackpotDrawModule.runBafAwards, (uint256(1), uint256(9_000_000), traits))
+        ];
         for (uint256 t; t < 2; ++t) {
             vm.record();
             vm.recordLogs();
             vm.prank(buyer);
-            (bool ok, bytes memory ret) = targets[t].call(
-                abi.encodeWithSignature("runBafAwards(uint256,uint256)", uint256(1), uint256(9_000_000))
-            );
+            (bool ok, bytes memory ret) = targets[t].call(calls[t]);
             assertTrue(ok, "runBafAwards without BAF work returns");
             (bool progressed, bool done, uint256 rewardBasis) = abi.decode(ret, (bool, bool, uint256));
             assertTrue(done, "no kind-7 record reads as done");

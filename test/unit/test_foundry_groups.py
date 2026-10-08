@@ -53,6 +53,8 @@ else:
         Path("contracts/Game.sol").write_text("changed during compile\\n")
     if mode == "bytecode_drift":
         Path("contracts/mocks/Reference.hex").write_text("0x6001\\n")
+    if mode == "dependency_drift":
+        Path("lib/forge-std/Library.sol").write_text("changed dependency\\n")
     print("Ran 1 test suite in 0s: 2 tests passed, 0 failed, 0 skipped")
 '''
 
@@ -108,6 +110,7 @@ class FoundryGroupsDriverTest(unittest.TestCase):
         for row in rows:
             self.assertEqual(row["group"], "integration-gas")
             args = row["command"]
+            self.assertEqual(args.count("--force"), 1, "each batch rebuilds a coherent artifact set")
             skipped = {args[i + 1] for i, arg in enumerate(args[:-1]) if arg == "--skip"}
             self.assertTrue(set(excluded) <= skipped)
             self.assertFalse(set(support) & skipped)
@@ -130,15 +133,36 @@ class FoundryGroupsDriverTest(unittest.TestCase):
         self.assertEqual([row["source_files"] for row in rows], [21, 7, 7, 7])
         self.assertNotEqual(rows[0]["run_id"], rows[1]["run_id"])
 
+    def test_symlinked_libraries_are_captured_and_drift_fails(self):
+        self.sources("gas", 1)
+        shared = self.root / "shared-library"
+        shared.mkdir()
+        (shared / "Library.sol").write_text("original dependency\n")
+        (shared / "cycle").symlink_to(shared, target_is_directory=True)
+        for directory, name in (("lib", "forge-std"), ("node_modules", "linked")):
+            (self.root / directory).mkdir(exist_ok=True)
+            (self.root / directory / name).symlink_to(shared, target_is_directory=True)
+        result = self.run_driver("--group", "integration-gas")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        row = self.rows()[-1]
+        inputs = json.loads((self.root / ".audit-test-logs/foundry" / row["input_manifest"]).read_text())
+        for path in ("lib/forge-std/Library.sol", "node_modules/linked/Library.sol"):
+            self.assertEqual(inputs.get(path), hashlib.sha256(b"original dependency\n").hexdigest())
+        self.assertFalse(any("/cycle/" in path for path in inputs))
+        result = self.run_driver("--group", "integration-gas", FAKE_MODE="dependency_drift")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("source/build inputs changed during this batch", self.rows()[-1]["errors"])
+
     def test_focused_selection_and_forge_limits_are_preserved(self):
         gas = self.sources("gas", 3)
         fuzz = self.sources("fuzz", 3)
         result = self.run_driver("--file", gas[1], "--file", fuzz[2], "--max-files", "1",
-                                 "--fuzz-runs", "13", "--fuzz-seed", "0x1234")
+                                 "--force", "--fuzz-runs", "13", "--fuzz-seed", "0x1234")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         rows = self.rows()
         self.assertEqual({path for row in rows for path in row["selected_sources"]}, {gas[1], fuzz[2]})
         self.assertTrue(all(row["command"][-4:] == ["--fuzz-runs", "13", "--fuzz-seed", "0x1234"] for row in rows))
+        self.assertTrue(all(row["command"].count("--force") == 1 for row in rows))
         self.assertEqual(len(rows), 2)
 
     def test_missing_zero_or_failed_totals_fail_even_when_forge_exits_zero(self):

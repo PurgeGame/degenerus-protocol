@@ -142,12 +142,26 @@ def split_forwarded(arguments):
     return files, flags
 
 
+def captured_files(folder):
+    """Follow dependency-directory links, retaining aliases and stopping cycles."""
+    pending = [(Path(folder), frozenset())]
+    while pending:
+        path, ancestors = pending.pop()
+        if path.is_dir():
+            target = path.resolve()
+            if target not in ancestors:
+                parents = ancestors | {target}
+                pending.extend((child, parents) for child in path.iterdir())
+        elif path.is_file():
+            yield path
+
+
 def source_identity(config):
     paths = {config, Path(__file__).relative_to(ROOT)}
     for folder, suffixes in (("contracts", {".sol"}), ("test", {".sol", ".js", ".cjs", ".mjs", ".ts"}),
                              ("scripts", {".js", ".cjs", ".mjs", ".py", ".json", ".tsv", ".sh"}),
                              ("lib", {".sol"}), ("node_modules", {".sol"})):
-        paths.update(p for p in Path(folder).rglob("*") if p.is_file() and p.suffix in suffixes)
+        paths.update(p for p in captured_files(folder) if p.suffix in suffixes)
     for name in ("package.json", "package-lock.json", "yarn.lock", "foundry.toml", "tsconfig.json", "docs/AUDIT.md",
                  "docs/audit/snapshot.json", "scope.txt",
                  "node_modules/hardhat/package.json", "node_modules/hardhat/internal/solidity/compiler/index.js"):
