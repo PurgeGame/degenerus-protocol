@@ -151,9 +151,9 @@ jobs:
           resource_monitor_pid=$!
           trap 'kill "$resource_monitor_pid" 2>/dev/null || true; wait "$resource_monitor_pid" 2>/dev/null || true' EXIT
           if [ "$TEST_GROUP" = integration-gas ]; then
-            FOUNDRY_ISOLATE=true python3 scripts/test-foundry-groups.py --group "$TEST_GROUP" --max-files 5 --threads 1 -vvv
+            FOUNDRY_ISOLATE=true python3 scripts/test-foundry-groups.py --group "$TEST_GROUP" --max-files 5 --threads 1
           else
-            FOUNDRY_ISOLATE=false python3 scripts/test-foundry-groups.py --group "$TEST_GROUP" --max-files 5 --threads 1 -vvv
+            FOUNDRY_ISOLATE=false python3 scripts/test-foundry-groups.py --group "$TEST_GROUP" --max-files 5 --threads 1
           fi
       - name: Preserve group evidence, including failed batches
         if: always()

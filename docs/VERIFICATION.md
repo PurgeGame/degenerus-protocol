@@ -92,6 +92,10 @@ Incremental artifacts from a different selection can otherwise disagree with the
 handler runtime embedded in a cached invariant test. Both runners fingerprint
 symlinked library directories, stop directory cycles and fail on dependency drift.
 CI limits ordinary batches to five roots without reducing test or fuzz budgets.
+The runner defaults to `-vv`; an explicit verbosity flag replaces that default.
+CI uses the default. Forge adds verbosity flags, so combining `-vv` and `-vvv`
+would enable level-five traces and can exhaust memory on large suites. Rerun an
+individual failing case with higher verbosity when a trace is needed.
 
 ```sh
 git rev-parse HEAD
@@ -162,7 +166,7 @@ FOUNDRY_ISOLATE=true python3 scripts/test-foundry-groups.py \
 ```
 
 CI runs each of the seven Foundry groups in a separate job. The other six groups
-use isolation disabled, at most ten roots per batch and one thread. The default fuzz campaign uses 1,000 runs; default
+use isolation disabled, at most five roots per batch and one thread. The default fuzz campaign uses 1,000 runs; default
 invariants use 256 runs at depth 128, with per-suite overrides visible in source.
 `npm test` uses the maintained Hardhat runner, including all statistical files.
 Discovery fails if a JavaScript test is outside the configured directories.

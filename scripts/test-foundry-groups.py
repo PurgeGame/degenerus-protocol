@@ -284,7 +284,11 @@ def main():
             # associate that deployed handler with an artifact for invariant targeting.
             # Compile one coherent artifact set for every physical batch.
             fresh = [] if "--force" in forge_args else ["--force"]
-            command = ["forge", "test", "-vv", *skip, *fresh, *forge_args]
+            # Forge adds repeated verbosity flags. Appending -vvv to a default
+            # -vv enables level-five tracing and can exhaust the hosted runner.
+            verbosity = [] if any(arg == "--verbosity" or re.fullmatch(r"-v+", arg)
+                                  for arg in forge_args) else ["-vv"]
+            command = ["forge", "test", *verbosity, *skip, *fresh, *forge_args]
             identity = source_identity()
             input_path = run_dir / f"{name}-inputs.json"
             write_json(input_path, identity)

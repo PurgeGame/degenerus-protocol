@@ -165,6 +165,17 @@ class FoundryGroupsDriverTest(unittest.TestCase):
         self.assertTrue(all(row["command"].count("--force") == 1 for row in rows))
         self.assertEqual(len(rows), 2)
 
+    def test_requested_verbosity_does_not_stack_with_default(self):
+        self.sources("gas", 1)
+        for requested in ([], ["-vvv"], ["-v", "-v", "-v"], ["--verbosity"] * 3):
+            with self.subTest(requested=requested):
+                result = self.run_driver("--group", "integration-gas", *requested)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                command = self.rows()[-1]["command"]
+                verbosity = [arg for arg in command if arg == "--verbosity"
+                             or (arg.startswith("-v") and set(arg[1:]) == {"v"})]
+                self.assertEqual(verbosity, requested or ["-vv"])
+
     def test_missing_zero_or_failed_totals_fail_even_when_forge_exits_zero(self):
         self.sources("gas", 1)
         for mode in ("missing", "zero", "failed"):

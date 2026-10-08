@@ -27,16 +27,20 @@ runtimes; the full-budget rerun passes all ten invariants (23 total tests).
 All original warm failures have passing closures. The runner now rebuilds each batch
 as one artifact set. Dependency fingerprints also follow nested library symlinks
 and stop directory cycles; two regression tests failed before that repair and pass
-after it. All 59 assurance unit tests and six partition tests pass. Saved compiler
+after it. All 60 assurance unit tests and six partition tests pass. Saved compiler
 metadata independently matches all 19 compiled forge-std sources to the clean,
 locked library revision in all nine Foundry checkouts.
 
 The first remote run passed production assurance and Slither, but several Foundry
 runners received shutdown signals. Its Aderyn installer selected crates.io 0.1.9,
 which cannot parse Osaka; the next remote run passes with npm release 0.6.8.
-Further Foundry runner interruptions remain unresolved: they recurred with the
-local Foundry release pinned and batches capped at five roots. CI now prints
-memory, process, disk and cgroup information every minute to diagnose termination.
+The resource diagnostics identified additive verbosity: the runner's default `-vv`
+and CI's `-vvv` enabled level-five execution/setup/storage tracing. Forge grew to
+about 15 GB resident memory and 11 GB swap before termination, after compilation
+had stayed below 3 GB. The same five-file batch passes 130 tests locally at default
+verbosity, with a 3.1 GB peak across the run. Explicit verbosity now replaces the
+default, and CI uses the same log level as the local campaign. The regression test
+fails before this fix and passes after it; the repaired hosted run is pending.
 Remote interruption logs are retained; they are not counted as passing test runs.
 
 The audit gas policy follows available-gas admission at deterministic checkpoints.
