@@ -79,9 +79,12 @@ audit findings. Bypassing its authorization, voting or execution rules remains i
 
 Ticket work now uses `MineFlipGas` admission bounds and deterministic checkpoints.
 The former fixed 900-unit ticket budget and 11.5M transaction ceiling are retired.
-The engine admits the next chunk only when its declared cost, including the call,
-return and checkpoint envelope, fits the remaining gas; otherwise it stops at a
-checkpoint instead of running out of gas. Chunks between checkpoints are sized to
-cost at most 10M gas in about 99% of realistic cases, and no chunk may exceed 13M in
-the absolute worst case. Review cold native execution, nested EIP-150 forwarding, and
-full return tails.
+The engine admits the next chunk only when its conservative cold-path bound,
+including the call, return and checkpoint envelope, fits both the remaining worker
+allowance and actual available gas. Otherwise it stops at a safe checkpoint before
+starting that chunk. The 10M figure guides operation sizing; it is not an enforced
+transaction cap, and the former 13M absolute-ceiling wording is not the current
+admission rule. A transaction can perform several admitted operations. Review the
+declared bounds against reachable worst cases, nested EIP-150 forwarding and full
+return tails. A caller choosing too little gas must not change an outcome or cause
+an out-of-gas failure to be accepted as a semantic fallback.

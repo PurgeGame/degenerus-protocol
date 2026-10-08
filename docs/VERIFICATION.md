@@ -165,11 +165,11 @@ commands use raw Hardhat and therefore bypass runner-level pin restoration.
 See [the test usefulness review](TEST_REVIEW.md) for retired checks, repaired
 fixtures and the distinction between model, structural and runtime coverage.
 
-Chunks between checkpoints target at most 10M gas in about 99% of realistic cases,
-with a 13M absolute worst-case ceiling, including the call/return/flush tail, as
-specified in [the audit scope](AUDIT.md). A transaction may execute several admitted
-chunks. Each checkpoint admits the next chunk only when its conservative worst-case
-cost and tail fit both the remaining worker allowance and actual available gas.
+The 10M figure is an operation-sizing guideline, not a transaction ceiling or a
+substitute for a proven cold-path admission bound; see [the audit scope](AUDIT.md).
+A transaction may execute several admitted chunks. Each checkpoint admits the next
+chunk only when its conservative worst-case cost and complete call/return/flush
+tail fit both the remaining worker allowance and actual available gas.
 A protocol path with no internal checkpoint is one indivisible chunk; caller-selected
 batches do not establish a bound for protocol-selected work.
 Fixture gas limits do not establish cold bounds. Gas may only select safe
@@ -232,14 +232,25 @@ npx hardhat compile
 slither . --compile-force-framework hardhat --ignore-compile
 ```
 
+CI pins Aderyn 0.6.8 through its npm distribution. The older crates.io 0.1.9
+release rejects `evm_version = "osaka"` before analyzing any source. Reproduce
+the supported analyzer in a disposable environment:
+
+```sh
+npm install --global @cyfrin/aderyn@0.6.8
+aderyn --version
+aderyn . -o aderyn-report.md
+```
+
 Analyzer output requires independent triage. Reports and test logs are generated
 on demand and are not part of the source handoff.
 
 The fixed 900-unit ticket budget is retired. Current ticket admission uses
 `MineFlipGas` and `MineFlipGasBounds`; every atomic operation and complete accumulated
-return tail needs a cold bound. Chunks between checkpoints target 10M gas or less in
-about 99% of realistic cases, with a 13M absolute worst case (see `docs/AUDIT.md`).
-Historical measurements remain historical evidence.
+return tail needs a conservative cold bound. Admission uses the remaining worker
+allowance and actual available gas, with no fixed transaction ceiling. The 10M
+sizing guideline does not replace these checks (see `docs/AUDIT.md`). Historical
+measurements and fixture gas limits remain scoped evidence, not universal bounds.
 
 ## Daily RNG and foil implementation (2026-10-01)
 

@@ -1,8 +1,16 @@
-# Ticket-drain charge derivation
+# Historical ticket-drain unit model — retired
 
-Backs `UNIT_GAS_BOUND`, `WRITES_BUDGET_SAFE`, `ROUND_UNITS` and `ROUND_SPLIT_UNITS` in
-`contracts/storage/DegenerusGameStorage.sol`. Storage operations are priced by the analytical
-model in that file's comment table; the reveal emitter is bounded separately below.
+This document records the retired fixed-unit implementation. Its constants,
+900-unit budget, transaction envelope and measurements do not describe the current
+engine. Current admission uses `MineFlipGas` and `MineFlipGasBounds`: conservative
+cold operation bounds and complete return tails must fit actual available gas and
+the remaining worker allowance. See [the current audit handoff](../AUDIT.md) and
+[verification instructions](../VERIFICATION.md).
+
+The derivation below backed `UNIT_GAS_BOUND`, `WRITES_BUDGET_SAFE`, `ROUND_UNITS` and
+`ROUND_SPLIT_UNITS` in the former `DegenerusGameStorage.sol`. Those constants have
+been removed. The historical model priced storage operations analytically and
+bounded the reveal emitter separately.
 
 ## Reveal emitter
 
@@ -74,5 +82,6 @@ earlier drain calls. The named 16-day lifecycle enforces at most 1% of keeper
 transactions above 10M and none above 16.7M. This fixture gate is evidence for
 exercised workloads, not a statistical claim about the entire future game.
 
-`test/gas/TicketDrainWorstCaseBound.t.sol` checks this model's arithmetic; it is not an
-independent measurement of the model.
+The original arithmetic checks were not independent runtime measurements. The
+current `test/gas/TicketDrainWorstCaseBound.t.sol` checks cold checkpoint reserves
+and sizing targets for the replacement implementation, not this retired unit model.

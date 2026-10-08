@@ -139,15 +139,16 @@ interrupt it. Foil levels need not be monotonic. Terminal continuation preserves
 an active solo offset and seats when finishing the same old cohort on its old
 word; genuine repoints, completed queues and retired buffers clear progress.
 
-Each indivisible miner operation, including its complete checkpoint tail, targets
-10M gas in about 99% of realistic cases and must stay below the 13M absolute ceiling
-specified in `docs/AUDIT.md`. There is no fixed transaction gas cap: a transaction may
-perform several operations. Available gas may select an earlier safe checkpoint,
+Each indivisible miner operation needs a conservative cold-path bound, including
+its complete call, checkpoint and return tail. Admission requires that bound to fit
+the remaining worker allowance and actual available gas. The 10M operation-sizing
+guideline in `docs/AUDIT.md` is not a fixed transaction cap: a transaction may perform
+several admitted operations. Available gas may select an earlier safe checkpoint,
 with the complete flush reserved; it must not change the final ticket inventory.
 Actual failures still revert atomically, and an OOG failure cannot become an
-allowed terminal or prize-delivery fallback. Miner compensation requires at least
-1M measured execution gas and successful nonterminal progress; entry gas is not
-an eligibility condition.
+allowed terminal or prize-delivery fallback. Miner compensation prices measured
+execution gas above each call's first unpaid 1M and requires successful nonterminal
+progress; entry gas is not an eligibility condition.
 
 ## Century-refill amendment (2026-09-22)
 

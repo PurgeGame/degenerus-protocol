@@ -112,7 +112,7 @@ contract WalletIdentityPhaseATest is DeployProtocol {
     // ----- mintPacked_ codec -----
 
     function test_MintWordFieldsDisjointAndComplete() public pure {
-        uint256[15] memory masks = [
+        uint256[17] memory masks = [
             BitPackingLib.MASK_24 << BitPackingLib.LAST_LEVEL_SHIFT,
             BitPackingLib.MASK_24 << BitPackingLib.LEVEL_COUNT_SHIFT,
             BitPackingLib.MASK_24 << BitPackingLib.LEVEL_STREAK_SHIFT,
@@ -127,14 +127,16 @@ contract WalletIdentityPhaseATest is DeployProtocol {
             BitPackingLib.MASK_24 << BitPackingLib.AFFILIATE_BONUS_LEVEL_SHIFT,
             BitPackingLib.MASK_6 << BitPackingLib.AFFILIATE_BONUS_POINTS_SHIFT,
             BitPackingLib.MASK_5 << BitPackingLib.CURSE_COUNT_SHIFT,
-            BitPackingLib.MASK_16 << BitPackingLib.LEVEL_UNITS_SHIFT
+            BitPackingLib.MASK_16 << BitPackingLib.LEVEL_UNITS_SHIFT,
+            BitPackingLib.MASK_16 << BitPackingLib.SMURF_COUNT_SHIFT,
+            BitPackingLib.MASK_16 << BitPackingLib.SMURF_BASE_SHIFT
         ];
         uint256 union;
         for (uint256 i; i < masks.length; ++i) {
             assertEq(union & masks[i], 0, "fields overlap");
             union |= masks[i];
         }
-        assertEq(union, (uint256(1) << 224) - 1, "32 high bits are free");
+        assertEq(union, type(uint256).max, "mint fields and smurf quota cover all 256 bits");
         assertGe(BitPackingLib.MASK_5, 20, "curse cap fits");
         assertEq(BitPackingLib.MASK_24, type(uint24).max, "day is uint24");
     }

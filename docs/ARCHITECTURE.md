@@ -126,9 +126,11 @@ operator and charge; the table's `CrapsBonusDonated` records the vault as donor.
 `DegenerusGameMinerModule`, which selects the next action from storage
 (`_nextMinerAction`) and runs the advance worker or drains existing read consumers
 before the next daily request can reuse their randomness storage. Workers run by
-delegatecall, preserving the original caller, and each chunk is admitted only while the
-caller's gas covers its declared bound. Standalone advancement is a miner action like any
-other and is paid by measured gas; terminal actions are unpaid. The bounty prices measured
+delegatecall, preserving the original caller. Each chunk is admitted only while both
+the remaining worker allowance and actual available gas cover its cold-path bound
+and complete call, checkpoint and return tail. A call can execute multiple admitted
+chunks; there is no fixed transaction gas ceiling. Standalone advancement is a miner
+action like any other and is paid by measured gas; terminal actions are unpaid. The bounty prices measured
 gas above each call's first 1M at a capped basefee times a multiplier that starts at 0.3x and rises 0.45x per 30 minutes the work waits: 1.2x
 after one hour, 2.1x after two. A caller with a deity pass, or a lazy/whale pass covering
 the current level, earns double. A call that starts while the daily RNG lock is held earns
@@ -480,7 +482,7 @@ for dilution and timing, and `SdgnrsCenturyRecycle` for the accounting tests.
 - Credited ETH/stETH obligations remain covered under the stated external-asset assumptions.
 - Token supply/backing/virtual allowances reconcile without treating them as interchangeable.
 - No double settlement, recipient substitution, duplicate ticket materialization or lost resume state.
-- Entropy-dependent processing has the documented freeze boundaries; caller gas cannot choose work.
+- Entropy-dependent processing has the documented freeze boundaries; caller gas may select a safe checkpoint, never a committed outcome.
 - Pool writes, unchecked arithmetic and advance-chain external calls remain covered by the source manifests.
 
 ### Decimator battle

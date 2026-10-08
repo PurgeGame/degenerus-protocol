@@ -1,9 +1,38 @@
 # Audit readiness — 2026-10-08
 
-## Review subject and status
+## Freeze verification in progress
 
-Base revision: `98cd2a781c1ce328362351ca9a0761e41e50eea1`, plus the working-tree
-changes authenticated by [the snapshot manifest](audit/snapshot.json).
+The current candidate starts at `68c189cd6433d9de31ff42fb1eb4fb1be60c1567`,
+including the BAF main-board sampling and ID-keyed smurf allowance changes. A new
+complete regression, cold-gas, Hardhat and deep-invariant campaign is running in
+isolated checkouts. The results below belong to the earlier campaign and do not
+certify these later changes. No freeze tag has been created for this candidate.
+
+The complete 96-file Hardhat selection has passed (1,651 tests), as have all
+56 Halmos properties, the 24 split-arithmetic checks and the production/layout
+gates. Foundry regression, cold-gas and deep-invariant campaigns remain in progress.
+Two stale test oracles now include the smurf quota lanes and exclude them from
+gameplay eligibility; their combined rerun passes 21 tests. One optional foil
+comparison is skipped because no archived runtime was supplied. Production
+Solidity is unchanged by these verification repairs.
+
+The first remote run passed production assurance and Slither, but several Foundry
+runners received shutdown signals. Its Aderyn installer selected crates.io 0.1.9,
+which cannot parse Osaka; CI now pins the locally verified npm release 0.6.8.
+Remote interruption logs are retained; they are not counted as passing test runs.
+
+The audit gas policy follows available-gas admission at deterministic checkpoints.
+The 10M figure guides operation sizing; it is not a fixed transaction cap. Each
+declared cold-path bound and complete call/return/flush tail must fit the worker's
+remaining allowance and actual available gas. The old 13M absolute-ceiling wording
+has been removed from the active handoff and verification instructions. Gas can
+choose a safe continuation checkpoint, never a committed outcome or fallback.
+
+## Earlier campaign: review subject and status
+
+Base revision: `98cd2a781c1ce328362351ca9a0761e41e50eea1`, plus the verification
+repairs recorded in that campaign's local input manifests. The current snapshot
+manifest has since advanced and must not be used to identify this earlier run.
 Priorities are RNG commitment integrity, continued progress without an
 attacker-induced permanent revert, and protection of ETH/stETH and account data.
 
@@ -33,8 +62,9 @@ The source review and focused adversarial reviews found no confirmed ordinary-pl
 exploit that rerolls a committed result, permanently bricks `mineFlip`, steals
 backing, or obtains another account's authority. This is a bounded review conclusion,
 not a proof of absence. The additional broad campaigns below test that conclusion
-against the repository's complete configured selections. The focused RNG/mineFlip
-review is recorded in [the detailed report](audit/rng-mineflip-2026-10-07/REVIEW.md).
+against the repository's complete configured selections. The detailed RNG/mineFlip
+review remains local at `docs/audit/rng-mineflip-2026-10-07/REVIEW.md`; this public
+handoff summarizes its conclusions and executable coverage below.
 
 | Property | Protection reviewed | Relevant executable coverage |
 | --- | --- | --- |
@@ -87,9 +117,9 @@ production Solidity behavior has been changed by this readiness pass.
 | Build cache could regard fixture-pinned default artifacts as current | Use separate production artifacts and cache in the documented build and CI. Keep the strict metadata/source check; it rejected the stale local artifact before the fresh production build passed. |
 | CI only checked shallow storage goldens | Also compare full recursive compiler layouts for all 16 Game modules and the CrapsBattle/JackpotBattle pair. |
 | Serial CI campaigns placed unrelated properties behind one timeout | Run the seven Foundry groups separately and dynamically enumerate every deep invariant root. Split the three expensive Craps suites by named property, with a complementary job retaining every other or inherited test. Preserve budgets and require both production gates and every ordinary test group through the original aggregate check name. Local validation covers all seven groups and an exhaustive 41-job deep partition over 24 roots, with six partition unit tests. Remote CI is not yet evidenced. |
-| Audit documentation disagreed on gas criteria and omitted delayed RNG retry authority | Align with the existing 10M typical/13M absolute atomic-work policy and document the 20-hour owner retry and its trust limitation. Production gas reserves and existing warm regression bounds are retained. |
+| Audit documentation omitted delayed RNG retry authority | Document the 20-hour owner retry and its trust limitation. The subsequent freeze pass also reconciles gas wording with available-gas admission; production reserves and fixture bounds are retained. |
 
-## Evidence
+## Earlier campaign evidence
 
 Local logs, source identities, exact commands and tool versions are generated under
 `.audit-test-logs/readiness-2026-10-08/`. Runners use isolated checkouts, authenticate
@@ -97,7 +127,7 @@ the compiled inputs, retain failed batches and restore address pins. Repeat the
 commands in [VERIFICATION.md](VERIFICATION.md); generated local logs are not shipped
 as a substitute for reproducible tests.
 
-| Check | Current result |
+| Check | Earlier campaign result |
 | --- | --- |
 | Assurance-tool unit tests | 67 passed: 57 runner/snapshot tests, six deep-partition tests and four split-proof gate failure-mode tests. |
 | Ten source-drift gates plus interface coverage | Passed. |

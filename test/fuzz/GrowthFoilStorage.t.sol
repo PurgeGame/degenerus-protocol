@@ -6,7 +6,7 @@ import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 
 contract GrowthFoilStorageTest is GrowthFoilFixture {
     /// @dev The ineligible gate reuses a mint word; compare all combinations of
-    /// activity/loyalty, curses-only, deity fallback, and afking against its policy.
+    /// activity/loyalty, curses-only, quota-only, deity fallback, and afking against its policy.
     function testFuzz_MarketGatePolicy(uint256 mintData, uint24 rawLevel, bool afking, bool deity) public {
         uint24 lvl = uint24(bound(rawLevel, 0, type(uint24).max - 1));
         mintData = deity ? mintData | (uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT)
@@ -20,7 +20,9 @@ contract GrowthFoilStorageTest is GrowthFoilFixture {
         (bool mayBet, bool earnsReward, uint32 gateId) = quests.marketBetGates(game.walletIdOf(PLAYER), lvl);
         assertEq(earnsReward, expectedReward);
         assertEq(gateId, pid, "the gate preserves the selected wallet ID");
-        assertEq(mayBet, expectedReward || (mintData & ~(uint256(31) << BitPackingLib.CURSE_COUNT_SHIFT)) != 0);
+        uint256 gameplayFields = mintData & ((uint256(1) << BitPackingLib.SMURF_COUNT_SHIFT) - 1)
+            & ~(uint256(31) << BitPackingLib.CURSE_COUNT_SHIFT);
+        assertEq(mayBet, expectedReward || gameplayFields != 0);
     }
 
     function test_FoilZeroSpendStillSyncsAndFloors() public {
