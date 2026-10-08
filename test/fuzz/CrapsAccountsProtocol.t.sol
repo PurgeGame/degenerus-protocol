@@ -52,6 +52,7 @@ contract CrapsAccountsProtocolTest is DeployProtocol {
         for (uint256 i; i < 4; ++i) {
             _mint([owner, wallet, operator, stranger][i], 10_000_000);
         }
+        _grantSmurfBase(owner, 1);
         (smurfId, smurf) = _createSmurf(owner);
         vm.prank(wallet);
         game.setOperatorApproval(0, operator, true);

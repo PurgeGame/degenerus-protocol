@@ -59,6 +59,14 @@ contract IdReviewSeller {
         uint256 price = game.mintPrice();
         game.purchase{value: price}(0, 400, 0, 0, MintPaymentKind.DirectEth, false);
         replacement = game.walletIdOf(address(this));
+        (bool created, bytes memory reason) = address(game).call{value: price}(
+            abi.encodeCall(game.createSmurf, (bytes32(0), MintPaymentKind.DirectEth))
+        );
+        require(!created && bytes4(reason) == bytes4(keccak256("SmurfCreationLimitReached()")),
+            "replacement inherited sold quota");
+        // Earn fresh capacity through a real pass purchase; keep the allocation inside
+        // the callback to exercise authorization while the original sale is in flight.
+        game.purchaseDeityPass{value: 24 ether}(0, 3, 0);
         replacementChild = game.createSmurf{value: price}(0, MintPaymentKind.DirectEth);
     }
 }
@@ -84,6 +92,7 @@ contract IdAuthorizationReviewTest is DeployProtocol {
         assertTrue(game.rngComplete());
         owner = address(new IdReviewSeller());
         root = _giveWalletId(owner);
+        _grantSmurfBase(owner, 1);
         vm.deal(owner, 100 ether);
         uint256 price = game.mintPrice();
         vm.prank(owner);

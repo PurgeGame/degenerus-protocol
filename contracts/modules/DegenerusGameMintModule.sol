@@ -34,7 +34,7 @@ import {
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
-import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
+import {DegenerusGameMintStreakUtils, IDegenerusVaultOwner} from "./DegenerusGameMintStreakUtils.sol";
 import {DegenerusGamePayoutUtils} from "./DegenerusGamePayoutUtils.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
@@ -81,7 +81,8 @@ import {LiquidationQuote, ILiquidationDeity} from "../interfaces/ILiquidation.so
  * Bits 197-202: affBonusPoints     - Cached affiliate bonus points (0-50)
  * Bits 203-207: curseCount         - Cashout/smite curse counter (0-20)
  * Bits 208-223: levelUnits         - Units minted this level
- * Bits 224-255: walletId           - Permanent wallet ID (registration only)
+ * Bits 224-239: smurf count       - Lifetime creations by this main ID
+ * Bits 240-255: smurf base        - Admin-granted additional capacity
  * ```
  *
  * Note: Quest Streak is tracked in DegenerusQuests.questPlayerState.
@@ -355,10 +356,10 @@ contract DegenerusGameMintModule is
         );
     }
 
-    /// @notice Create a smurf account owned by the caller, give it the caller's referrer and buy
+    /// @notice Create a smurf account owned and referred by the caller and buy
     ///         it one whole ticket paid by the caller (body of Game.createSmurf).
     /// @dev The caller must have an ordinary wallet ID. Resolve its referral, allocate the
-    ///      subaccount with only its owner ID and smurf flag, copy the referral, then buy its
+    ///      subaccount with only its owner ID and smurf flag, refer it through the owner, then buy its
     ///      ticket. Admission uses the ticket quote. Payment uses the owner's fresh ETH,
     ///      claimable and AFKing balances according to payKind; overpay credits the owner.
     ///      Ticket history and quest progress belong to the new account.
@@ -372,6 +373,17 @@ contract DegenerusGameMintModule is
     {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         uint32 ownerId = _requireWalletId(msg.sender);
+        uint256 mintWord = _smurfMain(ownerId);
+        if (address(uint160(_walletElement(ownerId))) != msg.sender) revert E();
+        uint256 score = _playerActivityScore(ownerId, _effectiveQuestStreak(ownerId));
+        uint16 created = uint16(mintWord >> BitPackingLib.SMURF_COUNT_SHIFT);
+        if (created == type(uint16).max || created >= uint256(uint16(mintWord >> BitPackingLib.SMURF_BASE_SHIFT)) + score / SMURF_SCORE_PER_CREATION) {
+            revert SmurfCreationLimitReached();
+        }
+        // Reserve this ID's lifetime slot before stateful external calls; failures undo it.
+        mintPacked_[ownerId] = BitPackingLib.setPacked(
+            mintWord, BitPackingLib.SMURF_COUNT_SHIFT, BitPackingLib.MASK_16, uint256(created) + 1
+        );
         affiliate.payAffiliate(0, affiliateCode, ownerId, level + 1, true, 0);
         uint256 ticketCost = PriceLookupLib.priceForLevel(_activeTicketLevel());
 
@@ -383,7 +395,7 @@ contract DegenerusGameMintModule is
         mintPacked_[smurfId] = uint256(1) << BitPackingLib.SMURF_FLAG_SHIFT;
         emit SmurfCreated(ownerId, smurfId);
 
-        affiliate.copyReferral(ownerId, smurfId);
+        affiliate.referSmurf(ownerId, smurfId);
 
         uint256 fresh = payKind == MintPaymentKind.Claimable
             ? 0
@@ -398,6 +410,27 @@ contract DegenerusGameMintModule is
             )
         );
         if (!ok) _revertDelegate(data);
+    }
+
+    /// @dev Only an allocated ordinary main can create children or receive grants.
+    ///      Acquired roots and smurfs have a nonzero parent and cannot qualify.
+    function _smurfMain(uint32 id) private view returns (uint256 mintWord) {
+        _requireAllocated(id);
+        uint256 element = _walletElement(id);
+        mintWord = mintPacked_[id];
+        if (uint160(element) == 0 || uint32(element >> 160) != 0
+            || (mintWord >> BitPackingLib.SMURF_FLAG_SHIFT) & 1 != 0) revert E();
+    }
+
+    /// @notice Permanently raise this main ID's base allowance; never resets its lifetime count.
+    function raiseSmurfBaseAllowance(uint32 mainId, uint16 newBase) external {
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
+        if (!IDegenerusVaultOwner(ContractAddresses.VAULT).isVaultOwner(msg.sender)) revert OnlyVault();
+        uint256 mintWord = _smurfMain(mainId);
+        uint16 previous = uint16(mintWord >> BitPackingLib.SMURF_BASE_SHIFT);
+        if (newBase <= previous) revert InvalidSmurfBaseIncrease();
+        mintPacked_[mainId] = BitPackingLib.setPacked(mintWord, BitPackingLib.SMURF_BASE_SHIFT, BitPackingLib.MASK_16, newBase);
+        emit SmurfBaseAllowanceRaised(mainId, previous, newBase);
     }
 
     /// @notice Redeem FLIP for current-jackpot tickets — allowed only inside the jackpot window.

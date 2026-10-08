@@ -765,6 +765,7 @@ contract SeatCapInvariant is DeployProtocol {
         // Wallets 0..4 start registered, each holding its pass's free seat; wallets 0 and 1
         // own a smurf. Wallets 5..9 start unregistered.
         for (uint256 i; i < 5; ++i) handler.passPurchase(i);
+        for (uint256 i; i < 5; ++i) _grantSmurfBase(handler.wallets(i), 8);
         handler.createSmurf(0);
         handler.createSmurf(1);
         require(handler.smurfIds(1) != 0, "fixture: two smurfs");

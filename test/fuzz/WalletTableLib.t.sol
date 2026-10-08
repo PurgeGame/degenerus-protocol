@@ -82,6 +82,7 @@ contract WalletTableLibGameTest is DeployProtocol {
     function test_SmurfOwnerResolutionIgnoresHalfPassBalances() public {
         address who = makeAddr("tableBits");
         uint32 ownerId = _giveWalletId(who);
+        _grantSmurfBase(who, 1);
         uint256 price = game.mintPrice();
         vm.deal(who, price);
         vm.prank(who);

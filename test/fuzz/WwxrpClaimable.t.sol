@@ -51,6 +51,7 @@ contract WwxrpClaimableTest is DeployProtocol {
     }
 
     function test_SmurfAndOwnerBalancesStaySeparateOperatorCannotRedirectWithdrawal() public {
+        _grantSmurfBase(alice, 1);
         (,,,, uint256 price) = game.purchaseInfo();
         vm.deal(alice, price);
         vm.prank(alice);

@@ -11,8 +11,7 @@ import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 /// @notice Proves the creation contract of plan F / decision G7 and hazard H-F2:
 ///         - only a caller holding a wallet ID creates a smurf;
 ///         - the owner's referral resolves and locks first (a default-code owner registers
-///           before the smurf ID is taken), then the smurf copies it verbatim, so its referrer is
-///           the owner's referrer and never the owner;
+///           before the smurf ID is taken), then the smurf refers directly through its main;
 ///         - the smurf's table element is `ownerId << 160`, its mint word carries the smurf flag
 ///           (bit 147), and `SmurfCreated(ownerId, smurfId)` records creation;
 ///         - the one whole ticket, its mint history and its quest progress belong to the smurf, while
@@ -60,6 +59,8 @@ contract SmurfCreation is DeployProtocol {
         vm.deal(control, 100 ether);
         vm.deal(stranger, 100 ether);
         price = game.mintPrice();
+        _giveWalletId(owner);
+        _grantSmurfBase(owner, 2);
     }
 
     // ---------------------------------------------------------------------
@@ -199,7 +200,7 @@ contract SmurfCreation is DeployProtocol {
         uint256 word = _mintWord(expectedKey);
         assertEq(word & CREATION_MASK, (uint256(1) << BitPackingLib.SMURF_FLAG_SHIFT),
             "mint word carries the smurf flag outside the purchase's history lanes");
-        assertEq(_mintWord(owner), ownerWordBefore, "owner's mint word untouched");
+        assertEq(_mintWord(owner), ownerWordBefore + (uint256(1) << 224), "only the main lifetime count changes");
         assertEq((_mintWord(owner) >> BitPackingLib.SMURF_FLAG_SHIFT) & 1, 0, "owner carries no smurf flag");
 
         (uint32[] memory regIds, address[] memory regKeys, uint256[] memory regAt, uint256 smurfAt,
@@ -241,7 +242,7 @@ contract SmurfCreation is DeployProtocol {
         assertEq(_mintWord(key) & HISTORY_MASK, _mintWord(control) & HISTORY_MASK,
             "smurf mint history = an ordinary one-ticket buyer's");
         assertGt(_mintWord(key) & HISTORY_MASK, 0, "history recorded on the smurf");
-        assertEq(_mintWord(owner), ownerWordBefore, "owner's mint history untouched");
+        assertEq(_mintWord(owner), ownerWordBefore + (uint256(1) << 224), "mint history unchanged; creation count increments");
         assertEq(_fixtureEntries(1, owner), ownerOwedBefore, "owner's queue untouched");
     }
 
@@ -353,61 +354,42 @@ contract SmurfCreation is DeployProtocol {
     // Referral
     // ---------------------------------------------------------------------
 
-    /// @notice An owner with a referrer gives the smurf that referrer (never the owner), whatever
-    ///         code the creation passes; the smurf's buy routes affiliate score to it.
-    function test_Referral_OwnerWithReferrer_SmurfCopies() public {
+    function test_Referral_OwnerWithReferrer_SmurfUsesMain() public {
         uint32 refId = _referrerCode(bytes32("SMURF_REF_ONE"));
         _buyTicket(owner, bytes32("SMURF_REF_ONE"));
         uint32 ownerId = game.walletIdOf(owner);
-        address other = makeAddr("smurf_other_referrer");
-        vm.prank(other);
-        affiliate.createAffiliateCode(bytes32("SMURF_REF_TWO"), 0);
-        uint256 scoreBefore = affiliate.affiliateScore(1, refId);
-
-        (, uint32 key) = _createSmurf(owner, bytes32("SMURF_REF_TWO"), MintPaymentKind.DirectEth, price);
-
-        assertEq(affiliate.getReferrerIdById(_fixtureId(owner)), refId, "owner's referral unchanged");
-        assertEq(affiliate.getReferrerIdById(_fixtureId(key)), refId, "smurf's referrer = owner's referrer");
-        assertTrue(affiliate.getReferrerIdById(_fixtureId(key)) != ownerId, "never the owner");
-        (uint32 a0, uint32 u10, uint32 u20) = affiliate.referrerIdsById(_fixtureId(owner));
-        (uint32 a1, uint32 u11, uint32 u21) = affiliate.referrerIdsById(_fixtureId(key));
-        assertEq(a1, a0);
-        assertEq(u11, u10);
-        assertEq(u21, u20);
-        assertEq(_refWord(key), _refWord(owner), "the word is copied verbatim");
-        assertGt(affiliate.affiliateScore(1, refId), scoreBefore, "the smurf's ticket routes to the copied referrer");
+        uint256 scoreBefore = affiliate.affiliateScore(1, ownerId);
+        (, uint32 child) = _createSmurf(owner, bytes32("IGNORED"), MintPaymentKind.DirectEth, price);
+        assertEq(affiliate.getReferrerIdById(ownerId), refId);
+        (uint32 a, uint32 u1, uint32 u2) = affiliate.referrerIdsById(child);
+        assertEq(a, ownerId);
+        assertEq(u1, refId);
+        assertEq(u2, affiliate.getReferrerIdById(refId));
+        assertEq(_refWord(child), bytes32((uint256(1) << 32) | ownerId));
+        assertGt(affiliate.affiliateScore(1, ownerId), scoreBefore, "first ticket credits main's score");
     }
 
-    /// @notice Unset owner with a valid code: the owner's referral is set from it, the smurf copies.
-    function test_Referral_UnsetOwner_ValidCode_SetsOwnerThenCopies() public {
+    function test_Referral_UnsetOwner_ValidCode_SetsOwnerThenRefersChild() public {
         uint32 refId = _referrerCode(bytes32("SMURF_REF_ONE"));
-        _giveWalletId(owner);
-        assertEq(_refWord(owner), bytes32(0), "fixture: owner unreferred");
-        (, uint32 key) = _createSmurf(owner, bytes32("SMURF_REF_ONE"), MintPaymentKind.DirectEth, price);
-        assertEq(affiliate.getReferrerIdById(_fixtureId(owner)), refId, "owner referred by the code");
-        assertEq(affiliate.getReferrerIdById(_fixtureId(key)), refId, "smurf copies");
-        assertEq(_refWord(key), _refWord(owner));
+        assertEq(_refWord(owner), bytes32(0));
+        (, uint32 child) = _createSmurf(owner, bytes32("SMURF_REF_ONE"), MintPaymentKind.DirectEth, price);
+        assertEq(affiliate.getReferrerIdById(game.walletIdOf(owner)), refId);
+        assertEq(affiliate.getReferrerIdById(child), game.walletIdOf(owner));
         assertEq(_refWord(owner), bytes32("SMURF_REF_ONE"));
     }
 
-    /// @notice Unset owner with a blank code: both lock to no referrer.
-    function test_Referral_UnsetOwner_BlankCode_LocksBoth() public {
-        _giveWalletId(owner);
-        (, uint32 key) = _createSmurf(owner, bytes32(0), MintPaymentKind.DirectEth, price);
-        assertEq(_refWord(owner), REF_LOCKED, "owner locked");
-        assertEq(_refWord(key), REF_LOCKED, "smurf locked");
-        assertEq(affiliate.getReferrerIdById(_fixtureId(owner)), VAULT_ID, "no referrer reads as the VAULT");
-        assertEq(affiliate.getReferrerIdById(_fixtureId(key)), VAULT_ID);
+    function test_Referral_BlankOwner_ChildStillRefersMain() public {
+        (, uint32 child) = _createSmurf(owner, bytes32(0), MintPaymentKind.DirectEth, price);
+        assertEq(_refWord(owner), REF_LOCKED);
+        assertEq(affiliate.getReferrerIdById(child), game.walletIdOf(owner));
+        assertEq(affiliate.getReferrerIdById(game.walletIdOf(owner)), VAULT_ID);
     }
 
-    /// @notice Unset owner passing its own default code: a self-referral locks the owner, so the
-    ///         smurf is locked too and can never name its owner.
-    function test_Referral_UnsetOwner_OwnDefaultCode_LocksBothNeverOwner() public {
-        uint32 ownerId = _giveWalletId(owner);
-        (, uint32 key) = _createSmurf(owner, bytes32(uint256(uint160(owner))), MintPaymentKind.DirectEth, price);
+    function test_Referral_MainSelfReferralRejected_ChildRefersMain() public {
+        uint32 ownerId = game.walletIdOf(owner);
+        (, uint32 child) = _createSmurf(owner, bytes32(uint256(uint160(owner))), MintPaymentKind.DirectEth, price);
         assertEq(_refWord(owner), REF_LOCKED);
-        assertEq(_refWord(key), REF_LOCKED);
-        assertTrue(affiliate.getReferrerIdById(_fixtureId(key)) != ownerId, "never the owner");
+        assertEq(affiliate.getReferrerIdById(child), ownerId);
     }
 
     /// @notice H-F2: an unregistered default code registers its owner BEFORE the smurf ID is taken:
@@ -429,7 +411,7 @@ contract SmurfCreation is DeployProtocol {
         uint32 key = smurfId;
         assertEq(_element(smurfId), uint256(ownerId) << 160, "key derives from the later ID");
         assertEq(affiliate.getReferrerIdById(_fixtureId(owner)), len, "owner referred by the code owner");
-        assertEq(affiliate.getReferrerIdById(_fixtureId(key)), len, "smurf copies");
+        assertEq(affiliate.getReferrerIdById(_fixtureId(key)), ownerId, "smurf refers main");
 
         (uint32[] memory regIds, address[] memory regKeys, uint256[] memory regAt, uint256 smurfAt,
          uint32 loggedOwner, uint32 loggedSmurf, uint256 smurfCount) = _identityLogs(logs);

@@ -265,6 +265,7 @@ interface IDegenerusGameWhaleModule {
 /// @title IDegenerusGameMintModule
 /// @notice Interface for minting operations and purchase processing
 interface IDegenerusGameMintModule {
+    function raiseSmurfBaseAllowance(uint32 mainId, uint16 newBase) external;
     function liquidateAccount(uint32 id, uint256 minEthOut) external;
     function previewLiquidateAccount(uint32 id) external returns (LiquidationQuote memory);
     function harvestAcquiredAccounts(uint32 buyer, uint32[] calldata ids) external returns (uint256);
@@ -273,9 +274,10 @@ interface IDegenerusGameMintModule {
 
     /// @notice Body of Game.createSmurf (raw msg.data target, identical selector; see
     ///         IDegenerusGame for the full contract). Owner = msg.sender (must hold an ID).
-    /// @dev Resolves and locks the owner's referral from `affiliateCode` as a purchase does,
+    /// @dev Requires an ordinary main and unused base-plus-score lifetime allowance.
+    ///      Resolves and locks the owner's referral from `affiliateCode` as a purchase does,
     ///      appends the subaccount owner ID, sets its mint-word flag and emits `SmurfCreated`.
-    ///      Calls Affiliate `copyReferral(ownerId, smurfId)`, then buys one whole ticket
+    ///      Calls Affiliate `referSmurf(ownerId, smurfId)`, then buys one whole ticket
     ///      for the subaccount paid by the owner (payer ID threaded
     ///      through the payment path; fresh-ETH overpay to the owner's AFKing balance).
     /// @param affiliateCode Referral code applied to the owner if its referral is unset.

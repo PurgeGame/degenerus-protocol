@@ -47,6 +47,7 @@ contract WalletIdTruthInvariant is DeployProtocol {
             if (i < 4) {
                 vm.prank(a);
                 game.purchaseWhalePass{value: 2.4 ether}(0, 1, bytes32(0));
+                _grantSmurfBase(a, 8);
             }
         }
         _driveDay(1);
@@ -359,27 +360,29 @@ contract WalletIdTruthInvariant is DeployProtocol {
 
     /// @notice Creation with a blank code (owner already locked), an unregistered default code
     ///         (its owner registers before the smurf's ID) and a registered default code: each
-    ///         smurf copies its owner's referral word, and the oracle holds.
-    function test_smurfCreationCopiesTheOwnersReferral() public {
+    ///         smurf refers directly to its main ID, and the oracle holds.
+    function test_smurfCreationRefersToTheMain() public {
         (, uint32 ka) = _smurf(seeded[0]);
-        assertEq(_referralWord(ka), _referralWord(seeded[0]), "blank code: the owner's word");
+        assertEq(_referralWord(ka), (uint256(1) << 32) | game.walletIdOf(seeded[0]), "blank code: main ID");
 
         address ownerB = seeded[4];
         address codeOwner = address(0xC0DE0001);
         _giveWalletId(ownerB);
         _giveWalletId(seeded[5]);
+        _grantSmurfBase(ownerB, 1);
+        _grantSmurfBase(seeded[5], 1);
         handler.ingest();
         (bool okB, uint32 b) = handler.createSmurfFor(ownerB, bytes32(uint256(uint160(codeOwner))), DIRECT_ETH);
         assertTrue(okB, "createSmurf with an unregistered default code");
         assertEq(game.walletIdOf(codeOwner), b - 1, "the code's owner registers just before the smurf");
         uint32 kb = b;
         assertEq(uint32(_referralWord(ownerB)), game.walletIdOf(codeOwner), "owner referred by the code");
-        assertEq(_referralWord(kb), _referralWord(ownerB), "unregistered code: the owner's word");
+        assertEq(_referralWord(kb), (uint256(1) << 32) | game.walletIdOf(ownerB), "unregistered code: main ID");
 
         (bool okC, uint32 c) = handler.createSmurfFor(seeded[5], bytes32(uint256(uint160(seeded[1]))), DIRECT_ETH);
         assertTrue(okC, "createSmurf with a registered default code");
         uint32 kc = c;
-        assertEq(uint32(_referralWord(kc)), game.walletIdOf(seeded[1]), "the smurf's referrer is the owner's referrer");
+        assertEq(uint32(_referralWord(kc)), game.walletIdOf(seeded[5]), "the smurf refers to its main");
         assertEq(handler.smurfCount(), 3, "three SmurfCreated");
         handler.checkAll();
     }
@@ -423,7 +426,7 @@ contract WalletIdTruthInvariant is DeployProtocol {
             console.log(handler.actionName(action), handler.calls(action), handler.oks(action));
         }
         console.log("authorized ok for the smurf", handler.acctSmurfOks());
-        assertEq(_referralWord(key), _referralWord(owner), "referral word copied");
+        assertEq(_referralWord(key), (uint256(1) << 32) | ownerId, "child refers to its main ID");
         handler.checkAll();
     }
 
@@ -473,6 +476,19 @@ contract WalletIdTruthInvariant is DeployProtocol {
         vm.clearMockedCalls();
         assertEq(handler.authViolations(), 1, "fixture: the stranger's auto-rebuy went through");
         _expectBreach("AUTH");
+    }
+
+    function test_oracleDetectsAResetSmurfCount() public {
+        _smurf(seeded[0]);
+        bytes32 slot = GameSlotKeys.mintPacked(game.walletIdOf(seeded[0]));
+        vm.store(address(game), slot, bytes32(uint256(vm.load(address(game), slot)) & ~(uint256(0xffff) << 224)));
+        _expectBreach("SMURFQUOTA");
+    }
+
+    function test_oracleDetectsAnUnloggedSmurfGrant() public {
+        bytes32 slot = GameSlotKeys.mintPacked(game.walletIdOf(seeded[0]));
+        vm.store(address(game), slot, bytes32(uint256(vm.load(address(game), slot)) ^ (uint256(1) << 240)));
+        _expectBreach("SMURFQUOTA");
     }
 
     function test_oracleDetectsADivergentSmurfReferral() public {

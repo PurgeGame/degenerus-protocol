@@ -62,6 +62,7 @@ contract SmurfPayoutsTest is SmurfFixture {
     function setUp() public {
         _setUpSmurfFixture();
         (owner, ownerId) = _wallet("smurf_owner");
+        _grantSmurfBase(owner, 1);
         smurfId = _createSmurf(owner);
         (plain, plainId) = _wallet("plain_wallet");
         operator = makeAddr("operator");

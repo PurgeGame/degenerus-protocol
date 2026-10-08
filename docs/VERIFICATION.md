@@ -8,6 +8,63 @@ local output directories or CI artifacts.
 The dated implementation sections below are historical, scoped evidence; their
 pass counts do not certify later revisions.
 
+### ID-keyed smurf allowance (2026-10-08)
+
+The smurf feature follows baseline commit `1dcc578d0`. Quota belongs to the main
+ID: bits 224–239 of its existing mint word count lifetime creations, and bits
+240–255 hold the base allowance. Capacity is `min(65535, base + currentScore / 120)`.
+The vault owner calls `Game.raiseSmurfBaseAllowance(uint32,uint16)` directly;
+MintModule checks `isVaultOwner`, and Admin has no forwarding function. Children
+refer directly to their main ID. Acquired accounts cannot create children or
+receive grants, and replacement IDs do not inherit sold IDs' quota.
+
+The precommit review found and fixed a packed-field regression in
+`DegenerusQuests.marketBetGates`: a quota-only mint word could satisfy the existing
+participation gate. The gate now ignores both quota lanes and the curse counter.
+Two new regressions failed before the fix, then passed afterward; they cover real
+grants, child creation, the child's own eligibility, main purchases, and arbitrary
+quota/curse combinations. Older smurf fixtures now request explicit capacity. The
+sale-callback regression first proves a replacement ID cannot reuse sold quota,
+then earns fresh capacity through a real deity-pass purchase before creating a
+child inside the callback.
+
+Final selected verification passes:
+
+- Foundry: **650 tests, 55 suites, 46 selected roots**, zero failures or
+  skips, using fuzz seed `0xbadc0de`. Coverage includes smurf creation and referrals,
+  packed-field preservation, liquidation and callback authorization, account doors,
+  payouts, deity groups, lens/identity views, seats and identity gas fixtures, plus
+  activity score/cache, quests, markets, affiliate and pass regressions. WalletIdTruth
+  passes **256 × 128** invariant calls; SeatCap passes **64 × 64**. Quota ghosts
+  derive counts and grants from events and detect corrupted count/base fields.
+- Hardhat: **178 tests across five files**, zero failures or pending tests:
+  `SmurfAllowance`, `DegenerusAdmin`, `AccessControl`, `DegenerusAffiliate` and
+  `AffiliateHardening`. The grant test exercises bases 300 and 65,535 and a real
+  DGVE transfer, proving authority follows the vault owner.
+- Source guards pass for delegatecalls, raw selectors, RNG windows, pool writes,
+  array deletes, advance calls, RNG taint, unchecked arithmetic, write ownership
+  and gas reads. Fresh production artifacts match **33 storage goldens** and
+  **303 methods across 27 interfaces**; all **16 Game modules** share the complete
+  recursive Game layout, and JackpotBattle matches CrapsBattle.
+- Fresh normal-pin production bytecode passes the deployment size gate with
+  source hashes verified against the final checkout. Game is **24,454 bytes**
+  (122 spare), MintModule **22,509 bytes**, Affiliate **9,830 bytes**, and Quests
+  **21,749 bytes**. The identity gas fixture measures first-child creation at
+  **389,915 gas** and subsequent creation at **352,417 gas** (fixture-specific).
+
+Foundry evidence is under local run
+`.audit-test-logs/smurf-precommit-final/20261008T153815.408009Z-d2759939/`; Hardhat
+evidence is under
+`.audit-test-logs/smurf-precommit-hardhat/20261008T154020.316706Z-51985005/`.
+The two pre-fix failures are retained under
+`.audit-test-logs/smurf-market-before/20261008T153427.202527Z-90ec946b/`, and build
+and structural evidence is under `.audit-test-logs/smurf-precommit-checks/`.
+The runners retain selected files, commands and source/compiler inputs, and report
+no source drift. Hardhat and the normal-pin production build used an isolated
+copy with matching production sources to avoid concurrent fixture pin changes.
+Generated evidence remains local. These selected results do not represent a new
+full-repository audit or certify the older readiness campaign against this feature.
+
 ### Pre-smurf checkpoint (2026-10-08)
 
 This checkpoint combines the readiness changes with BAF sampling of the main

@@ -50,6 +50,7 @@ contract CoinflipAccountsTest is DeployProtocol {
         _deployProtocol();
         owner = makeAddr("cfa_owner");
         ownerId = _giveWalletId(owner);
+        _grantSmurfBase(owner, 1);
         (smurfId,) = _createSmurf(owner);
         stranger = makeAddr("cfa_stranger");
         operator = makeAddr("cfa_operator");

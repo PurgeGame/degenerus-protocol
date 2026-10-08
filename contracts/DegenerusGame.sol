@@ -565,7 +565,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
         return _account(id, caller);
     }
 
-    /// @notice Create a smurf account owned by the caller, give it the caller's referrer and
+    /// @notice Create a smurf account owned and referred by the caller and
     ///         buy it one ticket, all in one call.
     /// @dev Body in the mint module; the signature matches the module function exactly, so the
     ///      calldata and msg.value forward as-is.
@@ -575,6 +575,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
         if (!ok) _revertDelegate(data);
         // The trusted Mint module returns the identical one-word ABI result.
         assembly ("memory-safe") { return(add(data, 32), mload(data)) }
+    }
+
+    /// @notice Vault-owner-only permanent increase to an ordinary main ID's base smurf allowance.
+    function raiseSmurfBaseAllowance(uint32, uint16) external {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(msg.data);
+        if (!ok) _revertDelegate(data);
     }
 
     /*+======================================================================+

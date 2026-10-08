@@ -32,6 +32,8 @@ contract AccountIdentityGasTest is DeployProtocol {
         _giveWalletId(owner);
         plainId = _giveWalletId(plain);
         _giveWalletId(freshOwner);
+        _grantSmurfBase(owner, 2);
+        _grantSmurfBase(freshOwner, 1);
         price = game.mintPrice();
         vm.prank(owner);
         smurfId = game.createSmurf{value: price}(0, MintPaymentKind.DirectEth);

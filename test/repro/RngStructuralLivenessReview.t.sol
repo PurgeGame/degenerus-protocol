@@ -30,6 +30,7 @@ contract RngStructuralLivenessReviewTest is DeployProtocol {
         _idle();
         owner = address(new RngReviewRejectEther());
         root = _giveWalletId(owner);
+        _grantSmurfBase(owner, 1);
         vm.deal(owner, 100 ether);
         uint256 price = game.mintPrice();
         vm.prank(owner);
@@ -138,6 +139,7 @@ contract RngStructuralLivenessReviewTest is DeployProtocol {
         address seller = makeAddr("rng-review-seller");
         vm.deal(seller, 100 ether);
         uint32 sellerRoot = _giveWalletId(seller);
+        _grantSmurfBase(seller, 1);
         uint256 price = game.mintPrice();
         vm.prank(seller);
         uint32 sellerChild = game.createSmurf{value: price}(0, MintPaymentKind.DirectEth);

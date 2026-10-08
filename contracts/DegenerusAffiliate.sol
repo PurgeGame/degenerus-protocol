@@ -50,7 +50,7 @@ import {PriceLookupLib} from "./libraries/PriceLookupLib.sol";
  *        the uint32 Game wallet ID. Referral words are keyed by the player ID. VAULT and SDGNRS are the constant IDs 1 and 2.
  *
  * @dev SECURITY:
- *      - Access control: payAffiliate / payAffiliateCombined / copyReferral (game only); claim (permissionless settlement)
+ *      - Access control: payAffiliate / payAffiliateCombined / referSmurf (game only); claim (permissionless settlement)
  *      - Referral locking: invalid codes lock slot (REF_CODE_LOCKED sentinel)
  *      - Fixed contract addresses at deploy (no re-pointing)
  */
@@ -513,21 +513,22 @@ contract DegenerusAffiliate {
     // =====================================================================
 
     /**
-     * @notice Give a new smurf its owner's resolved referral word.
-     * @dev GAME only, once per smurf at creation, after the owner's referral was resolved, so
-     *      the owner's word is nonzero (a referrer word or REF_CODE_LOCKED). The copy is
-     *      verbatim and every nonzero word is permanent, so the smurf is locked to the owner's
-     *      referrer chain: its direct affiliate and uplines are the owner's, never the owner
-     *      (the owner's word cannot name the owner), and an unreferred owner gives an
-     *      unreferred smurf. Registers nobody and moves no value.
+     * @notice Permanently refer a new smurf through its current main account, with zero kickback.
+     * @dev GAME only, once at creation, after the main's upstream referral was resolved.
+     *      Game validates the ordinary parent and fresh child. Store its current gameplay ID,
+     *      not the address's permanent identity (which may belong to a liquidated main).
+     *      Registers nobody and moves no value. All nonzero referral words are permanent.
      * @param ownerId The smurf owner's wallet ID.
      * @param smurfId The new smurf's wallet ID.
      */
-    function copyReferral(uint32 ownerId, uint32 smurfId) external {
+    function referSmurf(uint32 ownerId, uint32 smurfId) external {
         if (msg.sender != ContractAddresses.GAME) revert OnlyAuthorized();
-        bytes32 word = playerReferralCode[ownerId];
-        (uint32 referrerId, bytes32 code) = _referrerView(ownerId);
-        _setReferral(smurfId, word, word == REF_CODE_LOCKED ? REF_CODE_LOCKED : code, referrerId);
+        if (ownerId == 0 || smurfId == 0 || ownerId == smurfId
+            || playerReferralCode[ownerId] == bytes32(0) || playerReferralCode[smurfId] != bytes32(0)) {
+            revert Insufficient();
+        }
+        bytes32 word = bytes32(DEFAULT_ID_TAG | ownerId);
+        _setReferral(smurfId, word, word, ownerId);
     }
 
     /**

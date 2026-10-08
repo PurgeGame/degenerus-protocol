@@ -36,6 +36,7 @@ contract SmurfDeityGroupTest is SmurfFixture {
     function setUp() public {
         _setUpSmurfFixture();
         (owner, ownerId) = _wallet("deity_owner");
+        _grantSmurfBase(owner, 3);
         smurfId = _createSmurf(owner);
         siblingId = _createSmurf(owner);
         (other, otherId) = _wallet("deity_other");
@@ -135,7 +136,7 @@ contract SmurfDeityGroupTest is SmurfFixture {
         assertFalse(_fixtureHasDeity(owner), "the owner's word carries no deity bit");
         assertEq(ext.x_deityIdAt(2), smurfId, "the deity lane holds the smurf's ID");
         assertGt(_fixtureEntries(passLevel, smurfId), smurfEntries, "the perpetual tickets queue for the smurf");
-        assertEq(_fixtureEntries(passLevel, owner), ownerEntries, "no deity tickets for the owner");
+        assertEq(_fixtureEntries(passLevel, owner), ownerEntries + 20, "main receives the conferred affiliate whale-pass entries");
         assertGt(ext.x_deityPricePaid(smurfId), 0, "the refundable price is held under the smurf's ID");
         assertEq(ext.x_deityPricePaid(ownerId), 0, "nothing under the owner's ID");
         assertEq(

@@ -90,18 +90,10 @@ interface IDegenerusAffiliate {
         uint16 lbFreshScore
     ) external returns (uint32 winnerId, uint256 winnerCredit, uint256 playerKickback);
 
-    /// @notice Copy the smurf owner's resolved referral word to a new smurf, locked.
-    /// @dev GAME only, called once by `createSmurf` after Game resolved the owner's referral
-    ///      (a zero-amount `payAffiliate` touch, so the owner's word is nonzero: a referrer word
-    ///      or REF_CODE_LOCKED). Writes `playerReferralCode[smurfId] = playerReferralCode[ownerId]`
-    ///      verbatim, so the smurf's direct affiliate and uplines are the owner's referrer chain
-    ///      (never the owner) and an unreferred owner gives an unreferred smurf. Any nonzero word
-    ///      is permanent, so the copy is locked. Emits `ReferralUpdated` for the subaccount ID. Never
-    ///      registers anyone and moves no value.
-    /// @param ownerId The smurf owner's address (its referral word is already resolved).
-    /// @param smurfId The new subaccount ID (its referral word is still zero).
-    /// @custom:reverts OnlyAuthorized If the caller is not GAME.
-    function copyReferral(uint32 ownerId, uint32 smurfId) external;
+    /// @notice Permanently refer a fresh smurf to its ordinary main's current gameplay ID.
+    /// @dev Game-only; main referral must be resolved, child referral unset. Zero kickback.
+    ///      Emits ReferralUpdated with the normalized ID word; no registration or value calls.
+    function referSmurf(uint32 ownerId, uint32 smurfId) external;
 
     /// @notice Settle a batch of afking subs' accrued affiliate base to the upline chain.
     /// @dev Permissionless. All `subs` must resolve to the same direct affiliate `A` (else revert).

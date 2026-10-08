@@ -2764,12 +2764,11 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @notice The two gates the parimutuel growth market applies to a bet. Read-only —
     ///         no quest ledger writes.
     /// @dev earnsReward = recordGrowthBet's own eligibility (level quest or active
-    ///      afking). mayBet = that, or an ever-written mintPacked_ word with the curse
-    ///      counter masked out. The curse is the one field a third party can write into a
-    ///      stranger's word (deity smite). Registration leaves the word empty; neither
-    ///      registration nor a curse opens the markets.
-    ///      The wallet ID rides the same mint word; every door that writes a nonzero mint field
-    ///      registers first, so mayBet implies a nonzero ID.
+    ///      afking). mayBet = that, or mintPacked_ participation fields with the curse
+    ///      counter and smurf quota masked out. Registration, third-party curses, base
+    ///      grants and creating a child do not establish this main's own participation.
+    ///      Paying doors register the account before writing its mint history, so mayBet
+    ///      implies a nonzero ID.
     /// @param playerId The account to test.
     /// @param lvl The level to test against.
     /// @return mayBet True if the player may place a bet at all.
@@ -2789,6 +2788,7 @@ contract DegenerusQuests is IDegenerusQuests {
         mayBet =
             earnsReward ||
             (mintData &
+                ((uint256(1) << BitPackingLib.SMURF_COUNT_SHIFT) - 1) &
                 ~(BitPackingLib.MASK_5 << BitPackingLib.CURSE_COUNT_SHIFT)) !=
             0;
     }

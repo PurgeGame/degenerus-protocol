@@ -359,3 +359,5 @@ PURE-DERIVE	ARG	EntropyLib.hash2	runBafAwards	modules/DegenerusGameJackpotModule
 PURE-DERIVE	ARG	JackpotBucketLib.unpackWinningTraits	runBafAwards	modules/DegenerusGameJackpotModule.sol	unpacks the main board derived from the locked word and frozen hero/golden-ticket inputs
 EXEMPT-ADVANCE	PARAM	word	runBafAwards	modules/DegenerusGameJackpotModule.sol	advance-dispatched word; main board inputs stay frozen throughout BAF and the later main draw
 EXEMPT-ADVANCE	PARAM	word	_drawBafPair	modules/DegenerusGameJackpotDrawModule.sol	locked award-stage word passed with the three fixed non-solo main traits
+NOT-RNG	ARG	BitPackingLib.setPacked	createSmurf	modules/DegenerusGameMintModule.sol	mintWord is ID-keyed mint/quota storage; the masked update changes creation count or base, not entropy
+NOT-RNG	ARG	BitPackingLib.setPacked	raiseSmurfBaseAllowance	modules/DegenerusGameMintModule.sol	mintWord is ID-keyed mint/quota storage; the masked update changes creation count or base, not entropy

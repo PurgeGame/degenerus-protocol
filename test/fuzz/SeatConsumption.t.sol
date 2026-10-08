@@ -279,6 +279,7 @@ contract SeatConsumptionTest is SeatFixture {
 
     function test_smurfSubscribeByOwnerBurnsTheOwnersSeat() public {
         (address owner, uint256 seat) = _passBuyer("smurf-owner");
+        _grantSmurfBase(owner, 1);
         uint32 smurfId = _createSmurf(owner);
         uint256 l0 = _L();
 
@@ -294,6 +295,7 @@ contract SeatConsumptionTest is SeatFixture {
 
     function test_smurfSubscribeByOperatorBurnsTheOwnersSeat() public {
         (address owner, uint256 seat) = _passBuyer("smurf-owner-op");
+        _grantSmurfBase(owner, 1);
         uint32 smurfId = _createSmurf(owner);
         vm.prank(owner);
         game.setOperatorApproval(smurfId, op, true);

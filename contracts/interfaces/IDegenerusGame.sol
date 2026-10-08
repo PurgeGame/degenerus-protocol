@@ -93,16 +93,17 @@ interface IDegenerusGame {
     /// @custom:reverts NotApproved If the caller is neither the key nor the smurf's owner.
     function setOperatorApproval(uint32 id, address operator, bool approved) external;
 
-    /// @notice Create a smurf account owned by the caller, give it the caller's referrer and buy it
+    /// @notice Create a smurf account owned and referred by the caller and buy it
     ///         one ticket, all in one call.
     /// @dev Owner = `msg.sender`, which must already hold an ordinary wallet ID. Steps, atomically:
+    ///      Lifetime creations must be below the main ID's admin base + floor(current main score / 120).
+    ///      Only ordinary mains create children. The packed count/base remain on that ID after liquidation; new IDs start at zero.
     ///      1. Resolve the owner's referral exactly as a purchase does: an unset referral is set
     ///         from `affiliateCode`, or locked to no referrer for a blank or invalid code; a set
     ///         referral ignores the code.
     ///      2. Allocate the next ID, storing only `ownerId << 160` in its wallet-table element.
     ///         Set the account's mint-word smurf flag and emit `SmurfCreated(ownerId, smurfId)`.
-    ///      3. Copy the owner's resolved referral word to the smurf, locked (Affiliate
-    ///         `copyReferral`). An owner with no referrer gives a smurf with none.
+    ///      3. Permanently refer the smurf through the current main ID with zero kickback.
     ///      4. Buy exactly one whole ticket (400 scaled units, no boxes) for the smurf at the
     ///         current price. The owner pays: fresh `msg.value` first, then the owner's claimable
     ///         and AFKing balances as `payKind` allows, exactly as `purchase` spends a buyer's.
@@ -113,11 +114,16 @@ interface IDegenerusGame {
     /// @param affiliateCode Referral code applied to the owner if its referral is unset.
     /// @param payKind How the owner funds the ticket (DirectEth, Claimable or Combined).
     /// @return smurfId The new account's wallet ID.
-    /// @custom:reverts E If the caller has no wallet ID or paid admission refuses the allocation.
-    /// @custom:reverts (purchase) Every revert of a one-ticket `purchase` by the owner (RNG lock,
+    /// @custom:reverts E If the caller has no ordinary main or paid admission refuses allocation.
+    /// @custom:reverts SmurfCreationLimitReached If all base-plus-score creation slots are consumed.
+    /// @custom:reverts (purchase) Every applicable revert of a one-ticket `purchase` by the owner (
     ///                 liveness/game over, insufficient payment).
     function createSmurf(bytes32 affiliateCode, MintPaymentKind payKind)
         external payable returns (uint32 smurfId);
+    /// @notice Vault-owner-only permanent increase to a registered main ID's base (0..65535).
+    /// @dev Strictly increasing absolute value; preserves lifetime count and all other mint fields.
+    function raiseSmurfBaseAllowance(uint32 mainId, uint16 newBase) external;
+
     /// @notice Read a raw storage slot; used for permanent identity lookups with pinned roots.
     function extsload(bytes32 slot) external view returns (bytes32 value);
     /// @notice Allowed read consumer: 0 blocked, 1 redemption, 2 AFK, 3 boxes/bets, 4 Decimator, 5 Craps, 6 complete.
@@ -518,7 +524,7 @@ interface IDegenerusGame {
     function hasDeityPass(address player) external view returns (bool);
 
     /// @notice Get raw bit-packed mint data for a player.
-    /// @dev Address convenience view of ID-keyed mint history. Bits 224..255 are unused;
+    /// @dev Address convenience view of ID-keyed mint history. Bits 224..239 count lifetime smurfs; 240..255 hold the admin base;
     ///      bit 147 is the smurf flag (set once by `createSmurf`).
     /// @param player Player address to query.
     /// @return Raw packed uint256 containing mint counts, streak, pass status.

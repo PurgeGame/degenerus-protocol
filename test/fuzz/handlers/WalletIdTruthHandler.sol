@@ -155,6 +155,9 @@ contract WalletIdTruthHandler is Test {
     mapping(uint32 => uint256) public smurfCreatedCount;
     mapping(uint32 => uint32) public smurfCreatedOwner;
     uint256 public smurfReturnMismatch;
+    mapping(uint32 => uint256) public lifetimeSmurfs;
+    mapping(uint32 => uint16) public smurfBase;
+    uint256 public quotaViolations;
 
     // ------------------------------------------------------------------ account-door ghosts
     uint256 public authViolations;
@@ -362,7 +365,14 @@ contract WalletIdTruthHandler is Test {
                 } else if (t0 == SMURF_CREATED && l.topics.length == 3) {
                     uint32 sid = uint32(uint256(l.topics[2]));
                     if (smurfCreatedCount[sid]++ == 0) smurfIds.push(sid);
-                    smurfCreatedOwner[sid] = uint32(uint256(l.topics[1]));
+                    uint32 mainId = uint32(uint256(l.topics[1]));
+                    smurfCreatedOwner[sid] = mainId;
+                    ++lifetimeSmurfs[mainId];
+                } else if (t0 == keccak256("SmurfBaseAllowanceRaised(uint32,uint16,uint16)") && l.topics.length == 2) {
+                    uint32 mainId = uint32(uint256(l.topics[1]));
+                    (uint16 previous, uint16 next) = abi.decode(l.data, (uint16, uint16));
+                    if (previous != smurfBase[mainId] || next <= previous) ++quotaViolations;
+                    smurfBase[mainId] = next;
                 } else if (t0 == DEC_BURN_RECORDED && l.topics.length == 4 && _dec.length < CAP) {
                     _dec.push(DecEntry(
                         uint24(uint256(l.topics[2])), uint64(uint256(l.topics[3])), uint32(uint256(l.topics[1]))
@@ -988,9 +998,14 @@ contract WalletIdTruthHandler is Test {
     function _createSmurf(address p, bytes32 code, uint256 kindSel) internal returns (bool ok, uint32 smurfId) {
         (uint256 value, bytes memory data) = _smurfData(code, kindSel);
         uint256 before = smurfIds.length;
+        uint32 mainId = game.walletIdOf(p);
+        uint256 limit = uint256(smurfBase[mainId]) + game.playerActivityScoreById(mainId) / 120;
+        if (limit > 65_535) limit = 65_535;
+        uint256 created = lifetimeSmurfs[mainId];
         bytes memory ret;
         (ok, ret) = _call(43, p, GAME, value, data, false);
         if (ok) {
+            if (created >= limit) ++quotaViolations;
             smurfId = abi.decode(ret, (uint32));
             if (smurfIds.length != before + 1 || smurfIds[before] != smurfId) ++smurfReturnMismatch;
         }
@@ -1462,10 +1477,14 @@ contract WalletIdTruthHandler is Test {
     }
 
     /// @dev Every allocated element: owner lane, zero subaccount address, smurf flag, `SmurfCreated`,
-    ///      and referral copy (plan F2, decisions G4/G9, inventory M14).
+    ///      and automatic main referral plus event-derived creation quotas.
     function _checkSmurfs() internal view {
+        if (quotaViolations != 0) _fail("SMURFQUOTA", "invalid quota transition", address(0), quotaViolations, 0);
         uint256 len = _tableLength();
         for (uint32 id = 1; id < len; ++id) {
+            uint256 mw = uint256(vm.load(GAME, GameSlotKeys.mintPacked(id)));
+            if (uint16(mw >> 224) != lifetimeSmurfs[id]) _fail("SMURFQUOTA", "lifetime count differs from events", address(0), uint16(mw >> 224), lifetimeSmurfs[id]);
+            if (uint16(mw >> 240) != smurfBase[id]) _fail("SMURFQUOTA", "base differs from grants", address(0), uint16(mw >> 240), smurfBase[id]);
             uint256 el = _element(id);
             if ((el >> 160) & LANE_MASK == 0) _checkOrdinary(id, address(uint160(el)));
             else _checkSmurf(id, el, len);
@@ -1496,15 +1515,12 @@ contract WalletIdTruthHandler is Test {
         _checkAccountRecords(address(0), id);
     }
 
-    /// @dev The smurf's referral word is a verbatim copy of its owner's, never the owner itself.
+    /// @dev Every child is permanently referred by its creation-time main ID.
     function _checkSmurfReferral(uint32 id, uint32 ownerId) internal view {
-        uint256 sw = _referralId(id); uint256 ow = _referralId(ownerId);
-        if (sw != ow) _fail("SMURFREF", "subaccount referral differs from owner", address(0), sw, ow);
-        if (sw > 1 && sw < (uint256(1) << 192) && uint32(sw) == ownerId) revert("SMURFREF: self referral");
+        uint256 sw = _referralId(id);
+        uint256 expected = (uint256(1) << 32) | ownerId;
+        if (sw != expected) _fail("SMURFREF", "subaccount referral differs from main ID", address(0), sw, expected);
     }
-
-
-
 
     /// @dev At most one deity per main wallet (decision G5): the deity accounts' payees differ.
     function _checkDeityGroup() internal view {

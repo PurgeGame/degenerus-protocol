@@ -72,6 +72,7 @@ contract AccountRuleGame is DeployProtocol {
         ownerId = game.walletIdOf(owner);
         walletId = game.walletIdOf(wallet);
         sourceId = _giveWalletId(source);
+        _grantSmurfBase(owner, 2);
         (smurfId,) = _createSmurf();
     }
 

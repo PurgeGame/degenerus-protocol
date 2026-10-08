@@ -27,6 +27,7 @@ contract RedemptionAccountsTest is RedemptionFixture {
 
     function setUp() public override {
         super.setUp();
+        _grantSmurfBase(alice, 1);
         aliceId = game.walletIdOf(alice);
         vm.prank(alice);
         game.setOperatorApproval(0, operator, true);

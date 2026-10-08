@@ -28,6 +28,7 @@ contract AccountIdOnlyTest is DeployProtocol {
         _deployProtocol();
         owner = makeAddr("id-only-owner");
         ownerId = _giveWalletId(owner);
+        _grantSmurfBase(owner, 2);
         vm.deal(owner, 100 ether);
         uint256 price = game.mintPrice();
         vm.startPrank(owner);
@@ -49,7 +50,8 @@ contract AccountIdOnlyTest is DeployProtocol {
             assertEq(game.mintPackedOfId(id) >> 224, 0);
         }
         assertEq(game.walletIdOf(owner), ownerId);
-        assertEq(game.mintPackedOfId(ownerId), 0, "creating subaccounts does not mint on the owner");
+        assertEq(game.mintPackedOfId(ownerId), (uint256(2) << 224) | (uint256(2) << 240),
+            "creating subaccounts changes only the owner's quota");
     }
 
     function test_PurchasesAuthorizeAndKeepSiblingHistorySeparate() public {
@@ -67,7 +69,7 @@ contract AccountIdOnlyTest is DeployProtocol {
         game.purchase{value: price}(a, 400, 0, 0, MintPaymentKind.DirectEth, false);
         assertNotEq(game.mintPackedOfId(a), beforeA);
         assertEq(game.mintPackedOfId(b), beforeB);
-        assertEq(game.mintPackedOfId(ownerId), 0);
+        assertEq(game.mintPackedOfId(ownerId), (uint256(2) << 224) | (uint256(2) << 240));
         vm.prank(owner);
         game.setOperatorApproval(a, operator, false);
         vm.prank(operator);

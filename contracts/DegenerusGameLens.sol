@@ -67,6 +67,40 @@ interface IDegenerusGameLensSource {
 ///      be called — they would read this contract's empty storage; the lens carries
 ///      explicit mirrors that source the same fields via extsload instead.
 contract DegenerusGameLens is DegenerusGameMintStreakUtils {
+    struct SmurfCreationInfo {
+        uint32 mainId;
+        uint256 currentScore;
+        uint16 createdLifetime;
+        uint16 baseAllowance;
+        uint16 scoreAllowance;
+        uint16 allowance;
+        uint16 remaining;
+        bool eligibleMain;
+    }
+
+    /// @notice Main ID's lifetime quota, including admin base and current score capacity.
+    /// @dev Capacity is not purchase readiness: payment and liveness guards still apply.
+    function smurfCreationInfo(address game, uint32 mainId) external view returns (SmurfCreationInfo memory info) {
+        info.mainId = mainId;
+        uint256 base;
+        assembly { base := wallets.slot }
+        if (mainId == 0 || mainId >= _sload(game, bytes32(base))) return info;
+        uint256 element = _sload(game, bytes32(uint256(keccak256(abi.encode(base))) + mainId));
+        assembly { base := mintPacked_.slot }
+        uint256 mintWord = _sload(game, _mapSlot(uint256(mainId), base));
+        info.createdLifetime = uint16(mintWord >> BitPackingLib.SMURF_COUNT_SHIFT);
+        info.baseAllowance = uint16(mintWord >> BitPackingLib.SMURF_BASE_SHIFT);
+        info.allowance = info.baseAllowance;
+        info.eligibleMain = uint160(element) != 0 && uint32(element >> 160) == 0
+            && (mintWord >> BitPackingLib.SMURF_FLAG_SHIFT) & 1 == 0;
+        if (!info.eligibleMain) return info;
+        info.currentScore = IDegenerusGameLensSource(game).playerActivityScoreById(mainId);
+        info.scoreAllowance = uint16(info.currentScore / SMURF_SCORE_PER_CREATION);
+        uint256 total = uint256(info.baseAllowance) + info.scoreAllowance;
+        info.allowance = total > type(uint16).max ? type(uint16).max : uint16(total);
+        if (info.allowance > info.createdLifetime) info.remaining = info.allowance - info.createdLifetime;
+    }
+
     /// @notice Registered deity by owner-list index (genesis first, then paid, in order).
     function deityOwnerAt(address game, uint256 index) external view returns (address owner) {
         uint256 base;

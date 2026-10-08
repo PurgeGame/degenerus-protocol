@@ -50,6 +50,7 @@ contract ExternalDoorAccountsTest is DeployProtocol {
         _deployProtocol();
         owner = makeAddr("xda_owner");
         ownerId = _giveWalletId(owner);
+        _grantSmurfBase(owner, 1);
         (smurfId,) = _createSmurf(owner);
         stranger = makeAddr("xda_stranger");
         operator = makeAddr("xda_operator");

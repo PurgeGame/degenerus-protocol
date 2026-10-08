@@ -31,6 +31,10 @@ impact to **burnie@degener.us** or a repository issue. The audit subject is the
   six levels ahead, with shift <=8, the projected-entry floor and pending-declaration locks.
 - Stake surplus Game ETH into stETH subject to player-claim reserves; exchange supplied
   ETH for an equal amount of Game stETH through Admin.
+- Permanently raise a registered main ID's base smurf allowance directly through the Game,
+  up to 65,535 base creations, plus one per 120 current main activity points, subject
+  to the 65,535 total lifetime creation cap.
+  Grants preserve prior creation counts and never permit children of smurfs.
 - Retry an unanswered live RNG request once after 20 hours through Admin. This replaces
   the transport request ID while preserving its logical day, kind, committed cohort and
   original timeout. It cannot replace a word already accepted by the Game. This recovery

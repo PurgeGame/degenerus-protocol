@@ -195,6 +195,8 @@ abstract contract DegenerusGameStorage {
     ///      which would overflow at 65,535.
     uint16 internal constant ACTIVITY_SCORE_HARD_CAP_POINTS = 65_534;
 
+    uint256 internal constant SMURF_SCORE_PER_CREATION = 120;
+
     /// @dev Floor streak points for active pass holders (50 points).
     uint16 internal constant PASS_STREAK_FLOOR_POINTS = 50;
 
@@ -305,6 +307,8 @@ abstract contract DegenerusGameStorage {
     error OnlySelf();
     /// @notice Thrown when the caller is not the admin.
     error OnlyAdmin();
+    error SmurfCreationLimitReached();
+    error InvalidSmurfBaseIncrease();
     /// @notice Thrown when the caller is not the vault or the vault owner.
     error OnlyVault();
     /// @notice Thrown when the caller is not the sDGNRS contract.
@@ -493,7 +497,7 @@ abstract contract DegenerusGameStorage {
     ///      RNG flags that `_rngConsumerStage` and `_swapRngBuffers` already read and write.
     bool internal humanReadComplete = true;
 
-    /// @dev Slot-0 bytes 30..31. Bits 0..7 hold the nudge count (0..255); bit8 marks RNG
+    /// @dev Slot-0 bytes 30..31. Bits 0..7 hold the nudge count (0..65535); bit8 marks RNG
     ///      complete, bit9 the FLIP redemption window, bit10 the request's spent retry; bit11
     ///      marks unpaid parimutuel growth winners, bit12 selects write, bit13 marks terminal;
     ///      bits14/15 identify an active request / published session. All setters preserve
@@ -1565,6 +1569,7 @@ abstract contract DegenerusGameStorage {
     /// @param ownerId The owning wallet's ID (the smurf's payee).
     /// @param smurfId The smurf account's wallet ID.
     event SmurfCreated(uint32 indexed ownerId, uint32 indexed smurfId);
+    event SmurfBaseAllowanceRaised(uint32 indexed mainId, uint16 previousBase, uint16 newBase);
 
     /// @dev With createSmurf, the only writer of a wallet's identity. Returns the existing ID or allocates the
     ///      next table position, publishing both directions (the table element and walletIds)

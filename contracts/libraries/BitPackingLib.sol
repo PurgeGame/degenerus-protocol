@@ -45,7 +45,8 @@ pragma solidity 0.8.34;
  *      [197-202] AFFILIATE_BONUS_POINTS_SHIFT - Cached affiliate bonus points (6 bits)
  *      [203-207] CURSE_COUNT_SHIFT           - Cashout/smite curse counter (5 bits, capped at 20)
  *      [208-223] LEVEL_UNITS_SHIFT           - Units purchased at current level (16 bits)
- *      [224-255] Free                         - Identity is stored separately by wallet ID
+ *      [224-239] SMURF_COUNT_SHIFT           - Lifetime smurf creations (16 bits)
+ *      [240-255] SMURF_BASE_SHIFT            - Admin-granted base allowance (16 bits)
  */
 library BitPackingLib {
     // -------------------------------------------------------------------------
@@ -120,7 +121,11 @@ library BitPackingLib {
     /// @notice Bit position for level units count (bits 208-223)
     uint256 internal constant LEVEL_UNITS_SHIFT = 208;
 
-    // Bits 224..255 are unused; identity lives in the separate wallet registry.
+    /// @notice Lifetime successful smurf creations by this main ID (bits 224-239).
+    uint256 internal constant SMURF_COUNT_SHIFT = 224;
+
+    /// @notice Admin-granted base creation allowance, additive to score capacity (bits 240-255).
+    uint256 internal constant SMURF_BASE_SHIFT = 240;
 
     // -------------------------------------------------------------------------
     // Packing Functions

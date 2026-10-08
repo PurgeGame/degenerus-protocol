@@ -36,6 +36,7 @@ contract DegeneretteGiftByAccountTest is SmurfFixture {
     function setUp() public {
         _setUpSmurfFixture();
         (owner, ownerId) = _wallet("gift_owner");
+        _grantSmurfBase(owner, 1);
         smurfId = _createSmurf(owner);
         (recipient, recipientId) = _wallet("gift_recipient");
         (giver, giverId) = _wallet("gift_giver");

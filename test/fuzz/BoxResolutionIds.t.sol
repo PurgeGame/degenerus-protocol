@@ -17,6 +17,7 @@ contract BoxResolutionIdsTest is SmurfFixture {
         _setUpSmurfFixture();
         address owner;
         (owner, ownerId) = _wallet("resolution_owner");
+        _grantSmurfBase(owner, 1);
         smurfId = _createSmurf(owner);
     }
 

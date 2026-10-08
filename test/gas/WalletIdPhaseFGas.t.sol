@@ -68,6 +68,7 @@ contract WalletIdPhaseFGasTest is DeployProtocol {
         _ticket(REFERRER, REFERRER);
         _ticket(OWNER, OWNER);
         _approve(REG, REG, OPERATOR);
+        _grantSmurfBase(OWNER, 2);
         smurfId = _createSmurf(OWNER, bytes32(0));
         _approve(OWNER, smurfId, OPERATOR);
     }
@@ -257,6 +258,7 @@ contract WalletIdPhaseFGasTest is DeployProtocol {
     function test_Gas_SmurfCreateReferredOwner() public {
         // FRESH registers through a purchase referred by REFERRER's default code, then creates.
         _ticketWithCode(FRESH, FRESH, bytes32(uint256(uint160(REFERRER))));
+        _grantSmurfBase(FRESH, 1);
         _createSmurf(FRESH, bytes32(0));
         _report("smurf_create_referred_owner");
     }

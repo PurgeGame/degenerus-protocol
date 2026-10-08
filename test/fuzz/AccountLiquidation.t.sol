@@ -5,7 +5,8 @@ import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {LiquidationQuote} from "../../contracts/interfaces/ILiquidation.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
-import {GameSlots} from "../helpers/GameSlots.sol";
+import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
+import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {IsDGNRS} from "../../contracts/interfaces/IsDGNRS.sol";
 import {RedemptionCloseTools} from "./helpers/RedemptionCloseTools.sol";
@@ -47,6 +48,7 @@ contract AccountLiquidationTest is RedemptionCloseTools {
         _deployProtocol();
         seller = makeAddr("liquidation-seller");
         root = _giveWalletId(seller);
+        _grantSmurfBase(seller, 4);
         vm.deal(seller, 100 ether);
         vm.deal(address(game), 10_000 ether);
         gameRuntime = address(game).code;
@@ -117,6 +119,35 @@ contract AccountLiquidationTest is RedemptionCloseTools {
         vm.deal(address(sdgnrs), address(sdgnrs).balance + amount);
         vm.prank(address(sdgnrs));
         game.creditRedemptionDirect{value: amount}(id, amount);
+    }
+
+    function test_SmurfQuotaStaysWithSoldIdAndReplacementStartsAtZero() public {
+        uint32 child = _child();
+        DegenerusGameLens lens = new DegenerusGameLens();
+        uint256 quota = uint256(vm.load(address(game), GameSlotKeys.mintPacked(root))) >> 224;
+        _seed(child, 400, 0, 0);
+        _sale(child);
+        assertEq(uint256(vm.load(address(game), GameSlotKeys.mintPacked(root))) >> 224, quota);
+        assertEq(lens.smurfCreationInfo(address(game), root).createdLifetime, 1);
+        _sale(root);
+        assertEq(uint256(vm.load(address(game), GameSlotKeys.mintPacked(root))) >> 224, quota);
+        assertFalse(lens.smurfCreationInfo(address(game), root).eligibleMain);
+        assertEq(lens.smurfCreationInfo(address(game), root).remaining, 0);
+        vm.prank(ContractAddresses.CREATOR);
+        vm.expectRevert(bytes4(keccak256("E()")));
+        game.raiseSmurfBaseAllowance(root, 5);
+        uint32 replacement = _giveWalletId(seller);
+        assertTrue(replacement != root);
+        assertEq(lens.smurfCreationInfo(address(game), replacement).baseAllowance, 0);
+        assertEq(lens.smurfCreationInfo(address(game), replacement).createdLifetime, 0);
+        uint256 price = game.mintPrice();
+        vm.prank(seller);
+        vm.expectRevert(bytes4(keccak256("SmurfCreationLimitReached()")));
+        game.createSmurf{value: price}(0, MintPaymentKind.DirectEth);
+        _grantSmurfBase(seller, 1);
+        uint32 newChild = _child();
+        assertEq(uint32(uint256(vm.load(address(affiliate), keccak256(abi.encode(newChild, uint256(2)))))), replacement);
+        assertEq(game.walletIdentityOf(seller), root);
     }
 
     function testFuzz_LaterAwardsRemainPermissionlesslyCollectible(bool vaultBuyer) public {

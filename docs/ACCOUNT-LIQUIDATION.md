@@ -39,7 +39,7 @@ Each new live redemption, including a top-up, must have at least 0.01 ETH of fre
 
 Coinflip's ordinary settlement and previews are unchanged; the acquired-account collection hook is the only new behavior. No module or deployment-order change is needed.
 
-Game slot 77 packs the current gameplay ID in the low 32 bits and permanent identity in the next 32. Existing slots do not move. Acquired roots use the existing wallet-table owner lane, preserving half-pass counts and all ticket positions; there is no new acquisition mapping. This is a fresh-deployment source change, not an in-place migration of a live registry.
+Game slot 77 retains the current gameplay ID and permanent identity. Smurf creation counts and admin bases belong to the main ID: bits 224–239 and 240–255 of its existing mint word. Selling a child never refunds a creation. Selling the main leaves both fields on the sold ID, which cannot create more children because it is acquired. A replacement ID starts with zero count and zero base. Existing storage roots and types do not change. Acquired roots use the existing wallet-table owner lane, preserving half-pass counts and all ticket positions; there is no new acquisition mapping.
 
 ## Verification
 
