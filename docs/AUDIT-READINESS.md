@@ -10,7 +10,8 @@ certify these later changes. No freeze tag has been created for this candidate.
 
 The complete 96-file Hardhat selection has passed (1,651 tests), as have all
 56 Halmos properties, the 24 split-arithmetic checks and the production/layout
-gates. Foundry regression, cold-gas and deep-invariant campaigns remain in progress.
+gates. The warm Foundry campaign is closed; cold-gas and deep-invariant campaigns
+remain in progress.
 Two stale test oracles now include the smurf quota lanes and exclude them from
 gameplay eligibility. A third fixture used the retired two-argument BAF draw-module
 selector; typed calls now preserve its no-work assertions against both module
@@ -22,7 +23,8 @@ The complete warm selection covered all 410 roots: 3,481 initial passes, the
 repaired BAF selector failure, and ten invariant setup errors. Those ten cases
 made zero handler calls because cached test bytecode embedded a different handler
 runtime from the current compiler artifact. Clean compilation restores matching
-runtimes; the full-budget rerun is in progress. The runner now rebuilds each batch
+runtimes; the full-budget rerun passes all ten invariants (23 total tests).
+All original warm failures have passing closures. The runner now rebuilds each batch
 as one artifact set. Dependency fingerprints also follow nested library symlinks
 and stop directory cycles; two regression tests failed before that repair and pass
 after it. All 59 assurance unit tests and six partition tests pass. Saved compiler
@@ -32,8 +34,9 @@ locked library revision in all nine Foundry checkouts.
 The first remote run passed production assurance and Slither, but several Foundry
 runners received shutdown signals. Its Aderyn installer selected crates.io 0.1.9,
 which cannot parse Osaka; the next remote run passes with npm release 0.6.8.
-Further Foundry runner interruptions remain unresolved. CI now pins the same
-Foundry release as the local campaign and caps each batch at five roots.
+Further Foundry runner interruptions remain unresolved: they recurred with the
+local Foundry release pinned and batches capped at five roots. CI now prints
+memory, process, disk and cgroup information every minute to diagnose termination.
 Remote interruption logs are retained; they are not counted as passing test runs.
 
 The audit gas policy follows available-gas admission at deterministic checkpoints.

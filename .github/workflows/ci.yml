@@ -130,6 +130,26 @@ jobs:
         env:
           TEST_GROUP: ${{ matrix.group }}
         run: |
+          # Keep resource evidence visible even if the hosted runner is terminated
+          # before upload-artifact can run. This does not alter test budgets.
+          mkdir -p .audit-test-logs/foundry
+          (
+            while true; do
+              date -u '+%Y-%m-%dT%H:%M:%SZ'
+              free -h
+              df -h . /tmp
+              ps -eo pid,ppid,comm,etime,%cpu,rss --sort=-rss | head -12
+              for resource_file in /sys/fs/cgroup/memory.events /sys/fs/cgroup/memory.max /sys/fs/cgroup/memory.peak; do
+                if [ -r "$resource_file" ]; then
+                  echo "$resource_file"
+                  cat "$resource_file"
+                fi
+              done
+              sleep 60
+            done
+          ) > >(tee -a .audit-test-logs/foundry/runner-resources.log) 2>&1 &
+          resource_monitor_pid=$!
+          trap 'kill "$resource_monitor_pid" 2>/dev/null || true; wait "$resource_monitor_pid" 2>/dev/null || true' EXIT
           if [ "$TEST_GROUP" = integration-gas ]; then
             FOUNDRY_ISOLATE=true python3 scripts/test-foundry-groups.py --group "$TEST_GROUP" --max-files 5 --threads 1 -vvv
           else

@@ -212,5 +212,9 @@ event JackpotSubsidyRolled(uint64 indexed slot, uint32 multiplierBps, uint256 ma
 
 ## Gas checks
 
-`test/fuzz/JackpotMergeAdvance.t.sol` exercises full draw chunks and asserts a
-10M transaction ceiling. See [Verification](VERIFICATION.md) for cold gas checks.
+`test/fuzz/JackpotMergeAdvance.t.sol` exercises admitted draw checkpoints and
+metered settlement, using 5M draw allowances and a 10.5M settlement envelope.
+It checks the declared draw bound, progress and completion. These fixture budgets
+are not protocol transaction ceilings: admission depends on each operation's
+cold-path bound, remaining worker allowance and available gas, including the
+complete call/return tail. See [Verification](VERIFICATION.md) for cold gas checks.
