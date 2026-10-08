@@ -651,7 +651,7 @@ describe("BafCreditRouting", function () {
       const word = 42n;
       const headBefore = await jackpots.bafHeadWinner(10, word, 0);
       const roundsBefore = [];
-      for (let p = 0; p < 24; p++) roundsBefore.push(await jackpots.bafPairWinners(10, word, p, 48));
+      for (let p = 0; p < 24; p++) roundsBefore.push((await jackpots.bafPairWinners(10, word, p, 48, [0, 64, 128]))[0]);
       expect(headBefore).to.equal(BOB_ID);
 
       const tx = await coinflip
@@ -668,7 +668,7 @@ describe("BafCreditRouting", function () {
       // Every bracket-10 slot the remaining award groups draw reads as before the claim.
       expect(await jackpots.bafHeadWinner(10, word, 0)).to.equal(headBefore);
       for (let p = 0; p < 24; p++) {
-        const pair = await jackpots.bafPairWinners(10, word, p, 48);
+        const [pair] = await jackpots.bafPairWinners(10, word, p, 48, [0, 64, 128]);
         for (let i = 0; i < 4; i++) expect(pair[i]).to.equal(roundsBefore[p][i]);
       }
     });

@@ -30,7 +30,7 @@ contract NativeAtomicDegeneretteTest is DeployProtocol {
         vm.warp(vm.getBlockTimestamp() + 1 days);
         vm.deal(address(game), 1_000_000 ether);
         vm.deal(PLAYER, 10_000 ether);
-        vm.prank(address(game)); coin.mintForGame(PLAYER, 1_000_000 ether);
+        vm.prank(address(game)); coin.mintForGame(PLAYER, 1_000_000);
         vm.etch(address(game), type(NativeAtomicReadFixture).runtimeCode);
         host = NativeAtomicReadFixture(payable(address(game)));
         host.fundFuture();
@@ -79,7 +79,7 @@ contract NativeAtomicDegeneretteTest is DeployProtocol {
     function test_Max15FlipSpinsAndSurvivalMintFitOneStep() public {
         uint256 beforeBalance = coin.balanceOf(PLAYER);
         uint256 used = _measure(1, 100, 15, 5);
-        assertGt(coin.balanceOf(PLAYER), beforeBalance - 1500 ether, "surviving FLIP winnings minted");
+        assertGt(coin.balanceOf(PLAYER), beforeBalance - 1500, "surviving FLIP winnings minted");
         emit log_named_uint("cold_atomic_15_flip_spins_survival", used);
     }
 }

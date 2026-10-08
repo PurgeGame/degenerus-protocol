@@ -215,12 +215,21 @@ contract CenturySeedWindow is DeployProtocol {
     ///      packed word that holds the window start. This is the figure the hosting phase-end tx pays.
     function testArmGasOnVirginDays() public {
         _leaveDeployWindow();
+        vm.record();
         vm.prank(address(game));
         uint256 g0 = gasleft();
         coinflip.armCenturySeed(100);
         uint256 used = g0 - gasleft();
         emit log_named_uint("armCenturySeed_gas_virgin_days", used);
-        assertLt(used, 15_000, "the century arm is one packed-word write");
+        // Isolated external calls include transaction overhead and cold access costs.
+        // Keep the original warm guard; both modes must touch only the packed seed word.
+        uint256 ceiling = vm.envOr("FOUNDRY_ISOLATE", false) ? 40_000 : 15_000;
+        assertLt(used, ceiling, "century seed arming gas regressed");
+        (, bytes32[] memory writes) = vm.accesses(address(coinflip));
+        assertGt(writes.length, 0, "arming must update the seed word");
+        for (uint256 i; i < writes.length; ++i) {
+            assertEq(writes[i], bytes32(uint256(4)), "arming writes only the packed seed word");
+        }
     }
 
     // ------------------------------------------------------------------

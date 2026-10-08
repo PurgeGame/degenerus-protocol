@@ -14,11 +14,11 @@ contract BafBandOracle {
         return uint32(0xBAF000 + band * 16 + rank);
     }
 
-    function sampleTraitEntries(bool next, uint256) external pure returns (uint8, uint32[] memory entries) {
+    function sampleTraitEntries(bool next, uint8, uint256) external pure returns (uint32[] memory entries) {
         entries = new uint32[](4);
         entries[0] = candidate(next ? 1 : 0, 1);
         entries[1] = candidate(next ? 1 : 0, 2);
-        return (0, entries);
+        return entries;
     }
 
     function sampleFarFutureTickets(uint256, uint24 from, uint24 to) external view returns (uint32[] memory entries) {

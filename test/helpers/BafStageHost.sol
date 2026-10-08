@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {BafViews} from "./BafViews.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
+import {BafDrawSeed} from "./BafDrawSeed.sol";
 import {BucketSeed} from "./BucketSeed.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
@@ -170,6 +172,16 @@ contract BafStageHost is DegenerusGame, BucketSeed {
             j.directTicketRound, j.directTickets);
     }
 
+    function frozenMainBoard() external view returns (bool present, uint32 board) { (present, board,) = _foilDrawFor(dailyIdx + 1); }
+    function seedOneEntry(uint24 lvl, uint8 trait, address player) external { _seedBucket(lvl, trait, player, 1); }
+    function clearTrait(uint24 lvl, uint8 trait) external { _seedBucketClear(lvl, trait); }
+    function seedBufferLevel(uint24 lvl) external { _setTicketBufferLevel(lvl); }
+    function bufferLevel(bool next) external view returns (uint24) { return _ticketBufferLevel(next ? 1 : 0); }
+    function seedHero(uint8 q, uint8 symbol, bool banned) external {
+        dailyHeroWagers[dailyIdx][q] = uint256(1) << (uint256(symbol) * 32);
+        if (banned) goldenTicket = (uint256(1) << 190) | (uint256(q) << 191) | (uint256(dailyIdx) << 193);
+    }
+
     function poolView() external view returns (PoolView memory p) {
         (p.next, p.future) = _getPrizePools();
         (p.pendingNext, p.pendingFuture) = _getPendingPools();
@@ -295,8 +307,7 @@ abstract contract BafBracketFixture is DeployProtocol {
     /// @dev The armed final purchase day's direct-deposit book (head slot 1's draw).
     function _armDepositDraw() internal {
         for (uint256 i; i < DEPOSITORS; ++i) {
-            vm.store(address(coinflip), keccak256(abi.encode((uint256(DRAW_DAY) << 32) | i, uint256(8))),
-                bytes32((uint256(host.seedWallet(_depositor(i))) << 96) | ((i + 1) * 100)));
+            BafDrawSeed.entry(address(coinflip), DRAW_DAY, uint32(i), host.seedWallet(_depositor(i)), uint96((i + 1) * 100));
         }
         vm.store(address(coinflip), keccak256(abi.encode(uint256(DRAW_DAY), uint256(5))),
             bytes32((DEPOSITORS << 96) | (DEPOSITORS * 100)));
@@ -419,7 +430,7 @@ abstract contract BafBracketFixture is DeployProtocol {
         for (uint256 i = start; i < end; ++i) {
             if (i < 2 * rounds) {
                 if (i & 3 == 0) {
-                    uint32[4] memory pair = jackpots.bafPairWinners(lvl, word, i >> 2, rounds);
+                    uint32[4] memory pair = BafViews.pair(address(jackpots), lvl, word, i >> 2, rounds);
                     for (uint256 k; k < 4; ++k) w[i + k - start] = host.walletKeyOf(pair[k]);
                 }
             } else {

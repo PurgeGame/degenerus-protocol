@@ -4,6 +4,23 @@ Run checks against the exact revision supplied for review. The repository contai
 source, tests and reproduction tooling; generated logs and analyzer reports stay in
 local output directories or CI artifacts.
 
+[The current readiness review](AUDIT-READINESS.md) records the latest campaign.
+The dated implementation sections below are historical, scoped evidence; their
+pass counts do not certify later revisions.
+
+### Pre-smurf checkpoint (2026-10-08)
+
+This checkpoint combines the readiness changes with BAF sampling of the main
+board's three non-solo traits, using prepared physical buffers. The BAF execution
+record reports 47 passing direct-buffer follow-up tests and passing source,
+interface, layout and deployment-size checks. Those are prior scoped results;
+the complete combined tree was not rerun at this checkpoint.
+
+Fresh checkpoint checks pass: six deep-partition tooling tests, four split-proof
+tooling tests, 24 split arithmetic checks, and `git diff --check`. Source identity
+hashes are refreshed to include the combined changes. These checks do not certify
+the subsequent smurf feature, which has not started at this checkpoint.
+
 ## Setup
 
 Use Node 20 (as in CI), Python 3, Bash, Git and Foundry. Solidity 0.8.34, via IR,
@@ -32,9 +49,12 @@ separate disposable checkouts. Raw test commands bypass this restoration.
 ## Build and structural checks
 
 ```sh
-forge build --skip test
-node scripts/check-deployment-sizes.js
-bash scripts/layout/storage_layout_oracle.sh
+forge build --skip test --out forge-out-production --cache-path .foundry-cache-production
+node scripts/check-deployment-sizes.js forge-out-production
+FOUNDRY_OUT=forge-out-production FOUNDRY_CACHE_PATH=.foundry-cache-production \
+  bash scripts/layout/storage_layout_oracle.sh
+python3 scripts/layout/check_recursive_layout.py --out forge-out-production \
+  --report .audit-test-logs/recursive-layout.json
 make check-interfaces check-delegatecall check-raw-selectors check-rng-window \
   check-rng-taint check-advance-calls check-unchecked check-write-owners \
   check-pool-writes check-array-delete check-gasleft
@@ -43,9 +63,14 @@ make test-assurance-tools
 
 The size gate checks deployment entries against the 24,576-byte runtime limit and
 rejects stale, missing or unlinked artifacts. Address pins affect compiled output;
-repeat deployment checks with the intended production pins. The storage oracle
+repeat deployment checks with the intended production pins. Keep production artifacts
+and their cache separate from test builds: a test runner may overwrite the default
+artifacts with fixture pins while an unrelated build cache still considers them current.
+The size gate rejects that mismatch. The storage oracle
 compares top-level slots, offsets and types; it does not recursively verify nested
-struct members. Source manifests are review aids, not proofs of their annotations.
+struct members. The additional recursive comparison checks all Game modules and the
+CrapsBattle/JackpotBattle pair, including nested members. Source manifests are review
+aids, not proofs of their annotations.
 
 ## Tests
 
@@ -71,8 +96,8 @@ FOUNDRY_ISOLATE=true python3 scripts/test-foundry-groups.py \
   --group integration-gas --max-files 5 --threads 1
 ```
 
-CI runs the other six Foundry groups with isolation disabled, at most ten roots
-per batch and one thread. The default fuzz campaign uses 1,000 runs; default
+CI runs each of the seven Foundry groups in a separate job. The other six groups
+use isolation disabled, at most ten roots per batch and one thread. The default fuzz campaign uses 1,000 runs; default
 invariants use 256 runs at depth 128, with per-suite overrides visible in source.
 `npm test` uses the maintained Hardhat runner, including all statistical files.
 Discovery fails if a JavaScript test is outside the configured directories.
@@ -83,13 +108,13 @@ commands use raw Hardhat and therefore bypass runner-level pin restoration.
 See [the test usefulness review](TEST_REVIEW.md) for retired checks, repaired
 fixtures and the distinction between model, structural and runtime coverage.
 
-No chunk between two checkpoints may cost more than 10M gas in its worst case,
-including its call/return/flush tail. A transaction may exceed 10M by running several
-admitted chunks. Each checkpoint admits the next chunk only when its conservative
-worst-case cost and tail fit both the remaining worker allowance and actual available
-gas; a larger supplied budget runs more chunks, never a larger one. A protocol path
-with no internal checkpoint (advance, terminal or keeper call) is one chunk and must
-also stay within 10M; batches whose size the caller chooses are sized by that caller.
+Chunks between checkpoints target at most 10M gas in about 99% of realistic cases,
+with a 13M absolute worst-case ceiling, including the call/return/flush tail, as
+specified in [the audit scope](AUDIT.md). A transaction may execute several admitted
+chunks. Each checkpoint admits the next chunk only when its conservative worst-case
+cost and tail fit both the remaining worker allowance and actual available gas.
+A protocol path with no internal checkpoint is one indivisible chunk; caller-selected
+batches do not establish a bound for protocol-selected work.
 Fixture gas limits do not establish cold bounds. Gas may only select safe
 continuation, never a semantic fallback or committed outcome.
 
@@ -102,22 +127,40 @@ FOUNDRY_PROFILE=deep FOUNDRY_ISOLATE=false python3 scripts/test-foundry-groups.p
 
 The deep invariant profile uses 1,000 runs at depth 256. The separate Halmos job
 uses version 0.3.3, the `halmos` Foundry profile and the bounds recorded in
-[CI](../.github/workflows/ci.yml). Both jobs run on scheduled or manual dispatch.
-Use that job's command in a disposable checkout to reproduce symbolic checks.
+[CI](../.github/workflows/ci.yml). Both campaigns run on scheduled or manual dispatch.
+CI dynamically enumerates every invariant source, splitting the three expensive
+Craps suites by named property. A complementary job retains all other tests,
+including inherited properties and helpers, so discovery is only a scheduling hint
+and cannot silently omit a test. All run/depth settings are preserved, and failed
+results are retained (`fail-fast: false`). Run `python3 scripts/deep-invariant-matrix.py`
+to inspect the exact partition. Use the symbolic job's command in a
+disposable checkout to reproduce Halmos checks.
+
+The two multiway split models use exact nonnegative integer arithmetic with separate
+proofs that the admitted products, sums and subtractions fit checked `uint256`
+semantics. Their Solidity fuzz carriers remain in the ordinary test selection, and
+the bucket carrier calls the production library. A source fingerprint requires
+reviewing the model when its production routine or carrier files change. This is
+an arithmetic model proof, not a bytecode-equivalence claim.
+
+```sh
+pip install halmos==0.3.3
+python3 scripts/test-split-arithmetic.py
+python3 scripts/check-split-arithmetic.py --json-output .audit-test-logs/split-arithmetic.json
+```
 
 Known verification limits:
 
-- The last local full Halmos campaign left five properties timed out. A timeout
-  establishes neither a counterexample nor a proof; the campaign is not all green.
-  These are `check_cost_no_overflow`, `check_autorebuy_ethspent_bounded` and
-  `check_takeprofit_multiple` in `test/halmos/Arithmetic.t.sol`, plus
-  `check_bps_split_exact` and `check_affiliate_reward_bounded` in
-  `test/halmos/NewProperties.t.sol`.
-- The last local deep invariant campaign did not finish. Ordinary test passes
-  do not substitute for a completed deep run.
-- Existing skipped/pending tests and harness assumptions remain visible in test
-  source. Imported helper suites can repeat across batches, so execution totals
-  are not counts of unique properties.
+- Use the current readiness report for completion status. Earlier solver timeouts
+  are preserved in local evidence; a timeout establishes neither a counterexample
+  nor a proof.
+- Halmos 0.3.3's unconstrained GAS model cannot establish production gas-metered
+  FSM liveness. Those three production transition carriers remain real-EVM fuzz
+  tests, with explicit boundary scenarios; the separate accounting models remain
+  symbolic. Liveness evidence comes from the invariant and gas campaigns.
+- Imported helper suites can repeat across batches, so execution totals are not
+  counts of unique properties. Per-suite budgets and model domains are explicit
+  in source; a bounded campaign does not cover every possible state.
 - A full remote CI run of the supplied revision has not been confirmed. Consult
   that revision's CI results rather than historical local pass counts.
 

@@ -55,11 +55,17 @@ contract RecyclingSymbolicHarness is DegenerusGameStorage {
 
 /// @dev Header proofs replace the old per-trait stamp/partial-data-word proofs.
 ///      Supported additions are explicitly assumed below 2^32; production adds no overflow revert.
+/// @custom:halmos --storage-layout generic
 contract StorageRecyclingSymbolicTest is Test {
     RecyclingSymbolicHarness h;
     function setUp() public { h = new RecyclingSymbolicHarness(); }
     function _mask(uint256 n) internal pure returns (uint256) {
         return n == 8 ? type(uint256).max : (uint256(1) << (n * 32)) - 1;
+    }
+    function _repeatedOwner(uint32 owner) internal pure returns (uint256 word) {
+        // Eight disjoint 32-bit lanes; this independent reference avoids asking
+        // the solver to invert a 256-bit multiplication for overflow checking.
+        for (uint256 i; i < 8; ++i) word |= uint256(owner) << (i * 32);
     }
     function check_header_count_tail_roundtrip(uint24 lvl, uint32 count, uint224 tail) public {
         vm.assume(lvl > 0);
@@ -82,7 +88,7 @@ contract StorageRecyclingSymbolicTest is Test {
         h.seedStale(oldWord);
         assertEq(h.count(3), 0);
         h.appendStaleRun(owner, n);
-        uint256 full = uint256(owner) * 0x0000000100000001000000010000000100000001000000010000000100000001;
+        uint256 full = _repeatedOwner(owner);
         assertEq(h.payload(3, 0), full & _mask(n));
         assertEq(h.count(3), n);
         assertEq(h.count(1), 0);

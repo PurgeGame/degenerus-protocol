@@ -29,14 +29,14 @@ contract WhaleSybilInvariant is DeployProtocol {
         targetContract(address(wsHandler));
     }
 
-    /// @notice ETH solvency under concurrent whale + sybil pressure
+    /// @notice ETH + stETH backing covers obligations under concurrent whale + sybil pressure
     function invariant_solvencyUnderPressure() public view {
-        uint256 gameBalance = address(game).balance;
+        uint256 gameBacking = SolvencyObligations.backing(game);
         // Canonical obligation set (pending buffer in, dead post-GO pools out) -- SolvencyObligations.
         uint256 obligations = SolvencyObligations.obligations(game);
 
         assertGe(
-            gameBalance,
+            gameBacking,
             obligations,
             "WhaleSybil: solvency violated under concurrent pressure"
         );
@@ -58,7 +58,7 @@ contract WhaleSybilInvariant is DeployProtocol {
 
     /// @notice Obligation ratio should stay above 100% (10000 bps)
     /// @dev If the minimum observed obligation ratio drops below 10000 bps,
-    ///      it means at some point balance < obligations (insolvency)
+    ///      it means at some point ETH + stETH backing < obligations (insolvency)
     function invariant_obligationRatioHealthy() public view {
         uint256 minRatio = wsHandler.ghost_minObligationRatio();
         // If no observations yet (type(uint256).max), skip
@@ -77,10 +77,10 @@ contract WhaleSybilInvariant is DeployProtocol {
         // This is structurally enforced by the handler's gameOver() checks
         // The invariant here is that the game state is consistent
         if (game.gameOver()) {
-            // Game balance should still cover claimable obligations
-            uint256 gameBalance = address(game).balance;
+            // Remaining ETH + stETH backing must cover claimable obligations.
+            uint256 gameBacking = SolvencyObligations.backing(game);
             uint256 claimable = game.claimablePoolView();
-            assertGe(gameBalance, claimable, "WhaleSybil: post-game claimable exceeds balance");
+            assertGe(gameBacking, claimable, "WhaleSybil: post-game claimable exceeds backing");
         }
     }
 

@@ -39,6 +39,11 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
     event JackpotTicketWin(uint32 indexed walletId, uint24 indexed entryLevel, uint16 indexed traitId,
         uint32 entryCount, uint24 sourceLevel, uint256 entryIndex, bool roundedUp);
 
+    /// @notice Every sampled near-level spot, including zero-score candidates and score-check losers.
+    /// @dev Array order identifies each spot; wallet IDs may repeat. Empty arrays mean empty buckets.
+    event BafCandidates(uint24 indexed level, uint24 indexed day, uint16 indexed round,
+        uint24 sourceLevel, uint8 traitId, uint32[] candidates);
+
     bytes32 private constant FLIP_LEVEL_TAG = keccak256("coin-level");
     bytes32 private constant FAR_FUTURE_FLIP_TAG = keccak256("far-future-coin");
     uint256 private constant JACKPOT_BATTLE_ENTRANTS = JackpotBattleFieldLib.MAX_CHUNK;
@@ -321,6 +326,9 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
         uint256
     ) external returns (uint256 claimableDelta) {
         if (msg.sender != address(this)) revert OnlySelf();
+        // BAF levels are even. Prepare both buffers once, including empty levels, so
+        // the sampler can use its current/next flag directly without stale tickets.
+        if (!_prepareTicketLevelAfterFoil(lvl) || !_prepareTicketLevelAfterFoil(lvl + 1)) revert E();
         jackpots.beginBaf();
         uint256 rounds = _bafRounds(poolWei);
         claimableDelta = _bafReservation(poolWei, rounds);
@@ -351,7 +359,9 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
     ///      `work.paid` tracks the reserved ETH not yet credited; the last group returns what no
     ///      candidate took to the pending future pool, closes the bracket and deletes the work
     ///      record. The game-over latch releases the reservation instead.
-    function runBafAwards(uint256 word, uint256 allowance) external returns (MineFlipGas.Result memory result) {
+    function runBafAwards(uint256 word, uint256 allowance, uint8[3] calldata traits)
+        external returns (MineFlipGas.Result memory result)
+    {
         MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
         JackpotWork storage work = jackpotWork;
         if (work.kind != 7) {
@@ -374,7 +384,7 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
                 uint32 winner;
                 uint256 amount;
                 if (i < 2 * rounds) {
-                    if (i & 3 == 0) drawn = jackpots.bafPairWinners(lvl, word, i >> 2, rounds);
+                    if (i & 3 == 0) drawn = _drawBafPair(work, word, i, traits);
                     winner = drawn[i & 3];
                     amount = i & 1 == 0 ? (pool / 2) / rounds : ((pool * 30) / 100) / rounds;
                 } else {
@@ -403,6 +413,22 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
             result.progressed = true;
         }
         MineFlipGas.finish(meter);
+    }
+
+    /// @dev Draw and record each near-level pair once, when its first award executes.
+    function _drawBafPair(JackpotWork storage work, uint256 word, uint256 i, uint8[3] calldata traits)
+        private returns (uint32[4] memory winners)
+    {
+        uint256 rounds = (work.traits - 3) / 2;
+        IDegenerusJackpots.BafRound[2] memory draws;
+        (winners, draws) = jackpots.bafPairWinners(work.lvl, word, i >> 2, rounds, traits);
+        if (i < rounds) {
+            uint24 sourceLevel = work.lvl + (i >= rounds / 2 ? 1 : 0);
+            for (uint256 j; j < 2; ++j) {
+                emit BafCandidates(work.lvl, rngRequestDay, uint16((i >> 1) + j), sourceLevel,
+                    draws[j].trait, draws[j].candidates);
+            }
+        }
     }
 
     /// @dev BAF_ROUNDS below 4 anchors, doubled at each fourfold step of `pool` from there (96 at

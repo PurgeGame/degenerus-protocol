@@ -17,7 +17,9 @@ import {BucketSeed} from "../helpers/BucketSeed.sol";
 import {FreshWordLeg} from "./PurchaseDailyWorstCase.t.sol";
 import {ProtocolBoonDrawSeeder} from "./helpers/ProtocolBoonDrawSeeder.sol";
 import {VaultHistorySeeder} from "./AdvanceNestedSettlementGas.t.sol";
+import {BafDrawSeed} from "../helpers/BafDrawSeed.sol";
 import {BafViews} from "../helpers/BafViews.sol";
+import {BafBoardSeed} from "../helpers/BafBoardSeed.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
 import {CrapsSlots} from "../helpers/GameSlots.sol";
 
@@ -249,7 +251,7 @@ library BafPairDraw {
         uint32[4] memory w;
         for (uint256 i = from; i < to; ++i) {
             if (i < 2 * rounds) {
-                if (i & 3 == 0) w = views.bafPairWinners(BafSchedule.LVL, word, i >> 2, rounds);
+                if (i & 3 == 0) w = BafViews.pair(address(views), BafSchedule.LVL, word, i >> 2, rounds);
                 atStart[i - from] = w[i & 3];
             } else {
                 atStart[i - from] = views.bafHeadWinner(BafSchedule.LVL, word, uint8(i - 2 * rounds));
@@ -259,7 +261,7 @@ library BafPairDraw {
         uint256 ptr;
         for (uint256 i = from; i < to; ++i) {
             if (i < 2 * rounds) {
-                if (i & 3 == 0) w = views.bafPairWinners(BafSchedule.LVL, word, i >> 2, rounds);
+                if (i & 3 == 0) w = BafViews.pair(address(views), BafSchedule.LVL, word, i >> 2, rounds);
                 atPair[i - from] = w[i & 3];
             } else {
                 atPair[i - from] = atStart[i - from];
@@ -323,11 +325,7 @@ library CenturyBafScores {
         }
         uint256 depositorId = _register(game, address(0xD3F0517));
         for (uint256 i; i < 4096; ++i) {
-            VM.store(
-                coinflip,
-                keccak256(abi.encode((uint256(day) << 32) | i, uint256(8))),
-                bytes32((depositorId << 96) | ((i + 1) * 100))
-            );
+            BafDrawSeed.entry(coinflip, day, uint32(i), uint32(depositorId), uint96((i + 1) * 100));
         }
         VM.store(coinflip, keccak256(abi.encode(uint256(day), uint256(5))), bytes32((uint256(4096) << 96) | 409_600));
         VM.prank(game);
@@ -415,10 +413,10 @@ contract CenturyConsolidationSeeder is DegenerusGame, BucketSeed {
         // base = hash2(word, BAF tag). Each selected bucket holds 2048 distinct wallets; a bucket
         // selected by two rounds keeps the first round's wallets (for the fixture's words such
         // rounds read different packed words, so no wallet is a candidate twice).
-        uint256 base = EntropyLib.hash2(word, uint256(keccak256("degenerus.baf.winners")));
+        uint256 board = BafBoardSeed.context(100, word, rounds);
         for (uint256 round; round < rounds / 2; ++round) {
             uint24 target = round < rounds / 4 ? 100 : 101;
-            uint8 trait = uint8(EntropyLib.hash2(base, round) >> 24);
+            uint8 trait = uint8(uint32(board) >> ((round % 4) * 8));
             if (_seedBucketLen(target, trait) < 2048) {
                 _seedBucketDistinct(target, trait, 2048, uint160(0xC3700000 + round * 4096));
             }

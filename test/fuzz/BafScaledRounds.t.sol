@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {BafViews} from "../helpers/BafViews.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -133,7 +134,7 @@ contract BafScaledRoundsTest is DeployProtocol {
         for (uint256 rounds = 48; rounds <= 1536; rounds *= 2) {
             uint256[4] memory perBand;
             for (uint256 round; round < rounds; ++round) {
-                uint32[4] memory pair = jackpots.bafPairWinners(lvl, WORD, round >> 1, rounds);
+                uint32[4] memory pair = BafViews.pair(address(jackpots), lvl, WORD, round >> 1, rounds);
                 (uint32 best, uint32 next) = (pair[(round & 1) * 2], pair[(round & 1) * 2 + 1]);
                 uint256 band = (uint256(best) - 0xBAF000) / 16;
                 assertEq(band, (round * 4) / rounds, "contiguous quarter bands in forward order");

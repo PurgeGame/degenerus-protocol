@@ -154,6 +154,8 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
     uint256 private cohortSize;
 
     function _queueBurners(uint256 n, uint256 amount) private returns (address[] memory players) {
+        (uint256 preview,) = sdgnrs.previewBurnValue(amount);
+        assertGe(preview, sdgnrs.MIN_REDEMPTION_VALUE(), "cohort burns meet admission");
         cohortSize = n;
         players = new address[](n);
         for (uint256 i; i < n; ++i) {
@@ -194,7 +196,7 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
 
     function test_ColdManyMinimumBeneficiaries() public {
         uint32 day = _openBatchId();
-        _queueBurners(45, 1e12);
+        _queueBurners(45, _minimumLiveBurn());
         _resolve(day, 175, 99);
         emit log_named_uint("cold_45_dust_router_gas", _coldRouterGas());
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
@@ -203,8 +205,9 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
 
     function test_ColdTwentyBoxBeneficiaryMiddleOfMixedBatch() public {
         uint32 day = _openBatchId();
-        address[] memory players = _queueBurners(3, 1e12);
-        uint256 topup = (sdgnrs.totalSupply() + _escrow()) * 16 / 1000 - 1e12;
+        uint256 minimum = _minimumLiveBurn();
+        address[] memory players = _queueBurners(3, minimum);
+        uint256 topup = (sdgnrs.totalSupply() + _escrow()) * 16 / 1000 - minimum;
         vm.prank(address(game));
         assertEq(sdgnrs.transferFromPool(sDGNRS.Pool.Whale, players[1], topup), topup);
         _burn(players[1], topup);
@@ -244,14 +247,14 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
     function test_ColdLongCohortFinishClearsInConstantTime() public {
         uint32 day = _openBatchId();
         uint256 snap = vm.snapshotState();
-        _queueBurners(2, 1e12);
+        _queueBurners(2, _minimumLiveBurn());
         _resolve(day, 100, 99);
         _drainToLastClaim();
         uint256 shortFinish = _coldRouterGas();
         assertFalse(sdgnrs.redemptionSettlementPending());
         assertTrue(vm.revertToState(snap));
 
-        _queueBurners(2000, 1e12);
+        _queueBurners(2000, _minimumLiveBurn());
         _resolve(day, 100, 99);
         _drainToLastClaim();
         uint256 used = _coldRouterGas();

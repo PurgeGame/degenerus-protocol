@@ -87,6 +87,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
 
     /// @notice Thrown when a consolation claim covers no claimable score.
     error NothingToClaim();
+    error InvalidBafDraw();
 
     /*+======================================================================+
       |                              EVENTS                                  |
@@ -348,26 +349,31 @@ contract DegenerusJackpots is IDegenerusJackpots {
     ///         second-best BAF score among its four sampled candidates, as [best, second] of the
     ///         even round then of the odd round, as wallet IDs (0 where none qualifies).
     /// @dev Pure in the bracket, the word, the pair, the round count and the bucket and queue
-    ///      entries it samples. Four bands of `rounds / 4` rounds (`rounds` a multiple of 8, so a
-    ///      pair never straddles two bands): trait buckets at lvl and lvl + 1 (each round four
-    ///      entries of one packed word), then one queue lane per wallet over lvl + 2..lvl + 5 and
+    ///      entries it samples. Four bands of `rounds / 4` rounds (`rounds` a multiple of 48, so a
+    ///      pair never straddles two bands): the main board's three non-solo trait buckets at
+    ///      lvl and lvl + 1 (each round up to four entries), then one queue lane per wallet over lvl + 2..lvl + 5 and
     ///      lvl + 6..lvl + 99, where one sample of eight lanes serves the pair (the even round
     ///      ranks the first four).
-    function bafPairWinners(uint24 lvl, uint256 rngWord, uint256 pair, uint256 rounds)
-        external view returns (uint32[4] memory winners)
+    function bafPairWinners(uint24 lvl, uint256 rngWord, uint256 pair, uint256 rounds, uint8[3] calldata traits)
+        external view returns (uint32[4] memory winners, BafRound[2] memory draws)
     {
+        if (rounds < 48 || rounds > 1536 || rounds % 48 != 0 || pair >= rounds / 2) revert InvalidBafDraw();
         uint256 base = _bafEntropyBase(rngWord);
         uint256 band = (pair * 8) / rounds;
         uint64 currentEpoch = bafLevel[lvl].epoch;
-        uint32[] memory tickets;
         if (band < 2) {
-            (, tickets) = degenerusGame.sampleTraitEntries(band == 1, EntropyLib.hash2(base, 2 * pair));
-            (winners[0], winners[1]) = _bafRank(tickets, 0, lvl, currentEpoch);
-            (, tickets) = degenerusGame.sampleTraitEntries(band == 1, EntropyLib.hash2(base, 2 * pair + 1));
-            (winners[2], winners[3]) = _bafRank(tickets, 0, lvl, currentEpoch);
+            for (uint256 j; j < 2; ++j) {
+                uint256 round = 2 * pair + j;
+                // Each near-level band has a multiple of three rounds.
+                draws[j].trait = traits[round % 3];
+                draws[j].candidates = degenerusGame.sampleTraitEntries(
+                    band == 1, draws[j].trait, EntropyLib.hash2(base, round)
+                );
+                (winners[2 * j], winners[2 * j + 1]) = _bafRank(draws[j].candidates, 0, lvl, currentEpoch);
+            }
         } else {
             uint256 pairEntropy = EntropyLib.hash2(base, BAF_FAR_PAIR_KEY | pair);
-            tickets = band == 2
+            uint32[] memory tickets = band == 2
                 ? degenerusGame.sampleFarFutureTickets(pairEntropy, lvl + 2, lvl + 5)
                 : degenerusGame.sampleFarFutureTickets(pairEntropy, lvl + 6, lvl + 99);
             (winners[0], winners[1]) = _bafRank(tickets, 0, lvl, currentEpoch);

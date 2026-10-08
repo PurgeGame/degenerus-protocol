@@ -89,7 +89,11 @@ contract CrapsScheduledCursorTest is CrapsPins {
     }
 
     function test_theCursorIsBornAtGenesisPlusOne() public {
-        CursorHarness fresh = new CursorHarness();
+        // CREATE's isolated-test nonce can collide with the etched Game pin. Deploy the
+        // actual production constructor at a distinct CREATE2 address, then add readers.
+        CrapsBattle deployed = new CrapsBattle{salt: keccak256("fresh-cursor-constructor")}();
+        vm.etch(address(deployed), address(craps).code);
+        CursorHarness fresh = CursorHarness(address(deployed));
         uint24 genesis = fresh.currentDayIndex();
         assertEq(fresh.keeperSlot(), uint64(fresh._daySlotOfPub(genesis + 1)), "the cursor was not born at tomorrow");
 

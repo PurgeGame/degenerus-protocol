@@ -31,6 +31,11 @@ impact to **burnie@degener.us** or a repository issue. The audit subject is the
   six levels ahead, with shift <=8, the projected-entry floor and pending-declaration locks.
 - Stake surplus Game ETH into stETH subject to player-claim reserves; exchange supplied
   ETH for an equal amount of Game stETH through Admin.
+- Retry an unanswered live RNG request once after 20 hours through Admin. This replaces
+  the transport request ID while preserving its logical day, kind, committed cohort and
+  original timeout. It cannot replace a word already accepted by the Game. This recovery
+  power does not prove that a privileged actor with advance knowledge of an undelivered
+  VRF result cannot prefer a replacement request.
 - Propose VRF recovery after 44 hours of stall, or feed recovery after two unhealthy days.
   Community proposal paths open only after a seven-day stall and require the proposer
   to hold at least 0.5% of sDGNRS voting supply; there is no post-proposal delay.

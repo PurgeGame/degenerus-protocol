@@ -191,16 +191,14 @@ contract FSMAdvanceHarness is DegenerusGameMinerModule {
     }
 }
 
-/// @title Bounded production FSM transitions and separate arithmetic models
-/// @notice The first three checks execute actual production state writers under explicit empty
-///         dependency stubs. They are not universal proofs over all functions or reachable states.
-/// @dev Terminal covers empty drain then one advance before the 30-day sweep; level covers a fresh
-///      last-purchase request plus its single same-day retry; dailyIdx covers a 0..7-day gap and a
-///      complete empty purchase-day seal at two boundary days. The Foundry carrier retains all uint16 days.
-///      The five remaining checks are copied arithmetic models,
-///      not production accounting proofs. Foundry fuzz wrappers exercise the same bounded carriers.
-///      halmos --contract GameFSMSymbolicTest --loop 8 --solver-timeout-assertion 120000
-contract GameFSMSymbolicTest is Test {
+/// @title Bounded production FSM transitions, executed by Foundry's EVM
+/// @notice Production state writers run under explicit empty dependency stubs. The three
+///         carriers retain their uint16 level/day domains and retry/terminal assertions.
+/// @dev Halmos 0.3.3 models each GAS opcode as an unconstrained f_gas read: it can increase
+///      within a frame or exceed the transaction limit. These metered production paths therefore
+///      remain real-EVM fuzz tests, plus all 16 explicit day/gap boundaries. No symbolic gas or
+///      universal liveness proof is claimed. Arithmetic-only checks live in the next contract.
+contract GameFSMProductionTransitionTest is Test {
     FSMAdvanceHarness private machine;
 
     function setUp() public {
@@ -242,7 +240,7 @@ contract GameFSMSymbolicTest is Test {
         assert(ok);
     }
 
-    function check_emptyTerminal_latchAndAdvance(uint16 initialLevel, uint8 elapsedDays) public {
+    function _emptyTerminal_latchAndAdvance(uint16 initialLevel, uint8 elapsedDays) private {
         vm.assume(elapsedDays < 30);
         vm.warp(_dayStart(50) + 120);
         machine.seed(initialLevel, 10, 10, false);
@@ -261,9 +259,7 @@ contract GameFSMSymbolicTest is Test {
         assert(machine.level() == initialLevel);
     }
 
-    /// @dev More branch-solving time prunes impossible queue-loop continuations; no input restriction.
-    /// @custom:halmos --solver-timeout-branching 100ms
-    function check_lastPurchase_promotesOnceAcrossRetry(uint16 initialLevel) public {
+    function _lastPurchase_promotesOnceAcrossRetry(uint16 initialLevel) private {
         vm.warp(_dayStart(31) + 120);
         machine.seed(initialLevel, 30, 30, true);
         _mustCall(abi.encodeCall(DegenerusGameMinerModule.mineFlip, ()));
@@ -290,7 +286,7 @@ contract GameFSMSymbolicTest is Test {
     /// @notice Explicit finite boundary scenarios, not a universal calendar proof.
     /// @dev Covers each gap 0..7 at initial day1 and65535. The full uint16 calendar remains
     ///      covered by the separate Foundry fuzz carrier; its wider symbolic attempt is unproved.
-    function check_dailyIdx_boundaryScenarios(uint8 scenario) public {
+    function _dailyIdx_boundaryScenario(uint8 scenario) private {
         vm.assume(scenario < 16);
         for (uint8 gap; gap < 8; ++gap) {
             if (scenario == gap) {
@@ -348,17 +344,28 @@ contract GameFSMSymbolicTest is Test {
     }
 
     function testFuzz_emptyTerminal_latchAndAdvance(uint16 level, uint8 elapsed) public {
-        check_emptyTerminal_latchAndAdvance(level, elapsed % 30);
+        _emptyTerminal_latchAndAdvance(level, elapsed % 30);
     }
 
     function testFuzz_lastPurchase_promotesOnceAcrossRetry(uint16 level) public {
-        check_lastPurchase_promotesOnceAcrossRetry(level);
+        _lastPurchase_promotesOnceAcrossRetry(level);
     }
 
     function testFuzz_dailyIdx_gapThenSeal(uint16 day, uint8 gap) public {
         _dailyIdx_gapThenSeal(day == 0 ? 1 : day, gap % 8);
     }
 
+    function test_dailyIdx_AllBoundaryScenarios() public {
+        uint256 initialState = vm.snapshotState();
+        for (uint8 scenario; scenario < 16; ++scenario) {
+            _dailyIdx_boundaryScenario(scenario);
+            assertTrue(vm.revertToState(initialState), "restore the same initial machine for every boundary");
+        }
+    }
+}
+
+/// @title Arithmetic accounting models; these are not proofs of complete production flows.
+contract GameFSMSymbolicTest is Test {
     // =========================================================================
     // Property 4: Sentinel pattern correctness
     // =========================================================================
@@ -383,6 +390,12 @@ contract GameFSMSymbolicTest is Test {
         assert(payout > 0); // since amount > 1, payout > 0
     }
 
+    function test_claimPoolCounterexampleReplay() public pure {
+        check_claim_pool_accounting((uint256(1) << 255) - 1, uint256(1) << 255);
+        check_claim_pool_accounting(1, 2);
+        check_claim_pool_accounting(type(uint256).max, type(uint256).max);
+    }
+
     /// @notice claimablePool accounting: payout = amount - 1, pool decremented by payout
     function check_claim_pool_accounting(uint256 claimablePool, uint256 amount) public pure {
         if (amount <= 1) return;
@@ -397,8 +410,9 @@ contract GameFSMSymbolicTest is Test {
 
         // Pool should decrease by exactly payout
         assert(poolAfter == claimablePool - payout);
-        // Pool should retain the 1 wei sentinel contribution
-        assert(poolAfter == claimablePool - amount + 1);
+        // Group the sentinel subtraction before debiting: pool == amount - 1 is valid.
+        // Reconstructing the original pool also checks conservation without an intermediate underflow.
+        assert(poolAfter + (amount - 1) == claimablePool);
     }
 
     // =========================================================================
@@ -438,7 +452,8 @@ contract GameFSMSymbolicTest is Test {
         uint256 lootboxPortion
     ) public pure {
         if (poolReserved == 0) return;
-        if (ethPortion + lootboxPortion != poolReserved) return;
+        // Express the existing partition domain without overflowing while checking admission.
+        if (ethPortion > poolReserved || lootboxPortion != poolReserved - ethPortion) return;
         if (poolBefore > type(uint256).max - poolReserved) return;
 
         // Step 1: Pre-reserve full amount

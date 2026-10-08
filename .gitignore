@@ -47,6 +47,7 @@ docs/*
 !docs/README.md
 !docs/ACCOUNT-LIQUIDATION.md
 !docs/AUDIT.md
+!docs/AUDIT-READINESS.md
 !docs/ARCHITECTURE.md
 !docs/VERIFICATION.md
 !docs/TEST_REVIEW.md

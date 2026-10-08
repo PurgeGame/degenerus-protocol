@@ -2204,42 +2204,46 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
       |  Used for scatter draws and promotional mechanics.                   |
       +======================================================================+*/
 
-    /// @notice Sample up to 4 trait burn entries from a specific level.
+    /// @notice Sample up to 4 entries from a prepared BAF trait buffer.
     /// @dev BAF scatter reads a random packed word and rotates its lanes. Tail padding
     ///      is redrawn over valid entries so the last word keeps equal entry weighting.
     ///      The bucket's data root is hashed once for all four draws. Entries are the wallet
     ///      IDs the bucket lanes store.
-    /// @param nextLevel False selects the current level; true selects the next.
-    /// @param entropy Random seed (typically VRF word) for trait and offset selection.
-    /// @return traitSel Selected trait ID.
+    ///      BAF runs on even levels and prepares both buffers when armed. The flag selects
+    ///      the physical buffer directly; this reader does not resolve or validate a level.
+    /// @param nextLevel False selects the even/current BAF buffer; true selects the odd/next buffer.
+    /// @param traitSel Trait bucket to sample; BAF passes a non-solo trait from the main board.
+    /// @param entropy Random seed (typically derived from VRF) for entry selection.
     /// @return entries Up to 4 entry holders' wallet IDs (IDs may repeat).
     function sampleTraitEntries(
         bool nextLevel,
+        uint8 traitSel,
         uint256 entropy
-    ) external view returns (uint8 traitSel, uint32[] memory entries) {
-        traitSel = uint8(entropy >> 24);
+    ) external view returns (uint32[] memory entries) {
         uint256 len;
+        uint256 take;
         uint256 header;
         uint256 wordsBase;
         {
-            uint24 targetLvl = level + (nextLevel ? 1 : 0);
-            if (_ticketLevelRetired(targetLvl)) return (traitSel, new uint32[](0));
-            uint256 headerSlot = _traitBufferBase(targetLvl) + traitSel;
-            len = _bucketLengthUnchecked(targetLvl, traitSel);
-            if (len == 0) {
-                return (traitSel, new uint32[](0));
+            uint24 buffer = nextLevel ? 1 : 0;
+            uint256 headerSlot = _traitBufferBase(buffer) + traitSel;
+            assembly ("memory-safe") {
+                if and(sload(add(traitBucketLive.slot, buffer)), shl(traitSel, 1)) {
+                    header := sload(headerSlot)
+                }
             }
+            len = uint32(header);
+            take = len > 4 ? 4 : len;
+            entries = new uint32[](take);
+            if (len == 0) return entries;
             // Every draw uses the same bucket. Hash its data root once, including for a
             // padding redraw that selects a different packed word.
             assembly ("memory-safe") {
-                header := sload(headerSlot)
                 mstore(0, headerSlot)
                 wordsBase := keccak256(0, 32)
             }
         }
 
-        uint256 take = len > 4 ? 4 : len;
-        entries = new uint32[](take);
         PackedTicketSampleLib.Cursor memory cursor;
         uint256 selectedWord;
         {

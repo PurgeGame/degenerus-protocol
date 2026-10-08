@@ -257,9 +257,9 @@ contract BafBoardPackingTest is Test {
         vm.mockCall(
             ContractAddresses.GAME,
             abi.encodeWithSelector(IDegenerusGame.sampleTraitEntries.selector),
-            abi.encode(uint8(0), near)
+            abi.encode(near)
         );
-        uint32[4] memory w = jp.bafPairWinners(lvl, 1, 0, 48);
+        (uint32[4] memory w,) = jp.bafPairWinners(lvl, 1, 0, 48, [uint8(0), 64, 128]);
         assertEq(w[0], 4);
         assertEq(w[1], 3);
         assertEq(w[2], 4);
@@ -276,7 +276,7 @@ contract BafBoardPackingTest is Test {
             abi.encodeWithSelector(IDegenerusGame.sampleFarFutureTickets.selector),
             abi.encode(far)
         );
-        w = jp.bafPairWinners(lvl, 1, 12, 48);
+        (w,) = jp.bafPairWinners(lvl, 1, 12, 48, [uint8(0), 64, 128]);
         assertEq(w[0], 3, "far band group 0 best");
         assertEq(w[1], 5, "far band group 0 second");
         assertEq(w[2], 4, "far band group 1 best");

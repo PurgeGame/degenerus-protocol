@@ -39,6 +39,7 @@ contracts/interfaces/IDegenerusJackpots.sol
 contracts/interfaces/IDegenerusParimutuel.sol
 contracts/interfaces/IDegenerusQuests.sol
 contracts/interfaces/IJackpotBattle.sol
+contracts/interfaces/ILiquidation.sol
 contracts/interfaces/IStETH.sol
 contracts/interfaces/IVRFCoordinator.sol
 contracts/interfaces/IVaultCoin.sol

@@ -468,8 +468,10 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
 
     it("sDGNRS burn(uint256) burns from msg.sender only", async function () {
       const { sdgnrs, game, alice } = await loadFixture(deployFullProtocol);
-      const amount = dgnrsUnits("1000");
+      const amount = INITIAL_SUPPLY / 100n;
       await giveSDGNRS(sdgnrs, game, alice.address, amount);
+      await depositETH(sdgnrs, game, eth("10"));
+      expect((await sdgnrs.previewBurnValue(amount))[0]).to.be.gte(eth("0.01"));
 
       const supplyBefore = await sdgnrs.totalSupply();
       await sdgnrs.connect(alice).burn(amount);
@@ -574,9 +576,14 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
       expect(supply0).to.equal(INITIAL_SUPPLY);
 
       // Give alice sDGNRS from pool, then burn — supply decreases
-      await giveSDGNRS(sdgnrs, game, alice.address, dgnrsUnits("1000"));
-      await sdgnrs.connect(alice).burn(dgnrsUnits("500"));
-      expect(await sdgnrs.totalSupply()).to.equal(supply0 - dgnrsUnits("500"));
+      const granted = supply0 / 100n;
+      const burned = granted / 2n;
+      await giveSDGNRS(sdgnrs, game, alice.address, granted);
+      await depositETH(sdgnrs, game, eth("10"));
+      expect((await sdgnrs.previewBurnValue(burned))[0]).to.be.gte(eth("0.01"));
+      await sdgnrs.connect(alice).burn(burned);
+      expect(await sdgnrs.totalSupply()).to.equal(supply0 - burned);
+      expect(await sdgnrs.balanceOf(alice.address)).to.equal(granted - burned);
     });
   });
 

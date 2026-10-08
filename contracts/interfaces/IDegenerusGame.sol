@@ -450,14 +450,16 @@ interface IDegenerusGame {
         view
         returns (uint256 packed);
 
-    /// @notice Sample up to 4 trait burn tickets from a specific level.
-    /// @dev View function for BAF scatter selection targeting a specific level. Returns the
-    ///      wallet IDs the trait bucket already stores (no wallet-table decode).
-    /// @param nextLevel Select the next level instead of the current level.
+    /// @notice Sample up to 4 entries from a prepared BAF trait buffer.
+    /// @dev Returns the wallet IDs the trait bucket already stores (no wallet-table decode).
+    ///      BAF prepares its even/current and odd/next buffers when armed. This reads the
+    ///      chosen physical buffer directly, without looking up the current game level.
+    /// @param nextLevel False selects the even/current BAF buffer; true selects the odd/next buffer.
     /// @param entropy Random entropy for sampling (typically from VRF).
-    /// @return trait The sampled trait ID.
+    /// @param trait The explicit trait bucket (one of the main board's non-solo traits for BAF).
     /// @return entries Wallet IDs holding the sampled entries (IDs may repeat).
-    function sampleTraitEntries(bool nextLevel, uint256 entropy) external view returns (uint8 trait, uint32[] memory entries);
+    function sampleTraitEntries(bool nextLevel, uint8 trait, uint256 entropy)
+        external view returns (uint32[] memory entries);
 
     /// @notice Sample two BAF rounds' worth of unminted future-level candidates.
     /// @dev Four packs (independent level in [fromLevel, toLevel] + one random eight-lane queue

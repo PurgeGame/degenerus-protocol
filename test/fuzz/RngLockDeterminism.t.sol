@@ -9,6 +9,7 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 // during the RNG lock, and the auto-open lock/unlock boundary. Broader current
 // commitment-window coverage lives in RngWindowFreeze and the binding suites.
 
+import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {VRFHandler} from "./helpers/VRFHandler.sol";
 import {MockVRFCoordinator} from "../../contracts/mocks/MockVRFCoordinator.sol";
@@ -540,36 +541,30 @@ contract RngLockDeterminism is DeployProtocol {
         vm.deal(holder, 100 ether);
 
         vm.prank(holder);
-        try game.purchase{value: 1.01 ether}(
-            0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false
-        ) {
-        } catch {
-            vm.assume(false);
-        }
+        game.purchase{value: 1.01 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
 
-        // At c4d48008 a game purchase routes proceeds to the staking pools, not a direct
-        // sDGNRS mint to the buyer — so seed the holder's sDGNRS balance (sDGNRS
-        // balanceOf @ slot 1) and bump totalSupply (slot 0) to keep the supply identity intact,
-        // so the redemption burn below is reachable for the fuzzer (avoids the vm.assume(false)
-        // exhaustion the empty-balance buy used to cause). This exercises the SAME per-day-keyed
-        // redemption RNG-freeze path the test guards.
-        {
-            bytes32 balSlot = keccak256(abi.encode(uint256(uint160(holder)), uint256(1)));
-            vm.store(address(sdgnrs), balSlot, bytes32(uint256(100 ether)));
-            uint256 ts = uint256(vm.load(address(sdgnrs), bytes32(uint256(0))));
-            vm.store(address(sdgnrs), bytes32(uint256(0)), bytes32(ts + 100 ether));
-        }
-
-        // v44 MIN_BURN_AMOUNT floor: bound legal-burn range to [1e18, 100e18]
+        // Transfer existing pool tokens and back the original entire burn range.
+        // Failed admission is a fixture failure, never an assumed-away fuzz input.
+        vm.prank(address(game));
+        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, holder, 100 ether);
+        vm.deal(address(sdgnrs), 20_000 ether);
         uint256 burnAmount = bound(burnAmountSeed, 1e18, 100e18);
-
-        // Burn on the current (already-drawn) day so the admission gate passes; it stamps this day,
-        // whose pool then resolves on the next day's VRF (window-b) after the warp below.
+        (uint256 preview,) = sdgnrs.previewBurnValue(burnAmount);
+        assertGe(preview, 0.01 ether, "fixture meets the burn admission minimum");
+        vm.recordLogs();
         vm.prank(holder);
-        try sdgnrs.burn(burnAmount) returns (uint256, uint256, uint256) {
-        } catch {
-            vm.assume(false);
+        sdgnrs.burn(burnAmount);
+        uint32 holderId = game.walletIdOf(holder);
+        uint32 batchId;
+        Vm.Log[] memory submitted = vm.getRecordedLogs();
+        for (uint256 i; i < submitted.length; ++i) {
+            if (submitted[i].emitter == address(sdgnrs) && submitted[i].topics.length == 3
+                && submitted[i].topics[0] == keccak256("RedemptionSubmitted(uint32,uint256,uint32)")
+                && uint32(uint256(submitted[i].topics[1])) == holderId) {
+                batchId = uint32(uint256(submitted[i].topics[2]));
+            }
         }
+        assertGt(batchId, 0, "fixture admitted a real redemption batch");
 
         // Advance to the next wall-day so the upcoming mineFlip requests a fresh VRF — the word
         // that resolves this burn's pool — instead of replaying the now-recorded current-day word.
@@ -577,6 +572,7 @@ contract RngLockDeterminism is DeployProtocol {
 
         uint256 preLockSnap = _snapshotPreLock();
 
+        vm.recordLogs();
         game.mineFlip();
         uint256 reqId = mockVRF.lastRequestId();
         assertTrue(game.rngLocked(), "StakedStonkRedemption: rngLock must engage");
@@ -597,13 +593,14 @@ contract RngLockDeterminism is DeployProtocol {
         // The determinism claim rides the WORD, not the request id.
         _deliverMockVrf(mockVRF.lastRequestId(), vrfWord);
 
-        bytes32 perturbedOutputs = _captureStonkRedemptionOutputs();
+        bytes32 perturbedOutputs = _captureStonkRedemptionOutputs(batchId, holderId);
 
         _revertToPreLock(preLockSnap);
+        vm.recordLogs();
         game.mineFlip();
         uint256 reqIdBaseline = mockVRF.lastRequestId();
         _deliverMockVrf(reqIdBaseline, vrfWord);
-        bytes32 baselineOutputs = _captureStonkRedemptionOutputs();
+        bytes32 baselineOutputs = _captureStonkRedemptionOutputs(batchId, holderId);
 
         _assertVrfOutputByteIdentity(
             perturbedOutputs,
@@ -612,9 +609,36 @@ contract RngLockDeterminism is DeployProtocol {
         );
     }
 
-    function _captureStonkRedemptionOutputs() internal view returns (bytes32) {
-        uint256 pre = sdgnrs.pendingRedemptionEthValue();
-        return keccak256(abi.encode(pre, address(sdgnrs).balance));
+    function test_StakedRedemptionCommitmentSurvivesNextDayBurn_regression() public {
+        testFuzz_RngLockDeterminism_StakedStonkRedemption(
+            14316, 35000, 80940301956449715265555514883629269286580728405949583951092367079218117361617
+        );
+    }
+
+    function _captureStonkRedemptionOutputs(uint32 batchId, uint32 holderId) internal returns (bytes32) {
+        // Compare the committed batch after its actual consumer runs. Global reserve
+        // and custody can also include a later batch closed after a wall-day warp.
+        _finishReadConsumers();
+        (uint80 tokens, uint96 payout, uint96 base, uint96 escrow, uint16 roll, uint16 reward) =
+            sdgnrs.redemptionBatches(batchId);
+        assertGt(tokens, 0, "the committed batch is nonempty");
+        assertGt(roll, 0, "the committed batch actually resolved");
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 claims;
+        bytes32 claim;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter == address(sdgnrs) && logs[i].topics.length == 3
+                && logs[i].topics[0] == keccak256("RedemptionClaimed(uint32,uint32,uint16,uint256,uint256,uint256)")
+                && uint32(uint256(logs[i].topics[1])) == holderId
+                && uint32(uint256(logs[i].topics[2])) == batchId) {
+                ++claims;
+                claim = keccak256(logs[i].data);
+            }
+        }
+        assertEq(claims, 1, "the original claim settled exactly once");
+        (uint80 pending,) = sdgnrs.pendingRedemptions(holderId, batchId);
+        assertEq(pending, 0, "the original claim is consumed");
+        return keccak256(abi.encode(tokens, payout, base, escrow, roll, reward, claim));
     }
 
 

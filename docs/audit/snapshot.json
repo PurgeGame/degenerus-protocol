@@ -1,8 +1,8 @@
 {
-  "date": "2026-10-07",
+  "date": "2026-10-08",
   "status": "working-tree source identity; verification status is recorded separately",
-  "base_commit": "e019363a489a63dd7de4862507f348f315b981c1",
-  "source_file_count": 83,
+  "base_commit": "98cd2a781c1ce328362351ca9a0761e41e50eea1",
+  "source_file_count": 84,
   "source_files": [
     "contracts/AFKingSubscriptionToken.sol",
     "contracts/Coinflip.sol",
@@ -40,6 +40,7 @@
     "contracts/interfaces/IDegenerusParimutuel.sol",
     "contracts/interfaces/IDegenerusQuests.sol",
     "contracts/interfaces/IJackpotBattle.sol",
+    "contracts/interfaces/ILiquidation.sol",
     "contracts/interfaces/IStETH.sol",
     "contracts/interfaces/IVRFCoordinator.sol",
     "contracts/interfaces/IVaultCoin.sol",

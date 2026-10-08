@@ -100,7 +100,7 @@ contract JackpotVariablePricingTest is CrapsPins {
     }
 
     function test_ExactDecoderOddsMeanAndBothPresetCopies() public {
-        JackpotVariableDecoder decoder = JackpotVariableDecoder(deployCode("JackpotVariablePricing.t.sol:JackpotVariableDecoder"));
+        JackpotVariableDecoder decoder = new JackpotVariableDecoder{salt: keccak256("variable-pricing-decoder")}();
         uint256 priceSum;
         for (uint256 i; i < 4; ++i) {
             uint256 expected = i == 0 ? 6000 : i == 3 ? 10000 : 8000;

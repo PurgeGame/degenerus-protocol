@@ -164,8 +164,13 @@ contract RedemptionConsumerOrderingTest is RedemptionCloseTools {
         assertEq(_owed(CAROL), 0);
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
         assertFalse(sdgnrs.redemptionSettlementPending());
+        uint256 nextBurn = sdgnrs.balanceOf(ALICE);
+        (uint256 burnValue,) = sdgnrs.previewBurnValue(nextBurn);
+        assertGe(burnValue, sdgnrs.MIN_REDEMPTION_VALUE(), "fixture: next burn meets minimum");
         vm.prank(ALICE);
-        sdgnrs.burn(1e12);
+        sdgnrs.burn(nextBurn);
         assertEq(_openBatch(), burnDay + 1, "next open batch accepts burns");
+        (uint80 nextTokens,) = sdgnrs.pendingRedemptions(game.walletIdOf(ALICE), burnDay + 1);
+        assertEq(uint256(nextTokens), nextBurn, "next batch records the new claim");
     }
 }

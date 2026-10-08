@@ -46,37 +46,24 @@ async function giveSDGNRS(sdgnrs, game, recipient, amount) {
   await seedDailyWord(game, await game.currentDayView(), BigInt("0x" + "de".repeat(32)));
 }
 
-// Seed Game claimable and its matching pool liability, both included in the live
-// estimate and in the eventual request-close price. Burns do not move this backing.
+// Fund Game claimable through its real credit hook, including matching ETH custody.
 async function fundGameClaimableForSdgnrs(gameAddr, sdgnrsAddr, amount) {
-  const CLAIMABLE_WINNINGS_SLOT = 7n;
-  const CLAIMABLE_POOL_SLOT = 1n;
-  // balancesPacked[SDGNRS_ID] = keccak256(abi.encode(uint256(2), slot 7)); balances are keyed by
-  // the uint32 wallet ID (protocol ids: VAULT 1, SDGNRS 2, GNRUS 3), claimable in the low 128 bits.
-  const SDGNRS_WALLET_ID = 2n;
-  const key = hre.ethers.keccak256(
-    hre.ethers.AbiCoder.defaultAbiCoder().encode(
-      ["uint256", "uint256"],
-      [SDGNRS_WALLET_ID, CLAIMABLE_WINNINGS_SLOT]
-    )
-  );
-  await hre.network.provider.send("hardhat_setStorageAt", [
-    gameAddr,
-    key,
-    hre.ethers.toBeHex(amount, 32),
-  ]);
-  // claimablePool occupies the upper 128 bits of slot 1; preserve the lower 128.
-  const slot1Hex = hre.ethers.toBeHex(CLAIMABLE_POOL_SLOT, 32);
-  const cur = BigInt(
-    await hre.network.provider.send("eth_getStorageAt", [gameAddr, slot1Hex, "latest"])
-  );
-  const lower128 = cur & ((1n << 128n) - 1n);
-  const packed = lower128 | (BigInt(amount) << 128n);
-  await hre.network.provider.send("hardhat_setStorageAt", [
-    gameAddr,
-    slot1Hex,
-    hre.ethers.toBeHex(packed, 32),
-  ]);
+  const balance = await hre.ethers.provider.getBalance(sdgnrsAddr);
+  await hre.ethers.provider.send("hardhat_setBalance", [sdgnrsAddr, hre.ethers.toBeHex(balance + amount)]);
+  await hre.network.provider.request({ method: "hardhat_impersonateAccount", params: [sdgnrsAddr] });
+  try {
+    const signer = await hre.ethers.getSigner(sdgnrsAddr);
+    const game = await hre.ethers.getContractAt("DegenerusGame", gameAddr);
+    await hre.network.provider.send("hardhat_setNextBlockBaseFeePerGas", ["0x0"]);
+    await game.connect(signer).creditRedemptionDirect(2, amount, { value: amount, gasPrice: 0 });
+  } finally {
+    await hre.network.provider.request({ method: "hardhat_stopImpersonatingAccount", params: [sdgnrsAddr] });
+  }
+}
+
+async function assertBurnAdmitted(sdgnrs, amount) {
+  const [value] = await sdgnrs.previewBurnValue(amount);
+  expect(value, "fixture must clear the production redemption minimum").to.be.gte(eth("0.01"));
 }
 
 describe("DGNRS", function () {
@@ -480,8 +467,10 @@ describe("DGNRS", function () {
 
     it("burn is player-only — no third-party burn", async function () {
       const { sdgnrs, game, alice } = await loadFixture(deployFullProtocol);
-      const amount = dgnrsUnits("1000");
+      const amount = INITIAL_SUPPLY / 100n;
       await giveSDGNRS(sdgnrs, game, alice.address, amount);
+      await fundGameClaimableForSdgnrs(await game.getAddress(), await sdgnrs.getAddress(), eth("10"));
+      await assertBurnAdmitted(sdgnrs, amount);
 
       // Alice burns her own sDGNRS — during active game this enters the gambling path
       // and emits RedemptionSubmitted, not Burn (Burn is only emitted post-gameOver)
@@ -493,7 +482,7 @@ describe("DGNRS", function () {
 
     it("burn with ETH backing records unpriced batch tokens", async function () {
       const { sdgnrs, game, alice } = await loadFixture(deployFullProtocol);
-      const sdgnrsAmount = dgnrsUnits("100000"); // 100k sDGNRS
+      const sdgnrsAmount = INITIAL_SUPPLY / 100n;
       await giveSDGNRS(sdgnrs, game, alice.address, sdgnrsAmount);
 
       // Add ETH to DGNRS contract via game impersonation
@@ -522,6 +511,7 @@ describe("DGNRS", function () {
 
       // Burn — during active game this enters the gambling path (RedemptionSubmitted).
       // Tokens burn immediately; the next request fixes their proportional payout base.
+      await assertBurnAdmitted(sdgnrs, sdgnrsAmount);
       const tx = await sdgnrs.connect(alice).burn(sdgnrsAmount);
 
       const ev = await getEvent(tx, sdgnrs, "RedemptionSubmitted");
@@ -536,8 +526,10 @@ describe("DGNRS", function () {
 
     it("RedemptionSubmitted event emitted with correct fields during active game", async function () {
       const { sdgnrs, game, alice } = await loadFixture(deployFullProtocol);
-      const amount = dgnrsUnits("1000");
+      const amount = INITIAL_SUPPLY / 100n;
       await giveSDGNRS(sdgnrs, game, alice.address, amount);
+      await fundGameClaimableForSdgnrs(await game.getAddress(), await sdgnrs.getAddress(), eth("10"));
+      await assertBurnAdmitted(sdgnrs, amount);
 
       // During active game, burn() routes to the gambling path and emits RedemptionSubmitted.
       // The Burn event is only emitted on the deterministic post-gameOver path.
@@ -549,8 +541,10 @@ describe("DGNRS", function () {
 
     it("total supply decreases after burn", async function () {
       const { sdgnrs, game, alice } = await loadFixture(deployFullProtocol);
-      const amount = dgnrsUnits("1000");
+      const amount = INITIAL_SUPPLY / 100n;
       await giveSDGNRS(sdgnrs, game, alice.address, amount);
+      await fundGameClaimableForSdgnrs(await game.getAddress(), await sdgnrs.getAddress(), eth("10"));
+      await assertBurnAdmitted(sdgnrs, amount);
       const supplyBefore = await sdgnrs.totalSupply();
 
       await sdgnrs.connect(alice).burn(amount);
@@ -559,7 +553,7 @@ describe("DGNRS", function () {
 
     it("burn with stETH backing records unpriced batch tokens", async function () {
       const { sdgnrs, game, mockStETH, deployer, alice } = await loadFixture(deployFullProtocol);
-      const sdgnrsAmount = dgnrsUnits("100000");
+      const sdgnrsAmount = INITIAL_SUPPLY / 100n;
       await giveSDGNRS(sdgnrs, game, alice.address, sdgnrsAmount);
 
       // Deposit stETH into sDGNRS via game
@@ -592,6 +586,7 @@ describe("DGNRS", function () {
 
       // A live burn records raw tokens; stETH stays in custody until settlement.
       const stethBefore = await mockStETH.balanceOf(alice.address);
+      await assertBurnAdmitted(sdgnrs, sdgnrsAmount);
       const tx = await sdgnrs.connect(alice).burn(sdgnrsAmount);
       const ev = await getEvent(tx, sdgnrs, "RedemptionSubmitted");
       expect(ev.args.player).to.equal(await game.walletIdOf(alice.address));

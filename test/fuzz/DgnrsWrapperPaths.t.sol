@@ -25,7 +25,10 @@ contract DgnrsWrapperPaths is DeployProtocol {
         assertEq(sdgnrs.totalSupply(), 1e24);
         address owner = ContractAddresses.CREATOR;
         _giveWalletId(owner);
-        uint256 amount = 1e12 + 1;
+        vm.deal(address(sdgnrs), 100 ether);
+        uint256 amount = 1e21 + 1;
+        (uint256 burnValue,) = sdgnrs.previewBurnValue(amount);
+        assertGe(burnValue, sdgnrs.MIN_REDEMPTION_VALUE(), "fixture: wrapped burn meets minimum");
         uint256 before = dgnrs.balanceOf(owner);
         uint256 supply = dgnrs.totalSupply();
         (uint32 batchId,,,) = sdgnrs.redemptionBatchState();

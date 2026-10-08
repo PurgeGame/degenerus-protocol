@@ -139,8 +139,9 @@ interrupt it. Foil levels need not be monotonic. Terminal continuation preserves
 an active solo offset and seats when finishing the same old cohort on its old
 word; genuine repoints, completed queues and retired buffers clear progress.
 
-Each indivisible miner operation, including its complete checkpoint tail, must
-fit within 10M gas. There is no fixed transaction gas cap: a transaction may
+Each indivisible miner operation, including its complete checkpoint tail, targets
+10M gas in about 99% of realistic cases and must stay below the 13M absolute ceiling
+specified in `docs/AUDIT.md`. There is no fixed transaction gas cap: a transaction may
 perform several operations. Available gas may select an earlier safe checkpoint,
 with the complete flush reserved; it must not change the final ticket inventory.
 Actual failures still revert atomically, and an OOG failure cannot become an

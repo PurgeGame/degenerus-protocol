@@ -20,8 +20,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  foundry:
-    name: Foundry build + tests
+  foundry-build:
+    name: Production build + assurance gates
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -60,36 +60,93 @@ jobs:
         run: npx mocha test/deploy/OptionalConfig.test.js
 
       - name: Build production contracts
-        run: forge build --skip test
+        run: forge build --skip test --out forge-out-production --cache-path .foundry-cache-production
 
       - name: Contract size ceiling (EIP-170)
-        run: node scripts/check-deployment-sizes.js
+        run: node scripts/check-deployment-sizes.js forge-out-production
 
       # MECH-02: deterministic storage-layout gate. Fails the PR if any slot/offset
       # in DegenerusGame, a state contract, or a delegatecall module moves vs the
-      # committed golden (whole-protocol corruption risk under 155 delegatecall sites).
+      # committed golden. Recursive comparison also checks nested structs across
+      # every module and the separate CrapsBattle/JackpotBattle delegate pair.
       - name: Storage-layout oracle (MECH-02)
+        env:
+          FOUNDRY_OUT: forge-out-production
+          FOUNDRY_CACHE_PATH: .foundry-cache-production
         run: bash scripts/layout/storage_layout_oracle.sh
+
+      - name: Recursive delegate storage layouts
+        run: python3 scripts/layout/check_recursive_layout.py --out forge-out-production --report .audit-test-logs/foundry/recursive-layout.json
 
       # Run all source-drift gates, including the newer crank, randomness,
       # shared-storage, arithmetic and simulation parity registries.
       - name: Source-drift gates
         run: make check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete check-advance-calls check-rng-taint check-unchecked check-write-owners check-gasleft
 
-      - name: Foundry regressions and default invariants
-        run: FOUNDRY_ISOLATE=false python3 scripts/test-foundry-groups.py --group repro-symbolic --group fuzz-1 --group fuzz-2 --group fuzz-3 --group fuzz-4 --group invariants --max-files 10 --threads 1 -vvv
-
-      - name: Cold integration and gas tests
-        run: FOUNDRY_ISOLATE=true python3 scripts/test-foundry-groups.py --group integration-gas --max-files 5 --threads 1 -vvv
-
-      - name: Preserve Foundry evidence, including failed batches
+      - name: Preserve structural evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: foundry-evidence
+          name: foundry-structural-evidence
           path: .audit-test-logs/foundry/
           include-hidden-files: true
           if-no-files-found: ignore
+
+  foundry-tests:
+    name: Foundry ${{ matrix.group }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        group: [repro-symbolic, fuzz-1, fuzz-2, fuzz-3, fuzz-4, invariants, integration-gas]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: foundry-rs/foundry-toolchain@v1
+      - run: npm ci
+      - name: Add swap space for bounded via-IR compilations
+        run: |
+          sudo swapoff -a || true
+          sudo rm -f /swapfile
+          sudo fallocate -l 14G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=14336
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+      - name: Run complete selected group
+        env:
+          TEST_GROUP: ${{ matrix.group }}
+        run: |
+          if [ "$TEST_GROUP" = integration-gas ]; then
+            FOUNDRY_ISOLATE=true python3 scripts/test-foundry-groups.py --group "$TEST_GROUP" --max-files 5 --threads 1 -vvv
+          else
+            FOUNDRY_ISOLATE=false python3 scripts/test-foundry-groups.py --group "$TEST_GROUP" --max-files 10 --threads 1 -vvv
+          fi
+      - name: Preserve group evidence, including failed batches
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: foundry-${{ matrix.group }}-evidence
+          path: .audit-test-logs/foundry/
+          include-hidden-files: true
+          if-no-files-found: ignore
+
+  foundry:
+    name: Foundry build + tests
+    needs: [foundry-build, foundry-tests]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every build gate and test group
+        env:
+          BUILD_RESULT: ${{ needs.foundry-build.result }}
+          TEST_RESULT: ${{ needs.foundry-tests.result }}
+        run: test "$BUILD_RESULT" = success && test "$TEST_RESULT" = success
 
   hardhat:
     name: Hardhat tests in bounded batches
@@ -173,13 +230,20 @@ jobs:
         run: npm ci
       - name: Install Halmos
         run: pip install halmos==0.3.3
+      - name: Exact split arithmetic proofs and gate sensitivity
+        run: |
+          python3 scripts/test-split-arithmetic.py
+          python3 scripts/check-split-arithmetic.py --json-output .audit-test-logs/halmos/split-arithmetic.json
       - name: Configure deterministic Foundry deployment addresses
         run: node scripts/lib/patchForFoundry.js
       - name: Halmos symbolic proofs
+        env:
+          # Halmos pins and verifies checksums for its supported solver downloads.
+          HALMOS_ALLOW_DOWNLOAD: '1'
         run: |
           set -o pipefail
           mkdir -p .audit-test-logs/halmos
-          FOUNDRY_PROFILE=halmos halmos --forge-build-out forge-out-halmos --loop 8 --solver-timeout-assertion 120000 --solver-threads 2 --json-output .audit-test-logs/halmos/results.json --dump-smt-queries --dump-smt-directory .audit-test-logs/halmos/queries 2>&1 | tee .audit-test-logs/halmos/output.log
+          FOUNDRY_PROFILE=halmos halmos --forge-build-out forge-out-halmos --loop 8 --panic-error-codes '*' --solver-timeout-assertion 120000 --solver-threads 2 --json-output .audit-test-logs/halmos/results.json --dump-smt-queries --dump-smt-directory .audit-test-logs/halmos/queries 2>&1 | tee .audit-test-logs/halmos/output.log
       - name: Preserve symbolic evidence, including unresolved queries
         if: always()
         uses: actions/upload-artifact@v4
@@ -189,11 +253,37 @@ jobs:
           include-hidden-files: true
           if-no-files-found: ignore
 
+  deep-selection:
+    name: Discover deep invariant partitions
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    outputs:
+      partitions: ${{ steps.discover.outputs.partitions }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify partition coverage
+        run: python3 scripts/test-deep-invariant-matrix.py
+      - name: Enumerate every invariant root and heavy property
+        id: discover
+        run: |
+          python3 - <<'PYTHON'
+          import os, subprocess
+          partitions = subprocess.check_output(["python3", "scripts/deep-invariant-matrix.py"], text=True).strip()
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write("partitions=" + partitions + "\n")
+          PYTHON
+
   deep-invariants:
-    name: Deep invariant sweep (scheduled / manual)
+    name: Deep ${{ matrix.file }} / ${{ matrix.label }}
+    needs: deep-selection
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include: ${{ fromJSON(needs.deep-selection.outputs.partitions) }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -203,13 +293,17 @@ jobs:
           node-version: '20'
       - uses: foundry-rs/foundry-toolchain@v1
       - run: npm ci
-      - name: Deep invariant sweep (runs=1000 / depth=256)
-        run: FOUNDRY_PROFILE=deep FOUNDRY_ISOLATE=false python3 scripts/test-foundry-groups.py --group invariants --max-files 5 --threads 1
+      - name: Deep invariant partition (runs=1000 / depth=256, existing suite overrides retained)
+        env:
+          INVARIANT_FILE: ${{ matrix.file }}
+          INVARIANT_MATCH: ${{ matrix.match }}
+          INVARIANT_EXCLUDE: ${{ matrix.exclude }}
+        run: FOUNDRY_PROFILE=deep FOUNDRY_ISOLATE=false python3 scripts/test-foundry-groups.py --file "$INVARIANT_FILE" --match-test "$INVARIANT_MATCH" --no-match-test "$INVARIANT_EXCLUDE" --threads 1
       - name: Preserve deep-invariant evidence, including failed batches
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: deep-invariant-evidence
+          name: deep-invariant-${{ strategy.job-index }}-evidence
           path: .audit-test-logs/foundry/
           include-hidden-files: true
           if-no-files-found: ignore

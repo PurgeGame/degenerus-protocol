@@ -407,7 +407,7 @@ contract RedemptionEndingPendingTest is RedemptionCloseTools {
         vm.deal(playerA, 1 ether);
         _giveWalletId(playerA);
         vm.prank(address(game));
-        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, playerA, 1_000_000e12);
+        sdgnrs.transferFromPool(sDGNRS.Pool.Reward, playerA, 1_000_000_000e12);
         vm.mockCall(
             address(coinflip),
             abi.encodeWithSelector(IReviewCoinflipMock.getCoinflipDayResult.selector),
@@ -429,8 +429,10 @@ contract RedemptionEndingPendingTest is RedemptionCloseTools {
 
         _primeCurrentDayRng();
         burnDay = _openBatch();
+        (uint256 preview,) = sdgnrs.previewBurnValue(1_000_000_000e12);
+        assertGe(preview, 0.01 ether, "fixture meets the burn admission minimum");
         vm.prank(playerA);
-        sdgnrs.burn(1_000_000e12);
+        sdgnrs.burn(1_000_000_000e12);
         vm.warp(vm.getBlockTimestamp() + 1 days);
         _primeCurrentDayRng();
         _closeFunded();

@@ -407,14 +407,15 @@ contract AnyInputSafety is DeployProtocol {
         }
     }
 
-    /// @dev Claimable winnings through a normal flow: the bystander sells a slice of its whale pass's
-    ///      far-future entries to the sDGNRS desk, which pays the seller in claimable.
+    /// @dev Seed a backed claim through the authenticated sDGNRS award hook.
     function _bystanderClaimable() internal {
         // Seed a deterministic protocol award through the real payable accounting door.
         // Liquidation now pays ETH out and no longer creates a seller claimable balance.
         vm.deal(address(sdgnrs), address(sdgnrs).balance + 0.1 ether);
+        uint32 bystanderId = game.walletIdOf(BYSTANDER);
         vm.prank(address(sdgnrs));
-        game.creditRedemptionDirect{value: 0.1 ether}(game.walletIdOf(BYSTANDER), 0.1 ether);
+        game.creditRedemptionDirect{value: 0.1 ether}(bystanderId, 0.1 ether);
+        assertGe(game.claimableWinningsOf(BYSTANDER), 0.1 ether, "fixture: bystander claim missing");
     }
 
     function _buildTracked() internal {
@@ -561,6 +562,19 @@ contract AnyInputSafety is DeployProtocol {
     // =====================================================================================
     // Non-vacuity / falsifiability pins
     // =====================================================================================
+
+    /// @notice Minimized campaign regression: a sold root remains valid in its ticket queues.
+    function test_queueOracleAcceptsLiquidation() public {
+        uint32 id = game.walletIdOf(actors[1]);
+        handler.gd_liquidateAccount(1, 0, 0);
+        (, address payee, bool authorized) = game.resolveAccount(id, actors[1]);
+        assertTrue(payee == address(vault) || payee == address(sdgnrs), "fixture must sell the account");
+        assertFalse(authorized, "seller loses authority");
+        _checkSolvency();
+        _checkBystander();
+        _checkConservation();
+        _checkLiveness();
+    }
 
     /// @notice The bystander really holds something in every tracked lane the fixture can fill.
     function test_fixtureBystanderHoldings() public view {

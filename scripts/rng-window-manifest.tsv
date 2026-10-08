@@ -221,3 +221,5 @@ ACCESSOR	lootboxRngPacked	degeneretteBetInfo	DegenerusGame.sol	READ	View bound f
 CURSOR	lootboxRngPacked	_placeDegeneretteBetCore	modules/DegenerusGameDegeneretteModule.sol	READ	Reads the write-buffer bet count to fix the bet id (position + 1) before the buffer is sealed; _collectBetFunds commits the increment.
 EXEMPT-ADVANCE	lootboxRngPacked	_swapRngBuffers	storage/DegenerusGameStorage.sol	READ	Seal (normal request or terminal request): latches the write counts into the read lengths. Retry never swaps.
 EXEMPT-ADVANCE	lootboxRngPacked	_swapRngBuffers	storage/DegenerusGameStorage.sol	WRITE	Seal clears pending ETH/FLIP and both write counts in one write; the new write buffer starts empty. Retry never swaps.
+
+EXEMPT-ADVANCE	rngRequestDay	_drawBafPair	modules/DegenerusGameJackpotDrawModule.sol	READ	tags candidate events with the locked request day; no selection input, existing request-day freeze coverage applies

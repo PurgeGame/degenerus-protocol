@@ -87,7 +87,7 @@ async function asGame(hreEthers, game, fn) {
 async function roundWinners(jackpots, lvl, word) {
   const rounds = [];
   for (let p = 0; p < 24; p++) {
-    const w = await jackpots.bafPairWinners(lvl, word, p, 48);
+    const [w] = await jackpots.bafPairWinners(lvl, word, p, 48, [0, 64, 128]);
     rounds.push({ best: w[0], second: w[1] }, { best: w[2], second: w[3] });
   }
   return rounds;
@@ -584,7 +584,6 @@ describe("DegenerusJackpots", function () {
         await idOf(coinflip, carol.address),
       ]);
 
-      // Set game level to 10
       await setLevel(gameAddr, 10);
 
       // Populate every trait bucket of levels 10 and 11 (the first two bands).
@@ -620,13 +619,14 @@ describe("DegenerusJackpots", function () {
       await recordBafFlipAsCoinflip(hre.ethers, coinflip, jackpots, bob.address, 10, eth(300));
       await recordBafFlipAsCoinflip(hre.ethers, coinflip, jackpots, carol.address, 10, eth(100));
 
-      // Four words, 192 rounds: each draws its own trait bucket or far-future packs.
+      // Four words, 192 rounds: near rounds reuse the frozen non-solo board; far packs vary.
       const words = [42n, 43n, 44n, 45n];
       let firstCount = 0;
       let secondCount = 0;
       console.log("\n    === BAF scatter rounds: lvl 10, FULL SLATE ===");
       for (const word of words) {
         const rounds = await roundWinners(jackpots, 10, word);
+        expect(rounds.slice(0, 24).some(({ best }) => best !== 0n), "near rounds use the main board").to.equal(true);
         for (const { best, second } of rounds) {
           // Only scored candidates place, and a second place needs a distinct first.
           if (best !== 0n) {

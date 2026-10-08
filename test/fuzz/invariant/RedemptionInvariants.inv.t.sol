@@ -26,6 +26,14 @@ contract RedemptionInvariants is DeployProtocol {
         handler = new RedemptionHandler(sdgnrs, game, mockVRF, coin, 5);
         vrfHandler = new VRFHandler(mockVRF, game);
         wrapperHandler = new WrapperPathHandler(sdgnrs, dgnrs, game, mockVRF, 3);
+        vm.deal(address(sdgnrs), 10_000 ether);
+        mockVRF.fundSubscription(1, 100 ether);
+        for (uint256 i; i < handler.getActorCount(); ++i) _giveWalletId(handler.getActor(i));
+        // Make redemption invariants non-vacuous even when random calls end the
+        // game immediately: every sequence starts with a real pending claim.
+        handler.action_burn(0, 10 ether);
+        assertEq(handler.successfulBurns(), 1, "campaign starts with an admitted redemption");
+        assertEq(handler.getBatchCount(), 1, "seeded batch is tracked");
         targetContract(address(handler));
         targetContract(address(vrfHandler));
         targetContract(address(wrapperHandler));
@@ -187,6 +195,17 @@ contract RedemptionInvariants is DeployProtocol {
     // =========================================================================
     //        FOCUSED: wrapper paths traverse deterministically (non-vacuity)
     // =========================================================================
+
+    function test_seededRedemptionCompletesRealClaim() public {
+        for (uint256 i; i < 32 && handler.ghost_claimCount() == 0; ++i) {
+            handler.action_settle(99);
+        }
+        assertEq(handler.ghost_claimCount(), 1, "seeded redemption settles exactly once");
+        invariant_ethSegregationSolvency();
+        invariant_noDoubleClaim();
+        invariant_supplyConsistency();
+        invariant_rollBounds();
+    }
 
     /// @notice Proves the unwrapTo paired decrement deterministically: one unwrap moves BOTH
     ///         sides down by exactly the unwrapped amount and preserves strict equality — so the

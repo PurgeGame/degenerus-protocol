@@ -75,10 +75,7 @@ contract SolvencyArithmeticTest is Test {
         assert((folded >> FUT) >= (live >> FUT) || future == HALF);
     }
 
-    // NOTE: there is no winner-total cap function to prove. The total is bounded
-    //       structurally by the bucket geometry: base [24,16,8,1] scaled by at most
-    //       DAILY_JACKPOT_SCALE_MAX_BPS (6.36x) gives 152+104+48+1 = 305, with the solo
-    //       bucket never scaled. The gas suite pins that ceiling directly.
+    // Winner geometry is exercised separately by the production gas suites.
 
     // -------------------------------------------------------------------------
     // (2) bucketShares: sum of distributed shares never exceeds the pool.
@@ -86,7 +83,10 @@ contract SolvencyArithmeticTest is Test {
     //      the solvency-critical direction is the upper bound — never pay out more
     //      than was drawn.) A counterexample = over-payment = insolvency.
     // -------------------------------------------------------------------------
-    function check_bucketShares_no_overpay(
+    /// @dev The exact integer proof and checked-arithmetic bounds live in
+    ///      scripts/check-split-arithmetic.py; this fuzz check calls the production
+    ///      library and covers the entire admitted split domain without rejections.
+    function testFuzz_bucketShares_no_overpay(
         uint256 pool,
         uint16 s0,
         uint16 s1,
@@ -97,10 +97,13 @@ contract SolvencyArithmeticTest is Test {
         uint16 c2,
         uint16 c3,
         uint8 remainderIdx
-    ) public pure {
-        if (pool > 1e30) return; // realistic ETH range
-        if (uint256(s0) + s1 + s2 + s3 > 10_000) return; // shareBps within 100% (as the real splits are)
-        if (remainderIdx > 3) return;
+    ) public {
+        pool = bound(pool, 0, 1e30);
+        s0 = uint16(bound(s0, 0, 10000));
+        s1 = uint16(bound(s1, 0, 10000 - s0));
+        s2 = uint16(bound(s2, 0, 10000 - s0 - s1));
+        s3 = uint16(bound(s3, 0, 10000 - s0 - s1 - s2));
+        remainderIdx = uint8(bound(remainderIdx, 0, 3));
         uint16[4] memory shareBps = [s0, s1, s2, s3];
         uint16[4] memory counts = [c0, c1, c2, c3];
         uint256[4] memory shares =

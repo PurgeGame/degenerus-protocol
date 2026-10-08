@@ -163,12 +163,12 @@ contract JackpotWordSamplingTest is Test {
         uint256 len = uint256(length) % 65;
         scatter.seed(len);
         entropy = (entropy & ~uint256(0xffffffffff)) | (uint256(7) << 24);
-        (uint8 trait, uint32[] memory players) = scatter.sampleTraitEntries(false, entropy);
-        assertEq(trait, 7);
+        uint32[] memory players = scatter.sampleTraitEntries(false, 7, entropy);
         uint256 take = len < 4 ? len : 4;
         assertEq(players.length, take);
         for (uint256 i; i < take; ++i) {
-            assertEq(players[i], scatter.idOf(address(uint160(0x10001 + _index(entropy >> 40, len, i)))));
+            uint256 index = _index(entropy >> 40, len, i);
+            assertEq(players[i], scatter.idOf(address(uint160(0x10001 + index))));
         }
     }
 

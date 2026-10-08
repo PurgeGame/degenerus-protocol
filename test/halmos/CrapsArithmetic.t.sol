@@ -20,7 +20,7 @@ contract CrapsArithmeticSymbolicTest is Test {
     CrapsViews internal craps;
 
     uint256 internal constant BPS = 10_000;
-    uint256 internal constant BOON_CAP = 60_000 ether;
+    uint256 internal constant BOON_CAP = 60_000; // whole FLIP, matching settlement units
     uint256 internal constant WON_MASK = 0xFFFFFFFFFFF;
 
     function setUp() public {
@@ -62,6 +62,7 @@ contract CrapsArithmeticSymbolicTest is Test {
     // _boonBonus: zero off the three tiers, capped by the 60k base, monotone below the cap.
     // ------------------------------------------------------------------------------------
 
+    /// @custom:halmos --solver cvc5-int
     function check_boonBonus_capAndTiers(uint256 mask, uint256 basePaid) public view {
         uint256 bonus = craps.boonBonusOf(mask, basePaid);
         if (mask != 1 && mask != 2 && mask != 4) {
@@ -77,6 +78,18 @@ contract CrapsArithmeticSymbolicTest is Test {
     function testFuzz_boonBonus_monotoneBelowCap(uint8 mask, uint96 a, uint96 b) public view {
         vm.assume(a <= b && b <= BOON_CAP);
         assert(craps.boonBonusOf(mask, a) <= craps.boonBonusOf(mask, b));
+    }
+
+    function test_boonCapUnitsAndBoundaryReplays() public view {
+        assertEq(craps.BOON_PAYOUT_BASE_CAP(), BOON_CAP);
+        for (uint256 mask; mask <= 8; ++mask) {
+            check_boonBonus_capAndTiers(mask, 0);
+            check_boonBonus_capAndTiers(mask, BOON_CAP - 1);
+            check_boonBonus_capAndTiers(mask, BOON_CAP);
+            check_boonBonus_capAndTiers(mask, BOON_CAP + 1);
+            check_boonBonus_capAndTiers(mask, uint256(1) << 67);
+            check_boonBonus_capAndTiers(mask, type(uint256).max);
+        }
     }
 
     // ------------------------------------------------------------------------------------
@@ -150,6 +163,7 @@ contract CrapsArithmeticSymbolicTest is Test {
     // _stakeFor: the stake is exactly the chip total in whole FLIP.
     // ------------------------------------------------------------------------------------
 
+    /// @custom:halmos --solver cvc5-int
     function check_stakeFor_isChipTotal(
         uint24 passLine,
         uint24 place4,
@@ -176,7 +190,14 @@ contract CrapsArithmeticSymbolicTest is Test {
         });
         uint256 chips = uint256(passLine) + place4 + place5 + place6 + place8 + place9 + place10 + hard4 + hard8
             + dontPass;
-        assert(craps.stakeFor(b) == chips * 1 ether);
+        // Prove the widening bound before multiplying; this is an assertion, not an assumption.
+        assert(chips <= uint256(type(uint24).max) * 10);
+        uint256 expected;
+        // The proved bound makes this product exact. A constant-divisor round trip verifies it
+        // without solc's symbolic-divisor overflow predicate overwhelming the SMT solver.
+        unchecked { expected = chips * 1 ether; }
+        assert(expected / 1 ether == chips);
+        assert(craps.stakeFor(b) == expected);
     }
 
     // ------------------------------------------------------------------------------------

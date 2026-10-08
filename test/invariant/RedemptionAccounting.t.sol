@@ -23,7 +23,10 @@ contract RedemptionAccounting is RedemptionFixture {
         targetSelector(FuzzSelector({addr: address(handler), selectors: selectors}));
         targetContract(address(handler));
         // Ensure all campaigns start with a real claim, not only reverting random actions.
-        handler.action_burn(0, 1_000_000 ether);
+        uint256 amount = _minimumLiveBurn();
+        handler.action_burn(0, amount);
+        assertEq(handler.successfulBurns(), 1, "campaign starts with an admitted redemption");
+        assertEq(handler.getBatchCount(), 1, "seeded batch is tracked");
     }
     function invariant_INV_01_WriteOnceRoll() public view {
         for (uint256 i; i < handler.getBatchCount(); ++i) {

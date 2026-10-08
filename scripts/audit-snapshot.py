@@ -54,6 +54,8 @@ def verification_files(build_inputs):
         "scripts/lib/fork-probe-utils.js", "scripts/fork-hardhat.config.js",
         "scripts/test-fork-probe-utils.js",
         "scripts/export-decimator-abi.py", "scripts/test-decimator-sampling.py",
+        "scripts/check-split-arithmetic.py", "scripts/test-split-arithmetic.py",
+        "scripts/deep-invariant-matrix.py", "scripts/test-deep-invariant-matrix.py",
     ) if (ROOT / p).is_file())
     paths.update(p.relative_to(ROOT).as_posix() for p in (ROOT / "test").rglob("*")
                  if p.is_file() and p.suffix in {".sol", ".js", ".py"})

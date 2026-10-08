@@ -71,8 +71,8 @@ contract JackpotMergeSeeder is DegenerusGame, WalletSeed {
 ///      balances/queues are seeded. Run with FOUNDRY_ISOLATE=true for cold transaction gas.
 ///      The engine composes every admitted checkpoint into one call, so each call is given a
 ///      realistic allowance chosen for the step under test: the smallest ladder rung that admits
-///      work (so the indivisible word application runs without a following battle group), one
-///      50-entry field group per draw call (984b8e7d8), and 10.5M for metered settle calls.
+///      work (so the indivisible word application runs without a following battle group), a 5M
+///      draw-call allowance admitting whole 50-entry groups, and 10.5M for metered settle calls.
 contract JackpotMergeAdvanceTest is DeployProtocol {
     IJackpotBattle private api;
     JackpotBattle private reader;
@@ -80,8 +80,8 @@ contract JackpotMergeAdvanceTest is DeployProtocol {
     uint64 private slot;
     uint256 private requestId;
     bytes32 private constant ADVANCE = keccak256("Advance(uint8,uint24)");
-    /// @dev Admits one 50-entry field group (JACKPOT_BATTLE_DRAW 3.3M + tails) but not a second.
-    uint256 private constant ONE_GROUP_GAS = 5_000_000;
+    /// @dev Admits bounded 50-entry checkpoints; cheaper storage can fit multiple groups.
+    uint256 private constant DRAW_GAS = 5_000_000;
     uint256 private constant SETTLE_GAS = 10_500_000 - 21_064;
 
     function setUp() public {
@@ -184,7 +184,7 @@ contract JackpotMergeAdvanceTest is DeployProtocol {
             // day's request, which locks the next battle.
             if (complete || active != slot) break;
             assertTrue(game.rngLocked()); assertTrue(game.advanceDue());
-            (uint8[] memory stages, uint256 gasUsed) = _step(sealedField ? SETTLE_GAS : ONE_GROUP_GAS);
+            (uint8[] memory stages, uint256 gasUsed) = _step(sealedField ? SETTLE_GAS : DRAW_GAS);
             if (gasUsed > maxGas) maxGas = gasUsed;
             assertGt(stages.length, 0, "every battle call progresses");
             assertEq(stages[0], battleStage, "the battle runs from its own stage");
@@ -232,7 +232,7 @@ contract JackpotMergeAdvanceTest is DeployProtocol {
         assertEq(r.drawnUnits, 5);
     }
     /// @dev 42 paid seats and a large award field drawn over one low byte, driven to completion:
-    ///      one 50-entry group per draw call, metered settle calls. Each call succeeds and makes
+    ///      whole 50-entry groups per draw call, metered settle calls. Each call succeeds and makes
     ///      progress; the field never settles before it seals, and the sealing call settles nothing.
     function _driveChunks(uint256 pool) private returns (uint256 maxDraw, uint256 draws, uint256 settles, uint64 sealCursor) {
         _prepare(false,false,false,40,8);
@@ -245,7 +245,8 @@ contract JackpotMergeAdvanceTest is DeployProtocol {
         for (uint256 i; i < 400; ++i) {
             (,, bool started, bool complete) = api.jackpotProgress();
             if (complete) break;
-            (uint8[] memory stages, uint256 gasUsed) = _step(started ? SETTLE_GAS : ONE_GROUP_GAS);
+            (CrapsBattleStorage.JackpotRound memory beforeRound,,) = reader.jackpotBattleOf(slot);
+            (uint8[] memory stages, uint256 gasUsed) = _step(started ? SETTLE_GAS : DRAW_GAS);
             assertEq(stages[0], 17);
             if (started) {
                 if (gasUsed > maxSettle) maxSettle = gasUsed;
@@ -256,19 +257,25 @@ contract JackpotMergeAdvanceTest is DeployProtocol {
             ++draws;
             (,,uint64 cursor) = reader.jackpotBattleOf(slot);
             (,,bool sealedNow,) = api.jackpotProgress();
+            (CrapsBattleStorage.JackpotRound memory afterRound,,) = reader.jackpotBattleOf(slot);
+            uint256 appended = afterRound.drawnUnits - beforeRound.drawnUnits;
+            assertGt(appended, 0, "every draw transaction appends awards");
+            assertLe(afterRound.drawnUnits, afterRound.awardTarget, "draw cannot overfill its target");
             if (sealedNow) sealCursor = cursor;
-            else assertEq(cursor, 0, "an unsealed field settled");
+            else {
+                assertEq(appended % 50, 0, "an unsealed call commits whole draw groups");
+                assertEq(cursor, 0, "an unsealed field settled");
+            }
         }
         (,,, bool done) = api.jackpotProgress();
         assertTrue(done, "battle completed");
-        // Per-chunk: a draw call admits exactly one 50-entry group, so the whole call must fit the
-        // group's declared admission envelope (JACKPOT_BATTLE_DRAW plus the phase and engine tails),
-        // itself far inside the 10M realistic chunk limit.
+        // Retain the measured whole-call gas guard even when improved packing admits multiple
+        // checkpoints. The production worker independently reserves every group's full bound.
         uint256 envelope = GasBounds.JACKPOT_BATTLE_DRAW + GasBounds.DAILY_PHASE_TAIL
             + GasBounds.ENGINE_BOUNDARY + GasBounds.ENGINE_RETURN;
-        emit log_named_uint("declared one-group admission envelope", envelope);
-        assertLe(maxDraw, envelope, "one field group stays inside its declared admission envelope");
-        emit log_named_uint("largest single-group draw call (incl intrinsic under isolate)", maxDraw);
+        emit log_named_uint("declared draw admission envelope", envelope);
+        assertLe(maxDraw, envelope, "draw transaction stays inside the retained gas guard");
+        emit log_named_uint("largest draw call (incl intrinsic under isolate)", maxDraw);
         emit log_named_uint("largest settle call at 10.5M (incl intrinsic under isolate)", maxSettle);
         emit log_named_uint("draw transactions", draws);
         emit log_named_uint("settlement transactions", settles);
@@ -279,8 +286,8 @@ contract JackpotMergeAdvanceTest is DeployProtocol {
         (, uint256 draws, uint256 settles, uint64 sealCursor) = _driveChunks(30_000 ether);
         (CrapsBattleStorage.JackpotRound memory r,,) = reader.jackpotBattleOf(slot);
         assertEq(r.drawnUnits, 500, "award cap");
-        // 50-entry field groups (984b8e7d8; was four 150-entry chunks).
-        assertEq(draws, 10, "50-entry draw groups");
+        assertGt(draws, 0, "the field was drawn");
+        assertLe(draws, 10, "500 awards finish within ten 50-entry checkpoints");
         assertGt(settles, 0, "metered settle calls");
         assertLe(settles, 10, "metered settle calls at 10.5M");
         // The sealing draw returns before settlement; metered calls settle afterwards
@@ -298,10 +305,14 @@ contract JackpotMergeAdvanceTest is DeployProtocol {
         JackpotMergeSeeder(payable(address(game))).widen(20, 30_000 ether);
         vm.etch(address(game), code);
         _requestAndApply();
-        for (uint256 i; i < 10; ++i) _step(ONE_GROUP_GAS);
+        for (uint256 i; i < 10; ++i) {
+            (,, bool sealedField,) = api.jackpotProgress();
+            if (sealedField) break;
+            _step(DRAW_GAS);
+        }
         (,, bool started,) = api.jackpotProgress();
         (,,uint64 cursor) = reader.jackpotBattleOf(slot);
-        assertTrue(started, "the tenth group seals");
+        assertTrue(started, "the draw calls seal within ten checkpoints");
         assertEq(cursor, 0, "the sealing call settles nothing");
         uint256 snap = vm.snapshotState();
         _step(SETTLE_GAS);
@@ -317,8 +328,8 @@ contract JackpotMergeAdvanceTest is DeployProtocol {
         (CrapsBattleStorage.JackpotRound memory r,,) = reader.jackpotBattleOf(slot);
         assertGe(r.drawnUnits, 439, "sealing chunk of at least 139 entries");
         assertLe(r.drawnUnits, 450);
-        // 439..450 entries in 50-entry groups (984b8e7d8; was three 150-entry chunks).
-        assertEq(draws, 9);
+        assertGt(draws, 0);
+        assertLe(draws, 9, "at most nine 50-entry checkpoints fill this field");
         assertEq(sealCursor, 0, "the sealing call settled past its draw charge");
     }
     function test_EmptyAwardQueuesStillClosePaidField() public {
@@ -328,7 +339,7 @@ contract JackpotMergeAdvanceTest is DeployProtocol {
         _prepare(false,false,false,3,8); _requestAndApply();
         vm.mockCallRevert(ContractAddresses.JACKPOT_BATTLE,
             abi.encodeWithSelector(JackpotBattle.prepareJackpotBattle.selector), hex"deadbeef");
-        vm.expectRevert(bytes4(0xdeadbeef)); game.mineFlip{gas: ONE_GROUP_GAS}();
+        vm.expectRevert(bytes4(0xdeadbeef)); game.mineFlip{gas: DRAW_GAS}();
         assertTrue(game.rngLocked());
         vm.clearMockedCalls(); _drain(false,false);
     }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {BafViews} from "../helpers/BafViews.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -363,14 +364,14 @@ contract BafWeightedDrawTest is DeployProtocol {
     /// @dev Every scatter pair of the 48-round schedule and head slots 0 and 2 for bracket 10.
     function _otherSlots(uint256 word) internal view returns (bytes32 h) {
         for (uint256 pair; pair < 24; ++pair) {
-            h = keccak256(abi.encode(h, jackpots.bafPairWinners(10, word, pair, 48)));
+            h = keccak256(abi.encode(h, BafViews.pair(address(jackpots), 10, word, pair, 48)));
         }
         h = keccak256(abi.encode(h, jackpots.bafHeadWinner(10, word, 0), jackpots.bafHeadWinner(10, word, 2)));
     }
 
     function _assertAllSlotsEmpty(uint256 word, bool includeDraw) internal view {
         for (uint256 pair; pair < 24; ++pair) {
-            uint32[4] memory drawn = jackpots.bafPairWinners(10, word, pair, 48);
+            uint32[4] memory drawn = BafViews.pair(address(jackpots), 10, word, pair, 48);
             for (uint256 k; k < 4; ++k) assertEq(drawn[k], 0, "no scored candidate takes a scatter place");
         }
         assertEq(jackpots.bafHeadWinner(10, word, 0), 0, "no top bettor");

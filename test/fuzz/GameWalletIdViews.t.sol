@@ -245,9 +245,8 @@ contract GameWalletIdViews is DeployProtocol {
             ext.x_bucketAppend(lvl, trait, id, 1);
         }
 
-        (uint8 traitSel, uint32[] memory entries) = game.sampleTraitEntries(true, entropy);
+        uint32[] memory entries = game.sampleTraitEntries(true, trait, entropy);
 
-        assertEq(traitSel, trait, "trait selection");
         uint256 len = ext.x_bucketLength(lvl, trait);
         assertGe(len, count, "fixture: seeded lanes present");
         uint32[] memory expected = _expectedTraitSample(lvl, trait, len, entropy);
@@ -265,17 +264,16 @@ contract GameWalletIdViews is DeployProtocol {
         uint256 entropy = uint256(keccak256("sampler_empty"));
         uint24 lvl = game.level() + 1;
         uint8 trait = uint8(entropy >> 24);
-        (uint8 t, uint32[] memory entries) = game.sampleTraitEntries(true, entropy);
-        assertEq(t, trait, "trait selection");
+        uint32[] memory entries = game.sampleTraitEntries(true, trait, entropy);
         assertEq(entries.length, 0, "empty bucket returns no entries");
 
         (, uint32 id) = _wallet("retired_entry");
         ext.x_bucketAppend(lvl, trait, id, 3);
-        (, entries) = game.sampleTraitEntries(true, entropy);
+        entries = game.sampleTraitEntries(true, trait, entropy);
         assertEq(entries.length, 3, "a live bucket samples");
         // A later same-parity level takes over the buffer: the level is retired.
         ext.x_setTicketBufferLevel(lvl + 2);
-        (, entries) = game.sampleTraitEntries(true, entropy);
+        entries = game.sampleTraitEntries(true, trait, entropy);
         assertEq(entries.length, 0, "a retired level returns no entries");
     }
 

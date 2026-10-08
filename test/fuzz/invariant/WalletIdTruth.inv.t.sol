@@ -280,8 +280,13 @@ contract WalletIdTruthInvariant is DeployProtocol {
         coinflip.depositCoinflip(0, 1_000);
         vm.prank(p);
         crapsBattle.setPreferredBoard(0, 1 | (1 << 9));
+        // Populate a real redemption record above the current minimum value.
+        vm.deal(address(sdgnrs), 20_000 ether);
+        uint256 burnAmount = dgnrs.balanceOf(p);
+        (uint256 burnValue,) = sdgnrs.previewBurnValue(burnAmount);
+        assertGe(burnValue, sdgnrs.MIN_REDEMPTION_VALUE(), "fixture: redemption meets minimum");
         vm.prank(p);
-        sdgnrs.burnWrapped(1e12);
+        sdgnrs.burnWrapped(burnAmount);
 
         uint256 cr = uint256(vm.load(address(crapsBattle), keccak256(abi.encode(id, CrapsSlots.PASS_CREDITS_BY_ID))));
         assertEq((cr >> 64) & 0xfffff, 1 | (1 << 6), "compressed preferred board");

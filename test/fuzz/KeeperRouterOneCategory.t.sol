@@ -190,6 +190,14 @@ contract KeeperRouterOneCategory is DeployProtocol {
         assertFalse(game.advanceDue(), "pre: settled (advance not due)");
         assertFalse(game.rngLocked(), "pre: settled (not locked)");
 
+        // Packing improvements made the empty advance cheaper than the unpaid first million.
+        // Queue real paid work so the exactly-once reward assertion remains non-vacuous.
+        for (uint256 i; i < 4; ++i) {
+            address buyer = address(uint160(0xB0A17000 + i));
+            vm.deal(buyer, 10 ether);
+            _buyBox(buyer, LOOTBOX_WEI);
+        }
+
         // Drive `advanceDue()` true: roll the wall clock forward so the simulated day index moves ahead.
         vm.warp(block.timestamp + 1 days);
         assertTrue(game.advanceDue(), "pre: advance is due");

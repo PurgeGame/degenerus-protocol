@@ -47,7 +47,11 @@ contract RedemptionHandler is Test {
             actors.push(actor);
             vm.deal(actor, 10 ether);
             vm.prank(address(g));
-            s.transferFromPool(sDGNRS.Pool.Reward, actor, 1_000_000e12);
+            // At 10,000 ETH backing, this supports real burns above the 0.01 ETH
+            // admission floor. The old 1e18 allocation left bounded seeds at or
+            // below admission instead of giving the campaign a useful range.
+            uint256 funded = s.transferFromPool(sDGNRS.Pool.Reward, actor, 1_000 ether);
+            assertEq(funded, 1_000 ether, "handler actors receive usable redemption balances");
         }
     }
     function setCoinflip(address c) external { coinflip = c; }

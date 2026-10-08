@@ -4,11 +4,13 @@ pragma solidity ^0.8.26;
 import {TicketQueueStorage} from "./TicketQueueStorage.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
+import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
+import {IStETH} from "../../../contracts/interfaces/IStETH.sol";
 import {GameSlots} from "../../helpers/GameSlots.sol";
 
 /// @title SolvencyObligations -- canonical ETH-obligation set for the game contract
-/// @notice Computes the contract's TRUE ETH obligation set so solvency invariants can assert
-///         `address(game).balance >= obligations()` and still catch a real `balance < obligations`.
+/// @notice Computes the contract's ETH-denominated obligations and backing so solvency invariants
+///         can assert `backing(game) >= obligations(game)` across automatic ETH-to-stETH staking.
 ///
 ///         The set mirrors the contract's own canonical reservation calc in
 ///         DegenerusGameJackpotModule.distributeYieldSurplus (the only on-chain place the protocol
@@ -32,7 +34,7 @@ import {GameSlots} from "../../helpers/GameSlots.sol";
 ///            post-game tickets, never withdrawable ETH. Counting it double-counts a dead pool.
 ///
 ///         This is a PRINCIPLED correction, NOT a weakening: `obligations()` still equals the exact
-///         set of ETH the contract is on the hook to pay out, so `balance < obligations()` remains a
+///         set of ETH the contract is on the hook to pay out, so `backing(game) < obligations(game)` is a
 ///         genuine insolvency signal. (The §1 post-game-over Degenerette resolve in
 ///         323-SOLVENCY-FINDING.md pushed `claimablePool` itself above balance; that path is now
 ///         contract-guarded at HEAD, and this helper keeps `claimablePool` in the post-GO set so any
@@ -47,6 +49,13 @@ library SolvencyObligations {
     // Cheatcode address (forge-std Vm). Used to read the no-external-view pending buffer.
     address internal constant VM_ADDRESS =
         address(uint160(uint256(keccak256("hevm cheat code"))));
+
+    /// @notice Game-held backing, matching distributeYieldSurplus's ETH + stETH calculation.
+    /// @dev Pool obligations are ETH-denominated; automatic staking changes the custody asset
+    ///      without reducing those obligations. Count only assets held by the Game itself.
+    function backing(DegenerusGame game) internal view returns (uint256) {
+        return address(game).balance + IStETH(ContractAddresses.STETH_TOKEN).balanceOf(address(game));
+    }
 
     /// @notice The contract's TRUE ETH obligation set at the current state.
     /// @param game The DegenerusGame under test.

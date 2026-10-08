@@ -57,7 +57,7 @@ PURE-DERIVE	PARAM	seed	settleSlipBounded	CrapsEngine.sol	external pure engine do
 PURE-DERIVE	ARG	EntropyLib.hash2	sampleFarFutureTickets	DegenerusGame.sol	Mix the committed entropy and filled candidate count for another level when fewer than four slots have been filled.
 EXEMPT-ADVANCE	PARAM	entropy	sampleFarFutureTickets	DegenerusGame.sol	view sampler over the far-future ticketQueue; consumed by bafPairWinners inside the locked BAF award stage (one sample of eight lanes per round pair); far-future pushes revert RngLocked across request->unlock
 PURE-DERIVE	ARG	PackedTicketSampleLib.begin	sampleTraitEntries	DegenerusGame.sol	BAF scatter derives word and lane rotation from its advance-dispatched entropy; pure memory operation over the committed bucket length
-EXEMPT-ADVANCE	PARAM	entropy	sampleTraitEntries	DegenerusGame.sol	view sampler of lvlTraitEntry[targetLvl][entropy>>24]; on-chain consumer is DegenerusJackpots.bafPairWinners inside the locked BAF award stage; buckets advance-written only
+EXEMPT-ADVANCE	PARAM	entropy	sampleTraitEntries	DegenerusGame.sol	view sampler of the bool-selected even/current or odd/next BAF trait buffer; runBafJackpot prepares both once under the daily lock before bafPairWinners samples them; buckets advance-written only
 NOT-RNG	PARAM	subWord	_afkingStreakMirror	DegenerusGameLens.sol	subWord = packed Sub record (covered day, start day, latch); the sealed-word presence test inside is the window gate's _rngWordByDayOf row; lens only
 NOT-RNG	PARAM	subWord	_effectiveQuestStreakMirror	DegenerusGameLens.sol	subWord is the afking Sub struct's packed storage word read via extsload, not a VRF value; read-only lens
 NOT-RNG	PARAM	maxWords	_findPackedIndex	DegenerusGameLens.sol	bounded count (1..2048) of packed storage words to scan; not a VRF value
@@ -169,7 +169,7 @@ EXEMPT-ADVANCE	ARG	EntropyLib.hash4	_payBafAward	modules/DegenerusGameJackpotDra
 EXEMPT-ADVANCE	PARAM	word	_payBafAward	modules/DegenerusGameJackpotDrawModule.sol	the locked day's recorded word, equal to the selection word: the lock is held from consolidation through the award stage
 EXEMPT-ADVANCE	PARAM	word	runBafAwards	modules/DegenerusGameJackpotDrawModule.sol	advance-dispatched BAF award stage under the daily lock; pays frozen awards, gas selects only the group count
 EXEMPT-ADVANCE	ARG	jackpots.bafHeadWinner	runBafAwards	modules/DegenerusGameJackpotDrawModule.sol	forwards the locked day's word (the selection word) for the head slot draw; slot index fixed by position
-EXEMPT-ADVANCE	ARG	jackpots.bafPairWinners	runBafAwards	modules/DegenerusGameJackpotDrawModule.sol	forwards the locked day's word for the round-pair draw; pair index and round count fixed by position and the armed pool, independent of the call partition
+EXEMPT-ADVANCE	ARG	jackpots.bafPairWinners	_drawBafPair	modules/DegenerusGameJackpotDrawModule.sol	forwards the locked day's word for the round-pair draw; pair index and round count fixed by position and the armed pool, independent of the call partition
 PURE-DERIVE	ARG	EntropyLib.hash2	_bafEntropyBase	DegenerusJackpots.sol	hash2(rngWord, BAF_WINNERS_TAG): the bracket's winner stream root
 EXEMPT-ADVANCE	PARAM	rngWord	_bafEntropyBase	DegenerusJackpots.sol	the locked transition word forwarded by the game's BAF award stage
 PURE-DERIVE	ARG	EntropyLib.hash2	bafHeadWinner	DegenerusJackpots.sol	hash2(base, BAF_HEAD_PICK_KEY) & 1 picks third or fourth place; no actor input
@@ -355,3 +355,7 @@ NOT-RNG	PARAM	word	_rememberBoard	CrapsBattle.sol	The account's Craps address wo
 NOT-RNG	PARAM	word	_appendBet	storage/CrapsBattleStorage.sol	Logical slip fields compressed into a lane; no entropy.
 NOT-RNG	PARAM	word	_writeBetLane	storage/CrapsBattleStorage.sol	Logical slip fields and calendar generation, not RNG.
 NOT-RNG	PARAM	word	_storeDecEntry	storage/DegenerusGameStorage.sol	Logical entry account, board and stack, not RNG.
+PURE-DERIVE	ARG	EntropyLib.hash2	runBafAwards	modules/DegenerusGameJackpotModule.sol	same word/level solo entropy as the main ETH draw
+PURE-DERIVE	ARG	JackpotBucketLib.unpackWinningTraits	runBafAwards	modules/DegenerusGameJackpotModule.sol	unpacks the main board derived from the locked word and frozen hero/golden-ticket inputs
+EXEMPT-ADVANCE	PARAM	word	runBafAwards	modules/DegenerusGameJackpotModule.sol	advance-dispatched word; main board inputs stay frozen throughout BAF and the later main draw
+EXEMPT-ADVANCE	PARAM	word	_drawBafPair	modules/DegenerusGameJackpotDrawModule.sol	locked award-stage word passed with the three fixed non-solo main traits

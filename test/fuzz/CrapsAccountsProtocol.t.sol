@@ -20,7 +20,7 @@ contract CrapsAccountsProtocolTest is DeployProtocol {
     uint32 internal constant BOARD = 3 | (3 << 12) | (1 << 15);
     uint32 internal constant BOARD_B = 2 | (1 << 3);
     uint256 internal constant ID_SHIFT = 85;
-    uint256 internal constant DAY_HIGH_MASK = uint256(0x3F) << 217;
+    uint256 internal constant DAY_HIGH_MASK = uint256(0x3F) << 65;
     bytes4 internal constant GAME_E = bytes4(keccak256("E()"));
     bytes4 internal constant BURN_FOR_CRAPS = bytes4(keccak256("burnCoinForCraps(address,uint32,uint256)"));
     bytes4 internal constant RECORD_CRAPS = bytes4(keccak256("recordCrapsAction(uint32,uint8)"));
@@ -305,6 +305,7 @@ contract CrapsAccountsProtocolTest is DeployProtocol {
         uint256 seat = crapsBattle.daySeatNumberOfId(tomorrow, smurfId);
         assertGt(seat, 0);
         uint256 betId = ((uint256(tomorrow) * 8) << 64) | seat;
+        assertEq(uint32(crapsBattle.betWordOf(betId)), smurfId, "upgrading preserves the ticket owner");
         assertEq(crapsBattle.betWordOf(betId) & DAY_HIGH_MASK, DAY_HIGH_MASK, "the smurf's day is high");
     }
 

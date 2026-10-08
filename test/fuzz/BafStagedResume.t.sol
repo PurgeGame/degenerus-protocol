@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {BafViews} from "../helpers/BafViews.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {BafStageHost, BafBracketFixture} from "../helpers/BafStageHost.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
@@ -146,7 +147,7 @@ abstract contract BafStagedResumeFixture is BafBracketFixture {
         assertEq(jackpots.bafHeadWinner(LVL, word, 2), 0, "no third or fourth place after finalizeBaf");
         uint256 rounds = _bafRounds(pool);
         for (uint256 pair; pair < rounds / 2; pair += 3) {
-            uint32[4] memory drawn = jackpots.bafPairWinners(LVL, word, pair, rounds);
+            uint32[4] memory drawn = BafViews.pair(address(jackpots), LVL, word, pair, rounds);
             for (uint256 k; k < 4; ++k) assertEq(drawn[k], 0, "closed epoch: no scatter winner");
         }
 
@@ -416,7 +417,7 @@ abstract contract BafStagedResumeFixture is BafBracketFixture {
             uint256 cut = _afterFirstPair(logs, exact, cursor, floor);
             assertTrue(vm.revertToState(snap));
             for (uint256 j; j < cut; ++j) _replayQueued(logs[j]);
-            uint32[4] memory drawn = jackpots.bafPairWinners(LVL, word, second, rounds);
+            uint32[4] memory drawn = BafViews.pair(address(jackpots), LVL, word, second, rounds);
             bool moved;
             for (uint256 k; k < 4; ++k) {
                 address winner = host.walletKeyOf(drawn[k]);

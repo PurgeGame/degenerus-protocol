@@ -78,7 +78,9 @@ contract QuadrantWhalePassTest is Test {
         uint8[4] memory gold;
         uint8 n;
         for (uint8 q; q < 4; ++q) if (((traits[q] >> 3) & 7) == 7) gold[n++] = q;
-        uint8 solo = n == 0 ? uint8((3 - (entropy & 3)) & 3) : gold[(entropy >> 4) % n];
+        // Gold six takes the solo quadrant before the ordinary gold-quadrant tie-break.
+        uint8 solo = traits[3] == GoldSixLib.TRAIT ? 3
+            : n == 0 ? uint8((3 - (entropy & 3)) & 3) : gold[(entropy >> 4) % n];
         entropy = (entropy & ~uint256(3)) | uint256((3 - solo) & 3);
         counts = JackpotBucketLib.ethWinnerTargets(ethBudget, entropy);
         uint64 packed = finalDay ? uint64(6000) | (uint64(1333) << 16) | (uint64(1333) << 32) | (uint64(1334) << 48)
@@ -216,6 +218,15 @@ contract QuadrantWhalePassTest is Test {
         shape %= 4;
         _seed(word, mask & 15, 65);
         _run(bound(uint256(amount), 5 ether, 1_000_000 ether), word, shape == 3 ? 0 : shape, shape == 3);
+    }
+
+    function test_goldSixSoloPriorityCounterexampleReplay() public {
+        uint256 word = 641518955479923548691900238103279543832;
+        uint8[4] memory traits = _board(word);
+        assertEq(traits[3], GoldSixLib.TRAIT, "replay includes a surviving gold six");
+        (,,, uint256 entropy) = _geometry(word, 100_000 ether, false);
+        assertEq(JackpotBucketLib.soloBucketIndex(entropy), 3, "gold six owns the solo draw");
+        testFuzz_allDayShapesMasksAndAccounting(506806022868, word, 9, 46);
     }
 
     function test_thresholdsAndRemainderAtOneWeiBoundaries() public {

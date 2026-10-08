@@ -24,6 +24,8 @@ results or a deployed instance.
 3. [Known issues](../KNOWN-ISSUES.md) and [economic disclosures](../ECONOMIC_DISCLOSURES.md).
 4. [RNG domains](audit/RNG-DOMAINS.md): seeds, intentional shared outcomes and retained exceptions.
 5. [Verification](VERIFICATION.md): reproduce the build and select relevant tests.
+6. [Current readiness review](AUDIT-READINESS.md): security conclusions, repaired
+   verification gaps, campaign results and remaining limits.
 
 ## Review priorities
 

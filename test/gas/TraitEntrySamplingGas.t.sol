@@ -14,6 +14,7 @@ contract TraitEntrySamplingHarness is DegenerusGame, BucketSeed {
     }
 
     function retire(uint24 target) external { _setTicketBufferLevel(target + 2); }
+    function setCurrentLevel(uint24 current) external { level = current; }
 
     /// @dev Pre-optimization sampler, kept only as a behavior and gas reference.
     function referenceSample(bool nextLevel, uint256 entropy)
@@ -56,17 +57,24 @@ contract TraitEntrySamplingGasTest is Test {
         h.seed(42, next, trait, uint256(length) % 513);
         uint256 entropy = _entropy(seed, trait);
         (uint8 beforeTrait, uint32[] memory beforeEntries) = h.referenceSample(next, entropy);
-        (uint8 afterTrait, uint32[] memory afterEntries) = h.sampleTraitEntries(next, entropy);
-        assertEq(afterTrait, beforeTrait);
+        uint32[] memory afterEntries = h.sampleTraitEntries(next, trait, entropy);
+        assertEq(trait, beforeTrait);
         _assertSame(afterEntries, beforeEntries, "sampling order and padding redraws must stay identical");
     }
 
     function test_RetiredBucketRemainsHidden() public {
         h.seed(42, false, 7, 17);
         h.retire(42);
-        (uint8 trait, uint32[] memory entries) = h.sampleTraitEntries(false, _entropy(16, 7));
-        assertEq(trait, 7);
+        uint32[] memory entries = h.sampleTraitEntries(false, 7, _entropy(16, 7));
         assertEq(entries.length, 0);
+    }
+
+    function test_BoolSelectsTheBufferWithoutReadingGameLevel() public {
+        h.seed(42, false, 7, 2);
+        h.seed(42, true, 7, 3);
+        h.setCurrentLevel(99);
+        assertEq(h.sampleTraitEntries(false, 7, 0).length, 2);
+        assertEq(h.sampleTraitEntries(true, 7, 0).length, 3);
     }
 
     function _measure(uint256 length, uint256 seed) private {
@@ -76,7 +84,7 @@ contract TraitEntrySamplingGasTest is Test {
         (, uint32[] memory beforeEntries) = h.referenceSample(false, entropy);
         uint256 beforeGas = vm.snapshotGasLastCall("reference-sample");
         vm.cool(address(h));
-        (, uint32[] memory afterEntries) = h.sampleTraitEntries(false, entropy);
+        uint32[] memory afterEntries = h.sampleTraitEntries(false, 7, entropy);
         uint256 afterGas = vm.snapshotGasLastCall("cached-sample");
         _assertSame(afterEntries, beforeEntries, "entries");
         emit log_named_uint("reference cold sample gas", beforeGas);

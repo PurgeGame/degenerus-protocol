@@ -316,7 +316,7 @@ contract LootboxCrapsTest is CrapsPins {
         _setIndex(1);
         _setWord(1, 0xBEEF);
 
-        ShippedProbe shipped = new ShippedProbe();
+        ShippedProbe shipped = new ShippedProbe{salt: keccak256("shipped-path-probe")}();
         assertEq(shipped.GAME(), ContractAddresses.GAME, "GAME pin");
         assertEq(shipped.currentIndex(), 0, "shipped currentIndex did not read the pinned game");
         assertEq(shipped.wordAt(1), 0xBEEF, "shipped wordAt did not read the pinned game");

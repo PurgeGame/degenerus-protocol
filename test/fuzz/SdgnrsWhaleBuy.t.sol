@@ -464,7 +464,8 @@ contract SdgnrsWhaleBuy is DeployProtocol {
 
     /// @dev Wallet ID read from storage (the facade may be etched away by the forwarder).
     function _walletId(address who) internal view returns (uint256) {
-        return uint256(vm.load(address(game), GameSlotKeys.walletId(who)));
+        // Low 32 bits select the current gameplay ID; high 32 bits retain the identity.
+        return uint32(uint256(vm.load(address(game), GameSlotKeys.walletId(who))));
     }
 
     /// @dev Force `who`'s claimable (slot 7 low-128) to `amount`, preserving the afking half, AND

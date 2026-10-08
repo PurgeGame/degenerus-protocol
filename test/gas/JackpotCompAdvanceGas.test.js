@@ -299,8 +299,16 @@ async function measureLevelOneAdvance(prevPoolEth, expectedAwards) {
   // These wallet families were freshly seeded only in the Game registry. They had no prior
   // Coinflip/pass balance. Reconcile all published run/pot/share payments to actual ownership.
   for (const [id, owner] of entries) {
-    const stored = await getSlot(crapsAddr, mapSlot(BigInt(id), betRoot));
-    expect(stored & ((1n << 160n) - 1n), "settled seat retains its actual awarded owner id").to.equal(idOfOwner.get(owner));
+    // Scheduled slips recycle their day and pack three 72-bit seats into each word.
+    // Authenticate the full day before selecting the seat's 32-bit owner lane.
+    const slot = BigInt(id) >> 64n;
+    const seat = BigInt(id) & ((1n << 64n) - 1n);
+    expect(seat).to.be.gt(0n);
+    const key = ((slot & 511n) << 64n) | (1n + (seat - 1n) / 3n);
+    const packed = await getSlot(crapsAddr, mapSlot(key, betRoot));
+    expect((packed >> 216n) & 0xffffffn, "settled seat belongs to the expected day").to.equal(slot >> 3n);
+    const ownerId = (packed >> (((seat - 1n) % 3n) * 72n)) & 0xffffffffn;
+    expect(ownerId, "settled seat retains its actual awarded owner id").to.equal(idOfOwner.get(owner));
   }
   for (const [owner, expected] of credits) expect(await coinflip.coinflipAmount(owner), `actual stake for ${owner}`).to.equal(expected);
   for (const owner of new Set(entries.values())) {

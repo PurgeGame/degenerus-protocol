@@ -118,7 +118,8 @@ interface IDegenerusGameJackpotDrawModule {
     function awardDailyFlipJackpot(uint24 minLevel, uint24 maxLevel, uint32 traits, uint256 budget, uint256 word) external;
     function runPurchaseJackpotBattle(uint24 lvl, uint256 word, uint256 allowance)
         external returns (MineFlipGas.Result memory);
-    function runBafAwards(uint256 word, uint256 allowance) external returns (MineFlipGas.Result memory);
+    function runBafAwards(uint256 word, uint256 allowance, uint8[3] calldata traits)
+        external returns (MineFlipGas.Result memory);
 }
 
 interface IDegenerusGameJackpotModule {

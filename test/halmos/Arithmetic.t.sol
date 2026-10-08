@@ -55,6 +55,7 @@ contract ArithmeticSymbolicTest is Test {
     // =========================================================================
 
     /// @notice BPS split of any amount sums correctly (no rounding amplification)
+    /// @custom:halmos --solver cvc5-int
     function check_bps_split_bounded(uint256 amount, uint16 bps) public pure {
         if (amount > 1e30) return; // reasonable ETH range
         if (bps > 10000) return;
@@ -66,6 +67,7 @@ contract ArithmeticSymbolicTest is Test {
     }
 
     /// @notice Two-way BPS split sums to original
+    /// @custom:halmos --solver cvc5-int
     function check_bps_two_split(uint256 amount, uint16 futureBps) public pure {
         if (amount > 1e30) return;
         if (futureBps > 10000) return;
@@ -102,27 +104,36 @@ contract ArithmeticSymbolicTest is Test {
     // =========================================================================
 
     /// @notice Cost = (priceWei * entryQuantityScaled) / 400 is bounded and non-zero
+    /// @custom:halmos --solver cvc5-int
     function check_cost_bounded(uint24 level, uint32 entryQuantityScaled) public pure {
         if (entryQuantityScaled == 0 || entryQuantityScaled > 40000) return;
-
-        uint256 priceWei = PriceLookupLib.priceForLevel(level);
-        uint256 cost = (priceWei * uint256(entryQuantityScaled)) / 400;
-
-        // Cost should never exceed 100 full tickets (qty 40000 / 400 = 100)
-        assert(cost <= priceWei * 100);
-        // Cost should be non-zero for non-zero quantity and non-zero price
-        if (priceWei > 0) {
-            // For very small quantities, cost could round to 0
-            // but for qty >= 400/priceWei it should be non-zero
-            assert(cost <= type(uint256).max);
-        }
+        _checkCostForProductionPrice(level, entryQuantityScaled);
     }
 
     /// @notice Cost calculation does not overflow for max inputs
+    /// @custom:halmos --solver cvc5-int
     function check_cost_no_overflow(uint24 level, uint256 entryQuantityScaled) public pure {
         if (entryQuantityScaled > 40000) return;
+        _checkCostForProductionPrice(level, entryQuantityScaled);
+    }
 
+    function _checkCostForProductionPrice(uint24 level, uint256 entryQuantityScaled) private pure {
         uint256 priceWei = PriceLookupLib.priceForLevel(level);
+        // Exhaust the production lookup's valid prices before the nonlinear division.
+        // Every original level/quantity remains covered; an unexpected price fails.
+        if (priceWei == 0.01 ether) _assertCostNoOverflow(0.01 ether, entryQuantityScaled);
+        else if (priceWei == 0.02 ether) _assertCostNoOverflow(0.02 ether, entryQuantityScaled);
+        else if (priceWei == 0.04 ether) _assertCostNoOverflow(0.04 ether, entryQuantityScaled);
+        else if (priceWei == 0.08 ether) _assertCostNoOverflow(0.08 ether, entryQuantityScaled);
+        else if (priceWei == 0.12 ether) _assertCostNoOverflow(0.12 ether, entryQuantityScaled);
+        else if (priceWei == 0.16 ether) _assertCostNoOverflow(0.16 ether, entryQuantityScaled);
+        else {
+            assert(priceWei == 0.24 ether);
+            _assertCostNoOverflow(0.24 ether, entryQuantityScaled);
+        }
+    }
+
+    function _assertCostNoOverflow(uint256 priceWei, uint256 entryQuantityScaled) private pure {
         // priceWei max = 0.24 ether = 2.4e17
         // entryQuantityScaled max = 40000
         // product max = 2.4e17 * 40000 = 9.6e21, well under uint256 max
@@ -131,6 +142,8 @@ contract ArithmeticSymbolicTest is Test {
         assert(entryQuantityScaled == 0 || product / entryQuantityScaled == priceWei);
         uint256 cost = product / 400;
         assert(cost <= product);
+        assert(cost <= priceWei * 100);
+        if (entryQuantityScaled != 0) assert(cost > 0);
     }
 
     // =========================================================================
@@ -138,6 +151,7 @@ contract ArithmeticSymbolicTest is Test {
     // =========================================================================
 
     /// @notice baseTickets * ticketPrice <= rebuyAmount by construction
+    /// @custom:halmos --solver cvc5-int
     function check_autorebuy_ethspent_bounded(uint256 rebuyAmount, uint24 targetLevel) public pure {
         if (targetLevel > 16_000_000) return;
 
@@ -152,6 +166,7 @@ contract ArithmeticSymbolicTest is Test {
     }
 
     /// @notice Take-profit reserved amount is always a multiple of takeProfit setting
+    /// @custom:halmos --solver cvc5-int
     function check_takeprofit_multiple(uint256 weiAmount, uint256 takeProfit) public pure {
         if (takeProfit == 0) return;
         if (weiAmount > 1e30) return;

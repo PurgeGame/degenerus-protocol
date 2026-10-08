@@ -1499,7 +1499,15 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
         return abi.decode(_delegateJackpotDraw(msg.data), (uint256));
     }
 
-    function runBafAwards(uint256, uint256) external returns (MineFlipGas.Result memory) {
-        return abi.decode(_delegateJackpotDraw(msg.data), (MineFlipGas.Result));
+    function runBafAwards(uint256 word, uint256 allowance) external returns (MineFlipGas.Result memory) {
+        // The same locked word, hero pool and golden-ticket ban feed the later main draw.
+        // Both paths use this calculation, so BAF needs no separate board state or ordering.
+        uint8[4] memory main = JackpotBucketLib.unpackWinningTraits(_rollMainTraits(word));
+        uint8 solo = _pickSoloQuadrant(main, EntropyLib.hash2(word, level));
+        uint8[3] memory traits;
+        for (uint256 q; q < 3; ++q) traits[q] = main[q < solo ? q : q + 1];
+        return abi.decode(_delegateJackpotDraw(abi.encodeWithSelector(
+            IDegenerusGameJackpotDrawModule.runBafAwards.selector, word, allowance, traits
+        )), (MineFlipGas.Result));
     }
 }

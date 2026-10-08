@@ -74,16 +74,31 @@ library TicketQueueStorage {
             require(id != 0 && id < count, "invalid owner ID");
             uint256 ownerWord = _ownerWord(host, id);
             uint32 parent = uint32(ownerWord >> 160);
-            if (parent == 0) {
-                address player = address(uint160(ownerWord));
-                require(player != address(0) && _id(host, player) == id, "wallet identity mismatch");
-            } else {
-                require(uint160(ownerWord) == 0 && parent < count, "invalid subaccount owner");
-                uint256 parentWord = _ownerWord(host, parent);
-                require(parentWord >> 160 == 0 && uint160(parentWord) != 0, "owner must be ordinary");
-                require(_id(host, address(uint160(parentWord))) == parent, "owner identity mismatch");
+            if (uint160(ownerWord) == 0) {
+                // Children retain their original parent even after that root is sold.
+                require(parent != 0 && parent < count && parent != id, "invalid subaccount owner");
+                id = parent;
+                ownerWord = _ownerWord(host, parent);
             }
+            _assertRootOwner(host, id, ownerWord, count);
         }
+    }
+
+    function _assertRootOwner(address host, uint32 id, uint256 word, uint256 count) private view {
+        address key = address(uint160(word));
+        require(key != address(0), "owner root missing key");
+        uint32 buyer = uint32(word >> 160);
+        if (buyer == 0) {
+            require(_id(host, key) == id, "wallet identity mismatch");
+            return;
+        }
+        // Liquidation retains the seller key and redirects to a reserved protocol root.
+        // The seller's forward gameplay ID may be zero or a newly registered account.
+        require(id > 3 && (buyer == 1 || buyer == 2) && buyer < count, "invalid acquired buyer");
+        uint256 buyerWord = _ownerWord(host, buyer);
+        address payee = address(uint160(buyerWord));
+        require(uint32(buyerWord >> 160) == 0 && payee != address(0), "buyer must be ordinary");
+        require(_id(host, payee) == buyer, "buyer identity mismatch");
     }
     function seed(address host, uint24 key, uint24 lvl, address player, uint80 value) internal returns (uint256 index) {
         uint32 id = _id(host, player);
@@ -177,6 +192,9 @@ library TicketQueueStorage {
     function ownerAt(address host, uint24 key, uint24, uint256 index) internal view returns (address) {
         uint256 word = _ownerWord(host, ownerIdAt(host, key, index));
         uint32 parent = uint32(word >> 160);
-        return address(uint160(parent == 0 ? word : _ownerWord(host, parent)));
+        if (parent != 0) word = _ownerWord(host, parent);
+        parent = uint32(word >> 160);
+        if (parent != 0) word = _ownerWord(host, parent);
+        return address(uint160(word));
     }
 }

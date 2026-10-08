@@ -29,8 +29,8 @@ contract WhaleSybilHandler is Test {
     uint256 public ghost_totalClaimed;
 
     // Pool tracking
-    uint256 public ghost_maxGameBalance;
-    uint256 public ghost_minObligationRatio; // basis points: balance * 10000 / obligations
+    uint256 public ghost_maxGameBalance; // Game-held ETH + stETH backing
+    uint256 public ghost_minObligationRatio; // basis points: backing * 10000 / obligations
 
     // --- Call counters ---
     uint256 public calls_whaleBuy;
@@ -198,11 +198,11 @@ contract WhaleSybilHandler is Test {
 
     // --- Internal helpers ---
 
-    /// @dev Track game balance vs obligations for solvency ratio
+    /// @dev Track Game-held ETH + stETH backing vs obligations for solvency ratio
     function _trackBalance() private {
-        uint256 gameBalance = address(game).balance;
-        if (gameBalance > ghost_maxGameBalance) {
-            ghost_maxGameBalance = gameBalance;
+        uint256 gameBacking = SolvencyObligations.backing(game);
+        if (gameBacking > ghost_maxGameBalance) {
+            ghost_maxGameBalance = gameBacking;
         }
 
         // Canonical obligation set (freeze-window pending buffer included; dead post-GO live
@@ -212,7 +212,7 @@ contract WhaleSybilHandler is Test {
         uint256 obligations = SolvencyObligations.obligations(game);
 
         if (obligations > 0) {
-            uint256 ratio = (gameBalance * 10_000) / obligations;
+            uint256 ratio = (gameBacking * 10_000) / obligations;
             if (ratio < ghost_minObligationRatio) {
                 ghost_minObligationRatio = ratio;
             }

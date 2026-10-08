@@ -42,6 +42,11 @@ contract SdgnrsCenturyRecycleTest is RedemptionCloseTools {
         vm.deal(address(sdgnrs), 100 ether);
     }
 
+    function _assertAdmissibleBurn(uint256 amount) private view {
+        (uint256 value,) = sdgnrs.previewBurnValue(amount);
+        assertGe(value, sdgnrs.MIN_REDEMPTION_VALUE(), "fixture: burn meets admission minimum");
+    }
+
     function _recycle(uint24 lvl) private {
         _recycle(lvl, RNG_WORD);
     }
@@ -249,27 +254,29 @@ contract SdgnrsCenturyRecycleTest is RedemptionCloseTools {
     }
 
     function testMixedRedemptionsWrappedBurnsAndTransfers() public {
-        uint256 direct = 1_000e12 + 3;
-        uint256 wrapped = 2_000e12 + 5;
-        uint256 selfBurn = 3_000e12 + 7;
+        uint256 direct = 1_000e18 + 3;
+        uint256 wrapped = 2_000e18 + 5;
+        uint256 selfBurn = 3_000e18 + 7;
         _award(sDGNRS.Pool.Reward, ALICE, direct * 2);
+        _assertAdmissibleBurn(direct);
         vm.prank(ALICE);
         sdgnrs.burn(direct);
         uint256 wrapperBefore = dgnrs.totalSupply();
+        _assertAdmissibleBurn(wrapped);
         vm.prank(ContractAddresses.CREATOR);
         sdgnrs.burnWrapped(wrapped);
         assertEq(dgnrs.totalSupply(), wrapperBefore - wrapped);
         _award(sDGNRS.Pool.Affiliate, address(sdgnrs), selfBurn);
-        _award(sDGNRS.Pool.Lootbox, BOB, 4_000e12);
+        _award(sDGNRS.Pool.Lootbox, BOB, 4_000e18);
         vm.prank(ContractAddresses.CREATOR);
-        dgnrs.unwrapTo(BOB, 5_000e12);
+        dgnrs.unwrapTo(BOB, 5_000e18);
         vm.prank(ALICE);
         vm.expectRevert(sDGNRS.Insufficient.selector);
         sdgnrs.burn(type(uint256).max);
         _closeFunded();
         _assertRefill(100, direct + wrapped + selfBurn);
         assertEq(sdgnrs.balanceOf(ALICE), direct);
-        assertEq(sdgnrs.balanceOf(BOB), 9_000e12, "ordinary transfers and unwraps are not burns");
+        assertEq(sdgnrs.balanceOf(BOB), 9_000e18, "ordinary transfers and unwraps are not burns");
     }
 
     function testUnwrappedInventorySurplusIsPreserved() public {
@@ -323,11 +330,13 @@ contract SdgnrsCenturyRecycleTest is RedemptionCloseTools {
     function testPendingAndResolvedClaimsSurviveRefillsAndSettle() public {
         _fundFlip();
         mockStETH.mint(address(sdgnrs), 50 ether);
-        _award(sDGNRS.Pool.Reward, ALICE, 10_000e12);
-        _award(sDGNRS.Pool.Reward, BOB, 10_000e12);
+        _award(sDGNRS.Pool.Reward, ALICE, 10_000e18);
+        _award(sDGNRS.Pool.Reward, BOB, 10_000e18);
         uint32 id = _openBatch();
-        vm.prank(ALICE); sdgnrs.burn(1_000e12 + 1);
-        vm.prank(BOB); sdgnrs.burn(2_000e12 + 1);
+        _assertAdmissibleBurn(1_000e18 + 1);
+        vm.prank(ALICE); sdgnrs.burn(1_000e18 + 1);
+        _assertAdmissibleBurn(2_000e18 + 1);
+        vm.prank(BOB); sdgnrs.burn(2_000e18 + 1);
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
         bytes32 fingerprint = _pendingFingerprint(id);
         _assertRefill(100, 0); // Open burns retain their economic holder share.
@@ -341,9 +350,9 @@ contract SdgnrsCenturyRecycleTest is RedemptionCloseTools {
         (uint80 batchTokens, uint96 batchPayout,,,,) = sdgnrs.redemptionBatches(id);
         (uint80 aliceTokens,) = sdgnrs.pendingRedemptions(game.walletIdOf(ALICE), id);
         uint256 alicePayout = uint256(batchPayout) * aliceTokens / batchTokens;
-        _award(sDGNRS.Pool.Whale, address(sdgnrs), 7_000e12);
+        _award(sDGNRS.Pool.Whale, address(sdgnrs), 7_000e18);
         fingerprint = _pendingFingerprint(id);
-        _assertRefill(200, 10_000e12 + 2); // The close now counts both live burns.
+        _assertRefill(200, 10_000e18 + 2); // The close now counts both live burns.
         assertEq(_pendingFingerprint(id), fingerprint);
         uint256 supply = sdgnrs.totalSupply();
         uint256 before = game.claimableWinningsOf(ALICE);
@@ -359,16 +368,18 @@ contract SdgnrsCenturyRecycleTest is RedemptionCloseTools {
         _assertRefill(300, 0);
     }
     function testOpenBatchRemainsUnpricedAcrossRefill() public {
-        _award(sDGNRS.Pool.Reward, ALICE, 3_000e12);
+        _award(sDGNRS.Pool.Reward, ALICE, 3_000e18);
         uint32 id = _openBatch();
-        vm.prank(ALICE); sdgnrs.burn(1_000e12 + 1);
+        _assertAdmissibleBurn(1_000e18 + 1);
+        vm.prank(ALICE); sdgnrs.burn(1_000e18 + 1);
         (,uint96 payout,,,,) = sdgnrs.redemptionBatches(id);
         assertEq(payout, 0);
         _assertRefill(100, 0);
-        vm.prank(ALICE); sdgnrs.burn(1_000e12 + 1);
+        _assertAdmissibleBurn(1_000e18 + 1);
+        vm.prank(ALICE); sdgnrs.burn(1_000e18 + 1);
         (uint80 tokens,uint96 afterPayout,,,,) = sdgnrs.redemptionBatches(id);
         assertEq(afterPayout, 0);
-        assertEq(tokens, 2_000e12 + 2);
+        assertEq(tokens, 2_000e18 + 2);
         _assertRefill(200, 0);
     }
 

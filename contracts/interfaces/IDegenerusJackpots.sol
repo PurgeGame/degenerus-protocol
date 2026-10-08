@@ -28,6 +28,12 @@ pragma solidity 0.8.34;
 /// @notice Interface for the jackpot distribution contract.
 /// @dev Handles BAF (Big Ass Flip) jackpot calculations and payouts.
 interface IDegenerusJackpots {
+    /// @dev A near-level round retains every sampled wallet ID, including score-check losers.
+    struct BafRound {
+        uint8 trait;
+        uint32[] candidates;
+    }
+
     function bafConsolationOfId(uint32 playerId, uint24 lvl) external view returns (uint256);
     /// @notice Opens a bracket's resolution (today's winning-flip claims route onward).
     function beginBaf() external;
@@ -47,14 +53,17 @@ interface IDegenerusJackpots {
     /// @notice Best and second-best BAF score of scatter rounds 2 * pair and 2 * pair + 1 of `rounds`.
     /// @dev View. Candidates are the wallet IDs Game's `sampleTraitEntries` and
     ///      `sampleFarFutureTickets` return; scores are read from the ID-keyed BAF ledger.
+    ///      Near-level candidates come from the supplied main board's three non-solo traits.
     /// @param lvl BAF bracket level.
     /// @param rngWord The BAF transition VRF word.
     /// @param pair Round pair index.
-    /// @param rounds Total scatter rounds (a multiple of 8).
+    /// @param rounds Total scatter rounds (48..1536, a multiple of 48).
     /// @return winnerIds [best, second] of the even round, then of the odd round, as wallet
     ///         IDs; 0 where no candidate qualifies (no winner).
-    function bafPairWinners(uint24 lvl, uint256 rngWord, uint256 pair, uint256 rounds)
-        external view returns (uint32[4] memory winnerIds);
+    /// @param traits The main board's three non-solo traits in quadrant order.
+    /// @return draws The two near-level candidate slates; empty for far-future pairs.
+    function bafPairWinners(uint24 lvl, uint256 rngWord, uint256 pair, uint256 rounds, uint8[3] calldata traits)
+        external view returns (uint32[4] memory winnerIds, BafRound[2] memory draws);
 
     /// @notice Record a coinflip win for BAF score tracking.
     /// @dev COINFLIP only. VAULT (wallet ID 1) accrues a score but stays off the top-4 board;

@@ -177,9 +177,12 @@ contract CustomerFollowupGasTest is DeployProtocol {
     }
 
     function _bank(uint128 amount) private {
-        bytes32 slot = keccak256(abi.encode(PLAYER, uint256(2)));
+        uint32 id = game.walletIdOf(PLAYER);
+        require(id != 0, "bank fixture requires a registered player");
+        bytes32 slot = keccak256(abi.encode(uint256(id), uint256(2)));
         uint256 word = uint256(vm.load(address(coinflip), slot));
         vm.store(address(coinflip), slot, bytes32((word & ~uint256(type(uint128).max)) | amount));
+        assertGe(coinflip.previewClaimCoinflips(PLAYER), amount, "bank is visible through the production getter");
     }
     function _degen(uint8 currency, uint8 symbol, uint256 fresh) private {
         vm.prank(PLAYER);

@@ -6,6 +6,7 @@ check-audit-snapshot:
 
 test-assurance-tools:
 	@python3 -m unittest discover -s test/unit -p 'test_*.py'
+	@python3 scripts/test-deep-invariant-matrix.py
 
 # ── Interface coverage gate ─────────────────────────────────────────────
 # Verifies every function declared in contracts/interfaces/ has a matching
