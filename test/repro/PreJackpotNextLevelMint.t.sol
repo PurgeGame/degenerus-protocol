@@ -579,19 +579,20 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
         assertGt(reqId, oldId, "the new day requests a fresh word");
     }
 
-    /// @dev Each call gets the smallest rung of a realistic allowance ladder that admits work, so
-    ///      the sealing call cannot also compose the miner's own mid-day request (2.5M bound):
-    ///      the seal is observed before any later request.
+    /// @dev Each call gets the smallest rung of a realistic allowance ladder that admits work.
+    ///      Maximum calibration defers every continuation after first progress, so the sealing
+    ///      call cannot also compose the miner's own mid-day request: the seal is observed
+    ///      before any later request.
     function _finishOrdinaryPurchaseDaily() private {
         uint256[9] memory ladder = [uint256(1_500_000), 2_000_000, 2_500_000, 3_000_000, 3_500_000, 4_000_000,
             6_000_000, 10_000_000, 16_777_216];
         // Drive the day seal, then the committed session's read consumers (they follow the seal),
         // stopping before any new request.
         uint256 requestId = mockVRF.lastRequestId();
-        for (uint256 i; i < 400 && (game.rngLocked() || !game.rngComplete()); ++i) {
+        for (uint256 i; i < 4000 && (game.rngLocked() || !game.rngComplete() || _dailyWorkPending()); ++i) {
             assertEq(mockVRF.lastRequestId(), requestId, "no request composes into the daily chain");
             for (uint256 r; r < ladder.length; ++r) {
-                try game.mineFlip{gas: ladder[r]}(0) {
+                try game.mineFlip{gas: ladder[r]}(type(uint32).max) {
                     break;
                 } catch (bytes memory err) {
                     assertEq(bytes4(err), MineFlipGas.InsufficientExecutionGas.selector, "only an allowance refusal retries");
@@ -605,11 +606,14 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
         assertFalse(jackpot, "the last-purchase window precedes the jackpot phase");
         // No daily work remains. A shut Craps window bound to the write buffer is mid-day request
         // work for any caller (craps windows ride the normal RNG round), not daily work.
+        assertFalse(_dailyWorkPending(), "no daily work remains before the next request");
+    }
+
+    /// @dev Anything other than idle or the mid-day request is daily work.
+    function _dailyWorkPending() private view returns (bool) {
         uint8 next = game.nextMinerAction();
-        assertTrue(
-            next == uint8(DegenerusGameStorage.MinerAction.Idle) || next == uint8(DegenerusGameStorage.MinerAction.RequestMidday),
-            "no daily work remains before the next request"
-        );
+        return next != uint8(DegenerusGameStorage.MinerAction.Idle)
+            && next != uint8(DegenerusGameStorage.MinerAction.RequestMidday);
     }
 
     function _buyCurrent(address player) private {

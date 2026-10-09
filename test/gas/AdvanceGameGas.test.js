@@ -541,13 +541,16 @@ describe("AdvanceGame Gas Benchmarks", function () {
       await hre.ethers.provider.send("evm_revert", [resume]);
 
       // (b) Every chunk wholly inside the far-future queue, isolated at its minimum
-      // admission allowance, stays <= 10M (asserted by measureNextChunk).
+      // admission allowance, stays <= 10M (asserted by measureNextChunk). The first unit
+      // always progresses and later units must fit above every ancestor's return tail, so a
+      // minimum allowance may drain a single entry per call: one chunk per queued entry bounds it.
+      const queuedEntries = Number(ffDrain.before.lens.reduce((sum, len) => sum + len, 0n));
       let pure = 0;
       let maxPure = 0n;
       while ((await ffSnapshot(game, ffDrain.ffLevels)).inProgress) {
         const { receipt } = await measureNextChunk(game, deployer, "far-future drain (in progress)");
         if (receipt.gasUsed > maxPure) maxPure = receipt.gasUsed;
-        expect(++pure, "far-future drain finishes in bounded chunks").to.be.lte(200);
+        expect(++pure, "far-future drain finishes in bounded chunks").to.be.lte(queuedEntries + 16);
       }
       expect(released(await ffSnapshot(game, ffDrain.ffLevels)), "the isolated chunks released the far-future queue").to.equal(true);
       console.log(`      isolated far-future chunks: ${pure}; heaviest ${maxPure.toLocaleString()} gas`);

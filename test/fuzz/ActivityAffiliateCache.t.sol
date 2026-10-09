@@ -16,7 +16,8 @@ contract ActivityCacheQuestStub {
 }
 
 contract ActivityAffiliateCacheTest is ActivityAffiliateCacheFixture {
-    uint256 private constant DURABLE_MASK = (uint256(1) << 48) - 1 | (uint256(type(uint32).max) << 72);
+    // Last level, level count and last-purchase day: the history the cache persists beside.
+    uint256 private constant DURABLE_MASK = (uint256(1) << 48) - 1 | (uint256(type(uint24).max) << 72);
     function testFuzz_CachedScorePreservesScoreAndOtherFields(
         uint256 packed, uint32 streak, uint24 lvl, uint24 basis, address player, uint128 earnings
     ) public {
@@ -36,6 +37,13 @@ contract ActivityAffiliateCacheTest is ActivityAffiliateCacheFixture {
             assertEq((afterPacked >> 197) & 63, affiliate.affiliateBonusPointsBest(lvl, id));
         }
         assertEq(host.score(player, streak, basis), expected);
+    }
+
+    function test_UnitTrackingLevelAloneIsNotDurableHistory() public {
+        uint256 packed = _stale(uint256(1) << 96, 7);
+        host.seed(PLAYER, packed, 7);
+        host.scoreCached(PLAYER, 0, 7);
+        assertEq(host.packedOf(PLAYER), packed, "unit-tracking level alone never caches");
     }
 
     function testFuzz_CacheHitHasNoAffiliateCallOrStore(uint256 packed, uint24 lvl, uint32 streak) public {
