@@ -68,6 +68,7 @@ docs/audit/*
 !docs/audit/RNG-DOMAINS.md
 !docs/audit/RUN53-FINAL-CONTRACTS.md
 !docs/audit/snapshot.json
+!docs/audit/freeze.json
 !docs/audit/source-sha256.txt
 !docs/audit/verification-sha256.txt
 
