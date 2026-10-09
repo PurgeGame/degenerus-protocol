@@ -108,8 +108,8 @@ library MineFlipGasBounds {
     uint256 internal constant DECIMATOR_GENERATED_GAS_MAX = 469_000;
     // Opposite-phase stratum with calibrated metering: 5,112 incremental cold gas.
     uint256 internal constant DECIMATOR_SAMPLE_SKIP_GAS_MAX = 6_000;
-    // Cold four-cohort initialization including the worker frame: 59,983 gas.
-    uint256 internal constant DECIMATOR_PLAN_GAS_MAX = 60_000;
+    // Cold four-cohort initialization with calibrated metering and worker frame: 60,298 gas.
+    uint256 internal constant DECIMATOR_PLAN_GAS_MAX = 65_000;
 
     // JACKPOT
     uint256 internal constant JACKPOT_SETUP_GAS = 500_000;
