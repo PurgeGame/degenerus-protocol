@@ -3,8 +3,9 @@
 ## Subject
 
 Review the production Solidity files listed in [scope.txt](../scope.txt). This handoff describes a
-**working-tree snapshot**. Exact SHA-256 hashes and the
-base Git commit are recorded in [the snapshot manifest](audit/snapshot.json).
+**source snapshot**; frozen revisions are published as annotated `audit-*` tags and
+[audit readiness](AUDIT-READINESS.md) names the current one. Exact SHA-256 hashes and
+the source base commit are recorded in [the snapshot manifest](audit/snapshot.json).
 
 From the repository root, verify the supplied source/build inputs before patching pins:
 
@@ -42,10 +43,14 @@ results or a deployed instance.
 Operational assumptions, including scheduled progression, are disclosed in Known Issues.
 
 The 10M gas figure is a sizing guideline for indivisible work, not a runtime cap.
-Each checkpoint must reserve the next chunk's conservative worst-case cost, its
-complete call/return/flush envelope and a safety margin against both the remaining
-worker allowance and actual available gas. Larger supplied budgets may admit larger
-chunks. Network transaction/block limits remain separate constraints. Caller gas
+Optional continuations reserve the next chunk's estimated cost and complete
+call/return/flush envelope, scaled by the caller's multiplier, against the remaining
+worker allowance and actual available gas. The first mandatory checkpoint is not
+vetoed by that estimate, so conservative calibration cannot prevent progress. The
+gas floor always holds every ancestor's return tail: the first unit may run below it,
+and once that unit has progressed later units must fit above it again. Once the first
+unit fits in the supplied gas, `mineFlip` is designed not to revert for gas. Larger
+supplied budgets may admit more chunks. Network transaction/block limits remain separate constraints. Caller gas
 may select a safe continuation checkpoint, never a committed game outcome.
 At game over, fair ETH distribution and completion take priority. FLIP has no
 post-game value by design; unfinished Craps or other FLIP bookkeeping does not
@@ -56,7 +61,7 @@ justify adding prerequisites to ETH release.
 A High finding must demonstrate substantial impact that one actor can cause unilaterally
 without vault-owner privileges (the >50.1% DGVE holder, initially CREATOR, and its comp
 delegates and battle creators), from a healthy live-game state: the game has not ended, VRF
-is functional, and `mineFlip()` is attempted on schedule.
+is functional, and `mineFlip(uint32)` is attempted on schedule.
 The finding must not require an unrelated service outage, prolonged keeper inactivity
 or a pre-existing unhealthy state.
 
@@ -79,11 +84,14 @@ audit findings. Bypassing its authorization, voting or execution rules remains i
 
 Ticket work now uses `MineFlipGas` admission bounds and deterministic checkpoints.
 The former fixed 900-unit ticket budget and 11.5M transaction ceiling are retired.
-The engine admits the next chunk only when its conservative cold-path bound,
-including the call, return and checkpoint envelope, fits both the remaining worker
-allowance and actual available gas. Otherwise it stops at a safe checkpoint before
-starting that chunk. The 10M figure guides operation sizing; it is not an enforced
-transaction cap, and the former 13M absolute-ceiling wording is not the current
+After the first mandatory checkpoint, the engine admits the next chunk only when
+its caller-scaled estimate, including the call, return and checkpoint envelope,
+fits both the remaining worker allowance and actual available gas. Otherwise it
+stops at a safe checkpoint before starting that chunk. Zero calibration means
+10,000 basis points; callers may select a larger multiplier after gas repricing.
+Only estimate-admitted work is held to the floor when a worker finishes; a first unit
+that ran below the floor is not an estimate failure.
+The 10M figure guides operation sizing; it is not an enforced transaction cap, and the former 13M absolute-ceiling wording is not the current
 admission rule. A transaction can perform several admitted operations. Review the
 declared bounds against reachable worst cases, nested EIP-150 forwarding and full
 return tails. A caller choosing too little gas must not change an outcome or cause

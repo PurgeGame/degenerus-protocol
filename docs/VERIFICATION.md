@@ -8,6 +8,40 @@ local output directories or CI artifacts.
 The dated implementation sections below are historical, scoped evidence; their
 pass counts do not certify later revisions.
 
+### Caller-calibrated batching and AFKing ordering (2026-10-09)
+
+The public entry is `mineFlip(uint32 gasMultiplierBps)`. Zero means 10,000 basis
+points; explicit values below 10,000 revert. The multiplier changes admission of
+optional continuation work, while the first mandatory checkpoint is always
+attempted. Insufficient caller gas can still revert the transaction. Vault calls
+forward the chosen calibration. Committed outcomes must be independent of the
+caller, multiplier and transaction partitioning.
+
+Box subscribers occupy an ascending section; ticket subscribers occupy a descending
+section separated from it by an empty sentinel. Boxes are processed first. Daily preparation locks membership and
+mode changes. Box opening visits only the box section; Vault and sDGNRS retain
+permanent box-mode seats. A zero Vault quantity preserves its membership. An
+unreachable zero-entry invariant revert was deliberately removed; tests should
+exercise reachable membership and pending-count invariants instead of requiring
+that retired revert on corrupted storage.
+
+The archived repricing experiments use pinned Glamsterdam devnet-8 Geth and explicit
+stETH/VRF/LINK/feed mocks. The chunk replay covers 33 initialized fixtures and
+rechecks selected peaks with 10M supplied gas. Peak values are sampled stress
+measurements, not exhaustive upper bounds, and do not predict final fork settings.
+The saved direct VRF callback tests include transaction overhead and exclude the
+real coordinator's proof verification and billing. Callback allowance stays 300k.
+
+Freeze verification also exposed a stale Decimator plan estimate: the cold plan
+and worker frame use 60,298 gas after calibrated metering. The estimate is now
+65,000. The full affected cold batch passes all 72 tests with unchanged assertions.
+Some invariant and symbolic evidence predates this final constant change; the
+freeze record separates it from the complete final-source fuzz, regression,
+cold integration/gas and Hardhat suites and the compiled-code comparison.
+
+Use [the freeze record](audit/freeze.json) for the recorded verification results,
+input identities, analyzer dispositions and remaining verification limits.
+
 ### ID-keyed smurf allowance (2026-10-08)
 
 The smurf feature follows baseline commit `1dcc578d0`. Quota belongs to the main
@@ -80,7 +114,8 @@ the subsequent smurf feature, which has not started at this checkpoint.
 
 ## Setup
 
-Use Node 20 (as in CI), Python 3, Bash, Git and Foundry. Solidity 0.8.34, via IR,
+Use Node 20 and Python 3.12 to match Hardhat CI, plus Bash, Git and Foundry.
+Install local Python packages in a virtual environment. Solidity 0.8.34, via IR,
 1,000 optimizer runs and EVM Osaka are set in both compiler configurations.
 The npm dependencies and forge-std revision are locked in the repository. Foundry
 CI pins `nightly-c07d504b4ae67754584f4e05ff0c547a43c50f7b`, the build used by
@@ -103,8 +138,12 @@ node --version
 forge --version
 python3 scripts/audit-snapshot.py
 npm ci
+python3 -m pip install safe-pysha3==1.0.5
 git submodule update --init --recursive
 ```
+
+The Python dependency supplies Keccak for the independent wild-color vector
+generator. The Hardhat suite checks that the committed vectors match this generator.
 
 The snapshot check verifies the scope and hashes of source, build and verification
 inputs. It does not attest that tests pass. Maintainers refresh those hashes with

@@ -5,7 +5,8 @@ Degenerette and a prize-pool growth parimutuel. ETH/stETH obligations and token 
 are accounted for separately. Contracts use fixed deployment addresses; game modules
 execute by delegatecall, while craps uses a separate stateless dice engine.
 
-**External audit: start with [the audit handoff](docs/AUDIT.md).**
+**External audit: start with [the audit handoff](docs/AUDIT.md).** Frozen revisions are published as
+annotated `audit-*` tags; [audit readiness](docs/AUDIT-READINESS.md) names the current one.
 
 | Document | Purpose |
 | --- | --- |

@@ -1,37 +1,117 @@
 # Audit readiness — 2026-10-09
 
-## Freeze verification in progress — 2026-10-09
+## Freeze verification in progress — second 2026-10-09 freeze
 
-The current production candidate is `d611f132a924b471e078dca57b7e0aabe2c6c9cc`.
-It includes caller-calibrated `mineFlip(uint32)` batching and the boxes-first,
-two-ended AFKing subscriber list. A zero multiplier means 10,000 basis points;
-the first mandatory checkpoint is attempted and callers must supply sufficient
-gas. Vault forwarding preserves the selected calibration. VRF callback gas remains
-300,000, as approved after repricing review.
+The candidate production source is commit `69c67918c74b2c301c702f1843d8850ab47bca50`;
+final test inputs are `75d95953f`. They supersede `audit-2026-10-09` (production
+`97c58a8fd`) once a new annotated tag is published; no tag exists for this candidate yet.
 
-The 2026-10-08 freeze was stopped before its deep campaign and remote CI finished.
-Those results are historical evidence, not a completed freeze of this candidate.
-The resumed freeze will record source and verification hashes, complete the current
-required checks, and create an annotated tag only after verification closes.
-No freeze tag has yet been created for this candidate.
+Production changes since `97c58a8fd`:
 
-Focused implementation checks and repriced-client experiments are saved locally:
+- `1a540f2ed` separates mineFlip RNG request admission budgets: 400k for a mid-day
+  request, 1.5M for a daily request, plus 300k only when a nonempty redemption batch
+  must close. The terminal allowance (2.5M) is unchanged.
+- `69c67918c` keeps the mineFlip gas reserves after the first unit. The floor always
+  holds every ancestor's return tail; the first unit may run below it and later units
+  must fit above it again, so a call that fits its first unit does not revert for gas.
+  Liquidating a smurf account burns no sDGNRS (a main-account sale still does), and
+  its payment tries ETH then stETH. Dead code and stale comments were removed
+  (`settleGrowth`, `CrapsEngine.settleRanked`, unused `MineFlipGas` helpers and
+  zero-allowance guards).
 
-- AFKing cleanup: 14 passing tests in five suites, with source-drift gates passing.
-- Gas/chunk replay: 33 initialized fixtures using pinned Glamsterdam devnet-8 Geth.
-  Every selected peak case also succeeds with 10M supplied gas. The largest measured
-  gross peak is 7,931,562 gas for a cold 100-box reward fixture. These are sampled
-  fixture peaks, not mathematical upper bounds or a promise about final fork rules.
-- Direct VRF callback tests consume approximately 35.1k gas including standalone
-  transaction overhead. They exclude real-coordinator proof verification/billing.
-- The obsolete corrupted-empty-section regression is removed: it expected the
-  invariant revert that the owner explicitly requested removing. Reachable-state
-  membership, locking, pending-count and completion checks remain in the suite.
+Verification so far, all on this candidate: production build, deployment-size ceiling,
+storage-layout oracle and the eleven source-drift gates pass; the standard Foundry
+groups, Hardhat suite and static analysers have been run. Four stale test expectations
+were repaired without changing any contract (fixture calibration after the new request
+budgets, one chunk-count guard, one packed-word mask in a cache test). The deep
+invariant sweep, Halmos proofs and hosted CI for this exact revision are still running;
+the final section below replaces this one when they close.
 
-Evidence locations: `.audit-test-logs/afking-no-zero-guard/`,
-`.audit-test-logs/chunk-repricing-20261009/`, and
-`.audit-test-logs/caller-gas-multiplier-20261008/`. Final freeze verification is
-recorded under `.audit-test-logs/freeze-2026-10-09/` and the associated GitHub CI run.
+## Earlier freeze — `audit-2026-10-09`
+
+Annotated tag: `audit-2026-10-09`. Production source commit:
+`97c58a8fdf9a0cf464abe71176a1670e02c28b67`. Verified final test/build inputs:
+`97c58a8fdf9a0cf464abe71176a1670e02c28b67`. Final handoff changes after this revision are
+documentation and freeze records only. See [the freeze record](audit/freeze-audit-2026-10-09.json)
+for source hashes, every selected root, per-run results and evidence identities.
+
+Verification combines the [standard hosted run](https://github.com/PurgeGame/degenerus-protocol/actions/runs/37936049839),
+the [deep/symbolic campaign](https://github.com/PurgeGame/degenerus-protocol/actions/runs/37929240395), the
+[final-source CI](https://github.com/PurgeGame/degenerus-protocol/actions/runs/37964801163) and full-budget local
+replacement runs. The hosted histories retain these resolved issues:
+
+- The original Hardhat vector-generator check lacked Python's `sha3` module.
+  CI now installs `safe-pysha3==1.0.5` using Python 3.12, and the complete
+  Hardhat selection passes in the later hosted run.
+- The V61 stETH-cover-buy scenario crossed a day boundary without completing
+  daily processing. The ordered subscription lock correctly rejected it with
+  `RngLocked()`. Its setup now calls the real miner/VRF sequence through a
+  disjoint actor before taking financial baselines. Every original purchase and
+  solvency assertion remains. The entire affected five-root standard batch and
+  the full deep V61 root pass on the corrected inputs.
+- The cold Decimator plan/frame witness measured 60,298 gas against a stale
+  60,000 estimate. The final production revision raises only that estimate to
+  65,000. The entire affected cold batch passes all 72 tests, retaining every
+  original assertion. The witness already completed under the separate tail
+  reserve; no out-of-gas failure was observed.
+- The hosted deep AdvanceLiveness job exceeded GitHub's 5½-hour execution limit.
+  Its partial artifact is retained as incomplete evidence, with no reported test
+  failure. The full-budget local run on the final source supplies that root's
+  successful coverage; no run or depth budget was reduced.
+
+The broad regression baseline is `40fbc58eb649d713e7802ce09fd0bf0e7b1e8458`.
+Between the hosted baseline and the V61 replacements, only that scenario changes;
+retained Foundry selections exclude it and no other Solidity source imports it.
+The subsequent production change is limited to the Decimator estimate. Final-source
+checks include all 96 Hardhat files (1651 passing tests),
+all four fuzz groups, the repro-symbolic group and the full cold integration/gas
+suite (1547 passing executions), plus 21 targeted Foundry roots
+(201 passing executions), the complete deep
+AdvanceLiveness root, and production gates. Bytecode comparison isolates
+the larger admission operand in each affected module, with expected jump-address
+relocation; all other production executable bytes match after metadata removal.
+This is broad baseline coverage plus targeted final-source verification, **not a
+complete Foundry full-suite rerun on the final constant**. The record retains exact input
+identities and admits no unexplained failures or reduced fuzz/invariant budgets.
+
+To complete the hosted queue sooner, 16 deep roots also ran locally
+at the unchanged deep budgets. Complete all-tests root selections cover all of
+their planned partitions. The record counts each physical selection once and
+retains the actual hosted job status, including any cancelled duplicate work.
+The configured deep campaign is 1,000 runs × 256 calls per run, with the existing
+inline overrides retained: AnyInputSafety uses 256 × 128 and SeatCap uses 64 × 64.
+The record includes the executed run/call totals for each invariant property.
+
+| Selection | Verified result |
+| --- | --- |
+| Foundry warm | 412 roots; 3887 passing executions |
+| Foundry cold integration/gas | 134 roots; 1547 passing executions |
+| Deep invariants | 41 planned partitions covered across 24 roots; 214 passing executions |
+| Hardhat | 96 files; 1651 passing tests |
+| Halmos | 56 passing properties |
+| Split arithmetic | 24 passing checks |
+
+The table combines the recorded baseline and replacement revisions above; it is
+not a claim that every row ran on the final source. Counts are runner executions
+and may include inherited/imported suites. Recorded
+skips total 2; their exact identities are in the freeze record. The skips are optional archived-runtime differential tests for growth foil and subscription transitions; their historical-runtime fixtures are not configured in these runs.
+Production build, deployment-size, storage-layout, interface and source-drift
+gates also pass. Local assurance-tool checks pass 60 unit tests and six partition
+tests. Static analyzers completed; their alerts and bounded triage are retained,
+not represented as zero findings. The prior interrupted freeze is historical
+evidence only.
+
+The candidate retains caller-calibrated `mineFlip(uint32)` batching, boxes-first
+AFKing processing and the 300,000-gas VRF callback allowance. Repriced-client stress
+replays cover 33 fixtures; each selected peak succeeds with 10M supplied gas. The
+largest measured gross peak is 7,931,562 gas. These samples are not exhaustive
+upper bounds or promises about final fork rules. Direct VRF callback tests use
+about 35.1k gas including standalone transaction overhead and exclude real
+coordinator proof verification/billing.
+
+Insufficient caller gas can revert. The first mandatory checkpoint is attempted
+regardless of conservative admission estimates; optional continuation work uses
+the caller multiplier. No deployment or external audit approval is implied.
 
 ## Earlier campaign: review subject and status
 
@@ -61,7 +141,7 @@ evidence is under `whale-counterexample-replay/20261008T102434.557048Z-d494e69c/
 The passing closure run is
 `whale-final-deep/20261008T105734.694153Z-33d9fee3/` (13 executions, zero failures).
 
-## Security conclusions
+## Earlier campaign: security conclusions
 
 The source review and focused adversarial reviews found no confirmed ordinary-player
 exploit that rerolls a committed result, permanently bricks `mineFlip`, steals
@@ -85,10 +165,11 @@ percentages/multipliers must still respect their commitments. Previously accepte
 soft EV-allowance timing remains a gameplay rule. These exceptions do not authorize
 arbitrary post-request selection or diversion of payment.
 
-## Repairs made during verification
+## Earlier campaign: verification repairs
 
-All changes so far concern tests, assurance gates, scope or documentation; no
-production Solidity behavior has been changed by this readiness pass.
+The 2026-10-08 readiness pass changed tests, assurance gates, scope and
+documentation; it did not change production Solidity behavior. The later
+Decimator estimate correction is recorded in the current freeze section above.
 
 | Gap | Correction and reason |
 | --- | --- |
