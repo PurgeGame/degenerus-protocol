@@ -165,6 +165,9 @@ contract V61SolvencyAfpay is DeployProtocol {
 
     /// @notice Pin non-vacuity for the new action: actor ETH becomes stETH, then funds a real cover buy.
     function testScenarioStethFallbackPreservesIdentity() public {
+        // setUp crossed a day boundary: finish the real miner/VRF sequence before
+        // subscribing. The other handler's actor leaves this cover buyer untouched.
+        handler.advance(0, 1);
         address actor = solvencyHandler.actors(0);
         uint256 priceWei = _oneTicketCost();
         uint256 actorEthBefore = actor.balance;
