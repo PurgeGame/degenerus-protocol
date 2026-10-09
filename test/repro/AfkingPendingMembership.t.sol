@@ -45,7 +45,6 @@ contract AfkingMembershipHarness is GameAfkingModule, WalletSeed {
         subsFullyProcessed = false;
         _setRngComplete(true);
     }
-    function corruptEmptySet() external { _setSubscriberAt(0, 0); _setSubscriberCount(0); _subBoxCount = 0; }
     function complete() external view returns (bool) { return _rngComplete(); }
     function state(address player) external view returns (uint256 count, uint256 members, uint256 index, uint24 stamp, uint24 opened, uint8 quantity) {
         Sub storage sub = _subOf[_walletIdOf(player)];
@@ -136,17 +135,5 @@ contract AfkingPendingMembershipTest is Test {
             assertEq(lastOpened, stamp, "no new box purchased");
             h.deliver();
         }
-    }
-
-    function test_EmptySectionNeverForfeitsUnresolvedCount() public {
-        h.seed(PLAYER, address(0), 1);
-        h.deliver();
-        h.corruptEmptySet();
-        vm.expectRevert(bytes4(keccak256("E()")));
-        h.runAfkingWork(9_000_000);
-        (uint256 pending,,, uint24 stamp, uint24 opened,) = h.state(PLAYER);
-        assertEq(pending, 1);
-        assertLt(opened, stamp);
-        assertFalse(h.complete());
     }
 }

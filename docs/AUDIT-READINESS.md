@@ -1,54 +1,37 @@
-# Audit readiness — 2026-10-08
+# Audit readiness — 2026-10-09
 
-## Freeze verification in progress
+## Freeze verification in progress — 2026-10-09
 
-The current candidate starts at `68c189cd6433d9de31ff42fb1eb4fb1be60c1567`,
-including the BAF main-board sampling and ID-keyed smurf allowance changes. A new
-complete regression, cold-gas, Hardhat and deep-invariant campaign is running in
-isolated checkouts. The results below belong to the earlier campaign and do not
-certify these later changes. No freeze tag has been created for this candidate.
+The current production candidate is `d611f132a924b471e078dca57b7e0aabe2c6c9cc`.
+It includes caller-calibrated `mineFlip(uint32)` batching and the boxes-first,
+two-ended AFKing subscriber list. A zero multiplier means 10,000 basis points;
+the first mandatory checkpoint is attempted and callers must supply sufficient
+gas. Vault forwarding preserves the selected calibration. VRF callback gas remains
+300,000, as approved after repricing review.
 
-The complete 96-file Hardhat selection has passed (1,651 tests), as have all
-56 Halmos properties, the 24 split-arithmetic checks and the production/layout
-gates. The warm Foundry campaign is closed; cold-gas and deep-invariant campaigns
-remain in progress.
-Two stale test oracles now include the smurf quota lanes and exclude them from
-gameplay eligibility. A third fixture used the retired two-argument BAF draw-module
-selector; typed calls now preserve its no-work assertions against both module
-interfaces. The three-file rerun passes 95 tests. One optional foil comparison is
-skipped because no archived runtime was supplied. Production Solidity is unchanged
-by these verification repairs.
+The 2026-10-08 freeze was stopped before its deep campaign and remote CI finished.
+Those results are historical evidence, not a completed freeze of this candidate.
+The resumed freeze will record source and verification hashes, complete the current
+required checks, and create an annotated tag only after verification closes.
+No freeze tag has yet been created for this candidate.
 
-The complete warm selection covered all 410 roots: 3,481 initial passes, the
-repaired BAF selector failure, and ten invariant setup errors. Those ten cases
-made zero handler calls because cached test bytecode embedded a different handler
-runtime from the current compiler artifact. Clean compilation restores matching
-runtimes; the full-budget rerun passes all ten invariants (23 total tests).
-All original warm failures have passing closures. The runner now rebuilds each batch
-as one artifact set. Dependency fingerprints also follow nested library symlinks
-and stop directory cycles; two regression tests failed before that repair and pass
-after it. All 60 assurance unit tests and six partition tests pass. Saved compiler
-metadata independently matches all 19 compiled forge-std sources to the clean,
-locked library revision in all nine Foundry checkouts.
+Focused implementation checks and repriced-client experiments are saved locally:
 
-The first remote run passed production assurance and Slither, but several Foundry
-runners received shutdown signals. Its Aderyn installer selected crates.io 0.1.9,
-which cannot parse Osaka; the next remote run passes with npm release 0.6.8.
-The resource diagnostics identified additive verbosity: the runner's default `-vv`
-and CI's `-vvv` enabled level-five execution/setup/storage tracing. Forge grew to
-about 15 GB resident memory and 11 GB swap before termination, after compilation
-had stayed below 3 GB. The same five-file batch passes 130 tests locally at default
-verbosity, with a 3.1 GB peak across the run. Explicit verbosity now replaces the
-default, and CI uses the same log level as the local campaign. The regression test
-fails before this fix and passes after it; the repaired hosted run is pending.
-Remote interruption logs are retained; they are not counted as passing test runs.
+- AFKing cleanup: 14 passing tests in five suites, with source-drift gates passing.
+- Gas/chunk replay: 33 initialized fixtures using pinned Glamsterdam devnet-8 Geth.
+  Every selected peak case also succeeds with 10M supplied gas. The largest measured
+  gross peak is 7,931,562 gas for a cold 100-box reward fixture. These are sampled
+  fixture peaks, not mathematical upper bounds or a promise about final fork rules.
+- Direct VRF callback tests consume approximately 35.1k gas including standalone
+  transaction overhead. They exclude real-coordinator proof verification/billing.
+- The obsolete corrupted-empty-section regression is removed: it expected the
+  invariant revert that the owner explicitly requested removing. Reachable-state
+  membership, locking, pending-count and completion checks remain in the suite.
 
-The audit gas policy follows available-gas admission at deterministic checkpoints.
-The 10M figure guides operation sizing; it is not a fixed transaction cap. Each
-declared cold-path bound and complete call/return/flush tail must fit the worker's
-remaining allowance and actual available gas. The old 13M absolute-ceiling wording
-has been removed from the active handoff and verification instructions. Gas can
-choose a safe continuation checkpoint, never a committed outcome or fallback.
+Evidence locations: `.audit-test-logs/afking-no-zero-guard/`,
+`.audit-test-logs/chunk-repricing-20261009/`, and
+`.audit-test-logs/caller-gas-multiplier-20261008/`. Final freeze verification is
+recorded under `.audit-test-logs/freeze-2026-10-09/` and the associated GitHub CI run.
 
 ## Earlier campaign: review subject and status
 
