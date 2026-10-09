@@ -95,8 +95,34 @@ contract AfKingFundingWaterfall is DeployProtocol {
     function setUp() public {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
+        _finishSubscriptionWindow();
     }
 
+
+    function test_BoxesHavePriorityOverEarlierTicketsSharingOneDaysFunding() public {
+        address funder = makeAddr("shared-priority-funder");
+        address ticket = makeAddr("shared-priority-ticket");
+        address box = makeAddr("shared-priority-box");
+        _fundPool(funder, 10 ether);
+        uint32 funderId = _aid(funder);
+        address[2] memory players = [ticket, box];
+        for (uint256 i; i < 2; ++i) {
+            uint32 playerId = _aid(players[i]);
+            uint256 seat = _grantSeat(players[i]);
+            vm.prank(funder);
+            game.setAfkingFundingApproval(0, playerId, true);
+            vm.prank(players[i]);
+            game.subscribe(0, false, i == 0, 1, funderId, seat);
+        }
+        uint256 cost = game.mintPrice();
+        uint256 balance = game.afkingFundingOf(funder);
+        vm.prank(funder);
+        game.withdrawAfkingFunding(0, balance - cost);
+        _runStageOnce();
+        assertGt(_subscriberIndexOf(box), 0, "later box gets the shared funds first");
+        assertEq(_subscriberIndexOf(ticket), 0, "earlier ticket is now unfunded");
+        assertEq(game.afkingFundingOf(funder), 0, "exactly one day's purchase paid");
+    }
 
     // =========================================================================
     // Task 3c -- No settable exemption flag (grep-clean, complements the runtime tests)
@@ -185,12 +211,12 @@ contract AfKingFundingWaterfall is DeployProtocol {
     }
 
     /// @dev Prep an existing SUB-09 sub (VAULT/SDGNRS) to REACH the funding waterfall: re-subscribe it in
-    ///      ticket + drain-first mode (the standalone setMode/setDrainGameCreditFirst setters are GONE —
+    ///      box + drain-first mode (the standalone setMode/setDrainGameCreditFirst setters are GONE —
     ///      the flags are set via subscribe), sentinel claimable so DirectEth ethValue == cost. Bucket
     ///      left empty by the caller.
     function _prepExemptSub(address who) internal {
         vm.prank(who);
-        game.subscribe(0, /*drainFirst*/ true, /*useTickets*/ true, 1, 0, 0); // exempt: no seat burned
+        game.subscribe(0, /*drainFirst*/ true, /*useTickets*/ false, 1, 0, 0); // exempt: no seat burned
         _setClaimable(who, 1); // sentinel -> DirectEth
     }
 

@@ -79,6 +79,7 @@ contract V61Smite is DeployProtocol {
         vm.warp(_t);
         vm.deal(address(game), 5_000_000 ether);
         _seedDailyIdx(100);
+        _finishSubscriptionWindow();
     }
 
     // =========================================================================

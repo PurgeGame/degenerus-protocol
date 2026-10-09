@@ -606,6 +606,7 @@ contract GameWalletIdCredits is DeployProtocol {
     }
 
     function test_SubDrawCreditsWinnerElementId() public {
+        _finishSubscriptionWindow();
         (address p,) = _wallet("sub_draw_player");
         uint256 seat = _grantSeat(p);
         vm.deal(address(this), 5 ether);

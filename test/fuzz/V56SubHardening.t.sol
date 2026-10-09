@@ -101,6 +101,7 @@ contract V56SubHardening is DeployProtocol {
         _t = block.timestamp + 1 days;
         vm.warp(_t);
         vm.deal(address(game), 5_000_000 ether);
+        _finishSubscriptionWindow();
     }
 
     // =========================================================================
@@ -418,6 +419,7 @@ contract V56SubHardening is DeployProtocol {
     function testBountyEligibleIsOpenAcrossRolesAndDayWindows() public {
         _settleClean(uint256(keccak256("be_settle")) | 1);
         _warpToDayBoundary(5);
+        _finishSubscriptionWindow();
         address fresh = makeAddr("be_fresh");
         address deity = makeAddr("be_deity");
         address sub = makeAddr("be_sub");
@@ -462,6 +464,7 @@ contract V56SubHardening is DeployProtocol {
     function testOpenMiningDoesNotBypassSubscriptionCoinRequirement() public {
         _settleClean(uint256(keccak256("subscription_gate_settle")) | 1);
         _warpToDayBoundary(5);
+        _finishSubscriptionWindow();
         address miner = makeAddr("coinless_miner");
         _fundPool(miner, 50 ether);
         assertTrue(game.bountyEligible(miner));
@@ -470,6 +473,7 @@ contract V56SubHardening is DeployProtocol {
         vm.expectRevert(abi.encodeWithSignature("InvalidToken()"));
         game.subscribe(0, false, false, 1, 0, seat);
         assertEq(_subscriberIndexOf(miner), 0, "subscription credential still required");
+        _warpToDayBoundary(6);
         vm.recordLogs();
         vm.prank(miner);
         game.mineFlip(0);

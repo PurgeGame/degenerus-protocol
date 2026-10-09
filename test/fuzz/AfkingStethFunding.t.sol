@@ -330,21 +330,15 @@ contract AfkingStethFundingTest is DeployProtocol {
         assertEq(badToken.allowance(FUNDER, address(game)), 0);
     }
 
-    function test_AlreadyBoughtPendingAndCanceledNeverPull() public {
-        uint24 today = game.currentDayView();
-        _add(PLAYER, address(0), false, true, 1, 0, 0);
-        _add(NEXT, address(0), false, false, 1, 0, 0);
-        _add(FUNDER, address(0), false, true, 0, 0, 0);
-        _authorize(PLAYER, PLAYER, type(uint256).max);
-        _authorize(NEXT, NEXT, type(uint256).max);
-        _authorize(FUNDER, FUNDER, type(uint256).max);
-        host.setMarkers(PLAYER, today, today);
-        host.setMarkers(NEXT, today - 1, today - 2);
+    function test_CompletedPassPendingReadAndCanceledNeverPull() public {
+        _add(PLAYER, address(0), false, true, 0, 0, 0);
         _expectNoTokenCalls();
         _work();
-        assertGt(host.memberOf(PLAYER), 0);
-        assertGt(host.memberOf(NEXT), 0);
-        assertEq(host.memberOf(FUNDER), 0);
+        assertEq(host.memberOf(PLAYER), 0);
+        assertTrue(host.subWork(WORK_GAS).done, "completed pass does not replay");
+        host.nextDay();
+        host.closeReadForTest();
+        assertFalse(host.subWork(WORK_GAS).progressed, "prior read blocks new preparation");
     }
 
     function test_ProtocolSubscriptionKeepsExistingFundingFailureExemption() public {
@@ -403,10 +397,11 @@ contract AfkingStethFundingTest is DeployProtocol {
         game.subscribe(0, false, true, 1, 0, seat);
     }
 
-    function test_NewSubscribeAndActiveCoverBuyUseFallback() public {
+    function test_NewSubscribeAndNextDailyBuyUseFallbackWithoutDuplicateCover() public {
+        host.subscriptionWindow();
         uint256 seat = _grantSeat(PLAYER);
         _aid(PLAYER);
-        uint32 funderId = _aid(FUNDER); // a funding source must already hold a wallet ID
+        uint32 funderId = _aid(FUNDER);
         mockStETH.mint(FUNDER, 1 ether);
         _authorize(FUNDER, PLAYER, type(uint256).max);
         vm.prank(PLAYER);
@@ -416,13 +411,19 @@ contract AfkingStethFundingTest is DeployProtocol {
         vm.warp(block.timestamp + 1 days);
         host.nextDay();
         vm.prank(PLAYER);
+        vm.expectRevert(DegenerusGameStorage.RngLocked.selector);
         game.subscribe(0, false, true, 2, funderId, 0);
-        assertEq(mockStETH.balanceOf(FUNDER), 1 ether - 3 * host.price());
+        _work();
+        host.subscriptionWindow();
+        vm.prank(PLAYER);
+        game.subscribe(0, false, true, 2, funderId, 0);
+        assertEq(mockStETH.balanceOf(FUNDER), 1 ether - 2 * host.price(), "update after daily purchase does not buy again");
         assertGt(host.entries(PLAYER), firstEntries);
         assertEq(host.stateOf(PLAYER).lastAutoBoughtDay, game.currentDayView());
     }
 
-    function test_NewSubscribeFailureRevertsButActiveUnfundedCoverBuySkips() public {
+    function test_NewSubscribeFailureRevertsWithoutCreatingUnfundedMember() public {
+        host.subscriptionWindow();
         uint256 seat = _grantSeat(PLAYER);
         _aid(PLAYER);
         _authorize(PLAYER, PLAYER, type(uint256).max);
@@ -430,16 +431,15 @@ contract AfkingStethFundingTest is DeployProtocol {
         vm.expectRevert(abi.encodeWithSignature("MustPurchaseToBeginAfking()"));
         game.subscribe(0, false, true, 1, 0, seat);
         assertEq(host.memberOf(PLAYER), 0);
-        _add(PLAYER, address(0), false, true, 1, 0, 0);
+        mockStETH.mint(PLAYER, 1 ether);
         vm.prank(PLAYER);
-        game.subscribe(0, false, true, 2, 0, seat);
-        assertGt(host.memberOf(PLAYER), 0, "unpaid optional cover buy does not evict");
-        assertEq(host.stateOf(PLAYER).lastAutoBoughtDay, game.currentDayView() - 1);
-        _work();
-        _assertEvicted(PLAYER);
+        game.subscribe(0, false, true, 1, 0, seat);
+        assertGt(host.memberOf(PLAYER), 0);
+        assertEq(host.stateOf(PLAYER).lastAutoBoughtDay, game.currentDayView());
     }
 
     function test_AllowancePersistsThroughCancellationAndReenrollment() public {
+        host.subscriptionWindow();
         uint256 seat = _grantSeat(PLAYER);
         mockStETH.mint(PLAYER, 1 ether);
         _authorize(PLAYER, PLAYER, type(uint256).max);
@@ -482,6 +482,9 @@ contract AfkingStethFundingTest is DeployProtocol {
         _authorize(PLAYER, PLAYER, type(uint256).max);
         uint256 budget = MineFlipGas.budget(WORK_GAS, type(uint32).max, true);
         MineFlipGas.Result memory result = host.subWork{gas: WORK_GAS}(budget);
+        assertTrue(result.progressed); // empty box section -> ticket phase is a durable checkpoint
+        assertEq(host.entries(PLAYER), 0);
+        result = host.subWork{gas: WORK_GAS}(budget);
         assertTrue(result.progressed);
         assertGt(host.entries(PLAYER), 0);
         assertEq(host.entries(NEXT), 0);
@@ -496,7 +499,7 @@ contract AfkingStethFundingTest is DeployProtocol {
         _authorize(PLAYER, PLAYER, type(uint256).max);
         MineFlipGas.Result memory deferred =
             host.subWork(GasBounds.SUBSCRIBER_ITEM_GAS + GasBounds.SUBSCRIBER_TAIL_GAS - 1);
-        assertFalse(deferred.progressed);
+        assertTrue(deferred.progressed, "empty box section advanced to tickets");
         assertFalse(deferred.done);
         assertGt(host.memberOf(PLAYER), 0);
         assertEq(mockStETH.balanceOf(PLAYER), 1 ether);

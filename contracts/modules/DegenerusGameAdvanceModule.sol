@@ -948,8 +948,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         uint256 len = _subscribers.length;
         uint256 word = _recordedDailyWord(day);
         if (len < 2 || word == 0) return;
-        uint256 idx = 1 + (uint256(keccak256(abi.encodePacked("SEATDRAW", word))) % (len - 1));
-        uint32 winner = _subscribers[idx];
+        uint256 boxes = _subBoxCount;
+        // Vault is permanently box position 0; sDGNRS at position 1 remains eligible.
+        uint256 idx = 1 + uint256(keccak256(abi.encodePacked("SEATDRAW", word))) % (len - 1);
+        uint32 winner = _subscriberAt(idx < boxes ? idx : SUBSCRIBER_CAP - (idx - boxes));
         Sub storage s = _subOf[winner];
         uint24 startDay = s.afkingStartDay;
         uint24 covered = s.afkCoveredThroughDay;

@@ -98,6 +98,7 @@ contract V62GasBrickCompose is DeployProtocol {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
         vm.deal(address(game), 100_000_000 ether);
+        _finishSubscriptionWindow();
     }
 
     // =========================================================================

@@ -10,12 +10,12 @@
 CLASS	identifier	file	rationale
 OWNER	_afkingResetDay	modules/DegenerusGameMinerModule.sol	Miner pins the preparation day once before subscriber staging; it survives midnight and partial batches until the daily session seals.
 OWNER	_fundingSourceOf	modules/GameAfkingModule.sol	subscribe upserts/deletes the sparse external-funder map with FLAG_EXTERNAL_FUNDING; sole writer
-OWNER	_pendingBoxCount	modules/GameAfkingModule.sol	runSubscriberWork increments per stamped box; _openAfkingBox decrements; _forfeitPendingBoxCount clears a count no ring stamp can satisfy; sole module
+OWNER	_pendingBoxCount	modules/GameAfkingModule.sol	runSubscriberWork batches stamped-box increments; the monotonic opener decrements each paid obligation exactly once
 OWNER	_sdgnrsBonusLevel	modules/GameAfkingModule.sol	runSubscriberWork latches the level at which SDGNRS's bonus box fired; sole writer
 OWNER	_subCursor	modules/DegenerusGameMinerModule.sol	Miner resets the subscriber cursor only when beginning a new pinned preparation day; AFKing owns batch advancement.
 OWNER	_subCursor	modules/GameAfkingModule.sol	runSubscriberWork persists the advanced chunk cursor; the crank resets it once per day
-OWNER	_subOpenCursor	modules/GameAfkingModule.sol	_runAfkingWork persists the ring cursor for afking box opens; sole writer
-OWNER	_subscribers	modules/GameAfkingModule.sol	_removeFromSet swap-and-pop (push/pop elsewhere in the module); sole writer
+OWNER	_subOpenCursor	modules/GameAfkingModule.sol	_runAfkingWork persists the monotonic box-section cursor
+HELPER	_subscribers	storage/DegenerusGameStorage.sol	Packed physical ID helpers and logical membership root; AFKing owns insertion, section changes and removal
 OWNER	balancesPacked	DegenerusGame.sol	claimWinnings/withdrawAfkingFunding debit a player's claimable/afking halves inline (byte-identical to the storage helpers) paired with a claimablePool debit
 OWNER	balancesPacked	modules/DegenerusGameMintModule.sol	_processMintPayment debits claimable and afking from one packed snapshot; preserves the low-half sentinel and checks high-half sufficiency; _purchaseForWithCached applies the matching combined claimablePool debit
 HELPER	balancesPacked	storage/DegenerusGameStorage.sol	_creditClaimable/_debitClaimable/_debitAfking/_debitClaimableAndAfking/_settleShortfallNoPool/_creditAfkingValue: the per-player packed-balance mutators every module calls
@@ -208,3 +208,5 @@ HELPER	walletIds	storage/DegenerusGameStorage.sol	_registerWallet assigns a defa
 OWNER	walletIds	modules/DegenerusGameMintModule.sol	liquidateAccount clears only the seller's default gameplay ID on a main-account sale, retaining permanent identity.
 OWNER	afkingFundingApprovals	modules/GameAfkingModule.sol	setAfkingFundingApproval writes funder-owner consent; acquired accounts cannot grant it and inherited acquisition invalidates existing consent at reads.
 OWNER	lootboxRngPacked	DegenerusGame.sol	setCrapsRngPending is CRAPS-only and changes only pending parity bits 250/251, preserving committed entropy/session fields.
+OWNER	_subOpenCursor	modules/DegenerusGameMinerModule.sol	Reset once at daily preparation after the previous read cohort completed
+OWNER	_subBoxCount	modules/GameAfkingModule.sol	Box-section membership maintained by insert, mode change and same-section removal

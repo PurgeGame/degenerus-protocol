@@ -125,6 +125,7 @@ contract KeeperNonBrick is DeployProtocol {
         uint256 lrPacked = uint256(vm.load(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT))));
         RecyclingState.seedWriteBuffer(address(game), INDEX);
         vm.store(address(game), bytes32(uint256(LOOTBOX_RNG_PACKED_SLOT)), bytes32(lrPacked));
+        _finishSubscriptionWindow();
     }
 
 

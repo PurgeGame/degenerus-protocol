@@ -103,6 +103,7 @@ contract AfKingConcurrency is DeployProtocol {
     function setUp() public {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
+        _finishSubscriptionWindow();
     }
 
 
@@ -125,7 +126,7 @@ contract AfKingConcurrency is DeployProtocol {
         }
         // After a completed STAGE: the gate is CLOSED for this day (no more processing).
         assertTrue(_subsFullyProcessed(), "post-STAGE: subsFullyProcessed == true (gate closed for the day)");
-        assertEq(_subCursorVal(), uint16(_subscribersLen()), "post-STAGE: cursor reached the set end");
+        assertEq(_subCursorVal(), uint16(1 << 15), "all-box pass ended at the empty ticket section");
 
         // Fresh-day reset: open the reset gate exactly as the contract does at a new-day entry
         // (AdvanceModule:306-308: `subsFullyProcessed = false; _subCursor = 0`).

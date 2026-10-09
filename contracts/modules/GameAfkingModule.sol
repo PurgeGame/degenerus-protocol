@@ -110,8 +110,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                               Custom errors
     ------------------------------------------------------------------*/
     // error RngLocked() — inherited from DegenerusGameStorage. Reverts a subscribe
-    // (create / replace / cancel) attempted during the RNG freeze window: the subscriber
-    // set must be frozen across [request -> unlock].
+    // (create / replace / cancel) from daily preparation being due through the last
+    // paid AFKing box opening. Membership and modes stay fixed across that whole window.
     /// @notice Thrown when smite() targets an active afking subscriber, which is immune to
     ///         smite stacks.
     error SmiteeAfkingImmune();
@@ -147,7 +147,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         uint32 indexed fundingSource
     );
     /// @dev Per-player pre-check skip inside the process pass. `reason`:
-    ///        2 = AlreadyAutoBoughtToday (sub.lastAutoBoughtDay >= today)
     ///        3 = InsufficientPool  (afkingFunding[src] < ethValue) — funding skip
     ///      lastAutoBoughtDay is UNCHANGED on a skip.
     event PlayerSkipped(uint32 indexed player, uint8 reason);
@@ -155,10 +154,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///        1 = AutoPause (funding-skip kill of a NORMAL sub)
     ///        2 = CancelReclaim (in-pass reclaim of an externally-cancelled tombstone)
     event SubscriptionExpired(uint32 indexed player, uint8 reason);
-    /// @dev A pending-box count with no openable stamp behind it was cleared so the read
-    ///      cohort can complete; the stamps' ETH stays in the prize pools.
-    event AfkingBoxCountForfeited(uint16 count);
-
     /// @notice A consented funding account paid the residual subscription cost in stETH.
     /// @dev `source` is the funding account's key (the stETH leaves its payee). Any
     ///      share-rounding excess remains in the source's prepaid balance.
@@ -273,10 +268,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///         (create-or-replace in place); dailyQuantity == 0 cancels (writes the
     ///         tombstone sentinel, relocating no one). Every mutation flows
     ///         through this one consent-gated path.
-    /// @dev rngLock guard: subscribe reverts during the RNG freeze window
-    ///      (`rngLockedFlag`), for ALL of create / replace / cancel — the subscriber
-    ///      set must be frozen across [request -> unlock] so the stamped set the open
-    ///      consumes cannot shift mid-cycle. Callers wait for the unlock.
+    /// @dev Lock create/replace/cancel from the day boundary through preparation, RNG
+    ///      and all AFKing opens. Outside that window, mode changes may safely relocate IDs.
     /// @dev Authorization is checked ONCE here under the account rule (`_resolveAccount`:
     ///      the caller is the account's payee — its key or a smurf's owner — or an operator
     ///      approved for its ID). Authorization is NEVER re-checked at process-time.
@@ -317,11 +310,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         uint32 fundingSourceId,
         uint256 seatId
     ) external payable {
-        // Block ALL subscribe (create / replace / cancel) during the
-        // RNG freeze window: the subscriber set the stamp pass + open consume must
-        // stay frozen across [request -> unlock]. Callers wait for the unlock.
-        if (rngLockedFlag) revert RngLocked();
-
         // Closed from the liveness trigger onward, which subsumes post-gameOver: the
         // predicate stays true once death is declared (_unlockRng deliberately freezes
         // dailyIdx so the deadman never un-fires, and the phase flags it reads can no
@@ -336,10 +324,19 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // claim path.
         if (_livenessTriggered()) revert GameOver();
 
+        // Include the pre-first-miner-call window and post-unlock AFKing consumption.
+        // The old RNG completion flag remains true during preparation, so it is not a lock.
+        if (rngLockedFlag || _afkingResetDay > dailyIdx
+            || _simulatedDayIndex() > dailyIdx || _pendingBoxCount != 0) revert RngLocked();
+
         // The account rule: the caller for id 0, else an account the caller may act for.
         uint32 subId = _resolveAccountId(id);
         if (dailyQuantity != 0) subId = _registerCallerAccount(subId, msg.value);
         if (_isAcquired(subId)) revert NotApproved();
+        // The permanent protocol entries stay at box positions 0 (Vault) and 1 (sDGNRS).
+        // This also applies to an approved operator acting for the Vault's account.
+        bool exemptSub = subId == VAULT_WALLET_ID || subId == SDGNRS_WALLET_ID;
+        if (useTickets && exemptSub) revert E();
 
         // An external funding source (an ID other than 0 and the subscriber's own) must be
         // allocated and must consent: the same main wallet as the subscriber (equal payees)
@@ -368,8 +365,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         }
 
         // Cancel branch — dailyQuantity == 0 writes the `dailyQuantity = 0` tombstone in
-        // place and relocates no one (the in-pass reclaim swap-pops the tombstone when the
-        // process stage reaches it). Revert if the caller has no active sub. Any msg.value
+        // place and relocates no one. The process stage reclaims ordinary tombstones;
+        // VAULT keeps its entry at quantity zero so cancellation never frees a seat-cap unit.
+        // Revert if the caller has no set entry. Any msg.value
         // above was still credited to funding, so a cancel-with-ETH never strands the
         // deposit (it stays game-side withdrawable).
         if (dailyQuantity == 0) {
@@ -406,9 +404,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             return;
         }
 
-        // UPSERT branch (dailyQuantity >= 1) — create-or-replace in place. `_addToSet`
-        // is idempotent (adds only when `setPosition == 0`), so a re-subscribe of
-        // an active member replaces its fields without set churn.
+        // UPSERT branch (dailyQuantity >= 1). Same-mode updates keep their position;
+        // _addToSet moves mode changes to the other section in this unlocked window.
         Sub storage s = _subOf[subId];
 
         // Captured BEFORE the dailyQuantity overwrite: a non-zero stored dailyQuantity means the
@@ -422,8 +419,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // vault); they are exempt from the seat burn and the
         // purchase-grounded gate below, keyed on the un-spoofable resolved
         // subscriber identity. Every other sub must clear both.
-        bool exemptSub = subId == VAULT_WALLET_ID || subId == SDGNRS_WALLET_ID;
-
         if (wasActive) {
             // Settle the prior run's pendingFlip under its CURRENT flag + dailyQuantity before
             // the overwrite below, so the presale-box credit keys on the state in force during
@@ -690,38 +685,53 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     }
 
     /*------------------------------------------------------------------
-                          Iterable set (hand-inlined OZ EnumerableSet)
+                          Two-ended packed subscriber set
     ------------------------------------------------------------------*/
-    /// @dev Iterable set insert. Idempotent on already-in-set. Pushes the subscriber ID
-    ///      and records its 1-indexed position
-    ///      in the subscriber's `Sub.setPosition` (0 = not in set). The set is bounded without a
-    ///      runtime cap: every non-exempt entry burned a seat, and the seat token caps live
-    ///      seats plus set entries at 2,000.
-    /// @param s The subscriber's record (`_subOf[id]`).
-    /// @param id The subscriber's wallet ID.
+    /// @dev Insert or align an existing member with its requested mode. Existing members
+    ///      can move only from subscribe's unlocked window, with no active AFKing cursor.
     function _addToSet(Sub storage s, uint32 id) internal {
-        if (s.setPosition == 0) {
-            uint256 len = _subscribers.length;
-            _subscribers.push(id);
-            s.setPosition = uint32(len + 1);
+        uint256 position = s.setPosition;
+        bool tickets = (s.flags & FLAG_USE_TICKETS) != 0;
+        if (position != 0) {
+            if ((position > _subBoxCount) == tickets) return;
+            _removeFromSet(position);
         }
+        uint256 count = _subscribers.length;
+        if (count >= SUBSCRIBER_CAP) revert E();
+        uint256 boxes = _subBoxCount;
+        uint256 index;
+        if (tickets) {
+            index = SUBSCRIBER_CAP - (count - boxes);
+        } else {
+            index = boxes;
+            _subBoxCount = uint16(boxes + 1);
+        }
+        _setSubscriberAt(index, id);
+        _setSubscriberCount(count + 1);
+        s.setPosition = uint32(index + 1);
     }
 
-    /// @dev Iterable set remove via swap-and-pop of the element at 1-indexed `position`
-    ///      (the process pass's cursor + 1, known without reading the removed record, which
-    ///      the caller deletes — its `setPosition` with the rest of it). Moves the last
-    ///      element word into the vacated slot, rewrites the mover's `setPosition` to the
-    ///      vacated position, and pops the tail. The process pass's "no cursor-advance
-    ///      after swap-pop" pattern enforces iteration safety; this helper is itself
-    ///      iteration-safe (membership ⟺ `setPosition != 0` preserved).
+    /// @dev Remove a physical 1-based position, replacing it with its own section's tail.
+    ///      The caller deletes the removed Sub, or immediately reinserts it on a mode switch.
+    ///      During preparation do not advance the cursor: the mover still needs processing.
     function _removeFromSet(uint256 position) internal {
-        uint256 last = _subscribers.length;
-        if (position != last) {
-            uint32 mover = _subscribers[last - 1];
-            _subscribers[position - 1] = mover;
-            _subOf[mover].setPosition = uint32(position); // mover takes the vacated slot
+        uint256 index = position - 1;
+        uint256 count = _subscribers.length;
+        uint256 boxes = _subBoxCount;
+        uint256 last;
+        if (index < boxes) {
+            last = boxes - 1;
+            _subBoxCount = uint16(last);
+        } else {
+            last = SUBSCRIBER_CAP + 1 - (count - boxes);
         }
-        _subscribers.pop();
+        if (index != last) {
+            uint32 mover = _subscriberAt(last);
+            _setSubscriberAt(index, mover);
+            _subOf[mover].setPosition = uint32(position);
+        }
+        _setSubscriberAt(last, 0);
+        _setSubscriberCount(count - 1);
     }
 
     /*------------------------------------------------------------------
@@ -923,8 +933,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 sub.pendingFlip = uint24(newOwed);
             }
 
-            // No pending box: keep lastOpenedDay == lastAutoBoughtDay so the no-orphan guard and
-            // the open leg's `lastOpenedDay < lastAutoBoughtDay` gate never treat a ticket sub as
+            // No pending box: keep lastOpenedDay == lastAutoBoughtDay so the stamp markers
+            // never describe a ticket sub as
             // box-pending.
             sub.lastOpenedDay = uint24(processDay);
         } else {
@@ -952,7 +962,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 // Subscribe-time grounding box: a full INDEXED box on the live lootbox index,
                 // resolved off its sealed cohort's live word (a future word). Rides the auto-open queue,
                 // so the markers go box-clean (lastOpenedDay == lastAutoBoughtDay) and the
-                // no-orphan guard never trips on a freshly-subscribed sub.
+                // signup cover cannot become an AFKing-cohort obligation.
                 _recordAfkingCoverBox(
                     element,
                     currentLevel,
@@ -1158,28 +1168,13 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /*------------------------------------------------------------------
               The REQUIRED-PATH process STAGE (stamp + debit)
     ------------------------------------------------------------------*/
-    /// @notice The chunked pre-RNG stamp/buy pass the AdvanceModule STAGE drives across
-    ///         the subscriber set, immediately before `rngGate` on the new-day path
-    ///         (the required path; the AdvanceModule owns the insertion). A
-    ///         NO-ORPHAN guard runs FIRST per sub: a sub with a pending unopened box
-    ///         (`lastOpenedDay < lastAutoBoughtDay`) is left ENTIRELY untouched this cycle
-    ///         (no reclaim / evict / funding-kill / re-stamp), so its paid-for box is never
-    ///         orphaned. For each funded, well-formed sub it then builds the `_resolveBuy`
-    ///         slice and, per mode: a LOOTBOX sub STAMPS the two
-    ///         genuinely-per-sub box inputs (`score`, `amount`) warm-dirty into the
-    ///         single-slot Sub record — the box is materialized LATER by the open
-    ///         leg at the LIVE level; a TICKET sub QUEUES whole tickets NOW directly
-    ///         via the inherited `_queueEntriesScaled` primitive (no box). Both modes debit
-    ///         `afkingFunding[src]` then set the `lastAutoBoughtDay` success-marker AFTER
-    ///         the debit (it also doubles as the lootbox seed `day`), and carry the
-    ///         set-mutation semantics (no cursor advance after swap-pop).
-    /// @dev The STAGE runs strictly pre-RNG (before `rngGate`), so the day-D
-    ///      session word is uncommitted at stamp — the freeze property.
-    ///      The lootbox open uses the published active session word after the stamped day
-    ///      has sealed, and rolls the level LIVE at open; there is no
-    ///      stored per-day epoch. The boundary-pinned `processDay` is computed once by the
-    ///      STAGE and passed in (it is the stamped `lastAutoBoughtDay`, the frozen seed
-    ///      `day`; never open-time `_simulatedDayIndex()`).
+    /// @notice Prepare the pinned day's subscriptions, boxes first and tickets second.
+    /// @dev The previous read cohort completes before this pass. Public subscription changes
+    ///      remain locked from daily due through the last AFKing open, so each member is visited
+    ///      once and no signup cover can pre-buy this day. Same-section removal reprocesses its
+    ///      unvisited tail mover. Each funded box stores amount/score/day in the packed Sub;
+    ///      tickets queue directly. Both debit before stamping the success marker. The daily
+    ///      commitment follows completion, and boxes consume that published word later.
     /// @dev Stamp-only (lootbox mode): this pass writes NO cold box-ledger entry —
     ///      the warm Sub stamp is the box record (no cold ledger). boons OFF ⇒ `amount` = spend.
     /// @dev DOUBLE-DRAW GUARD: the lootbox path STAMPS only — the
@@ -1238,8 +1233,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // latch too (they are unreachable through this gate and cost the level its buy, not
         // the crank its day). sDGNRS's ordinary daily box is untouched — the per-sub loop still
         // stamps it (no Sub field is written here, no pending-box count). A real purchase's
-        // gas-weight is charged to this chunk, so the loop below starts with it consumed and
-        // the chunk stays on the <10M target; a no-buy probe charges nothing.
+        // operation consumes first-progress permission; subsequent items use the remaining
+        // caller budget. The attempted-level latch makes even a no-buy probe resumable.
         if (!swept && currentLevel > _sdgnrsBonusLevel) {
             if (!MineFlipGas.canRun(meter, SUBSCRIBER_WHALE_GAS, SUBSCRIBER_TAIL_GAS)) return result;
             _sdgnrsBonusLevel = currentLevel;
@@ -1263,71 +1258,42 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         uint256 boxEthAccrued;
         uint256 ticketEthAccrued;
 
-        // Locally mirrored set length: each in-loop swap-pop removal
-        // (tombstone reclaim / funding-kill) decrements it in lockstep with
-        // `_removeFromSet`'s pop — every removed player came from `_subscribers[cursor]`
-        // and is provably in-set, so the pop always happens — keeping the loop bound
-        // SLOAD-free per iteration.
-        uint256 len = _subscribers.length;
-
-        // Reserve the largest per-subscriber branch before reading or mutating it.
-        while (cursor < len && MineFlipGas.canRun(meter, SUBSCRIBER_ITEM_GAS, SUBSCRIBER_TAIL_GAS)) {
+        // Public membership/mode changes are locked throughout this pass. Each section
+        // is dense, and its zero sentinel stays empty even at the combined 2000-member cap.
+        while (true) {
+            uint256 position = cursor < SUBSCRIBER_TICKET_PHASE
+                ? cursor : SUBSCRIBER_CAP - (cursor - SUBSCRIBER_TICKET_PHASE);
+            uint32 element = _subscriberAt(position);
+            if (!MineFlipGas.canRun(meter, element == 0 ? 0 : SUBSCRIBER_ITEM_GAS, SUBSCRIBER_TAIL_GAS)) break;
             MineFlipGas.markProgress(meter);
-            // Packed subscriber IDs key mint history, quests, events and balances directly.
-            uint32 element = _subscribers[cursor];
+            if (element == 0) {
+                result.progressed = true;
+                if (cursor < SUBSCRIBER_TICKET_PHASE) {
+                    cursor = SUBSCRIBER_TICKET_PHASE;
+                    continue;
+                }
+                result.done = true;
+                break;
+            }
             uint32 player = element;
             uint32 id = element;
             Sub storage sub = _subOf[id];
 
-            // (-1) NO-ORPHAN guard (the load-bearing correctness rule). A box is
-            // STAMPED at process (day D) but OPENED later; it exists ONLY as
-            // (Sub stamp + lastAutoBoughtDay) with no cold ledger, so ANY mutation of the
-            // Sub OR removal from `_subscribers` between stamp and open ORPHANS the
-            // paid-for box (the player was debited at stamp, gets nothing). A sub with a
-            // pending unopened box (`lastOpenedDay < lastAutoBoughtDay`) is therefore left
-            // ENTIRELY untouched this cycle — no reclaim, no evict, no funding-kill, no
-            // re-stamp; it stays in-set (reachable), `_runAfkingWork` opens it, and a LATER
-            // cycle processes it (now boxless, lastOpenedDay == lastAutoBoughtDay).
-            // Positioned BEFORE the cancel-reclaim so it dominates ALL the orphan paths
-            // (re-stamp / cancel-reclaim / funding-kill). SKIP, not
-            // force-open: keeps the heavy open out of the gas-critical advance
-            // chain; the FLIP open-bounty keeps opens prompt so it ~never skips a buy. No
-            // double-charge — the debit is downstream of this guard. Composes with the
-            // same-day idempotency skip at (1) (lastAutoBoughtDay >= processDay), which
-            // still handles the chunked-same-day case.
-            if (sub.lastOpenedDay < sub.lastAutoBoughtDay) {
-                unchecked {
-                    ++cursor;
-                    ++processed;
-
-                }
-                continue;
-            }
-
-            // Acquisition takes effect for every child before any further debit. Paid stamps
-            // were handled by the no-orphan guard above; unclaimed run accrual may forfeit.
+            // Previous-day paid boxes have all opened before preparation can start.
+            // Acquisition takes effect before any further debit; unclaimed accrual may forfeit.
             if (sub.dailyQuantity != 0 && _isAcquired(id)) _cancelAcquiredSubscription(id);
 
-            // (0) Cancel-tombstone reclaim.
-            // An externally-cancelled sub (subscribe(_, 0)) is an in-set
-            // `dailyQuantity == 0` tombstone: it relocated no one on cancel, so it cannot
-            // have pushed a pending entry behind the cursor. The cancel branch — the ONLY
-            // writer of an in-set zero-quantity record — already finalized the afking
-            // streak (quests-side `afkingActive` is clear) before tombstoning, so the
-            // reclaim just deletes the `_subOf` record, swap-pops it out, and continues
-            // WITHOUT advancing the cursor — the swap-pop occupant (a mover from ahead,
-            // still pending) is processed at this slot this pass. Ordered ahead of the
-            // AlreadyAutoBoughtToday skip so a tombstone is ALWAYS reclaimed, independent
-            // of its lastAutoBoughtDay. Budgeted at EVICT_WEIGHT — the call-free reclaim
-            // runs under that weight, conservative for the chunk bound. The removed element
-            // sits at the cursor, so its position (cursor + 1) needs no record read and the
-            // record can be deleted before the swap-pop.
+            // Ordinary cancellations retain same-day markers until this reclaim.
+            // The section tail replaces the tombstone and is processed at this cursor.
             if (sub.dailyQuantity == 0) {
-                delete _subOf[id];
-                _removeFromSet(cursor + 1);
-                unchecked {
-                    --len;
+                // The vault's operator may set quantity to zero, but its exempt seat stays
+                // counted. Resuming reuses this entry instead of growing the capped set.
+                if (id == VAULT_WALLET_ID) {
+                    unchecked { ++cursor; ++processed; }
+                    continue;
                 }
+                delete _subOf[id];
+                _removeFromSet(position + 1);
                 emit SubscriptionExpired(player, 2);
                 unchecked {
                     ++processed;
@@ -1336,17 +1302,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 continue;
             }
 
-            // (1) AlreadyAutoBoughtToday — cheapest SLOAD-only skip (the lastAutoBoughtDay
-            // marker is the idempotency backstop: a sub stamped this cycle is not re-stamped).
-            if (sub.lastAutoBoughtDay >= processDay) {
-                emit PlayerSkipped(player, 2);
-                unchecked {
-                    ++cursor;
-                    ++processed;
-
-                }
-                continue;
-            }
+            // Each retained member is visited once. Signup covers happen only after that
+            // day's processing and cannot pre-buy this pass or insert behind its cursor.
 
             // No pass/validity gate: the run's seat was burned when it started, so the
             // process pass never re-checks membership credentials.
@@ -1408,10 +1365,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 // affiliateBase so nothing survives claimable out-of-set.
                 _finalizeAfking(id, sub, processDay);
                 delete _subOf[id];
-                _removeFromSet(cursor + 1);
-                unchecked {
-                    --len;
-                }
+                _removeFromSet(position + 1);
                 emit SubscriptionExpired(player, 1);
                 unchecked {
                     ++processed;
@@ -1425,9 +1379,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             // debit `afkingFunding[src]` (claimablePool in tandem, fail-loud on underflow),
             // stamp the lootbox box / queue the tickets, accrue the day's affiliate + the
             // pendingFlip reward, advance the compute-on-read streak markers (gap days earn
-            // nothing; the streak never resets in-run), and set the success marker. A lootbox buy is weight
-            // SUB_STAGE_LOOTBOX_WEIGHT; a ticket buy SUB_STAGE_TICKET_WEIGHT (the cold ticketQueue
-            // push makes it ~2x a lootbox), so the budget binds on the true per-buy cost.
+            // nothing; the streak never resets in-run), and set the success marker.
+            // Admission reserves the complete item and accounting/checkpoint tail.
             _deliverAfkingBuy(
                 element,
                 sub,
@@ -1479,7 +1432,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         _routeAfkingPoolEth(boxEthAccrued, ticketEthAccrued);
         result.progressed = result.progressed || processed != 0;
         result.rewardBasis = processed;
-        result.done = cursor == len;
         if (result.done) {
             subsFullyProcessed = true;
             result.progressed = true;
@@ -1574,10 +1526,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         unchecked {
             --_pendingBoxCount;
         }
-        // Backlog fully drained (via ANY open path, rewarded or valve): the forced-split
-        // bounty batch is over — clear the carry so the next backlog's knee starts fresh.
-        // Same packed slot as the counter, so both accesses are warm.
-
         // boons OFF ⇒ the stamped spend IS the box amount (unpacked milli-ETH → wei). The
         // active session word (passed in from the readiness check so it isn't re-read)
         // remains retained until every pending box opens; the level and EV-cap read
@@ -1606,52 +1554,33 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         MineFlipGas.Meter memory meter = MineFlipGas.start(gasAllowance);
         if (_pendingBoxCount == 0) { result.done = true; return result; }
         if (_rngConsumerStage() != 2) return result;
-        uint256 len = _subscribers.length;
         uint256 cursor = _subOpenCursor;
         uint256 initialCursor = cursor;
-        if (cursor >= len) cursor = 0;
         uint256 word = _lootboxWord(_rngReadBuffer());
-        uint24 sealedDay = dailyIdx;
-        uint256 scanned;
-        while (scanned < len) {
-            if (cursor >= len) cursor = 0;
-            uint32 element = _subscribers[cursor];
+        // Cache eight physical IDs at a time. Membership cannot change until pending is zero.
+        uint256 ids = _subscriberWordAt(cursor) >> ((cursor & 7) * 32);
+        while (true) {
+            uint32 element = uint32(ids);
             Sub storage sub = _subOf[element];
-            uint24 stampDay = sub.lastAutoBoughtDay;
-            bool skip = sub.lastOpenedDay >= stampDay || stampDay > sealedDay;
+            // Every ordinary survivor bought in preparation. Only permanent protocol members
+            // may remain without buying (Vault quantity zero or either member underfunded).
+            bool skip = (element == VAULT_WALLET_ID || element == SDGNRS_WALLET_ID)
+                && sub.lastOpenedDay >= sub.lastAutoBoughtDay;
             if (!MineFlipGas.canRun(meter, skip ? AFKING_SKIP_GAS : AFKING_OPEN_GAS, AFKING_TAIL_GAS)) break;
             if (!skip) {
                 _openAfkingBox(element, sub, word);
-                MineFlipGas.markProgress(meter);
                 ++result.rewardBasis;
             }
             ++cursor;
-            ++scanned;
+            MineFlipGas.markProgress(meter);
             if (_pendingBoxCount == 0) break;
+            ids = (cursor & 7) == 0 ? _subscriberWordAt(cursor) : ids >> 32;
         }
-        uint16 nextCursor = uint16(cursor >= len ? 0 : cursor);
-        if (nextCursor != initialCursor) _subOpenCursor = nextCursor;
-        result.progressed = nextCursor != initialCursor || result.rewardBasis != 0;
-        if (result.rewardBasis == 0 && scanned == len && _pendingBoxCount != 0) {
-            // A full scan found no openable stamp, so the count has no box behind it.
-            _forfeitPendingBoxCount(result);
-        } else {
-            result.done = _pendingBoxCount == 0;
-            if (result.done) _tryCompleteRng();
-        }
+        if (cursor != initialCursor) _subOpenCursor = uint16(cursor);
+        result.progressed = cursor != initialCursor;
+        result.done = _pendingBoxCount == 0;
+        if (result.done) _tryCompleteRng();
         MineFlipGas.finish(meter);
-    }
-
-    /// @dev Clear a pending-box count that no stamp in the ring can satisfy, so the read
-    ///      cohort completes instead of reselecting this stage. The ETH that bought the
-    ///      counted boxes reached the prize pools when they were stamped and stays there;
-    ///      no box opens and no stamp is written.
-    function _forfeitPendingBoxCount(MineFlipGas.Result memory result) private {
-        emit AfkingBoxCountForfeited(_pendingBoxCount);
-        _pendingBoxCount = 0;
-        result.progressed = true;
-        result.done = true;
-        _tryCompleteRng();
     }
 
     /// @notice Settle the active session's box entries in FIFO order, after AFKing.

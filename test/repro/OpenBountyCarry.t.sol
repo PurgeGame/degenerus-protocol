@@ -32,6 +32,7 @@ contract OpenBountyCarry is DeployProtocol {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
         vm.deal(address(game), 10_000_000 ether);
+        _finishSubscriptionWindow();
     }
 
     /// @notice Case 1: one AFKing backlog, drained by one call or split across realistic-allowance

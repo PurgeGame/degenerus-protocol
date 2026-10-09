@@ -51,24 +51,16 @@ contract RingSingleStepFixture is DegenerusGame {
 
     /// @dev One call of the AFK open worker mineFlip dispatches for the Afking stage, with the
     ///      same allowance shape. Returns the boxes it opened (its reward basis).
-    function runAfkOnce() external returns (uint256 opened) {
+    function runAfkOnce(uint32 factor) external returns (uint256 opened) {
         (bool ok, bytes memory ret) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(
-            abi.encodeWithSelector(IGameAfkingModule.runAfkingWork.selector, uint256(10_000_000)));
+            abi.encodeWithSelector(IGameAfkingModule.runAfkingWork.selector, MineFlipGas.budget(10_000_000, MineFlipGas.normalize(factor), true)));
         if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
         opened = abi.decode(ret, (MineFlipGas.Result)).rewardBasis;
     }
 }
 
-/// @title AutoOpenCursorRing — pending AFK boxes drain across the whole subscriber ring.
-/// @notice Directed cursor cases retain openable members below a non-pending tail
-/// cursor and exercise the production AFK open worker and mineFlip.
-/// Subscription creation and box purchases use public protocol paths; the
-/// intermediate pre-open checkpoint and the isolated open call use RingSingleStepFixture
-/// to execute the guarded production worker mineFlip would select. That checkpoint
-/// instrumentation is necessary because one composed mineFlip can finish and open in
-/// one call. It is a worker-order fixture, not proof that a public transaction stops there.
-/// @dev Cursor pokes are explicit for the two directed wrap cases. The growth
-/// case uses no cursor poke. No contracts/*.sol source is changed.
+/// @notice Public lifecycle regressions for the linear AFKing cursor and subscription lock.
+///         A guarded worker driver exposes partial checkpoints without fabricating paid boxes.
 contract AutoOpenCursorRing is DeployProtocol {
 
     mapping(address => uint32) private _aidCache;
@@ -111,174 +103,62 @@ contract AutoOpenCursorRing is DeployProtocol {
         _t = block.timestamp + 1 days;
         vm.warp(_t);
         vm.deal(address(game), 5_000_000 ether);
+        _finishSubscriptionWindow();
     }
 
-    // =========================================================================
-    // 1 — stranded subs in [0, cursor) drain after the cursor wedges mid-array
-    // =========================================================================
-
-    /// @notice With several subs each carrying a SEALED openable box, wedge `_subOpenCursor` at a mid-array
-    ///         index whose sub is NON-pending (so a suffix-only scan from there finds nothing) and assert
-    ///         the open path STILL opens the stranded boxes at indices `< cursor`: their `lastOpenedDay`
-    ///         advances to `lastAutoBoughtDay` and `opened > 0`. The full-ring scan wraps past `len` back to
-    ///         0; the old suffix-only `[cursor, len)` scan provably could not reach `[0, cursor)`.
-    function test_StrandedSubsDrainAfterCursorWedge() public {
-        // Five subs, each with a sealed (stamped-but-unopened) openable box. Stamping via the real STAGE
-        // (a new-day buy with NO subsequent open) leaves each with lastOpenedDay < lastAutoBoughtDay and a
-        // landed _recordedDailyWord(lastAutoBoughtDay) — exactly the openable predicate.
+    function test_SubscribeAndModeChangesWaitUntilPaidBoxesOpen() public {
         address[] memory subs = _stampSealedOpenableSubs(5);
-
-        // The "wedge" sub: a fresh, NOT-yet-stamped subscriber pushed to the tail of `_subscribers` AFTER
-        // the openable subs. A just-created sub has no pending box (lastOpenedDay == lastAutoBoughtDay == 0
-        // pre-buy), so it is non-pending — landing the cursor on it makes a suffix-only scan find no work.
-        address wedge = _freshNonPendingSub("ring_wedge");
-        uint256 wedgeIdx = _subscriberIndexOf(wedge) - 1; // 0-based index in _subscribers
-
-        // Wedge the open cursor onto the non-pending fresh sub (a mid-array index, since the openable subs
-        // sit at indices < wedgeIdx). Documented vm.store poke: it reproduces the exact stuck-cursor state
-        // (cursor at a non-openable mid-array sub) the real subscribe-grows-the-set path produces.
-        _setOpenCursor(uint16(wedgeIdx));
-        assertTrue(wedgeIdx < _subscribersLength(), "fixture: the cursor index is mid-array (< len)");
-        assertTrue(_isNonPending(wedge), "fixture: the cursor sub is non-pending (suffix scan finds nothing here)");
-
-        // Fails-without: every openable box sits STRICTLY BELOW the cursor, so the old [cursor, len)-only
-        // scan provably could not reach any of them — only the full-ring scan opens them.
-        for (uint256 i; i < subs.length; i++) {
-            assertTrue(_subscriberIndexOf(subs[i]) - 1 < wedgeIdx, "fails-without: openable box is at an index strictly < cursor");
-            assertTrue(_isOpenable(subs[i]), "fixture: the sub below the cursor is openable (pending box + landed word)");
-        }
-
-        // Drive the production AFK open worker. The full-ring scan wraps from the wedge index past len back
-        // to 0, reaching the stranded openable boxes.
-        uint256 opened = _openAfkRing();
-        assertGt(opened, 0, "ring: the open leg did NOT return 0 with openable boxes still present");
-
-        // Every stranded box was opened — its lastOpenedDay caught up to lastAutoBoughtDay.
-        for (uint256 i; i < subs.length; i++) {
-            assertEq(_lastOpenedDayOf(subs[i]), _lastBoughtDayOf(subs[i]), "ring: the stranded [0,cursor) box was opened (marker advanced)");
-            assertFalse(_isOpenable(subs[i]), "ring: no openable box left behind for the stranded sub");
-        }
+        assertEq(_openCursor(), 0, "daily reset starts at the first box");
+        address joiner = makeAddr("locked-joiner");
+        uint256 seat = _grantSeat(joiner);
+        _fundPool(joiner, 80 ether);
+        vm.prank(joiner);
+        vm.expectRevert(bytes4(keccak256("RngLocked()")));
+        game.subscribe(0, false, false, 1, 0, seat);
+        vm.prank(subs[0]);
+        vm.expectRevert(bytes4(keccak256("RngLocked()")));
+        game.subscribe(0, false, true, 1, 0, 0);
+        vm.prank(subs[0]);
+        vm.expectRevert(bytes4(keccak256("RngLocked()")));
+        game.subscribe(0, false, false, 0, 0, 0);
+        assertGe(_openAfkRing(), subs.length);
+        for (uint256 i; i < subs.length; ++i) assertFalse(_isOpenable(subs[i]));
+        assertEq(_openAfkRing(), 0, "completed cohort never replays");
+        vm.prank(joiner);
+        game.subscribe(0, false, false, 1, 0, seat);
+        assertFalse(_isOpenable(joiner), "signup box is only in the human queue");
+        _stampSealedBoxOn(joiner);
+        assertEq(_openCursor(), 0, "next day resets before its new cohort");
+        assertTrue(_isOpenable(joiner), "signup is an ordinary due sub the next day");
+        assertGe(_openAfkRing(), subs.length + 1);
+        assertFalse(_isOpenable(joiner));
     }
 
-    /// @notice The same wedge driven through the keeper path (Game.mineFlip's open category) opens the
-    ///         stranded boxes too — mineFlip pays the open bounty rather than reverting NoWork while
-    ///         openable boxes exist below the cursor.
-    function test_StrandedSubsDrainViaMintFlipKeeper() public {
-        address[] memory subs = _stampSealedOpenableSubs(4);
-        address wedge = _freshNonPendingSub("mf_wedge");
-        uint256 wedgeIdx = _subscriberIndexOf(wedge) - 1;
-        _setOpenCursor(uint16(wedgeIdx));
-        assertTrue(_isNonPending(wedge), "fixture: cursor sub non-pending");
-        for (uint256 i; i < subs.length; i++) {
-            assertTrue(_subscriberIndexOf(subs[i]) - 1 < wedgeIdx, "fails-without: openable box strictly < cursor");
-            assertTrue(_isOpenable(subs[i]), "fixture: sub below cursor openable");
-        }
-
-        // AFK is the selected committed consumer. The public keeper must find
-        // the openable boxes below the cursor and make progress.
-        address keeper = makeAddr("mf_keeper");
-        _grantDeityPass(keeper); // retain the original eligible keeper fixture
-        require(uint8(game.nextMinerAction()) == 9 && !game.rngLocked(), "fixture: AFK is the selected consumer");
-        vm.prank(keeper);
-        game.mineFlip(0); // MUST NOT revert NoWork — the open category had work below the cursor
-
-        for (uint256 i; i < subs.length; i++) {
-            assertEq(_lastOpenedDayOf(subs[i]), _lastBoughtDayOf(subs[i]), "ring(keeper): stranded box opened");
-        }
-    }
-
-    // =========================================================================
-    // 2 — NoWork fires ONLY when the whole set is truly drained, never while boxes remain
-    // =========================================================================
-
-    /// @notice With the same wedge, the keeper open path does NOT revert NoWork while openable boxes exist,
-    ///         and DOES cleanly no-op (returns 0 / reverts NoWork) only once EVERY box is opened. Proves the
-    ///         0-open / NoWork signal now means "whole set drained", not "suffix drained".
-    function test_NoWorkOnlyWhenTrulyDrained() public {
+    function test_PartialOpensAdvanceWithoutWrapOrRepeatedPayout() public {
         address[] memory subs = _stampSealedOpenableSubs(5);
-        address wedge = _freshNonPendingSub("nw_wedge");
-        uint256 wedgeIdx = _subscriberIndexOf(wedge) - 1;
-        _setOpenCursor(uint16(wedgeIdx));
-        assertTrue(_isNonPending(wedge), "fixture: cursor sub non-pending");
-        for (uint256 i; i < subs.length; i++) {
-            assertTrue(_subscriberIndexOf(subs[i]) - 1 < wedgeIdx, "fails-without: openable box strictly < cursor");
+        for (uint256 i; i < 8 && uint8(game.nextMinerAction()) == 9; ++i) {
+            uint16 beforeCursor = _openCursor();
+            bytes memory code = address(game).code;
+            vm.etch(address(game), address(new RingSingleStepFixture()).code);
+            uint256 opened = RingSingleStepFixture(payable(address(game))).runAfkOnce(type(uint32).max);
+            vm.etch(address(game), code);
+            assertGt(_openCursor(), beforeCursor, "one durable visit per mandatory call");
+            assertLe(opened, 1);
         }
+        for (uint256 i; i < subs.length; ++i) assertFalse(_isOpenable(subs[i]));
+        assertEq(_openAfkRing(), 0);
+    }
 
-        // While openable boxes exist below the cursor, mineFlip's open leg has work -> NO NoWork revert.
-        address keeper = makeAddr("nw_keeper");
-        _grantDeityPass(keeper);
-        require(uint8(game.nextMinerAction()) == 9 && !game.rngLocked(), "fixture: AFK is the selected consumer");
-        vm.prank(keeper);
-        game.mineFlip(0); // MUST NOT revert NoWork — there IS open work
-
-        // Every afking box is now opened: the whole afking ring is drained (the ring scan reached the
-        // stranded [0, cursor) subs, not just the suffix).
-        for (uint256 i; i < subs.length; i++) {
-            assertFalse(_isOpenable(subs[i]), "drain: no openable afking box remains after the ring scan");
+    function test_PublicMinerResumesTheLinearOpenCursor() public {
+        address[] memory subs = _stampSealedOpenableSubs(5);
+        for (uint256 i; i < 8 && uint8(game.nextMinerAction()) == 9; ++i) {
+            uint16 beforeCursor = _openCursor();
+            game.mineFlip(type(uint32).max);
+            assertGt(_openCursor(), beforeCursor);
         }
-        // Finish the rest of the read cohort (the incidental human boxes the STAGE buys created), then a
-        // final clean AFK worker call opens nothing — the open path cleanly no-ops once every box is opened.
+        for (uint256 i; i < subs.length; ++i) assertEq(_lastOpenedDayOf(subs[i]), _lastBoughtDayOf(subs[i]));
         _finishReadConsumers();
-        assertEq(_openAfkRing(), 0, "drained: a follow-up AFK open opens nothing (whole set drained)");
-
-        // NOW (and only now) mineFlip cleanly signals no work: with no advance due and the afking ring
-        // fully drained, both router categories are empty -> the clean NoWork no-op (not a suffix-strand
-        // false-positive while [0, cursor) boxes remained).
-        // The crank has a craps arm now, so a NoWork probe has to quiet the table too or it is
-        // asserting an idleness it never set up.
-        _quietCrapsTable();
-        // The fresh wedge subscription also bought an indexed human cover
-        // box. If it is below the midday request threshold, the next normal
-        // daily commitment is its guaranteed settlement path.
-        _t += 1 days;
-        vm.warp(_t);
-        _settleClean(uint256(keccak256("ring_final_drain")) | 1);
-        require(!game.advanceDue() && !game.rngLocked(), string.concat("fixture: final drain action=", vm.toString(uint8(game.nextMinerAction()))));
-        assertEq(uint8(game.nextMinerAction()), 0, "all consumer and maintenance work is idle");
-        vm.prank(keeper);
-        vm.expectRevert(abi.encodeWithSignature("NoWork()"));
-        game.mineFlip(0);
-    }
-
-    // =========================================================================
-    // Real-path wedge — a subscribe grows the set while the cursor sits at the old length
-    // =========================================================================
-
-    /// @notice A public subscription grows the set without a cursor poke. After
-    /// a later guarded-worker checkpoint stamps fresh boxes, the AFK open worker
-    /// drains them. Directed wrap geometry is asserted by the separate wedge cases.
-    function test_RealPathSubscribeGrowsSetThenDrains() public {
-        // Stamp two openable subs, then drain the current ring.
-        address[] memory first = _stampSealedOpenableSubs(2);
-        // Open everything currently pending and record the resulting cursor.
-        _openAfkRing();
-        for (uint256 i; i < first.length; i++) {
-            assertFalse(_isOpenable(first[i]), "fixture: the first wave's boxes opened (cursor walked the set)");
-        }
-        uint16 cursorAfterDrain = _openCursor();
-        uint256 lenBeforeGrow = _subscribersLength();
-
-        // A fresh subscription grows the set. No particular post-drain cursor
-        // position is assumed by this growth case.
-        address grower = _freshNonPendingSub("realpath_grow");
-        assertGt(_subscribersLength(), lenBeforeGrow, "real path: the subscribe grew _subscribers (push, no cursor reset)");
-
-        // Stamp a new box on an original member through the guarded worker
-        // checkpoint and require nonempty work before invoking the open worker.
-        address stranded = first[0];
-        _stampSealedBoxOn(stranded);
-        assertTrue(_isOpenable(stranded), "fixture: a fresh openable box exists on the original member");
-        // The original member remains in the grown set.
-        assertTrue(_subscriberIndexOf(stranded) - 1 < _subscribersLength(), "non-vacuity: stranded sub in-set");
-        // Record the actual geometry without assuming the cursor parks at length.
-        emit log_named_uint("open cursor after drain", cursorAfterDrain);
-        emit log_named_uint("grown set length", _subscribersLength());
-        emit log_named_uint("grower index (cursor sub)", _subscriberIndexOf(grower) - 1);
-
-        // The ring scan drains the stranded openable box no matter where the cursor parked.
-        uint256 opened = _openAfkRing();
-        assertGt(opened, 0, "real path: the ring scan opened the stranded box (no suffix-only strand)");
-        assertEq(_lastOpenedDayOf(stranded), _lastBoughtDayOf(stranded), "real path: the stranded box opened (marker advanced)");
+        assertEq(_openAfkRing(), 0);
     }
 
     // =========================================================================
@@ -328,7 +208,7 @@ contract AutoOpenCursorRing is DeployProtocol {
     function _openAfkRing() internal returns (uint256 opened) {
         bytes memory productionCode = address(game).code;
         vm.etch(address(game), address(new RingSingleStepFixture()).code);
-        opened = RingSingleStepFixture(payable(address(game))).runAfkOnce();
+        opened = RingSingleStepFixture(payable(address(game))).runAfkOnce(0);
         vm.etch(address(game), productionCode);
     }
 

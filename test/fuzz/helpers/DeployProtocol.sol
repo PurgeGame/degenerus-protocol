@@ -379,6 +379,21 @@ abstract contract DeployProtocol is Test {
         if (initializeDeities) game.initProtocolDeity();
     }
 
+    /// @dev Reach the real post-daily subscription window after a test advances time.
+    ///      Uses production mining and mock VRF fulfillment, never bypasses the timing lock.
+    function _finishSubscriptionWindow() internal {
+        for (uint256 i; i < 1000; ++i) {
+            if (!game.advanceDue() && game.rngComplete()) return;
+            uint256 request = mockVRF.lastRequestId();
+            if (request != 0) {
+                (,, bool fulfilled) = mockVRF.pendingRequests(request);
+                if (!fulfilled) mockVRF.fulfillRandomWords(request, uint256(keccak256(abi.encode("subscription-window", request))));
+            }
+            game.mineFlip(0);
+        }
+        revert("subscription window did not open");
+    }
+
     /// @dev A seat `player` holds, for a new subscription to burn (subscribe's `seatId`). A holder
     ///      gets back one of its existing serials; a non-holder receives one through the real
     ///      game-side mint (seats are pushed on pass acquisition, so this pranks the GAME into the

@@ -83,6 +83,7 @@ contract V61CurseSet is DeployProtocol {
         // (0 + 5 > 1). Seed dailyIdx to 100 (field-isolated RMW on slot 0) so a lastEthDay-0 claimant is stale
         // by construction (0 + 5 <= 100), and a "today" claimant (lastEthDay == 100) is non-stale.
         _seedDailyIdx(100);
+        _finishSubscriptionWindow();
     }
 
     // =========================================================================

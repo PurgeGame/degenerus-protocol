@@ -145,6 +145,7 @@ contract OverpayToAfking is DeployProtocol {
     ///         Without the log a funded subscribe made from a contract wallet cannot be
     ///         attributed off-chain at all (the top-level tx value is not the sub's).
     function test_SubscribeValueEmitsAfkingFunded() public {
+        _finishSubscriptionWindow();
         address sub = makeAddr("subSelfFunded");
         vm.deal(sub, 2 ether);
 
@@ -167,6 +168,7 @@ contract OverpayToAfking is DeployProtocol {
     /// @notice On an operator-funded sub the credit — and the log — name the FUNDER's
     ///         bucket, never the subscriber's. This is the misdirection guard.
     function test_SubscribeValueEmitsAfkingFundedForOperatorFunder() public {
+        _finishSubscriptionWindow();
         address sub = makeAddr("subOperatorFunded");
         address funder = makeAddr("subFunder");
         vm.deal(sub, 2 ether);

@@ -263,6 +263,7 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
         vm.warp(_t);
         vm.deal(address(game), 5_000_000 ether);
         _fundPool(p, 50 ether);
+        _finishSubscriptionWindow();
         _subscribeLootbox(p, 1);
         _deliverDay(0xD3C1);
         (, bool afking) = quests.effectiveBaseStreakAndAfking(id);

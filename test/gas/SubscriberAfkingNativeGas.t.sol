@@ -20,7 +20,7 @@ contract SubscriberNativeGasHost is DegenerusGame, WalletSeed {
         _subCursor = 0;
         _subOpenCursor = 0;
         _pendingBoxCount = 0;
-        delete _subscribers;
+        _clearSubscriberSet();
         subsFullyProcessed = false;
         ticketsFullyProcessed = true;
         humanReadComplete = true;
@@ -54,9 +54,8 @@ contract SubscriberNativeGasHost is DegenerusGame, WalletSeed {
     ///             3=unfunded expiry,4=cancelled tombstone,5=maximum box stamp.
     function add(address player, uint8 mode) external {
         uint32 id = _seedWallet(player);
-        _subscribers.push(id);
+        _seedSubscriber(id, mode != 5);
         Sub storage sub = _subOf[id];
-        sub.setPosition = uint32(_subscribers.length);
         uint24 yesterday = _afkingResetDay - 1;
         sub.dailyQuantity = mode == 4 ? 0 : 255;
         sub.flags = mode == 5 ? 0 : 4;
@@ -94,12 +93,14 @@ contract SubscriberNativeGasHost is DegenerusGame, WalletSeed {
         humanReadComplete = true;
         subsFullyProcessed = true;
         uint32 id = _seedWallet(player);
-        delete _subscribers;
-        _subscribers.push(id);
+        _clearSubscriberSet();
+        _seedSubscriber(id, false);
         _subOpenCursor = 0;
         _pendingBoxCount = 1;
         Sub storage sub = _subOf[id];
         sub.setPosition = 1;
+        sub.dailyQuantity = 255;
+        sub.flags = 0;
         sub.lastAutoBoughtDay = day;
         sub.lastOpenedDay = day - 1;
         sub.amount = 61_200; //255 tickets at the maximum0.24ETH price.
@@ -121,6 +122,13 @@ contract SubscriberNativeGasHost is DegenerusGame, WalletSeed {
             id = parent;
         }
         wallets[id] |= uint256(SDGNRS_WALLET_ID) << 160;
+    }
+    function publishForOpen() external {
+        dailyIdx = _afkingResetDay;
+        rngRequestDay = dailyIdx;
+        rngWordCurrent = 0xAFAFAF;
+        _setRngSessionPublished(true);
+        _setRngComplete(false);
     }
     function nextPass() external {
         _afkingResetDay = _simulatedDayIndex();
@@ -204,14 +212,15 @@ contract SubscriberAfkingNativeGasTest is DeployProtocol {
         assertEq(host.pendingBoxes(), 1);
         uint256 fundingBefore = game.afkingFundingOf(PLAYER);
         host.acquireForTest(PLAYER, true);
+        host.publishForOpen();
+        assertEq(host.openWork(12_000_000).rewardBasis, 1, "acquisition cannot discard the paid box");
+        assertEq(host.pendingBoxes(), 0);
+        (, uint24 openedAfter) = host.delivered(PLAYER);
+        assertEq(openedAfter, bought);
         vm.warp(vm.getBlockTimestamp() + 1 days);
         host.nextPass();
         host.subWork(2_000_000);
-        assertEq(host.memberCount(), 1);
-        assertEq(host.pendingBoxes(), 1);
-        (uint24 boughtAfter, uint24 openedAfter) = host.delivered(PLAYER);
-        assertEq(boughtAfter, bought);
-        assertEq(openedAfter, opened);
+        assertEq(host.memberCount(), 0, "acquired member removed on next preparation");
         assertEq(game.afkingFundingOf(PLAYER), fundingBefore);
     }
 

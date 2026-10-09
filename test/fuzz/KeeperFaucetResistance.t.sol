@@ -539,6 +539,7 @@ contract KeeperFaucetResistance is DeployProtocol {
     ///      survive any level crossing), run a new-day STAGE to stamp them, then settle so mineFlip's
     ///      `else` open arm is reachable (advance not due). Returns the subs + the stamp day.
     function _stampKAfkingBoxes(uint256 k, uint256 salt) internal returns (address[] memory subs, uint32 stampDay) {
+        _finishSubscriptionWindow();
         subs = new address[](k);
         for (uint256 i; i < k; ++i) {
             address w = makeAddr(string(abi.encodePacked("afkbox_", vm.toString(salt), "_", vm.toString(i))));

@@ -69,56 +69,28 @@ contract AfkingStreakFrameNoRegress is DeployProtocol {
         assertTrue(r.done, "pass completes");
     }
 
-    /// Real sequence: day-D pass pinned and still partial at D+1; VAULT cancelled and re-subscribed
-    /// unfunded (exempt branch) on D+1; vault funded; lagging day-D walk delivers to VAULT.
-    function test_VaultResubscribedLaterDayThenLaggingPassDelivers() public {
+    /// A later wall day cannot reframe a run while its earlier preparation is active.
+    function test_VaultUpdateWaitsWhileEarlierDayPreparationIsPinned() public {
         uint24 dayD = host.currentDayView();
         host.pin(dayD);
-
-        // Wall clock passes into D+1 with the day-D pass untouched.
         vm.warp(block.timestamp + 1 days);
-        uint24 dayD1 = host.currentDayView();
-        assertEq(dayD1, dayD + 1, "clock advanced one day");
-
-        // Approved operator cancels then re-subscribes the VAULT with no game-side funding.
-        address owner = ContractAddresses.CREATOR;
         uint32 vaultId = _aid(address(vault));
-        vm.prank(owner);
+        vm.prank(ContractAddresses.CREATOR);
         vault.gameSetOperatorApproval(OP, true);
+        DegenerusGameStorage.Sub memory beforeSub = _sub(address(vault));
         vm.prank(OP);
+        vm.expectRevert(DegenerusGameStorage.RngLocked.selector);
         game.subscribe(vaultId, false, true, 0, 0, 0);
         vm.prank(OP);
-        game.subscribe(vaultId, false, true, 1, 0, 0); // exempt: no seat burned
-
-        DegenerusGameStorage.Sub memory s = _sub(address(vault));
-        assertEq(s.afkCoveredThroughDay, dayD1, "new run covered framed on D+1");
-        assertEq(s.afkingStartDay, dayD1, "new run start framed on D+1");
-        assertLt(s.lastAutoBoughtDay, dayD1, "exempt unfunded start stamps nothing");
-
-        // Vault becomes funded before the lagging day-D walk reaches it.
+        vm.expectRevert(DegenerusGameStorage.RngLocked.selector);
+        game.subscribe(vaultId, false, true, 1, 0, 0);
+        assertEq(_sub(address(vault)).afkingStartDay, beforeSub.afkingStartDay);
         vm.deal(address(this), 10 ether);
-        game.depositAfkingFunding{value: 5 ether}(_aid(address(vault)));
-        assertEq(host.resetDay(), dayD, "pass still pinned to D");
-
-        _work(); // day-D walk delivers to VAULT with processDay = D
-        s = _sub(address(vault));
-        assertEq(s.lastAutoBoughtDay, dayD, "VAULT delivered for day D");
-        _assertFrame("after lagging day-D walk");
-        assertEq(s.afkCoveredThroughDay, dayD1, "frame did not move backwards");
-        assertEq(s.afkingStartDay, dayD1, "start unchanged");
-
-        // D+1 pass (includes the box open of day D) completes without reverting.
-        host.nextDay();
-        assertEq(host.resetDay(), dayD1);
+        game.depositAfkingFunding{value: 5 ether}(vaultId);
+        assertEq(host.resetDay(), dayD);
         _work();
-        _assertFrame("after day-D+1 pass");
-        s = _sub(address(vault));
-        assertEq(s.lastAutoBoughtDay, dayD1, "VAULT delivered for day D+1");
-
-        // A later cancel (finalize reads covered - start) succeeds.
-        vm.prank(OP);
-        game.subscribe(vaultId, false, true, 0, 0, 0);
-        assertEq(_sub(address(vault)).dailyQuantity, 0, "cancelled");
+        assertEq(_sub(address(vault)).lastAutoBoughtDay, dayD);
+        _assertFrame("lagging purchase keeps a valid streak frame");
     }
 
     /// Existing behaviour: an ordinary subscriber's covered day advances by one per delivered day

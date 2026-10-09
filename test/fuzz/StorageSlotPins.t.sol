@@ -102,6 +102,7 @@ contract GameSlotHarness is DegenerusGameStorage {
     function s_boxReadCount() external pure returns (uint256 s, uint256 o) { assembly { s := boxReadCount.slot o := boxReadCount.offset } }
     function s_sdgnrsBonusLevel() external pure returns (uint256 s, uint256 o) { assembly { s := _sdgnrsBonusLevel.slot o := _sdgnrsBonusLevel.offset } }
     function s_pendingBoxCount() external pure returns (uint256 s, uint256 o) { assembly { s := _pendingBoxCount.slot o := _pendingBoxCount.offset } }
+    function s_subBoxCount() external pure returns (uint256 s, uint256 o) { assembly { s := _subBoxCount.slot o := _subBoxCount.offset } }
     function s_boxQueue() external pure returns (uint256 s, uint256 o) { assembly { s := boxQueue.slot o := boxQueue.offset } }
     function s_foilRecord() external pure returns (uint256 s, uint256 o) { assembly { s := foilRecord.slot o := foilRecord.offset } }
     function s_foilMatchClaimed() external pure returns (uint256 s, uint256 o) { assembly { s := foilMatchClaimed.slot o := foilMatchClaimed.offset } }
@@ -287,6 +288,7 @@ contract StorageSlotPinsTest is Test {
         (s, o) = h.s_boxReadCount(); assertEq(s, GameSlots.BOX_READ_COUNT, "boxReadCount.slot"); assertEq(o, GameSlots.BOX_READ_COUNT_OFFSET, "boxReadCount.offset");
         (s, o) = h.s_sdgnrsBonusLevel(); assertEq(s, GameSlots.SDGNRS_BONUS_LEVEL, "_sdgnrsBonusLevel.slot"); assertEq(o, GameSlots.SDGNRS_BONUS_LEVEL_OFFSET, "_sdgnrsBonusLevel.offset");
         (s, o) = h.s_pendingBoxCount(); assertEq(s, GameSlots.PENDING_BOX_COUNT, "_pendingBoxCount.slot"); assertEq(o, GameSlots.PENDING_BOX_COUNT_OFFSET, "_pendingBoxCount.offset");
+        (s, o) = h.s_subBoxCount(); assertEq(s, GameSlots.SUB_BOX_COUNT, "_subBoxCount.slot"); assertEq(o, GameSlots.SUB_BOX_COUNT_OFFSET, "_subBoxCount.offset");
         (s, o) = h.s_boxQueue(); assertEq(s, GameSlots.BOX_QUEUE, "boxQueue.slot"); assertEq(o, 0, "boxQueue.offset");
         (s, o) = h.s_foilRecord(); assertEq(s, GameSlots.FOIL_RECORD, "foilRecord.slot"); assertEq(o, 0, "foilRecord.offset");
         (s, o) = h.s_foilMatchClaimed(); assertEq(s, GameSlots.FOIL_MATCH_CLAIMED, "foilMatchClaimed.slot"); assertEq(o, 0, "foilMatchClaimed.offset");

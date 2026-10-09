@@ -4166,26 +4166,23 @@ abstract contract DegenerusGameStorage {
     ///      source (not needed at open — funding is already debited at process).
     mapping(uint32 => uint32) internal _fundingSourceOf;
 
-    /// @dev Insertion-ordered subscriber IDs, eight per storage word. Cancellation uses swap-pop.
-    ///      Mint history, affiliate claims and funding use IDs; stETH pulls resolve the owner at transfer.
+    /// @dev Two-ended packed set: boxes at [0,B), tickets descending from 2000, at most
+    ///      2000 members and one empty sentinel. The length word is logical membership,
+    ///      NOT the physical extent. Use _subscriberAt/_setSubscriberAt; never index/push/pop.
+    ///      Vault and sDGNRS remain at box positions 0 and 1; protocol ticket mode is forbidden.
     uint32[] internal _subscribers;
 
-    /// @dev The two uint16 cursors + the uint24 afking reset-day pack into ONE slot
-    ///      (16 + 16 + 24 = 56 bits). The cursors index `_subscribers` (every entry but the
-    ///      two exempt protocol subscriptions burned an AFKing seat, and live seats plus set
-    ///      entries never exceed the token's 2,000 cap, so the set stays well within uint16)
-    ///      and are drained in chunks across advanceGame / router calls.
-    /// @dev Process-STAGE cursor: the pre-RNG stamp pass position.
+    /// @dev Purchase cursor: bit 15 selects tickets, low bits are the section offset.
+    ///      Packed with the opening cursor, reset day and cohort counters below.
     uint16 internal _subCursor;
 
-    /// @dev Open-leg cursor: the post-RNG box-open pass position (the
-    ///      OPEN_BATCH-style router-category cursor).
+    /// @dev Monotonic physical box position, reset once before each daily preparation.
     uint16 internal _subOpenCursor;
 
     /// @dev The day the process STAGE was last reset for. When the advance first enters
     ///      a new `day` with the lock down and `_recordedDailyWord(day)` still uncommitted
     ///      (`_afkingResetDay != day`), it resets `subsFullyProcessed` + the
-    ///      `_subCursor` ONCE, before that day's STAGE drains — a forward-looking reset
+    ///      `_subCursor` and `_subOpenCursor` ONCE, before that day's STAGE drains — a forward-looking reset
     ///      (at the start of the new day, not trailing after the prior day completes),
     ///      firing exactly once per day regardless of which RNG path runs.
     uint24 internal _afkingResetDay;
@@ -4211,14 +4208,19 @@ abstract contract DegenerusGameStorage {
     ///      read/write is warm; a uint24 holds the full level range (matches `level`).
     uint24 internal _sdgnrsBonusLevel;
 
-    /// @dev Count of stamped-but-unopened afking boxes (at most one per subscriber — the
-    ///      no-orphan rule blocks re-stamping, eviction, reclaim, and funding-kill while a
-    ///      box is pending, so the daily STAGE box stamps are the ONLY increment — batched
-    ///      one add per STAGE chunk — and the box open the ONLY per-box decrement). The open worker
-    ///      early-outs on zero, making a drained-ring "any work?" check O(1) instead of a full
-    ///      ring scan; a full scan that finds no openable stamp clears the count. Packs into the
-    ///      cursor slot (warm for both writers); uint16 covers the seat-bounded subscriber set.
+    /// @dev Exact count of stamped but unopened boxes. Preparation increments once per paid
+    ///      box (batched per call), and the monotonic opener decrements once per resolution.
+    ///      The scheduler finishes the prior cohort before preparation; subscribe locks all
+    ///      membership/configuration changes until this cohort opens. Zero is the O(1) done
+    ///      check. Shares the cursor slot; at most 2000 paid stamps fit the subscriber set.
     uint16 internal _pendingBoxCount;
+
+    /// @dev Box-side membership. Ticket count is _subscribers.length - _subBoxCount.
+    ///      Subscription changes are locked from daily due through the last AFKing open.
+    uint16 internal _subBoxCount;
+
+    uint256 internal constant SUBSCRIBER_CAP = 2000;
+    uint256 internal constant SUBSCRIBER_TICKET_PHASE = 1 << 15;
 
     /// @dev Box purchase queue per physical RNG buffer (keys 0/1): one complete entry word per
     ///      purchase, appended to the write buffer and settled FIFO from `boxCursor` once the
@@ -4639,6 +4641,33 @@ abstract contract DegenerusGameStorage {
         assembly ("memory-safe") {
             sstore(slot, or(and(sload(slot), not(shl(shift, 0xffffffffffffffffffffffffffffffff))), shl(shift, lane)))
         }
+    }
+
+    /// @dev Read eight physical subscriber positions. Callers bound positions to [0,2000].
+    function _subscriberWordAt(uint256 position) internal view returns (uint256 word) {
+        assembly ("memory-safe") {
+            mstore(0, _subscribers.slot)
+            word := sload(add(keccak256(0, 32), shr(3, position)))
+        }
+    }
+
+    function _subscriberAt(uint256 position) internal view returns (uint32) {
+        return uint32(_subscriberWordAt(position) >> ((position & 7) * 32));
+    }
+
+    /// @dev Preserve the other seven IDs, including across the empty section gap.
+    function _setSubscriberAt(uint256 position, uint32 id) internal {
+        assembly ("memory-safe") {
+            mstore(0, _subscribers.slot)
+            let slot := add(keccak256(0, 32), shr(3, position))
+            let shift := shl(5, and(position, 7))
+            sstore(slot, or(and(sload(slot), not(shl(shift, 0xffffffff))), shl(shift, and(id, 0xffffffff))))
+        }
+    }
+
+    /// @dev Logical length only: physical ticket positions deliberately lie beyond it.
+    function _setSubscriberCount(uint256 count) internal {
+        assembly ("memory-safe") { sstore(_subscribers.slot, count) }
     }
 
     function _lootboxReadComplete() internal view virtual returns (bool) {

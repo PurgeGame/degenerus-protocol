@@ -103,6 +103,7 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
                 // Once pinned, a preparation day survives midnight and partial batches.
                 _afkingResetDay = _simulatedDayIndex();
                 _subCursor = 0;
+                _subOpenCursor = 0;
                 subsFullyProcessed = false;
                 moved = true;
                 MineFlipGas.markProgress(meter);

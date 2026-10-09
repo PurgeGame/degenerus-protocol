@@ -133,6 +133,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         // Advance one day off the deploy boundary so the day index is a clean, stable index.
         vm.warp(block.timestamp + 1 days);
         vm.deal(address(game), 10_000_000 ether);
+        _finishSubscriptionWindow();
     }
 
 
@@ -522,7 +523,13 @@ contract V56AfkingGasMarginal is DeployProtocol {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics.length != 0 && logs[i].topics[0] == boxSpinSig) {
                 (uint64 betId, , , ) = abi.decode(logs[i].data, (uint64, uint256, uint256, uint256));
-                if ((betId >> 60) & 7 == 2) ++ethSpins;
+                // Signup covers share this session with the daily AFKing cohort. Count
+                // only the forced stamp's spin ID, excluding the unrelated human boxes.
+                uint32 playerId = uint32(uint256(logs[i].topics[1]));
+                uint256 seed = uint256(keccak256(abi.encode(word, uint256(playerId), uint256(0x41666b696e67426f78), uint256(day))));
+                uint256 spinSeed = uint256(keccak256(abi.encode(seed, uint256(0x4574685370696e))));
+                uint64 expected = uint64((uint256(1) << 63) | (uint256(2) << 60) | (spinSeed & ((uint256(1) << 60) - 1)));
+                if (betId == expected) ++ethSpins;
             }
         }
         for (uint256 i; i < m; ++i) require(_lastOpenedDayOf(subs[i]) == day, "fixture: each forced box opened");
@@ -1410,7 +1417,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
                 "LIVE: each funded call commits the work its conservative reservations admit");
             assertEq(membersBefore - _subscriberCount(), evicted, "LIVE: each expiry removes exactly one member");
             assertGe(_subCursor(), cursorBefore, "LIVE: swap-pop checkpoint never moves behind completed work");
-            assertLe(_subCursor(), _subscriberCount(), "LIVE: checkpoint remains within the live set");
+            assertLe(_subCursor() & 0x7fff, _subscriberCount(), "LIVE: section offset remains within the live set");
             _assertNativeEvictionCheckpoint(players, originalSubs);
             totalEvicted += evicted;
             ++calls;

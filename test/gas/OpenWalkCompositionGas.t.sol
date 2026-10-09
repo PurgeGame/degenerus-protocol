@@ -38,6 +38,7 @@ contract OpenWalkCompositionGas is DeployProtocol {
         // Advance one day off the deploy boundary so the day index is a clean, stable index.
         vm.warp(block.timestamp + 1 days);
         vm.deal(address(game), 10_000_000 ether);
+        _finishSubscriptionWindow();
     }
 
     // =========================================================================

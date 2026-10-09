@@ -712,6 +712,14 @@
     "typeLabel": "uint16"
   },
   {
+    "bytes": "2",
+    "encoding": "inplace",
+    "label": "_subBoxCount",
+    "offset": 22,
+    "slot": 51,
+    "typeLabel": "uint16"
+  },
+  {
     "bytes": "32",
     "encoding": "mapping",
     "label": "boxQueue",

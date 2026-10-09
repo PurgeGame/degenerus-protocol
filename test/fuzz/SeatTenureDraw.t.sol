@@ -7,8 +7,8 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title SeatTenureDraw — integration tests for the daily seat-tenure drawing:
-///        one uniform draw over the afking ring at each day-seal (_unlockRng),
-///        VAULT's pinned slot 0 excluded, prize = 10 whole FLIP per funded
+///        one uniform draw over logical box/ticket order at each day-seal (_unlockRng),
+///        VAULT excluded by identity, prize = 10 whole FLIP per funded
 ///        tenure day capped at 4,000, credited via coinflip.creditFlip. The
 ///        winner is fully deterministic from the sealed day's word, so each
 ///        day's SubDrawWon (or its dud absence) is asserted exactly.
@@ -32,6 +32,7 @@ contract SeatTenureDraw is DeployProtocol {
     function setUp() public {
         _deployProtocol();
         vm.warp(vm.getBlockTimestamp() + 1 days);
+        _finishSubscriptionWindow();
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -218,6 +219,100 @@ contract SeatTenureDraw is DeployProtocol {
             }
         }
         revert("fixture: player never drawn in 12 days");
+    }
+
+    function _assertProtocolPositions() private view {
+        bytes32 root = keccak256(abi.encode(GameSlots.SUBSCRIBERS));
+        uint256 ids = uint256(vm.load(address(game), root));
+        assertEq(uint32(ids), game.walletIdOf(ContractAddresses.VAULT), "Vault stays first");
+        assertEq(uint32(ids >> 32), game.walletIdOf(ContractAddresses.SDGNRS), "sDGNRS stays second");
+    }
+
+    function test_ProtocolTicketModeRevertsForSelfAndApprovedVaultOperator() public {
+        address[2] memory protocols = [ContractAddresses.VAULT, ContractAddresses.SDGNRS];
+        for (uint256 i; i < protocols.length; ++i) {
+            for (uint8 quantity; quantity < 2; ++quantity) {
+                vm.prank(protocols[i]);
+                vm.expectRevert(abi.encodeWithSignature("E()"));
+                game.subscribe(0, false, true, quantity, 0, 0);
+            }
+        }
+        address operator = makeAddr("vault-sub-operator");
+        vm.prank(ContractAddresses.CREATOR);
+        vault.gameSetOperatorApproval(operator, true);
+        uint32 vaultId = game.walletIdOf(ContractAddresses.VAULT);
+        vm.prank(operator);
+        vm.expectRevert(abi.encodeWithSignature("E()"));
+        game.subscribe(vaultId, false, true, 1, 0, 0);
+        vm.prank(operator);
+        game.subscribe(vaultId, false, false, 0, 0, 0);
+        _completeDay(0xAF01);
+        _assertProtocolPositions();
+        assertEq(game.subscriberSetLength(), 2, "zero-quantity Vault remains counted");
+        vm.prank(operator);
+        game.subscribe(vaultId, false, false, 1, 0, 0);
+        _assertProtocolPositions();
+    }
+
+    function test_OrdinaryModeChangesAndReclaimCannotMoveProtocolPositions() public {
+        address a = makeAddr("fixed-a");
+        address b = makeAddr("fixed-b");
+        _seatAndSubscribe(a, 1);
+        _seatAndSubscribe(b, 1);
+        _assertProtocolPositions();
+        vm.prank(a);
+        game.subscribe(0, false, true, 1, 0, 0);
+        _assertProtocolPositions();
+        vm.prank(b);
+        game.subscribe(0, false, false, 0, 0, 0);
+        _completeDay(0xAF02);
+        _assertProtocolPositions();
+        assertEq(game.subscriberSetLength(), 3, "ordinary tombstone reclaimed");
+        vm.prank(a);
+        game.subscribe(0, false, false, 1, 0, 0);
+        _assertProtocolPositions();
+    }
+
+    function test_DrawCoversEveryNonVaultRankWithPermanentVaultAtZeroOrNonzeroQuantity() public {
+        address box = makeAddr("draw-box");
+        address ticket = makeAddr("draw-ticket");
+        _seatAndSubscribe(box, 1);
+        _seatAndSubscribe(ticket, 1);
+        _fundPool(ContractAddresses.SDGNRS, 5 ether);
+        vm.prank(ticket);
+        game.subscribe(0, false, true, 1, 0, 0);
+        _completeDay(0xC0FFEE);
+        for (uint8 quantity; quantity < 2; ++quantity) {
+            uint256 quantitySnapshot = vm.snapshotState();
+            vm.prank(ContractAddresses.VAULT);
+            game.subscribe(0, false, false, quantity, 0, 0);
+            _assertProtocolPositions();
+            assertEq(game.subscriberSetLength(), 4, "zero quantity keeps Vault counted");
+            uint256 packed = uint256(vm.load(address(game), bytes32(GameSlots.SUB_BOX_COUNT)));
+            uint256 boxes = (packed >> (GameSlots.SUB_BOX_COUNT_OFFSET * 8)) & 0xffff;
+            uint256 root = uint256(keccak256(abi.encode(GameSlots.SUBSCRIBERS)));
+            address[3] memory expected;
+            uint256 n;
+            for (uint256 rank; rank < 4; ++rank) {
+                uint256 physical = rank < boxes ? rank : 2000 - (rank - boxes);
+                uint256 ids = uint256(vm.load(address(game), bytes32(root + (physical >> 3))));
+                address owner = _fixturePayee(uint32(ids >> ((physical & 7) * 32)));
+                if (owner != ContractAddresses.VAULT) expected[n++] = owner;
+            }
+            assertEq(n, 3);
+            for (uint256 rank; rank < 3; ++rank) {
+                uint256 word = 2;
+                while (uint256(keccak256(abi.encodePacked("SEATDRAW", word))) % 3 != rank) ++word;
+                uint256 drawSnapshot = vm.snapshotState();
+                vm.recordLogs();
+                _completeDay(word);
+                (uint256 count, address winner,,,) = _drawEvents();
+                assertEq(count, 1, "all three eligible identities remain drawable");
+                assertEq(winner, expected[rank], "logical rank excludes exactly Vault");
+                assertTrue(vm.revertToState(drawSnapshot));
+            }
+            assertTrue(vm.revertToState(quantitySnapshot));
+        }
     }
 
     /// @notice Protocol-only ring (len 2): index 0 (VAULT) is structurally

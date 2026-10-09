@@ -36,6 +36,7 @@ contract PendingBoxCountInvariant is DeployProtocol {
         // Advance one day off the deploy boundary so the day index is a clean, stable index.
         vm.warp(block.timestamp + 1 days);
         vm.deal(address(game), 10_000_000 ether);
+        _finishSubscriptionWindow();
     }
 
     function testPendingBoxCountTracksMarkersAcrossLifecycle() public {
@@ -61,25 +62,15 @@ contract PendingBoxCountInvariant is DeployProtocol {
         _assertInvariant("after the full drain");
         assertEq(_pendingBoxCount(), 0, "fully drained ring has zero pending boxes");
 
-        // Cancel WHILE PENDING: stamp a fresh day, then cancel one lootbox sub before its box
-        // opens. The cancel tombstones in-set and retains the markers (no-orphan rule), so the
-        // counter must still include the tombstone's box — and the open walk must still open it.
+        // Updates wait for the paid box; rejection preserves the exact count and stamp.
         _stampToRequest(uint256(keccak256("pb_w2")) | 1);
         _assertInvariant("after the second daily STAGE stamp");
         address cancelled = lootboxSubs[0];
-        if (!(_lastOpenedDayOf(cancelled) < _lastBoughtDayOf(cancelled))) {
-            // Later game phases can deliver a lootbox sub's daily buy as a (box-clean) ticket
-            // buy, so re-arm the pending state deterministically: mark the sub pending on its
-            // stamp day and bump the counter to match — byte-identical to the state a daily
-            // Sub-stamp box leaves behind (it opens once the stamp day seals).
-            uint32 d = _lastBoughtDayOf(cancelled);
-            _pokeSubOpenedDay(cancelled, d - 1);
-            _pokePendingCount(uint16(_pendingBoxCount() + 1));
-            _assertInvariant("after re-arming a pending box via poke");
-        }
+        assertLt(_lastOpenedDayOf(cancelled), _lastBoughtDayOf(cancelled));
         vm.prank(cancelled);
-        game.subscribe(0, false, false, 0, 0, 0); // qty 0 = cancel (tombstone)
-        _assertInvariant("after cancelling a sub with a pending box (tombstone retains markers)");
+        vm.expectRevert(bytes4(keccak256("RngLocked()")));
+        game.subscribe(0, false, false, 0, 0, 0);
+        _assertInvariant("pending cancellation rejected");
 
         _drainDay(uint256(keccak256("pb_c2")) | 1, false);
         _assertInvariant("after draining (incl. the pending tombstone's box)");
@@ -89,6 +80,10 @@ contract PendingBoxCountInvariant is DeployProtocol {
             _lastBoughtDayOf(cancelled),
             "the cancelled sub's pending box was still opened in-set"
         );
+
+        vm.prank(cancelled);
+        game.subscribe(0, false, false, 0, 0, 0);
+        _assertInvariant("post-open cancellation");
 
         // Next STAGE reclaims the (now box-clean) tombstone; re-subscribe and stamp again.
         _stampToRequest(uint256(keccak256("pb_w3")) | 1);
@@ -204,9 +199,11 @@ contract PendingBoxCountInvariant is DeployProtocol {
     function _countPendingMarkers() internal view returns (uint256 pending) {
         uint256 len = uint256(vm.load(address(game), bytes32(uint256(SUBSCRIBERS_SLOT))));
         bytes32 base = keccak256(abi.encode(uint256(SUBSCRIBERS_SLOT)));
+        uint256 boxes = uint16(uint256(vm.load(address(game), bytes32(GameSlots.SUB_BOX_COUNT))) >> (GameSlots.SUB_BOX_COUNT_OFFSET * 8));
         for (uint256 i; i < len; ++i) {
-            uint256 word = uint256(vm.load(address(game), bytes32(uint256(base) + i / 8)));
-            uint32 id = uint32(word >> ((i & 7) * 32));
+            uint256 position = i < boxes ? i : 2000 - (i - boxes);
+            uint256 word = uint256(vm.load(address(game), bytes32(uint256(base) + position / 8)));
+            uint32 id = uint32(word >> ((position & 7) * 32));
             uint256 sub = uint256(vm.load(address(game), keccak256(abi.encode(id, SUBOF_SLOT))));
             if (uint24(sub >> (OFF_LASTOPENED * 8)) < uint24(sub >> (OFF_LASTBOUGHT * 8))) {
                 unchecked {

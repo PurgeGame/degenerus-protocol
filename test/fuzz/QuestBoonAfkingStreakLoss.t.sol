@@ -78,6 +78,7 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
         _t = block.timestamp + 1 days;
         vm.warp(_t);
         vm.deal(address(game), 5_000_000 ether);
+        _finishSubscriptionWindow();
     }
 
     // =========================================================================

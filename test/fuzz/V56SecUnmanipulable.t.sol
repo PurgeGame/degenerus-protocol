@@ -73,6 +73,7 @@ contract V56SecUnmanipulable is DeployProtocol {
         _t = block.timestamp + 1 days;
         vm.warp(_t);
         vm.deal(address(game), 5_000_000 ether);
+        _finishSubscriptionWindow();
     }
 
     // =========================================================================
@@ -136,54 +137,34 @@ contract V56SecUnmanipulable is DeployProtocol {
     // Repro 2 — streak gap dodge (compute-on-read; advances only on delivered days)
     // =========================================================================
 
-    /// @notice A live funded sub's gap is a protocol-side skip (the no-orphan guard is the only gap source
-    ///         for a live funded sub), so the run survives it: the finalize WRITE hands the earned streak
-    ///         back intact, anchored at the day before the sub ended. Gap days still earn nothing — the
-    ///         streak freezes across the gap, never resets.
-    /// @dev    The engine now opens every stamped AFKing box as the next cohort's read consumer, before
-    ///         any later STAGE can run (read-cohort gate, 6d0e64b09 / 60d31f775), so "skip opening the
-    ///         box" is no longer something a caller can do. The guard's skip is reproduced by marking the
-    ///         last delivered box pending again (`_markBoxPending`); the finalize under test is unchanged.
-    function testStreakSurvivesProtocolSkipGapIntact() public {
+    /// @notice A delayed RNG session cannot erase or manufacture funded streak days.
+    function testStreakSurvivesDelayedSessionAndOrderedCatchup() public {
         address p = makeAddr("decay_p");
-        _grantSeat(p);
         _fundPool(p, 50 ether);
         _subscribeLootbox(p, 1);
-
-        // Build a few delivered days so the run has a covered high-water and a real earned streak.
         _deliverDay(_singleton(p), 0xDECA01);
         _deliverDay(_singleton(p), 0xDECA02);
-        uint32 coveredBefore = _afkCoveredOf(p);
-        uint32 earnedBefore = coveredBefore - _afkingStartOf(p);
-        assertGt(earnedBefore, 0, "non-vacuity: the run earned a streak over delivered days");
-
-        // The first further day still DELIVERS (the sub is box-clean, so the STAGE stamps a new box — one
-        // more earned day). That box is then left pending, so every later cycle hits the no-orphan guard
-        // and skips the funded sub (the protocol-side gap — the sub never misses a day it could have paid
-        // for). The covered high-water then goes stale by >= 2 days.
-        _skipDaysNoDelivery(0xDECA03);
-        _markBoxPending(p);
-        _skipDaysNoDelivery(0xDECA04);
-        _skipDaysNoDelivery(0xDECA05);
-
-        uint32 currentDay = game.currentDayView();
-        assertGt(currentDay, coveredBefore + 1, "gap window: covered + 1 < currentDay (a protocol-skip gap exists)");
-
-        // CANCEL on a post-gap day -> finalize hands the earned streak back INTACT: the handback anchor is
-        // the day before the cancel (floored at the funded high-water), so the protocol-skip gap zeroes
-        // nothing. Gap days earned nothing — the handback equals the pre-gap earned streak.
-        if (_subscriberIndexOf(p) == 0) {
-            _subscribeLootbox(p, 1); // re-create the slot to drive the explicit-cancel finalize
-        }
+        _t += 1 days;
+        vm.warp(_t);
+        for (uint256 i; i < 64 && !game.rngLocked(); ++i) game.mineFlip(0);
+        assertTrue(game.rngLocked());
+        uint32 covered = _afkCoveredOf(p);
+        uint32 bought = _lastBoughtDayOf(p);
+        _t += 3 days;
+        vm.warp(_t);
+        assertEq(_afkCoveredOf(p), covered, "wall time cannot earn funded days");
+        assertEq(_lastBoughtDayOf(p), bought, "paid stamp survives the delay");
+        vm.prank(p);
+        vm.expectRevert(abi.encodeWithSignature("RngLocked()"));
+        game.subscribe(0, false, false, 0, 0, 0);
+        _settleClean(0xDECA03);
+        _finishSubscriptionWindow();
+        uint32 earned = _afkCoveredOf(p) - _afkingStartOf(p);
+        assertGt(earned, covered - _afkingStartOf(p), "catchup delivers missed logical days");
         vm.recordLogs();
         vm.prank(p);
         game.subscribe(0, false, false, 0, 0, 0);
-        uint24 finalStreak = _lastFinalizeStreakFor(p);
-        assertEq(
-            finalStreak,
-            earnedBefore + 1,
-            "protocol-skip gap: finalize handed back the earned streak intact (+1 for the first no-open day's delivery; the skipped gap days earned nothing)"
-        );
+        assertEq(_lastFinalizeStreakFor(p), earned, "only delivered days are handed back");
     }
 
     /// @notice Kill-then-resume re-bases the run: a funding-kill finalizes the old run (handing its streak
@@ -541,59 +522,43 @@ contract V56SecUnmanipulable is DeployProtocol {
         assertEq(zeroedStreak, 0, "hook D ZEROED: lastValid <= currentDay - 2 -> finalize zeroed the streak (decay)");
     }
 
-    // =========================================================================
-    // No-orphan arm — a pending-box sub is left ENTIRELY untouched by the STAGE
-    // =========================================================================
-
-    /// @notice The NO-ORPHAN guard (GameAfkingModule `runSubscriberWork`): a sub with a pending unopened box
-    ///         (`lastOpenedDay < lastAutoBoughtDay`) is left ENTIRELY untouched by a STAGE cycle — no reclaim,
-    ///         no evict, no funding-kill, no re-stamp — so its paid-for box is never orphaned.
-    /// @dev    Under the engine a stamped box is the next cohort's AFKing read consumer and is opened before
-    ///         any later STAGE can run (read-cohort gate, 6d0e64b09 / 60d31f775): that is asserted first.
-    ///         The guard itself is then exercised on a box marked pending again, through the next day's
-    ///         STAGE up to its request (before any cohort could touch the box).
-    function testNoOrphanPendingBoxSubUntouchedByStage() public {
+    /// @notice A paid stamp survives a delay and funding withdrawal; the engine opens it
+    /// before the next pass can evict the now-unfunded member.
+    function testPendingBoxOpensBeforeNextDayFundingEviction() public {
         address p = makeAddr("orphan_p");
-        _grantSeat(p);
         _fundPool(p, 50 ether);
         _subscribeLootbox(p, 1);
-        // STAGE a buy: the engine opens the stamped box as the cohort's read consumer.
-        _runStageNewDay(0x0F0F);
-        _settleClean(0x0F10);
-        uint32 boughtBefore = _lastBoughtDayOf(p);
-        assertGt(boughtBefore, 0, "non-vacuity: a box was stamped");
-        assertEq(_lastOpenedDayOf(p), boughtBefore, "the engine opened the stamped box before any later STAGE");
-
-        _markBoxPending(p);
-        uint32 openedBefore = _lastOpenedDayOf(p);
-        assertTrue(openedBefore < boughtBefore, "the box is pending (lastOpenedDay < lastAutoBoughtDay)");
-        uint256 idxBefore = _subscriberIndexOf(p);
-
-        // Run the next day's STAGE (subscriber preparation precedes the day's request) and stop at the
-        // request: the no-orphan guard skips the sub entirely.
-        vm.recordLogs();
         _t += 1 days;
         vm.warp(_t);
         for (uint256 i; i < 64 && !game.rngLocked(); ++i) game.mineFlip(0);
-        assertTrue(game.rngLocked(), "the STAGE ran and the day's request went out");
-
-        // UNTOUCHED: the stamp markers are byte-identical, the sub stays in-set, no expiry event fired.
-        assertEq(_lastBoughtDayOf(p), boughtBefore, "no-orphan: lastAutoBoughtDay untouched (no re-stamp)");
-        assertEq(_lastOpenedDayOf(p), openedBefore, "no-orphan: lastOpenedDay untouched (the box still pending)");
-        assertEq(_subscriberIndexOf(p), idxBefore, "no-orphan: the sub stays in-set (no reclaim/evict/funding-kill)");
-        assertEq(_countExpiredAnyReason(p), 0, "no-orphan: no SubscriptionExpired fired for the pending-box sub");
-    }
-
-    /// @dev Mark `who`'s last stamped (and already opened) box pending again: lastOpenedDay one day
-    ///      behind lastAutoBoughtDay (Sub bytes 10..12). No cohort owns this marker, so no read consumer
-    ///      opens it; only the STAGE's no-orphan guard sees it.
-    function _markBoxPending(address who) internal {
-        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT)));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        uint256 bought = (packed >> (OFF_LASTBOUGHT * 8)) & 0xFFFFFF;
-        require(bought > 0, "a stamped box exists");
-        packed = (packed & ~(uint256(0xFFFFFF) << (OFF_LASTOPENED * 8))) | ((bought - 1) << (OFF_LASTOPENED * 8));
-        vm.store(address(game), slot, bytes32(packed));
+        assertTrue(game.rngLocked());
+        uint32 bought = _lastBoughtDayOf(p);
+        assertLt(_lastOpenedDayOf(p), bought);
+        _drainAllFunding(p);
+        _t += 1 days;
+        vm.warp(_t);
+        assertEq(_lastBoughtDayOf(p), bought);
+        vm.prank(p);
+        vm.expectRevert(abi.encodeWithSignature("RngLocked()"));
+        game.subscribe(0, false, true, 1, 0, 0);
+        vm.recordLogs();
+        _settleClean(0x0F10);
+        _finishSubscriptionWindow();
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bool opened;
+        bool evicted;
+        uint32 id = game.walletIdOf(p);
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter != address(game) || logs[i].topics.length < 2
+                || uint32(uint256(logs[i].topics[1])) != id) continue;
+            if (logs[i].topics[0] == keccak256("LootBoxOpened(uint32,uint48,uint256,uint24,uint32,uint256,bool)")) opened = true;
+            if (logs[i].topics[0] == SUB_EXPIRED_SIG) {
+                assertTrue(opened, "paid box must open before eviction");
+                evicted = true;
+            }
+        }
+        assertTrue(opened && evicted, "both real lifecycle steps happened");
+        assertEq(_subscriberIndexOf(p), 0);
     }
 
     // =========================================================================
@@ -603,7 +568,7 @@ contract V56SecUnmanipulable is DeployProtocol {
     uint256 private _deliverNonce;
 
     /// @dev Deliver ONE funded day to `who`: a new-day STAGE buy (stamps each pending box + accrues), then
-    ///      settle clean and OPEN every pending box (so the no-orphan guard does not skip the next day's buy).
+    ///      settle clean and OPEN every pending box before the next day's preparation.
     ///      Each delivered day advances the covered high-water and accrues 100 pendingFlip per in-set sub.
     ///      Uses a rich, distinct VRF word each call (a degenerate small word routes into a non-stamping
     ///      branch); the stage word and the clean word are kept distinct.

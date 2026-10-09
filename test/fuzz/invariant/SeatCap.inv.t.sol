@@ -86,7 +86,6 @@ contract SeatCapHandler is Test {
     uint256 public dayCranks;
     uint256 public maxSum;
     uint256 public capHits;
-    uint256 public sumOf2001;
     uint256 internal salt;
 
     constructor(DegenerusGame g, AFKingSubscriptionToken t, DegenerusVault v, MockVRFCoordinator r, address s) {
@@ -190,7 +189,6 @@ contract SeatCapHandler is Test {
         uint256 sum = token.totalSupply() + game.subscriberSetLength();
         if (sum > maxSum) maxSum = sum;
         if (sum >= CAP) ++capHits;
-        if (sum == CAP + 1) ++sumOf2001;
     }
 
     // ═════════════════════════ raw Game reads ═════════════════════════
@@ -555,19 +553,17 @@ contract SeatCapHandler is Test {
         _checkLive();
     }
 
-    /// @notice The vault-approved operator changes, cancels or re-subscribes the VAULT account,
-    ///         naming a nonzero seat: exempt, never a burn (the accepted O1 path).
+    /// @notice The vault-approved operator changes, pauses or resumes the permanent VAULT entry.
+    ///         Naming a seat never burns it; pausing never releases the counted entry.
     function vaultSubscription(uint256 seed) external {
         ++calls[A_VAULTSUB];
         bool live = _qty(VAULT_ID) != 0;
-        (bool inSet,) = _inSet(VAULT_ID, address(vault));
+        uint256 position = _pos(VAULT_ID);
         uint256 s0 = game.subscriberSetLength();
         uint256 l0 = token.totalSupply();
         address owner2 = gOwner[2];
         uint256 seat = (seed >> 8) % 2 == 0 ? 2 : 1 + (seed >> 16) % (gNext + 5);
         uint8 qty = live ? ((seed % 3 == 0) ? 0 : uint8(1 + (seed >> 24) % 3)) : 1;
-        // Out of the set, VAULT waits half the time so vault mints can land in the freed unit.
-        if (!live && !inSet && (seed >> 32) % 2 == 0) return;
         vm.prank(vaultOp);
         try game.subscribe(VAULT_ID, true, false, qty, 0, seat) {
             ++oks[A_VAULTSUB];
@@ -579,12 +575,10 @@ contract SeatCapHandler is Test {
                     _violate("serial 2 burned by an exempt subscription");
                 }
             }
-            uint256 s1 = game.subscriberSetLength();
-            if (!live && qty != 0 && !inSet) {
-                if (s1 != s0 + 1) _violate("VAULT re-entry did not add one entry");
-            } else if (s1 != s0) {
-                _violate("a VAULT change or cancel changed the set length");
+            if (game.subscriberSetLength() != s0 || _pos(VAULT_ID) != position) {
+                _violate("a VAULT change, pause or resume moved its set entry");
             }
+            if (_qty(VAULT_ID) != qty) _violate("VAULT quantity was not updated");
         } catch (bytes memory r) {
             _noteRevert(A_VAULTSUB, r);
         }
@@ -683,10 +677,9 @@ contract SeatCapHandler is Test {
         (uint256 e, bool sdgnrsIn, bool consistent) = exemptEntries();
         if (!consistent) return "set element does not match its Sub position";
         if (!sdgnrsIn) return "SDGNRS left the set";
-        uint256 n = s - e;
+        if (e != 2) return "VAULT left the set";
         if (s > CAP) return "S > 2000";
-        if (l + n + 1 > CAP) return "L + N + 1 > 2000";
-        if (l + s > CAP + 1) return "L + S > 2001";
+        if (l + s > CAP) return "L + S > 2000";
         uint256 serials = uint256(token.nextSerial()) - 1;
         if (serials < gBurns || l != serials - gBurns) return "L != (nextSerial - 1) - burns";
         if (l != gLive) return "L != ghost live count";
@@ -732,17 +725,12 @@ contract SeatCapHandler is Test {
     }
 }
 
-/// @title SeatCap — live seats plus subscriber-set entries stay within the seat cap (G6, F-token
-///        §6 bullet 7, O1 accepted).
-/// @notice With L = live seats, S = set length and N = non-exempt set entries (S minus the
-///         VAULT/SDGNRS entries in the set), after every handler step:
-///         - S <= 2000;
-///         - L + N + 1 <= 2000 (SDGNRS's permanent exempt entry counted once): a vault mint
-///           requires L + n + S <= 2000 with S >= N + 1, free mints all precede the first vault
-///           mint and total 1,002 live seats at most, a non-exempt new run moves one unit from
-///           L to N, a tombstone re-run lowers L, and reclaims and evictions lower N;
-///         - L + S <= 2001 (the +1 is the VAULT entry leaving through an operator cancel and
-///           the reclaim, a vault mint into the freed unit, and the exempt re-subscribe);
+/// @title SeatCap — live seats plus subscriber-set entries stay within the seat cap.
+/// @notice With L = live seats and S = set length, after every handler step:
+///         - Both protocol entries remain in the set, including a paused VAULT;
+///         - L + S <= 2000: a vault mint requires L + n + S <= 2000, free mints all
+///           precede the first vault mint and create at most 1,002 live seats, a non-exempt
+///           new run moves one unit from L to S, and reclaims and evictions lower S;
 ///         - L == (nextSerial - 1) - burns, L == the sum of ghost holder balances, every holder's
 ///           balance matches the ghost, non-exempt insertions <= burns;
 ///         - freeClaims <= 1000, no free mint after the first vault mint, nextSerial monotone and
@@ -771,6 +759,7 @@ contract SeatCapInvariant is DeployProtocol {
         require(handler.smurfIds(1) != 0, "fixture: two smurfs");
         targetContract(address(handler));
         targetSelector(StdInvariant.FuzzSelector({addr: address(handler), selectors: _selectors()}));
+        _finishSubscriptionWindow();
     }
 
     /// forge-config: default.invariant.runs = 64
@@ -786,7 +775,6 @@ contract SeatCapInvariant is DeployProtocol {
         uint256 prevMax = vm.envOr("SEATCAP_MAXSUM", uint256(0));
         if (handler.maxSum() > prevMax) vm.setEnv("SEATCAP_MAXSUM", vm.toString(handler.maxSum()));
         _bump("SEATCAP_CAPHITS", handler.capHits());
-        _bump("SEATCAP_2001", handler.sumOf2001());
         _bump("SEATCAP_BURNS", handler.gBurns());
         _bump("SEATCAP_INSERTS", handler.gInsertions());
         _bump("SEATCAP_VMINTS", handler.gVaultMints());
@@ -811,7 +799,6 @@ contract SeatCapInvariant is DeployProtocol {
         console.log("SEATCAP state-engine cranks inside driveDay (summed)", vm.envOr("SEATCAP_CRANKS", uint256(0)));
         console.log("SEATCAP max L+S", vm.envOr("SEATCAP_MAXSUM", uint256(0)));
         console.log("SEATCAP steps at/over the cap (summed)", vm.envOr("SEATCAP_CAPHITS", uint256(0)));
-        console.log("SEATCAP steps at L+S == 2001 (summed)", vm.envOr("SEATCAP_2001", uint256(0)));
         console.log("SEATCAP burns / non-exempt insertions / vault seats (summed)",
             string.concat(
                 vm.toString(vm.envOr("SEATCAP_BURNS", uint256(0))), " / ",
@@ -863,11 +850,9 @@ contract SeatCapInvariant is DeployProtocol {
 
     // ═════════════════════════ scripted campaigns ═════════════════════════
 
-    /// @notice A scripted pass through every handler action, ending on the accepted O1 path:
-    ///         free tranche closed, runs started and ended, the cap reached, the VAULT entry
-    ///         cancelled and reclaimed, a vault mint into the freed unit and the exempt
-    ///         re-subscribe at L + S == 2001. The bounds hold after every step.
-    function test_scriptedCampaignReachesTheAcceptedPlusOne() public {
+    /// @notice Reach the cap, pause VAULT through its real operator, run later daily passes,
+    ///         then resume. The retained entry never permits an extra seat mint.
+    function test_scriptedCampaignVaultPauseCannotExceedCap() public {
         // setUp: wallets 0..4 hold their pass seats; smurfs at account indices 10 and 11.
         _ok();
         assertEq(afkingSubToken.freeClaims(), 5, "five free seats from setUp");
@@ -905,23 +890,34 @@ contract SeatCapInvariant is DeployProtocol {
         _ok();
         assertEq(afkingSubToken.totalSupply() + game.subscriberSetLength(), 2000, "back at the cap");
 
-        handler.vaultSubscription(0); // VAULT cancelled through its operator
+        uint256 position = _posOf(1);
+        assertGt(position, 0);
+        handler.vaultSubscription(0); // VAULT paused through its operator
         _ok();
-        assertEq(_qtyOf(1), 0, "VAULT cancelled");
-        for (uint256 d; d < 4 && _posOf(1) != 0; ++d) {
+        assertEq(_qtyOf(1), 0, "VAULT paused");
+        for (uint256 d; d < 4; ++d) {
             handler.driveDay(10 + d);
             _ok();
+            assertEq(_posOf(1), position, "paused VAULT is never reclaimed");
+            assertEq(_qtyOf(1), 0, "daily processing does not restart VAULT");
         }
-        assertEq(_posOf(1), 0, "VAULT tombstone reclaimed");
-        handler.vaultMint(0, 0); // mint into the freed unit
+        handler.vaultMint(0, 0); // refill only capacity freed by ordinary subscribers
         _ok();
         assertEq(afkingSubToken.totalSupply() + game.subscriberSetLength(), 2000);
-        handler.vaultSubscription(1 | (uint256(1) << 32)); // exempt re-subscribe: no burn, S + 1
+        address recipient = handler.phantom();
+        vm.expectRevert(AFKingSubscriptionToken.SeatCapReached.selector);
+        vault.afkingSeatMint(recipient, 1);
+        uint256 liveSeats = afkingSubToken.totalSupply();
+        uint256 members = game.subscriberSetLength();
+        handler.vaultSubscription(1); // resume the existing entry without a burn
         _ok();
-        assertEq(afkingSubToken.totalSupply() + game.subscriberSetLength(), 2001, "the accepted +1");
-        handler.vaultMint(1, 1); // one more seat is refused
-        _ok();
-        assertEq(afkingSubToken.totalSupply() + game.subscriberSetLength(), 2001, "no further");
+        assertGt(_qtyOf(1), 0, "VAULT resumed");
+        assertEq(_posOf(1), position, "resume reuses the retained position");
+        assertEq(game.subscriberSetLength(), members, "resume adds no entry");
+        assertEq(afkingSubToken.totalSupply(), liveSeats, "resume burns no seat");
+        assertEq(liveSeats + members, 2000);
+        vm.expectRevert(AFKingSubscriptionToken.SeatCapReached.selector);
+        vault.afkingSeatMint(recipient, 1);
         handler.transferSeat(N_WALLETS_PLUS_PHANTOM);
         _ok();
         assertEq(handler.violations(), 0);
@@ -956,7 +952,7 @@ contract SeatCapInvariant is DeployProtocol {
         bytes32 lenSlot = bytes32(GameSlots.SUBSCRIBERS);
         uint256 len = uint256(vm.load(address(game), lenSlot));
         vm.store(address(game), lenSlot, bytes32(len + 2));
-        assertEq(handler.check(), "L + N + 1 > 2000");
+        assertEq(handler.check(), "L + S > 2000");
         vm.revertToState(snap);
 
         _ok();

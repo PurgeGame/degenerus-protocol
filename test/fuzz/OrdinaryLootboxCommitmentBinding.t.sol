@@ -72,7 +72,9 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         vm.warp(block.timestamp + 1 days);
         // Subscribed before the bootstrap request, so their subscribe-time cover boxes resolve in
         // the bootstrap cohort and never share a cohort with the owners' orders.
+        _finishSubscriptionWindow();
         _spawnAfkingSubscribers(40);
+        vm.warp(vm.getBlockTimestamp() + 1 days);
         _requestDaily();
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 0xB007);
         _finishDaily();

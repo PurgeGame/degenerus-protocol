@@ -15,8 +15,7 @@ import {WalletSeed} from "../helpers/WalletSeed.sol";
 contract AfkingStethGasHost is SubscriberNativeGasHost {
     function addStethSubscriber(address player, address source, bool tickets) external {
         uint32 subId = _seedWallet(player);
-        _subscribers.push(subId);
-        _subOf[subId].setPosition = uint32(_subscribers.length);
+        _seedSubscriber(subId, tickets);
         Sub storage sub = _subOf[subId];
         uint24 yesterday = _afkingResetDay - 1;
         sub.dailyQuantity = 255;
@@ -225,7 +224,7 @@ contract AfkingStethGasTest is DeployProtocol {
     function test_InsufficientAdmissionAllowanceDefersWithoutChargingOrEvicting() public {
         mockStETH.mint(FUNDER, 1_000 ether);
         _authorize(PLAYER, FUNDER, true);
-        host.addStethSubscriber(PLAYER, FUNDER, true);
+        host.addStethSubscriber(PLAYER, FUNDER, false);
         uint256 sourceShares = mockStETH.sharesOf(FUNDER);
         uint256 allowanceBefore = mockStETH.allowance(FUNDER, address(game));
         uint256 required = GasBounds.SUBSCRIBER_ITEM_GAS + GasBounds.SUBSCRIBER_TAIL_GAS + MineFlipGas.CHECK_RESERVE;
@@ -240,13 +239,13 @@ contract AfkingStethGasTest is DeployProtocol {
         assertLt(bought, game.currentDayView());
         // A later miner with adequate budget admits and pays exactly this item.
         _work();
-        _assertDelivered(PLAYER, true);
+        _assertDelivered(PLAYER, false);
     }
 
     function test_AdmissionBoundaryPaysAtMinimumAndDefersOneGasBelow() public {
         mockStETH.mint(FUNDER, 1_000 ether);
         _authorize(PLAYER, FUNDER, true);
-        host.addStethSubscriber(PLAYER, FUNDER, true);
+        host.addStethSubscriber(PLAYER, FUNDER, false);
         uint256 initial = vm.snapshotState();
         uint256 required = GasBounds.SUBSCRIBER_ITEM_GAS + GasBounds.SUBSCRIBER_TAIL_GAS + MineFlipGas.CHECK_RESERVE;
         // The meter also charges worker-entry checks before the item. Discover
@@ -268,7 +267,7 @@ contract AfkingStethGasTest is DeployProtocol {
         vm.revertToState(initial);
         (MineFlipGas.Result memory admitted, uint256 grossGas) = host.measuredSubWork{gas: WORK_GAS}(high);
         assertTrue(admitted.progressed && admitted.done);
-        _assertDelivered(PLAYER, true);
+        _assertDelivered(PLAYER, false);
         assertLe(grossGas, GasBounds.SUBSCRIBER_ITEM_GAS + GasBounds.SUBSCRIBER_TAIL_GAS);
         emit log_named_uint("production_minimum_subscriber_worker_allowance", high);
         emit log_named_uint("production_admitted_at_boundary_gross_gas", grossGas);

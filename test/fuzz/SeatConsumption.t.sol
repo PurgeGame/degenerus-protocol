@@ -34,6 +34,7 @@ abstract contract SeatFixture is DeployProtocol {
         vm.warp(vm.getBlockTimestamp() + 1 days);
         mockVRF.fundSubscription(1, 1_000_000 ether);
         _checkSetLayout();
+        _finishSubscriptionWindow();
     }
 
     // ─────────────────────────── raw set reads ───────────────────────────
@@ -502,20 +503,20 @@ contract SeatConsumptionTest is SeatFixture {
         assertEq(afkingSubToken.ownerOf(2), address(vault), "vault seat untouched");
     }
 
-    /// @notice After the cancel and the reclaim, the operator's re-subscribe of VAULT is a new
-    ///         run that still burns nothing (exempt) and re-enters the set.
+    /// @notice Vault quantity zero retains its entry; a later resume burns no seat.
     function test_vaultResubscribeThroughOperatorNeverCallsTheToken() public {
         _approveVaultOperator();
         vm.prank(op);
         game.subscribe(VAULT_ID, true, false, 0, 0, 0);
-        _driveUntilOut(VAULT_ID);
+        _driveDay();
+        assertTrue(_inSet(VAULT_ID), "zero-quantity Vault remains counted");
         uint256 s0 = _S();
 
         _expectNoBurn();
         vm.prank(op);
         game.subscribe(VAULT_ID, true, false, 1, 0, 2);
         assertTrue(_inSet(VAULT_ID), "vault back in the set");
-        assertEq(_S(), s0 + 1, "exempt re-entry");
+        assertEq(_S(), s0, "resume reuses the existing entry");
         assertEq(afkingSubToken.ownerOf(2), address(vault), "vault seat never burned");
         assertEq(_L(), 2);
     }
@@ -695,15 +696,16 @@ contract SeatConsumptionTest is SeatFixture {
 
     // ═══════════════ F-game item 9 extras ═══════════════
 
-    function test_vaultCancelReclaimResubscribeReachesTwoThousandAndOne() public {
+    function test_vaultCancelAndResumeKeepCombinedCapAtTwoThousand() public {
         vm.prank(ContractAddresses.CREATOR);
         vault.gameSetOperatorApproval(op, true);
         _fillFreeTrancheTo(1000);
 
         vm.prank(op);
         game.subscribe(VAULT_ID, true, false, 0, 0, 0);
-        _driveUntilOut(VAULT_ID);
-        assertEq(_exemptEntries(), 1, "only SDGNRS's entry remains");
+        _driveDay();
+        assertTrue(_inSet(VAULT_ID), "zero-quantity Vault remains counted");
+        assertEq(_exemptEntries(), 2, "both protocol entries remain");
 
         address to = makeAddr("o1-grantee");
         _mintToCap(to, 0);
@@ -712,7 +714,7 @@ contract SeatConsumptionTest is SeatFixture {
         vm.prank(op);
         game.subscribe(VAULT_ID, true, false, 1, 0, 0);
         assertEq(_exemptEntries(), 2, "VAULT re-entered");
-        assertEq(_L() + _S(), 2001, "the accepted +1");
+        assertEq(_L() + _S(), 2000, "resume cannot exceed the cap");
 
         vm.prank(ContractAddresses.CREATOR);
         vm.expectRevert(AFKingSubscriptionToken.SeatCapReached.selector);

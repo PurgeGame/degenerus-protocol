@@ -33,6 +33,7 @@ contract QuestStreakStallForgiveness is DeployProtocol {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
         vm.deal(address(game), 5_000_000 ether);
+        _finishSubscriptionWindow();
     }
 
     function test_ManualStreakForgivesOnlyUnrolledDays() public {
@@ -356,48 +357,36 @@ contract QuestStreakStallForgiveness is DeployProtocol {
         assertEq(_subField(player, OFF_SUB_STREAK_BASE, 16), 10, "streak base survives the gap");
     }
 
-    function test_AfkingActiveResubscribeGapPreservesRun() public {
+    function test_AfkingActiveResubscribeWaitsForOrderedCatchup() public {
         address player = _startAfkingPlayer("resub-gap", 12);
         uint24 startDay = uint24(_subField(player, OFF_SUB_START, 24));
-        vm.warp(block.timestamp + 3 days);
-
+        vm.warp(vm.getBlockTimestamp() + 3 days);
+        vm.prank(player);
+        vm.expectRevert(abi.encodeWithSignature("RngLocked()"));
+        game.subscribe(0, false, false, 1, 0, 0);
+        _finishSubscriptionWindow();
+        uint256 covered = _subField(player, OFF_SUB_COVERED, 24);
+        assertEq(covered, game.currentDayView(), "due preparation delivered before updates reopen");
+        assertEq(_subField(player, OFF_SUB_START, 24), startDay + 2, "undelivered gap days earn no streak");
+        assertEq(covered - _subField(player, OFF_SUB_START, 24), 1, "only the actual delivery earns a day");
         vm.prank(player);
         game.subscribe(0, false, false, 1, 0, 0);
-
-        uint24 covered = uint24(_subField(player, OFF_SUB_COVERED, 24));
-        uint24 shiftedStart = uint24(_subField(player, OFF_SUB_START, 24));
-        assertEq(covered, uint24(game.currentDayView()), "cover buy advances to the wall day");
-        assertEq(shiftedStart, startDay + 2, "active re-subscribe excludes both phantom days");
-        assertEq(covered - shiftedStart, 1, "re-subscribe adds exactly its funded delivery");
-        assertEq(_subField(player, OFF_SUB_STREAK_BASE, 16), 12, "active run base is preserved");
-
-        // A second retry-day cover composes from the already-shifted framing: only the new
-        // intervening phantom day is excluded, and the second funded buy adds one more day.
-        vm.warp(block.timestamp + 2 days);
-        vm.prank(player);
-        game.subscribe(0, false, false, 1, 0, 0);
-        covered = uint24(_subField(player, OFF_SUB_COVERED, 24));
-        shiftedStart = uint24(_subField(player, OFF_SUB_START, 24));
-        assertEq(covered - shiftedStart, 2, "retry-day covers compose as two funded days");
-        assertEq(_subField(player, OFF_SUB_STREAK_BASE, 16), 12, "base survives repeated pending-gap covers");
+        assertEq(_subField(player, OFF_SUB_COVERED, 24), covered, "update cannot buy a processed day twice");
+        assertEq(_subField(player, OFF_SUB_STREAK_BASE, 16), 12, "active run base survives catchup");
     }
 
-    function test_AfkingGapFreezesRunAcrossSealedMissBeforeStall() public {
+    function test_AfkingUpdateCannotReframePinnedPreparationToWallDay() public {
         address player = _startAfkingPlayer("real-before-gap", 12);
-        uint24 coveredBefore = uint24(_subField(player, OFF_SUB_COVERED, 24));
-
-        // Two sealed calendar days with no funded delivery precede the pending gap. A live
-        // funded sub only gaps on sealed days through a protocol-side skip, so the run
-        // FREEZES across the whole gap — the base survives and the gap days earn nothing.
-        _setDailyIdx(coveredBefore + 2);
-        vm.warp(block.timestamp + 5 days);
+        uint256 start = _subField(player, OFF_SUB_START, 24);
+        vm.warp(vm.getBlockTimestamp() + 5 days);
+        game.mineFlip(type(uint32).max);
         vm.prank(player);
-        game.subscribe(0, false, false, 1, 0, 0);
-
-        uint24 today = uint24(game.currentDayView());
-        assertEq(_subField(player, OFF_SUB_STREAK_BASE, 16), 12, "the streak base survives the sealed-miss gap");
-        assertEq(_subField(player, OFF_SUB_START, 24), today - 1, "the gap days shift the base day forward, earning nothing");
-        assertEq(_subField(player, OFF_SUB_COVERED, 24), today, "delivery still advances coverage");
+        vm.expectRevert(abi.encodeWithSignature("RngLocked()"));
+        game.subscribe(0, false, true, 1, 0, 0);
+        assertEq(_subField(player, OFF_SUB_START, 24), start);
+        _finishSubscriptionWindow();
+        assertEq(_subField(player, OFF_SUB_COVERED, 24), game.currentDayView());
+        assertEq(_subField(player, OFF_SUB_STREAK_BASE, 16), 12);
     }
 
     function test_LiveAfkingActivityScoreDoesNotDropDuringPendingGap() public {

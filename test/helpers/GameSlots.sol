@@ -139,6 +139,8 @@ library GameSlots {
     uint256 internal constant SDGNRS_BONUS_LEVEL_OFFSET = 17;
     uint256 internal constant PENDING_BOX_COUNT = 51;
     uint256 internal constant PENDING_BOX_COUNT_OFFSET = 20;
+    uint256 internal constant SUB_BOX_COUNT = 51;
+    uint256 internal constant SUB_BOX_COUNT_OFFSET = 22;
     uint256 internal constant BOX_QUEUE = 52;
     uint256 internal constant FOIL_RECORD = 53;
     uint256 internal constant FOIL_MATCH_CLAIMED = 54;

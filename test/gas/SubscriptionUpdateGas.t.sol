@@ -9,7 +9,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {Vm} from "forge-std/Vm.sol";
 
-contract SubscriptionUpdateSeeder is DegenerusGameStorage {
+contract SubscriptionUpdateSeeder is GameAfkingModule {
     function sourceOf(address player) external view returns (address) {
         return address(uint160(_walletElement(_fundingSourceOf[_walletIdOf(player)])));
     }
@@ -21,11 +21,7 @@ contract SubscriptionUpdateSeeder is DegenerusGameStorage {
         uint32 id = _walletIdOf(player);
         require(_subOf[id].dailyQuantity == 0);
         require(_subOf[id].lastOpenedDay >= _subOf[id].lastAutoBoughtDay);
-        uint256 index = _subOf[id].setPosition - 1;
-        uint32 tail = _subscribers[_subscribers.length - 1];
-        _subscribers[index] = tail;
-        _subOf[tail].setPosition = uint32(index + 1);
-        _subscribers.pop();
+        _removeFromSet(_subOf[id].setPosition);
         delete _subOf[id];
     }
 }
@@ -75,6 +71,7 @@ contract SubscriptionUpdateGasTest is DeployProtocol {
             require(baselineCode.length != 0, "baseline file required");
             vm.etch(address(afkingModule), baselineCode);
         }
+        _finishSubscriptionWindow();
     }
 
     function _srcId(address source) private returns (uint32) {
@@ -146,6 +143,29 @@ contract SubscriptionUpdateGasTest is DeployProtocol {
         assertEq(source, address(0), "old external source cleared despite deleted flags");
         assertEq(flags & 1, 0);
     }
+
+    function _measureModeChange(bool tickets) private {
+        vm.recordLogs();
+        vm.startStateDiffRecording();
+        vm.prank(PLAYER);
+        game.subscribe(0, false, tickets, 1, 0, 0);
+        string memory label = tickets ? "box_to_ticket" : "ticket_to_box";
+        uint256 gasUsed = vm.snapshotGasLastCall("subscription-update", label);
+        (, uint256 reads, uint256 writes) = _digest(vm.stopAndReturnStateDiff());
+        emit log_named_string("scenario", label);
+        emit log_named_uint("execution_gas", gasUsed);
+        emit log_named_uint("sloads", reads);
+        emit log_named_uint("sstores", writes);
+    }
+
+    function testGas_TicketToBox() public { _subscribe(1, address(0)); _measureModeChange(false); }
+    function testGas_BoxToTicket() public {
+        _subscribe(1, address(0));
+        vm.prank(PLAYER);
+        game.subscribe(0, false, false, 1, 0, 0);
+        _measureModeChange(true);
+    }
+    function testGas_Cancel() public { _subscribe(1, address(0)); _measure("cancel", 0, address(0)); }
 
     function test_ActiveUpdateBurnsNoSeat() public {
         _subscribe(1, address(0));

@@ -12,10 +12,10 @@ contract AfkingIdSetHarness is GameAfkingModule {
         _addToSet(_subOf[id], id);
     }
     function remove(uint256 position) external {
-        delete _subOf[_subscribers[position - 1]];
+        delete _subOf[_subscriberAt(position - 1)];
         _removeFromSet(position);
     }
-    function at(uint256 index) external view returns (uint32) { return _subscribers[index]; }
+    function at(uint256 index) external view returns (uint32) { return _subscriberAt(index); }
     function position(uint32 id) external view returns (uint32) { return _subOf[id].setPosition; }
     function root() external pure returns (uint256 r) { assembly { r := _subscribers.slot } }
     function smurf(uint32 ownerId) external returns (uint32 id) {

@@ -19,8 +19,8 @@ contract AfkingAffiliateCacheHost is DegenerusGame, WalletSeed {
         _subCursor = 0;
         _subOpenCursor = 0;
         _pendingBoxCount = 0;
-        delete _subscribers;
-        _subscribers.push(id);
+        _clearSubscriberSet();
+        _seedSubscriber(id, false);
         subsFullyProcessed = false;
         ticketsFullyProcessed = true;
         humanReadComplete = true;

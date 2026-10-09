@@ -20,7 +20,7 @@ contract AfkingStethHost is DegenerusGame, WalletSeed {
         _subCursor = 0;
         _subOpenCursor = 0;
         _pendingBoxCount = 0;
-        delete _subscribers;
+        _clearSubscriberSet();
         subsFullyProcessed = false;
         ticketsFullyProcessed = true;
         humanReadComplete = true;
@@ -51,9 +51,8 @@ contract AfkingStethHost is DegenerusGame, WalletSeed {
         uint256 claimable
     ) external {
         (uint32 id, ) = _registerWallet(player, 0);
-        _subscribers.push(id);
+        _seedSubscriber(id, tickets);
         Sub storage sub = _subOf[id];
-        sub.setPosition = uint32(_subscribers.length);
         sub.dailyQuantity = quantity;
         sub.flags = (source == address(0) ? 0 : 1) | (drainFirst ? 2 : 0) | (tickets ? 4 : 0);
         uint32 sourceId;
@@ -88,6 +87,15 @@ contract AfkingStethHost is DegenerusGame, WalletSeed {
         _subCursor = 0;
         subsFullyProcessed = false;
     }
+
+    /// @dev Seed a completed empty/ticket-only day for subscribe-path fixtures.
+    function subscriptionWindow() external {
+        require(_pendingBoxCount == 0);
+        dailyIdx = _simulatedDayIndex();
+        _afkingResetDay = dailyIdx;
+        subsFullyProcessed = true;
+    }
+    function closeReadForTest() external { _setRngComplete(false); }
 
     function stateOf(address player) external view returns (Sub memory) {
         return _subOf[_walletIdOf(player)];

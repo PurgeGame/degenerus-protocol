@@ -27,23 +27,23 @@ contract RewardRngBoundaryFixture is DegenerusGame, WalletSeed {
         ticketsFullyProcessed = true;
         humanReadComplete = complete;
         _recordDailyRng(sealedDay, word);
-        delete _subscribers;
+        _afkingResetDay = complete ? stampDay : sealedDay;
+        subsFullyProcessed = true;
+        _clearSubscriberSet();
         for (uint256 i; i < cleanPrefix; ++i) {
             address member = address(uint160(0x100000 + i));
             uint32 memberId = _seedWallet(member);
-            _subscribers.push(memberId);
-            _subOf[memberId].setPosition = uint32(_subscribers.length);
+            _seedSubscriber(memberId, false);
         }
         uint32 subId = _seedWallet(player);
-        _subscribers.push(subId);
-        _subOf[subId].setPosition = uint32(_subscribers.length);
+        _seedSubscriber(subId, false);
         Sub storage sub = _subOf[subId];
         sub.amount = 10;
         sub.score = 1200;
         sub.lastAutoBoughtDay = stampDay;
         sub.lastOpenedDay = stampDay - 1;
         _pendingBoxCount = 1;
-        _subOpenCursor = 0;
+        _subOpenCursor = uint16(cleanPrefix);
         _subCursor = 0;
         boxCursor = 0;
     }
@@ -92,15 +92,15 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         );
     }
 
-    /// @dev Fund the mandatory ring scan/open; extreme calibration prevents later requests.
+    /// @dev Fund the mandatory next open; extreme calibration prevents later requests.
     function _keep() private {
         game.mineFlip{gas: 12_000_000}(type(uint32).max);
     }
 
     function _underfundedKeep() private {
-        (bool ok,) = address(game).call{gas: 2_000_000}(
+        (bool ok,) = address(game).call{gas: 20_000}(
             abi.encodeCall(game.mineFlip, (type(uint32).max)));
-        assertFalse(ok, "underfunded mandatory scan must roll back");
+        assertFalse(ok, "underfunded mandatory open must roll back");
     }
 
     function _finishRead() private {
@@ -118,8 +118,8 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         uint24 day = game.currentDayView();
         _seed(day, day, 1900, false);
 
-        // The mandatory unit includes reaching the first stamped box through the clean
-        // prefix. An underfunded attempt cannot certify the empty human queue or the session.
+        // Completed prefix positions are behind the monotonic cursor and never rescanned.
+        // An underfunded open cannot certify the empty human queue or the session.
         _underfundedKeep();
         assertFalse(_humanComplete(), "the indexed consumer completed its empty read queue");
         assertEq(_pending(), 1, "failed attempt preserved the final stamped box");
@@ -213,7 +213,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         assertTrue(game.rngLocked());
         assertGt(mockVRF.lastRequestId(), oldRequest);
 
-        uint24 requestDay = game.currentDayView();
+        uint24 requestDay = stampDay; // the prepared logical day remains pinned across the delay
         uint256 delivered = mockVRF.lastRequestId();
         vm.warp(vm.getBlockTimestamp() + 1 days);
         mockVRF.fulfillRandomWords(delivered, SESSION_WORD);
@@ -227,7 +227,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         vm.recordLogs();
         for (uint256 i; i < 256 && _dailyIdx() < requestDay; ++i) game.mineFlip(0);
         assertEq(_dailyIdx(), requestDay, "delayed request applied and unlocked");
-        assertEq(RecyclingState.dailyWord(address(game), stampDay), 0, "gap processing retained only recent daily words");
+        assertEq(RecyclingState.dailyWord(address(game), stampDay), SESSION_WORD, "the delayed request retains its pinned day");
         _mineAll(64);
         assertEq(_pending(), 0, "request-day stamp survived the gap");
         // The same composed call may go on to prepare the next wall day's subscriptions, where

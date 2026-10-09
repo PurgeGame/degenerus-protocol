@@ -135,6 +135,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
         keeper = makeAddr("router_keeper");
         vm.deal(keeper, 100_000 ether);
         vm.deal(address(game), 1_000_000 ether);
+        _finishSubscriptionWindow();
     }
 
     /// @dev Settle the game to a clean state: drive mineFlip + deliver the mock VRF word until

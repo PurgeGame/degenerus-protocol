@@ -9,6 +9,28 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///         register wallets the way production does (`_registerWallet`) and to read queue,
 ///         bucket and whale-pass state by address. Bucket and queue lanes hold wallet IDs.
 abstract contract WalletSeed is DegenerusGameStorage {
+    /// @dev Synthetic fixture membership, using the production two-ended physical layout.
+    function _seedSubscriber(uint32 id, bool tickets) internal {
+        uint256 count = _subscribers.length;
+        uint256 position = tickets ? SUBSCRIBER_CAP - (count - _subBoxCount) : _subBoxCount++;
+        _setSubscriberAt(position, id);
+        _setSubscriberCount(count + 1);
+        _subOf[id].setPosition = uint32(position + 1);
+    }
+
+    function _clearSubscriberSet() internal {
+        uint256 count = _subscribers.length;
+        uint256 boxes = _subBoxCount;
+        for (uint256 i; i < count; ++i) {
+            uint256 position = i < boxes ? i : SUBSCRIBER_CAP - (i - boxes);
+            uint32 id = _subscriberAt(position);
+            _subOf[id].setPosition = 0;
+            _setSubscriberAt(position, 0);
+        }
+        _setSubscriberCount(0);
+        _subBoxCount = 0;
+    }
+
     /// @dev Test-only account-key decoder for stored wallet IDs.
     function _walletKey(uint32 id) internal view returns (address) {
         return address(uint160(_walletElement(id)));
