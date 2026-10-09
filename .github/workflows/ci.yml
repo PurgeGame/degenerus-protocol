@@ -16,7 +16,8 @@ on:
     - cron: '0 6 * * 1'
 
 concurrency:
-  group: ci-${{ github.ref }}
+  # A normal push must not cancel a long manual/scheduled audit campaign.
+  group: ci-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 env:
@@ -189,10 +190,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - uses: foundry-rs/foundry-toolchain@v1
         with:
           version: ${{ env.AUDIT_FOUNDRY_VERSION }}
       - run: npm ci
+      - name: Install Python Keccak reference dependency
+        run: python3 -m pip install safe-pysha3==1.0.5
       - name: Full configured Hardhat selection
         run: python3 scripts/test-hardhat-groups.py
       - name: Preserve Hardhat evidence, including failed batches
