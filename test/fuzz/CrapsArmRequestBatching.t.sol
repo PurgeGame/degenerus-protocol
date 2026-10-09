@@ -61,12 +61,16 @@ contract CrapsArmRequestBatchingTest is DeployProtocol {
     }
 
     function _mine(uint256 gasLimit) internal returns (bool armed, bool requested, uint256 used) {
+        return _mine(gasLimit, 0);
+    }
+
+    function _mine(uint256 gasLimit, uint32 calibration) internal returns (bool armed, bool requested, uint256 used) {
         uint64 slot = _slot(1);
         uint256 before = mockVRF.lastRequestId();
         vm.recordLogs();
         vm.prank(KEEPER);
         uint256 start = gasleft();
-        game.mineFlip{gas: gasLimit}(0);
+        game.mineFlip{gas: gasLimit}(calibration);
         used = start - gasleft();
         armed = _armedIn(vm.getRecordedLogs(), slot);
         requested = mockVRF.lastRequestId() != before;
@@ -83,13 +87,15 @@ contract CrapsArmRequestBatchingTest is DeployProtocol {
         assertFalse(game.rngComplete(), "the request opened a new read session");
     }
 
-    function test_LowGasKeepsTheArmAndANextCallRequests() public {
+    function test_MaximumCalibrationKeepsTheArmAndANextCallRequests() public {
         _seat(address(0xBEEF), 1);
         vm.warp(vm.getBlockTimestamp() + 5 hours + 10 minutes);
-        (bool armed, bool requested, uint256 used) = _mine(1_500_000);
+        // The arm is the mandatory first unit; maximum calibration scales the request's
+        // estimate past any supplied gas, so the request is deferred to the next call.
+        (bool armed, bool requested, uint256 used) = _mine(16_000_000, type(uint32).max);
         emit log_named_uint("arm_only_gas", used);
-        assertTrue(armed, "maintenance committed within the smaller budget");
-        assertFalse(requested, "the request did not fit the remaining gas");
+        assertTrue(armed, "maintenance committed as the first unit");
+        assertFalse(requested, "the request did not fit the calibrated estimate");
         assertEq(game.nextMinerAction(), 18, "the request is the next action");
         (armed, requested, used) = _mine(16_000_000);
         emit log_named_uint("request_only_gas", used);
