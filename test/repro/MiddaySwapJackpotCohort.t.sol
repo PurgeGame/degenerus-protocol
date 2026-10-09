@@ -824,8 +824,8 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
     ///      global ticket buffer toggled.
     function _middayRequest() internal returns (bool swapped) {
         // The miner sends its own mid-day request whenever one is eligible (a shut Craps window
-        // on the write buffer, or pending box value). Finish any session in flight with calls
-        // too small to admit a request (RNG_REQUEST 2.5M + engine reserves), so this explicit
+        // on the write buffer, or pending box value). Finish any session in flight with
+        // maximum calibration to defer continuations after first progress, so this explicit
         // request is the one that commits the cohort under test.
         _settleReadsWithoutRequest();
         vm.prank(buyer);
@@ -867,12 +867,12 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
             uint256 id = mockVRF.lastRequestId();
             (,, bool fulfilled) = mockVRF.pendingRequests(id);
             if (game.rngComplete() && (id == 0 || fulfilled)) return;
-            // Smallest admitting allowance; a consumer whose own bound exceeds the 2.7M rung is
-            // admitted at the next rung; the guard below proves no request composed after it.
+            // Escalate only for actual first-work cost. Maximum calibration defers the next
+            // request regardless of its bound; the guard below proves it did not compose.
             uint256[6] memory ladder = [uint256(2_700_000), 3_500_000, 4_500_000, 6_000_000, 9_000_000, 16_777_216];
             bool progressed;
             for (uint256 r; r < ladder.length && !progressed; ++r) {
-                (bool ok, bytes memory err) = address(game).call{gas: ladder[r]}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+                (bool ok, bytes memory err) = address(game).call{gas: ladder[r]}(abi.encodeWithSignature("mineFlip(uint32)", type(uint32).max));
                 if (ok) progressed = true;
                 else if (bytes4(err) == bytes4(keccak256("NoWork()"))) return;
                 else require(bytes4(err) == MineFlipGas.InsufficientExecutionGas.selector, "harness: reads settle");

@@ -135,6 +135,11 @@ interface IsDGNRS {
     ///      Game's balance and the game-over drain never subtracts it.
     function pendingRedemptionEthValue() external view returns (uint256);
 
+    /// @notice Open/settling batch IDs, settlement cursor and unpriced burned supply.
+    /// @dev Nonzero escrowedSupply means the next fresh request must budget a batch close.
+    function redemptionBatchState()
+        external view returns (uint32 openBatch, uint32 settlingBatch, uint32 cursor, uint256 escrowedSupply);
+
     /// @notice Close the open redemption batch: price it, take its FLIP escrow and reserve its MAX
     ///         payout. Game only, inside the transaction that sends the next live (daily or
     ///         mid-day) VRF request; the ending's request closes nothing.

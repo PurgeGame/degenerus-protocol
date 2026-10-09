@@ -85,15 +85,15 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         assertEq(_activeLootboxIndex(), idx ^ 1, "LR_INDEX advanced; box index idx is now finalized");
         _parkBoxFrontier(idx);
 
-        // PRE-WORD: word at idx is 0 -> the engine's human-box stage is not eligible. A 2M allowance
-        // cannot admit a fresh request, so this crank does its preparation work and stops. No open.
+        // PRE-WORD: word at idx is 0 -> the engine's human-box stage is not eligible. With
+        // doubled continuation bounds, 2M cannot admit the next daily request after preparation.
         assertEq(
             _injectedWord(idx),
             0,
             "pre-condition: box index word not yet landed (frozen window)"
         );
         vm.prank(cranker);
-        game.mineFlip{gas: 2_000_000}(0);
+        game.mineFlip{gas: 2_000_000}(20_000);
         assertGt(
             _boxUnsettled(idx, boxOwner),
             0,
@@ -517,13 +517,13 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
     }
 
     /// @dev Resolve queued bets through the permissionless crank. Degenerette resolution is the
-    ///      engine's Degenerette stage (mineFlip), not the box helper (60d31f775). A 2M allowance
-    ///      can never admit the next daily request (RNG_REQUEST plus tail), so the crank stops at
-    ///      the read cohort instead of committing a new day.
+    ///      engine's Degenerette stage (mineFlip), not the box helper (60d31f775). Doubled
+    ///      continuation bounds keep the next daily request beyond the 2M allowance, so the
+    ///      crank stops at the read cohort instead of committing a new day.
     function _crankBets(uint48 index, uint64 betId) internal {
         for (uint256 i; i < 8 && !_betProcessed(index, betId); ++i) {
             vm.prank(cranker);
-            game.mineFlip{gas: 2_000_000}(0);
+            game.mineFlip{gas: 2_000_000}(20_000);
         }
     }
 

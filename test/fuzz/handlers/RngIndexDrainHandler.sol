@@ -237,13 +237,13 @@ contract RngIndexDrainHandler is RngIndexDrainOracle {
         // The engine keeps admitting chunks while the allowance covers the next declared bound
         // (60d31f775): an unbounded call can drain a cohort and then seal the next request in
         // the same transaction. Offer the smallest of three allowances that admits the next
-        // chunk; 2M covers every ticket chunk of this campaign but never a request (RNG_REQUEST
-        // plus tail), so a ticket-materializing call keeps its committed index.
+        // chunk; 2M covers every ticket chunk of this campaign. Maximum calibration on that
+        // rung defers the next request after progress, retaining the materialized index.
         uint256[3] memory allowances = [uint256(2_000_000), 4_500_000, 9_000_000];
         bool ok;
         for (uint256 k; k < 3 && !ok; ++k) {
             vm.recordLogs();
-            try game.mineFlip{gas: allowances[k]}(0) {
+            try game.mineFlip{gas: allowances[k]}(k == 0 ? type(uint32).max : 0) {
                 ok = true;
             } catch (bytes memory err) {
                 // Reverted logs are not committed state and must not be scored.

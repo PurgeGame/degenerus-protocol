@@ -76,12 +76,12 @@ contract BinaryRngBuffersTest is DeployProtocol {
         vm.prank(buyer);
         game.placeDegeneretteBet{value: 0.005 ether}(0, 0, uint128(0.005 ether), 1, uint8(9));
     }
-    /// @dev Drain the delivered read session through the keeper. A 2M allowance can never admit
-    ///      a fresh request (RNG_REQUEST plus tail), so the keeper stops at completion and the
+    /// @dev Drain the delivered read session through the keeper. Maximum calibration prevents
+    ///      any continuation after first progress, so the keeper stops at completion and the
     ///      test, not the engine's own mid-day request for pending write-side value, decides
     ///      when the next session is sealed.
     function _drainSession() private {
-        for (uint256 i; i < 1024 && !game.rngComplete(); ++i) game.mineFlip{gas: 2_000_000}(0);
+        for (uint256 i; i < 1024 && !game.rngComplete(); ++i) game.mineFlip{gas: 2_000_000}(type(uint32).max);
     }
     /// @dev The buyer's mineFlip, with the read session complete, issues the mid-day request.
     function _request() private returns(uint256 id) {

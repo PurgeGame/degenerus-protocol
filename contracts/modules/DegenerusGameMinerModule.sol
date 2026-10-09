@@ -143,8 +143,16 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
                 } else {
                     callData = abi.encodeWithSelector(IDegenerusGameRngModule.requestMinerRng.selector);
                 }
-                // Request/boundary work is indivisible; leave it for the next call if needed.
-                if (!MineFlipGas.canRun(meter, GasBounds.RNG_REQUEST, RETURN_RESERVE + WORKER_BOUNDARY)) break;
+                uint256 requestMax = action == MinerAction.RequestDaily
+                    ? GasBounds.RNG_DAILY_REQUEST : GasBounds.RNG_MIDDAY_REQUEST;
+                // Batch pricing, backing settlement and ETH/stETH funding stay atomic with
+                // the commitment. Only a nonempty open batch pays their rare admission cost.
+                // The first mandatory action bypasses estimates, including this sizing read.
+                if (moved) {
+                    (,,, uint256 escrowed) = IsDGNRS(ContractAddresses.SDGNRS).redemptionBatchState();
+                    if (escrowed != 0) requestMax += GasBounds.RNG_REDEMPTION_CLOSE;
+                }
+                if (!MineFlipGas.canRun(meter, requestMax, RETURN_RESERVE + WORKER_BOUNDARY)) break;
             } else {
                 basicResult = true;
                 if (action == MinerAction.Tickets) {

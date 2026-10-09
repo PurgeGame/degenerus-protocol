@@ -470,11 +470,11 @@ contract DeadVrfEndingTest is DeployProtocol {
     }
 
     /// @dev A sealed daily day can leave its box/bet cohort pending under serialization. Finish it
-    ///      with calls too small to admit a request (RNG_REQUEST plus the engine reserves), then
+    ///      with maximum calibration to defer continuations after first progress, then
     ///      `caller`'s mineFlip issues the mid-day request, the engine's last stage.
     function _mineMiddayRequest(address caller) private returns (uint256 id) {
         uint48 read = RecyclingState.readBuffer(address(game));
-        for (uint256 i; i < 50 && !game.boxIndexComplete(read); ++i) game.mineFlip{gas: 2_000_000}(0);
+        for (uint256 i; i < 50 && !game.boxIndexComplete(read); ++i) game.mineFlip{gas: 2_000_000}(type(uint32).max);
         assertTrue(game.boxIndexComplete(read), "the test's prior delivered read cohort must finish");
         uint256 before = mockVRF.lastRequestId();
         vm.prank(caller);

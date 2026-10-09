@@ -111,6 +111,8 @@ contract MinerDispatchRegressionTest is Test {
         vm.etch(ContractAddresses.GAME_AFKING_MODULE, address(new DispatchAfkingWorker()).code);
         vm.etch(ContractAddresses.GAME_RNG_MODULE, address(new DispatchRequestWorker()).code);
         vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
+        vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionBatchState()"),
+            abi.encode(uint32(1), uint32(0), uint32(0), uint256(0)));
         vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("minerMaintenancePending()"), abi.encode(false));
     }
 

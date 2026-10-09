@@ -291,7 +291,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
                             && _terminalDrainBatch(drainLevel, meter, work)
                     ) return (true, STAGE_TICKETS_WORKING, false);
                 }
-                if (!MineFlipGas.canRun(meter, GasBounds.RNG_REQUEST + 100_000, GasBounds.TERMINAL_TAIL)) {
+                if (!MineFlipGas.canRun(meter, GasBounds.RNG_TERMINAL_REQUEST + 100_000, GasBounds.TERMINAL_TAIL)) {
                     return (true, STAGE_GAMEOVER, false);
                 }
                 if (
@@ -338,7 +338,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     ///      the refusal.
     function _requestTerminalRng(uint24 day, MineFlipGas.Meter memory meter, TerminalWork memory work) private returns (bool requested) {
         if (_lrRead(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK) == 0 || _rngRequestActive()) revert E();
-        if (!MineFlipGas.canRun(meter, GasBounds.RNG_REQUEST, GasBounds.TERMINAL_TAIL)) return false;
+        if (!MineFlipGas.canRun(meter, GasBounds.RNG_TERMINAL_REQUEST, GasBounds.TERMINAL_TAIL)) return false;
         if (rngRequestDay == 0) {
             rngRequestDay = day > dailyIdx ? day : dailyIdx + 1;
             rngRequestTime = uint48(block.timestamp);

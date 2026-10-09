@@ -16,7 +16,22 @@ library MineFlipGasBounds {
     uint256 internal constant DAILY_GAP = 600_000;
     // Cold century day with a 365-day vault coinflip history: 3.23M measured.
     uint256 internal constant DAILY_APPLY = 3_900_000;
-    uint256 internal constant RNG_REQUEST = 2_500_000;
+    // Fresh-request calibration: test/gas/MineFlipRequestGas.t.sol, cold gross execution.
+    // Pinned Chainlink VRFCoordinatorV2_5 request: 41.5k; request witnesses impose a 125k
+    // coordinator execution floor. Admin's dedicated subscription has one consumer (Game).
+    // Midday max (credit + activation + populated box/bet counts): 306.8k, +30% margin.
+    uint256 internal constant RNG_MIDDAY_REQUEST = 400_000;
+    // Daily transition, affiliate reward, 20 charity vote reads/17 edits, quest, paid battle,
+    // ticket/foil/pool freezes: 902.2k; retain 1.5M (~66% margin) for this rarer path.
+    // Post-fulfillment daily work is separate.
+    uint256 internal constant RNG_DAILY_REQUEST = 1_500_000;
+    // Add only for a nonempty open batch. Cold close + mixed ETH/stETH pull: 190.4k,
+    // +58%, including proxy and 10k balance/40k transfer stETH surcharges. sDGNRS is
+    // already coinflip-settled by every daily/gap payout; neither backing call walks
+    // historical days at a legal request boundary. These bounds exclude engine tails.
+    uint256 internal constant RNG_REDEMPTION_CLOSE = 300_000;
+    // Retain the ending's existing allowance; it never closes a redemption batch.
+    uint256 internal constant RNG_TERMINAL_REQUEST = 2_500_000;
     // Century close: 32 deity renewals, stETH stake, unlock, recycle and seed arming.
     // Cold: 3.20M measured, empty sDGNRS pools.
     uint256 internal constant TRANSITION_CLOSE = 3_850_000;
