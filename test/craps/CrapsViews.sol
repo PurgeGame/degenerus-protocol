@@ -678,7 +678,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
     ///      than a way around it.
     function resolveSeats(uint64 slot, uint64 n) external {
         for (uint64 i = 0; i < n; ++i) {
-            _resolveSlotRange(slot, MineFlipGas.available(), 1);
+            _resolveSlotRange(slot, gasleft(), 1);
         }
     }
 
@@ -691,7 +691,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
     }
 
     function settleSlot(uint64 slot, uint64) external {
-        _settleField(slot, MineFlipGas.available());
+        _settleField(slot, gasleft());
     }
 
     function _settleField(uint64 slot, uint256 allowance) private returns (MineFlipGas.Result memory result) {

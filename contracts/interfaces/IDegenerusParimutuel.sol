@@ -61,17 +61,4 @@ interface IDegenerusParimutuel {
     ///         when nothing is left to pay.
     /// @custom:reverts OnlyGame If caller is not GAME.
     function recordGrowth(uint24 round, bool over) external returns (bool settlementPending);
-
-    /// @notice Pay up to `maxWinners` winners of the sealed, unsettled growth rounds, oldest
-    ///         round first, from the settlement cursor (round and array position in one word).
-    /// @dev GAME-only counted settlement helper. Mining uses runGrowthWork instead. Walks only
-    ///      the winning side's wallet-ID array (losers are never read) and credits each winner
-    ///      the round's uniform payout `STAKE * total / winCount` through one
-    ///      `creditFlipBatch(ids, amounts)` per call (Parimutuel is a flip creditor). The work is
-    ///      a pure function of state and `maxWinners` (no `gasleft`). Revert-free for any
-    ///      committed state; an empty winning side settles nothing.
-    /// @param maxWinners Fixed per-call operation bound.
-    /// @return done True when every sealed round's winners are paid (Game clears its bit).
-    /// @custom:reverts OnlyGame If caller is not GAME.
-    function settleGrowth(uint256 maxWinners) external returns (bool done);
 }

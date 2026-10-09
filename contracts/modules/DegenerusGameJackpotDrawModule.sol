@@ -163,7 +163,6 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
             if (complete) result.done = true;
             else {
                 uint256 childAllowance = MineFlipGas.child(meter, 100_000);
-                if (childAllowance == 0) return result;
                 result = IJackpotBattleMeter(ContractAddresses.CRAPS).runDailyBattleWork(childAllowance);
             }
             if (result.done) {

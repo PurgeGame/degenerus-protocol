@@ -124,7 +124,6 @@ contract JackpotBattle is CrapsBattleStorage {
 
     function _keepRngCohort(uint48 index, uint256 allowance) private returns (MineFlipGas.Result memory result) {
         if (index > 1) revert BadJackpotField();
-        if (allowance == 0) return result;
         MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
         uint64[] storage slots = _rngSlots[index];
         uint64 pos = _rngSlotCursor[index];
@@ -959,7 +958,6 @@ contract JackpotBattle is CrapsBattleStorage {
     }
 
     function _keepScheduled(uint256 allowance) private returns (MineFlipGas.Result memory result) {
-        if (allowance == 0) return result;
         MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
         uint8 stage = _readCrapsStage();
         uint48 read = _writeBuffer() ^ 1;
@@ -1096,7 +1094,6 @@ contract JackpotBattle is CrapsBattleStorage {
     }
 
     function _runDailyBattleWork(uint256 allowance) private returns (MineFlipGas.Result memory result) {
-        if (allowance == 0) return result;
         MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
         uint64 slot = _activeJackpotSlot;
         if (_scheduledExpired(slot)) { result.done = true; return result; }

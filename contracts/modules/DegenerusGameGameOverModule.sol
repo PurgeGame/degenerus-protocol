@@ -430,7 +430,6 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     /// @return ran True if a batch ran, finished or not.
     function _terminalDrainBatch(uint24 drainLevel, MineFlipGas.Meter memory meter, TerminalWork memory work) private returns (bool ran) {
         uint256 allowance = MineFlipGas.child(meter, 100_000);
-        if (allowance == 0) return true;
         (bool ok, bytes memory data) = ContractAddresses.GAME_TICKET_MODULE.delegatecall(
             abi.encodeWithSelector(IDegenerusGameTicketModule.runTicketWork.selector,
                 drainLevel | TICKET_SLOT_BIT, allowance)
@@ -617,7 +616,6 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
 
     function _resumeTerminalPayout(uint24 day, MineFlipGas.Meter memory meter, TerminalWork memory work) private returns (bool done) {
         uint256 allowance = MineFlipGas.child(meter, 100_000);
-        if (allowance == 0) return false;
         (MineFlipGas.Result memory result,) = IDegenerusGame(address(this)).runTerminalJackpotWork(
             jackpotWork.budget, jackpotWork.lvl, _lootboxWord(_rngReadBuffer()), allowance
         );

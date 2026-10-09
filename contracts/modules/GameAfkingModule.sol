@@ -339,10 +339,10 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         if (useTickets && exemptSub) revert E();
 
         // An external funding source (an ID other than 0 and the subscriber's own) must be
-        // allocated and must consent: the same main wallet as the subscriber (equal payees)
-        // consents implicitly, any other source must have approved the subscriber's key as an
-        // operator. Prepaid draws retain this consent; stETH pulls from the source's payee
-        // re-check it live.
+        // allocated and must consent: the subscriber's own family (same main ID) consents
+        // implicitly, any other source must have granted the subscriber a funding approval
+        // (setAfkingFundingApproval). Prepaid draws retain this consent; stETH pulls from the
+        // source's payee re-check it live.
         uint32 fundId = subId;
         if (fundingSourceId != 0 && fundingSourceId != subId) {
             _requireAllocated(fundingSourceId);
@@ -598,9 +598,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      A refused token top-up uses the ordinary insufficient-funding policy.
     ///      Empty/OOG and known metering failures still propagate, so caller starvation
     ///      cannot expire a funded subscription.
-    /// @param subscriber The sub's set element: its key (bits 0..159) and wallet ID (160..191).
-    /// @param funding The funding account in the same layout; equal to `subscriber` when
-    ///        self-funded.
+    /// @param subscriber The subscriber's wallet ID.
+    /// @param funding The funding account's wallet ID; equal to `subscriber` when self-funded.
     function _tryFundAfkingSteth(
         uint32 subscriber,
         uint32 funding,
@@ -624,12 +623,10 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      owner for a smurf account) — and whether the pull may run. Protocol custody is not a
     ///      wallet funding allowance: sDGNRS preapproves GAME for redemptions whose stETH backing
     ///      must remain segregated, so neither protocol sink is ever pulled. An external source
-    ///      must still consent live: the same main wallet as the subscriber (equal payees), or
-    ///      an operator approval of the subscriber's key. A self-funded sub reads only its own
-    ///      element; the subscriber's payee is read only for an external source that is not
-    ///      the subscriber's own key. Never reverts.
-    /// @param subscriber The sub's set element (key | ID << 160).
-    /// @param funding The funding account's element in the same layout.
+    ///      must still consent live: the subscriber's own family (same main ID), or a funding
+    ///      approval for the subscriber. Never reverts.
+    /// @param subscriber The subscriber's wallet ID.
+    /// @param funding The funding account's wallet ID.
     function _stethSource(uint32 subscriber, uint32 funding)
         private view returns (address source, bool allowed)
     {
@@ -1101,8 +1098,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      the run's streak hands back intact and the manual decay owns it from `currentDay`
     ///      forward. `quests.finalizeAfking` also folds in any manual completion day and is
     ///      idempotent (a no-op if the player is not currently afking). Clears the
-    ///      Sub's afking framing. The cross-contract read+write is the heavier (EVICT_WEIGHT)
-    ///      STAGE branch.
+    ///      Sub's afking framing.
     /// @param id The wallet ID of the subscriber whose run is ending.
     /// @param sub The subscriber's record (storage ref — afking framing cleared here).
     /// @param currentDay The current day (the decay reference passed to DegenerusQuests).
@@ -1129,7 +1125,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     function _cancelAcquiredSubscription(uint32 id) private {
         Sub storage sub = _subOf[id];
         if (sub.setPosition == 0 || sub.dailyQuantity == 0) return;
-        // Same forfeiture as an expired run: claim pending accrual before liquidation.
+        // Close the run like an expired one: settle its AFKing streak into Quests.
         _finalizeAfking(id, sub, _simulatedDayIndex());
         // Leave its paid box stamp reachable by the ordinary open worker.
         sub.dailyQuantity = 0;

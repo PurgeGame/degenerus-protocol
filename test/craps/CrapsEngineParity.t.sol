@@ -47,19 +47,14 @@ contract CrapsEngineParity is Test {
     }
 
     /// forge-config: default.fuzz.runs = 64
-    function testFuzz_directAndRankedRunsUseSharedRollCeiling(bytes32 seed, bool latched) public {
+    function testFuzz_directRunUsesSharedRollCeiling(bytes32 seed, bool latched) public {
         CrapsEngine e = new CrapsEngine();
         uint256 goal = latched ? 5e39 : 5e40;
         // Enough capital to force a bound, with a full board and no survival or scatter ambiguity.
         uint256 chips = 3 | (3 << 9) | (3 << 12) | (1 << 15);
         Craps.SlipResult memory direct = e.settleSlip(chips, 1, 0, 0, seed, 1e40, goal, 1, 0);
-        Craps.SlipResult memory ranked = e.settleRanked(chips, 1, 0, 0, seed, 1e40, goal, 1, 0);
         assertGe(direct.totalRolls, 600, "stopped before the shared budget");
         assertLe(direct.totalRolls, 1_111, "passed the shared ceiling");
-        assertEq(ranked.totalRolls, direct.totalRolls, "ranked entry used different bounds");
-        assertEq(ranked.handsPlayed, direct.handsPlayed);
-        assertEq(ranked.bankrollOut, direct.bankrollOut);
-        assertEq(uint8(ranked.stop), uint8(direct.stop));
         assertEq(uint8(direct.stop), uint8(latched ? Craps.SlipStop.Goal : Craps.SlipStop.Bust));
         if (latched) assertGe(direct.bankrollOut, goal, "latched goal lost its reserve");
     }

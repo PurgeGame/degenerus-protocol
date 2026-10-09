@@ -19,16 +19,13 @@ REVIEWED = {
         "let ok := delegatecall(gas(), target, 0, calldatasize(), 0, 0)"],
     ("DegenerusGame.sol", "minerAction"): [
         "let ok := delegatecall(gas(), target, ptr, calldatasize(), 0, 0)"],
-    ("libraries/MineFlipGas.sol", "available"): ["return gasleft();"],
     ("libraries/MineFlipGas.sol", "start"): [
         "uint256 entry = gasleft();"],
     ("libraries/MineFlipGas.sol", "remaining"): ["uint256 current = gasleft();"],
-    ("libraries/MineFlipGas.sol", "finish"): ["if (gasleft() < meter.floor) revert WorkGasBound();"],
-    ("libraries/MineFlipGas.sol", "spent"): ["return consumed(meter.start, gasleft());"],
-    ("libraries/MineFlipGas.sol", "canRunAfterFirst"): ["return gasleft() >= required;"],
-    ("libraries/MineFlipGas.sol", "forwardable"): ["uint256 available = gasleft();"],
-    ("libraries/MineFlipGas.sol", "requireStipend"): [
-        "if (gasleft() < stipend + stipend / 63 + 2 * CALL_RESERVE) revert InsufficientExecutionGas();"],
+    ("libraries/MineFlipGas.sol", "finish"): ["if (meter.bounded && gasleft() < meter.floor) revert WorkGasBound();"],
+    ("libraries/MineFlipGas.sol", "canRunAfterFirst"): [
+        "if (required > remaining(meter) || gasleft() < required) return false;"],
+    ("libraries/MineFlipGas.sol", "forwardable"): ["if (meter.mustProgress) return gasleft();"],
     ("modules/DegenerusGameMinerModule.sol", "mineFlip"): [
         "uint256 rewardStart = gasleft();",
         "MineFlipGas.Meter memory meter = MineFlipGas.start(MineFlipGas.budget(gasleft(), gasMultiplierBps, true));",

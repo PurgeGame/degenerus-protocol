@@ -4,9 +4,9 @@
 
 Selling a main account transfers its existing children without rewriting their tickets or records. A child sold separately retains its buyer when its former parent is later sold. Printed tickets and children contribute nothing to the quote. The selected account's eligible unprinted far-future holdings determine the price: the legacy cash value plus 25% of its nominal replacement-ticket value. No replacement tickets or FLIP are issued as the acquisition price.
 
-The seller receives only the quoted price in native ETH. Claimable ETH, unspent own AFKing funding and unclaimed rewards stay with the sold ID, including when selling a main account. Withdraw or claim first to keep them. `minEthOut` protects the price. External funders retain their own money. The entire sale, including the sDGNRS forfeiture, reverts if native payment fails.
+The seller receives only the quoted price, in ETH with stETH covering any shortfall in the Game's ETH balance. Claimable ETH, unspent own AFKing funding and unclaimed rewards stay with the sold ID, including when selling a main account. Withdraw or claim first to keep them. `minEthOut` protects the price. External funders retain their own money. The entire sale, including the sDGNRS forfeiture, reverts if payment fails.
 
-**Liquidation destroys the seller wallet’s entire remaining native sDGNRS balance for no payout**, including dust. This creates no redemption claim or new ID association. Redeem before selling to obtain redemption value; already-submitted claims remain attached to their existing account and transfer with it. Wrapped DGNRS is outside this native-balance forfeiture. This rule also applies when selling a standalone child.
+**Selling a main account destroys the seller wallet’s entire remaining native sDGNRS balance for no payout**, including dust. This creates no redemption claim or new ID association. Redeem before selling to obtain redemption value; already-submitted claims remain attached to their existing account and transfer with it. Wrapped DGNRS is outside this native-balance forfeiture. Selling a standalone child burns no sDGNRS: a child holds none (its awards land at the owner), so the owner's balance is untouched.
 
 Coinflip wagers transfer unchanged. Existing auto-rebuy continues until collection, so its carry can win or lose during that interval. `Coinflip.claimAcquiredCoinflips(id)` runs ordinary bounded settlement, pays the buyer, and banks carry/disables auto-rebuy once caught up and unfrozen. There is no sale-day cutoff or special preview arithmetic.
 
@@ -14,7 +14,7 @@ The normal AFKing worker cancels acquired subscriptions before another purchase 
 
 ## Integration
 
-- `previewLiquidateAccount(id)` returns account/buyer IDs, eligibility, native liquidity, face value, legacy budget, nominal ticket value, and price. Use `eth_call`: the Game dispatcher is not marked `view`. Eligibility and funding are rechecked at execution.
+- `previewLiquidateAccount(id)` returns account/buyer IDs, eligibility, face value, legacy budget, nominal ticket value, and price. Use `eth_call`: the Game dispatcher is not marked `view`. Eligibility and funding are rechecked at execution.
 - `walletIdOf(address)` returns the current default gameplay ID. A main sale clears it; later gameplay can register a replacement.
 - `walletIdentityOf(address)` returns the permanent identity used for governance and original address-derived affiliate links. A sale does not reset it.
 - `resolveAccount(id, caller)` resolves current payee and authorization. Raw wallet-table keys are historical metadata on acquired roots, not spending authority. `Lens.walletOfId` returns the current payee.

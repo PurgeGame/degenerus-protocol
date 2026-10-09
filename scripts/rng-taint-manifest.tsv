@@ -28,7 +28,7 @@ EXEMPT-ADVANCE	PARAM	rngWord	processCoinflipPayouts	Coinflip.sol	onlyDegenerusGa
 PURE-DERIVE	PARAM	seed	_playerDraw	Craps.sol	private pure four-word keccak used by _survived; no storage, no actor input
 PURE-DERIVE	PARAM	seed	_runSettlement	Craps.sol	private pure hand machine over the committed seed; the board is the frozen, scattered slip
 PURE-DERIVE	PARAM	seed	_runSideSettlement	Craps.sol	private pure place/hardway specialization of _runSettlement over the same committed seed
-PURE-DERIVE	PARAM	word	_scatterInto	Craps.sol	internal pure: throws the unplaced chips at legs keccak(word, i) % 10; word is hash2(settling word, owner), owner = the paid entry's committed wallet ID (bet word bits 0-31) or the awarded entry's synthetic salt, passed to CrapsEngine.settleRanked by the table
+PURE-DERIVE	PARAM	word	_scatterInto	Craps.sol	internal pure: throws the unplaced chips at legs keccak(word, i) % 10; word is hash2(settling word, owner), owner = the paid entry's committed wallet ID (bet word bits 0-31) or the awarded entry's synthetic salt, passed to CrapsEngine.settleBattle by the table
 PURE-DERIVE	PARAM	seed	_settleSlip	Craps.sol	internal pure engine; seed = hash3(_CRAPS_SEED_DOMAIN, word, slot) from the caller; board, owner and boost row fixed at entry close, before the slot's index word existed
 PURE-DERIVE	PARAM	seed	_survived	Craps.sol	internal pure second-chance coin keccak(tag, seed, round, salt); salt = the owner's wallet ID or a synthetic entry's 160-bit salt, fixed before the word; seed the table's
 PURE-DERIVE	PARAM	seed	handSeed	Craps.sol	internal pure keccak(seed, hand i); no actor input
@@ -48,10 +48,9 @@ PURE-DERIVE	PARAM	word	_tieBreak	CrapsBattle.sol	private pure hash2(word, challe
 PURE-DERIVE	ARG	CrapsPriceLib.tier	_tierPick	CrapsBattle.sol	Pure shared tier decoder of _bonusRoll(word,period); bookends use the same fixed period, and entry terms and allocation weights use the same tier
 PURE-DERIVE	PARAM	word	_tierPick	CrapsBattle.sol	internal pure size tier from _bonusRoll(word, period); bit-identical to _bonusPreset's draw
 PURE-DERIVE	PARAM	word	_windowTermsOn	CrapsBattle.sol	private pure: window preset from _bonusRoll(word, period) and highMult from _highMultOf(word); published terms, no actor input
-PURE-DERIVE	PARAM	seed	_play	CrapsEngine.sol	private pure body shared by settleSlip and settleRanked: board, scatter and _settleSlip over the caller's seed; no storage, no actor input
+PURE-DERIVE	PARAM	seed	_play	CrapsEngine.sol	private pure body shared by settleSlip and settleBattle: board, scatter and _settleSlip over the caller's seed; no storage, no actor input
 PURE-DERIVE	ARG	FlipRoundLib.roundFlipToHundreds	settleBattle	CrapsEngine.sol	EV-preserving rounding on hash2(word, betId ^ FLIP_ROUND_TAG); per-bet key so batching cannot choose the split; pure
 PURE-DERIVE	PARAM	word	settleBattle	CrapsEngine.sol	pure full-cap engine; frozen header, board, field and slot; awarded header domain separates dice/scatter from paid run; per-id rounding is independent of batching
-PURE-DERIVE	PARAM	seed	settleRanked	CrapsEngine.sol	external pure engine door the table STATICCALLs from _settlementOf: the run with merit composite (_rankOf) in the fifth word; seed and scatter come from the committed word; no storage or actor input
 PURE-DERIVE	PARAM	seed	settleSlip	CrapsEngine.sol	external pure compatibility and parity entry point, not called by the table; callers supply the seed and scatter hash; no storage or actor-controlled table settlement
 PURE-DERIVE	PARAM	seed	settleSlipBounded	CrapsEngine.sol	external pure engine door the Decimator module STATICCALLs from _run: goal-free run under the caller's shooter cap and roll budget (clamped to the engine limits); seed and scatter derive from the sealed round word; no storage or actor input
 PURE-DERIVE	ARG	EntropyLib.hash2	sampleFarFutureTickets	DegenerusGame.sol	Mix the committed entropy and filled candidate count for another level when fewer than four slots have been filled.

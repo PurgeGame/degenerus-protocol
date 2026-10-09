@@ -664,10 +664,10 @@ contract Coinflip {
     /// @notice Consume `amount` of `player`'s coinflip-resident backing for auto-decimator (FLIP only).
     /// @dev Settle-then-drain waterfall matching the redemption desk's withdrawRedeemedFlip: settled
     ///      claimable FIRST (no mint — removes a future mint of the consumed slice), then the rolling
-    ///      auto-rebuy carry. For the vault FLIP first drains the virtual allowance (its held leg);
-    ///      sDGNRS has no wallet leg, so this covers its entire backing (claimable + carry). Reaching
-    ///      the carry is freeze-safe because the automatic sDGNRS decimator entry requires today's flip to be settled before calling here.
-    /// @param player The backing owner (sDGNRS or the vault).
+    ///      auto-rebuy carry. sDGNRS has no wallet leg, so this covers its entire backing (claimable +
+    ///      carry). Reaching the carry is freeze-safe because the automatic sDGNRS decimator entry
+    ///      requires today's flip to be settled before calling here.
+    /// @param player The backing owner (sDGNRS, the automatic decimator's only caller).
     /// @param amount Maximum FLIP (whole tokens) to consume from claimable + carry.
     /// @return consumed Actual amount removed (claimable consumed + carry decremented).
     function consumeFlipBacking(

@@ -11,7 +11,6 @@ import {IDegenerusParimutuel} from "../../contracts/interfaces/IDegenerusParimut
 import {Coinflip} from "../../contracts/Coinflip.sol";
 import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
-import {MineFlipGasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {DegenerusGameMinerModule} from "../../contracts/modules/DegenerusGameMinerModule.sol";
@@ -194,9 +193,22 @@ contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
         return pari.recordGrowth(round, over);
     }
 
-    function _settle(uint256 maxWinners) private returns (bool) {
+    /// @dev One settlement call with a tagged, first-unit-progress budget. A tiny `allowance`
+    ///      pays exactly one unit (one winner run of a single winner, or one round step); a large
+    ///      one drains everything the budget admits.
+    function _work(uint256 allowance) private returns (MineFlipGas.Result memory r) {
         vm.prank(ContractAddresses.GAME);
-        return pari.settleGrowth(maxWinners);
+        r = pari.runGrowthWork{gas: 9_000_000}(MineFlipGas.budget(allowance, 10_000, true));
+    }
+
+    /// @dev Exactly one unit: a single winner, or a single round step.
+    function _unit() private returns (MineFlipGas.Result memory) {
+        return _work(1);
+    }
+
+    /// @dev One call with an allowance far above any fixture here; reports `done`.
+    function _settleAll() private returns (bool) {
+        return _work(8_500_000).done;
     }
 
     function _stake(uint32 id) private view returns (uint256) {
@@ -223,10 +235,10 @@ contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
         payout = nWin == 0 ? 0 : (STAKE * (nWin + nLose)) / nWin;
     }
 
-    function test_GasAwareGrowthMatchesCountedSettlementAtAllMultipliers() public {
+    function test_GasAwareGrowthMatchesFullSettlementAtAllMultipliers() public {
         _round(1, 10, 123, 17, true);
         uint256 snap = vm.snapshotState();
-        while (!_settle(100)) {}
+        while (!_settleAll()) {}
         bytes32 expected;
         for (uint32 id = 10; id < 150; ++id) expected = keccak256(abi.encode(expected, _stake(id)));
         uint32[4] memory factors = [uint32(10_000), 15_000, 50_000, type(uint32).max];
@@ -310,11 +322,18 @@ contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
         assertEq(_sideWord(1, OVER, 0) >> 224, 107, "position 7 is the top lane of word 0");
     }
 
-    function _settleStopAt(uint256 chunk, uint256 end) private {
-        assertFalse(_settle(chunk), "a chunk that spends its budget on winners is not done");
-        (uint24 r, uint256 paid) = _cursor();
-        assertEq(r, 1);
-        assertEq(paid, end, "cursor stops exactly on the boundary");
+    /// @dev One unit pays the single winner at `index`: the cursor advances by one, that winner's
+    ///      lane is credited, and the next position is not yet.
+    function _payOneAt(uint24 round, uint32 firstId, uint256 index) private {
+        MineFlipGas.Result memory r = _unit();
+        assertTrue(r.progressed, "a first unit always runs");
+        assertFalse(r.done, "the last winner leaves the step for the next call");
+        assertEq(r.rewardBasis, 1, "one winner per unit");
+        (uint24 cr, uint256 paid) = _cursor();
+        assertEq(cr, round);
+        assertEq(paid, index + 1, "cursor advances by exactly one position");
+        assertEq(_stake(firstId + uint32(index)), 2_000, "the paid position is credited");
+        if (index + 1 < 17) assertEq(_stake(firstId + uint32(index) + 1), 0, "the next position waits");
     }
 
     function _checkRun(PaidRun memory run, uint8 outcome, uint256 firstIndex, uint256 count) private pure {
@@ -324,30 +343,26 @@ contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
         assertEq(run.payout, 2_000);
     }
 
-    /// @dev Round 1, OVER: chunks of 7, 1, 7, 1, 1 end on positions 7, 8, 15, 16, 17.
+    /// @dev Round 1, OVER: one winner per call across the 7/8 and 15/16 word boundaries.
     function _settleOverOnBoundaries() private {
         vm.recordLogs();
-        _settleStopAt(7, 7);
-        _settleStopAt(1, 8);
-        _settleStopAt(7, 15);
-        _settleStopAt(1, 16);
-        _settleStopAt(1, 17);
+        for (uint256 i; i < 17; ++i) _payOneAt(1, 100, i);
         PaidRun[] memory runs = _paidRuns(vm.getRecordedLogs());
-        assertEq(runs.length, 5);
-        _checkRun(runs[0], OVER, 0, 7);
-        _checkRun(runs[1], OVER, 7, 1);
-        _checkRun(runs[2], OVER, 8, 7);
-        _checkRun(runs[3], OVER, 15, 1);
-        _checkRun(runs[4], OVER, 16, 1);
-        assertFalse(_settle(1), "a lone step spends the budget");
-        assertTrue(_settle(1), "every sealed round paid");
+        assertEq(runs.length, 17);
+        for (uint256 i; i < 17; ++i) _checkRun(runs[i], OVER, i, 1);
+        MineFlipGas.Result memory step = _unit();
+        assertTrue(step.progressed, "a lone step is a unit");
+        assertEq(step.rewardBasis, 0);
+        assertTrue(step.done, "the step reaches the unsealed round");
+        assertTrue(_settleAll(), "every sealed round paid");
         for (uint32 i; i < 17; ++i) {
             assertEq(_stake(100 + i), 2_000, "each OVER winner credited once");
             assertEq(_stake(200 + i), 0, "UNDER losers never credited");
         }
     }
 
-    /// @dev Round 2, UNDER: chunks of 8, 7, 4 end on positions 8, 15, then pay 15..16 and finish.
+    /// @dev Round 2, UNDER: a call that admits many winners crosses the word boundaries inside
+    ///      one run; the credited set is exactly the winners.
     function _settleUnderOnBoundaries() private {
         _open(2);
         for (uint32 i; i < 17; ++i) {
@@ -356,18 +371,23 @@ contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
         }
         assertTrue(_seal(2, false));
         vm.recordLogs();
-        assertFalse(_settle(8));
-        assertFalse(_settle(7));
-        assertTrue(_settle(4), "two winners, a step, then the unsealed round");
+        assertTrue(_settleAll(), "all winners, the step, then the unsealed round");
         PaidRun[] memory runs = _paidRuns(vm.getRecordedLogs());
-        assertEq(runs.length, 3);
-        _checkRun(runs[0], UNDER, 0, 8);
-        _checkRun(runs[1], UNDER, 8, 7);
-        _checkRun(runs[2], UNDER, 15, 2);
+        uint256 total;
+        for (uint256 i; i < runs.length; ++i) {
+            assertEq(runs[i].outcome, UNDER);
+            assertEq(runs[i].firstIndex, total, "runs are contiguous");
+            assertEq(runs[i].payout, 2_000);
+            total += runs[i].count;
+        }
+        assertEq(total, 17, "every position paid once");
         for (uint32 i; i < 17; ++i) {
             assertEq(_stake(300 + i), 2_000, "each UNDER winner credited once");
             assertEq(_stake(400 + i), 0, "OVER losers never credited");
         }
+        (uint24 r, uint256 paid) = _cursor();
+        assertEq(r, 3);
+        assertEq(paid, 0);
     }
 
     /// lastBetRounds packs eight wallets per word keyed id >> 3: IDs 7 and 8 live in different
@@ -414,40 +434,36 @@ contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
 
     // ---------------------------------------------------------------- settlement chunks
 
-    /// The Game's fixed chunk is GROWTH_SETTLE_WINNERS (100). 99 winners settle and report done
-    /// in one call; exactly 100 fill the budget, so the next call only steps and reports done;
-    /// 101 leave one winner for the second call. Every winner is credited once at
+    /// One call drains a round of 98..101 winners; every winner is credited once at
     /// STAKE * total / winCount, losers never, and the burned dust is below winCount.
-    function test_ChunkBoundaries99_100_101() public {
-        assertEq(MineFlipGasBounds.GROWTH_SETTLE_WINNERS, 100);
-        _checkChunkBoundary(1, 1_000, 98);
-        _checkChunkBoundary(2, 2_000, 99);
-        _checkChunkBoundary(3, 3_000, 100);
-        _checkChunkBoundary(4, 4_000, 101);
+    function test_BatchBufferBoundaries98_99() public {
+        _checkBatchBoundary(1, 1_000, 98, 0);
+        _checkBatchBoundary(2, 2_000, 99, 0);
     }
 
-    /// @dev A round's winners and its step share the chunk budget, and `done` needs one unit
-    ///      left to read the unsealed next round: n <= 98 settles and reports done in one call;
-    ///      99 pays everyone and steps, 100 pays everyone and stops on the boundary, 101 leaves
-    ///      one winner; each of those reports done on its second call.
-    function _checkChunkBoundary(uint24 round, uint32 firstId, uint256 n) private {
-        uint256 chunk = MineFlipGasBounds.GROWTH_SETTLE_WINNERS;
+    /// The batch buffer holds 100: exactly 100 winners flush through one creditFlipBatch.
+    function test_BatchBuffer100FlushesOnce() public {
+        _checkBatchBoundary(1, 3_000, 100, 1);
+    }
+
+    /// 101 winners: a full buffer flushes mid-loop and the straggler flushes at the end.
+    function test_BatchBuffer101FlushesTwice() public {
+        _checkBatchBoundary(1, 4_000, 101, 2);
+    }
+
+    function _checkBatchBoundary(uint24 round, uint32 firstId, uint256 n, uint64 flushes) private {
         uint256 payout = _round(round, firstId, n, 3, true);
         assertEq(payout, (STAKE * (n + 3)) / n);
 
         vm.recordLogs();
-        bool doneFirst = n + 1 < chunk;
-        assertEq(_settle(chunk), doneFirst, "one call finishes only with a unit to spare");
-        (uint24 r, uint256 paid) = _cursor();
-        assertEq(r, n >= chunk ? round : round + 1);
-        assertEq(paid, n >= chunk ? chunk : 0, "a full chunk stops on the 100th winner");
-        if (!doneFirst) {
-            assertTrue(_settle(chunk), "the next call reports done");
-            (r, paid) = _cursor();
-        }
-        assertEq(r, round + 1);
+        if (flushes != 0) vm.expectCall(ContractAddresses.COINFLIP, abi.encodeWithSelector(CREDIT_BATCH), flushes);
+        MineFlipGas.Result memory r = _work(8_500_000);
+        assertTrue(r.done, "a generous budget drains every sealed round");
+        assertEq(r.rewardBasis, n, "reward basis counts the winners paid");
+        (uint24 cr, uint256 paid) = _cursor();
+        assertEq(cr, round + 1);
         assertEq(paid, 0);
-        _checkRunsCover(vm.getRecordedLogs(), n, payout, n > chunk ? 2 : 1);
+        _checkRunsCover(vm.getRecordedLogs(), n, payout, n > 100 ? 2 : 1);
         _checkCredits(firstId, n, 3, payout);
     }
 
@@ -459,7 +475,7 @@ contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
             total += runs[i].count;
         }
         assertEq(total, n, "every position paid once");
-        assertEq(runs.length, expectRuns, "a 100-winner round's second call pays nobody");
+        assertEq(runs.length, expectRuns, "one run per full buffer");
     }
 
     function _checkCredits(uint32 firstId, uint256 nWin, uint256 nLose, uint256 payout) private view {
@@ -486,7 +502,7 @@ contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
         assertEq(paid, 0);
 
         vm.expectCall(ContractAddresses.COINFLIP, abi.encodeWithSelector(CREDIT_BATCH), 0);
-        assertTrue(_settle(100), "nothing pending");
+        assertTrue(_settleAll(), "nothing pending");
         assertEq(_stake(50) + _stake(51), 0, "stakes stay burned");
         (uint8 side, bool claimed, uint8 outcome, uint256 owed) = _position(50, 1);
         assertEq(side, UNDER);
@@ -495,8 +511,8 @@ contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
         assertEq(owed, 0);
     }
 
-    function _settleExpect(bool done, uint24 round, uint256 paid) private {
-        assertEq(_settle(2), done, "done only after the last sealed round");
+    function _unitExpect(bool done, uint24 round, uint256 paid) private {
+        assertEq(_unit().done, done, "done only once the cursor reaches the unsealed round");
         (uint24 r, uint256 p) = _cursor();
         assertEq(r, round);
         assertEq(p, paid);
@@ -519,7 +535,8 @@ contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
         _open(1);
         for (uint32 i; i < 10; ++i) _bet(60 + i, i % 2 == 0);
         assertTrue(_seal(1, true));
-        assertFalse(_settle(2));
+        assertFalse(_unit().done);
+        assertFalse(_unit().done);
 
         _open(2);
         _bet(80, false);
@@ -535,11 +552,15 @@ contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
         assertTrue(_seal(3, true));
 
         vm.recordLogs();
-        _settleExpect(false, 1, 4);
-        _settleExpect(false, 2, 0);
-        _settleExpect(false, 3, 1);
-        _settleExpect(false, 4, 0);
-        _settleExpect(true, 4, 0);
+        _unitExpect(false, 1, 3);
+        _unitExpect(false, 1, 4);
+        _unitExpect(false, 1, 5);
+        _unitExpect(false, 2, 0); // round 1 step
+        _unitExpect(false, 3, 0); // round 2 owes nobody: a lone step
+        _unitExpect(false, 3, 1);
+        _unitExpect(false, 3, 2);
+        _unitExpect(true, 4, 0); // round 3 step reaches the unsealed round
+        assertTrue(_settleAll(), "nothing left");
         _checkRunsInOrderSkipping(vm.getRecordedLogs(), 2);
         for (uint32 i; i < 10; ++i) assertEq(_stake(60 + i), i % 2 == 0 ? 2_000 : 0);
         assertEq(_stake(80), 0);
@@ -558,7 +579,7 @@ contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
         (uint24 r, uint256 paid) = _cursor();
         assertEq(r, 1);
         assertEq(paid, 0);
-        assertTrue(_settle(100));
+        assertTrue(_settleAll());
 
         _open(2);
         _bet(11, false);
@@ -584,7 +605,7 @@ contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
         (, , uint8 outcome, ) = _position(15, 5);
         assertEq(outcome, OVER, "write-once outcome");
 
-        while (!_settle(1)) {}
+        while (!_unit().done) {}
         assertEq(_stake(12) + _stake(13) + _stake(15), 1_000 + 1_000 + 1_000);
         assertEq(_stake(14), 0);
         assertFalse(_seal(5, false), "a paid round re-sealed leaves nothing pending");
@@ -613,7 +634,7 @@ contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
         assertEq(outcome, OVER);
         assertEq(owed, payout, "sealed and unpaid");
 
-        assertFalse(_settle(4));
+        for (uint256 i; i < 4; ++i) assertFalse(_unit().done);
         (side, claimed, , owed) = _position(23, 1);
         assertEq(side, OVER);
         assertTrue(claimed, "position 3 paid by the first chunk");
@@ -641,7 +662,7 @@ contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
         (side, , , ) = _position(24, 2);
         assertEq(side, 0, "last bet older than the round");
 
-        assertTrue(_settle(100));
+        assertTrue(_settleAll());
         (side, claimed, , owed) = _position(24, 1);
         assertTrue(claimed);
         assertEq(owed, 0);
@@ -652,16 +673,45 @@ contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
         vm.expectRevert(DegenerusParimutuel.OnlyGame.selector);
         pari.recordGrowth(1, true);
         vm.expectRevert(DegenerusParimutuel.OnlyGame.selector);
-        pari.settleGrowth(100);
+        pari.runGrowthWork(8_500_000);
+        vm.expectRevert(DegenerusParimutuel.OnlyGame.selector);
+        pari.runGrowthWork(MineFlipGas.budget(8_500_000, 10_000, true));
     }
 
-    /// The Game never passes a zero budget; a zero budget is a no-op that reports not done.
-    function test_ZeroBudgetChangesNothing() public {
+    /// An untagged zero allowance admits no estimate-gated unit: nothing is paid, the cursor stays,
+    /// the call reports neither progress nor done, and it does not revert.
+    function test_ZeroAllowanceChangesNothing() public {
         _round(1, 10, 3, 1, true);
-        assertFalse(_settle(0));
-        (uint24 r, uint256 paid) = _cursor();
-        assertEq(r, 1);
+        vm.prank(ContractAddresses.GAME);
+        MineFlipGas.Result memory r = pari.runGrowthWork(0);
+        assertFalse(r.progressed);
+        assertFalse(r.done);
+        assertEq(r.rewardBasis, 0);
+        (uint24 cr, uint256 paid) = _cursor();
+        assertEq(cr, 1);
         assertEq(paid, 0);
+        assertEq(_stake(10), 0);
+    }
+
+    /// A raw (untagged) allowance is an uncalibrated budget: it pays whole winners only, never
+    /// reverts, and repeated calls drain the round to exactly the full-budget outcome.
+    function test_RawAllowanceDrainsInBoundedCalls() public {
+        uint256 payout = _round(1, 10, 40, 5, true);
+        uint256 calls;
+        bool done;
+        uint256 total;
+        while (!done && calls < 200) {
+            vm.prank(ContractAddresses.GAME);
+            MineFlipGas.Result memory r = pari.runGrowthWork{gas: 9_000_000}(400_000);
+            total += r.rewardBasis;
+            assertTrue(r.progressed || r.done, "a 400k allowance always admits a unit");
+            done = r.done;
+            ++calls;
+        }
+        assertTrue(done);
+        assertGt(calls, 1, "a small allowance splits the round");
+        assertEq(total, 40);
+        _checkCredits(10, 40, 5, payout);
     }
 
     // ---------------------------------------------------------------- agreement fuzz
@@ -675,9 +725,9 @@ contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
     /// One stage call as the Game makes it, with the Game's pending bit modelled: a call made
     /// with the bit clear must find nothing to pay; a call with it set either reports done (and
     /// the cursor sits on the first unsealed round) or moves the cursor.
-    function _stageCall(bool bit, uint256 maxWinners, uint24 lastSealed) private returns (bool) {
+    function _stageCall(bool bit, uint256 allowance, uint24 lastSealed) private returns (bool) {
         (uint24 br, uint256 bp) = _cursor();
-        bool done = _settle(maxWinners);
+        bool done = _work(allowance).done;
         (uint24 ar, uint256 ap) = _cursor();
         if (!bit) {
             assertTrue(done, "bit clear: every sealed round is paid");
@@ -732,7 +782,7 @@ contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
         }
         uint256 calls = (fr.rs >> 32) % 4;
         for (uint256 c; c < calls; ++c) {
-            bit = _stageCall(bit, 1 + (uint256(keccak256(abi.encode(fr.rs, c))) % 64), r);
+            bit = _stageCall(bit, (1 + (uint256(keccak256(abi.encode(fr.rs, c))) % 64)) * 20_000, r);
         }
         return bit;
     }
@@ -748,8 +798,8 @@ contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
         }
     }
 
-    /// Random rounds, side sizes, outcomes and chunk sizes, with seals interleaved between stage
-    /// calls (lagging included). settleGrowth never reverts; every call with maxWinners >= 1
+    /// Random rounds, side sizes, outcomes and gas allowances, with seals interleaved between stage
+    /// calls (lagging included). runGrowthWork never reverts; every first-unit-progress call
     /// moves the cursor or reports done; recordGrowth's return matches the cursor model; the
     /// modelled bit never clears with winners owed; each wallet's stake lane ends at exactly the
     /// sum of its payouts; marketState agrees for every bet.
@@ -759,7 +809,7 @@ contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
         uint256[] memory expected = new uint256[](POOL);
         bool bit;
         for (uint24 r = 1; r <= rounds; ++r) bit = _playRound(r, _fuzzRound(seed, r), expected, bit);
-        for (uint256 k; bit && k < 2_000; ++k) bit = _stageCall(bit, 1 + ((k * 7 + seed) % 64), rounds);
+        for (uint256 k; bit && k < 2_000; ++k) bit = _stageCall(bit, (1 + ((k * 7 + (seed % 64)) % 64)) * 20_000, rounds);
         assertFalse(bit, "settlement drains");
         for (uint256 i; i < POOL; ++i) {
             assertEq(_stake(uint32(10 + i)), expected[i], "credited exactly the sum of its payouts");
@@ -957,7 +1007,7 @@ contract ParimutuelSettlementSelectorTest is Test {
         return abi.encodeWithSelector(IDegenerusParimutuel.runGrowthWork.selector);
     }
 
-    /// The stage passes the fixed chunk once and clears the bit when settleGrowth reports done.
+    /// The stage calls the worker once and clears the bit when runGrowthWork reports done.
     function test_StageClearsBitOnDone() public {
         game.seed(DegenerusGameStorage.MinerAction.Idle);
         game.setGrowthPending(true);

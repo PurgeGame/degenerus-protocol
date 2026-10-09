@@ -161,13 +161,6 @@ library MineFlipGasBounds {
     uint256 internal constant CRAPS_REFUND_GAS_MAX = 65_000;
     uint256 internal constant CRAPS_SWEEP_TAIL_GAS = 130_000;
 
-    // GROWTH
-    // Winners paid per Parimutuel settlement call, credited through one creditFlipBatch.
-    uint256 internal constant GROWTH_SETTLE_WINNERS = 100;
-    // Cold chunk of GROWTH_SETTLE_WINNERS distinct winners on fresh Coinflip lanes (the call, packed
-    // ID reads, cursor write, events and batch credit): 2.65M measured inside mineFlip.
-    uint256 internal constant GROWTH_SETTLE_GAS = 3_200_000;
-
     // REDEEM
     // Cold beneficiary without a lootbox leg: 0.23M measured (pre-batch; re-measure).
     uint256 internal constant REDEMPTION_BASE_GAS = 500_000;

@@ -173,13 +173,6 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     uint256 internal constant _REFUND_GAS_MAX = GasBounds.CRAPS_REFUND_GAS_MAX;
     uint256 internal constant _SWEEP_TAIL_GAS = GasBounds.CRAPS_SWEEP_TAIL_GAS;
 
-    /// @dev Carve the EIP-150 forwarding reserve and ABI/return tail from the fixed ledger.
-    /// The atomic admission check separately reserves enough available gas for a safe checkpoint.
-    function _resolverAllowance(uint256 remaining) internal pure returns (uint256) {
-        uint256 available = remaining - _WORK_TAIL_GAS - 30_000;
-        return available - available / 64 - 1;
-    }
-
     function _readCrapsStage() internal view returns (uint8) {
         return IGameCrapsWorkStage(_GAME).rngConsumerStage();
     }
@@ -306,7 +299,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     //   bits  0..31  owner wallet ID
     //   bits 32..61  ten three-bit chip counts (zero means draw all ten)
     //   bits 62..64  one-hot boon
-    //   bits 65..71  high-roller flags (one per period on day tickets)
+    //   bits 65..70  high-roller flags (one per period on day tickets); bit 71 is unused
     // Bit72 is added in memory for an awarded jackpot seat; it is never stored.
     // Three 72-bit lanes and one shared uint24 day occupy each physical word.
     // Scheduled keys recycle the day modulo 64; custom keys retain the full slot.
@@ -341,9 +334,9 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      have named, so eligibility has to be a thing the entry recorded, not a thing a later
     ///      reader re-derives from an argument.
     ///
-    ///      A WINDOW-LOCAL slip stores exactly this one bit. A DAY ticket stores SEVEN — bit
+    ///      A WINDOW-LOCAL slip stores exactly this one bit. A DAY ticket stores SIX — bit
     ///      `65 + p` for period `p` — so one ticket can be high in the windows it chose and
-    ///      ordinary in the rest. A whole-day high entry sets all seven, which is what keeps it
+    ///      ordinary in the rest. A whole-day high entry sets all six, which is what keeps it
     ///      byte-for-byte the seat it always was; `_highOn` is the one reader of either shape.
     uint256 internal constant _BET_HIGH_BIT = 1 << 65;
     uint256 internal constant _BET_HIGH_SHIFT = 65;
@@ -496,7 +489,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
         uint256 handsPlayed;
         /// @dev THE MERIT COMPOSITE (`Craps._rankOf`): the fifth word, where
         ///      `SlipResult` carries escalated units, which the table never reads.
-        ///      `CrapsEngine.settleRanked` returns the composite here instead.
+        ///      `CrapsEngine.settleBattle` returns the composite here instead.
         uint256 rank;
         /// @dev Dice rolls across the run. It ranks NOTHING and qualifies nothing — the
         ///      progressive reads the high point now — and survives only as telemetry.
@@ -505,8 +498,8 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
         uint256 hottestHand;
     }
 
-    /// @dev Three 72-bit slips per word: owner32, board30, boon3, high7.
-    ///      Bits216..239 hold the shared day; bits240..255 are reserved.
+    /// @dev Three 72-bit slips per word: owner32, board30, boon3, high6 and one unused bit.
+    ///      Bits216..239 hold the shared day; bits240..255 are unused.
     ///      Day identity is shared by each word; award status derives from frozen counts.
     ///      Logical IDs are `(slot << 64) | n`, with dense indices 1..entrants. Only the
     ///      scheduled day component of the physical key is recycled; counts stay logical.
@@ -698,18 +691,10 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      is what lets a custom battle behave exactly like a bonus window.
     mapping(uint256 => uint256) internal _customBattle;
 
-    /// @dev An account's forward word, keyed by its account key: the preferred board in bits
-    ///      64..83 (two bits per leg), bit 84 set on its first save and never cleared, and the
-    ///      account's Game wallet ID in bits 85..116, filled by the first board save from the
-    ///      Game's registration or account resolution and never changed. Bits 0..63 are zero.
-    ///      Every board door reads it first, so a bet learns its owner's ID and the
-    ///      unchanged-board fast path from one read.
-
-
     /// @dev A wallet's UNCOMMITTED day-pass credits and its board, keyed by Game wallet ID: the
-    ///      normal count in bits 0..31, the high-roller count above `_PASS_HIGH_SHIFT`, and the
-    ///      same board and initialized lanes as the address word, written together with it when a
-    ///      save changes the board. Board writes preserve the pass lanes and pass writes preserve
+    ///      normal count in bits 0..31, the high-roller count above `_PASS_HIGH_SHIFT`, the
+    ///      preferred board in bits 64..83 (two bits per leg) and bit 84 set on its first save
+    ///      and never cleared. Board writes preserve the pass lanes and pass writes preserve
     ///      the board. Awarded by the lootbox and by the pass half of a protocol payout, spent by
     ///      committing one to a future day, and movable one way — normals into highs — at the
     ///      credits' value ratio.
@@ -843,7 +828,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///            - bits 160..167 the entry multiple MINUS ONE, so 0 reads as one copy of the run.
     ///            - bits 190..205 are unused.
     ///            - bits 206..208 the one-hot boon.
-    ///            - bit 217 the high flag on a window seat; bits 217..223 a day ticket's per-period
+    ///            - bit 217 the high flag on a window seat; bits 217..222 a day ticket's per-period
     ///              high mask, bit `217 + p` for period `p`, so a
     ///              banked high pass seated at one copy of the run still reads as high.
     ///
@@ -1125,9 +1110,9 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     /// @dev Next field in each physical FIFO; length minus cursor is its pending count.
     uint64[2] internal _rngSlotCursor;
 
-    /// @dev `who`'s address word with its wallet ID filled in. A missing ID is fetched once from
-    ///      the Game: `allocate` registers a new wallet (a paying action); otherwise an
-    ///      unregistered wallet reverts. The fill is written back only by a board save.
+    /// @dev `who`'s ID-keyed pass/preference word with its wallet ID added in memory. The ID comes
+    ///      from the Game: `allocate` registers a new wallet (a paying action); otherwise an
+    ///      unregistered wallet reverts. The ID is never persisted here.
     function _walletWord(address who, bool allocate) internal returns (uint256 word) {
         uint32 id = IGameCrapsWorkStage(_GAME).registerWallet(who, allocate);
         if (id == 0) revert NoWalletId();

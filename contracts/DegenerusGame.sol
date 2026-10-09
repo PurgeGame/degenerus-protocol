@@ -414,9 +414,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Length of the afking subscriber set: live subscriptions, the two exempt
-    ///         protocol subscriptions and cancel/eviction tombstones awaiting the in-pass
-    ///         reclaim. The seat token's capped vault mint reads it.
     function setAfkingFundingApproval(uint32, uint32, bool) external {
         (bool ok, bytes memory data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
@@ -426,6 +423,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
         return !_isAcquired(funderId) && !_isAcquired(subscriberId) && afkingFundingApprovals[funderId][subscriberId];
     }
 
+    /// @notice Length of the afking subscriber set: live subscriptions, the two exempt
+    ///         protocol subscriptions and cancel/eviction tombstones awaiting the in-pass
+    ///         reclaim. The seat token's capped vault mint reads it.
     function subscriberSetLength() external view returns (uint256) {
         return _subscribers.length;
     }

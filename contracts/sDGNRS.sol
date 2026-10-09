@@ -507,7 +507,6 @@ contract sDGNRS {
     }
 
     function _runRedemptionWork(uint256 word, uint256 allowance) private returns (MineFlipGas.Result memory result) {
-        if (allowance == 0) return result;
         MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
         uint32 id = _settlingBatch;
         if (id == 0) { result.done = true; return result; }
@@ -981,7 +980,7 @@ contract sDGNRS {
     //                          BURN (Public)
     // =====================================================================
 
-    /// @notice Forfeit the seller's entire native sDGNRS balance as part of account liquidation.
+    /// @notice Forfeit the seller's entire native sDGNRS balance when its main account is liquidated.
     /// @dev Game authenticates the seller. No payout, reserve, queue entry or ID link is created.
     ///      Already submitted redemptions are unaffected; wrapped DGNRS is not burned.
     function burnForLiquidation(address seller) external onlyGame {

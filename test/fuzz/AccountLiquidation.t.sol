@@ -294,15 +294,39 @@ contract AccountLiquidationTest is RedemptionCloseTools {
         assertEq(seller.balance, beforeEth + price);
     }
 
-    function test_DustSdgnrsAlsoForfeitedOnStandaloneChildSale() public {
+    function test_SmurfSaleLeavesOwnerWalletSdgnrsBalanceAndSupply() public {
         uint32 child = _child();
         _seed(child, 400, 0, 0);
-        _giveSdgnrs(seller, 1);
+        _giveSdgnrs(seller, 10e12);
         uint256 supply = sdgnrs.totalSupply();
-        _sale(child);
+        uint256 ownerBalance = sdgnrs.balanceOf(seller);
+        uint256 reserved = sdgnrs.pendingRedemptionEthValue();
+        uint256 sellerEth = seller.balance;
+        uint256 price = _sale(child);
+        assertEq(sdgnrs.balanceOf(seller), ownerBalance, "owner wallet keeps its sDGNRS");
+        assertEq(sdgnrs.totalSupply(), supply, "nothing burned");
+        assertEq(sdgnrs.pendingRedemptionEthValue(), reserved);
+        assertEq(game.walletIdOf(seller), root, "a smurf sale keeps the owner's gameplay ID");
+        assertEq(_payee(child), address(sdgnrs), "the smurf moved to the buyer");
+        assertEq(_payee(root), seller, "the main account stays with the owner");
+        assertEq(seller.balance, sellerEth + price);
+        // The surviving balance is still forfeited by a later main-account sale.
+        _sale(root);
         assertEq(sdgnrs.balanceOf(seller), 0);
-        assertEq(sdgnrs.totalSupply(), supply - 1);
-        assertEq(game.walletIdOf(seller), root);
+        assertEq(sdgnrs.totalSupply(), supply - ownerBalance);
+    }
+
+    function test_MainSaleBurnsWholeNativeSdgnrsEvenWithChildren() public {
+        _child();
+        _giveSdgnrs(seller, 1);
+        _giveSdgnrs(seller, 10e12);
+        uint256 supply = sdgnrs.totalSupply();
+        uint256 held = sdgnrs.balanceOf(seller);
+        assertEq(held, 10e12 + 1);
+        _sale(root);
+        assertEq(sdgnrs.balanceOf(seller), 0, "dust included");
+        assertEq(sdgnrs.totalSupply(), supply - held);
+        assertEq(game.walletIdOf(seller), 0);
     }
 
     function test_PreviouslySubmittedRedemptionRemainsWithSoldAccount() public {
@@ -369,13 +393,77 @@ contract AccountLiquidationTest is RedemptionCloseTools {
         assertEq(coinflip.claimAcquiredCoinflips(child), 0);
     }
 
-    function test_NativeShortfallRollsBackSdgnrsAndOwnership() public {
+    function _stGame() private view returns (uint256) {
+        return mockStETH.balanceOf(address(game));
+    }
+
+    function test_EthShortfallPaysEthBalanceThenStethRemainder() public {
         _giveSdgnrs(seller, 13);
         uint256 price = game.previewLiquidateAccount(root).price;
-        vm.deal(address(game), price - 1);
-        vm.prank(seller); vm.expectRevert(); game.liquidateAccount(root, 0);
+        uint256 ethLeft = price / 3;
+        uint256 stLeft = price; // ETH + stETH covers the price with stETH to spare
+        vm.deal(address(game), ethLeft);
+        mockStETH.mint(address(game), stLeft);
+        uint256 stGameBefore = _stGame();
+        uint256 sellerEth = seller.balance;
+        uint256 sellerSt = mockStETH.balanceOf(seller);
+        uint256 buyerBefore = game.claimableWinningsOf(address(sdgnrs));
+        uint256 poolBefore = uint256(vm.load(address(game), bytes32(uint256(1)))) >> 128;
+
+        vm.prank(seller);
+        game.liquidateAccount(root, price);
+
+        uint256 stPaid = price - ethLeft;
+        assertEq(seller.balance, sellerEth + ethLeft, "seller receives the whole ETH balance");
+        assertApproxEqAbs(mockStETH.balanceOf(seller), sellerSt + stPaid, 1, "and the remainder in stETH");
+        assertEq(address(game).balance, 0);
+        assertApproxEqAbs(_stGame(), stGameBefore - stPaid, 1);
+        assertEq(game.claimableWinningsOf(address(sdgnrs)), buyerBefore - price, "buyer claimable debited the price");
+        assertEq(uint256(vm.load(address(game), bytes32(uint256(1)))) >> 128, poolBefore - price, "claimablePool debited the price");
+        assertEq(sdgnrs.balanceOf(seller), 0);
+        assertEq(_payee(root), address(sdgnrs));
+    }
+
+    function test_EthCoveringPriceIsPaidFullyInEth() public {
+        uint256 price = game.previewLiquidateAccount(root).price;
+        vm.deal(address(game), price);
+        mockStETH.mint(address(game), 5 ether);
+        uint256 sellerEth = seller.balance;
+        uint256 stGameBefore = _stGame();
+        uint256 sellerSt = mockStETH.balanceOf(seller);
+        _sale(root);
+        assertEq(seller.balance, sellerEth + price);
+        assertEq(mockStETH.balanceOf(seller), sellerSt, "no stETH when ETH covers");
+        assertEq(_stGame(), stGameBefore);
+        assertEq(address(game).balance, 0);
+    }
+
+    function test_EthPlusStethShortfallRollsBackSdgnrsAndOwnership() public {
+        _giveSdgnrs(seller, 13);
+        uint256 price = game.previewLiquidateAccount(root).price;
+        uint256 buyerBefore = game.claimableWinningsOf(address(sdgnrs));
+        vm.deal(address(game), price / 2);
+        mockStETH.mint(address(game), price / 2 - 1);
+        vm.prank(seller);
+        vm.expectRevert(DegenerusGameStorage.TransferFailed.selector);
+        game.liquidateAccount(root, 0);
         assertEq(sdgnrs.balanceOf(seller), 13);
         assertEq(_payee(root), seller);
+        assertEq(game.walletIdOf(seller), root);
+        assertEq(game.claimableWinningsOf(address(sdgnrs)), buyerBefore);
+    }
+
+    function test_NoEthRequiredWhenStethCoversPrice() public {
+        uint256 price = game.previewLiquidateAccount(root).price;
+        vm.deal(address(game), 0);
+        mockStETH.mint(address(game), price);
+        uint256 sellerEth = seller.balance;
+        uint256 sellerSt = mockStETH.balanceOf(seller);
+        vm.prank(seller);
+        game.liquidateAccount(root, price);
+        assertEq(seller.balance, sellerEth, "no ETH was available");
+        assertApproxEqAbs(mockStETH.balanceOf(seller), sellerSt + price, 1);
+        assertEq(_payee(root), address(sdgnrs));
     }
 
     function test_PricingUsesCompleteRangeAndCashPlusQuarterTicketValue() public {
@@ -588,13 +676,25 @@ contract AccountLiquidationTest is RedemptionCloseTools {
         _giveSdgnrs(address(rejector), 123);
         uint256 supply = sdgnrs.totalSupply();
         uint256 buyerBefore = game.claimableWinningsOf(address(sdgnrs));
-        vm.expectRevert(); rejector.sell(address(game));
+        vm.expectRevert(DegenerusGameStorage.TransferFailed.selector); rejector.sell(address(game));
         assertEq(_payee(id), address(rejector));
         assertEq(game.walletIdOf(address(rejector)), id);
         assertEq(game.claimableWinningsOf(address(sdgnrs)), buyerBefore);
         assertEq(coin.balanceOf(address(rejector)), 0);
         assertEq(sdgnrs.balanceOf(address(rejector)), 123);
         assertEq(sdgnrs.totalSupply(), supply);
+    }
+
+    function test_StethOnlyPaymentNeedsNoEthReceiver() public {
+        RejectLiquidationEth rejector = new RejectLiquidationEth();
+        uint32 id = _giveWalletId(address(rejector));
+        _seed(id, 400, 0, 0);
+        uint256 price = game.previewLiquidateAccount(id).price;
+        vm.deal(address(game), 0);
+        mockStETH.mint(address(game), price);
+        rejector.sell(address(game));
+        assertApproxEqAbs(mockStETH.balanceOf(address(rejector)), price, 1, "paid wholly in stETH");
+        assertEq(_payee(id), address(sdgnrs));
     }
 
     function test_ZeroPriceIsNotAnUncompensatedDonation() public {

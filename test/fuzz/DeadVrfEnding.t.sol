@@ -765,12 +765,15 @@ contract DeadVrfEndingTest is DeployProtocol {
         vm.revertToState(snap);
 
         // Probe down through the mandatory first unit's actual cost. A survivor must leave
-        // the window open with no request. At the lowest allowances even the root can OOG
-        // without enough gas to wrap the empty failure; no semantic worker error is allowed.
+        // the window open with no request. A first-mode worker stops above its parents'
+        // tails, so every call that fits the first unit succeeds; the probe continues in 2k
+        // steps below two coarse steps until the first unit itself no longer fits. At the
+        // lowest allowances even the root can OOG without enough gas to wrap the empty
+        // failure; no semantic worker error is allowed.
         uint256 witnessGas;
         uint256 leakGas;
         uint256 step = batchGas / 128;
-        for (uint256 g = batchGas; g > step; g -= step) {
+        for (uint256 g = batchGas; g >= 20_000; g -= g > 2 * step ? step : 2_000) {
             snap = vm.snapshotState();
             try game.mineFlip{gas: g}(0) {
                 (,, swapped) = _terminalQueues();

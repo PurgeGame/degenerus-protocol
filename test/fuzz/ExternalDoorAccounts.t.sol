@@ -9,6 +9,7 @@ import {DegenerusJackpots} from "../../contracts/DegenerusJackpots.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {DegenerusQuests} from "../../contracts/DegenerusQuests.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 
@@ -318,7 +319,7 @@ contract ExternalDoorAccountsTest is DeployProtocol {
         uint256 ownerLane = _lane(target, ownerId);
         vm.startPrank(GAME);
         parimutuel.recordGrowth(1, true);
-        parimutuel.settleGrowth(16);
+        parimutuel.runGrowthWork(MineFlipGas.budget(8_500_000, 10_000, true));
         vm.stopPrank();
         assertGt(_lane(target, smurfId), smurfLane, "the OVER win credits S's stake lane");
         assertEq(_lane(target, ownerId), ownerLane, "O's losing UNDER bet pays nothing");

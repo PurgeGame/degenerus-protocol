@@ -20,20 +20,6 @@ interface ICrapsEngine {
         uint256 goal, uint48 bound, uint256 field, uint256 word) external pure returns (Craps.SlipResult memory);
 
     function customDefinition(uint32 played, uint8 bankMult, uint16 goalMult, uint24 stakeUnits, uint40 closeTime, bool multiEntry, uint16 highRollerMult) external view returns (uint256);
-
-    /// @notice CrapsEngine's pure play of one slip to its stop, the merit composite in the
-    ///         fifth word (see `CrapsEngine.settleRanked`).
-    function settleRanked(
-        uint256 packedChips,
-        uint256 chipFlip,
-        uint256 scatterHash,
-        uint256 scatterCount,
-        bytes32 seed,
-        uint256 bankroll,
-        uint256 goal,
-        uint256 salt,
-        uint256 boost
-    ) external pure returns (Craps.SlipResult memory);
 }
 
 /// @dev The one FLIP sink this game uses, authorized to `ContractAddresses.CRAPS` in the
@@ -299,7 +285,7 @@ contract CrapsBattle is CrapsBattleStorage {
         _appendBet(betId, uint256(id) | (chips << _BET_CHIPS_SHIFT)
             | boon | highBits);
         // Keep the event's wire offsets separate from the compact slip: boon at 206, highs at
-        // 217..223 (day ticket, one per period), above the bet ID and multiple. A
+        // 217..222 (day ticket, one per period), above the bet ID and multiple. A
         // banked HIGH pass spent by `_seatBody` carries `evMult = 0`, so without this an indexer
         // reads the house's high day seat as an ordinary 1x ticket and can only learn otherwise
         // from storage.
@@ -399,7 +385,7 @@ contract CrapsBattle is CrapsBattleStorage {
     }
 
     /// @dev Every player door's prologue: the account it acts for. `id == 0` is the caller,
-    ///      whose ID comes from its own address word (`allocate` registers a paying caller).
+    ///      whose ID the Game looks up (`allocate` registers a paying caller).
     ///      Any other `id` is resolved by the Game, which reverts for an unallocated ID, and the
     ///      caller must be authorized for it. Game state follows the account; burns come from
     ///      the payee (a smurf's owner, otherwise the key).
@@ -432,12 +418,10 @@ contract CrapsBattle is CrapsBattleStorage {
         if (_newcomer(uint32(word >> CrapsPreferenceLib.ID_SHIFT))) account |= _ACCOUNT_NEWCOMER;
     }
 
-    /// @dev Every board door's epilogue, on the account's address word as its prologue read it
-    ///      (`_door`, ID filled). `chips` is already validated. An unchanged initialized board
-    ///      touches nothing: an initialized word always holds its wallet ID. Otherwise the word
-    ///      is written back with its ID, and the board is saved to it and to the ID word unless
-    ///      the daily lock is on. Nothing between the prologue and this epilogue writes the
-    ///      account's address word.
+    /// @dev Every board door's epilogue, on the account's pass/preference word as its prologue
+    ///      read it (`_door`, ID added in memory). `chips` is already validated. An unchanged
+    ///      initialized board touches nothing. Otherwise the board is saved to the ID-keyed word
+    ///      unless the daily lock is on.
     /// @return saved False only when the daily lock prevents a first save or a changed board.
     function _rememberBoard(uint256 word, uint32 chips) private returns (bool saved) {
         uint256 field = CrapsPreferenceLib.compress(chips)
@@ -594,7 +578,6 @@ contract CrapsBattle is CrapsBattleStorage {
     // ---------------------------------------------------------------------------------------
 
     function _resolveSlotRange(uint64 slot, uint256 allowance, uint64 seatLimit) internal returns (MineFlipGas.Result memory result) {
-        if (allowance == 0) return result;
         if (_scheduledExpired(slot)) { result.done = true; return result; }
         MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
         if (!MineFlipGas.canRun(meter, _SEAT_GAS_MAX, _SETTLE_TAIL_GAS + _CREDIT_GAS_MAX)) return result;

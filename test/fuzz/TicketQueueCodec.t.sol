@@ -29,10 +29,6 @@ contract TicketQueueCodecHarness is DegenerusGameStorage, WalletSeed {
         return _walletKey(_tqPositionAt(ticketQueue[_ticketQueueStorageKey(key)], k));
     }
     function length(uint24 key) external view returns (uint256) { return _ticketQueueLength(key); }
-    function remove(uint24 key, uint256 k) external {
-        require(k < _ticketQueueLength(key));
-        _tqSwapPop(ticketQueue[_ticketQueueStorageKey(key)], k);
-    }
     function release(uint24 key) external { _releaseTicketQueue(key); }
     function word(uint24 key, uint256 w) external view returns (uint256 value) {
         uint256[] storage q = ticketQueue[_ticketQueueStorageKey(key)];
@@ -145,25 +141,6 @@ contract TicketQueueCodecTest is Test {
         h.release(5);
         h.append(5, 1);
         assertEq(h.owner(5, 5, 0), address(0xBEEF), "registry index zero is encoded as one");
-    }
-
-    function testFuzz_SwapPopPreservesEveryNeighbour(uint8 lengthSeed, uint8 indexSeed, uint32 salt) public {
-        uint256 n = bound(lengthSeed, 1, 40);
-        uint256 index = uint256(indexSeed) % n;
-        uint32[] memory expected = new uint32[](n);
-        for (uint256 i; i < n; ++i) {
-            expected[i] = uint32(uint256(keccak256(abi.encode(salt, i))));
-            if (expected[i] == 0) expected[i] = 1;
-            h.append(5, expected[i]);
-        }
-        h.remove(5, index);
-        expected[index] = expected[n - 1];
-        assertEq(h.length(5), n - 1);
-        for (uint256 i; i < n - 1; ++i) assertEq(h.position(5, i), expected[i]);
-        assertEq(uint32(h.word(5, (n - 1) / 8) >> (((n - 1) % 8) * 32)), 0);
-        h.append(5, type(uint32).max - 1);
-        assertEq(h.position(5, n - 1), type(uint32).max - 1);
-        for (uint256 i; i < n - 1; ++i) assertEq(h.position(5, i), expected[i]);
     }
 
     function test_ReleaseAndReuseOverwritesStaleWords() public {

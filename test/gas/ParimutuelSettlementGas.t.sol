@@ -6,6 +6,7 @@ import {console} from "forge-std/console.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 
@@ -13,7 +14,7 @@ import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 ///         Game). Each figure is one call measured with the touched accounts cooled first, so
 ///         storage and account access are cold as in a fresh transaction. Winners' Coinflip stake
 ///         lanes are fresh (zero) unless the case says otherwise: a zero-to-nonzero lane write is
-///         the per-winner worst case GROWTH_SETTLE_GAS must cover.
+///         the per-winner worst case the runGrowthWork admission estimate must cover.
 contract ParimutuelSettlementGasTest is DeployProtocol {
     bytes4 private constant GROWTH_STATE = bytes4(keccak256("growthState(uint24)"));
     bytes4 private constant MARKET_GATES = bytes4(keccak256("marketBetGates(uint32,uint24)"));
@@ -22,7 +23,11 @@ contract ParimutuelSettlementGasTest is DeployProtocol {
     uint256 private constant SETTLEMENT_SLOT = 4; // DegenerusParimutuel.growthSettlement
     uint256 private constant STAKE_ROOT = 0; // Coinflip.coinflipStakePacked
     uint256 private constant PENDING_BIT = GameSlots.RNG_FLAGS_AND_NUDGES_OFFSET * 8 + 11;
-    uint256 private constant CHUNK = MineFlipGasBounds.GROWTH_SETTLE_WINNERS;
+    uint256 private constant CHUNK = 100; // runGrowthWork's batch buffer
+    uint256 private constant ALLOWANCE = 8_500_000;
+    // Allowance that admits part of a 200-winner round.
+    uint256 private constant CHUNK_ALLOWANCE = 2_000_000;
+    uint256 private constant FRESH_CHUNK_BOUND = 3_000_000; // measured 2.73M cold (fresh lanes), 1.02M repeat
 
     uint256 private nonce;
     uint256 private simTime;
@@ -95,31 +100,32 @@ contract ParimutuelSettlementGasTest is DeployProtocol {
         return uint32(w >> ((uint256(day) & 7) << 5));
     }
 
-    function _settleCold(uint256 maxWinners) private returns (uint256 used, bool done) {
+    /// @dev One cold runGrowthWork call with a tagged first-unit budget; reports its gas and result.
+    function _settleCold(uint256 allowance) private returns (uint256 used, MineFlipGas.Result memory r) {
         vm.cool(address(parimutuel));
         vm.cool(address(coinflip));
         vm.prank(address(game));
         uint256 g0 = gasleft();
-        done = parimutuel.settleGrowth(maxWinners);
+        r = parimutuel.runGrowthWork{gas: 9_000_000}(MineFlipGas.budget(allowance, 10_000, true));
         used = g0 - gasleft();
     }
 
     // ---------------------------------------------------------------- measurements
 
-    /// The declared stage weight: one cold chunk of GROWTH_SETTLE_WINNERS winners whose
-    /// Coinflip stake lanes are all fresh.
-    function test_ColdChunkOfFreshWinnersFitsDeclaredWeight() public {
+    /// One cold call settling a full 100-winner buffer whose Coinflip stake lanes are all fresh,
+    /// then stepping the round and reporting done.
+    function test_ColdChunkOfFreshWinners() public {
         (, uint32[] memory ids) = _round(1, CHUNK);
         for (uint256 i; i < ids.length; ++i) assertEq(_stake(ids[i]), 0, "fixture: fresh lanes");
-        (uint256 used, bool done) = _settleCold(CHUNK);
-        console.log("settleGrowth(100), 100 fresh cold winners:", used);
-        console.log("GROWTH_SETTLE_GAS:", MineFlipGasBounds.GROWTH_SETTLE_GAS);
-        assertFalse(done, "a full chunk ends on the boundary");
-        (uint24 r, uint256 paid) = _cursor();
-        assertEq(r, 1);
-        assertEq(paid, CHUNK);
+        (uint256 used, MineFlipGas.Result memory r) = _settleCold(ALLOWANCE);
+        console.log("runGrowthWork, 100 fresh cold winners (+ step, done):", used);
+        assertTrue(r.done);
+        assertEq(r.rewardBasis, CHUNK);
+        (uint24 round, uint256 paid) = _cursor();
+        assertEq(round, 2);
+        assertEq(paid, 0);
         assertEq(_stake(ids[0]), (STAKE * (CHUNK + 1)) / CHUNK);
-        assertLe(used, MineFlipGasBounds.GROWTH_SETTLE_GAS, "cold fresh chunk within the declared weight");
+        assertLe(used, FRESH_CHUNK_BOUND, "cold fresh chunk of 100 winners");
     }
 
     /// Repeat winners: the same 100 wallets win a second round on the same stake day, so each
@@ -127,45 +133,54 @@ contract ParimutuelSettlementGasTest is DeployProtocol {
     function test_ColdChunkOfRepeatWinners() public {
         (address[] memory who, uint32[] memory ids) = _round(1, CHUNK);
         vm.prank(address(game));
-        parimutuel.settleGrowth(CHUNK);
-        vm.prank(address(game));
-        assertTrue(parimutuel.settleGrowth(CHUNK));
+        assertTrue(parimutuel.runGrowthWork(MineFlipGas.budget(ALLOWANCE, 10_000, true)).done);
         _repeatRound(2, who, ids);
         assertGt(_stake(ids[0]), 0, "fixture: lanes already credited today");
-        (uint256 used, ) = _settleCold(CHUNK);
-        console.log("settleGrowth(100), 100 repeat winners (nonzero lanes), cold:", used);
-        assertLe(used, MineFlipGasBounds.GROWTH_SETTLE_GAS);
+        (uint256 used, MineFlipGas.Result memory r) = _settleCold(ALLOWANCE);
+        console.log("runGrowthWork, 100 repeat winners (nonzero lanes), cold:", used);
+        assertEq(r.rewardBasis, CHUNK);
+        assertLe(used, FRESH_CHUNK_BOUND);
     }
 
-    /// Two consecutive chunks in one transaction: the second runs with the Parimutuel and
-    /// Coinflip accounts warm (its winners' lanes are still fresh).
-    function test_WarmSecondChunk() public {
+    /// Allowance-gated calls over 200 fresh winners: the admission estimate must cover the real cold
+    /// cost, so the call's gas stays within its allowance (an overspend reverts WorkGasBound).
+    /// A second call in the same transaction (accounts warm, lanes still fresh) is held to the same bound.
+    function test_GatedChunksStayWithinAllowance() public {
         _round(1, 2 * CHUNK);
-        (uint256 first, ) = _settleCold(CHUNK);
+        (uint256 first, MineFlipGas.Result memory r1) = _settleCold(CHUNK_ALLOWANCE);
+        assertGt(r1.rewardBasis, 0);
+        assertFalse(r1.done);
+        assertLe(first, CHUNK_ALLOWANCE, "cold call within its allowance");
         vm.prank(address(game));
         uint256 g0 = gasleft();
-        parimutuel.settleGrowth(CHUNK);
+        MineFlipGas.Result memory r2 = parimutuel.runGrowthWork{gas: 9_000_000}(MineFlipGas.budget(CHUNK_ALLOWANCE, 10_000, true));
         uint256 second = g0 - gasleft();
-        console.log("settleGrowth(100), first cold chunk of 200:", first);
-        console.log("settleGrowth(100), second chunk, accounts warm:", second);
-        assertLe(first, MineFlipGasBounds.GROWTH_SETTLE_GAS);
+        console.log("runGrowthWork, cold call under allowance, winners/gas:", r1.rewardBasis, first);
+        console.log("runGrowthWork, warm second call, winners/gas:", r2.rewardBasis, second);
+        assertLe(second, CHUNK_ALLOWANCE);
+        assertGt(r2.rewardBasis, 0);
+        assertLe(second * r1.rewardBasis, first * r2.rewardBasis + first * r1.rewardBasis / 4, "warm accounts are not dearer per winner");
     }
 
-    /// A chunk spanning a round boundary: 50 winners left on round 1, a step, then 49 fresh
-    /// winners of round 2 (the step spends one unit of the budget).
-    function test_ChunkSpanningRoundBoundary() public {
+    /// One unbounded call spanning a round boundary: the rest of round 1, the step, and 100 fresh
+    /// winners of round 2 (the batch buffer flushes at 100).
+    function test_CallSpanningRoundBoundary() public {
         _round(1, 150);
         vm.prank(address(game));
-        parimutuel.settleGrowth(CHUNK);
+        MineFlipGas.Result memory head = parimutuel.runGrowthWork{gas: 9_000_000}(MineFlipGas.budget(CHUNK_ALLOWANCE, 10_000, true));
+        (uint24 r0, uint256 mid) = _cursor();
+        assertEq(r0, 1);
+        assertEq(mid, head.rewardBasis);
+        assertFalse(head.done);
         _round(2, CHUNK);
-        vm.recordLogs();
-        (uint256 used, bool done) = _settleCold(CHUNK);
-        console.log("settleGrowth(100) spanning rounds 1->2 (50 + step + 49 winners), cold:", used);
-        assertFalse(done);
-        (uint24 r, uint256 paid) = _cursor();
-        assertEq(r, 2);
-        assertEq(paid, 49);
-        assertLe(used, MineFlipGasBounds.GROWTH_SETTLE_GAS);
+        (uint256 used, MineFlipGas.Result memory r) = _settleCold(ALLOWANCE);
+        console.log("runGrowthWork spanning rounds 1->2, winners:", r.rewardBasis);
+        console.log("runGrowthWork spanning rounds 1->2, cold gas:", used);
+        assertTrue(r.done);
+        assertEq(r.rewardBasis, 150 - head.rewardBasis + CHUNK);
+        (uint24 round, uint256 paid) = _cursor();
+        assertEq(round, 3);
+        assertEq(paid, 0);
     }
 
     function _driveDay() private {
@@ -221,6 +236,6 @@ contract ParimutuelSettlementGasTest is DeployProtocol {
         (uint24 r, uint256 paid) = _cursor();
         assertEq(r, 2, "completed round cursor is released in the same call");
         assertEq(paid, 0);
-        assertLe(executionGas, MineFlipGasBounds.GROWTH_SETTLE_GAS + MineFlipGasBounds.ENGINE_BOUNDARY);
+        assertLe(executionGas, FRESH_CHUNK_BOUND + MineFlipGasBounds.ENGINE_BOUNDARY);
     }
 }

@@ -330,7 +330,6 @@ abstract contract DegenerusGameStorage {
     /// @notice Thrown when a balance or pool draw would underflow its backing.
     error Insolvent();
     /// @notice Thrown when an internal invariant is violated.
-    error Invariant();
     /// @notice Thrown when a required address argument is the zero address.
     error ZeroAddress();
     /// @notice Thrown when a required value argument is zero.
@@ -2127,28 +2126,6 @@ abstract contract DegenerusGameStorage {
             mstore(0x00, q.slot)
             let word := sload(add(keccak256(0x00, 0x20), shr(3, k)))
             pos := and(shr(shl(5, and(k, 7)), word), 0xffffffff)
-        }
-    }
-
-    /// @dev Remove a verified queue index by replacing it with the last lane. Clear only
-    ///      that last lane, preserving neighbours even when both positions share a word.
-    function _tqSwapPop(uint256[] storage q, uint256 k) internal {
-        assembly ("memory-safe") {
-            let header := sload(q.slot)
-            let last := sub(and(header, 0xffffffff), 1)
-            mstore(0x00, q.slot)
-            let base := keccak256(0x00, 0x20)
-            let lastSlot := add(base, shr(3, last))
-            let lastShift := shl(5, and(last, 7))
-            let lastWord := sload(lastSlot)
-            let pos := and(shr(lastShift, lastWord), 0xffffffff)
-            sstore(lastSlot, and(lastWord, not(shl(lastShift, 0xffffffff))))
-            if iszero(eq(k, last)) {
-                let slot := add(base, shr(3, k))
-                let shift := shl(5, and(k, 7))
-                sstore(slot, or(and(sload(slot), not(shl(shift, 0xffffffff))), shl(shift, pos)))
-            }
-            sstore(q.slot, sub(header, 1))
         }
     }
 

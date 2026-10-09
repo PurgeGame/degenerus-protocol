@@ -461,9 +461,8 @@ contract DegenerusJackpots is IDegenerusJackpots {
     ///      WWXRP mint allowance via the token's vault routing.
     /// @param id Score owner account (0 = caller).
     /// @param lvl Skipped bracket level to claim.
-    /// @custom:reverts E (Game) When `id` is unallocated.
-    /// @custom:reverts NothingToClaim When the bracket is not skipped, the
-    ///         score is stale/absent/already claimed.
+    /// @custom:reverts NothingToClaim When the bracket is not skipped, or the
+    ///         score is stale/absent/already claimed (including an unallocated `id`).
     function claimBafConsolation(uint32 id, uint24 lvl) external {
         BafLevel memory lv = bafLevel[lvl];
         if (!lv.skipped) revert NothingToClaim();

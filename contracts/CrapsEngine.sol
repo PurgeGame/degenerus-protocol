@@ -6,8 +6,8 @@ import {FlipRoundLib} from "./libraries/FlipRoundLib.sol";
 import {CrapsCustomTerms} from "./CrapsCustomTerms.sol";
 
 /// @title CrapsEngine
-/// @notice The table's stateless computations: custom-definition validation and two pure
-///         dice entry points. The table uses `settleRanked` to resolve runs.
+/// @notice The table's stateless computations: custom-definition validation and the pure
+///         dice entry points. The table uses `settleBattle` to resolve runs.
 /// @dev Holds no storage, takes no constructor arguments, has no owner and no upgrade path.
 ///      `CrapsBattle` reaches it by STATICCALL at the pinned `ContractAddresses.CRAPS_ENGINE`,
 ///      which is what keeps the table itself under the EIP-170 ceiling: the engine's whole
@@ -70,25 +70,6 @@ contract CrapsEngine is Craps, CrapsCustomTerms {
         r = _settleSlip(board, seed, bankroll, 0, cap, rollBudget, salt, boost);
     }
 
-    /// @notice `settleSlip` with the table's MERIT COMPOSITE (`_rankOf`) in the fifth word, in
-    ///         place of the escalated units the table never reads. What `CrapsBattle` calls: the
-    ///         comparator runs here, beside the dice, instead of in the table's bytecode.
-    /// @dev Same parameters and the same run as `settleSlip`; only `unitsPlayed` differs.
-    function settleRanked(
-        uint256 packedChips,
-        uint256 chipFlip,
-        uint256 scatterHash,
-        uint256 scatterCount,
-        bytes32 seed,
-        uint256 bankroll,
-        uint256 goal,
-        uint256 salt,
-        uint256 boost
-    ) external pure returns (SlipResult memory r) {
-        r = _play(packedChips, chipFlip, scatterHash, scatterCount, seed, bankroll, goal, salt, boost);
-        r.unitsPlayed = _rankOf(r);
-    }
-
     /// @notice Full normal battle settlement, shared by paid and awarded entries.
     /// @dev Inputs and returned money fields are whole FLIP. The simulation retains 10^18
     ///      sub-units through every hand; bankrollIn becomes the rounded payment and unitsPlayed
@@ -98,7 +79,7 @@ contract CrapsEngine is Craps, CrapsCustomTerms {
     ///      hash of its own bet id rather than its wallet, so repeat awards to one wallet stay
     ///      separate runs. Every field uses the shared 600-roll
     ///      between-shooter budget and 1,111-roll absolute ceiling.
-    /// @dev Compact header: owner32, chips30, boon3, high7, then the derived awarded bit.
+    /// @dev Compact header: owner32, chips30, boon3, high6 (bit 71 unused), then the derived awarded bit.
     function settleBattle(uint256 betId, uint256 header, uint256 chipFlip, uint256 bankroll,
         uint256 goal, uint48 bound, uint256 field, uint256 word) external pure returns (SlipResult memory r)
     {

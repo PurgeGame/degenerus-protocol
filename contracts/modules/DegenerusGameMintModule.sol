@@ -557,7 +557,6 @@ contract DegenerusGameMintModule is
         q.accountId = id;
         (q.faceValue, q.quoteBudget, q.ticketValue, q.price) = _quoteLiquidation(id);
         if (q.price != 0) q.buyerId = _resolveLiquidationBuyer(q.price);
-        q.nativeLiquidity = address(this).balance >= q.price;
         q.eligible = id > GNRUS_WALLET_ID && !_isAcquired(id)
             && !_liquidationDeity(_payee(_walletElement(id))) && !rngLockedFlag && !gameOver && !_livenessTriggered()
             && q.price != 0;
@@ -568,6 +567,10 @@ contract DegenerusGameMintModule is
     }
 
     /// @notice Sell one account and, for a main account, its entire family. Only the owner.
+    ///         A main sale hands the whole family to sDGNRS, which burns any sDGNRS it receives,
+    ///         so the seller wallet's native sDGNRS burns with it. A smurf holds none (its awards
+    ///         land at the owner), so a smurf sale leaves the owner's balance alone.
+    ///         Pays ETH first and stETH for any shortfall.
     function liquidateAccount(uint32 id, uint256 minEthOut) external {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (id == 0) id = _walletIdOf(msg.sender);
@@ -583,9 +586,10 @@ contract DegenerusGameMintModule is
         uint32 buyer = _resolveLiquidationBuyer(price);
         if (buyer == 0) revert Insolvent();
 
-        if (address(this).balance < price) revert Insolvent();
-        dgnrs.burnForLiquidation(seller);
-        if (uint32(element >> 160) == 0) walletIds[seller] &= uint64(type(uint32).max) << 32;
+        if (uint32(element >> 160) == 0) {
+            dgnrs.burnForLiquidation(seller);
+            walletIds[seller] &= uint64(type(uint32).max) << 32;
+        }
         // A nonzero seller key beside a buyer ID identifies an acquired root. Keep half passes.
         uint256 slot = _walletSlot(id);
         uint256 acquired = (element & (type(uint256).max << 192)) | (uint256(buyer) << 160) | uint160(seller);
@@ -593,8 +597,7 @@ contract DegenerusGameMintModule is
         _debitLiquidationEth(buyer, price);
         claimablePool -= uint128(price);
         emit AccountLiquidated(id, seller, buyer, price);
-        (bool paid, ) = seller.call{value: price}("");
-        if (!paid) revert E();
+        _payoutWithStethFallback(seller, price);
     }
 
     /// @dev sDGNRS pays from claimable; Vault uses claimable then its own prepaid reserve.

@@ -341,58 +341,6 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
         settlementPending = _readOutcome(next) != 0;
     }
 
-    /// @inheritdoc IDegenerusParimutuel
-    /// @dev Each winner paid and each round stepped past spends one unit of `maxWinners`, so a
-    ///      call's work is bounded by the argument alone. A call that ends exactly on a round
-    ///      boundary reports not done; the next call steps the cursor and reports done.
-    function settleGrowth(uint256 maxWinners) external returns (bool done) {
-        if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
-        uint256 cursor = growthSettlement;
-        uint24 round = uint24(cursor);
-        uint256 pos = uint64(cursor >> 24);
-
-        uint32[] memory ids = new uint32[](maxWinners);
-        uint256[] memory amounts = new uint256[](maxWinners);
-        uint256 n;
-        uint256 budget = maxWinners;
-        while (budget != 0) {
-            uint8 outcome = _readOutcome(round);
-            if (outcome == 0) {
-                // The cursor reached a round the game has not sealed: every sealed round is paid.
-                done = true;
-                break;
-            }
-            uint256 counts = growthCounts[round];
-            uint256 winCount = _winCount(counts, outcome);
-            if (pos == winCount) {
-                unchecked {
-                    ++round;
-                    --budget;
-                }
-                pos = 0;
-                continue;
-            }
-
-            uint256 take = winCount - pos;
-            if (take > budget) take = budget;
-            _payRun(ids, amounts, n, round, outcome, counts, pos, take);
-            unchecked {
-                n += take;
-                pos += take;
-                budget -= take;
-            }
-        }
-        growthSettlement = uint256(round) | (pos << 24);
-
-        if (n != 0) {
-            assembly ("memory-safe") {
-                mstore(ids, n)
-                mstore(amounts, n)
-            }
-            coinflip.creditFlipBatch(ids, amounts);
-        }
-    }
-
     /// @dev Load `take` winners of `round` from array position `pos` into the batch arrays at
     ///      slot `n`, each at the round's uniform payout.
     function _payRun(

@@ -5,7 +5,6 @@ struct LiquidationQuote {
     uint32 accountId;
     uint32 buyerId;
     bool eligible;
-    bool nativeLiquidity;
     uint256 faceValue;
     uint256 quoteBudget;
     uint256 ticketValue;

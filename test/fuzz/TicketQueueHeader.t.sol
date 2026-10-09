@@ -11,7 +11,6 @@ contract TicketQueueHeaderHarness is DegenerusGameStorage, WalletSeed {
     function append(uint24 key, uint32 id) external { _tqAppend(key, id); }
     function appendLanes(uint24 key, uint256 lanes, uint256 count) external { _tqAppendLanes(key, lanes, count); }
     function release(uint24 key) external { _releaseTicketQueue(key); }
-    function swapPop(uint24 key, uint256 k) external { _tqSwapPop(ticketQueue[_ticketQueueStorageKey(key)], k); }
     function length(uint24 key) external view returns (uint256) { return _ticketQueueLength(key); }
     function at(uint24 key, uint256 k) external view returns (uint32) {
         return _tqPositionAt(ticketQueue[_ticketQueueStorageKey(key)], k);
@@ -109,15 +108,6 @@ contract TicketQueueHeaderTest is Test {
         h.release(FF | 12);
         assertEq(h.length(FF | 112), 1);
         assertEq(h.header(h.physical(FF | 112)), 1 | (uint256(112) << 32));
-    }
-
-    function test_SwapPopTouchesOnlyTheCount() public {
-        uint24 key = FF | 30;
-        h.append(key, a);
-        h.append(key, b);
-        h.swapPop(key, 0);
-        assertEq(h.header(h.physical(key)), 1 | (uint256(30) << 32));
-        assertEq(h.at(key, 0), b);
     }
 
     function test_PackedLaneAppendPreservesTag() public {

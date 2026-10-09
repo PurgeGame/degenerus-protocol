@@ -37,8 +37,7 @@ interface IDegenerusAffiliate {
     ///      Recycled ETH rewards: 5% (all levels).
     ///      Access restricted to GAME purchase paths. Credits the rolled winner itself by wallet
     ///      ID (`creditFlip(winnerId, ...)`) and skips the leg whose winner ID equals `senderId`.
-    ///      A zero `amount` rolls no winner, so `senderId` may be 0 for it (WhaleModule's
-    ///      link-only touch).
+    ///      `senderId` must be a registered ID; a zero `amount` only resolves the referral.
     /// @param amount Base reward amount (0 decimals).
     /// @param code Affiliate code provided with the transaction (may be bytes32(0)).
 

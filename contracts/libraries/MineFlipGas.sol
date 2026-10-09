@@ -20,10 +20,10 @@ library MineFlipGas {
     error EmptyRevert();
 
     struct Meter {
-        uint256 start;
         uint256 floor;
         uint32 multiplierBps;
         bool mustProgress;
+        bool bounded;
     }
 
     struct Result {
@@ -32,18 +32,14 @@ library MineFlipGas {
         uint256 rewardBasis;
     }
 
-    function available() internal view returns (uint256) {
-        return gasleft();
-    }
-
     function normalize(uint32 multiplierBps) internal pure returns (uint32) {
         if (multiplierBps == 0) return DEFAULT_MULTIPLIER;
         if (multiplierBps < DEFAULT_MULTIPLIER) revert InvalidGasMultiplier();
         return multiplierBps;
     }
 
-    /// @dev ABI transport in the existing worker budget word: low 192 bits are
-    /// actual gas, bits 192..223 calibration, bit 224 first-progress permission.
+    /// @dev ABI transport in the existing worker budget word: low 192 bits are the
+    /// reserve-adjusted gas allowance, bits 192..223 calibration, bit 224 first-progress permission.
     /// Bit 255 distinguishes context from legacy uncalibrated worker allowances.
     /// Never pass this encoded word as a CALL gas operand or subtract from it.
     function budget(uint256 allowance, uint32 multiplierBps, bool mustProgress) internal pure returns (uint256) {
@@ -54,6 +50,8 @@ library MineFlipGas {
 
     /// @dev The local allowance retains the parent's return gas across nested work;
     ///      it is derived from gas actually available, without a transaction ceiling.
+    ///      The floor always holds every ancestor's tail. The first unit may run below it;
+    ///      once that unit marks progress, later units must fit above it again.
     function start(uint256 allowance) internal view returns (Meter memory meter) {
         uint256 entry = gasleft();
         if (allowance & CONTEXT_TAG != 0) {
@@ -62,13 +60,7 @@ library MineFlipGas {
             meter.mustProgress = allowance & FIRST_BIT != 0;
             allowance &= ALLOWANCE_MASK;
         }
-        meter.start = entry;
-        // The mandatory path uses the actual forwarded frame, not a soft estimate.
-        meter.floor = meter.mustProgress || allowance >= entry ? 0 : entry - allowance;
-    }
-
-    function spent(Meter memory meter) internal view returns (uint256) {
-        return consumed(meter.start, gasleft());
+        meter.floor = allowance >= entry ? 0 : entry - allowance;
     }
 
     function consumed(uint256 beforeGas, uint256 afterGas) internal pure returns (uint256) {
@@ -103,40 +95,34 @@ library MineFlipGas {
     /// @dev Size optional aggregation without spending the first-unit permission.
     function canRunAfterFirst(Meter memory meter, uint256 nextMax, uint256 tail) internal view returns (bool) {
         uint256 required = scale(meter, nextMax + tail + CHECK_RESERVE);
-        if (required > remaining(meter)) return false;
-        return gasleft() >= required;
+        if (required > remaining(meter) || gasleft() < required) return false;
+        // Work admitted on an estimate is held to the floor at finish.
+        if (!meter.mustProgress) meter.bounded = true;
+        return true;
     }
 
+    /// @dev Gas to send a child call: everything for the first unit, else the allowance.
     function forwardable(Meter memory meter, uint256 tail) internal view returns (uint256) {
+        if (meter.mustProgress) return gasleft();
+        return _allowance(meter, tail);
+    }
+
+    /// @dev The child's context word always carries the reserve-adjusted allowance, so a
+    ///      child that runs past its first unit still leaves every ancestor's tail.
+    function child(Meter memory meter, uint256 tail) internal view returns (uint256) {
+        return budget(_allowance(meter, tail), meter.multiplierBps, meter.mustProgress);
+    }
+
+    function _allowance(Meter memory meter, uint256 tail) private view returns (uint256) {
         uint256 left = remaining(meter);
-        if (meter.mustProgress) return left;
         uint256 reserve = scale(meter, tail + CALL_RESERVE);
         return left > reserve ? left - reserve : 0;
     }
 
-    function child(Meter memory meter, uint256 tail) internal view returns (uint256) {
-        return budget(forwardable(meter, tail), meter.multiplierBps, meter.mustProgress);
-    }
-
-    /// @dev Available child gas after retaining the caller's complete return tail.
-    ///      This is only a checkpoint/call envelope, never an entropy input or fixed tx cap.
-    function forwardable(uint256 allowance, uint256 tail) internal view returns (uint256) {
-        uint256 available = gasleft();
-        uint256 reserve = tail + CALL_RESERVE;
-        if (available <= reserve || allowance <= reserve) return 0;
-        available -= reserve;
-        allowance -= reserve;
-        return available < allowance ? available : allowance;
-    }
-
-    /// @dev Guarantees a fixed-stipend call its whole stipend after EIP-150 retention, so a
-    ///      failure it returns is the callee's own refusal, never caller-withheld gas.
-    function requireStipend(uint256 stipend) internal view {
-        if (gasleft() < stipend + stipend / 63 + 2 * CALL_RESERVE) revert InsufficientExecutionGas();
-    }
-
+    /// @dev Only estimate-admitted work can overspend. A refused worker's fixed prelude
+    ///      and a first unit that ran below the floor are not estimate failures.
     function finish(Meter memory meter) internal view {
-        if (gasleft() < meter.floor) revert WorkGasBound();
+        if (meter.bounded && gasleft() < meter.floor) revert WorkGasBound();
     }
 
     /// @dev Metering failures must never be swallowed by a semantic fallback. The Game
