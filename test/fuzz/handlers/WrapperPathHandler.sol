@@ -8,9 +8,6 @@ import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
 
-interface IVaultOwnerCheck {
-    function isVaultOwner(address account) external view returns (bool);
-}
 
 /// @title WrapperPathHandler — drives the DGNRS wrapper's own mutation paths so the
 ///        wrapper-backing invariants are exercised non-vacuously.
@@ -30,9 +27,9 @@ interface IVaultOwnerCheck {
 ///             stays untouched — the terminal charity forfeiture. Sets `ghost_yearSweepRan` so
 ///             the invariant can scope itself to the pre-sweep regime it is stated for.
 ///
-/// @dev Vault-owner auth for `unwrapTo` is mocked (isVaultOwner(actor0) == true): the property
-///      under test is the paired-decrement arithmetic, not DGVE governance. Actors are funded
-///      with DGNRS from CREATOR's deploy-time 50B allocation (a plain ERC20 transfer). Actor
+/// @dev `unwrapTo` is vault-only, so the handler unwraps from the Vault's own DGNRS balance: the
+///      property under test is the paired-decrement arithmetic. Actors are funded with DGNRS
+///      from the Vault's deploy-time 50B allocation (a plain ERC20 transfer). Actor
 ///      base 0xE0000 is disjoint from every existing handler (0xD0000 redemption, 0x60000 rng).
 contract WrapperPathHandler is Test {
     sDGNRS public sdgnrs;
@@ -85,18 +82,10 @@ contract WrapperPathHandler is Test {
             address actor = address(uint160(0xE0000 + i));
             actors.push(actor);
             vm.deal(actor, 10 ether);
-            // Fund with DGNRS from CREATOR's deploy-time allocation (plain ERC20 transfer).
-            vm.prank(ContractAddresses.CREATOR);
+            // Fund with DGNRS from the Vault's deploy-time allocation (plain ERC20 transfer).
+            vm.prank(ContractAddresses.VAULT);
             dgnrs.transfer(actor, 1_000_000e12);
         }
-
-        // Vault-owner auth is not the property under test — grant it to actor 0 only, by
-        // exact-calldata mock, so unwrapTo's paired-decrement arithmetic is reachable.
-        vm.mockCall(
-            ContractAddresses.VAULT,
-            abi.encodeWithSelector(IVaultOwnerCheck.isVaultOwner.selector, actors[0]),
-            abi.encode(true)
-        );
     }
 
     function actorCount() external view returns (uint256) {
@@ -104,15 +93,15 @@ contract WrapperPathHandler is Test {
     }
 
     // =========================================================================
-    // Action: unwrapTo — vault-owner DGNRS burn + backing sDGNRS transfer out
+    // Action: unwrapTo — vault DGNRS burn + backing sDGNRS transfer out
     // =========================================================================
 
-    /// @notice Unwrap DGNRS to soulbound sDGNRS (actor 0 holds the mocked vault-owner bit).
+    /// @notice Unwrap the Vault's DGNRS to soulbound sDGNRS for a random actor.
     ///         Contract-side gate `!game.rngLocked()` may revert the call — fine either way;
     ///         the invariant re-checks the pair after every handler call.
     function tryUnwrapTo(uint256 amtSeed, uint256 recipSeed) external {
         calls_unwrapTo++;
-        address owner_ = actors[0];
+        address owner_ = ContractAddresses.VAULT;
         uint256 bal = dgnrs.balanceOf(owner_);
         if (bal < 1 ether) return;
         uint256 amt = bound(amtSeed, 1 ether, bal);

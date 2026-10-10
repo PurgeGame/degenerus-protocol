@@ -87,7 +87,7 @@ CONSUMER-SEALED	_wordAt	_slotWord	CrapsBattle.sol	READ
 CONSUMER-SEALED	_dailyWordAt	_windowTerms	CrapsBattle.sol	READ
 CONSUMER-SEALED	_dailyWordAt	openBonusDay	CrapsBattle.sol	READ
 CONSUMER-SEALED	_dailyWordAt	vaultComp	CrapsBattle.sol	READ
-GATE	_currentRngWord	boxesPending	DegenerusGame.sol	READ	Keeper discovery only; a waiting payload cannot open queues.
+GATE	_currentRngWord	boxesPending	DegenerusGame.sol	READ	Miner discovery only; a waiting payload cannot open queues.
 CONSUMER-SEALED	_recordedDailyWord	deityBoonDataById	DegenerusGame.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
 ACCESSOR	rngWordCurrent	isRngFulfilled	DegenerusGame.sol	READ
 CURSOR	_nudgeCount	reverseFlip	DegenerusGame.sol	READ	Quote-gated counter update before daily lock; cap-255 admission.
@@ -168,7 +168,7 @@ DECL	rngWordByDay	<file-scope>	storage/DegenerusGameStorage.sol	DECL
 DECL	rngWordCurrent	<file-scope>	storage/DegenerusGameStorage.sol	DECL
 GATE	_recordedDailyWord	_afkingStreak	storage/DegenerusGameStorage.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
 ACCESSOR	rngFlagsAndNudges	_clearAppliedNudges	storage/DegenerusGameStorage.sol	READ	Daily recorder clears the frozen receipt once after using the finalized word.
-ACCESSOR	rngFlagsAndNudges	_clearAppliedNudges	storage/DegenerusGameStorage.sol	WRITE	Keeper recorder clears only nudge bits, never in the billed callback.
+ACCESSOR	rngFlagsAndNudges	_clearAppliedNudges	storage/DegenerusGameStorage.sol	WRITE	Miner recorder clears only nudge bits, never in the billed callback.
 ACCESSOR	_currentRngWord	_currentRngWord	storage/DegenerusGameStorage.sol	READ	Shared encoding accessor for current slot3; no extra state, all entropy readers use this decoder.
 ACCESSOR	rngWordCurrent	_currentRngWord	storage/DegenerusGameStorage.sol	READ	Shared encoding accessor for current slot3; no extra state, all entropy readers use this decoder.
 ACCESSOR	lootboxRngPacked	_dailyHeroWagerWord	storage/DegenerusGameStorage.sol	READ	Hero-ring metadata selects the retained pool; latest <= dailyIdx+1, so post-request bets cannot change the frozen dailyIdx day it returns.

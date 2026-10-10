@@ -366,14 +366,14 @@ contract JackpotBattleTest is CrapsPins {
         assertEq(table.bonusCursorOf(detached), 1);
         uint64 daySlot = uint64(uint256(day) * 8);
         _crank(table);
-        assertEq(table.keeperSlot(), daySlot, "daily lock prevents maintenance interleaving");
+        assertEq(table.minerSlot(), daySlot, "daily lock prevents maintenance interleaving");
         assertEq(table.bonusCursorOf(detached), 1);
         _finish();
         uint256 settledLane = flip.compLane();
         game.setRngLocked(false);
         game.setRngConsumerStage(7);
-        for (uint256 i; i < 20 && table.keeperSlot() <= daySlot; ++i) _crank(table);
-        assertGt(table.keeperSlot(), daySlot, "the keeper never swept the lapsed day");
+        for (uint256 i; i < 20 && table.minerSlot() <= daySlot; ++i) _crank(table);
+        assertGt(table.minerSlot(), daySlot, "the keeper never swept the lapsed day");
         assertEq(table.bonusCursorOf(detached), 40, "the sweep moved the completed battle cursor");
         assertEq(flip.compLane(), settledLane, "the sweep refunded awards as reservations");
         assertEq(table.battleOf(bytes32(uint256(detached))).resolved, 40);

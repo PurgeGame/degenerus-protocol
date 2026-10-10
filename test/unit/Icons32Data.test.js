@@ -14,10 +14,10 @@ import { getEvent, ZERO_ADDRESS } from "../helpers/testUtils.js";
  * Architecture summary:
  *  - On-chain storage for 33 SVG icon paths (indices 0-32)
  *  - Symbol names for quadrants 0/1/2 (Q3=Dice is dynamic)
- *  - Mutable until finalize() is called by CREATOR
+ *  - Mutable until finalize() is called by the vault owner
  *  - After finalization, no setter functions can be called
  *
- * Access control: only ContractAddresses.CREATOR (== deployer in tests)
+ * Access control: only the vault owner (the DGVE majority holder, == deployer in tests)
  */
 
 describe("Icons32Data", function () {
@@ -156,19 +156,19 @@ describe("Icons32Data", function () {
   // ---------------------------------------------------------------------------
 
   describe("setPaths() access control", function () {
-    it("reverts with OnlyCreator when called by a non-CREATOR address", async function () {
+    it("reverts with NotVaultOwner when called by a non-owner address", async function () {
       const { icons32, alice } = await getFixture();
       await expect(
         icons32.connect(alice).setPaths(0, ["malicious"])
-      ).to.be.revertedWithCustomError(icons32, "OnlyCreator");
+      ).to.be.revertedWithCustomError(icons32, "NotVaultOwner");
     });
 
-    it("reverts with OnlyCreator for any signer that is not CREATOR", async function () {
+    it("reverts with NotVaultOwner for any signer that does not hold the DGVE majority", async function () {
       const { icons32, bob, carol } = await getFixture();
       for (const signer of [bob, carol]) {
         await expect(
           icons32.connect(signer).setPaths(0, ["x"])
-        ).to.be.revertedWithCustomError(icons32, "OnlyCreator");
+        ).to.be.revertedWithCustomError(icons32, "NotVaultOwner");
       }
     });
   });
@@ -293,11 +293,11 @@ describe("Icons32Data", function () {
   // ---------------------------------------------------------------------------
 
   describe("setSymbols() access control", function () {
-    it("reverts with OnlyCreator when called by a non-CREATOR address", async function () {
+    it("reverts with NotVaultOwner when called by a non-owner address", async function () {
       const { icons32, alice } = await getFixture();
       await expect(
         icons32.connect(alice).setSymbols(0, makeSymbols())
-      ).to.be.revertedWithCustomError(icons32, "OnlyCreator");
+      ).to.be.revertedWithCustomError(icons32, "NotVaultOwner");
     });
   });
 
@@ -347,7 +347,7 @@ describe("Icons32Data", function () {
   // ---------------------------------------------------------------------------
 
   describe("finalize()", function () {
-    it("allows CREATOR to call finalize without reverting", async function () {
+    it("allows the vault owner to call finalize without reverting", async function () {
       const { icons32 } = await getFixture();
       await expect(icons32.finalize()).to.not.be.reverted;
     });
@@ -393,18 +393,18 @@ describe("Icons32Data", function () {
   // ---------------------------------------------------------------------------
 
   describe("finalize() access control", function () {
-    it("reverts with OnlyCreator when called by non-CREATOR", async function () {
+    it("reverts with NotVaultOwner when called by a non-owner", async function () {
       const { icons32, alice } = await getFixture();
       await expect(
         icons32.connect(alice).finalize()
-      ).to.be.revertedWithCustomError(icons32, "OnlyCreator");
+      ).to.be.revertedWithCustomError(icons32, "NotVaultOwner");
     });
 
-    it("does not finalize the contract when a non-CREATOR attempts it", async function () {
+    it("does not finalize the contract when a non-owner attempts it", async function () {
       const { icons32, alice } = await getFixture();
       // Attempt by alice (should fail)
       await expect(icons32.connect(alice).finalize()).to.be.reverted;
-      // CREATOR can still set paths (contract not finalized)
+      // The vault owner can still set paths (contract not finalized)
       await expect(icons32.setPaths(0, ["still_ok"])).to.not.be.reverted;
     });
   });
@@ -578,28 +578,28 @@ describe("Icons32Data", function () {
       );
     });
 
-    it("non-CREATOR cannot disrupt lifecycle at any stage", async function () {
+    it("a non-owner cannot disrupt lifecycle at any stage", async function () {
       const { icons32, alice, bob } = await getFixture();
 
       // Alice tries to set paths
       await expect(
         icons32.connect(alice).setPaths(0, ["hack"])
-      ).to.be.revertedWithCustomError(icons32, "OnlyCreator");
+      ).to.be.revertedWithCustomError(icons32, "NotVaultOwner");
 
-      // CREATOR sets a path normally
+      // The vault owner sets a path normally
       await icons32.setPaths(0, ["legit"]);
       expect(await icons32.data(0)).to.equal("legit");
 
       // Bob tries to finalize early
       await expect(
         icons32.connect(bob).finalize()
-      ).to.be.revertedWithCustomError(icons32, "OnlyCreator");
+      ).to.be.revertedWithCustomError(icons32, "NotVaultOwner");
 
-      // CREATOR can still write after failed finalize attempts
+      // The vault owner can still write after failed finalize attempts
       await icons32.setPaths(1, ["also_legit"]);
       expect(await icons32.data(1)).to.equal("also_legit");
 
-      // CREATOR finalizes
+      // The vault owner finalizes
       await icons32.finalize();
 
       // Nobody can write anymore
@@ -608,7 +608,7 @@ describe("Icons32Data", function () {
       ).to.be.revertedWithCustomError(icons32, "AlreadyFinalized");
       await expect(
         icons32.connect(alice).setPaths(0, ["post-final"])
-      ).to.be.revertedWithCustomError(icons32, "OnlyCreator");
+      ).to.be.revertedWithCustomError(icons32, "NotVaultOwner");
     });
   });
 });

@@ -535,10 +535,10 @@ contract CoverageGap222 is DeployProtocol {
     //  SECTION D: Icons32Data.sol — setup-phase functions.
     //             Note: DeployProtocol's icons32 is freshly deployed; calling
     //             setPaths / setSymbols / finalize from the test contract
-    //             (not CREATOR) exercises the OnlyCreator revert branch.
+    //             (not the vault owner) exercises the NotVaultOwner revert branch.
     // ====================================================================
 
-    function test_gap_icons32_setPaths_nonCreator_reverts() public {
+    function test_gap_icons32_setPaths_nonOwner_reverts() public {
         string[] memory paths = new string[](1);
         paths[0] = "M0 0L10 10";
         vm.prank(buyer);
@@ -549,11 +549,11 @@ contract CoverageGap222 is DeployProtocol {
                 paths
             )
         );
-        // Non-CREATOR must revert with OnlyCreator. ok must be false.
-        assertFalse(ok, "setPaths rejected non-CREATOR caller");
+        // A non-owner must revert with NotVaultOwner. ok must be false.
+        assertFalse(ok, "setPaths rejected non-vault-owner caller");
     }
 
-    function test_gap_icons32_setSymbols_nonCreator_reverts() public {
+    function test_gap_icons32_setSymbols_nonOwner_reverts() public {
         string[8] memory syms;
         syms[0] = "BTC";
         vm.prank(buyer);
@@ -564,15 +564,15 @@ contract CoverageGap222 is DeployProtocol {
                 syms
             )
         );
-        assertFalse(ok, "setSymbols rejected non-CREATOR caller");
+        assertFalse(ok, "setSymbols rejected non-vault-owner caller");
     }
 
-    function test_gap_icons32_finalize_nonCreator_reverts() public {
+    function test_gap_icons32_finalize_nonOwner_reverts() public {
         vm.prank(buyer);
         (bool ok, ) = address(icons32).call(
             abi.encodeWithSignature("finalize()")
         );
-        assertFalse(ok, "finalize rejected non-CREATOR caller");
+        assertFalse(ok, "finalize rejected non-vault-owner caller");
     }
 
     function test_gap_icons32_setPaths_asCreator_writes() public {
@@ -855,7 +855,7 @@ contract CoverageGap222 is DeployProtocol {
             )
         );
         assertFalse(o1, "staked.unwrapTo rejected caller without balance");
-        assertFalse(o2, "staked.claimVested rejected caller without vest");
+        assertFalse(o2, "staked.claimVested reverts while nothing new has vested");
         assertFalse(o3, "staked.burn rejected caller without balance");
         assertFalse(o4, "staked.yearAutoBuy rejected caller before autoBuy window");
         assertFalse(o5, "staked.burnForSdgnrs rejected non-sdgnrs caller");

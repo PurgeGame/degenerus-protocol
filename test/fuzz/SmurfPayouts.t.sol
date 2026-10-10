@@ -37,7 +37,7 @@ contract SmurfPayoutsTest is SmurfFixture {
 
     uint256 private constant LB_PRESALE_SHIFT = 185;
     uint256 private constant LB_CLOSING = uint256(1) << 254;
-    bytes32 private constant PRESALE_SWEPT = keccak256("PresaleBoxRemainderSwept(uint32,uint256)");
+    bytes32 private constant PRESALE_BURNED = keccak256("PresaleBoxRemainderBurned(uint256)");
 
     uint256 private constant PLAYER_TICKET_TAG = 0x446567656e506c61796572; // "DegenPlayer"
     uint256 private constant RESULT_TICKET_TAG = 0x446567656e526573756c74; // "DegenResult"
@@ -311,12 +311,12 @@ contract SmurfPayoutsTest is SmurfFixture {
         _boxPays(Box.Presale, plainId, plainId, plain, false);
     }
 
-    function test_PresaleClosingRemainder_SmurfPaysOwner() public {
-        _presaleClosing(smurfId, smurfId, owner);
+    function test_PresaleClosingRemainder_BurnedForSmurf() public {
+        _presaleClosing(smurfId, owner);
     }
 
-    function test_PresaleClosingRemainder_OrdinaryPaysKey() public {
-        _presaleClosing(plainId, plainId, plain);
+    function test_PresaleClosingRemainder_BurnedForOrdinary() public {
+        _presaleClosing(plainId, plain);
     }
 
     function test_AfkingBox_SmurfPaysOwner() public {
@@ -362,7 +362,6 @@ contract SmurfPayoutsTest is SmurfFixture {
                 || topic == keccak256("LootBoxReward(uint32,uint8,uint256,uint256)")
                 || topic == keccak256("BoonDiscarded(uint32,uint8)")
                 || topic == keccak256("PresaleBoxOpened(uint32,uint48,uint256,uint256,uint256,uint256,bool,uint32,uint32)")
-                || topic == keccak256("PresaleBoxRemainderSwept(uint32,uint256)")
                 || topic == keccak256("LootBoxWhalePassJackpot(uint32,uint256,uint24,uint32,uint24,uint24)")
             ) {
                 assertEq(uint256(logs[i].topics[1]), id, "resolution logs identify the credited account");
@@ -441,11 +440,13 @@ contract SmurfPayoutsTest is SmurfFixture {
         assertTrue(paid, "fixture: a box paid the wanted token");
     }
 
-    /// @dev The closing presale box sweeps the whole remaining PresaleBox pool to `payee`.
-    function _presaleClosing(uint32 id, uint32 key, address payee) private {
+    /// @dev The closing presale box burns the whole remaining PresaleBox pool: the account, smurf
+    ///      or ordinary, receives only its own presale roll.
+    function _presaleClosing(uint32 id, address payee) private {
         uint24 cur = game.level() + 1;
         uint256 entry = uint256(id) | (uint256(0.1 ether) << LB_PRESALE_SHIFT) | LB_CLOSING;
         uint256 before = sdgnrs.balanceOf(payee);
+        uint256 supplyBefore = sdgnrs.totalSupply();
         vm.recordLogs();
         ext.x_delegate(
             ContractAddresses.GAME_LOOTBOX_MODULE,
@@ -455,17 +456,17 @@ contract SmurfPayoutsTest is SmurfFixture {
             )
         );
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        uint256 swept;
+        uint256 burned;
         for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].emitter != address(game) || logs[i].topics[0] != PRESALE_SWEPT) continue;
-            assertEq(uint32(uint256(logs[i].topics[1])), _fixtureId(key), "the event names the account ID");
-            swept = abi.decode(logs[i].data, (uint256));
+            if (logs[i].emitter != address(game) || logs[i].topics[0] != PRESALE_BURNED) continue;
+            burned = abi.decode(logs[i].data, (uint256));
         }
-        assertGt(swept, 0, "the closing box swept the remainder");
+        assertGt(burned, 0, "the closing box burned the remainder");
         assertEq(_poolBalance(IsDGNRS.Pool.PresaleBox), 0, "the PresaleBox pool is empty");
+        assertEq(supplyBefore - sdgnrs.totalSupply(), burned, "the remainder left total supply");
         uint256 toPayee = _poolTransfers(logs, payee);
-        assertGe(toPayee, swept, "the remainder went to the payee");
-        assertEq(sdgnrs.balanceOf(payee) - before, toPayee, "the payee received every presale DGNRS");
+        assertEq(sdgnrs.balanceOf(payee) - before, toPayee, "the payee received only its own presale roll");
+        assertLt(toPayee, burned, "the remainder did not go to the payee");
     }
 
     // =====================================================================

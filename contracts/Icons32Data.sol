@@ -26,6 +26,11 @@ pragma solidity 0.8.34;
 
 import {ContractAddresses} from "./ContractAddresses.sol";
 
+/// @dev Vault ownership check (DGVE majority holder), as implemented by DegenerusVault.
+interface IVaultOwnerCheck {
+    function isVaultOwner(address account) external view returns (bool);
+}
+
 /*
 +=======================================================================================================+
 |                                         Icons32Data                                                   |
@@ -69,12 +74,12 @@ import {ContractAddresses} from "./ContractAddresses.sol";
 |  -----------------------                                                                              |
 |                                                                                                       |
 |  1. FINALIZATION                                                                                      |
-|     • Data can be modified by CREATOR until finalize() is called                                      |
+|     • Data can be modified by the vault owner until finalize() is called                              |
 |     • After finalization, no data can be changed                                                      |
 |     • finalize() can only be called once                                                              |
 |                                                                                                       |
 |  2. ACCESS CONTROL                                                                                    |
-|     • Only ContractAddresses.CREATOR can call setter functions                                        |
+|     • Only the vault owner (>50.1% DGVE holder) can call setter functions                             |
 |     • View functions are publicly accessible                                                          |
 |                                                                                                       |
 |  3. BOUNDS CHECKING                                                                                   |
@@ -84,8 +89,8 @@ import {ContractAddresses} from "./ContractAddresses.sol";
 |       on idx >= 8 (array bounds)                                                                      |
 |                                                                                                       |
 |  4. NO EXTERNAL CALLS                                                                                 |
-|     • Pure data storage, no dependencies on other contracts (except ContractAddresses)                |
-|     • Cannot be manipulated by external state changes                                                 |
+|     • Reads are pure data storage; setters make one view call to the Vault to authorize               |
+|     • Reads cannot be manipulated by external state changes                                           |
 |                                                                                                       |
 |  5. GAS OPTIMIZATION                                                                                  |
 |     • Batch size limited to 10 paths per call to stay under gas limits                                |
@@ -96,7 +101,7 @@ import {ContractAddresses} from "./ContractAddresses.sol";
 |  TRUST ASSUMPTIONS                                                                                    |
 |  -----------------                                                                                    |
 |                                                                                                       |
-|  1. CREATOR provides valid SVG path data before finalization                                          |
+|  1. The vault owner provides valid SVG path data before finalization                                  |
 |  2. Path data does not contain malicious SVG (script injection, etc.)                                 |
 |  3. Symbol names are appropriate and accurate                                                         |
 |                                                                                                       |
@@ -105,14 +110,14 @@ import {ContractAddresses} from "./ContractAddresses.sol";
 
 /// @title Icons32Data
 /// @notice On-chain storage for Degenerus SVG icon paths and symbol names
-/// @dev Data is mutable until finalize() is called by CREATOR, after which it becomes immutable
+/// @dev Data is mutable by the vault owner until finalize() is called, after which it becomes immutable
 contract Icons32Data {
     // ---------------------------------------------------------------------
     // ERRORS
     // ---------------------------------------------------------------------
 
-    /// @notice Thrown when caller is not ContractAddresses.CREATOR
-    error OnlyCreator();
+    /// @notice Thrown when caller does not hold >50.1% of DGVE (the vault owner)
+    error NotVaultOwner();
 
     /// @notice Thrown when attempting to modify data after finalize() has been called
     error AlreadyFinalized();
@@ -156,7 +161,7 @@ contract Icons32Data {
     // CONSTRUCTOR
     // ---------------------------------------------------------------------
 
-    /// @notice Deploy contract for batch initialization by CREATOR
+    /// @notice Deploy contract for batch initialization by the vault owner
     /// @dev Data must be populated via setter functions before finalization
     constructor() {}
 
@@ -165,16 +170,16 @@ contract Icons32Data {
     // ---------------------------------------------------------------------
 
     /// @notice Set a batch of icon paths
-    /// @dev Only callable by CREATOR before finalization. Batch capped at 10 paths per call; path
+    /// @dev Only callable by the vault owner before finalization. Batch capped at 10 paths per call; path
     ///      strings are individually unbounded, so the caller still sizes the batch to fit gas.
     /// @param startIndex Starting index in _paths array (0-32)
     /// @param paths Array of SVG path strings to set (max 10)
-    /// @custom:reverts OnlyCreator When caller is not ContractAddresses.CREATOR
+    /// @custom:reverts NotVaultOwner When caller does not hold >50.1% of DGVE
     /// @custom:reverts AlreadyFinalized When finalize() has already been called
     /// @custom:reverts MaxBatch When paths.length > 10
     /// @custom:reverts IndexOutOfBounds When startIndex + paths.length > 33
     function setPaths(uint256 startIndex, string[] calldata paths) external {
-        if (msg.sender != ContractAddresses.CREATOR) revert OnlyCreator();
+        if (!IVaultOwnerCheck(ContractAddresses.VAULT).isVaultOwner(msg.sender)) revert NotVaultOwner();
         if (_finalized) revert AlreadyFinalized();
         if (paths.length > 10) revert MaxBatch();
         if (startIndex + paths.length > 33) revert IndexOutOfBounds();
@@ -185,14 +190,14 @@ contract Icons32Data {
     }
 
     /// @notice Set symbol names for a quadrant
-    /// @dev Only callable by CREATOR before finalization. Quadrant 3 (Dice) names are generated dynamically.
+    /// @dev Only callable by the vault owner before finalization. Quadrant 3 (Dice) names are generated dynamically.
     /// @param quadrant Quadrant index (0=Crypto, 1=Zodiac, 2=Cards) — matches symbol() getter indexing
     /// @param symbols Array of 8 symbol names for the quadrant
-    /// @custom:reverts OnlyCreator When caller is not ContractAddresses.CREATOR
+    /// @custom:reverts NotVaultOwner When caller does not hold >50.1% of DGVE
     /// @custom:reverts AlreadyFinalized When finalize() has already been called
     /// @custom:reverts InvalidQuadrant When quadrant is not 0, 1, or 2
     function setSymbols(uint256 quadrant, string[8] calldata symbols) external {
-        if (msg.sender != ContractAddresses.CREATOR) revert OnlyCreator();
+        if (!IVaultOwnerCheck(ContractAddresses.VAULT).isVaultOwner(msg.sender)) revert NotVaultOwner();
         if (_finalized) revert AlreadyFinalized();
 
         if (quadrant == 0) {
@@ -213,11 +218,11 @@ contract Icons32Data {
     }
 
     /// @notice Finalize the contract, locking all data permanently
-    /// @dev Only callable by CREATOR once. After this, no setter functions can be called.
-    /// @custom:reverts OnlyCreator When caller is not ContractAddresses.CREATOR
+    /// @dev Only callable by the vault owner once. After this, no setter functions can be called.
+    /// @custom:reverts NotVaultOwner When caller does not hold >50.1% of DGVE
     /// @custom:reverts AlreadyFinalized When finalize() has already been called
     function finalize() external {
-        if (msg.sender != ContractAddresses.CREATOR) revert OnlyCreator();
+        if (!IVaultOwnerCheck(ContractAddresses.VAULT).isVaultOwner(msg.sender)) revert NotVaultOwner();
         if (_finalized) revert AlreadyFinalized();
         _finalized = true;
     }

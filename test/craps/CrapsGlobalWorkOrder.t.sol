@@ -93,12 +93,12 @@ contract CrapsGlobalWorkOrderTest is CrapsPins {
     function test_ZeroWorkerAllowanceLeavesSettlementAndLifecycleUntouched() public {
         MineFlipGas.Result memory result = _worker(0);
         assertFalse(result.progressed);
-        uint64 keeper = table.keeperSlot();
+        uint64 keeper = table.minerSlot();
         game.setRngConsumerStage(7);
         vm.prank(ContractAddresses.GAME);
         result = table.runCrapsMaintenance(0);
         assertFalse(result.progressed);
-        assertEq(table.keeperSlot(), keeper);
+        assertEq(table.minerSlot(), keeper);
         assertEq(table.bonusCursorOf(first), 0);
     }
 

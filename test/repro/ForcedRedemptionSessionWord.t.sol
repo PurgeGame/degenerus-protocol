@@ -97,7 +97,7 @@ contract ForcedRedemptionSessionWordTest is RedemptionCloseTools {
         uint32 burnDay;
         for (uint256 i; i < OWNERS; ++i) {
             address owner = _owner(i);
-            dgnrs.unwrapTo(owner, 1_000_000_000e12);
+            _unwrapFromVault(owner, 1_000_000_000e12);
             _giveWalletId(owner);
             vm.prank(owner);
             sdgnrs.burn(500_000_000e12);

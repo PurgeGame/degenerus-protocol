@@ -103,13 +103,14 @@ describe("DGNRS", function () {
       );
     });
 
-    it("creator holds initial vesting (50B) as DGNRS tokens", async function () {
-      const { dgnrs, deployer } = await loadFixture(deployFullProtocol);
-      const CREATOR_INITIAL = 50_000_000_000n * dgnrsUnits("1");
-      expect(await dgnrs.balanceOf(deployer.address)).to.be.closeTo(
-        CREATOR_INITIAL,
+    it("the vault holds the initial vesting release (50B) as DGNRS tokens", async function () {
+      const { dgnrs, vault, deployer } = await loadFixture(deployFullProtocol);
+      const VAULT_INITIAL = 50_000_000_000n * dgnrsUnits("1");
+      expect(await dgnrs.balanceOf(await vault.getAddress())).to.be.closeTo(
+        VAULT_INITIAL,
         dgnrsUnits("1")
       );
+      expect(await dgnrs.balanceOf(deployer.address)).to.equal(0n);
     });
 
     it("contract holds the pool allocations (80% total)", async function () {

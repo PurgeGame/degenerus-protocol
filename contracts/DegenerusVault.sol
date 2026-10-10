@@ -31,7 +31,7 @@ import {IVaultCoin} from "./interfaces/IVaultCoin.sol";
 
 /// @notice Interface for game player actions on DegenerusGame contract used by DegenerusVault.
 interface IDegenerusGamePlayerActions {
-    /// @notice Crank the unified keeper router (advance + box opens), paying any earned bounty.
+    /// @notice Crank the unified miner router (advance + box opens), paying any earned bounty.
     function mineFlip(uint32 gasMultiplierBps) external;
     /// @notice Start or extend a daily afking subscription for account `id` (0 = caller).
     /// @dev The afking subscription surface is GAME-resident. The vault self-subscribes with
@@ -150,9 +150,18 @@ interface IERC721Sweep {
 interface IsDGNRSBurn {
     /// @notice Burn sDGNRS to claim proportional backing assets.
     function burn(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 flipOut);
+    /// @notice Burn wrapped DGNRS held by the caller for backing assets (a redemption claim
+    ///         during the game, a deterministic payout after game over).
+    function burnWrapped(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 flipOut);
     /// @notice Claim account `id`'s resolved gambling-burn redemption in batch `batchId`
     ///         (0 = caller; the vault passes 0).
     function claimRedemption(uint32 id, uint32 batchId) external;
+}
+
+/// @notice Interface for the DGNRS wrapper's vault-only unwrap used by DegenerusVault.
+interface IDGNRSUnwrap {
+    /// @notice Burn caller's DGNRS and send the underlying sDGNRS to `recipient` as soulbound.
+    function unwrapTo(address recipient, uint256 amount) external;
 }
 
 /// @notice Interface for WWXRP vault-minting used by DegenerusVault.
@@ -537,8 +546,10 @@ contract DegenerusVault {
         IAFKingSubscriptionToken(ContractAddresses.AFKING_SUB_TOKEN);
     /// @dev stETH (Lido) token contract
     IStETH internal constant steth = IStETH(ContractAddresses.STETH_TOKEN);
-    /// @dev sDGNRS contract for burning vault-held sDGNRS
+    /// @dev sDGNRS contract for burning vault-held sDGNRS and wrapped DGNRS
     IsDGNRSBurn internal constant sdgnrsToken = IsDGNRSBurn(ContractAddresses.SDGNRS);
+    /// @dev DGNRS wrapper: the vault holds the DGNRS allocation and unwraps from it
+    IDGNRSUnwrap internal constant dgnrsToken = IDGNRSUnwrap(ContractAddresses.DGNRS);
 
     // ---------------------------------------------------------------------
     // LIQUIDATION-BUYER FALLBACK CONFIG (owner-settable; packed into one slot)
@@ -645,9 +656,9 @@ contract DegenerusVault {
     // GAMEPLAY (Vault Owner)
     // ---------------------------------------------------------------------
 
-    /// @notice Crank the game keeper router on behalf of the vault (advance + box opens)
+    /// @notice Crank the game miner router on behalf of the vault (advance + box opens)
     /// @dev Requires caller to hold >50.1% of DGVE supply. Routes through mineFlip so the
-    ///      vault earns the keeper bounty for the work; reverts NoWork() when nothing is due.
+    ///      vault earns the miner bounty for the work; reverts NoWork() when nothing is due.
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     /// @param gasMultiplierBps Forwarded to mineFlip unchanged; 0 selects the 1x default.
     function gameAdvance(uint32 gasMultiplierBps) external onlyVaultOwner {
@@ -974,6 +985,34 @@ contract DegenerusVault {
         returns (uint256 ethOut, uint256 stethOut, uint256 flipOut)
     {
         return sdgnrsToken.burn(amount);
+    }
+
+    /// @notice Burn vault-held wrapped DGNRS for backing assets. During the game this files a
+    ///         redemption claim for the vault (settled to it automatically, or via
+    ///         `sdgnrsClaimRedemption` after game over); after game over it pays ETH/stETH at once.
+    /// @dev The vault holds the DGNRS allocation (50B at deploy, 5B per level released to it by the
+    ///      permissionless `DGNRS.claimVested`). Proceeds land in vault reserves, increasing DGVE value.
+    /// @param amount Amount of DGNRS to burn (12 decimals)
+    /// @return ethOut ETH received (deterministic path only)
+    /// @return stethOut stETH received (deterministic path only)
+    /// @return flipOut FLIP received (always zero here)
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
+    function dgnrsBurnWrapped(uint256 amount)
+        external
+        onlyVaultOwner
+        returns (uint256 ethOut, uint256 stethOut, uint256 flipOut)
+    {
+        return sdgnrsToken.burnWrapped(amount);
+    }
+
+    /// @notice Unwrap vault-held DGNRS into soulbound sDGNRS for `recipient`.
+    /// @dev Subject to the wrapper's lifetime unwrap cap (40B DGNRS), whole-token minimum and the
+    ///      RNG-lock block; those checks revert on the wrapper side.
+    /// @param recipient Receives the soulbound sDGNRS
+    /// @param amount Amount of DGNRS to unwrap (12 decimals)
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
+    function dgnrsUnwrapTo(address recipient, uint256 amount) external onlyVaultOwner {
+        dgnrsToken.unwrapTo(recipient, amount);
     }
 
     /// @notice Claim a resolved sDGNRS gambling-burn redemption in batch `batchId` on behalf of the

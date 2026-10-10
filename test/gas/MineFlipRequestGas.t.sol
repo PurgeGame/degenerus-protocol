@@ -120,9 +120,9 @@ contract RequestCharitySeeder is GNRUS {
 
 contract RequestMaintenanceSeeder is CrapsBattle {
     function seedHead(uint24 day, uint8 period, uint32 entrants) external {
-        _keeperSlot = uint64(uint256(day) * _BONUS_SLOTS_PER_DAY + period);
+        _minerSlot = uint64(uint256(day) * _BONUS_SLOTS_PER_DAY + period);
         _boostBudget[day] = 1;
-        _battles[bytes32(uint256(_keeperSlot))] = entrants;
+        _battles[bytes32(uint256(_minerSlot))] = entrants;
     }
     function binding(uint64 slot) external view returns (uint48) { return _slotIndexOf(slot); }
     function seedPaidJackpot(uint24 day) external {

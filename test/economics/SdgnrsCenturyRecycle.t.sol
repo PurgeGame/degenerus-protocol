@@ -263,13 +263,12 @@ contract SdgnrsCenturyRecycleTest is RedemptionCloseTools {
         sdgnrs.burn(direct);
         uint256 wrapperBefore = dgnrs.totalSupply();
         _assertAdmissibleBurn(wrapped);
-        vm.prank(ContractAddresses.CREATOR);
+        vm.prank(ContractAddresses.VAULT);
         sdgnrs.burnWrapped(wrapped);
         assertEq(dgnrs.totalSupply(), wrapperBefore - wrapped);
         _award(sDGNRS.Pool.Affiliate, address(sdgnrs), selfBurn);
         _award(sDGNRS.Pool.Lootbox, BOB, 4_000e18);
-        vm.prank(ContractAddresses.CREATOR);
-        dgnrs.unwrapTo(BOB, 5_000e18);
+        _unwrapFromVault(BOB, 5_000e18);
         vm.prank(ALICE);
         vm.expectRevert(sDGNRS.Insufficient.selector);
         sdgnrs.burn(type(uint256).max);
@@ -280,8 +279,7 @@ contract SdgnrsCenturyRecycleTest is RedemptionCloseTools {
     }
 
     function testUnwrappedInventorySurplusIsPreserved() public {
-        vm.prank(ContractAddresses.CREATOR);
-        dgnrs.unwrapTo(address(sdgnrs), 1_000e12);
+        _unwrapFromVault(address(sdgnrs), 1_000e12);
         _award(sDGNRS.Pool.Whale, address(sdgnrs), 101e12);
         _assertRefill(100, 101e12);
         assertEq(sdgnrs.balanceOf(address(sdgnrs)) - _sum(_pools()), 1_000e12);
@@ -406,7 +404,7 @@ contract SdgnrsCenturyRecycleTest is RedemptionCloseTools {
         uint256 supply = sdgnrs.totalSupply();
         vm.prank(ALICE);
         sdgnrs.burn(1_000e12);
-        vm.prank(ContractAddresses.CREATOR);
+        vm.prank(ContractAddresses.VAULT);
         sdgnrs.burnWrapped(1_000e12);
         _recycle(100);
         _recycle(200);

@@ -188,7 +188,7 @@ contract CrapsBattle is CrapsBattleStorage {
         uint24 genesis = _currentDayIndex();
         unchecked {
             _bonus = uint256(genesis) + 1;
-            _keeperSlot = uint64(_daySlotOf(uint256(genesis) + 1));
+            _minerSlot = uint64(_daySlotOf(uint256(genesis) + 1));
         }
 
         // TWENTY SEED DAYS EACH, banked to the two protocol bodies. The day lane seats both of
@@ -651,7 +651,7 @@ contract CrapsBattle is CrapsBattleStorage {
     /// @notice Constant-time predicate for the next scheduled maintenance step.
     /// @dev Read settlement and the dedicated daily battle have their own earlier stages.
     function minerMaintenancePending() external view returns (bool) {
-        uint64 cur = _keeperSlot;
+        uint64 cur = _minerSlot;
         if (_scheduledExpired(cur)) return true;
         uint24 day = uint24(uint256(cur) / _BONUS_SLOTS_PER_DAY);
         uint256 period = cur % _BONUS_SLOTS_PER_DAY;
@@ -1479,7 +1479,7 @@ contract CrapsBattle is CrapsBattleStorage {
     ///      same reason.
     /// @custom:reverts OnlyGame If the caller is not the pinned game.
     /// @dev Opening walks nothing but today. A window that this day leaves unshut is not stranded
-    ///      and does not need sweeping up: the scheduled keeper shuts every window that has
+    ///      and does not need sweeping up: the scheduled miner shuts every window that has
     ///      stopped taking bets, in order.
     function openBonusDay() external {
         if (msg.sender != _GAME) revert OnlyGame();

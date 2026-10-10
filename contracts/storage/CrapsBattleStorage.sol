@@ -731,7 +731,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      doors check the live clock and the word), so all it can hold is prepaid reservations,
     ///      and the cursor hands each of those its pass credit back before crossing. Late work is
     ///      finished; dead days are refunded in kind; nothing is stranded either way.
-    uint64 internal _keeperSlot;
+    uint64 internal _minerSlot;
 
     /// @dev What a future day costs bought outright, per day. FIXED constants, deliberately not
     ///      derived from the pass denominations or from each other: the pass is a lootbox award

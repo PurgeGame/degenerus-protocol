@@ -259,7 +259,7 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
             // Legacy raw reward was floor(numerator * 1e18 / denominator). Preserve its
             // zero cutoff without multiplying, then pay whole FLIP with the existing minimum.
             if (numerator >= (denominator - 1) / 1e18 + 1) {
-                // The stake ledger is keyed by wallet ID. A keeper without one is registered on
+                // The stake ledger is keyed by wallet ID. A miner without one is registered on
                 // its first bounty, after the measured work; past paid admission that bounty is
                 // dropped (no registration, no credit). Registration only appends the ordinary
                 // wallet and its forward lookup; it does not write mint history.

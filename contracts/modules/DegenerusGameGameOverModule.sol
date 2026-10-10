@@ -1020,7 +1020,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         // send reaches the VRF-dead ending.
         if (!rngLockedFlag) {
             // Reissue only an active unanswered mid-day request. Delivery does not clear
-            // its ID; a delivered word awaiting keeper publication must remain unchanged.
+            // its ID; a delivered word awaiting miner publication must remain unchanged.
             if (_rngRequestActive() && rngWordCurrent == RNG_WORD_WAITING) vrfRequestId = _requestVrfWord(VRF_MIDDAY_CONFIRMATIONS);
         } else {
             // Daily in flight: KEEP rngLockedFlag=true.

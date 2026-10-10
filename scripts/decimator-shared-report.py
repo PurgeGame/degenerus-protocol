@@ -215,7 +215,7 @@ python3 scripts/decimator-shared-report.py
 | Multiple-wallet advantage | Quantified for both fresh and developed wallets | High for large burns | Decide the tolerated degree of splitting, then include it in every candidate comparison |
 | Field-dependent incentives | Equal, mixed and multi-whale fields have different curves | High for parameter tuning | Use a distribution of realistic fields, not one equal-entry calibration |
 | Podium concentration at scale | Large-field simulations | High for capped-winner economics | Test podium budgets as well as game rules across N |
-| RNG / keeper / arithmetic integration | Not exercised by an economic replica | Unresolved production risk | Freeze all inputs; bound arithmetic and work; test keeper progress and pool conservation in the real router |
+| RNG / miner / arithmetic integration | Not exercised by an economic replica | Unresolved production risk | Freeze all inputs; bound arithmetic and work; test keeper progress and pool conservation in the real router |
 
 The measured heap architecture remains compatible with this baseline: retain at most 100 eligible peaks in bounded batches, then credit the winners. The full-score baseline needs no median or live-field statistic. Shared outcomes do not automatically mean a single dice calculation can settle every bankroll; common shooter-summary reuse could be a later gas experiment. Existing component measurements are not an integrated worst-case bound, and total settlement work still grows with entries.
 

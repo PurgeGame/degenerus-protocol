@@ -37,8 +37,7 @@ contract WalletIdTruthInvariant is DeployProtocol {
             address a = address(uint160(0x1D7A0000 + i));
             seeded.push(a);
             vm.deal(a, 10_000 ether);
-            vm.prank(ContractAddresses.CREATOR);
-            dgnrs.transfer(a, 1_000_000e12);
+            _dgnrsFromVault(a, 1_000_000e12);
             vm.startPrank(address(game));
             coin.mintForGame(a, 5_000_000);
             wwxrp.mintPrize(a, 200_000);

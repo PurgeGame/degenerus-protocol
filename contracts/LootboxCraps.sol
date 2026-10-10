@@ -20,7 +20,7 @@ interface IGameSlotReader {
 ///      consumer of the preceding read session finishes. New commitments keep
 ///      accumulating in write; they cannot see the sealed read word.
 ///
-///      Fulfillment stores the shared session word. Mandatory keeper publication
+///      Fulfillment stores the shared session word. Mandatory miner publication
 ///      makes it available to consumers and emits LootboxRngApplied(tag, word, requestId).
 ///      Requests which never receive a usable word can be retried without swapping.
 ///      Unfinished battles lose their entropy on terminal entry. Settled battles
@@ -33,7 +33,7 @@ interface IGameSlotReader {
 ///      limited to their stakes, while the house bears the table's correlated variance.
 ///
 ///      This base supplies randomness binding and resolution, without escrow or
-///      payouts. The protocol's bounded keeper chain settles the preceding session
+///      payouts. The protocol's bounded miner chain settles the preceding session
 ///      before allowing a fresh request. Craps requests waive the lootbox volume
 ///      threshold, while retaining the completion, daily-priority and funding gates.
 contract LootboxCraps is Craps {
@@ -68,7 +68,7 @@ contract LootboxCraps is Craps {
     /// @notice The VRF word committed to `index`, or zero if it has not been drawn.
     function _wordAt(uint48 index) internal view returns (uint256) {
         uint256 state = _sload(RNG_STATE_SLOT);
-        // Bit253 is terminal, bit255 is keeper publication, bit252 selects write.
+        // Bit253 is terminal, bit255 is miner publication, bit252 selects write.
         // Settled battles never consult this payload again; unfinished ones die at terminal.
         if (state & (uint256(1) << 253) != 0 || state & (uint256(1) << 255) == 0
             || index != (((state >> 252) & 1) ^ 1)) return 0;

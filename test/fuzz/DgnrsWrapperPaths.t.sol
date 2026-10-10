@@ -12,8 +12,8 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///        (2) the wrapper-backing EQUALITY non-vacuity noted in audit/DGNRS-WRAPPER-BACKING-PROOF.md
 ///        — the RedemptionInvariants net asserts only the `>=` safety direction because its handler
 ///        never moves the wrapper balances. Here the paired decrement is exercised directly.
-/// @dev CREATOR is the vault owner (holds the initial DGVE majority) and holds CREATOR_INITIAL
-///      (50B) DGNRS at deploy; RNG is unlocked at genesis, so `unwrapTo`'s guards are satisfied.
+/// @dev The VAULT holds VAULT_INITIAL (50B) DGNRS at deploy and is the only caller `unwrapTo`
+///      accepts; RNG is unlocked at genesis, so `unwrapTo`'s other guards are satisfied.
 contract DgnrsWrapperPaths is DeployProtocol {
     function setUp() public {
         _deployProtocol();
@@ -23,8 +23,8 @@ contract DgnrsWrapperPaths is DeployProtocol {
         assertEq(sdgnrs.decimals(), 12);
         assertEq(dgnrs.decimals(), 12);
         assertEq(sdgnrs.totalSupply(), 1e24);
-        address owner = ContractAddresses.CREATOR;
-        _giveWalletId(owner);
+        address owner = ContractAddresses.VAULT; // holds the deploy-time DGNRS and has wallet ID 1
+        assertEq(game.walletIdOf(owner), 1, "the vault is a protocol wallet");
         vm.deal(address(sdgnrs), 100 ether);
         uint256 amount = 1e21 + 1;
         (uint256 burnValue,) = sdgnrs.previewBurnValue(amount);
@@ -40,14 +40,14 @@ contract DgnrsWrapperPaths is DeployProtocol {
         assertEq(pending, amount, "the last raw unit is included in the packed claim");
     }
 
-    /// @notice `unwrapTo` burns DGNRS from the vault owner and forwards an equal amount of
+    /// @notice `unwrapTo` burns DGNRS from the Vault and forwards an equal amount of
     ///         soulbound sDGNRS to the recipient. Both `DGNRS.totalSupply()` and
     ///         `sDGNRS.balanceOf(DGNRS)` fall by exactly `amount` (the paired decrement), the
     ///         recipient gains exactly `amount`, and the backing==supply equality is preserved.
     function test_unwrapToPairedDecrement() public {
-        address owner = ContractAddresses.CREATOR; // vault owner + DGNRS holder at deploy
+        address owner = ContractAddresses.VAULT; // DGNRS holder at deploy and the only unwrap caller
         address recipient = address(0xBEEF);
-        uint256 amount = 1_000_000_000 * 1e12; // 1B DGNRS, < CREATOR_INITIAL (50B)
+        uint256 amount = 1_000_000_000 * 1e12; // 1B DGNRS, < VAULT_INITIAL (50B)
 
         require(!game.rngLocked(), "fixture: RNG must be unlocked at genesis for unwrapTo");
         // Equality holds at deploy: DGNRS.totalSupply == sDGNRS.balanceOf(DGNRS).
@@ -92,8 +92,8 @@ contract DgnrsWrapperPaths is DeployProtocol {
     function test_postGameOverDeterministicBurnDecrement() public {
         _reachGameOver();
 
-        address owner = ContractAddresses.CREATOR; // holds CREATOR_INITIAL DGNRS
-        uint256 amount = 1_000_000_000 * 1e12; // 1B, < CREATOR_INITIAL (50B)
+        address owner = ContractAddresses.VAULT; // holds VAULT_INITIAL DGNRS
+        uint256 amount = 1_000_000_000 * 1e12; // 1B, < VAULT_INITIAL (50B)
 
         uint256 dgnrsSupplyBefore = dgnrs.totalSupply();
         uint256 sdgnrsSupplyBefore = sdgnrs.totalSupply();
@@ -141,7 +141,7 @@ contract DgnrsWrapperPaths is DeployProtocol {
     /// @notice Lifetime unwraps stop at 40B, 20% of the 200B DGNRS supply: calls add up to the
     ///         cap exactly, anything past it reverts, and the counter reads the running total.
     function test_unwrapToLifetimeCap() public {
-        address owner = ContractAddresses.CREATOR; // holds CREATOR_INITIAL (50B), above the cap
+        address owner = ContractAddresses.VAULT; // holds VAULT_INITIAL (50B), above the cap
         uint256 cap = 40_000_000_000 * 1e12;
 
         vm.startPrank(owner);
@@ -159,22 +159,113 @@ contract DgnrsWrapperPaths is DeployProtocol {
     }
 
     /// @notice Vesting and the unwrap total share one slot: an unwrap leaves the vesting mark
-    ///         alone, and a vest leaves the unwrap total alone.
+    ///         alone, and a vest leaves the unwrap total alone. Anyone may trigger a vest; the
+    ///         Vault always receives it.
     function test_vestingAndUnwrapShareTheSlot() public {
-        address owner = ContractAddresses.CREATOR;
+        address owner = ContractAddresses.VAULT;
+        address poker = address(0xCA11);
         vm.prank(owner);
         dgnrs.unwrapTo(address(0xBEEF), 7_000e12);
 
         // Level 4 vests 50B + 4 x 5B = 70B, so 20B is claimable past the 50B released at deploy.
         vm.mockCall(ContractAddresses.GAME, abi.encodeWithSignature("level()"), abi.encode(uint24(4)));
         uint256 before = dgnrs.balanceOf(owner);
-        vm.prank(owner);
+        vm.prank(poker);
         dgnrs.claimVested();
-        assertEq(dgnrs.balanceOf(owner), before + 20_000_000_000 * 1e12, "vested the level-4 tranche");
+        assertEq(dgnrs.balanceOf(owner), before + 20_000_000_000 * 1e12, "vested the level-4 tranche to the vault");
+        assertEq(dgnrs.balanceOf(poker), 0, "the caller of a vest receives nothing");
         assertEq(dgnrs.totalUnwrapped(), 7_000e12, "vesting left the unwrap total alone");
 
-        vm.prank(owner);
+        vm.prank(poker);
         vm.expectRevert(DGNRS.Insufficient.selector);
         dgnrs.claimVested();
+    }
+
+    /// @notice The creator account receives no DGNRS; the Vault holds the whole deploy-time release.
+    function test_vaultHoldsTheInitialAllocation() public view {
+        assertEq(dgnrs.balanceOf(ContractAddresses.VAULT), 50_000_000_000 * 1e12, "vault holds 50B at deploy");
+        assertEq(dgnrs.balanceOf(ContractAddresses.CREATOR), 0, "the creator holds none");
+        assertEq(dgnrs.balanceOf(address(dgnrs)), dgnrs.totalSupply() - 50_000_000_000 * 1e12, "the rest is unvested");
+    }
+
+    /// @notice Only the Vault may unwrap, even a DGVE-majority holder: its owner reaches the
+    ///         wrapper through `dgnrsUnwrapTo`, and everyone else is refused by the Vault.
+    function test_ownerUnwrapsOnlyThroughTheVault() public {
+        address recipient = address(0xBEEF);
+        uint256 amount = 5_000e12;
+        assertTrue(vault.isVaultOwner(address(this)), "fixture: the test contract holds the DGVE majority");
+
+        vm.expectRevert(DGNRS.Unauthorized.selector);
+        dgnrs.unwrapTo(recipient, amount); // the owner account itself is not the vault
+
+        uint256 vaultBefore = dgnrs.balanceOf(ContractAddresses.VAULT);
+        vault.dgnrsUnwrapTo(recipient, amount);
+        assertEq(dgnrs.balanceOf(ContractAddresses.VAULT), vaultBefore - amount, "vault DGNRS -= amount");
+        assertEq(sdgnrs.balanceOf(recipient), amount, "recipient holds soulbound sDGNRS");
+
+        vm.prank(address(0xBAD));
+        vm.expectRevert(abi.encodeWithSignature("NotVaultOwner()"));
+        vault.dgnrsUnwrapTo(recipient, amount);
+    }
+
+    /// @notice During the game the Vault files a redemption claim for its wrapped DGNRS; the owner
+    ///         triggers it through `dgnrsBurnWrapped` and nobody else can.
+    function test_vaultBurnWrappedFilesAClaimInGame() public {
+        uint256 amount = 1e21 + 1;
+        vm.deal(address(sdgnrs), 100 ether);
+        (uint256 burnValue,) = sdgnrs.previewBurnValue(amount);
+        assertGe(burnValue, sdgnrs.MIN_REDEMPTION_VALUE(), "fixture: burn meets the minimum");
+        uint256 before = dgnrs.balanceOf(ContractAddresses.VAULT);
+        (uint32 batchId,,,) = sdgnrs.redemptionBatchState();
+
+        vm.prank(address(0xBAD));
+        vm.expectRevert(abi.encodeWithSignature("NotVaultOwner()"));
+        vault.dgnrsBurnWrapped(amount);
+
+        vault.dgnrsBurnWrapped(amount);
+        assertEq(before - dgnrs.balanceOf(ContractAddresses.VAULT), amount, "vault DGNRS -= amount");
+        (uint80 pending,) = sdgnrs.pendingRedemptions(game.walletIdOf(ContractAddresses.VAULT), batchId);
+        assertEq(pending, amount, "the claim is recorded for the vault's wallet");
+    }
+
+    /// @notice After game over the same call pays the Vault ETH/stETH at once, into its reserves.
+    function test_vaultBurnWrappedPaysTheVaultAfterGameOver() public {
+        _reachGameOver();
+        uint256 amount = 1_000_000_000 * 1e12;
+        vm.deal(address(sdgnrs), address(sdgnrs).balance + 10 ether);
+        uint256 supplyBefore = dgnrs.totalSupply();
+        uint256 vaultBalanceBefore = ContractAddresses.VAULT.balance;
+        uint256 vaultStethBefore = mockStETH.balanceOf(ContractAddresses.VAULT);
+
+        (uint256 ethOut, uint256 stethOut,) = vault.dgnrsBurnWrapped(amount);
+
+        assertEq(dgnrs.totalSupply(), supplyBefore - amount, "DGNRS supply fell by the burn");
+        assertEq(ContractAddresses.VAULT.balance - vaultBalanceBefore, ethOut, "ETH landed in the vault");
+        assertEq(mockStETH.balanceOf(ContractAddresses.VAULT) - vaultStethBefore, stethOut, "stETH landed in the vault");
+        assertGt(ethOut + stethOut, 0, "the burn paid something");
+    }
+
+    /// @notice Icons32Data follows vault ownership: the DGVE majority holder edits and finalizes,
+    ///         and moving the majority moves the ability.
+    function test_iconsFollowVaultOwnership() public {
+        string[] memory paths = new string[](1);
+        paths[0] = "M0 0L10 10";
+        icons32.setPaths(0, paths); // the test contract is the DGVE majority holder
+
+        address newOwner = address(0xCAFE);
+        address dgve = vm.computeCreateAddress(address(vault), 2); // the vault's second child: DGVE
+        (bool ok,) = dgve.call(abi.encodeWithSignature("transfer(address,uint256)", newOwner, 1_000_000_000_000 ether));
+        require(ok, "fixture: move the DGVE majority");
+        assertTrue(vault.isVaultOwner(newOwner) && !vault.isVaultOwner(address(this)), "fixture: ownership moved");
+
+        vm.expectRevert(abi.encodeWithSignature("NotVaultOwner()"));
+        icons32.setPaths(0, paths);
+        vm.expectRevert(abi.encodeWithSignature("NotVaultOwner()"));
+        icons32.finalize();
+
+        vm.prank(newOwner);
+        icons32.setPaths(1, paths);
+        vm.prank(newOwner);
+        icons32.finalize();
     }
 }

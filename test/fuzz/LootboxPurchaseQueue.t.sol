@@ -62,7 +62,7 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
     bytes32 internal constant OPENED = keccak256("LootBoxOpened(uint32,uint48,uint256,uint24,uint32,uint256,bool)");
     bytes32 internal constant PRESALE_OPENED =
         keccak256("PresaleBoxOpened(uint32,uint48,uint256,uint256,uint256,uint256,bool,uint32,uint32)");
-    bytes32 internal constant REMAINDER = keccak256("PresaleBoxRemainderSwept(uint32,uint256)");
+    bytes32 internal constant REMAINDER = keccak256("PresaleBoxRemainderBurned(uint256)");
     bytes32 internal constant BOX_BUY = keccak256("LootBoxBuy(uint32,uint48,uint32,uint256)");
     bytes32 internal constant PRESALE_BUY = keccak256("PresaleBoxBuy(uint32,uint48,uint32,uint256,bool)");
 
@@ -474,9 +474,9 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
     }
 
     /// @notice The requested amount clamps to the cap; the exact applied amount is stored, down to
-    ///         1 wei. The closing entry's own resolution pays the remainder, after every earlier
-    ///         presale box has settled, and no other entry sweeps.
-    function test_Presale_OneWeiCloseAndRemainderAfterEarlierBoxes() public {
+    ///         1 wei. The closing entry's own resolution burns the remainder, after every earlier
+    ///         presale box has settled, and no other entry burns it.
+    function test_Presale_OneWeiCloseAndRemainderBurnAfterEarlierBoxes() public {
         _buy(alice, BoxOrderLib.boSmalls(1));
         _buy(bob, BoxOrderLib.boSmalls(1));
         host.seedPresale(40 ether, alice, 1 ether);
@@ -493,7 +493,7 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
         Vm.Log[] memory logs = _drain(WORD);
         uint256 openedA = type(uint256).max;
         uint256 openedB = type(uint256).max;
-        uint256 swept = type(uint256).max;
+        uint256 burned = type(uint256).max;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics.length == 0) continue;
             if (logs[i].topics[0] == PRESALE_OPENED) {
@@ -501,14 +501,13 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
                 if (uint256(logs[i].topics[2]) == _ref(b, pb)) openedB = i;
             }
             if (logs[i].topics[0] == REMAINDER) {
-                assertEq(swept, type(uint256).max, "one sweep");
-                swept = i;
-                assertEq(uint32(uint256(logs[i].topics[1])), _id(bob), "to the closing wallet");
+                assertEq(burned, type(uint256).max, "one burn");
+                burned = i;
             }
         }
         assertLt(openedA, openedB);
-        assertLt(openedB, swept, "remainder follows the closing box's own roll");
-        assertEq(IsDGNRS(address(sdgnrs)).poolBalance(IsDGNRS.Pool.PresaleBox), 0, "pool drained to the closer");
+        assertLt(openedB, burned, "remainder burn follows the closing box's own roll");
+        assertEq(IsDGNRS(address(sdgnrs)).poolBalance(IsDGNRS.Pool.PresaleBox), 0, "pool burned out");
     }
 
     // =========================================================================

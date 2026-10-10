@@ -12,8 +12,8 @@ contract RedemptionCommitmentBindingTest is RedemptionFixture {
     function _queue() private returns (uint32 id) {
         id = _openBatchId();
         for (uint256 i; i < OWNERS; ++i) {
-            // Real creator unwrap funds each owner, without writing token storage.
-            dgnrs.unwrapTo(_owner(i), 1_000_000_000e12);
+            // Real vault unwrap funds each owner, without writing token storage.
+            _unwrapFromVault(_owner(i), 1_000_000_000e12);
             _burn(_owner(i), 500_000_000e12);
         }
     }

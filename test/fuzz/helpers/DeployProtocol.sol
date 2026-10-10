@@ -263,6 +263,18 @@ abstract contract DeployProtocol is Test {
         return (new address[](0), new bytes32[](0), new uint8[](0), new address[](0), new bytes32[](0));
     }
 
+    /// @dev The vault holds the DGNRS allocation; fixtures that need DGNRS holders draw from it.
+    function _dgnrsFromVault(address to, uint256 amount) internal {
+        vm.prank(ContractAddresses.VAULT);
+        require(dgnrs.transfer(to, amount), "fixture: vault DGNRS transfer");
+    }
+
+    /// @dev Unwrap is vault-only: the vault burns its own DGNRS into soulbound sDGNRS for `to`.
+    function _unwrapFromVault(address to, uint256 amount) internal {
+        vm.prank(ContractAddresses.VAULT);
+        dgnrs.unwrapTo(to, amount);
+    }
+
     function _deployProtocol() internal {
         _deployProtocol(true);
     }
@@ -325,10 +337,10 @@ abstract contract DeployProtocol is Test {
         vault = new DegenerusVault();                  // N+20 = nonce 25
 
         // Stonk constructor calls game.subscribe(...) (SUB-09 self-subscribe).
-        // Mints creator's 20% to DGNRS address
+        // Mints the vault's 20% to the DGNRS address
         sdgnrs = new sDGNRS();           // N+21 = nonce 26
 
-        // DGNRS reads its sDGNRS balance and mints DGNRS to CREATOR
+        // DGNRS reads its sDGNRS balance and mints the initial 50B DGNRS to the VAULT
         dgnrs = new DGNRS();                  // N+22 = nonce 27
 
         // Admin constructor calls VRF.createSubscription() + GAME.wireVrf()

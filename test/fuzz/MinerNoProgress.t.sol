@@ -109,16 +109,16 @@ contract MinerRefusingCoordinator {
 
 contract MinerMaintenanceTable is CrapsBattle {
     function seedHead(uint24 day, uint8 remainder, uint32 entrants, bool opened) external {
-        _keeperSlot = uint64(uint256(day) * _BONUS_SLOTS_PER_DAY + remainder);
+        _minerSlot = uint64(uint256(day) * _BONUS_SLOTS_PER_DAY + remainder);
         if (opened) _boostBudget[day] = 1;
         if (remainder == 0) {
-            _dayTickets[_keeperSlot] = entrants;
+            _dayTickets[_minerSlot] = entrants;
             for (uint256 i = 1; i <= entrants; ++i) {
-                _appendBet((uint256(_keeperSlot) << 64) | i, 0xA000 + i);
+                _appendBet((uint256(_minerSlot) << 64) | i, 0xA000 + i);
             }
-        } else _battles[bytes32(uint256(_keeperSlot))] = entrants;
+        } else _battles[bytes32(uint256(_minerSlot))] = entrants;
     }
-    function head() external view returns (uint64) { return _keeperSlot; }
+    function head() external view returns (uint64) { return _minerSlot; }
     function binding(uint64 slot) external view returns (uint48) { return _slotIndexOf(slot); }
     function cursor(uint64 slot) external view returns (uint64) { return _bonusCursorOf(slot); }
     function credits(uint32 id) external view returns (uint256) { return _passCreditsById[id]; }

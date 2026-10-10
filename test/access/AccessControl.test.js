@@ -27,7 +27,7 @@ import {
  *  DegenerusJackpots: OnlyCoin, OnlyGame
  *  DegenerusQuests  : OnlyCoin, OnlyGame
  *  DegenerusAdmin   : NotOwner
- *  Icons32Data      : OnlyCreator
+ *  Icons32Data      : NotVaultOwner
  */
 describe("AccessControl", function () {
   after(function () {
@@ -295,29 +295,29 @@ describe("AccessControl", function () {
   // ---------------------------------------------------------------------------
 
   describe("Icons32Data", function () {
-    it("setPaths: reverts when called by alice (OnlyCreator)", async function () {
+    it("setPaths: reverts when called by alice (NotVaultOwner)", async function () {
       const { icons32, alice } = await loadFixture(deployFullProtocol);
 
       await expect(
         icons32.connect(alice).setPaths(0, ["M0 0"])
-      ).to.be.revertedWithCustomError(icons32, "OnlyCreator");
+      ).to.be.revertedWithCustomError(icons32, "NotVaultOwner");
     });
 
-    it("setSymbols: reverts when called by alice (OnlyCreator)", async function () {
+    it("setSymbols: reverts when called by alice (NotVaultOwner)", async function () {
       const { icons32, alice } = await loadFixture(deployFullProtocol);
 
       const symbols = ["A", "B", "C", "D", "E", "F", "G", "H"];
       await expect(
         icons32.connect(alice).setSymbols(0, symbols)
-      ).to.be.revertedWithCustomError(icons32, "OnlyCreator");
+      ).to.be.revertedWithCustomError(icons32, "NotVaultOwner");
     });
 
-    it("finalize: reverts when called by alice (OnlyCreator)", async function () {
+    it("finalize: reverts when called by alice (NotVaultOwner)", async function () {
       const { icons32, alice } = await loadFixture(deployFullProtocol);
 
       await expect(
         icons32.connect(alice).finalize()
-      ).to.be.revertedWithCustomError(icons32, "OnlyCreator");
+      ).to.be.revertedWithCustomError(icons32, "NotVaultOwner");
     });
   });
 

@@ -126,6 +126,6 @@ contract CrapsArmRequestBatchingTest is DeployProtocol {
         (bool armed, bool requested,) = _mine(16_000_000);
         assertTrue(armed && requested, "the oldest window arms and requests first");
         assertEq(crapsBattle.slotIndexOf(_slot(2)), 0, "the next window waits for the head's settlement");
-        assertEq(crapsBattle.keeperSlot(), _slot(1), "the cursor stays on the armed head");
+        assertEq(crapsBattle.minerSlot(), _slot(1), "the cursor stays on the armed head");
     }
 }

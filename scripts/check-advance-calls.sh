@@ -31,7 +31,7 @@
 #                  daily VRF request when Chainlink refuses — KNOWN-ISSUES Governance); the rationale
 #                  must cite the document. Accepted, never silently.
 #   OFF-CRANK      the enclosing function is not reachable from advanceGame, the VRF
-#                  fulfilment, or the keeper router (player, owner or view entry points).
+#                  fulfilment, or the miner router (player, owner or view entry points).
 #   CRANK-UNPINNED bare crank call whose callee has no revert-freedom pin (refused, ADVX-04).
 #
 # The classification is human judgement; this gate does not re-derive reachability. It

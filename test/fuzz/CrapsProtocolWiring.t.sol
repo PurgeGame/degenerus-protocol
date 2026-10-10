@@ -549,7 +549,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
     /// @return cranks How many cranks it took — each one paid the flat bounty for real progress.
     function _crankUntilArmed(uint64 slot) internal returns (uint48 index, uint256 cranks) {
         for (; cranks < 24 && index == 0; ) {
-            uint64 at = crapsBattle.keeperSlot();
+            uint64 at = crapsBattle.minerSlot();
             uint48 pending = crapsBattle.slotIndexOf(at);
             if (pending != 0 && crapsBattle.wordAt(pending - 1) == 0) {
                 _landTableWordW(pending - 1, uint256(keccak256(abi.encode("cursor-feed", at))));

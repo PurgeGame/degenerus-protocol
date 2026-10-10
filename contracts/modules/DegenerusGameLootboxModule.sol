@@ -155,7 +155,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param dgnrs DGNRS paid by the roll.
     /// @param wwxrp WWXRP requested (before WWXRP's gameMintScale): the 10% dud roll, or the pass side of the FLIP-valued branch
     ///        when its fractional pass lost the round (no pass, no coin).
-    /// @param closing True iff this was the 50-ETH-crossing closing box.
+    /// @param closing True iff this was the 50-ETH-crossing closing box; its resolution burns
+    ///        the Pool.PresaleBox remainder.
     /// @param normalPasses Normal Craps day passes credited by the pass side (0 otherwise).
     /// @param highPasses High-roller Craps day passes credited by the pass side (0 otherwise).
     event PresaleBoxOpened(
@@ -170,11 +171,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint32 highPasses
     );
 
-    /// @notice The Pool.PresaleBox remainder, paid inside the closing purchase's own presale
+    /// @notice The Pool.PresaleBox remainder, burned inside the closing purchase's own presale
     ///         resolution: every earlier presale box has settled by then.
-    /// @param id The reward account's wallet ID.
-    /// @param dgnrs DGNRS swept (the pool's whole remaining balance).
-    event PresaleBoxRemainderSwept(uint32 indexed id, uint256 dgnrs);
+    /// @param dgnrs sDGNRS burned (the pool's whole remaining balance).
+    event PresaleBoxRemainderBurned(uint256 dgnrs);
 
     /// @notice Unified lootbox reward event for boon awards
     /// @param id The reward account's wallet ID.
@@ -330,7 +330,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     // Over 50 ETH the idealized draw sums to 100*base = 2.5*poolStart (each box is priced
     // whole at the tier of its buy-time cumulative, so a boundary-straddling box pays its
     // starting tier for its whole size); with the ~40% DGNRS branch rate the pool drains
-    // through the boxes, and the closing box takes the dust.
+    // through the boxes, and the closing box burns the dust.
     /// @dev DGNRS tier multiplier in tenths: 3.0x at tier 0, 0.5x lower per tier, 1.0x at tier 4.
     uint256 private constant PRESALE_BOX_DGNRS_TIER1_TENTHS = 30;
     uint256 private constant PRESALE_BOX_DGNRS_TIER_STEP_TENTHS = 5;
@@ -981,8 +981,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      committed coin toss keeps it as coinflip credit or denominates the whole roll into
     ///      Craps day passes, cap overflow staying FLIP and a lost sub-pass fraction paying the
     ///      WWXRP dud), 40% DGNRS, 10% WWXRP. The closing purchase's box is the last presale box
-    ///      ever appended and the FIFO settles it last, so it also takes whatever remains in
-    ///      Pool.PresaleBox: no other entry can draw from that pool afterwards.
+    ///      ever appended and the FIFO settles it last, so its resolution also burns whatever
+    ///      remains in Pool.PresaleBox: no other entry can draw from that pool afterwards.
+    ///      The burn is paid to no one, so it raises every holder's share of the backing.
     /// @param acc Entry accumulator holding the owner ID and lazy token-recipient cache.
     /// @param ref Event tag (QUEUED_ENTRY_TAG | position << 1 | buffer).
     /// @param amount Exact applied presale wei.
@@ -1080,12 +1081,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         emit PresaleBoxOpened(id, ref, amount, flipOut, dgnrsOut, wwxrpOut, closing, passNormal, passHigh);
 
         if (closing) {
-            uint256 remaining = dgnrs.poolBalance(IsDGNRS.Pool.PresaleBox);
-            if (remaining != 0) {
-                emit PresaleBoxRemainderSwept(
-                    id, dgnrs.transferFromPool(IsDGNRS.Pool.PresaleBox, _boxPayee(acc), remaining)
-                );
-            }
+            // A pool transfer to sDGNRS itself burns; the amount clamps to what the pool holds.
+            uint256 burned =
+                dgnrs.transferFromPool(IsDGNRS.Pool.PresaleBox, ContractAddresses.SDGNRS, type(uint256).max);
+            if (burned != 0) emit PresaleBoxRemainderBurned(burned);
         }
     }
 
@@ -1292,7 +1291,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///           passes the frozen stamp day's word), NOT read from any index-keyed map; and
     ///        2. the seed `day` is the FROZEN stamped process day (a passed param), NOT the
     ///           live `_simulatedDayIndex()` — the day MUST stay frozen in the seed or a
-    ///           self-keepering id could grind the seed by open-timing.
+    ///           self-mining id could grind the seed by open-timing.
     ///
     ///      The live-level handling matches `resolveLootboxDirect`: `currentLevel = level +
     ///      1` LIVE, `targetLevel = _rollTargetLevel(currentLevel, seed)` rolls from the LIVE

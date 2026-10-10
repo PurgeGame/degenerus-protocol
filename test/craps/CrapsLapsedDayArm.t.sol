@@ -133,11 +133,11 @@ contract CrapsLapsedDayArmTest is CrapsPins {
         // THE SWEEP: the keeper crosses `today` (never opened, empty) and then G, refunding alice.
         uint256 laneBefore = flip.compLane();
         vm.recordLogs();
-        for (uint256 i = 0; i < 8 && craps.keeperSlot() < daySlotG + 8; ++i) {
+        for (uint256 i = 0; i < 8 && craps.minerSlot() < daySlotG + 8; ++i) {
             _crank(craps);
         }
         Vm.Log[] memory sweepLogs = vm.getRecordedLogs();
-        assertGe(craps.keeperSlot(), daySlotG + 8, "the keeper did not cross G");
+        assertGe(craps.minerSlot(), daySlotG + 8, "the keeper did not cross G");
         assertEq(_countSig(sweepLogs, keccak256("CrapsDayLapsed(uint24,uint64)")), 2, "today and G did not both lapse");
         (aN,) = craps.passCreditsOf(alice);
         assertEq(aN, 1, "alice's lapsed reservation was not refunded as a pass");
@@ -196,7 +196,7 @@ contract CrapsLapsedDayArmTest is CrapsPins {
         assertEq(craps.slotIndexOf(slot), 0, "the refused arm bound a table anyway");
 
         // Now the keeper sweeps G as lapsed and refunds the seat the refused arm never touched.
-        for (uint256 i = 0; i < 8 && craps.keeperSlot() < daySlotG + 8; ++i) {
+        for (uint256 i = 0; i < 8 && craps.minerSlot() < daySlotG + 8; ++i) {
             _crank(craps);
         }
         (uint256 aN,) = craps.passCreditsOf(alice);
@@ -274,10 +274,10 @@ contract CrapsLapsedDayArmTest is CrapsPins {
         _lapse(dayG);
         uint256 laneBefore = flip.compLane();
         uint256 daveBefore = coinflip.staked(dave);
-        for (uint256 i = 0; i < 8 && craps.keeperSlot() < daySlotG + 8; ++i) {
+        for (uint256 i = 0; i < 8 && craps.minerSlot() < daySlotG + 8; ++i) {
             _crank(craps);
         }
-        assertGe(craps.keeperSlot(), daySlotG + 8, "the keeper did not cross G");
+        assertGe(craps.minerSlot(), daySlotG + 8, "the keeper did not cross G");
         assertEq(coinflip.staked(dave), daveBefore, "the seat's winner was credited FLIP directly");
         assertEq(flip.compLane() - laneBefore, OPENER_SEAT_VALUE, "the lapsed seat was not refunded to the comp lane");
         assertEq(craps.bonusCursorOf(slot), 1, "the window cursor did not walk the seat");
@@ -299,12 +299,12 @@ contract CrapsLapsedDayArmTest is CrapsPins {
         }
         vm.stopPrank();
         _lapse(dayG);
-        while (craps.keeperSlot() < daySlotG) _crank(craps);
+        while (craps.minerSlot() < daySlotG) _crank(craps);
         uint256 laneBefore = flip.compLane();
         uint256 expected = seatsPerWindow * (ROUTINE_WINDOW_PRICE + TAIL_WINDOW_PRICE * 21);
         uint256 calls;
         uint256 priorRefunds;
-        while (craps.keeperSlot() < daySlotG + 8) {
+        while (craps.minerSlot() < daySlotG + 8) {
             vm.cool(address(craps));
             vm.prank(ContractAddresses.GAME);
             MineFlipGas.Result memory step = JackpotBattle(address(craps)).runCrapsMaintenance{gas: 400_000}(400_000);

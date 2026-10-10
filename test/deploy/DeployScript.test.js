@@ -107,11 +107,11 @@ describe("Deploy Pipeline", function () {
       expect(wrapperBal).to.equal((totalSupply * 2000n) / 10000n);
     });
 
-    it("DGNRS: creator holds initial vesting (50B) as DGNRS", async function () {
+    it("DGNRS: the vault holds the initial vesting release (50B) as DGNRS", async function () {
       const f = await loadFixture(deployFullProtocol);
-      const CREATOR_INITIAL = 50_000_000_000n * 10n ** 12n;
-      const creatorDgnrs = await f.dgnrs.balanceOf(f.deployer.address);
-      expect(creatorDgnrs).to.equal(CREATOR_INITIAL);
+      const VAULT_INITIAL = 50_000_000_000n * 10n ** 12n;
+      expect(await f.dgnrs.balanceOf(await f.vault.getAddress())).to.equal(VAULT_INITIAL);
+      expect(await f.dgnrs.balanceOf(f.deployer.address)).to.equal(0n);
     });
 
     it("DegenerusDeityPass: DGVE majority holder can call admin functions", async function () {

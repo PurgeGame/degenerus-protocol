@@ -159,7 +159,7 @@ contract DegenerusGameMintModule is
     ///        call's ordinary boxes).
     /// @param amount The applied box ETH (post-clamp).
     /// @param closing True iff this buy crossed the 50-ETH cap. It latches presaleOver, and
-    ///        this box's own resolution pays the Pool.PresaleBox remainder to the buyer.
+    ///        this box's own resolution burns the Pool.PresaleBox remainder.
     event PresaleBoxBuy(
         uint32 indexed buyer,
         uint48 indexed index,
@@ -1213,7 +1213,7 @@ contract DegenerusGameMintModule is
 
         // The DGNRS tier freezes off the purchase's starting position (sold), so a box crossing
         // a tier boundary keeps its starting tier. The closing purchase is the last presale box
-        // ever appended; its own resolution pays the Pool.PresaleBox remainder.
+        // ever appended; its own resolution burns the Pool.PresaleBox remainder.
         (uint48 index, uint32 position) = _appendBoxOrder(
             word | buyerId | (applied << LB_PRESALE_SHIFT) | (_presaleTier(sold) << LB_TIER_SHIFT)
                 | (closing ? LB_CLOSING : 0),

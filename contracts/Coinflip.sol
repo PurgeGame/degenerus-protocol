@@ -437,7 +437,7 @@ contract Coinflip {
 
     /// @notice Restricts access to authorized flip creditors.
     /// @dev Allowed callers: GAME (delegatecall modules — incl. the afking router's
-    ///      in-context creditFlip bounty, which pays AS the GAME, not a separate keeper contract),
+    ///      in-context creditFlip bounty, which pays AS the GAME, not a separate miner contract),
     ///      QUESTS (level quest rewards), AFFILIATE, ADMIN, SDGNRS (redemption win-credit at settlement:
     ///      the escrowed slice was already removed from sDGNRS's backing at batch close via
     ///      withdrawRedeemedFlip, so the settlement mint to the redeemer is FLIP-neutral),
@@ -1233,7 +1233,7 @@ contract Coinflip {
     ///
     ///      THE CLOCK IS THE ANTI-STACKING RULE, and it needs no second one. Craps fields
     ///      close on their own schedule and are finalized by whoever cranks them, so a
-    ///      keeper walking several already-closed fields in ASCENDING order of high point
+    ///      miner walking several already-closed fields in ASCENDING order of high point
     ///      makes each of them a strict improvement. The reset is what prices that: the
     ///      first claim of a day takes its accrued share, and every further claim that day
     ///      takes 5% of what the previous one left. Stacking `k` claims in a day therefore

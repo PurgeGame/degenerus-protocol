@@ -16,7 +16,7 @@ contract RedemptionGasTest is RedemptionFixture {
         assertLt(used, 350_000);
     }
     function test_gas_burnWrapped_gambling() public {
-        dgnrs.transfer(alice, 1e18);
+        _dgnrsFromVault(alice, 1e18);
         vm.prank(alice); sdgnrs.burnWrapped(1e18);
         assertEq(_claimTokens(alice, _openBatchId()), 1e18);
     }

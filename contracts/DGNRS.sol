@@ -51,12 +51,6 @@ interface IDegenerusGame {
     function level() external view returns (uint24);
 }
 
-/// @dev Vault interface for DGVE ownership check (unwrap auth).
-interface IDegenerusVault {
-    /// @notice Checks DGVE-majority vault ownership, as implemented by DegenerusVault.
-    function isVaultOwner(address account) external view returns (bool);
-}
-
 /**
  * @title DGNRS (DGNRS)
  * @notice Transferable ERC20 — the liquid face of the DGNRS token
@@ -135,7 +129,7 @@ contract DGNRS {
     //                     VESTING AND UNWRAP STATE
     // =====================================================================
 
-    /// @dev DGNRS released to the creator so far; at most CREATOR_TOTAL (2e23), under uint128.
+    /// @dev DGNRS released to the vault so far; at most VAULT_TOTAL (2e23), under uint128.
     uint128 private _vestingReleased;
     /// @notice DGNRS unwrapped to soulbound sDGNRS over the contract's life; at most UNWRAP_CAP.
     uint128 public totalUnwrapped;
@@ -144,16 +138,15 @@ contract DGNRS {
     //                          CONSTANTS
     // =====================================================================
 
-    uint256 private constant CREATOR_INITIAL = 50_000_000_000 * 1e12;   // 50B at deploy
+    uint256 private constant VAULT_INITIAL   = 50_000_000_000 * 1e12;   // 50B at deploy
     uint256 private constant VEST_PER_LEVEL  = 5_000_000_000 * 1e12;    // 5B per level
-    uint256 private constant CREATOR_TOTAL   = 200_000_000_000 * 1e12;  // 200B total
+    uint256 private constant VAULT_TOTAL     = 200_000_000_000 * 1e12;  // 200B total
     uint256 private constant MIN_UNWRAP_AMOUNT = 1e12;
     /// @dev Lifetime ceiling on `unwrapTo`: 20% of the 200B DGNRS supply, 4% of sDGNRS's 1T.
-    uint256 private constant UNWRAP_CAP = CREATOR_TOTAL / 5;
+    uint256 private constant UNWRAP_CAP = VAULT_TOTAL / 5;
 
     IsDGNRS private constant staked = IsDGNRS(ContractAddresses.SDGNRS);
     IStETH private constant steth = IStETH(ContractAddresses.STETH_TOKEN);
-    IDegenerusVault private constant vault = IDegenerusVault(ContractAddresses.VAULT);
     IDegenerusGame private constant game = IDegenerusGame(ContractAddresses.GAME);
 
     // =====================================================================
@@ -161,16 +154,16 @@ contract DGNRS {
     // =====================================================================
 
     /// @notice Mints DGNRS 1:1 against sDGNRS already deposited to this contract, splitting
-    ///         creator and vesting allocations from the rest.
+    ///         the vault's initial and vesting allocations from the rest.
     constructor() {
         uint256 deposited = staked.balanceOf(address(this));
         if (deposited == 0) revert Insufficient();
         totalSupply = deposited;
-        uint256 unvested = deposited - CREATOR_INITIAL;
-        balanceOf[ContractAddresses.CREATOR] = CREATOR_INITIAL;
+        uint256 unvested = deposited - VAULT_INITIAL;
+        balanceOf[ContractAddresses.VAULT] = VAULT_INITIAL;
         balanceOf[address(this)] = unvested;
-        _vestingReleased = uint128(CREATOR_INITIAL);
-        emit Transfer(address(0), ContractAddresses.CREATOR, CREATOR_INITIAL);
+        _vestingReleased = uint128(VAULT_INITIAL);
+        emit Transfer(address(0), ContractAddresses.VAULT, VAULT_INITIAL);
         emit Transfer(address(0), address(this), unvested);
 
         // Register this contract's ENS reverse name (best-effort; skipped when the
@@ -240,18 +233,20 @@ contract DGNRS {
     }
 
     // =====================================================================
-    //                          UNWRAP (Vault Owner Only)
+    //                          UNWRAP (Vault Only)
     // =====================================================================
 
     /// @notice Burn DGNRS and send the underlying sDGNRS to a recipient as soulbound.
     /// @dev Blocked while RNG is locked to prevent vote-stacking via DGNRS→sDGNRS conversion.
     ///      Unwraps are whole-token minimums so one account cannot be seeded with vote-ineligible dust.
-    ///      Lifetime unwraps are capped at `UNWRAP_CAP` (40B), however many calls or owners.
+    ///      Lifetime unwraps are capped at `UNWRAP_CAP` (40B), however many calls.
+    ///      Only the Vault may unwrap, from its own balance; its owner reaches this through
+    ///      `DegenerusVault.dgnrsUnwrapTo`.
     /// @param recipient Address to receive the soulbound sDGNRS.
     /// @param amount Amount of DGNRS to burn and unwrap (12 decimals).
     /// @custom:reverts UnwrapCapExceeded If lifetime unwraps would pass `UNWRAP_CAP`.
     function unwrapTo(address recipient, uint256 amount) external {
-        if (!vault.isVaultOwner(msg.sender)) revert Unauthorized();
+        if (msg.sender != ContractAddresses.VAULT) revert Unauthorized();
         if (recipient == address(0)) revert ZeroAddress();
         if (amount < MIN_UNWRAP_AMOUNT) revert UnwrapTooSmall();
         uint256 unwrapped = totalUnwrapped;
@@ -264,22 +259,22 @@ contract DGNRS {
     }
 
     // =====================================================================
-    //                          VESTING (Vault Owner Only)
+    //                          VESTING (Permissionless, Pays the Vault)
     // =====================================================================
 
-    /// @notice Claim vested DGNRS based on current game level.
-    /// @dev 50B at deploy to CREATOR, then 5B per level to vault owner. Fully vested at level 30.
+    /// @notice Release vested DGNRS to the vault based on current game level.
+    /// @dev 50B at deploy, then 5B per level, all to the Vault. Fully vested at level 30.
+    ///      Anyone may trigger the release; the recipient is always the Vault.
     function claimVested() external {
-        if (!vault.isVaultOwner(msg.sender)) revert Unauthorized();
-        uint256 vested = CREATOR_INITIAL + game.level() * VEST_PER_LEVEL;
-        if (vested > CREATOR_TOTAL) vested = CREATOR_TOTAL;
+        uint256 vested = VAULT_INITIAL + game.level() * VEST_PER_LEVEL;
+        if (vested > VAULT_TOTAL) vested = VAULT_TOTAL;
         if (vested <= _vestingReleased) revert Insufficient();
         uint256 claimable;
         unchecked { claimable = vested - _vestingReleased; }
         _vestingReleased = uint128(vested);
         balanceOf[address(this)] -= claimable;
-        balanceOf[msg.sender] += claimable;
-        emit Transfer(address(this), msg.sender, claimable);
+        balanceOf[ContractAddresses.VAULT] += claimable;
+        emit Transfer(address(this), ContractAddresses.VAULT, claimable);
     }
 
     // =====================================================================

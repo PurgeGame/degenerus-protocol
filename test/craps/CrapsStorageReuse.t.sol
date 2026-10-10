@@ -211,7 +211,7 @@ contract CrapsStorageReuseTest is CrapsPins {
         (uint256 b,) = table.passCreditsOf(bob);
         assertEq(a, 0); assertEq(b, 0);
         assertEq(coinflip.totalCredited(), 0);
-        assertGe(table.keeperSlot() / 8, _today() - 30);
+        assertGe(table.minerSlot() / 8, _today() - 30);
         assertEq(uint32(table.betWordOf(_id(day + 64, 1))), game.walletIdOf(bob));
     }
 

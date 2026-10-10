@@ -78,14 +78,14 @@ contract CrapsScheduledCursorTest is CrapsPins {
         _openDay();
         assertTrue(craps.minerMaintenancePending(), "opened separator is maintenance work");
         _crank(craps);
-        uint64 head = craps.keeperSlot();
+        uint64 head = craps.minerSlot();
         assertGt(craps.slotIndexOf(head), 0, "closed scheduled head registered");
         assertFalse(craps.minerMaintenancePending(), "committed read field owns the earlier settlement stage");
         _setWord(craps.slotIndexOf(head) - 1, 0xC105ED);
         _crank(craps);
         assertTrue(craps.minerMaintenancePending(), "finished head owes bounded cursor cleanup");
         _crank(craps);
-        assertGt(craps.keeperSlot(), head);
+        assertGt(craps.minerSlot(), head);
     }
 
     function test_theCursorIsBornAtGenesisPlusOne() public {
@@ -95,7 +95,7 @@ contract CrapsScheduledCursorTest is CrapsPins {
         vm.etch(address(deployed), address(craps).code);
         CursorHarness fresh = CursorHarness(address(deployed));
         uint24 genesis = fresh.currentDayIndex();
-        assertEq(fresh.keeperSlot(), uint64(fresh._daySlotOfPub(genesis + 1)), "the cursor was not born at tomorrow");
+        assertEq(fresh.minerSlot(), uint64(fresh._daySlotOfPub(genesis + 1)), "the cursor was not born at tomorrow");
 
         // Genesis is consumed: the Game's open hook is a no-op on the warm-up day, and the
         // cursor stands in front of tomorrow claiming nothing.
@@ -139,7 +139,7 @@ contract CrapsScheduledCursorTest is CrapsPins {
         uint64 winSlot = _slotAt(PER);
         // Period 0's window armed first (oldest); drive until the window under test is armed.
         for (uint256 i = 0; i < 8 && craps.slotIndexOf(winSlot) == 0; ++i) {
-            uint48 pending = craps.slotIndexOf(craps.keeperSlot());
+            uint48 pending = craps.slotIndexOf(craps.minerSlot());
             if (pending != 0 && pending <= 2 && craps.wordAt(pending - 1) == 0) {
                 _setWord(pending - 1, uint256(keccak256(abi.encode("life", i))));
             }
@@ -148,7 +148,7 @@ contract CrapsScheduledCursorTest is CrapsPins {
         assertGt(craps.slotIndexOf(winSlot), 0, "the cursor never armed the window under test");
 
         // WORDLESS: stopped, unadvanced, unpaid.
-        uint64 at = craps.keeperSlot();
+        uint64 at = craps.minerSlot();
         assertEq(at, winSlot, "the cursor is not standing on the armed window");
         (progressed, slot) = _crank(craps);
         assertFalse(progressed, "a wordless armed field claimed progress");
@@ -161,7 +161,7 @@ contract CrapsScheduledCursorTest is CrapsPins {
         assertTrue(progressed, "settling the field was not progress");
         assertTrue(craps.battleOf(craps.keyOfSlot(winSlot)).finalized, "the field did not finalize");
         _crank(craps); // Maintenance follows the completed read settlement stage.
-        assertGt(craps.keeperSlot(), winSlot, "a finalized field did not release the cursor");
+        assertGt(craps.minerSlot(), winSlot, "a finalized field did not release the cursor");
     }
 
     /// @dev A PARTIAL FIELD RESUMES ON THE SAME SLOT ACROSS MIDNIGHT. The wall clock has no vote:
@@ -184,11 +184,11 @@ contract CrapsScheduledCursorTest is CrapsPins {
         uint64 walked = craps.bonusCursorOf(winSlot);
         assertGt(walked, 0, "no seats settled");
         assertLt(walked, craps.battleOf(craps.keyOfSlot(winSlot)).entrants, "the fixture field settled whole");
-        assertEq(craps.keeperSlot(), winSlot, "a partial field released the cursor");
+        assertEq(craps.minerSlot(), winSlot, "a partial field released the cursor");
 
         // MIDNIGHT. The cursor still points at the same slot and the walk resumes at walked+1.
         vm.warp(block.timestamp + 1 days);
-        assertEq(craps.keeperSlot(), winSlot, "midnight moved the cursor");
+        assertEq(craps.minerSlot(), winSlot, "midnight moved the cursor");
         (progressed,) = _crank(craps);
         assertTrue(progressed, "the resumed batch was not progress");
         assertGt(craps.bonusCursorOf(winSlot), walked, "the walk did not resume past its seat cursor");
@@ -271,7 +271,7 @@ contract CrapsScheduledCursorTest is CrapsPins {
         assertEq(aN, 1, "alice's lapsed reservation did not come back as a normal credit");
         assertEq(bH, 1, "bob's lapsed reservation did not come back as a HIGH credit");
         assertEq(_countSig(logs, keccak256("CrapsDayLapsed(uint24,uint64)")), 2, "both dead days did not lapse");
-        assertGe(craps.keeperSlot(), uint64(craps._daySlotOfPub(dayA + 3)), "the cursor did not cross the dead days");
+        assertGe(craps.minerSlot(), uint64(craps._daySlotOfPub(dayA + 3)), "the cursor did not cross the dead days");
 
         // ONCE. Driving the cursor further never re-credits.
         _crank(craps);
@@ -309,7 +309,7 @@ contract CrapsScheduledCursorTest is CrapsPins {
         }
         assertGt(refunded, 0);
         assertLt(refunded, owners.length, "protocol allowance must checkpoint this fixture");
-        assertEq(craps.keeperSlot(), uint256(dayA + 1) * craps.BONUS_SLOTS_PER_DAY());
+        assertEq(craps.minerSlot(), uint256(dayA + 1) * craps.BONUS_SLOTS_PER_DAY());
         (bool progressed,) = _crank(craps);
         assertTrue(progressed);
         for (uint256 i; i < owners.length; ++i) {
@@ -389,7 +389,7 @@ contract CrapsScheduledCursorTest is CrapsPins {
     ///      `target` with `target` armed.
     function _driveCursorTo(uint64 target) internal {
         for (uint256 i = 0; i < 24; ++i) {
-            uint64 at = craps.keeperSlot();
+            uint64 at = craps.minerSlot();
             if (at == target && craps.slotIndexOf(target) != 0) return;
             uint48 pending = craps.slotIndexOf(at);
             if (pending != 0 && pending <= 2 && craps.wordAt(pending - 1) == 0 && at != target) {
@@ -406,8 +406,8 @@ contract CrapsScheduledCursorTest is CrapsPins {
         vm.warp(_dayStart() + 1 days - 1);
         _startDailyBattle(craps, day + 1, uint256(keccak256(abi.encode("jackpot", day))), 100_000);
         for (uint256 i = 0; i < 40; ++i) {
-            if (craps.keeperSlot() >= pastAll) return;
-            uint64 at = craps.keeperSlot();
+            if (craps.minerSlot() >= pastAll) return;
+            uint64 at = craps.minerSlot();
             uint48 pending = craps.slotIndexOf(at);
             if (pending == type(uint48).max) {
                 vm.prank(ContractAddresses.GAME);

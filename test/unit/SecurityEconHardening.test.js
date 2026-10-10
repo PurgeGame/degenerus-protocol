@@ -551,7 +551,7 @@ describe("SecurityEconHardening", function () {
   // =========================================================================
   describe("ECON-05: LINK reward formula", function () {
     async function assertDonation(startLink, donatedLink, expectedFlip) {
-      const { admin, mockLINK, mockVRF, mockFeed, game, coinflip, dgnrs, sdgnrs, deployer, alice } =
+      const { admin, mockLINK, mockVRF, mockFeed, game, coinflip, vault, sdgnrs, deployer, alice } =
         await loadFixture(deployFullProtocol);
       const adminAddr = await admin.getAddress();
       const vrfAddr = await mockVRF.getAddress();
@@ -562,7 +562,7 @@ describe("SecurityEconHardening", function () {
       expect((await mockVRF.getSubscription(subId))[0]).to.equal(0n);
 
       // Public unwrap supplies a real voter; governance installs the healthy feed.
-      await dgnrs.connect(deployer).unwrapTo(deployer.address, hre.ethers.parseUnits("1000", 12));
+      await vault.connect(deployer).dgnrsUnwrapTo(deployer.address, hre.ethers.parseUnits("1000", 12));
       expect(await sdgnrs.votingSupply()).to.equal(hre.ethers.parseUnits("1000", 12));
       await admin.connect(deployer).proposeFeedSwap(feedAddr);
       const proposalId = await admin.feedProposalCount();

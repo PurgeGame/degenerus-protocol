@@ -75,7 +75,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
     // makes exactly (a roll budget of 512 or more is judged between shooters). A safety bound for
     // the budget, not a rule of play: none of 200,000 simulated shared-dice runs over every board
     // size came near it (the longest ran 430 rolls and 36 shooters), and 70 of 286 million engine
-    // runs across every strategy reached 511 rolls. The complete run remains atomic across keeper checkpoints.
+    // runs across every strategy reached 511 rolls. The complete run remains atomic across miner checkpoints.
     uint256 private constant RUN_BOUNDS = (511 << 16) | 48;
 
     // A compact entry: owner ID32, board30, then the stack in whole FLIP (66 bits).

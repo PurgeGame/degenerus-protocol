@@ -80,7 +80,7 @@ interface ISeatToken {
  *      invariant.
  *
  * @dev Subscription preparation receives the engine's pinned logical day. Box
- *      consumption uses the active published session word. The Keeper module
+ *      consumption uses the active published session word. The Miner module
  *      owns global ordering, fixed gas accounting, and miner compensation.
  *
  * @custom:invariant stETH fallback pulls use an atomic self-call to pinned Lido

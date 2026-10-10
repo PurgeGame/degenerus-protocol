@@ -68,8 +68,8 @@ contract AnyInputSafety is DeployProtocol {
                 vm.prank(a);
                 game.purchaseWhalePass{value: 2.4 ether}(0, 1, bytes32(0)); // seat + sDGNRS + far-future entries
             }
+            _dgnrsFromVault(a, 1_000_000e12);
             vm.startPrank(ContractAddresses.CREATOR);
-            dgnrs.transfer(a, 1_000_000e12);
             _erc20Transfer(dgve, a, dgveSupply / 100);
             _erc20Transfer(dgvf, a, dgvfSupply / 100);
             vm.stopPrank();
@@ -126,8 +126,8 @@ contract AnyInputSafety is DeployProtocol {
         (,,,, uint256 priceWei) = game.purchaseInfo();
         game.purchase{value: priceWei * 10}(0, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         vm.stopPrank();
+        _dgnrsFromVault(BYSTANDER, 1_000_000e12);
         vm.startPrank(ContractAddresses.CREATOR);
-        dgnrs.transfer(BYSTANDER, 1_000_000e12);
         _erc20Transfer(dgve, BYSTANDER, dgveSupply / 200);
         _erc20Transfer(dgvf, BYSTANDER, dgvfSupply / 200);
         vm.stopPrank();

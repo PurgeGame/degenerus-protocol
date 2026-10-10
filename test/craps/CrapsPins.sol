@@ -391,7 +391,7 @@ abstract contract CrapsPins is Test {
         MineFlipGas.Result memory r = game.rngConsumerStage() == 6
             ? _readWork(c, c.currentIndex() ^ 1)
             : _maintain(c);
-        return (r.progressed, c.keeperSlot());
+        return (r.progressed, c.minerSlot());
     }
 
     MockGame internal game;

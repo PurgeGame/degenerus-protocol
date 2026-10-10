@@ -103,7 +103,7 @@ interface IDGNRS {
  * @title sDGNRS (sDGNRS)
  * @notice Soulbound token backed by ETH, stETH, and FLIP reserves
  * @dev Receives ETH/stETH from game distributions; reward pools recycle 25-75% of live burns each century.
- *      Creator allocation is minted to the DGNRS wrapper contract; all other holders receive
+ *      The vault allocation is minted to the DGNRS wrapper contract; all other holders receive
  *      sDGNRS directly from reward pools (soulbound — no transfer function).
  *
  * ARCHITECTURE:
@@ -659,10 +659,10 @@ contract sDGNRS {
     /// @dev Basis points denominator (100%)
     uint16 private constant BPS_DENOM = 10_000;
 
-    /// @dev Creator allocation (20%)
-    uint16 private constant CREATOR_BPS = 2000;
+    /// @dev Vault allocation (20%), minted to the DGNRS wrapper
+    uint16 private constant VAULT_BPS = 2000;
 
-    /// @dev Non-creator pool distribution (BPS of total supply).
+    /// @dev Pool distribution other than the vault allocation (BPS of total supply).
     uint16 private constant WHALE_POOL_BPS = 1000;
     uint16 private constant AFFILIATE_POOL_BPS = 3000;
     uint16 private constant LOOTBOX_POOL_BPS = 2000;
@@ -733,15 +733,15 @@ contract sDGNRS {
 
 
     /// @notice Initializes token supply and distributes to pools
-    /// @dev Mints creator allocation to DGNRS wrapper address and pool allocations to this contract
+    /// @dev Mints the vault allocation to the DGNRS wrapper address and pool allocations to this contract
     constructor() {
-        uint256 creatorAmount = (INITIAL_SUPPLY * CREATOR_BPS) / BPS_DENOM;
+        uint256 vaultAmount = (INITIAL_SUPPLY * VAULT_BPS) / BPS_DENOM;
         uint256 whaleAmount = (INITIAL_SUPPLY * WHALE_POOL_BPS) / BPS_DENOM;
         uint256 presaleBoxAmount = (INITIAL_SUPPLY * PRESALE_BOX_POOL_BPS) / BPS_DENOM;
         uint256 affiliateAmount = (INITIAL_SUPPLY * AFFILIATE_POOL_BPS) / BPS_DENOM;
         uint256 lootboxAmount = (INITIAL_SUPPLY * LOOTBOX_POOL_BPS) / BPS_DENOM;
         uint256 rewardAmount = (INITIAL_SUPPLY * REWARD_POOL_BPS) / BPS_DENOM;
-        uint256 totalAllocated = creatorAmount + whaleAmount + presaleBoxAmount + affiliateAmount + lootboxAmount + rewardAmount;
+        uint256 totalAllocated = vaultAmount + whaleAmount + presaleBoxAmount + affiliateAmount + lootboxAmount + rewardAmount;
         if (totalAllocated < INITIAL_SUPPLY) {
             uint256 dust;
             unchecked {
@@ -752,7 +752,7 @@ contract sDGNRS {
         uint256 poolTotal =
             whaleAmount + presaleBoxAmount + affiliateAmount + lootboxAmount + rewardAmount;
 
-        _mint(ContractAddresses.DGNRS, creatorAmount);
+        _mint(ContractAddresses.DGNRS, vaultAmount);
         _mint(address(this), poolTotal);
         centurySupplyCheckpoint = _totalSupply;
 
@@ -800,7 +800,7 @@ contract sDGNRS {
     // =====================================================================
 
     /// @notice Transfer sDGNRS from the wrapper to a recipient (wrapper only)
-    /// @dev Called by DGNRS contract when creator unwraps DGNRS to soulbound sDGNRS.
+    /// @dev Called by DGNRS contract when the vault unwraps DGNRS to soulbound sDGNRS.
     ///      Direct balance manipulation avoids modifying _transfer authorization.
     /// @param to Recipient address
     /// @param amount Amount to transfer

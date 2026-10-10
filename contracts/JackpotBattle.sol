@@ -965,7 +965,7 @@ contract JackpotBattle is CrapsBattleStorage {
         // A live read cohort, locked day or earlier consumer always blocks admission work.
         if (stage != 7 && !(stage == 0 && !IGameCraps(_GAME).rngLocked()
             && _rngSlotCursor[read] == _rngSlots[read].length && _wordAt(read) == 0)) return result;
-        uint64 cur = _keeperSlot;
+        uint64 cur = _minerSlot;
         uint24 today = _currentDayIndex();
         if (_scheduledExpired(cur)) {
             // Bounded catch-up after a long outage. No expired seat is read or refunded.
@@ -1002,7 +1002,7 @@ contract JackpotBattle is CrapsBattleStorage {
             result.done = true;
             break;
         }
-        if (cur != _keeperSlot) { _keeperSlot = cur; result.progressed = true; MineFlipGas.markProgress(meter); }
+        if (cur != _minerSlot) { _minerSlot = cur; result.progressed = true; MineFlipGas.markProgress(meter); }
         result.rewardBasis = result.progressed ? 1 : 0;
         MineFlipGas.finish(meter);
     }

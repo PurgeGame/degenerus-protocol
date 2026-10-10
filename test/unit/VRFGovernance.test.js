@@ -423,18 +423,19 @@ describe("VRF Governance", function () {
   // =========================================================================
   describe("unwrapTo VRF stall guard", function () {
     it("unwrapTo works normally (rngLocked=false)", async function () {
-      const { dgnrs, sdgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
+      const { dgnrs, sdgnrs, vault, deployer, alice } = await loadFixture(deployFullProtocol);
       const amount = hre.ethers.parseUnits("100", 12);
+      const vaultAddr = await vault.getAddress();
 
-      const wrapperBefore = await dgnrs.balanceOf(deployer.address);
+      const wrapperBefore = await dgnrs.balanceOf(vaultAddr);
       const stakedBefore = await sdgnrs.balanceOf(alice.address);
-      await dgnrs.connect(deployer).unwrapTo(alice.address, amount);
-      expect(await dgnrs.balanceOf(deployer.address)).to.equal(wrapperBefore - amount);
+      await vault.connect(deployer).dgnrsUnwrapTo(alice.address, amount);
+      expect(await dgnrs.balanceOf(vaultAddr)).to.equal(wrapperBefore - amount);
       expect(await sdgnrs.balanceOf(alice.address)).to.equal(stakedBefore + amount);
     });
 
     it("unwrapTo reverts when rngLocked is true", async function () {
-      const { dgnrs, game, deployer, alice } = await loadFixture(deployFullProtocol);
+      const { dgnrs, vault, game, deployer, alice } = await loadFixture(deployFullProtocol);
       const amount = hre.ethers.parseUnits("100", 12);
 
       // Advance to next day and call mineFlip to trigger VRF request,
@@ -443,7 +444,7 @@ describe("VRF Governance", function () {
       await game.connect(deployer).mineFlip(0);
 
       await expect(
-        dgnrs.connect(deployer).unwrapTo(alice.address, amount)
+        vault.connect(deployer).dgnrsUnwrapTo(alice.address, amount)
       ).to.be.revertedWithCustomError(dgnrs, "Unauthorized");
     });
   });
@@ -825,14 +826,14 @@ describe("VRF Governance", function () {
   // =========================================================================
   describe("tie condition", function () {
     it("equal approve and reject weights leave proposal Active (neither execute nor kill)", async function () {
-      const { admin, game, mockVRF, deployer, alice, bob, carol, sdgnrs, dgnrs } =
+      const { admin, game, mockVRF, deployer, alice, bob, carol, sdgnrs, vault } =
         await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
       const subId = await admin.subscriptionId();
       // Three equal eligible holders: either first vote is below the initial 50%.
       // The third holder abstains; the first two form an exact, nonzero tie.
       for (const owner of [deployer, alice, bob]) {
-        await dgnrs.connect(deployer).unwrapTo(owner.address, hre.ethers.parseUnits("1000", 12));
+        await vault.connect(deployer).dgnrsUnwrapTo(owner.address, hre.ethers.parseUnits("1000", 12));
         expect(await sdgnrs.balanceOf(owner.address)).to.equal(hre.ethers.parseUnits("1000", 12));
       }
       expect(await sdgnrs.votingSupply()).to.equal(hre.ethers.parseUnits("3000", 12));

@@ -14,10 +14,10 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 ///         (bought last, the crossing buy) can never be opened ahead of its cohort (bought
 ///         first) -- the title's claim holds STRUCTURALLY rather than merely by observed
 ///         invariant. This test proves: (1) the cohort drains before the closer is even
-///         reachable, (2) the closer's own roll and the pool's remainder (both credited to the
-///         closer) are the two components of the closing entry's one resolution, decomposed via
-///         the `PresaleBoxRemainderSwept` event, and (3) the closer's own roll never itself takes
-///         a windfall share of the pool -- the remainder does, after that roll.
+///         reachable, (2) the closer's own roll (credited to the closer) and the pool's remainder
+///         (burned, paid to no one) are the two components of the closing entry's one resolution,
+///         decomposed via the `PresaleBoxRemainderBurned` event, and (3) the closer's own roll never
+///         itself takes a windfall share of the pool.
 contract WardenLbxClosingBoxOrder is DeployProtocol {
     using BoxOrderLib for uint256;
 
@@ -26,7 +26,7 @@ contract WardenLbxClosingBoxOrder is DeployProtocol {
     uint256 constant PRESALE_BOX_ETH_CAP = 50 ether;
     uint256 constant QUEUED_ORDER_DOMAIN = 0x5175657565644f72646572; // "QueuedOrder"
 
-    bytes32 constant REMAINDER_SWEPT_TOPIC = keccak256("PresaleBoxRemainderSwept(uint32,uint256)");
+    bytes32 constant REMAINDER_BURNED_TOPIC = keccak256("PresaleBoxRemainderBurned(uint256)");
 
     function setUp() public {
         _deployProtocol();
@@ -107,10 +107,10 @@ contract WardenLbxClosingBoxOrder is DeployProtocol {
         assertEq(RecyclingState.boxCount(address(game), _lrIndex()), position + 1, "one entry per purchase");
     }
 
-    /// @dev Sum every PresaleBoxRemainderSwept amount in `logs` (at most one: the closing entry's).
-    function _remainderSweptIn(Vm.Log[] memory logs) internal pure returns (uint256 total) {
+    /// @dev Sum every PresaleBoxRemainderBurned amount in `logs` (at most one: the closing entry's).
+    function _remainderBurnedIn(Vm.Log[] memory logs) internal pure returns (uint256 total) {
         for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics.length != 0 && logs[i].topics[0] == REMAINDER_SWEPT_TOPIC) {
+            if (logs[i].topics.length != 0 && logs[i].topics[0] == REMAINDER_BURNED_TOPIC) {
                 total += abi.decode(logs[i].data, (uint256));
             }
         }
@@ -164,21 +164,23 @@ contract WardenLbxClosingBoxOrder is DeployProtocol {
         assertGt(remainder, 0, "the pool still holds a remainder once the cohort alone has drawn");
         assertEq(sdgnrs.balanceOf(closer), 0, "the closer is still unreached after the whole cohort");
 
-        // Opening the closer's entry runs its own roll and then pays the pool's remainder (both
-        // credited to `closer`) in the same resolution. The PresaleBoxRemainderSwept event
-        // isolates the remainder from the closer's own roll.
+        // Opening the closer's entry runs its own roll and then burns the pool's remainder in the
+        // same resolution: only the roll is credited to `closer`. The PresaleBoxRemainderBurned
+        // event reports the burn.
         uint256 closerBalBefore = sdgnrs.balanceOf(closer);
+        uint256 supplyBefore = sdgnrs.totalSupply();
         uint256 closerBudget = _oneEntryBudget();
         vm.recordLogs();
         game.mineFlip{gas: closerBudget}(0);
         assertEq(_cursor(), closerPos + 1, "exactly the closer's one entry opened");
-        uint256 sweptRemainder = _remainderSweptIn(vm.getRecordedLogs());
-        uint256 closerOwnRoll = sdgnrs.balanceOf(closer) - closerBalBefore - sweptRemainder;
+        uint256 burnedRemainder = _remainderBurnedIn(vm.getRecordedLogs());
+        uint256 closerOwnRoll = sdgnrs.balanceOf(closer) - closerBalBefore;
 
-        assertEq(sweptRemainder, remainder - closerOwnRoll, "the remainder is exactly what the closer's own roll left");
+        assertEq(burnedRemainder, remainder - closerOwnRoll, "the remainder is exactly what the closer's own roll left");
+        assertEq(supplyBefore - sdgnrs.totalSupply(), burnedRemainder, "the remainder left total supply");
         assertEq(_poolBal(), 0, "the closing entry leaves the pool empty");
         assertLt(closerOwnRoll, pool / 2, "the closer's own roll never itself takes the pool");
         emit log_named_uint("closer own roll (wei)", closerOwnRoll);
-        emit log_named_uint("remainder paid at close (wei)", sweptRemainder);
+        emit log_named_uint("remainder burned at close (wei)", burnedRemainder);
     }
 }

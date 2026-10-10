@@ -1020,9 +1020,9 @@ contract CrapsWalletIdsTest is CrapsPins {
         _open();
         uint64 gSlot = uint64(_daySlot(g));
         vm.recordLogs();
-        for (uint256 i; i < 8 && c.keeperSlot() < gSlot + 8; ++i) _crank(c);
+        for (uint256 i; i < 8 && c.minerSlot() < gSlot + 8; ++i) _crank(c);
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        assertGe(c.keeperSlot(), gSlot + 8, "the keeper crossed G");
+        assertGe(c.minerSlot(), gSlot + 8, "the keeper crossed G");
 
         assertEq(_normal(c.idWord(aId)), _normal(a0) + 1, "alice's normal refund by ID");
         assertEq(_high(c.idWord(bId)), _high(b0) + 1, "bob's high refund by ID");

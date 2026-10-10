@@ -11,8 +11,8 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 /// @notice Presale payout regression: real buys and FIFO engine opens, with one immutable
 ///         word per session. Only earned credit, completed ticket prerequisites and entropy
 ///         are seeded. Tests preserve the tier ratio, live-pool clamp and closing-dust bounds;
-///         the closing entry's own resolution pays the Pool.PresaleBox remainder
-///         (`poolBalance` then `transferFromPool`) after every earlier presale box.
+///         the closing entry's own resolution burns the Pool.PresaleBox remainder (a pool
+///         transfer to sDGNRS itself) after every earlier presale box, paying nobody.
 contract PresaleBoxDrain is DeployProtocol {
     using BoxOrderLib for uint256;
 
@@ -22,7 +22,7 @@ contract PresaleBoxDrain is DeployProtocol {
     uint256 constant QUEUED_ORDER_DOMAIN = 0x5175657565644f72646572; // "QueuedOrder"
     uint256 constant QUEUED_ENTRY_TAG = uint256(1) << 46;
     bytes32 constant OPENED = keccak256("PresaleBoxOpened(uint32,uint48,uint256,uint256,uint256,uint256,bool,uint32,uint32)");
-    bytes32 constant SWEPT = keccak256("PresaleBoxRemainderSwept(uint32,uint256)");
+    bytes32 constant BURNED = keccak256("PresaleBoxRemainderBurned(uint256)");
 
     function setUp() public {
         _deployProtocol();
@@ -109,8 +109,8 @@ contract PresaleBoxDrain is DeployProtocol {
     /// @dev The FIFO transcript accumulated across engine calls.
     struct Transcript {
         uint256 opened;
-        uint256 swept;
-        bool sawSweep;
+        uint256 burned;
+        bool sawBurn;
         uint256[] paid;
     }
 
@@ -119,7 +119,7 @@ contract PresaleBoxDrain is DeployProtocol {
     ///      Progress is read off the resolution events: once the cohort completes, the same
     ///      engine call may already seal the next request, which restarts the cursor.
     function _openAll(uint48 index, uint256 base, uint256 word, address[] memory buyers, uint256 amount)
-        private returns (uint256[] memory paid, uint256 swept)
+        private returns (uint256[] memory paid, uint256 burned)
     {
         uint256[] memory amounts = new uint256[](buyers.length);
         for (uint256 i; i < buyers.length; ++i) amounts[i] = amount;
@@ -128,7 +128,7 @@ contract PresaleBoxDrain is DeployProtocol {
 
     /// @dev `_openAll` with each entry's own applied presale amount.
     function _openAll(uint48 index, uint256 base, uint256 word, address[] memory buyers, uint256[] memory amounts)
-        private returns (uint256[] memory paid, uint256 swept)
+        private returns (uint256[] memory paid, uint256 burned)
     {
         RecyclingState.seedWord(address(game), index, bytes32(word));
         // These payout fixtures buy presale boxes only: there is no ticket producer to drain.
@@ -148,9 +148,9 @@ contract PresaleBoxDrain is DeployProtocol {
             assertGt(t.opened, before, "ready FIFO sweep advances");
         }
         assertEq(t.opened, buyers.length, "every queued entry opened exactly once");
-        (paid, swept) = (t.paid, t.swept);
+        (paid, burned) = (t.paid, t.burned);
         for (uint256 i; i < buyers.length; ++i) {
-            assertEq(sdgnrs.balanceOf(buyers[i]), paid[i] + (i == buyers.length - 1 ? swept : 0), "credits match result");
+            assertEq(sdgnrs.balanceOf(buyers[i]), paid[i], "credits match result: the remainder pays nobody");
         }
         // Replay probe: whatever the engine does next (or NoWork / a pending word), it pays no entry twice.
         vm.recordLogs();
@@ -188,12 +188,11 @@ contract PresaleBoxDrain is DeployProtocol {
                 assertEq(resolved, amounts[t.opened], "applied amount preserved");
                 if (closing) assertEq(t.opened, buyers.length - 1, "closing buyer is last");
                 t.paid[t.opened++] = dgnrsPaid;
-            } else if (logs[i].topics[0] == SWEPT) {
+            } else if (logs[i].topics[0] == BURNED) {
                 assertEq(t.opened, buyers.length, "the remainder follows every resolution");
-                assertFalse(t.sawSweep, "remainder paid once");
-                assertEq(uint32(uint256(logs[i].topics[1])), game.walletIdOf(buyers[buyers.length - 1]));
-                t.swept = abi.decode(logs[i].data, (uint256));
-                t.sawSweep = true;
+                assertFalse(t.sawBurn, "remainder burned once");
+                t.burned = abi.decode(logs[i].data, (uint256));
+                t.sawBurn = true;
             }
         }
     }
@@ -210,14 +209,14 @@ contract PresaleBoxDrain is DeployProtocol {
         assertEq(_entry(index, base).boPresaleTier(), 0, "bought below 10 ETH sold: tier 0");
         assertEq(_entry(index, base + 1).boPresaleTier(), 4, "bought from 40 ETH sold: tier 4");
         uint256 start = _poolBal();
-        (uint256[] memory paid, uint256 swept) =
+        (uint256[] memory paid, uint256 burned) =
             _openAll(index, base, _allDgnrsWord(buyers, index, base), buyers, 1 ether);
         assertGt(paid[0], 0, "tier1 drew DGNRS");
         assertGt(paid[1], 0, "tier5 drew DGNRS");
         assertEq(paid[0], paid[1] * 3, "tier-1 DGNRS-per-ETH == 3 * tier-5 DGNRS-per-ETH");
         assertEq(paid[0], _expectedReward(start, 30, 1 ether), "tier1 fixed curve");
         assertEq(paid[1], _expectedReward(start, 10, 1 ether), "tier5 fixed curve");
-        assertEq(swept, 0, "sale remains open");
+        assertEq(burned, 0, "sale remains open");
         assertEq(start - _poolBal(), paid[0] + paid[1], "pool conservation");
     }
 
@@ -235,7 +234,7 @@ contract PresaleBoxDrain is DeployProtocol {
         uint256 excess = _poolBal() - start;
         vm.prank(address(game));
         sdgnrs.transferFromPool(sDGNRS.Pool.PresaleBox, address(0xDEAD), excess);
-        (uint256[] memory paid, uint256 swept) =
+        (uint256[] memory paid, uint256 burned) =
             _openAll(index, base, _allDgnrsWord(buyers, index, base), buyers, 5 ether);
         uint256 remaining = start;
         for (uint256 i; i < buyers.length; ++i) {
@@ -247,12 +246,12 @@ contract PresaleBoxDrain is DeployProtocol {
             remaining -= paid[i];
         }
         assertGt(paid[0], 0, "early DGNRS branch paid");
-        assertLe(paid[6] + swept, 1, "closing roll plus remainder <= 1 wei dust");
+        assertLe(paid[6] + burned, 1, "closing roll plus remainder <= 1 wei dust");
         assertLe(_poolBal(), 1, "pool ~0 after closing box");
-        assertEq(remaining - swept, _poolBal(), "pool conservation");
+        assertEq(remaining - burned, _poolBal(), "pool conservation");
     }
 
-    function test_PFIX02_RealisticRun_ClosingSweepIsDust() public {
+    function test_PFIX02_RealisticRun_ClosingBurnIsDust() public {
         uint48 index = RecyclingState.writeBuffer(address(game));
         uint256 base = RecyclingState.boxCount(address(game), index);
         address[] memory buyers = new address[](250);
@@ -270,7 +269,7 @@ contract PresaleBoxDrain is DeployProtocol {
         uint256 word = 2;
         while (!_realisticWord(word, buyers, index, base)) ++word;
         uint256 branches;
-        (uint256[] memory paid, uint256 swept) = _openAll(index, base, word, buyers, 0.2 ether);
+        (uint256[] memory paid, uint256 burned) = _openAll(index, base, word, buyers, 0.2 ether);
         uint256 remaining = start;
         uint256 cumulative;
         for (uint256 i; i < buyers.length; ++i) {
@@ -287,20 +286,21 @@ contract PresaleBoxDrain is DeployProtocol {
         assertLe(branches * 100, buyers.length * 50, "realized DGNRS branch rate <= 50%");
         assertGe(_outcome(word, buyers[249], index, base + 249), 90, "closer is the WWXRP branch");
         assertEq(paid[249], 0, "closing WWXRP branch draws no DGNRS");
-        assertLe(swept, start / 100, "closing remainder <= poolStart/100");
+        assertLe(burned, start / 100, "closing remainder burned <= poolStart/100");
         assertLe(_poolBal(), start / 100, "residual pool <= poolStart/100 after close");
         assertGe(cumulative * 100, start * 90, "per-box cumulative DGNRS draw >= 90% of poolStart");
-        assertEq(remaining - swept, _poolBal(), "pool conservation");
+        assertEq(remaining - burned, _poolBal(), "pool conservation");
         emit log_named_uint("fixture word", word);
-        emit log_named_uint("closing remainder (wei)", swept);
+        emit log_named_uint("closing remainder (wei)", burned);
     }
 
     /// @notice The closing entry — here one whose applied amount is the last 1 wei of the sale —
-    ///         pays the Pool.PresaleBox remainder (`poolBalance`, then `transferFromPool`) inside
-    ///         its own resolution: after every earlier presale box has resolved, exactly once,
-    ///         to its own wallet, leaving the pool empty. The cohort's draws are at most 7.5% and
-    ///         2.5% of the pool, so the remainder is large whatever the word.
-    function test_PFIX02_ClosingEntryPaysTheRemainderAfterEveryEarlierBox() public {
+    ///         burns the Pool.PresaleBox remainder inside its own resolution: after every earlier
+    ///         presale box has resolved, exactly once, paying nobody, leaving the pool empty and
+    ///         total supply lower by exactly the remainder. The cohort's draws are at most 7.5% and
+    ///         2.5% of the pool, so the remainder is large whatever the word; a 1-wei closer gains
+    ///         nothing from it.
+    function test_PFIX02_ClosingEntryBurnsTheRemainderAfterEveryEarlierBox() public {
         uint48 index = RecyclingState.writeBuffer(address(game));
         uint256 base = RecyclingState.boxCount(address(game), index);
         address[] memory buyers = new address[](3);
@@ -324,9 +324,12 @@ contract PresaleBoxDrain is DeployProtocol {
         assertEq(game.presaleBoxEthRemaining(), 0, "sale closed");
 
         uint256 start = _poolBal();
-        (uint256[] memory paid, uint256 swept) = _openAll(index, base, 2, buyers, amounts);
-        assertGt(swept, 0, "the closing entry paid a remainder");
-        assertEq(swept, start - paid[0] - paid[1] - paid[2], "the remainder is the pool after every presale roll");
+        uint256 supplyBefore = sdgnrs.totalSupply();
+        (uint256[] memory paid, uint256 burned) = _openAll(index, base, 2, buyers, amounts);
+        assertGt(burned, 0, "the closing entry burned a remainder");
+        assertEq(burned, start - paid[0] - paid[1] - paid[2], "the remainder is the pool after every presale roll");
         assertEq(_poolBal(), 0, "the closing entry leaves the pool empty");
+        assertEq(supplyBefore - sdgnrs.totalSupply(), burned, "the remainder left total supply");
+        assertEq(sdgnrs.balanceOf(buyers[2]), paid[2], "the 1-wei closer gets only its own roll");
     }
 }

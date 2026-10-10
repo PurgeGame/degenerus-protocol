@@ -661,8 +661,8 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
     }
 
     /// @dev The scheduled cursor, raw. Zero until the first day opens.
-    function keeperSlot() external view returns (uint64) {
-        return _keeperSlot;
+    function minerSlot() external view returns (uint64) {
+        return _minerSlot;
     }
 
     /// @dev Write straight into the pool, so a fixture can put a known balance on the table

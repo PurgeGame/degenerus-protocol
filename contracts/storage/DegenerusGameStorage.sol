@@ -3082,7 +3082,7 @@ abstract contract DegenerusGameStorage {
     ///      the next caught-up day still ends the level. The deadman and the VRF-dead window
     ///      bound how long any gap can last. A caught-up day that nobody advances can
     ///      therefore read true and then false once it has passed; the ending needs one advance
-    ///      on a caught-up day, which the keeper router's advance leg sends whenever an advance
+    ///      on a caught-up day, which the miner router's advance leg sends whenever an advance
     ///      is due. A day that already holds its word is finished on it, even when
     ///      its own catch-up credit left the deadline behind it: the ending starts the next
     ///      day, before any word exists, so its terminal word is always requested after the
@@ -3139,7 +3139,7 @@ abstract contract DegenerusGameStorage {
     }
 
     /// @dev An active, unanswered request expires from its original timestamp. A delivered
-    ///      word proves VRF is alive even while the keeper has not published it. Retained idle
+    ///      word proves VRF is alive even while the miner has not published it. Retained idle
     ///      timestamps grant neither callback authority nor a timeout. A refused terminal
     ///      attempt has no active request, but keeps its one-shot timer and unpublished latch.
     function _vrfDead() internal view returns (bool) {
@@ -4587,7 +4587,7 @@ abstract contract DegenerusGameStorage {
     }
 
     /// @dev The shared session payload is usable by lootbox consumers only after fulfillment.
-    ///      Daily callback stores its final nudge; the keeper publishes readiness and unlock retains it.
+    ///      Daily callback stores its final nudge; the miner publishes readiness and unlock retains it.
     function _lootboxWord(uint48 buffer) internal view returns (uint256) {
         return buffer == _rngReadBuffer() && _rngSessionPublished() ? _currentRngWord() : 0;
     }
@@ -4651,7 +4651,7 @@ abstract contract DegenerusGameStorage {
         return _rngComplete();
     }
 
-    /// @dev One ordering authority for the keeper and its read-consumer workers. The read
+    /// @dev One ordering authority for the miner and its read-consumer workers. The read
     ///      cohort alone determines the stage; fresh write-side work cannot cut in.
     ///      0 blocked, 1 redemption, 2 AFKing, 3 human boxes, 4 Degenerette,
     ///      5 Decimator, 6 read-bound Craps, 7 drained. Timed claims are independent.
