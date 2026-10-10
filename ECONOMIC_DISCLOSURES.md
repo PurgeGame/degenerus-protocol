@@ -7,9 +7,12 @@ price tables and reward curves.
 
 - CREATOR receives the initial DGVE and DGVF share supplies, initially controlling the
   Vault. Governance authority follows DGVE ownership; redemptions follow the relevant shares.
-- The creator allocation is **200B DGNRS**, backed by the **20% sDGNRS allocation** held by
+- The vault allocation is **200B DGNRS**, backed by the **20% sDGNRS allocation** held by
   the wrapper. These are the same economic position, not two allocations. **50B** is
-  released initially; **5B per level** vests to the current vault owner, capped at **200B**.
+  released to the Vault at deployment; **5B per level** vests to the Vault (anyone may trigger
+  the release), capped at **200B**. The Vault's owner, the DGVE majority holder, decides what
+  to do with it: burn it for backing, which lands ETH/stETH in vault reserves, unwrap up to
+  **40B** over the contract's life into soulbound sDGNRS, or sweep it out.
 - Other initial sDGNRS allocations: affiliate 30%, lootbox 20%, whale 10%, reward 10%,
   presale box 10%. See `sDGNRS` and `DGNRS` for pool movements and redemption conditions.
 - At the final transition close after levels **100, 200, 300, etc.**, a random **25–75%** of all
@@ -18,7 +21,7 @@ price tables and reward curves.
   interval starts at deployment. This includes live player redemptions, wrapped
   redemptions' underlying sDGNRS burn, and automatic self-award burns. The committed
   transition RNG word selects a whole percentage (25 through 75; mean 50%). Each mint
-  rounds down in raw token units; allocation dust goes to Lootbox. Creator and
+  rounds down in raw token units; allocation dust goes to Lootbox. Vault and
   PresaleBox allocations receive no refill.
 - Recycling adds no ETH/stETH/FLIP backing and reduces existing tokens' share of
   that backing at the refill. If a fraction `b` of the supply standing at the

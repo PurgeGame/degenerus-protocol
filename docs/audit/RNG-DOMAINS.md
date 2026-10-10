@@ -141,8 +141,7 @@ word; genuine repoints, completed queues and retired buffers clear progress.
 
 Each indivisible miner operation needs a conservative cold-path bound, including
 its complete call, checkpoint and return tail. Admission requires that bound to fit
-the remaining worker allowance and actual available gas. The 10M operation-sizing
-guideline in `docs/AUDIT.md` is not a fixed transaction cap: a transaction may perform
+the remaining worker allowance and actual available gas. A transaction may perform
 several admitted operations. Available gas may select an earlier safe checkpoint,
 with the complete flush reserved; it must not change the final ticket inventory.
 Actual failures still revert atomically, and an OOG failure cannot become an
@@ -235,7 +234,7 @@ Coinflip outcome. Coinflip result history continues independently of the two
 full-word slots; old gap words have no archive.
 
 Live sDGNRS redemptions pin the final settlement session word for both manual
-claims and the mandatory bounded keeper drain. Half the rolled ETH credits
+claims and the mandatory bounded miner drain. Half the rolled ETH credits
 game claimable and half opens a redemption lootbox, subject to the existing dust
 rule; surviving escrow FLIP credits its owner. Terminal redemptions retain their
 roll, receipt, and global ETH reservation until an authorized withdrawal. They

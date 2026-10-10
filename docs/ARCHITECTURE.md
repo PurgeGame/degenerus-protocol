@@ -29,8 +29,9 @@ Chainlink, LINK and stETH have distinct trust boundaries described in Security.
 ## Main value flow
 
 Ticket and ordinary lootbox ETH funds protocol prize pools. Presale-box ETH is credited
-80% to the Vault and 20% to sDGNRS as claimable (`_creditBoxProceeds`); the closing buyer
-also receives the sDGNRS `PresaleBox` pool remainder once presale is drained. Jackpot and redemption paths create claimable
+80% to the Vault and 20% to sDGNRS as claimable (`_creditBoxProceeds`); the box that fills the
+presale cap is the last presale box to resolve, and its resolution burns whatever remains in the
+sDGNRS `PresaleBox` pool. Jackpot and redemption paths create claimable
 obligations or game-specific credits; moving ETH/stETH to a player follows the relevant
 claim/recipient checks. Permissionless processing is not authority to redirect payment.
 
@@ -163,7 +164,7 @@ apply no daily nudge. A mid-day request is issued only by `mineFlip`: an empty q
 requests; pending work at or above the ETH threshold requests at no charge; pending work
 below it (FLIP-only included) requests only when the `mineFlip` caller's donated LINK
 credit covers the charge, which it then spends. A closed craps window waives both gates. Final values 0 and 1 are refused and remain retryable;
-1 is the nonzero waiting sentinel. Mandatory keeper publication emits the applied
+1 is the nonzero waiting sentinel. Mandatory miner publication emits the applied
 word and performs nudge/request cleanup outside the LINK-funded callback. Request
 ID and timestamp retain nonzero idle values; the active flag controls authority.
 Terminal advancement bypasses normal read completion and kills unfinished boxes,
@@ -187,7 +188,7 @@ first RNG request after it: typically a mid-day request (a closed craps window c
 request work), otherwise the
 last-purchase daily request (or, after a same-day turbo latch, that same request). The
 frozen pool mints inside the unified sweep with that first cohort, on its word, before the
-sweep counts as finished; keepers see it through `advanceDue`. Either way it is fully
+sweep counts as finished; miners see it through `advanceDue`. Either way it is fully
 minted before the last-purchase consolidation, so the BAF and the day-1 early-bird draw
 read every L+1 ticket queued before the last-purchase request.
 

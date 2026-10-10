@@ -151,7 +151,7 @@ Generated work completes under the RNG lock; originals run at consumer stage 5 a
 unlock. Both cursors count strata, at most 1,000 each. The locked worker skips natural IDs;
 the unlocked worker skips generated IDs. With M=0 the locked loop is skipped entirely.
 Only the sampled survivors call the engine: at most 1,000 runs in total, independent of N.
-Gas and keeper identity affect checkpoint sizes, never outcomes. Admission uses a measured
+Gas and miner identity affect checkpoint sizes, never outcomes. Admission uses a measured
 small bound for opposite-type strata and the existing full bound for an engine run.
 
 One min-heap retains at most 200 eligible entries. Every node stores a 192-bit score and

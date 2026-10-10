@@ -18,15 +18,14 @@ impact to **burnie@degener.us** or a repository issue. The audit subject is the
 ## Vault-owner powers
 
 - Spend/manage vault positions through its game, coinflip, subscription and redemption
-  interfaces; set operator approvals and the salvage-purchase reserve policy.
+  interfaces; set operator approvals and the liquidation-buyer fallback (on/off and its
+  ETH floor).
 - Grant comps and set delegate limits. Create custom battles, authorize creators, choose
   the vault's default craps board or disable future automatic seating, and amend its open slips.
 - Mint unlimited WWXRP for free to any nonzero recipient; register or revoke trusted
   WWXRP minters/burners. Distribute AFKing seats within the token's tranche/lock rules;
   manage eligible vault seats and recover foreign tokens/NFTs. The foreign-token
   sweep excludes stETH backing. Share redemption still burns the relevant shares.
-- The owner wallet is always bounty-eligible in the Game (`_bountyEligible`), regardless of
-  activity or time of day.
 - Set lootbox RNG threshold and midday basefee ceiling. Declare Thanos scaling at least
   six levels ahead, with shift <=8, the projected-entry floor and pending-declaration locks.
 - Stake surplus Game ETH into stETH subject to player-claim reserves; exchange supplied
@@ -45,8 +44,9 @@ impact to **burnie@degener.us** or a repository issue. The audit subject is the
   to hold at least 0.5% of sDGNRS voting supply; there is no post-proposal delay.
   Execution still needs the decaying vote threshold; recovery cancels applicable proposals.
   Retry retired-subscription cancellation with prescribed recovery destinations.
-- Manage permitted charity slots, claim level-vested DGNRS, unwrap owned DGNRS under its
-  restrictions, and set supported NFT renderers/colors. Charity slots 0..2 lock once filled;
+- Manage permitted charity slots; burn or unwrap the Vault's DGNRS under its restrictions
+  (the level-vested release is permissionless and always pays the Vault); set supported NFT
+  renderers/colors; and edit or finalize the icon data until it is finalized. Charity slots 0..2 lock once filled;
   residual charity recovery has its own long post-game delay.
 
 There is no owner setter for the craps engine, comp rate or shared comp balance. Contracts

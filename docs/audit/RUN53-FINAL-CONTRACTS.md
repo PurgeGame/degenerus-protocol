@@ -66,19 +66,19 @@ pricing: no transient tracking, caller-supplied gas or warmth enters work sizing
 | Additional per-entry occurrences | 1 unit each |
 | Foil pack | 83 units |
 | Drain budget | 900 units |
-| Fixed entry/exit/keeper overhead allowance | 1,000,000 gas |
+| Fixed entry/exit/miner overhead allowance | 1,000,000 gas |
 | Analytical drain envelope | **10,000,000 gas** |
 
 A singleton can initialize a bucket (header plus bitmap), or complete an already
 live tail (header plus word); it cannot do all three. Admission reserves bound
 actual step gas even if conservatively charged units exceed a reserve on the
 last step. The outer drain does not begin another step without sufficient room.
-The fixed allowance covers keeper/entry/exit work; it is an explicit assumption
+The fixed allowance covers miner/entry/exit work; it is an explicit assumption
 of this analytical envelope, checked separately in complete transaction fixtures.
 
 Normal chunk fixtures include startup, full recycling, tail flushes, growth
 beyond the previous parity backing and later record-volume chunks after 32 real
-earlier drain calls. The named 16-day lifecycle enforces at most 1% of keeper
+earlier drain calls. The named 16-day lifecycle enforces at most 1% of miner
 transactions above 10M and none above 16.7M. This fixture gate is evidence for
 exercised workloads, not a statistical claim about the entire future game.
 

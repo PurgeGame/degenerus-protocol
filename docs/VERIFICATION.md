@@ -230,8 +230,8 @@ commands use raw Hardhat and therefore bypass runner-level pin restoration.
 See [the test usefulness review](TEST_REVIEW.md) for retired checks, repaired
 fixtures and the distinction between model, structural and runtime coverage.
 
-The 10M figure is an operation-sizing guideline, not a transaction ceiling or a
-substitute for a proven cold-path admission bound; see [the audit scope](AUDIT.md).
+Gas admission rests on a proven cold-path bound for each operation, not on a fixed gas
+figure or transaction ceiling; see [the audit scope](AUDIT.md).
 A transaction may execute several admitted chunks. Each checkpoint admits the next
 chunk only when its conservative worst-case cost and complete call/return/flush
 tail fit both the remaining worker allowance and actual available gas.
@@ -310,12 +310,11 @@ aderyn . -o aderyn-report.md
 Analyzer output requires independent triage. Reports and test logs are generated
 on demand and are not part of the source handoff.
 
-The fixed 900-unit ticket budget is retired. Current ticket admission uses
-`MineFlipGas` and `MineFlipGasBounds`; every atomic operation and complete accumulated
-return tail needs a conservative cold bound. Admission uses the remaining worker
-allowance and actual available gas, with no fixed transaction ceiling. The 10M
-sizing guideline does not replace these checks (see `docs/AUDIT.md`). Historical
-measurements and fixture gas limits remain scoped evidence, not universal bounds.
+Ticket admission uses `MineFlipGas` and `MineFlipGasBounds`; every atomic operation and
+complete accumulated return tail needs a conservative cold bound. Admission uses the
+remaining worker allowance and actual available gas, with no fixed transaction ceiling
+(see `docs/AUDIT.md`). Historical measurements and fixture gas limits remain scoped
+evidence, not universal bounds.
 
 ## Daily RNG and foil implementation (2026-10-01)
 
@@ -384,7 +383,7 @@ Halmos or remote CI pass.
 ## Redemption batching integration (2026-10-01)
 
 The subsequent redemption workstream batches whole FIFO claims within the existing
-keeper work allowance, credits the keeper once per successful claim, and admits
+miner work allowance, credits the miner once per successful claim, and admits
 box work only within the remaining allowance. Manual claims retain their existing
 settlement behavior. The terminal foil-only cohort fix is also covered.
 
@@ -559,7 +558,7 @@ execution-only ceilings. The original ceilings are retained.
 
 Two combined-regression fixtures were also repaired: whole-token ticket rounding
 now exercises `redeemFlip` after opening its prize-target gate, checks the exact
-insufficient-FLIP error, and reads owed entries in whole-entry units. The keeper
+insufficient-FLIP error, and reads owed entries in whole-entry units. The miner
 reward fixture nests the fee cheat and protocol call in one execution frame so
 the isolated runner retains its intended nonzero fee. The same measured work
 (1,456,514 gas) now pays the independently calculated 6 FLIP; its original payout
@@ -675,7 +674,7 @@ copied back into the working tree. No other test or contract source changed afte
 the combined run. The per-test accepted-result index is
 `.audit-test-logs/redemption-ready/accepted-tests.json`; earlier failures remain
 in the logs. Coverage includes exact reserves/token accounting, arbitrary-input
-safety, RNG freezing, delayed responses, and award equality across keeper gas
+safety, RNG freezing, delayed responses, and award equality across miner gas
 partitions while the next batch accepts burns.
 
 The isolated cold campaign `20261005T095321.718553Z-e2ae7086` passes all 58 test

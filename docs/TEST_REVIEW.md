@@ -49,7 +49,7 @@ replacement. Git history retains the original bodies and skip explanations.
 | `KeeperFaucetResistance` | 5 | Grounded subscription and current marginal gas tests; the retired ungrounded round trip is no longer constructible. |
 | `V55FreezeDeterminism` (file removed) | 7 | `V56FreezeSolvency`: stamp-before-resolution and two-block determinism. |
 | `RngLockDeterminism` | 14 | Five active legacy cases retained. Current commitment-binding, `RngWindowFreeze` and VRF suites cover related behavior; this is not 14 newly verified replacements. |
-| `RouterWorstCaseGas` | 5 | `V56AfkingGasMarginal` and current keeper gas suites. |
+| `RouterWorstCaseGas` | 5 | `V56AfkingGasMarginal` and current miner gas suites. |
 | `OpenWalkCompositionGas` | 1 | Removed composition required both afking and human opens in one call, which the current valve excludes. Other measurements retained. |
 | `KeeperLeversAndPacking` | 1 | Unified `openBoxes` coverage in `V56AfkingGasMarginal`. |
 
