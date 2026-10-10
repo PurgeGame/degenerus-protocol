@@ -8,6 +8,20 @@ local output directories or CI artifacts.
 The dated implementation sections below are historical, scoped evidence; their
 pass counts do not certify later revisions.
 
+### Admission budgets, ancestor-tail floor and fixture repairs (2026-10-10)
+
+Request admission is sized per request kind (mid-day 400k, daily 1.5M, plus 300k for a
+nonempty redemption batch; terminal 2.5M), calibrated in `test/gas/MineFlipRequestGas.t.sol`.
+The gas floor always holds every ancestor's return tail; `test/repro/MineFlipGasNesting.t.sol`
+and `test/repro/MineFlipGasSweep.t.sol` sweep supplied gas and assert that once the first unit
+succeeds no later call reverts for gas. `test/fuzz/AccountLiquidation.t.sol` covers the
+smurf-safe liquidation path.
+
+Tests that need a request deferred use maximum calibration (`type(uint32).max`) instead of a
+gas figure sized to an older bound. The deep invariant matrix (`scripts/deep-invariant-matrix.py`)
+was run per root at 1,000 runs × 256 calls with `FOUNDRY_PROFILE=deep`. Use
+[the freeze record](audit/freeze.json) for recorded results and input identities.
+
 ### Caller-calibrated batching and AFKing ordering (2026-10-09)
 
 The public entry is `mineFlip(uint32 gasMultiplierBps)`. Zero means 10,000 basis

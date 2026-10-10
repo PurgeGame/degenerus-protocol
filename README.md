@@ -5,8 +5,8 @@ Degenerette and a prize-pool growth parimutuel. ETH/stETH obligations and token 
 are accounted for separately. Contracts use fixed deployment addresses; game modules
 execute by delegatecall, while craps uses a separate stateless dice engine.
 
-**External audit: start with [the audit handoff](docs/AUDIT.md).** Frozen revisions are published as
-annotated `audit-*` tags; [audit readiness](docs/AUDIT-READINESS.md) names the current one.
+**External audit: use tag `audit-2026-10-10` and start with [the audit handoff](docs/AUDIT.md).**
+The [freeze record](docs/audit/freeze.json) identifies the tested inputs, their hashes and verification limits.
 
 | Document | Purpose |
 | --- | --- |

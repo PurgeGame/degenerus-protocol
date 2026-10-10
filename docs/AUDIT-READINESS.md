@@ -1,31 +1,65 @@
-# Audit readiness — 2026-10-09
+# Audit readiness — 2026-10-10
 
-## Freeze verification in progress — second 2026-10-09 freeze
+## Frozen source — `audit-2026-10-10`
 
-The candidate production source is commit `69c67918c74b2c301c702f1843d8850ab47bca50`;
-final test inputs are `75d95953f`. They supersede `audit-2026-10-09` (production
-`97c58a8fd`) once a new annotated tag is published; no tag exists for this candidate yet.
+Annotated tag: `audit-2026-10-10`. Production source commit:
+`69c67918c74b2c301c702f1843d8850ab47bca50`. Final test inputs:
+`75d95953ffdb6abfb94de37a040001b240fa9ca2`. The hosted CI commit
+`40cad24c10818f30e02d884fceee2d86c6e918a1` and the tagged handoff commit change
+documentation and freeze records only; no contract differs from the production commit.
+This freeze supersedes `audit-2026-10-09` (production `97c58a8fd`, section below). See
+[the freeze record](audit/freeze.json) for hashes, per-group results and evidence identities.
 
-Production changes since `97c58a8fd`:
+Production changes since the earlier freeze:
 
 - `1a540f2ed` separates mineFlip RNG request admission budgets: 400k for a mid-day
   request, 1.5M for a daily request, plus 300k only when a nonempty redemption batch
   must close. The terminal allowance (2.5M) is unchanged.
 - `69c67918c` keeps the mineFlip gas reserves after the first unit. The floor always
-  holds every ancestor's return tail; the first unit may run below it and later units
-  must fit above it again, so a call that fits its first unit does not revert for gas.
-  Liquidating a smurf account burns no sDGNRS (a main-account sale still does), and
-  its payment tries ETH then stETH. Dead code and stale comments were removed
+  holds every ancestor's return tail: the first unit may run below it and later units
+  must fit above it again, so a call whose first unit fits does not revert for gas.
+  Liquidating a smurf account burns no sDGNRS (a main-account sale still does), and its
+  payment tries ETH then stETH. Dead code and stale comments were removed
   (`settleGrowth`, `CrapsEngine.settleRanked`, unused `MineFlipGas` helpers and
   zero-allowance guards).
 
-Verification so far, all on this candidate: production build, deployment-size ceiling,
-storage-layout oracle and the eleven source-drift gates pass; the standard Foundry
-groups, Hardhat suite and static analysers have been run. Four stale test expectations
-were repaired without changing any contract (fixture calibration after the new request
-budgets, one chunk-count guard, one packed-word mask in a cache test). The deep
-invariant sweep, Halmos proofs and hosted CI for this exact revision are still running;
-the final section below replaces this one when they close.
+Verification of this revision:
+
+| Selection | Verified result |
+| --- | --- |
+| Foundry standard groups (final tree) | 7 groups; 4988 passing executions, 0 failures |
+| Hardhat | 96 files; 1651 passing tests |
+| Deep invariants (1,000 runs × 256 calls) | 24 roots; 0 failures |
+| Halmos | 56 passing properties |
+| Split arithmetic | tests and exact check pass |
+| Hosted CI (run 38005026482) | every job green; deep and Halmos jobs are push-skipped by design |
+
+The deep sweep ran locally with the existing inline overrides retained (AnyInputSafety
+256 × 128, SeatCap 64 × 64); the long AdvanceLiveness root completed 256,000 calls. Foundry
+groups ran on `e9ebb21d9`, with `fuzz-1` rerun on the final test inputs; Hardhat and the
+deep sweep's AdvanceLiveness root ran on the production commit, and the one repaired
+Hardhat file was rerun with its final content. Counts are runner executions and may
+include inherited suites. Two optional archived-runtime comparisons are skipped because
+their historical fixtures are not configured. Production build, deployment-size, storage
+layout, interface and source-drift gates pass.
+
+Verification found four stale test expectations; no contract changed. The request budgets
+made a mid-day request fit inside gas figures that previously could not admit it
+(`PreJackpotNextLevelMint`, `CrapsArmRequestBatching`: now deferred by maximum
+calibration); the minimum-allowance far-future drain may now clear a single entry per
+call, so its chunk-count guard is bounded by queued entries (`AdvanceGameGas`; a realistic
+10M call still finishes in three and the heaviest chunk is unchanged at 638k gas); and a
+cache test's durable-history mask was wider than the contract's (`ActivityAffiliateCache`,
+a pre-existing mismatch found by the fuzzer, now with a deterministic regression).
+
+Static analysis is compared like for like against the earlier freeze's commit with the
+same tool versions. Slither 0.11.5 reports 1314 → 1313 results: four findings on deleted
+dead code disappear and two notes appear for the `redemptionBatchState()` view read in
+`mineFlip`. Aderyn 0.6.8 reports the same 34 categories (2462 → 2457 instances). Alerts
+are retained and triaged by delta, not represented as zero findings.
+
+Insufficient caller gas for the first unit can still revert. No deployment, external audit
+approval or absence-of-bugs claim is implied.
 
 ## Earlier freeze — `audit-2026-10-09`
 
