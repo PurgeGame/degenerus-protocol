@@ -8,6 +8,25 @@ local output directories or CI artifacts.
 The dated implementation sections below are historical, scoped evidence; their
 pass counts do not certify later revisions.
 
+### Vault-held allocations and presale burn (2026-10-10)
+
+`DGNRS` pays its initial 50B and every level-vested release to the Vault, and
+`Icons32Data` setters follow `isVaultOwner`. `test/fuzz/DgnrsWrapperPaths.t.sol` covers the
+Vault holding the allocation, owner-only unwrap and burn through `dgnrsUnwrapTo` and
+`dgnrsBurnWrapped` (in game and after game over), icon control moving with DGVE ownership,
+and permissionless vesting release. `test/fuzz/handlers/WrapperPathHandler.sol` funds and
+unwraps through the Vault for the wrapper invariants; `test/fuzz/helpers/DeployProtocol.sol`
+exposes `_dgnrsFromVault` and `_unwrapFromVault` for fixtures that need circulating DGNRS.
+Hardhat fixtures that need DGNRS sweep it out of the Vault (`vault.sweepToken`) or unwrap
+through `vault.dgnrsUnwrapTo`.
+
+The closing presale box burns the `Pool.PresaleBox` remainder with a self-directed pool
+transfer; `WardenLbxClosingBoxOrder` and `PresaleBoxDrain` assert the burn and that the
+closing buyer receives only the purchased amount. Local lanes ran on the verified commit
+in parallel worktrees (Foundry groups, Hardhat, deep invariants at 1,000 runs × 256 calls,
+Halmos); use [the freeze record](audit/freeze.json) for recorded results and input
+identities.
+
 ### Admission budgets, ancestor-tail floor and fixture repairs (2026-10-10)
 
 Request admission is sized per request kind (mid-day 400k, daily 1.5M, plus 300k for a
@@ -20,7 +39,7 @@ smurf-safe liquidation path.
 Tests that need a request deferred use maximum calibration (`type(uint32).max`) instead of a
 gas figure sized to an older bound. The deep invariant matrix (`scripts/deep-invariant-matrix.py`)
 was run per root at 1,000 runs × 256 calls with `FOUNDRY_PROFILE=deep`. Use
-[the freeze record](audit/freeze.json) for recorded results and input identities.
+[the freeze record](audit/freeze-audit-2026-10-10.json) for recorded results and input identities.
 
 ### Caller-calibrated batching and AFKing ordering (2026-10-09)
 
@@ -53,7 +72,7 @@ Some invariant and symbolic evidence predates this final constant change; the
 freeze record separates it from the complete final-source fuzz, regression,
 cold integration/gas and Hardhat suites and the compiled-code comparison.
 
-Use [the freeze record](audit/freeze.json) for the recorded verification results,
+Use [the freeze record](audit/freeze-audit-2026-10-09.json) for the recorded verification results,
 input identities, analyzer dispositions and remaining verification limits.
 
 ### ID-keyed smurf allowance (2026-10-08)

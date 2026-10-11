@@ -1,6 +1,67 @@
 # Audit readiness — 2026-10-10
 
-## Frozen source — `audit-2026-10-10`
+## Frozen source — `audit-2026-10-10b`
+
+Annotated tag: `audit-2026-10-10b`. Production source commit:
+`8125d2e6a0a4000734bea9944c2a9d366133a3de`. Verified commit (every local lane and hosted CI):
+`5a24042c06656d57695bb0f531600341e86e113d`, which differs from the production commit only in
+documentation and re-pinned manifests. The tagged handoff commit adds this section and the
+freeze record; no contract differs from the production commit. This freeze supersedes
+`audit-2026-10-10` (production `69c67918c`, section below). See
+[the freeze record](audit/freeze.json) for hashes, per-group results and evidence identities.
+
+Production changes since the earlier freeze:
+
+- The Vault, not CREATOR, holds the creator-side allocations. `DGNRS` mints its initial 50B
+  to the Vault, and every level-vested release pays the Vault; `claimVested` is
+  permissionless, and `unwrapTo` accepts only the Vault. The Vault owner burns wrapped DGNRS
+  through `dgnrsBurnWrapped` (an in-game claim or the post-game-over payout lands in vault
+  reserves) or unwraps it through `dgnrsUnwrapTo`. The initial DGVE/DGVF supply stays with
+  CREATOR because it is the vault ownership.
+- `Icons32Data` setters and `finalize` follow `isVaultOwner` (`NotVaultOwner`) instead of
+  CREATOR, so cosmetic control moves with DGVE ownership. `initProtocolDeity` stays
+  CREATOR-gated at level 0 and grants CREATOR no allocation.
+- The closing presale box burns the remaining `Pool.PresaleBox` balance
+  (`PresaleBoxRemainderBurned(uint256)`) instead of paying it to the closing buyer.
+- Comments and naming say miner, not keeper (`_keeperSlot` is `_minerSlot`; the layout
+  goldens follow). Game stays 24,467 bytes (109 spare); Vault 11,922; DGNRS 4,735.
+
+Verification of this revision:
+
+| Selection | Verified result |
+| --- | --- |
+| Foundry standard groups | 7 groups; 4993 passing executions, 0 failures, 2 skipped |
+| Hardhat | 96 files; 1652 passing tests, 0 failures |
+| Deep invariants (1,000 runs × 256 calls) | 24 roots; 0 failures |
+| Halmos | 56 passing properties |
+| Split arithmetic | tests and exact check pass |
+| Hosted CI (run 38092026845) | every job green; deep and Halmos jobs are push-skipped by design |
+
+All lanes ran on the verified commit in parallel worktrees. The deep sweep kept the existing
+inline overrides (AnyInputSafety 256 × 128, SeatCap 64 × 64); AdvanceLiveness completed
+256,000 calls. Counts are runner executions and may include inherited suites; the two
+optional archived-runtime comparisons are skipped because their historical fixtures are not
+configured. Production build, deployment-size, storage-layout, recursive-layout, interface and
+source-drift gates pass.
+
+The change needed test updates, not contract fixes: fixtures now take DGNRS from the Vault,
+and the closing-box tests assert the burn. `DgnrsWrapperPaths` gained five tests (the Vault
+holds the allocation; the owner unwraps only through the Vault; the Vault burns wrapped
+DGNRS in game and after game over; icon control follows DGVE ownership), and its vesting
+test now releases from a stranger's call and checks that only the Vault is paid.
+
+Static analysis is compared like for like against the earlier freeze with the same tool
+versions. Slither 0.11.5 reports 1313 → 1314 results: one note is added for the ignored
+return in `DegenerusVault.dgnrsBurnWrapped`, the same pass-through shape as `sdgnrsBurn`.
+Aderyn 0.6.8 reports the same 34 categories (2457 → 2460 instances): three reentrancy-order
+notes in `Icons32Data` (its read-only owner check precedes its writes) and one more
+contract-name-reuse instance; two reentrancy notes in `DGNRS` disappear. Alerts are
+retained and triaged by delta, not represented as zero findings.
+
+Insufficient caller gas for the first unit can still revert. No deployment, external audit
+approval or absence-of-bugs claim is implied.
+
+## Earlier freeze — `audit-2026-10-10`
 
 Annotated tag: `audit-2026-10-10`. Production source commit:
 `69c67918c74b2c301c702f1843d8850ab47bca50`. Final test inputs:
@@ -8,7 +69,7 @@ Annotated tag: `audit-2026-10-10`. Production source commit:
 `40cad24c10818f30e02d884fceee2d86c6e918a1` and the tagged handoff commit change
 documentation and freeze records only; no contract differs from the production commit.
 This freeze supersedes `audit-2026-10-09` (production `97c58a8fd`, section below). See
-[the freeze record](audit/freeze.json) for hashes, per-group results and evidence identities.
+[the freeze record](audit/freeze-audit-2026-10-10.json) for hashes, per-group results and evidence identities.
 
 Production changes since the earlier freeze:
 

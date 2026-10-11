@@ -1,30 +1,31 @@
 {
   "schema_version": 3,
   "status": "source frozen for external audit; standard battery, deep invariants, Halmos and hosted CI reconciled for this revision",
-  "audit_tag": "audit-2026-10-10",
-  "recorded_at_utc": "2026-10-10T06:55:18.506687+00:00",
-  "production_source_commit": "69c67918c74b2c301c702f1843d8850ab47bca50",
-  "final_test_inputs_commit": "75d95953ffdb6abfb94de37a040001b240fa9ca2",
-  "hosted_ci_commit": "40cad24c10818f30e02d884fceee2d86c6e918a1",
+  "audit_tag": "audit-2026-10-10b",
+  "recorded_at_utc": "2026-10-10T22:36:49.332619+00:00",
+  "production_source_commit": "8125d2e6a0a4000734bea9944c2a9d366133a3de",
+  "final_test_inputs_commit": "8125d2e6a0a4000734bea9944c2a9d366133a3de",
+  "verified_commit": "5a24042c06656d57695bb0f531600341e86e113d",
+  "hosted_ci_commit": "5a24042c06656d57695bb0f531600341e86e113d",
   "predecessor_freeze": {
-    "tag": "audit-2026-10-09",
-    "production_source_commit": "97c58a8fdf9a0cf464abe71176a1670e02c28b67",
-    "record": "docs/audit/freeze-audit-2026-10-09.json"
+    "tag": "audit-2026-10-10",
+    "production_source_commit": "69c67918c74b2c301c702f1843d8850ab47bca50",
+    "record": "docs/audit/freeze-audit-2026-10-10.json"
   },
-  "contract_changes_since_predecessor": "21 files changed, 110 insertions(+), 253 deletions(-)",
+  "contract_changes_since_predecessor": "17 files changed, 133 insertions(+), 95 deletions(-)",
   "contracts_unchanged_after_production_commit": true,
   "snapshot_files": {
-    "snapshot.json": "c878b35c547510b4b111b4209fcab1b68528ec613dbef96ccfb471dfc3f16661",
-    "source-sha256.txt": "d359336f3e19383d59c5024b24ef599d3e6a51075615cf9805b83afac92a82b2",
-    "verification-sha256.txt": "30087f8b4eb839a8eebd9194e330bf27bb24001f7935fce89cdf9b2a7b5e3ad1"
+    "snapshot.json": "385e379919cd916521108dbd680285d1edd6755b53c94763ddb0126a1c399b21",
+    "source-sha256.txt": "839f52c52dec41ccde0723c23e6ad50e2b16bee7abdec9ffe48c68ea78ece12a",
+    "verification-sha256.txt": "3e70a0ee897e363c2853ba74f8ca4ae59c4d21735d6df0c2ffcce57dca4a0e61"
   },
   "local_verification": {
-    "structural_at_production_commit": "forge production build, deployment-size ceiling, storage-layout oracle and recursive layout check exit 0; 11 source-drift gates exit 0",
+    "structural_at_verified_commit": "production build, deployment-size ceiling (Game 24,467 B / 109 spare; Vault 11,922; DGNRS 4,735; Icons32Data 2,340), storage-layout oracle, recursive layout check and audit-snapshot identity exit 0; assurance tooling tests and the 11 source-drift gates exit 0",
     "foundry_standard": {
-      "foundry @e9ebb21d9 (repro-symbolic, fuzz-1 [superseded], fuzz-2)": [
+      "foundry lane 1 @5a24042c0 (repro-symbolic, fuzz-1, fuzz-2)": [
         {
           "group": "repro-symbolic",
-          "run_id": "20261009T214450.601278Z-dcd0286c",
+          "run_id": "20261010T144841.333723Z-6ab1275c",
           "batches": 4,
           "source_files": 80,
           "suites": 91,
@@ -35,33 +36,31 @@
         },
         {
           "group": "fuzz-1",
-          "run_id": "20261009T220607.344617Z-7afc822d",
+          "run_id": "20261010T151136.271315Z-5f351d8a",
           "batches": 4,
           "source_files": 78,
           "suites": 107,
-          "passed": 863,
-          "failed": 1,
+          "passed": 864,
+          "failed": 0,
           "skipped": 0,
-          "nonzero_exit_batches": [
-            "fuzz-1-04"
-          ]
+          "nonzero_exit_batches": []
         },
         {
           "group": "fuzz-2",
-          "run_id": "20261009T224057.700079Z-d35764d0",
+          "run_id": "20261010T155115.045980Z-fa9f40ec",
           "batches": 4,
           "source_files": 78,
           "suites": 88,
-          "passed": 636,
+          "passed": 641,
           "failed": 0,
           "skipped": 1,
           "nonzero_exit_batches": []
         }
       ],
-      "foundry2 @e9ebb21d9 (fuzz-3, fuzz-4, invariants)": [
+      "foundry lane 2 @5a24042c0 (fuzz-3, fuzz-4, invariants)": [
         {
           "group": "fuzz-3",
-          "run_id": "20261009T214450.598859Z-a915fe7f",
+          "run_id": "20261010T144841.331917Z-47f522e5",
           "batches": 4,
           "source_files": 78,
           "suites": 107,
@@ -72,7 +71,7 @@
         },
         {
           "group": "fuzz-4",
-          "run_id": "20261009T220953.276872Z-08a8a75e",
+          "run_id": "20261010T151442.174909Z-d1c4aad5",
           "batches": 4,
           "source_files": 76,
           "suites": 85,
@@ -83,7 +82,7 @@
         },
         {
           "group": "invariants",
-          "run_id": "20261009T223352.137836Z-fe2fa054",
+          "run_id": "20261010T153845.395829Z-9492ad3d",
           "batches": 2,
           "source_files": 24,
           "suites": 28,
@@ -93,10 +92,10 @@
           "nonzero_exit_batches": []
         }
       ],
-      "foundry3 @e9ebb21d9 (integration-gas)": [
+      "foundry lane 3 @5a24042c0 (integration-gas)": [
         {
           "group": "integration-gas",
-          "run_id": "20261009T214450.596672Z-0616eea2",
+          "run_id": "20261010T145605.526719Z-2d4b34aa",
           "batches": 7,
           "source_files": 135,
           "suites": 226,
@@ -105,247 +104,217 @@
           "skipped": 1,
           "nonzero_exit_batches": []
         }
-      ],
-      "foundry2 @75d95953f (fuzz-1 rerun)": [
-        {
-          "group": "fuzz-1",
-          "run_id": "20261009T230228.834675Z-06555a34",
-          "batches": 4,
-          "source_files": 78,
-          "suites": 107,
-          "passed": 864,
-          "failed": 0,
-          "skipped": 0,
-          "nonzero_exit_batches": []
-        }
       ]
     },
-    "hardhat_at_production_commit": {
+    "foundry_totals": {
+      "passed": 4993,
+      "failed": 0,
+      "skipped": 2
+    },
+    "hardhat": {
       "files": 96,
-      "passed": 1650,
-      "failed": 1,
+      "passed": 1652,
+      "failed": 0,
       "pending": 0,
-      "failing_batches": [
-        "batch-072"
-      ]
+      "source_drift": "none reported in any of 96 batches"
     },
-    "hardhat_repaired_file_rerun": [
-      {
-        "file": [
-          "test/gas/AdvanceGameGas.test.js"
-        ],
-        "passed": 13,
-        "failed": 0
-      }
-    ],
     "deep_invariants_1000x256": {
       "roots": {
         "AdvanceLiveness": {
-          "worktree": "deep",
+          "worktree": "d1",
           "passed": 8,
           "failed": 0,
           "skipped": 0,
           "exit_code": 0,
-          "run_id": "20261009T211533.215671Z-cef539cb"
-        },
-        "GameFSM": {
-          "worktree": "deep1",
-          "passed": 11,
-          "failed": 0,
-          "skipped": 0,
-          "exit_code": 0,
-          "run_id": "20261009T233207.015927Z-affd971f"
-        },
-        "CrapsConservation": {
-          "worktree": "deep1",
-          "passed": 16,
-          "failed": 0,
-          "skipped": 0,
-          "exit_code": 0,
-          "run_id": "20261009T233748.624106Z-f6ca6404"
-        },
-        "CoinSupply": {
-          "worktree": "deep1",
-          "passed": 11,
-          "failed": 0,
-          "skipped": 0,
-          "exit_code": 0,
-          "run_id": "20261009T235556.953616Z-27a74dba"
-        },
-        "BoxEnqueue": {
-          "worktree": "deep1",
-          "passed": 11,
-          "failed": 0,
-          "skipped": 0,
-          "exit_code": 0,
-          "run_id": "20261010T000227.688749Z-58b0aeee"
-        },
-        "SeatCap": {
-          "worktree": "deep1",
-          "passed": 9,
-          "failed": 0,
-          "skipped": 0,
-          "exit_code": 0,
-          "run_id": "20261010T001204.922290Z-9407db6c"
-        },
-        "CrapsRealWiringConservation": {
-          "worktree": "deep1",
-          "passed": 9,
-          "failed": 0,
-          "skipped": 0,
-          "exit_code": 0,
-          "run_id": "20261010T003302.404850Z-f1a42520"
-        },
-        "EthSolvency": {
-          "worktree": "deep1",
-          "passed": 12,
-          "failed": 0,
-          "skipped": 0,
-          "exit_code": 0,
-          "run_id": "20261010T053724.770366Z-b5b8dd34"
-        },
-        "DegeneretteBet": {
-          "worktree": "deep1",
-          "passed": 8,
-          "failed": 0,
-          "skipped": 0,
-          "exit_code": 0,
-          "run_id": "20261010T054211.482920Z-24f93de8"
-        },
-        "VaultShareMath": {
-          "worktree": "deep1",
-          "passed": 11,
-          "failed": 0,
-          "skipped": 0,
-          "exit_code": 0,
-          "run_id": "20261010T054522.432945Z-52481b84"
-        },
-        "TicketQueue": {
-          "worktree": "deep1",
-          "passed": 9,
-          "failed": 0,
-          "skipped": 0,
-          "exit_code": 0,
-          "run_id": "20261010T054926.150957Z-aca2d625"
+          "run_id": "20261010T144638.664705Z-e9c98194"
         },
         "CrapsRngSeal": {
-          "worktree": "deep2",
+          "worktree": "d2",
           "passed": 20,
           "failed": 0,
           "skipped": 0,
           "exit_code": 0,
-          "run_id": "20261009T233207.015643Z-d77d1f72"
+          "run_id": "20261010T144638.666056Z-e1ab1f5b"
         },
-        "AnyInputSafety": {
-          "worktree": "deep3",
-          "passed": 14,
-          "failed": 0,
-          "skipped": 0,
-          "exit_code": 0,
-          "run_id": "20261009T233207.017866Z-83a959bd"
-        },
-        "V61SolvencyAfpay": {
-          "worktree": "deep3",
-          "passed": 16,
-          "failed": 0,
-          "skipped": 0,
-          "exit_code": 0,
-          "run_id": "20261009T235312.374426Z-a9c224f6"
-        },
-        "MultiLevel": {
-          "worktree": "deep3",
-          "passed": 10,
-          "failed": 0,
-          "skipped": 0,
-          "exit_code": 0,
-          "run_id": "20261009T235956.132433Z-aa8d50b7"
-        },
-        "PoolConservation": {
-          "worktree": "deep3",
+        "GameFSM": {
+          "worktree": "d3",
           "passed": 11,
           "failed": 0,
           "skipped": 0,
           "exit_code": 0,
-          "run_id": "20261010T000356.999355Z-3c1635a7"
+          "run_id": "20261010T145605.532627Z-ec4200cf"
         },
-        "RedemptionInvariants": {
-          "worktree": "deep3",
+        "CrapsConservation": {
+          "worktree": "d3",
           "passed": 16,
           "failed": 0,
           "skipped": 0,
           "exit_code": 0,
-          "run_id": "20261010T000900.607888Z-cbf3671d"
+          "run_id": "20261010T150250.558793Z-9fbf2077"
         },
-        "WalletIdTruth": {
-          "worktree": "deep3",
-          "passed": 23,
+        "CoinSupply": {
+          "worktree": "d3",
+          "passed": 11,
           "failed": 0,
           "skipped": 0,
           "exit_code": 0,
-          "run_id": "20261010T001435.924236Z-fe72756d"
+          "run_id": "20261010T152524.123718Z-78d2d25f"
         },
-        "Composition": {
-          "worktree": "deep4",
-          "passed": 10,
+        "BoxEnqueue": {
+          "worktree": "d3",
+          "passed": 11,
           "failed": 0,
           "skipped": 0,
           "exit_code": 0,
-          "run_id": "20261009T233207.015200Z-c46a4332"
+          "run_id": "20261010T153307.358742Z-461f307e"
         },
-        "RngIndexDrainOrdering": {
-          "worktree": "deep4",
+        "SeatCap": {
+          "worktree": "d3",
           "passed": 9,
           "failed": 0,
           "skipped": 0,
           "exit_code": 0,
-          "run_id": "20261009T233955.584794Z-f9765f66"
+          "run_id": "20261010T154647.126514Z-3ad3d019"
         },
-        "RngWindowFreeze": {
-          "worktree": "deep4",
-          "passed": 11,
+        "CrapsRealWiringConservation": {
+          "worktree": "d3",
+          "passed": 9,
           "failed": 0,
           "skipped": 0,
           "exit_code": 0,
-          "run_id": "20261010T000555.208569Z-83c9f495"
+          "run_id": "20261010T154831.118614Z-697a0c60"
         },
-        "StorageRecyclingModel": {
-          "worktree": "deep4",
-          "passed": 8,
-          "failed": 0,
-          "skipped": 0,
-          "exit_code": 0,
-          "run_id": "20261010T001648.138340Z-2947a9cb"
-        },
-        "VRFPathInvariants": {
-          "worktree": "deep4",
+        "EthSolvency": {
+          "worktree": "d3",
           "passed": 12,
           "failed": 0,
           "skipped": 0,
           "exit_code": 0,
-          "run_id": "20261010T002013.996324Z-d55be075"
+          "run_id": "20261010T210650.460610Z-c9134ce0"
         },
-        "WhaleSybil": {
-          "worktree": "deep4",
+        "DegeneretteBet": {
+          "worktree": "d3",
+          "passed": 8,
+          "failed": 0,
+          "skipped": 0,
+          "exit_code": 0,
+          "run_id": "20261010T211202.710468Z-04ebe194"
+        },
+        "VaultShareMath": {
+          "worktree": "d3",
           "passed": 11,
           "failed": 0,
           "skipped": 0,
           "exit_code": 0,
-          "run_id": "20261010T002319.882455Z-3c0f4890"
-        }
-      },
-      "interrupted_duplicates_not_counted": [
-        {
-          "root": "CrapsRealWiringConservation",
-          "worktree": "deep2",
-          "passed": 0,
+          "run_id": "20261010T211624.930905Z-afeb3ce0"
+        },
+        "TicketQueue": {
+          "worktree": "d3",
+          "passed": 9,
           "failed": 0,
           "skipped": 0,
-          "exit_code": 1,
-          "run_id": "20261010T065300.009865Z-1cf7e3d4"
+          "exit_code": 0,
+          "run_id": "20261010T212024.384045Z-ec07a4a6"
+        },
+        "AnyInputSafety": {
+          "worktree": "d4",
+          "passed": 14,
+          "failed": 0,
+          "skipped": 0,
+          "exit_code": 0,
+          "run_id": "20261010T145650.823817Z-0313f2a8"
+        },
+        "V61SolvencyAfpay": {
+          "worktree": "d4",
+          "passed": 16,
+          "failed": 0,
+          "skipped": 0,
+          "exit_code": 0,
+          "run_id": "20261010T152245.766362Z-7ffc2b5d"
+        },
+        "MultiLevel": {
+          "worktree": "d4",
+          "passed": 10,
+          "failed": 0,
+          "skipped": 0,
+          "exit_code": 0,
+          "run_id": "20261010T153050.202685Z-50231b96"
+        },
+        "PoolConservation": {
+          "worktree": "d4",
+          "passed": 11,
+          "failed": 0,
+          "skipped": 0,
+          "exit_code": 0,
+          "run_id": "20261010T153539.978111Z-0ca2e197"
+        },
+        "RedemptionInvariants": {
+          "worktree": "d4",
+          "passed": 16,
+          "failed": 0,
+          "skipped": 0,
+          "exit_code": 0,
+          "run_id": "20261010T154218.453640Z-a05c52ad"
+        },
+        "WalletIdTruth": {
+          "worktree": "d4",
+          "passed": 23,
+          "failed": 0,
+          "skipped": 0,
+          "exit_code": 0,
+          "run_id": "20261010T155144.455945Z-ae82da49"
+        },
+        "Composition": {
+          "worktree": "d5",
+          "passed": 10,
+          "failed": 0,
+          "skipped": 0,
+          "exit_code": 0,
+          "run_id": "20261010T145650.825385Z-f815c98a"
+        },
+        "RngIndexDrainOrdering": {
+          "worktree": "d5",
+          "passed": 9,
+          "failed": 0,
+          "skipped": 0,
+          "exit_code": 0,
+          "run_id": "20261010T150625.012721Z-dedde18d"
+        },
+        "RngWindowFreeze": {
+          "worktree": "d5",
+          "passed": 11,
+          "failed": 0,
+          "skipped": 0,
+          "exit_code": 0,
+          "run_id": "20261010T154350.868855Z-2872b2ee"
+        },
+        "StorageRecyclingModel": {
+          "worktree": "d5",
+          "passed": 8,
+          "failed": 0,
+          "skipped": 0,
+          "exit_code": 0,
+          "run_id": "20261010T155747.489032Z-49e3c036"
+        },
+        "VRFPathInvariants": {
+          "worktree": "d5",
+          "passed": 12,
+          "failed": 0,
+          "skipped": 0,
+          "exit_code": 0,
+          "run_id": "20261010T160242.868879Z-1b11362c"
+        },
+        "WhaleSybil": {
+          "worktree": "d5",
+          "passed": 11,
+          "failed": 0,
+          "skipped": 0,
+          "exit_code": 0,
+          "run_id": "20261010T160640.959213Z-7654b778"
         }
-      ],
+      },
       "root_count": 24,
-      "advance_liveness": "1000 runs, 256000 calls, 15780 handler-permitted reverts, pass (9742 s), at the production commit"
+      "advance_liveness": "1000 runs, 256000 calls, 15781 handler-permitted reverts, pass (10,495 s)"
     },
     "halmos": {
       "properties": 56,
@@ -356,78 +325,58 @@
       "testFuzz_FoilMatchesArchivedRuntime",
       "testFuzz_TransitionMatchesHistoricalRuntime"
     ],
-    "fixture_repairs_no_contract_change": [
-      {
-        "file": "test/repro/PreJackpotNextLevelMint.t.sol",
-        "cause": "daily-finish loop assumed a small gas rung blocked the mid-day request, now admitted at 400k",
-        "rerun": "23 passed"
-      },
-      {
-        "file": "test/gas/AdvanceGameGas.test.js",
-        "cause": "200-chunk guard on minimum-allowance far-future drain; now bounded by queued entries (271 chunks, heaviest 638k gas; realistic 10M calls still 3)",
-        "rerun": "13 passed"
-      },
-      {
-        "file": "test/fuzz/ActivityAffiliateCache.t.sol",
-        "cause": "durable-history mask covered bits 72..103; contract persists the cache beside the 24-bit day only (pre-existing, found by fuzzer)",
-        "rerun": "16 passed incl. new deterministic regression"
-      },
-      {
-        "file": "test/fuzz/CrapsArmRequestBatching.t.sol",
-        "cause": "1.5M 'low gas' budget now admits the 400k request; defer by maximum calibration",
-        "rerun": "10 passed"
-      }
-    ]
+    "test_changes_for_the_vault_move": "the Vault holds the DGNRS allocation, so fixtures obtain DGNRS through the Vault (DeployProtocol helpers, WrapperPathHandler, redemption, wallet-id and craps fixtures; Hardhat DGNRS, DGNRSLiquid, DeployScript, AccessControl, Icons32Data, SecurityEconHardening, VRFGovernance). DgnrsWrapperPaths gained five tests (the Vault holds the allocation, the owner unwraps only through the Vault, the Vault burns wrapped DGNRS in-game and after game over, Icons32Data follows Vault ownership), and its vesting test releases from a stranger's call and checks only the Vault is paid. The closing-box presale tests assert the remainder is burned."
   },
   "static_analysis_local_like_for_like": {
     "slither": {
       "version": "0.11.5",
       "args": "--exclude-informational --exclude-optimization",
-      "predecessor_results": 1314,
-      "this_results": 1313,
-      "removed": 4,
-      "added": 2,
-      "note": "removed findings are on deleted dead code; added are the redemptionBatchState() view read in mineFlip (ignored return, call in loop)"
+      "predecessor_results": 1313,
+      "this_results": 1314,
+      "removed": 0,
+      "added": 1,
+      "note": "added is the unused-return note on DegenerusVault.dgnrsBurnWrapped, which returns the sDGNRS result exactly as sdgnrsBurn already does"
     },
     "aderyn": {
       "version": "0.6.8",
-      "predecessor_instances": 2462,
-      "this_instances": 2457,
-      "new_categories": 0
+      "predecessor_instances": 2457,
+      "this_instances": 2460,
+      "new_categories": 0,
+      "note": "three reentrancy-order notes in Icons32Data (view call to the Vault owner check precedes its state writes) and one more contract-name-reuse instance (IVaultOwnerCheck); two reentrancy notes in DGNRS disappear because claimVested no longer calls the Vault"
     }
   },
   "hosted_ci": {
-    "run_id": 38005026482,
-    "url": "https://github.com/PurgeGame/degenerus-protocol/actions/runs/38005026482",
-    "commit": "40cad24c10818f30e02d884fceee2d86c6e918a1",
+    "run_id": 38092026845,
+    "url": "https://github.com/PurgeGame/degenerus-protocol/actions/runs/38092026845",
+    "commit": "5a24042c06656d57695bb0f531600341e86e113d",
     "status": "completed",
     "conclusion": "success",
     "jobs": {
-      "Aderyn (static analysis, non-blocking)": "success",
-      "Foundry fuzz-1": "success",
-      "Production build + assurance gates": "success",
-      "Foundry fuzz-3": "success",
-      "Foundry invariants": "success",
-      "Foundry fuzz-4": "success",
-      "Foundry integration-gas": "success",
       "Hardhat tests in bounded batches": "success",
+      "Aderyn (static analysis, non-blocking)": "success",
+      "Production build + assurance gates": "success",
       "Slither (static analysis, non-blocking)": "success",
+      "Foundry fuzz-4": "success",
       "Foundry fuzz-2": "success",
+      "Foundry integration-gas": "success",
+      "Foundry invariants": "success",
       "Foundry repro-symbolic": "success",
+      "Foundry fuzz-3": "success",
+      "Foundry fuzz-1": "success",
       "Discover deep invariant partitions": "skipped",
       "Halmos proofs (scheduled / manual)": "skipped",
+      "Deep ${{ matrix.file }} / ${{ matrix.label }}": "skipped",
       "Foundry build + tests": "success"
     }
   },
   "evidence_archive": {
-    "path": "/home/zak/Dev/PurgeGame/degenerus-audit-archive/freeze-2026-10-10/evidence.tar.gz",
-    "sha256": "62c997b4459557afa4dd8d7e32eb3e7e51e0e99788d9c8bbfd1336d67524e31f"
+    "path": "/home/zak/Dev/PurgeGame/degenerus-audit-archive/freeze-2026-10-10b/evidence.tar.gz",
+    "sha256": "8e66222d41b573b4b0a04fc81712510dc566498be40a839a852094ffdc870b79"
   },
   "limits": [
     "Counts are runner executions; helper suites may repeat between batches.",
     "Two optional archived-runtime comparisons are skipped (their historical fixtures are not configured).",
-    "Hardhat ran at the production commit; the one repaired file was rerun with its final content.",
-    "The deep AdvanceLiveness root ran at the production commit; its inputs are identical on the final tree.",
+    "Every lane ran on the verified commit; later commits change documentation and this record only.",
     "Analyser output is retained and triaged by delta, not presented as zero findings.",
     "No audit approval, absence-of-bugs claim or deployment is implied."
   ]
