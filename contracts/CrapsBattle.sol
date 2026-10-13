@@ -1908,7 +1908,7 @@ contract CrapsBattle is CrapsBattleStorage {
     /// @dev What a stored boon mask adds to an already-rounded, already-scaled bankroll payment.
     ///      Fails CLOSED: mask 0 and the unreachable 3/5/6/7 pay nothing, and a busted run pays
     ///      nothing because its payment is zero — which is also why a boon can never turn a bust
-    ///      into a credit and move a settlement's `_CREDIT_UNITS` accounting.
+    ///      into a credit and move a settlement's credit accounting.
     function _boonBonus(uint256 mask, uint256 basePaid) internal pure returns (uint256) {
         if (basePaid == 0) return 0;
         uint256 bps;
@@ -2220,7 +2220,7 @@ contract CrapsBattle is CrapsBattleStorage {
     ///      THE REVEAL IS A CLIENT CONCERN, and needs nothing from here. The rung lands the
     ///      instant the table's VRF word does — after entry shuts, before any run is settled — and
     ///      everything it is drawn from is already public: `CrapsBonusArmed` carries the battle
-    ///      key and the table index, `_wordAt` the word, `boostBudgetOf` the day's budget and
+    ///      key and the table index, `_wordAt` the word, `CrapsHighRollerDayOpened` the day's budget and
     ///      `CrapsBonusDonated` the donations. So a front end spins its own wheel off the chain's own
     ///      inputs rather than paying for a view that restates them.
     /// @dev The scheduled window's immutable slot identifies its boost draw. Its monetary

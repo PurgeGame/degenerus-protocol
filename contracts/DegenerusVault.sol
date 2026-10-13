@@ -784,9 +784,9 @@ contract DegenerusVault {
     ///         for those.
     /// @param slot  The custom battle to join.
     /// @param chips Up to seven the vault places; the complement to ten is scattered at settlement.
-    /// @param multiple How many copies of the run to buy, 1 to `MAX_ENTRY_MULTIPLE`: the same
-    ///                  bounty in the battle, at that multiple of the
-    ///                  bankroll and that multiple of whatever the table returns.
+    /// @param multiple One copy of the run (1), or exactly the battle's high-roller multiple;
+    ///                  any other value reverts. The same bounty in the battle, at that multiple
+    ///                  of the bankroll and that multiple of whatever the table returns.
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     /// @return betId The slip: `(slot << 64) | seat`.
     function crapsEnterBattle(uint64 slot, uint32 chips, uint16 multiple) external onlyVaultOwner returns (uint256 betId) {

@@ -301,8 +301,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      *      already exists. The STAGE runs unlocked and pre-RNG, and this re-checks both halves
      *      live — lock down AND the process day's word uncommitted (a VRF-gap replay is unlocked
      *      yet holds a public word) — before any debit, boon consumption or award. A zero return
-     *      costs the level its purchase, never the crank its day; the caller charges the STAGE
-     *      weight only on a non-zero return.
+     *      costs the level its purchase, never the crank its day; the caller admits the call
+     *      against `SUBSCRIBER_WHALE_GAS` before it runs.
      *
      *      Liveness: a terminal game buys nothing. Everything the delivery touches is revert-free
      *      for a claimable-funded protocol buyer (its bundled boxes append as their own entry and
@@ -310,8 +310,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      *      claimable, the affiliate code is blank (vault default, recycle-rate leg only), the
      *      seat bit was latched at genesis, and the Craps door saturates instead of reverting.
      *
-     *      Gas: one aggregate award (never per pass) — the STAGE charges
-     *      `SUB_STAGE_SDGNRS_WHALE_WEIGHT` against its chunk budget on a non-zero return.
+     *      Gas: one aggregate award (never per pass), admitted by the caller against
+     *      `SUBSCRIBER_WHALE_GAS`.
      * @param processDay The STAGE's boundary-pinned process day (the word key checked live).
      * @return paidPasses Paid passes bought this call (a multiple of five), 0 when nothing was.
      */

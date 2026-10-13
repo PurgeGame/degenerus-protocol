@@ -55,7 +55,7 @@ import {MineFlipGas} from "./libraries/MineFlipGas.sol";
  *      - RNG lock prevents state manipulation during VRF callback window
  *      - Access control via msg.sender checks
  *      - Delegatecall modules use constant addresses from ContractAddresses
- *      - 12h VRF timeout, 14-day gameover-RNG fallback, 30-day purchase inactivity guard
+ *      - 20h VRF retry timeout, 14-day gameover-RNG fallback, 30-day purchase inactivity guard
  */
 
 import {IsDGNRS} from "./interfaces/IsDGNRS.sol";
@@ -1480,15 +1480,14 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
       |  Chainlink VRF V2.5 integration for provably fair randomness.        |
       |                                                                      |
       |  LIFECYCLE:                                                          |
-      |  1. mineFlip() calls rngGate()                                    |
-      |  2. If no valid RNG word, _requestRng() is called                    |
-      |  3. Chainlink calls rawFulfillRandomWords() with random word         |
-      |  4. Next mineFlip() uses the fulfilled word                       |
-      |  5. After processing, _unlockRng() resets for next cycle             |
+      |  1. mineFlip() calls requestDailyRng() as its final normal action    |
+      |  2. Chainlink calls rawFulfillRandomWords(); the word is stored      |
+      |  3. A later mineFlip() calls publishRng() to publish the word        |
+      |  4. After processing, _unlockRng() resets for next cycle             |
       |                                                                      |
       |  SECURITY:                                                           |
       |  • RNG lock prevents state manipulation during VRF window            |
-      |  • Single 12h timeout retry (vault owner 1h early) per daily request |
+      |  • Single 20h timeout retry (vault owner via Admin) per request      |
       |  • Governance-gated coordinator rotation via Admin                   |
       |  • Nudge system allows players to influence (not predict) RNG        |
       +======================================================================+*/
@@ -1920,10 +1919,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
     ///
     ///      bettingOpen deliberately ignores the RNG lock: the market consumes no
     ///      randomness and its terms are write-once, so a bet is placeable the whole
-    ///      jackpot phase — including while a day's word is in flight. The one mid-window
-    ///      restriction lives where it belongs, in FLIP: a stake burn tops up from
-    ///      unclaimed coinflip winnings only outside the lock, so a locked-window bet must
-    ///      be wallet-funded.
+    ///      jackpot phase — including while a day's word is in flight. The stake burn is
+    ///      ungated too: its FLIP top-up reaches only settled claimable winnings, which the
+    ///      pending word cannot reprice.
     /// @param round The round to report ratchet terms for; 0 skips those reads (the
     ///        placement path only needs the phase half, and has no round to name yet).
     /// @return ratchetPrev The ratchet entry for round - 1.
