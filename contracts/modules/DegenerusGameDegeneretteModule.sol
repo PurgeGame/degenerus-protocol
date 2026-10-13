@@ -897,7 +897,7 @@ contract DegenerusGameDegeneretteModule is
         if (totals.betLootboxShare > 0) {
             // The bet-win recirc box itemizes its contents via LootBoxOpened (like every box path)
             // so the per-box FLIP datum is recoverable.
-            _resolveDegeneretteLootboxDirect(
+            _resolveLootboxDirect(
                 playerId,
                 totals.betLootboxShare,
                 EntropyLib.hash2(rngWord, betId),
@@ -1116,9 +1116,9 @@ contract DegenerusGameDegeneretteModule is
         boonBps = abi.decode(data, (uint16));
     }
 
-    /// @dev Delegates to the lootbox open module to resolve lootbox rewards directly.
-    ///      Internal ETH reward-spin recirculation keeps the normal 10 ETH ceiling.
-    ///      The resolved box itemizes its contents via `LootBoxOpened` like every box path.
+    /// @dev Delegates to the lootbox open module to resolve lootbox rewards directly: the
+    ///      internal ETH reward-spin recirculation and a purchased bet's combined win box both
+    ///      draw the shared per-level EV allowance. The resolved box itemizes its contents via `LootBoxOpened` like every box path.
     function _resolveLootboxDirect(
         uint32 id,
         uint256 amount,
@@ -1136,25 +1136,6 @@ contract DegenerusGameDegeneretteModule is
                     activityScore
                 )
             );
-        if (!ok) _revertDelegate(data);
-    }
-
-    /// @dev One purchased bet's combined box, with a 50 ETH ceiling if allowance remains.
-    function _resolveDegeneretteLootboxDirect(
-        uint32 id,
-        uint256 amount,
-        uint256 rngWord,
-        uint16 activityScore
-    ) private {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(
-            abi.encodeWithSelector(
-                IDegenerusGameLootboxModule.resolveDegeneretteLootboxDirect.selector,
-                id,
-                amount,
-                rngWord,
-                activityScore
-            )
-        );
         if (!ok) _revertDelegate(data);
     }
 

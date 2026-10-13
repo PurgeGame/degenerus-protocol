@@ -15,6 +15,7 @@ import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlip
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 import {QueueHost} from "../helpers/BoxQueueHost.sol";
+import {EvTaperRef} from "../helpers/EvTaperRef.sol";
 
 /// @dev Records the Game's box-cursor slot each time a reward credit reaches Coinflip. Etched over
 ///      Coinflip, so it keeps its log at a private slot base clear of Coinflip's own storage.
@@ -381,23 +382,28 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
         assertFalse(BoxOrderLib.boDistress(host.entryAt(b, p)));
     }
 
-    /// @notice The shared per-(wallet, level) EV allowance spans entries: full, partial, exhausted.
+    /// @notice The shared per-(wallet, level) EV allowance spans entries: each entry records the
+    ///         weighted taper share of its own spend, and the allowance exhausts at 40 ETH.
     function test_Modifiers_SharedEvAllowanceAcrossEntries() public {
         _buy(alice, BoxOrderLib.boSmalls(1)); // registers alice
         uint32 id = _id(alice);
         uint24 key = host.level() + 1;
-        uint256 left = 10 ether - host.evUsed(id, key);
-        assertGt(left, 4 ether, "fixture leaves room for one full and one partial draw");
+        uint256 used = host.evUsed(id, key);
+        assertLt(used, 4 ether, "fixture starts inside the full-weight leg");
         uint48 b = host.writeBuffer();
         uint256 p = host.boxWriteCount();
-        for (uint256 i; i < 3; ++i) {
+        for (uint256 i; i < 8; ++i) {
             host.grant(alice, 6 ether, 30_000, false, 0);
-            uint256 drawn = left < 6 ether ? left : 6 ether;
-            left -= drawn;
-            assertEq(BoxOrderLib.boEvBps(host.entryAt(b, p + i)), drawn * 10_000 / 6 ether, "entry's own fraction");
+            (uint256 eligible, uint256 usedAfter) = EvTaperRef.eligible(used, 6 ether);
+            uint256 bps = BoxOrderLib.boEvBps(host.entryAt(b, p + i));
+            assertLe(bps, eligible * 10_000 / 6 ether, "entry's own fraction never rounds up");
+            assertApproxEqAbs(bps, eligible * 10_000 / 6 ether, 1, "entry's own fraction");
+            if (i == 0) assertEq(bps, 10_000, "first grant sits wholly in the full-weight leg");
+            assertEq(host.evUsed(id, key), usedAfter, "usage advances by the whole spend");
+            used = usedAfter;
         }
-        assertEq(left, 0);
-        assertEq(host.evUsed(id, key), 10 ether, "the shared allowance is exhausted across entries");
+        assertEq(used, 40 ether, "the shared allowance is exhausted across entries");
+        assertEq(BoxOrderLib.boEvBps(host.entryAt(b, p + 7)), 0, "an exhausted allowance draws nothing");
     }
 
     // =========================================================================

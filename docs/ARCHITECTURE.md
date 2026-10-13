@@ -35,13 +35,15 @@ sDGNRS `PresaleBox` pool. Jackpot and redemption paths create claimable
 obligations or game-specific credits; moving ETH/stETH to a player follows the relevant
 claim/recipient checks. Permissionless processing is not authority to redirect payment.
 
-A purchased ETH Degenerette bet resolves its combined win lootbox once per bet ID.
-If the shared score allowance for `level + 1` has usage below 10 ETH at settlement,
-the box applies its frozen activity-score bonus to at most `50 ETH - used`; overflow
-receives neutral EV. Recorded usage stays capped at 10 ETH, so crossing that boundary
-exhausts the allowance for later boxes. Eligibility is read at settlement, with no
-purchase reservation. Ordinary boxes, AFKing, redemption, and internal ETH reward-spin
-recirculation retain the normal 10 ETH allowance.
+Every box with an activity-score bonus draws one shared per-(wallet, level) allowance.
+The first 10 ETH of bonus spend takes the full bonus; the bonus then tapers linearly to
+half at 20 ETH and to neutral at 40 ETH. A box earns the integral of that weight over
+the spend it covers, so splitting or reordering purchases cannot raise the total.
+Ordinary and pass/cover boxes draw at purchase. AFKing boxes, internal ETH reward-spin
+recirculation, a purchased ETH Degenerette bet's combined win box (one per bet ID), and
+an sDGNRS redemption's lootbox leg draw at settlement, keyed to the level live then, so
+purchases made between commitment and settlement draw first. Penalty and neutral boxes
+draw nothing.
 
 Game-over processing reserves existing claims and applicable deity refunds, credits 2% of
 the remaining pool to the terminal level's top affiliate, and sends the rest to the main

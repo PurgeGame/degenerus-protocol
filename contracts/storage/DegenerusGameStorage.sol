@@ -2416,7 +2416,7 @@ abstract contract DegenerusGameStorage {
     //   [32:56]    level           purchase level; prices the preset tiers
     //   [56:71]    score           post-action activity score, clamped to the effective cap
     //   [71:85]    boostBps        boon uplift as a fraction of this purchase's spend
-    //   [85:99]    evBps           EV-cap-eligible fraction drawn at purchase
+    //   [85:99]    evBps           weighted EV-eligible fraction drawn at purchase
     //   [99]       distress        bought in distress mode
     //   [100:128]  small/med/large/custom counts, 7 bits each, summing to at most 100
     //   [128:184]  size            custom or cover box size in gwei
@@ -3299,9 +3299,59 @@ abstract contract DegenerusGameStorage {
     uint16 internal constant LOOTBOX_EV_VB_BPS = 14_390;
     /// @dev Maximum EV (145%, reached at the effective cap)
     uint16 internal constant LOOTBOX_EV_MAX_BPS = 14_500;
-    /// @dev Maximum EV benefit cap per account per level (10 ETH scaled)
-    uint256 internal constant LOOTBOX_EV_BENEFIT_CAP =
-        10 ether;
+    /// @dev Per-(account, level) bonus spend that takes the full EV bonus
+    uint256 internal constant LOOTBOX_EV_FULL_ETH = 10 ether;
+    /// @dev Cumulative bonus spend at which the marginal box keeps half the EV bonus
+    uint256 internal constant LOOTBOX_EV_HALF_ETH = 20 ether;
+    /// @dev Cumulative bonus spend at which the marginal box is back to neutral EV
+    uint256 internal constant LOOTBOX_EV_ZERO_ETH = 40 ether;
+
+    /// @dev Weighted share of `spend` that takes the EV bonus, starting `used` into the
+    ///      per-(account, level) bonus spend. The marginal weight is 1 up to FULL, falls
+    ///      linearly to 1/2 at HALF, then linearly to 0 at ZERO; `eligible` is its integral
+    ///      over [used, usedAfter], so splitting or reordering purchases cannot raise the
+    ///      total. Each segment floors, so rounding never favours the player.
+    function _lootboxEvEligible(uint256 used, uint256 spend)
+        internal
+        pure
+        returns (uint256 eligible, uint256 usedAfter)
+    {
+        if (used >= LOOTBOX_EV_ZERO_ETH) return (0, used);
+        usedAfter = used + spend;
+        if (usedAfter > LOOTBOX_EV_ZERO_ETH) usedAfter = LOOTBOX_EV_ZERO_ETH;
+        if (used < LOOTBOX_EV_FULL_ETH) {
+            eligible = (usedAfter < LOOTBOX_EV_FULL_ETH ? usedAfter : LOOTBOX_EV_FULL_ETH) - used;
+        }
+        // Segment weights (P - x) / K: 1 -> 1/2 over [FULL, HALF], 1/2 -> 0 over [HALF, ZERO].
+        eligible += _lootboxEvSegment(
+            used,
+            usedAfter,
+            LOOTBOX_EV_FULL_ETH,
+            LOOTBOX_EV_HALF_ETH,
+            2 * LOOTBOX_EV_HALF_ETH - LOOTBOX_EV_FULL_ETH,
+            2 * (LOOTBOX_EV_HALF_ETH - LOOTBOX_EV_FULL_ETH)
+        );
+        eligible += _lootboxEvSegment(
+            used,
+            usedAfter,
+            LOOTBOX_EV_HALF_ETH,
+            LOOTBOX_EV_ZERO_ETH,
+            LOOTBOX_EV_ZERO_ETH,
+            2 * (LOOTBOX_EV_ZERO_ETH - LOOTBOX_EV_HALF_ETH)
+        );
+    }
+
+    /// @dev Integral of (p - x) / k over [lo, hi] clipped to [from, to], floored.
+    function _lootboxEvSegment(uint256 lo, uint256 hi, uint256 from, uint256 to, uint256 p, uint256 k)
+        private
+        pure
+        returns (uint256)
+    {
+        uint256 a = lo > from ? lo : from;
+        uint256 b = hi < to ? hi : to;
+        if (b <= a) return 0;
+        return ((p - a) * (p - a) - (p - b) * (p - b)) / (2 * k);
+    }
 
     /// @dev Read a field from the packed lootbox RNG slot.
     function _lrRead(uint256 shift, uint256 mask) internal view returns (uint256) {
@@ -3412,16 +3462,17 @@ abstract contract DegenerusGameStorage {
     /// @dev Per-player lootbox EV-multiplier benefit used, two level-stamped windows in
     ///      one slot. At any instant only the keys {currentLevel, currentLevel+1} are live
     ///      (opens RMW currentLevel, deposits RMW level+1), so two windows hold the full
-    ///      live set with no eviction of a live key. Each window: used (64 bits) + level
-    ///      stamp (24 bits). `used` is clamped to LOOTBOX_EV_BENEFIT_CAP = 10 ether = 1e19
-    ///      < 2^64 at every write. A non-matching stamp reads as 0 (a fresh allowance).
-    ///      Window A: bits [0:64) used, [64:88) level. Window B: bits [88:152) used, [152:176) level.
+    ///      live set with no eviction of a live key. Each window: used (72 bits) + level
+    ///      stamp (24 bits). `used` is the cumulative bonus spend, clamped to
+    ///      LOOTBOX_EV_ZERO_ETH = 4e19 < 2^72 at every write. A non-matching stamp reads as 0
+    ///      (a fresh allowance).
+    ///      Window A: bits [0:72) used, [72:96) level. Window B: bits [96:168) used, [168:192) level.
     mapping(uint32 => uint256) internal lootboxEvCapPacked;
 
-    uint256 private constant _EV_USED_MASK = (uint256(1) << 64) - 1;
-    uint256 private constant _EV_WINDOW_A_MASK = (uint256(1) << 88) - 1;
+    uint256 private constant _EV_USED_MASK = (uint256(1) << 72) - 1;
+    uint256 private constant _EV_WINDOW_A_MASK = (uint256(1) << 96) - 1;
     uint256 private constant _EV_WINDOW_B_MASK =
-        ((uint256(1) << 88) - 1) << 88;
+        ((uint256(1) << 96) - 1) << 96;
 
     /// @dev A player's EV benefit used for `level`; 0 if neither window is stamped to it.
     function _lootboxEvUsedFor(uint32 id, uint24 level)
@@ -3430,8 +3481,8 @@ abstract contract DegenerusGameStorage {
         returns (uint256)
     {
         uint256 packed = lootboxEvCapPacked[id];
-        if (uint24(packed >> 64) == level) return packed & _EV_USED_MASK;
-        if (uint24(packed >> 152) == level) return (packed >> 88) & _EV_USED_MASK;
+        if (uint24(packed >> 72) == level) return packed & _EV_USED_MASK;
+        if (uint24(packed >> 168) == level) return (packed >> 96) & _EV_USED_MASK;
         return 0;
     }
 
@@ -3444,9 +3495,9 @@ abstract contract DegenerusGameStorage {
         uint256 used
     ) internal {
         uint256 packed = lootboxEvCapPacked[id];
-        uint24 lvlA = uint24(packed >> 64);
-        uint24 lvlB = uint24(packed >> 152);
-        uint256 windowA = (uint256(level) << 64) | (used & _EV_USED_MASK);
+        uint24 lvlA = uint24(packed >> 72);
+        uint24 lvlB = uint24(packed >> 168);
+        uint256 windowA = (uint256(level) << 72) | (used & _EV_USED_MASK);
         if (lvlA == level) {
             lootboxEvCapPacked[id] =
                 (packed & ~_EV_WINDOW_A_MASK) |
@@ -3454,7 +3505,7 @@ abstract contract DegenerusGameStorage {
         } else if (lvlB == level) {
             lootboxEvCapPacked[id] =
                 (packed & ~_EV_WINDOW_B_MASK) |
-                (windowA << 88);
+                (windowA << 96);
         } else if (lvlA <= lvlB) {
             lootboxEvCapPacked[id] =
                 (packed & ~_EV_WINDOW_A_MASK) |
@@ -3462,7 +3513,7 @@ abstract contract DegenerusGameStorage {
         } else {
             lootboxEvCapPacked[id] =
                 (packed & ~_EV_WINDOW_B_MASK) |
-                (windowA << 88);
+                (windowA << 96);
         }
     }
 

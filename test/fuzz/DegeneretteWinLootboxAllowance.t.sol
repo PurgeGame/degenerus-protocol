@@ -9,10 +9,11 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 import {DegeneretteQueue as DQ} from "../helpers/DegeneretteQueue.sol";
+import {EvTaperRef} from "../helpers/EvTaperRef.sol";
 
 /// @dev Test overlay: exercises real module bytecode in the Game's storage and forwards
 ///      ordinary Game calls to its original runtime. No storage-layout slot constants.
-contract WinLootboxCapProbe is DegenerusGameStorage, WalletSeed {
+contract WinLootboxAllowanceProbe is DegenerusGameStorage, WalletSeed {
     address private constant ORIGINAL = address(0xCA9001);
 
     function seedAllowance(address player, uint24 key, uint256 used) external {
@@ -62,25 +63,24 @@ contract WinLootboxCapProbe is DegenerusGameStorage, WalletSeed {
     }
 }
 
-contract DegeneretteWinLootboxCap is DeployProtocol {
-    bytes4 private constant NORMAL = bytes4(keccak256("resolveLootboxDirect(uint32,uint256,uint256,uint16)"));
-    bytes4 private constant WIN = bytes4(keccak256("resolveDegeneretteLootboxDirect(uint32,uint256,uint256,uint16)"));
+contract DegeneretteWinLootboxAllowance is DeployProtocol {
+    bytes4 private constant DIRECT = bytes4(keccak256("resolveLootboxDirect(uint32,uint256,uint256,uint16)"));
     bytes32 private constant OPENED = keccak256("LootBoxOpened(uint32,uint48,uint256,uint24,uint32,uint256,bool)");
     uint16 private constant MAX_SCORE = 30_000;
     uint8 private constant SYMBOL = 9;
     uint48 private constant INDEX = 1;
     address private player;
     uint32 private playerId;
-    WinLootboxCapProbe private probe;
+    WinLootboxAllowanceProbe private probe;
     uint256 private directWord;
 
     function setUp() public {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
         vm.etch(address(0xCA9001), address(game).code);
-        WinLootboxCapProbe overlay = new WinLootboxCapProbe();
+        WinLootboxAllowanceProbe overlay = new WinLootboxAllowanceProbe();
         vm.etch(address(game), address(overlay).code);
-        probe = WinLootboxCapProbe(payable(address(game)));
+        probe = WinLootboxAllowanceProbe(payable(address(game)));
         player = makeAddr("winCapPlayer");
         playerId = probe.walletId(player);
         // Ticket rolls emit LootBoxOpened even for a cold bust. Spin rolls use BoxSpin.
@@ -96,9 +96,9 @@ contract DegeneretteWinLootboxCap is DeployProtocol {
         coin.mintForGame(player, 1_000_000 ether);
     }
 
-    function _resolve(bytes4 selector, uint256 amount, uint16 score) private returns (uint256 scaled, uint24 target) {
+    function _resolve(uint256 amount, uint16 score) private returns (uint256 scaled, uint24 target) {
         vm.recordLogs();
-        probe.dispatch(address(lootboxModule), abi.encodeWithSelector(selector, playerId, amount, directWord, score));
+        probe.dispatch(address(lootboxModule), abi.encodeWithSelector(DIRECT, playerId, amount, directWord, score));
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 count;
         for (uint256 i; i < logs.length; ++i) {
@@ -110,83 +110,76 @@ contract DegeneretteWinLootboxCap is DeployProtocol {
         assertEq(count, amount == 0 ? 0 : 1, "one resolution per awarded box");
     }
 
-    function test_LargeWinUses50EthCeilingAndExhaustsNormalAllowance() public {
-        (uint256 scaled,) = _resolve(WIN, 60 ether, MAX_SCORE);
-        assertEq(scaled, 82.5 ether);
-        assertEq(probe.allowanceUsed(player, 1), 10 ether);
-        (scaled,) = _resolve(WIN, 60 ether, MAX_SCORE);
-        assertEq(scaled, 60 ether, "exhausted means neutral, not another 40 ETH");
+    // Expected values at MAX_SCORE (145%): bonus = 0.45 x the weighted eligible spend, where the
+    // weight is 1 to 10 ETH, 1 -> 1/2 over 10..20 ETH and 1/2 -> 0 over 20..40 ETH.
+
+    function test_LargeWinRidesTaperAndExhaustsAllowance() public {
+        (uint256 scaled,) = _resolve(60 ether, MAX_SCORE);
+        assertEq(scaled, 70.125 ether, "22.5 ETH weighted eligible");
+        assertEq(probe.allowanceUsed(player, 1), 40 ether);
+        (scaled,) = _resolve(60 ether, MAX_SCORE);
+        assertEq(scaled, 60 ether, "exhausted means neutral");
     }
 
-    function test_PartiallyUsedAllowanceIsDeductedFrom50Eth() public {
+    function test_PartiallyUsedAllowanceStartsMidTaper() public {
         probe.seedAllowance(player, 1, 9 ether);
-        (uint256 scaled,) = _resolve(WIN, 45 ether, MAX_SCORE);
-        assertEq(scaled, 63.45 ether);
-        assertEq(probe.allowanceUsed(player, 1), 10 ether);
+        (uint256 scaled,) = _resolve(45 ether, MAX_SCORE);
+        assertEq(scaled, 51.075 ether, "1 + 7.5 + 5 ETH weighted eligible");
+        assertEq(probe.allowanceUsed(player, 1), 40 ether);
     }
 
-    function test_ExactCeilingAndOneWeiOfRemainingAllowance() public {
-        (uint256 scaled,) = _resolve(WIN, 50 ether, MAX_SCORE);
-        assertEq(scaled, 72.5 ether);
-        probe.seedAllowance(player, 1, 10 ether - 1);
-        (scaled,) = _resolve(WIN, 50 ether, MAX_SCORE);
-        assertEq(scaled, 50 ether + (uint256(40 ether + 1) * 4500) / 10000);
-        assertEq(probe.allowanceUsed(player, 1), 10 ether);
+    function test_OneWeiBeforeExhaustionEarnsNothing() public {
+        probe.seedAllowance(player, 1, 40 ether - 1);
+        (uint256 scaled,) = _resolve(50 ether, MAX_SCORE);
+        assertEq(scaled, 50 ether);
+        assertEq(probe.allowanceUsed(player, 1), 40 ether);
     }
 
-    function test_SmallWinsConsumeAllowanceBeforeOneExceptionalDraw() public {
+    function test_WinsAndRecirculationShareOneAllowance() public {
         probe.seedAllowance(player, 1, 5 ether);
-        (uint256 scaled,) = _resolve(WIN, 2 ether, MAX_SCORE);
+        (uint256 scaled,) = _resolve(2 ether, MAX_SCORE);
         assertEq(scaled, 2.9 ether);
         assertEq(probe.allowanceUsed(player, 1), 7 ether);
-        (scaled,) = _resolve(WIN, 60 ether, MAX_SCORE);
-        assertEq(scaled, 79.35 ether);
-        assertEq(probe.allowanceUsed(player, 1), 10 ether);
-        (scaled,) = _resolve(NORMAL, 2 ether, MAX_SCORE);
-        assertEq(scaled, 2 ether, "ordinary box shares exhausted allowance");
-    }
-
-    function test_NormalRecirculationKeeps10EthCap() public {
-        probe.seedAllowance(player, 1, 9 ether);
-        (uint256 scaled,) = _resolve(NORMAL, 45 ether, MAX_SCORE);
-        assertEq(scaled, 45.45 ether);
-        (scaled,) = _resolve(WIN, 45 ether, MAX_SCORE);
-        assertEq(scaled, 45 ether, "normal resolution consumed the remaining allowance");
+        (scaled,) = _resolve(60 ether, MAX_SCORE);
+        assertEq(scaled, 66.975 ether, "3 + 7.5 + 5 ETH weighted eligible");
+        assertEq(probe.allowanceUsed(player, 1), 40 ether);
+        (scaled,) = _resolve(2 ether, MAX_SCORE);
+        assertEq(scaled, 2 ether, "later box shares the exhausted allowance");
     }
 
     function test_NeutralPenaltyAndZeroAmountDoNotConsumeAllowance() public {
         probe.seedAllowance(player, 1, 9 ether);
         uint256 beforeWord = probe.allowanceWord(player);
-        (uint256 scaled,) = _resolve(WIN, 45 ether, 60);
+        (uint256 scaled,) = _resolve(45 ether, 60);
         assertEq(scaled, 45 ether);
-        (scaled,) = _resolve(WIN, 45 ether, 0);
+        (scaled,) = _resolve(45 ether, 0);
         assertEq(scaled, 40.5 ether);
-        _resolve(WIN, 0, MAX_SCORE);
+        _resolve(0, MAX_SCORE);
         assertEq(probe.allowanceWord(player), beforeWord);
     }
 
     function test_FreshLevelPreservesOtherAllowanceWindow() public {
         probe.seedAllowance(player, 1, 10 ether);
         probe.seedLevel(1);
-        (uint256 scaled,) = _resolve(WIN, 60 ether, MAX_SCORE);
-        assertEq(scaled, 82.5 ether);
+        (uint256 scaled,) = _resolve(60 ether, MAX_SCORE);
+        assertEq(scaled, 70.125 ether);
         assertEq(probe.allowanceUsed(player, 1), 10 ether);
-        assertEq(probe.allowanceUsed(player, 2), 10 ether);
+        assertEq(probe.allowanceUsed(player, 2), 40 ether);
     }
 
     function test_AllowanceDoesNotChangeCommittedTargetLevel() public {
         uint256 snapshot = vm.snapshotState();
-        (, uint24 eligibleTarget) = _resolve(WIN, 60 ether, MAX_SCORE);
+        (, uint24 eligibleTarget) = _resolve(60 ether, MAX_SCORE);
         assertTrue(vm.revertToState(snapshot));
-        probe.seedAllowance(player, 1, 10 ether);
-        (, uint24 exhaustedTarget) = _resolve(WIN, 60 ether, MAX_SCORE);
+        probe.seedAllowance(player, 1, 40 ether);
+        (, uint24 exhaustedTarget) = _resolve(60 ether, MAX_SCORE);
         assertEq(eligibleTarget, exhaustedTarget);
     }
 
     function test_DirectModuleCallRejectsValueEvenForZeroAmount() public {
         vm.expectRevert(bytes4(keccak256("OnlyDelegatecall()")));
         (bool ok,) = address(lootboxModule).call{value: 1 ether}(
-            abi.encodeWithSelector(WIN, playerId, uint256(0), uint256(1), MAX_SCORE)
+            abi.encodeWithSelector(DIRECT, playerId, uint256(0), uint256(1), MAX_SCORE)
         );
         assertTrue(ok); // expectRevert makes the observed low-level call succeed
     }
@@ -245,14 +238,14 @@ contract DegeneretteWinLootboxCap is DeployProtocol {
         }
     }
 
-    function test_PurchasedBetRoutesToExceptionalCapAndQueuedFollowupIsNeutral() public {
+    function test_PurchasedBetRidesTaperAndQueuedFollowupIsNeutral() public {
         _place(1, MAX_SCORE);
         _place(1, MAX_SCORE);
         uint256[] memory amounts = _sweepAmounts();
         assertEq(amounts.length, 2);
-        assertGt(amounts[1], 50 ether, "fixture produces a large win box");
-        assertEq(amounts[0], amounts[1] + 22.5 ether, "only first queued win gets bonus");
-        assertEq(probe.allowanceUsed(player, 1), 10 ether);
+        assertGt(amounts[1], 40 ether, "fixture produces a win box past the allowance");
+        assertEq(amounts[0], amounts[1] + 10.125 ether, "only first queued win gets bonus");
+        assertEq(probe.allowanceUsed(player, 1), 40 ether);
     }
 
     function test_AllowanceIsReadAtSettlementAfterPlacement() public {
@@ -260,25 +253,25 @@ contract DegeneretteWinLootboxCap is DeployProtocol {
         uint256 snapshot = vm.snapshotState();
         uint256[] memory eligible = _sweepAmounts();
         assertTrue(vm.revertToState(snapshot));
-        probe.seedAllowance(player, 1, 10 ether);
+        probe.seedAllowance(player, 1, 40 ether);
         uint256[] memory exhausted = _sweepAmounts();
-        assertEq(eligible[0], exhausted[0] + 22.5 ether);
+        assertEq(eligible[0], exhausted[0] + 10.125 ether);
     }
 
-    function test_MultiSpinBetKeepsOneBoxAndOneCeiling() public {
+    function test_MultiSpinBetKeepsOneBox() public {
         _place(25, MAX_SCORE);
         uint256 snapshot = vm.snapshotState();
         uint256[] memory eligible = _sweepAmounts();
         assertEq(eligible.length, 1);
         assertTrue(vm.revertToState(snapshot));
-        probe.seedAllowance(player, 1, 10 ether);
+        probe.seedAllowance(player, 1, 40 ether);
         uint256[] memory exhausted = _sweepAmounts();
         assertEq(exhausted.length, 1);
-        assertEq(eligible[0], exhausted[0] + 22.5 ether);
+        assertEq(eligible[0], exhausted[0] + 10.125 ether);
     }
 
-    function testFuzz_WinCapMatchesReference(uint256 used, uint256 amount, uint16 score) public {
-        used = bound(used, 0, 10 ether);
+    function testFuzz_DirectBoxMatchesReference(uint256 used, uint256 amount, uint16 score) public {
+        used = bound(used, 0, 41 ether);
         amount = bound(amount, 1 gwei, 100 ether);
         score = uint16(bound(score, 0, 30_000));
         probe.seedAllowance(player, 1, used);
@@ -291,12 +284,13 @@ contract DegeneretteWinLootboxCap is DeployProtocol {
         uint256 expectedUsed = used;
         uint256 expected = amount * multiplier / 10000;
         if (multiplier > 10000) {
-            uint256 adjusted = used == 10 ether ? 0 : (amount < 50 ether - used ? amount : 50 ether - used);
-            expected = adjusted * multiplier / 10000 + amount - adjusted;
-            expectedUsed = used + adjusted > 10 ether ? 10 ether : used + adjusted;
+            uint256 eligible;
+            (eligible, expectedUsed) = EvTaperRef.eligible(used, amount);
+            expected = eligible * multiplier / 10000 + amount - eligible;
         }
-        (uint256 scaled,) = _resolve(WIN, amount, score);
-        assertEq(scaled, expected);
+        (uint256 scaled,) = _resolve(amount, score);
+        // The contract floors once per taper segment, the reference once overall.
+        assertApproxEqAbs(scaled, expected, 2);
         assertEq(probe.allowanceUsed(player, 1), expectedUsed);
         assertEq(probe.allowanceUsed(player, 2), 3 ether, "other packed window preserved");
     }
@@ -323,7 +317,8 @@ contract DegeneretteWinLootboxCap is DeployProtocol {
 
     function testGas_Win1Spin() public { _gasSweep("cap_win_1spin", 1, MAX_SCORE, 0); }
     function testGas_Win25Spins() public { _gasSweep("cap_win_25spins", 25, MAX_SCORE, 0); }
-    function testGas_Exhausted() public { _gasSweep("cap_exhausted", 1, MAX_SCORE, 10 ether); }
+    function testGas_Exhausted() public { _gasSweep("cap_exhausted", 1, MAX_SCORE, 40 ether); }
+    function testGas_MidTaper() public { _gasSweep("cap_mid_taper", 1, MAX_SCORE, 15 ether); }
     function testGas_Neutral() public { _gasSweep("cap_neutral", 1, 60, 0); }
     function testGas_Penalty() public { _gasSweep("cap_penalty", 1, 0, 0); }
     function testGas_SmallWin() public { _gasSweepWithStake("cap_small_win", 1, MAX_SCORE, 0, 0.005 ether); }
@@ -353,7 +348,7 @@ contract DegeneretteWinLootboxCap is DeployProtocol {
         vm.cool(address(game));
         vm.cool(address(lootboxModule));
         uint256 beforeGas = gasleft();
-        probe.dispatch(address(lootboxModule), abi.encodeWithSelector(NORMAL, playerId, 60 ether, uint256(12345), MAX_SCORE));
+        probe.dispatch(address(lootboxModule), abi.encodeWithSelector(DIRECT, playerId, 60 ether, uint256(12345), MAX_SCORE));
         emit log_named_uint("cap_normal_recirc", beforeGas - gasleft());
     }
 

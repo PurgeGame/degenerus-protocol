@@ -349,13 +349,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     // Lootbox Opening Functions
     // =========================================================================
 
-    /// @dev A purchased Degenerette win may cross the normal allowance once, up to this ceiling.
-    uint256 private constant DEGENERETTE_WIN_EV_CAP = 50 ether;
-
-    /// @dev Apply EV multiplier with per-account per-level cap of 10 ETH.
-    ///      Tracks how much benefit has been used and only applies EV adjustment
-    ///      to the uncapped portion. Remainder gets 100% EV (neutral).
-    /// @param id Wallet ID whose cap is drawn
+    /// @dev Apply the EV multiplier against the per-account per-level bonus allowance: the
+    ///      first 10 ETH of bonus spend takes the full multiplier, the bonus then tapers to
+    ///      half at 20 ETH and to neutral at 40 ETH (`_lootboxEvEligible`). The non-eligible
+    ///      remainder gets 100% EV (neutral).
+    /// @param id Wallet ID whose allowance is drawn
     /// @param lvl Current game level
     /// @param amount Lootbox ETH amount
     /// @param evMultiplierBps EV multiplier in basis points (9000-14500)
@@ -364,45 +362,24 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         private
         returns (uint256 scaledAmount)
     {
-        return _applyEvMultiplierWithCap(id, lvl, amount, evMultiplierBps, LOOTBOX_EV_BENEFIT_CAP);
-    }
-
-    /// @dev `ceiling` bounds this box's adjustment, while recorded usage always stays within
-    ///      the shared 10 ETH allowance (and its 64-bit storage lane). Eligibility is read once
-    ///      at settlement: an exhausted allowance cannot receive the exceptional extension.
-    function _applyEvMultiplierWithCap(
-        uint32 id, uint24 lvl, uint256 amount, uint256 evMultiplierBps, uint256 ceiling
-    ) private returns (uint256 scaledAmount)
-    {
-        // Bonus-only cap: penalty (< NEUTRAL) and neutral (== NEUTRAL) boxes apply the
-        // multiplier on the full amount and draw nothing from the cap. Only a bonus box
-        // (> NEUTRAL) falls through to the cap-draw branch below.
+        // Bonus-only allowance: penalty (< NEUTRAL) and neutral (== NEUTRAL) boxes apply the
+        // multiplier on the full amount and draw nothing. Only a bonus box (> NEUTRAL) falls
+        // through to the draw below.
         if (evMultiplierBps <= LOOTBOX_EV_NEUTRAL_BPS) {
             return (amount * evMultiplierBps) / 10_000;
         }
 
-        // Check how much EV benefit capacity remains for this level
         uint256 usedBenefit = _lootboxEvUsedFor(id, lvl);
-        if (usedBenefit >= LOOTBOX_EV_BENEFIT_CAP) {
-            // Cap exhausted: apply 100% EV (neutral)
+        if (usedBenefit >= LOOTBOX_EV_ZERO_ETH) {
+            // Allowance exhausted: apply 100% EV (neutral)
             return amount;
         }
 
-        // Determine how much of this lootbox gets the EV adjustment
-        uint256 remainingCap = ceiling - usedBenefit;
-        uint256 adjustedPortion = amount > remainingCap ? remainingCap : amount;
-        uint256 neutralPortion = amount - adjustedPortion;
-
-        // Update tracking
-        uint256 usedAfter = usedBenefit + adjustedPortion;
-        if (usedAfter > LOOTBOX_EV_BENEFIT_CAP) usedAfter = LOOTBOX_EV_BENEFIT_CAP;
+        (uint256 eligible, uint256 usedAfter) = _lootboxEvEligible(usedBenefit, amount);
         _setLootboxEvUsedFor(id, lvl, usedAfter);
 
-        // Calculate scaled amount:
-        // - adjustedPortion gets the full EV multiplier
-        // - neutralPortion gets 100% EV
-        uint256 adjustedValue = (adjustedPortion * evMultiplierBps) / 10_000;
-        scaledAmount = adjustedValue + neutralPortion;
+        // The eligible portion gets the EV multiplier, the rest 100% EV.
+        scaledAmount = (eligible * evMultiplierBps) / 10_000 + (amount - eligible);
     }
 
     // =========================================================================
@@ -578,19 +555,20 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         emit LootBoxBuy(id, idx, position, amountWei);
     }
 
-    /// @dev The EV-cap draw an entry's EV fraction records: a bonus score (mult > NEUTRAL)
-    ///      draws min(spend, CAP - used) from the shared per-(wallet, level) accumulator, which
-    ///      never resets per entry; neutral and sub-neutral scores draw nothing. Shared by the
-    ///      purchase paths and the sDGNRS redemption order, which draws at resolution.
+    /// @dev The EV-allowance draw an entry's EV fraction records: a bonus score (mult > NEUTRAL)
+    ///      advances the shared per-(wallet, level) bonus spend by `spend` and returns its
+    ///      weighted eligible share (`_lootboxEvEligible`); the accumulator never resets per
+    ///      entry. Neutral and sub-neutral scores draw nothing. Shared by the purchase paths
+    ///      and the sDGNRS redemption order, which draws at resolution.
     function _drawEvBenefit(uint32 id, uint24 capLevel, uint256 spend, uint256 score)
         private
         returns (uint256 evExtra)
     {
         if (_lootboxEvMultiplierFromScore(score) > LOOTBOX_EV_NEUTRAL_BPS) {
             uint256 used = _lootboxEvUsedFor(id, capLevel);
-            uint256 remaining = used >= LOOTBOX_EV_BENEFIT_CAP ? 0 : LOOTBOX_EV_BENEFIT_CAP - used;
-            evExtra = spend < remaining ? spend : remaining;
-            if (evExtra != 0) _setLootboxEvUsedFor(id, capLevel, used + evExtra);
+            uint256 usedAfter;
+            (evExtra, usedAfter) = _lootboxEvEligible(used, spend);
+            if (usedAfter != used) _setLootboxEvUsedFor(id, capLevel, usedAfter);
         }
     }
 
@@ -864,7 +842,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             // carries its proportional share.
             uint256 boosted = size + (size * c.boostBps) / 10_000;
             // Frozen EV application: a penalty or neutral order scales the whole box; a bonus
-            // order scales only the cap-eligible fraction drawn at buy and pays the rest —
+            // order scales only the weighted eligible fraction drawn at buy and pays the rest —
             // including the boon uplift — at 100%. The adj fraction applies to the RAW size,
             // matching the buy-side draw (which capped raw spend, not boosted): applying it to
             // the boosted basis would quietly extend the EV bonus onto the boost itself. No
@@ -1112,7 +1090,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         paid = dgnrs.transferFromPool(IsDGNRS.Pool.PresaleBox, _boxPayee(acc), dgnrsAmount);
     }
 
-    /// @notice Resolve an internal ETH reward spin's recirculated lootbox (normal 10 ETH cap).
+    /// @notice Resolve a direct lootbox: an internal ETH reward spin's recirculated box or a
+    ///         purchased Degenerette bet's combined win box.
     /// @dev Rolls full boons + passes via the common resolver over the STATIC table — this
     ///      path's open timing is claimant-controlled, so no live eligibility may reach the
     ///      draw; ineligible drawn types are discarded at delivery (`_deliverBoon`). Emits
@@ -1130,24 +1109,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         external
         payable
     {
-        _resolveLootboxDirectCore(id, amount, rngWord, activityScore, LOOTBOX_EV_BENEFIT_CAP);
-    }
-
-    /// @notice Resolve one purchased Degenerette bet's combined win box.
-    /// @dev Remaining allowance is checked at settlement. A qualifying box gets a 50 ETH
-    ///      ceiling less prior usage, then exhausts the normal allowance if it crosses 10 ETH.
-    ///      The activity score and RNG seed remain frozen; no purchase bookkeeping is added.
-    function resolveDegeneretteLootboxDirect(uint32 id, uint256 amount, uint256 rngWord, uint16 activityScore)
-        external
-        payable
-    {
-        _resolveLootboxDirectCore(id, amount, rngWord, activityScore, DEGENERETTE_WIN_EV_CAP);
-    }
-
-    function _resolveLootboxDirectCore(
-        uint32 id, uint256 amount, uint256 rngWord, uint16 activityScore, uint256 ceiling
-    ) private
-    {
         // Delegatecall-only: address(this) == GAME under the nested dispatch. A direct call on the
         // deployed module would trap the in-flight msg.value (the amount==0 early-return path).
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
@@ -1163,7 +1124,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint24 targetLevel = _rollTargetLevel(currentLevel, seed);
 
         uint256 evMultiplierBps = _lootboxEvMultiplierFromScore(uint256(activityScore));
-        uint256 scaledAmount = _applyEvMultiplierWithCap(id, currentLevel, amount, evMultiplierBps, ceiling);
+        uint256 scaledAmount = _applyEvMultiplierWithCap(id, currentLevel, amount, evMultiplierBps);
 
         // allowEthSpin=false: this is the recirc entry, called inside runDegeneretteWork's deferred
         // ETH-pool flush window — an ETH-spin RMW here would be clobbered by that flush. Roll
@@ -1301,10 +1262,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      evMultiplierBps)` RMW — the sole residual live-read, a benign monotonic
     ///      down-clamp, keyed on the SAME per-level window of
     ///      `lootboxEvCapPacked[id]` the human buy-time write uses
-    ///      so the human + afking boxes share the one per-level 10-ETH EV budget.
+    ///      so the human + afking boxes share the one per-level EV allowance.
     ///      The buy-time EV write is bypassed for afking boxes (the process pass STAMPS only),
-    ///      so this is the single draw (no double-draw). The cap hard-clamps at 10 ETH with the
-    ///      no-write 100%-EV short-circuit ⇒ NO revert. The seed carries ZERO `block.*`
+    ///      so this is the single draw (no double-draw). The allowance hard-clamps at 40 ETH
+    ///      with the no-write 100%-EV short-circuit ⇒ NO revert. The seed carries ZERO `block.*`
     ///      entropy.
     ///
     ///      Boons OFF for afking boxes ⇒ `amount` IS the spend exactly (there is no
@@ -1351,7 +1312,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
         // The SINGLE EV-cap RMW at open — the sole residual live-read, a benign
         // monotonic down-clamp, keyed [id][currentLevel] on the SAME
-        // per-level 10-ETH budget map the human buy-time write uses. Fed the FROZEN
+        // per-level EV allowance the human buy-time write uses. Fed the FROZEN
         // evMultiplierBps from the stamped activityScore. Hard-clamped, no revert.
         // sDGNRS's protocol-owned self-subscription boxes are exempt: the full amount
         // takes the multiplier and no per-level budget is drawn — its EV benefit is

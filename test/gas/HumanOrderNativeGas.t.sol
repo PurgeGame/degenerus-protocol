@@ -39,7 +39,7 @@ contract HumanOrderGasSeed is DegenerusGame {
         word |= uint256(_walletIdOf(player))
             | uint256(ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS) << LB_SCORE_SHIFT;
         uint256 nominal = BoxOrderLib.boNominal(word, PriceLookupLib.priceForLevel(100));
-        uint256 eligible = nominal < LOOTBOX_EV_BENEFIT_CAP ? nominal : LOOTBOX_EV_BENEFIT_CAP;
+        (uint256 eligible,) = _lootboxEvEligible(0, nominal);
         if (nominal != 0) word |= (eligible * 10_000 / nominal) << LB_EV_SHIFT;
         if (presale) {
             // One purchase applies the whole 50 ETH from zero sold: tier 0, and it closes the sale.

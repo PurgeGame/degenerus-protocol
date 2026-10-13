@@ -423,15 +423,6 @@ interface IDegenerusGameLootboxModule {
         uint16 activityScore
     ) external payable;
 
-    /// @notice Resolve a purchased Degenerette win with a 50 ETH score ceiling if allowance remains.
-    /// @dev One combined box per bet; recorded shared usage is clamped to the normal 10 ETH cap.
-    function resolveDegeneretteLootboxDirect(
-        uint32 id,
-        uint256 amount,
-        uint256 rngWord,
-        uint16 activityScore
-    ) external payable;
-
     /// @notice Resolves an sDGNRS redemption's full lootbox leg (auth, funding-mix pull, pool
     ///         credit, one box order of up to 20 equal boxes) — delegatecall target of the
     ///         Game's thin stub.
