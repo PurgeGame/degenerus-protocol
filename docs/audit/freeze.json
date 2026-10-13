@@ -1,23 +1,30 @@
 {
   "schema_version": 3,
-  "status": "source frozen for external audit; standard battery, deep invariants, Halmos and hosted CI reconciled for this revision",
-  "audit_tag": "audit-2026-10-10b",
-  "recorded_at_utc": "2026-10-10T22:36:49.332619+00:00",
-  "production_source_commit": "8125d2e6a0a4000734bea9944c2a9d366133a3de",
-  "final_test_inputs_commit": "8125d2e6a0a4000734bea9944c2a9d366133a3de",
-  "verified_commit": "5a24042c06656d57695bb0f531600341e86e113d",
-  "hosted_ci_commit": "5a24042c06656d57695bb0f531600341e86e113d",
+  "status": "source frozen for external audit; standard battery, deep invariants and Halmos ran on the previous production commit, whose runtime bytecode this revision reproduces exactly; hosted CI reconciled for this revision",
+  "audit_tag": "audit-2026-10-12",
+  "recorded_at_utc": "2026-10-13T02:05:21.672576+00:00",
+  "production_source_commit": "fd9d30f6fba04c54bd7be96f95f7c78584f9e098",
+  "battery_commit": "5a24042c06656d57695bb0f531600341e86e113d",
+  "battery_production_source_commit": "8125d2e6a0a4000734bea9944c2a9d366133a3de",
+  "hosted_ci_commit": "a5f93874974a170b625f2b7c8736bd6afcee7762",
   "predecessor_freeze": {
-    "tag": "audit-2026-10-10",
-    "production_source_commit": "69c67918c74b2c301c702f1843d8850ab47bca50",
-    "record": "docs/audit/freeze-audit-2026-10-10.json"
+    "tag": "audit-2026-10-10b",
+    "production_source_commit": "8125d2e6a0a4000734bea9944c2a9d366133a3de",
+    "record": "docs/audit/freeze-audit-2026-10-10b.json"
   },
-  "contract_changes_since_predecessor": "17 files changed, 133 insertions(+), 95 deletions(-)",
+  "contract_changes_since_predecessor": "4 files changed, 18 insertions(+), 20 deletions(-); comments only (DegenerusGame, DegenerusVault, CrapsBattle, DegenerusGameWhaleModule)",
   "contracts_unchanged_after_production_commit": true,
   "snapshot_files": {
-    "snapshot.json": "385e379919cd916521108dbd680285d1edd6755b53c94763ddb0126a1c399b21",
-    "source-sha256.txt": "839f52c52dec41ccde0723c23e6ad50e2b16bee7abdec9ffe48c68ea78ece12a",
+    "snapshot.json": "81d86fc84cff71d2578c116b0294408d93ea52e0b54f9f5820e330312b225763",
+    "source-sha256.txt": "db958df9384c4d2e56462eeb031b2c21dd82ec20ee0411b8dc4e9f4126331ffa",
     "verification-sha256.txt": "3e70a0ee897e363c2853ba74f8ca4ae59c4d21735d6df0c2ffcce57dca4a0e61"
+  },
+  "comment_only_delta": {
+    "basis": "8125d2e6a..fd9d30f6f touches contracts only in comments: the VRF retry is 20h with no early path, the VRF lifecycle banner names the real calls, the growth-bet stake burn is ungated, a craps battle entry is binary, the sDGNRS whale award is admitted against SUBSCRIBER_WHALE_GAS, and two comments no longer name symbols that do not exist",
+    "runtime_bytecode": "production build of the predecessor tree (220607a07) and this tree (a5f938749): all 163 artifacts have identical runtime bytecode once the trailing metadata hash is stripped; the only other difference is two embedded creation-code metadata hashes inside the AdvanceLivenessHandler test helper",
+    "deployment_sizes": "identical, Game 24,467 bytes (109 spare)",
+    "checks_on_this_tree": "audit-snapshot identity, storage-layout oracle, recursive layout check and the 11 source-drift gates exit 0",
+    "archive": "/home/zak/Dev/PurgeGame/degenerus-audit-archive/freeze-2026-10-12"
   },
   "local_verification": {
     "structural_at_verified_commit": "production build, deployment-size ceiling (Game 24,467 B / 109 spare; Vault 11,922; DGNRS 4,735; Icons32Data 2,340), storage-layout oracle, recursive layout check and audit-snapshot identity exit 0; assurance tooling tests and the 11 source-drift gates exit 0",
@@ -327,6 +334,7 @@
     ],
     "test_changes_for_the_vault_move": "the Vault holds the DGNRS allocation, so fixtures obtain DGNRS through the Vault (DeployProtocol helpers, WrapperPathHandler, redemption, wallet-id and craps fixtures; Hardhat DGNRS, DGNRSLiquid, DeployScript, AccessControl, Icons32Data, SecurityEconHardening, VRFGovernance). DgnrsWrapperPaths gained five tests (the Vault holds the allocation, the owner unwraps only through the Vault, the Vault burns wrapped DGNRS in-game and after game over, Icons32Data follows Vault ownership), and its vesting test releases from a stranger's call and checks only the Vault is paid. The closing-box presale tests assert the remainder is burned."
   },
+  "local_verification_note": "The Foundry, Hardhat, deep-invariant and Halmos lanes below ran on battery_commit. This revision differs from it only in comments (see comment_only_delta), so they are carried forward unchanged and were not rerun.",
   "static_analysis_local_like_for_like": {
     "slither": {
       "version": "0.11.5",
@@ -346,6 +354,30 @@
     }
   },
   "hosted_ci": {
+    "run_id": 38335169021,
+    "url": "https://github.com/PurgeGame/degenerus-protocol/actions/runs/38335169021",
+    "commit": "a5f93874974a170b625f2b7c8736bd6afcee7762",
+    "status": "completed",
+    "conclusion": "success",
+    "jobs": {
+      "Aderyn (static analysis, non-blocking)": "success",
+      "Production build + assurance gates": "success",
+      "Foundry repro-symbolic": "success",
+      "Foundry fuzz-2": "success",
+      "Foundry fuzz-1": "success",
+      "Slither (static analysis, non-blocking)": "success",
+      "Foundry invariants": "success",
+      "Foundry fuzz-3": "success",
+      "Foundry integration-gas": "success",
+      "Foundry fuzz-4": "success",
+      "Hardhat tests in bounded batches": "success",
+      "Deep ${{ matrix.file }} / ${{ matrix.label }}": "skipped",
+      "Halmos proofs (scheduled / manual)": "skipped",
+      "Discover deep invariant partitions": "skipped",
+      "Foundry build + tests": "success"
+    }
+  },
+  "battery_hosted_ci": {
     "run_id": 38092026845,
     "url": "https://github.com/PurgeGame/degenerus-protocol/actions/runs/38092026845",
     "commit": "5a24042c06656d57695bb0f531600341e86e113d",
@@ -370,13 +402,18 @@
     }
   },
   "evidence_archive": {
-    "path": "/home/zak/Dev/PurgeGame/degenerus-audit-archive/freeze-2026-10-10b/evidence.tar.gz",
-    "sha256": "8e66222d41b573b4b0a04fc81712510dc566498be40a839a852094ffdc870b79"
+    "battery": {
+      "path": "/home/zak/Dev/PurgeGame/degenerus-audit-archive/freeze-2026-10-10b/evidence.tar.gz",
+      "sha256": "8e66222d41b573b4b0a04fc81712510dc566498be40a839a852094ffdc870b79"
+    },
+    "comment_only_delta": {
+      "path": "/home/zak/Dev/PurgeGame/degenerus-audit-archive/freeze-2026-10-12"
+    }
   },
   "limits": [
     "Counts are runner executions; helper suites may repeat between batches.",
     "Two optional archived-runtime comparisons are skipped (their historical fixtures are not configured).",
-    "Every lane ran on the verified commit; later commits change documentation and this record only.",
+    "The test lanes ran on battery_commit; this revision reproduces its runtime bytecode and differs only in comments and re-pinned manifests.",
     "Analyser output is retained and triaged by delta, not presented as zero findings.",
     "No audit approval, absence-of-bugs claim or deployment is implied."
   ]

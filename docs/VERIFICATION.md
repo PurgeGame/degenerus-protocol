@@ -8,6 +8,14 @@ local output directories or CI artifacts.
 The dated implementation sections below are historical, scoped evidence; their
 pass counts do not certify later revisions.
 
+### Comment corrections (2026-10-12)
+
+Four production files changed in comments only. Compare the runtime bytecode of two production
+builds (`forge build --skip test --out forge-out-production`) after stripping the trailing
+CBOR metadata hash: every artifact matches, so earlier test results apply unchanged. Test
+helpers that embed a contract's creation code differ only inside those embedded metadata
+hashes. Use [the freeze record](audit/freeze.json) for the recorded identities.
+
 ### Vault-held allocations and presale burn (2026-10-10)
 
 `DGNRS` pays its initial 50B and every level-vested release to the Vault, and
@@ -24,8 +32,8 @@ The closing presale box burns the `Pool.PresaleBox` remainder with a self-direct
 transfer; `WardenLbxClosingBoxOrder` and `PresaleBoxDrain` assert the burn and that the
 closing buyer receives only the purchased amount. Local lanes ran on the verified commit
 in parallel worktrees (Foundry groups, Hardhat, deep invariants at 1,000 runs × 256 calls,
-Halmos); use [the freeze record](audit/freeze.json) for recorded results and input
-identities.
+Halmos); use [the freeze record](audit/freeze-audit-2026-10-10b.json) for recorded results and
+input identities.
 
 ### Admission budgets, ancestor-tail floor and fixture repairs (2026-10-10)
 

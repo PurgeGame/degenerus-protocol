@@ -3,7 +3,7 @@
 ## Subject
 
 Review the production Solidity files listed in [scope.txt](../scope.txt). This handoff describes a
-**frozen source revision at annotated tag `audit-2026-10-10b`**.
+**frozen source revision at annotated tag `audit-2026-10-12`**.
 [The freeze record](audit/freeze.json) identifies the tested input revisions and verification
 results. Exact SHA-256 hashes and the source base commit are recorded in
 [the snapshot manifest](audit/snapshot.json).

@@ -1,6 +1,41 @@
 # Audit readiness — 2026-10-10
 
-## Frozen source — `audit-2026-10-10b`
+## Frozen source — `audit-2026-10-12`
+
+Annotated tag: `audit-2026-10-12`. Production source commit:
+`fd9d30f6fba04c54bd7be96f95f7c78584f9e098`, hosted CI on
+`a5f93874974a170b625f2b7c8736bd6afcee7762` (the same sources with re-pinned manifests). The
+tagged handoff commit adds this section and the freeze record; no contract differs from the
+production commit. This freeze supersedes `audit-2026-10-10b` (production `8125d2e6a`,
+section below). See [the freeze record](audit/freeze.json) for hashes and evidence identities.
+
+The only change since the earlier freeze is comment corrections in `DegenerusGame`,
+`DegenerusVault`, `CrapsBattle` and `DegenerusGameWhaleModule` (4 files, comments only):
+
+- The VRF retry is 20 hours and has no early path; the Game's header and VRF banner said 12
+  hours with a vault-owner early retry. The banner's lifecycle now names the real calls
+  (`requestDailyRng`, `rawFulfillRandomWords`, `publishRng`, `_unlockRng`).
+- The growth-bet market has no RNG-lock restriction. The stake burn's FLIP top-up is
+  ungated because it reaches only settled claimable winnings, not the auto-rebuy carry.
+- A craps battle entry is binary: one copy of the run or exactly the field's high-roller
+  multiple. The Vault's `crapsEnterBattle` documented a nonexistent range.
+- The sDGNRS whale award is admitted by its caller against `SUBSCRIBER_WHALE_GAS`; the
+  comment described a retired per-stage weight. Two comments no longer name symbols that do
+  not exist.
+
+Verification of this revision: the production build of the earlier freeze's tree and of this
+tree produce identical runtime bytecode for every one of the 163 artifacts once the trailing
+metadata hash is stripped, with identical deployment sizes (Game 24,467 bytes, 109 spare).
+The audit-snapshot identity, storage-layout oracle, recursive layout check and the 11
+source-drift gates pass on this tree. Because the executable code is unchanged, the Foundry
+(4993 passing), Hardhat (1652), deep-invariant (24 roots at 1,000 runs × 256 calls) and
+Halmos (56) results recorded for the earlier freeze, and its static-analysis comparison,
+carry forward without a rerun. Hosted CI ran on this revision (run 38335169021) and every job passed; the deep and Halmos jobs are push-skipped by design.
+
+Insufficient caller gas for the first unit can still revert. No deployment, external audit
+approval or absence-of-bugs claim is implied.
+
+## Earlier freeze — `audit-2026-10-10b`
 
 Annotated tag: `audit-2026-10-10b`. Production source commit:
 `8125d2e6a0a4000734bea9944c2a9d366133a3de`. Verified commit (every local lane and hosted CI):
@@ -8,7 +43,7 @@ Annotated tag: `audit-2026-10-10b`. Production source commit:
 documentation and re-pinned manifests. The tagged handoff commit adds this section and the
 freeze record; no contract differs from the production commit. This freeze supersedes
 `audit-2026-10-10` (production `69c67918c`, section below). See
-[the freeze record](audit/freeze.json) for hashes, per-group results and evidence identities.
+[the freeze record](audit/freeze-audit-2026-10-10b.json) for hashes, per-group results and evidence identities.
 
 Production changes since the earlier freeze:
 
