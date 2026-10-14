@@ -10,16 +10,16 @@ import { patchContractAddresses } from "./patchContractAddresses.js";
 // = 0x7FA9385bE102ac3EAc297483Dd6233D62b3e1496.
 // Note: forge-std's DEFAULT_TEST_CONTRACT (0x5615...) uses a double-nested
 // derivation that does NOT match current Foundry behavior.
-const FOUNDRY_TEST_CONTRACT =
+export const FOUNDRY_TEST_CONTRACT =
   "0x7FA9385bE102ac3EAc297483Dd6233D62b3e1496";
 
 // 4 mocks deployed before protocol contracts:
 // MockVRFCoordinator, MockStETH, MockLinkToken, MockLinkEthFeed
-const MOCK_COUNT = 4;
+export const MOCK_COUNT = 4;
 
 // Foundry test contracts start with nonce 1 (EIP-161: contracts start at 1).
 // Mocks use nonces 1..4, protocol starts at nonce 5.
-const PROTOCOL_START_NONCE = MOCK_COUNT + 1; // = 5
+export const PROTOCOL_START_NONCE = MOCK_COUNT + 1; // = 5
 
 // Fixed deploy timestamp for reproducibility (1 day = 86400 seconds).
 // DeployProtocol.sol must vm.warp() to this same value before deploying.

@@ -18,6 +18,8 @@ FAKE_TOOL = '''#!/usr/bin/env python3
 import json, os, signal, sys, time
 from pathlib import Path
 if Path(sys.argv[0]).name == "node":
+    patches = Path("node-calls.json")
+    patches.write_text(json.dumps([*(json.loads(patches.read_text()) if patches.exists() else []), sys.argv[1:]]))
     Path("contracts/ContractAddresses.sol").write_text("patched\\n")
     raise SystemExit(int(os.environ.get("FAKE_PATCH_EXIT", "0")))
 if "--version" in sys.argv:
@@ -46,6 +48,9 @@ elif mode == "zero":
     print("Ran 0 test suites in 0s: 0 tests passed, 0 failed, 0 skipped")
 elif mode == "skipped_only":
     print("Ran 1 test suite in 0s: 0 tests passed, 0 failed, 1 skipped")
+elif mode == "echo_rpc":
+    print("fork error at " + os.environ.get("MAINNET_RPC_URL", ""))
+    print("Ran 1 test suite in 0s: 1 test passed, 0 failed, 0 skipped")
 elif mode == "failed":
     print("Ran 1 test suite in 0s: 1 test passed, 1 failed, 0 skipped")
 else:
@@ -322,6 +327,72 @@ class FoundryGroupsDriverTest(unittest.TestCase):
         self.sources("unassigned", 1)
         self.assertNotEqual(self.run_driver().returncode, 0)
         self.assertFalse((self.root / ".audit-test-logs").exists())
+
+    def node_calls(self):
+        path = self.root / "node-calls.json"
+        return json.loads(path.read_text()) if path.exists() else []
+
+    def test_full_tree_run_never_selects_or_compiles_the_fork_suite(self):
+        gas = self.sources("gas", 2)
+        fork = self.sources("fork", 2)
+        fork_helper = self.sources("fork", 1, ".sol")[0]
+        self.assertTrue(fork_helper.endswith("Case000.sol"))
+        result = self.run_driver()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        rows = self.rows()
+        self.assertEqual({row["group"] for row in rows}, {"integration-gas"})
+        self.assertEqual({path for row in rows for path in row["selected_sources"]}, set(gas))
+        for row in rows:
+            args = row["command"]
+            skipped = {args[i + 1] for i, arg in enumerate(args[:-1]) if arg == "--skip"}
+            self.assertTrue({*fork, fork_helper} <= skipped, "fork sources and helpers stay out of normal builds")
+        self.assertEqual(self.node_calls(), [["scripts/lib/patchForFoundry.js"]])
+
+    def test_fork_group_runs_alone_with_the_fork_patch(self):
+        gas = self.sources("gas", 2)
+        support = self.sources("helpers", 1, ".sol")
+        mock_pinned_helper_suite = self.sources("fuzz/helpers", 1)
+        fork = self.sources("fork", 2)
+        fork_helper = self.sources("fork", 1, ".sol")
+        self.assertIn("fork: 3 source files, 1 batch", self.run_driver("--group", "fork", "--list").stdout)
+        result = self.run_driver("--group", "fork")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        row = self.rows()[-1]
+        self.assertEqual(row["group"], "fork")
+        self.assertEqual(set(row["selected_sources"]), {*fork, *fork_helper})
+        args = row["command"]
+        skipped = {args[i + 1] for i, arg in enumerate(args[:-1]) if arg == "--skip"}
+        self.assertTrue(set(gas) <= skipped)
+        self.assertTrue(set(mock_pinned_helper_suite) <= skipped, "helper suites never run on the fork patch")
+        self.assertFalse(set(support) & skipped)
+        self.assertFalse({*fork, *fork_helper} & skipped)
+        self.assertEqual(self.node_calls(), [["scripts/lib/patchForFork.js"]])
+        run = json.loads((self.root / ".audit-test-logs/foundry" / row["run_id"] / "run.json").read_text())
+        self.assertEqual(run["patch_command"], ["node", "scripts/lib/patchForFork.js"])
+        focused = self.run_driver("--file", fork[0])
+        self.assertEqual(focused.returncode, 0, focused.stdout + focused.stderr)
+        self.assertEqual(self.node_calls()[-1], ["scripts/lib/patchForFork.js"])
+
+    def test_fork_sources_cannot_share_a_run_with_other_sources(self):
+        gas = self.sources("gas", 1)
+        fork = self.sources("fork", 1)
+        for args in (("--group", "fork", "--group", "integration-gas"), ("--file", fork[0], "--file", gas[0])):
+            with self.subTest(args=args):
+                result = self.run_driver(*args)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("run them alone", result.stderr)
+        self.assertFalse((self.root / ".audit-test-logs").exists())
+        self.assertEqual(self.node_calls(), [])
+
+    def test_rpc_url_is_redacted_from_evidence_logs(self):
+        self.sources("fork", 1)
+        secret = "https://mainnet.example/v2/SECRET-KEY"
+        result = self.run_driver("--group", "fork", FAKE_MODE="echo_rpc", MAINNET_RPC_URL=secret)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        log_dir = self.root / ".audit-test-logs/foundry"
+        text = "".join(p.read_text() for p in log_dir.rglob("*") if p.is_file())
+        self.assertNotIn("SECRET-KEY", text)
+        self.assertIn("<MAINNET_RPC_URL>", (log_dir / self.rows()[-1]["log"]).read_text())
 
     def test_invalid_existing_summary_is_not_overwritten(self):
         self.sources("gas", 1)

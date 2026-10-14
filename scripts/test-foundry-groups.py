@@ -31,12 +31,27 @@ ENV_KEYS = (
 )
 
 
+# The mainnet-fork suite runs against real Lido / Chainlink contracts. It needs an RPC endpoint
+# and a differently patched ContractAddresses.sol, so it is never part of a full-tree run: only
+# an explicit `--group fork` (or `--file test/fork/...`) selects it, and then alone.
+FORK_GROUP = "fork"
+FORK_ROOT = "test/fork/"
+FOUNDRY_PATCH = ["node", "scripts/lib/patchForFoundry.js"]
+FORK_PATCH = ["node", "scripts/lib/patchForFork.js"]
+
+
+def is_fork_source(path):
+    return str(path).startswith(FORK_ROOT)
+
+
 def groups():
     files = sorted(Path("test").rglob("*.sol"))
     # Every non-test source stays compiled: a skipped helper still compiles as an import, but
     # its artifact is not emitted, so forge cannot identify the contract an invariant targets.
-    support = {p for p in files if not p.name.endswith(".t.sol") or any(str(p).startswith(prefix)
-               for prefix in ("test/fuzz/helpers/", "test/fuzz/handlers/", "test/helpers/"))}
+    # Fork helpers are the exception: they compile only with the fork group (and its patch).
+    support = {p for p in files if not is_fork_source(p) and (
+               not p.name.endswith(".t.sol") or any(str(p).startswith(prefix)
+               for prefix in ("test/fuzz/helpers/", "test/fuzz/handlers/", "test/helpers/")))}
     fuzz = sorted(Path("test/fuzz").glob("*.t.sol"))
     result = {
         "integration-gas": {p for p in files if p.parts[1] in {
@@ -47,6 +62,7 @@ def groups():
     for i in range(4):
         result[f"fuzz-{i + 1}"] = set(fuzz[i * chunk:(i + 1) * chunk])
     result["invariants"] = set(Path("test/fuzz/invariant").rglob("*.sol"))
+    result[FORK_GROUP] = {p for p in files if is_fork_source(p)}
     missing = set(files) - support - set().union(*result.values())
     if missing:
         raise ValueError("Unassigned Solidity test sources: " + ", ".join(map(str, sorted(missing))))
@@ -171,6 +187,17 @@ def main():
         if unknown:
             parser.error("Unknown groups: " + ", ".join(sorted(unknown)))
         selected = {name: keep for name, keep in selected.items() if name in args.group}
+    elif not args.file:
+        # A full-tree run never reaches mainnet: the fork group is explicit opt-in only.
+        selected.pop(FORK_GROUP, None)
+    chosen = set().union(*selected.values()) if selected else set()
+    fork_run = any(is_fork_source(p) for p in chosen)
+    if fork_run and not all(is_fork_source(p) for p in chosen):
+        parser.error("Fork sources need the fork address patch; run them alone (--group fork)")
+    if fork_run:
+        # Helper directories also hold mock-pinned suites (e.g. NonceCheck.t.sol). They stay
+        # importable but must not execute against the fork patch.
+        support = {p for p in support if not p.name.endswith(".t.sol")}
     # Empty groups can occur in small fixtures or after sources are moved. An explicitly
     # requested empty selection is an error; a full-tree run ignores unused group names.
     if args.group and any(not keep for keep in selected.values()):
@@ -217,7 +244,7 @@ def main():
         "test_count_semantics": "execution counts; imported helper suites may repeat between batches",
         "selected_sources": {name: list(map(str, sorted(keep))) for name, keep in selected.items()},
         "original_pins_sha256": hashlib.sha256(original_pins).hexdigest(),
-        "patch_command": ["node", "scripts/lib/patchForFoundry.js"],
+        "patch_command": FORK_PATCH if fork_run else FOUNDRY_PATCH,
     }
     write_json(run_dir / "run.json", metadata)
 
@@ -305,6 +332,12 @@ def main():
             with log_path.open("w") as log:
                 forge_code = run_child(command, env=env, stdout=log, stderr=subprocess.STDOUT)
             output = log_path.read_text(errors="replace")
+            # A keyed RPC URL must not reach the evidence artifacts (forge echoes it on fork
+            # errors). Hosted CI masks secrets in its console, not in uploaded files.
+            rpc_url = env.get("MAINNET_RPC_URL", "")
+            if rpc_url and rpc_url in output:
+                output = output.replace(rpc_url, "<MAINNET_RPC_URL>")
+                log_path.write_text(output)
             totals = TOTALS.findall(output)
             errors = []
             row["forge_exit_code"] = forge_code

@@ -167,6 +167,89 @@ jobs:
           include-hidden-files: true
           if-no-files-found: ignore
 
+  # The protocol against the REAL mainnet dependencies (Lido stETH, LINK, Chainlink VRF v2.5
+  # coordinator, LINK/ETH feed) on a fork pinned at test/fork/ForkPins.sol's FORK_BLOCK. Not part
+  # of the matrix above: those groups build with mock pins and no RPC; this one builds with the
+  # fork patch (scripts/lib/patchForFork.js) and needs archive state at the pinned block.
+  foundry-fork:
+    name: Foundry mainnet fork (real Lido / Chainlink)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: ${{ env.AUDIT_FOUNDRY_VERSION }}
+          # The fork-state cache is managed below, keyed by the pinned block.
+          cache: false
+      - run: npm ci
+      - name: Add swap space for the via-IR compilation
+        run: |
+          sudo swapoff -a || true
+          sudo rm -f /swapfile
+          sudo fallocate -l 14G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=14336
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+      - name: Read the pinned fork block
+        id: pin
+        run: |
+          block=$(sed -n 's/.*constant FORK_BLOCK = \([0-9]*\);.*/\1/p' test/fork/ForkPins.sol)
+          test -n "$block"
+          echo "block=$block" >> "$GITHUB_OUTPUT"
+      # Foundry stores every account/slot it fetched for a pinned fork under
+      # ~/.foundry/cache/rpc/mainnet/<block>. State at a fixed block never changes, so a cache
+      # keyed by the block (plus the suite, which decides WHAT is fetched) makes reruns nearly
+      # RPC-free; a changed suite restores the same block's cache and only fetches the delta.
+      - name: Restore fork RPC cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.foundry/cache/rpc/mainnet/${{ steps.pin.outputs.block }}
+          key: foundry-fork-rpc-${{ steps.pin.outputs.block }}-${{ hashFiles('test/fork/**', 'contracts/**') }}
+          restore-keys: |
+            foundry-fork-rpc-${{ steps.pin.outputs.block }}-
+      - name: Mainnet-fork suite
+        env:
+          # A repository secret when configured; empty on forks and when unset.
+          MAINNET_RPC_URL: ${{ secrets.MAINNET_RPC_URL }}
+          FORK_BLOCK: ${{ steps.pin.outputs.block }}
+        run: |
+          # Use the first endpoint that serves archive state at the pinned block: the secret, then
+          # keyless public endpoints. The probe reads stETH's balance AT the block, so an endpoint
+          # that prunes old state (1rpc.io refuses archive reads once the pin is ~128 blocks old)
+          # is skipped rather than failing the suite mid-run.
+          probe() {
+            curl -sf -m 30 -X POST -H 'content-type: application/json' \
+              --data "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_getBalance\",\"params\":[\"0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84\",\"$(printf '0x%x' "$FORK_BLOCK")\"]}" \
+              "$1" | grep -q '"result":"0x'
+          }
+          selected=""
+          for candidate in "$MAINNET_RPC_URL" https://eth.drpc.org https://1rpc.io/eth \
+              https://mainnet.gateway.tenderly.co https://eth-pokt.nodies.app; do
+            if [ -n "$candidate" ] && probe "$candidate"; then selected="$candidate"; break; fi
+          done
+          if [ -z "$selected" ]; then
+            echo "::error::No RPC endpoint served archive state at block $FORK_BLOCK"
+            exit 1
+          fi
+          if [ "$selected" = "$MAINNET_RPC_URL" ]; then echo "Using the MAINNET_RPC_URL secret"; else echo "Using $selected"; fi
+          export MAINNET_RPC_URL="$selected"
+          mkdir -p .audit-test-logs/foundry
+          FOUNDRY_ISOLATE=false python3 scripts/test-foundry-groups.py --group fork --threads 2
+      - name: Preserve fork evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: foundry-fork-evidence
+          path: .audit-test-logs/foundry/
+          include-hidden-files: true
+          if-no-files-found: ignore
+
   foundry:
     name: Foundry build + tests
     needs: [foundry-build, foundry-tests]
