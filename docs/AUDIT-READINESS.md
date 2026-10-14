@@ -1,13 +1,72 @@
-# Audit readiness — 2026-10-10
+# Audit readiness — 2026-10-13
 
-## Frozen source — `audit-2026-10-12`
+## Frozen source — `audit-2026-10-13`
+
+Annotated tag: `audit-2026-10-13`. Production source commit:
+`dc4e48562` (full hash in [the freeze record](audit/freeze.json)). The full battery ran on
+`b06427257`, which differs from the production commit only in re-pinned manifests; the
+Foundry groups that needed a rerun, the structural identity checks and hosted CI ran on
+`6a960ddcd`, which adds one test-file fix and its manifest re-pin. The tagged handoff commit
+adds this section and the freeze record; `contracts/` is byte-identical across all of them.
+This freeze supersedes `audit-2026-10-12` (production `fd9d30f6f`, section below). See
+[the freeze record](audit/freeze.json) for hashes, per-group results and evidence identities.
+
+Production changes since the earlier freeze (16 contract files):
+
+- The lootbox EV allowance is a two-tier taper per (wallet ID, level): the marginal bonus
+  weight is 1 up to 10 ETH, falls linearly to 1/2 at 20 ETH and to 0 at 40 ETH. A box earns
+  the integral of that weight over the spend it covers (`_lootboxEvEligible`), so splitting or
+  reordering purchases cannot raise the total; usage lanes widen to 72 bits in the same slot.
+  The Degenerette 50 ETH win ceiling is retired: a purchased win box resolves through
+  `resolveLootboxDirect` on the shared allowance.
+- The AFKing daily work writes less. `Sub.lastOpenedDay` is gone (a box is pending exactly
+  while its stamp is the cohort's, the count is nonzero and the cursor has not passed it); the
+  open loop stores its pending count once per call and the preparation stage releases
+  `claimablePool` once per chunk. `createSmurf` appends each smurf to its main's packed
+  `_smurfWords` list, so a seizure cancels the account's subscription and, for a main, every
+  smurf's through `GameAfkingModule.cancelLiquidatedSubscriptions` with no per-subscriber
+  acquisition poll. Self-claims pay `msg.sender` without re-reading the caller's wallet element.
+- Account loans replace account sale ([ACCOUNT-LOANS](ACCOUNT-LOANS.md)). An account borrows
+  against its far-future tickets: whole tickets at the due level + 2 and above are valued at
+  10% of face two levels ahead, 5% at twenty and 2% at a hundred, with no randomness and a
+  0.05 ETH minimum. sDGNRS lends, or the Vault when sDGNRS cannot fund it and fallback is
+  enabled. Repaying before the due level costs 5% of principal per level used plus 1% per unused
+  level of the chosen term, paid to the lender. Borrowing and repaying are deliberately not
+  request-locked. The daily request that enters the due level arms the seizure of every unpaid
+  loan due there; the mining engine runs it next (`MinerAction.SeizeLoans`) in metered chunks
+  from a cursor, ahead of the wait for the word. A seizure gives the lender the account and a
+  main's family, burns the borrower wallet's native sDGNRS, stops AFKing runs, and moves a deity
+  account's soulbound pass through a game-only `DeityPass.seize`. Terminal handling outranks
+  seizure, so at game over the borrower keeps the account. A main with more than five smurfs
+  cannot borrow and cannot create smurfs while its loan is open. Storage: `_loans`,
+  `_loansDue` and `_loansDueCount` take slots 80-82 and no slot moves.
+
+Verification: the structural gates (production build, deployment sizes with Game at 24,294
+bytes and 282 spare, storage-layout oracle, recursive layout check, the 11 source-drift gates),
+Hardhat (96 files, 1,652 passing), Halmos (56 properties), the 24 deep-invariant roots at
+1,000 runs × 256 calls, and the Foundry groups ran in parallel worktrees. The standard Foundry
+battery is 5,038 passing, 0 failing, 2 skipped over 29 batches. Five Foundry batches were killed
+by the compiler (signal 9, memory pressure) before any test ran, and `fuzz-2-03` failed on a
+stale test: `JackpotCommitmentFreeze` expected `RngLocked` from `borrow`, which the loan design
+does not gate. The probe now expects the lender-stage `Insolvent()` (test-only, `40c196818`).
+Each affected group (`repro-symbolic`, `fuzz-2`, `fuzz-3`, `integration-gas`) was rerun in full
+on the verified commit and is counted only from that rerun. Hosted CI ran on `6a960ddcd`
+(run 38583216944) and every job passed; the deep and Halmos jobs are push-skipped by design.
+Static analysis is compared by delta against the earlier tree: Slither 1,314 to 1,334 results
+and Aderyn 2,460 to 2,499 instances, from the new loan, seizure and taper code, with one new
+detector category (two write-after-write notes in the Lens views) and no new Aderyn category.
+
+Insufficient caller gas for the first unit can still revert. No deployment, external audit
+approval or absence-of-bugs claim is implied.
+
+## Earlier freeze — `audit-2026-10-12`
 
 Annotated tag: `audit-2026-10-12`. Production source commit:
 `fd9d30f6fba04c54bd7be96f95f7c78584f9e098`, hosted CI on
 `a5f93874974a170b625f2b7c8736bd6afcee7762` (the same sources with re-pinned manifests). The
 tagged handoff commit adds this section and the freeze record; no contract differs from the
 production commit. This freeze supersedes `audit-2026-10-10b` (production `8125d2e6a`,
-section below). See [the freeze record](audit/freeze.json) for hashes and evidence identities.
+section below). See [the freeze record](audit/freeze-audit-2026-10-12.json) for hashes and evidence identities.
 
 The only change since the earlier freeze is comment corrections in `DegenerusGame`,
 `DegenerusVault`, `CrapsBattle` and `DegenerusGameWhaleModule` (4 files, comments only):

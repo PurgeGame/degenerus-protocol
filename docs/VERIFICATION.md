@@ -8,13 +8,34 @@ local output directories or CI artifacts.
 The dated implementation sections below are historical, scoped evidence; their
 pass counts do not certify later revisions.
 
+### Lootbox taper, AFKing write trim and account loans (2026-10-13)
+
+`test/fuzz/LootboxEvTaper.t.sol` checks the two-tier allowance against the independent
+integer reference in `test/helpers/EvTaperRef.sol` (splitting, reordering and per-segment
+flooring never raise the total), and `DegeneretteWinLootboxAllowance` covers a purchased
+win box on the shared allowance. `test/fuzz/AfkingWriteTrim.t.sol` and
+`PendingBoxCountInvariant` check settlement from emitted records per paid box (both fail
+with `resolveAfkingBox` stubbed to a no-op). `AccountLoans` covers valuation, gates,
+repayment, lenders and the ported sale behaviour; `LoanSeizure` runs real transitions,
+chunking, terminal precedence and deity passes; `test/gas/LoanSeizureGas.t.sol` pins the
+seizure admission bounds from cold measurements (a lone account 51.5k, a main with five
+subscribed smurfs 200k, plus a deity at symbol 31 292.9k, against a 370k bound). The
+`JackpotCommitmentFreeze` probe expects the lender-stage `Insolvent()` from `borrow`, since
+borrowing is deliberately not request-locked.
+
+Local lanes ran on the battery commit in parallel worktrees (Foundry groups, Hardhat, deep
+invariants at 1,000 runs × 256 calls, Halmos). A Foundry batch whose compiler was killed by
+the host (signal 9, before any test ran) is not a result: its whole group was rerun on the
+verified commit and is counted only from the rerun. Use
+[the freeze record](audit/freeze.json) for recorded results and input identities.
+
 ### Comment corrections (2026-10-12)
 
 Four production files changed in comments only. Compare the runtime bytecode of two production
 builds (`forge build --skip test --out forge-out-production`) after stripping the trailing
 CBOR metadata hash: every artifact matches, so earlier test results apply unchanged. Test
 helpers that embed a contract's creation code differ only inside those embedded metadata
-hashes. Use [the freeze record](audit/freeze.json) for the recorded identities.
+hashes. Use [the freeze record](audit/freeze-audit-2026-10-12.json) for the recorded identities.
 
 ### Vault-held allocations and presale burn (2026-10-10)
 
