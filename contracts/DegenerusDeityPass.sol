@@ -66,7 +66,8 @@ interface IDeityPassRendererV1 {
 
 /// @title DegenerusDeityPass
 /// @notice Soulbound ERC721 for deity passes. 32 tokens max (one per symbol).
-///         Transfers are permanently disabled. tokenId = symbolId (0-31).
+///         Holders can never transfer a pass; only the game moves one, with its deity account,
+///         to the lender of a defaulted loan. tokenId = symbolId (0-31).
 contract DegenerusDeityPass {
     // -------------------------------------------------------------------------
     // Errors
@@ -89,9 +90,9 @@ contract DegenerusDeityPass {
     // Events (ERC721)
     // -------------------------------------------------------------------------
 
-    /// @notice Emitted on mint (`from` is always address(0); passes are soulbound, so this is
-    ///         the only Transfer this contract ever emits).
-    /// @param from The prior owner (always address(0)).
+    /// @notice Emitted on mint (`from` is address(0)) and when the game moves a seized deity
+    ///         account's pass to its lender.
+    /// @param from The prior owner (address(0) on mint).
     /// @param to The new owner.
     /// @param tokenId The minted token's symbol ID.
     event Transfer(address indexed from, address indexed to, uint256 indexed tokenId);
@@ -523,7 +524,7 @@ contract DegenerusDeityPass {
     }
 
     // -------------------------------------------------------------------------
-    // ERC721 Mutations (soulbound — all transfers blocked)
+    // ERC721 Mutations (soulbound — all holder transfers blocked)
     // -------------------------------------------------------------------------
 
     /// @notice Disabled — always reverts Soulbound.
@@ -567,6 +568,21 @@ contract DegenerusDeityPass {
         _balances[to]++;
         _owners[tokenId] = to;
         emit Transfer(address(0), to, tokenId);
+    }
+
+    /// @notice Move a pass with its deity account when a defaulted loan hands the account to
+    ///         its lender. Only the game; players can never transfer a pass.
+    /// @param tokenId Symbol ID of the seized account's pass.
+    /// @param to The lender (Vault or sDGNRS).
+    function seize(uint256 tokenId, address to) external {
+        if (msg.sender != ContractAddresses.GAME) revert NotAuthorized();
+        address from = _owners[tokenId];
+        if (from == address(0) || to == address(0)) revert InvalidToken();
+        if (from == to) return;
+        unchecked { --_balances[from]; }
+        _balances[to]++;
+        _owners[tokenId] = to;
+        emit Transfer(from, to, tokenId);
     }
 
 }

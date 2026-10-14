@@ -41,8 +41,8 @@ Request admission is sized per request kind (mid-day 400k, daily 1.5M, plus 300k
 nonempty redemption batch; terminal 2.5M), calibrated in `test/gas/MineFlipRequestGas.t.sol`.
 The gas floor always holds every ancestor's return tail; `test/repro/MineFlipGasNesting.t.sol`
 and `test/repro/MineFlipGasSweep.t.sol` sweep supplied gas and assert that once the first unit
-succeeds no later call reverts for gas. `test/fuzz/AccountLiquidation.t.sol` covers the
-smurf-safe liquidation path.
+succeeds no later call reverts for gas. `test/fuzz/AccountLoans.t.sol` and
+`test/fuzz/LoanSeizure.t.sol` cover borrowing, repayment and the smurf-safe seizure path.
 
 Tests that need a request deferred use maximum calibration (`type(uint32).max`) instead of a
 gas figure sized to an older bound. The deep invariant matrix (`scripts/deep-invariant-matrix.py`)

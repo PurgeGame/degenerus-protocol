@@ -27,7 +27,8 @@ import {DecimatorSamplingLib as Sampling} from "./libraries/DecimatorSamplingLib
  * Provided AS IS, without warranty of any kind. Full text: TERMS.md
  */
 
-import {DegenerusGameMintStreakUtils} from "./modules/DegenerusGameMintStreakUtils.sol";
+import {DegenerusGameMintStreakUtils, IDegenerusVaultOwner} from "./modules/DegenerusGameMintStreakUtils.sol";
+import {PriceLookupLib} from "./libraries/PriceLookupLib.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
 import {BitPackingLib} from "./libraries/BitPackingLib.sol";
 import {GameTimeLib} from "./libraries/GameTimeLib.sol";
@@ -43,6 +44,7 @@ interface IDegenerusGameLensSource {
     /// @notice DegenerusGame's aggregate activity-score read for `player`.
     function playerActivityScoreById(uint32 id) external view returns (uint256);
     function playerActivityScore(address player) external view returns (uint256 scorePoints);
+    function livenessTriggered() external view returns (bool);
 }
 
 /// @title DegenerusGameLens
@@ -67,6 +69,23 @@ interface IDegenerusGameLensSource {
 ///      be called — they would read this contract's empty storage; the lens carries
 ///      explicit mirrors that source the same fields via extsload instead.
 contract DegenerusGameLens is DegenerusGameMintStreakUtils {
+    struct LoanQuote {
+        uint32 accountId;
+        uint32 lenderId;
+        bool eligible;
+        uint256 face;
+        uint256 principal;
+    }
+
+    struct LoanInfo {
+        uint256 principal;
+        uint32 lenderId;
+        uint24 startLevel;
+        uint24 dueLevel;
+        uint8 family;
+        uint256 owed;
+    }
+
     struct SmurfCreationInfo {
         uint32 mainId;
         uint256 currentScore;
@@ -801,6 +820,123 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         if ((_sload(game, bytes32(goRoot)) >> GO_SWEPT_SHIFT) & GO_SWEPT_MASK != 0) return (0, 0);
         uint256 word = _sload(game, _mapSlot(uint256(id), base));
         return (uint128(word), uint128(word >> 128));
+    }
+
+    /*+======================================================================+
+      |                              LOANS                                   |
+      +======================================================================+*/
+
+    /// @notice What `borrow(id, dueLevel, ...)` would pay now and whether every gate except
+    ///         the caller's ownership passes. Mirrors the game's quote and lender selection.
+    function previewBorrow(address game, uint32 id, uint24 dueLevel) external view returns (LoanQuote memory q) {
+        q.accountId = id;
+        uint256 w = _levelWord(game);
+        uint24 cl = _activeTicketLevelMirror(w);
+        uint24 lvl;
+        bool over;
+        {
+            uint256 o;
+            assembly { o := level.offset }
+            lvl = uint24(w >> (o << 3));
+            assembly { o := gameOver.offset }
+            over = uint8(w >> (o << 3)) != 0;
+        }
+        if (dueLevel <= lvl || uint256(dueLevel) + 2 > uint256(cl) + 100) return q;
+        for (uint256 target = uint256(dueLevel) + 2; target <= uint256(cl) + 100; ++target) {
+            uint256 lane = _farFutureLaneMirror(game, uint24(target), id);
+            if (lane & 0x80000000 == 0) continue;
+            uint256 entries = (lane & 0x3fffffff) & ~uint256(3);
+            if (entries == 0) continue;
+            uint256 value = PriceLookupLib.priceForLevel(uint24(target)) * entries / 4;
+            q.face += value;
+            q.principal += value * _loanRateBps(target - cl) / 10_000;
+        }
+        q.lenderId = _lenderMirror(game, q.principal);
+        q.eligible = id > GNRUS_WALLET_ID && !over && q.lenderId != 0
+            && q.principal >= LOAN_MIN_PRINCIPAL && _borrowableMirror(game, id)
+            && !IDegenerusGameLensSource(game).livenessTriggered();
+    }
+
+    /// @notice The open loan of `id` and what repaying it costs at the current level; zero when
+    ///         none is open.
+    function loanOf(address game, uint32 id) external view returns (LoanInfo memory info) {
+        uint256 base;
+        assembly { base := _loans.slot }
+        uint256 loan = _sload(game, _mapSlot(uint256(id), base));
+        if (loan == 0) return info;
+        info.principal = uint96(loan);
+        info.lenderId = uint8(loan >> LOAN_LENDER_SHIFT);
+        info.startLevel = uint24(loan >> LOAN_START_SHIFT);
+        info.dueLevel = uint24(loan >> LOAN_DUE_SHIFT);
+        info.family = uint8(loan >> LOAN_FAMILY_SHIFT);
+        uint256 o;
+        assembly { o := level.offset }
+        uint256 lvl = uint24(_levelWord(game) >> (o << 3));
+        if (lvl >= info.dueLevel) return info;
+        uint256 used = lvl > info.startLevel ? lvl - info.startLevel : 1;
+        info.owed = info.principal * (10_000 + used * LOAN_INTEREST_BPS_PER_LEVEL
+            + (info.dueLevel - info.startLevel - used) * LOAN_EARLY_FEE_BPS_PER_LEVEL) / 10_000;
+    }
+
+    /// @notice Accounts with loans due at `dueLevel`, in seizure order. Once the game has
+    ///         entered `dueLevel` the list is history: those accounts were seized.
+    function loansDue(address game, uint24 dueLevel) external view returns (uint32[] memory ids) {
+        uint256 base;
+        assembly { base := _loansDueCount.slot }
+        uint256 count = _sload(game, _mapSlot(uint256(dueLevel), base));
+        assembly { base := _loansDue.slot }
+        uint256 inner = uint256(_mapSlot(uint256(dueLevel), base));
+        ids = new uint32[](count);
+        uint256 word;
+        for (uint256 i; i < count; ++i) {
+            if (i & 7 == 0) word = _sload(game, _mapSlot(i >> 3, inner));
+            ids[i] = uint32(word >> ((i & 7) * 32));
+        }
+    }
+
+    /// @dev Mirror of _farFutureLane over extsload.
+    function _farFutureLaneMirror(address game, uint24 lvl, uint32 id) private view returns (uint256) {
+        uint256 position = (uint256(lvl) - 1) % 100;
+        uint256 base;
+        assembly { base := ticketQueue.slot }
+        uint256 occupying = (_sload(game, _mapSlot(position + 1 | TICKET_FAR_FUTURE_BIT, base)) >> 32) & 0xffffff;
+        if (occupying == 0) occupying = position + 1;
+        if (occupying != lvl) return 0;
+        assembly { base := farFutureOwed.slot }
+        uint256 root = uint256(_mapSlot(uint256(id), base));
+        return (_sload(game, bytes32(root + (position >> 3))) >> ((position & 7) << 5)) & 0xffffffff;
+    }
+
+    /// @dev Account-level borrow gates: allocated, not acquired, no open loan, and a main's
+    ///      lifetime smurf count within the cap.
+    function _borrowableMirror(address game, uint32 id) private view returns (bool) {
+        uint256 base;
+        assembly { base := wallets.slot }
+        if (id == 0 || id >= _sload(game, bytes32(base))) return false;
+        uint256 table = uint256(keccak256(abi.encode(base)));
+        uint256 element = _sload(game, bytes32(table + id));
+        uint32 parent = uint32(element >> 160);
+        if (parent != 0 && (uint160(element) != 0 || uint32(_sload(game, bytes32(table + parent)) >> 160) != 0)) {
+            return false;
+        }
+        assembly { base := _loans.slot }
+        if (_sload(game, _mapSlot(uint256(id), base)) != 0) return false;
+        if (parent != 0) return true;
+        assembly { base := mintPacked_.slot }
+        return uint16(_sload(game, _mapSlot(uint256(id), base)) >> BitPackingLib.SMURF_COUNT_SHIFT) <= LOAN_MAX_SMURFS;
+    }
+
+    /// @dev Mirror of _resolveLender over extsload.
+    function _lenderMirror(address game, uint256 principal) private view returns (uint32) {
+        uint256 base;
+        assembly { base := balancesPacked.slot }
+        if (uint128(_sload(game, _mapSlot(uint256(SDGNRS_WALLET_ID), base))) >= principal + 1 ether) {
+            return SDGNRS_WALLET_ID;
+        }
+        (bool enabled, uint256 floorWei) = IDegenerusVaultOwner(ContractAddresses.VAULT).liquidationBuyConfig();
+        uint256 vault = _sload(game, _mapSlot(uint256(VAULT_WALLET_ID), base));
+        if (enabled && uint256(uint128(vault)) + (vault >> 128) >= principal + floorWei) return VAULT_WALLET_ID;
+        return 0;
     }
 
     /// @notice Find a wallet ID position in a bounded page of a packed ticket queue.

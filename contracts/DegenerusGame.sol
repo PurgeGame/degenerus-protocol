@@ -2,8 +2,6 @@
 pragma solidity 0.8.34;
 import {DegenerusGamePayoutUtils} from "./modules/DegenerusGamePayoutUtils.sol";
 
-import {LiquidationQuote} from "./interfaces/ILiquidation.sol";
-
 import {MineFlipGas} from "./libraries/MineFlipGas.sol";
 
 /*
@@ -461,16 +459,16 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
         return uint32(walletIds[owner] >> 32);
     }
 
-    /// @notice Sell an account as-is; withdraw balances first to keep them.
-    function liquidateAccount(uint32, uint256) external {
+    /// @notice Borrow against far-future tickets; unrepaid at `dueLevel`, the lender takes the
+    ///         account as a sale would.
+    function borrow(uint32, uint24, uint256) external {
         (bool ok, bytes memory data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
 
-    function previewLiquidateAccount(uint32) external returns (LiquidationQuote memory) {
+    function repay(uint32) external payable {
         (bool ok, bytes memory data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
-        assembly ("memory-safe") { return(add(data, 32), mload(data)) }
     }
 
     function harvestAcquiredAccounts(uint32, uint32[] calldata) external returns (uint256) {

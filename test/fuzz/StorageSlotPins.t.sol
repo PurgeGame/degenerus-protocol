@@ -45,6 +45,10 @@ contract GameSlotHarness is DegenerusGameStorage {
     function s_lvlTraitEntry() external pure returns (uint256 s, uint256 o) { assembly { s := lvlTraitEntry.slot o := lvlTraitEntry.offset } }
     function s_afkingFundingApprovals() external pure returns (uint256 s, uint256 o) { assembly { s := afkingFundingApprovals.slot o := afkingFundingApprovals.offset } }
     function s_walletIds() external pure returns (uint256 s) { assembly { s := walletIds.slot } }
+    function s_loanSeizeCursor() external pure returns (uint256 s, uint256 o) { assembly { s := loanSeizeCursor.slot o := loanSeizeCursor.offset } }
+    function s_loans() external pure returns (uint256 s) { assembly { s := _loans.slot } }
+    function s_loansDue() external pure returns (uint256 s) { assembly { s := _loansDue.slot } }
+    function s_loansDueCount() external pure returns (uint256 s) { assembly { s := _loansDueCount.slot } }
     function s_mintPacked() external pure returns (uint256 s, uint256 o) { assembly { s := mintPacked_.slot o := mintPacked_.offset } }
     function s_rngWordByDay() external pure returns (uint256 s, uint256 o) { assembly { s := rngWordByDay.slot o := rngWordByDay.offset } }
     function s_prizePoolPendingPacked() external pure returns (uint256 s, uint256 o) { assembly { s := prizePoolPendingPacked.slot o := prizePoolPendingPacked.offset } }
@@ -230,6 +234,10 @@ contract StorageSlotPinsTest is Test {
         (s, o) = h.s_balancesPacked(); assertEq(s, GameSlots.BALANCES_PACKED, "balancesPacked.slot"); assertEq(o, 0, "balancesPacked.offset");
         (s, o) = h.s_lvlTraitEntry(); assertEq(s, GameSlots.LVL_TRAIT_ENTRY, "lvlTraitEntry.slot"); assertEq(o, 0, "lvlTraitEntry.offset");
         assertEq(h.s_walletIds(), GameSlots.WALLET_IDS, "walletIds.slot");
+        (s, o) = h.s_loanSeizeCursor(); assertEq(s, GameSlots.LOAN_SEIZE_CURSOR, "loanSeizeCursor.slot"); assertEq(o, GameSlots.LOAN_SEIZE_CURSOR_OFFSET, "loanSeizeCursor.offset");
+        assertEq(h.s_loans(), GameSlots.LOANS, "_loans.slot");
+        assertEq(h.s_loansDue(), GameSlots.LOANS_DUE, "_loansDue.slot");
+        assertEq(h.s_loansDueCount(), GameSlots.LOANS_DUE_COUNT, "_loansDueCount.slot");
         (s, o) = h.s_afkingFundingApprovals(); assertEq(s, 78, "afkingFundingApprovals.slot"); assertEq(o, 0);
         (s, o) = h.s_mintPacked(); assertEq(s, GameSlots.MINT_PACKED, "mintPacked_.slot"); assertEq(o, 0, "mintPacked_.offset");
         (s, o) = h.s_rngWordByDay(); assertEq(s, GameSlots.RNG_WORD_BY_DAY, "rngWordByDay.slot"); assertEq(o, 0, "rngWordByDay.offset");

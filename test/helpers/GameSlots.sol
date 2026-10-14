@@ -64,6 +64,11 @@ library GameSlots {
     uint256 internal constant LAST_VRF_PROCESSED_TIMESTAMP_OFFSET = 4;
     uint256 internal constant TICKET_BUFFER_LEVELS = 5;
     uint256 internal constant TICKET_BUFFER_LEVELS_OFFSET = 10;
+    uint256 internal constant LOAN_SEIZE_CURSOR = 5;
+    uint256 internal constant LOAN_SEIZE_CURSOR_OFFSET = 16;
+    uint256 internal constant LOANS = 80;
+    uint256 internal constant LOANS_DUE = 81;
+    uint256 internal constant LOANS_DUE_COUNT = 82;
     uint256 internal constant DAILY_TICKET_BUDGETS_PACKED = 6;
     uint256 internal constant BALANCES_PACKED = 7;
     uint256 internal constant LVL_TRAIT_ENTRY = 8;

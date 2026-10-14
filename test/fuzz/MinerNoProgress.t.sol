@@ -53,9 +53,11 @@ contract MinerProgressHarness is DegenerusGameMinerModule {
         }
         if (action == MinerAction.RequestMidday) _lrWrite(LR_PENDING_FLIP_SHIFT, LR_PENDING_FLIP_MASK, 1);
         if (action == MinerAction.GrowthSettle) _setGrowthSettlePending(true);
+        if (action == MinerAction.SeizeLoans) _setLoansDuePending(true);
     }
 
     function setGrowthPending(bool pending) external { _setGrowthSettlePending(pending); }
+    function setLoansDue(bool pending) external { _setLoansDuePending(pending); }
     function growthPending() external view returns (bool) { return _growthSettlePending(); }
 
     function pendingMidday() external { _lrWrite(LR_PENDING_FLIP_SHIFT, LR_PENDING_FLIP_MASK, 1); }
@@ -218,11 +220,12 @@ contract MinerNoProgressTest is Test {
         if (action == DegenerusGameStorage.MinerAction.Decimator) return (ContractAddresses.GAME_DECIMATOR_MODULE, abi.encodeWithSignature("runDecimatorWork(uint256)"));
         if (action == DegenerusGameStorage.MinerAction.Craps) return (ContractAddresses.CRAPS, abi.encodeWithSignature("runCrapsReadWork(uint48,uint256)"));
         if (action == DegenerusGameStorage.MinerAction.PrepareSubscriptions) return (ContractAddresses.GAME_AFKING_MODULE, abi.encodeWithSignature("runSubscriberWork(uint24,uint256)"));
+        if (action == DegenerusGameStorage.MinerAction.SeizeLoans) return (ContractAddresses.GAME_ADVANCE_MODULE, abi.encodeWithSignature("runLoanSeizureWork(uint256)"));
         return (ContractAddresses.CRAPS, abi.encodeWithSignature("runCrapsMaintenance(uint256)"));
     }
 
     function test_EveryResultWorkerStopsOnUnchangedDoneOrGasCheckpoint() public {
-        uint8[10] memory actions = [uint8(1), 7, 8, 9, 10, 11, 12, 13, 15, 16];
+        uint8[11] memory actions = [uint8(1), 7, 8, 9, 10, 11, 12, 13, 15, 16, 20];
         for (uint256 i; i < actions.length; ++i) {
             uint256 snap = vm.snapshotState();
             DegenerusGameStorage.MinerAction action = DegenerusGameStorage.MinerAction(actions[i]);
@@ -247,6 +250,23 @@ contract MinerNoProgressTest is Test {
             game.mineFlip{gas: 500_000}(type(uint32).max);
             vm.revertToState(snap);
         }
+    }
+
+    function test_SeizeLoansOutranksWaitAndEveryConsumerButNotTerminal() public {
+        assertEq(uint8(DegenerusGameStorage.MinerAction.SeizeLoans), 20, "appended value");
+        DegenerusGameStorage.MinerAction[5] memory behind = [DegenerusGameStorage.MinerAction.Wait,
+            DegenerusGameStorage.MinerAction.Publish, DegenerusGameStorage.MinerAction.Tickets,
+            DegenerusGameStorage.MinerAction.DailyPhase, DegenerusGameStorage.MinerAction.RequestDaily];
+        for (uint256 i; i < behind.length; ++i) {
+            uint256 snap = vm.snapshotState();
+            _seed(behind[i]);
+            game.setLoansDue(true);
+            assertEq(game.minerAction(), 20, "seizure first");
+            vm.revertToState(snap);
+        }
+        _seed(DegenerusGameStorage.MinerAction.Terminal);
+        game.setLoansDue(true);
+        assertEq(game.minerAction(), uint8(DegenerusGameStorage.MinerAction.Terminal), "the ending outranks seizure");
     }
 
     function test_GrowthSettleSelectedAfterRequestDailyAndBeforeRequestMidday() public {

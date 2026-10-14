@@ -2,7 +2,7 @@
 pragma solidity 0.8.34;
 
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
-import {LiquidationQuote} from "../../contracts/interfaces/ILiquidation.sol";
+import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
@@ -23,9 +23,22 @@ contract WriteTrimSeeder is DegenerusGameStorage {
         claimablePool += claimable;
         balancesPacked[id] += claimable;
     }
+
+    /// @dev Enter `due` and run the production seizure worker, as the transition request and the
+    ///      mining engine would.
+    function seizeDue(uint24 due) external {
+        level = due;
+        if (_loansDueCount[due] == 0) return;
+        _setLoansDuePending(true);
+        loanSeizeCursor = 0;
+        (bool ok, bytes memory data) = ContractAddresses.GAME_ADVANCE_MODULE.delegatecall(
+            abi.encodeWithSignature("runLoanSeizureWork(uint256)", gasleft())
+        );
+        if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
+    }
 }
 
-/// @notice Liquidation stops the sold account's AFKing run and, for a main sale, every smurf's,
+/// @notice A loan seizure stops the seized account's AFKing run and, for a main, every smurf's,
 ///         by walking the main's stored smurf list. The daily stage no longer polls acquisition.
 contract AfkingFamilyLiquidationTest is RedemptionCloseTools {
     address private seller;
@@ -72,11 +85,16 @@ contract AfkingFamilyLiquidationTest is RedemptionCloseTools {
         return lens.subInfoFullById(address(game), id).dailyQuantity;
     }
 
+    /// @dev Borrow against `id` and default at the next level.
     function _sale(uint32 id) private {
-        LiquidationQuote memory q = game.previewLiquidateAccount(id);
-        assertTrue(q.eligible, "sale eligible");
+        uint24 due = game.level() + 1;
+        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), id, due);
+        assertTrue(q.eligible, "borrow eligible");
         vm.prank(seller);
-        game.liquidateAccount(id, q.price);
+        game.borrow(id, due, q.principal);
+        vm.etch(address(game), seeder.code);
+        WriteTrimSeeder(address(game)).seizeDue(due);
+        vm.etch(address(game), gameRuntime);
     }
 
     function test_SmurfListRecordsEveryCreationAcrossWords() public {
@@ -90,17 +108,16 @@ contract AfkingFamilyLiquidationTest is RedemptionCloseTools {
 
     function test_MainSaleCancelsOwnAndEverySmurfSubscription() public {
         _sub(root, false);
-        uint32[] memory kids = new uint32[](10);
+        // A borrowing main has at most five smurfs, so the walk fits one list word.
+        uint32[] memory kids = new uint32[](5);
         for (uint256 i; i < kids.length; ++i) kids[i] = _child();
-        // Active box and ticket runs on both list words, one tombstone, one never subscribed.
+        // Active box and ticket runs, one tombstone, one never subscribed.
         _sub(kids[0], false);
-        _sub(kids[3], true);
-        _sub(kids[7], false);
-        _sub(kids[8], true);
-        _sub(kids[9], false);
-        _sub(kids[5], false);
+        _sub(kids[1], true);
+        _sub(kids[3], false);
+        _sub(kids[2], false);
         vm.prank(seller);
-        game.subscribe(kids[5], false, false, 0, 0, 0);
+        game.subscribe(kids[2], false, false, 0, 0, 0);
         uint256 members = game.subscriberSetLength();
 
         _sale(root);
@@ -152,16 +169,6 @@ contract AfkingFamilyLiquidationTest is RedemptionCloseTools {
         // cancels it before any further debit of the buyer-owned balance.
         assertEq(_quantity(outsiderId), 1, "outsider run left for the stage");
         assertFalse(game.afkingFundingApproved(root, outsiderId), "consent dead after sale");
-    }
-
-    function test_Gas_MainSaleWithSubscribedSmurfs() public {
-        _sub(root, false);
-        for (uint256 i; i < 8; ++i) _sub(_child(), i % 2 == 0);
-        for (uint256 i; i < 4; ++i) _child();
-        LiquidationQuote memory q = game.previewLiquidateAccount(root);
-        vm.prank(seller);
-        game.liquidateAccount(root, q.price);
-        emit log_named_uint("main_sale_9_runs_12_smurfs_gas", vm.lastCallGas().gasTotalUsed);
     }
 }
 

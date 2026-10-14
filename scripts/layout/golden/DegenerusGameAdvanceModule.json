@@ -232,6 +232,14 @@
     "typeLabel": "uint48"
   },
   {
+    "bytes": "4",
+    "encoding": "inplace",
+    "label": "loanSeizeCursor",
+    "offset": 16,
+    "slot": 5,
+    "typeLabel": "uint32"
+  },
+  {
     "bytes": "32",
     "encoding": "inplace",
     "label": "dailyTicketBudgetsPacked",
@@ -1038,5 +1046,29 @@
     "offset": 0,
     "slot": 79,
     "typeLabel": "mapping(uint32 => mapping(uint256 => uint256))"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "_loans",
+    "offset": 0,
+    "slot": 80,
+    "typeLabel": "mapping(uint32 => uint256)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "_loansDue",
+    "offset": 0,
+    "slot": 81,
+    "typeLabel": "mapping(uint24 => mapping(uint256 => uint256))"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "_loansDueCount",
+    "offset": 0,
+    "slot": 82,
+    "typeLabel": "mapping(uint24 => uint256)"
   }
 ]

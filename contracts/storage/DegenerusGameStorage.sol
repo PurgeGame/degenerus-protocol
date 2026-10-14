@@ -92,7 +92,7 @@ interface IAdminLinkValue {
  * | [15:16] jackpotPhaseFlag         bool     Payout mode: purchase(F)/jackpot(T)   |
  * | [16:17] jackpotCounter           uint8    Jackpots processed this level         |
  * | [17:18] lastPurchaseDay          bool     Prize target met flag                 |
- * | [18:19] decimatorFlags          uint8    bit0=window open, bit1=opening day      |
+ * | [18:19] decimatorFlags          uint8    bit0=window open, bit1=opening day, bit2=loans due |
  * | [19:20] rngLockedFlag            bool     Daily RNG lock (jackpot window)       |
  * | [20:21] phaseTransitionActive    bool     Level transition in progress          |
  * | [21:22] gameOver                 bool     Terminal state flag                   |
@@ -404,10 +404,12 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Bit 0 holds the burn window open from x4/x99 until x5/x00 (excluding x94/x95).
     ///      Bit 1 marks its opening-day quest and auto-entry. The next fresh daily request
-    ///      clears bit 1; a retry preserves it. The flags share byte 18 and remain independent.
+    ///      clears bit 1; a retry preserves it. Bit 2 marks loans due at the level just entered
+    ///      and still unseized. The flags share byte 18 and remain independent.
     uint8 internal decimatorFlags;
     uint8 internal constant DEC_WINDOW_OPEN = 1;
     uint8 internal constant DEC_DAY_ONE_ACTIVE = 2;
+    uint8 internal constant LOANS_DUE_PENDING = 4;
 
     function _decWindowOpen() internal view returns (bool) {
         return decimatorFlags & DEC_WINDOW_OPEN != 0;
@@ -423,6 +425,14 @@ abstract contract DegenerusGameStorage {
 
     function _setDecDayOneActive(bool active) internal {
         decimatorFlags = active ? decimatorFlags | DEC_DAY_ONE_ACTIVE : decimatorFlags & ~DEC_DAY_ONE_ACTIVE;
+    }
+
+    function _loansDuePending() internal view returns (bool) {
+        return decimatorFlags & LOANS_DUE_PENDING != 0;
+    }
+
+    function _setLoansDuePending(bool pending) internal {
+        decimatorFlags = pending ? decimatorFlags | LOANS_DUE_PENDING : decimatorFlags & ~LOANS_DUE_PENDING;
     }
 
     /// @dev True when daily RNG is locked (jackpot resolution in progress).
@@ -641,6 +651,9 @@ abstract contract DegenerusGameStorage {
     uint48 internal lastVrfProcessedTimestamp;
     /// @dev Even/odd ticket epochs: two uint24 levels, slot-5 bytes 10..15.
     uint48 internal ticketBufferLevels;
+    /// @dev Next index of `_loansDue[level]` to seize while `LOANS_DUE_PENDING` is set;
+    ///      slot-5 bytes 16..19.
+    uint32 internal loanSeizeCursor;
 
     /// @dev Packed daily jackpot ticket data, handed from one advance stage to the next.
     ///      Layout: [reserved (8 bits @ 0)] [dailyEntries (64 bits @ 8)] [battlePending (1 bit @ 72)]
@@ -1050,7 +1063,8 @@ abstract contract DegenerusGameStorage {
     enum MinerAction {
         Idle, Terminal, Wait, Publish, Tickets, DailyGap, DailyApply, DailyPhase,
         Redemption, Afking, HumanBoxes, Degenerette, Decimator, Craps,
-        CertifyRead, PrepareSubscriptions, Maintenance, RequestDaily, RequestMidday, GrowthSettle
+        CertifyRead, PrepareSubscriptions, Maintenance, RequestDaily, RequestMidday, GrowthSettle,
+        SeizeLoans
     }
 
     function _minerMaintenancePending() internal view returns (bool) {
@@ -1074,6 +1088,8 @@ abstract contract DegenerusGameStorage {
                 && _rngRequestActive() && _currentRngWord() == 0 && !_vrfDead()) return MinerAction.Wait;
             return MinerAction.Terminal;
         }
+        // Loans due at the level just entered are seized before anything uses its word.
+        if (_loansDuePending()) return MinerAction.SeizeLoans;
         if (_rngRequestActive() && _currentRngWord() == 0) {
             return MinerAction.Wait;
         }
@@ -4909,8 +4925,42 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Smurf IDs by owning main ID, eight packed uint32 lanes per word (lane `i & 7` of word
     ///      `i >> 3`). Append-only at `createSmurf`; the main's lifetime `SMURF_COUNT` in
-    ///      `mintPacked_` is the list length. Liquidation walks it to stop the family's AFKing.
+    ///      `mintPacked_` is the list length. A main's loan seizure walks it to stop the family's AFKing.
     mapping(uint32 => mapping(uint256 => uint256)) internal _smurfWords;
+
+    // =========================================================================
+    // Account loans
+    // =========================================================================
+
+    /// @dev Open loan by account ID; zero means none. Packed: principal wei (bits 0-95),
+    ///      lender wallet ID (96-103), level at borrowing (104-127), due level (128-151),
+    ///      index in `_loansDue[due]` (152-183), subscriptions its seizure may cancel (184-191).
+    mapping(uint32 => uint256) internal _loans;
+    /// @dev Account IDs due at each level, eight packed uint32 lanes per word.
+    mapping(uint24 => mapping(uint256 => uint256)) internal _loansDue;
+    /// @dev Open loans due at each level; seizure leaves a level's count behind.
+    mapping(uint24 => uint256) internal _loansDueCount;
+
+    uint256 internal constant LOAN_MIN_PRINCIPAL = 0.05 ether;
+    uint256 internal constant LOAN_INTEREST_BPS_PER_LEVEL = 500;
+    uint256 internal constant LOAN_EARLY_FEE_BPS_PER_LEVEL = 100;
+    uint256 internal constant LOAN_MAX_SMURFS = 5;
+
+    uint256 internal constant LOAN_LENDER_SHIFT = 96;
+    uint256 internal constant LOAN_START_SHIFT = 104;
+    uint256 internal constant LOAN_DUE_SHIFT = 128;
+    uint256 internal constant LOAN_INDEX_SHIFT = 152;
+    uint256 internal constant LOAN_FAMILY_SHIFT = 184;
+
+    function _loanDueAt(uint24 due, uint256 i) internal view returns (uint32) {
+        return uint32(_loansDue[due][i >> 3] >> ((i & 7) << 5));
+    }
+
+    function _setLoanDueAt(uint24 due, uint256 i, uint32 id) internal {
+        uint256 shift = (i & 7) << 5;
+        uint256 word = _loansDue[due][i >> 3];
+        _loansDue[due][i >> 3] = (word & ~(uint256(type(uint32).max) << shift)) | (uint256(id) << shift);
+    }
 
     /// @dev Ordinary main: address only; child: parent only; acquired root: seller + buyer.
     ///      Children can have only one ordinary parent, so one parent read is sufficient.

@@ -113,7 +113,7 @@ contract SubscriberNativeGasHost is DegenerusGame, WalletSeed {
         _setPrizePools(1_000 ether, 10_000 ether);
     }
 
-    // Fixture-only ownership transition; liquidation tests exercise the authorized sale itself.
+    // Fixture-only ownership transition; the loan tests exercise the real seizure itself.
     function acquireForTest(address player, bool child) external {
         uint32 id = _walletIdOf(player);
         if (child) {
@@ -123,8 +123,8 @@ contract SubscriberNativeGasHost is DegenerusGame, WalletSeed {
         }
         wallets[id] |= uint256(SDGNRS_WALLET_ID) << 160;
     }
-    /// @dev Fixture for a sale: the ownership transition, then the cancel `liquidateAccount` runs
-    ///      right after it (a main sale also stops its smurfs; `child` makes `player` the sold
+    /// @dev Fixture for a seizure: the ownership transition, then the cancel `runLoanSeizureWork` runs
+    ///      right after it (a main seizure also stops its smurfs; `child` makes `player` the seized
     ///      main's only smurf).
     function liquidateForTest(address player, bool child) external {
         uint32 id = _walletIdOf(player);

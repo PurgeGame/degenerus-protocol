@@ -4,7 +4,7 @@ Start at [AUDIT.md](AUDIT.md) for the audit scope and reading list.
 
 Technical references supplement the architecture:
 
-- [Account liquidation, recurring collection and redemptions](ACCOUNT-LIQUIDATION.md)
+- [Account loans, seizure, recurring collection and redemptions](ACCOUNT-LOANS.md)
 - [Craps preferences and jackpot battle](CRAPS-PREFERENCES.md)
 - [Decimator battle rules, settlement and ABI](DECIMATOR-BATTLE.md)
 - [Degenerette bet queue](DEGENERETTE-BET-QUEUE.md)

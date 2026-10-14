@@ -56,10 +56,10 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     ///        0 means cured).
     event CurseChanged(uint32 indexed player, uint8 newCurseCount);
 
-    /// @dev Price-funded buyer selection. sDGNRS retains 1 ETH of claimable; the enabled
+    /// @dev Principal-funded lender selection. sDGNRS retains 1 ETH of claimable; the enabled
     ///      Vault retains its configured floor across claimable plus prepaid AFKing.
-    ///      Both balances are claimablePool-backed; zero means neither buyer can fund.
-    function _resolveLiquidationBuyer(uint256 totalBudget) internal view returns (uint32 buyer) {
+    ///      Both balances are claimablePool-backed; zero means neither lender can fund.
+    function _resolveLender(uint256 totalBudget) internal view returns (uint32 buyer) {
         if (_claimableOf(SDGNRS_WALLET_ID) >= totalBudget + 1 ether) {
             return SDGNRS_WALLET_ID;
         }
@@ -137,29 +137,22 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     // =========================================================================
 
 
-    /// @dev Legacy far-future discount curve (bps of face): flat 15% for d2..d6, then two lines,
-    ///      15% @ d6 -> 10% @ d20 -> 5% @ d100. Caller guarantees 2 <= d <= 100. Integer
-    ///      truncation is sub-bps, acceptable.
-    function _farFutureFractionBps(uint256 d) internal pure returns (uint256) {
-        if (d <= 6) return 1500; // never above the d6 rate
-        if (d <= 20) return 1500 - ((d - 6) * 500) / 14; // 15% -> 10%
-        return 1000 - ((d - 20) * 500) / 80; // 10% -> 5%
+    /// @dev Loan rate in bps of face for a ticket `d` levels ahead (2 <= d <= 100): 10% at d2
+    ///      down to 5% at d20, then down to 2% at d100. Truncation is under one bp.
+    function _loanRateBps(uint256 d) internal pure returns (uint256) {
+        if (d <= 20) return 1000 - (d - 2) * 500 / 18;
+        return 500 - (d - 20) * 300 / 80;
     }
 
-
-
-
-
-    /// @dev Whole-account quote. Queue tags distinguish current lanes from old ring cycles;
-    ///      the account's entries remain in their original queues after ownership changes.
-    function _quoteLiquidation(uint32 id) internal view
-        returns (uint256 face, uint256 budget, uint256 ticketValue, uint256 price)
+    /// @dev Principal for a loan due at `dueLevel`: whole tickets at `dueLevel + 2` and beyond,
+    ///      within 100 levels of the active ticket level. Those levels are still far-future lanes
+    ///      when the account is seized at `dueLevel`. Queue tags distinguish current lanes from
+    ///      old ring cycles. Callers hold `dueLevel >= _activeTicketLevel()`.
+    function _quoteLoan(uint32 id, uint24 dueLevel) internal view
+        returns (uint256 face, uint256 principal)
     {
-        uint24 cl = _activeTicketLevel();
-        uint256 seed = _farFutureSeed(id);
-        uint256 jitter = 7000 + seed % 4001;
-        for (uint256 distance = 2; distance <= 100; ++distance) {
-            uint256 target = uint256(cl) + distance;
+        uint256 cl = _activeTicketLevel();
+        for (uint256 target = uint256(dueLevel) + 2; target <= cl + 100; ++target) {
             if (target > type(uint24).max) break;
             uint256 lane = _farFutureLane(uint24(target), id);
             if (lane & 0x80000000 == 0) continue;
@@ -167,20 +160,8 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
             if (entries == 0) continue;
             uint256 value = PriceLookupLib.priceForLevel(uint24(target)) * entries / 4;
             face += value;
-            budget += value * _farFutureFractionBps(distance) * jitter / 100_000_000;
+            principal += value * _loanRateBps(target - cl) / 10_000;
         }
-        ticketValue = budget * (4000 + ((seed >> 128) % 4001)) / 10_000;
-        uint256 oneEntry = PriceLookupLib.priceForLevel(cl) / 4;
-        if (ticketValue < oneEntry) ticketValue = oneEntry;
-        if (ticketValue > budget) ticketValue = budget;
-        price = budget - ticketValue + ticketValue / 4;
-    }
-
-    /// @dev Daily ID-seeded liquidation offer, shared by preview and execution.
-    function _farFutureSeed(uint32 playerId) internal view returns (uint256) {
-        return uint256(
-            keccak256(abi.encode(uint256(playerId), _recordedDailyWord(_simulatedDayIndex() - 1)))
-        );
     }
 
     /// @dev Activity score body operating on a caller-supplied current level, so every

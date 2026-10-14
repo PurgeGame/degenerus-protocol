@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
-import {LiquidationQuote} from "./ILiquidation.sol";
 
 /*
  * TERMS OF INTERACTION — submitting a transaction to this contract accepts them.
@@ -73,6 +72,7 @@ interface IDegenerusGameAdvanceModule {
     function applyDailyGap() external;
     function runDailyPhase(uint256 allowance) external returns (MineFlipGas.Result memory);
     function runTerminalPhase(uint256 allowance) external returns (MineFlipGas.Result memory);
+    function runLoanSeizureWork(uint256 allowance) external returns (MineFlipGas.Result memory);
     function setThanosLevel(uint24 targetLevel, uint8 shift) external;
 }
 
@@ -266,8 +266,8 @@ interface IDegenerusGameWhaleModule {
 /// @notice Interface for minting operations and purchase processing
 interface IDegenerusGameMintModule {
     function raiseSmurfBaseAllowance(uint32 mainId, uint16 newBase) external;
-    function liquidateAccount(uint32 id, uint256 minEthOut) external;
-    function previewLiquidateAccount(uint32 id) external returns (LiquidationQuote memory);
+    function borrow(uint32 id, uint24 dueLevel, uint256 minEthOut) external;
+    function repay(uint32 id) external payable;
     function harvestAcquiredAccounts(uint32 buyer, uint32[] calldata ids) external returns (uint256);
 
 
@@ -659,8 +659,8 @@ interface IGameAfkingModule {
     function runSubscriberWork(uint24 processDay, uint256 gasAllowance) external returns (MineFlipGas.Result memory);
     function runAfkingWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory);
     function runHumanBoxWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory);
-    /// @notice Liquidation-only: cancel the sold account's AFKing run and, for a main sale,
-    ///         every smurf's (MintModule.liquidateAccount delegatecall target).
+    /// @notice Loan-seizure only: cancel the seized account's AFKing run and, for a main,
+    ///         every smurf's (AdvanceModule.runLoanSeizureWork delegatecall target).
     function cancelLiquidatedSubscriptions(uint32 id, bool mainSale) external;
 
     /// @notice The SINGLE subscription entrypoint: create / replace (dailyQuantity >= 1)

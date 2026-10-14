@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
-import {LiquidationQuote} from "./ILiquidation.sol";
 
 import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 
@@ -61,8 +60,10 @@ interface IDegenerusGame {
     /// @notice Execute ordered game work. Zero selects the 10,000-bps default estimate factor.
     function mineFlip(uint32 gasMultiplierBps) external;
 
-    function liquidateAccount(uint32 id, uint256 minEthOut) external;
-    function previewLiquidateAccount(uint32 id) external returns (LiquidationQuote memory);
+    /// @notice Borrow against far-future tickets, due when the game enters `dueLevel`.
+    function borrow(uint32 id, uint24 dueLevel, uint256 minEthOut) external;
+    /// @notice Repay an open loan before its due level; excess ETH funds the account's AFKing.
+    function repay(uint32 id) external payable;
     function harvestAcquiredAccounts(uint32 buyer, uint32[] calldata ids) external returns (uint256);
 
     /// @notice Wallet-ID hook for trusted protocol contracts: existing ID, or with `allocate` a new

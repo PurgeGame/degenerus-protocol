@@ -5,8 +5,23 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {Coinflip} from "../../contracts/Coinflip.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
-import {LiquidationQuote} from "../../contracts/interfaces/ILiquidation.sol";
+import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
+
+/// @dev Enters the due level and runs the production seizure worker in the Game's context.
+contract IdReviewSeizer is DegenerusGameStorage {
+    function seizeDue(uint24 due) external {
+        level = due;
+        _setLoansDuePending(true);
+        loanSeizeCursor = 0;
+        (bool ok, bytes memory data) = ContractAddresses.GAME_ADVANCE_MODULE.delegatecall(
+            abi.encodeWithSignature("runLoanSeizureWork(uint256)", gasleft())
+        );
+        if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
+    }
+}
 
 contract IdReviewOperator {
     function configure(Coinflip flip, uint32 id) external {
@@ -14,7 +29,8 @@ contract IdReviewOperator {
     }
 }
 
-/// @dev Tries both the former owner and a previously approved operator DURING the ETH callback.
+/// @dev Borrows, then after the lender seized the account tries both the former owner and a
+///      previously approved operator against it.
 contract IdReviewSeller {
     DegenerusGame private game;
     Coinflip private flip;
@@ -26,17 +42,19 @@ contract IdReviewSeller {
     uint32 public replacement;
     uint32 public replacementChild;
 
-    function sell(DegenerusGame game_, Coinflip flip_, IdReviewOperator operator_, uint32 root_, uint32 child_) external {
+    function borrow(DegenerusGame game_, Coinflip flip_, IdReviewOperator operator_, uint32 root_, uint32 child_) external {
         game = game_;
         flip = flip_;
         operator = operator_;
         root = root_;
         child = child_;
         armed = true;
-        game.liquidateAccount(root, 1);
+        game.borrow(root, 1, 1);
     }
 
-    receive() external payable {
+    receive() external payable {}
+
+    function probe() external {
         if (!armed) return;
         armed = false;
         callbackRan = true;
@@ -55,7 +73,7 @@ contract IdReviewSeller {
             (ok,) = address(operator).call(abi.encodeCall(IdReviewOperator.configure, (flip, id)));
             require(!ok, "operator changed sold account");
         }
-        // Re-register through a real paid door, then allocate a child while the sale is in flight.
+        // Re-register through a real paid door, then allocate a child.
         uint256 price = game.mintPrice();
         game.purchase{value: price}(0, 400, 0, 0, MintPaymentKind.DirectEth, false);
         replacement = game.walletIdOf(address(this));
@@ -64,8 +82,7 @@ contract IdReviewSeller {
         );
         require(!created && bytes4(reason) == bytes4(keccak256("SmurfCreationLimitReached()")),
             "replacement inherited sold quota");
-        // Earn fresh capacity through a real pass purchase; keep the allocation inside
-        // the callback to exercise authorization while the original sale is in flight.
+        // Earn fresh capacity through a real pass purchase.
         game.purchaseDeityPass{value: 24 ether}(0, 3, 0);
         replacementChild = game.createSmurf{value: price}(0, MintPaymentKind.DirectEth);
     }
@@ -115,7 +132,7 @@ contract IdAuthorizationReviewTest is DeployProtocol {
         game.creditRedemptionDirect{value: amount}(id, amount);
     }
 
-    function test_SaleCallbackCannotReuseOldOwnershipOrOperatorApprovals() public {
+    function test_SeizureLeavesNoOldOwnershipOrOperatorApprovals() public {
         IdReviewOperator operator = new IdReviewOperator();
         vm.startPrank(owner);
         game.setOperatorApproval(root, address(operator), true);
@@ -130,12 +147,17 @@ contract IdAuthorizationReviewTest is DeployProtocol {
         _award(root, 0.1 ether);
         _award(child, 0.1 ether);
         _award(2, 100 ether);
-        LiquidationQuote memory q = game.previewLiquidateAccount(root);
+        DegenerusGameLens.LoanQuote memory q = new DegenerusGameLens().previewBorrow(address(game), root, 1);
         assertTrue(q.eligible);
-        assertGt(q.price, 0);
+        assertGt(q.principal, 0);
         bytes32 rootBank = game.extsload(GameSlotKeys.balances(root));
         bytes32 childBank = game.extsload(GameSlotKeys.balances(child));
-        IdReviewSeller(payable(owner)).sell(game, coinflip, operator, root, child);
+        IdReviewSeller(payable(owner)).borrow(game, coinflip, operator, root, child);
+        bytes memory runtime = address(game).code;
+        vm.etch(address(game), address(new IdReviewSeizer()).code);
+        IdReviewSeizer(address(game)).seizeDue(1);
+        vm.etch(address(game), runtime);
+        IdReviewSeller(payable(owner)).probe();
         assertTrue(IdReviewSeller(payable(owner)).callbackRan());
         uint32 replacement = IdReviewSeller(payable(owner)).replacement();
         uint32 replacementChild = IdReviewSeller(payable(owner)).replacementChild();

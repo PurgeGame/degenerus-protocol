@@ -139,7 +139,6 @@ GATE	rngRequestDay	_terminalWordApplied	modules/DegenerusGameGameOverModule.sol	
 EXEMPT-ADVANCE	rngWordCurrent	updateVrfCoordinatorAndSub	modules/DegenerusGameGameOverModule.sol	READ
 EXEMPT-ADVANCE	dailyFoilDraw	_emitDailyWinningTraits	modules/DegenerusGameJackpotModule.sol	READ	Same-day retries and stale writes against a newer stored day are idempotent no-ops.
 PRODUCER	dailyFoilDraw	_emitDailyWinningTraits	modules/DegenerusGameJackpotModule.sol	WRITE	Seal the committed logical-day board/level/seed with its exact day tag; recycle only an older parity slot.
-CONSUMER-SEALED	_recordedDailyWord	_farFutureSeed	modules/DegenerusGameMintStreakUtils.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
 GATE	rngWordCurrent	_rngRetryDue	modules/DegenerusGameRngModule.sol	READ	Retry only an active unanswered request; retained delivered payload cannot be discarded.
 EXEMPT-ADVANCE	_currentRngWord	publishRng	modules/DegenerusGameRngModule.sol	READ
 PRODUCER	rngFlagsAndNudges	rawFulfillRandomWords	DegenerusGame.sol	READ	One slot0 SLOAD authenticates activity, identifies daily lock and supplies frozen nudge; callback never writes it.

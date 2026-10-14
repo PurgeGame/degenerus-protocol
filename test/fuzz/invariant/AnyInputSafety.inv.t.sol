@@ -9,6 +9,22 @@ import {TicketQueueStorage} from "../helpers/TicketQueueStorage.sol";
 import {AnyInputHandler, IAnyBalance} from "../handlers/AnyInputHandler.sol";
 import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
+import {DegenerusGameStorage} from "../../../contracts/storage/DegenerusGameStorage.sol";
+
+/// @dev Runs the production seizure worker for loans due at `due` while leaving `level` in place.
+contract AnyInputSeizer is DegenerusGameStorage {
+    function seizeDueInPlace(uint24 due) external {
+        uint24 saved = level;
+        level = due;
+        _setLoansDuePending(true);
+        loanSeizeCursor = 0;
+        (bool ok, bytes memory data) = ContractAddresses.GAME_ADVANCE_MODULE.delegatecall(
+            abi.encodeWithSignature("runLoanSeizureWork(uint256)", gasleft())
+        );
+        if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
+        level = saved;
+    }
+}
 
 /// @title AnyInputSafety -- arbitrary inputs on the player doors no other handler drives
 /// @notice One campaign, four properties, checked after every handler call:
@@ -138,9 +154,9 @@ contract AnyInputSafety is DeployProtocol {
 
         // ---------------- process day 1 so dailies, words and the craps day exist ----------------
         _driveDay(1);
-        // Account liquidation: sDGNRS buys only from its own claimable (empty this
-        // early), so the vault owner enables the vault fallback and an actor funds the vault's
-        // prepaid afking (permissionless depositAfkingFunding). Both are ordinary flows.
+        // Account loans: sDGNRS lends only from its own claimable (empty this early), so the
+        // vault owner enables the vault fallback and an actor funds the vault's prepaid afking
+        // (permissionless depositAfkingFunding). Both are ordinary flows.
         uint32 vaultId = game.walletIdOf(address(vault));
         vm.prank(actors[5]);
         game.depositAfkingFunding{value: 20 ether}(vaultId);
@@ -410,7 +426,6 @@ contract AnyInputSafety is DeployProtocol {
     /// @dev Seed a backed claim through the authenticated sDGNRS award hook.
     function _bystanderClaimable() internal {
         // Seed a deterministic protocol award through the real payable accounting door.
-        // Liquidation now pays ETH out and no longer creates a seller claimable balance.
         vm.deal(address(sdgnrs), address(sdgnrs).balance + 0.1 ether);
         uint32 bystanderId = game.walletIdOf(BYSTANDER);
         vm.prank(address(sdgnrs));
@@ -451,7 +466,7 @@ contract AnyInputSafety is DeployProtocol {
     }
 
     function _selectors() internal pure returns (bytes4[] memory s) {
-        s = new bytes4[](116);
+        s = new bytes4[](117);
         uint256 i;
         s[i++] = AnyInputHandler.cf_deposit.selector;
         s[i++] = AnyInputHandler.cf_claim.selector;
@@ -460,7 +475,8 @@ contract AnyInputSafety is DeployProtocol {
         s[i++] = AnyInputHandler.cf_setTakeProfit.selector;
         s[i++] = AnyInputHandler.g_purchase.selector;
         s[i++] = AnyInputHandler.g_redeemFlip.selector;
-        s[i++] = AnyInputHandler.g_liquidateAccount.selector;
+        s[i++] = AnyInputHandler.g_borrow.selector;
+        s[i++] = AnyInputHandler.g_repay.selector;
         s[i++] = AnyInputHandler.g_buyLootboxAndPresaleBox.selector;
         s[i++] = AnyInputHandler.g_claimBingo.selector;
         s[i++] = AnyInputHandler.g_claimDeadVrf.selector;
@@ -535,7 +551,7 @@ contract AnyInputSafety is DeployProtocol {
         for (uint256 w; w < 2; ++w) s[i++] = AnyInputHandler.prog_warp.selector;
         for (uint256 w; w < 4; ++w) s[i++] = AnyInputHandler.prog_driveDay.selector;
         for (uint256 w; w < 2; ++w) s[i++] = AnyInputHandler.prog_topUp.selector;
-        s[i++] = AnyInputHandler.gd_liquidateAccount.selector;
+        s[i++] = AnyInputHandler.gd_borrow.selector;
         s[i++] = AnyInputHandler.gd_issueDeityBoon.selector;
         s[i++] = AnyInputHandler.gd_placeDegenerette.selector;
         s[i++] = AnyInputHandler.gd_enterBonusBattle.selector;
@@ -556,17 +572,22 @@ contract AnyInputSafety is DeployProtocol {
         s[i++] = AnyInputHandler.prog_deadman.selector;
         s[i++] = AnyInputHandler.gd_buyPresaleBox.selector;
         s[i++] = AnyInputHandler.gd_buyLootboxAndPresaleBox.selector;
-        require(i == 116, "selector table size");
+        require(i == 117, "selector table size");
     }
 
     // =====================================================================================
     // Non-vacuity / falsifiability pins
     // =====================================================================================
 
-    /// @notice Minimized campaign regression: a sold root remains valid in its ticket queues.
-    function test_queueOracleAcceptsLiquidation() public {
+    /// @notice Minimized campaign regression: a seized root remains valid in its ticket queues.
+    function test_queueOracleAcceptsSeizedRoot() public {
         uint32 id = game.walletIdOf(actors[1]);
-        handler.gd_liquidateAccount(1, 0, 0);
+        uint24 due = game.level() + 1;
+        handler.gd_borrow(1, 0, 0);
+        bytes memory runtime = address(game).code;
+        vm.etch(address(game), address(new AnyInputSeizer()).code);
+        AnyInputSeizer(address(game)).seizeDueInPlace(due);
+        vm.etch(address(game), runtime);
         (, address payee, bool authorized) = game.resolveAccount(id, actors[1]);
         assertTrue(payee == address(vault) || payee == address(sdgnrs), "fixture must sell the account");
         assertFalse(authorized, "seller loses authority");

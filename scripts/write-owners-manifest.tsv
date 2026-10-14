@@ -205,9 +205,14 @@ OWNER	foilWriteCount	modules/DegenerusGameFoilPackModule.sol	_buyFoilPack append
 HELPER	deityPassIds	storage/DegenerusGameStorage.sol	_appendDeityId appends a packed uint32 ID and increments its logical count; helper called by deity registration.
 INIT	wallets	storage/DegenerusGameStorage.sol	Storage constructor reserves ID zero by setting the wallet-table length to one; later registration appends normally.
 HELPER	walletIds	storage/DegenerusGameStorage.sol	_registerWallet assigns a default gameplay ID and initializes or preserves the permanent governance/affiliate identity in the high lane.
-OWNER	walletIds	modules/DegenerusGameMintModule.sol	liquidateAccount clears only the seller's default gameplay ID on a main-account sale, retaining permanent identity.
+OWNER	walletIds	modules/DegenerusGameAdvanceModule.sol	_seizeLoan clears only the borrower's default gameplay ID when a main account's loan is seized, retaining permanent identity.
 OWNER	afkingFundingApprovals	modules/GameAfkingModule.sol	setAfkingFundingApproval writes funder-owner consent; acquired accounts cannot grant it and inherited acquisition invalidates existing consent at reads.
-OWNER	_smurfWords	modules/DegenerusGameMintModule.sol	createSmurf appends each new smurf ID to its owner's append-only list (sole writer); the list length is the owner's SMURF_COUNT. Liquidation (GameAfkingModule.cancelLiquidatedSubscriptions) only reads it.
+OWNER	_smurfWords	modules/DegenerusGameMintModule.sol	createSmurf appends each new smurf ID to its owner's append-only list (sole writer); the list length is the owner's SMURF_COUNT. A main's loan seizure (GameAfkingModule.cancelLiquidatedSubscriptions, AdvanceModule._seizeLoan) only reads it.
 OWNER	lootboxRngPacked	DegenerusGame.sol	setCrapsRngPending is CRAPS-only and changes only pending parity bits 250/251, preserving committed entropy/session fields.
 OWNER	_subOpenCursor	modules/DegenerusGameMinerModule.sol	Reset once at daily preparation after the previous read cohort completed
 OWNER	_subBoxCount	modules/GameAfkingModule.sol	Box-section membership maintained by insert, mode change and same-section removal
+OWNER	_loans	modules/DegenerusGameMintModule.sol	borrow writes the account's packed loan; repay deletes it and rewrites the index of the loan it swaps into the freed lane. One loan per account.
+OWNER	_loans	modules/DegenerusGameAdvanceModule.sol	_seizeLoan deletes each loan it seizes; seizure only runs at the due level, after which borrow/repay can no longer touch that level's loans.
+HELPER	_loansDue	storage/DegenerusGameStorage.sol	_setLoanDueAt writes one packed lane of a due level's ID list; borrow appends and repay swap-and-pops through it.
+OWNER	_loansDueCount	modules/DegenerusGameMintModule.sol	borrow increments and repay decrements the due level's open-loan count (sole writer); seizure only reads it and leaves the count behind.
+OWNER	loanSeizeCursor	modules/DegenerusGameAdvanceModule.sol	prepareRequestBoundary resets it when arming a due level; runLoanSeizureWork advances it before each seizure.

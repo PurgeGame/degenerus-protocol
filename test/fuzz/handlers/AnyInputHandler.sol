@@ -275,8 +275,13 @@ contract AnyInputHandler is Test {
         _call(6, address(game), 0, abi.encodeWithSignature("redeemFlip(uint32,uint256)", _id(bSeed), qty));
     }
 
-    function g_liquidateAccount(uint256 a, uint256 pSeed, uint256 minEthOut) external act(a) {
-        _call(7, address(game), 0, abi.encodeWithSignature("liquidateAccount(uint32,uint256)", _id(pSeed), minEthOut));
+    function g_borrow(uint256 a, uint256 pSeed, uint256 dueSeed) external act(a) {
+        uint24 due = uint24(uint256(game.level()) + 1 + dueSeed % 99);
+        _call(7, address(game), 0, abi.encodeWithSignature("borrow(uint32,uint24,uint256)", _id(pSeed), due, uint256(0)));
+    }
+
+    function g_repay(uint256 a, uint256 pSeed, uint256 value) external act(a) {
+        _call(51, address(game), _val(value), abi.encodeWithSignature("repay(uint32)", _id(pSeed)));
     }
 
     function g_buyLootboxAndPresaleBox(
@@ -744,8 +749,9 @@ contract AnyInputHandler is Test {
         return ok && r.length >= 32 ? uint16(abi.decode(r, (uint256))) : 1;
     }
 
-    function gd_liquidateAccount(uint256 a, uint256, uint256) external act(a) {
-        _call(84, address(game), 0, abi.encodeWithSignature("liquidateAccount(uint32,uint256)", uint32(0), uint256(0)));
+    function gd_borrow(uint256 a, uint256, uint256) external act(a) {
+        uint24 due = game.level() + 1;
+        _call(84, address(game), 0, abi.encodeWithSignature("borrow(uint32,uint24,uint256)", uint32(0), due, uint256(0)));
     }
 
     function gd_issueDeityBoon(uint256 a, uint256 rSeed, uint8 slot) external act(a) {
@@ -969,7 +975,7 @@ contract AnyInputHandler is Test {
     function _initNames() internal {
         string[N_ACTIONS] memory n = [
             string("cf_depositCoinflip"), "cf_claimCoinflips", "cf_claimCoinflipCarry", "cf_setCoinflipAutoRebuy",
-            "cf_setCoinflipAutoRebuyTakeProfit", "g_purchase", "g_redeemFlip", "g_liquidateAccount",
+            "cf_setCoinflipAutoRebuyTakeProfit", "g_purchase", "g_redeemFlip", "g_borrow",
             "g_buyLootboxAndPresaleBox", "g_claimBingo", "g_claimDeadVrf", "g_claimFoilMatch",
             "g_claimFoilMatchMany", "g_claimGoldenTicket", "g_claimAffiliateDgnrs(addr)", "g_claimAffiliateDgnrs(addr[])",
             "g_claimWhalePass", "g_claimAfkingFlip", "g_withdrawAfkingFunding", "g_depositAfkingFunding",
@@ -980,7 +986,7 @@ contract AnyInputHandler is Test {
             "f_approve", "f_decimatorBurn", "d_transfer", "d_transferFrom",
             "d_approve", "d_burn", "s_burn", "s_burnWrapped",
             "s_claimRedemption", "s_claimParkedRedemption", "v_burnEth", "v_burnCoin",
-            "gn_burn", "gn_vote", "pm_placeBet", "unused_51",
+            "gn_burn", "gn_vote", "pm_placeBet", "g_repay",
             "unused_52", "af_createAffiliateCode", "af_referPlayer", "af_claim",
             "wx_enter", "wx_claim", "cr_setPreferredBoard", "cr_enterBattle",
             "cr_enterBonusBattle", "cr_enterBonusDay", "cr_amendSlip", "cr_buyFutureCrapsDays",
@@ -989,7 +995,7 @@ contract AnyInputHandler is Test {
             "st_safeTransferFrom", "st_approve", "st_setApprovalForAll", "unused_75",
             "st_setSeatTraits", "prog_buy", "prog_bigBuy", "prog_mineFlip",
             "prog_fulfillVrf", "prog_warp", "prog_driveDay", "prog_topUp",
-            "gd_liquidateAccount", "gd_issueDeityBoon", "gd_placeDegeneretteBet", "gd_enterBonusBattle",
+            "gd_borrow", "gd_issueDeityBoon", "gd_placeDegeneretteBet", "gd_enterBonusBattle",
             "gd_enterBonusDay", "gd_createBattle", "gd_enterBattle", "gd_amendSlip",
             "gd_reverseFlip", "gd_transferOwnSeat", "gd_claimFoilMatch", "gd_smite",
             "gd_sdgnrsBurn", "gd_burnWrapped", "gd_referPlayer", "gd_closeBattle",

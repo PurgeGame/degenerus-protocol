@@ -1109,15 +1109,15 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         _setStreakBase(sub, 0);
     }
 
-    /// @notice Stop the AFKing runs a liquidation hands to its buyer: the sold account's own
-    ///         and, for a main sale, every smurf's. Reached only by MintModule's
-    ///         `liquidateAccount` delegatecall, after the ownership write.
+    /// @notice Stop the AFKing runs a loan seizure hands to its lender: the seized account's own
+    ///         and, for a main, every smurf's. Reached only by AdvanceModule's
+    ///         `runLoanSeizureWork` delegatecall, after the ownership write.
     /// @dev Walks the main's append-only smurf list (`_smurfWords`, length = lifetime
-    ///      `SMURF_COUNT`). A smurf sold on its own earlier was cancelled by its own sale and
-    ///      cannot re-subscribe, so it reads inactive here. Each cancel keeps the run's paid box
+    ///      `SMURF_COUNT`). A smurf seized on its own earlier was cancelled by its own seizure
+    ///      and cannot re-subscribe, so it reads inactive here. Each cancel keeps the run's paid box
     ///      stamp for the ordinary opener and leaves the tombstone for the stage to reclaim,
     ///      the same shape the stage itself writes mid-pass.
-    /// @param id The sold account.
+    /// @param id The seized account.
     /// @param mainSale True when `id` was an ordinary main (its smurfs transfer with it).
     function cancelLiquidatedSubscriptions(uint32 id, bool mainSale) external {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();

@@ -169,4 +169,18 @@ library MineFlipGasBounds {
     // equal custom boxes, admitted like a human entry: HUMAN_ENTRY_GAS + boxes * HUMAN_BOX_GAS.
     uint256 internal constant REDEMPTION_BOX_UNIT = 1 ether;
     uint256 internal constant REDEMPTION_BOXES_MAX = 20;
+
+    // LOANS (test/gas/LoanSeizureGas.t.sol, cold). Admission per loan is
+    // BASE + family * SUB + DEITY, family = the account plus a main's smurfs (at most six).
+    // Lone account 51.5k; main with its run and sDGNRS 82.3k; main with five smurfs and six
+    // runs 200.0k; the same with a deity smurf at symbol 31 (full registry scan) 292.9k,
+    // against a 370k admission.
+    // Loan and list reads, ownership write, a main's ID clear and sDGNRS burn, delete, event: ~59k.
+    uint256 internal constant LOAN_SEIZE_BASE = 75_000;
+    // Per family account: an active run's finalization with its Quests call, plus the walk reads: ~24k.
+    uint256 internal constant LOAN_SEIZE_SUB = 30_000;
+    // At most one deity per family: the 32-symbol scan and the cold DeityPass.seize: ~93k.
+    uint256 internal constant LOAN_SEIZE_DEITY = 115_000;
+    // Pending-flag clear and return.
+    uint256 internal constant LOAN_SEIZE_TAIL = 30_000;
 }

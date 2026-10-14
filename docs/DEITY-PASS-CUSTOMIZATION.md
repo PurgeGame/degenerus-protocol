@@ -11,7 +11,8 @@ Only the current `pass.ownerOf(tokenId)` can write or clear overrides. Game
 operator approval, Vault majority ownership, and the renderer deployer convey no
 additional editing permission. `pass.setRenderer(address)` and
 `pass.setRenderColors(string,string,string)` retain their existing Vault-majority
-authorization. Passes remain soulbound.
+authorization. Passes remain soulbound: holders can never transfer one, and only the game
+moves a pass, with its deity account, to the lender of a defaulted loan.
 
 ## Frontend contract
 

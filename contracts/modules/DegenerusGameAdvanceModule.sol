@@ -29,8 +29,10 @@ import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol
 import {IJackpotBattle} from "../interfaces/IJackpotBattle.sol";
 import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
 import {IDegenerusJackpots} from "../interfaces/IDegenerusJackpots.sol";
-import {IDegenerusGameJackpotModule, IDegenerusGameFoilPackModule, IDegenerusGameBoonModule, IDegenerusGameGameOverModule}
-    from "../interfaces/IDegenerusGameModules.sol";
+import {IDegenerusGameJackpotModule, IDegenerusGameFoilPackModule, IDegenerusGameBoonModule, IDegenerusGameGameOverModule,
+    IGameAfkingModule} from "../interfaces/IDegenerusGameModules.sol";
+import {IDeityPassSeize} from "../interfaces/ILiquidation.sol";
+import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {IStETH} from "../interfaces/IStETH.sol";
 import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
 import {EntropyLib} from "../libraries/EntropyLib.sol";
@@ -55,6 +57,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
     IWwxrpIncinerator private constant wwxrpIncinerator = IWwxrpIncinerator(ContractAddresses.WWXRP);
 
     event Advance(uint8 stage, uint24 lvl);
+    event LoanSeized(uint32 indexed accountId, uint32 indexed lenderId);
     event PoolSkimApplied(uint24 indexed lvl, uint256 take, uint256 insuranceSkim);
     event PoolsSettled(
         uint24 indexed lvl,
@@ -355,6 +358,89 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         if (result.progressed) emit Advance(stage, lvl);
     }
 
+    /// @notice Seize the loans due at the level just entered, in list order, before anything
+    ///         uses that level's word. The lender takes each account exactly as a sale does.
+    ///         Pending loans die with the game: terminal handling outranks this stage.
+    function runLoanSeizureWork(uint256 allowance) external returns (MineFlipGas.Result memory result) {
+        MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
+        if (address(this) != ContractAddresses.GAME) revert E();
+        if (!_loansDuePending()) {
+            result.done = true;
+            return result;
+        }
+        uint24 due = level;
+        uint256 count = _loansDueCount[due];
+        uint256 i = loanSeizeCursor;
+        while (i < count) {
+            uint32 id = _loanDueAt(due, i);
+            uint256 loan = _loans[id];
+            uint256 family = uint8(loan >> LOAN_FAMILY_SHIFT);
+            if (!MineFlipGas.canRun(
+                meter,
+                GasBounds.LOAN_SEIZE_BASE + family * GasBounds.LOAN_SEIZE_SUB + GasBounds.LOAN_SEIZE_DEITY,
+                GasBounds.LOAN_SEIZE_TAIL
+            )) break;
+            loanSeizeCursor = uint32(++i);
+            _seizeLoan(id, uint32(uint8(loan >> LOAN_LENDER_SHIFT)));
+            result.progressed = true;
+            MineFlipGas.markProgress(meter);
+            ++result.rewardBasis;
+        }
+        if (i == count) {
+            _setLoansDuePending(false);
+            result.progressed = true;
+            MineFlipGas.markProgress(meter);
+            result.done = true;
+        }
+        MineFlipGas.finish(meter);
+    }
+
+    /// @dev The sale's ownership write, the borrower wallet's sDGNRS burn and default-ID clear
+    ///      for a main, the family's AFKing stop, and the deity pass following its account. A
+    ///      smurf already seized on its own keeps its lender and its pass.
+    function _seizeLoan(uint32 id, uint32 lender) private {
+        uint256 element = _walletElement(id);
+        address seller = _payee(element);
+        bool main = uint32(element >> 160) == 0;
+        if (main) {
+            dgnrs.burnForLiquidation(seller);
+            walletIds[seller] &= uint64(type(uint32).max) << 32;
+        }
+        uint256 slot = _walletSlot(id);
+        uint256 acquired = (element & (type(uint256).max << 192)) | (uint256(lender) << 160) | uint160(seller);
+        assembly ("memory-safe") { sstore(slot, acquired) }
+        (bool ok, bytes memory data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(
+            abi.encodeWithSelector(IGameAfkingModule.cancelLiquidatedSubscriptions.selector, id, main)
+        );
+        if (!ok) _revertDelegate(data);
+        address to = lender == VAULT_WALLET_ID ? ContractAddresses.VAULT : ContractAddresses.SDGNRS;
+        _seizeDeityPass(id, to);
+        if (main) {
+            uint256 smurfs = uint16(mintPacked_[id] >> BitPackingLib.SMURF_COUNT_SHIFT);
+            mapping(uint256 => uint256) storage words = _smurfWords[id];
+            uint256 word;
+            for (uint256 k; k < smurfs; ++k) {
+                if (k & 7 == 0) word = words[k >> 3];
+                uint32 smurf = uint32(word >> ((k & 7) * 32));
+                if (uint160(_walletElement(smurf)) == 0) _seizeDeityPass(smurf, to);
+            }
+        }
+        delete _loans[id];
+        emit LoanSeized(id, lender);
+    }
+
+    /// @dev A deity account's pass (token = symbol) moves with it. The symbol registry is
+    ///      keyed by symbol, so the rare deity seizure scans its 32 entries.
+    function _seizeDeityPass(uint32 id, address to) private {
+        if (mintPacked_[id] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 == 0) return;
+        for (uint8 symbol; symbol < 32; ++symbol) {
+            if (deityBySymbol[symbol] == id) {
+                IDeityPassSeize(ContractAddresses.DEITY_PASS).seize(symbol, to);
+                return;
+            }
+        }
+    }
+
     function _phaseAllowance(MineFlipGas.Meter memory meter) private view returns (uint256) {
         return MineFlipGas.child(meter, GasBounds.DAILY_PHASE_TAIL);
     }
@@ -436,6 +522,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
             // Scores routed to lvl (= level + 1) during the purchase phase just ended.
             _rewardTopAffiliate(lvl);
             level = lvl;
+            if (_loansDueCount[lvl] != 0) {
+                _setLoansDuePending(true);
+                loanSeizeCursor = 0;
+            }
 
 
             // Fold a reached thanos declaration into the active shift: from this

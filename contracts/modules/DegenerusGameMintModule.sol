@@ -40,7 +40,6 @@ import {DegenerusGamePayoutUtils} from "./DegenerusGamePayoutUtils.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {ActivityCurveLib} from "../libraries/ActivityCurveLib.sol";
 
-import {LiquidationQuote, ILiquidationDeity} from "../interfaces/ILiquidation.sol";
 
 /**
  * @title DegenerusGameMintModule
@@ -375,7 +374,8 @@ contract DegenerusGameMintModule is
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         uint32 ownerId = _requireWalletId(msg.sender);
         uint256 mintWord = _smurfMain(ownerId);
-        if (address(uint160(_walletElement(ownerId))) != msg.sender) revert E();
+        // An open loan fixes the family its seizure walks.
+        if (address(uint160(_walletElement(ownerId))) != msg.sender || _loans[ownerId] != 0) revert E();
         uint256 score = _playerActivityScore(ownerId, _effectiveQuestStreak(ownerId));
         uint16 created = uint16(mintWord >> BitPackingLib.SMURF_COUNT_SHIFT);
         if (created == type(uint16).max || created >= uint256(uint16(mintWord >> BitPackingLib.SMURF_BASE_SHIFT)) + score / SMURF_SCORE_PER_CREATION) {
@@ -548,70 +548,88 @@ contract DegenerusGameMintModule is
         _payoutWithStethFallback(payee, amount);
     }
 
-    event AccountLiquidated(uint32 indexed accountId, address indexed seller, uint32 indexed buyerId,
-        uint256 price);
+    event LoanTaken(uint32 indexed accountId, address indexed borrower, uint32 indexed lenderId,
+        uint256 principal, uint24 dueLevel);
+    event LoanRepaid(uint32 indexed accountId, address indexed payer, uint256 owed);
     event AcquiredAccountHarvested(uint32 indexed accountId, uint32 indexed buyerId, uint256 ethValue);
     event AfkingWithdrew(uint32 indexed player, uint256 amount);
 
-    function previewLiquidateAccount(uint32 id) external view returns (LiquidationQuote memory q) {
-        if (id == 0) id = _walletIdOf(msg.sender);
-        _requireAllocated(id);
-        q.accountId = id;
-        (q.faceValue, q.quoteBudget, q.ticketValue, q.price) = _quoteLiquidation(id);
-        if (q.price != 0) q.buyerId = _resolveLiquidationBuyer(q.price);
-        q.eligible = id > GNRUS_WALLET_ID && !_isAcquired(id)
-            && !_liquidationDeity(_payee(_walletElement(id))) && !rngLockedFlag && !gameOver && !_livenessTriggered()
-            && q.price != 0;
-    }
-
-    function _liquidationDeity(address seller) private view returns (bool) {
-        return ILiquidationDeity(ContractAddresses.DEITY_PASS).balanceOf(seller) != 0;
-    }
-
-    /// @notice Sell one account and, for a main account, its entire family. Only the owner.
-    ///         A main sale hands the whole family to sDGNRS, which burns any sDGNRS it receives,
-    ///         so the seller wallet's native sDGNRS burns with it. A smurf holds none (its awards
-    ///         land at the owner), so a smurf sale leaves the owner's balance alone.
-    ///         Pays ETH first and stETH for any shortfall.
-    function liquidateAccount(uint32 id, uint256 minEthOut) external {
+    /// @notice Borrow against the account's far-future tickets (levels `dueLevel + 2` and up),
+    ///         due when the game enters `dueLevel`. Only the owner. Unrepaid by then, the lender
+    ///         takes the account as a sale does: a main with its family, burning the borrower
+    ///         wallet's native sDGNRS. A main with more than five smurfs cannot borrow; smurfs
+    ///         can. Pays ETH first and stETH for any shortfall.
+    function borrow(uint32 id, uint24 dueLevel, uint256 minEthOut) external {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (id == 0) id = _walletIdOf(msg.sender);
         _requireAllocated(id);
         uint256 element = _walletElement(id);
-        address seller = _payee(element);
-        if (seller != msg.sender) revert NotApproved();
-        if (id <= GNRUS_WALLET_ID || _isAcquired(id) || _liquidationDeity(seller)) revert E();
-        if (rngLockedFlag) revert RngLocked();
+        address borrower = _payee(element);
+        if (borrower != msg.sender) revert NotApproved();
+        if (id <= GNRUS_WALLET_ID || _isAcquired(id) || _loans[id] != 0) revert E();
         if (gameOver || _livenessTriggered()) revert E();
-        (, , , uint256 price) = _quoteLiquidation(id);
-        if (price == 0 || price < minEthOut) revert E();
-        uint32 buyer = _resolveLiquidationBuyer(price);
-        if (buyer == 0) revert Insolvent();
-
+        uint256 family = 1;
         if (uint32(element >> 160) == 0) {
-            dgnrs.burnForLiquidation(seller);
-            walletIds[seller] &= uint64(type(uint32).max) << 32;
+            family += uint16(mintPacked_[id] >> BitPackingLib.SMURF_COUNT_SHIFT);
+            if (family > LOAN_MAX_SMURFS + 1) revert E();
         }
-        // A nonzero seller key beside a buyer ID identifies an acquired root. Keep half passes.
-        uint256 slot = _walletSlot(id);
-        uint256 acquired = (element & (type(uint256).max << 192)) | (uint256(buyer) << 160) | uint160(seller);
-        assembly ("memory-safe") { sstore(slot, acquired) }
-        // The buyer takes the account passively: end its AFKing run, and for a main its
-        // smurfs' runs, so no later daily pass has to check for acquisition.
-        (bool ok, bytes memory data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(
-            abi.encodeWithSelector(
-                IGameAfkingModule.cancelLiquidatedSubscriptions.selector, id, uint32(element >> 160) == 0
-            )
-        );
-        if (!ok) _revertDelegate(data);
-        _debitLiquidationEth(buyer, price);
-        claimablePool -= uint128(price);
-        emit AccountLiquidated(id, seller, buyer, price);
-        _payoutWithStethFallback(seller, price);
+        uint24 lvl = level;
+        if (dueLevel <= lvl || uint256(dueLevel) + 2 > uint256(_activeTicketLevel()) + 100) revert E();
+        (, uint256 principal) = _quoteLoan(id, dueLevel);
+        if (principal < LOAN_MIN_PRINCIPAL || principal < minEthOut) revert E();
+        uint32 lender = _resolveLender(principal);
+        if (lender == 0) revert Insolvent();
+        uint256 index = _loansDueCount[dueLevel]++;
+        _setLoanDueAt(dueLevel, index, id);
+        _loans[id] = principal | (uint256(lender) << LOAN_LENDER_SHIFT) | (uint256(lvl) << LOAN_START_SHIFT)
+            | (uint256(dueLevel) << LOAN_DUE_SHIFT) | (index << LOAN_INDEX_SHIFT) | (family << LOAN_FAMILY_SHIFT);
+        _debitLender(lender, principal);
+        claimablePool -= uint128(principal);
+        emit LoanTaken(id, borrower, lender, principal, dueLevel);
+        _payoutWithStethFallback(borrower, principal);
+    }
+
+    /// @notice Repay an open loan before the game enters its due level. Owed: principal plus 5%
+    ///         of it per level used (at least one) plus 1% per unused level of the chosen term,
+    ///         all to the lender. Only the owner. ETH first, the account's own claimable for any
+    ///         shortfall; excess ETH goes to the account's AFKing balance.
+    function repay(uint32 id) external payable {
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
+        if (id == 0) id = _walletIdOf(msg.sender);
+        uint256 loan = _loans[id];
+        if (loan == 0) revert E();
+        if (_payee(_walletElement(id)) != msg.sender) revert NotApproved();
+        uint24 due = uint24(loan >> LOAN_DUE_SHIFT);
+        uint24 lvl = level;
+        if (lvl >= due || gameOver) revert E();
+        uint256 start = uint24(loan >> LOAN_START_SHIFT);
+        uint256 used = lvl > start ? lvl - start : 1;
+        uint256 principal = uint96(loan);
+        uint256 owed = principal * (10_000 + used * LOAN_INTEREST_BPS_PER_LEVEL
+            + (due - start - used) * LOAN_EARLY_FEE_BPS_PER_LEVEL) / 10_000;
+        uint256 fresh = msg.value < owed ? msg.value : owed;
+
+        uint256 index = uint32(loan >> LOAN_INDEX_SHIFT);
+        uint256 last = --_loansDueCount[due];
+        if (index != last) {
+            uint32 moved = _loanDueAt(due, last);
+            _setLoanDueAt(due, index, moved);
+            uint256 indexMask = uint256(type(uint32).max) << LOAN_INDEX_SHIFT;
+            _loans[moved] = (_loans[moved] & ~indexMask) | (index << LOAN_INDEX_SHIFT);
+        }
+        delete _loans[id];
+
+        // The claimable leg leaves the 1-wei sentinel, as every claimable draw does.
+        if (owed > fresh && _claimableOf(id) <= owed - fresh) revert Insolvent();
+        _debitClaimable(id, owed - fresh);
+        claimablePool += uint128(fresh);
+        _creditClaimableLogged(uint32(uint8(loan >> LOAN_LENDER_SHIFT)), owed);
+        _creditAfkingValue(id, msg.value - fresh);
+        emit LoanRepaid(id, msg.sender, owed);
     }
 
     /// @dev sDGNRS pays from claimable; Vault uses claimable then its own prepaid reserve.
-    function _debitLiquidationEth(uint32 buyer, uint256 amount) private {
+    function _debitLender(uint32 buyer, uint256 amount) private {
         uint256 available = _claimableOf(buyer);
         uint256 fromClaim = amount < available ? amount : available;
         if (buyer != VAULT_WALLET_ID) fromClaim = amount;

@@ -3,11 +3,29 @@ pragma solidity 0.8.34;
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
-import {LiquidationQuote} from "../../contracts/interfaces/ILiquidation.sol";
+import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {GameSlotKeys} from "../helpers/GameSlots.sol";
 import {Vm} from "forge-std/Vm.sol";
+
+/// @dev Runs the production seizure worker for loans due at `due` while leaving `level` where it
+///      was, so an ownership change can be placed mid-session.
+contract RngReviewSeizer is DegenerusGameStorage {
+    function seizeDueInPlace(uint24 due) external {
+        uint24 saved = level;
+        level = due;
+        _setLoansDuePending(true);
+        loanSeizeCursor = 0;
+        (bool ok, bytes memory data) = ContractAddresses.GAME_ADVANCE_MODULE.delegatecall(
+            abi.encodeWithSignature("runLoanSeizureWork(uint256)", gasleft())
+        );
+        if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
+        level = saved;
+    }
+}
 
 contract RngReviewRejectEther {
     receive() external payable { revert("reject payment"); }
@@ -135,7 +153,7 @@ contract RngStructuralLivenessReviewTest is DeployProtocol {
         }
     }
 
-    function test_MiddayLiquidationPreservesQueuedFamilyAndLaterRequests() public {
+    function test_MiddaySeizurePreservesQueuedFamilyAndLaterRequests() public {
         address seller = makeAddr("rng-review-seller");
         vm.deal(seller, 100 ether);
         uint32 sellerRoot = _giveWalletId(seller);
@@ -144,7 +162,7 @@ contract RngStructuralLivenessReviewTest is DeployProtocol {
         vm.prank(seller);
         uint32 sellerChild = game.createSmurf{value: price}(0, MintPaymentKind.DirectEth);
         vm.prank(address(game)); coin.mintForGame(seller, 100_000);
-        // A real whale purchase gives the root far-future inventory and a positive sale quote.
+        // A real whale purchase gives the root far-future inventory and a positive loan quote.
         vm.prank(seller); game.purchaseWhalePass{value: 2.4 ether}(sellerRoot, 1, 0);
         _queue(seller, sellerChild, 100);
         vm.deal(address(sdgnrs), 100 ether);
@@ -153,10 +171,15 @@ contract RngStructuralLivenessReviewTest is DeployProtocol {
         uint256 snapshot = vm.snapshotState();
         (bytes32 beforeSale,,) = _drain(6_000_000, address(0xCA11));
         assertTrue(vm.revertToStateAndDelete(snapshot));
-        LiquidationQuote memory q = game.previewLiquidateAccount(sellerRoot);
+        uint24 due = game.level() + 1;
+        DegenerusGameLens.LoanQuote memory q = new DegenerusGameLens().previewBorrow(address(game), sellerRoot, due);
         assertTrue(q.eligible);
-        assertGt(q.price, 0);
-        vm.prank(seller); game.liquidateAccount(sellerRoot, q.price);
+        assertGt(q.principal, 0);
+        vm.prank(seller); game.borrow(sellerRoot, due, q.principal);
+        bytes memory runtime = address(game).code;
+        vm.etch(address(game), address(new RngReviewSeizer()).code);
+        RngReviewSeizer(address(game)).seizeDueInPlace(due);
+        vm.etch(address(game), runtime);
         (, address payee, bool authorized) = game.resolveAccount(sellerChild, seller);
         assertEq(payee, address(sdgnrs));
         assertFalse(authorized);

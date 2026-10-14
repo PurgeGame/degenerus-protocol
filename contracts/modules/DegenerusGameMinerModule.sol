@@ -159,6 +159,9 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
                     target = ContractAddresses.GAME_TICKET_MODULE;
                     uint24 anchor = !jackpotPhaseFlag && lastPurchaseDay && rngLockedFlag ? level : level + 1;
                     callData = abi.encodeWithSelector(IDegenerusGameTicketModule.runTicketWork.selector, anchor, allowance);
+                } else if (action == MinerAction.SeizeLoans) {
+                    target = ContractAddresses.GAME_ADVANCE_MODULE;
+                    callData = abi.encodeWithSelector(IDegenerusGameAdvanceModule.runLoanSeizureWork.selector, allowance);
                 } else if (action == MinerAction.PrepareSubscriptions) {
                     target = ContractAddresses.GAME_AFKING_MODULE;
                     callData = abi.encodeWithSelector(IGameAfkingModule.runSubscriberWork.selector, _afkingResetDay, allowance);
