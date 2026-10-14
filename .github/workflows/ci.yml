@@ -241,6 +241,27 @@ jobs:
           export MAINNET_RPC_URL="$selected"
           mkdir -p .audit-test-logs/foundry
           FOUNDRY_ISOLATE=false python3 scripts/test-foundry-groups.py --group fork --threads 2
+      # The runner redacts each finished batch, but a cancelled or timed-out run can leave a raw
+      # log behind, and uploaded artifacts are not secret-masked: scrub every file before upload.
+      - name: Redact the RPC secret from fork evidence
+        if: always()
+        env:
+          MAINNET_RPC_URL: ${{ secrets.MAINNET_RPC_URL }}
+        run: |
+          [ -n "$MAINNET_RPC_URL" ] && [ -d .audit-test-logs ] || exit 0
+          python3 - <<'PYTHON'
+          import importlib.util, os, pathlib
+          spec = importlib.util.spec_from_file_location("runner", "scripts/test-foundry-groups.py")
+          runner = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(runner)
+          url = os.environ["MAINNET_RPC_URL"]
+          for path in pathlib.Path(".audit-test-logs").rglob("*"):
+              if path.is_file():
+                  text = path.read_text(errors="replace")
+                  clean = runner.redact_rpc_url(text, url)
+                  if clean != text:
+                      path.write_text(clean)
+          PYTHON
       - name: Preserve fork evidence
         if: always()
         uses: actions/upload-artifact@v4

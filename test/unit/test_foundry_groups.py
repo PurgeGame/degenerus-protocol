@@ -405,5 +405,25 @@ class FoundryGroupsDriverTest(unittest.TestCase):
         self.assertFalse((self.root / "calls.json").exists())
 
 
+
+class RpcRedactionTest(unittest.TestCase):
+    def setUp(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("foundry_groups_runner", RUNNER)
+        self.runner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.runner)
+
+    def test_full_url_and_key_parts_are_removed(self):
+        url = "https://eth-mainnet.example.com/v2/abcdEFGHijklMNOPqrst1234?token=zyxwVUTSrqpoNMLK9876"
+        text = f"fork error for url ({url}); key abcdEFGHijklMNOPqrst1234; token zyxwVUTSrqpoNMLK9876"
+        clean = self.runner.redact_rpc_url(text, url)
+        for secret in (url, "abcdEFGHijklMNOPqrst1234", "zyxwVUTSrqpoNMLK9876"):
+            self.assertNotIn(secret, clean)
+        self.assertIn("<MAINNET_RPC_URL>", clean)
+
+    def test_empty_url_leaves_text_unchanged(self):
+        self.assertEqual(self.runner.redact_rpc_url("no secret here", ""), "no secret here")
+
+
 if __name__ == "__main__":
     unittest.main()

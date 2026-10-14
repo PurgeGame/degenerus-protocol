@@ -44,6 +44,18 @@ def is_fork_source(path):
     return str(path).startswith(FORK_ROOT)
 
 
+def redact_rpc_url(text, url):
+    """Remove an RPC URL from evidence text: the whole URL, and any key-like part of it (a long
+    path segment or query value) in case it is echoed in another form."""
+    if not url:
+        return text
+    text = text.replace(url, "<MAINNET_RPC_URL>")
+    for part in re.split(r"[/?&=:@#]", url):
+        if len(part) >= 16:
+            text = text.replace(part, "<MAINNET_RPC_KEY>")
+    return text
+
+
 def groups():
     files = sorted(Path("test").rglob("*.sol"))
     # Every non-test source stays compiled: a skipped helper still compiles as an import, but
@@ -334,9 +346,9 @@ def main():
             output = log_path.read_text(errors="replace")
             # A keyed RPC URL must not reach the evidence artifacts (forge echoes it on fork
             # errors). Hosted CI masks secrets in its console, not in uploaded files.
-            rpc_url = env.get("MAINNET_RPC_URL", "")
-            if rpc_url and rpc_url in output:
-                output = output.replace(rpc_url, "<MAINNET_RPC_URL>")
+            redacted = redact_rpc_url(output, env.get("MAINNET_RPC_URL", ""))
+            if redacted != output:
+                output = redacted
                 log_path.write_text(output)
             totals = TOTALS.findall(output)
             errors = []
