@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {claimableBalance} from "../helpers/ClaimableBalance.sol";
+
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
@@ -147,14 +149,14 @@ contract DegradeTerminalMissingWordTest is DeployProtocol {
         assertEq(pot, 100 ether, "the whole balance is the pot");
         assertEq(created, 255 * 4 + 1, "the applied cohort is tallied as created");
         assertGe(total, created * 100, "the pot divides over created plus queued weight");
-        assertEq(game.claimableWinningsOf(TOP), 0, "the dead ending pays no affiliate");
+        assertEq(claimableBalance(game, TOP), 0, "the dead ending pays no affiliate");
         assertEq(address(game).balance, 100 ether, "nothing moved at the payout");
 
         uint256[] memory refs = new uint256[](1);
         refs[0] = uint256(5) << 64; // HOLDER's first ticket of trait 5
         game.claimDeadVrf(game.walletIdOf(HOLDER), refs);
         uint256 perTrait = (pot * created * 100) / total / 256;
-        assertEq(game.claimableWinningsOf(HOLDER), perTrait / 4, "one of trait 5's four equal shares");
+        assertEq(claimableBalance(game, HOLDER), perTrait / 4, "one of trait 5's four equal shares");
     }
 
     /// @dev Drain route: the degraded branch itself, in the state no chain path produces.

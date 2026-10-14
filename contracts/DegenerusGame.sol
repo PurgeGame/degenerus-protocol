@@ -471,14 +471,15 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
         if (!ok) _revertDelegate(data);
     }
 
-    function harvestAcquiredAccounts(uint32, uint32[] calldata) external returns (uint256) {
+    function acquiredBuyer(uint32 id) external view returns (uint32 buyerId) {
+        return _acquiredBuyer(id);
+    }
+
+    /// @notice Collect subaccount ETH and settled FLIP for its current owner; only sDGNRS's are permissionless.
+    function sweepAccounts(uint32[] calldata) external returns (uint256, uint256) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
         assembly ("memory-safe") { return(add(data, 32), mload(data)) }
-    }
-
-    function acquiredBuyer(uint32 id) external view returns (uint32 buyerId) {
-        return _acquiredBuyer(id);
     }
 
     /// @notice Deity-gated smite: add a curse stack to account `smiteeId` for 200 FLIP.
@@ -1114,15 +1115,16 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
       |                                                                                        |
       |  SECURITY:                                                                             |
       |  • Uses CEI pattern (Checks-Effects-Interactions)                                      |
-      |  • Leaves 1 wei sentinel for gas optimization on future credits                        |
+      |  • Never pays the account's unbacked 1-wei claimable sentinel                          |
       |  • Falls back to stETH if ETH balance insufficient                                     |
       |  • claimablePool is decremented before external call                                   |
       +========================================================================================+*/
 
     /// @notice Emitted when claimable ETH winnings are paid out.
-    /// @param amount Total value paid — native ETH plus any stETH fallback (excludes the 1 wei sentinel).
-    ///        1-wei sentinel). Not derivable from `amount`: claimWinnings(player, amount) is a
-    ///        partial cashout, so the residual is arbitrary pre-gameOver.
+    /// @param amount Total value paid — native ETH plus any stETH fallback (never the 1-wei sentinel).
+    /// @param claimableAfter Raw claimable left after the claim (including the 1-wei sentinel). Not
+    ///        derivable from `amount`: claimWinnings(player, amount) is a partial cashout, so the
+    ///        residual is arbitrary pre-gameOver.
     event WinningsClaimed(
         uint32 indexed player,
         uint256 amount,
@@ -1137,8 +1139,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
     /// @dev Aggregates all winnings: affiliates, ContractAddresses.JACKPOTS, endgame payouts.
     ///      Uses pull pattern for security (CEI: check balance, update state, then transfer).
     ///
-    ///      GAS OPTIMIZATION: Leaves 1 wei sentinel so subsequent credits remain
-    ///      non-zero → cheaper SSTORE (cold→warm vs cold→zero→warm).
+    ///      Every account is created holding a 1-wei claimable sentinel outside claimablePool;
+    ///      the claim never pays it, so later credits always write a nonzero slot.
     ///
     ///      SECURITY: Reverts if balance ≤ 1 wei (nothing to claim).
     ///      Debits account `id` and pays its payee; the caller must be authorized for it.
@@ -2134,7 +2136,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
 
     /// @notice Get a player's raw claimable balance (includes the 1 wei sentinel).
     /// @param player Player address to query.
-    /// @return Raw claimable balance in wei (includes 1 wei sentinel if any balance exists).
+    /// @return Raw claimable balance in wei (includes the account's 1-wei sentinel).
     function claimableWinningsOf(
         address player
     ) external view returns (uint256) {

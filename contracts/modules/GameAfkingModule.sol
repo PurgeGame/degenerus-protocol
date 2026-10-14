@@ -1116,7 +1116,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      `SMURF_COUNT`). A smurf seized on its own earlier was cancelled by its own seizure
     ///      and cannot re-subscribe, so it reads inactive here. Each cancel keeps the run's paid box
     ///      stamp for the ordinary opener and leaves the tombstone for the stage to reclaim,
-    ///      the same shape the stage itself writes mid-pass.
+    ///      the same shape the stage itself writes mid-pass. Unclaimed pendingFlip and
+    ///      affiliateBase are claimable permissionlessly until that reclaim deletes them.
     /// @param id The seized account.
     /// @param mainSale True when `id` was an ordinary main (its smurfs transfer with it).
     function cancelLiquidatedSubscriptions(uint32 id, bool mainSale) external {

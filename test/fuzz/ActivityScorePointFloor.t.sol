@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {claimableBalance} from "../helpers/ClaimableBalance.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {activityScoreOf} from "../helpers/ActivityScoreOf.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
@@ -280,7 +281,7 @@ contract ActivityScorePointFloorTest is DeployProtocol {
         uint256 funded = game.afkingFundingOf(player);
         vm.prank(player);
         game.withdrawAfkingFunding(0, funded);
-        if (game.claimableWinningsOf(player) != 0) {
+        if (claimableBalance(game, player) != 0) { // the 1-wei sentinel alone is not claimable
             vm.prank(player);
             game.claimWinnings(0);
         }

@@ -10,6 +10,7 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {Craps} from "../../contracts/Craps.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
+import {claimableBalance} from "../helpers/ClaimableBalance.sol";
 import {
     IDegenerusGameDecimatorModule,
     IDegenerusGameRngModule
@@ -192,7 +193,7 @@ contract UnpushedDecimatorRngSafety is DeployProtocol {
         assertEq(r.phase, 3);
         assertGt(checkpoints, 1, "the round spans bounded calls");
         uint256 sum;
-        for (uint64 id = 1; id <= COUNT; ++id) sum += game.claimableWinningsOf(address(uint160(0xD000 + id)));
+        for (uint64 id = 1; id <= COUNT; ++id) sum += claimableBalance(game, address(uint160(0xD000 + id)));
         assertEq(sum, POOL, "all payouts finish before the next request");
         // With the round complete the engine issues the mid-day request itself.
         uint256 requestBefore = mockVRF.lastRequestId();

@@ -64,7 +64,14 @@ interface IDegenerusGame {
     function borrow(uint32 id, uint24 dueLevel, uint256 minEthOut) external;
     /// @notice Repay an open loan before its due level; excess ETH funds the account's AFKing.
     function repay(uint32 id) external payable;
-    function harvestAcquiredAccounts(uint32 buyer, uint32[] calldata ids) external returns (uint256);
+    /// @notice Sweep up to 32 owned subaccounts into their current main accounts.
+    /// @dev Permissionless only for sDGNRS-owned accounts; otherwise each source requires its
+    ///      payee or approved operator. Moves claimable ETH internally (retaining 1 wei), and
+    ///      settled FLIP to the payee. Acquired accounts also surrender prepaid AFKing and,
+    ///      once caught up and unfrozen, coinflip carry. Ordinary smurfs keep live AFKing
+    ///      funding and auto-rebuy; moving their ETH applies their normal cashout curse.
+    ///      Repeat for later awards or a coinflip backlog. Does not resolve unclaimed prizes.
+    function sweepAccounts(uint32[] calldata ids) external returns (uint256 ethCollected, uint256 flipCollected);
 
     /// @notice Wallet-ID hook for trusted protocol contracts: existing ID, or with `allocate` a new
     ///         one subject to paid admission. Non-allocating calls return zero for unregistered wallets.

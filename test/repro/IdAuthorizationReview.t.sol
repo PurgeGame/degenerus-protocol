@@ -210,7 +210,7 @@ contract IdAuthorizationReviewTest is DeployProtocol {
         assertEq(_giveWalletId(newcomer), next);
         assertEq(uint256(game.extsload(GameSlotKeys.walletElement(next))), uint160(newcomer));
         assertEq(game.extsload(GameSlotKeys.mintPacked(next)), bytes32(0));
-        assertEq(game.extsload(GameSlotKeys.balances(next)), bytes32(0));
+        assertEq(game.extsload(GameSlotKeys.balances(next)), bytes32(uint256(1)), "only the claimable sentinel");
         (,, bool authorized) = game.resolveAccount(next, address(this));
         assertFalse(authorized);
     }

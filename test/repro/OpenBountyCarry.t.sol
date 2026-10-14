@@ -101,6 +101,8 @@ contract OpenBountyCarry is DeployProtocol {
     /// @dev One keeper mineFlip (`allowance` 0 = unbounded); returns the FLIP credited to the
     ///      keeper and the execution gas the engine measured.
     function _mintFlipKeeperCredit(address keeper, uint256 allowance) internal returns (uint256 total, uint256 used) {
+        // The stake ledger is keyed by wallet ID: a keeper without one does the work unpaid.
+        if (game.walletIdOf(keeper) == 0) _giveWalletId(keeper);
         vm.recordLogs();
         vm.prank(keeper);
         if (allowance == 0) game.mineFlip(0);

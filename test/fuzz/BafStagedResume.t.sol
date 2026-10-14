@@ -17,8 +17,8 @@ import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlip
 ///         exactly the ETH it credited; every award goes to the winner drawn when its pair starts:
 ///         `bafPairWinners` read at the group start for the group's first pair and for trait pairs,
 ///         read after replaying the first pair's queue writes for a far-future second pair, and
-///         `bafHeadWinner` for the head awards. Completion deletes the record, runs `finalizeBaf`
-///         (board cleared, epoch bumped) and returns the ETH term of unfilled slots to the pending
+///         `bafHeadWinner` for the head awards. Completion retires the record, runs `finalizeBaf`
+///         (board length cleared, epoch bumped) and returns the ETH term of unfilled slots to the pending
 ///         future pool (the stage runs inside the daily request's pool freeze); a resume from a
 ///         checkpoint under any allowance pays the identical remaining awards; another kind is left
 ///         untouched. A real consolidation (`runBafJackpot` -> `beginBaf`) arms the record with the
@@ -106,7 +106,7 @@ abstract contract BafStagedResumeFixture is BafBracketFixture {
                 assertTrue(r.done);
                 assertEq(end - cursor, 3, "the head group pays the three head awards");
                 assertEq(before.paid, groupCredit, "the head group credits the whole remaining reservation");
-                _assertWorkDeleted();
+                _assertWorkRetired();
             }
             BafStageHost.PoolView memory p = host.poolView();
             assertEq(p.claimable, p0.claimable, "credits come out of the reservation");
@@ -135,13 +135,13 @@ abstract contract BafStagedResumeFixture is BafBracketFixture {
 
         MineFlipGas.Result memory r = _drainOnce(LARGE);
         assertTrue(r.done, "the stage completes");
-        _assertWorkDeleted();
+        _assertWorkRetired();
 
-        // finalizeBaf: board cleared and epoch bumped, so every stored score reads stale.
+        // finalizeBaf: board length cleared and epoch bumped, so every stored score reads stale.
         (uint64 epoch1, uint8 topLen1, bool skipped1, uint256 top1) = _bracketBoard(LVL);
         assertEq(epoch1, epoch0 + 1, "epoch bumped");
         assertEq(topLen1, 0, "board length cleared");
-        assertEq(top1, 0, "board slots cleared");
+        assertEq(top1, top0, "retired board payload is retained");
         assertFalse(skipped1);
         assertEq(jackpots.bafHeadWinner(LVL, word, 0), 0, "no top bettor after finalizeBaf");
         assertEq(jackpots.bafHeadWinner(LVL, word, 2), 0, "no third or fourth place after finalizeBaf");
@@ -183,7 +183,7 @@ abstract contract BafStagedResumeFixture is BafBracketFixture {
         address top = _topBettor(3);
         uint256 snap = vm.snapshotState();
         (uint256 creditedPaid, uint256 residuePaid) = _drainAll();
-        assertGt(host.claimableOf(top), 0, "a filled head slot is paid");
+        assertGt(host.claimableOf(top), 1, "a filled head slot is paid above its sentinel");
         vm.revertToState(snap);
         vm.mockCall(
             address(jackpots),
@@ -191,7 +191,7 @@ abstract contract BafStagedResumeFixture is BafBracketFixture {
             abi.encode(uint32(0))
         );
         (uint256 creditedSkipped, uint256 residueSkipped) = _drainAll();
-        assertEq(host.claimableOf(top), 0, "the empty slot credits nobody");
+        assertEq(host.claimableOf(top), 1, "the empty slot leaves only the sentinel");
         assertGt(creditedPaid, creditedSkipped, "the forfeited award is not credited");
         assertEq(residueSkipped - residuePaid, creditedPaid - creditedSkipped, "the forfeit joins the residue");
     }
@@ -273,7 +273,7 @@ abstract contract BafStagedResumeFixture is BafBracketFixture {
             (,, uint256 end) = _payGroupAndCheck(cursor, LVL + 1);
             cursor = end;
         }
-        _assertWorkDeleted();
+        _assertWorkRetired();
         assertGt(rollsSeen, 0, "ticket legs rolled from the turbo floor");
     }
 
@@ -333,7 +333,7 @@ abstract contract BafStagedResumeFixture is BafBracketFixture {
         assertEq(calls, _bafGroups(w.budget), "one call per award group");
         assertEq(credited, armedReserve, "every slot filled: credits equal the reservation");
         assertEq(host.liabilities(), claimableArmed, "the stage moves no pool when every slot is filled");
-        _assertWorkDeleted();
+        _assertWorkRetired();
         (uint64 epoch,,,) = _bracketBoard(LVL);
         assertEq(epoch, 1, "finalizeBaf closed the bracket");
     }
@@ -368,7 +368,7 @@ abstract contract BafStagedResumeFixture is BafBracketFixture {
             if (!r.done) assertEq(host.workView().paid + credited, reserve, "paid tracks the uncredited reservation");
         }
         assertTrue(r.done);
-        _assertWorkDeleted();
+        _assertWorkRetired();
         assertGt(residue, 0, "the case leaves a residue");
         assertEq(credited + residue, reserve, "credits plus residue equal the reservation");
         BafStageHost.PoolView memory p1 = host.poolView();
@@ -594,15 +594,11 @@ abstract contract BafStagedResumeFixture is BafBracketFixture {
         ));
     }
 
-    function _assertWorkDeleted() internal view {
+    function _assertWorkRetired() internal view {
         BafStageHost.WorkView memory w = host.workView();
-        assertEq(w.kind, 0, "record deleted");
-        assertEq(w.budget, 0);
-        assertEq(w.paid, 0);
-        assertEq(w.traits, 0);
-        assertEq(w.lvl, 0);
-        assertEq(w.winner, 0);
-        assertEq(w.quadrant, 0);
+        assertEq(w.kind, 0, "record retired");
+        assertGt(w.budget, 0, "completed payload is retained");
+        assertEq(w.winner, w.traits, "all scheduled positions were processed");
     }
 }
 

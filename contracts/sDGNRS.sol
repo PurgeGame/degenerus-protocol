@@ -350,10 +350,14 @@ contract sDGNRS {
         activityScore = uint16(entry >> BATCH_PLAYER_SCORE_SHIFT);
     }
 
+    /// @dev The settling batch's prefix below the miner's cursor is consumed (paid or parked):
+    ///      the miner leaves those entries in place, so they are not live.
     function _liveClaimIndex(uint32 walletId, uint32 batchId) private view returns (uint256 index, bool live) {
-        if (batchId == 0 || (batchId != _openBatch && batchId != _settlingBatch)) return (0, false);
+        uint32 settling = _settlingBatch;
+        if (batchId == 0 || (batchId != _openBatch && batchId != settling)) return (0, false);
         uint64 locator = uint64(_claimLocations[walletId] >> ((batchId & 1) * 64));
-        return (uint32(locator >> 32), uint32(locator) == batchId);
+        index = uint32(locator >> 32);
+        live = uint32(locator) == batchId && (batchId != settling || index >= _redemptionCursor);
     }
 
     /// @dev Remove before paying (including terminal ETH callbacks). An emptied queue entry may
@@ -560,9 +564,9 @@ contract sDGNRS {
             // The self-call keeps its whole bound after EIP-150 retention.
             if (!MineFlipGas.canRun(meter, nextMax + nextMax / 63 + MineFlipGas.CALL_RESERVE,
                 REDEMPTION_TAIL_GAS)) break;
-            delete players[cursor++];
+            // The entry stays in place: the frontier retires it for every claim lookup.
             // Commit the frontier before any nested calls.
-            _redemptionCursor = uint32(cursor);
+            _redemptionCursor = uint32(++cursor);
             MineFlipGas.markProgress(meter);
             // Paid or parked, the claim's rolled share leaves the batch's remaining reserve; a
             // parked claim keeps it in the global reserve until claimParkedRedemption pays it.

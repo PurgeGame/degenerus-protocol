@@ -1382,13 +1382,19 @@ contract Coinflip {
         _setCoinflipAutoRebuy(key, payee, id, enabled, takeProfit);
     }
 
-    /// @notice Collect an acquired account's FLIP to its buyer. Caller receives nothing.
-    /// @dev Ordinary bounded settlement, including losses through collection time. Once caught
-    ///      up and unfrozen, bank the remaining carry and turn rebuy off. A longer backlog can
-    ///      be collected again; no historical result or pending-day stake is skipped.
-    function claimAcquiredCoinflips(uint32 id) external returns (uint256 claimed) {
+    /// @notice Collect for the current payee after Game.sweepAccounts authorizes the source.
+    /// @dev Ordinary accounts retain auto-rebuy and its carry, just like claimCoinflips.
+    function sweepAccountCoinflips(uint32 id) external onlyDegenerusGameContract returns (uint256) {
         uint32 buyer = degenerusGame.acquiredBuyer(id);
-        if (buyer == 0) revert NotApproved();
+        if (buyer != 0) return _claimAcquiredCoinflips(id, buyer);
+        (address key, address payee,) = degenerusGame.resolveAccount(id, address(this));
+        return _claimCoinflipsAmount(key, payee, id, type(uint256).max, true);
+    }
+
+    /// @dev An acquired account's FLIP to its buyer: ordinary bounded settlement, including losses
+    ///      through collection time. Once caught up and unfrozen, bank the remaining carry and turn
+    ///      rebuy off. A longer backlog can be collected again; no result or pending stake is skipped.
+    function _claimAcquiredCoinflips(uint32 id, uint32 buyer) private returns (uint256 claimed) {
         PlayerCoinflipState storage state = playerState[id];
         claimed = uint256(state.claimableStored) + _claimCoinflipsInternal(id, state, true);
         if (state.autoRebuyEnabled && state.lastClaim >= flipsClaimableDay && !_flipFrozen()) {

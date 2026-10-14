@@ -10,14 +10,27 @@ import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {IsDGNRS} from "../../contracts/interfaces/IsDGNRS.sol";
 import {RedemptionCloseTools} from "./helpers/RedemptionCloseTools.sol";
+import {TicketQueueStorage} from "./helpers/TicketQueueStorage.sol";
 
 /// @dev Etched over the Game for state seeding. `enterDue` jumps `level` to a due level and arms
 ///      its seizure the way `prepareRequestBoundary` does; `seize` runs the production seizure
 ///      worker in the Game's context.
 contract LoanSeeder is DegenerusGameStorage {
     function end() external { gameOver = true; }
+    function finalSweep() external { _goWrite(GO_SWEPT_SHIFT, GO_SWEPT_MASK, 1); }
     function lock(bool on) external { rngLockedFlag = on; }
     function setLevel(uint24 level_) external { level = level_; }
+    function lateBorrowWindow(uint8 phase, bool writeSlot) external {
+        level = 29;
+        jackpotPhaseFlag = phase != 0;
+        jackpotCounter = phase == 2 ? JACKPOT_DAYS - 1 : 0;
+        phaseTransitionActive = phase == 3;
+        rngLockedFlag = true;
+        ticketWriteSlot = writeSlot;
+        prizePoolFrozen = true;
+        _setPendingPools(0.5 ether, 0.25 ether);
+    }
+    function creditStallDays(uint24 count) external { purchaseStartDay += count; }
     function awardSdgnrs(uint32 id, uint256 amount) external {
         dgnrs.transferFromPool(IsDGNRS.Pool.Reward, _payee(_walletElement(id)), amount);
     }
@@ -30,7 +43,11 @@ contract LoanSeeder is DegenerusGameStorage {
         purchaseStartDay = day;
         if (entries != 0) _queueEntries(id, _activeTicketLevel() + 6, entries, false);
         uint256 old = balancesPacked[id];
-        claimablePool = uint128(uint256(claimablePool) + claimable + prepaid - uint128(old) - (old >> 128));
+        // The claimable sentinel is not backed by claimablePool. Fixtures may also seed
+        // a zero raw balance, so exclude the sentinel independently on both sides.
+        uint256 oldBacked = uint128(old) > 1 ? uint128(old) - 1 : 0;
+        uint256 newBacked = claimable > 1 ? claimable - 1 : 0;
+        claimablePool = uint128(uint256(claimablePool) + newBacked + prepaid - oldBacked - (old >> 128));
         balancesPacked[id] = uint256(claimable) | (uint256(prepaid) << 128);
     }
 
@@ -244,6 +261,187 @@ contract AccountLoansTest is RedemptionCloseTools {
         assertEq(info.dueLevel, 1);
         assertEq(info.family, 1);
         assertEq(_payee(root), seller, "the borrower keeps the account during the loan");
+    }
+
+    // ---------------------------------------------------------------- late-level ticket half
+
+    /// @dev Warp to `daysIn` days past the level's purchase start.
+    function _warpDaysIn(uint256 daysIn) private {
+        uint256 start = uint24(uint256(vm.load(address(game), bytes32(GameSlots.PURCHASE_START_DAY))));
+        vm.warp((start + daysIn - 1 + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621);
+    }
+
+    function test_DayTwentyLoanIsAllEth() public {
+        _warpDaysIn(20);
+        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), root, 1);
+        assertEq(q.ticketWei, 0, "day 20 is not past the threshold");
+        uint256 before = seller.balance;
+        uint256 entriesBefore = game.entriesOwedView(1, seller);
+        _borrow(root, 1);
+        assertEq(seller.balance, before + q.principal);
+        assertEq(game.entriesOwedView(1, seller), entriesBefore);
+    }
+
+    function test_LateLevelLoanPaysHalfInTickets() public {
+        _warpDaysIn(21);
+        uint24 cl = lens.activeTicketLevelOf(address(game));
+        uint256 price = PriceLookupLib.priceForLevel(cl);
+        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), root, 1);
+        uint256 ticketWei = q.principal / 2 / price * price;
+        assertGt(ticketWei, 0);
+        assertEq(q.ticketWei, ticketWei, "lens mirrors the ticket half");
+
+        uint256 before = seller.balance;
+        uint256 lenderBefore = game.claimableWinningsOf(address(sdgnrs));
+        uint256 poolBefore = _pool();
+        uint256 nextBefore = game.nextPrizePoolView();
+        uint256 futureBefore = game.futurePrizePoolView();
+        uint256 entriesBefore = game.entriesOwedView(cl, seller);
+
+        vm.prank(seller);
+        game.borrow(root, 1, q.principal - ticketWei);
+
+        assertEq(seller.balance, before + q.principal - ticketWei, "the rest pays out as ETH");
+        assertEq(game.claimableWinningsOf(address(sdgnrs)), lenderBefore - q.principal, "lender funds it all");
+        assertEq(_pool(), poolBefore - q.principal);
+        assertEq(game.entriesOwedView(cl, seller), entriesBefore + ticketWei / price * 4, "whole tickets");
+        assertEq(game.nextPrizePoolView(), nextBefore + ticketWei - ticketWei / 10, "90% next pool");
+        assertEq(game.futurePrizePoolView(), futureBefore + ticketWei / 10, "10% future pool");
+        assertEq(lens.loanOf(address(game), root).principal, q.principal, "the loan is the full principal");
+        assertEq(lens.loanOf(address(game), root).owed, q.principal * 105 / 100);
+    }
+
+    function test_JackpotPhaseLoanIsAllEth() public {
+        _warpDaysIn(21);
+        bytes32 slot0 = vm.load(address(game), bytes32(GameSlots.JACKPOT_PHASE_FLAG));
+        vm.store(address(game), bytes32(GameSlots.JACKPOT_PHASE_FLAG),
+            slot0 | bytes32(uint256(1) << (GameSlots.JACKPOT_PHASE_FLAG_OFFSET * 8)));
+        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), root, 1);
+        assertEq(q.ticketWei, 0, "jackpot phase pays no tickets");
+        uint256 before = seller.balance;
+        _borrow(root, 1);
+        assertEq(seller.balance, before + q.principal);
+    }
+
+    function test_LateLevelMinEthOutBoundsTheEthPart() public {
+        _warpDaysIn(21);
+        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), root, 1);
+        assertGt(q.ticketWei, 0);
+        vm.prank(seller); vm.expectRevert(bytes4(keccak256("E()")));
+        game.borrow(root, 1, q.principal - q.ticketWei + 1);
+    }
+
+    function testFuzz_LateBorrowPreservesCommittedTicketsAndPools(uint8 phaseSeed, bool writeSlot) public {
+        uint8 phase = uint8(bound(phaseSeed, 0, 3));
+        _seedLevel(root, 35, 400);
+        _warpDaysIn(21);
+        _etch(); LoanSeeder(address(game)).lateBorrowWindow(phase, writeSlot); _unetch();
+        uint24 target = phase == 1 ? 29 : 30;
+        uint24 writeKey = target | (writeSlot ? uint24(1 << 23) : 0);
+        uint24 readKey = target | (writeSlot ? 0 : uint24(1 << 23));
+        uint80 committed = TicketQueueStorage.owedById(address(game), readKey, root);
+        uint256 writeBefore = uint32(TicketQueueStorage.owedById(address(game), writeKey, root) >> 8);
+        uint256 livePools = uint256(vm.load(address(game), bytes32(GameSlots.PRIZE_POOLS_PACKED)));
+        uint256 pending = uint256(vm.load(address(game), bytes32(GameSlots.PRIZE_POOL_PENDING_PACKED)));
+        uint256 claimableBefore = _pool();
+        uint256 custodyBefore = address(game).balance;
+        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), root, 30);
+        uint256 tickets = phase == 0 ? q.principal / 2 / PriceLookupLib.priceForLevel(target) : 0;
+        assertTrue(q.eligible);
+        if (phase == 0) assertGt(tickets, 0);
+        assertEq(q.ticketWei, tickets * PriceLookupLib.priceForLevel(target));
+
+        vm.prank(seller); game.borrow(root, 30, q.principal - q.ticketWei);
+
+        assertEq(TicketQueueStorage.owedById(address(game), readKey, root), committed,
+            "a loan cannot change the committed ticket cohort");
+        assertEq(uint32(TicketQueueStorage.owedById(address(game), writeKey, root) >> 8),
+            writeBefore + tickets * 4, "tickets follow the active purchase level and write slot");
+        assertEq(uint256(vm.load(address(game), bytes32(GameSlots.PRIZE_POOLS_PACKED))), livePools,
+            "frozen prize pools cannot change");
+        uint256 pendingAfter = uint256(vm.load(address(game), bytes32(GameSlots.PRIZE_POOL_PENDING_PACKED)));
+        assertEq(uint128(pendingAfter), uint128(pending) + q.ticketWei - q.ticketWei / 10);
+        assertEq(pendingAfter >> 128, (pending >> 128) + q.ticketWei / 10);
+        assertEq(_pool(), claimableBefore - q.principal);
+        assertEq(address(game).balance, custodyBefore - q.principal + q.ticketWei);
+    }
+
+    function test_LateLoanUsesStethOnlyForCashPart() public {
+        _warpDaysIn(21);
+        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), root, 1);
+        uint256 cash = q.principal - q.ticketWei;
+        vm.deal(address(game), 0);
+        mockStETH.mint(address(game), q.principal);
+        uint256 stethBefore = mockStETH.balanceOf(address(game));
+        uint256 sellerBefore = mockStETH.balanceOf(seller);
+        vm.prank(seller); game.borrow(root, 1, cash);
+        assertApproxEqAbs(mockStETH.balanceOf(seller), sellerBefore + cash, 1);
+        assertApproxEqAbs(mockStETH.balanceOf(address(game)), stethBefore - cash, 1,
+            "the ticket part retains its backing in the game");
+        assertEq(game.entriesOwedView(1, seller), q.ticketWei / PriceLookupLib.priceForLevel(1) * 4);
+    }
+
+    function test_LateLoanFailedPayoutRollsBackTicketsAndPools() public {
+        RejectLoanEth receiver = new RejectLoanEth();
+        uint32 id = _giveWalletId(address(receiver));
+        _seed(id, 400, 1, 0);
+        _warpDaysIn(21);
+        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), id, 1);
+        assertGt(q.ticketWei, 0);
+        uint256 poolsBefore = uint256(vm.load(address(game), bytes32(GameSlots.PRIZE_POOLS_PACKED)));
+        uint256 claimableBefore = _pool();
+        uint256 lenderBefore = game.claimableWinningsOf(address(sdgnrs));
+        vm.expectRevert(); receiver.borrow(address(game), 1);
+        assertEq(game.entriesOwedView(1, address(receiver)), 0);
+        assertEq(lens.loanOf(address(game), id).principal, 0);
+        assertEq(lens.loansDue(address(game), 1).length, 0);
+        assertEq(uint256(vm.load(address(game), bytes32(GameSlots.PRIZE_POOLS_PACKED))), poolsBefore);
+        assertEq(_pool(), claimableBefore);
+        assertEq(game.claimableWinningsOf(address(sdgnrs)), lenderBefore);
+    }
+
+    function test_CreditedStallDaysDelayLoanTicketThreshold() public {
+        _warpDaysIn(21);
+        assertGt(lens.previewBorrow(address(game), root, 1).ticketWei, 0);
+        _etch(); LoanSeeder(address(game)).creditStallDays(2); _unetch();
+        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), root, 1);
+        assertEq(q.ticketWei, 0);
+        uint256 before = seller.balance;
+        _borrow(root, 1);
+        assertEq(seller.balance, before + q.principal);
+    }
+
+    function test_LateLoanBelowOneTicketPaysAllCash() public {
+        _setLevel(9);
+        _seedLevel(root, 12, 60);
+        _warpDaysIn(21);
+        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), root, 10);
+        assertTrue(q.eligible);
+        assertLt(q.principal / 2, PriceLookupLib.priceForLevel(10));
+        assertEq(q.ticketWei, 0);
+        uint256 before = seller.balance;
+        _borrow(root, 10);
+        assertEq(seller.balance, before + q.principal);
+        assertEq(game.entriesOwedView(10, seller), 0);
+    }
+
+    function test_LateSmurfLoanCreditsTicketsToBorrowingAccount() public {
+        uint32 child = _child();
+        _seed(child, 400, 1, 0);
+        _warpDaysIn(21);
+        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), child, 1);
+        uint24 writeKey = uint8(uint256(vm.load(address(game), bytes32(0)))
+            >> (GameSlots.TICKET_WRITE_SLOT_OFFSET * 8)) == 0 ? 1 : uint24(1 | (1 << 23));
+        uint256 childBefore = uint32(TicketQueueStorage.owedById(address(game), writeKey, child) >> 8);
+        uint80 rootBefore = TicketQueueStorage.owedById(address(game), writeKey, root);
+        uint256 cashBefore = seller.balance;
+        vm.prank(seller); game.borrow(child, 1, q.principal - q.ticketWei);
+        assertEq(seller.balance, cashBefore + q.principal - q.ticketWei);
+        assertEq(uint32(TicketQueueStorage.owedById(address(game), writeKey, child) >> 8),
+            childBefore + q.ticketWei / PriceLookupLib.priceForLevel(1) * 4);
+        assertEq(TicketQueueStorage.owedById(address(game), writeKey, root), rootBefore);
+        assertEq(lens.loanOf(address(game), child).principal, q.principal);
+        assertEq(lens.loanOf(address(game), root).principal, 0);
     }
 
     // ---------------------------------------------------------------- borrow gates
@@ -549,12 +747,12 @@ contract AccountLoansTest is RedemptionCloseTools {
     function test_VaultFallbackLendsAndKeepsConfiguredFloor() public {
         uint256 principal = lens.previewBorrow(address(game), root, 1).principal;
         _seed(2, 0, 1 ether, 0);
-        _seed(1, 0, uint128(principal / 2), uint128(2 ether + principal - principal / 2));
+        _seed(1, 0, uint128(principal / 2 + 1), uint128(2 ether + principal - principal / 2));
         vm.prank(ContractAddresses.CREATOR);
         vault.setLiquidationBuyFallback(true, 2 ether);
         assertEq(lens.previewBorrow(address(game), root, 1).lenderId, 1);
         _borrow(root, 1);
-        assertEq(game.claimableWinningsOf(address(vault)), 0);
+        assertEq(game.claimableWinningsOf(address(vault)), 1);
         assertEq(game.afkingFundingOf(address(vault)), 2 ether);
         _seize(1);
         assertEq(_payee(root), address(vault));
@@ -562,7 +760,9 @@ contract AccountLoansTest is RedemptionCloseTools {
         vault.setLiquidationBuyFallback(false, 2 ether);
         _seed(root, 0, 1 ether + 1, 0);
         uint32[] memory ids = new uint32[](1); ids[0] = root;
-        assertEq(game.harvestAcquiredAccounts(1, ids), 1 ether);
+        vm.prank(address(vault));
+        (uint256 ethOut, ) = game.sweepAccounts(ids);
+        assertEq(ethOut, 1 ether);
     }
 
     function test_FallbackDisabledAndInsufficientFloorReject() public {
@@ -600,7 +800,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         assertEq(game.walletIdentityOf(seller), root);
     }
 
-    function testFuzz_LaterAwardsRemainPermissionlesslyCollectible(bool vaultLender) public {
+    function testFuzz_LaterAwardsRemainCollectibleByAuthorizedCaller(bool vaultLender) public {
         uint32 child = _child();
         if (vaultLender) _fundVaultLender();
         _default(root);
@@ -608,9 +808,9 @@ contract AccountLoansTest is RedemptionCloseTools {
         address payee = vaultLender ? address(vault) : address(sdgnrs);
         assertEq(game.acquiredBuyer(root), lender);
         assertEq(game.acquiredBuyer(child), lender);
-        address caller = makeAddr("unrelated-sweeper");
+        address caller = vaultLender ? address(vault) : makeAddr("unrelated-sweeper");
         uint32[] memory ids = new uint32[](2); ids[0] = root; ids[1] = child;
-        vm.prank(caller); assertEq(game.harvestAcquiredAccounts(lender, ids), 0);
+        vm.prank(caller); game.sweepAccounts(ids);
         uint256 sellerBefore = seller.balance;
         for (uint24 day = 3; day <= 4; ++day) {
             _awardEth(child, 2 ether);
@@ -619,30 +819,32 @@ contract AccountLoansTest is RedemptionCloseTools {
             vm.prank(address(game)); coinflip.creditFlip(child, 10_000);
             _resolve(day, true);
             uint256 lenderBefore = game.claimableWinningsOf(payee);
-            uint256 expected = day == 3 ? 3 ether - 2 : 3 ether;
-            vm.prank(caller); assertEq(game.harvestAcquiredAccounts(lender, ids), expected);
+            // The root was explicitly seeded at zero; the created child already has its sentinel.
+            uint256 expected = day == 3 ? 3 ether - 1 : 3 ether;
+            vm.prank(caller); (uint256 ethOut, uint256 paid) = game.sweepAccounts(ids);
+            assertEq(ethOut, expected);
             assertEq(game.claimableWinningsOf(payee), lenderBefore + expected);
+            assertGt(paid, 0);
             uint256 prize = wwxrp.claimable(child);
             vm.prank(caller); assertEq(wwxrp.withdrawAcquired(child), prize);
-            vm.prank(caller); uint256 paid = coinflip.claimAcquiredCoinflips(child);
-            assertGt(paid, 0);
         }
         assertEq(seller.balance, sellerBefore);
-        assertEq(caller.balance, 0);
+        if (!vaultLender) assertEq(caller.balance, 0);
     }
 
-    function test_LaterVaultHarvestCanActuallyBeWithdrawn() public {
+    function test_LaterVaultSweepCanActuallyBeWithdrawn() public {
         uint32 child = _child();
         _fundVaultLender();
         _default(root);
         _seed(1, 0, 1, 0);
         _awardEth(child, 3 ether);
         uint32[] memory ids = new uint32[](1); ids[0] = child;
-        game.harvestAcquiredAccounts(1, ids);
+        vm.prank(address(vault));
+        game.sweepAccounts(ids);
         uint256 before = address(vault).balance + mockStETH.balanceOf(address(vault));
         vm.prank(ContractAddresses.CREATOR);
         vault.gameClaimWinnings();
-        assertEq(address(vault).balance + mockStETH.balanceOf(address(vault)), before + 3 ether - 1);
+        assertEq(address(vault).balance + mockStETH.balanceOf(address(vault)), before + 3 ether);
     }
 
     function test_SmurfSdgnrsRewardsBurnAutomaticallyWithoutDeletingAccount() public {
@@ -729,14 +931,16 @@ contract AccountLoansTest is RedemptionCloseTools {
         assertFalse(game.afkingFundingApproved(funderId, root));
     }
 
-    function test_ChildHarvestDoesNotResumeSubscription() public {
+    function test_ChildSweepDoesNotResumeSubscription() public {
         uint32 child = _child();
         uint256 seat = _grantSeat(seller);
         vm.prank(seller); game.subscribe{value: 2 ether}(child, false, false, 1, root, seat);
+        // Keep the borrowing main below the automatic-repayment threshold so this tests seizure.
+        _seed(root, 0, 0, 0);
         _default(root);
         assertEq(uint8(GameSlotKeys.subWord(address(game), child)), 0, "a main's seizure stops its smurf's run");
         uint32[] memory ids = new uint32[](1); ids[0] = child;
-        game.harvestAcquiredAccounts(2, ids);
+        game.sweepAccounts(ids);
         vm.prank(address(sdgnrs)); vm.expectRevert(); game.subscribe(child, false, false, 1, 0, 0);
     }
 
@@ -761,7 +965,8 @@ contract AccountLoansTest is RedemptionCloseTools {
         uint256 before = coin.balanceOf(seller);
         _default(root);
         assertEq(coin.balanceOf(seller), before);
-        assertEq(coinflip.claimAcquiredCoinflips(root), 1311);
+        (, uint256 flipOut) = game.sweepAccounts(_one(root));
+        assertEq(flipOut, 1311);
         (bool enabled, , uint256 carry, ) = coinflip.coinflipAutoRebuyInfoById(root);
         assertFalse(enabled);
         assertEq(carry, 0);
@@ -772,8 +977,10 @@ contract AccountLoansTest is RedemptionCloseTools {
         _coinState(child, 71, 10_000, 2);
         _default(root);
         _resolve(3, false);
-        assertEq(coinflip.claimAcquiredCoinflips(child), 71);
-        assertEq(coinflip.claimAcquiredCoinflips(child), 0);
+        (, uint256 flipOut) = game.sweepAccounts(_one(child));
+        assertEq(flipOut, 71);
+        (, flipOut) = game.sweepAccounts(_one(child));
+        assertEq(flipOut, 0);
     }
 
     function test_OperatorLosesChildApprovalAtSeizure() public {
@@ -819,15 +1026,17 @@ contract AccountLoansTest is RedemptionCloseTools {
         assertEq(_payee(root), address(vault));
     }
 
-    function test_HarvestDuplicatesConservePoolAndPayCallerNothing() public {
+    function test_SweepDuplicatesConservePoolAndPayCallerNothing() public {
         uint32 child = _child();
         _seed(child, 0, 2 ether + 1, 3 ether);
         _default(root);
         uint256 lenderBefore = game.claimableWinningsOf(address(sdgnrs));
         uint256 poolBefore = _pool();
         uint32[] memory ids = new uint32[](3); ids[0] = child; ids[1] = child; ids[2] = root;
-        assertEq(game.harvestAcquiredAccounts(2, ids), 5 ether);
-        assertEq(game.harvestAcquiredAccounts(2, ids), 0);
+        (uint256 ethOut, ) = game.sweepAccounts(ids);
+        assertEq(ethOut, 5 ether);
+        (ethOut, ) = game.sweepAccounts(ids);
+        assertEq(ethOut, 0);
         assertEq(game.claimableWinningsOf(address(sdgnrs)), lenderBefore + 5 ether);
         assertEq(_pool(), poolBefore);
     }
@@ -856,5 +1065,208 @@ contract AccountLoansTest is RedemptionCloseTools {
         assertEq(_payee(root), seller);
         assertEq(game.walletIdOf(seller), root);
         _child();
+    }
+
+    // ---------------------------------------------------------------- unified sweeps
+
+    function _one(uint32 id) private pure returns (uint32[] memory ids) {
+        ids = new uint32[](1);
+        ids[0] = id;
+    }
+
+    function test_SweepPlayerSmurfPreservesFundingAndRebuy() public {
+        uint32 child = _child();
+        _seed(child, 0, 2 ether + 1, 3 ether);
+        _coinState(child, 77, 1234, 2);
+        uint256 poolBefore = _pool();
+        uint256 mainBefore = game.claimableWinningsOf(seller);
+        uint256 flipBefore = coin.balanceOf(seller);
+        uint256 walletBefore = seller.balance;
+        vm.prank(seller);
+        (uint256 ethOut, uint256 flipOut) = game.sweepAccounts(_one(child));
+        assertEq(ethOut, 2 ether);
+        assertEq(flipOut, 77);
+        assertEq(game.claimableWinningsOf(seller), mainBefore + ethOut);
+        assertEq(coin.balanceOf(seller), flipBefore + flipOut);
+        assertEq(seller.balance, walletBefore, "ETH remains inside the game");
+        assertEq(_pool(), poolBefore);
+        (uint128 claimable, uint128 prepaid) = lens.accountBalances(address(game), child);
+        assertEq(claimable, 1);
+        assertEq(prepaid, 3 ether);
+        (bool enabled,, uint256 carry,) = coinflip.coinflipAutoRebuyInfoById(child);
+        assertTrue(enabled);
+        assertEq(carry, 1234);
+        vm.prank(seller);
+        (ethOut, flipOut) = game.sweepAccounts(_one(child));
+        assertEq(ethOut, 0);
+        assertEq(flipOut, 0);
+    }
+
+    function test_SweepPlayerRequiresSourceApprovalAndCannotRedirect() public {
+        uint32 child = _child();
+        address operator = makeAddr("sweep-operator");
+        _seed(child, 0, 2 ether + 1, 0);
+        _coinState(child, 77, 0, 2);
+        vm.prank(seller); game.setOperatorApproval(root, operator, true);
+        vm.prank(operator); vm.expectRevert(DegenerusGameStorage.NotApproved.selector);
+        game.sweepAccounts(_one(child));
+        vm.prank(seller); game.setOperatorApproval(child, operator, true);
+        uint256 mainBefore = game.claimableWinningsOf(seller);
+        vm.prank(operator);
+        game.sweepAccounts(_one(child));
+        assertEq(game.claimableWinningsOf(seller), mainBefore + 2 ether);
+        assertEq(coin.balanceOf(operator), 0);
+        assertEq(operator.balance, 0);
+        vm.prank(seller); game.setOperatorApproval(child, operator, false);
+        vm.prank(operator); vm.expectRevert(DegenerusGameStorage.NotApproved.selector);
+        game.sweepAccounts(_one(child));
+    }
+
+    function test_SweepSdgnrsFamilyPermissionlesslyAndRepeatedly() public {
+        uint32 child = _child();
+        _default(root);
+        _seed(root, 0, 2 ether + 1, 3 ether);
+        _seed(child, 0, 4 ether + 1, 5 ether);
+        _coinState(child, 77, 1234, 2);
+        uint32[] memory ids = new uint32[](3);
+        ids[0] = root; ids[1] = child; ids[2] = child;
+        uint256 mainBefore = game.claimableWinningsOf(address(sdgnrs));
+        uint256 flipBefore = coinflip.coinflipAmountById(2);
+        uint256 poolBefore = _pool();
+        address stranger = makeAddr("sweep-stranger");
+        vm.prank(stranger);
+        (uint256 ethOut, uint256 flipOut) = game.sweepAccounts(ids);
+        assertEq(ethOut, 14 ether);
+        assertEq(flipOut, 1311);
+        assertEq(game.claimableWinningsOf(address(sdgnrs)), mainBefore + ethOut);
+        assertEq(coinflip.coinflipAmountById(2), flipBefore + flipOut);
+        assertEq(_pool(), poolBefore);
+        assertEq(stranger.balance, 0);
+        assertEq(coin.balanceOf(stranger), 0);
+        vm.prank(stranger);
+        (ethOut, flipOut) = game.sweepAccounts(ids);
+        assertEq(ethOut, 0); assertEq(flipOut, 0);
+        _awardEth(child, 1 ether);
+        _coinState(child, 25, 0, 2);
+        vm.prank(stranger);
+        (ethOut, flipOut) = game.sweepAccounts(ids);
+        assertEq(ethOut, 1 ether); assertEq(flipOut, 25);
+        assertEq(game.acquiredBuyer(child), 2, "sweep preserves ownership and account");
+    }
+
+    function test_SweepVaultRequiresOwnerWrapperAndGameOnlyFlipHook() public {
+        uint32 child = _child();
+        _fundVaultLender();
+        _default(root);
+        _seed(child, 0, 2 ether + 1, 3 ether);
+        _coinState(child, 77, 1234, 2);
+        address stranger = makeAddr("vault-sweep-stranger");
+        vm.prank(stranger); vm.expectRevert(DegenerusGameStorage.NotApproved.selector);
+        game.sweepAccounts(_one(child));
+        vm.prank(stranger); vm.expectRevert();
+        coinflip.sweepAccountCoinflips(child);
+        vm.prank(stranger); vm.expectRevert(); vault.gameSweepAccounts(_one(child));
+        uint256 mainBefore = game.claimableWinningsOf(address(vault));
+        uint256 flipBefore = coin.vaultMintAllowance();
+        vm.prank(ContractAddresses.CREATOR);
+        (uint256 ethOut, uint256 flipOut) = vault.gameSweepAccounts(_one(child));
+        assertEq(ethOut, 5 ether); assertEq(flipOut, 1311);
+        assertEq(game.claimableWinningsOf(address(vault)), mainBefore + ethOut);
+        assertEq(coin.vaultMintAllowance(), flipBefore + flipOut);
+    }
+
+    function test_SweepUsesEachCurrentOwnerIncludingSeparatelySeizedChild() public {
+        uint32 child = _child();
+        _seed(child, 400, 0, 0);
+        _default(child); // child belongs to sDGNRS
+        _fundVaultLender();
+        _default(root); // main belongs to vault
+        _seed(child, 0, 1 ether + 1, 0);
+        _seed(root, 0, 2 ether + 1, 0);
+        uint32[] memory ids = new uint32[](2); ids[0] = child; ids[1] = root;
+        uint256 sdBefore = game.claimableWinningsOf(address(sdgnrs));
+        uint256 vaultBefore = game.claimableWinningsOf(address(vault));
+        vm.expectRevert(DegenerusGameStorage.NotApproved.selector);
+        game.sweepAccounts(ids);
+        assertEq(game.claimableWinningsOf(address(sdgnrs)), sdBefore, "unauthorized batch rolls back fully");
+        vm.prank(ContractAddresses.CREATOR);
+        vault.gameSweepAccounts(ids);
+        assertEq(game.claimableWinningsOf(address(sdgnrs)), sdBefore + 1 ether);
+        assertEq(game.claimableWinningsOf(address(vault)), vaultBefore + 2 ether);
+    }
+
+    function test_SweepAcquiredCarryCannotEscapePendingLoss() public {
+        uint32 child = _child();
+        _coinState(child, 71, 10_000, 2);
+        _default(root);
+        vm.warp(block.timestamp + 1 days);
+        (uint256 ethOut, uint256 flipOut) = game.sweepAccounts(_one(child));
+        assertEq(ethOut, 0); assertEq(flipOut, 71);
+        (bool enabled,, uint256 carry,) = coinflip.coinflipAutoRebuyInfoById(child);
+        assertTrue(enabled); assertEq(carry, 10_000);
+        _resolve(3, false);
+        (, flipOut) = game.sweepAccounts(_one(child));
+        assertEq(flipOut, 0, "pending loss must consume the carry");
+        (enabled,, carry,) = coinflip.coinflipAutoRebuyInfoById(child);
+        assertFalse(enabled); assertEq(carry, 0);
+    }
+
+    function test_SweepRejectsRootsInvalidIdsAndOversizedBatches() public {
+        vm.expectRevert(DegenerusGameStorage.E.selector); game.sweepAccounts(_one(root));
+        vm.expectRevert(DegenerusGameStorage.E.selector); game.sweepAccounts(_one(0));
+        vm.expectRevert(DegenerusGameStorage.E.selector); game.sweepAccounts(_one(type(uint32).max));
+        uint32[] memory ids = new uint32[](33);
+        vm.expectRevert(DegenerusGameStorage.E.selector); game.sweepAccounts(ids);
+        (uint256 ethOut, uint256 flipOut) = game.sweepAccounts(new uint32[](0));
+        assertEq(ethOut, 0); assertEq(flipOut, 0);
+        vm.expectRevert(); coinflip.sweepAccountCoinflips(root);
+    }
+
+    function test_SweepAtGameOverIncludesPrepaidAndRejectsAfterFinalSweep() public {
+        uint32 child = _child();
+        _seed(child, 0, 2 ether + 1, 3 ether);
+        _endGame();
+        uint256 mainBefore = game.claimableWinningsOf(seller);
+        vm.prank(seller);
+        (uint256 ethOut,) = game.sweepAccounts(_one(child));
+        assertEq(ethOut, 5 ether);
+        assertEq(game.claimableWinningsOf(seller), mainBefore + ethOut);
+        _etch(); LoanSeeder(address(game)).finalSweep(); _unetch();
+        vm.prank(seller); vm.expectRevert(DegenerusGameStorage.E.selector);
+        game.sweepAccounts(_one(child));
+    }
+
+    function test_SweepOrdinaryClaimableAppliesSourceCashoutCurseOnlyOnce() public {
+        uint32 child = _child();
+        vm.warp(block.timestamp + 6 days);
+        // Seed after advancing time so dailyIdx, the cashout staleness clock, advances too.
+        _seed(child, 0, 1 ether + 1, 0);
+        uint256 before = game.mintPackedOfId(child);
+        vm.prank(seller); game.sweepAccounts(_one(child));
+        uint256 after_ = game.mintPackedOfId(child);
+        assertEq((after_ >> 203) & 31, ((before >> 203) & 31) + 2);
+        vm.prank(seller); game.sweepAccounts(_one(child));
+        assertEq(game.mintPackedOfId(child), after_, "empty repeat cannot add a curse");
+    }
+
+    function testFuzz_SweepConservesBalances(uint96 winnings, uint96 prepaid, bool acquired) public {
+        uint32 child = _child();
+        if (acquired) _default(root);
+        _seed(child, 0, uint128(winnings) + 1, prepaid);
+        address payee = acquired ? address(sdgnrs) : seller;
+        uint256 mainBefore = game.claimableWinningsOf(payee);
+        uint256 poolBefore = _pool();
+        // Exercise the full batch bound with duplicates: only the first visit may debit ETH.
+        uint32[] memory ids = new uint32[](32);
+        for (uint256 i; i < ids.length; ++i) ids[i] = child;
+        vm.prank(seller);
+        (uint256 ethOut,) = game.sweepAccounts(ids);
+        uint256 expected = uint256(winnings) + (acquired ? prepaid : 0);
+        assertEq(ethOut, expected);
+        assertEq(game.claimableWinningsOf(payee), mainBefore + expected);
+        assertEq(_pool(), poolBefore);
+        (uint128 claimable, uint128 funding) = lens.accountBalances(address(game), child);
+        assertEq(claimable, 1);
+        assertEq(funding, acquired ? 0 : prepaid);
     }
 }

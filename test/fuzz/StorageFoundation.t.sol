@@ -156,6 +156,7 @@ contract StorageFoundationTest is Test {
         // Write a known value to Slot 11 via vm.store, then read back via harness getter
         uint256 sentinel11 = 0x0000000000000000000000000000000300000000000000000000000000000004;
         vm.store(address(harness), bytes32(uint256(11)), bytes32(sentinel11));
+        harness.setPrizePoolFrozen(true);
         (uint128 next11, uint128 future11) = harness.exposed_getPendingPools();
         assertEq(uint256(next11), sentinel11 & POOL_HALF, "prizePoolPendingPacked not at slot 11 (next)");
         assertEq(uint256(future11), sentinel11 >> 128, "prizePoolPendingPacked not at slot 11 (future)");
@@ -175,6 +176,7 @@ contract StorageFoundationTest is Test {
         assertEq(uint256(f), POOL_HALF, "future must hold a full uint128");
 
         harness.exposed_setPendingPools(type(uint128).max, type(uint128).max);
+        harness.setPrizePoolFrozen(true);
         (uint128 pn, uint128 pf) = harness.exposed_getPendingPools();
         assertEq(uint256(pn), POOL_HALF, "pending next must hold a full uint128");
         assertEq(uint256(pf), POOL_HALF, "pending future must hold a full uint128");
@@ -220,8 +222,8 @@ contract StorageFoundationTest is Test {
     }
 
     /// @dev A frozen add routes to the pending buffer, and the fold ADDS each half into
-    ///      its own, saturating independently, then zeroes the pending slot.
-    function testFoldAddsHalvesSaturatingAndZeroesPending() public {
+    ///      its own, saturating independently, then hides the retained pending slot.
+    function testFoldAddsHalvesSaturatingAndHidesPending() public {
         harness.exposed_setPrizePools(2 ether, 1 ether);
         harness.setPrizePoolFrozen(true);
         harness.exposed_addPrizeContribution(5 ether, 3 ether);
@@ -234,7 +236,10 @@ contract StorageFoundationTest is Test {
         (n, f) = harness.exposed_getPrizePools();
         assertEq(uint256(n), 7 ether, "the fold must add the next halves");
         assertEq(uint256(f), 4 ether, "the fold must add the future halves");
-        assertEq(harness.exposed_rawPendingPools(), 0, "the fold must zero the pending slot");
+        assertEq(harness.exposed_rawPendingPools(), uint256(5 ether) | (uint256(3 ether) << 128));
+        (uint128 pn, uint128 pf) = harness.exposed_getPendingPools();
+        assertEq(pn, 0, "folded next is no longer pending");
+        assertEq(pf, 0, "folded future is no longer pending");
 
         // A fold that would overflow a half clamps it, and leaves the other half exact.
         harness.exposed_setPrizePools(type(uint128).max, 1 ether);
@@ -319,6 +324,7 @@ contract StorageFoundationTest is Test {
     // =====================================================================
 
     function testPendingPoolPackingZero() public {
+        harness.setPrizePoolFrozen(true);
         harness.exposed_setPendingPools(0, 0);
         (uint128 n, uint128 f) = harness.exposed_getPendingPools();
         assertEq(n, 0);
@@ -326,6 +332,7 @@ contract StorageFoundationTest is Test {
     }
 
     function testPendingPoolPackingMaxNext() public {
+        harness.setPrizePoolFrozen(true);
         harness.exposed_setPendingPools(uint128(POOL_HALF), 0);
         (uint128 n, uint128 f) = harness.exposed_getPendingPools();
         assertEq(uint256(n), POOL_HALF);
@@ -333,6 +340,7 @@ contract StorageFoundationTest is Test {
     }
 
     function testPendingPoolPackingMaxFuture() public {
+        harness.setPrizePoolFrozen(true);
         harness.exposed_setPendingPools(0, uint128(POOL_HALF));
         (uint128 n, uint128 f) = harness.exposed_getPendingPools();
         assertEq(n, 0);
@@ -340,6 +348,7 @@ contract StorageFoundationTest is Test {
     }
 
     function testPendingPoolPackingMaxBoth() public {
+        harness.setPrizePoolFrozen(true);
         harness.exposed_setPendingPools(uint128(POOL_HALF), uint128(POOL_HALF));
         (uint128 n, uint128 f) = harness.exposed_getPendingPools();
         assertEq(uint256(n), POOL_HALF);
@@ -347,6 +356,7 @@ contract StorageFoundationTest is Test {
     }
 
     function testPendingPoolPackingArbitrary() public {
+        harness.setPrizePoolFrozen(true);
         harness.exposed_setPendingPools(12345, 67890);
         (uint128 n, uint128 f) = harness.exposed_getPendingPools();
         assertEq(n, 12345);

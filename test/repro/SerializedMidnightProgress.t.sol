@@ -21,6 +21,7 @@ contract SerializedMidnightProgressTest is MiddayFrozenPoolLatch {
         private returns (uint256 previousRequest, uint256 committedWord, uint48 committedRead)
     {
         vm.pauseGasMetering();
+        _giveWalletId(MINER);
         _latchMiddayAfterTarget(false);
         assertFalse(game.rngComplete(), "the requested cycle is not complete before delivery");
         _fulfillPending();

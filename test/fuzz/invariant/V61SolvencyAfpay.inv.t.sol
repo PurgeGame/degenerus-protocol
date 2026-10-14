@@ -109,13 +109,16 @@ contract V61SolvencyAfpay is DeployProtocol {
         address[] memory addrs = _unionTrackedAddrs();
         uint256 sum;
         for (uint256 i; i < addrs.length; i++) {
-            uint256 packed = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(addrs[i])), BALANCES_PACKED_SLOT))));
-            sum += uint128(packed) + (packed >> 128); // claimable low half + afking high half
+            uint32 id = game.walletIdOf(addrs[i]);
+            if (id == 0) continue;
+            uint256 packed = uint256(vm.load(address(game), keccak256(abi.encode(uint256(id), BALANCES_PACKED_SLOT))));
+            // Claimable low half above the unpooled registration sentinel, plus the afking high half.
+            sum += uint128(packed) - 1 + (packed >> 128);
         }
         assertEq(
             game.claimablePoolView(),
             sum,
-            "SOLVENCY-01: claimablePool == Sigma (claimable + afking halves) across all tracked addresses"
+            "SOLVENCY-01: claimablePool == Sigma (claimable - sentinel + afking) across all tracked addresses"
         );
     }
 
@@ -245,7 +248,7 @@ contract V61SolvencyAfpay is DeployProtocol {
         game.depositAfkingFunding{value: 30 ether}(aid_);
         _assertIdentityHolds(_singleton3(p));
         assertEq(game.afkingFundingOf(p), 30 ether, "credit: afking high half == 30 ETH");
-        assertEq(game.claimableWinningsOf(p), 0, "credit: claimable low half untouched (0)");
+        assertEq(game.claimableWinningsOf(p), 1, "credit: claimable sentinel untouched");
 
         // Debit: a Combined buy draws afking for the shortfall (pairs claimablePool -=).
         uint256 cost = _oneTicketCost();
@@ -255,7 +258,7 @@ contract V61SolvencyAfpay is DeployProtocol {
         game.purchase{value: ethSent}(0, 400, 0, bytes32(0), MintPaymentKind.Combined, false);
 
         _assertIdentityHolds(_singleton3(p));
-        assertEq(game.claimableWinningsOf(p), 0, "debit: claimable half STILL untouched (afking covered the shortfall)");
+        assertEq(game.claimableWinningsOf(p), 1, "debit: claimable sentinel untouched (afking covered the shortfall)");
     }
 
     // =========================================================================
@@ -343,7 +346,7 @@ contract V61SolvencyAfpay is DeployProtocol {
     function testSolvencyIdentityIsFalsifiable_droppedPairing() public {
         // A real SolvencyActionHandler actor (0x5A000 band) — in the union the invariant sums over.
         address actor = solvencyHandler.actors(0);
-        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(actor)), uint256(BALANCES_PACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(uint256(_aid(actor)), uint256(BALANCES_PACKED_SLOT)));
 
         // Identity holds going in (fresh deploy: pool == 0 == Σ).
         assertTrue(_identityHoldsOverUnion(), "pre: identity holds before the seeded break");
@@ -388,7 +391,7 @@ contract V61SolvencyAfpay is DeployProtocol {
         address[] memory addrs = _unionTrackedAddrs();
         for (uint256 i; i < addrs.length; i++) {
             uint256 packed = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(addrs[i])), BALANCES_PACKED_SLOT))));
-            sum += uint128(packed) + (packed >> 128);
+            sum += (uint128(packed) > 1 ? uint128(packed) - 1 : 0) + (packed >> 128);
         }
     }
 
@@ -404,7 +407,7 @@ contract V61SolvencyAfpay is DeployProtocol {
         for (uint256 i; i < extra.length; i++) {
             if (extra[i] == address(0)) continue;
             uint256 packed = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(extra[i])), BALANCES_PACKED_SLOT))));
-            sum += uint128(packed) + (packed >> 128);
+            sum += (uint128(packed) > 1 ? uint128(packed) - 1 : 0) + (packed >> 128);
         }
         address[3] memory infra = [ContractAddresses.VAULT, ContractAddresses.SDGNRS, ContractAddresses.GNRUS];
         for (uint256 i; i < 3; i++) {
@@ -413,7 +416,7 @@ contract V61SolvencyAfpay is DeployProtocol {
             for (uint256 j; j < extra.length; j++) if (extra[j] == infra[i]) dup = true;
             if (dup) continue;
             uint256 packed = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(infra[i])), BALANCES_PACKED_SLOT))));
-            sum += uint128(packed) + (packed >> 128);
+            sum += (uint128(packed) > 1 ? uint128(packed) - 1 : 0) + (packed >> 128);
         }
         assertEq(game.claimablePoolView(), sum, "focused: claimablePool == Sigma (claimable + afking halves)");
     }

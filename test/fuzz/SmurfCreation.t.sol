@@ -264,7 +264,7 @@ contract SmurfCreation is DeployProtocol {
         assertEq(owner.balance, ethBefore - price, "owner's fresh ETH paid");
         assertEq(_fixtureClaimable(owner), claimBefore);
         assertEq(_fixtureAfking(owner), afkBefore);
-        assertEq(_fixtureClaimable(key), 0, "smurf ledger empty");
+        assertEq(_fixtureClaimable(key), 1, "smurf holds only its unbacked sentinel");
         assertEq(_fixtureAfking(key), 0, "smurf AFKing empty");
     }
 
@@ -291,7 +291,7 @@ contract SmurfCreation is DeployProtocol {
         assertEq(_fixtureClaimable(owner), 1 ether - price, "owner's claimable debited");
         assertEq(_fixtureAfking(owner), afkBefore + 0.3 ether, "the ETH sent credits the owner's AFKing");
         assertEq(owner.balance, ethBefore - 0.3 ether);
-        assertEq(_fixtureClaimable(key), 0);
+        assertEq(_fixtureClaimable(key), 1);
         assertEq(_fixtureAfking(key), 0);
     }
 
@@ -305,7 +305,7 @@ contract SmurfCreation is DeployProtocol {
         (, uint32 key) = _createSmurf(owner, bytes32(0), MintPaymentKind.Combined, half);
         assertEq(owner.balance, ethBefore - half, "owner's ETH leg");
         assertEq(_fixtureClaimable(owner), 1 ether - (price - half), "owner's claimable leg");
-        assertEq(_fixtureClaimable(key), 0);
+        assertEq(_fixtureClaimable(key), 1);
         assertEq(_fixtureAfking(key), 0);
     }
 

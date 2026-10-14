@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {claimableBalance} from "../helpers/ClaimableBalance.sol";
+
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {TicketQueueStorage} from "./helpers/TicketQueueStorage.sol";
@@ -398,8 +400,8 @@ contract WwxrpIncineratorTest is DeployProtocol {
             credits++;
         }
         assertEq(credits, 1, "exactly one flip credit for the winner");
-        assertEq(game.claimableWinningsOf(winner), 0, "no ETH for the winner");
-        assertEq(game.claimableWinningsOf(winner == alice ? bob : alice), 0, "no ETH for the loser");
+        assertEq(claimableBalance(game, winner), 0, "no ETH for the winner");
+        assertEq(claimableBalance(game, winner == alice ? bob : alice), 0, "no ETH for the loser");
     }
 
     function testDrivenCenturyFireLeavesIncineratorUnresolved() public {
@@ -423,8 +425,8 @@ contract WwxrpIncineratorTest is DeployProtocol {
         (uint256 total, uint32 count) = wwxrp.incineratorInfo(100);
         assertEq(total, 400, "entries persist unresolved");
         assertEq(count, 2, "both entries persist");
-        assertEq(game.claimableWinningsOf(alice), 0, "alice uncredited");
-        assertEq(game.claimableWinningsOf(bob), 0, "bob uncredited");
+        assertEq(claimableBalance(game, alice), 0, "alice uncredited");
+        assertEq(claimableBalance(game, bob), 0, "bob uncredited");
     }
 
     // ==================== Driven-loop internals ====================

@@ -31,6 +31,7 @@ contract MinerRewardMinimum is DeployProtocol {
         _deployProtocol();
         keeper = makeAddr("minimum_keeper");
         vm.deal(keeper, 100 ether);
+        _giveWalletId(keeper);
         uint256 dayStart = ((block.timestamp - 82_620) / 1 days + 1) * 1 days + 82_620;
         vm.warp(dayStart + 1 minutes);
         vm.fee(1 gwei);

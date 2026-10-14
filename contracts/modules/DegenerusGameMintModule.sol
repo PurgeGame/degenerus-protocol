@@ -226,7 +226,7 @@ contract DegenerusGameMintModule is
     ///      Claimable: ethForLeg must be 0, deduct from claimableWinnings
     ///      Combined: ETH first (any amount ≤ cost), then claimable for rest
     ///
-    ///      SECURITY: Leaves 1 wei sentinel in claimable to prevent zeroing.
+    ///      SECURITY: Never draws the account's unbacked 1-wei claimable sentinel.
     ///      The per-player claimable/afking balances are debited here; the matching claimablePool
     ///      decrement is deferred to the caller (returned as claimableDraw) so a combined buy folds
     ///      both legs into one pool RMW.
@@ -394,6 +394,7 @@ contract DegenerusGameMintModule is
         smurfId = uint32(position);
         wallets.push(uint256(ownerId) << 160);
         mintPacked_[smurfId] = uint256(1) << BitPackingLib.SMURF_FLAG_SHIFT;
+        balancesPacked[smurfId] = 1; // the unbacked claimable sentinel, as _registerWallet seeds it
         // Append to the owner's smurf list at index `created` (its pre-increment count).
         _smurfWords[ownerId][created >> 3] |= uint256(smurfId) << ((created & 7) * 32);
         emit SmurfCreated(ownerId, smurfId);
@@ -549,16 +550,17 @@ contract DegenerusGameMintModule is
     }
 
     event LoanTaken(uint32 indexed accountId, address indexed borrower, uint32 indexed lenderId,
-        uint256 principal, uint24 dueLevel);
+        uint256 principal, uint24 dueLevel, uint256 ticketWei);
     event LoanRepaid(uint32 indexed accountId, address indexed payer, uint256 owed);
-    event AcquiredAccountHarvested(uint32 indexed accountId, uint32 indexed buyerId, uint256 ethValue);
     event AfkingWithdrew(uint32 indexed player, uint256 amount);
 
     /// @notice Borrow against the account's far-future tickets (levels `dueLevel + 2` and up),
     ///         due when the game enters `dueLevel`. Only the owner. Unrepaid by then, the lender
     ///         takes the account as a sale does: a main with its family, burning the borrower
     ///         wallet's native sDGNRS. A main with more than five smurfs cannot borrow; smurfs
-    ///         can. Pays ETH first and stETH for any shortfall.
+    ///         can. Pays ETH first and stETH for any shortfall. More than 20 days into a level's
+    ///         purchase phase, half the principal arrives as whole tickets at the live ticket
+    ///         level, priced and pooled like a ticket buy; `minEthOut` bounds the ETH part.
     function borrow(uint32 id, uint24 dueLevel, uint256 minEthOut) external {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (id == 0) id = _walletIdOf(msg.sender);
@@ -576,7 +578,11 @@ contract DegenerusGameMintModule is
         uint24 lvl = level;
         if (dueLevel <= lvl || uint256(dueLevel) + 2 > uint256(_activeTicketLevel()) + 100) revert E();
         (, uint256 principal) = _quoteLoan(id, dueLevel);
-        if (principal < LOAN_MIN_PRINCIPAL || principal < minEthOut) revert E();
+        uint24 buyLevel = _activeTicketLevel();
+        uint256 price = PriceLookupLib.priceForLevel(buyLevel);
+        uint256 ticketWei = _loanTicketWei(principal, _simulatedDayIndex(), purchaseStartDay, price,
+            jackpotPhaseFlag);
+        if (principal < LOAN_MIN_PRINCIPAL || principal - ticketWei < minEthOut) revert E();
         uint32 lender = _resolveLender(principal);
         if (lender == 0) revert Insolvent();
         uint256 index = _loansDueCount[dueLevel]++;
@@ -585,8 +591,13 @@ contract DegenerusGameMintModule is
             | (uint256(dueLevel) << LOAN_DUE_SHIFT) | (index << LOAN_INDEX_SHIFT) | (family << LOAN_FAMILY_SHIFT);
         _debitLender(lender, principal);
         claimablePool -= uint128(principal);
-        emit LoanTaken(id, borrower, lender, principal, dueLevel);
-        _payoutWithStethFallback(borrower, principal);
+        if (ticketWei != 0) {
+            _queuePurchaseEntries(id, buyLevel, uint32(ticketWei / price * (4 * QTY_SCALE)));
+            uint256 futureShare = (ticketWei * PURCHASE_TO_FUTURE_BPS) / 10_000;
+            _addPrizeContribution(uint128(ticketWei - futureShare), uint128(futureShare));
+        }
+        emit LoanTaken(id, borrower, lender, principal, dueLevel, ticketWei);
+        _payoutWithStethFallback(borrower, principal - ticketWei);
     }
 
     /// @notice Repay an open loan before the game enters its due level. Owed: principal plus 5%
@@ -628,36 +639,58 @@ contract DegenerusGameMintModule is
         emit LoanRepaid(id, msg.sender, owed);
     }
 
-    /// @dev sDGNRS pays from claimable; Vault uses claimable then its own prepaid reserve.
+    /// @dev sDGNRS pays from claimable; Vault uses claimable above its sentinel, then its own
+    ///      prepaid reserve.
     function _debitLender(uint32 buyer, uint256 amount) private {
         uint256 available = _claimableOf(buyer);
-        uint256 fromClaim = amount < available ? amount : available;
+        uint256 usable = available > 1 ? available - 1 : 0;
+        uint256 fromClaim = amount < usable ? amount : usable;
         if (buyer != VAULT_WALLET_ID) fromClaim = amount;
         _debitClaimableAndAfking(buyer, fromClaim, amount - fromClaim);
         if (fromClaim != 0) emit ClaimableSpent(buyer, fromClaim, available - fromClaim, MintPaymentKind.Internal, amount);
         if (amount > fromClaim) emit AfkingSpent(buyer, amount - fromClaim);
     }
 
-    /// @notice Bounded, permissionless collection. Pays the recorded buyer and never the caller.
-    function harvestAcquiredAccounts(uint32 buyer, uint32[] calldata ids) external returns (uint256 collected) {
+    event AccountSwept(uint32 indexed accountId, uint32 indexed mainId, uint256 ethValue, uint256 flipAmount);
+
+    /// @notice Repeatable collection of subaccount balances into their current main's reserves.
+    /// @dev No recipient override or external ETH payout. A normal smurf keeps its live prepaid
+    ///      funding; acquired accounts and ended-game smurfs also consolidate prepaid ETH.
+    function sweepAccounts(uint32[] calldata ids) external returns (uint256 ethCollected, uint256 flipCollected) {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
-        if ((buyer != VAULT_WALLET_ID && buyer != SDGNRS_WALLET_ID) || ids.length > 32) revert E();
-        if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) revert E();
+        if (ids.length > 32 || _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) revert E();
         for (uint256 i; i < ids.length; ++i) {
             uint32 id = ids[i];
             _requireAllocated(id);
-            if (_acquiredBuyer(id) != buyer) revert NotApproved();
+            uint256 element = _walletElement(id);
+            if (uint32(element >> 160) == 0) revert E();
+            uint32 mainId = _ownerWalletId(id);
+            if (mainId != SDGNRS_WALLET_ID) {
+                (, , bool authorized) = _account(id, msg.sender);
+                if (!authorized) revert NotApproved();
+            }
+            bool acquired = _acquiredRoot(id, element) != 0;
             uint256 packed = balancesPacked[id];
-            uint256 claimable = uint128(packed);
-            uint256 amount = claimable > 1 ? claimable - 1 : 0;
-            uint256 prepaid = packed >> 128;
-            if (amount + prepaid == 0) continue;
-            balancesPacked[id] = packed - amount - (prepaid << 128);
-            collected += amount + prepaid;
-            emit AcquiredAccountHarvested(id, buyer, amount + prepaid);
+            uint256 amount = uint128(packed);
+            amount = amount > 1 ? amount - 1 : 0;
+            uint256 prepaid = acquired || gameOver ? packed >> 128 : 0;
+            if (amount + prepaid != 0) {
+                balancesPacked[id] = packed - amount - (prepaid << 128);
+                _creditClaimableLogged(mainId, amount + prepaid);
+                // Preserve the source account's cashout rule when an ordinary owner extracts
+                // its winnings. No ETH leaves the Game and claimablePool is unchanged.
+                if (!acquired && amount != 0) {
+                    (bool ok, bytes memory data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(
+                        abi.encodeWithSelector(IGameAfkingModule.maybeCurse.selector, id)
+                    );
+                    if (!ok) _revertDelegate(data);
+                }
+            }
+            uint256 flipAmount = coinflip.sweepAccountCoinflips(id);
+            ethCollected += amount + prepaid;
+            flipCollected += flipAmount;
+            emit AccountSwept(id, mainId, amount + prepaid, flipAmount);
         }
-        _creditClaimableLogged(buyer, collected);
-        // Internal liability consolidation, so claimablePool does not change.
     }
 
     /// @dev Single-tx callers: the fresh-ETH portion is `msg.value`. Read here (a private fn)

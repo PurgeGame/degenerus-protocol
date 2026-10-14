@@ -43,7 +43,6 @@ contract YieldHarness is DegenerusGameJackpotModule {
         (uint128 pNext, uint128 pFuture) = _getPendingPools();
         (uint128 next, uint128 future) = _getPrizePools();
         _setPrizePools(next + pNext, future + pFuture);
-        prizePoolPendingPacked = 0;
         prizePoolFrozen = false;
     }
 
@@ -159,5 +158,13 @@ contract YieldSurplusSolvencyTest is Test {
             harness.liveObligations(),
             "contract must remain solvent after unfreeze"
         );
+    }
+
+    function testRetainedPendingDoesNotHideYieldAfterUnfreeze() public {
+        harness.callUnfreezePool();
+        vm.deal(address(harness), O + P + 100 ether);
+        harness.distributeYieldSurplus(RNG);
+        assertEq(harness.getClaimablePool(), CP + 69 ether);
+        assertEq(harness.getYieldAccumulator(), YA + 23 ether);
     }
 }

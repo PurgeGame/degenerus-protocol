@@ -249,11 +249,14 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
         // Every call's first MIN_REWARDED_GAS is unpaid. Splitting work into small calls forfeits
         // another unpaid million per call; the only thing an extra qualifying call can gain is the
         // sub-FLIP rounding below, bounded by one FLIP per paid call.
-        if (rewardEligible && !gameOver && used > MineFlipGas.MIN_REWARDED_GAS) {
+        // The stake ledger is keyed by wallet ID: a miner without one is not paid.
+        uint32 minerId = rewardEligible && !gameOver && used > MineFlipGas.MIN_REWARDED_GAS
+            ? _walletIdOf(msg.sender) : 0;
+        if (minerId != 0) {
             // Price only compensation, after work and its gas measurement are complete.
             uint256 elapsed = block.timestamp > rewardDueAt ? block.timestamp - rewardDueAt : 0;
             (uint256 cap, uint256 multiplierBps) = _minerRewardTerms(elapsed);
-            if (_minerHoldsActivePass(msg.sender)) multiplierBps <<= 1;
+            if (_minerHoldsActivePass(minerId)) multiplierBps <<= 1;
             if (lockedAtStart) multiplierBps <<= 1;
             uint256 rate = block.basefee;
             if (rate > cap) rate = cap;
@@ -262,24 +265,14 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
             // Legacy raw reward was floor(numerator * 1e18 / denominator). Preserve its
             // zero cutoff without multiplying, then pay whole FLIP with the existing minimum.
             if (numerator >= (denominator - 1) / 1e18 + 1) {
-                // The stake ledger is keyed by wallet ID. A miner without one is registered on
-                // its first bounty, after the measured work; past paid admission that bounty is
-                // dropped (no registration, no credit). Registration only appends the ordinary
-                // wallet and its forward lookup; it does not write mint history.
-                uint32 minerId = _walletIdOf(msg.sender);
-                if (minerId == 0 && wallets.length <= PAID_ADMISSION_WALLETS) {
-                    (minerId, ) = _registerWallet(msg.sender, 0);
-                }
-                if (minerId != 0) {
-                    reward = numerator / denominator;
-                    if (reward == 0) reward = 1;
-                    // Coinflip stakes are whole FLIP: a positive reward pays at least 1 FLIP,
-                    // larger rewards floor to whole FLIP. Applied after the gas measurement, so
-                    // the normalization cannot price itself. Both events report this figure;
-                    // below the daily stake cap it is exactly what Coinflip credits.
-                    coinflip.creditFlip(minerId, reward);
-                    emit MinerBounty(MINER_BOUNTY_ADVANCE, msg.sender, reward);
-                }
+                reward = numerator / denominator;
+                if (reward == 0) reward = 1;
+                // Coinflip stakes are whole FLIP: a positive reward pays at least 1 FLIP,
+                // larger rewards floor to whole FLIP. Applied after the gas measurement, so
+                // the normalization cannot price itself. Both events report this figure;
+                // below the daily stake cap it is exactly what Coinflip credits.
+                coinflip.creditFlip(minerId, reward);
+                emit MinerBounty(MINER_BOUNTY_ADVANCE, msg.sender, reward);
             }
         }
         emit MinerWork(msg.sender, uint8(first), used, reward);
@@ -295,8 +288,8 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
 
     /// @dev A deity pass, or a lazy/whale pass whose window covers the current level,
     ///      doubles the caller's bounty. Same pass test as the activity score.
-    function _minerHoldsActivePass(address miner) internal view returns (bool) {
-        uint256 packed = mintPacked_[_walletIdOf(miner)];
+    function _minerHoldsActivePass(uint32 minerId) internal view returns (bool) {
+        uint256 packed = mintPacked_[minerId];
         if (packed >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0) return true;
         uint256 passType = (packed >> BitPackingLib.WHALE_PASS_TYPE_SHIFT) & 3;
         return (passType == 1 || passType == 3)

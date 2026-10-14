@@ -236,6 +236,7 @@ contract KeeperFaucetResistance is DeployProtocol {
 
         address keeper = makeAddr("advMatch_keeper");
         vm.deal(keeper, 1000 ether);
+        _giveWalletId(keeper);
         // The day's preparation (subscriber stamp, scheduled table upkeep) and its request may take
         // more than one call; every one is paid exactly its measured-gas formula.
         uint256 pre;
@@ -325,6 +326,7 @@ contract KeeperFaucetResistance is DeployProtocol {
         // A winning bet's win box credits its own FLIP to the bettor's stake, so the sweep runs from a
         // separate address and its stake delta is the bounty alone; the gas is the same either way.
         address sweeper = makeAddr("faucet_sweeper");
+        _giveWalletId(sweeper);
         uint256 preStake = coinflip.coinflipAmount(sweeper);
         vm.recordLogs();
         vm.prank(sweeper);

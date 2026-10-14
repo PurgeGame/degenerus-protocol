@@ -399,7 +399,10 @@ contract V61RngFreezeIntact is DeployProtocol {
 
     function _prizePoolTotal() internal view returns (uint256) {
         uint256 active = uint256(vm.load(address(game), bytes32(uint256(PRIZE_POOLS_SLOT))));
-        uint256 pending = uint256(vm.load(address(game), bytes32(uint256(PRIZE_POOL_PENDING_SLOT))));
+        uint256 flags = uint256(vm.load(address(game), bytes32(GameSlots.PRIZE_POOL_FROZEN)));
+        bool frozen = uint8(flags >> (GameSlots.PRIZE_POOL_FROZEN_OFFSET * 8)) != 0;
+        uint256 pending = frozen
+            ? uint256(vm.load(address(game), bytes32(uint256(PRIZE_POOL_PENDING_SLOT)))) : 0;
         return
             (active & ((uint256(1) << 128) - 1)) +
             ((active >> 128) & ((uint256(1) << 128) - 1)) +

@@ -131,8 +131,9 @@ library MineFlipGasBounds {
     uint256 internal constant JACKPOT_PLAN_GAS = 120_000;
     uint256 internal constant JACKPOT_FINAL_GAS = 150_000;
     uint256 internal constant JACKPOT_TAIL_GAS = 180_000;
-    // Cold winner with a fresh claimable balance: 30.6k measured.
-    uint256 internal constant JACKPOT_ETH_WINNER_GAS_MAX = 37_000;
+    // Cold winner; every claimable slot holds its registration sentinel, so the credit is a
+    // nonzero write: 14.8k measured, 17.3k with a padding redraw.
+    uint256 internal constant JACKPOT_ETH_WINNER_GAS_MAX = 20_000;
     // One sampler group, as for tickets: a quadrant's first group adds 160k for its pass
     // conversion, gold arm and accounting; continuation groups are 8 x WINNER.
     uint256 internal constant JACKPOT_ETH_AWARD_CHUNK = 8;

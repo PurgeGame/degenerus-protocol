@@ -6,6 +6,7 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DeadVrfSeeder} from "../fuzz/helpers/DeadVrfSeeder.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
+import {claimableBalance} from "../helpers/ClaimableBalance.sol";
 
 /// @dev The DeadVrfEnding seeder plus the post-swap probes this repro needs. Etched only to
 ///      seed and to read; every measured call runs the production DegenerusGame runtime.
@@ -87,7 +88,7 @@ contract TerminalDrainPostSwapStarvationTest is DeployProtocol {
     }
 
     function _cohortClaimable() private view returns (uint256 sum) {
-        for (uint256 i; i < cohort.length; ++i) sum += game.claimableWinningsOf(cohort[i]);
+        for (uint256 i; i < cohort.length; ++i) sum += claimableBalance(game, cohort[i]);
     }
 
     /// @dev ETH the game holds beyond what it owes as claimable: what the final sweep takes.

@@ -104,7 +104,7 @@ contract JackpotCheckpointsTest is Test {
     }
 
     function test_TerminalQuadrantsPreserveTranscriptSharesAndLiabilities() public {
-        _terminalParity(6_700_000);
+        _terminalParity(2_000_000);
     }
     function test_ExtremeCalibrationPreservesTerminalWinners() public {
         _terminalParity(MineFlipGas.budget(9_000_000, type(uint32).max, true));
@@ -287,7 +287,7 @@ contract JackpotCheckpointsTest is Test {
             vm.cool(address(h));
             vm.cool(ContractAddresses.GAME_WHALE_MODULE);
             vm.recordLogs();
-            result = h.runDailyJackpot{gas: 10_000_000}(true, LVL, word, 6_700_000);
+            result = h.runDailyJackpot{gas: 10_000_000}(true, LVL, word, 2_000_000);
             splitTranscript = _digest(splitTranscript, vm.getRecordedLogs());
         } while (!result.done && calls++ < 8);
         assertTrue(result.done);

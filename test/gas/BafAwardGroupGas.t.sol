@@ -570,14 +570,13 @@ contract BafAwardTailProbeGas is BafAwardGroupFixture {
         (BafSchedule.Award[] memory got,) = BafSchedule.awardsOf(logs);
         assertEq(got.length, 0, "an empty slot pays nothing");
         (uint8 kind,,,) = host.bafWork();
-        assertEq(kind, 0, "the work record is deleted");
+        assertEq(kind, 0, "the work record is retired");
         (uint256 claimableAfter, uint256 futureAfter) = host.poolsProbe();
         assertEq(claimableBefore - claimableAfter, headReserve, "unfilled slots' reservation leaves claimablePool");
         assertEq(futureAfter - futureBefore, headReserve, "and returns to the pending future pool");
         uint256 levelAfter = CenturyBafScores.levelWord(address(jackpots));
         assertEq(uint64(levelAfter), uint64(levelBefore) + 1, "the bracket epoch is bumped");
-        assertEq(uint8(levelAfter >> 64), 0, "the board is emptied");
-        for (uint256 i; i < 2; ++i) assertEq(CenturyBafScores.topEntry(address(jackpots), i), 0, "board entry cleared");
+        assertEq(uint8(levelAfter >> 64), 0, "the board is emptied (its stale words stay in place)");
         assertLe(used, GasBounds.BAF_AWARD_GROUP, "the tail probe exceeds the group bound");
         _assertDeclaredFits();
     }

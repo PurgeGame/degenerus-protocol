@@ -278,24 +278,19 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
         JackpotWork storage work = jackpotWork;
         // Work of another kind or level is retired: the ending prices its own draw from the
         // pot it is handed, and a retired draw's paid quadrants already left their source.
-        if (work.kind != 0 && (work.kind != 3 || work.lvl != targetLvl)) delete jackpotWork;
+        if (work.kind != 0 && (work.kind != 3 || work.lvl != targetLvl)) _retireJackpotWork();
         if (work.kind == 0 || work.quadrant == 255) {
             if (!MineFlipGas.canRun(meter, JACKPOT_SETUP_GAS, JACKPOT_TAIL_GAS)) return (result, 0);
-            if (work.kind == 0) {
-                work.kind = 3;
-                work.lvl = targetLvl;
-                work.budget = uint128(poolWei);
-            }
-            work.quadrant = 0;
-            work.traits = _rollBoard(rngWord, _NO_QUADRANT_BAN);
-            work.finalDay = true;
+            // A staged ending (quadrant 255) keeps its pinned pot.
+            _startJackpotWork(work.kind == 0 ? uint128(poolWei) : work.budget,
+                _rollBoard(rngWord, _NO_QUADRANT_BAN), targetLvl, 3, 0, true, false);
             result.progressed = true;
             MineFlipGas.markProgress(meter);
         }
         uint256 beforePaid = work.paid;
         _resumeEth(work, rngWord, meter, result);
         paidDelta = uint256(work.paid) - beforePaid;
-        if (result.done) delete jackpotWork;
+        if (result.done) _retireJackpotWork();
         MineFlipGas.finish(meter);
     }
 
@@ -339,10 +334,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
         // quadrants debited their source and credited claimablePool in the calls that paid
         // them, and its unpaid remainder was never debited, so the fresh pricing reads pools
         // that hold that remainder exactly once.
-        if (work.kind != 0 && (work.kind != kind || work.lvl != lvl)) delete jackpotWork;
+        if (work.kind != 0 && (work.kind != kind || work.lvl != lvl)) _retireJackpotWork();
         if (work.kind == 0) {
             if (!MineFlipGas.canRun(meter, JACKPOT_SETUP_GAS, JACKPOT_TAIL_GAS)) return result;
-            _startDailyEth(work, kind, lvl, randWord);
+            _startDailyEth(kind, lvl, randWord);
             result.progressed = true;
             MineFlipGas.markProgress(meter);
         }
@@ -357,18 +352,16 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
                 _emitDailyWinningTraits(dailyIdx + 1, work.traits, lvl, randWord);
                 dailyJackpotCoinTicketsPending = true;
             }
-            delete jackpotWork;
+            _retireJackpotWork();
         }
         MineFlipGas.finish(meter);
     }
 
     /// @dev Price once. Every later quadrant debits its source and credits its
     ///      liability in the same call, including across transaction boundaries.
-    function _startDailyEth(JackpotWork storage work, uint8 kind, uint24 lvl, uint256 word) private {
-        work.kind = kind;
-        work.lvl = lvl;
+    function _startDailyEth(uint8 kind, uint24 lvl, uint256 word) private {
         uint32 traits = _rollMainTraits(word);
-        work.traits = traits;
+        bool finalDay;
         uint256 g = goldenTicket;
         if ((g >> 189) & 1 != 0 && dailyIdx > uint24((g >> 165) & 0xFFFFFF)) {
             _resolveGoldenTicket(g, traits, lvl);
@@ -377,8 +370,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
         uint256 budget;
         if (kind == 2) {
             uint8 counter = jackpotCounter;
-            bool finalDay = _isFinalJackpotDay(counter, jackpotFlags);
-            work.finalDay = finalDay;
+            finalDay = _isFinalJackpotDay(counter, jackpotFlags);
             uint256 current = _getCurrentPrizePool();
             uint256 bps = finalDay ? 10_000 : _dailyCurrentPoolBps(counter, word);
             if (!finalDay && counter != 0) bps *= 2;
@@ -406,7 +398,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
                 if (entries >= ENTRIES_PER_TICKET) dailyTicketBudgetsPacked = entries << 208;
             }
         }
-        work.budget = uint128(budget);
+        _startJackpotWork(uint128(budget), traits, lvl, kind, 0, finalDay, false);
     }
 
     /// @dev One ETH draw, rederived from the frozen leg on every call.
@@ -655,19 +647,18 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
         if (work.kind == 0) {
             if (kind == 6 && !dailyJackpotCoinTicketsPending) { result.done = true; return result; }
             if (!MineFlipGas.canRun(meter, JACKPOT_SETUP_GAS, JACKPOT_TAIL_GAS)) return result;
-            work.kind = kind;
-            work.lvl = kind == 6 ? level : level + 1;
-            // Keep same-level cohorts, unprepared buffers and Thanos scaling on the
-            // ordinary queue path. Latch once: caller gas cannot choose delivery mode.
-            work.directTickets = kind == 6 && _ticketBufferLevel(level + 1) == level + 1
-                && _snapShiftFor(level + 1) == 0;
             uint256 packed = dailyTicketBudgetsPacked;
-            work.budget = kind == 4 ? uint128(packed >> 208)
-                : uint128(uint64(packed >> (kind == 5 ? 144 : 8)));
             // Advance drains the ETH work before any ticket leg; that work records this
             // exact logical day's board before retiring. The lock keeps the tag stable
             // across checkpoints and wall-day stalls, including the final jackpot day.
-            (, work.traits,) = _foilDrawFor(uint256(dailyIdx) + 1);
+            (, uint32 traits,) = _foilDrawFor(uint256(dailyIdx) + 1);
+            // Keep same-level cohorts, unprepared buffers and Thanos scaling on the
+            // ordinary queue path. Latch once: caller gas cannot choose delivery mode.
+            _startJackpotWork(
+                kind == 4 ? uint128(packed >> 208) : uint128(uint64(packed >> (kind == 5 ? 144 : 8))),
+                traits, kind == 6 ? level : level + 1, kind, 0, false,
+                kind == 6 && _ticketBufferLevel(level + 1) == level + 1 && _snapShiftFor(level + 1) == 0
+            );
             result.progressed = true;
             MineFlipGas.markProgress(meter);
         }
@@ -695,7 +686,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
                     dailyJackpotCoinTicketsPending = false;
                     dailyTicketBudgetsPacked = 0;
                 }
-                delete jackpotWork;
+                _retireJackpotWork();
                 result.progressed = true;
                 MineFlipGas.markProgress(meter);
                 result.done = true;
@@ -716,7 +707,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
             dailyJackpotCoinTicketsPending = false;
             dailyTicketBudgetsPacked &= ~(uint256(type(uint64).max) << 8);
         }
-        delete jackpotWork;
+        _retireJackpotWork();
     }
 
     function _ticketWorkPlan(JackpotWork storage work, uint256 word)

@@ -41,6 +41,7 @@ contract StateEngineIntegrationTest is RedemptionCloseTools {
 
     function setUp() public {
         _deployProtocol();
+        _giveWalletId(MINER); // an ID-less miner runs the work unpaid
         vm.fee(1 gwei);
         mockVRF.fundSubscription(1, 1000 ether);
         vm.warp(vm.getBlockTimestamp() + 1 days);

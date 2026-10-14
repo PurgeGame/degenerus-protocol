@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {claimableBalance} from "../helpers/ClaimableBalance.sol";
+
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {Test} from "forge-std/Test.sol";
@@ -248,7 +250,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         refs[1] = _ref(0, 3, 1);
         refs[2] = _ref(0, 3, 2);
         game.claimDeadVrf(game.walletIdOf(alice), refs);
-        assertEq(game.claimableWinningsOf(alice), 3 * (perTrait / 4), "alice: 3 of trait 3's four tickets");
+        assertEq(claimableBalance(game, alice), 3 * (perTrait / 4), "alice: 3 of trait 3's four tickets");
 
         uint256[] memory one = new uint256[](1);
         one[0] = _ref(0, 3, 3);
@@ -256,7 +258,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         vm.expectRevert();
         game.claimDeadVrf(aliceId, one); // bob's ticket, not alice's
         game.claimDeadVrf(game.walletIdOf(bob), one);
-        assertEq(game.claimableWinningsOf(bob), perTrait / 4, "bob: 1 of trait 3's four tickets");
+        assertEq(claimableBalance(game, bob), perTrait / 4, "bob: 1 of trait 3's four tickets");
         uint32 bobId = game.walletIdOf(bob);
         vm.expectRevert();
         game.claimDeadVrf(bobId, one); // already claimed
@@ -265,29 +267,29 @@ contract DeadVrfEndingTest is DeployProtocol {
         two[0] = _ref(0, 200, 0);
         two[1] = _ref(0, 200, 1);
         game.claimDeadVrf(game.walletIdOf(carol), two);
-        assertEq(game.claimableWinningsOf(carol), 2 * (perTrait / 2), "carol: a whole trait's share");
+        assertEq(claimableBalance(game, carol), 2 * (perTrait / 2), "carol: a whole trait's share");
 
         one[0] = _ref(1, TLVL | (uint24(1) << 23), davePos);
         game.claimDeadVrf(game.walletIdOf(dave), one);
-        assertEq(game.claimableWinningsOf(dave), (pot * 450) / total, "dave: the average for 4.5 entries");
+        assertEq(claimableBalance(game, dave), (pot * 450) / total, "dave: the average for 4.5 entries");
         uint32 daveId = game.walletIdOf(dave);
         vm.expectRevert();
         game.claimDeadVrf(daveId, one); // owed zeroed
 
         one[0] = _ref(1, TLVL, erinPos);
         game.claimDeadVrf(game.walletIdOf(erin), one);
-        assertEq(game.claimableWinningsOf(erin), (pot * 200) / total, "erin: the average for 2 entries");
+        assertEq(claimableBalance(game, erin), (pot * 200) / total, "erin: the average for 2 entries");
 
         one[0] = _ref(2, foilDay & 1, foilIdx);
         game.claimDeadVrf(game.walletIdOf(frank), one);
-        assertEq(game.claimableWinningsOf(frank), (pot * 1600) / total, "frank: the average for a foil pack");
+        assertEq(claimableBalance(game, frank), (pot * 1600) / total, "frank: the average for a foil pack");
         uint32 frankId = game.walletIdOf(frank);
         vm.expectRevert();
         game.claimDeadVrf(frankId, one); // pack word zeroed
 
-        uint256 paid = game.claimableWinningsOf(alice) + game.claimableWinningsOf(bob)
-            + game.claimableWinningsOf(carol) + game.claimableWinningsOf(dave)
-            + game.claimableWinningsOf(erin) + game.claimableWinningsOf(frank);
+        uint256 paid = claimableBalance(game, alice) + claimableBalance(game, bob)
+            + claimableBalance(game, carol) + claimableBalance(game, dave)
+            + claimableBalance(game, erin) + claimableBalance(game, frank);
         assertLe(paid, pot, "never more than the pot");
         assertLt(pot - paid, 16, "only rounding dust left");
         (,,,,, uint256 left) = _state();
@@ -316,7 +318,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         duplicate[0] = _ref(1, TLVL, id);
         duplicate[1] = duplicate[0];
         vm.expectRevert(); game.claimDeadVrf(daveId, duplicate);
-        assertEq(game.claimableWinningsOf(dave), 0, "duplicate batch rolls back atomically");
+        assertEq(claimableBalance(game, dave), 0, "duplicate batch rolls back atomically");
         uint24[3] memory keys = [TLVL | (uint24(1) << 23), TLVL, TLVL | (uint24(1) << 22)];
         uint256[3] memory weights = [uint256(300), 500, 700];
         uint256 paid;
@@ -324,7 +326,7 @@ contract DeadVrfEndingTest is DeployProtocol {
             refs[0] = _ref(1, keys[i], id);
             game.claimDeadVrf(daveId, refs);
             paid += pot * weights[i] / total;
-            assertEq(game.claimableWinningsOf(dave), paid);
+            assertEq(claimableBalance(game, dave), paid);
             vm.expectRevert(); game.claimDeadVrf(daveId, refs);
         }
         (,,,,,uint256 left) = _state();

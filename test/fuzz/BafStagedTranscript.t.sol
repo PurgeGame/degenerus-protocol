@@ -535,11 +535,11 @@ abstract contract BafTranscriptFixture is DeployProtocol {
         r.bafLogs = h;
         if (mode == MODE_ONE_CALL && _expectBaf()) assertEq(r.bafCalls, 1, "a wide allowance pays every award in one call");
 
-        // Completion: the record is cleared, the bracket closed, and only the residue moved pools.
+        // Completion: the record is retired (only `kind` is cleared; the other fields are stale
+        // and never read), the bracket closed, and only the residue moved pools.
         {
-            (uint256 w0, uint256 w1) = host.btWorkRaw();
-            assertEq(w0, 0, "jackpotWork word 0 cleared");
-            assertEq(w1, 0, "jackpotWork word 1 cleared");
+            (,,,,, uint8 kindDone,) = host.btWork();
+            assertEq(kindDone, 0, "jackpotWork retired");
         }
         if (_expectBaf()) {
             _assertBracketClosed(b0, st.consDay);
@@ -995,11 +995,13 @@ abstract contract BafTranscriptFixture is DeployProtocol {
         assertEq(b.resolvedDay, consDay, "the resolution day stays at the consolidation day");
     }
 
-    /// @dev After the last group: `finalizeBaf` cleared the board and bumped the epoch.
+    /// @dev After the last group: `finalizeBaf` emptied the board (length only) and bumped the epoch.
     function _assertBracketClosed(Bracket memory b0, uint24 consDay) internal view {
         Bracket memory b = _bracket();
         assertEq(b.levelWord, uint256(uint64(b0.levelWord)) + 1, "finalizeBaf bumps the epoch, empties the board");
-        for (uint256 i; i < 2; ++i) assertEq(b.top[i], bytes32(0), "finalizeBaf clears every board word");
+        assertEq(uint8(b.levelWord >> 64), 0, "finalizeBaf resets the board length");
+        // Every read is bounded by the length, so the lanes stay in place, stale and invisible.
+        for (uint256 i; i < 2; ++i) assertEq(b.top[i], b0.top[i], "finalizeBaf leaves the stale board lanes in place");
         assertEq(b.resolvedDay, consDay, "the resolution day stays at the consolidation day");
     }
 

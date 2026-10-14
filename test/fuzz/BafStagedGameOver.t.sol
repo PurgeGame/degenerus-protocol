@@ -60,7 +60,7 @@ contract BafStagedGameOverTest is BafBracketFixture {
             halves[k] = host.whalePassesOf(first[k]);
             bool seen;
             for (uint256 j; j < k; ++j) if (first[j] == first[k]) seen = true;
-            if (!seen) creditedSum += credits[k];
+            if (!seen) creditedSum += credits[k] - 1;
         }
         assertEq(creditedSum, groupCredit, "the paid winners hold the group's credits");
 
@@ -75,10 +75,8 @@ contract BafStagedGameOverTest is BafBracketFixture {
         host.terminal(9_000_000);
         _assertNoBafAward(vm.getRecordedLogs());
         BafStageHost.WorkView memory cleared = host.workView();
-        assertEq(cleared.kind, 0, "record deleted at the latch");
-        assertEq(cleared.paid, 0);
-        assertEq(cleared.traits, 0);
-        assertEq(cleared.winner, 0);
+        w.kind = 0;
+        assertEq(abi.encode(cleared), abi.encode(w), "latch retires the kind and retains the payload");
         assertEq(host.liabilities(), poolBefore - inFlight, "claimablePool releases exactly work.paid");
         vm.expectRevert(bytes4(keccak256("E()")));
         host.daily(9_000_000);

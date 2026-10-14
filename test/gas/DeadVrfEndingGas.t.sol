@@ -253,7 +253,7 @@ contract DeadVrfClaimGas is DeployProtocol {
         uint256 used = beforeGas - gasleft() + intrinsic;
         emit log_named_uint("DEAD_VRF_COLD_256_TRAIT_CLAIM_INCLUDING_INTRINSIC", used);
         assertLt(used, 11_500_000);
-        assertEq(game.claimableWinningsOf(OWNER), expectedClaim);
+        assertEq(game.claimableWinningsOf(OWNER), expectedClaim + 1, "the claim plus the registration sentinel");
         assertGt(expectedClaim, 0, "the measured call must pay the owner");
         vm.expectRevert();
         game.claimDeadVrf(ownerId, refs);

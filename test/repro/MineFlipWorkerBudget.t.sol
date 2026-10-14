@@ -200,6 +200,8 @@ contract BudgetBoundedEngine {
 contract MineFlipDecimatorBudgetTest is Test {
     BudgetDecimatorFixture private host;
     uint24 private constant LVL = 5;
+    /// @dev Every wallet ID starts with an unbacked 1-wei claimable sentinel.
+    uint256 private constant SENTINEL = 1;
     function setUp() public {
         vm.warp(uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621);
         vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
@@ -221,7 +223,7 @@ contract MineFlipDecimatorBudgetTest is Test {
         }
         assertEq(host.queue(), 0);
         assertEq(host.roundOf(LVL).phase, 3);
-        assertEq(host.balanceOf(address(0xA11CE)), 16.5 ether);
+        assertEq(host.balanceOf(address(0xA11CE)), 16.5 ether + SENTINEL);
         assertEq(host.passesOf(address(0xA11CE)), 6);
         assertGt(calls, 1);
     }
@@ -254,14 +256,14 @@ contract MineFlipDecimatorBudgetTest is Test {
         MineFlipGas.Result memory result = host.runDecimatorWork(100_000);
         assertFalse(result.progressed);
         assertEq(host.roundOf(LVL).paid, 0);
-        assertEq(host.balanceOf(address(0xA11CE)), 0);
+        assertEq(host.balanceOf(address(0xA11CE)), SENTINEL);
         assertEq(host.passesOf(address(0xA11CE)), 0);
         result = host.runDecimatorWork(400_000);
         assertTrue(result.done);
         assertEq(result.rewardBasis, 1);
         assertEq(host.roundOf(LVL).phase, 3);
         assertEq(host.queue(), 0);
-        assertEq(host.balanceOf(address(0xA11CE)), 16.5 ether);
+        assertEq(host.balanceOf(address(0xA11CE)), 16.5 ether + SENTINEL);
         assertEq(host.passesOf(address(0xA11CE)), 6);
         assertEq(host.reserved() + host.future(), 30 ether);
     }

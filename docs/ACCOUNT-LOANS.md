@@ -10,7 +10,9 @@ The borrower picks the due level X, from the next level up to the level that kee
 | 2 → 20 | linear, 10% → 5% |
 | 20 → 100 | linear, 5% → 2% |
 
-`rate(d) = 1000 − (d − 2)·500/18` bps for d ≤ 20, else `500 − (d − 20)·300/80`. The quote has no randomness. The principal must be at least 0.05 ETH and at least `minEthOut`. Printed tickets and children contribute nothing. Payment is ETH, with stETH covering any shortfall in the Game's ETH balance; a failed payment reverts the whole borrow. The borrower keeps the account, its balances and its play while the loan is open, except that a main with an open loan cannot create smurfs.
+`rate(d) = 1000 − (d − 2)·500/18` bps for d ≤ 20, else `500 − (d − 20)·300/80`. The quote has no randomness. The principal must be at least 0.05 ETH, and the ETH part at least `minEthOut`. Printed tickets and children contribute nothing. Payment is ETH, with stETH covering any shortfall in the Game's ETH balance; a failed payment reverts the whole borrow.
+
+A loan taken in the purchase phase more than 20 days after it began (`purchaseStartDay`; credited stall days do not count) pays half its principal, rounded down to whole tickets, as tickets at the live ticket level instead of ETH. Those tickets are priced at that level and pooled like a ticket buy (90% next pool, 10% future pool), with no affiliate, quest or activity credit. The loan's principal, interest and repayment are unchanged: the borrower owes on the whole amount. Jackpot-phase loans are always all ETH. The borrower keeps the account, its balances and its play while the loan is open, except that a main with an open loan cannot create smurfs.
 
 ## Repayment
 
@@ -22,7 +24,11 @@ The amount owed goes to the lender's game claimable. `msg.value` pays first; the
 
 ## Seizure
 
-The daily request that enters level X arms the seizure of every unpaid loan due at X. The mining engine runs it next, ahead of the wait for the VRF word and every consumer of it (`MinerAction.SeizeLoans`), in bounded chunks that resume from a cursor. Each seizure is the old sale:
+The daily request that enters level X arms the settlement of every unpaid loan due at X. The mining engine runs it next, ahead of the wait for the VRF word and every consumer of it (`MinerAction.SeizeLoans`), in bounded chunks that resume from a cursor.
+
+First, automatic repayment. If the borrowing account's own claimable (above its 1-wei sentinel) plus its prepaid AFKing funding covers the full-term amount `principal × (1 + 5%·T)`, that amount moves to the lender's claimable, claimable first and then AFKing. The loan closes with `LoanRepaid` (payer = the account's payee), and the borrower keeps everything else. Only that account's slot counts, never its main's or siblings'. A borrower who prefers to default withdraws before X. An account already acquired by a lender (a smurf whose main was seized) is never auto-repaid.
+
+Otherwise the account is seized. Each seizure is the old sale:
 
 - The lender takes the account. A main takes its existing children, which keep their tickets and records. A child seized on its own earlier keeps its own lender.
 - For a main, the borrower wallet's entire native sDGNRS balance is burned for no payout, and the wallet's default gameplay ID is cleared. Redeem before the due level to keep redemption value. Already-submitted redemption claims stay with the account.
@@ -36,14 +42,14 @@ Terminal handling outranks seizure: at liveness or game over, unpaid loans are n
 
 ## Integration
 
-- `Lens.previewBorrow(game, id, dueLevel)` returns account, lender ID, eligibility (every gate but the caller's ownership), face value and principal. `Lens.loanOf(game, id)` returns the open loan and the amount owed at the current level. `Lens.loansDue(game, X)` lists the accounts due at X, in seizure order; once the game has entered X the list is history.
-- Events: `LoanTaken(accountId, borrower, lenderId, principal, dueLevel)` and `LoanRepaid(accountId, payer, owed)` from the Mint module; `LoanSeized(accountId, lenderId)` from the Advance module. A deity seizure also emits the pass's `Transfer`.
+- `Lens.previewBorrow(game, id, dueLevel)` returns account, lender ID, eligibility (every gate but the caller's ownership), face value, principal and `ticketWei`, the part of the principal a borrow now would pay as tickets. `Lens.loanOf(game, id)` returns the open loan and the amount owed at the current level. `Lens.loansDue(game, X)` lists the accounts due at X, in settlement order; once the game has entered X the list is history.
+- Events: `LoanTaken(accountId, borrower, lenderId, principal, dueLevel, ticketWei)` (`ticketWei` = the part paid as tickets) and `LoanRepaid(accountId, payer, owed)` from the Mint module (a manual repayment) or the Advance module (an automatic one at X); `LoanSeized(accountId, lenderId)` from the Advance module. A deity seizure also emits the pass's `Transfer`.
 - `walletIdOf(address)` returns the current default gameplay ID; a main seizure clears it and later gameplay can register a replacement. `walletIdentityOf(address)` is permanent and does not reset.
 - `resolveAccount(id, caller)` resolves current payee and authorization. Raw wallet-table keys are historical metadata on acquired roots, not spending authority. `Lens.walletOfId` returns the current payee.
 - `acquiredBuyer(id)` returns the lender that seized the account (zero if not acquired). Child ownership follows at most two links.
-- `harvestAcquiredAccounts(buyerId, ids)` accepts at most 32 acquired IDs for buyer 1 (Vault) or 2 (sDGNRS). Anyone can call; the caller receives nothing. It moves available claimable ETH and prepaid funding into the buyer's main game balance without changing `claimablePool`. Collection stays available for later awards; ordinary prize resolution never traverses the family.
+- `sweepAccounts(ids)` accepts at most 32 subaccount IDs (smurfs or acquired accounts, never a main) and pays each one's current owner. sDGNRS-owned IDs are permissionless; anything else needs the current payee or an operator approved for that ID. The Vault sweeps through `Vault.gameSweepAccounts(ids)`. It moves available claimable ETH (keeping the 1-wei sentinel) into the owner's main game balance without changing `claimablePool`. Acquired accounts, and every account after game over, also move their prepaid funding. Settled FLIP goes to the payee. Acquired accounts also give up their auto-rebuy carry once caught up and unfrozen. Collection stays available for later awards; ordinary prize resolution never traverses the family. Unclaimed prizes (bingo, foil, whale pass, AFKing FLIP and so on) have permissionless claims that credit the account, after which a sweep collects them.
 - Swept ETH becomes usable in the existing buyer paths: sDGNRS counts its main game claimable as redemption backing; the Vault can withdraw through `gameClaimWinnings`, and DGVE burns can pull the balance automatically. The final game-over sweep deadline still applies.
-- Token collection is separate: `Coinflip.claimAcquiredCoinflips(id)` and `WWXRP.withdrawAcquired(id)` fix the recipient to the buyer. Collected FLIP follows protocol-receiver handling. sDGNRS pool rewards earned by sDGNRS-owned accounts burn automatically.
+- `WWXRP.withdrawAcquired(id)` fixes the recipient to the buyer. Swept FLIP follows protocol-receiver handling: sDGNRS's stakes onto its next flip as backing, and the Vault's becomes its mint allowance. sDGNRS pool rewards earned by sDGNRS-owned accounts burn automatically.
 - `Vault.setLiquidationBuyFallback(enabled, floorWei)` controls future Vault lending. sDGNRS retains 1 ETH of game claimable; the Vault keeps its configured floor across claimable and prepaid funding.
 
 ## Redemptions
@@ -60,4 +66,4 @@ No existing slot moves.
 
 ## Verification
 
-`test/fuzz/AccountLoans.t.sol` covers valuation, gates, repayment, lenders, payout and the ported sale behaviours through borrow-then-default. `test/fuzz/LoanSeizure.t.sol` drives real level transitions, chunked seizure, terminal precedence and deity passes. `test/gas/LoanSeizureGas.t.sol` measures the cold per-loan seizure cost against its admission bound.
+`test/fuzz/AccountLoans.t.sol` covers valuation, gates, repayment, lenders, payout and the ported sale behaviours through borrow-then-default. `test/fuzz/LoanSeizure.t.sol` drives real level transitions, chunked seizure, automatic repayment, terminal precedence and deity passes. `test/gas/LoanSeizureGas.t.sol` measures the cold per-loan seizure and automatic-repayment costs against their admission bound.

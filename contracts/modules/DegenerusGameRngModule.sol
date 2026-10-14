@@ -188,9 +188,7 @@ contract DegenerusGameRngModule is DegenerusGameRngUtils {
         // A failed request rolls back this swap, queue resets and any credit charge.
         _sealRngWriteBuffer();
         rngRequestDay = 0;
-        rngGapApplied = false;
         _setRngRequestActive(false);
-        _setRngSessionPublished(false);
         rngWordCurrent = RNG_WORD_WAITING;
         rngRequestTime = uint48(block.timestamp);
         _rearmRngRetry();

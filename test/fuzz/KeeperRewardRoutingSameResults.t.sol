@@ -71,6 +71,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
 
         ffk = new FFKeyHarness();
         keeper = makeAddr("routing_keeper");
+        _giveWalletId(keeper);
         vm.deal(keeper, 100_000 ether);
         vm.deal(address(game), 5_000_000 ether);
     }
@@ -380,7 +381,8 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
                 "afkingSnapshot: afkingFundings[i] == afkingFundingOf(players[i])"
             );
             // Non-vacuity: the batched values track the seeded balances (not a constant zero).
-            assertEq(claimables[i], seededClaim[i], "afkingSnapshot non-vacuity: claimables[i] tracks the seeded balance");
+            // An unseeded wallet still carries the 1 wei registration sentinel.
+            assertEq(claimables[i], seededClaim[i] == 0 ? 1 : seededClaim[i], "afkingSnapshot non-vacuity: claimables[i] tracks the seeded balance");
             assertEq(afkingFundings[i], seededFund[i], "afkingSnapshot non-vacuity: afkingFundings[i] tracks the seeded funding");
             if (claimables[i] > 0) sawNonZeroClaim = true;
             if (afkingFundings[i] > 0) sawNonZeroFund = true;

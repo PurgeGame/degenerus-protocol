@@ -93,7 +93,11 @@ contract DecimatorJackpotHarness is DegenerusGameDecimatorModule, WalletSeed {
     function ownerSlot(uint256 index) external view returns (address) { return _walletKey(decGeneratedOwners[index]); }
     function registerWallet(address owner, bool) external returns (uint32) { return _seedWallet(owner); }
     function walletIdOf(address owner) external view returns (uint32) { return _walletIdOf(owner); }
-    function balance(address owner) external view returns (uint256) { return _claimableOf(_walletIdOf(owner)); }
+    /// @dev Claimable above the registration sentinel.
+    function balance(address owner) external view returns (uint256) {
+        uint256 c = _claimableOf(_walletIdOf(owner));
+        return c == 0 ? 0 : c - 1;
+    }
     function passes(address owner) external view returns (uint256) { return _halfPassesOf(owner); }
     function pools() external view returns (uint256, uint256, uint256) {
         return (_getCurrentPrizePool(), _getFuturePrizePool(), claimablePool);
@@ -599,8 +603,26 @@ contract DecimatorJackpotIntegrationTest is Test {
         vm.recordLogs();
         _daily(WORD, 3_000_000);
         h.unlock();
-        for (uint256 i; h.round(LVL).phase == 1 && i < 1000; ++i) h.runDecimatorWork(700_000);
-        assertEq(h.round(LVL).phase, 2, "inspect retained entries before completion");
+        // Stop with every entry sampled but unranked: a call that would also rank (and then pay
+        // every winner) is rolled back and the same state retried with less gas.
+        // A rolled-back call's logs are discarded, so the field check sees each receipt once.
+        Vm.Log[] memory kept = vm.getRecordedLogs();
+        uint256 allowance = 700_000;
+        for (uint256 i; h.round(LVL).phase == 1 && i < 200; ++i) {
+            uint256 snap = vm.snapshotState();
+            h.runDecimatorWork(allowance);
+            Vm.Log[] memory got = vm.getRecordedLogs();
+            if (h.round(LVL).phase != 1) {
+                assertTrue(vm.revertToState(snap));
+                assertGt(allowance, 400_000, "no allowance stops before ranking");
+                allowance -= 10_000;
+            } else {
+                vm.deleteStateSnapshot(snap);
+                kept = _concat(kept, got);
+            }
+        }
+        assertEq(h.round(LVL).phase, 1, "inspect retained entries before ranking");
+        assertGt(h.round(LVL).winners, 0);
         for (uint8 i; i < h.round(LVL).winners; ++i) {
             DegenerusGameLens.DecWinner memory node = lens.decWinnerAt(address(h), LVL, i);
             uint256 raw = h.node(i);
@@ -612,7 +634,13 @@ contract DecimatorJackpotIntegrationTest is Test {
                 WORD, LVL, uint64(raw)))) & ~uint256(type(uint64).max)) | uint64(raw));
         }
         _settle(1_000_000);
-        _assertField(401, WORD, vm.getRecordedLogs());
+        _assertField(401, WORD, _concat(kept, vm.getRecordedLogs()));
+    }
+
+    function _concat(Vm.Log[] memory a, Vm.Log[] memory b) private pure returns (Vm.Log[] memory c) {
+        c = new Vm.Log[](a.length + b.length);
+        for (uint256 i; i < a.length; ++i) c[i] = a[i];
+        for (uint256 i; i < b.length; ++i) c[a.length + i] = b[i];
     }
 
     function testFuzz_SharedHeapMatchesIndependentFieldAndConservesPool(uint8 population, uint256 word) public {

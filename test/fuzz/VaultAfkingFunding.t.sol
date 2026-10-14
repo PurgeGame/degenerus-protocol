@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {DegenerusVault} from "../../contracts/DegenerusVault.sol";
+import {claimableBalance} from "../helpers/ClaimableBalance.sol";
 
 /// @title VaultAfkingFunding — the vault's prepaid afking ETH is vault reserve, moved only by the owner.
 ///
@@ -142,13 +143,14 @@ contract VaultAfkingFunding is DeployProtocol {
             mockStETH.transfer(address(0xdead), st);
         }
 
-        uint256 owedV = game.claimableWinningsOf(ContractAddresses.VAULT) + game.afkingFundingOf(ContractAddresses.VAULT);
-        uint256 owedS = game.claimableWinningsOf(ContractAddresses.SDGNRS) + game.afkingFundingOf(ContractAddresses.SDGNRS);
-        uint256 owedG = game.claimableWinningsOf(ContractAddresses.GNRUS) + game.afkingFundingOf(ContractAddresses.GNRUS);
+        uint256 owedV = claimableBalance(game, ContractAddresses.VAULT) + game.afkingFundingOf(ContractAddresses.VAULT);
+        uint256 owedS = claimableBalance(game, ContractAddresses.SDGNRS) + game.afkingFundingOf(ContractAddresses.SDGNRS);
+        uint256 owedG = claimableBalance(game, ContractAddresses.GNRUS) + game.afkingFundingOf(ContractAddresses.GNRUS);
         assertGe(owedV, 3 ether, "harness: the vault's afking survives to the sweep");
         assertGe(owedS, 5 ether, "harness: sDGNRS's afking survives to the sweep");
         assertGe(owedG, 7 ether, "harness: GNRUS's afking survives to the sweep");
 
+        // Backed obligations only: each sink's 1-wei claimable sentinel is not ETH the game holds.
         uint256 total = address(game).balance;
         uint256 third = (total - owedV - owedS - owedG) / 3;
         uint256 v0 = ContractAddresses.VAULT.balance;

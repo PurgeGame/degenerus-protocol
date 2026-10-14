@@ -92,6 +92,13 @@ contract AfkingFamilyLiquidationTest is RedemptionCloseTools {
         assertTrue(q.eligible, "borrow eligible");
         vm.prank(seller);
         game.borrow(id, due, q.principal);
+        // A borrower whose own balances cover the full-term amount auto-repays at the due level,
+        // so withdraw the account's prepaid funding to default.
+        uint256 prepaid = uint256(vm.load(address(game), GameSlotKeys.balances(id))) >> 128;
+        if (prepaid != 0) {
+            vm.prank(seller);
+            game.withdrawAfkingFunding(id, prepaid);
+        }
         vm.etch(address(game), seeder.code);
         WriteTrimSeeder(address(game)).seizeDue(due);
         vm.etch(address(game), gameRuntime);

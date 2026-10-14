@@ -268,7 +268,7 @@ interface IDegenerusGameMintModule {
     function raiseSmurfBaseAllowance(uint32 mainId, uint16 newBase) external;
     function borrow(uint32 id, uint24 dueLevel, uint256 minEthOut) external;
     function repay(uint32 id) external payable;
-    function harvestAcquiredAccounts(uint32 buyer, uint32[] calldata ids) external returns (uint256);
+    function sweepAccounts(uint32[] calldata ids) external returns (uint256 ethCollected, uint256 flipCollected);
 
 
 

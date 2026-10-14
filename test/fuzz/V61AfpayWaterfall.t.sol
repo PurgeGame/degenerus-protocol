@@ -461,7 +461,9 @@ contract V61AfpayWaterfall is DeployProtocol {
         uint256 high = packed >> 128;
         uint256 newPacked = (high << 128) | uint128(amount);
         vm.store(address(game), slot, bytes32(newPacked));
-        _bumpClaimablePool(int256(amount) - int256(oldLow));
+        uint256 oldLiability = oldLow > 1 ? oldLow - 1 : 0;
+        uint256 newLiability = amount > 1 ? amount - 1 : 0;
+        _bumpClaimablePool(int256(newLiability) - int256(oldLiability));
     }
 
     /// @dev Seed `who`'s afking (high half) to `amount`, preserve the claimable low half, keep the pool.
@@ -487,12 +489,15 @@ contract V61AfpayWaterfall is DeployProtocol {
     }
 
     /// @dev Total prize pool the buy's prizeContribution lands in: the active prizePoolsPacked (slot 2,
-    ///      [future:128 | next:128]) PLUS the pending prizePoolPendingPacked (slot 11) — a contribution
+    ///      [future:128 | next:128]) PLUS the pending prizePoolPendingPacked (slot 11) while frozen — a contribution
     ///      goes to exactly one (active when !prizePoolFrozen, pending when frozen), so the sum captures it
     ///      regardless of the freeze state.
     function _prizePoolTotal() internal view returns (uint256) {
         uint256 active = uint256(vm.load(address(game), bytes32(uint256(PRIZE_POOLS_SLOT))));
-        uint256 pending = uint256(vm.load(address(game), bytes32(uint256(PRIZE_POOL_PENDING_SLOT))));
+        uint256 flags = uint256(vm.load(address(game), bytes32(GameSlots.PRIZE_POOL_FROZEN)));
+        bool frozen = uint8(flags >> (GameSlots.PRIZE_POOL_FROZEN_OFFSET * 8)) != 0;
+        uint256 pending = frozen
+            ? uint256(vm.load(address(game), bytes32(uint256(PRIZE_POOL_PENDING_SLOT)))) : 0;
         uint256 halfMask = (uint256(1) << 128) - 1;
         uint256 sum = (active & halfMask) + ((active >> 128) & halfMask);
         sum += (pending & halfMask) + ((pending >> 128) & halfMask);

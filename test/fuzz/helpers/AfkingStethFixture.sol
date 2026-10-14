@@ -68,8 +68,9 @@ contract AfkingStethHost is DegenerusGame, WalletSeed {
         sub.subStreakLatch = 9;
         if (prepaid != 0) _creditAfkingValue(source == address(0) ? id : sourceId, prepaid);
         if (claimable != 0) {
-            _creditClaimable(id, claimable);
-            claimablePool += uint128(claimable);
+            // The argument includes the unbacked 1-wei sentinel seeded at registration.
+            _creditClaimable(id, claimable - 1);
+            claimablePool += uint128(claimable - 1);
         }
     }
 

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+
+import {claimableBalance} from "../helpers/ClaimableBalance.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
@@ -183,7 +185,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
             "Unfrozen: live future should decrease after winning resolve");
 
         // Player should have claimable ETH
-        uint256 postClaimable = game.claimableWinningsOf(player);
+        uint256 postClaimable = claimableBalance(game, player);
         assertGt(postClaimable, 0, "Unfrozen: player should have claimable from winning bet");
 
         // Unfrozen conservation: live pool debit == player claimable
@@ -300,7 +302,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         _injectLootboxRngWord(index, word);
 
         // Pre-resolve balances.
-        uint256 preClaimable = game.claimableWinningsOf(player);
+        uint256 preClaimable = claimableBalance(game, player);
         uint256 preClaimablePool = _readClaimablePool();
         uint256 preFlip = coin.balanceOf(player);
         uint256 preWwxrp = wwxrp.balanceOf(player);
@@ -362,7 +364,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         // Tier-1 byte-identical assertions.
         uint256 flipDelta = coin.balanceOf(player) - preFlip;
         uint256 wwxrpDelta = wwxrp.balanceOf(player) - preWwxrp;
-        uint256 claimableDelta = game.claimableWinningsOf(player) - preClaimable;
+        uint256 claimableDelta = claimableBalance(game, player) - preClaimable;
         uint256 claimablePoolDelta = _readClaimablePool() - preClaimablePool;
 
         assertEq(flipDelta, expectedFlipMint,
@@ -471,7 +473,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
 
         // Capture activity BEFORE resolving -- degeneretteBetInfo zeroes after resolve.
         uint16 activity = DQ.activity(game.degeneretteBetInfo(index, betId));
-        uint256 preClaimable = game.claimableWinningsOf(player);
+        uint256 preClaimable = claimableBalance(game, player);
 
 
         vm.recordLogs();
@@ -490,7 +492,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
             _replayRunningPoolCap(rawPayouts, perTicket, smallPool);
 
         // (a) byte-identical total ETH credited.
-        uint256 claimableDelta = game.claimableWinningsOf(player) - preClaimable;
+        uint256 claimableDelta = claimableBalance(game, player) - preClaimable;
         assertEq(claimableDelta, expectedEthCredited,
             "Tier-2: ETH credited == Sum of per-spin capped shares against the running pool");
 
@@ -563,11 +565,11 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         uint256 snap = vm.snapshotState();
 
         // --- Run A: resolve BOTH in ONE call (the cross-bet batch under test) ---
-        uint256 preA = game.claimableWinningsOf(player);
+        uint256 preA = claimableBalance(game, player);
         vm.recordLogs();
         _resolveCohort();
 
-        uint256 ethCreditedOneCall = game.claimableWinningsOf(player) - preA;
+        uint256 ethCreditedOneCall = claimableBalance(game, player) - preA;
         // Two bets resolved -> two DegeneretteResolved, two PayoutCapped (one spin each).
         (uint256 resolvedCount, uint256 cappedCount) = _countResolvedAndCapped(bet1, bet2);
         assertEq(resolvedCount, 2, "two bets resolved -> two DegeneretteResolved (per-bet unit)");
@@ -577,7 +579,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         // --- Run B: revert to the snapshot, resolve the SAME two bets in TWO calls ---
         // (the per-betId baseline: one box per bet, resolved one at a time).
         vm.revertToState(snap);
-        uint256 preB = game.claimableWinningsOf(player);
+        uint256 preB = claimableBalance(game, player);
 
         // The walk-unit budget is now a gas allowance (60d31f775): the starved first call gets the
         // smallest allowance that resolves any bet, which admits bet1 and refuses bet2.
@@ -588,7 +590,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         _resolveCohort();
         assertEq(_betPacked(bet2), 0, "Run B call 2: bet2 resolved");
 
-        uint256 ethCreditedTwoCalls = game.claimableWinningsOf(player) - preB;
+        uint256 ethCreditedTwoCalls = claimableBalance(game, player) - preB;
 
         // The resolution-batch-invariant: batching two same-index bets in ONE call
         // equals resolving them in TWO calls (per-betId box, never pooled). A
@@ -744,9 +746,9 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         // only difference between the two runs is the game-over state the guard checks.
         uint256 snap = vm.snapshotState();
 
-        uint256 preClaimable = game.claimableWinningsOf(player);
+        uint256 preClaimable = claimableBalance(game, player);
         _resolveCohort();
-        uint256 ethCreditedPreGo = game.claimableWinningsOf(player) - preClaimable;
+        uint256 ethCreditedPreGo = claimableBalance(game, player) - preClaimable;
         assertGt(
             ethCreditedPreGo,
             0,
@@ -772,7 +774,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         );
 
         // --- Phase 4: the engine must NOT settle the pending bet post-game-over ---
-        uint256 preClaimablePostGo = game.claimableWinningsOf(player);
+        uint256 preClaimablePostGo = claimableBalance(game, player);
         assertEq(preClaimablePostGo, 0, "precondition: no claimable yet post-revert");
         assertGt(
             game.degeneretteBetInfo(index, betId),
@@ -787,7 +789,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
         vm.recordLogs();
         game.mineFlip(0);
         assertEq(_countTopic(vm.getRecordedLogs(), DQ.RESOLVED_SIG), 0, "the terminal step resolves no pending bet");
-        assertEq(game.claimableWinningsOf(player), 0, "the terminal step credits the bettor nothing");
+        assertEq(claimableBalance(game, player), 0, "the terminal step credits the bettor nothing");
     }
 
     // =========================================================================

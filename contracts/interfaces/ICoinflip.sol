@@ -43,7 +43,8 @@ uint8 constant RECORD_KIND_BUY = 3;
 uint8 constant RECORD_KIND_DICE_RUN = 4;
 
 interface ICoinflip {
-    function claimAcquiredCoinflips(uint32 id) external returns (uint256);
+    /// @notice Game-only collection after the Game authorizes the source account's sweep.
+    function sweepAccountCoinflips(uint32 id) external returns (uint256);
     /// @notice Emitted whenever a player's coinflip claim-state changes (claimable + carry + claim
     ///         cursor), so off-chain consumers can reconstruct valuation from logs without an eth_call.
     /// @param player The player whose claim-state changed.

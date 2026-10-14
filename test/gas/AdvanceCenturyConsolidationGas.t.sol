@@ -882,8 +882,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         assertEq(calls, (positions + BAF_GROUP - 1) / BAF_GROUP, "one call per group");
         uint256 levelAfter = CenturyBafScores.levelWord(address(jackpots));
         assertEq(uint64(levelAfter), uint64(levelBefore) + 1, "the last group bumps the bracket epoch");
-        assertEq(uint8(levelAfter >> 64), 0, "and empties the board");
-        for (uint256 i; i < 4; ++i) assertEq(CenturyBafScores.topEntry(address(jackpots), i), 0, "board entry cleared");
+        assertEq(uint8(levelAfter >> 64), 0, "and empties the board (its stale words stay in place)");
         (uint256 claimableAfter, uint256 futureAfter, uint256 pendingAfter) = host.poolsProbe();
         assertEq(claimableAfter, claimableBefore, "award groups pay from the reservation");
         assertEq(futureAfter, futureBefore, "a fully filled schedule returns no residue");

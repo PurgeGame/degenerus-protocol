@@ -20,7 +20,11 @@ contract RetiredJackpotHarness is DegenerusGameJackpotModule, WalletSeed {
         for (uint8 i; i < 32; ++i) deityBySymbol[i] = _seedWallet(deity);
         _setTicketBufferLevel(retired ? 3 : 1);
     }
-    function credited(address player) external view returns (uint256) { return _claimableOf(_walletIdOf(player)); }
+    /// @dev Backed credit only: the registration sentinel (1 wei) is not a payout.
+    function credited(address player) external view returns (uint256) {
+        uint256 balance = _claimableOf(_walletIdOf(player));
+        return balance > 1 ? balance - 1 : 0;
+    }
 }
 
 contract RetiredTicketReadersTest is Test {

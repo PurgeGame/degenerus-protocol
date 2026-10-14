@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {claimableBalance} from "../helpers/ClaimableBalance.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
@@ -159,7 +160,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         // Seed the live future prize pool so the winning ETH payout is solvent.
         _seedFuturePrizePool(10_000 ether);
 
-        uint256 preClaimable = game.claimableWinningsOf(player);
+        uint256 preClaimable = claimableBalance(game, player);
         assertEq(preClaimable, 0, "no claimable before resolve");
 
         // Land the word and resolve it from an unrelated caller (permissionless, post-unlock)
@@ -171,7 +172,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
         // The bet resolved (queue word marked processed) and the winnings landed wholly in claimable.
         assertEq(game.degeneretteBetInfo(INDEX, betId), 0, "winning bet resolved");
         assertTrue(_betProcessed(INDEX, betId), "winning bet resolved");
-        uint256 postClaimable = game.claimableWinningsOf(player);
+        uint256 postClaimable = claimableBalance(game, player);
         assertGt(
             postClaimable,
             preClaimable,

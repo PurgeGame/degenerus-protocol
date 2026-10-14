@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {claimableBalance} from "../helpers/ClaimableBalance.sol";
+
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -331,7 +333,7 @@ contract DecimatorLegEndingIdleTest is RedemptionCloseTools {
         assertEq(coinflip.coinflipAmount(keeper) - before, reward, "the bounty is credited to the keeper's stake");
         if (used > MineFlipGas.MIN_REWARDED_GAS) assertGt(reward, 0, "sampled work past the unpaid first million is paid");
         else assertEq(reward, 0, "work inside the unpaid first million is unpaid, whatever its outcome");
-        assertEq(game.claimableWinningsOf(winner), 0, "zero quota has no ETH credit");
+        assertEq(claimableBalance(game, winner), 0, "zero quota has no ETH credit");
     }
 
     /// @dev Once liveness triggers the read-consumer stage is closed and the ending owns the chain:
@@ -340,24 +342,24 @@ contract DecimatorLegEndingIdleTest is RedemptionCloseTools {
     ///      holds up the end.
     function test_legIdlesDuringLiveness() public {
         assertTrue(game.livenessTriggered(), "fixture: liveness triggered");
-        uint256 before = game.claimableWinningsOf(winner);
+        uint256 before = claimableBalance(game, winner);
         uint256 poolBefore = game.claimablePoolView();
         assertEq(game.nextMinerAction(), 1, "the ending owns the engine (MinerAction.Terminal), not the Decimator");
         (MineFlipGas.Result memory result,) = _runDecWorker(5_000_000);
         assertFalse(result.progressed); assertFalse(result.done); assertEq(result.rewardBasis, 0);
-        assertEq(game.claimableWinningsOf(winner), before, "no credit once liveness triggers");
+        assertEq(claimableBalance(game, winner), before, "no credit once liveness triggers");
         assertEq(game.claimablePoolView(), poolBefore, "the reservation stays reserved for the sweep");
     }
 
     function test_legIdlesAfterGameOver() public {
         _over();
-        uint256 before = game.claimableWinningsOf(winner);
+        uint256 before = claimableBalance(game, winner);
         assertTrue(game.nextMinerAction() != 12, "the engine never selects the Decimator after game over");
         // An idle worker settles nothing and moves nothing.
         (MineFlipGas.Result memory result, uint256 gasUsed) = _runDecWorker(5_000_000);
         assertFalse(result.progressed); assertFalse(result.done); assertEq(result.rewardBasis, 0);
         emit log_named_uint("idle decimator leg gas", gasUsed);
-        assertEq(game.claimableWinningsOf(winner), before, "no credit after game over");
+        assertEq(claimableBalance(game, winner), before, "no credit after game over");
     }
 
     function test_SweepDoesNotWaitForPendingBattle() public {
@@ -387,7 +389,7 @@ contract DecimatorLegEndingIdleTest is RedemptionCloseTools {
             vm.etch(address(game), realCode);
         }
         assertTrue(swept, "sweep ran with a battle queued");
-        assertEq(game.claimableWinningsOf(winner), 0, "the unsettled battle credits nothing");
+        assertEq(claimableBalance(game, winner), 0, "the unsettled battle credits nothing");
     }
 
 }

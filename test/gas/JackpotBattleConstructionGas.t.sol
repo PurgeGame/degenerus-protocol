@@ -131,6 +131,8 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
         tableCode = type(CrapsBattle).runtimeCode;
         vm.warp(100 days + 82_620 + 1 hours);
         paidProbe = new BattlePaidMinerProbe();
+        // Only a miner with a wallet ID is paid.
+        _giveWalletId(MINER);
     }
 
     function _seed(uint256 target, uint8 shape) private {

@@ -264,7 +264,8 @@ contract SubscriberAfkingNativeGasTest is DeployProtocol {
         assertLe(used, GasBounds.SUBSCRIBER_WHALE_GAS + GasBounds.SUBSCRIBER_TAIL_GAS,
             "whale action exceeds saved atomic envelope");
         assertLe(used, STEP_GAS_TARGET);
-        assertEq(host.claimableOf(ContractAddresses.SDGNRS), 1_600 ether, "all100 paid passes bought");
+        // Plus the 1-wei registration sentinel.
+        assertEq(host.claimableOf(ContractAddresses.SDGNRS), 1_600 ether + 1, "all100 paid passes bought");
         uint256 purchaseLogs;
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {

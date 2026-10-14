@@ -57,10 +57,10 @@ export async function assertSolvencyInvariant(game, steth) {
 }
 
 /**
- * Assert that claimablePool >= sum of individual claimableWinnings for given players.
+ * Assert that claimablePool >= sum of individual credited claimable for given players.
  *
- * Used to verify the aggregate pool is at least as large as the sum of per-player
- * credits (it may be larger due to 1-wei sentinels).
+ * Every registered account holds a 1-wei claimable sentinel from registration that sits outside
+ * claimablePool and is never paid, so each player's credited claimable is its balance minus 1.
  *
  * @param {Contract} game - DegenerusGame contract instance
  * @param {string[]} players - Array of player addresses to check
@@ -70,7 +70,7 @@ export async function assertClaimablePoolConsistency(game, players) {
   let sumWinnings = 0n;
   for (const p of players) {
     const w = await game.claimableWinningsOf(p);
-    sumWinnings += w;
+    sumWinnings += w > 0n ? w - 1n : 0n;
   }
   expect(claimablePool).to.be.gte(
     sumWinnings,

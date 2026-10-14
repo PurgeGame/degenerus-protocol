@@ -5,6 +5,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {IsDGNRS} from "../../contracts/interfaces/IsDGNRS.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
+import {claimableBalance} from "../helpers/ClaimableBalance.sol";
 
 /// @dev Etched over the game only to seed a claimable balance, then the real runtime is restored.
 contract ClaimableSeeder is DegenerusGame, WalletSeed {
@@ -73,7 +74,7 @@ contract PostGameOverShortfall is DeployProtocol {
         vm.prank(alice);
         game.claimWinnings(0, 4 ether);
         assertEq(alice.balance, 4 ether, "the ETH that exists was not paid");
-        assertEq(game.claimableWinningsOf(alice), 6 ether, "the rest did not stay claimable");
+        assertEq(claimableBalance(game, alice), 6 ether, "the rest did not stay claimable");
     }
 
     /// @notice An stETH loss that leaves sDGNRS custodying less than its reserved redemption value

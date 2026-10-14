@@ -6,6 +6,7 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
+import {claimableBalance} from "../helpers/ClaimableBalance.sol";
 
 /// @notice Coinflip surface mirror (interface-only) so the submit FLIP leg (settled backing read
 ///         + backing withdraw) is mockable without importing the coinflip contract. With
@@ -216,7 +217,7 @@ contract RedemptionLootboxPayableForward is RedemptionCloseTools {
         // Direct half lands as a game-claimable credit; the full rolled value reaches the game
         // (seed ETH as msg.value across both legs, the remainder as stETH pulls).
         assertEq(
-            game.claimableWinningsOf(player),
+            claimableBalance(game, player),
             ethDirect,
             "direct half must credit the claimant's game claimable"
         );
@@ -242,7 +243,7 @@ contract RedemptionLootboxPayableForward is RedemptionCloseTools {
         assertEq(uint256(owed), 0, "the claim settled rather than parking");
 
         assertEq(
-            game.claimableWinningsOf(player),
+            claimableBalance(game, player),
             ethDirect,
             "direct half must credit the claimant's game claimable"
         );

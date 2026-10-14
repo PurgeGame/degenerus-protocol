@@ -162,8 +162,10 @@ contract GoldenTicketFoilHarness is DegenerusGameFoilPackModule, WalletSeed {
         return _bucketOwnerAt(lvl, traitId, i);
     }
 
-    function claimableOf(address who) external view returns (uint256) {
-        return _claimableOf(_walletIdOf(who));
+    /// @dev Backed winnings: excludes the 1-wei registration sentinel every wallet carries.
+    function claimableOf(address who) external view returns (uint256 b) {
+        b = _claimableOf(_walletIdOf(who));
+        if (b != 0) --b;
     }
 
     function whalePassOf(address who) external view returns (uint256) {

@@ -358,7 +358,7 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
     ///      and half as lootbox tickets or, above the claim threshold, whale-pass halves; a small
     ///      scatter award is all ETH or all tickets, the leg alternating by round and by rank.
     ///      `work.paid` tracks the reserved ETH not yet credited; the last group returns what no
-    ///      candidate took to the pending future pool, closes the bracket and deletes the work
+    ///      candidate took to the pending future pool, closes the bracket and retires the work
     ///      record. The game-over latch releases the reservation instead.
     function runBafAwards(uint256 word, uint256 allowance, uint8[3] calldata traits)
         external returns (MineFlipGas.Result memory result)
@@ -411,7 +411,7 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
             uint256 residue = work.paid;
             if (residue != 0) _releaseBafReserve(residue);
             jackpots.finalizeBaf(lvl);
-            delete jackpotWork;
+            _retireJackpotWork();
             result.done = true;
             result.progressed = true;
             MineFlipGas.markProgress(meter);

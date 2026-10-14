@@ -231,7 +231,7 @@ contract V62RedemptionReentrancy is RedemptionCloseTools {
         // GAME (seedEth as msg.value, the remainder as stETH pulls across the two legs).
         assertEq(
             game.claimableWinningsOf(address(attacker)),
-            ethDirect,
+            ethDirect + 1,
             "V62-03 L1: direct half must credit the claimant's game claimable"
         );
         assertEq(

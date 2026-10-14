@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {claimableBalance} from "../helpers/ClaimableBalance.sol";
+
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
@@ -8,6 +10,7 @@ import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @dev Initial conditions only: a funded first jackpot day with already-materialized
 /// ticket owners. No settlement or request is performed under this runtime.
@@ -115,6 +118,8 @@ contract DailyJackpotCommitmentFreezeTest is DeployProtocol {
     }
 
     function _pending() private view returns (uint256 next, uint256 future) {
+        uint256 flags = uint256(vm.load(address(game), bytes32(GameSlots.PRIZE_POOL_FROZEN)));
+        if (uint8(flags >> (GameSlots.PRIZE_POOL_FROZEN_OFFSET * 8)) == 0) return (0, 0);
         uint256 packed = uint256(vm.load(address(game), bytes32(uint256(11))));
         return (uint128(packed), packed >> 128);
     }
@@ -230,30 +235,30 @@ contract DailyJackpotCommitmentFreezeTest is DeployProtocol {
         for (uint256 q; q < 4; ++q) {
             address currentOwner = _owner(0, q);
             address earlyOwner = _owner(1, q);
-            uint256 credited = game.claimableWinningsOf(currentOwner);
+            uint256 credited = claimableBalance(game, currentOwner);
             uint256 mainOwed = _level5Entries(currentOwner);
             // Cohort-1 owners hold 128 seeded level-5 entries; early-bird awards stay queued.
             uint256 earlyOwed = game.entriesOwedView(5, earlyOwner);
             _expectLeg(credited, eth[q], ethState, "ETH recipient must match committed board and exact share");
             _expectLeg(mainOwed, mainEntries[q], mainState, "main tickets must belong to committed current-level owners");
             _expectLeg(earlyOwed, earlyEntries[q], earlyState, "early tickets must belong to committed next-level owners");
-            assertEq(game.claimableWinningsOf(earlyOwner), 0, "early cohort cannot receive current-level ETH");
+            assertEq(claimableBalance(game, earlyOwner), 0, "early cohort cannot receive current-level ETH");
             assertEq(game.entriesOwedView(4, currentOwner), 0, "daily awards queue at the next level");
             digest = keccak256(abi.encode(digest, currentOwner, credited, mainOwed, earlyOwner, earlyOwed));
             for (uint256 cohort; cohort < 2; ++cohort) {
                 address other = address(uint160(0x2000 + cohort * 16 + q));
-                assertEq(game.claimableWinningsOf(other), 0, "unselected paid owner received ETH");
+                assertEq(claimableBalance(game, other), 0, "unselected paid owner received ETH");
                 assertEq(_level5Entries(other), cohort == 1 ? 128 : 0, "unselected paid owner received tickets");
             }
         }
         for (uint256 lvl = 4; lvl <= 5; ++lvl) {
             for (uint256 base = 0x3000; base <= 0x4000; base += 0x1000) {
                 address other = address(uint160(base + lvl));
-                assertEq(game.claimableWinningsOf(other), 0, "uncommitted hero selected an ETH owner");
+                assertEq(claimableBalance(game, other), 0, "uncommitted hero selected an ETH owner");
                 assertEq(_level5Entries(other), lvl == 5 ? 128 : 0, "uncommitted hero selected a ticket owner");
             }
         }
-        assertEq(game.claimableWinningsOf(ATTACKER), 0, "late buyer cannot join committed ETH cohort");
+        assertEq(claimableBalance(game, ATTACKER), 0, "late buyer cannot join committed ETH cohort");
         assertEq(game.entriesOwedView(5, ATTACKER), 0, "late buyer cannot join committed prize cohort");
     }
 

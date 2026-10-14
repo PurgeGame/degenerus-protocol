@@ -53,6 +53,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
+        _giveWalletId(KEEPER);
     }
 
     /// @dev The pin and the deploy order agreeing is the whole ballgame: FLIP authorizes an

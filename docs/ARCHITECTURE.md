@@ -483,6 +483,7 @@ for dilution and timing, and `SdgnrsCenturyRecycle` for the accounting tests.
 
 - Game/module layouts agree; pinned delegatecall targets match their interfaces.
 - Credited ETH/stETH obligations remain covered under the stated external-asset assumptions.
+- Every allocated wallet ID, protocol IDs included, starts with a 1-wei claimable sentinel outside `claimablePool`. No path pays it out, so `claimablePool` equals the sum over IDs of (claimable − 1 + prepaid), and no credit in metered work writes an empty balance slot. Only the final game-over sweep takes it, at most 3 wei for the protocol sinks.
 - Token supply/backing/virtual allowances reconcile without treating them as interchangeable.
 - No double settlement, recipient substitution, duplicate ticket materialization or lost resume state.
 - Entropy-dependent processing has the documented freeze boundaries; caller gas may select a safe checkpoint, never a committed outcome.

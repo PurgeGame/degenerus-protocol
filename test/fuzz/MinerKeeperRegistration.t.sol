@@ -9,10 +9,8 @@ import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 
 /// @title MinerKeeperRegistration -- the keeper bounty is credited by wallet ID
-/// @notice A keeper without a wallet ID is registered on its first positive bounty, after the
-///         measured work, and paid by that ID. Past paid admission the bounty is dropped: the
-///         work still runs, nothing registers, nothing is credited and nothing reverts. A call
-///         whose reward floors to zero, and every terminal call, registers nobody.
+/// @notice mineFlip never registers its caller. A keeper with a wallet ID is paid by that ID; a
+///         keeper without one runs the same work unpaid, and nothing reverts.
 /// @dev One real daily advance is prepared in setUp (by a separate preparer) and replayed from a
 ///      snapshot, so each case runs the same paid work with a different keeper or wallet table.
 contract MinerKeeperRegistration is DeployProtocol {
@@ -116,32 +114,23 @@ contract MinerKeeperRegistration is DeployProtocol {
     }
 
     // ---------------------------------------------------------------------
-    // (a) An ID-less keeper earning a positive bounty is registered and paid by ID
+    // (a) An ID-less keeper's paid-size work runs unpaid and unregistered
     // ---------------------------------------------------------------------
 
-    function test_IdlessKeeperRegisteredOnFirstBounty() public {
+    function test_IdlessMinerIsNeitherPaidNorRegistered() public {
         vm.revertToState(snapshot);
         assertEq(game.walletIdOf(keeper), 0, "fixture: keeper starts without an ID");
         uint256 lengthBefore = _walletsLength();
-        uint32 expectedId = uint32(lengthBefore);
-        uint256 laneBefore = _lane(expectedId);
 
         Outcome memory o = _mine(keeper);
 
-        assertGt(o.used, MineFlipGas.MIN_REWARDED_GAS, "fixture: paid work");
-        assertGt(o.reward, 0, "positive bounty");
-        assertEq(o.registrations, 1, "exactly one WalletRegistered");
-        assertEq(o.registeredOwner, keeper, "the keeper registered");
-        assertEq(o.registeredId, expectedId, "ID = prior table length");
-        assertEq(_walletsLength(), lengthBefore + 1, "one table push");
-        _assertIdTruth(keeper, expectedId);
-        assertEq(o.bounties, 1, "MinerBounty emitted");
-        assertEq(o.bounty, o.reward, "MinerBounty and MinerWork agree");
-        assertEq(o.stakeEvents, 1, "one Coinflip credit");
-        assertEq(o.stakeId, expectedId, "credited by the new ID");
-        assertEq(o.stakeAmount, o.reward, "credited amount is the bounty");
-        assertEq(_lane(expectedId) - laneBefore, o.reward, "stake lane of the ID moved by the bounty");
-        assertEq(coinflip.coinflipAmount(keeper), o.reward, "address view resolves the same lane");
+        assertGt(o.used, MineFlipGas.MIN_REWARDED_GAS, "fixture: paid-size work ran");
+        assertEq(o.reward, 0, "MinerWork reports a zero reward");
+        assertEq(o.bounties, 0, "no MinerBounty");
+        assertEq(o.registrations, 0, "mineFlip registers nobody");
+        assertEq(o.stakeEvents, 0, "nothing credited");
+        assertEq(game.walletIdOf(keeper), 0, "keeper still has no ID");
+        assertEq(_walletsLength(), lengthBefore, "table unchanged");
     }
 
     // ---------------------------------------------------------------------
@@ -234,16 +223,10 @@ contract MinerKeeperRegistration is DeployProtocol {
         for (uint256 i; i < 16 && !game.rngLocked(); ++i) {
             address caller = address(uint160(0xC0FFEE00 + i));
             Outcome memory o = _mine(caller);
-            if (o.used <= MineFlipGas.MIN_REWARDED_GAS) {
-                sawUnpaid = true;
-                assertEq(o.registrations, 0, "unpaid call registers nobody");
-                assertEq(game.walletIdOf(caller), 0, "unpaid caller has no ID");
-            } else {
-                // A paid preparation call registers its caller like any other bounty.
-                assertEq(o.registrations, 1, "paid call registers its caller");
-                lengthBefore += 1;
-            }
-            assertEq(_walletsLength(), lengthBefore, "only paid calls grow the table");
+            if (o.used <= MineFlipGas.MIN_REWARDED_GAS) sawUnpaid = true;
+            assertEq(o.registrations, 0, "mineFlip registers nobody");
+            assertEq(game.walletIdOf(caller), 0, "the caller has no ID");
+            assertEq(_walletsLength(), lengthBefore, "table unchanged");
         }
         assertTrue(sawUnpaid, "non-vacuity: a call measured inside the unpaid million");
     }

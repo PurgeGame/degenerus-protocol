@@ -17,6 +17,7 @@ OWNER	_subCursor	modules/GameAfkingModule.sol	runSubscriberWork persists the adv
 OWNER	_subOpenCursor	modules/GameAfkingModule.sol	_runAfkingWork persists the monotonic box-section cursor
 HELPER	_subscribers	storage/DegenerusGameStorage.sol	Packed physical ID helpers and logical membership root; AFKing owns insertion, section changes and removal
 OWNER	balancesPacked	DegenerusGame.sol	claimWinnings/withdrawAfkingFunding debit a player's claimable/afking halves inline (byte-identical to the storage helpers) paired with a claimablePool debit
+OWNER	balancesPacked	modules/DegenerusGameAdvanceModule.sol	_autoRepayLoan debits the due borrower's claimable then prepaid funding, paired with the lender's internal claimable credit; leaves the claimable sentinel
 OWNER	balancesPacked	modules/DegenerusGameMintModule.sol	_processMintPayment debits claimable and afking from one packed snapshot; preserves the low-half sentinel and checks high-half sufficiency; _purchaseForWithCached applies the matching combined claimablePool debit
 HELPER	balancesPacked	storage/DegenerusGameStorage.sol	_creditClaimable/_debitClaimable/_debitAfking/_debitClaimableAndAfking/_settleShortfallNoPool/_creditAfkingValue: the per-player packed-balance mutators every module calls
 OWNER	boonPacked	DegenerusGame.sol	NOT A STORAGE WRITE: deityBoonData declares a local uint32 boonPacked = deityBoonPacked[deity] in a view; label collision with the storage identifier
@@ -107,7 +108,6 @@ OWNER	presaleOver	modules/DegenerusGameMintModule.sol	_buyPresaleBoxFor latches 
 OWNER	prizePoolFrozen	modules/DegenerusGameAdvanceModule.sol	_freezePool/_unfreezePool own the freeze; unfreeze folds pending into live
 OWNER	prizePoolFrozen	modules/DegenerusGameGameOverModule.sol	_handleGameOverDrain clears the freeze after zeroing the live pools so _unlockRng's _unfreezePool cannot resurrect pending ETH; terminal
 OWNER	prizePoolFrozen	modules/DegenerusGameRngUtils.sol	_freezePool/_unfreezePool own the freeze; unfreeze folds pending into live
-OWNER	prizePoolPendingPacked	modules/DegenerusGameAdvanceModule.sol	_unfreezePool zeroes the pending buffer after folding it into prizePoolsPacked
 OWNER	prizePoolPendingPacked	modules/DegenerusGameGameOverModule.sol	_handleGameOverDrain zeroes the pending buffer at terminal drain (its ETH is in `available`)
 HELPER	prizePoolPendingPacked	storage/DegenerusGameStorage.sol	_setPendingPools/_addPrizeContribution (frozen branch) mutators
 OWNER	prizePoolsPacked	modules/DegenerusGameAdvanceModule.sol	_unfreezePool writes the folded live pools (saturating)
@@ -172,10 +172,9 @@ OWNER	deityRecipientBoonCount	modules/DegenerusGameBoonModule.sol	Increments the
 OWNER	foilRecord	modules/DegenerusGameFoilPackModule.sol	Four-slot exact-level-tagged pack record; buy reuse guard protects pending/matching rights, generator stores all lines, gold claim marks its consumed bit.
 OWNER	humanReadComplete	modules/GameAfkingModule.sol	Human FIFO worker certifies completion once every entry has settled; the shared RNG seal invalidates it for a fresh cohort.
 OWNER	jackpotCounter	modules/DegenerusGameJackpotModule.sol	Increments once after the daily coin/ticket leg completes; Advance resets at phase end.
-OWNER	jackpotWork	modules/DegenerusGameGameOverModule.sol	Jackpot worker owns canonical plan/cursor and quadrant accounting; terminal cutover retires only unpaid normal work and seeds its own terminal plan.
 OWNER	jackpotWork	modules/DegenerusGameJackpotModule.sol	Jackpot worker owns canonical plan/cursor and quadrant accounting; terminal cutover retires only unpaid normal work and seeds its own terminal plan. A work of another kind or level met by _runDailyJackpot or _runTicketWork is deleted before the requested draw is priced.
 OWNER	jackpotWork	modules/DegenerusGameTicketModule.sol	Ticket awards advance the jackpot worker's quadrant, winner and direct-round cursors on its behalf; the plan and budget stay the jackpot module's. The ticket module also clears directTickets (and skips a partly materialized group) when a direct-lane precondition no longer holds, so the queued path finishes the draw.
-OWNER	jackpotWork	modules/DegenerusGameJackpotDrawModule.sol	BAF consolidation arms the kind-7 award record (schedule size, reserved ETH, turbo floor flag); the award stage advances its cursor, decrements the reserved ETH per call and deletes it on the last group.
+OWNER	jackpotWork	modules/DegenerusGameJackpotDrawModule.sol	BAF consolidation arms the kind-7 award record (schedule size, reserved ETH, turbo floor flag); the award stage advances its cursor, decrements the reserved ETH per call and retires it on the last group.
 OWNER	operatorApprovals	DegenerusGame.sol	Player-controlled operator permission mapping; cannot authorize mutation of committed RNG inputs.
 OWNER	protocolBoonEntries	modules/DegenerusGameDegeneretteModule.sol	Appends pre-request weighted protocol-bet entries with exact issuer/day-ring ownership.
 OWNER	protocolBoonPools	modules/DegenerusGameBoonModule.sol	Bet placement builds the day-tagged pool; Boon settlement marks its awardedMask once on the committed day word.
@@ -194,6 +193,7 @@ OWNER	claimablePool	modules/DegenerusGameRngUtils.sol	_closeRedemptionBatch debi
 # Decimator jackpot integration (2026-10-05)
 OWNER	decBattleHeap	modules/DegenerusGameDecimatorModule.sol	Reusable top-200 entry min heap; rank swaps champion first, only Decimator settlement mutates nodes.
 OWNER	jackpotWork	modules/DegenerusGameDecimatorModule.sol	Initialization adds the single generated funding transfer to paid; the Jackpot caller must not debit funding again.
+HELPER	jackpotWork	storage/DegenerusGameStorage.sol	_retireJackpotWork clears only kind; every start path writes the whole record, so a retired leg's fields are never read
 OWNER	decPreviousStack	modules/DegenerusGameDecimatorModule.sol	Successful nonempty seal snapshots original credited aggregate once; generated entries excluded.
 OWNER	decPreviousCount	modules/DegenerusGameDecimatorModule.sol	Successful nonempty seal snapshots original count once; empty and rejected seals retain history.
 OWNER	decJackpotPlans	modules/DegenerusGameDecimatorModule.sol	Seal sets pending mode only for positive x5 references; initialize/fund once and advance generated cursor in one packed word.

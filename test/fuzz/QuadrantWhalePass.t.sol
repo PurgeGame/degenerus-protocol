@@ -266,6 +266,12 @@ contract QuadrantWhalePassTest is Test {
     /// @dev A normal jackpot day at about 42 ETH (no quarter reaches 18 ETH) and at three times
     ///      that (every quarter converts) share the 40 ETH winner targets, so conversion must
     ///      leave the ETH draw unchanged.
+    /// @dev Backed winnings: excludes the 1-wei registration sentinel every wallet carries.
+    function _backed(address who) internal view returns (uint256 b) {
+        b = h.claimableOf(who);
+        if (b != 0) --b;
+    }
+
     function test_originalEthDrawMatchesUnconvertedDraw() public {
         uint256 word = 1337;
         _seed(word, 15, 512);
@@ -278,7 +284,7 @@ contract QuadrantWhalePassTest is Test {
         Draw memory converted = _run(3 * current, word, 1, false);
         for (uint8 q; q < 4; ++q) assertGt(converted.halves[q], 0, "every quarter converts");
         bool fresh;
-        for (uint8 q; q < 4; ++q) if (h.claimableOf(converted.passWinner[q]) == 0) fresh = true;
+        for (uint8 q; q < 4; ++q) if (_backed(converted.passWinner[q]) == 0) fresh = true;
         assertTrue(fresh, "a pass recipient need not be an ETH winner");
         assertEq(converted.fingerprint, ordinary.fingerprint, "conversion preserves the original ETH draw");
     }
@@ -319,7 +325,7 @@ contract QuadrantWhalePassTest is Test {
         Draw memory d = _read(vm.getRecordedLogs());
         assertEq(d.passEvents[0], 4, "four awards without wallet deduplication");
         assertEq(h.whalePassOf(player), d.passTotal);
-        assertEq(h.claimableOf(player), d.ethTotal);
+        assertEq(_backed(player), d.ethTotal);
         // A 1,000 ETH final-day budget targets 256 + 128 + 32 winners plus the solo.
         assertEq(d.slots[0] + d.slots[1] + d.slots[2] + d.slots[3], 417);
     }

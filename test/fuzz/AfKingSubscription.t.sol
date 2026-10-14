@@ -159,6 +159,7 @@ contract AfKingSubscription is DeployProtocol {
         }
 
         address keeper = makeAddr("bounty_keeper");
+        _giveWalletId(keeper);
 
         // mineFlip composes every admitted chunk (the buy STAGE for both subscribers among them) and
         // pays ONE measured-gas reward at the end. The reward prices gas above the unpaid first 1M

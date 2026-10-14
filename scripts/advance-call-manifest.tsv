@@ -46,6 +46,9 @@ CRANK-PINNED	ICrapsEngine.settleBattle	_settlementOf	CrapsBattle.sol	BARE	test/c
 OFF-CRANK	lowlevel:call	constructor	CrapsBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
 OFF-CRANK	IVaultOwnership.isVaultOwner	setBattleCreator	JackpotBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
 OFF-CRANK	delegatecall:IGameAfkingModule.maybeCurse	_claimWinningsWithCurse	DegenerusGame.sol	BARE		claimWinnings / claimWinnings(amount) player claim path; GNRUS, sDGNRS and VAULT redemptions call it as players
+OFF-CRANK	lowlevel:delegatecall	sweepAccounts	DegenerusGame.sol	BARE		Explicit subaccount collection entry; never called by the mining engine
+OFF-CRANK	delegatecall:IGameAfkingModule.maybeCurse	sweepAccounts	modules/DegenerusGameMintModule.sol	BARE		Authorized ordinary-smurf ETH consolidation preserves the source cashout curse; no miner caller
+OFF-CRANK	ICoinflip.sweepAccountCoinflips	sweepAccounts	modules/DegenerusGameMintModule.sol	BARE		Explicit bounded account collection after source authorization; Coinflip hook is Game-only
 OFF-CRANK	IStETH.balanceOf	_payoutWithEthFallback	DegenerusGame.sol	BARE		VAULT-only claimWinningsStethFirst payout
 OFF-CRANK	lowlevel:call	_payoutWithEthFallback	DegenerusGame.sol	BARE		VAULT-only claimWinningsStethFirst payout
 OFF-CRANK	IStETH.balanceOf	_payoutWithStethFallback	modules/DegenerusGamePayoutUtils.sol	BARE		ETH-first claim payout, claimWinnings player path
@@ -297,7 +300,6 @@ OFF-CRANK	IGameCraps.resolveAccount	_accountId	JackpotBattle.sol	BARE		Pass-door
 OFF-CRANK	ICrapsEngine.customDefinition	createBattle	JackpotBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
 OFF-CRANK	IVaultOwnership.isVaultOwner	createBattle	JackpotBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
 OFF-CRANK	lowlevel:delegatecall	setAfkingFundingApproval	DegenerusGame.sol	BARE		Owner-only account-to-account funding consent dispatch; module validates both IDs and payee before writing consent. No RNG or settlement path.
-OFF-CRANK	lowlevel:delegatecall	harvestAcquiredAccounts	DegenerusGame.sol	BARE	test/fuzz/AccountLiquidation.t.sol	Permissionless bounded collection to recorded buyer only; optional semantic failures deferred, gas failures propagate, no keeper payment
 OFF-CRANK	lowlevel:delegatecall	registerWalletIdentity	DegenerusGame.sol	BARE	test/fuzz/AccountLiquidation.t.sol	Restricted registration boundary delegates to ticket module; permanent governance identity survives gameplay sale
 OFF-CRANK	lowlevel:delegatecall	withdrawAfkingFunding	DegenerusGame.sol	BARE	test/fuzz/AccountLiquidation.t.sol	Player withdrawal dispatcher moved to Mint to retain facade size margin; same authorization and payout accounting
 OFF-CRANK	lowlevel:delegatecall	raiseSmurfBaseAllowance	DegenerusGame.sol	BARE	test/fuzz/SmurfAllowance.t.sol	Vault-owner-only monotonic base grant; Mint checks DGVE ownership and changes only the main ID mint-word base lane.

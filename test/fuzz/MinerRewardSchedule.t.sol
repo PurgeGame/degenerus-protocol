@@ -17,7 +17,7 @@ contract MinerRewardScheduleHarness is DegenerusGameMinerModule {
     }
 
     function holdsPass(address miner) external view returns (bool) {
-        return _minerHoldsActivePass(miner);
+        return _minerHoldsActivePass(_walletIdOf(miner));
     }
 
     function seedPass(address miner, uint256 packed, uint24 currentLevel) external {

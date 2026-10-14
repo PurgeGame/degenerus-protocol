@@ -481,6 +481,8 @@ contract DegeneretteSweep is DeployProtocol {
 
     /// @dev Run mineFlip as `keeper`; return bets resolved, the bounty paid and the measured gas.
     function _crank(address keeper) private returns (uint256 resolved, uint256 bounty, uint256 used) {
+        // The stake ledger is keyed by wallet ID: a keeper without one does the work unpaid.
+        if (game.walletIdOf(keeper) == 0) _giveWalletId(keeper);
         vm.recordLogs();
         this.crankAtBasefee(keeper);
         Vm.Log[] memory logs = vm.getRecordedLogs();

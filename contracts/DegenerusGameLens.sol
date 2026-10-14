@@ -75,6 +75,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         bool eligible;
         uint256 face;
         uint256 principal;
+        uint256 ticketWei;
     }
 
     struct LoanInfo {
@@ -828,6 +829,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
 
     /// @notice What `borrow(id, dueLevel, ...)` would pay now and whether every gate except
     ///         the caller's ownership passes. Mirrors the game's quote and lender selection.
+    ///         `ticketWei` is the part of the principal paid as tickets; the rest is ETH.
     function previewBorrow(address game, uint32 id, uint24 dueLevel) external view returns (LoanQuote memory q) {
         q.accountId = id;
         uint256 w = _levelWord(game);
@@ -850,6 +852,16 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
             uint256 value = PriceLookupLib.priceForLevel(uint24(target)) * entries / 4;
             q.face += value;
             q.principal += value * _loanRateBps(target - cl) / 10_000;
+        }
+        {
+            uint256 o;
+            uint256 jp;
+            assembly {
+                o := purchaseStartDay.offset
+                jp := jackpotPhaseFlag.offset
+            }
+            q.ticketWei = _loanTicketWei(q.principal, GameTimeLib.currentDayIndex(),
+                uint24(w >> (o << 3)), PriceLookupLib.priceForLevel(cl), uint8(w >> (jp << 3)) != 0);
         }
         q.lenderId = _lenderMirror(game, q.principal);
         q.eligible = id > GNRUS_WALLET_ID && !over && q.lenderId != 0
@@ -879,7 +891,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Accounts with loans due at `dueLevel`, in seizure order. Once the game has
-    ///         entered `dueLevel` the list is history: those accounts were seized.
+    ///         entered `dueLevel` the list is history: those loans were repaid or seized.
     function loansDue(address game, uint24 dueLevel) external view returns (uint32[] memory ids) {
         uint256 base;
         assembly { base := _loansDueCount.slot }
@@ -935,7 +947,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         }
         (bool enabled, uint256 floorWei) = IDegenerusVaultOwner(ContractAddresses.VAULT).liquidationBuyConfig();
         uint256 vault = _sload(game, _mapSlot(uint256(VAULT_WALLET_ID), base));
-        if (enabled && uint256(uint128(vault)) + (vault >> 128) >= principal + floorWei) return VAULT_WALLET_ID;
+        if (enabled && uint256(uint128(vault)) + (vault >> 128) > principal + floorWei) return VAULT_WALLET_ID;
         return 0;
     }
 

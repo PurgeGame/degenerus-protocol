@@ -742,7 +742,8 @@ abstract contract DegenerusGameStorage {
     ///      [128:256] futurePending | [0:128] nextPending
     ///      Accumulated while prizePoolFrozen == true; applied atomically by _unfreezePool().
     ///
-    ///      SECURITY: Zeroed at freeze start (if not already frozen) and at unfreeze.
+    ///      SECURITY: Overwritten at freeze start (if not already frozen). An unfreeze folds it
+    ///      without clearing it, and `_getPendingPools` reads it as empty while unfrozen.
     ///      Accumulators grow for the length of one lock window (request -> day seal);
     ///      a jackpot day re-freezes at its own request.
     uint256 internal prizePoolPendingPacked;
@@ -1528,11 +1529,14 @@ abstract contract DegenerusGameStorage {
             uint256(next);
     }
 
+    /// @dev Empty while unfrozen: an unfreeze folds the buffer into the live pools without
+    ///      clearing it, and the next freeze overwrites it whole.
     function _getPendingPools()
         internal
         view
         returns (uint128 next, uint128 future)
     {
+        if (!prizePoolFrozen) return (0, 0);
         uint256 packed = prizePoolPendingPacked;
         next = uint128(packed);
         future = uint128(packed >> POOL_FUTURE_SHIFT);
@@ -1588,7 +1592,7 @@ abstract contract DegenerusGameStorage {
 
     /// @dev With createSmurf, the only writer of a wallet's identity. Returns the existing ID or allocates the
     ///      next table position, publishing both directions (the table element and walletIds)
-    ///      in the same call. Existing mint history is returned; new registration does not write it.
+    ///      and seeding the claimable sentinel in the same call. Existing mint history is returned; new registration does not write it.
     ///      Callers register before anything else in the transaction loads `owner`'s mint word.
     ///      `quotedSpend` is the ETH-equivalent total the paying call charges (zero for the
     ///      external hook); it is read only when a new wallet would be admitted at or above
@@ -1605,6 +1609,9 @@ abstract contract DegenerusGameStorage {
         wallets.push(uint160(owner));
         uint32 identity = uint32(registry >> 32);
         walletIds[owner] = (uint64(identity == 0 ? id : identity) << 32) | id;
+        // Unbacked claimable sentinel, outside claimablePool and never paid out: every later
+        // credit to the account is a nonzero write.
+        balancesPacked[id] = 1;
         // A new account has no mint history; registration does not write a statistics word.
         word = 0;
         emit WalletRegistered(id, owner);
@@ -4889,6 +4896,27 @@ abstract contract DegenerusGameStorage {
     }
     JackpotWork internal jackpotWork;
 
+    /// @dev `kind` alone marks the record live. Retiring clears only it; every start writes the
+    ///      whole record, so no field of a retired leg is ever read.
+    function _retireJackpotWork() internal {
+        jackpotWork.kind = 0;
+    }
+
+    /// @dev Start a leg: both words written whole (paid, winner and direct round zero). Bit
+    ///      offsets follow the struct's compiled layout: traits 0, lvl 32, kind 72, quadrant 80,
+    ///      finalDay 88, directTickets 128.
+    function _startJackpotWork(uint128 budget, uint32 traits, uint24 lvl, uint8 kind, uint8 quadrant,
+        bool finalDay, bool directTickets) internal
+    {
+        uint256 head = uint256(traits) | (uint256(lvl) << 32) | (uint256(kind) << 72)
+            | (uint256(quadrant) << 80) | (finalDay ? uint256(1) << 88 : 0)
+            | (directTickets ? uint256(1) << 128 : 0);
+        assembly ("memory-safe") {
+            sstore(jackpotWork.slot, budget)
+            sstore(add(jackpotWork.slot, 1), head)
+        }
+    }
+
     /// @dev 100 circular level lanes per owner: owed[0:29], snap[30], present[31].
     mapping(uint32 => uint256[13]) internal farFutureOwed;
 
@@ -4945,6 +4973,8 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant LOAN_INTEREST_BPS_PER_LEVEL = 500;
     uint256 internal constant LOAN_EARLY_FEE_BPS_PER_LEVEL = 100;
     uint256 internal constant LOAN_MAX_SMURFS = 5;
+    /// @dev A loan taken more than this many days into a level pays half its principal as tickets.
+    uint256 internal constant LOAN_TICKET_AFTER_DAYS = 20;
 
     uint256 internal constant LOAN_LENDER_SHIFT = 96;
     uint256 internal constant LOAN_START_SHIFT = 104;

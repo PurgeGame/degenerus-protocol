@@ -132,6 +132,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
         mockVRF.fundSubscription(1, 100e18);
 
         keeper = makeAddr("router_keeper");
+        _giveWalletId(keeper);
         vm.deal(keeper, 100_000 ether);
         vm.deal(address(game), 1_000_000 ether);
         _finishSubscriptionWindow();

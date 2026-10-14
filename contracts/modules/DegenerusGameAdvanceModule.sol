@@ -27,7 +27,7 @@ pragma solidity 0.8.34;
 import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol";
 import {IJackpotBattle} from "../interfaces/IJackpotBattle.sol";
-import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
+import {IDegenerusGame, MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {IDegenerusJackpots} from "../interfaces/IDegenerusJackpots.sol";
 import {IDegenerusGameJackpotModule, IDegenerusGameFoilPackModule, IDegenerusGameBoonModule, IDegenerusGameGameOverModule,
     IGameAfkingModule} from "../interfaces/IDegenerusGameModules.sol";
@@ -58,6 +58,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
 
     event Advance(uint8 stage, uint24 lvl);
     event LoanSeized(uint32 indexed accountId, uint32 indexed lenderId);
+    event LoanRepaid(uint32 indexed accountId, address indexed payer, uint256 owed);
     event PoolSkimApplied(uint24 indexed lvl, uint256 take, uint256 insuranceSkim);
     event PoolsSettled(
         uint24 indexed lvl,
@@ -358,8 +359,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         if (result.progressed) emit Advance(stage, lvl);
     }
 
-    /// @notice Seize the loans due at the level just entered, in list order, before anything
-    ///         uses that level's word. The lender takes each account exactly as a sale does.
+    /// @notice Settle the loans due at the level just entered, in list order, before anything
+    ///         uses that level's word. A borrower whose balances cover the full-term amount repays;
+    ///         otherwise the lender takes the account exactly as a sale does.
     ///         Pending loans die with the game: terminal handling outranks this stage.
     function runLoanSeizureWork(uint256 allowance) external returns (MineFlipGas.Result memory result) {
         MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
@@ -381,7 +383,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
                 GasBounds.LOAN_SEIZE_TAIL
             )) break;
             loanSeizeCursor = uint32(++i);
-            _seizeLoan(id, uint32(uint8(loan >> LOAN_LENDER_SHIFT)));
+            if (!_autoRepayLoan(id, loan, due)) _seizeLoan(id, uint32(uint8(loan >> LOAN_LENDER_SHIFT)));
             result.progressed = true;
             MineFlipGas.markProgress(meter);
             ++result.rewardBasis;
@@ -393,6 +395,30 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
             result.done = true;
         }
         MineFlipGas.finish(meter);
+    }
+
+    /// @dev A borrower whose own claimable plus AFKing funding covers the full-term amount repays
+    ///      instead of defaulting: claimable first (keeping its 1-wei sentinel), then AFKing. An
+    ///      account already acquired by a lender defaults as before. Both legs sit inside
+    ///      claimablePool and move to the lender's claimable, so the pool is unchanged.
+    function _autoRepayLoan(uint32 id, uint256 loan, uint24 due) private returns (bool) {
+        uint256 element = _walletElement(id);
+        if (_acquiredRoot(id, element) != 0) return false;
+        uint256 owed = uint96(loan) * (10_000 + (due - uint24(loan >> LOAN_START_SHIFT))
+            * LOAN_INTEREST_BPS_PER_LEVEL) / 10_000;
+        uint256 packed = balancesPacked[id];
+        uint256 claimable = uint128(packed);
+        uint256 fromClaim = claimable > 1 ? claimable - 1 : 0;
+        if (fromClaim > owed) fromClaim = owed;
+        uint256 fromAfking = owed - fromClaim;
+        if (fromAfking > packed >> 128) return false;
+        balancesPacked[id] = packed - fromClaim - (fromAfking << 128);
+        _creditClaimableLogged(uint32(uint8(loan >> LOAN_LENDER_SHIFT)), owed);
+        delete _loans[id];
+        if (fromClaim != 0) emit ClaimableSpent(id, fromClaim, claimable - fromClaim, MintPaymentKind.Internal, owed);
+        if (fromAfking != 0) emit AfkingSpent(id, fromAfking);
+        emit LoanRepaid(id, _payee(element), owed);
+        return true;
     }
 
     /// @dev The sale's ownership write, the borrower wallet's sDGNRS burn and default-ID clear
@@ -996,7 +1022,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         if (next > POOL_HALF_MAX) next = POOL_HALF_MAX;
         if (future > POOL_HALF_MAX) future = POOL_HALF_MAX;
         prizePoolsPacked = (future << POOL_FUTURE_SHIFT) | next;
-        prizePoolPendingPacked = 0;
+        // The folded buffer stays in place; unfrozen, it reads as empty.
         prizePoolFrozen = false;
     }
 

@@ -221,7 +221,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             // reserved their ETH in claimablePool at consolidation: the uncredited part
             // leaves the reservation and joins the distributable total.
             if (jackpotWork.kind == 7) claimablePool -= jackpotWork.paid;
-            delete jackpotWork;
+            _retireJackpotWork();
             dailyTicketBudgetsPacked = 0;
             dailyJackpotCoinTicketsPending = false;
             work.progressed = true;
@@ -357,7 +357,6 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             _swapRngBuffers();
             vrfRequestId = id;
             _setRngRequestActive(true);
-            _setRngSessionPublished(false);
             rngWordCurrent = RNG_WORD_WAITING;
             // A refusal retry retains the first admitted attempt's identity and
             // timeout. Coordinator acceptance does not restart that deadline.
@@ -607,10 +606,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         // three-way split to vault / sDGNRS / GNRUS.
         // Pin the pot before returning even if this call has too little allowance
         // left to roll a first quadrant. 255 denotes priced but not yet initialized.
-        jackpotWork.kind = 3;
-        jackpotWork.lvl = terminalLevel;
-        jackpotWork.budget = uint128(remaining);
-        jackpotWork.quadrant = 255;
+        _startJackpotWork(uint128(remaining), 0, terminalLevel, 3, 255, false, false);
         return _resumeTerminalPayout(day, meter, work);
     }
 
@@ -665,10 +661,10 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
 
         if (totalFunds == 0) return;
 
-        // Protocol balances are fully backed: totalFunds >= owedV + owedSD + owedG. Only an stETH
-        // loss (a negative rebase) larger than the unclaimed cushion can break that, and the sweep
-        // must still complete, so a shortfall splits what exists pro rata. The three legs still sum
-        // to exactly totalFunds.
+        // Protocol balances are fully backed apart from the three unbacked 1-wei sentinels, so
+        // totalFunds >= owedV + owedSD + owedG - 3. A game holding exactly its obligations, or an
+        // stETH loss (a negative rebase) larger than the unclaimed cushion, takes the pro-rata
+        // branch; the sweep must still complete, and the three legs still sum to exactly totalFunds.
         uint256 owed = owedV + owedSD + owedG;
         uint256 remainder;
         if (totalFunds >= owed) {
@@ -687,7 +683,8 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     }
 
     /// @dev Zero a sink's packed balance — claimable (low half) and prepaid afking (high half),
-    ///      both inside claimablePool — and return the total the final sweep owes it.
+    ///      both inside claimablePool apart from the claimable's unbacked 1-wei sentinel — and
+    ///      return the total the final sweep owes it.
     function _takeSinkBalance(uint32 sink) private returns (uint256 owed) {
         uint256 claimable = _claimableOf(sink);
         uint256 afking = _afkingOf(sink);

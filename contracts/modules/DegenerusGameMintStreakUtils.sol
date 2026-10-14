@@ -57,8 +57,8 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     event CurseChanged(uint32 indexed player, uint8 newCurseCount);
 
     /// @dev Principal-funded lender selection. sDGNRS retains 1 ETH of claimable; the enabled
-    ///      Vault retains its configured floor across claimable plus prepaid AFKing.
-    ///      Both balances are claimablePool-backed; zero means neither lender can fund.
+    ///      Vault retains its configured floor across claimable plus prepaid AFKing, and always
+    ///      its claimable sentinel. Zero means neither lender can fund.
     function _resolveLender(uint256 totalBudget) internal view returns (uint32 buyer) {
         if (_claimableOf(SDGNRS_WALLET_ID) >= totalBudget + 1 ether) {
             return SDGNRS_WALLET_ID;
@@ -69,7 +69,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         if (
             enabled &&
             _claimableOf(VAULT_WALLET_ID) +
-                _afkingOf(VAULT_WALLET_ID) >=
+                _afkingOf(VAULT_WALLET_ID) >
             totalBudget + vaultFloorWei
         ) {
             return VAULT_WALLET_ID;
@@ -142,6 +142,16 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
     function _loanRateBps(uint256 d) internal pure returns (uint256) {
         if (d <= 20) return 1000 - (d - 2) * 500 / 18;
         return 500 - (d - 20) * 300 / 80;
+    }
+
+    /// @dev The part of a loan's principal paid as whole tickets at `price`: half of it, rounded
+    ///      down to whole tickets, once day `today` is more than LOAN_TICKET_AFTER_DAYS past the
+    ///      level's `purchaseStart` day in the purchase phase; otherwise none.
+    function _loanTicketWei(uint256 principal, uint256 today, uint256 purchaseStart, uint256 price,
+        bool jackpotPhase) internal pure returns (uint256)
+    {
+        if (jackpotPhase || today <= purchaseStart + LOAN_TICKET_AFTER_DAYS) return 0;
+        return principal / 2 / price * price;
     }
 
     /// @dev Principal for a loan due at `dueLevel`: whole tickets at `dueLevel + 2` and beyond,

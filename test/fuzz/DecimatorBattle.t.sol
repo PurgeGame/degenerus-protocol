@@ -187,7 +187,7 @@ contract DecimatorBattleTest is Test {
         _drain(h);
         // The champion: half in whole half passes (6.5 ETH buys two), the rest ETH.
         assertEq(h.passesOf(address(1)), 2);
-        assertEq(h.balanceOf(address(1)), 13 ether + 17 - 2 * 2.25 ether);
+        assertEq(_bal(h, address(1)), 13 ether + 17 - 2 * 2.25 ether);
         assertEq(h.reserved(), 13 ether + 17 - 2 * 2.25 ether);
         assertEq(h.future(), 2 * 2.25 ether, "pass money recycles after daily work unlocks");
         assertEq(h.pendingFuture(), 0);
@@ -215,7 +215,7 @@ contract DecimatorBattleTest is Test {
         assertEq(round.paid, 1);
         assertEq(h.queue(), 0, "the read cohort no longer waits on decimator");
         assertEq(h.passesOf(address(1)), 2);
-        assertEq(h.balanceOf(address(1)), 13 ether + 17 - 2 * 2.25 ether);
+        assertEq(_bal(h, address(1)), 13 ether + 17 - 2 * 2.25 ether);
         assertEq(h.reserved() + h.future(), 13 ether + 17);
     }
 
@@ -247,7 +247,7 @@ contract DecimatorBattleTest is Test {
         assertEq(h.reserved(), 7 ether, "locked stage retains the reservation");
         h.freeze(false);
         _drain(h);
-        assertEq(h.balanceOf(address(1)), 0);
+        assertEq(_bal(h, address(1)), 0);
         assertEq(h.roundOf(LVL).winners, 0);
         assertEq(h.reserved(), 0);
         assertEq(h.pendingFuture(), 0);
@@ -273,7 +273,7 @@ contract DecimatorBattleTest is Test {
         assertEq(runs, 1);
         assertEq(h.roundOf(LVL).cursor, 1);
         assertEq(h.roundOf(LVL).champion, 2);
-        assertEq(h.balanceOf(address(1)), 0);
+        assertEq(_bal(h, address(1)), 0);
     }
 
     /// @dev Game over stops settlement: the queued round keeps its reservation for the final sweep.
@@ -327,7 +327,7 @@ contract DecimatorBattleTest is Test {
             assertEq(abi.encode(h.nodeOf(LVL, i)), abi.encode(other.nodeOf(LVL, i)));
         }
         for (uint160 i = 1; i <= 31; ++i) {
-            assertEq(h.balanceOf(address(i)), other.balanceOf(address(i)));
+            assertEq(_bal(h, address(i)), _bal(other, address(i)));
         }
     }
 
@@ -374,7 +374,7 @@ contract DecimatorBattleTest is Test {
         digest = keccak256(abi.encode(round, target.future(), target.reserved()));
         for (uint8 i; i < round.winners; ++i) digest = keccak256(abi.encode(digest, target.nodeOf(LVL, i)));
         for (uint160 i = 1; i <= 31; ++i) {
-            digest = keccak256(abi.encode(digest, target.balanceOf(address(i)), target.passesOf(address(i))));
+            digest = keccak256(abi.encode(digest, _bal(target, address(i)), target.passesOf(address(i))));
         }
     }
 
@@ -421,12 +421,12 @@ contract DecimatorBattleTest is Test {
         uint256 perEth = 0; // shares of 0.475 ETH buy no pass, so nobody else takes passes
         assertEq(uint64(h.nodeOf(LVL, 0).key), round.champion, "champion paid from position 0");
         assertEq(h.passesOf(address(uint160(round.champion))), 1);
-        assertEq(h.balanceOf(address(uint160(round.champion))), champ - 2.25 ether);
+        assertEq(_bal(h, address(uint160(round.champion))), champ - 2.25 ether);
         uint256 sum = champ - 2.25 ether;
         for (uint8 i = 1; i < 200; ++i) {
             uint64 id = uint64(h.nodeOf(LVL, i).key);
             assertTrue(_sampled(777, LVL, id, h.roundOf(LVL).count));
-            uint256 amount = h.balanceOf(address(uint160(id)));
+            uint256 amount = _bal(h, address(uint160(id)));
             assertEq(amount, base + perEth, "equal ETH share plus the champion's leftover split");
             sum += amount;
         }
@@ -441,7 +441,7 @@ contract DecimatorBattleTest is Test {
             if (node.score < root.score) root = node;
         }
         for (uint64 id = 1; id <= 2000; ++id) {
-            if (!_sampled(777, LVL, id, h.roundOf(LVL).count) || h.balanceOf(address(uint160(id))) != 0 || id == round.champion) continue;
+            if (!_sampled(777, LVL, id, h.roundOf(LVL).count) || _bal(h, address(uint160(id))) != 0 || id == round.champion) continue;
             uint256 peak = 3000 + uint256(keccak256(abi.encode(BOARD, uint256(777), LVL, id))) % (1_000_000);
             assertLe(h.entryOf(LVL, id).stack / 1 * peak, root.score);
         }
@@ -456,8 +456,8 @@ contract DecimatorBattleTest is Test {
         h.seal(LVL, 1 ether, word);
         _drain(h);
         assertEq(h.roundOf(LVL).champion, 2);
-        assertEq(h.balanceOf(address(1)), 0);
-        assertEq(h.balanceOf(address(2)), 1 ether);
+        assertEq(_bal(h, address(1)), 0);
+        assertEq(_bal(h, address(2)), 1 ether);
     }
 
     /// @dev The battle board rules: three per leg, seven named, one side of the line, thirty bits.
@@ -494,7 +494,7 @@ contract DecimatorBattleTest is Test {
         _burn(h, address(2), LVL, 1000, 10_000);
         h.seal(LVL, 1 ether, word);
         _drain(h); // the probe reverts unless chips, scatter count and boost all match
-        assertEq(h.balanceOf(address(1)), 1 ether);
+        assertEq(_bal(h, address(1)), 1 ether);
     }
 
     function _tieKey(uint256 word, uint24 lvl, uint64 id) internal pure returns (uint256) {
@@ -543,8 +543,8 @@ contract DecimatorBattleTest is Test {
         assertTrue(placed[1] && placed[2]);
         for (uint256 i; i < 38; ++i) assertEq(placed[uint64(keys[i])], i < 18);
         uint256 base = (4 ether - 4 ether / 20) / 20;
-        assertEq(h.balanceOf(address(uint160(first))), 4 ether - base * 19);
-        assertEq(h.balanceOf(address(uint160(uint64(keys[0])))), base);
+        assertEq(_bal(h, address(uint160(first))), 4 ether - base * 19);
+        assertEq(_bal(h, address(uint160(uint64(keys[0])))), base);
     }
 
     function _runPhaseUnits(DecimatorBattleHarness target, uint24 lvl) internal returns (uint256 units) {
@@ -583,7 +583,7 @@ contract DecimatorBattleTest is Test {
             assertEq(abi.encode(h.nodeOf(15, i)), abi.encode(fresh.nodeOf(15, i)));
         }
         for (uint160 i = 1001; i <= 1025; ++i) {
-            assertEq(h.balanceOf(address(i)), fresh.balanceOf(address(i)));
+            assertEq(_bal(h, address(i)), _bal(fresh, address(i)));
         }
         assertLt(reusedUnits, freshUnits, "reused slots are charged less than fresh ones");
     }
@@ -651,15 +651,15 @@ contract DecimatorBattleTest is Test {
         uint256 passMoney = champPasses * 2.25 ether + passWinners * (base / 2.25 ether) * 2.25 ether;
         address champion = address(uint160(round.champion));
         assertEq(t.passesOf(champion), champPasses, "champion: half in whole half passes");
-        assertEq(t.balanceOf(champion), champ - champPasses * 2.25 ether, "champion: the rest ETH");
+        assertEq(_bal(t, champion), champ - champPasses * 2.25 ether, "champion: the rest ETH");
         uint256 eth = champ - champPasses * 2.25 ether;
         for (uint8 i = 1; i < w; ++i) {
             address owner = address(uint160(uint64(t.nodeOf(LVL, i).key)));
             if (i % 2 == 0) {
                 assertEq(t.passesOf(owner), base / 2.25 ether, "whole half passes");
-                assertEq(t.balanceOf(owner), 0);
+                assertEq(_bal(t, owner), 0);
             } else {
-                assertEq(t.balanceOf(owner), base + perEth, "ETH share plus the leftovers");
+                assertEq(_bal(t, owner), base + perEth, "ETH share plus the leftovers");
                 assertEq(t.passesOf(owner), 0);
                 eth += base + perEth;
             }
@@ -726,11 +726,18 @@ contract DecimatorBattleTest is Test {
         uint8 cap = uint8(n / 2); // this property covers 1–35 entrants, below the 20-place plateau
         uint256 sum;
         for (uint64 id = 1; id <= n; ++id) {
-            sum += h.balanceOf(address(uint160(id)));
+            sum += _bal(h, address(uint160(id)));
         }
         assertEq(h.roundOf(LVL).winners, cap);
         assertEq(sum + h.future(), pool);
         assertEq(h.reserved(), sum);
+    }
+
+    /// @dev Backed winnings: the harness balance view includes the 1-wei registration sentinel
+    ///      every registered wallet carries (unbacked, never paid out).
+    function _bal(DecimatorBattleHarness t, address p) internal view returns (uint256 b) {
+        b = t.balanceOf(p);
+        if (b != 0) --b;
     }
 
     function test_QuotaBoundariesAndCenturyUseSameRule() public {
@@ -756,7 +763,7 @@ contract DecimatorBattleTest is Test {
         assertEq(h.roundOf(LVL).winners, 9);
         assertEq(h.roundOf(LVL).paid, 9);
         uint256 sum;
-        for (uint160 i = 1; i <= 19; ++i) sum += h.balanceOf(address(i));
+        for (uint160 i = 1; i <= 19; ++i) sum += _bal(h, address(i));
         assertEq(sum + h.future(), 60 ether);
     }
 

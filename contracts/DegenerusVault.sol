@@ -57,6 +57,7 @@ interface IDegenerusGamePlayerActions {
     ) external payable;
     /// @notice Claim account `id`'s accumulated ETH winnings (0 = caller); pays the payee.
     function claimWinnings(uint32 id) external;
+    function sweepAccounts(uint32[] calldata ids) external returns (uint256 ethCollected, uint256 flipCollected);
     /// @notice Claim winnings preferring stETH over ETH.
     function claimWinningsStethFirst() external;
     /// @notice Place single-symbol bets on degenerette for account `id` (0 = caller).
@@ -700,6 +701,14 @@ contract DegenerusVault {
     /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
     function gameClaimWinnings() external onlyVaultOwner {
         gamePlayer.claimWinningsStethFirst();
+    }
+
+    /// @notice Consolidate the vault's acquired accounts into its own ETH and FLIP reserves.
+    /// @dev Current ownership is checked by the Game for every ID; repeat for later awards.
+    function gameSweepAccounts(uint32[] calldata ids)
+        external onlyVaultOwner returns (uint256 ethCollected, uint256 flipCollected)
+    {
+        return gamePlayer.sweepAccounts(ids);
     }
 
     /// @notice Place a Degenerette bet for the vault in ETH or FLIP.

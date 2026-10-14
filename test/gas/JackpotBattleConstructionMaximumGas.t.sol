@@ -74,6 +74,7 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol {
         vm.fee(1 gwei);
         isolated = vm.envOr("FOUNDRY_ISOLATE", false);
         paidProbe = new BattlePaidMinerProbe();
+        _giveWalletId(MINER);
     }
 
     function _battleWord(uint256 word) private pure returns (uint256) {

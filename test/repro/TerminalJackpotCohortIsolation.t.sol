@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {claimableBalance} from "../helpers/ClaimableBalance.sol";
+
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {TicketQueueStorage as RingStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
@@ -298,8 +300,8 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         assertTrue(game.gameOver(), "game-over latches after committed snapshot drains");
         assertEq(_holderEntryCount(LEVEL, lateBuyer), 0, "late cohort never enters terminal traits");
         assertEq(_totalQueuedOwed(LEVEL, lateBuyer), ENTRIES, "late cohort remains excluded at latch");
-        assertGt(game.claimableWinningsOf(currentLevelWinner), 0, "jackpot pays current-level cohort");
-        assertEq(game.claimableWinningsOf(nextLevelWinner), 0, "jackpot does not pay level+1 cohort");
+        assertGt(claimableBalance(game, currentLevelWinner), 0, "jackpot pays current-level cohort");
+        assertEq(claimableBalance(game, nextLevelWinner), 0, "jackpot does not pay level+1 cohort");
     }
 
     function testPurchaseTerminalFreezesUnsnappedNextLevelBeforeRequest() public {

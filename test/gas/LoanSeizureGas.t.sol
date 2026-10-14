@@ -22,6 +22,11 @@ contract SeizureGasSeeder is DegenerusGameStorage {
         dailyIdx = day;
         purchaseStartDay = day;
     }
+    function setBalances(uint32 id, uint128 claimable, uint128 afking) external {
+        uint256 old = balancesPacked[id];
+        claimablePool = claimablePool - uint128(old) - uint128(old >> 128) + claimable + afking;
+        balancesPacked[id] = (uint256(afking) << 128) | claimable;
+    }
     function enterDue(uint24 due) external {
         level = due;
         _setLoansDuePending(true);
@@ -80,7 +85,15 @@ abstract contract LoanSeizureGasBase is DeployProtocol {
         vm.prank(borrower);
         game.borrow(root, 1, q.principal);
         family = lens.loanOf(address(game), root).family;
+        // One wei short of the full-term amount: the auto-repay check reads everything, then defaults.
+        DegenerusGameLens.LoanInfo memory info = lens.loanOf(address(game), root);
+        uint256 owed = info.principal * (10_000 + (info.dueLevel - info.startLevel) * 500) / 10_000;
+        _setBalances(root, owed / 2, owed - owed / 2);
         _etch(); SeizureGasSeeder(address(game)).enterDue(1); _unetch();
+    }
+
+    function _setBalances(uint32 id, uint256 claimable, uint256 afking) internal {
+        _etch(); SeizureGasSeeder(address(game)).setBalances(id, uint128(claimable), uint128(afking)); _unetch();
     }
 
     function _etch() internal { vm.etch(address(game), seeder.code); }
@@ -93,6 +106,10 @@ abstract contract LoanSeizureGasBase is DeployProtocol {
     }
 
     function _measure(string memory label) internal returns (uint256 used) {
+        used = _measureAs(label, address(sdgnrs));
+    }
+
+    function _measureAs(string memory label, address expectedPayee) internal returns (uint256 used) {
         _etch();
         uint256 before = gasleft();
         SeizureGasSeeder(address(game)).seize();
@@ -100,7 +117,7 @@ abstract contract LoanSeizureGasBase is DeployProtocol {
         _unetch();
         emit log_named_uint(label, used);
         (, address payee, ) = game.resolveAccount(root, address(0));
-        assertEq(payee, address(sdgnrs), "seized");
+        assertEq(payee, expectedPayee, expectedPayee == borrower ? "auto-repaid" : "seized");
         uint256 bound = MineFlipGasBounds.LOAN_SEIZE_BASE + family * MineFlipGasBounds.LOAN_SEIZE_SUB
             + MineFlipGasBounds.LOAN_SEIZE_DEITY + MineFlipGasBounds.LOAN_SEIZE_TAIL;
         emit log_named_uint("admission_bound", bound);
@@ -126,6 +143,15 @@ contract LoanSeizureGasFamily is LoanSeizureGasBase {
 contract LoanSeizureGasWorst is LoanSeizureGasBase {
     function setUp() public { _setUpCase(5, true, true, true); }
     function test_Gas_SeizeWorstFamilyWithDeitySmurf() public { _measure("seize_worst_family_deity_cold"); }
+}
+
+/// @notice A borrower whose balances cover the full-term amount repays at the due level instead.
+contract LoanAutoRepayGas is LoanSeizureGasBase {
+    function setUp() public {
+        _setUpCase(5, true, true, true);
+        _setBalances(root, 1, 100 ether);
+    }
+    function test_Gas_AutoRepayWorstFamily() public { _measureAs("auto_repay_worst_family_cold", borrower); }
 }
 
 /// @notice Player-paid entry points, for the record.

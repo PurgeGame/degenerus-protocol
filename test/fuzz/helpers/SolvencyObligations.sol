@@ -100,6 +100,9 @@ library SolvencyObligations {
         view
         returns (uint256 next, uint256 future)
     {
+        // Mirrors _getPendingPools: an unfrozen game's retained buffer is already folded.
+        bytes32 flags = Vm(VM_ADDRESS).load(address(game), bytes32(GameSlots.PRIZE_POOL_FROZEN));
+        if (uint8(uint256(flags) >> (GameSlots.PRIZE_POOL_FROZEN_OFFSET * 8)) == 0) return (0, 0);
         bytes32 packed = Vm(VM_ADDRESS).load(
             address(game),
             bytes32(PRIZE_POOL_PENDING_PACKED_SLOT)

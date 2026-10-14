@@ -20,8 +20,17 @@ contract SeizureSeeder is DegenerusGameStorage {
     }
     function setClaimable(uint32 id, uint128 claimable) external {
         uint256 old = balancesPacked[id];
-        claimablePool = claimablePool - uint128(old) + claimable;
+        uint128 oldBacked = uint128(old) > 1 ? uint128(old) - 1 : 0;
+        uint128 newBacked = claimable > 1 ? claimable - 1 : 0;
+        claimablePool = claimablePool - oldBacked + newBacked;
         balancesPacked[id] = (old >> 128 << 128) | claimable;
+    }
+    function setBalances(uint32 id, uint128 claimable, uint128 afking) external {
+        uint256 old = balancesPacked[id];
+        uint128 oldBacked = uint128(old) > 1 ? uint128(old) - 1 : 0;
+        uint128 newBacked = claimable > 1 ? claimable - 1 : 0;
+        claimablePool = claimablePool - oldBacked - uint128(old >> 128) + newBacked + afking;
+        balancesPacked[id] = (uint256(afking) << 128) | claimable;
     }
     function seedLevel(uint32 id, uint24 level_, uint32 entries) external { _queueEntries(id, level_, entries, false); }
     function end() external { gameOver = true; }
@@ -49,6 +58,7 @@ contract LoanSeizureTest is DeployProtocol {
     uint8 private constant ACTION_WAIT = 2;
     uint8 private constant ACTION_SEIZE_LOANS = 20;
     bytes32 private constant LOAN_SEIZED_SIG = keccak256("LoanSeized(uint32,uint32)");
+    bytes32 private constant LOAN_REPAID_SIG = keccak256("LoanRepaid(uint32,address,uint256)");
 
     address private borrower;
     uint32 private root;
@@ -157,8 +167,12 @@ contract LoanSeizureTest is DeployProtocol {
     }
 
     function _seizedCount(Vm.Log[] memory logs) private pure returns (uint256 n) {
+        return _count(logs, LOAN_SEIZED_SIG);
+    }
+
+    function _count(Vm.Log[] memory logs, bytes32 sig) private pure returns (uint256 n) {
         for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics.length != 0 && logs[i].topics[0] == LOAN_SEIZED_SIG) ++n;
+            if (logs[i].topics.length != 0 && logs[i].topics[0] == sig) ++n;
         }
     }
 
@@ -283,6 +297,7 @@ contract LoanSeizureTest is DeployProtocol {
         _buyDeity(borrower, root, 3);
         assertEq(deityPass.ownerOf(3), borrower);
         _borrow(borrower, root, 1);
+        _setBalances(root, 0, 0); // the deity purchase's change would otherwise repay
         _enterDue(1);
         game.mineFlip(0);
         assertEq(deityPass.ownerOf(3), address(sdgnrs), "the pass follows its account");
@@ -308,6 +323,7 @@ contract LoanSeizureTest is DeployProtocol {
     function test_DeityBoughtDuringLoanStillMoves() public {
         _borrow(borrower, root, 1);
         _buyDeity(borrower, root, 10);
+        _setBalances(root, 0, 0); // the deity purchase's change would otherwise repay
         _enterDue(1);
         game.mineFlip(0);
         assertEq(deityPass.ownerOf(10), address(sdgnrs));
@@ -323,6 +339,8 @@ contract LoanSeizureTest is DeployProtocol {
         _fund(1, 100 ether);
         vm.prank(ContractAddresses.CREATOR); vault.setLiquidationBuyFallback(true, 1 ether);
         _borrow(borrower, root, 1);
+        _setBalances(root, 0, 0);
+        _setBalances(child, 0, 0); // the deity purchase's change would otherwise repay
         _enterDue(1);
         game.mineFlip(0);
         assertEq(deityPass.ownerOf(5), address(vault), "the family and its pass went to the Vault");
@@ -338,6 +356,7 @@ contract LoanSeizureTest is DeployProtocol {
     function test_SellerCanBuyANewDeityAfterSeizure() public {
         _buyDeity(borrower, root, 7);
         _borrow(borrower, root, 1);
+        _setBalances(root, 0, 0); // the deity purchase's change would otherwise repay
         _enterDue(1);
         _etch(); SeizureSeeder(address(game)).seize(); _unetch();
         uint32 replacement = _giveWalletId(borrower);
@@ -354,5 +373,157 @@ contract LoanSeizureTest is DeployProtocol {
         _giveSdgnrsTo(borrower, 1);
         vm.expectRevert(sDGNRS.Unauthorized.selector);
         sdgnrs.burnForLiquidation(borrower);
+    }
+
+    // ---------------------------------------------------------------- auto-repay at the due level
+
+    function _setBalances(uint32 id, uint256 claimable, uint256 afking) private {
+        _etch(); SeizureSeeder(address(game)).setBalances(id, uint128(claimable), uint128(afking)); _unetch();
+    }
+
+    function _claimPool() private view returns (uint256) {
+        return uint256(vm.load(address(game), bytes32(uint256(GameSlots.CLAIMABLE_POOL)))) >> 128;
+    }
+
+    /// @dev Full-term amount at the due level: 5% per level from start to due, no early fee.
+    function _owedAtDue(uint32 id) private view returns (uint256) {
+        DegenerusGameLens.LoanInfo memory info = lens.loanOf(address(game), id);
+        return info.principal * (10_000 + (info.dueLevel - info.startLevel) * 500) / 10_000;
+    }
+
+    function _settleDue(uint24 due) private returns (uint256 seized, uint256 repaid) {
+        _enterDue(due);
+        vm.recordLogs();
+        _etch(); SeizureSeeder(address(game)).seize(); _unetch();
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        seized = _count(logs, LOAN_SEIZED_SIG);
+        repaid = _count(logs, LOAN_REPAID_SIG);
+        (bool on, ) = _pending();
+        assertFalse(on, "the due list is finished");
+    }
+
+    function testFuzz_AutoRepayFromClaimableThenAfking(uint256 claimSeed, uint256 extraAfking) public {
+        _giveSdgnrsTo(borrower, 5e12);
+        _borrow(borrower, root, 1);
+        uint256 owed = _owedAtDue(root);
+        // Claimable anywhere from empty to more than the debt; AFKing tops up exactly what is missing.
+        uint256 claimable = bound(claimSeed, 0, owed * 2);
+        uint256 usable = claimable > 1 ? claimable - 1 : 0;
+        uint256 afking = (usable >= owed ? 0 : owed - usable) + bound(extraAfking, 0, 10 ether);
+        _setBalances(root, claimable, afking);
+        (uint128 lenderBefore, ) = lens.accountBalances(address(game), 2);
+        uint256 poolBefore = _claimPool();
+
+        (uint256 seized, uint256 repaid) = _settleDue(1);
+
+        assertEq(seized, 0, "covered borrowers are not seized");
+        assertEq(repaid, 1);
+        assertEq(_payee(root), borrower, "the account stays with its owner");
+        assertEq(game.acquiredBuyer(root), 0);
+        assertEq(game.walletIdOf(borrower), root, "default ID kept");
+        assertEq(sdgnrs.balanceOf(borrower), 5e12, "no liquidation burn");
+        assertEq(lens.loanOf(address(game), root).principal, 0, "loan closed");
+        (uint128 lenderAfter, ) = lens.accountBalances(address(game), 2);
+        assertEq(lenderAfter, lenderBefore + owed, "lender receives the full-term amount");
+        uint256 fromClaim = usable < owed ? usable : owed;
+        (uint128 c, uint128 a) = lens.accountBalances(address(game), root);
+        assertEq(c, claimable - fromClaim, "claimable spent first, sentinel kept");
+        assertEq(a, afking - (owed - fromClaim), "AFKing covers only the remainder");
+        assertEq(_claimPool(), poolBefore, "internal move");
+    }
+
+    function test_OneWeiShortDefaultsWithBalancesIntact() public {
+        _giveSdgnrsTo(borrower, 5e12);
+        _borrow(borrower, root, 1);
+        uint256 owed = _owedAtDue(root);
+        // Usable = (claimable - 1 sentinel) + afking = owed - 1.
+        _setBalances(root, owed / 2 + 1, owed - owed / 2 - 1);
+        (uint128 lenderBefore, ) = lens.accountBalances(address(game), 2);
+
+        (uint256 seized, uint256 repaid) = _settleDue(1);
+
+        assertEq(seized, 1);
+        assertEq(repaid, 0);
+        assertEq(_payee(root), address(sdgnrs), "the lender took the account");
+        assertEq(sdgnrs.balanceOf(borrower), 0);
+        (uint128 c, uint128 a) = lens.accountBalances(address(game), root);
+        assertEq(c, owed / 2 + 1, "balances ride with the seized account");
+        assertEq(a, owed - owed / 2 - 1);
+        (uint128 lenderAfter, ) = lens.accountBalances(address(game), 2);
+        assertEq(lenderAfter, lenderBefore);
+    }
+
+    function test_SmurfAutoRepaysFromItsOwnBalancesOnly() public {
+        uint32 child = _child(borrower);
+        _seedLevel(child, 8, 400);
+        _borrow(borrower, child, 1);
+        uint256 owed = _owedAtDue(child);
+        // The main's money does not count: only the borrowing account's own slot.
+        _setBalances(root, owed * 10, owed * 10);
+        _setBalances(child, owed, 0);
+        (uint256 seized, ) = _settleDue(1);
+        assertEq(seized, 1, "the smurf's own slot is one wei short (sentinel)");
+        assertEq(game.acquiredBuyer(child), 2);
+        assertEq(_payee(root), borrower, "the main is untouched");
+
+        uint32 second = _child(borrower);
+        _seedLevel(second, 8, 400);
+        _borrow(borrower, second, 2);
+        _setBalances(second, _owedAtDue(second) + 1, 0);
+        uint256 repaid;
+        (seized, repaid) = _settleDue(2);
+        assertEq(seized, 0);
+        assertEq(repaid, 1);
+        assertEq(game.acquiredBuyer(second), 0);
+        (uint128 c, ) = lens.accountBalances(address(game), second);
+        assertEq(c, 1, "sentinel kept");
+    }
+
+    function test_AcquiredBorrowerDefaultsEvenWhenItsBalancesCover() public {
+        uint32 child = _child(borrower);
+        _seedLevel(child, 8, 400);
+        // The smurf borrows from sDGNRS, due second; the main from the Vault, due first.
+        _borrow(borrower, child, 2);
+        _etch(); SeizureSeeder(address(game)).setClaimable(2, 1 ether); _unetch();
+        _fund(1, 100 ether);
+        vm.prank(ContractAddresses.CREATOR); vault.setLiquidationBuyFallback(true, 1 ether);
+        _borrow(borrower, root, 1);
+        (uint256 seized, ) = _settleDue(1);
+        assertEq(seized, 1);
+        assertEq(game.acquiredBuyer(child), 1, "the smurf went to the Vault with its main");
+        _fund(2, 500 ether);
+        uint256 owed = _owedAtDue(child);
+        _setBalances(child, owed * 3, owed * 3);
+        uint256 repaid;
+        (seized, repaid) = _settleDue(2);
+        assertEq(seized, 1, "Vault-owned money never repays the sDGNRS loan");
+        assertEq(repaid, 0);
+        assertEq(game.acquiredBuyer(child), 2);
+        (uint128 c, uint128 a) = lens.accountBalances(address(game), child);
+        assertEq(c, owed * 3);
+        assertEq(a, owed * 3);
+    }
+
+    function test_MixedDueListRepaysSomeAndSeizesOthers() public {
+        _fund(2, 5_000 ether);
+        uint256 n = 12;
+        uint32[] memory ids = new uint32[](n);
+        for (uint256 i; i < n; ++i) {
+            address owner = makeAddr(string(abi.encode("mixed-borrower", i)));
+            ids[i] = _giveWalletId(owner);
+            _seedLevel(ids[i], 8, 400);
+            _borrow(owner, ids[i], 1);
+            if (i % 3 == 0) _setBalances(ids[i], _owedAtDue(ids[i]) + 1, 0);
+            else if (i % 3 == 1) _setBalances(ids[i], 1, _owedAtDue(ids[i]));
+        }
+        uint256 poolBefore = _claimPool();
+        (uint256 seized, uint256 repaid) = _settleDue(1);
+        assertEq(repaid, 8);
+        assertEq(seized, 4);
+        for (uint256 i; i < n; ++i) {
+            assertEq(game.acquiredBuyer(ids[i]), i % 3 == 2 ? 2 : 0);
+            assertEq(lens.loanOf(address(game), ids[i]).principal, 0);
+        }
+        assertEq(_claimPool(), poolBefore);
     }
 }

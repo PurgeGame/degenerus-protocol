@@ -21,6 +21,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
+        _giveWalletId(MINER);
         vm.fee(1 gwei);
         mockVRF.fundSubscription(1, 1000 ether);
         vm.warp(vm.getBlockTimestamp() + 1 days);

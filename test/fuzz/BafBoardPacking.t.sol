@@ -21,8 +21,9 @@ contract BafBoardCoinView {
 /// @notice `bafTop[lvl]` is two words of two 128-bit lanes (`score96 | id << 96`). Fuzzed against a
 ///         reference model of the four-slot `PlayerScore[4]` algorithm over interleaved levels, VAULT
 ///         (ID 1) credits, zero amounts and saturating scores: the board, its length, the per-wallet
-///         totals and the head slots agree after every credit. `finalizeBaf` clears exactly the
-///         words the board used and the next epoch restarts. The pair draw ranks wallet IDs.
+///         totals and the head slots agree after every credit. `finalizeBaf` empties the board
+///         without touching its words, and the next epoch restarts over the stale lanes. The pair
+///         draw ranks wallet IDs.
 contract BafBoardPackingTest is Test {
     DegenerusJackpots internal jp;
 
@@ -182,22 +183,17 @@ contract BafBoardPackingTest is Test {
         for (uint256 i; i < 2; ++i) {
             uint24 lvl = lvls[i];
             uint8 len = ref[lvl].len;
-            (bytes32 base,,) = _boardWords(lvl);
+            (bytes32 base, uint256 w0Before, uint256 w1Before) = _boardWords(lvl);
             vm.record();
             vm.prank(ContractAddresses.GAME);
             jp.finalizeBaf(lvl);
             (, bytes32[] memory writes) = vm.accesses(address(jp));
-            bool wroteW0;
-            bool wroteW1;
             for (uint256 j; j < writes.length; ++j) {
-                if (writes[j] == base) wroteW0 = true;
-                if (writes[j] == bytes32(uint256(base) + 1)) wroteW1 = true;
+                assertTrue(writes[j] != base && writes[j] != bytes32(uint256(base) + 1), "board words untouched");
             }
-            assertEq(wroteW0, len != 0, "word 0 cleared iff used");
-            assertEq(wroteW1, len > 2, "word 1 cleared iff used");
             (, uint256 w0, uint256 w1) = _boardWords(lvl);
-            assertEq(w0, 0);
-            assertEq(w1, 0);
+            assertEq(w0, w0Before, "stale lanes retained");
+            assertEq(w1, w1Before);
             uint256 lv = _levelWord(lvl);
             assertEq(uint64(lv), 1, "epoch bumped");
             assertEq(uint8(lv >> 64), 0, "board length reset");
@@ -209,6 +205,8 @@ contract BafBoardPackingTest is Test {
             assertEq(uint192(word), 9, "a stale epoch restarts the total");
             assertEq(word >> 192, 1);
             assertEq(jp.bafHeadWinner(lvl, seed, 0), 5);
+            // Stale lanes past the new length never surface.
+            if (len > 1) assertEq(jp.bafHeadWinner(lvl, seed, 2), 0, "only the live lane is drawable");
         }
     }
 

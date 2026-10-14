@@ -44,8 +44,8 @@ contract ConsolidationLevelSeeder is DegenerusGame {
 ///         pool settlement), the phase flags and the level quest roll. Each case seeds the level
 ///         below, drives the real request and VRF answer, the word application and the purchase
 ///         battle through the production modules, then measures the consolidation call alone with
-///         every engine account cold. The three yield surplus recipients start with empty balance
-///         slots, so each surplus credit is a zero-to-nonzero write.
+///         every engine account cold. The three yield surplus recipients hold the claimable
+///         sentinel from deployment, so no surplus credit is a zero-to-nonzero write.
 abstract contract PoolConsolidationFixture is FreshWordLeg {
     uint8 internal constant STAGE_PURCHASE_BATTLE = 17;
     uint8 internal constant STAGE_ENTERED_JACKPOT = 7;
@@ -203,7 +203,7 @@ abstract contract PoolConsolidationFixture is FreshWordLeg {
         uint24 lvl = _level();
         bool x0 = lvl % 10 == 0;
         bool win = _word() & 1 == 1;
-        assertEq(_emptyRecipientSlots(), 3, "every yield surplus credit is a zero-to-nonzero write");
+        assertEq(_emptyRecipientSlots(), 0, "protocol recipients keep their claimable sentinel");
         _coolAll();
         vm.recordLogs();
         MineFlipGas.Result memory result = host.dailyWith{gas: 12_000_000}(9_000_000);

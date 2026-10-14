@@ -322,14 +322,14 @@ contract DegenerusJackpots is IDegenerusJackpots {
         lastBafResolvedDay = GameTimeLib.currentDayIndex();
     }
 
-    /// @notice Closes a resolved bracket once every award is paid: clears the board and bumps
+    /// @notice Closes a resolved bracket once every award is paid: empties the board and bumps
     ///         the epoch so every stored score reads zero.
+    /// @dev Board lanes stay in place: every read is bounded by `topLen`, and inserts write a
+    ///      lane before extending the length, so a stale lane is never visible.
     /// @param lvl Level whose bracket resolved.
     /// @custom:access Restricted to game contract via onlyGame modifier.
     function finalizeBaf(uint24 lvl) external onlyGame {
         BafLevel memory current = bafLevel[lvl];
-        if (current.topLen != 0) delete bafTop[lvl][0];
-        if (current.topLen > 2) delete bafTop[lvl][1];
         unchecked {
             bafLevel[lvl] = BafLevel({epoch: current.epoch + 1, topLen: 0, skipped: false});
         }

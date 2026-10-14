@@ -29,8 +29,10 @@ contract JackpotSingleCallHarness is DegenerusGameJackpotModule, BucketSeed {
 
     // -- read-only accounting views (the credit sinks _processDailyEth writes) --
 
+    /// @dev Credited claimable: above the registration sentinel, which is outside claimablePool.
     function claimableOf(address who) external view returns (uint256) {
-        return _claimableOf(_walletIdOf(who));
+        uint256 c = _claimableOf(_walletIdOf(who));
+        return c == 0 ? 0 : c - 1;
     }
 
     function whalePassOf(address who) external view returns (uint256) {

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {claimableBalance} from "../helpers/ClaimableBalance.sol";
+
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DeadVrfSeeder} from "../fuzz/helpers/DeadVrfSeeder.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
@@ -97,7 +99,7 @@ contract DegradeTerminalRetiredStampTest is DeployProtocol {
         vm.recordLogs();
         _finishTerminal();
         assertGt(_ethWins(vm.getRecordedLogs()), 0, "a readable cohort draws winners");
-        assertGt(game.claimableWinningsOf(HOLDER), 0, "the cohort's holder is paid");
+        assertGt(claimableBalance(game, HOLDER), 0, "the cohort's holder is paid");
     }
 
     function test_RetiredTerminalBufferPaysNobodyAndTheSweepTakesTheShare() public {
@@ -112,7 +114,7 @@ contract DegradeTerminalRetiredStampTest is DeployProtocol {
         (uint256 dead, uint256 paid,, uint256 liability) = _endingState();
         assertEq(dead, 0, "the normal ending stays normal");
         assertEq(paid, 1, "payout marked complete");
-        assertEq(game.claimableWinningsOf(HOLDER), 0, "retired cohort receives nothing");
+        assertEq(claimableBalance(game, HOLDER), 0, "retired cohort receives nothing");
         assertEq(liability, 0, "no cohort was credited");
         assertEq(address(game).balance, 100 ether, "nothing left the game at the payout");
         vm.expectRevert();
@@ -156,11 +158,11 @@ contract DegradeTerminalRetiredStampTest is DeployProtocol {
         uint256[] memory refs = new uint256[](1);
         refs[0] = (uint256(1) << 248) | (uint256(tlvl | (uint24(1) << 23)) << 32) | davePos;
         game.claimDeadVrf(game.walletIdOf(dave), refs);
-        assertEq(game.claimableWinningsOf(dave), pot, "the queued holder claims the tallied weight");
+        assertEq(claimableBalance(game, dave), pot, "the queued holder claims the tallied weight");
 
         refs[0] = uint256(3) << 64; // alice's created ticket: the bucket is unreadable
         vm.expectRevert(DegenerusGameStorage.E.selector);
         game.claimDeadVrf(_fixtureId(alice), refs);
-        assertEq(game.claimableWinningsOf(alice), 0);
+        assertEq(claimableBalance(game, alice), 0);
     }
 }
