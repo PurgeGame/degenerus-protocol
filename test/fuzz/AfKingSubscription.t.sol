@@ -335,7 +335,7 @@ contract AfKingSubscription is DeployProtocol {
 
     /// @dev Read `who`'s 1-indexed subscriber index (slot 55); 0 = not in set.
     function _subscriberIndexOf(address who) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.SUB_OF)))) >> 224; // Sub.setPosition (1-based)
+        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.SUB_OF)))) >> 200; // Sub.setPosition (1-based)
     }
 
     /// @dev Read `who`'s fundingSource from the sparse `_fundingSourceOf` map (slot 53).

@@ -137,7 +137,8 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
         // Permissionless: a settled claim only ever credits the slot owner, never the caller.
         // Bucket lanes hold wallet IDs; a caller with no ID owns no slot.
         uint32 playerId = _creditAccountId(id);
-        address payee = _payee(_walletElement(playerId));
+        // A self claim pays the caller: its ID is its own ordinary main.
+        address payee = id == 0 ? msg.sender : _payee(_walletElement(playerId));
         // ---- Validation (gameOver hard cutoff + range gates) ----
         // No level upper-bound guard: the 8-color ownership check below is the gate —
         // an unmaterialized bucket is empty and fails it, while a bucket the sweep has
@@ -216,7 +217,8 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
     function claimAffiliateDgnrs(uint32 id) external {
         // Permissionless: a settled claim only ever credits the affiliate, never the caller.
         uint32 playerId = id == 0 ? _walletIdOf(msg.sender) : _creditAccountId(id);
-        address payee = playerId == 0 ? msg.sender : _payee(_walletElement(playerId));
+        // A self claim pays the caller: its ID is its own ordinary main.
+        address payee = id == 0 ? msg.sender : _payee(_walletElement(playerId));
 
         uint24 currLevel = level;
         if (currLevel == 0) revert NotStarted();

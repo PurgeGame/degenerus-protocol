@@ -202,7 +202,7 @@ contract SeatCapHandler is Test {
     }
 
     function _pos(uint32 id) internal view returns (uint256) {
-        return id == 0 ? 0 : _subWord(id) >> 224;
+        return id == 0 ? 0 : _subWord(id) >> 200;
     }
 
     function _setElement(uint256 index) internal view returns (uint256) {
@@ -970,6 +970,6 @@ contract SeatCapInvariant is DeployProtocol {
     }
 
     function _posOf(uint32 id) internal view returns (uint256) {
-        return uint256(vm.load(address(game), GameSlotKeys.byId(id, GameSlots.SUB_OF))) >> 224;
+        return uint256(vm.load(address(game), GameSlotKeys.byId(id, GameSlots.SUB_OF))) >> 200;
     }
 }

@@ -3,16 +3,17 @@ pragma solidity ^0.8.26;
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
-import {GameSlots} from "../helpers/GameSlots.sol";
+import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
+import {Vm} from "forge-std/Vm.sol";
 
-/// @title PendingBoxCountInvariant — `_pendingBoxCount` == Σ pending day-markers, everywhere
+/// @title PendingBoxCountInvariant — `_pendingBoxCount` never exceeds the stamped boxes ahead of the opener, everywhere
 /// @notice The `_pendingBoxCount` counter (compiler-pinned GameSlots) gates
-///         mineFlip's AFKing stage: it MUST equal the number of subscribers whose
-///         `lastOpenedDay < lastAutoBoughtDay` (a stamped-but-unopened box) after EVERY lifecycle
-///         transition, or the gate under-counts (the engine moves past the AFKing stage with
-///         stamped boxes still unopened) or over-counts (walks that find nothing — gas only). Exactness rests on the no-orphan rule: a pending sub is
-///         never re-stamped, evicted, reclaimed, or funding-killed, so the daily STAGE lootbox
-///         stamp is the ONLY increment and the box open the ONLY decrement.
+///         mineFlip's AFKing stage. A stamped box is pending while its stamp is the open cohort's,
+///         the sub sits in the box section and the opener cursor has not passed it, so after EVERY
+///         lifecycle transition the count is bounded by that walk. The engine-level exactness
+///         (starved call opens exactly one, full drain reaches zero) is asserted in the test body,
+///         and settlement is checked independently of the counter and cursor: every box stamped
+///         for a cohort must emit its settlement record in exactly one AFKing-stage call.
 /// @dev Walks the full live `_subscribers` ring via vm.load after each step and compares.
 ///      Covers: grounded subscribe (lootbox + ticket mode), the daily STAGE stamp, partial and
 ///      full drains (bounded and unbounded mineFlip calls), cancel-to-tombstone WHILE PENDING (markers
@@ -25,7 +26,6 @@ contract PendingBoxCountInvariant is DeployProtocol {
     uint256 private constant CURSOR_SLOT = GameSlots.SUB_CURSOR;
     uint256 private constant PENDING_COUNT_SHIFT = GameSlots.PENDING_BOX_COUNT_OFFSET * 8;
     uint256 private constant OFF_LASTBOUGHT = 7;  // uint24 lastAutoBoughtDay (bytes 7..9)
-    uint256 private constant OFF_LASTOPENED = 10; // uint24 lastOpenedDay     (bytes 10..12)
     uint256 private _lastFulfilledReqId;
 
     uint256 private constant N_LOOTBOX = 12;
@@ -120,25 +120,26 @@ contract PendingBoxCountInvariant is DeployProtocol {
     ///      the first time the AFKing stage is the next work it is partially drained through
     ///      bounded mineFlip calls before the stepping continues.
     function _drainDay(uint256 vrfWord, bool partialDrain) internal {
+        _captureCohort();
         bool partialUsed = !partialDrain;
         for (uint256 i; i < 800; ++i) {
             _assertInvariant("engine checkpoint");
-            if (!game.advanceDue() && game.rngComplete()) return;
+            if (!game.advanceDue() && game.rngComplete()) {
+                _assertCohortSettled();
+                return;
+            }
             _fulfillPending(vrfWord + i);
             if (!partialUsed && game.nextMinerAction() == 9) { // MinerAction.Afking
                 partialUsed = true;
                 uint256 before = _pendingBoxCount();
                 uint256 starved = _oneBoxBudget();
-                vm.prank(makeAddr("pb_drain_a"));
-                game.mineFlip{gas: starved}(0);
+                _trackedFlip(makeAddr("pb_drain_a"), starved);
                 _assertInvariant("after a starved engine drain");
                 assertEq(_pendingBoxCount(), before - 1, "the starved engine call opened exactly one box");
-                vm.prank(makeAddr("pb_drain_b"));
-                game.mineFlip{gas: 1_500_000}(0);
+                _trackedFlip(makeAddr("pb_drain_b"), 1_500_000);
                 _assertInvariant("after a moderate engine drain");
                 if (game.nextMinerAction() == 9) {
-                    vm.prank(makeAddr("pb_crank"));
-                    game.mineFlip{gas: 2_000_000}(0);
+                    _trackedFlip(makeAddr("pb_crank"), 2_000_000);
                     _assertInvariant("after a rewarded mineFlip drain");
                 }
                 continue;
@@ -177,16 +178,86 @@ contract PendingBoxCountInvariant is DeployProtocol {
             if (ok) hi = mid;
             else lo = mid;
         }
-        game.mineFlip{gas: hi}(0);
+        _trackedFlip(address(this), hi);
+    }
+
+    // ---- settlement evidence (independent of the counter and cursor) ----
+
+    bytes32 private constant LOOTBOX_OPENED = keccak256("LootBoxOpened(uint32,uint48,uint256,uint24,uint32,uint256,bool)");
+    bytes32 private constant BOX_SPIN = keccak256("BoxSpin(uint32,uint64,uint256,uint256,uint256)");
+    bytes32 private constant CRAPS_PASSES = keccak256("LootBoxCrapsPasses(uint32,uint32,uint32,uint24)");
+
+    uint32[] private _cohort;
+    mapping(uint32 => uint256) private _settledCalls;
+    uint32[] private _settledIds;
+
+    /// @dev Record the boxes this cohort stamped, from the stamp field alone.
+    function _captureCohort() internal {
+        delete _cohort;
+        if (_pendingBoxCount() == 0) return;
+        uint256 len = uint256(vm.load(address(game), bytes32(uint256(SUBSCRIBERS_SLOT))));
+        bytes32 base = keccak256(abi.encode(uint256(SUBSCRIBERS_SLOT)));
+        uint256 packed = uint256(vm.load(address(game), bytes32(GameSlots.SUB_BOX_COUNT)));
+        uint256 boxes = uint16(packed >> (GameSlots.SUB_BOX_COUNT_OFFSET * 8));
+        uint24 stampDay = uint24(packed >> (GameSlots.AFKING_RESET_DAY_OFFSET * 8));
+        for (uint256 i = uint16(packed >> (GameSlots.SUB_OPEN_CURSOR_OFFSET * 8)); i < len && i < boxes; ++i) {
+            uint32 id = uint32(uint256(vm.load(address(game), bytes32(uint256(base) + i / 8))) >> ((i & 7) * 32));
+            uint256 sub = uint256(vm.load(address(game), keccak256(abi.encode(id, SUBOF_SLOT))));
+            if (uint24(sub >> (OFF_LASTBOUGHT * 8)) == stampDay) _cohort.push(id);
+        }
+    }
+
+    /// @dev One mineFlip; a call made while AFKing opens are the next read work has its settlement
+    ///      records tallied, each account counted once per call.
+    function _trackedFlip(address caller, uint256 gasCap) internal {
+        bool afking = game.rngConsumerStage() == 2;
+        if (afking) vm.recordLogs();
+        if (caller != address(this)) vm.prank(caller);
+        game.mineFlip{gas: gasCap}(0);
+        if (!afking) return;
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint32[] memory seen = new uint32[](logs.length);
+        uint256 n;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter != address(game) || logs[i].topics.length < 2) continue;
+            bytes32 sig = logs[i].topics[0];
+            if (sig != LOOTBOX_OPENED && sig != BOX_SPIN && sig != CRAPS_PASSES) continue;
+            uint32 id = uint32(uint256(logs[i].topics[1]));
+            bool dup;
+            for (uint256 j; j < n; ++j) if (seen[j] == id) dup = true;
+            if (dup) continue;
+            seen[n++] = id;
+            if (_settledCalls[id]++ == 0) _settledIds.push(id);
+        }
+    }
+
+    /// @dev Every stamped box settled in exactly one call, and nothing else settled as AFKing.
+    function _assertCohortSettled() internal {
+        for (uint256 i; i < _cohort.length; ++i) {
+            assertEq(_settledCalls[_cohort[i]], 1, "each stamped box settles exactly once");
+        }
+        for (uint256 i; i < _settledIds.length; ++i) {
+            uint32 id = _settledIds[i];
+            bool stamped;
+            for (uint256 j; j < _cohort.length; ++j) if (_cohort[j] == id) stamped = true;
+            assertTrue(stamped, "only stamped boxes settle in the AFKing stage");
+            delete _settledCalls[id];
+        }
+        delete _settledIds;
+        delete _cohort;
     }
 
     // ---- invariant core ----
 
+    /// @dev The record carries no per-sub open marker, so the stamp walk is an upper bound: a
+    ///      same-day subscribe cover-buy shares the cohort's stamp day without creating a pending
+    ///      box. The count never exceeds the walk, and a nonzero count needs a stamped box ahead of
+    ///      the opener cursor to open.
     function _assertInvariant(string memory label) internal view {
-        assertEq(
+        assertLe(
             _pendingBoxCount(),
             _countPendingMarkers(),
-            string(abi.encodePacked("_pendingBoxCount != pending-marker walk: ", label))
+            string(abi.encodePacked("_pendingBoxCount exceeds the stamped boxes ahead of the opener: ", label))
         );
     }
 
@@ -199,13 +270,16 @@ contract PendingBoxCountInvariant is DeployProtocol {
     function _countPendingMarkers() internal view returns (uint256 pending) {
         uint256 len = uint256(vm.load(address(game), bytes32(uint256(SUBSCRIBERS_SLOT))));
         bytes32 base = keccak256(abi.encode(uint256(SUBSCRIBERS_SLOT)));
-        uint256 boxes = uint16(uint256(vm.load(address(game), bytes32(GameSlots.SUB_BOX_COUNT))) >> (GameSlots.SUB_BOX_COUNT_OFFSET * 8));
-        for (uint256 i; i < len; ++i) {
-            uint256 position = i < boxes ? i : 2000 - (i - boxes);
+        uint256 packed = uint256(vm.load(address(game), bytes32(GameSlots.SUB_BOX_COUNT)));
+        uint256 boxes = uint16(packed >> (GameSlots.SUB_BOX_COUNT_OFFSET * 8));
+        uint256 openCursor = uint16(packed >> (GameSlots.SUB_OPEN_CURSOR_OFFSET * 8));
+        uint24 stampDay = uint24(packed >> (GameSlots.AFKING_RESET_DAY_OFFSET * 8));
+        for (uint256 i = openCursor; i < len && i < boxes; ++i) {
+            uint256 position = i;
             uint256 word = uint256(vm.load(address(game), bytes32(uint256(base) + position / 8)));
             uint32 id = uint32(word >> ((position & 7) * 32));
             uint256 sub = uint256(vm.load(address(game), keccak256(abi.encode(id, SUBOF_SLOT))));
-            if (uint24(sub >> (OFF_LASTOPENED * 8)) < uint24(sub >> (OFF_LASTBOUGHT * 8))) {
+            if (stampDay != 0 && uint24(sub >> (OFF_LASTBOUGHT * 8)) == stampDay) {
                 unchecked {
                     ++pending;
                 }
@@ -225,15 +299,7 @@ contract PendingBoxCountInvariant is DeployProtocol {
     }
 
     function _lastOpenedDayOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_LASTOPENED, 24));
-    }
-
-    function _pokeSubOpenedDay(address who, uint32 d) internal {
-        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT)));
-        uint256 w = uint256(vm.load(address(game), slot));
-        uint256 shift = OFF_LASTOPENED * 8;
-        w = (w & ~(uint256(0xFFFFFF) << shift)) | (uint256(d & 0xFFFFFF) << shift);
-        vm.store(address(game), slot, bytes32(w));
+        return GameSlotKeys.afkingOpenedDay(address(game), game.walletIdOf(who));
     }
 
     function _pokePendingCount(uint16 pendingCount) internal {

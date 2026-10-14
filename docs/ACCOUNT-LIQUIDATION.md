@@ -10,7 +10,7 @@ The seller receives only the quoted price, in ETH with stETH covering any shortf
 
 Coinflip wagers transfer unchanged. Existing auto-rebuy continues until collection, so its carry can win or lose during that interval. `Coinflip.claimAcquiredCoinflips(id)` runs ordinary bounded settlement, pays the buyer, and banks carry/disables auto-rebuy once caught up and unfrozen. There is no sale-day cutoff or special preview arithmetic.
 
-The normal AFKing worker cancels acquired subscriptions before another purchase and preserves already-paid box stamps. Pending run accrual can be forfeited like an expired subscription; claim it before selling. No eager cleanup runs during liquidation.
+Liquidation cancels the sold account's AFKing subscription and, for a main account, every smurf's subscription, using the main's stored smurf list. Already-paid box stamps still open, with their rewards going to the buyer. Pending run accrual can be forfeited like an expired subscription; claim it before selling. A subscription that another account funded from the sold account's balance is cancelled by the daily AFKing pass before its next purchase.
 
 ## Integration
 
@@ -18,9 +18,9 @@ The normal AFKing worker cancels acquired subscriptions before another purchase 
 - `walletIdOf(address)` returns the current default gameplay ID. A main sale clears it; later gameplay can register a replacement.
 - `walletIdentityOf(address)` returns the permanent identity used for governance and original address-derived affiliate links. A sale does not reset it.
 - `resolveAccount(id, caller)` resolves current payee and authorization. Raw wallet-table keys are historical metadata on acquired roots, not spending authority. `Lens.walletOfId` returns the current payee.
-- `acquiredBuyer(id)` returns the actual buyer ID (zero if unacquired). Child ownership follows at most two links. No unbounded family walk is used.
+- `acquiredBuyer(id)` returns the actual buyer ID (zero if unacquired). Child ownership follows at most two links; resolving it never walks the family.
 - `harvestAcquiredAccounts(buyerId, ids)` accepts at most 32 acquired IDs for buyer 1 (Vault) or 2 (sDGNRS). Anyone can call; the caller receives nothing. It moves available claimable ETH and prepaid funding into the buyer’s main game balance without changing `claimablePool`. Duplicates do not double-pay. This collector makes no token or cleanup calls.
-- Collection remains available for later awards to the acquired root or any inherited child. There is no sale-time balance snapshot or one-time completion marker. An off-chain caller supplies the IDs and can sweep them again after more winnings arrive; liquidation and ordinary prize resolution do not traverse the family.
+- Collection remains available for later awards to the acquired root or any inherited child. There is no sale-time balance snapshot or one-time completion marker. An off-chain caller supplies the IDs and can sweep them again after more winnings arrive. Ordinary prize resolution never traverses the family. Liquidation of a main walks its stored smurf list (`Lens.smurfsOf`) only to cancel AFKing subscriptions; it moves no balances.
 - Swept ETH becomes usable in the existing buyer paths: sDGNRS counts its main game claimable as redemption backing and pulls it to fund redemption reserves; Vault can withdraw through `gameClaimWinnings`, and DGVE burns can pull the balance automatically. The normal final game-over sweep deadline still applies.
 - Token collection is separate: `Coinflip.claimAcquiredCoinflips(id)` and `WWXRP.withdrawAcquired(id)` fix the recipient to the buyer. They cannot pay the caller.
 - Collected FLIP follows existing protocol-receiver handling: sDGNRS receives tomorrow's flip stake and Vault receives its FLIP mint allowance. It is not left in an unusable ERC20 balance. The hooks also collect awards arriving after an earlier collection disabled auto-rebuy.
@@ -39,7 +39,7 @@ Each new live redemption, including a top-up, must have at least 0.01 ETH of fre
 
 Coinflip's ordinary settlement and previews are unchanged; the acquired-account collection hook is the only new behavior. No module or deployment-order change is needed.
 
-Game slot 77 retains the current gameplay ID and permanent identity. Smurf creation counts and admin bases belong to the main ID: bits 224–239 and 240–255 of its existing mint word. Selling a child never refunds a creation. Selling the main leaves both fields on the sold ID, which cannot create more children because it is acquired. A replacement ID starts with zero count and zero base. Existing storage roots and types do not change. Acquired roots use the existing wallet-table owner lane, preserving half-pass counts and all ticket positions; there is no new acquisition mapping.
+Game slot 77 retains the current gameplay ID and permanent identity. Smurf creation counts and admin bases belong to the main ID: bits 224–239 and 240–255 of its existing mint word. Selling a child never refunds a creation. Selling the main leaves both fields on the sold ID, which cannot create more children because it is acquired. A replacement ID starts with zero count and zero base. Existing storage roots and types do not change. Acquired roots use the existing wallet-table owner lane, preserving half-pass counts and all ticket positions; there is no acquisition mapping. Each main's smurf IDs are appended at creation to `_smurfWords`, eight per word, with the lifetime creation count as the list length.
 
 ## Verification
 

@@ -39,7 +39,6 @@ contract AfkingAffiliateCacheHost is DegenerusGame, WalletSeed {
         sub.dailyQuantity = 255;
         sub.flags = 0;
         sub.lastAutoBoughtDay = today - 1;
-        sub.lastOpenedDay = today - 1;
         sub.afkingStartDay = today - 1;
         sub.afkCoveredThroughDay = today - 1;
         _creditAfkingValue(id, 100 ether);

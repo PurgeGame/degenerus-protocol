@@ -8,7 +8,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {IDegenerusGameAdvanceModule, IDegenerusGameRngModule, IDegenerusGameTicketModule, IGameAfkingModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
-import {GameSlots} from "../helpers/GameSlots.sol";
+import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 
 /// @dev Test-only checkpoint driver: executes exactly the currently selected
 /// production worker before AFK, or the AFK open worker alone. The composed miner
@@ -86,10 +86,9 @@ contract AutoOpenCursorRing is DeployProtocol {
     uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED;        // mintPacked_ mapping root (deity bit @ 184)
 
     //   dailyQuantity u8 @0 · flags u8 @1 · score u16 @2 · amount u24 @4
-    //   lastAutoBoughtDay u24 @7 · lastOpenedDay u24 @10 · afkCoveredThroughDay u24 @13 · afkingStartDay u24 @16
-    //   affiliateBase u32 @19 · pendingFlip u24 @23 · subStreakLatch u16 @26
+    //   lastAutoBoughtDay u24 @7 · afkCoveredThroughDay u24 @10 · afkingStartDay u24 @13
+    //   affiliateBase u32 @16 · pendingFlip u24 @20 · subStreakLatch u16 @23
     uint256 private constant OFF_LASTBOUGHT = 7;      // uint24 lastAutoBoughtDay (bytes 7..9)
-    uint256 private constant OFF_LASTOPENED = 10;     // uint24 lastOpenedDay     (bytes 10..12)
 
     uint256 private constant DEITY_SHIFT = BitPackingLib.HAS_DEITY_PASS_SHIFT;
 
@@ -169,7 +168,7 @@ contract AutoOpenCursorRing is DeployProtocol {
 
     /// @dev Create `n` seated, funded subs and stamp ONE sealed openable box on each: a new-day STAGE
     ///      buy that stamps the box + lands its stamp-day word, with NO subsequent open. Each sub ends up
-    ///      with lastOpenedDay < lastAutoBoughtDay and _recordedDailyWord(lastAutoBoughtDay) != 0 (openable).
+    ///      with a pending stamped box and _recordedDailyWord(lastAutoBoughtDay) != 0 (openable).
     function _stampSealedOpenableSubs(uint256 n) internal returns (address[] memory subs) {
         subs = new address[](n);
         for (uint256 i; i < n; i++) {
@@ -321,14 +320,14 @@ contract AutoOpenCursorRing is DeployProtocol {
     }
 
     function _lastOpenedDayOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_LASTOPENED, 24));
+        return GameSlotKeys.afkingOpenedDay(address(game), game.walletIdOf(who));
     }
 
     function _subscriberIndexOf(address who) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.SUB_OF)))) >> 224; // Sub.setPosition (1-based)
+        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.SUB_OF)))) >> 200; // Sub.setPosition (1-based)
     }
 
-    /// @dev Openable under the entry-gate: pending box (lastOpenedDay < lastAutoBoughtDay) AND the frozen
+    /// @dev Openable under the entry-gate: pending box (stamped, unopened) AND the frozen
     ///      stamp-day word has landed (_recordedDailyWord(lastAutoBoughtDay) != 0). Mirrors the _runAfkingWork predicate.
     function _isOpenable(address who) internal view returns (bool) {
         uint32 bought = _lastBoughtDayOf(who);
@@ -336,7 +335,7 @@ contract AutoOpenCursorRing is DeployProtocol {
         return game.rngWordForDay(uint24(bought)) != 0;
     }
 
-    /// @dev Non-pending: no pending box (lastOpenedDay >= lastAutoBoughtDay) — a suffix-only scan landing
+    /// @dev Non-pending: no pending box (stamp opened) — a suffix-only scan landing
     ///      here finds no work.
     function _isNonPending(address who) internal view returns (bool) {
         return _lastOpenedDayOf(who) >= _lastBoughtDayOf(who);

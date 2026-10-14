@@ -20,7 +20,6 @@ contract SubscriptionUpdateSeeder is GameAfkingModule {
     function reclaimCanceled(address player) external {
         uint32 id = _walletIdOf(player);
         require(_subOf[id].dailyQuantity == 0);
-        require(_subOf[id].lastOpenedDay >= _subOf[id].lastAutoBoughtDay);
         _removeFromSet(_subOf[id].setPosition);
         delete _subOf[id];
     }

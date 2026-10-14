@@ -25,7 +25,6 @@ contract AfkingMembershipHarness is GameAfkingModule, WalletSeed {
         sub.setPosition = 1;
         sub.dailyQuantity = quantity;
         sub.lastAutoBoughtDay = processDay;
-        sub.lastOpenedDay = dailyIdx;
         sub.afkCoveredThroughDay = processDay;
         sub.afkingStartDay = processDay;
         sub.amount = 10;
@@ -48,7 +47,11 @@ contract AfkingMembershipHarness is GameAfkingModule, WalletSeed {
     function complete() external view returns (bool) { return _rngComplete(); }
     function state(address player) external view returns (uint256 count, uint256 members, uint256 index, uint24 stamp, uint24 opened, uint8 quantity) {
         Sub storage sub = _subOf[_walletIdOf(player)];
-        return (_pendingBoxCount, _subscribers.length, sub.setPosition, sub.lastAutoBoughtDay, sub.lastOpenedDay, sub.dailyQuantity);
+        // The record has no open marker: the box is pending while this cohort's stamp is unopened.
+        uint24 stamp = sub.lastAutoBoughtDay;
+        bool boxPending = sub.setPosition != 0 && stamp == _afkingResetDay && _pendingBoxCount != 0
+            && sub.setPosition <= _subBoxCount && sub.setPosition - 1 >= _subOpenCursor;
+        return (_pendingBoxCount, _subscribers.length, sub.setPosition, stamp, boxPending ? stamp - 1 : stamp, sub.dailyQuantity);
     }
 }
 

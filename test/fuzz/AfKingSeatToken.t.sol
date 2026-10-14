@@ -77,8 +77,8 @@ contract AfKingSeatToken is SeatFixture {
         uint256 w = _subWord(id);
         assertTrue(_active(player), "sub active");
         assertEq(uint8(w), 1, "daily quantity stored");
-        uint24 startDay = uint24(w >> 128);
-        uint24 coveredDay = uint24(w >> 104);
+        uint24 startDay = uint24(w >> 104);
+        uint24 coveredDay = uint24(w >> 80);
         assertGt(startDay, 0, "activation day stamped");
         assertGe(coveredDay, startDay, "funded-through >= activation day");
         assertEq(game.subscriberSetLength(), 3, "set grew by one");

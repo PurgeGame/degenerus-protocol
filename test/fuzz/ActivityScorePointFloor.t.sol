@@ -41,9 +41,9 @@ contract ActivityScorePointFloorTest is DeployProtocol {
     uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF;
     uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED;
     uint256 private constant DEITY_SHIFT = BitPackingLib.HAS_DEITY_PASS_SHIFT;
-    uint256 private constant OFF_AFKCOVERED = 13;
-    uint256 private constant OFF_AFKINGSTART = 16;
-    uint256 private constant OFF_STREAKLATCH = 26;
+    uint256 private constant OFF_AFKCOVERED = 10;
+    uint256 private constant OFF_AFKINGSTART = 13;
+    uint256 private constant OFF_STREAKLATCH = 23;
 
     /// @dev A deity-passed player with no quest streak scores exactly 50 + 25 + 80 = 155 points (the deity
     ///      base plus the deity activity bonus), with zero affiliate/whale/curse contribution — so the quest

@@ -14,7 +14,6 @@ contract AfkingRepricingHost is SubscriberNativeGasHost {
             sub.flags = 0;
             sub.dailyQuantity = i == 0 ? 0 : 1;
             sub.lastAutoBoughtDay = dailyIdx;
-            sub.lastOpenedDay = dailyIdx;
         }
     }
     function moreOpenMembers(uint256 boxes, uint256 tickets) external {
@@ -28,7 +27,6 @@ contract AfkingRepricingHost is SubscriberNativeGasHost {
             sub.amount = 10;
             sub.score = 305;
             sub.lastAutoBoughtDay = dailyIdx;
-            sub.lastOpenedDay = ticket ? dailyIdx : dailyIdx - 1;
             if (!ticket) ++_pendingBoxCount;
         }
     }

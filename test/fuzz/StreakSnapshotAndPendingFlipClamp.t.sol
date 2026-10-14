@@ -19,7 +19,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///      construction: at/over the ceiling the field reads exactly 16_777_215, never a wrapped small value.
 ///
 /// @dev Reuses the afking-run drive ported from V56SecUnmanipulable, RE-POINTED to the AFKing-Coin-era Sub
-///   accumulator (affiliateBase u32 off19, pendingFlip u24 off23, subStreakLatch u16 off26 — DegenerusGameStorage.sol
+///   accumulator (affiliateBase u32 off16, pendingFlip u24 off20, subStreakLatch u16 off23 — DegenerusGameStorage.sol
 ///   struct Sub, post `validThroughLevel` deletion; NOT the stale pre-PACK V56 offsets which read pendingFlip
 ///   u32 off27 / subStreakLatch u8 off31). The manual quest streak is driven by writing `questPlayerState[player].streak`
 ///   (uint16, slot 1 off9) directly, the same dormant value `beginAfking` snapshots; day anchors are left so
@@ -56,14 +56,14 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident slots + the AFKing-Coin-era Sub accumulator offsets (DegenerusGameStorage.sol struct Sub)
     // -------------------------------------------------------------------------
-    /// @dev _subOf mapping root @ slot 52. The accumulator section is affiliateBase u32 off19,
-    ///      pendingFlip u24 off23, subStreakLatch u16 off26. The afking day markers:
-    ///      afkCoveredThroughDay u24 off13, afkingStartDay u24 off16.
+    /// @dev _subOf mapping root @ slot 52. The accumulator section is affiliateBase u32 off16,
+    ///      pendingFlip u24 off20, subStreakLatch u16 off23. The afking day markers:
+    ///      afkCoveredThroughDay u24 off10, afkingStartDay u24 off13.
     uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF;
-    uint256 private constant OFF_AFKCOVERED = 13;
-    uint256 private constant OFF_AFKINGSTART = 16;
-    uint256 private constant OFF_PENDINGFLIP = 23; // uint24 pendingFlip (bytes 23..25)
-    uint256 private constant OFF_STREAKLATCH = 26; // uint16 subStreakLatch (bytes 26..27)
+    uint256 private constant OFF_AFKCOVERED = 10;
+    uint256 private constant OFF_AFKINGSTART = 13;
+    uint256 private constant OFF_PENDINGFLIP = 20; // uint24 pendingFlip (bytes 20..22)
+    uint256 private constant OFF_STREAKLATCH = 23; // uint16 subStreakLatch (bytes 23..24)
 
     /// @dev recordAfkingSecondary is QUESTS-gated; the live +1 bump is driven by pranking as this caller.
     address private constant QUESTS_CALLER = ContractAddresses.QUESTS;
@@ -318,13 +318,13 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
         return _subField(who, OFF_STREAKLATCH, 16);
     }
 
-    /// @dev pendingFlip — the uint24 accumulator (off 23, width 24), NOT the V56 width-32 reader.
+    /// @dev pendingFlip — the uint24 accumulator (off 20, width 24), NOT the V56 width-32 reader.
     function _pendingFlip24Of(address who) internal view returns (uint256) {
         return _subField(who, OFF_PENDINGFLIP, 24);
     }
 
     function _affiliateBase32Of(address who) internal view returns (uint256) {
-        return _subField(who, 19, 32);
+        return _subField(who, 16, 32);
     }
 
     function _afkingStartOf(address who) internal view returns (uint32) {

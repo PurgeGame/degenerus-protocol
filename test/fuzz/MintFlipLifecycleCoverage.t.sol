@@ -5,7 +5,7 @@ import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
-import {GameSlots} from "../helpers/GameSlots.sol";
+import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 
 /// @title MintFlipLifecycleCoverage -- the mineFlip afking lifecycle invariant: every subscriber is
 ///        STAMPED an afking box each day (the buy/stamp leg), then after the day's RNG/jackpot work
@@ -26,7 +26,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///     human boxes all fully drained.
 ///
 /// @notice A box is openable iff the entry-gate is open (`!rngLockedFlag && !_livenessTriggered`) AND
-///   `sub.lastOpenedDay < sub.lastAutoBoughtDay` AND `_recordedDailyWord(sub.lastAutoBoughtDay) != 0`.
+///   a pending stamped box AND `_recordedDailyWord(sub.lastAutoBoughtDay) != 0`.
 ///
 /// @dev N is chosen > OPEN_BATCH = 80 so the open leg MUST span multiple calls and the cursor resumes
 ///   mid-ring (the load-bearing condition for the open leg's resume property — proven explicitly in
@@ -50,10 +50,9 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
     uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED;        // mintPacked_ mapping root (deity bit @ 184)
 
     //   dailyQuantity u8 @0 · flags u8 @1 · score u16 @2 · amount u24 @4
-    //   lastAutoBoughtDay u24 @7 · lastOpenedDay u24 @10 · afkCoveredThroughDay u24 @13 · afkingStartDay u24 @16
-    //   affiliateBase u32 @19 · pendingFlip u24 @23 · subStreakLatch u16 @26
+    //   lastAutoBoughtDay u24 @7 · afkCoveredThroughDay u24 @10 · afkingStartDay u24 @13
+    //   affiliateBase u32 @16 · pendingFlip u24 @20 · subStreakLatch u16 @23
     uint256 private constant OFF_LASTBOUGHT = 7;      // uint24 lastAutoBoughtDay (bytes 7..9)
-    uint256 private constant OFF_LASTOPENED = 10;     // uint24 lastOpenedDay     (bytes 10..12)
 
     uint256 private constant DEITY_SHIFT = BitPackingLib.HAS_DEITY_PASS_SHIFT;
 
@@ -84,7 +83,7 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
     ///       proving the buy-leg cursor walked the whole [0, len) set with no strand);
     ///   (b) drain the boxes across MULTIPLE mineFlip calls (the open leg spans calls and
     ///       resumes mid-ring because N > OPEN_BATCH);
-    ///   (c) after draining, EVERY sub has `lastOpenedDay == lastAutoBoughtDay` (full OPEN coverage,
+    ///   (c) after draining, EVERY sub has no pending stamped box (full OPEN coverage,
     ///       proving the open-leg full-ring scan reached every sub with no strand);
     ///   (d) ONLY THEN does `mineFlip()` revert `NoWork()` — never while either leg had pending work.
     function test_AllSubsStampedThenAllBoxesOpenedBeforeNoWork() public {
@@ -115,7 +114,7 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
         uint256 openCalls = _drainDay(subs, keeper, uint256(keccak256("life_stampc")) | 1, false);
         assertGt(openCalls, 1, "load-bearing: draining the set spanned MULTIPLE open calls (cursor resumed mid-ring)");
 
-        // (c) FULL OPEN COVERAGE: every sub's box was opened — lastOpenedDay caught lastAutoBoughtDay.
+        // (c) FULL OPEN COVERAGE: every sub's box was opened — no stamp left pending.
         for (uint256 i; i < N; i++) {
             assertEq(_lastOpenedDayOf(subs[i]), _lastBoughtDayOf(subs[i]), "OPEN coverage: every stamped box was opened (marker advanced)");
             assertFalse(_isOpenable(subs[i]), "OPEN coverage: no openable box left behind for any sub");
@@ -567,14 +566,14 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
     }
 
     function _lastOpenedDayOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_LASTOPENED, 24));
+        return GameSlotKeys.afkingOpenedDay(address(game), game.walletIdOf(who));
     }
 
     function _subscriberIndexOf(address who) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.SUB_OF)))) >> 224; // Sub.setPosition (1-based)
+        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.SUB_OF)))) >> 200; // Sub.setPosition (1-based)
     }
 
-    /// @dev Openable under the entry-gate: pending box (lastOpenedDay < lastAutoBoughtDay) AND the frozen
+    /// @dev Openable under the entry-gate: pending box (stamped, unopened) AND the frozen
     ///      stamp-day word has landed (_recordedDailyWord(lastAutoBoughtDay) != 0).
     function _isOpenable(address who) internal view returns (bool) {
         uint32 bought = _lastBoughtDayOf(who);

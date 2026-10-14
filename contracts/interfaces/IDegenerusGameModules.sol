@@ -659,6 +659,9 @@ interface IGameAfkingModule {
     function runSubscriberWork(uint24 processDay, uint256 gasAllowance) external returns (MineFlipGas.Result memory);
     function runAfkingWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory);
     function runHumanBoxWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory);
+    /// @notice Liquidation-only: cancel the sold account's AFKing run and, for a main sale,
+    ///         every smurf's (MintModule.liquidateAccount delegatecall target).
+    function cancelLiquidatedSubscriptions(uint32 id, bool mainSale) external;
 
     /// @notice The SINGLE subscription entrypoint: create / replace (dailyQuantity >= 1)
     ///         or cancel (dailyQuantity == 0, tombstone) for account `id` (0 = caller).

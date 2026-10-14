@@ -232,6 +232,32 @@ library GameSlotKeys {
         return keccak256(abi.encode(uint256(id), GameSlots.BALANCES_PACKED));
     }
 
+    /// @dev The packed `_subOf[id]` record read straight from storage.
+    function subWord(address game, uint32 id) internal view returns (uint256) {
+        Vm vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
+        return uint256(vm.load(game, keccak256(abi.encode(uint256(id), GameSlots.SUB_OF))));
+    }
+
+    /// @dev True while `id`'s stamped AFKing box is unopened. The record carries no open marker:
+    ///      the stamp is the open cohort's (`lastAutoBoughtDay == _afkingResetDay`), the count is
+    ///      nonzero, the sub sits in the box section and the opener cursor has not passed it.
+    function afkingBoxPending(address game, uint32 id) internal view returns (bool) {
+        Vm vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
+        uint256 word = subWord(game, id);
+        uint256 position = uint32(word >> 200); // setPosition
+        if (position == 0 || uint24(word >> 56) != uint24(uint256(vm.load(game, bytes32(GameSlots.AFKING_RESET_DAY))) >> (8 * GameSlots.AFKING_RESET_DAY_OFFSET))) return false;
+        uint256 packed = uint256(vm.load(game, bytes32(GameSlots.PENDING_BOX_COUNT)));
+        if (uint16(packed >> (8 * GameSlots.PENDING_BOX_COUNT_OFFSET)) == 0) return false;
+        if (position > uint16(packed >> (8 * GameSlots.SUB_BOX_COUNT_OFFSET))) return false;
+        return position - 1 >= uint16(packed >> (8 * GameSlots.SUB_OPEN_CURSOR_OFFSET));
+    }
+
+    /// @dev Day whose box `id` has opened: the stamp day, one earlier while its stamp is pending.
+    function afkingOpenedDay(address game, uint32 id) internal view returns (uint32) {
+        uint32 bought = uint24(subWord(game, id) >> 56);
+        return afkingBoxPending(game, id) ? bought - 1 : bought;
+    }
+
     /// @dev Root of any `mapping(uint32 => ...)` at `root`, keyed by wallet ID.
     function byId(uint32 id, uint256 root) internal pure returns (bytes32) {
         return keccak256(abi.encode(uint256(id), root));

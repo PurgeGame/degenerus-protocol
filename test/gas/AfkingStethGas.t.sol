@@ -22,7 +22,6 @@ contract AfkingStethGasHost is SubscriberNativeGasHost {
         sub.flags = (source == player ? 0 : 1) | (tickets ? 4 : 0);
         if (source != player) _fundingSourceOf[_seedWallet(player)] = _seedWallet(source);
         sub.lastAutoBoughtDay = yesterday;
-        sub.lastOpenedDay = yesterday;
         sub.afkingStartDay = yesterday;
         sub.afkCoveredThroughDay = yesterday;
         // A mature run exercises the century-shield handback on eviction.

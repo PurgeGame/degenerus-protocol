@@ -89,7 +89,8 @@ VALUE-OUT	claimablePool	_claimWinningsInternal	DegenerusGame.sol	WRITE	player wi
 POOL-TO-POOL	claimablePool	_consolidatePoolsAndRewardJackpots	modules/DegenerusGameAdvanceModule.sol	WRITE	BAF + decimator claimableDelta: future -> claimable; rounds thereby PRE-COUNTED for later per-player claims
 VALUE-IN	claimablePool	_creditAfkingValue	storage/DegenerusGameStorage.sol	WRITE	overpay/bare-send and funded-subscribe ETH deposits, plus an atomic stETH fallback receipt verified by pullAfkingSteth before credit; per-player afking half in tandem (SOLVENCY-01 identity), with fallback uint128 bounds checked before the mutator
 VALUE-IN	claimablePool	_creditBoxProceeds	modules/DegenerusGamePayoutUtils.sol	WRITE	coin-presale-box proceeds: aggregate += full boxEth
-POOL-TO-POOL	claimablePool	_deliverAfkingBuy	modules/GameAfkingModule.sol	WRITE	afking/claimable funding spent on the daily buy (two sites); pools credited via _routeAfkingPoolEth
+POOL-TO-POOL	claimablePool	_deliverAfkingBuy	modules/GameAfkingModule.sol	WRITE	afking/claimable funding spent on the subscribe-time cover-buy (STAGE deliveries batch their debit in _runSubscriberWork); pools credited via _routeAfkingPoolEth
+POOL-TO-POOL	claimablePool	_runSubscriberWork	modules/GameAfkingModule.sol	WRITE	chunk-end release of the STAGE's summed delivery costs (each leg debited from its account in _deliverAfkingBuy); the same sum credits the prize pools via _routeAfkingPoolEth
 POOL-TO-POOL	claimablePool	_handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	WRITE	deity pass refund total moves distributable ETH into claimable
 POOL-TO-POOL	claimablePool	_payGoldenTicket	modules/DegenerusGameJackpotModule.sol	WRITE	golden-ticket ETH rung aggregate: future -> claimable; per-player credit paired below
 POOL-TO-POOL	claimablePool	_purchaseForWithCached	modules/DegenerusGameMintModule.sol	WRITE	claimable-funded purchase legs: aggregate falls as the pools rise (relabel)

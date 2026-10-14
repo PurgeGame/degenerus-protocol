@@ -45,7 +45,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     // -------------------------------------------------------------------------
 
     uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF; // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant OFF_LASTBOUGHT = 10; // uint24 lastAutoBoughtDay (bytes 11..13 of the Sub slot)
+    uint256 private constant OFF_LASTBOUGHT = 7; // uint24 lastAutoBoughtDay (bytes 7..9 of the Sub slot)
     uint256 private constant SUBSCRIBERS_SLOT = GameSlots.SUBSCRIBERS; // _subscribers address[] (length here)
     uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED; // mintPacked_ mapping root (deity bit)
     uint256 private constant DEITY_SHIFT = BitPackingLib.HAS_DEITY_PASS_SHIFT;

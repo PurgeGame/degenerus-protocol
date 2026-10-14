@@ -365,7 +365,9 @@ contract AccountLiquidationTest is RedemptionCloseTools {
         vm.prank(seller); game.subscribe{value: 2 ether}(root, false, true, 1, funderId, seat);
         uint256 otherMoney = game.afkingFundingOf(funder);
         assertGt(otherMoney, 0);
+        assertEq(uint8(GameSlotKeys.subWord(address(game), root)), 1, "the seller's run is live");
         _sale(root);
+        assertEq(uint8(GameSlotKeys.subWord(address(game), root)), 0, "the sale stops the sold account's run at liquidation");
         assertEq(game.afkingFundingOf(funder), otherMoney);
         assertFalse(game.afkingFundingApproved(funderId, root));
         vm.prank(seller); vm.expectRevert(); game.subscribe(root, false, true, 1, 0, 0);
@@ -375,7 +377,9 @@ contract AccountLiquidationTest is RedemptionCloseTools {
         uint32 child = _child();
         uint256 seat = _grantSeat(seller);
         vm.prank(seller); game.subscribe{value: 2 ether}(child, false, false, 1, root, seat);
+        assertEq(uint8(GameSlotKeys.subWord(address(game), child)), 1, "the smurf's run is live");
         _sale(root);
+        assertEq(uint8(GameSlotKeys.subWord(address(game), child)), 0, "a main sale stops its smurf's run at liquidation");
         uint32[] memory ids = new uint32[](1); ids[0] = child;
         game.harvestAcquiredAccounts(2, ids);
         assertFalse(game.afkingFundingApproved(root, child));

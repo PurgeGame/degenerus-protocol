@@ -60,7 +60,6 @@ contract CreditsGameExt is DegenerusGame {
         uint24 covered = s.afkingStartDay + span;
         s.afkCoveredThroughDay = covered;
         s.lastAutoBoughtDay = covered;
-        s.lastOpenedDay = covered;
     }
 
     function x_sub(uint32 id) external view returns (uint24 startDay, uint24 covered, uint8 qty) {

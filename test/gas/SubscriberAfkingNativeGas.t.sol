@@ -4,6 +4,7 @@ pragma solidity 0.8.34;
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -60,7 +61,6 @@ contract SubscriberNativeGasHost is DegenerusGame, WalletSeed {
         sub.dailyQuantity = mode == 4 ? 0 : 255;
         sub.flags = mode == 5 ? 0 : 4;
         sub.lastAutoBoughtDay = yesterday;
-        sub.lastOpenedDay = yesterday;
         sub.afkingStartDay = yesterday;
         sub.afkCoveredThroughDay = yesterday;
         if (mode == 0 || mode == 5) _creditAfkingValue(_seedWallet(player), 100 ether);
@@ -97,12 +97,12 @@ contract SubscriberNativeGasHost is DegenerusGame, WalletSeed {
         _seedSubscriber(id, false);
         _subOpenCursor = 0;
         _pendingBoxCount = 1;
+        _afkingResetDay = day; // the cohort's stamp day, as preparation leaves it
         Sub storage sub = _subOf[id];
         sub.setPosition = 1;
         sub.dailyQuantity = 255;
         sub.flags = 0;
         sub.lastAutoBoughtDay = day;
-        sub.lastOpenedDay = day - 1;
         sub.amount = 61_200; //255 tickets at the maximum0.24ETH price.
         sub.score = 305; //Maximum useful activity-score multiplier.
         // All following destinations are newly funded, cold far-future queues.
@@ -122,6 +122,24 @@ contract SubscriberNativeGasHost is DegenerusGame, WalletSeed {
             id = parent;
         }
         wallets[id] |= uint256(SDGNRS_WALLET_ID) << 160;
+    }
+    /// @dev Fixture for a sale: the ownership transition, then the cancel `liquidateAccount` runs
+    ///      right after it (a main sale also stops its smurfs; `child` makes `player` the sold
+    ///      main's only smurf).
+    function liquidateForTest(address player, bool child) external {
+        uint32 id = _walletIdOf(player);
+        if (child) {
+            uint32 parent = _seedWallet(address(0xAC0123));
+            wallets[id] = uint256(parent) << 160;
+            mintPacked_[parent] += uint256(1) << BitPackingLib.SMURF_COUNT_SHIFT;
+            _smurfWords[parent][0] = id;
+            id = parent;
+        }
+        wallets[id] |= uint256(SDGNRS_WALLET_ID) << 160;
+        (bool ok, bytes memory data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(
+            abi.encodeWithSignature("cancelLiquidatedSubscriptions(uint32,bool)", id, child)
+        );
+        if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
     }
     function publishForOpen() external {
         dailyIdx = _afkingResetDay;
@@ -144,8 +162,15 @@ contract SubscriberNativeGasHost is DegenerusGame, WalletSeed {
     }
     function pendingBoxes() external view returns (uint256) { return _pendingBoxCount; }
     function memberCount() external view returns (uint256) { return _subscribers.length; }
+    /// @dev (stamp day, day whose box has been opened). The open marker is derived: a stamped box
+    ///      is pending exactly while the stamp is this cohort's, the count is nonzero, the sub sits
+    ///      in the box section and the opener cursor has not passed it.
     function delivered(address player) external view returns (uint24, uint24) {
-        return (_subOf[_walletIdOf(player)].lastAutoBoughtDay, _subOf[_walletIdOf(player)].lastOpenedDay);
+        Sub storage sub = _subOf[_walletIdOf(player)];
+        uint24 bought = sub.lastAutoBoughtDay;
+        bool pending = sub.setPosition != 0 && bought == _afkingResetDay && _pendingBoxCount != 0
+            && sub.setPosition <= _subBoxCount && sub.setPosition - 1 >= _subOpenCursor;
+        return (bought, pending ? bought - 1 : bought);
     }
     function claimableOf(address player) external view returns (uint256) { return _claimableOf(_walletIdOf(player)); }
     function pendingEntries(address player, uint24 lvl) external view returns (uint256) {
@@ -187,7 +212,10 @@ contract SubscriberAfkingNativeGasTest is DeployProtocol {
             host.prepare(false);
             host.add(PLAYER, mode == 2 ? 2 : 0);
             address funder = mode == 2 ? address(uint160(PLAYER) + 0x100000) : PLAYER;
-            host.acquireForTest(funder, mode == 1);
+            // Own sale (0) and main sale with the smurf (1) stop at liquidation; a sold funder (2)
+            // is the one case the stage still polls.
+            if (mode == 2) host.acquireForTest(funder, false);
+            else host.liquidateForTest(funder, mode == 1);
             uint256 fundingBefore = game.afkingFundingOf(funder);
             uint256 claimableBefore = host.claimableOf(PLAYER);
             MineFlipGas.Result memory result = host.subWork{gas: 2_000_000}(2_000_000);
@@ -211,7 +239,7 @@ contract SubscriberAfkingNativeGasTest is DeployProtocol {
         assertGt(bought, opened);
         assertEq(host.pendingBoxes(), 1);
         uint256 fundingBefore = game.afkingFundingOf(PLAYER);
-        host.acquireForTest(PLAYER, true);
+        host.liquidateForTest(PLAYER, true);
         host.publishForOpen();
         assertEq(host.openWork(12_000_000).rewardBasis, 1, "acquisition cannot discard the paid box");
         assertEq(host.pendingBoxes(), 0);

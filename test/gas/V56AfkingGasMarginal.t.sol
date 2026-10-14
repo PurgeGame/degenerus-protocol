@@ -10,7 +10,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
-import {GameSlots} from "../helpers/GameSlots.sol";
+import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 
 /// @title AFKing marginal measurements and resumable lifecycle witnesses.
 /// @notice N versus N-1 measurements are comparative diagnostics, not standalone cold
@@ -49,18 +49,17 @@ contract V56AfkingGasMarginal is DeployProtocol {
     // 3-byte crossing-refresh marker) is DELETED and every field after it shifts down 3 bytes. Single
     // 256-bit Sub slot (28 used bytes, 4 free):
     //   dailyQuantity u8 @0 · flags u8 @1 · score u16 @2 · amount u24 @4
-    //   lastAutoBoughtDay u24 @7 · lastOpenedDay u24 @10 · afkCoveredThroughDay u24 @13 · afkingStartDay u24 @16
-    //   affiliateBase u32 @19 · pendingFlip u24 @23 · subStreakLatch u16 @26
+    //   lastAutoBoughtDay u24 @7 · afkCoveredThroughDay u24 @10 · afkingStartDay u24 @13
+    //   affiliateBase u32 @16 · pendingFlip u24 @20 · subStreakLatch u16 @23
     uint256 private constant OFF_AMOUNT = 4;      // uint24 amount (milli-ETH)   (bytes 4..6)
     uint256 private constant OFF_LASTBOUGHT = 7;  // uint24 lastAutoBoughtDay    (bytes 7..9)
-    uint256 private constant OFF_LASTOPENED = 10; // uint24 lastOpenedDay        (bytes 10..12)
     /// @dev milli-ETH packing scale (DegenerusGameStorage.LR_ETH_SCALE) — sub.amount * this = box wei.
     uint256 private constant MILLI_ETH_SCALE = 1e15;
-    uint256 private constant OFF_AFKCOVERED = 13;  // uint24 afkCoveredThroughDay (bytes 13..15)
-    uint256 private constant OFF_AFKINGSTART = 16; // uint24 afkingStartDay      (bytes 16..18)
-    uint256 private constant OFF_AFFBASE = 19;    // uint32 affiliateBase        (bytes 19..22)
-    uint256 private constant OFF_PENDINGFLIP = 23; // uint24 pendingFlip     (bytes 23..25)
-    uint256 private constant OFF_STREAKLATCH = 26; // uint16 subStreakLatch      (bytes 26..27; full streak counter)
+    uint256 private constant OFF_AFKCOVERED = 10;  // uint24 afkCoveredThroughDay (bytes 10..12)
+    uint256 private constant OFF_AFKINGSTART = 13; // uint24 afkingStartDay      (bytes 13..15)
+    uint256 private constant OFF_AFFBASE = 16;    // uint32 affiliateBase        (bytes 16..19)
+    uint256 private constant OFF_PENDINGFLIP = 20; // uint24 pendingFlip     (bytes 20..22)
+    uint256 private constant OFF_STREAKLATCH = 23; // uint16 subStreakLatch      (bytes 23..24)
 
     /// @dev The packed header slot 0 holds `purchaseStartDay` (uint24 @ byte 0) + `dailyIdx` (uint24 @ byte 3)
     ///      + `rngRequestTime` (uint48 @ byte 6) + `level` (uint24 @ byte 12) (RE-DERIVED via
@@ -630,7 +629,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         game.mineFlip(0);
         assertEq(_minerFirstAction(vm.getRecordedLogs()), 9, "LIVE-01(a): afking-first -- the call opened with the AFKing stage");
 
-        // Afking-first: the afking box opened (lastOpenedDay advanced to the stamp day).
+        // Afking-first: the afking box opened (no longer pending).
         assertEq(_lastOpenedDayOf(afk), _lastBoughtDayOf(afk), "LIVE-01(a): afking-first -- the afking box opened by the engine");
         // The human leg ran with the REMAINING allowance: its cursor did not regress.
         assertGe(_boxCursor(), boxCursorBefore, "LIVE-01(a): the human cursor advanced with the remaining allowance");
@@ -642,7 +641,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
 
     /// @notice LIVE-01 (b)+(c)+(d): repeated bounded mineFlip calls fully DRAIN a multi-box afking backlog with
     ///         BOTH cursors monotone-advancing (no stuck box), EACH mineFlip chunk < the EIP cap (bounded), and
-    ///         lastOpenedDay monotone no-double-open (the skip at GameAfkingModule:1154). Uses tiny per-call
+    ///         derived opened day monotone no-double-open (the skip at GameAfkingModule:1154). Uses tiny per-call
     ///         budgets so the drain genuinely spans multiple bounded calls.
     function testLive01DrainBothCursorsBoundedNoDoubleOpen() public {
         uint256 n = 8;
@@ -688,12 +687,12 @@ contract V56AfkingGasMarginal is DeployProtocol {
         vm.stopPrank();
         totalOpened += _openedCount(subs, stampDay) - beforeFinish;
 
-        // LIVE-01(b): the whole afking backlog DRAINED — every sub's box opened (lastOpenedDay == stampDay),
+        // LIVE-01(b): the whole afking backlog DRAINED — every sub's box opened (no longer pending),
         // no stuck box; the afking cursor advanced through the set.
         uint256 openedCount;
         for (uint256 i; i < n; ++i) {
             if (_lastOpenedDayOf(subs[i]) == stampDay) openedCount++;
-            // LIVE-01(d): lastOpenedDay is monotone — never exceeds the stamp day (no double-open / over-advance).
+            // LIVE-01(d): the derived opened day is monotone — never exceeds the stamp day (no double-open / over-advance).
             assertLe(_lastOpenedDayOf(subs[i]), stampDay, "LIVE-01(d): lastOpenedDay monotone, no double-open");
         }
         assertEq(openedCount, n, "LIVE-01(b): repeated bounded mineFlip calls fully drained the afking backlog (no stuck box)");
@@ -800,15 +799,6 @@ contract V56AfkingGasMarginal is DeployProtocol {
         uint256 cur = uint256(vm.load(address(game), slot));
         uint256 mask = (uint256(0xFFFFFF)) << (OFF_LASTBOUGHT * 8);
         cur = (cur & ~mask) | ((uint256(day) << (OFF_LASTBOUGHT * 8)) & mask);
-        vm.store(address(game), slot, bytes32(cur));
-    }
-
-    /// @dev Test-only poke of a Sub's lastOpenedDay (uint24 @ byte 14) — preserves all other Sub fields.
-    function _pokeLastOpenedDay(address who, uint32 day) internal {
-        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT)));
-        uint256 cur = uint256(vm.load(address(game), slot));
-        uint256 mask = (uint256(0xFFFFFF)) << (OFF_LASTOPENED * 8);
-        cur = (cur & ~mask) | ((uint256(day) << (OFF_LASTOPENED * 8)) & mask);
         vm.store(address(game), slot, bytes32(cur));
     }
 
@@ -972,7 +962,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     }
 
     /// @dev Ticket-mode funded subs (useTickets == true) — the new minimal-write `_queueEntriesScaled`
-    ///      primitive (off the old ~262k purchaseWith). The ticket leg sets lastOpenedDay ==
+    ///      primitive (off the old ~262k purchaseWith). The ticket leg sets no pending marker,
     ///      lastAutoBoughtDay so a ticket sub never produces an afking box (open-leg never touches it).
     function _setupFundedTicketSubs(uint256 n, string memory prefix, uint256 poolEach)
         internal
@@ -1107,7 +1097,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     }
 
     function _lastOpenedDayOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_LASTOPENED, 24)); // uint24
+        return GameSlotKeys.afkingOpenedDay(address(game), game.walletIdOf(who));
     }
 
     function _afkCoveredOf(address who) internal view returns (uint32) {
@@ -1458,11 +1448,11 @@ contract V56AfkingGasMarginal is DeployProtocol {
         require(game.advanceDue(), "fixture: the new subscription day is due");
     }
 
-    /// @dev The player's Sub word without its set position (bits 224..255), which swap-pop
+    /// @dev The player's Sub word without its set position (bits 200..231), which swap-pop
     ///      rewrites when another member's eviction moves this record within the set.
     function _nativeSubWord(address player) private view returns (bytes32) {
         uint256 word = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(player)), uint256(SUBOF_SLOT)))));
-        return bytes32(word & ~(uint256(type(uint32).max) << 224));
+        return bytes32(word & ~(uint256(type(uint32).max) << 200));
     }
 
     function _assertNativeEvictionCheckpoint(address[] memory players, bytes32[] memory originalSubs) private view {

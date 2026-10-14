@@ -3,7 +3,7 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
-import {GameSlots} from "../helpers/GameSlots.sol";
+import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 
 /// @title GapDayRewalkAfkingStage — skipped days never stage subscriptions or draw seats.
 /// @notice A request committed on R is fulfilled on W = R+3. The engine completes R's
@@ -30,7 +30,6 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
     uint256 private constant OFF_DAILY = 0; // uint8  dailyQuantity
     uint256 private constant OFF_AMOUNT = 4; // uint24 amount (milli-ETH)
     uint256 private constant OFF_LASTBOUGHT = 7; // uint24 lastAutoBoughtDay
-    uint256 private constant OFF_LASTOPENED = 10; // uint24 lastOpenedDay
     uint256 private constant AFKING_RESET_SLOT = GameSlots.AFKING_RESET_DAY; // uint24 _afkingResetDay
     uint256 private constant AFKING_RESET_OFF = 4;
 
@@ -97,7 +96,12 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
         _assertAppliedWord(recoveryLogs, R, WORD_LATE);
         assertEq(game.rngWordForDay(R), 0, "public word view expires history older than yesterday");
         assertEq(game.rngWordForDay(R + 1), 0, "R completion did not invent a gap word");
-        assertEq(_lastOpened(atk), R, "R box completes before the next request");
+        // The record carries no open marker. R's boxes opened during this recovery: the W stage
+        // could only prepare after the cohort count reached zero, so the live count is exactly W's
+        // stamps and both subs' W boxes are pending.
+        assertTrue(GameSlotKeys.afkingBoxPending(address(game), _aid(atk)), "W box pending");
+        assertTrue(GameSlotKeys.afkingBoxPending(address(game), _aid(bystander)), "W box pending (bystander)");
+        assertEq(_pendingCount(), 2, "R box completes before the next request: only W's stamps remain");
         assertEq(game.rngWordForDay(W), 0, "W was staged before its word was known");
         assertTrue(game.rngLocked(), "fresh W request is outstanding");
         assertEq(_afkingResetDay(), W, "one wall-day STAGE ran for W");
@@ -160,6 +164,10 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
         assertEq(_dailyIdx(), N, "N sealed");
         assertEq(game.rngWordForDay(N), wordN, "N recorded the fulfil word unnudged");
         assertEq(drawsN, 1, "N: SubDrawWon at the lock-releasing seal");
+    }
+
+    function _pendingCount() internal view returns (uint256) {
+        return uint16(uint256(vm.load(address(game), bytes32(GameSlots.PENDING_BOX_COUNT))) >> (GameSlots.PENDING_BOX_COUNT_OFFSET * 8));
     }
 
     /// @dev Counts game-emitted AfkingDelivered and SubDrawWon logs.
@@ -283,6 +291,6 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
     }
 
     function _lastOpened(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_LASTOPENED, 24));
+        return GameSlotKeys.afkingOpenedDay(address(game), game.walletIdOf(who));
     }
 }

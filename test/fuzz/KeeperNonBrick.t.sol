@@ -10,7 +10,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
-import {GameSlots} from "../helpers/GameSlots.sol";
+import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 
 /// @title KeeperNonBrick -- the REVERT-FREE / NON-BRICK corpus, adapted to the v55 game-resident
 ///        afking path (Phase 351, D-351-01). Proves the no-brick guarantee that survives D-348-04's
@@ -87,7 +87,6 @@ contract KeeperNonBrick is DeployProtocol {
     uint256 private constant OFF_SCORE = 2; // uint16 score             (bytes 2..3)
     uint256 private constant OFF_AMOUNT = 4; // uint24 amount            (bytes 4..6)
     uint256 private constant OFF_LASTBOUGHT = 7; // uint24 lastAutoBoughtDay (bytes 7..9)
-    uint256 private constant OFF_LASTOPENED = 10; // uint24 lastOpenedDay     (bytes 10..12)
 
     uint256 private constant DEITY_SHIFT = BitPackingLib.HAS_DEITY_PASS_SHIFT;
 
@@ -289,11 +288,11 @@ contract KeeperNonBrick is DeployProtocol {
     }
 
     function _lastOpenedDayOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_LASTOPENED, 24));
+        return GameSlotKeys.afkingOpenedDay(address(game), game.walletIdOf(who));
     }
 
     function _subscriberIndexOf(address who) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.SUB_OF)))) >> 224; // Sub.setPosition (1-based)
+        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.SUB_OF)))) >> 200; // Sub.setPosition (1-based)
     }
 
     function _subscriberCount() internal view returns (uint256) {

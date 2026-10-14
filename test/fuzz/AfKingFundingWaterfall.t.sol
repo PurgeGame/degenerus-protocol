@@ -296,7 +296,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
     }
 
     function _subscriberIndexOf(address who) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.SUB_OF)))) >> 224; // Sub.setPosition (1-based)
+        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.SUB_OF)))) >> 200; // Sub.setPosition (1-based)
     }
 
     function _fundingSourceOf(address who) internal view returns (address) {

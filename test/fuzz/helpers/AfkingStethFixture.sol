@@ -61,7 +61,6 @@ contract AfkingStethHost is DegenerusGame, WalletSeed {
             _fundingSourceOf[id] = sourceId;
         }
         sub.lastAutoBoughtDay = _afkingResetDay - 1;
-        sub.lastOpenedDay = _afkingResetDay - 1;
         sub.afkingStartDay = _afkingResetDay - 1;
         sub.afkCoveredThroughDay = _afkingResetDay - 1;
         sub.affiliateBase = 31;
@@ -125,9 +124,8 @@ contract AfkingStethHost is DegenerusGame, WalletSeed {
         return _entriesOwedTotal(level + 1, _walletIdOf(player));
     }
 
-    function setMarkers(address player, uint24 bought, uint24 opened) external {
+    function setMarkers(address player, uint24 bought) external {
         _subOf[_seedWallet(player)].lastAutoBoughtDay = bought;
-        _subOf[_seedWallet(player)].lastOpenedDay = opened;
     }
 
     function setQuantity(address player, uint8 quantity) external {

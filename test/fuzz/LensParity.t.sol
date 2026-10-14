@@ -57,7 +57,6 @@ contract LensStorageHarness is DegenerusGameMintStreakUtils, WalletSeed {
         uint16 score,
         uint24 amount,
         uint24 lastAutoBoughtDay,
-        uint24 lastOpenedDay,
         uint24 afkCoveredThroughDay,
         uint24 afkingStartDay,
         uint32 affiliateBase,
@@ -70,7 +69,6 @@ contract LensStorageHarness is DegenerusGameMintStreakUtils, WalletSeed {
         s.score = score;
         s.amount = amount;
         s.lastAutoBoughtDay = lastAutoBoughtDay;
-        s.lastOpenedDay = lastOpenedDay;
         s.afkCoveredThroughDay = afkCoveredThroughDay;
         s.afkingStartDay = afkingStartDay;
         s.affiliateBase = affiliateBase;
@@ -180,7 +178,7 @@ contract LensParityTest is Test {
     }
 
     // =========================================================================
-    // Sub record: slot + full 11-field decode + effective streak
+    // Sub record: slot + full 10-field decode + effective streak
     // =========================================================================
 
     function testFuzz_subInfoFull_decodesWrittenRecord(
@@ -190,7 +188,6 @@ contract LensParityTest is Test {
         uint16 score,
         uint24 amount,
         uint24 lastAutoBoughtDay,
-        uint24 lastOpenedDay,
         uint24 afkCoveredThroughDay,
         uint24 afkingStartDay,
         uint32 affiliateBase,
@@ -205,7 +202,6 @@ contract LensParityTest is Test {
             score,
             amount,
             lastAutoBoughtDay,
-            lastOpenedDay,
             afkCoveredThroughDay,
             afkingStartDay,
             affiliateBase,
@@ -221,7 +217,6 @@ contract LensParityTest is Test {
         assertEq(s.score, score, "score");
         assertEq(s.amountMilliEth, amount, "amount");
         assertEq(s.lastAutoBoughtDay, lastAutoBoughtDay, "lastAutoBoughtDay");
-        assertEq(s.lastOpenedDay, lastOpenedDay, "lastOpenedDay");
         assertEq(s.afkCoveredThroughDay, afkCoveredThroughDay, "afkCoveredThroughDay");
         assertEq(s.afkingStartDay, afkingStartDay, "afkingStartDay");
         assertEq(s.affiliateBase, affiliateBase, "affiliateBase");
@@ -249,7 +244,7 @@ contract LensParityTest is Test {
         warpTs = uint48(bound(warpTs, 2 days, 8000 days));
         vm.warp(warpTs);
 
-        harness.setSub(PLAYER, 1, 0, 0, 0, 0, 0, afkCoveredThroughDay, afkingStartDay, 0, 0, subStreakLatch);
+        harness.setSub(PLAYER, 1, 0, 0, 0, 0, afkCoveredThroughDay, afkingStartDay, 0, 0, subStreakLatch);
         harness.setSlot0(dailyIdx_, 3, false, false, false, 0, 0);
         if (sealNextWord) harness.setRngWordByDay(dailyIdx_ + 1, 0xABCD);
         _mockQuests(harness.seedId(PLAYER), manualStreak, true);

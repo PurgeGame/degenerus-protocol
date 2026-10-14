@@ -97,7 +97,7 @@ contract SeatTenureDraw is DeployProtocol {
     /// @dev (active, dailyQuantity, afkingStartDay, afkCoveredThroughDay) from the Sub word.
     function _subInfo(address who) internal view returns (bool, uint8, uint24, uint24) {
         uint256 w = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.SUB_OF))));
-        return (uint8(w) != 0, uint8(w), uint24(w >> 128), uint24(w >> 104));
+        return (uint8(w) != 0, uint8(w), uint24(w >> 104), uint24(w >> 80));
     }
 
     function _spanOf(address who) internal view returns (uint24) {
@@ -109,11 +109,10 @@ contract SeatTenureDraw is DeployProtocol {
     /// @dev Locate `who`'s single-slot Sub record by scanning candidate mapping
     ///      base slots and matching the packed day-field lanes against subInfo
     ///      (self-validating: reverts if the layout drifted), then fake a long
-    ///      funded tenure: covered (bits 104-127) = start + spanDays, with
-    ///      lastAutoBoughtDay (56-79) and lastOpenedDay (80-103) set to the same
-    ///      future day so the next STAGE's AlreadyAutoBoughtToday skip preserves
-    ///      the poke (delivery writes covered unconditionally) and no pending
-    ///      box exists.
+    ///      funded tenure: covered (bits 80-103) = start + spanDays, with
+    ///      lastAutoBoughtDay (56-79) set to the same future day so the next
+    ///      STAGE's AlreadyAutoBoughtToday skip preserves the poke (delivery
+    ///      writes covered unconditionally) and no pending box exists.
     function _pokeTenure(address who, uint24 spanDays) internal {
         (, uint8 qty, uint24 startDay, uint24 covered) = _subInfo(who);
         require(startDay != 0, "poke: no live run");
@@ -123,14 +122,13 @@ contract SeatTenureDraw is DeployProtocol {
             uint256 word = uint256(vm.load(address(game), slot));
             if (
                 uint8(word) == qty &&
-                uint24(word >> 128) == startDay &&
-                uint24(word >> 104) == covered
+                uint24(word >> 104) == startDay &&
+                uint24(word >> 80) == covered
             ) {
                 uint256 mask24 = (uint256(1) << 24) - 1;
                 word =
                     (word &
-                        ~((mask24 << 104) | (mask24 << 80) | (mask24 << 56))) |
-                    (uint256(newCovered) << 104) |
+                        ~((mask24 << 80) | (mask24 << 56))) |
                     (uint256(newCovered) << 80) |
                     (uint256(newCovered) << 56);
                 vm.store(address(game), slot, bytes32(word));

@@ -65,8 +65,8 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
     // Game-resident _subOf accumulator (AFKing-Coin-era offsets, DegenerusGameStorage.sol struct Sub)
     // -------------------------------------------------------------------------
     uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF;
-    uint256 private constant OFF_AFKINGSTART = 16; // uint24 afkingStartDay
-    uint256 private constant OFF_STREAKLATCH = 26; // uint16 subStreakLatch (the afking sub streak base)
+    uint256 private constant OFF_AFKINGSTART = 13; // uint24 afkingStartDay
+    uint256 private constant OFF_STREAKLATCH = 23; // uint16 subStreakLatch (the afking sub streak base)
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
     uint256 private _lastFulfilledReqId;
@@ -200,7 +200,7 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
     ///      no older than yesterday -- mirrors GameAfkingModule._afkingStreak so the finalize hand-back is checked
     ///      against the same value the contract earns.
     function _liveAfkingStreakOf(address who) internal view returns (uint256) {
-        uint256 covered = _subField(who, 13, 24); // afkCoveredThroughDay u24 off13
+        uint256 covered = _subField(who, 10, 24); // afkCoveredThroughDay u24 off10
         uint256 today = game.currentDayView();
         if (today == 0 || covered + 1 < today) return 0;
         return _streakLatch16Of(who) + covered - _afkingStartOf(who);

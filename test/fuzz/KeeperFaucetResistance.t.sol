@@ -17,7 +17,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
-import {GameSlots} from "../helpers/GameSlots.sol";
+import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 
 // CURRENT ENGINE (60d31f775 / 72fc06f6c): the router below is retired. `mineFlip()` is the
 //      single engine (DegenerusGameMinerModule); it pays once per call, CEI-last, in FLIP coinflip
@@ -113,7 +113,6 @@ contract KeeperFaucetResistance is DeployProtocol {
     /// @dev _subOf mapping root (one packed Sub slot per subscriber).
     uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF;
     uint256 private constant OFF_LASTBOUGHT = 7; // uint24 lastAutoBoughtDay (bytes 7..9; Sub: u8 qty, u8 flags, u16 score, u24 amount)
-    uint256 private constant OFF_LASTOPENED = 10; // uint24 lastOpenedDay     (bytes 10..12)
     uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED; // mintPacked_ mapping root (deity bit)
     uint256 private constant DEITY_SHIFT = BitPackingLib.HAS_DEITY_PASS_SHIFT;
 
@@ -609,10 +608,8 @@ contract KeeperFaucetResistance is DeployProtocol {
         return uint32(uint24(packed >> (OFF_LASTBOUGHT * 8)));
     }
 
-    /// @dev Read `who`'s lastOpenedDay (uint24 bytes 14..16) — the afking-box open marker.
+    /// @dev The day whose afking box `who` has opened: the stamp day, one earlier while pending.
     function _lastOpenedDayOf(address who) internal view returns (uint32) {
-        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT)));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        return uint32(uint24(packed >> (OFF_LASTOPENED * 8)));
+        return GameSlotKeys.afkingOpenedDay(address(game), game.walletIdOf(who));
     }
 }

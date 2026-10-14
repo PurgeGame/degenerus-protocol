@@ -50,7 +50,7 @@ abstract contract SeatFixture is DeployProtocol {
 
     /// @dev The Sub's 1-indexed set position (0 = not in the set).
     function _pos(uint32 id) internal view returns (uint256) {
-        return _subWord(id) >> 224;
+        return _subWord(id) >> 200;
     }
 
     function _setElement(uint256 index) internal view returns (uint256) {

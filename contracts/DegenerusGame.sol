@@ -1164,8 +1164,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
     ///      payee, then set the account's cashout curse. The curse SET runs in the Game's context
     ///      via delegatecall (hosted in GameAfkingModule to keep the Game under the EIP-170 ceiling).
     function _claimWinningsWithCurse(uint32 id, uint256 maxClaim) private {
-        id = _resolveAccountId(id);
-        address payee = id == 0 ? msg.sender : _payee(_walletElement(id));
+        address payee;
+        (id, payee) = _resolveAccountPayee(id);
         _claimWinningsInternal(id, payee, false, maxClaim);
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_AFKING_MODULE

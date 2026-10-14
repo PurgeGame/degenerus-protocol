@@ -17,7 +17,6 @@ contract AfkingSectionsHarness is GameAfkingModule, WalletSeed {
         s.flags = tickets ? 4 : 0;
         s.dailyQuantity = 1;
         s.lastAutoBoughtDay = _simulatedDayIndex();
-        s.lastOpenedDay = s.lastAutoBoughtDay;
         _addToSet(s, id);
     }
     function remove(uint32 id) external {
@@ -45,7 +44,6 @@ contract AfkingSectionsHarness is GameAfkingModule, WalletSeed {
         _setRngComplete(false);
         _setRngSessionPublished(true);
         _subOf[id].lastAutoBoughtDay = day;
-        _subOf[id].lastOpenedDay = day - 1;
         _subOf[id].amount = 10;
         ++_pendingBoxCount;
     }

@@ -1668,6 +1668,16 @@ abstract contract DegenerusGameStorage {
         return id;
     }
 
+    /// @dev `_resolveAccountId` plus the account's payee. The self shorthand pays the caller
+    ///      without a table read: a registered address's current ID is its own ordinary main
+    ///      (a main sale clears the address's ID), whose payee is that address.
+    function _resolveAccountPayee(uint32 id) internal view returns (uint32, address) {
+        if (id == 0) return (_walletIdOf(msg.sender), msg.sender);
+        (, address payee, bool authorized) = _account(id, msg.sender);
+        if (!authorized) revert NotApproved();
+        return (id, payee);
+    }
+
     /// @dev Only an unregistered self caller can reach this helper with ID zero.
     function _registerCallerAccount(uint32 id, uint256 spend) internal returns (uint32) {
         if (id != 0) return id;
@@ -3993,11 +4003,11 @@ abstract contract DegenerusGameStorage {
 
     /// @notice Per-wallet AfKing subscription record: the per-buy box stamp, the in-slot per-sub
     ///         accumulator and the wallet's position in the subscriber set.
-    /// @dev Layout (Solidity packs sequentially) — exactly ONE 32-byte slot, so the whole record
-    ///      reads/writes as a single warm slot with no extra cold slot:
+    /// @dev Layout (Solidity packs sequentially) — ONE 32-byte slot (232 bits used), so the whole
+    ///      record reads/writes as a single warm slot with no extra cold slot:
     ///        config (16b):  dailyQuantity(8) + flags(8)
     ///        per-sub stamp (40b): score(16) + amount(24, milli-ETH)
-    ///        markers (96b): lastAutoBoughtDay(24) + lastOpenedDay(24) + afkCoveredThroughDay(24) + afkingStartDay(24)
+    ///        markers (72b): lastAutoBoughtDay(24) + afkCoveredThroughDay(24) + afkingStartDay(24)
     ///        accumulator (72b): affiliateBase(32) + pendingFlip(24) + subStreakLatch(16)
     ///        set position (32b): 1-indexed position in `_subscribers` (0 = not in the set)
     ///      There is NO per-day epoch: the box resolves at the LIVE level at open (no
@@ -4032,9 +4042,8 @@ abstract contract DegenerusGameStorage {
     ///      `affiliateBase` is uint32 with a 100M-whole-FLIP saturating clamp and
     ///      `pendingFlip` is uint24 with a ~16.7M (2^24-1) saturating clamp at the accrue
     ///      write — each clamp binds before its field's type ceiling, and it can only ever
-    ///      UNDER-credit a pathological high-volume whale (off the solvency path). The accumulator fields are written on
-    ///      the buy-accrue path and the open markers (`lastOpenedDay`/`lastAutoBoughtDay`)
-    ///      on the open path — disjoint fields in one warm slot, no collision.
+    ///      UNDER-credit a pathological high-volume whale (off the solvency path). Every field
+    ///      is written on the subscribe / stage / cancel paths; the open only reads the slot.
     ///      There are no settle-day markers: the running balances self-mark, the pull has
     ///      no window, and the quest flush drains the counters so a double-fire finds 0.
     ///      `afkCoveredThroughDay` is a delivered-day high-water mark, not a settle
@@ -4057,20 +4066,16 @@ abstract contract DegenerusGameStorage {
         ///      round-down is on this recorded EV/seed input only — the actual ETH debit
         ///      still uses the full wei `ethValue`.
         uint24 amount;
-        // --- markers (96 bits) ---
+        // --- markers (72 bits) ---
         /// @dev Success-marker AND the frozen seed `day` (the same process day):
         ///      day index of the last successful buy, written only after a successful
-        ///      afkingFunding debit. The open sources the box word from
-        ///      `_recordedDailyWord(lastAutoBoughtDay)` and freezes this `day` in the seed.
+        ///      afkingFunding debit. The open freezes this `day` in the seed.
+        ///      Box-pending needs no marker of its own: subscription changes stay locked
+        ///      until every stamp opens, and the opener walks the box section once in
+        ///      order, so a box is pending exactly while its stamp day is `_afkingResetDay`,
+        ///      `_pendingBoxCount` is nonzero and the opener has not passed its position.
         ///      uint24 day index ~ 45,000 years of headroom.
         uint24 lastAutoBoughtDay;
-        /// @dev Day-keyed no-double-open marker: the open leg materializes a box only
-        ///      while `lastOpenedDay < lastAutoBoughtDay`; after the open it sets
-        ///      `lastOpenedDay = lastAutoBoughtDay`, making the predicate false until
-        ///      the next successful buy advances `lastAutoBoughtDay`. The no-orphan
-        ///      guard (process stage) keys on the same two day fields.
-        ///      uint24 day index, same width as lastAutoBoughtDay.
-        uint24 lastOpenedDay;
         /// @dev Delivered-day high-water mark: monotone, advanced only on a day whose
         ///      ETH debit actually fired (a skipped/un-debited day does not advance it).
         ///      The afking quest streak is computed ON READ from this marker (no
@@ -4236,8 +4241,8 @@ abstract contract DegenerusGameStorage {
     ///      read/write is warm; a uint24 holds the full level range (matches `level`).
     uint24 internal _sdgnrsBonusLevel;
 
-    /// @dev Exact count of stamped but unopened boxes. Preparation increments once per paid
-    ///      box (batched per call), and the monotonic opener decrements once per resolution.
+    /// @dev Exact count of stamped but unopened boxes. Preparation and the monotonic opener
+    ///      each apply their chunk's total in one write.
     ///      The scheduler finishes the prior cohort before preparation; subscribe locks all
     ///      membership/configuration changes until this cohort opens. Zero is the O(1) done
     ///      check. Shares the cursor slot; at most 2000 paid stamps fit the subscriber set.
@@ -4901,6 +4906,11 @@ abstract contract DegenerusGameStorage {
     mapping(address => uint64) internal walletIds;
     /// @dev Explicit account-to-account funding consent, independent of external operator rights.
     mapping(uint32 => mapping(uint32 => bool)) internal afkingFundingApprovals;
+
+    /// @dev Smurf IDs by owning main ID, eight packed uint32 lanes per word (lane `i & 7` of word
+    ///      `i >> 3`). Append-only at `createSmurf`; the main's lifetime `SMURF_COUNT` in
+    ///      `mintPacked_` is the list length. Liquidation walks it to stop the family's AFKing.
+    mapping(uint32 => mapping(uint256 => uint256)) internal _smurfWords;
 
     /// @dev Ordinary main: address only; child: parent only; acquired root: seller + buyer.
     ///      Children can have only one ordinary parent, so one parent read is sufficient.

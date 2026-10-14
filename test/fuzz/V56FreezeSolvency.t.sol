@@ -6,7 +6,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
-import {GameSlots} from "../helpers/GameSlots.sol";
+import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 
 /// @title V56FreezeSolvency -- the SEC-02 proof in three legs (CONTEXT D-05) against the FROZEN v56 subject:
 ///        (1) the ETH/claimablePool debit path is byte-unchanged vs 453f8073 (the SOLVENCY-01 site); (2) a
@@ -73,14 +73,13 @@ contract V56FreezeSolvency is DeployProtocol {
     uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF; // _subOf mapping root (address => Sub, one packed slot) (was 58)
 
     //   dailyQuantity u8 @0 · flags u8 @1 · score u16 @2 · amount u24 @4 (milli-ETH)
-    //   lastAutoBoughtDay u24 @7 · lastOpenedDay u24 @10 · afkCoveredThroughDay u24 @13 · afkingStartDay u24 @16
-    //   affiliateBase u32 @19 · pendingFlip u24 @23 · subStreakLatch u16 @26
+    //   lastAutoBoughtDay u24 @7 · afkCoveredThroughDay u24 @10 · afkingStartDay u24 @13
+    //   affiliateBase u32 @16 · pendingFlip u24 @20 · subStreakLatch u16 @23
     uint256 private constant OFF_SCOREPLUS1 = 2; // uint16 score             (bytes 2..3)
     uint256 private constant OFF_AMOUNT = 4; // uint24 amount (milli-ETH)   (bytes 4..6)
     uint256 private constant OFF_LASTBOUGHT = 7; // uint24 lastAutoBoughtDay (bytes 7..9)
-    uint256 private constant OFF_LASTOPENED = 10; // uint24 lastOpenedDay     (bytes 10..12)
-    uint256 private constant OFF_AFKCOVERED = 13; // uint24 afkCoveredThroughDay (bytes 13..15)
-    uint256 private constant OFF_PENDINGFLIP = 23; // uint24 pendingFlip (bytes 23..25)
+    uint256 private constant OFF_AFKCOVERED = 10; // uint24 afkCoveredThroughDay (bytes 10..12)
+    uint256 private constant OFF_PENDINGFLIP = 20; // uint24 pendingFlip (bytes 20..22)
 
     /// @dev keccak256 of the materialized-box event — the byte-identity oracle's source signature.
     bytes32 private constant LOOTBOX_OPENED_SIG =
@@ -290,7 +289,7 @@ contract V56FreezeSolvency is DeployProtocol {
     /// @notice STAMP-NOT-RESOLVE: the subscribe min-buy + the STAGE buy STAMP a box for-later-open and NEVER
     ///         inline-resolve it pre-RNG — across the subscribe AND a new-day STAGE, NO LootBoxOpened is
     ///         emitted (the box is stamped, the materialization is deferred to the open). Non-vacuous: a box
-    ///         WAS stamped (lastAutoBoughtDay advanced, the box is pending lastOpenedDay < lastAutoBoughtDay),
+    ///         WAS stamped (lastAutoBoughtDay advanced, the box is pending),
     ///         and a subsequent open DOES emit LootBoxOpened (so the absence above is real, not vacuous).
     function testSubscribeMinBuyStampsNoInlineResolve() public {
         address p = makeAddr("stamp_noresolve");
@@ -356,7 +355,7 @@ contract V56FreezeSolvency is DeployProtocol {
         // FREEZE: byte-identical across the two block contexts (the seed froze on the stamped day; no block.*).
         _assertBoxByteIdentical(box1, box2, "RNG-freeze two-block determinism");
         // The materialization bound to the FROZEN stamp day: the seed is _recordedDailyWord(stampDay) and the open
-        // advanced lastOpenedDay to that same stampDay (the live day moved between stamp and open, yet the box
+        // advanced the opened day to that same stampDay (the live day moved between stamp and open, yet the box
         // resolved against the frozen stamp day — no open-time entropy).
         assertEq(_lastOpenedDayOf(afk), stampDay, "the box materialized against the frozen stamp day (single-roll open, no open-time entropy)");
     }
@@ -597,7 +596,7 @@ contract V56FreezeSolvency is DeployProtocol {
     }
 
     function _lastOpenedDayOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_LASTOPENED, 24));
+        return GameSlotKeys.afkingOpenedDay(address(game), game.walletIdOf(who));
     }
 
     function _pendingFlipOf(address who) internal view returns (uint32) {
@@ -605,7 +604,7 @@ contract V56FreezeSolvency is DeployProtocol {
     }
 
     function _subscriberIndexOf(address who) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.SUB_OF)))) >> 224; // Sub.setPosition (1-based)
+        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.SUB_OF)))) >> 200; // Sub.setPosition (1-based)
     }
 
     function _claimablePool() internal view returns (uint256) {

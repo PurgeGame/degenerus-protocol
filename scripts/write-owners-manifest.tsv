@@ -207,6 +207,7 @@ INIT	wallets	storage/DegenerusGameStorage.sol	Storage constructor reserves ID ze
 HELPER	walletIds	storage/DegenerusGameStorage.sol	_registerWallet assigns a default gameplay ID and initializes or preserves the permanent governance/affiliate identity in the high lane.
 OWNER	walletIds	modules/DegenerusGameMintModule.sol	liquidateAccount clears only the seller's default gameplay ID on a main-account sale, retaining permanent identity.
 OWNER	afkingFundingApprovals	modules/GameAfkingModule.sol	setAfkingFundingApproval writes funder-owner consent; acquired accounts cannot grant it and inherited acquisition invalidates existing consent at reads.
+OWNER	_smurfWords	modules/DegenerusGameMintModule.sol	createSmurf appends each new smurf ID to its owner's append-only list (sole writer); the list length is the owner's SMURF_COUNT. Liquidation (GameAfkingModule.cancelLiquidatedSubscriptions) only reads it.
 OWNER	lootboxRngPacked	DegenerusGame.sol	setCrapsRngPending is CRAPS-only and changes only pending parity bits 250/251, preserving committed entropy/session fields.
 OWNER	_subOpenCursor	modules/DegenerusGameMinerModule.sol	Reset once at daily preparation after the previous read cohort completed
 OWNER	_subBoxCount	modules/GameAfkingModule.sol	Box-section membership maintained by insert, mode change and same-section removal

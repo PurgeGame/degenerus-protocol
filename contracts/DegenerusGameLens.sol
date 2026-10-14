@@ -101,6 +101,21 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         if (info.allowance > info.createdLifetime) info.remaining = info.allowance - info.createdLifetime;
     }
 
+    /// @notice Every smurf ID `mainId` has created, in creation order.
+    function smurfsOf(address game, uint32 mainId) external view returns (uint32[] memory ids) {
+        uint256 base;
+        assembly { base := mintPacked_.slot }
+        uint256 count = uint16(_sload(game, _mapSlot(uint256(mainId), base)) >> BitPackingLib.SMURF_COUNT_SHIFT);
+        assembly { base := _smurfWords.slot }
+        uint256 inner = uint256(_mapSlot(uint256(mainId), base));
+        ids = new uint32[](count);
+        uint256 word;
+        for (uint256 i; i < count; ++i) {
+            if (i & 7 == 0) word = _sload(game, _mapSlot(i >> 3, inner));
+            ids[i] = uint32(word >> ((i & 7) * 32));
+        }
+    }
+
     /// @notice Registered deity by owner-list index (genesis first, then paid, in order).
     function deityOwnerAt(address game, uint256 index) external view returns (address owner) {
         uint256 base;
@@ -227,7 +242,6 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         uint16 score; // frozen activity score stamp (box EV input)
         uint24 amountMilliEth; // frozen spend stamp, milli-ETH
         uint24 lastAutoBoughtDay;
-        uint24 lastOpenedDay;
         uint24 afkCoveredThroughDay;
         uint24 afkingStartDay;
         uint32 affiliateBase; // unclaimed whole-FLIP affiliate accumulator
@@ -342,12 +356,11 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         s.score = uint16(w >> 16);
         s.amountMilliEth = uint24(w >> 32);
         s.lastAutoBoughtDay = uint24(w >> 56);
-        s.lastOpenedDay = uint24(w >> 80);
-        s.afkCoveredThroughDay = uint24(w >> 104);
-        s.afkingStartDay = uint24(w >> 128);
-        s.affiliateBase = uint32(w >> 152);
-        s.pendingFlip = uint24(w >> 184);
-        s.subStreakLatch = uint16(w >> 208);
+        s.afkCoveredThroughDay = uint24(w >> 80);
+        s.afkingStartDay = uint24(w >> 104);
+        s.affiliateBase = uint32(w >> 128);
+        s.pendingFlip = uint24(w >> 160);
+        s.subStreakLatch = uint16(w >> 184);
         s.effectiveStreak = _effectiveQuestStreakMirror(game, id, w);
     }
 
@@ -361,7 +374,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
     ) private view returns (uint32) {
         (uint32 manualStreak, bool afking) = quests.effectiveBaseStreakAndAfking(id);
         if (!afking) return manualStreak;
-        if (uint24(subWord >> 128) != 0) {
+        if (uint24(subWord >> 104) != 0) {
             uint32 a = _afkingStreakMirror(game, subWord);
             if (a != 0) return a;
         }
@@ -373,7 +386,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
     ///      day passed without a funded delivery (days inside a pending unadvanced
     ///      gap — the next day's word unsealed — do not decay).
     function _afkingStreakMirror(address game, uint256 subWord) private view returns (uint32) {
-        uint24 covered = uint24(subWord >> 104); // afkCoveredThroughDay
+        uint24 covered = uint24(subWord >> 80); // afkCoveredThroughDay
         uint24 currentDay = GameTimeLib.currentDayIndex();
         if (currentDay == 0) return 0;
         if (uint32(covered) + 1 < uint32(currentDay)) {
@@ -384,7 +397,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
                 _rngWordByDayOf(game, uint24(sealedDay + 1)) != 0
             ) return 0;
         }
-        return uint32(uint16(subWord >> 208)) + uint32(covered - uint24(subWord >> 128));
+        return uint32(uint16(subWord >> 184)) + uint32(covered - uint24(subWord >> 104));
     }
 
     /// @dev _recordedDailyWord(day) via extsload (read-only periphery mirror of the sealed

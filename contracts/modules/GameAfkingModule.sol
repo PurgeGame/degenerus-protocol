@@ -332,7 +332,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // The account rule: the caller for id 0, else an account the caller may act for.
         uint32 subId = _resolveAccountId(id);
         if (dailyQuantity != 0) subId = _registerCallerAccount(subId, msg.value);
-        if (_isAcquired(subId)) revert NotApproved();
+        // The self shorthand names the caller's own ordinary main (a main sale clears the
+        // address's ID), so only an explicit ID can name an acquired account.
+        if (id != 0 && _isAcquired(subId)) revert NotApproved();
         // The permanent protocol entries stay at box positions 0 (Vault) and 1 (sDGNRS).
         // This also applies to an approved operator acting for the Vault's account.
         bool exemptSub = subId == VAULT_WALLET_ID || subId == SDGNRS_WALLET_ID;
@@ -465,12 +467,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 // and gains today; a gapped run keeps its streak too (gap days earn nothing, same
                 // as the stage). No re-snapshot / no forfeit — the afking streak is never reset by
                 // a re-subscribe. Skipped (streak just persists + decays on read) when already
-                // bought today OR a pending unopened box exists (re-stamping would orphan it — the
-                // no-orphan rule) OR the cover-buy is unfunded.
-                if (
-                    s.lastAutoBoughtDay != uint24(today) &&
-                    s.lastOpenedDay >= s.lastAutoBoughtDay
-                ) {
+                // bought today OR the cover-buy is unfunded. No stamped box can be pending here:
+                // subscribe is locked until every stamp opens.
+                if (s.lastAutoBoughtDay != uint24(today)) {
                     uint256 mp = _mintPriceInContext();
                     uint256 srcFunding = _afkingOf(fundId);
                     (
@@ -520,21 +519,14 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 s.afkingStartDay = uint24(today);
 
                 (bool done0, ) = IQuestCompletionView(address(quests)).questCompletionToday(subId);
-                if (s.lastOpenedDay < s.lastAutoBoughtDay) {
-                    // A pending unopened box (this or a prior day) already grounds the run on a real
-                    // purchase. Keep the snapshot and leave the box markers untouched so the open leg
-                    // still materializes it — re-stamping here would orphan the prepaid box.
-                    _setStreakBase(s, snap);
-                } else if (done0) {
+                if (done0) {
                     _setStreakBase(s, snap); // funded (manual) day-0 — keep the snapshot
                     s.lastAutoBoughtDay = uint24(today);
-                    s.lastOpenedDay = uint24(today); // no pending box
                 } else if (s.lastAutoBoughtDay == uint24(today)) {
                     // Already bought today in a prior subscribe cycle this day — the cancel
                     // tombstone retained the stamp across the unsub/re-subscribe. The run is
                     // already purchase-grounded, so keep the snapshot and skip a second
-                    // cover-buy: the per-day flat slot-0 reward is not re-accrued, and
-                    // lastOpenedDay is left untouched so a pending box is not orphaned. This
+                    // cover-buy: the per-day flat slot-0 reward is not re-accrued. This
                     // mirrors the active-sub re-subscribe guard above.
                     _setStreakBase(s, snap);
                 } else {
@@ -824,9 +816,10 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      (`coverBuy == true`). The slice is already confirmed funded by the caller
     ///      (`afkingFunding[src] >= ethValue`), so this is revert-free by construction (no
     ///      try/catch). Debits the fresh-ETH leg + the claimable leg (claimablePool in
-    ///      tandem, fail-loud on underflow — a debit can never exceed afkingFunding[src] ≤ the
-    ///      claimablePool reservation, so a revert here means solvency is already violated and
-    ///      must propagate), materializes the buy per mode, accrues the day's affiliate base + the
+    ///      tandem — inline for the cover-buy, once per chunk for the STAGE; fail-loud on
+    ///      underflow — a debit can never exceed afkingFunding[src] ≤ the claimablePool
+    ///      reservation, so a revert means solvency is already violated and must propagate),
+    ///      materializes the buy per mode, accrues the day's affiliate base + the
     ///      slot-0 pendingFlip reward, advances the compute-on-read streak markers (gap days
     ///      earn nothing; the streak freezes across them, never resets), and sets the
     ///      success marker. The frozen activity score reads the COMPUTE-ON-READ streak off the Sub
@@ -894,10 +887,11 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             );
         }
         // Both legs draw the solvency-tracked claimablePool (afking-funded ETH and claimableWinnings
-        // both ride in it); apply the combined debit as one checked RMW after the per-account writes
-        // above. The merged uint128 underflow guard reverts on the same condition as the two separate
-        // subtractions, and the whole call is atomic.
-        if (ethValue != 0 || claimableUse != 0) {
+        // both ride in it). The cover-buy applies the combined debit here as one checked RMW after
+        // the per-account writes above; the STAGE sums its chunk's costs and applies one checked
+        // debit at chunk end. Each leg was checked against its own account above, so the pool
+        // subtraction can only fail if solvency is already broken.
+        if (coverBuy && (ethValue != 0 || claimableUse != 0)) {
             claimablePool -= uint128(ethValue + claimableUse);
         }
 
@@ -929,11 +923,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 if (newOwed > type(uint24).max) newOwed = type(uint24).max;
                 sub.pendingFlip = uint24(newOwed);
             }
-
-            // No pending box: keep lastOpenedDay == lastAutoBoughtDay so the stamp markers
-            // never describe a ticket sub as
-            // box-pending.
-            sub.lastOpenedDay = uint24(processDay);
         } else {
             // Lootbox box. The per-buy manual side-effects (handlePurchase, affiliate ×2, the
             // per-buy creditFlip) are deferred to the in-slot accrue (affiliate pulled via
@@ -957,26 +946,24 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 : uint16(activityScore);
             if (coverBuy) {
                 // Subscribe-time grounding box: a full INDEXED box on the live lootbox index,
-                // resolved off its sealed cohort's live word (a future word). Rides the auto-open queue,
-                // so the markers go box-clean (lastOpenedDay == lastAutoBoughtDay) and the
-                // signup cover cannot become an AFKing-cohort obligation.
+                // resolved off its sealed cohort's live word (a future word). Rides the human-box
+                // queue, so the signup cover never becomes an AFKing-cohort obligation.
                 _recordAfkingCoverBox(
                     element,
                     currentLevel,
                     amount,
                     score
                 );
-                sub.lastOpenedDay = uint24(processDay);
             } else {
                 // Daily STAGE Sub-stamp box: the warm Sub slot IS the box record (no cold
                 // ledger); the EV-cap RMW is deferred to OPEN, fed this frozen score, and
                 // the level + EV-cap key read LIVE at open. milli-ETH stamp (the EV/seed input
                 // only — the ETH debit used the full wei ethValue).
-                // The stamp below leaves lastOpenedDay behind lastAutoBoughtDay — the ONLY
-                // pending-box-creating shape (ticket buys and cover-buys mark themselves
-                // box-clean above). `_pendingBoxCount` is maintained by the STAGE loop, the
-                // only caller that reaches this branch: it batches one add per chunk off its
-                // box-accrual count, atomic with this stamp (same tx, revert-together).
+                // This is the ONLY pending-box-creating shape (ticket buys queue entries and
+                // cover-buys ride the human-box queue). `_pendingBoxCount` is maintained by the
+                // STAGE loop, the only caller that reaches this branch: it batches one add per
+                // chunk off its box-accrual count, atomic with this stamp (same tx,
+                // revert-together).
                 sub.score = score;
                 sub.amount = uint24(_packEthToMilliEth(amount));
             }
@@ -1122,6 +1109,29 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         _setStreakBase(sub, 0);
     }
 
+    /// @notice Stop the AFKing runs a liquidation hands to its buyer: the sold account's own
+    ///         and, for a main sale, every smurf's. Reached only by MintModule's
+    ///         `liquidateAccount` delegatecall, after the ownership write.
+    /// @dev Walks the main's append-only smurf list (`_smurfWords`, length = lifetime
+    ///      `SMURF_COUNT`). A smurf sold on its own earlier was cancelled by its own sale and
+    ///      cannot re-subscribe, so it reads inactive here. Each cancel keeps the run's paid box
+    ///      stamp for the ordinary opener and leaves the tombstone for the stage to reclaim,
+    ///      the same shape the stage itself writes mid-pass.
+    /// @param id The sold account.
+    /// @param mainSale True when `id` was an ordinary main (its smurfs transfer with it).
+    function cancelLiquidatedSubscriptions(uint32 id, bool mainSale) external {
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
+        _cancelAcquiredSubscription(id);
+        if (!mainSale) return;
+        uint256 count = uint16(mintPacked_[id] >> BitPackingLib.SMURF_COUNT_SHIFT);
+        mapping(uint256 => uint256) storage words = _smurfWords[id];
+        uint256 word;
+        for (uint256 i; i < count; ++i) {
+            if (i & 7 == 0) word = words[i >> 3];
+            _cancelAcquiredSubscription(uint32(word >> ((i & 7) * 32)));
+        }
+    }
+
     function _cancelAcquiredSubscription(uint32 id) private {
         Sub storage sub = _subOf[id];
         if (sub.setPosition == 0 || sub.dailyQuantity == 0) return;
@@ -1182,8 +1192,11 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      revert-free by construction; there is no pre-emptive lootbox skip;
     ///      rule-(1) unfunded eviction is a separate pre-buy decision
     ///      (a NORMAL sub is auto-paused via swap-pop; VAULT/SDGNRS are EXEMPT by pinned
-    ///      identity); the `claimablePool -=` site FAILS LOUD (class B, must
+    ///      identity); the chunk-end `claimablePool -=` FAILS LOUD (class B, must
     ///      propagate). There is no per-cycle eviction cap.
+    /// @dev Acquired accounts: liquidation cancels the sold account's and its smurfs'
+    ///      subscriptions itself, so the pass checks acquisition only on an externally funded
+    ///      sub's funder (a sold funder's unrelated subscribers cannot be found at sale).
     /// @notice Stage the pinned daily subscription cohort before its request is sealed.
     function runSubscriberWork(uint24 processDay, uint256 gasAllowance)
         external returns (MineFlipGas.Result memory)
@@ -1247,10 +1260,10 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
 
         uint256 cursor = _subCursor;
         uint256 boxStamps; // pending boxes stamped this chunk — one batched counter add at chunk end
-        // Batched prize-pool routing: each funded buy debits its full cost from the funding
-        // source and accrues that spend here by mode; the pools are credited ONCE at chunk end
-        // (boxes 90% future / 10% next, tickets 90% next / 10% future) so the per-sub cost is
-        // an add, not a pool SSTORE.
+        // Batched pool accounting: each funded buy debits its full cost from its funding
+        // accounts and accrues that spend here by mode. At chunk end claimablePool releases the
+        // sum once and the prize pools are credited once (boxes 90% future / 10% next, tickets
+        // 90% next / 10% future), so the per-sub cost is an add, not a pool SSTORE.
         uint256 boxEthAccrued;
         uint256 ticketEthAccrued;
 
@@ -1274,10 +1287,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             uint32 player = element;
             uint32 id = element;
             Sub storage sub = _subOf[id];
-
-            // Previous-day paid boxes have all opened before preparation can start.
-            // Acquisition takes effect before any further debit; unclaimed accrual may forfeit.
-            if (sub.dailyQuantity != 0 && _isAcquired(id)) _cancelAcquiredSubscription(id);
 
             // Ordinary cancellations retain same-day markers until this reclaim.
             // The section tail replaces the tombstone and is processed at this cursor.
@@ -1372,7 +1381,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
 
             // BUY + DEBIT + ACCRUE + MARKER. The funded, well-formed slice is delivered
             // revert-free by construction (no try/catch) by the shared `_deliverAfkingBuy`:
-            // debit `afkingFunding[src]` (claimablePool in tandem, fail-loud on underflow),
+            // debit `afkingFunding[src]` (claimablePool batched at chunk end, fail-loud),
             // stamp the lootbox box / queue the tickets, accrue the day's affiliate + the
             // pendingFlip reward, advance the compute-on-read streak markers (gap days earn
             // nothing; the streak never resets in-run), and set the success marker.
@@ -1424,7 +1433,10 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 _pendingBoxCount += uint16(boxStamps);
             }
         }
-        // Credit the prize pools once for this chunk's batched box + ticket spend.
+        // Release the chunk's spend from claimablePool in one checked debit, then credit the
+        // prize pools once for the batched box + ticket spend.
+        uint256 spent = boxEthAccrued + ticketEthAccrued;
+        if (spent != 0) claimablePool -= uint128(spent);
         _routeAfkingPoolEth(boxEthAccrued, ticketEthAccrued);
         result.progressed = result.progressed || processed != 0;
         result.rewardBasis = processed;
@@ -1492,36 +1504,22 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @dev Materialize ONE subscriber's stamped afking box (the freeze-critical open).
     ///      The box uses the published active session word; the stamped day stays in its
     ///      seed domain. The level and EV-cap key read live inside `resolveAfkingBox`;
-    ///      the per-sub inputs (amount, score) come from the Sub record. Day-keyed
-    ///      no-double-open: the leg runs only while `lastOpenedDay < lastAutoBoughtDay`
-    ///      (the router pre-gates on the same condition), and advances the marker
-    ///      (`lastOpenedDay = lastAutoBoughtDay`) BEFORE the resolve (effects-before-
-    ///      interaction; a re-entrant open re-checks the now-equal marker and no-ops). The
-    ///      box is materialized by delegatecalling the LootboxModule's `resolveAfkingBox`
+    ///      the per-sub inputs (amount, score) come from the Sub record, which the open only
+    ///      reads. Each stamp opens exactly once because the opener walks the box section in
+    ///      order and its cursor only moves forward. The box is materialized by
+    ///      delegatecalling the LootboxModule's `resolveAfkingBox`
     ///      (the live-level twin of `resolveLootboxDirect`) with: the stamped spend (boons
     ///      OFF ⇒ amount == spend), the frozen process `day` = `lastAutoBoughtDay`, the
     ///      active session's word, and the frozen
     ///      `activityScore = score`. The draw math and the single EV-cap RMW live in
-    ///      `resolveAfkingBox`; this leg is the thin cursor/marker/dispatch shell.
+    ///      `resolveAfkingBox`; this leg is the thin dispatch shell.
     ///      `resolveAfkingBox` is the one freeze-correct seam (the public
     ///      `resolveLootboxDirect` derives its seed from the live day and would NOT freeze the
     ///      seed `day`). No stored baseLevel/index — the live roll needs no floor.
     /// @param element The subscriber ID whose stamped box is materialized.
-    /// @param sub The subscriber's stamped record (storage ref — the marker advances here).
+    /// @param sub The subscriber's stamped record.
     /// @param word The published active session word, read once by the caller.
     function _openAfkingBox(uint32 element, Sub storage sub, uint256 word) private {
-        // lastAutoBoughtDay is the frozen stamp day used in the seed domain.
-        uint24 day = sub.lastAutoBoughtDay;
-        // Advance the day-keyed no-double-open marker BEFORE the resolve (effects-first; a
-        // re-entrant open re-checks `lastOpenedDay < lastAutoBoughtDay` → false → no-op).
-        sub.lastOpenedDay = sub.lastAutoBoughtDay;
-        // Pending box consumed — the sole decrement paired with the daily stamp's sole
-        // increment. The stamp/count invariant guarantees a positive count here. An
-        // erroneous underflow would fail closed by blocking session completion; flooring
-        // at zero would instead conceal outstanding work and permit word reuse.
-        unchecked {
-            --_pendingBoxCount;
-        }
         // boons OFF ⇒ the stamped spend IS the box amount (unpacked milli-ETH → wei). The
         // active session word (passed in from the readiness check so it isn't re-read)
         // remains retained until every pending box opens; the level and EV-cap read
@@ -1533,7 +1531,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                     IDegenerusGameLootboxModule.resolveAfkingBox.selector,
                     element,
                     _unpackMilliEthToWei(uint64(sub.amount)), // milli-ETH → wei
-                    day,
+                    sub.lastAutoBoughtDay, // the frozen stamp day used in the seed domain
                     word,
                     uint16(sub.score)
                 )
@@ -1546,12 +1544,20 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         return _runAfkingWork(gasAllowance);
     }
 
+    /// @dev The cursor and the pending count are held locally and stored once after the loop.
+    ///      `resolveAfkingBox` reads neither and calls only pinned protocol contracts, none of
+    ///      which re-enters this walk.
     function _runAfkingWork(uint256 gasAllowance) private returns (MineFlipGas.Result memory result) {
         MineFlipGas.Meter memory meter = MineFlipGas.start(gasAllowance);
-        if (_pendingBoxCount == 0) { result.done = true; return result; }
+        uint256 pending = _pendingBoxCount;
+        if (pending == 0) { result.done = true; return result; }
         if (_rngConsumerStage() != 2) return result;
         uint256 cursor = _subOpenCursor;
         uint256 initialCursor = cursor;
+        uint256 initialPending = pending;
+        // Preparation for this day stamped every paid box; the next preparation waits for
+        // pending to reach zero, so the reset day is still the stamp day here.
+        uint24 stampDay = _afkingResetDay;
         uint256 word = _lootboxWord(_rngReadBuffer());
         // Cache eight physical IDs at a time. Membership cannot change until pending is zero.
         uint256 ids = _subscriberWordAt(cursor) >> ((cursor & 7) * 32);
@@ -1561,20 +1567,25 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             // Every ordinary survivor bought in preparation. Only permanent protocol members
             // may remain without buying (Vault quantity zero or either member underfunded).
             bool skip = (element == VAULT_WALLET_ID || element == SDGNRS_WALLET_ID)
-                && sub.lastOpenedDay >= sub.lastAutoBoughtDay;
+                && sub.lastAutoBoughtDay != stampDay;
             if (!MineFlipGas.canRun(meter, skip ? AFKING_SKIP_GAS : AFKING_OPEN_GAS, AFKING_TAIL_GAS)) break;
             if (!skip) {
+                // The stamp/count invariant guarantees a positive count here.
+                unchecked { --pending; }
                 _openAfkingBox(element, sub, word);
                 ++result.rewardBasis;
             }
             ++cursor;
             MineFlipGas.markProgress(meter);
-            if (_pendingBoxCount == 0) break;
+            if (pending == 0) break;
             ids = (cursor & 7) == 0 ? _subscriberWordAt(cursor) : ids >> 32;
         }
-        if (cursor != initialCursor) _subOpenCursor = uint16(cursor);
+        if (cursor != initialCursor) {
+            _subOpenCursor = uint16(cursor);
+            if (pending != initialPending) _pendingBoxCount = uint16(pending);
+        }
         result.progressed = cursor != initialCursor;
-        result.done = _pendingBoxCount == 0;
+        result.done = pending == 0;
         if (result.done) _tryCompleteRng();
         MineFlipGas.finish(meter);
     }

@@ -21,7 +21,7 @@ abstract contract AffiliateIdFixture is DeployProtocol {
     uint256 internal constant REFERRAL_ROOT = 2;
     uint256 internal constant LEVEL_SCORE_ROOT = 3;
     /// @dev `Sub.affiliateBase` (uint32) starts at byte 19 of the `_subOf[id]` word.
-    uint256 internal constant SUB_AFF_BASE_SHIFT = 19 * 8;
+    uint256 internal constant SUB_AFF_BASE_SHIFT = 16 * 8;
 
     bytes32 internal constant ROLL_TAG = keccak256("affiliate-payout-roll-v1");
     bytes32 internal constant LOCKED = bytes32(uint256(1));

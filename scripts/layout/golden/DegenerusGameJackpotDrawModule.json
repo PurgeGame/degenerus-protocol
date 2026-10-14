@@ -1030,5 +1030,13 @@
     "offset": 0,
     "slot": 78,
     "typeLabel": "mapping(uint32 => mapping(uint32 => bool))"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "_smurfWords",
+    "offset": 0,
+    "slot": 79,
+    "typeLabel": "mapping(uint32 => mapping(uint256 => uint256))"
   }
 ]

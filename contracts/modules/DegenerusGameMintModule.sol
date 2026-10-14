@@ -29,7 +29,8 @@ import {RECORD_KIND_BUY, RECORD_KIND_LUCKBOX} from "../interfaces/ICoinflip.sol"
 import {
     IDegenerusGameBoonModule,
     IDegenerusGameLootboxModule,
-    IDegenerusGameMintModule
+    IDegenerusGameMintModule,
+    IGameAfkingModule
 } from "../interfaces/IDegenerusGameModules.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
@@ -393,6 +394,8 @@ contract DegenerusGameMintModule is
         smurfId = uint32(position);
         wallets.push(uint256(ownerId) << 160);
         mintPacked_[smurfId] = uint256(1) << BitPackingLib.SMURF_FLAG_SHIFT;
+        // Append to the owner's smurf list at index `created` (its pre-increment count).
+        _smurfWords[ownerId][created >> 3] |= uint256(smurfId) << ((created & 7) * 32);
         emit SmurfCreated(ownerId, smurfId);
 
         affiliate.referSmurf(ownerId, smurfId);
@@ -531,8 +534,7 @@ contract DegenerusGameMintModule is
     function withdrawAfkingFunding(uint32 id, uint256 amount) external {
         if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) revert AlreadySwept();
         if (amount == 0) return;
-        uint32 wid = _resolveAccountId(id);
-        address payee = wid == 0 ? msg.sender : _payee(_walletElement(wid));
+        (uint32 wid, address payee) = _resolveAccountPayee(id);
         // One packed load: the guard reads the afking high half and the debit writes it back.
         uint256 packed = balancesPacked[wid];
         if (amount > (packed >> 128)) revert Insolvent();
@@ -594,6 +596,14 @@ contract DegenerusGameMintModule is
         uint256 slot = _walletSlot(id);
         uint256 acquired = (element & (type(uint256).max << 192)) | (uint256(buyer) << 160) | uint160(seller);
         assembly ("memory-safe") { sstore(slot, acquired) }
+        // The buyer takes the account passively: end its AFKing run, and for a main its
+        // smurfs' runs, so no later daily pass has to check for acquisition.
+        (bool ok, bytes memory data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(
+            abi.encodeWithSelector(
+                IGameAfkingModule.cancelLiquidatedSubscriptions.selector, id, uint32(element >> 160) == 0
+            )
+        );
+        if (!ok) _revertDelegate(data);
         _debitLiquidationEth(buyer, price);
         claimablePool -= uint128(price);
         emit AccountLiquidated(id, seller, buyer, price);

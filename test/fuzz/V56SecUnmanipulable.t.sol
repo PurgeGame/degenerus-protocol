@@ -9,7 +9,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IGameAfkingModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
-import {GameSlots} from "../helpers/GameSlots.sol";
+import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 
 /// @title Subscription churn accounting and streak regressions
 /// @notice Claim/cancel/upsert receipts are measured from wallet, claimable and next-day stake
@@ -46,16 +46,15 @@ contract V56SecUnmanipulable is DeployProtocol {
     uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF;            // _subOf mapping root (address => Sub, one packed slot) (was 58)
 
     //   dailyQuantity u8 @0 · flags u8 @1 · score u16 @2 · amount u24 @4
-    //   lastAutoBoughtDay u24 @7 · lastOpenedDay u24 @10 · afkCoveredThroughDay u24 @13 · afkingStartDay u24 @16
-    //   affiliateBase u32 @19 · pendingFlip u24 @23 · subStreakLatch u16 @26
+    //   lastAutoBoughtDay u24 @7 · afkCoveredThroughDay u24 @10 · afkingStartDay u24 @13
+    //   affiliateBase u32 @16 · pendingFlip u24 @20 · subStreakLatch u16 @23
     uint256 private constant OFF_DAILY = 0;           // uint8  dailyQuantity        (byte 0)
     uint256 private constant OFF_LASTBOUGHT = 7;      // uint24 lastAutoBoughtDay    (bytes 7..9)
-    uint256 private constant OFF_LASTOPENED = 10;     // uint24 lastOpenedDay        (bytes 10..12)
-    uint256 private constant OFF_AFKCOVERED = 13;     // uint24 afkCoveredThroughDay (bytes 13..15)
-    uint256 private constant OFF_AFKINGSTART = 16;    // uint24 afkingStartDay       (bytes 16..18)
-    uint256 private constant OFF_AFFBASE = 19;        // uint32 affiliateBase        (bytes 19..22)
-    uint256 private constant OFF_PENDINGFLIP = 23;    // uint24 pendingFlip          (bytes 23..25)
-    uint256 private constant OFF_STREAKLATCH = 26;    // uint16 subStreakLatch       (bytes 26..27; full streak counter)
+    uint256 private constant OFF_AFKCOVERED = 10;     // uint24 afkCoveredThroughDay (bytes 10..12)
+    uint256 private constant OFF_AFKINGSTART = 13;    // uint24 afkingStartDay       (bytes 13..15)
+    uint256 private constant OFF_AFFBASE = 16;        // uint32 affiliateBase        (bytes 16..19)
+    uint256 private constant OFF_PENDINGFLIP = 20;    // uint24 pendingFlip          (bytes 20..22)
+    uint256 private constant OFF_STREAKLATCH = 23;    // uint16 subStreakLatch       (bytes 23..24)
 
     /// @dev QUEST_SLOT0_REWARD / 1 ether = 100 whole FLIP accrued to pendingFlip per delivered buy.
     uint256 private constant SLOT0_FLIP_PER_BUY = 100;
@@ -576,7 +575,7 @@ contract V56SecUnmanipulable is DeployProtocol {
         uint256 w = uint256(keccak256(abi.encode("dlv", vrfWord, _deliverNonce++))) | 1;
         _runStageNewDay(w);
         _settleClean(uint256(keccak256(abi.encode("dlvc", w))) | 1);
-        // Mine any remaining box stages so lastOpenedDay catches lastAutoBoughtDay.
+        // Mine any remaining box stages so every stamped box is opened.
         vm.startPrank(makeAddr("deliver_opener"));
         _mineAll(64);
         vm.stopPrank();
@@ -732,7 +731,7 @@ contract V56SecUnmanipulable is DeployProtocol {
     }
 
     function _lastOpenedDayOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_LASTOPENED, 24));
+        return GameSlotKeys.afkingOpenedDay(address(game), game.walletIdOf(who));
     }
 
     function _afkCoveredOf(address who) internal view returns (uint32) {
@@ -756,6 +755,6 @@ contract V56SecUnmanipulable is DeployProtocol {
     }
 
     function _subscriberIndexOf(address who) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.SUB_OF)))) >> 224; // Sub.setPosition (1-based)
+        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.SUB_OF)))) >> 200; // Sub.setPosition (1-based)
     }
 }

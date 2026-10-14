@@ -10,7 +10,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {IDegenerusGameLootboxModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
-import {GameSlots} from "../helpers/GameSlots.sol";
+import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 
 /// @dev Seed boundary states only; all opening, publication and request transitions use
 ///      the deployed production modules. Clean entries represent an already-opened prefix.
@@ -41,7 +41,6 @@ contract RewardRngBoundaryFixture is DegenerusGame, WalletSeed {
         sub.amount = 10;
         sub.score = 1200;
         sub.lastAutoBoughtDay = stampDay;
-        sub.lastOpenedDay = stampDay - 1;
         _pendingBoxCount = 1;
         _subOpenCursor = uint16(cleanPrefix);
         _subCursor = 0;
@@ -76,7 +75,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
     }
 
     function _openedDay() private view returns (uint24) {
-        return uint24(uint256(game.extsload(keccak256(abi.encode(uint256(game.walletIdOf(PLAYER)), GameSlots.SUB_OF)))) >> 80);
+        return uint24(GameSlotKeys.afkingOpenedDay(address(game), game.walletIdOf(PLAYER)));
     }
 
     function _humanComplete() private view returns (bool) {

@@ -3,7 +3,7 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
-import {GameSlots} from "../helpers/GameSlots.sol";
+import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 
 /// @notice Check the cost of a NoWork revert after draining subscriber rings of different sizes.
 /// @dev The empty-work probe should stay small as the ring grows. These measurements do not
@@ -25,7 +25,6 @@ contract OpenWalkCompositionGas is DeployProtocol {
     uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF; // mapping(uint32 => Sub)
     uint256 private constant SUBSCRIBERS_SLOT = GameSlots.SUBSCRIBERS; // packed uint32[]
     uint256 private constant OFF_LASTBOUGHT = 7;
-    uint256 private constant OFF_LASTOPENED = 10;
     uint256 internal constant INTRINSIC_TX_GAS = 21_192;
     uint256 internal constant RING_1000_NEW_SUBS = 998;
     uint256 internal constant RING_500_NEW_SUBS = 500;
@@ -243,7 +242,7 @@ contract OpenWalkCompositionGas is DeployProtocol {
     }
 
     function _lastOpenedDayOf(uint32 id) internal view returns (uint32) {
-        return uint32(_subField(id, OFF_LASTOPENED, 24));
+        return GameSlotKeys.afkingOpenedDay(address(game), id);
     }
 
     function _subscriberCount() internal view returns (uint256) {

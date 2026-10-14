@@ -80,11 +80,10 @@ contract AfKingConcurrency is DeployProtocol {
     uint256 private constant OFF_DAILY = 0; // uint8  dailyQuantity      (byte 0)
     uint256 private constant OFF_VALIDTHROUGH = 1; // uint24 validThroughLevel  (bytes 1..3)
     uint256 private constant OFF_REINVEST = 4; // uint8  reinvestPct        (byte 4)
-    uint256 private constant OFF_FLAGS = 4; // uint8  flags              (byte 5; bit1=drainFirst, bit2=useTickets)
+    uint256 private constant OFF_FLAGS = 1; // uint8  flags              (byte 1; bit1=drainFirst, bit2=useTickets)
     uint256 private constant OFF_SCOREPLUS1 = 5; // uint16 scorePlus1         (bytes 6..7)
     uint256 private constant OFF_AMOUNT = 7; // uint24 amount             (bytes 8..10)
-    uint256 private constant OFF_LASTBOUGHT = 10; // uint24 lastAutoBoughtDay  (bytes 11..13)
-    uint256 private constant OFF_LASTOPENED = 13; // uint24 lastOpenedDay      (bytes 14..16)
+    uint256 private constant OFF_LASTBOUGHT = 7; // uint24 lastAutoBoughtDay  (bytes 7..9)
 
     uint256 private constant DEITY_SHIFT = BitPackingLib.HAS_DEITY_PASS_SHIFT; // HAS_DEITY_PASS_SHIFT in mintPacked_
 
@@ -368,7 +367,7 @@ contract AfKingConcurrency is DeployProtocol {
 
     /// @dev Read `who`'s 1-indexed subscriber index (slot 55); 0 = not in set.
     function _subscriberIndexOf(address who) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.SUB_OF)))) >> 224; // Sub.setPosition (1-based)
+        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.SUB_OF)))) >> 200; // Sub.setPosition (1-based)
     }
 
     /// @dev `_subscribers.length` (slot 54 holds the array length).
