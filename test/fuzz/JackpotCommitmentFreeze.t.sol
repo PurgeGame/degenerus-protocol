@@ -144,7 +144,10 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
         quantities[0] = 4;
         uint256[] memory positions = new uint256[](1);
         positions[0] = salvagePosition;
-        vm.expectRevert(RNG_LOCKED);
+        // Borrowing is deliberately not gated by the request lock: it reads no battle state and
+        // moves no battle money. The fixture's lenders hold nothing, so the quote reaches lender
+        // resolution and stops there.
+        vm.expectRevert(bytes4(keccak256("Insolvent()")));
         game.borrow(0, 9, 0);
         // A no-op preference write is allowed; it must not unset the commitment.
         crapsBattle.setPreferredBoard(0, BOARD);
