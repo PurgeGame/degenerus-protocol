@@ -136,4 +136,31 @@ contract EthSolvencyInvariant is DeployProtocol {
         gameHandler.claimWinnings(0);
         invariant_balanceReconciliation();
     }
+
+    /// @dev Non-vacuity. A single run can legitimately make no purchase (an early daily-RNG lock rejects them
+    ///      until a word is fulfilled; one measured run had 0 successful purchases), so progress is accumulated
+    ///      over the process (vm.setEnv, the SeatCap pattern) and each counter must be non-zero once at least
+    ///      MIN_RUNS runs have completed. Measured at default depth (seed 0xdeadbeef): about 3 successful
+    ///      purchases, 6 mineFlips and 2 VRF fulfilments per run, so 16 runs sit orders of magnitude above the
+    ///      zero threshold, while a handler whose purchases or cranks always revert fails at run 16.
+    uint256 private constant MIN_RUNS = 16;
+
+    function _acc(string memory k, uint256 v) private returns (uint256 total) {
+        total = vm.envOr(k, uint256(0)) + v;
+        vm.setEnv(k, vm.toString(total));
+    }
+
+    function afterInvariant() public {
+        uint256 runs = _acc("ES_RUNS", 1);
+        uint256 purchases = _acc("ES_purchases", gameHandler.ghost_successfulPurchases());
+        uint256 advances = _acc("ES_advances", gameHandler.ghost_successfulAdvances());
+        uint256 vrf = _acc("ES_vrf", vrfHandler.ghost_vrfFulfillments());
+        uint256 passes = _acc("ES_passes", whaleHandler.ghost_whalePassDeposited() + whaleHandler.ghost_lazyPassDeposited() + whaleHandler.ghost_deityPassDeposited());
+
+        if (runs < MIN_RUNS) return;
+        assertGt(purchases, 0, "vacuous: no ticket purchase ever succeeded");
+        assertGt(advances, 0, "vacuous: mineFlip never succeeded");
+        assertGt(vrf, 0, "vacuous: no VRF word was ever fulfilled");
+        assertGt(passes, 0, "vacuous: no pass purchase ever succeeded");
+    }
 }

@@ -5,6 +5,7 @@ import "forge-std/Test.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
+import {SolvencyObligations} from "../helpers/SolvencyObligations.sol";
 
 /// @title CompositionHandler -- Handler for cross-module composition invariant tests
 /// @notice Exercises cross-module state transitions and tracks ghost variables
@@ -21,11 +22,19 @@ contract CompositionHandler is Test {
     uint256 public ghost_gameOverReversed;
     uint256 public ghost_lastSeenLevel;
 
+    // --- Progress ghosts (successful calls only; read by the suite's afterInvariant) ---
+    uint256 public ghost_purchases;
+    uint256 public ghost_whalePurchases;
+    uint256 public ghost_mineFlips;
+    uint256 public ghost_vrfFulfillments;
+    uint256 public ghost_maxLevel;
+
     // --- Call counters ---
     uint256 public calls_purchaseThenAdvance;
     uint256 public calls_whaleThenPurchase;
     uint256 public calls_advanceFullCycle;
     uint256 public calls_purchaseOnly;
+    uint256 public calls_warpDay;
 
     // --- Actor management ---
     address[] public actors;
@@ -68,11 +77,15 @@ contract CompositionHandler is Test {
         vm.prank(currentActor);
         try game.purchase{value: ticketCost}(
             0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false
-        ) {} catch {}
+        ) {
+            ghost_purchases++;
+        } catch {}
 
         // Now advance
         vm.prank(currentActor);
-        try game.mineFlip(0) {} catch {}
+        try game.mineFlip(0) {
+            ghost_mineFlips++;
+        } catch {}
 
         _checkCompositionInvariants();
     }
@@ -94,7 +107,9 @@ contract CompositionHandler is Test {
         uint256 whaleCost = 2.4 ether;
         if (whaleCost <= currentActor.balance) {
             vm.prank(currentActor);
-            try game.purchaseWhalePass{value: whaleCost}(0, 1, bytes32(0)) {} catch {}
+            try game.purchaseWhalePass{value: whaleCost}(0, 1, bytes32(0)) {
+                ghost_whalePurchases++;
+            } catch {}
         }
 
         // Then purchase tickets
@@ -105,7 +120,9 @@ contract CompositionHandler is Test {
             vm.prank(currentActor);
             try game.purchase{value: ticketCost}(
                 0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false
-            ) {} catch {}
+            ) {
+                ghost_purchases++;
+            } catch {}
         }
 
         _checkCompositionInvariants();
@@ -130,13 +147,17 @@ contract CompositionHandler is Test {
             vm.prank(currentActor);
             try game.purchase{value: ticketCost}(
                 0, 100, 0, bytes32(0), MintPaymentKind.DirectEth, false
-            ) {} catch {}
+            ) {
+                ghost_purchases++;
+            } catch {}
         }
 
         // Try to advance 3 times (may trigger VRF, jackpot, etc.)
         for (uint256 i = 0; i < 3; i++) {
             vm.prank(currentActor);
-            try game.mineFlip(0) {} catch {}
+            try game.mineFlip(0) {
+                ghost_mineFlips++;
+            } catch {}
         }
 
         // Try to fulfill VRF if pending
@@ -144,15 +165,28 @@ contract CompositionHandler is Test {
         if (reqId != 0) {
             (, , bool fulfilled) = vrf.pendingRequests(reqId);
             if (!fulfilled) {
-                try vrf.fulfillRandomWords(reqId, uint256(keccak256(abi.encode(block.timestamp, actorSeed)))) {} catch {}
+                try vrf.fulfillRandomWords(reqId, uint256(keccak256(abi.encode(block.timestamp, actorSeed)))) {
+                    ghost_vrfFulfillments++;
+                } catch {}
             }
         }
 
         // Advance again after VRF
         vm.prank(currentActor);
-        try game.mineFlip(0) {} catch {}
+        try game.mineFlip(0) {
+            ghost_mineFlips++;
+        } catch {}
 
         _checkCompositionInvariants();
+    }
+
+    // =========================================================================
+    // Action: Warp one game day (lets the daily cycle, jackpots and level transitions run)
+    // =========================================================================
+
+    function action_warpDay(uint256 extra) external {
+        calls_warpDay++;
+        vm.warp(block.timestamp + 1 days + bound(extra, 0, 6 hours));
     }
 
     // =========================================================================
@@ -176,7 +210,9 @@ contract CompositionHandler is Test {
         vm.prank(currentActor);
         try game.purchase{value: ticketCost}(
             0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false
-        ) {} catch {}
+        ) {
+            ghost_purchases++;
+        } catch {}
 
         _checkCompositionInvariants();
     }
@@ -191,14 +227,10 @@ contract CompositionHandler is Test {
         _checkGameOverLatch();
     }
 
-    /// @dev Check pool solvency: obligations <= balance
+    /// @dev Canonical solvency: Game-held ETH + stETH must cover the full obligation set
+    ///      (SolvencyObligations: freeze-window pending buffer in, dead post-game-over pools out).
     function _checkPoolSolvency() private {
-        uint256 gameBalance = address(game).balance;
-        uint256 obligations = game.currentPrizePoolView()
-            + game.nextPrizePoolView()
-            + game.futurePrizePoolView()
-            + game.claimablePoolView();
-        if (obligations > gameBalance) {
+        if (SolvencyObligations.backing(game) < SolvencyObligations.obligations(game)) {
             ghost_poolSolvencyViolation++;
         }
     }
@@ -210,6 +242,7 @@ contract CompositionHandler is Test {
             ghost_levelDecreased++;
         }
         ghost_lastSeenLevel = currentLevel;
+        if (currentLevel > ghost_maxLevel) ghost_maxLevel = currentLevel;
     }
 
     /// @dev Check gameOver is a one-way latch

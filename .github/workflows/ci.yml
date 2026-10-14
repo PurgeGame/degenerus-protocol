@@ -353,7 +353,12 @@ jobs:
           INVARIANT_FILE: ${{ matrix.file }}
           INVARIANT_MATCH: ${{ matrix.match }}
           INVARIANT_EXCLUDE: ${{ matrix.exclude }}
-        run: FOUNDRY_PROFILE=deep FOUNDRY_ISOLATE=false python3 scripts/test-foundry-groups.py --file "$INVARIANT_FILE" --match-test "$INVARIANT_MATCH" --no-match-test "$INVARIANT_EXCLUDE" --threads 1
+          # A fresh seed every scheduled run (the per-PR jobs keep the fixed profile seed). Replay a
+          # failure locally with FOUNDRY_PROFILE=deep FOUNDRY_FUZZ_SEED=<seed printed below>.
+          FOUNDRY_FUZZ_SEED: ${{ github.run_id }}
+        run: |
+          echo "deep invariant seed: $FOUNDRY_FUZZ_SEED"
+          FOUNDRY_PROFILE=deep FOUNDRY_ISOLATE=false python3 scripts/test-foundry-groups.py --file "$INVARIANT_FILE" --match-test "$INVARIANT_MATCH" --no-match-test "$INVARIANT_EXCLUDE" --threads 1
       - name: Preserve deep-invariant evidence, including failed batches
         if: always()
         uses: actions/upload-artifact@v4

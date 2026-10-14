@@ -5,11 +5,14 @@ import "forge-std/Test.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {MockVRFCoordinator} from "../../../contracts/mocks/MockVRFCoordinator.sol";
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
+import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 
 /// @title MultiLevelHandler -- Handler for deep multi-level game progression
 /// @notice Drives the game through purchase -> VRF -> advance -> next level cycles.
-///         Previous fuzzing was limited to levels 0-2. This handler targets level 10+
-///         with price escalation and pool growth tracking.
+///         The random walk alone never leaves level 0 (measured: the actors' purchases fill a fraction
+///         of the level-0 target and the walk locks the daily RNG early), so `scriptedOpening` first
+///         plays a fixed, real-money, day-by-day opening to `OPENING_LEVEL`. The fuzzed walk then
+///         runs from that deep state, with price escalation and pool growth tracking.
 /// @dev Actors are funded with large ETH balances to sustain purchases at escalating prices.
 ///      Ghost variables track pool balances at each level transition for solvency verification.
 contract MultiLevelHandler is Test {
@@ -21,6 +24,18 @@ contract MultiLevelHandler is Test {
     uint256 public ghost_totalDeposited;
     uint256 public ghost_levelTransitions;
     uint256 public ghost_vrfFulfillments;
+    uint256 public ghost_advances;
+    uint256 public ghost_successfulPurchases;
+
+    // --- Scripted opening ---
+    uint256 public constant OPENING_LEVEL = 10;
+    uint256 public constant OPENING_MAX_DAYS = 90;
+    uint256 internal constant OPENING_BOX = 60 ether;
+    bool public opened;
+    address public immutable driver = address(0xD21FE);
+    uint256 public openingDays;
+    uint256 public openingPurchases;
+    uint256 public openingAdvances;
 
     // Pool snapshots at level transitions
     uint256 public ghost_lastCurrentPool;
@@ -60,6 +75,50 @@ contract MultiLevelHandler is Test {
         }
     }
 
+    /// @notice Fixed opening: one real purchase (tickets plus a 60 ETH lootbox) per game day from a funded
+    ///         driver, the daily VRF word fulfilled and mineFlip cranked until it refuses, until the game
+    ///         reaches `OPENING_LEVEL`. Real ETH moves through the real engine (no pool seeding), so the
+    ///         solvency invariant stays meaningful. Latched: runs once, later calls are no-ops.
+    /// @dev Measured: level 12 in 44 days; the bound leaves margin and a stall fails the suite's setUp.
+    function scriptedOpening() external {
+        if (opened) return;
+        opened = true;
+        vm.deal(driver, 100_000 ether);
+        // vm.getBlockTimestamp(): a hoisted block.timestamp can be stale after vm.warp under via-IR.
+        uint256 t = vm.getBlockTimestamp();
+        for (uint256 day; day < OPENING_MAX_DAYS && game.level() < OPENING_LEVEL; ++day) {
+            t += 1 days + 1;
+            vm.warp(t);
+            ++openingDays;
+
+            (, , , bool locked, uint256 priceWei) = game.purchaseInfo();
+            if (!locked && !game.gameOver()) {
+                uint256 cost = priceWei * 10 + OPENING_BOX;
+                vm.prank(driver);
+                try game.purchase{value: cost}(
+                    0, 4000, BoxOrderLib.boCustomFloor(OPENING_BOX), bytes32(0), MintPaymentKind.DirectEth, false
+                ) {
+                    ghost_totalDeposited += cost;
+                    ghost_successfulPurchases++;
+                } catch {}
+            }
+
+            for (uint256 j; j < 80; ++j) {
+                _fulfillPendingVrf();
+                uint256 levelBefore = game.level();
+                vm.prank(driver);
+                try game.mineFlip(0) {
+                    ghost_advances++;
+                } catch {
+                    break;
+                }
+                _checkLevelTransition(levelBefore);
+            }
+        }
+        openingPurchases = ghost_successfulPurchases;
+        openingAdvances = ghost_advances;
+    }
+
     /// @notice Heavy purchase to rapidly fill prize pool and trigger level transitions
     /// @param actorSeed Seed for actor selection
     /// @param qty Raw quantity, bounded to [1000, 4000]
@@ -88,6 +147,7 @@ contract MultiLevelHandler is Test {
             MintPaymentKind.DirectEth, false
         ) {
             ghost_totalDeposited += cost;
+            ghost_successfulPurchases++;
 
             // Track price
             if (!ghost_priceInitialized) {
@@ -131,6 +191,7 @@ contract MultiLevelHandler is Test {
             MintPaymentKind.DirectEth, false
         ) {
             ghost_totalDeposited += cost;
+            ghost_successfulPurchases++;
         } catch {}
 
         _checkLevelTransition(levelBefore);
@@ -146,7 +207,9 @@ contract MultiLevelHandler is Test {
         uint256 levelBefore = game.level();
 
         vm.prank(currentActor);
-        try game.mineFlip(0) {} catch {}
+        try game.mineFlip(0) {
+            ghost_advances++;
+        } catch {}
 
         _checkLevelTransition(levelBefore);
     }
@@ -188,6 +251,16 @@ contract MultiLevelHandler is Test {
     }
 
     // --- Internal helpers ---
+
+    function _fulfillPendingVrf() private {
+        uint256 reqId = vrf.lastRequestId();
+        if (reqId == 0) return;
+        (, , bool fulfilled) = vrf.pendingRequests(reqId);
+        if (fulfilled) return;
+        try vrf.fulfillRandomWords(reqId, uint256(keccak256(abi.encode(block.timestamp, reqId)))) {
+            ghost_vrfFulfillments++;
+        } catch {}
+    }
 
     function _checkLevelTransition(uint256 levelBefore) private {
         uint256 levelAfter = game.level();
