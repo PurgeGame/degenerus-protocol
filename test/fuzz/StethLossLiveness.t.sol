@@ -166,12 +166,12 @@ contract StethLossLiveness is RedemptionFixture {
         loanDue = game.level() + 2;
         _seeder(borrowerId, uint24(loanDue + 4), 600, 0, 0);
         _seeder(SDGNRS_ID, 0, 0, 100 ether, 0);
-        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), borrowerId, loanDue);
+        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), borrowerId, loanDue, type(uint256).max);
         assertTrue(q.eligible, "fixture: the loan must be borrowable");
         assertGt(q.principal, 0, "fixture: the loan must have a principal");
         _idle();
         vm.prank(borrower);
-        game.borrow(borrowerId, loanDue, 0);
+        game.borrow(borrowerId, loanDue, type(uint256).max, 0);
         assertTrue(lens.loanOf(address(game), borrowerId).principal != 0, "fixture: loan is open");
 
         // An AFKing subscription with prepaid funds.

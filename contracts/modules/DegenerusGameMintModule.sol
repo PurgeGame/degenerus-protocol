@@ -560,8 +560,9 @@ contract DegenerusGameMintModule is
     ///         wallet's native sDGNRS. A main with more than five smurfs cannot borrow; smurfs
     ///         can. Pays ETH first and stETH for any shortfall. More than 20 days into a level's
     ///         purchase phase, half the principal arrives as whole tickets at the live ticket
-    ///         level, priced and pooled like a ticket buy; `minEthOut` bounds the ETH part.
-    function borrow(uint32 id, uint24 dueLevel, uint256 minEthOut) external {
+    ///         level, priced and pooled like a ticket buy. The principal is the quote capped at
+    ///         `amount`; `minEthOut` bounds the ETH part.
+    function borrow(uint32 id, uint24 dueLevel, uint256 amount, uint256 minEthOut) external {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (id == 0) id = _walletIdOf(msg.sender);
         _requireAllocated(id);
@@ -578,6 +579,7 @@ contract DegenerusGameMintModule is
         uint24 lvl = level;
         if (dueLevel <= lvl || uint256(dueLevel) + 2 > uint256(_activeTicketLevel()) + 100) revert E();
         (, uint256 principal) = _quoteLoan(id, dueLevel);
+        if (amount < principal) principal = amount;
         uint24 buyLevel = _activeTicketLevel();
         uint256 price = PriceLookupLib.priceForLevel(buyLevel);
         uint256 ticketWei = _loanTicketWei(principal, _simulatedDayIndex(), purchaseStartDay, price,

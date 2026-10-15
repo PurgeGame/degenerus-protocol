@@ -81,9 +81,9 @@ abstract contract LoanSeizureGasBase is DeployProtocol {
             vm.prank(address(game));
             sdgnrs.transferFromPool(sDGNRS.Pool.Reward, borrower, 1e15);
         }
-        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), root, 1);
+        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), root, 1, type(uint256).max);
         vm.prank(borrower);
-        game.borrow(root, 1, q.principal);
+        game.borrow(root, 1, type(uint256).max, q.principal);
         family = lens.loanOf(address(game), root).family;
         // One wei short of the full-term amount: the auto-repay check reads everything, then defaults.
         DegenerusGameLens.LoanInfo memory info = lens.loanOf(address(game), root);
@@ -162,9 +162,9 @@ contract LoanEntryGas is LoanSeizureGasBase {
         address other = makeAddr("gas-other");
         uint32 id = _giveWalletId(other);
         _etch(); SeizureGasSeeder(address(game)).seedLevel(id, 8, 400); _unetch();
-        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), id, 5);
+        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), id, 5, type(uint256).max);
         vm.prank(other);
-        game.borrow(id, 5, q.principal);
+        game.borrow(id, 5, type(uint256).max, q.principal);
         emit log_named_uint("borrow_gas", vm.lastCallGas().gasTotalUsed);
         uint256 owed = lens.loanOf(address(game), id).owed;
         vm.deal(other, owed);

@@ -88,10 +88,10 @@ contract AfkingFamilyLiquidationTest is RedemptionCloseTools {
     /// @dev Borrow against `id` and default at the next level.
     function _sale(uint32 id) private {
         uint24 due = game.level() + 1;
-        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), id, due);
+        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), id, due, type(uint256).max);
         assertTrue(q.eligible, "borrow eligible");
         vm.prank(seller);
-        game.borrow(id, due, q.principal);
+        game.borrow(id, due, type(uint256).max, q.principal);
         // A borrower whose own balances cover the full-term amount auto-repays at the due level,
         // so withdraw the account's prepaid funding to default.
         uint256 prepaid = uint256(vm.load(address(game), GameSlotKeys.balances(id))) >> 128;

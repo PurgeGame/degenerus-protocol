@@ -29,7 +29,7 @@ Production changes since the earlier freeze (16 contract files):
 - Account loans replace account sale ([ACCOUNT-LOANS](ACCOUNT-LOANS.md)). An account borrows
   against its far-future tickets: whole tickets at the due level + 2 and above are valued at
   10% of face two levels ahead, 5% at twenty and 2% at a hundred, with no randomness and a
-  0.05 ETH minimum. sDGNRS lends, or the Vault when sDGNRS cannot fund it and fallback is
+  0.05 ETH minimum. The borrower may take any part of the quote. sDGNRS lends, or the Vault when sDGNRS cannot fund it and fallback is
   enabled. Repaying before the due level costs 5% of principal per level used plus 1% per unused
   level of the chosen term, paid to the lender. Borrowing and repaying are deliberately not
   request-locked. The daily request that enters the due level arms the seizure of every unpaid

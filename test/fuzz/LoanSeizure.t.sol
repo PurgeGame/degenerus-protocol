@@ -102,11 +102,11 @@ contract LoanSeizureTest is DeployProtocol {
     }
 
     function _borrow(address who, uint32 id, uint24 due) private returns (uint256 principal) {
-        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), id, due);
+        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), id, due, type(uint256).max);
         assertTrue(q.eligible, "borrow eligible");
         principal = q.principal;
         vm.prank(who);
-        game.borrow(id, due, principal);
+        game.borrow(id, due, type(uint256).max, principal);
     }
 
     function _child(address owner) private returns (uint32 id) {

@@ -459,9 +459,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
         return uint32(walletIds[owner] >> 32);
     }
 
-    /// @notice Borrow against far-future tickets; unrepaid at `dueLevel`, the lender takes the
-    ///         account as a sale would.
-    function borrow(uint32, uint24, uint256) external {
+    /// @notice Borrow up to `amount` against far-future tickets; unrepaid at `dueLevel`, the
+    ///         lender takes the account as a sale would.
+    function borrow(uint32, uint24, uint256, uint256) external {
         (bool ok, bytes memory data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }

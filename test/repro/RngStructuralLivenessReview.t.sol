@@ -172,10 +172,10 @@ contract RngStructuralLivenessReviewTest is DeployProtocol {
         (bytes32 beforeSale,,) = _drain(6_000_000, address(0xCA11));
         assertTrue(vm.revertToStateAndDelete(snapshot));
         uint24 due = game.level() + 1;
-        DegenerusGameLens.LoanQuote memory q = new DegenerusGameLens().previewBorrow(address(game), sellerRoot, due);
+        DegenerusGameLens.LoanQuote memory q = new DegenerusGameLens().previewBorrow(address(game), sellerRoot, due, type(uint256).max);
         assertTrue(q.eligible);
         assertGt(q.principal, 0);
-        vm.prank(seller); game.borrow(sellerRoot, due, q.principal);
+        vm.prank(seller); game.borrow(sellerRoot, due, type(uint256).max, q.principal);
         bytes memory runtime = address(game).code;
         vm.etch(address(game), address(new RngReviewSeizer()).code);
         RngReviewSeizer(address(game)).seizeDueInPlace(due);

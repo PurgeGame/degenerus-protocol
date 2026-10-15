@@ -49,7 +49,7 @@ contract IdReviewSeller {
         root = root_;
         child = child_;
         armed = true;
-        game.borrow(root, 1, 1);
+        game.borrow(root, 1, type(uint256).max, 1);
     }
 
     receive() external payable {}
@@ -147,7 +147,7 @@ contract IdAuthorizationReviewTest is DeployProtocol {
         _award(root, 0.1 ether);
         _award(child, 0.1 ether);
         _award(2, 100 ether);
-        DegenerusGameLens.LoanQuote memory q = new DegenerusGameLens().previewBorrow(address(game), root, 1);
+        DegenerusGameLens.LoanQuote memory q = new DegenerusGameLens().previewBorrow(address(game), root, 1, type(uint256).max);
         assertTrue(q.eligible);
         assertGt(q.principal, 0);
         bytes32 rootBank = game.extsload(GameSlotKeys.balances(root));

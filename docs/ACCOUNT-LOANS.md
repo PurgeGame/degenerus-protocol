@@ -1,6 +1,6 @@
 # Account loans
 
-`Game.borrow(id, dueLevel, minEthOut)` lends ETH against the selected account's far-future tickets. The lender is sDGNRS, or the Vault when sDGNRS cannot fund the principal and the Vault owner has enabled fallback. Only the current owner can borrow. Protocol roots, already-acquired accounts and accounts with an open loan are excluded. Borrowing works during the RNG lock: the quote reads no randomness, nothing changes hands at borrowing, and a new loan is always due above the level being seized. A main account with more than five lifetime smurfs cannot borrow; smurfs can borrow whatever their family's size.
+`Game.borrow(id, dueLevel, amount, minEthOut)` lends ETH against the selected account's far-future tickets. The lender is sDGNRS, or the Vault when sDGNRS cannot fund the principal and the Vault owner has enabled fallback. Only the current owner can borrow. Protocol roots, already-acquired accounts and accounts with an open loan are excluded. Borrowing works during the RNG lock: the quote reads no randomness, nothing changes hands at borrowing, and a new loan is always due above the level being seized. A main account with more than five lifetime smurfs cannot borrow; smurfs can borrow whatever their family's size.
 
 The borrower picks the due level X, from the next level up to the level that keeps X + 2 within 100 levels of the active ticket level. The principal values only whole tickets at levels X + 2 and above, which are still far-future buckets when the game enters X:
 
@@ -10,7 +10,7 @@ The borrower picks the due level X, from the next level up to the level that kee
 | 2 → 20 | linear, 10% → 5% |
 | 20 → 100 | linear, 5% → 2% |
 
-`rate(d) = 1000 − (d − 2)·500/18` bps for d ≤ 20, else `500 − (d − 20)·300/80`. The quote has no randomness. The principal must be at least 0.05 ETH, and the ETH part at least `minEthOut`. Printed tickets and children contribute nothing. Payment is ETH, with stETH covering any shortfall in the Game's ETH balance; a failed payment reverts the whole borrow.
+`rate(d) = 1000 − (d − 2)·500/18` bps for d ≤ 20, else `500 − (d − 20)·300/80`. The quote has no randomness. The borrower takes any part of it: the principal is the quote capped at `amount` (pass `type(uint256).max` for all of it). The account is the collateral whatever was drawn, so a partial loan that defaults is seized like a full one. The principal must be at least 0.05 ETH, and the ETH part at least `minEthOut`. Printed tickets and children contribute nothing. Payment is ETH, with stETH covering any shortfall in the Game's ETH balance; a failed payment reverts the whole borrow.
 
 A loan taken in the purchase phase more than 20 days after it began (`purchaseStartDay`; credited stall days do not count) pays half its principal, rounded down to whole tickets, as tickets at the live ticket level instead of ETH. Those tickets are priced at that level and pooled like a ticket buy (90% next pool, 10% future pool), with no affiliate, quest or activity credit. The loan's principal, interest and repayment are unchanged: the borrower owes on the whole amount. Jackpot-phase loans are always all ETH. The borrower keeps the account, its balances and its play while the loan is open, except that a main with an open loan cannot create smurfs.
 
@@ -42,7 +42,7 @@ Terminal handling outranks seizure: at liveness or game over, unpaid loans are n
 
 ## Integration
 
-- `Lens.previewBorrow(game, id, dueLevel)` returns account, lender ID, eligibility (every gate but the caller's ownership), face value, principal and `ticketWei`, the part of the principal a borrow now would pay as tickets. `Lens.loanOf(game, id)` returns the open loan and the amount owed at the current level. `Lens.loansDue(game, X)` lists the accounts due at X, in settlement order; once the game has entered X the list is history.
+- `Lens.previewBorrow(game, id, dueLevel, amount)` returns account, lender ID, eligibility (every gate but the caller's ownership), face value, `maxPrincipal` (the full quote), `principal` (the quote capped at `amount`) and `ticketWei`, the part of `principal` a borrow now would pay as tickets. `Lens.loanOf(game, id)` returns the open loan and the amount owed at the current level. `Lens.loansDue(game, X)` lists the accounts due at X, in settlement order; once the game has entered X the list is history.
 - Events: `LoanTaken(accountId, borrower, lenderId, principal, dueLevel, ticketWei)` (`ticketWei` = the part paid as tickets) and `LoanRepaid(accountId, payer, owed)` from the Mint module (a manual repayment) or the Advance module (an automatic one at X); `LoanSeized(accountId, lenderId)` from the Advance module. A deity seizure also emits the pass's `Transfer`.
 - `walletIdOf(address)` returns the current default gameplay ID; a main seizure clears it and later gameplay can register a replacement. `walletIdentityOf(address)` is permanent and does not reset.
 - `resolveAccount(id, caller)` resolves current payee and authorization. Raw wallet-table keys are historical metadata on acquired roots, not spending authority. `Lens.walletOfId` returns the current payee.
@@ -66,4 +66,4 @@ No existing slot moves.
 
 ## Verification
 
-`test/fuzz/AccountLoans.t.sol` covers valuation, gates, repayment, lenders, payout and the ported sale behaviours through borrow-then-default. `test/fuzz/LoanSeizure.t.sol` drives real level transitions, chunked seizure, automatic repayment, terminal precedence and deity passes. `test/gas/LoanSeizureGas.t.sol` measures the cold per-loan seizure and automatic-repayment costs against their admission bound.
+`test/fuzz/AccountLoans.t.sol` covers valuation, partial amounts, gates, repayment, lenders, payout and the ported sale behaviours through borrow-then-default. `test/fuzz/LoanSeizure.t.sol` drives real level transitions, chunked seizure, automatic repayment, terminal precedence and deity passes. `test/gas/LoanSeizureGas.t.sol` measures the cold per-loan seizure and automatic-repayment costs against their admission bound.

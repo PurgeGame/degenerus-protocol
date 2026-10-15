@@ -74,6 +74,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         uint32 lenderId;
         bool eligible;
         uint256 face;
+        uint256 maxPrincipal;
         uint256 principal;
         uint256 ticketWei;
     }
@@ -827,10 +828,13 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
       |                              LOANS                                   |
       +======================================================================+*/
 
-    /// @notice What `borrow(id, dueLevel, ...)` would pay now and whether every gate except
-    ///         the caller's ownership passes. Mirrors the game's quote and lender selection.
-    ///         `ticketWei` is the part of the principal paid as tickets; the rest is ETH.
-    function previewBorrow(address game, uint32 id, uint24 dueLevel) external view returns (LoanQuote memory q) {
+    /// @notice What `borrow(id, dueLevel, amount, ...)` would pay now and whether every gate
+    ///         except the caller's ownership passes. Mirrors the game's quote and lender selection.
+    ///         `maxPrincipal` is the full quote, `principal` that capped at `amount`, and
+    ///         `ticketWei` the part of `principal` paid as tickets; the rest is ETH.
+    function previewBorrow(address game, uint32 id, uint24 dueLevel, uint256 amount)
+        external view returns (LoanQuote memory q)
+    {
         q.accountId = id;
         uint256 w = _levelWord(game);
         uint24 cl = _activeTicketLevelMirror(w);
@@ -851,8 +855,9 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
             if (entries == 0) continue;
             uint256 value = PriceLookupLib.priceForLevel(uint24(target)) * entries / 4;
             q.face += value;
-            q.principal += value * _loanRateBps(target - cl) / 10_000;
+            q.maxPrincipal += value * _loanRateBps(target - cl) / 10_000;
         }
+        q.principal = amount < q.maxPrincipal ? amount : q.maxPrincipal;
         {
             uint256 o;
             uint256 jp;

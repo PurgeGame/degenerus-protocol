@@ -148,7 +148,7 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
         // moves no battle money. The fixture's lenders hold nothing, so the quote reaches lender
         // resolution and stops there.
         vm.expectRevert(bytes4(keccak256("Insolvent()")));
-        game.borrow(0, 9, 0);
+        game.borrow(0, 9, type(uint256).max, 0);
         // A no-op preference write is allowed; it must not unset the commitment.
         crapsBattle.setPreferredBoard(0, BOARD);
         vm.stopPrank();

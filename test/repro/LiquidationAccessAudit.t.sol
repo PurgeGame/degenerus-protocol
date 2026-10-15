@@ -99,7 +99,7 @@ contract LiquidationAccessAuditTest is DeployProtocol {
     function _default(uint32 id) private {
         uint24 due = game.level() + 1;
         vm.prank(borrower);
-        game.borrow(id, due, 0);
+        game.borrow(id, due, type(uint256).max, 0);
         host.seizeAt(due);
         assertEq(game.acquiredBuyer(id), 2, "seized to sDGNRS");
     }

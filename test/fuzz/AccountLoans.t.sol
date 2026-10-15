@@ -70,7 +70,7 @@ contract LoanSeeder is DegenerusGameStorage {
 contract RejectLoanEth {
     function borrow(address game, uint24 due) external {
         (bool ok, bytes memory reason) =
-            game.call(abi.encodeWithSignature("borrow(uint32,uint24,uint256)", uint32(0), due, uint256(0)));
+            game.call(abi.encodeWithSignature("borrow(uint32,uint24,uint256,uint256)", uint32(0), due, type(uint256).max, uint256(0)));
         if (!ok) assembly ("memory-safe") { revert(add(reason, 32), mload(reason)) }
     }
     receive() external payable { revert("reject ETH"); }
@@ -144,11 +144,11 @@ contract AccountLoansTest is RedemptionCloseTools {
 
     /// @dev Borrow the full quote for `id` due at `due`; returns the principal.
     function _borrow(uint32 id, uint24 due) private returns (uint256 principal) {
-        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), id, due);
+        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), id, due, type(uint256).max);
         assertTrue(q.eligible, "borrow eligible");
         principal = q.principal;
         vm.prank(seller);
-        game.borrow(id, due, principal);
+        game.borrow(id, due, type(uint256).max, principal);
     }
 
     /// @dev Enter `due` and run the production seizure worker.
@@ -212,13 +212,13 @@ contract AccountLoansTest is RedemptionCloseTools {
             _seedLevel(fresh, target, 40);
             expected += PriceLookupLib.priceForLevel(target) * 10 * _rate(ds[i]) / 10_000;
         }
-        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), fresh, cl);
+        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), fresh, cl, type(uint256).max);
         assertEq(q.principal, expected, "every level from due + 2 counts at its distance rate");
         assertEq(_rate(2), 1000);
         assertEq(_rate(20), 500);
         assertEq(_rate(100), 200);
         // A later due level drops the near levels from the collateral.
-        DegenerusGameLens.LoanQuote memory later = lens.previewBorrow(address(game), fresh, uint24(cl + 9));
+        DegenerusGameLens.LoanQuote memory later = lens.previewBorrow(address(game), fresh, uint24(cl + 9), type(uint256).max);
         uint256 dropped = PriceLookupLib.priceForLevel(uint24(cl + 3)) * 10 * _rate(3) / 10_000
             + PriceLookupLib.priceForLevel(uint24(cl + 10)) * 10 * _rate(10) / 10_000;
         assertEq(later.principal, expected - dropped, "levels below due + 2 are not collateral");
@@ -236,14 +236,14 @@ contract AccountLoansTest is RedemptionCloseTools {
         _seedLevel(fresh, uint24(cl + db), eb);
         uint256 expected = PriceLookupLib.priceForLevel(uint24(cl + da)) * (ea / 4) * _rate(da) / 10_000
             + PriceLookupLib.priceForLevel(uint24(cl + db)) * (eb / 4) * _rate(db) / 10_000;
-        assertEq(lens.previewBorrow(address(game), fresh, cl).principal, expected);
+        assertEq(lens.previewBorrow(address(game), fresh, cl, type(uint256).max).principal, expected);
     }
 
     function test_SameQuoteOnDifferentDays() public {
-        uint256 first = lens.previewBorrow(address(game), root, 1).principal;
+        uint256 first = lens.previewBorrow(address(game), root, 1, type(uint256).max).principal;
         _resolve(9, false);
         _seed(2, 0, 100 ether, 0);
-        assertEq(lens.previewBorrow(address(game), root, 1).principal, first, "no daily randomness");
+        assertEq(lens.previewBorrow(address(game), root, 1, type(uint256).max).principal, first, "no daily randomness");
     }
 
     function test_BorrowPaysTheLensQuoteExactly() public {
@@ -263,6 +263,73 @@ contract AccountLoansTest is RedemptionCloseTools {
         assertEq(_payee(root), seller, "the borrower keeps the account during the loan");
     }
 
+    // ---------------------------------------------------------------- partial loans
+
+    function test_PartialLoanPaysOnlyTheAmount() public {
+        uint256 full = lens.previewBorrow(address(game), root, 1, type(uint256).max).principal;
+        uint256 amount = full / 3;
+        assertGt(amount, 0.05 ether);
+        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), root, 1, amount);
+        assertEq(q.maxPrincipal, full, "the full quote stays visible");
+        assertEq(q.principal, amount);
+        assertTrue(q.eligible);
+
+        uint256 before = seller.balance;
+        uint256 lenderBefore = game.claimableWinningsOf(address(sdgnrs));
+        uint256 poolBefore = _pool();
+        vm.prank(seller);
+        game.borrow(root, 1, amount, amount);
+        assertEq(seller.balance, before + amount);
+        assertEq(game.claimableWinningsOf(address(sdgnrs)), lenderBefore - amount);
+        assertEq(_pool(), poolBefore - amount);
+        DegenerusGameLens.LoanInfo memory info = lens.loanOf(address(game), root);
+        assertEq(info.principal, amount);
+        assertEq(info.owed, amount * 105 / 100, "interest accrues on the amount taken");
+
+        vm.deal(seller, info.owed);
+        vm.prank(seller); game.repay{value: info.owed}(root);
+        assertEq(game.claimableWinningsOf(address(sdgnrs)), lenderBefore - amount + info.owed);
+        assertEq(lens.loanOf(address(game), root).principal, 0);
+    }
+
+    function test_AmountAboveQuoteTakesTheQuote() public {
+        uint256 full = lens.previewBorrow(address(game), root, 1, type(uint256).max).principal;
+        assertEq(lens.previewBorrow(address(game), root, 1, full + 1 ether).principal, full);
+        vm.prank(seller); game.borrow(root, 1, full + 1 ether, full);
+        assertEq(lens.loanOf(address(game), root).principal, full);
+    }
+
+    function test_PartialLoanBelowMinimumReverts() public {
+        assertGt(lens.previewBorrow(address(game), root, 1, type(uint256).max).principal, 0.05 ether);
+        assertFalse(lens.previewBorrow(address(game), root, 1, 0.05 ether - 1).eligible);
+        vm.prank(seller); vm.expectRevert(bytes4(keccak256("E()"))); game.borrow(root, 1, 0.05 ether - 1, 0);
+        vm.prank(seller); game.borrow(root, 1, 0.05 ether, 0);
+        assertEq(lens.loanOf(address(game), root).principal, 0.05 ether);
+    }
+
+    function test_LatePartialLoanPaysHalfOfTheAmountInTickets() public {
+        _warpDaysIn(21);
+        uint24 cl = lens.activeTicketLevelOf(address(game));
+        uint256 price = PriceLookupLib.priceForLevel(cl);
+        uint256 amount = lens.previewBorrow(address(game), root, 1, type(uint256).max).principal / 2;
+        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), root, 1, amount);
+        uint256 ticketWei = amount / 2 / price * price;
+        assertGt(ticketWei, 0);
+        assertEq(q.ticketWei, ticketWei);
+        uint256 before = seller.balance;
+        vm.prank(seller); game.borrow(root, 1, amount, amount - ticketWei);
+        assertEq(seller.balance, before + amount - ticketWei);
+    }
+
+    function test_PartialLoanDefaultStillSeizesTheAccount() public {
+        uint256 amount = lens.previewBorrow(address(game), root, 1, type(uint256).max).principal / 2;
+        assertGt(amount, 0.05 ether);
+        vm.prank(seller); game.borrow(root, 1, amount, 0);
+        assertEq(lens.loanOf(address(game), root).principal, amount);
+        _seize(1);
+        assertEq(game.acquiredBuyer(root), 2, "the account is the collateral, whatever was drawn");
+    }
+
     // ---------------------------------------------------------------- late-level ticket half
 
     /// @dev Warp to `daysIn` days past the level's purchase start.
@@ -273,7 +340,7 @@ contract AccountLoansTest is RedemptionCloseTools {
 
     function test_DayTwentyLoanIsAllEth() public {
         _warpDaysIn(20);
-        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), root, 1);
+        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), root, 1, type(uint256).max);
         assertEq(q.ticketWei, 0, "day 20 is not past the threshold");
         uint256 before = seller.balance;
         uint256 entriesBefore = game.entriesOwedView(1, seller);
@@ -286,7 +353,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         _warpDaysIn(21);
         uint24 cl = lens.activeTicketLevelOf(address(game));
         uint256 price = PriceLookupLib.priceForLevel(cl);
-        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), root, 1);
+        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), root, 1, type(uint256).max);
         uint256 ticketWei = q.principal / 2 / price * price;
         assertGt(ticketWei, 0);
         assertEq(q.ticketWei, ticketWei, "lens mirrors the ticket half");
@@ -299,7 +366,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         uint256 entriesBefore = game.entriesOwedView(cl, seller);
 
         vm.prank(seller);
-        game.borrow(root, 1, q.principal - ticketWei);
+        game.borrow(root, 1, type(uint256).max, q.principal - ticketWei);
 
         assertEq(seller.balance, before + q.principal - ticketWei, "the rest pays out as ETH");
         assertEq(game.claimableWinningsOf(address(sdgnrs)), lenderBefore - q.principal, "lender funds it all");
@@ -316,7 +383,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         bytes32 slot0 = vm.load(address(game), bytes32(GameSlots.JACKPOT_PHASE_FLAG));
         vm.store(address(game), bytes32(GameSlots.JACKPOT_PHASE_FLAG),
             slot0 | bytes32(uint256(1) << (GameSlots.JACKPOT_PHASE_FLAG_OFFSET * 8)));
-        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), root, 1);
+        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), root, 1, type(uint256).max);
         assertEq(q.ticketWei, 0, "jackpot phase pays no tickets");
         uint256 before = seller.balance;
         _borrow(root, 1);
@@ -325,10 +392,10 @@ contract AccountLoansTest is RedemptionCloseTools {
 
     function test_LateLevelMinEthOutBoundsTheEthPart() public {
         _warpDaysIn(21);
-        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), root, 1);
+        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), root, 1, type(uint256).max);
         assertGt(q.ticketWei, 0);
         vm.prank(seller); vm.expectRevert(bytes4(keccak256("E()")));
-        game.borrow(root, 1, q.principal - q.ticketWei + 1);
+        game.borrow(root, 1, type(uint256).max, q.principal - q.ticketWei + 1);
     }
 
     function testFuzz_LateBorrowPreservesCommittedTicketsAndPools(uint8 phaseSeed, bool writeSlot) public {
@@ -345,13 +412,13 @@ contract AccountLoansTest is RedemptionCloseTools {
         uint256 pending = uint256(vm.load(address(game), bytes32(GameSlots.PRIZE_POOL_PENDING_PACKED)));
         uint256 claimableBefore = _pool();
         uint256 custodyBefore = address(game).balance;
-        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), root, 30);
+        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), root, 30, type(uint256).max);
         uint256 tickets = phase == 0 ? q.principal / 2 / PriceLookupLib.priceForLevel(target) : 0;
         assertTrue(q.eligible);
         if (phase == 0) assertGt(tickets, 0);
         assertEq(q.ticketWei, tickets * PriceLookupLib.priceForLevel(target));
 
-        vm.prank(seller); game.borrow(root, 30, q.principal - q.ticketWei);
+        vm.prank(seller); game.borrow(root, 30, type(uint256).max, q.principal - q.ticketWei);
 
         assertEq(TicketQueueStorage.owedById(address(game), readKey, root), committed,
             "a loan cannot change the committed ticket cohort");
@@ -368,13 +435,13 @@ contract AccountLoansTest is RedemptionCloseTools {
 
     function test_LateLoanUsesStethOnlyForCashPart() public {
         _warpDaysIn(21);
-        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), root, 1);
+        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), root, 1, type(uint256).max);
         uint256 cash = q.principal - q.ticketWei;
         vm.deal(address(game), 0);
         mockStETH.mint(address(game), q.principal);
         uint256 stethBefore = mockStETH.balanceOf(address(game));
         uint256 sellerBefore = mockStETH.balanceOf(seller);
-        vm.prank(seller); game.borrow(root, 1, cash);
+        vm.prank(seller); game.borrow(root, 1, type(uint256).max, cash);
         assertApproxEqAbs(mockStETH.balanceOf(seller), sellerBefore + cash, 1);
         assertApproxEqAbs(mockStETH.balanceOf(address(game)), stethBefore - cash, 1,
             "the ticket part retains its backing in the game");
@@ -386,7 +453,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         uint32 id = _giveWalletId(address(receiver));
         _seed(id, 400, 1, 0);
         _warpDaysIn(21);
-        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), id, 1);
+        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), id, 1, type(uint256).max);
         assertGt(q.ticketWei, 0);
         uint256 poolsBefore = uint256(vm.load(address(game), bytes32(GameSlots.PRIZE_POOLS_PACKED)));
         uint256 claimableBefore = _pool();
@@ -402,9 +469,9 @@ contract AccountLoansTest is RedemptionCloseTools {
 
     function test_CreditedStallDaysDelayLoanTicketThreshold() public {
         _warpDaysIn(21);
-        assertGt(lens.previewBorrow(address(game), root, 1).ticketWei, 0);
+        assertGt(lens.previewBorrow(address(game), root, 1, type(uint256).max).ticketWei, 0);
         _etch(); LoanSeeder(address(game)).creditStallDays(2); _unetch();
-        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), root, 1);
+        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), root, 1, type(uint256).max);
         assertEq(q.ticketWei, 0);
         uint256 before = seller.balance;
         _borrow(root, 1);
@@ -415,7 +482,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         _setLevel(9);
         _seedLevel(root, 12, 60);
         _warpDaysIn(21);
-        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), root, 10);
+        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), root, 10, type(uint256).max);
         assertTrue(q.eligible);
         assertLt(q.principal / 2, PriceLookupLib.priceForLevel(10));
         assertEq(q.ticketWei, 0);
@@ -429,13 +496,13 @@ contract AccountLoansTest is RedemptionCloseTools {
         uint32 child = _child();
         _seed(child, 400, 1, 0);
         _warpDaysIn(21);
-        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), child, 1);
+        DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), child, 1, type(uint256).max);
         uint24 writeKey = uint8(uint256(vm.load(address(game), bytes32(0)))
             >> (GameSlots.TICKET_WRITE_SLOT_OFFSET * 8)) == 0 ? 1 : uint24(1 | (1 << 23));
         uint256 childBefore = uint32(TicketQueueStorage.owedById(address(game), writeKey, child) >> 8);
         uint80 rootBefore = TicketQueueStorage.owedById(address(game), writeKey, root);
         uint256 cashBefore = seller.balance;
-        vm.prank(seller); game.borrow(child, 1, q.principal - q.ticketWei);
+        vm.prank(seller); game.borrow(child, 1, type(uint256).max, q.principal - q.ticketWei);
         assertEq(seller.balance, cashBefore + q.principal - q.ticketWei);
         assertEq(uint32(TicketQueueStorage.owedById(address(game), writeKey, child) >> 8),
             childBefore + q.ticketWei / PriceLookupLib.priceForLevel(1) * 4);
@@ -448,29 +515,29 @@ contract AccountLoansTest is RedemptionCloseTools {
 
     function test_BorrowGates() public {
         // Due level must be ahead.
-        vm.prank(seller); vm.expectRevert(bytes4(keccak256("E()"))); game.borrow(root, 0, 0);
+        vm.prank(seller); vm.expectRevert(bytes4(keccak256("E()"))); game.borrow(root, 0, type(uint256).max, 0);
         // Due level + 2 must sit inside the 100-level horizon.
         uint24 cl = lens.activeTicketLevelOf(address(game));
-        vm.prank(seller); vm.expectRevert(bytes4(keccak256("E()"))); game.borrow(root, cl + 99, 0);
+        vm.prank(seller); vm.expectRevert(bytes4(keccak256("E()"))); game.borrow(root, cl + 99, type(uint256).max, 0);
         // Slippage.
-        uint256 principal = lens.previewBorrow(address(game), root, 1).principal;
-        vm.prank(seller); vm.expectRevert(bytes4(keccak256("E()"))); game.borrow(root, 1, principal + 1);
+        uint256 principal = lens.previewBorrow(address(game), root, 1, type(uint256).max).principal;
+        vm.prank(seller); vm.expectRevert(bytes4(keccak256("E()"))); game.borrow(root, 1, type(uint256).max, principal + 1);
         // Below the 0.05 ETH minimum.
         uint32 small = _giveWalletId(makeAddr("small"));
         _seedLevel(small, cl + 6, 8);
-        assertLt(lens.previewBorrow(address(game), small, 1).principal, 0.05 ether);
-        assertFalse(lens.previewBorrow(address(game), small, 1).eligible);
-        vm.prank(makeAddr("small")); vm.expectRevert(bytes4(keccak256("E()"))); game.borrow(small, 1, 0);
+        assertLt(lens.previewBorrow(address(game), small, 1, type(uint256).max).principal, 0.05 ether);
+        assertFalse(lens.previewBorrow(address(game), small, 1, type(uint256).max).eligible);
+        vm.prank(makeAddr("small")); vm.expectRevert(bytes4(keccak256("E()"))); game.borrow(small, 1, type(uint256).max, 0);
         // One loan per account.
         _borrow(root, 1);
-        vm.prank(seller); vm.expectRevert(bytes4(keccak256("E()"))); game.borrow(root, 2, 0);
+        vm.prank(seller); vm.expectRevert(bytes4(keccak256("E()"))); game.borrow(root, 2, type(uint256).max, 0);
         // Protocol roots.
-        vm.prank(address(sdgnrs)); vm.expectRevert(bytes4(keccak256("E()"))); game.borrow(2, 1, 0);
+        vm.prank(address(sdgnrs)); vm.expectRevert(bytes4(keccak256("E()"))); game.borrow(2, 1, type(uint256).max, 0);
     }
 
     function test_BorrowAndRepayDuringRngLock() public {
         _etch(); LoanSeeder(address(game)).lock(true); _unetch();
-        assertTrue(lens.previewBorrow(address(game), root, 1).eligible, "the lock does not gate borrowing");
+        assertTrue(lens.previewBorrow(address(game), root, 1, type(uint256).max).eligible, "the lock does not gate borrowing");
         uint256 principal = _borrow(root, 1);
         assertGt(principal, 0);
         uint256 owed = lens.loanOf(address(game), root).owed;
@@ -481,23 +548,23 @@ contract AccountLoansTest is RedemptionCloseTools {
     function test_OnlyOwnerBorrowsAndOperatorsCannot() public {
         address operator = makeAddr("loan-operator");
         vm.prank(seller); game.setOperatorApproval(root, operator, true);
-        vm.prank(operator); vm.expectRevert(DegenerusGameStorage.NotApproved.selector); game.borrow(root, 1, 0);
-        vm.prank(makeAddr("stranger")); vm.expectRevert(DegenerusGameStorage.NotApproved.selector); game.borrow(root, 1, 0);
+        vm.prank(operator); vm.expectRevert(DegenerusGameStorage.NotApproved.selector); game.borrow(root, 1, type(uint256).max, 0);
+        vm.prank(makeAddr("stranger")); vm.expectRevert(DegenerusGameStorage.NotApproved.selector); game.borrow(root, 1, type(uint256).max, 0);
     }
 
     function test_GameOverBlocksBorrow() public {
         _endGame();
-        vm.prank(seller); vm.expectRevert(bytes4(keccak256("E()"))); game.borrow(root, 1, 0);
+        vm.prank(seller); vm.expectRevert(bytes4(keccak256("E()"))); game.borrow(root, 1, type(uint256).max, 0);
     }
 
     function test_MainSmurfCapButSmurfsBorrowFreely() public {
         _grantSmurfBase(seller, 8);
         uint32[] memory kids = new uint32[](6);
         for (uint256 i; i < 5; ++i) kids[i] = _child();
-        assertTrue(lens.previewBorrow(address(game), root, 1).eligible, "five smurfs: the main may borrow");
+        assertTrue(lens.previewBorrow(address(game), root, 1, type(uint256).max).eligible, "five smurfs: the main may borrow");
         kids[5] = _child();
-        assertFalse(lens.previewBorrow(address(game), root, 1).eligible, "six smurfs: the main may not");
-        vm.prank(seller); vm.expectRevert(bytes4(keccak256("E()"))); game.borrow(root, 1, 0);
+        assertFalse(lens.previewBorrow(address(game), root, 1, type(uint256).max).eligible, "six smurfs: the main may not");
+        vm.prank(seller); vm.expectRevert(bytes4(keccak256("E()"))); game.borrow(root, 1, type(uint256).max, 0);
         _seed(kids[5], 400, 0, 0);
         uint256 principal = _borrow(kids[5], 1);
         assertGt(principal, 0);
@@ -644,8 +711,8 @@ contract AccountLoansTest is RedemptionCloseTools {
                 vm.prank(owners[k]); game.repay{value: owed}(ids[k]);
                 open[k] = false;
             } else {
-                uint256 principal = lens.previewBorrow(address(game), ids[k], due).principal;
-                vm.prank(owners[k]); game.borrow(ids[k], due, principal);
+                uint256 principal = lens.previewBorrow(address(game), ids[k], due, type(uint256).max).principal;
+                vm.prank(owners[k]); game.borrow(ids[k], due, type(uint256).max, principal);
                 open[k] = true;
             }
             uint256 total;
@@ -672,7 +739,7 @@ contract AccountLoansTest is RedemptionCloseTools {
     }
 
     function test_BorrowShortfallPaysEthBalanceThenStethRemainder() public {
-        uint256 principal = lens.previewBorrow(address(game), root, 1).principal;
+        uint256 principal = lens.previewBorrow(address(game), root, 1, type(uint256).max).principal;
         uint256 ethLeft = principal / 3;
         vm.deal(address(game), ethLeft);
         mockStETH.mint(address(game), principal);
@@ -680,7 +747,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         uint256 sellerEth = seller.balance;
         uint256 sellerSt = mockStETH.balanceOf(seller);
         vm.prank(seller);
-        game.borrow(root, 1, principal);
+        game.borrow(root, 1, type(uint256).max, principal);
         uint256 stPaid = principal - ethLeft;
         assertEq(seller.balance, sellerEth + ethLeft);
         assertApproxEqAbs(mockStETH.balanceOf(seller), sellerSt + stPaid, 1);
@@ -689,25 +756,25 @@ contract AccountLoansTest is RedemptionCloseTools {
     }
 
     function test_EthPlusStethShortfallRollsBackBorrow() public {
-        uint256 principal = lens.previewBorrow(address(game), root, 1).principal;
+        uint256 principal = lens.previewBorrow(address(game), root, 1, type(uint256).max).principal;
         uint256 lenderBefore = game.claimableWinningsOf(address(sdgnrs));
         vm.deal(address(game), principal / 2);
         mockStETH.mint(address(game), principal / 2 - 1);
         vm.prank(seller);
         vm.expectRevert(DegenerusGameStorage.TransferFailed.selector);
-        game.borrow(root, 1, 0);
+        game.borrow(root, 1, type(uint256).max, 0);
         assertEq(lens.loanOf(address(game), root).principal, 0);
         assertEq(lens.loansDue(address(game), 1).length, 0);
         assertEq(game.claimableWinningsOf(address(sdgnrs)), lenderBefore);
     }
 
     function test_NoEthRequiredWhenStethCoversPrincipal() public {
-        uint256 principal = lens.previewBorrow(address(game), root, 1).principal;
+        uint256 principal = lens.previewBorrow(address(game), root, 1, type(uint256).max).principal;
         vm.deal(address(game), 0);
         mockStETH.mint(address(game), principal);
         uint256 sellerEth = seller.balance;
         vm.prank(seller);
-        game.borrow(root, 1, principal);
+        game.borrow(root, 1, type(uint256).max, principal);
         assertEq(seller.balance, sellerEth);
         assertApproxEqAbs(mockStETH.balanceOf(seller), principal, 1);
     }
@@ -726,7 +793,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         RejectLoanEth rejector = new RejectLoanEth();
         uint32 id = _giveWalletId(address(rejector));
         _seed(id, 400, 0, 0);
-        uint256 principal = lens.previewBorrow(address(game), id, 1).principal;
+        uint256 principal = lens.previewBorrow(address(game), id, 1, type(uint256).max).principal;
         vm.deal(address(game), 0);
         mockStETH.mint(address(game), principal);
         rejector.borrow(address(game), 1);
@@ -734,9 +801,9 @@ contract AccountLoansTest is RedemptionCloseTools {
     }
 
     function test_OwnCashStaysWithAccountWithoutChangingPrincipal() public {
-        uint256 quote = lens.previewBorrow(address(game), root, 1).principal;
+        uint256 quote = lens.previewBorrow(address(game), root, 1, type(uint256).max).principal;
         _seed(root, 0, 2 ether + 1, 3 ether);
-        assertEq(lens.previewBorrow(address(game), root, 1).principal, quote);
+        assertEq(lens.previewBorrow(address(game), root, 1, type(uint256).max).principal, quote);
         _borrow(root, 1);
         assertEq(uint256(vm.load(address(game), keccak256(abi.encode(root, GameSlots.BALANCES_PACKED)))),
             uint256(2 ether + 1) | (uint256(3 ether) << 128));
@@ -745,12 +812,12 @@ contract AccountLoansTest is RedemptionCloseTools {
     // ---------------------------------------------------------------- lenders
 
     function test_VaultFallbackLendsAndKeepsConfiguredFloor() public {
-        uint256 principal = lens.previewBorrow(address(game), root, 1).principal;
+        uint256 principal = lens.previewBorrow(address(game), root, 1, type(uint256).max).principal;
         _seed(2, 0, 1 ether, 0);
         _seed(1, 0, uint128(principal / 2 + 1), uint128(2 ether + principal - principal / 2));
         vm.prank(ContractAddresses.CREATOR);
         vault.setLiquidationBuyFallback(true, 2 ether);
-        assertEq(lens.previewBorrow(address(game), root, 1).lenderId, 1);
+        assertEq(lens.previewBorrow(address(game), root, 1, type(uint256).max).lenderId, 1);
         _borrow(root, 1);
         assertEq(game.claimableWinningsOf(address(vault)), 1);
         assertEq(game.afkingFundingOf(address(vault)), 2 ether);
@@ -767,17 +834,17 @@ contract AccountLoansTest is RedemptionCloseTools {
 
     function test_FallbackDisabledAndInsufficientFloorReject() public {
         _seed(2, 0, 1 ether, 0);
-        vm.prank(seller); vm.expectRevert(bytes4(keccak256("Insolvent()"))); game.borrow(root, 1, 0);
+        vm.prank(seller); vm.expectRevert(bytes4(keccak256("Insolvent()"))); game.borrow(root, 1, type(uint256).max, 0);
         _seed(1, 0, 2 ether, 0);
         vm.prank(ContractAddresses.CREATOR); vault.setLiquidationBuyFallback(true, 2 ether);
-        vm.prank(seller); vm.expectRevert(bytes4(keccak256("Insolvent()"))); game.borrow(root, 1, 0);
+        vm.prank(seller); vm.expectRevert(bytes4(keccak256("Insolvent()"))); game.borrow(root, 1, type(uint256).max, 0);
     }
 
     function test_SdgnrsPriorityAndFloorEquality() public {
-        uint256 principal = lens.previewBorrow(address(game), root, 1).principal;
+        uint256 principal = lens.previewBorrow(address(game), root, 1, type(uint256).max).principal;
         _seed(2, 0, uint128(1 ether + principal), 0);
         vm.prank(ContractAddresses.CREATOR); vault.setLiquidationBuyFallback(true, 0);
-        assertEq(lens.previewBorrow(address(game), root, 1).lenderId, 2);
+        assertEq(lens.previewBorrow(address(game), root, 1, type(uint256).max).lenderId, 2);
         _borrow(root, 1);
         assertEq(game.claimableWinningsOf(address(sdgnrs)), 1 ether);
     }
@@ -946,9 +1013,9 @@ contract AccountLoansTest is RedemptionCloseTools {
 
     function test_WholeFamilyTransfersWithoutPayingForChildren() public {
         uint32 child = _child();
-        uint256 before = lens.previewBorrow(address(game), root, 1).principal;
+        uint256 before = lens.previewBorrow(address(game), root, 1, type(uint256).max).principal;
         _seed(child, 8000, 4 ether, 3 ether);
-        assertEq(lens.previewBorrow(address(game), root, 1).principal, before);
+        assertEq(lens.previewBorrow(address(game), root, 1, type(uint256).max).principal, before);
         uint256 table = uint256(keccak256(abi.encode(uint256(13))));
         bytes32 childElement = vm.load(address(game), bytes32(table + child));
         _default(root);

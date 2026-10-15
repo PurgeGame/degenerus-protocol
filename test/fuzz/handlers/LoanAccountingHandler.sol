@@ -292,6 +292,7 @@ contract LoanAccountingHandler is Test {
         uint24 lvl;
         uint256 cl;
         uint24 due;
+        uint256 amount;
         uint256 principal;
         uint256 ticketWei;
         uint32 lender;
@@ -330,7 +331,17 @@ contract LoanAccountingHandler is Test {
         if (probe == 2) c.due = uint24(c.cl + 99); // due + 2 must stay within 100 levels
         c.id = accts[c.idx].id;
         c.borrower = actors[accts[c.idx].actor];
-        c.principal = c.due > c.lvl && uint256(c.due) + 2 <= c.cl + 100 ? _principalOf(c.idx, c.due, c.cl) : 0;
+        uint256 full = c.due > c.lvl && uint256(c.due) + 2 <= c.cl + 100 ? _principalOf(c.idx, c.due, c.cl) : 0;
+        // A quarter of borrows ask for a partial loan, and unplanned ones sometimes for less than the minimum.
+        uint256 pick = (b >> 192) % 8;
+        if (pick < 2) {
+            c.amount = MIN_PRINCIPAL + (b >> 200) % (full > MIN_PRINCIPAL ? full - MIN_PRINCIPAL + 1 : 1);
+        } else if (pick == 2 && !plan) {
+            c.amount = (b >> 200) % MIN_PRINCIPAL;
+        } else {
+            c.amount = type(uint256).max;
+        }
+        c.principal = full < c.amount ? full : c.amount;
         c.ticketWei = _ticketPart(c.principal, c.cl);
         c.lender = _expectedLender(c.principal);
         c.minEthOut = probe == 0 ? c.principal - c.ticketWei + 1 : (probe == 4 ? c.principal - c.ticketWei : 0);
@@ -346,7 +357,7 @@ contract LoanAccountingHandler is Test {
         c.entries = _owedEntries(c.writeKey, c.id);
 
         vm.prank(c.borrower);
-        try game.borrow(c.id, c.due, c.minEthOut) {
+        try game.borrow(c.id, c.due, c.amount, c.minEthOut) {
             if (!c.eligible) {
                 _flag(5, "borrow passed a gate the spec closes");
                 return;

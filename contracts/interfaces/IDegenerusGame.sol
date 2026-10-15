@@ -60,8 +60,8 @@ interface IDegenerusGame {
     /// @notice Execute ordered game work. Zero selects the 10,000-bps default estimate factor.
     function mineFlip(uint32 gasMultiplierBps) external;
 
-    /// @notice Borrow against far-future tickets, due when the game enters `dueLevel`.
-    function borrow(uint32 id, uint24 dueLevel, uint256 minEthOut) external;
+    /// @notice Borrow up to `amount` against far-future tickets, due when the game enters `dueLevel`.
+    function borrow(uint32 id, uint24 dueLevel, uint256 amount, uint256 minEthOut) external;
     /// @notice Repay an open loan before its due level; excess ETH funds the account's AFKing.
     function repay(uint32 id) external payable;
     /// @notice Sweep up to 32 owned subaccounts into their current main accounts.

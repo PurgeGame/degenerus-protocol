@@ -277,7 +277,8 @@ contract AnyInputHandler is Test {
 
     function g_borrow(uint256 a, uint256 pSeed, uint256 dueSeed) external act(a) {
         uint24 due = uint24(uint256(game.level()) + 1 + dueSeed % 99);
-        _call(7, address(game), 0, abi.encodeWithSignature("borrow(uint32,uint24,uint256)", _id(pSeed), due, uint256(0)));
+        uint256 amount = dueSeed >> 128 == 0 ? type(uint256).max : dueSeed >> 128;
+        _call(7, address(game), 0, abi.encodeWithSignature("borrow(uint32,uint24,uint256,uint256)", _id(pSeed), due, amount, uint256(0)));
     }
 
     function g_repay(uint256 a, uint256 pSeed, uint256 value) external act(a) {
@@ -751,7 +752,7 @@ contract AnyInputHandler is Test {
 
     function gd_borrow(uint256 a, uint256, uint256) external act(a) {
         uint24 due = game.level() + 1;
-        _call(84, address(game), 0, abi.encodeWithSignature("borrow(uint32,uint24,uint256)", uint32(0), due, uint256(0)));
+        _call(84, address(game), 0, abi.encodeWithSignature("borrow(uint32,uint24,uint256,uint256)", uint32(0), due, type(uint256).max, uint256(0)));
     }
 
     function gd_issueDeityBoon(uint256 a, uint256 rSeed, uint8 slot) external act(a) {
