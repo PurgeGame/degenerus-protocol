@@ -451,7 +451,7 @@ contract EarlyBirdWhalePassTest is Test {
         DegenerusGameWhaleModule(payable(address(h))).claimWhalePass(wid);
         vm.warp(101 days);
         DegenerusGameWhaleModule(payable(address(h))).claimWhalePass(wid);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("NothingToClaim()")));
         DegenerusGameWhaleModule(payable(address(h))).claimWhalePass(wid);
         vm.etch(address(h), original);
         assertEq(h.passes(a.winner), 0);

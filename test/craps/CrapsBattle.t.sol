@@ -2310,10 +2310,13 @@ contract CrapsBattleTest is CrapsPins {
         CrapsViews.Battle memory info = craps.battleOf(_keyOf(PER));
         assertEq(info.battleStake, wantStake, "opened a bounty the schedule did not advertise");
         // The terms belong to the SLOT, not to the seat: every entrant plays these, so they are
-        // read once from the window rather than out of any one slip.
-        assertEq(wantBank, wantBank, "bankroll");
-        assertEq(wantGoal, wantGoal, "goal");
-        assertEq(wantStack, wantStack, "stack");
+        // read once from the window rather than out of any one slip — and opening the day does
+        // not re-derive them.
+        (uint128 gotBank, uint128 gotGoal, uint256 gotStack, uint256 gotStake,,) = craps.bonusTermsFor(day, PER);
+        assertEq(gotBank, wantBank, "bankroll");
+        assertEq(gotGoal, wantGoal, "goal");
+        assertEq(gotStack, wantStack, "stack");
+        assertEq(gotStake, wantStake, "stake");
         // The house seat names nothing at all: a blank ticket, every chip left to the dice.
         assertEq(craps.betOf(_houseSeat(PER)).chips, 0, "the house named a shape");
     }

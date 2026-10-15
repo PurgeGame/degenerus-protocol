@@ -195,7 +195,7 @@ describe("FLIP", function () {
       // alice has no balance
       await expect(
         coin.connect(alice).transfer(bob.address, flip(1))
-      ).to.be.reverted;
+      ).to.be.revertedWithPanic(0x11);
     });
 
     it("allows transferring entire balance", async function () {
@@ -272,7 +272,7 @@ describe("FLIP", function () {
 
       await expect(
         coin.connect(bob).transferFrom(alice.address, carol.address, flip(600))
-      ).to.be.reverted;
+      ).to.be.revertedWithPanic(0x11);
     });
 
     it("does not decrement infinite (max uint256) allowance", async function () {

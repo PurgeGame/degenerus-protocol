@@ -81,7 +81,7 @@ contract BigRecordPoolTest is DeployProtocol {
 
     function testFundRecordPoolIsGameOnly() public {
         vm.prank(player);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("OnlyDegenerusGame()")));
         coinflip.fundRecordPool(1);
 
         uint256 before = coinflip.recordPool();
@@ -108,7 +108,7 @@ contract BigRecordPoolTest is DeployProtocol {
     function testArmRecordIsGameOnly() public {
         uint32 id = _giveWalletId(player);
         vm.prank(player);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("OnlyDegenerusGame()")));
         coinflip.armRecord(RECORD_KIND_SPIN, id, 1 ether);
     }
 
@@ -349,7 +349,7 @@ contract BigRecordPoolTest is DeployProtocol {
 
     function testPayRecordSdgnrsIsCoinflipOnly() public {
         vm.prank(player);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("Unauthorized()")));
         game.payRecordSdgnrs(1, SHARE_CEIL_BPS);
     }
 

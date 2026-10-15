@@ -289,7 +289,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         _fund(alice, STAKE);
         _mockOpenAt(0, 0, true);
         vm.prank(alice);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("MarketClosed()")));
         parimutuel.placeBet(0, true);
     }
 
@@ -394,7 +394,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         _bet(alice, true);
 
         vm.prank(alice);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("AlreadyBet()")));
         parimutuel.placeBet(0, false);
     }
 
@@ -442,7 +442,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         _fund(alice, STAKE);
         _mockOpenAt(50, 0, false);
         vm.prank(alice);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("MarketClosed()")));
         parimutuel.placeBet(0, true);
     }
 
@@ -658,11 +658,11 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
     function testQuestRewardRejectsForeignCaller() public {
         uint32 aliceId = _giveWalletId(alice);
         vm.prank(alice);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("OnlyGame()")));
         quests.recordGrowthBet(aliceId, 50, 150);
 
         vm.prank(address(game));
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("OnlyGame()")));
         quests.recordGrowthBet(aliceId, 50, 150);
     }
 

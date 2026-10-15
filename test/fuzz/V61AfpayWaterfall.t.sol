@@ -375,7 +375,7 @@ contract V61AfpayWaterfall is DeployProtocol {
         // Use a large quantity so cost dwarfs the 2-ether usable sum.
         qty = 4_000_000; // 10,000 tickets ⇒ cost = 100 ether ≫ ~2 ether usable
         vm.prank(buyer);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("Insolvent()")));
         game.purchase{value: 0}(0, qty, 0, bytes32(0), MintPaymentKind.Claimable, false);
     }
 

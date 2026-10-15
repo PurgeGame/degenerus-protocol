@@ -94,7 +94,7 @@ contract CrapsStorageReuseTest is CrapsPins {
         assertEq(table.betWordOf(_id(newDay, 2)), 0, "new tail read an old bet");
         assertEq(table.daySeatNumberOf(oldDay, alice), 0);
         assertEq(table.daySeatNumberOf(newDay, alice), 1);
-        vm.expectRevert(); vm.prank(alice); table.amendSlip(oldId, uint32(1));
+        vm.expectRevert(bytes4(keccak256("NotYourBet()"))); vm.prank(alice); table.amendSlip(oldId, uint32(1));
         assertEq(table.betWordOf(newId), original);
         vm.prank(alice); table.amendSlip(newId, uint32(1));
         assertEq((table.betWordOf(newId) >> 32) & 3, 1);

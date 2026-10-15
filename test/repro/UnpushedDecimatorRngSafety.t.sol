@@ -200,7 +200,7 @@ contract UnpushedDecimatorRngSafety is DeployProtocol {
         game.mineFlip(0);
         assertGt(mockVRF.lastRequestId(), requestBefore);
         assertEq(RecyclingState.currentWord(address(game)), 0, "only the completed round releases its word");
-        vm.expectRevert(); lens.decWinnerAt(address(game), LVL, 0);
+        vm.expectRevert(bytes4(keccak256("E()"))); lens.decWinnerAt(address(game), LVL, 0);
     }
 
     function test_TerminalReplacementWordCannotResumeOldNormalBattleBeforeGameOver() public {
@@ -220,6 +220,6 @@ contract UnpushedDecimatorRngSafety is DeployProtocol {
         assertLt(used, 20_000);
         assertFalse(r.progressed);
         assertEq(abi.encode(lens.decBattleRoundOf(address(game), LVL)), beforeRound);
-        vm.expectRevert(); lens.decWinnerAt(address(game), LVL, 0);
+        vm.expectRevert(bytes4(keccak256("E()"))); lens.decWinnerAt(address(game), LVL, 0);
     }
 }

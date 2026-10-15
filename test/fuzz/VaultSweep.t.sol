@@ -160,7 +160,7 @@ contract VaultSweepTest is DeployProtocol {
     ///         exclusion for them — the token reverts on its own.
     function test_sweepNft_soulboundSelfExcludes() public {
         vm.prank(vaultOwner);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("Soulbound()")));
         vault.sweepNft(address(deityPass), vaultOwner, 1);
     }
 }

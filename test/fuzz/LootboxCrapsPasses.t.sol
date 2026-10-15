@@ -232,7 +232,7 @@ contract LootboxCrapsPasses is DeployProtocol {
         bytes memory live = address(crapsBattle).code;
         vm.etch(address(crapsBattle), hex"60006000fd");
 
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("InsufficientExecutionGas()")));
         this.openExternal(player, index, word, 10 ether);
 
         // The table comes back; the SAME box settles and the award lands whole.

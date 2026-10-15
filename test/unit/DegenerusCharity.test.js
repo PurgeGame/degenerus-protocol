@@ -257,7 +257,7 @@ describe("GNRUS (GNRUS)", function () {
       // voter1 has no GNRUS
       await expect(
         charity.connect(voter1).burn(eth("1"))
-      ).to.be.reverted; // Solidity 0.8 underflow revert
+      ).to.be.revertedWithPanic(0x11); // Solidity 0.8 underflow revert
     });
   });
 

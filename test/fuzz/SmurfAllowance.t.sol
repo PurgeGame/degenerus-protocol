@@ -112,7 +112,9 @@ contract SmurfAllowanceTest is DeployProtocol {
         vm.expectRevert(bytes4(keccak256("OnlyDelegatecall()")));
         (bool ok,) = ContractAddresses.GAME_MINT_MODULE.call(
             abi.encodeWithSignature("raiseSmurfBaseAllowance(uint32,uint16)", main, uint16(2)));
-        ok;
+        // A low-level call does not fail the test on a missed expectation: expectRevert reports a
+        // match through `ok` instead, so it must be asserted.
+        assertTrue(ok, "the direct implementation call reverted with OnlyDelegatecall()");
         assertEq(_info().baseAllowance, 0);
     }
 
@@ -122,9 +124,10 @@ contract SmurfAllowanceTest is DeployProtocol {
         game.raiseSmurfBaseAllowance(0, 1);
         vm.expectRevert(E);
         game.raiseSmurfBaseAllowance(type(uint32).max, 1);
-        vm.expectRevert();
-        (bool ok,) = address(game).call(abi.encodeWithSelector(game.raiseSmurfBaseAllowance.selector, main, uint256(65536)));
-        ok;
+        (bool ok, bytes memory ret) =
+            address(game).call(abi.encodeWithSelector(game.raiseSmurfBaseAllowance.selector, main, uint256(65536)));
+        assertFalse(ok, "a count wider than uint16 is rejected");
+        assertEq(ret.length, 0, "rejected by the uint16 argument decoding, not by a later guard");
         vm.stopPrank();
     }
 

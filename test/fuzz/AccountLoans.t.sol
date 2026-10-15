@@ -391,7 +391,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         uint256 poolsBefore = uint256(vm.load(address(game), bytes32(GameSlots.PRIZE_POOLS_PACKED)));
         uint256 claimableBefore = _pool();
         uint256 lenderBefore = game.claimableWinningsOf(address(sdgnrs));
-        vm.expectRevert(); receiver.borrow(address(game), 1);
+        vm.expectRevert(bytes4(keccak256("TransferFailed()"))); receiver.borrow(address(game), 1);
         assertEq(game.entriesOwedView(1, address(receiver)), 0);
         assertEq(lens.loanOf(address(game), id).principal, 0);
         assertEq(lens.loansDue(address(game), 1).length, 0);
@@ -465,7 +465,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         _borrow(root, 1);
         vm.prank(seller); vm.expectRevert(bytes4(keccak256("E()"))); game.borrow(root, 2, 0);
         // Protocol roots.
-        vm.prank(address(sdgnrs)); vm.expectRevert(); game.borrow(2, 1, 0);
+        vm.prank(address(sdgnrs)); vm.expectRevert(bytes4(keccak256("E()"))); game.borrow(2, 1, 0);
     }
 
     function test_BorrowAndRepayDuringRngLock() public {
@@ -487,7 +487,7 @@ contract AccountLoansTest is RedemptionCloseTools {
 
     function test_GameOverBlocksBorrow() public {
         _endGame();
-        vm.prank(seller); vm.expectRevert(); game.borrow(root, 1, 0);
+        vm.prank(seller); vm.expectRevert(bytes4(keccak256("E()"))); game.borrow(root, 1, 0);
     }
 
     function test_MainSmurfCapButSmurfsBorrowFreely() public {
@@ -767,10 +767,10 @@ contract AccountLoansTest is RedemptionCloseTools {
 
     function test_FallbackDisabledAndInsufficientFloorReject() public {
         _seed(2, 0, 1 ether, 0);
-        vm.prank(seller); vm.expectRevert(); game.borrow(root, 1, 0);
+        vm.prank(seller); vm.expectRevert(bytes4(keccak256("Insolvent()"))); game.borrow(root, 1, 0);
         _seed(1, 0, 2 ether, 0);
         vm.prank(ContractAddresses.CREATOR); vault.setLiquidationBuyFallback(true, 2 ether);
-        vm.prank(seller); vm.expectRevert(); game.borrow(root, 1, 0);
+        vm.prank(seller); vm.expectRevert(bytes4(keccak256("Insolvent()"))); game.borrow(root, 1, 0);
     }
 
     function test_SdgnrsPriorityAndFloorEquality() public {
@@ -941,7 +941,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         assertEq(uint8(GameSlotKeys.subWord(address(game), child)), 0, "a main's seizure stops its smurf's run");
         uint32[] memory ids = new uint32[](1); ids[0] = child;
         game.sweepAccounts(ids);
-        vm.prank(address(sdgnrs)); vm.expectRevert(); game.subscribe(child, false, false, 1, 0, 0);
+        vm.prank(address(sdgnrs)); vm.expectRevert(bytes4(keccak256("NotApproved()"))); game.subscribe(child, false, false, 1, 0, 0);
     }
 
     function test_WholeFamilyTransfersWithoutPayingForChildren() public {
@@ -1163,9 +1163,9 @@ contract AccountLoansTest is RedemptionCloseTools {
         address stranger = makeAddr("vault-sweep-stranger");
         vm.prank(stranger); vm.expectRevert(DegenerusGameStorage.NotApproved.selector);
         game.sweepAccounts(_one(child));
-        vm.prank(stranger); vm.expectRevert();
+        vm.prank(stranger); vm.expectRevert(bytes4(keccak256("OnlyDegenerusGame()")));
         coinflip.sweepAccountCoinflips(child);
-        vm.prank(stranger); vm.expectRevert(); vault.gameSweepAccounts(_one(child));
+        vm.prank(stranger); vm.expectRevert(bytes4(keccak256("NotVaultOwner()"))); vault.gameSweepAccounts(_one(child));
         uint256 mainBefore = game.claimableWinningsOf(address(vault));
         uint256 flipBefore = coin.vaultMintAllowance();
         vm.prank(ContractAddresses.CREATOR);
@@ -1219,7 +1219,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         vm.expectRevert(DegenerusGameStorage.E.selector); game.sweepAccounts(ids);
         (uint256 ethOut, uint256 flipOut) = game.sweepAccounts(new uint32[](0));
         assertEq(ethOut, 0); assertEq(flipOut, 0);
-        vm.expectRevert(); coinflip.sweepAccountCoinflips(root);
+        vm.expectRevert(bytes4(keccak256("OnlyDegenerusGame()"))); coinflip.sweepAccountCoinflips(root);
     }
 
     function test_SweepAtGameOverIncludesPrepaidAndRejectsAfterFinalSweep() public {

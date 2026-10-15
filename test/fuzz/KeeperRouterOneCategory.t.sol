@@ -280,7 +280,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
         assertFalse(game.advanceDue(), "pre: still not due after the table settled");
         vm.recordLogs();
         vm.prank(keeper);
-        vm.expectRevert(); // GameAfkingModule.NoWork()
+        vm.expectRevert(bytes4(keccak256("NoWork()"))); // GameAfkingModule.NoWork()
         game.mineFlip(0);
 
         // Nothing credited (the revert rolls back, but assert the count is zero regardless).

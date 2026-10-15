@@ -13,6 +13,7 @@ import {
   getEvent,
   getEvents,
   ZERO_ADDRESS,
+  errorAbi,
 } from "../helpers/testUtils.js";
 
 // MintPaymentKind enum values
@@ -169,7 +170,7 @@ describe("DegenerusVault", function () {
       const { vault, alice } = await loadFixture(deployFullProtocol);
       await expect(
         vault.connect(alice).burnCoin(eth("1"))
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("Insufficient()"), "Insufficient");
     });
 
     it("deployer can burn DGVF shares (has initial supply)", async function () {
@@ -215,7 +216,7 @@ describe("DegenerusVault", function () {
       const { vault, alice } = await loadFixture(deployFullProtocol);
       await expect(
         vault.connect(alice).burnEth(eth("1"))
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("Insufficient()"), "Insufficient");
     });
 
     it("deployer can burn DGVE shares with zero ETH reserve", async function () {

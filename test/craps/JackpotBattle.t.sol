@@ -185,7 +185,7 @@ contract JackpotBattleTest is CrapsPins {
         _enter(bob, false);
         _lock(50_000);
         _start(0xD4117, 5, address(0xD1000));
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("OnlyGame()")));
         table.runDailyBattleWork(9_000_000);
         vm.prank(ContractAddresses.GAME);
         MineFlipGas.Result memory result = table.runDailyBattleWork(1_000_000);
@@ -463,9 +463,9 @@ contract JackpotBattleTest is CrapsPins {
     function test_LockPreventsEntryUpgradeAmendmentAndPreferenceChange() public {
         uint256 id = _enter(alice, false); _enter(bob, true);
         _lock(200_000);
-        vm.prank(address(0x123)); vm.expectRevert(); table.enterBonusBattle(5, 0, 1);
-        vm.prank(alice); vm.expectRevert(); table.amendSlip(id, 1);
-        vm.prank(bob); vm.expectRevert(); table.upgradeDayWindows(0, day, 0x20);
+        vm.prank(address(0x123)); vm.expectRevert(bytes4(keccak256("BonusPeriodSpent()"))); table.enterBonusBattle(5, 0, 1);
+        vm.prank(alice); vm.expectRevert(bytes4(keccak256("BonusPeriodSpent()"))); table.amendSlip(id, 1);
+        vm.prank(bob); vm.expectRevert(bytes4(keccak256("BonusPeriodSpent()"))); table.upgradeDayWindows(0, day, 0x20);
         _start(831, 1, alice); _finish();
     }
 
@@ -519,10 +519,10 @@ contract JackpotBattleTest is CrapsPins {
         _finish();
     }
     function test_OnlyGameCanLockOrSupplyField() public {
-        vm.expectRevert(); api.lockJackpotBattle(day + 1, 123 ether, 2);
+        vm.expectRevert(bytes4(keccak256("OnlyGame()"))); api.lockJackpotBattle(day + 1, 123 ether, 2);
         uint256[] memory f = new uint256[](0);
-        vm.expectRevert(); api.prepareJackpotBattle(7, 123);
-        vm.expectRevert(); api.appendJackpotBattle(f, 0, true);
+        vm.expectRevert(bytes4(keccak256("OnlyGame()"))); api.prepareJackpotBattle(7, 123);
+        vm.expectRevert(bytes4(keccak256("OnlyGame()"))); api.appendJackpotBattle(f, 0, true);
     }
     function test_SixDeadlinesAndUnusedSlot() public {
         uint256[6] memory elapsed = [uint256(0),20 minutes,6 hours + 3 minutes,12 hours + 3 minutes,18 hours + 3 minutes,1 days - 20 minutes];
@@ -530,7 +530,7 @@ contract JackpotBattleTest is CrapsPins {
             vm.warp(dayStart + elapsed[i]);
             (,uint256 period,) = table.currentBonusSlot(); assertEq(period, i);
         }
-        vm.expectRevert(); table.jackpotTerms(uint64(uint256(day) * 8 + 7));
+        vm.expectRevert(bytes4(keccak256("NoSuchBattle()"))); table.jackpotTerms(uint64(uint256(day) * 8 + 7));
     }
     function test_DayPriceUsesNewPresetsAndDrawnJackpotFee() public {
         uint256 total;

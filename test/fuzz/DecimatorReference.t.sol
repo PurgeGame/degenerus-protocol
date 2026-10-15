@@ -51,9 +51,9 @@ contract DecimatorReferenceTest is Test {
 
     function test_AggregateOverflowRevertsEntireNewEntryAndTopup() public {
         _burn(address(1), type(uint64).max);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("E()")));
         _burn(address(2), 1);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("E()")));
         _burn(address(1), 1);
         assertEq(h.roundOf(5).totalCreditedStack, type(uint64).max);
         assertEq(h.roundOf(5).count, 1);
@@ -79,7 +79,7 @@ contract DecimatorReferenceTest is Test {
         _burn(address(1), 2000);
         assertEq(h.roundOf(5).count, 8001);
         h.forceCount(5, type(uint40).max);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSignature("Panic(uint256)", 0x11));
         _burn(address(2), 2000);
         assertEq(h.roundOf(5).count, type(uint40).max);
     }

@@ -15,6 +15,7 @@ import {
   getLastVRFRequestId,
   ZERO_ADDRESS,
   ZERO_BYTES32,
+  errorAbi,
 } from "../helpers/testUtils.js";
 import { boCustomFloor, boNominal } from "../helpers/boxOrder.js";
 import { compiledStorageSlot } from "../helpers/storageLayout.js";
@@ -347,7 +348,7 @@ describe("Distress-Mode Lootboxes", function () {
 
       await expect(
         purchaseLootbox(game, alice, eth("0"))
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("E()"), "E");
     });
 
     it("minimum lootbox (0.01 ETH) works in distress mode", async function () {

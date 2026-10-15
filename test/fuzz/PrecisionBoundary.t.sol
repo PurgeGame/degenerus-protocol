@@ -98,16 +98,13 @@ contract PrecisionBoundaryTest is Test {
         uint128 reserve,
         uint128 supply
     ) public pure {
-        vm.assume(supply > 0);
-        vm.assume(reserve > 0);
+        // claimValue can be 0 if reserve < supply (burning 1 share rounds down to 0; refill does
+        // not prevent this), so this model checks only the reserve >= supply regime — every run.
+        supply = uint128(bound(supply, 1, type(uint128).max));
+        reserve = uint128(bound(reserve, supply, type(uint128).max));
 
         uint256 claimValue = (uint256(reserve) * 1) / uint256(supply);
-        // claimValue can be 0 if reserve < supply, but this is expected:
-        // In that case burning 1 share returns 0 (rounding down); refill does
-        // not prevent this. This model checks only the reserve >= supply regime:
-        if (reserve >= supply) {
-            assertTrue(claimValue > 0, "burn 1 share should yield > 0 when reserve >= supply");
-        }
+        assertTrue(claimValue > 0, "burn 1 share should yield > 0 when reserve >= supply");
     }
 
     /// @notice Ceil-floor round-trip: claimValue from burnAmount always >= targetValue

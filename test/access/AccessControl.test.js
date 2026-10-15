@@ -8,6 +8,7 @@ import {
   eth,
   ZERO_ADDRESS,
   ZERO_BYTES32,
+  errorAbi,
 } from "../helpers/testUtils.js";
 
 /**
@@ -126,7 +127,7 @@ describe("AccessControl", function () {
 
       await expect(
         game.connect(alice).rawFulfillRandomWords(1n, [12345n])
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("OnlyCoordinator()"), "OnlyCoordinator");
     });
 
     it("recordMint: entry point removed (mint payment is module-internal)", async function () {
@@ -408,7 +409,7 @@ describe("AccessControl", function () {
       // random signers should revert with E() since it checks msg.sender).
       await expect(
         game.connect(alice).consumeCoinflipBoon(1)
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("Unauthorized()"), "Unauthorized");
     });
 
     it("coin.burnForCoinflip reverts when called by alice (not coinflip contract)", async function () {

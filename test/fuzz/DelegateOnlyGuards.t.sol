@@ -17,17 +17,17 @@ contract DelegateOnlyGuards is DeployProtocol {
     }
 
     function test_buyPresaleBox_directCallReverts() public {
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("E()")));
         mintModule.buyPresaleBox{value: 1 ether}(0, 1 ether);
     }
 
     function test_purchaseLazyPass_directCallReverts() public {
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("OnlyDelegatecall()")));
         whaleModule.purchaseLazyPass{value: 1 ether}(0, bytes32(0));
     }
 
     function test_purchaseDeityPass_directCallReverts() public {
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("OnlyDelegatecall()")));
         whaleModule.purchaseDeityPass{value: 1 ether}(0, 0, bytes32(0));
     }
 
@@ -36,22 +36,22 @@ contract DelegateOnlyGuards is DeployProtocol {
     // the module's own (empty) storage.
 
     function test_beginBoxOrder_directCallReverts() public {
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("OnlyDelegatecall()")));
         lootboxModule.beginBoxOrder(1, 1);
     }
 
     function test_recordCoverBox_directCallReverts() public {
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("OnlyDelegatecall()")));
         lootboxModule.recordCoverBox(1, 1 ether, 1, 0, false, 1);
     }
 
     function test_applyBoxOrderScore_directCallReverts() public {
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("OnlyDelegatecall()")));
         lootboxModule.applyBoxOrderScore(1, 1, 0, 1 ether);
     }
 
     function test_resolveLootboxDirect_directCallReverts() public {
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("OnlyDelegatecall()")));
         lootboxModule.resolveLootboxDirect(1, 1 ether, 1, 1);
     }
 }

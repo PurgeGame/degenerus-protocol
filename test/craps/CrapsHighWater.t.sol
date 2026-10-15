@@ -511,10 +511,6 @@ contract CrapsHighWaterTest is CrapsPins {
         assertGt(craps.compositeAt(_bust(9, 1)), craps.compositeAt(_bust(8, 1e12)), "shooters first");
         assertGt(craps.compositeAt(_bust(9, 2)), craps.compositeAt(_bust(9, 1)), "remainder second");
         assertEq(craps.compositeAt(_bust(9, 1)) & 0xFFFF, 0, "activity bits entered a bust rank");
-        // The SAME bust ranks identically under both products' readings.
-        assertEq(
-            craps.compositeAt(_bust(9, 1)), craps.compositeAt(_bust(9, 1)), "a bust read two ways"
-        );
 
         // And two busts differing ONLY in their high point are dead level.
         CrapsBattle.Settlement memory low = _bust(9, 1);

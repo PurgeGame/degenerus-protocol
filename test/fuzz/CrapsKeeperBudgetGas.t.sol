@@ -252,10 +252,10 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         vm.prank(MINER);
         assertEq(game.nextMinerAction(), uint8(DegenerusGameStorage.MinerAction.Wait));
         vm.prank(ContractAddresses.CREATOR);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
         game.mineFlip{gas: 15_000_000}(0);
         vm.prank(MINER);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
         game.mineFlip{gas: 15_000_000}(0);
         assertEq(mockVRF.lastRequestId(), request, "neither caller can retry through mining");
     }

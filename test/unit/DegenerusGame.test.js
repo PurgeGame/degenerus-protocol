@@ -14,6 +14,7 @@ import {
   getEvent,
   ZERO_ADDRESS,
   ZERO_BYTES32,
+  errorAbi,
 } from "../helpers/testUtils.js";
 import { boCustom } from "../helpers/boxOrder.js";
 
@@ -151,7 +152,7 @@ describe("DegenerusGame", function () {
       await giveWalletId(game, alice.address);
       await expect(
         game.connect(alice).setOperatorApproval(0, ZERO_ADDRESS, true)
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("ZeroAddress()"), "ZeroAddress");
     });
 
     it("operator can act on behalf of owner after approval", async function () {
@@ -181,7 +182,7 @@ describe("DegenerusGame", function () {
           aliceId, 400n, 0n, ZERO_BYTES32, MintPaymentKind.DirectEth, false,
           { value: price }
         )
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("NotApproved()"), "NotApproved");
     });
   });
 
@@ -217,7 +218,7 @@ describe("DegenerusGame", function () {
           MintPaymentKind.DirectEth,false, 
           { value: eth("0.001") } // underpay
         )
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("Insolvent()"), "Insolvent");
     });
 
     it("reverts when ticket buy-in is below 0.0025 ETH minimum", async function () {
@@ -231,14 +232,14 @@ describe("DegenerusGame", function () {
           MintPaymentKind.DirectEth,false, 
           { value: eth("0.002475") }
         )
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("E()"), "E");
     });
 
     it("redeemFlip reverts when ticket buy-in is below 0.0025 ETH minimum", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       await expect(
         game.connect(alice).redeemFlip(0, 99n)
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("E()"), "E");
     });
 
     it("allows purchasing lootbox with ETH (minimum 0.01 ETH)", async function () {
@@ -288,7 +289,7 @@ describe("DegenerusGame", function () {
           MintPaymentKind.DirectEth,false, 
           { value: price }
         )
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("NotApproved()"), "NotApproved");
     });
 
     it("redeemFlip with zero tickets succeeds as no-op", async function () {
@@ -353,14 +354,14 @@ describe("DegenerusGame", function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       await expect(
         game.connect(alice).setLootboxRngThreshold(eth("2"))
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("OnlyVault()"), "OnlyVault");
     });
 
     it("reverts when threshold is zero", async function () {
       const { game, deployer } = await loadFixture(deployFullProtocol);
       await expect(
         game.connect(deployer).setLootboxRngThreshold(0n)
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("ZeroValue()"), "ZeroValue");
     });
   });
 
@@ -380,7 +381,7 @@ describe("DegenerusGame", function () {
       expect(await game.claimableWinningsOf(alice.address)).to.equal(0n);
       await expect(
         game.connect(alice)["claimWinnings(uint32)"](0)
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("NothingToClaim()"), "NothingToClaim");
     });
 
     it("claimableWinningsOf returns 0 for unknown addresses", async function () {
@@ -395,7 +396,7 @@ describe("DegenerusGame", function () {
   describe("claimWinningsStethFirst", function () {
     it("reverts when called by a non-vault/non-dgnrs address", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
-      await expect(game.connect(alice).claimWinningsStethFirst()).to.be.reverted;
+      await expect(game.connect(alice).claimWinningsStethFirst()).to.be.revertedWithCustomError(errorAbi("OnlyVault()"), "OnlyVault");
     });
   });
 
@@ -407,7 +408,7 @@ describe("DegenerusGame", function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       await expect(
         game.connect(alice).payRecordSdgnrs(1, 0)
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("Unauthorized()"), "Unauthorized");
     });
   });
 
@@ -421,17 +422,15 @@ describe("DegenerusGame", function () {
       await expect(game.connect(alice).mineFlip(0)).to.not.be.reverted;
     });
 
-    it("mineFlip is handled gracefully when caller has no mint (no-op or gate revert)", async function () {
+    it("mineFlip on a fresh deploy with nothing due reports NoWork", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
-      // Requires daily mint to trigger advancement. Alice hasn't minted,
-      // so the call either no-ops gracefully or reverts. Both are acceptable.
-      try {
-        await game.connect(alice).mineFlip(0);
-      } catch (e) {
-        expect(e.message).to.satisfy(
-          (msg) => msg.includes("revert") || msg.includes("reverted")
-        );
-      }
+      // Nothing is due on the deploy day, so a caller without a mint gets the clean idle
+      // refusal rather than any partial work.
+      expect(await game.advanceDue()).to.equal(false);
+      await expect(game.connect(alice).mineFlip(0)).to.be.revertedWithCustomError(
+        errorAbi("NoWork()"),
+        "NoWork"
+      );
     });
   });
 
@@ -445,7 +444,7 @@ describe("DegenerusGame", function () {
         game.connect(alice).adminSwapEthForStEth(alice.address, eth("1"), {
           value: eth("1"),
         })
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("OnlyAdmin()"), "OnlyAdmin");
     });
   });
 
@@ -457,7 +456,7 @@ describe("DegenerusGame", function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       await expect(
         game.connect(alice).adminStakeEthForStEth(eth("1"))
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("OnlyVault()"), "OnlyVault");
     });
   });
 
@@ -470,7 +469,7 @@ describe("DegenerusGame", function () {
       const vrfAddr = await mockVRF.getAddress();
       await expect(
         game.connect(alice).wireVrf(vrfAddr, 1n, ZERO_BYTES32)
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("OnlyAdmin()"), "OnlyAdmin");
     });
   });
 
@@ -482,7 +481,7 @@ describe("DegenerusGame", function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       await expect(
         game.connect(alice).rawFulfillRandomWords(1n, [12345n])
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("OnlyCoordinator()"), "OnlyCoordinator");
     });
   });
 
@@ -532,7 +531,7 @@ describe("DegenerusGame", function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       await expect(
         game.connect(alice)["claimAffiliateDgnrs(uint32)"](0)
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("NotStarted()"), "NotStarted");
     });
   });
 
@@ -548,7 +547,7 @@ describe("DegenerusGame", function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       await expect(
         game.connect(alice).consumeCoinflipBoon(1)
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("Unauthorized()"), "Unauthorized");
     });
   });
 
@@ -557,7 +556,7 @@ describe("DegenerusGame", function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       await expect(
         game.connect(alice).consumeDecimatorBoon(1)
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("Unauthorized()"), "Unauthorized");
     });
   });
 

@@ -12,6 +12,7 @@ import {
   getEvents,
   getLastVRFRequestId,
   ZERO_BYTES32,
+  errorAbi,
 } from "../helpers/testUtils.js";
 
 const ZERO_ADDRESS = hre.ethers.ZeroAddress;
@@ -26,7 +27,7 @@ const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
  *   3. mineFlip again → processes the word → terminal drain → gameOver = true
  *
  * Two liveness guards:
- *   - level==0 && currentDay - purchaseStartDay > DEPLOY_IDLE_TIMEOUT_DAYS  (pre-game 365-day idle timeout)
+ *   - level==0 && currentDay - purchaseStartDay > DEPLOY_IDLE_TIMEOUT_DAYS  (pre-game 250-day idle timeout)
  *   - level!=0 && currentDay - purchaseStartDay > 30                        (post-game 30-day death clock)
  *
  * Deity pass refunds (GameOverModule:105-135):
@@ -45,7 +46,6 @@ describe("GameOver", function () {
   // -------------------------------------------------------------------------
 
   const SECONDS_912_DAYS = 912 * 86400;
-  const SECONDS_365_DAYS = 365 * 86400;
   const SECONDS_30_DAYS = 30 * 86400;
 
   /**
@@ -72,20 +72,6 @@ describe("GameOver", function () {
       if (await game.gameOver()) return transactions;
     }
     return transactions;
-  }
-
-  /**
-   * Drive a full VRF cycle: request → fulfill → drain tickets.
-   */
-  async function driveFullVRFCycle(game, deployer, mockVRF, word) {
-    await advanceToNextDay();
-    await game.connect(deployer).mineFlip(0);
-    const requestId = await getLastVRFRequestId(mockVRF);
-    await mockVRF.fulfillRandomWords(requestId, word || 123456n);
-    for (let i = 0; i < 30; i++) {
-      if (!(await game.rngLocked())) break;
-      await game.connect(deployer).mineFlip(0);
-    }
   }
 
   /**
@@ -187,58 +173,6 @@ describe("GameOver", function () {
       const miner = await hre.ethers.getContractFactory("DegenerusGameMinerModule");
       await expect(game.connect(deployer).mineFlip(0)).to.be.revertedWithCustomError(miner, "NoWork");
       expect(await game.isFinalSwept()).to.equal(false);
-    });
-  });
-
-  // =========================================================================
-  // 2. Post-game inactivity timeout (365 days, level >= 1)
-  // =========================================================================
-
-  describe("post-game 365-day inactivity timeout (level >= 1)", function () {
-    it("gameOver triggers after 365+ days of inactivity at level >= 1", async function () {
-      const { game, deployer, mockVRF } = await loadFixture(
-        deployFullProtocol
-      );
-
-      // Advance to level >= 1 via normal VRF cycle
-      await driveFullVRFCycle(game, deployer, mockVRF, 2n);
-
-      const level = await game.level();
-      // level might still be 0 if not enough tickets to advance;
-      // only test gameOver if we actually reached level >= 1
-      if (level >= 1n) {
-        await advanceTime(SECONDS_365_DAYS + 86400 * 2);
-
-        // gameOver flow: mineFlip → VRF → mineFlip
-        await game.connect(deployer).mineFlip(0);
-        const requestId = await getLastVRFRequestId(mockVRF);
-        if (requestId > 0n) {
-          try {
-            await mockVRF.fulfillRandomWords(requestId, 42n);
-          } catch {
-            // May already be fulfilled
-          }
-        }
-        await game.connect(deployer).mineFlip(0);
-
-        expect(await game.gameOver()).to.equal(true);
-      }
-    });
-
-    it("gameOver does NOT trigger at 364 days of inactivity", async function () {
-      const { game, deployer, mockVRF } = await loadFixture(
-        deployFullProtocol
-      );
-
-      await driveFullVRFCycle(game, deployer, mockVRF, 2n);
-
-      // Only 364 days
-      await advanceTime(364 * 86400);
-      await advanceToNextDay();
-
-      // Should issue VRF, not game over
-      await game.connect(deployer).mineFlip(0);
-      expect(await game.gameOver()).to.equal(false);
     });
   });
 
@@ -349,7 +283,7 @@ describe("GameOver", function () {
             MintPaymentKind.DirectEth,false, 
             { value: eth(0.01) }
           )
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("E()"), "E");
     });
 
     it("feed-swap proposals revert with GameOver after the terminal drain", async function () {
@@ -441,16 +375,20 @@ describe("GameOver", function () {
       await advanceTime(SECONDS_912_DAYS + 86400);
       await triggerGameOverAtLevel0(game, deployer, mockVRF);
 
+      expect(await game.gameOver()).to.equal(true);
+      // A level-0 ending refunds the deity pass (capped at 20 ETH), so there is always
+      // something to claim here.
       const claimable = await game.claimableWinningsOf(alice.address);
-      if (claimable > 0n) {
-        const balBefore = await hre.ethers.provider.getBalance(alice.address);
-        const tx = await game.connect(alice)["claimWinnings(uint32)"](0);
-        const receipt = await tx.wait();
-        const gasUsed = receipt.gasUsed * receipt.gasPrice;
-        const balAfter = await hre.ethers.provider.getBalance(alice.address);
+      expect(claimable).to.be.gte(eth(20));
 
-        expect(balAfter + gasUsed).to.be.gt(balBefore);
-      }
+      const balBefore = await hre.ethers.provider.getBalance(alice.address);
+      const tx = await game.connect(alice)["claimWinnings(uint32)"](0);
+      const receipt = await tx.wait();
+      const gasUsed = receipt.gasUsed * receipt.gasPrice;
+      const balAfter = await hre.ethers.provider.getBalance(alice.address);
+
+      expect(balAfter + gasUsed - balBefore).to.be.gte(eth(20), "the refund was paid out");
+      expect(await game.claimableWinningsOf(alice.address)).to.equal(1n, "only the 1-wei sentinel stays behind");
     });
 
     it("claimableWinningsOf returns 0 for non-participant after gameOver", async function () {

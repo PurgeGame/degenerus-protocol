@@ -99,3 +99,13 @@ export async function seedDailyWord(game, day, word) {
   const slot = hre.ethers.keccak256(hre.ethers.AbiCoder.defaultAbiCoder().encode(["uint256", "uint256"], [parity, await compiledStorageSlot("rngWordByDay")]));
   await hre.network.provider.send("hardhat_setStorageAt", [address, slot, hre.ethers.toBeHex(word, 32)]);
 }
+
+// --- Revert expectations ---
+
+/**
+ * An ABI-only stand-in for `revertedWithCustomError`: errors bubbled from a delegatecalled module
+ * are not in the facade's ABI, so name the error by its signature, e.g. errorAbi("Insolvent()").
+ */
+export function errorAbi(...signatures) {
+  return { interface: new hre.ethers.Interface(signatures.map((s) => `error ${s}`)) };
+}

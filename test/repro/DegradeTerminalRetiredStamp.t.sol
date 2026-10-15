@@ -117,7 +117,7 @@ contract DegradeTerminalRetiredStampTest is DeployProtocol {
         assertEq(claimableBalance(game, HOLDER), 0, "retired cohort receives nothing");
         assertEq(liability, 0, "no cohort was credited");
         assertEq(address(game).balance, 100 ether, "nothing left the game at the payout");
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("NoWork()")));
         game.mineFlip(0); // idle until the sweep opens: nothing pays twice
 
         vm.warp(block.timestamp + 30 days);

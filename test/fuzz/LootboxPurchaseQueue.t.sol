@@ -227,19 +227,19 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
         assertEq(BoxOrderLib.boLevel(lanes), lvl);
         assertEq(cost, 25 * 31 * price + 25 * 0.02 ether);
 
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("E()")));
         host.decode(BoxOrderLib.boOrder(26, 25, 25, 25, 0.02 ether), lvl);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("E()")));
         host.decode(0x80, lvl); // 128 smalls: under the 8-bit lane, over the cap
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("E()")));
         host.decode(uint256(1) << 24, lvl); // a custom with no size
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("E()")));
         host.decode(BoxOrderLib.boOrder(0, 0, 0, 1, 0.01 ether - 1 gwei), lvl);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("E()")));
         host.decode(1 | (uint256(1) << 32), lvl); // size without customs
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("E()")));
         host.decode(1 | (uint256(1) << 88), lvl); // a nonzero bit at 88
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("E()")));
         host.decode(1 | (uint256(1) << 255), lvl);
     }
 
@@ -256,7 +256,7 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
 
         uint256 over = (uint256(1) << 24) | ((maxSize + 1) << 32);
         vm.prank(alice);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("E()")));
         host.purchase{value: (maxSize + 1) * 1 gwei}(0, 0, over, bytes32(0), MintPaymentKind.DirectEth, false);
     }
 
@@ -451,7 +451,7 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
         assertEq(BoxOrderLib.boPresaleWei(host.entryAt(b, q)), 0.02 ether);
         uint256 count = host.boxWriteCount();
         vm.prank(alice);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("E()")));
         host.buyPresaleBox{value: 0.02 ether}(0, 0.02 ether); // 0.01 credit left
         assertEq(host.boxWriteCount(), count, "nothing appended");
         assertEq(host.presaleCredit(_id(alice)), 0.01 ether);
@@ -755,7 +755,7 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
         vm.mockCallRevert(
             address(sdgnrs), abi.encodeWithSelector(IsDGNRS.poolBalance.selector, IsDGNRS.Pool.PresaleBox), "boom"
         );
-        vm.expectRevert();
+        vm.expectRevert(bytes("boom"));
         host.work(ALLOWANCE);
         (, uint256 cursor, bool complete) = host.readState();
         assertEq(cursor, 0, "cursor move rolled back");

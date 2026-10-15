@@ -147,7 +147,7 @@ contract AffiliateDgnrsClaim is DeployProtocol {
 
     /// @notice Cannot claim at level 0
     function test_revertClaimAtLevel0() public {
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("NotStarted()")));
         _claimDgnrs(alice);
     }
 
@@ -158,7 +158,7 @@ contract AffiliateDgnrsClaim is DeployProtocol {
         _setLevel(1);
         _setAllocation(1, 1_000_000e12);
 
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("ScoreTooLow()")));
         _claimDgnrs(bob);
     }
 
@@ -177,7 +177,7 @@ contract AffiliateDgnrsClaim is DeployProtocol {
         uint256 bobScore = affiliate.affiliateScore(1, game.walletIdOf(bob));
         assertTrue(bobScore < 10, "Score below min");
 
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("ScoreTooLow()")));
         _claimDgnrs(bob);
     }
 
@@ -189,7 +189,7 @@ contract AffiliateDgnrsClaim is DeployProtocol {
 
         _claimDgnrs(alice);
 
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("AlreadyClaimed()")));
         _claimDgnrs(alice);
     }
 
@@ -199,7 +199,7 @@ contract AffiliateDgnrsClaim is DeployProtocol {
         _setLevel(1);
         // Don't set allocation — stays 0
 
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("ZeroValue()")));
         _claimDgnrs(alice);
     }
 
@@ -353,11 +353,11 @@ contract AffiliateDgnrsClaim is DeployProtocol {
         _setAllocation(2, 500_000e12);
 
         // Bob had no score at level 2 → reverts
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("ScoreTooLow()")));
         _claimDgnrs(bob);
 
         // Alice also has no score at level 2 (her purchases were during level 0 → score at 1)
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("ScoreTooLow()")));
         _claimDgnrs(alice);
     }
 

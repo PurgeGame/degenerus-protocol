@@ -183,7 +183,7 @@ contract CrapsPreferredBoardTest is CrapsPins {
         uint256 bet = (uint256(day) * 8 << 64) | c.daySeatNumberOf(day, bob);
         vm.prank(bob); c.amendSlip(bet, BOARD);
         assertEq(c.preferredBoardOf(game.walletIdOf(bob)), BOARD);
-        vm.prank(bob); vm.expectRevert(); c.buyFutureCrapsDays(day, 1, false, 0);
+        vm.prank(bob); vm.expectRevert(bytes4(keccak256("DayNotReservable()"))); c.buyFutureCrapsDays(day, 1, false, 0);
         assertEq(c.preferredBoardOf(game.walletIdOf(bob)), BOARD, "failed entry saved");
     }
 

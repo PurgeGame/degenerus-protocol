@@ -351,7 +351,7 @@ contract V61CureBountyDecurse is DeployProtocol {
         uint256 flipBefore = coin.balanceOf(curer);
         _aid(target);
         vm.prank(curer);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("NothingToClaim()")));
         game.decurse(_aid(target));
         assertEq(coin.balanceOf(curer), flipBefore, "revert-if-0: no FLIP burned");
     }

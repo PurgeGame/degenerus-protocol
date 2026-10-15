@@ -227,9 +227,9 @@ contract AfkingStethFundingTest is DeployProtocol {
     }
 
     function test_OnlyGameCanCallAtomicPull() public {
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("OnlySelf()")));
         game.pullAfkingSteth(uint32(1), FUNDER, 1);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("E()")));
         afkingModule.pullAfkingSteth(uint32(1), FUNDER, 1);
     }
 

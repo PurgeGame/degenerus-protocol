@@ -199,7 +199,7 @@ contract AfkingStethGasTest is DeployProtocol {
         uint256 sourceShares = mockStETH.sharesOf(FUNDER);
         uint256 gameShares = mockStETH.sharesOf(address(game));
         uint256 allowanceBefore = mockStETH.allowance(FUNDER, address(game));
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("EmptyRevert()")));
         host.measuredSubWork{gas: WORK_GAS}(WORK_GAS);
         assertEq(host.memberCount(), 2, "failed execution cannot evict");
         assertEq(mockStETH.sharesOf(FUNDER), sourceShares);
@@ -215,7 +215,7 @@ contract AfkingStethGasTest is DeployProtocol {
     function test_TransferGasExhaustionPreservesSubscription() public {
         AdversarialAfkingSteth faulty = _failedFixture(false);
         faulty.configureFault(AdversarialAfkingSteth.Operation.Transfer, AdversarialAfkingSteth.Fault.BurnGas);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("EmptyRevert()")));
         host.measuredSubWork{gas: WORK_GAS}(WORK_GAS);
         assertEq(host.memberCount(), 1);
     }

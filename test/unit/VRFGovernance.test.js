@@ -14,6 +14,7 @@ import {
   getEvent,
   ZERO_ADDRESS,
   ZERO_BYTES32,
+  errorAbi,
 } from "../helpers/testUtils.js";
 
 /**
@@ -373,7 +374,7 @@ describe("VRF Governance", function () {
       // Regardless, the expiry check should fire first
       await expect(
         admin.connect(deployer).vote(1, true)
-      ).to.be.reverted; // ProposalExpired or InsufficientStake
+      ).to.be.revertedWithCustomError(errorAbi("ProposalExpired()"), "ProposalExpired"); // ProposalExpired or InsufficientStake
     });
   });
 

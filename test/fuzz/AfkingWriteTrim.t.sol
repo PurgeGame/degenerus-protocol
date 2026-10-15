@@ -134,7 +134,7 @@ contract AfkingFamilyLiquidationTest is RedemptionCloseTools {
         assertEq(game.subscriberSetLength(), members, "tombstones stay for the stage to reclaim");
         // Acquired family members cannot restart.
         vm.prank(seller);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("NotApproved()")));
         game.subscribe(kids[0], false, false, 1, 0, 0);
     }
 

@@ -8,9 +8,8 @@ import {
 import {
   eth,
   advanceTime,
-  advanceToNextDay,
-  getLastVRFRequestId,
   ZERO_BYTES32,
+  errorAbi,
 } from "../helpers/testUtils.js";
 
 const ZERO_ADDRESS = hre.ethers.ZeroAddress;
@@ -77,13 +76,16 @@ describe("PriceEscalation", function () {
 
       const tx = await buyFullTickets(game, alice, 1, 0.01);
       expect((await tx.wait()).status).to.equal(1);
+      // Overpayment is accepted and credited to the payer's afking, so success alone
+      // proves only price <= value; no spill proves the price is exactly the value.
+      expect(await game.afkingFundingOf(alice.address)).to.equal(0n, "charged exactly the quoted price");
     });
 
     it("underpaying for 1 full ticket reverts", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
 
       // 1 full ticket = quantity 400, costs 0.01 ETH, underpay with 0.009
-      await expect(buyFullTickets(game, alice, 1, 0.009)).to.be.reverted;
+      await expect(buyFullTickets(game, alice, 1, 0.009)).to.be.revertedWithCustomError(errorAbi("Insolvent()"), "Insolvent");
     });
   });
 
@@ -97,6 +99,9 @@ describe("PriceEscalation", function () {
 
       const tx = await buyFullTickets(game, alice, 5, 0.05);
       expect((await tx.wait()).status).to.equal(1);
+      // Overpayment is accepted and credited to the payer's afking, so success alone
+      // proves only price <= value; no spill proves the price is exactly the value.
+      expect(await game.afkingFundingOf(alice.address)).to.equal(0n, "charged exactly the quoted price");
     });
 
     it("10 full tickets cost 0.10 ETH", async function () {
@@ -104,6 +109,9 @@ describe("PriceEscalation", function () {
 
       const tx = await buyFullTickets(game, alice, 10, 0.1);
       expect((await tx.wait()).status).to.equal(1);
+      // Overpayment is accepted and credited to the payer's afking, so success alone
+      // proves only price <= value; no spill proves the price is exactly the value.
+      expect(await game.afkingFundingOf(alice.address)).to.equal(0n, "charged exactly the quoted price");
     });
 
     it("100 full tickets cost 1.0 ETH", async function () {
@@ -111,13 +119,16 @@ describe("PriceEscalation", function () {
 
       const tx = await buyFullTickets(game, alice, 100, 1);
       expect((await tx.wait()).status).to.equal(1);
+      // Overpayment is accepted and credited to the payer's afking, so success alone
+      // proves only price <= value; no spill proves the price is exactly the value.
+      expect(await game.afkingFundingOf(alice.address)).to.equal(0n, "charged exactly the quoted price");
     });
 
     it("underpaying for 5 full tickets reverts", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
 
       // 5 full tickets = 0.05 ETH, pay only 0.04
-      await expect(buyFullTickets(game, alice, 5, 0.04)).to.be.reverted;
+      await expect(buyFullTickets(game, alice, 5, 0.04)).to.be.revertedWithCustomError(errorAbi("Insolvent()"), "Insolvent");
     });
   });
 
@@ -133,6 +144,9 @@ describe("PriceEscalation", function () {
         .connect(alice)
         .purchaseLazyPass(0, hre.ethers.ZeroHash, { value: eth(0.24) });
       expect((await tx.wait()).status).to.equal(1);
+      // Overpayment is accepted and credited to the payer's afking, so success alone
+      // proves only price <= value; no spill proves the price is exactly the value.
+      expect(await game.afkingFundingOf(alice.address)).to.equal(0n, "charged exactly the quoted price");
     });
 
     it("lazy pass at level 0 with wrong ETH reverts", async function () {
@@ -142,49 +156,7 @@ describe("PriceEscalation", function () {
         game
           .connect(alice)
           .purchaseLazyPass(0, hre.ethers.ZeroHash, { value: eth(0.23) })
-      ).to.be.reverted;
-    });
-  });
-
-  // =========================================================================
-  // 4. Price transition via level advancement
-  // =========================================================================
-
-  describe("price transition at level 5", function () {
-    async function advanceOneLevel(game, deployer, mockVRF, word) {
-      await advanceToNextDay();
-      await game.connect(deployer).mineFlip(0);
-      const requestId = await getLastVRFRequestId(mockVRF);
-      await mockVRF.fulfillRandomWords(requestId, word || 2n);
-      for (let i = 0; i < 30; i++) {
-        if (!(await game.rngLocked())) break;
-        await game.connect(deployer).mineFlip(0);
-      }
-    }
-
-    it("after advancing to level 5, price becomes 0.02 ETH", async function () {
-      const { game, deployer, mockVRF, alice } = await loadFixture(
-        deployFullProtocol
-      );
-
-      // Buy enough tickets to fill levels
-      await buyFullTickets(game, alice, 100, 1);
-
-      // Advance through levels 0-4
-      for (let lvl = 0; lvl < 5; lvl++) {
-        await advanceOneLevel(
-          game,
-          deployer,
-          mockVRF,
-          BigInt(lvl * 1000 + 2)
-        );
-      }
-
-      const currentLevel = await game.level();
-      if (currentLevel >= 5n) {
-        const info = await game.purchaseInfo();
-        expect(info.priceWei).to.equal(eth(0.02));
-      }
+      ).to.be.revertedWithCustomError(errorAbi("Insolvent()"), "Insolvent");
     });
   });
 
@@ -200,6 +172,9 @@ describe("PriceEscalation", function () {
         .connect(alice)
         .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
       expect((await tx.wait()).status).to.equal(1);
+      // Overpayment is accepted and credited to the payer's afking, so success alone
+      // proves only price <= value; no spill proves the price is exactly the value.
+      expect(await game.afkingFundingOf(alice.address)).to.equal(0n, "charged exactly the quoted price");
     });
 
     it("whale bundle qty=2 costs 4.8 ETH", async function () {
@@ -209,6 +184,9 @@ describe("PriceEscalation", function () {
         .connect(alice)
         .purchaseWhalePass(0, 2, hre.ethers.ZeroHash, { value: eth(4.8) });
       expect((await tx.wait()).status).to.equal(1);
+      // Overpayment is accepted and credited to the payer's afking, so success alone
+      // proves only price <= value; no spill proves the price is exactly the value.
+      expect(await game.afkingFundingOf(alice.address)).to.equal(0n, "charged exactly the quoted price");
     });
 
     it("whale bundle qty=10 costs 24 ETH", async function () {
@@ -218,6 +196,9 @@ describe("PriceEscalation", function () {
         .connect(alice)
         .purchaseWhalePass(0, 10, hre.ethers.ZeroHash, { value: eth(24) });
       expect((await tx.wait()).status).to.equal(1);
+      // Overpayment is accepted and credited to the payer's afking, so success alone
+      // proves only price <= value; no spill proves the price is exactly the value.
+      expect(await game.afkingFundingOf(alice.address)).to.equal(0n, "charged exactly the quoted price");
     });
   });
 
@@ -233,6 +214,9 @@ describe("PriceEscalation", function () {
         .connect(alice)
         .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
       expect((await tx.wait()).status).to.equal(1);
+      // Overpayment is accepted and credited to the payer's afking, so success alone
+      // proves only price <= value; no spill proves the price is exactly the value.
+      expect(await game.afkingFundingOf(alice.address)).to.equal(0n, "charged exactly the quoted price");
     });
 
     it("fourth deity pass: 30 ETH (24 + T(3) = 24 + 6)", async function () {
@@ -254,6 +238,9 @@ describe("PriceEscalation", function () {
         .connect(dan)
         .purchaseDeityPass(0, 3, hre.ethers.ZeroHash, { value: eth(30) });
       expect((await tx.wait()).status).to.equal(1);
+      // Overpayment is accepted and credited to the payer's afking, so success alone
+      // proves only price <= value; no spill proves the price is exactly the value.
+      expect(await game.afkingFundingOf(dan.address)).to.equal(0n, "charged exactly the quoted price");
     });
 
     it("wrong amount for deity pass reverts", async function () {
@@ -263,7 +250,7 @@ describe("PriceEscalation", function () {
         game
           .connect(alice)
           .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(23) })
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("Insolvent()"), "Insolvent");
     });
   });
 
@@ -282,6 +269,9 @@ describe("PriceEscalation", function () {
           value: eth(0.0025),
         });
       expect((await tx.wait()).status).to.equal(1);
+      // Overpayment is accepted and credited to the payer's afking, so success alone
+      // proves only price <= value; no spill proves the price is exactly the value.
+      expect(await game.afkingFundingOf(alice.address)).to.equal(0n, "charged exactly the quoted price");
     });
 
     it("half ticket (qty=200) costs 0.005 ETH at level 0", async function () {
@@ -293,6 +283,9 @@ describe("PriceEscalation", function () {
           value: eth(0.005),
         });
       expect((await tx.wait()).status).to.equal(1);
+      // Overpayment is accepted and credited to the payer's afking, so success alone
+      // proves only price <= value; no spill proves the price is exactly the value.
+      expect(await game.afkingFundingOf(alice.address)).to.equal(0n, "charged exactly the quoted price");
     });
 
     it("zero quantity with zero ETH reverts (totalCost == 0)", async function () {
@@ -305,7 +298,7 @@ describe("PriceEscalation", function () {
           .purchase(0, 0n, 0n, ZERO_BYTES32, MintPaymentKind.DirectEth,false,  {
             value: 0n,
           })
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("E()"), "E");
     });
   });
 });

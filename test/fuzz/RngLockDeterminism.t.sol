@@ -1013,7 +1013,10 @@ contract RngLockDeterminism is DeployProtocol {
         // waits (RngNotReady), and no box stage runs under the lock.
         address keeperCaller = makeAddr("tst01-autoopen-keeper");
         vm.prank(keeperCaller);
-        try game.mineFlip(0) {} catch {} // must not abort the lock
+        // Either it finds other work or it waits on the word; any other failure is a bug.
+        try game.mineFlip(0) {} catch (bytes memory reason) {
+            assertEq(bytes4(reason), bytes4(keccak256("RngNotReady()")), "autoOpen-noop: only a word wait stops the call");
+        }
         assertTrue(game.rngLocked(), "autoOpen-noop: the keeper call does not abort the lock");
         assertFalse(_boxSettled(boxIndex, buyer), "autoOpen-noop: no box opens during rngLock");
         assertTrue(_boxQueued(boxIndex, buyer), "autoOpen-noop: the queued box is deferred, not dropped");
@@ -1094,7 +1097,11 @@ contract RngLockDeterminism is DeployProtocol {
         assertTrue(game.rngLocked(), "no-maroon: rngLock engaged");
         assertFalse(game.boxesPending(), "no-maroon: boxesPending() false during lock (RD-3)");
         vm.prank(keeper);
-        try game.mineFlip(0) {} catch {} // the engine: must not abort the lock (box stages never run under it)
+        // The engine: must not abort the lock (box stages never run under it); it either finds
+        // other work or waits on the word — any other failure is a bug.
+        try game.mineFlip(0) {} catch (bytes memory reason) {
+            assertEq(bytes4(reason), bytes4(keccak256("RngNotReady()")), "no-maroon: only a word wait stops the call");
+        }
         assertTrue(
             _boxQueued(boxIndex, boxOwner),
             "no-maroon: the queued box is NOT consumed by the lock (deferred, not dropped)"

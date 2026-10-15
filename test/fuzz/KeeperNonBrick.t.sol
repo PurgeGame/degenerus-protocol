@@ -136,8 +136,8 @@ contract KeeperNonBrick is DeployProtocol {
     ///         holder whose ETH-receive callback re-enters `withdrawAfkingFunding` to extract a SECOND payout
     ///         cannot double-spend. Under the game's strict CEI (effects — the funding debit + the tandem
     ///         claimablePool release — execute BEFORE the `.call`, DegenerusGame.sol:1568-1571), the
-    ///         re-entrant inner withdraw sees the zeroed funding and reverts E(); the attacker bubbles it, so
-    ///         the outer `.call` sees failure, reverts E(), and the WHOLE call unwinds. The attacker extracts
+    ///         re-entrant inner withdraw sees the zeroed funding and reverts; the attacker bubbles it, so
+    ///         the outer `.call` sees failure, reverts TransferFailed(), and the WHOLE call unwinds. The attacker extracts
     ///         NOTHING — the per-frame debit can never be replayed.
     function testReentrantWithdrawCannotDoubleSpend() public {
         ReentrantAfkingWithdrawer attacker = new ReentrantAfkingWithdrawer(address(game));
@@ -145,8 +145,8 @@ contract KeeperNonBrick is DeployProtocol {
         _fundPool(address(attacker), funded);
         assertEq(game.afkingFundingOf(address(attacker)), funded, "attacker funding credited");
 
-        // The re-entrant attack reverts (bubbled E() -> outer .call fails -> E()); the whole withdraw unwinds.
-        vm.expectRevert();
+        // The re-entrant attack reverts (bubbled inner revert -> outer .call fails -> TransferFailed()); the whole withdraw unwinds.
+        vm.expectRevert(bytes4(keccak256("TransferFailed()")));
         attacker.attackBubbling(funded);
 
         // No double-spend: the funding debit fully rolled back (still == funded), the attacker got no ETH.

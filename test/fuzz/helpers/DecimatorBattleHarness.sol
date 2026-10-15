@@ -40,6 +40,13 @@ contract DecimatorBattleHarness is DegenerusGameDecimatorModule, WalletSeed {
         }
     }
 
+    /// @dev The production seal entry alone, without `seal`'s session staging: what the Game's
+    ///      own seal call does while another round is still queued.
+    function sealRaw(uint24 lvl, uint128 pool, uint256 word) external returns (uint256) {
+        _setDecWindowOpen(false);
+        return this.runDecimatorJackpot(pool, lvl, word);
+    }
+
     function roundOf(uint24 lvl) external view returns (DecBattleRound memory) {
         return decBattleRounds[lvl];
     }

@@ -401,7 +401,7 @@ contract CrapsPassesTest is CrapsPins {
         uint24 start = _today() + 2;
 
         vm.prank(alice);
-        vm.expectRevert();
+        vm.expectRevert(stdError.arithmeticError);
         craps.applyCrapsPasses(start, 5, false);
 
         assertEq(craps.dayStateOf(start, alice), 0, "a failed application still wrote a day");
@@ -462,7 +462,7 @@ contract CrapsPassesTest is CrapsPins {
         uint24 start = _today() + 2;
 
         vm.prank(alice);
-        vm.expectRevert();
+        vm.expectRevert(stdError.arithmeticError);
         craps.applyCrapsPasses(start, 1, false);
 
         vm.prank(alice);

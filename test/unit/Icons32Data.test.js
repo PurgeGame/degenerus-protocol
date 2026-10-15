@@ -4,7 +4,7 @@ import {
   deployFullProtocol,
   restoreAddresses,
 } from "../helpers/deployFixture.js";
-import { getEvent, ZERO_ADDRESS } from "../helpers/testUtils.js";
+import { getEvent, ZERO_ADDRESS, errorAbi } from "../helpers/testUtils.js";
 
 /*
  * Icons32Data Unit Tests
@@ -207,7 +207,7 @@ describe("Icons32Data", function () {
       ).to.be.revertedWithCustomError(icons32, "IndexOutOfBounds");
     });
 
-    it("reverts with IndexOutOfBounds on overflow attempt (startIndex = max uint)", async function () {
+    it("reverts (checked overflow, before IndexOutOfBounds) on startIndex = max uint", async function () {
       const { icons32 } = await getFixture();
       // startIndex = 2^256-1 + 1 path => 2^256 > 33
       await expect(
@@ -215,7 +215,7 @@ describe("Icons32Data", function () {
           "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
           ["x"]
         )
-      ).to.be.reverted; // arithmetic overflow before custom error
+      ).to.be.revertedWithPanic(0x11); // arithmetic overflow before custom error
     });
 
     it("accepts an empty paths array without reverting", async function () {
@@ -226,7 +226,7 @@ describe("Icons32Data", function () {
 
     it("data() reverts with out-of-bounds access for index 33", async function () {
       const { icons32 } = await getFixture();
-      await expect(icons32.data(33)).to.be.reverted;
+      await expect(icons32.data(33)).to.be.revertedWithPanic(0x32);
     });
   });
 
@@ -403,7 +403,7 @@ describe("Icons32Data", function () {
     it("does not finalize the contract when a non-owner attempts it", async function () {
       const { icons32, alice } = await getFixture();
       // Attempt by alice (should fail)
-      await expect(icons32.connect(alice).finalize()).to.be.reverted;
+      await expect(icons32.connect(alice).finalize()).to.be.revertedWithCustomError(errorAbi("NotVaultOwner()"), "NotVaultOwner");
       // The vault owner can still set paths (contract not finalized)
       await expect(icons32.setPaths(0, ["still_ok"])).to.not.be.reverted;
     });

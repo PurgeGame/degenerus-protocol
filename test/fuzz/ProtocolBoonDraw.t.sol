@@ -278,10 +278,10 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         assertEq(issued, 3);
     }
     function testInvalidOrUnfundedBetsCannotCreateEntries() public {
-        vm.expectRevert(); vm.prank(bettor); _bet(0, 0.005 ether - 1);
-        vm.expectRevert(); vm.prank(bettor); game.placeDegeneretteBet(0, 0, 0.005 ether, 1, 0);
-        vm.expectRevert(); vm.prank(bettor); game.placeDegeneretteBet{value: 0.005 ether}(0, 0, 0.005 ether, 0, 0);
-        vm.expectRevert(); boonModule.resolveProtocolBoonDraws(day + 1);
+        vm.expectRevert(bytes4(keccak256("InvalidBet()"))); vm.prank(bettor); _bet(0, 0.005 ether - 1);
+        vm.expectRevert(bytes4(keccak256("Insolvent()"))); vm.prank(bettor); game.placeDegeneretteBet(0, 0, 0.005 ether, 1, 0);
+        vm.expectRevert(bytes4(keccak256("InvalidBet()"))); vm.prank(bettor); game.placeDegeneretteBet{value: 0.005 ether}(0, 0, 0.005 ether, 0, 0);
+        vm.expectRevert(bytes4(keccak256("OnlyDelegatecall()"))); boonModule.resolveProtocolBoonDraws(day + 1);
         assertEq(lens.protocolBoonPool(address(game), address(vault), day).entryCount, 0);
         assertEq(lens.protocolBoonEntryAt(address(game), address(vault), day, 0).playerId, uint32(0));
     }
@@ -384,7 +384,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         assertEq(game.futurePrizePoolView(), future);
         assertEq(lens.protocolBoonPool(address(game), address(vault), day).totalWeight, type(uint64).max);
         assertEq(lens.protocolBoonPool(address(game), address(vault), day).entryCount, 0);
-        vm.expectRevert(); lens.protocolBoonQuote(address(game), bettor, type(uint256).max);
+        vm.expectRevert(bytes4(keccak256("E()"))); lens.protocolBoonQuote(address(game), bettor, type(uint256).max);
     }
 
     function testAutomaticDrawWaitsForWordAndNeverIssuesLate() public {
@@ -497,8 +497,8 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         assertEq(lens.protocolBoonPool(address(game), address(sdgnrs), day).entryCount, 0);
         // A terminal game retains the liveness trigger that ended it.
         vm.warp(vm.getBlockTimestamp() + 1_000 days);
-        vm.expectRevert(); vm.prank(bettor); _bet(0, 0.005 ether);
-        vm.expectRevert(); vm.prank(bettor); _bet(6, 0.005 ether);
+        vm.expectRevert(bytes4(keccak256("GameOver()"))); vm.prank(bettor); _bet(0, 0.005 ether);
+        vm.expectRevert(bytes4(keccak256("GameOver()"))); vm.prank(bettor); _bet(6, 0.005 ether);
     }
 
     function testLivenessDeadlineRejectsEthEntries() public {
@@ -506,8 +506,8 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         day = game.currentDayView();
         _fixtureCall(abi.encodeCall(ProtocolBoonFixture.requireLivenessTriggered, ()));
         assertFalse(game.gameOver());
-        vm.expectRevert(); vm.prank(bettor); _bet(0, 0.005 ether);
-        vm.expectRevert(); vm.prank(bettor); _bet(6, 0.005 ether);
+        vm.expectRevert(bytes4(keccak256("GameOver()"))); vm.prank(bettor); _bet(0, 0.005 ether);
+        vm.expectRevert(bytes4(keccak256("GameOver()"))); vm.prank(bettor); _bet(6, 0.005 ether);
         assertEq(lens.protocolBoonPool(address(game), address(vault), day).entryCount, 0);
         assertEq(lens.protocolBoonPool(address(game), address(sdgnrs), day).entryCount, 0);
     }

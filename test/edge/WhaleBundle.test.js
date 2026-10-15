@@ -12,6 +12,7 @@ import {
   advanceToNextDay,
   getEvents,
   getLastVRFRequestId,
+  errorAbi,
 } from "../helpers/testUtils.js";
 
 /**
@@ -105,6 +106,9 @@ describe("WhaleBundle", function () {
         .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
       const receipt = await tx.wait();
       expect(receipt.status).to.equal(1);
+      // Overpayment is accepted and credited to the payer's afking: no spill proves the
+      // purchase charged exactly the value sent, not merely at most that.
+      expect(await game.afkingFundingOf(alice.address)).to.equal(0n, "charged exactly the quoted price");
     });
 
     it("purchase at level 0 with insufficient ETH reverts", async function () {
@@ -114,7 +118,7 @@ describe("WhaleBundle", function () {
         game
           .connect(alice)
           .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.3) })
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("Insolvent()"), "Insolvent");
     });
 
     it("purchase multiple bundles (qty=3) costs 3 * 2.4 = 7.2 ETH", async function () {
@@ -125,6 +129,9 @@ describe("WhaleBundle", function () {
         .purchaseWhalePass(0, 3, hre.ethers.ZeroHash, { value: eth(7.2) });
       const receipt = await tx.wait();
       expect(receipt.status).to.equal(1);
+      // Overpayment is accepted and credited to the payer's afking: no spill proves the
+      // purchase charged exactly the value sent, not merely at most that.
+      expect(await game.afkingFundingOf(alice.address)).to.equal(0n, "charged exactly the quoted price");
     });
 
     it("quantity = 0 reverts", async function () {
@@ -134,7 +141,7 @@ describe("WhaleBundle", function () {
         game
           .connect(alice)
           .purchaseWhalePass(0, 0, hre.ethers.ZeroHash, { value: eth(0) })
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("InvalidQuantity()"), "InvalidQuantity");
     });
 
     it("quantity > 100 reverts", async function () {
@@ -144,7 +151,7 @@ describe("WhaleBundle", function () {
         game
           .connect(alice)
           .purchaseWhalePass(0, 101, hre.ethers.ZeroHash, { value: eth(242.4) })
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("InvalidQuantity()"), "InvalidQuantity");
     });
 
     it("quantity = 100 at level 0 succeeds (max bundle)", async function () {
@@ -204,14 +211,18 @@ describe("WhaleBundle", function () {
     // Level restrictions beyond 0-3 require advancing the game multiple levels,
     // which is expensive in tests. We verify the basic gating works.
     it("at level 0 (valid early level), multiple buyers succeed", async function () {
-      const { game, alice, bob } = await loadFixture(deployFullProtocol);
+      const { game, alice, bob, whaleModule } = await loadFixture(deployFullProtocol);
 
-      await game
-        .connect(alice)
-        .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
-      await game
-        .connect(bob)
-        .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
+      for (const buyer of [alice, bob]) {
+        const tx = await game
+          .connect(buyer)
+          .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
+        const events = await getEvents(tx, whaleModule, "WhalePassPurchased");
+        expect(events.length).to.equal(1);
+        expect(events[0].args.buyer).to.equal(await game.walletIdOf(buyer.address));
+        expect(events[0].args.quantity).to.equal(1n);
+        expect(events[0].args.weiIn).to.equal(eth(2.4), "each buyer pays the early price");
+      }
     });
 
     it("expired whale boon cannot use stale dailyIdx to get discounted pricing", async function () {
@@ -246,7 +257,7 @@ describe("WhaleBundle", function () {
         game
           .connect(bob)
           .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: discountedEarly })
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("Insolvent()"), "Insolvent");
     });
   });
 
@@ -263,6 +274,9 @@ describe("WhaleBundle", function () {
         .purchaseLazyPass(0, hre.ethers.ZeroHash, { value: eth(0.24) });
       const receipt = await tx.wait();
       expect(receipt.status).to.equal(1);
+      // Overpayment is accepted and credited to the payer's afking: no spill proves the
+      // purchase charged exactly the value sent, not merely at most that.
+      expect(await game.afkingFundingOf(alice.address)).to.equal(0n, "charged exactly the quoted price");
     });
 
     it("purchase at level 0 with wrong ETH reverts", async function () {
@@ -272,7 +286,7 @@ describe("WhaleBundle", function () {
         game
           .connect(alice)
           .purchaseLazyPass(0, hre.ethers.ZeroHash, { value: eth(0.2) })
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("Insolvent()"), "Insolvent");
     });
 
     it("lazy pass blocked if player has deity pass", async function () {
@@ -288,7 +302,7 @@ describe("WhaleBundle", function () {
         game
           .connect(alice)
           .purchaseLazyPass(0, hre.ethers.ZeroHash, { value: eth(0.24) })
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("DeityPassConflict()"), "DeityPassConflict");
     });
 
     it("lazy pass blocked with active freeze > currentLevel + 7", async function () {
@@ -304,7 +318,7 @@ describe("WhaleBundle", function () {
         game
           .connect(alice)
           .purchaseLazyPass(0, hre.ethers.ZeroHash, { value: eth(0.24) })
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("PassNotExpired()"), "PassNotExpired");
     });
 
     it("lazy pass emits LootBoxBuy", async function () {
@@ -333,6 +347,9 @@ describe("WhaleBundle", function () {
         .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
       const receipt = await tx.wait();
       expect(receipt.status).to.equal(1);
+      // Overpayment is accepted and credited to the payer's afking: no spill proves the
+      // purchase charged exactly the value sent, not merely at most that.
+      expect(await game.afkingFundingOf(alice.address)).to.equal(0n, "charged exactly the quoted price");
     });
 
     it("second deity pass costs 25 ETH (24 + 1)", async function () {
@@ -347,6 +364,9 @@ describe("WhaleBundle", function () {
         .connect(bob)
         .purchaseDeityPass(0, 1, hre.ethers.ZeroHash, { value: eth(25) });
       expect((await tx.wait()).status).to.equal(1);
+      // Overpayment is accepted and credited to the payer's afking: no spill proves the
+      // purchase charged exactly the value sent, not merely at most that.
+      expect(await game.afkingFundingOf(bob.address)).to.equal(0n, "charged exactly the quoted price");
     });
 
     it("third deity pass costs 27 ETH (24 + 3)", async function () {
@@ -366,6 +386,9 @@ describe("WhaleBundle", function () {
         .connect(carol)
         .purchaseDeityPass(0, 2, hre.ethers.ZeroHash, { value: eth(27) });
       expect((await tx.wait()).status).to.equal(1);
+      // Overpayment is accepted and credited to the payer's afking: no spill proves the
+      // purchase charged exactly the value sent, not merely at most that.
+      expect(await game.afkingFundingOf(carol.address)).to.equal(0n, "charged exactly the quoted price");
     });
 
     it("duplicate symbol reverts", async function () {
@@ -378,7 +401,7 @@ describe("WhaleBundle", function () {
       // Same symbol (0) should revert
       await expect(
         game.connect(bob).purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(25) })
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("SymbolTaken()"), "SymbolTaken");
     });
 
     it("same buyer purchasing twice reverts", async function () {
@@ -392,7 +415,7 @@ describe("WhaleBundle", function () {
         game
           .connect(alice)
           .purchaseDeityPass(0, 1, hre.ethers.ZeroHash, { value: eth(25) })
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("AlreadyOwnsDeityPass()"), "AlreadyOwnsDeityPass");
     });
 
     it("invalid symbol (32+) reverts", async function () {
@@ -402,7 +425,7 @@ describe("WhaleBundle", function () {
         game
           .connect(alice)
           .purchaseDeityPass(0, 32, hre.ethers.ZeroHash, { value: eth(24) })
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("InvalidSymbol()"), "InvalidSymbol");
     });
 
     it("wrong ETH amount reverts", async function () {
@@ -412,7 +435,7 @@ describe("WhaleBundle", function () {
         game
           .connect(alice)
           .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(23) })
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("Insolvent()"), "Insolvent");
     });
 
     it("symbols 0-23 are valid range", async function () {
@@ -553,7 +576,7 @@ describe("WhaleBundle", function () {
         game
           .connect(alice)
           .purchaseLazyPass(0, hre.ethers.ZeroHash, { value: eth(0.24) })
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("PassNotExpired()"), "PassNotExpired");
     });
 
     it("multiple whale bundles from same buyer extend freeze", async function () {
@@ -572,19 +595,26 @@ describe("WhaleBundle", function () {
     });
 
     it("different players can each buy whale bundles independently", async function () {
-      const { game, alice, bob, carol } = await loadFixture(
+      const { game, alice, bob, carol, whaleModule } = await loadFixture(
         deployFullProtocol
       );
 
-      await game
-        .connect(alice)
-        .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
-      await game
-        .connect(bob)
-        .purchaseWhalePass(0, 2, hre.ethers.ZeroHash, { value: eth(4.8) });
-      await game
-        .connect(carol)
-        .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
+      // Each purchase is priced and credited to its own buyer, whatever the others bought.
+      for (const [buyer, quantity, value] of [
+        [alice, 1n, eth(2.4)],
+        [bob, 2n, eth(4.8)],
+        [carol, 1n, eth(2.4)],
+      ]) {
+        const tx = await game
+          .connect(buyer)
+          .purchaseWhalePass(0, quantity, hre.ethers.ZeroHash, { value });
+        const events = await getEvents(tx, whaleModule, "WhalePassPurchased");
+        expect(events.length).to.equal(1);
+        expect(events[0].args.buyer).to.equal(await game.walletIdOf(buyer.address));
+        expect(events[0].args.quantity).to.equal(quantity);
+        expect(events[0].args.weiIn).to.equal(value);
+        expect(await game.afkingFundingOf(buyer.address)).to.equal(0n, "no overpayment");
+      }
     });
   });
 
@@ -627,7 +657,7 @@ describe("WhaleBundle", function () {
         game
           .connect(alice)
           .purchaseLazyPass(0, hre.ethers.ZeroHash, { value: eth(0.24) })
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("PassNotExpired()"), "PassNotExpired");
     });
   });
 
@@ -715,6 +745,9 @@ describe("WhaleBundle", function () {
         .connect(bob)
         .purchaseLazyPass(0, hre.ethers.ZeroHash, { value: discountedPrice });
       expect((await tx.wait()).status).to.equal(1);
+      // Overpayment is accepted and credited to the payer's afking: no spill proves the
+      // purchase charged exactly the value sent, not merely at most that.
+      expect(await game.afkingFundingOf(bob.address)).to.equal(0n, "charged exactly the quoted price");
     });
 
     it("full-price lazy pass reverts when discount boon active", async function () {
@@ -747,37 +780,6 @@ describe("WhaleBundle", function () {
       expect(after_).to.be.gt(before, "lazy-pass overpay excess must credit afking");
     });
 
-    it("boon consumed after use — second purchase needs full price", async function () {
-      const { game, deployer, alice, bob, mockVRF } =
-        await loadFixture(deployFullProtocol);
-
-      await game
-        .connect(alice)
-        .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
-
-      const discountBps = await issueLazyBoonForRecipient(
-        game,
-        alice,
-        bob,
-        deployer,
-        mockVRF
-      );
-
-      // Use the discount
-      const discountedPrice =
-        (eth(0.24) * (10_000n - discountBps)) / 10_000n;
-      await game
-        .connect(bob)
-        .purchaseLazyPass(0, hre.ethers.ZeroHash, { value: discountedPrice });
-
-      // Second purchase at discounted price should revert (boon consumed)
-      await expect(
-        game
-          .connect(bob)
-          .purchaseLazyPass(0, hre.ethers.ZeroHash, { value: discountedPrice })
-      ).to.be.reverted;
-    });
-
     it("expired boon requires full price", async function () {
       const { game, deployer, alice, bob, mockVRF } =
         await loadFixture(deployFullProtocol);
@@ -804,7 +806,7 @@ describe("WhaleBundle", function () {
         game
           .connect(bob)
           .purchaseLazyPass(0, hre.ethers.ZeroHash, { value: discountedPrice })
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("Insolvent()"), "Insolvent");
 
       // Full price should work
       const tx = await game
@@ -820,29 +822,27 @@ describe("WhaleBundle", function () {
 
   describe("deity pass pricing formula", function () {
     it("prices follow 24 + T(n) formula for n=0,1,2,3", async function () {
-      const { game, alice, bob, carol, dan } = await loadFixture(
+      const { game, alice, bob, carol, dan, whaleModule } = await loadFixture(
         deployFullProtocol
       );
 
-      // n=0: 24 + 0 = 24
-      await game
-        .connect(alice)
-        .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) });
-
-      // n=1: 24 + 1 = 25
-      await game
-        .connect(bob)
-        .purchaseDeityPass(0, 1, hre.ethers.ZeroHash, { value: eth(25) });
-
-      // n=2: 24 + 3 = 27
-      await game
-        .connect(carol)
-        .purchaseDeityPass(0, 2, hre.ethers.ZeroHash, { value: eth(27) });
-
-      // n=3: 24 + 6 = 30
-      await game
-        .connect(dan)
-        .purchaseDeityPass(0, 3, hre.ethers.ZeroHash, { value: eth(30) });
+      // Overpayment is accepted (the excess goes to the payer's afking), so a purchase that
+      // succeeds does not by itself prove the price: read the charged price off the event.
+      // n=0: 24 + 0 = 24, n=1: 24 + 1 = 25, n=2: 24 + 3 = 27, n=3: 24 + 6 = 30
+      for (const [buyer, symbol, price] of [
+        [alice, 4, eth(24)],
+        [bob, 1, eth(25)],
+        [carol, 2, eth(27)],
+        [dan, 3, eth(30)],
+      ]) {
+        const tx = await game
+          .connect(buyer)
+          .purchaseDeityPass(0, symbol, hre.ethers.ZeroHash, { value: price });
+        const events = await getEvents(tx, whaleModule, "DeityPassPurchased");
+        expect(events.length).to.equal(1);
+        expect(events[0].args.price).to.equal(price, `deity pass at symbol ${symbol}`);
+        expect(await game.afkingFundingOf(buyer.address)).to.equal(0n, "no overpayment");
+      }
     });
   });
 });

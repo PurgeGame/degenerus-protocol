@@ -11,6 +11,7 @@ import {
   getEvents,
   getLastVRFRequestId,
   ZERO_BYTES32,
+  errorAbi,
 } from "../helpers/testUtils.js";
 
 /**
@@ -111,7 +112,7 @@ describe("VRFIntegration", function () {
       // Alternatively, we just verify it reverts without checking the error name.
       await expect(
         game.connect(deployer).mineFlip(0)
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("RngNotReady()"), "RngNotReady");
     });
 
     it("first mineFlip works after advancing to next day", async function () {
@@ -243,7 +244,7 @@ describe("VRFIntegration", function () {
       // Direct call from alice should revert — msg.sender != vrfCoordinator.
       await expect(
         game.connect(alice).rawFulfillRandomWords(1n, [12345n])
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("OnlyCoordinator()"), "OnlyCoordinator");
     });
 
     it("calling rawFulfillRandomWords from deployer (not coordinator) reverts", async function () {
@@ -254,7 +255,7 @@ describe("VRFIntegration", function () {
 
       await expect(
         game.connect(deployer).rawFulfillRandomWords(1n, [12345n])
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("OnlyCoordinator()"), "OnlyCoordinator");
     });
   });
 

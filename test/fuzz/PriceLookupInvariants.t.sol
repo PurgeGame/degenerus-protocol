@@ -50,35 +50,32 @@ contract PriceLookupInvariantsTest is Test {
 
     /// @notice milestone levels (x00) always cost 0.24 ETH
     function testFuzz_milestonePricing(uint24 cycleNum) public pure {
-        vm.assume(cycleNum >= 1 && cycleNum <= 100_000);
+        cycleNum = uint24(bound(cycleNum, 1, type(uint24).max / 100));
         uint24 level = cycleNum * 100;
         assertEq(PriceLookupLib.priceForLevel(level), 0.24 ether, "x00 levels must be 0.24 ETH");
     }
 
     /// @notice within a cycle, price is weakly monotonic (never decreases within cycle segments)
     function testFuzz_weaklyMonotonicInCycle(uint24 baseLevel, uint24 offsetA, uint24 offsetB) public pure {
-        vm.assume(baseLevel >= 1 && baseLevel <= 10_000);
-        vm.assume(offsetA < 100 && offsetB < 100);
+        // Offset 0 is the milestone (0.24) and offsets 1-29 drop back to 0.04, so the property
+        // covers the non-milestone offsets 1-99 of any cycle, with offsetA < offsetB.
+        baseLevel = uint24(bound(baseLevel, 1, (type(uint24).max - 99) / 100));
+        offsetA = uint24(bound(offsetA, 1, 98));
+        offsetB = uint24(bound(offsetB, offsetA + 1, 99));
 
         uint24 levelA = baseLevel * 100 + offsetA;
         uint24 levelB = baseLevel * 100 + offsetB;
 
-        if (offsetA < offsetB) {
-            // price at higher offset within same cycle should be >= price at lower offset
-            // EXCEPT offset 0 is the milestone (0.24), offsets 1-29 drop back to 0.04
-            if (offsetA > 0) {
-                assertGe(
-                    PriceLookupLib.priceForLevel(levelB),
-                    PriceLookupLib.priceForLevel(levelA),
-                    "price should be weakly monotonic within non-milestone offsets"
-                );
-            }
-        }
+        assertGe(
+            PriceLookupLib.priceForLevel(levelB),
+            PriceLookupLib.priceForLevel(levelA),
+            "price should be weakly monotonic within non-milestone offsets"
+        );
     }
 
     /// @notice intro pricing verified
     function testFuzz_introPricing(uint24 level) public pure {
-        vm.assume(level < 10);
+        level = uint24(bound(level, 0, 9));
         uint256 price = PriceLookupLib.priceForLevel(level);
         if (level < 5) {
             assertEq(price, 0.01 ether, "levels 0-4 must be 0.01 ETH");
@@ -89,7 +86,7 @@ contract PriceLookupInvariantsTest is Test {
 
     /// @notice cost calculation: (priceWei * entryQuantityScaled) / 400 never overflows for reasonable inputs
     function testFuzz_costCalculation(uint24 level, uint256 entryQuantityScaled) public pure {
-        vm.assume(entryQuantityScaled > 0 && entryQuantityScaled <= 400 * 100); // max 100 full tickets
+        entryQuantityScaled = bound(entryQuantityScaled, 1, 400 * 100); // max 100 full tickets
         uint256 priceWei = PriceLookupLib.priceForLevel(level);
 
         // This must not overflow

@@ -38,7 +38,8 @@ contract AfkingRepricingHost is SubscriberNativeGasHost {
 contract AfkingRepricingFixturesTest is DeployProtocol {
     function test_ExportRepricingFixtures() public {
         string memory directory = vm.envOr("AFKING_REPRICING_STATE_DIR", string(""));
-        if (bytes(directory).length == 0) return;
+        // An opt-in export, not a check: without the directory it reports SKIP, never a PASS.
+        if (bytes(directory).length == 0) { vm.skip(true); return; }
         _deployProtocol();
         vm.warp(vm.getBlockTimestamp() + 2 days);
         vm.deal(address(game), 50_000 ether);

@@ -255,7 +255,7 @@ contract DeadVrfClaimGas is DeployProtocol {
         assertLt(used, 11_500_000);
         assertEq(game.claimableWinningsOf(OWNER), expectedClaim + 1, "the claim plus the registration sentinel");
         assertGt(expectedClaim, 0, "the measured call must pay the owner");
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("E()")));
         game.claimDeadVrf(ownerId, refs);
     }
 }

@@ -465,7 +465,7 @@ contract GameWalletIdViews is DeployProtocol {
         uint256 lengthBefore = _walletsLength();
 
         vm.prank(makeAddr("not_admin"));
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("OnlyAdmin()")));
         game.creditMiddayRng(donor, 1 ether);
 
         vm.recordLogs();
@@ -563,10 +563,10 @@ contract GameWalletIdViews is DeployProtocol {
         ext.x_setSub(id, 1, today - 2, today - 1, 5, 7);
 
         vm.prank(makeAddr("not_quests"));
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("NotApproved()")));
         game.recordAfkingSecondary(id, 1);
         vm.prank(makeAddr("not_quests"));
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("NotApproved()")));
         game.floorAfkingStreakBase(id, 1);
 
         vm.prank(ContractAddresses.QUESTS);

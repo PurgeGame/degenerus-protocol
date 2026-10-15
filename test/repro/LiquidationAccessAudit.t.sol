@@ -186,9 +186,9 @@ contract LiquidationAccessAuditTest is DeployProtocol {
                 game.claimWinnings(ids[i]);
                 vm.expectRevert(DegenerusGameStorage.NotApproved.selector);
                 game.withdrawAfkingFunding(ids[i], 1);
-                vm.expectRevert();
+                vm.expectRevert(bytes4(keccak256("NotApproved()")));
                 coinflip.setCoinflipAutoRebuy(ids[i], false, 0);
-                vm.expectRevert();
+                vm.expectRevert(bytes4(keccak256("NotApproved()")));
                 wwxrp.withdraw(ids[i], 0);
                 vm.expectRevert(DegenerusGameStorage.NotApproved.selector);
                 game.setOperatorApproval(ids[i], callers[j], true);

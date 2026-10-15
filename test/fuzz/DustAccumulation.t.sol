@@ -11,8 +11,8 @@ contract DustAccumulationTest is Test {
         uint8 numBurns,
         uint96 shareAmount
     ) public pure {
-        vm.assume(numBurns >= 2 && numBurns <= 50);
-        vm.assume(shareAmount > 0 && shareAmount <= 1e18);
+        numBurns = uint8(bound(numBurns, 2, 50));
+        shareAmount = uint96(bound(shareAmount, 1, 1e18));
 
         // Realistic vault state: 100 ETH reserve, 1T supply (post-refill)
         uint256 reserve = 100 ether;

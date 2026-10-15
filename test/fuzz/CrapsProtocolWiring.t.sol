@@ -75,16 +75,16 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         assertEq(coin.balanceOf(PLAYER), 600, "craps could not burn a stake");
 
         vm.prank(ContractAddresses.CRAPS);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("OnlyGame()")));
         coin.mintForGame(PLAYER, 1);
 
         // Negative controls: the gates admit the table, not the world.
         vm.prank(STRANGER);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("OnlyGame()")));
         coin.mintForGame(PLAYER, 1);
 
         vm.prank(STRANGER);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("OnlyGame()")));
         coin.burnCoin(PLAYER, 1);
     }
 
@@ -101,11 +101,11 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         coinflip.creditFlipBatch(players, amounts);
 
         vm.prank(STRANGER);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("OnlyFlipCreditors()")));
         coinflip.creditFlip(CREDIT_ID, 100);
 
         vm.prank(STRANGER);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("OnlyFlipCreditors()")));
         coinflip.creditFlipBatch(players, amounts);
     }
 
@@ -356,8 +356,12 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         vm.warp(block.timestamp + 1 days);
         assertTrue(game.advanceDue(), "the fixture owes no advance, so nothing is being preempted");
 
+        // The call must actually run (a reverted call would leave the slot unarmed trivially):
+        // the advance leg takes it and requests the day's word.
+        uint256 requestBefore = mockVRF.lastRequestId();
         vm.prank(KEEPER);
-        try game.mineFlip(0) {} catch {}
+        game.mineFlip(0);
+        assertGt(mockVRF.lastRequestId(), requestBefore, "the advance leg ran");
         assertEq(crapsBattle.slotIndexOf(slot), 0, "the craps leg ran alongside an advance");
     }
 

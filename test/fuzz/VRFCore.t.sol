@@ -245,7 +245,7 @@ contract VRFCore is DeployProtocol {
         words[0] = 12345;
 
         vm.prank(address(0xdead));
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("OnlyCoordinator()")));
         game.rawFulfillRandomWords(reqId, words);
     }
 
@@ -490,7 +490,7 @@ contract VRFCore is DeployProtocol {
 
         // Nobody but the vault owner can replace it.
         vm.prank(makeAddr("nonOwner"));
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("NotOwner()")));
         admin.retryGameRng();
 
         // The vault owner authorizes a transport replacement through Admin.
@@ -683,13 +683,13 @@ contract VRFCore is DeployProtocol {
 
         // 19h59m: even the vault owner (this test contract holds the DGVE majority) waits
         vm.warp(uint256(requestTime) + 20 hours - 1 minutes);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
         admin.retryGameRng();
 
         // Past 20h a non-owner still reverts: the retry is the vault owner's alone
         vm.warp(uint256(requestTime) + 20 hours + 1 minutes);
         vm.prank(makeAddr("nonOwner"));
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("NotOwner()")));
         admin.retryGameRng();
     }
 
@@ -709,7 +709,7 @@ contract VRFCore is DeployProtocol {
 
         // 19h: not yet
         vm.warp(uint256(requestTime) + 19 hours);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
         admin.retryGameRng();
 
         // 20h: the vault owner's retry re-sends the request; the stamp keeps its day
@@ -723,7 +723,7 @@ contract VRFCore is DeployProtocol {
 
         // Retry spent: another 20h on, even the vault owner gets RngNotReady
         vm.warp(uint256(requestTime) + 40 hours + 1);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
         admin.retryGameRng();
 
         // The retried request's late fulfillment still lands and completes the day. It lands
@@ -763,7 +763,7 @@ contract VRFCore is DeployProtocol {
 
         // No retry after the swap, even 20h on
         vm.warp(uint256(requestTime) + 20 hours + 1);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
         admin.retryGameRng();
         assertEq(_readVrfRequestId(), swapReqId, "the swap's request stands");
 

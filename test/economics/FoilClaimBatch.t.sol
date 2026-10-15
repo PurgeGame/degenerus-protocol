@@ -267,9 +267,9 @@ contract FoilClaimBatch is DeployProtocol {
         game.claimFoilMatchMany(p, d, ti); // must not revert
 
         // Both good tuples are consumed: re-claiming either now fails.
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("NoClaimableMatch()")));
         game.claimFoilMatch(good[0].id, good[0].day, good[0].ticketIndex);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("NoClaimableMatch()")));
         game.claimFoilMatch(good[1].id, good[1].day, good[1].ticketIndex);
     }
 

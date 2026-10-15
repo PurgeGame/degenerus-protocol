@@ -319,7 +319,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(keeper);
-        vm.expectRevert(); // GameAfkingModule.NoWork() — no sweep pending, no free idle crank
+        vm.expectRevert(bytes4(keccak256("NoWork()"))); // GameAfkingModule.NoWork() — no sweep pending, no free idle crank
         game.mineFlip(0);
 
         // Nothing credited (the revert rolls back, but assert zero regardless of the count oracle).

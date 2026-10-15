@@ -303,8 +303,8 @@ contract LoanSeizureTest is DeployProtocol {
         assertEq(deityPass.ownerOf(3), address(sdgnrs), "the pass follows its account");
         assertEq(deityPass.balanceOf(borrower), 0);
         assertEq(game.acquiredBuyer(root), 2);
-        vm.prank(borrower); vm.expectRevert(); game.smite(3, root);
-        vm.prank(borrower); vm.expectRevert(); game.issueDeityBoon(root, 2, 0);
+        vm.prank(borrower); vm.expectRevert(bytes4(keccak256("Unauthorized()"))); game.smite(3, root);
+        vm.prank(borrower); vm.expectRevert(bytes4(keccak256("NotApproved()"))); game.issueDeityBoon(root, 2, 0);
     }
 
     function test_DeitySmurfDefaultAloneMovesOnlyItsPass() public {
@@ -349,7 +349,7 @@ contract LoanSeizureTest is DeployProtocol {
         game.mineFlip(0);
         assertEq(deityPass.ownerOf(5), address(sdgnrs), "the smurf's own default moves it on");
         assertEq(game.acquiredBuyer(child), 2);
-        vm.prank(ContractAddresses.CREATOR); vm.expectRevert();
+        vm.prank(ContractAddresses.CREATOR); vm.expectRevert(bytes4(keccak256("Soulbound()")));
         vault.sweepNft(address(deityPass), ContractAddresses.CREATOR, 5);
     }
 

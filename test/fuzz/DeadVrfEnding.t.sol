@@ -255,12 +255,12 @@ contract DeadVrfEndingTest is DeployProtocol {
         uint256[] memory one = new uint256[](1);
         one[0] = _ref(0, 3, 3);
         uint32 aliceId = game.walletIdOf(alice);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("E()")));
         game.claimDeadVrf(aliceId, one); // bob's ticket, not alice's
         game.claimDeadVrf(game.walletIdOf(bob), one);
         assertEq(claimableBalance(game, bob), perTrait / 4, "bob: 1 of trait 3's four tickets");
         uint32 bobId = game.walletIdOf(bob);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("E()")));
         game.claimDeadVrf(bobId, one); // already claimed
 
         uint256[] memory two = new uint256[](2);
@@ -273,7 +273,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         game.claimDeadVrf(game.walletIdOf(dave), one);
         assertEq(claimableBalance(game, dave), (pot * 450) / total, "dave: the average for 4.5 entries");
         uint32 daveId = game.walletIdOf(dave);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("E()")));
         game.claimDeadVrf(daveId, one); // owed zeroed
 
         one[0] = _ref(1, TLVL, erinPos);
@@ -284,7 +284,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         game.claimDeadVrf(game.walletIdOf(frank), one);
         assertEq(claimableBalance(game, frank), (pot * 1600) / total, "frank: the average for a foil pack");
         uint32 frankId = game.walletIdOf(frank);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("E()")));
         game.claimDeadVrf(frankId, one); // pack word zeroed
 
         uint256 paid = claimableBalance(game, alice) + claimableBalance(game, bob)
@@ -311,13 +311,13 @@ contract DeadVrfEndingTest is DeployProtocol {
         uint32 daveId = game.walletIdOf(dave);
         uint256[] memory refs = new uint256[](1);
         refs[0] = _ref(1, TLVL | (uint24(1) << 23), id);
-        vm.expectRevert(); game.claimDeadVrf(erinId, refs);
+        vm.expectRevert(bytes4(keccak256("E()"))); game.claimDeadVrf(erinId, refs);
         refs[0] = _ref(1, TLVL + 1, id);
-        vm.expectRevert(); game.claimDeadVrf(daveId, refs);
+        vm.expectRevert(bytes4(keccak256("E()"))); game.claimDeadVrf(daveId, refs);
         uint256[] memory duplicate = new uint256[](2);
         duplicate[0] = _ref(1, TLVL, id);
         duplicate[1] = duplicate[0];
-        vm.expectRevert(); game.claimDeadVrf(daveId, duplicate);
+        vm.expectRevert(bytes4(keccak256("E()"))); game.claimDeadVrf(daveId, duplicate);
         assertEq(claimableBalance(game, dave), 0, "duplicate batch rolls back atomically");
         uint24[3] memory keys = [TLVL | (uint24(1) << 23), TLVL, TLVL | (uint24(1) << 22)];
         uint256[3] memory weights = [uint256(300), 500, 700];
@@ -327,7 +327,7 @@ contract DeadVrfEndingTest is DeployProtocol {
             game.claimDeadVrf(daveId, refs);
             paid += pot * weights[i] / total;
             assertEq(claimableBalance(game, dave), paid);
-            vm.expectRevert(); game.claimDeadVrf(daveId, refs);
+            vm.expectRevert(bytes4(keccak256("E()"))); game.claimDeadVrf(daveId, refs);
         }
         (,,,,,uint256 left) = _state();
         assertEq(left, 0);
@@ -366,7 +366,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         uint256[] memory one = new uint256[](1);
         one[0] = _ref(1, TLVL | (uint24(1) << 23), davePos);
         uint32 daveId = game.walletIdOf(dave);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("E()")));
         game.claimDeadVrf(daveId, one);
     }
 
@@ -700,7 +700,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         assertEq(fresh.lastRequestId(), 1, "the swap re-sent the daily request");
 
         vm.prank(ContractAddresses.CREATOR);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
         admin.retryGameRng(); // the coordinator swap already spent the single retry
         assertEq(fresh.lastRequestId(), 1, "no retry after the swap");
 

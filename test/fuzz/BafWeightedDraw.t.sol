@@ -53,7 +53,7 @@ contract BafWeightedDrawTest is DeployProtocol {
 
     function testArmBafDrawIsGameOnly() public {
         vm.prank(alice);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("OnlyDegenerusGame()")));
         coinflip.armBafDraw(3);
 
         vm.prank(GAME);

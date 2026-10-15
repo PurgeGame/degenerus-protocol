@@ -146,22 +146,22 @@ contract DecimatorBattleTest is Test {
     }
 
     function test_RecordAccessAndSealGuards() public {
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("E()")));
         h.recordFor(address(1), LVL, 1000, 10_000, 0);
         vm.startPrank(ContractAddresses.COIN);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("E()")));
         h.recordFor(address(1), LVL + 1, 1000, 10_000, 0);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("E()")));
         h.recordFor(address(1), LVL, 1000, 20_001, 0);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("E()")));
         h.recordFor(address(0), LVL, 1000, 10_000, 0);
         vm.stopPrank();
         _burn(h, address(1), LVL, 1000, 10_000);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("E()")));
         h.runDecimatorJackpot(1 ether, LVL, 123);
         h.seal(LVL, 1 ether, 123);
         vm.prank(ContractAddresses.COIN);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("E()")));
         h.recordFor(address(1), LVL, 1000, 10_000, 0);
         assertEq(h.seal(LVL, 1 ether, 456), 1 ether);
         assertEq(h.activeWord(), 123);
@@ -296,8 +296,10 @@ contract DecimatorBattleTest is Test {
         h.seal(LVL, 3 ether, 11);
         h.open(15);
         _populate(h, 15, 3);
-        vm.expectRevert();
-        h.seal(15, 4 ether, 22);
+        // With the session's own word and the window shut, the only thing refusing this seal is
+        // the round still queued: production hands the whole pool back and leaves it unsealed.
+        assertEq(h.sealRaw(15, 4 ether, h.activeWord()), 4 ether, "an overlapping seal returns the whole pool");
+        assertEq(h.roundOf(15).phase, 0, "the overlapping round stays unsealed");
         assertEq(uint24(h.queue()), LVL);
         assertEq(uint24(h.queue() >> 24), LVL);
         assertEq(h.roundOf(LVL).next, 0);
@@ -471,7 +473,7 @@ contract DecimatorBattleTest is Test {
         ];
         vm.startPrank(ContractAddresses.COIN);
         for (uint256 i; i < bad.length; ++i) {
-            vm.expectRevert();
+            vm.expectRevert(bytes4(keccak256("E()")));
             h.recordFor(address(1), LVL, 1000, 10_000, bad[i]);
         }
         uint32 seven = 3 | 3 << 3 | 1 << 6;
@@ -686,7 +688,7 @@ contract DecimatorBattleTest is Test {
         _burn(h, address(1), LVL, 1001, 10_000);
         assertEq(h.entryOf(LVL, 1).stack, 1001);
         vm.prank(ContractAddresses.COIN);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("E()")));
         h.recordFor(address(2), LVL, 0, 10_000, 0);
     }
 
@@ -695,7 +697,7 @@ contract DecimatorBattleTest is Test {
     function test_StackCannotOverflowCreditedAggregate() public {
         _burn(h, address(1), LVL, type(uint64).max, 10_000);
         vm.prank(ContractAddresses.COIN);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("E()")));
         h.recordFor(address(1), LVL, 2000, 20_000, 3);
         DecimatorBattleHarness.Entry memory e = h.entryOf(LVL, 1);
         assertEq(e.stack, type(uint64).max);

@@ -61,27 +61,19 @@ contract CoverageGap222 is DeployProtocol {
         uint256 cost = (price0 * qty) / 400;
         uint32 ticketsBefore = game.entriesOwedView(targetLvl, buyer);
         vm.prank(buyer);
-        try game.purchase{value: cost}(
-            0,
-            qty,
-            0,
-            bytes32(0),
-            MintPaymentKind.DirectEth, false
-        ) {
-            // Observable effect: entriesOwedView increments strictly.
-            uint32 ticketsAfter = game.entriesOwedView(targetLvl, buyer);
-            assertGt(ticketsAfter, ticketsBefore, "tickets incremented by purchase");
-        } catch {
-            // Purchase may revert during setup window — acceptable.
-        }
+        game.purchase{value: cost}(0, qty, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        // Observable effect: entriesOwedView increments strictly.
+        uint32 ticketsAfter = game.entriesOwedView(targetLvl, buyer);
+        assertGt(ticketsAfter, ticketsBefore, "tickets incremented by purchase");
 
-        // Advance to next day and try mineFlip.
+        // Advance to next day: mineFlip runs the day's advance and requests its word.
         vm.warp(block.timestamp + 1 days);
-        (bool ok, ) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
-        ok;
+        uint256 requestBefore = mockVRF.lastRequestId();
+        game.mineFlip(0);
 
-        // Observable effect: game contract is still live.
-        assertTrue(address(game).code.length > 0, "game contract alive after advance");
+        // Observable effect: the advance engaged the RNG lock behind a fresh VRF request.
+        assertGt(mockVRF.lastRequestId(), requestBefore, "the day's advance requested a word");
+        assertTrue(game.rngLocked(), "the day's advance holds the RNG lock until the word lands");
     }
 
     /// @notice Exercise the redeemFlip path (Flip token mint).

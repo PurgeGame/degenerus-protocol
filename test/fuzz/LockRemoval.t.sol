@@ -38,16 +38,6 @@ contract LockRemovalHarness is DegenerusGameStorage {
         blocked = (lootBoxAmount != 0 && lastPurchaseDay && (purchaseLevel % 5 == 0));
     }
 
-    // --- LOCK-03: openLootBox guard (removed entirely) ---
-    function openLootBoxGuard() external pure {
-        // Guard removed entirely -- no rngLockedFlag check
-    }
-
-    // --- LOCK-04: openFlipLootBox guard (removed entirely) ---
-    function openFlipLootBoxGuard() external pure {
-        // Guard removed entirely -- no rngLockedFlag check
-    }
-
     // --- LOCK-05: jackpotResolutionActive (DegeneretteModule:503 post-removal) ---
     function jackpotResolutionActive() external view returns (bool) {
         return lastPurchaseDay && ((level + 1) % 5 == 0);
@@ -109,26 +99,6 @@ contract LockRemovalTest is Test {
     }
 
     // ========================================================================
-    // LOCK-03: openLootBox guard removed
-    // ========================================================================
-
-    function test_LOCK03_openLootBoxDuringLock() public {
-        harness.setRngLockedFlag(true);
-        // Must NOT revert
-        harness.openLootBoxGuard();
-    }
-
-    // ========================================================================
-    // LOCK-04: openFlipLootBox guard removed
-    // ========================================================================
-
-    function test_LOCK04_openFlipLootBoxDuringLock() public {
-        harness.setRngLockedFlag(true);
-        // Must NOT revert
-        harness.openFlipLootBoxGuard();
-    }
-
-    // ========================================================================
     // LOCK-05: jackpotResolutionActive ignores rngLockedFlag
     // ========================================================================
 
@@ -166,10 +136,6 @@ contract LockRemovalTest is Test {
         uint24 purchaseLevel = lvl + 1;
         bool expectedBlocked = (lastDay && (purchaseLevel % 5 == 0));
         assertEq(blocked, expectedBlocked, "LOCK-02 guard must depend only on lastPurchaseDay and level");
-
-        // LOCK-03 + LOCK-04: never revert
-        harness.openLootBoxGuard();
-        harness.openFlipLootBoxGuard();
 
         // LOCK-05: jackpotResolutionActive depends only on lastPurchaseDay and level
         bool active = harness.jackpotResolutionActive();

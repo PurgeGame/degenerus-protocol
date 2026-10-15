@@ -200,8 +200,14 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
     /// @notice A blank array claims the caller's own — so it propagates the (ineligible) revert.
     function testAffiliateBlankArrayIsSelf() public {
         uint32[] memory empty = new uint32[](0);
+        // Past level 0, so the claim reaches its ID/score gate instead of stopping at NotStarted().
+        bytes32 levelSlot = bytes32(GameSlots.LEVEL);
+        uint256 slot0 = uint256(vm.load(address(game), levelSlot));
+        uint256 levelMask = uint256(0xFFFFFF) << (GameSlots.LEVEL_OFFSET * 8);
+        vm.store(address(game), levelSlot, bytes32((slot0 & ~levelMask) | (uint256(1) << (GameSlots.LEVEL_OFFSET * 8))));
+        assertEq(game.level(), 1, "fixture: level 1");
         vm.prank(player);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("ScoreTooLow()")));
         game.claimAffiliateDgnrs(empty);
     }
 }

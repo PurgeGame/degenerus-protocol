@@ -62,8 +62,8 @@ contract DecimatorSamplingTest is Test {
     }
 
     function test_LensRejectsStrataOutsideTheField() public {
-        vm.expectRevert(); lens.decSurvivorAt(777, 5, 0, 0);
-        vm.expectRevert(); lens.decSurvivorAt(777, 5, 1, 1);
-        vm.expectRevert(); lens.decSurvivorAt(777, 5, 2001, 1000);
+        vm.expectRevert(bytes4(keccak256("E()"))); lens.decSurvivorAt(777, 5, 0, 0);
+        vm.expectRevert(bytes4(keccak256("E()"))); lens.decSurvivorAt(777, 5, 1, 1);
+        vm.expectRevert(bytes4(keccak256("E()"))); lens.decSurvivorAt(777, 5, 2001, 1000);
     }
 }

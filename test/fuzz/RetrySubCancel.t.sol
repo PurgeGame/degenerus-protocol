@@ -197,7 +197,7 @@ contract RetrySubCancelTest is DeployProtocol {
         );
 
         vm.prank(vaultOwner);
-        vm.expectRevert();
+        vm.expectRevert(bytes("forward down"));
         admin.retrySubCancel(address(retired), RETIRED_SUB);
 
         // Cancel rolled back with the forward — nothing moved, nothing spent.

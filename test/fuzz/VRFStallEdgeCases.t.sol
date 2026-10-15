@@ -496,32 +496,34 @@ contract VRFStallEdgeCases is DeployProtocol {
     /// @notice Fuzz: totalFlipReversals preserved across coordinator swap.
     function test_coordinatorSwapPreservesTotalFlipReversals_fuzz(uint8 nudges) public {
         // Bound to 0-3 nudges (reverseFlip costs FLIP, which must be minted via purchases)
-        nudges = uint8(bound(nudges, 0, 3));
+        nudges = uint8(bound(nudges, 1, 3));
 
-        // Day 1: complete normally (to get FLIP minted for nudge purchases)
+        // Day 1: complete normally
         address buyer = makeAddr("nudgeBuyer");
         vm.deal(buyer, 100 ether);
 
-        // Purchase enough to mint FLIP for nudges
         for (uint256 i = 0; i < 10; i++) {
             vm.prank(buyer);
             game.purchase{value: 0.5 ether}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         }
         _completeDay(0xDEAD0001);
 
+        // reverseFlip burns FLIP; fund the nudger directly so every nudge lands.
+        vm.prank(ContractAddresses.GAME);
+        coin.mintForGame(buyer, 100_000 ether);
+
         // Apply nudges (reverseFlip increments totalFlipReversals)
         for (uint8 n = 0; n < nudges; n++) {
             (, uint256 cost) = game.rngNudgeQuote();
             vm.prank(buyer);
-            try game.reverseFlip(cost) {} catch {
-                break; // Not enough FLIP or RNG locked
-            }
+            game.reverseFlip(cost);
         }
 
         // Record totalFlipReversals before swap
         uint256 preSwapReversals = uint256(
             RecyclingState.nudgeCount(address(game))
         );
+        assertEq(preSwapReversals, nudges, "non-vacuity: every nudge moved _nudgeCount()");
 
         // Warp to the next day (day 3 absolute), trigger VRF request, then swap
         vm.warp(3 * 86400);

@@ -97,7 +97,7 @@ contract V61Smite is DeployProtocol {
         uint256 flipBefore = coin.balanceOf(attacker);
         _aid(smitee);
         vm.prank(attacker);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("Unauthorized()")));
         game.smite(deityId, _aid(smitee));
 
         assertEq(coin.balanceOf(attacker), flipBefore, "ownerOf gate: NON-owner caller burned nothing");
@@ -122,7 +122,7 @@ contract V61Smite is DeployProtocol {
         uint256 curseBefore = game.curseCountOf(afker);
         _aid(afker);
         vm.prank(deity);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("SmiteeAfkingImmune()")));
         game.smite(deityId, _aid(afker));
 
         assertEq(coin.balanceOf(deity), flipBefore, "active-afker immunity: reverts pre-burn (no FLIP burned)");
@@ -144,7 +144,7 @@ contract V61Smite is DeployProtocol {
         uint256 flipBefore = coin.balanceOf(deity);
         _aid(smitee);
         vm.prank(deity);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("SmiteCeilingReached()")));
         game.smite(deityId, _aid(smitee));
 
         assertEq(coin.balanceOf(deity), flipBefore, "ceiling: reverts pre-burn (no FLIP burned)");
@@ -168,7 +168,7 @@ contract V61Smite is DeployProtocol {
         uint256 flipMid = coin.balanceOf(deity);
         _aid(smitee);
         vm.prank(deity);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("SmiteCeilingReached()")));
         game.smite(deityId, _aid(smitee));
         assertEq(game.curseCountOf(smitee), 10, "ceiling blocks the next smite (stays 10)");
         assertEq(coin.balanceOf(deity), flipMid, "ceiling block: no second burn");

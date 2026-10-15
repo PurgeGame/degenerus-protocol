@@ -13,6 +13,7 @@ import {
   getLastVRFRequestId,
   ZERO_ADDRESS,
   ZERO_BYTES32,
+  errorAbi,
 } from "../helpers/testUtils.js";
 
 // MintPaymentKind enum values
@@ -99,7 +100,7 @@ describe("SecurityEconHardening", function () {
         game
           .connect(alice)
           .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) })
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("GameOver()"), "GameOver");
     });
   });
 
@@ -120,7 +121,7 @@ describe("SecurityEconHardening", function () {
         game
           .connect(alice)
           .purchaseLazyPass(0, hre.ethers.ZeroHash, { value: eth(0.24) })
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("GameOver()"), "GameOver");
     });
   });
 
@@ -141,7 +142,7 @@ describe("SecurityEconHardening", function () {
         game
           .connect(alice)
           .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: eth(24) })
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("GameOver()"), "GameOver");
     });
   });
 
@@ -167,7 +168,7 @@ describe("SecurityEconHardening", function () {
       // Now receive() should revert
       await expect(
         alice.sendTransaction({ to: gameAddr, value: eth(1) })
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("GameOver()"), "GameOver");
     });
 
     it("receive() credits the sender's afking funding before gameOver", async function () {
@@ -406,7 +407,7 @@ describe("SecurityEconHardening", function () {
       // before any purchase work). The call must revert regardless.
       await expect(
         game.connect(alice).redeemFlip(0, 400n)
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("E()"), "E");
     });
   });
 
@@ -479,7 +480,7 @@ describe("SecurityEconHardening", function () {
       // Second claim should revert (only 1 wei = sentinel, nothing to claim)
       await expect(
         game.connect(alice)["claimWinnings(uint32)"](0)
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("NothingToClaim()"), "NothingToClaim");
     });
 
     it("processMintPayment preserves sentinel in Combined mode", async function () {
@@ -509,7 +510,7 @@ describe("SecurityEconHardening", function () {
           MintPaymentKind.Claimable,false, 
           { value: 0n }
         )
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("E()"), "E");
     });
   });
 
@@ -639,7 +640,7 @@ describe("SecurityEconHardening", function () {
           MintPaymentKind.DirectEth,false, 
           { value: eth(0.01) }
         )
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("E()"), "E");
     });
   });
 

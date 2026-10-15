@@ -87,7 +87,7 @@ contract DegradeDecimatorSealTest is Test {
 
     /// @dev Caller authentication still reverts.
     function test_DirectCallStillReverts() public {
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("E()")));
         h.runDecimatorJackpot(POOL, LVL, WORD);
     }
 

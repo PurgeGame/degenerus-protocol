@@ -245,7 +245,7 @@ contract FoilGenerationCohortTest is Test {
         h.claimGoldenTicket(idB, 1);
         assertGt(FoilCohortCreditStub(ContractAddresses.COINFLIP).credited(h.walletIdOf(A)), 0);
         assertGt(FoilCohortCreditStub(ContractAddresses.COINFLIP).credited(h.walletIdOf(B)), 0);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("NoGoldenTicket()")));
         h.claimGoldenTicket(idA, 1);
     }
 
@@ -257,7 +257,7 @@ contract FoilGenerationCohortTest is Test {
         h.live();
         assertFalse(h.claimableDraw(day));
         assertEq(h.retained(day), 0);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("NoGoldenTicket()")));
         h.claimGoldenTicket(idA, 1);
     }
 

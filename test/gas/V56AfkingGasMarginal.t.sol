@@ -1518,7 +1518,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         uint256 seat = _grantSeat(newBuyer);
         _fundPool(newBuyer, 50 ether);
         vm.prank(newBuyer);
-        vm.expectRevert(); // RngLocked() — GameAfkingModule:328, blocks create/replace/cancel under the lock
+        vm.expectRevert(bytes4(keccak256("RngLocked()"))); // RngLocked() — GameAfkingModule:328, blocks create/replace/cancel under the lock
         game.subscribe(0, false, false, 1, 0, seat);
 
         // THE ENTRY GATE, proven organically: drive the buffered-clamp consuming drain and

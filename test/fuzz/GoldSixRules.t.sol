@@ -105,7 +105,7 @@ contract GoldSixRulesTest is Test {
         assertEq(h.first(1, 253), A);
         h.prepare(3, B);
         assertFalse(h.taken(3));
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("E()")));
         h.taken(1);
         stream = queueSolo(3, B);
         drain(wordWithGold(stream), 4);

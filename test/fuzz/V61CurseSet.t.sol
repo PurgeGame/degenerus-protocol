@@ -304,7 +304,7 @@ contract V61CurseSet is DeployProtocol {
 
         // Second claim same day: claimable is at the 1-wei sentinel ⇒ nothing to claim ⇒ revert.
         vm.prank(p);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("NothingToClaim()")));
         game.claimWinnings(0);
 
         assertEq(game.curseCountOf(p), 2, "no in-day stacking: curse unchanged after the reverted second claim");

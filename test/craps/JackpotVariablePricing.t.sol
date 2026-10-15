@@ -222,7 +222,7 @@ contract JackpotVariablePricingTest is CrapsPins {
             assertEq(flip.burned(BOB), 0);
             assertEq(flip.burned(compPlayer), 0);
             vm.prank(ContractAddresses.VAULT);
-            vm.expectRevert(); table.vaultComp(reservation);
+            vm.expectRevert(bytes4(keccak256("DayNotReservable()"))); table.vaultComp(reservation);
             _lock(50_000);
             assertEq(_round().paidCount, 3);
             assertEq(_round().paidUnits, 3);
@@ -325,9 +325,9 @@ contract JackpotVariablePricingTest is CrapsPins {
         vm.prank(ALICE); uint256 bet = table.enterBonusBattle(5, 0, 1);
         _lock(50_000);
         assertEq(_round().subsidyMultiplierBps, 0);
-        vm.expectRevert(); table.enterBonusBattle(5, 0, 1);
-        vm.prank(ALICE); vm.expectRevert(); table.amendSlip(bet, 1);
-        vm.expectRevert(); table.donate(false, 5, 1);
+        vm.expectRevert(bytes4(keccak256("BonusPeriodSpent()"))); table.enterBonusBattle(5, 0, 1);
+        vm.prank(ALICE); vm.expectRevert(bytes4(keccak256("BonusPeriodSpent()"))); table.amendSlip(bet, 1);
+        vm.expectRevert(bytes4(keccak256("BonusPeriodSpent()"))); table.donate(false, 5, 1);
         vm.prank(ContractAddresses.GAME);
         vm.expectRevert(JackpotBattle.BadJackpotField.selector); cold.prepareJackpotBattle(2, 0);
     }

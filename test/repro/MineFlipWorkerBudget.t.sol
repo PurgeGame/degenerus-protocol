@@ -155,7 +155,7 @@ contract MineFlipHumanBudgetTest is DeployProtocol {
         uint256 beforeOrder = host.order();
         bytes memory code = ContractAddresses.GAME_BOON_MODULE.code;
         vm.etch(ContractAddresses.GAME_BOON_MODULE, hex"fe");
-        vm.expectRevert(); host.workHuman(9_000_000);
+        vm.expectRevert(bytes4(keccak256("EmptyRevert()"))); host.workHuman(9_000_000);
         assertEq(host.order(), beforeOrder);
         assertEq(host.cursor(), 0);
         vm.etch(ContractAddresses.GAME_BOON_MODULE, code);

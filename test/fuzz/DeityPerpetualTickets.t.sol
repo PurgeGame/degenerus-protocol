@@ -180,11 +180,11 @@ contract DeityPerpetualTicketsTest is DeployProtocol {
         address buyer = makeAddr("buyer");
         vm.deal(buyer, 24 ether);
         for (uint8 i; i < 2; ++i) {
-            vm.expectRevert(); vm.prank(buyer);
+            vm.expectRevert(bytes4(keccak256("SymbolTaken()"))); vm.prank(buyer);
             game.purchaseDeityPass{value: 24 ether}(0, i == 0 ? 0 : 6, bytes32(0));
         }
-        vm.expectRevert(); vm.prank(address(vault)); game.initProtocolDeity();
-        vm.expectRevert(); game.initProtocolDeity();
+        vm.expectRevert(bytes4(keccak256("E()"))); vm.prank(address(vault)); game.initProtocolDeity();
+        vm.expectRevert(bytes4(keccak256("AlreadyOwnsDeityPass()"))); game.initProtocolDeity();
         assertEq(lens.deityPassSalesCount(address(game)), 0);
     }
 }

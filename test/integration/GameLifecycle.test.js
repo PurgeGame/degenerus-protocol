@@ -13,6 +13,7 @@ import {
   getEvents,
   ZERO_BYTES32,
   getLastVRFRequestId,
+  errorAbi,
 } from "../helpers/testUtils.js";
 import { boCustom } from "../helpers/boxOrder.js";
 
@@ -161,13 +162,13 @@ describe("GameLifecycle", function () {
           0,false, 
           { value: 0n }
         )
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("E()"), "E");
     });
 
     it("purchase with lootBoxAmount allocates lootbox ETH", async function () {
-      const { game, alice } = await loadFixture(deployFullProtocol);
+      const { game, alice, mintModule } = await loadFixture(deployFullProtocol);
 
-      // Send 0.01 ETH ticket + 0.01 ETH lootbox = 0.02 ETH total.
+      // Send a quarter ticket (0.0025 ETH) + a 0.01 ETH lootbox inside 0.02 ETH total.
       const tx = await game.connect(alice).purchase(
         0,
         100,
@@ -178,6 +179,11 @@ describe("GameLifecycle", function () {
       );
       const receipt = await tx.wait();
       expect(receipt.status).to.equal(1);
+      // The box joins the lootbox queue at the requested size, credited to alice.
+      const boxes = await getEvents(tx, mintModule, "LootBoxBuy");
+      expect(boxes.length).to.equal(1);
+      expect(boxes[0].args.buyer).to.equal(await game.walletIdOf(alice.address));
+      expect(boxes[0].args.amount).to.equal(eth("0.01"));
     });
 
     it("purchasing tickets sends ETH to the game contract", async function () {

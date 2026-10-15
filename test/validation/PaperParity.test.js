@@ -12,7 +12,7 @@ import {
   deployFullProtocol,
   restoreAddresses,
 } from "../helpers/deployFixture.js";
-import { eth, ZERO_ADDRESS, ZERO_BYTES32 } from "../helpers/testUtils.js";
+import { eth, ZERO_ADDRESS, ZERO_BYTES32, getEvents } from "../helpers/testUtils.js";
 import { boCustom } from "../helpers/boxOrder.js";
 
 const { ethers } = hre;
@@ -30,6 +30,21 @@ async function deployWithTester() {
   await priceTester.waitForDeployment();
 
   return { ...protocol, priceTester };
+}
+
+// A pass purchase accepts overpayment (the excess is credited to the payer's afking), so a
+// purchase that merely succeeds does not prove the price. Read the charged price off the
+// purchase event and require that nothing spilled into the payer's afking funding.
+async function expectCharged(game, whaleModule, payer, send, eventName, priceField, expected) {
+  const afkingBefore = await game.afkingFundingOf(payer.address);
+  const tx = await send();
+  const events = await getEvents(tx, whaleModule, eventName);
+  expect(events.length).to.equal(1, `${eventName} emitted once`);
+  expect(events[0].args[priceField]).to.equal(expected, `${eventName} charged price`);
+  expect(await game.afkingFundingOf(payer.address)).to.equal(
+    afkingBefore,
+    "the exact price left nothing to spill into afking"
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -278,17 +293,14 @@ describe("Paper Parity (Phase 46)", function () {
   describe("PAR-10: Whale bundle pricing", function () {
     it("early price (levels 0-3): 2.4 ETH", async function () {
       // WHALE_BUNDLE_EARLY_PRICE = 2.4 ether
-      const { game, alice } = await loadFixture(deployWithTester);
+      const { game, alice, whaleModule } = await loadFixture(deployWithTester);
 
       // At level 0, passLevel = 1 (<=4), so early price applies
       const expectedPrice = ethers.parseEther("2.4");
 
-      // Verify by purchasing -- will revert if price is wrong
-      await game
-        .connect(alice)
-        .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, {
-          value: expectedPrice,
-        });
+      await expectCharged(game, whaleModule, alice, () =>
+        game.connect(alice).purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: expectedPrice }),
+        "WhalePassPurchased", "weiIn", expectedPrice);
     });
 
   });
@@ -296,12 +308,12 @@ describe("Paper Parity (Phase 46)", function () {
   describe("PAR-11: Lazy pass pricing", function () {
     it("flat 0.24 ETH at levels 0-2", async function () {
       // At level 0-2: benefitValue = 0.24 ether, totalPrice = 0.24 ether (no boon)
-      const { game, alice } = await loadFixture(deployWithTester);
+      const { game, alice, whaleModule } = await loadFixture(deployWithTester);
 
       const expectedPrice = ethers.parseEther("0.24");
-      await game
-        .connect(alice)
-        .purchaseLazyPass(0, hre.ethers.ZeroHash, { value: expectedPrice });
+      await expectCharged(game, whaleModule, alice, () =>
+        game.connect(alice).purchaseLazyPass(0, hre.ethers.ZeroHash, { value: expectedPrice }),
+        "LazyPassPurchased", "weiIn", expectedPrice);
     });
 
     it("sum-of-10-level-prices at level 3+ (via PriceLookupTester)", async function () {
@@ -351,18 +363,18 @@ describe("Paper Parity (Phase 46)", function () {
 
   describe("PAR-12: Deity pass T(n) pricing (24 + k*(k+1)/2 ETH)", function () {
     it("first deity pass (k=0): 24 ETH", async function () {
-      const { game, alice } = await loadFixture(deployWithTester);
+      const { game, alice, whaleModule } = await loadFixture(deployWithTester);
 
       // basePrice = DEITY_PASS_BASE + (k * (k+1) * 1 ether) / 2
       // k=0: 24 + 0 = 24 ETH
       const expectedPrice = ethers.parseEther("24");
-      await game
-        .connect(alice)
-        .purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: expectedPrice });
+      await expectCharged(game, whaleModule, alice, () =>
+        game.connect(alice).purchaseDeityPass(0, 4, hre.ethers.ZeroHash, { value: expectedPrice }),
+        "DeityPassPurchased", "price", expectedPrice);
     });
 
     it("second deity pass (k=1): 25 ETH", async function () {
-      const { game, alice, bob } = await loadFixture(deployWithTester);
+      const { game, alice, bob, whaleModule } = await loadFixture(deployWithTester);
 
       // Buy first pass
       await game
@@ -373,13 +385,13 @@ describe("Paper Parity (Phase 46)", function () {
 
       // k=1: 24 + (1*2/2) = 24 + 1 = 25 ETH
       const expectedPrice = ethers.parseEther("25");
-      await game
-        .connect(bob)
-        .purchaseDeityPass(0, 1, hre.ethers.ZeroHash, { value: expectedPrice });
+      await expectCharged(game, whaleModule, bob, () =>
+        game.connect(bob).purchaseDeityPass(0, 1, hre.ethers.ZeroHash, { value: expectedPrice }),
+        "DeityPassPurchased", "price", expectedPrice);
     });
 
     it("third deity pass (k=2): 27 ETH", async function () {
-      const { game, alice, bob, carol } =
+      const { game, alice, bob, carol, whaleModule } =
         await loadFixture(deployWithTester);
 
       await game
@@ -395,9 +407,9 @@ describe("Paper Parity (Phase 46)", function () {
 
       // k=2: 24 + (2*3/2) = 24 + 3 = 27 ETH
       const expectedPrice = ethers.parseEther("27");
-      await game
-        .connect(carol)
-        .purchaseDeityPass(0, 2, hre.ethers.ZeroHash, { value: expectedPrice });
+      await expectCharged(game, whaleModule, carol, () =>
+        game.connect(carol).purchaseDeityPass(0, 2, hre.ethers.ZeroHash, { value: expectedPrice }),
+        "DeityPassPurchased", "price", expectedPrice);
     });
 
   });

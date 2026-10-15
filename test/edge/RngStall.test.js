@@ -12,6 +12,7 @@ import {
   getEvents,
   getLastVRFRequestId,
   ZERO_BYTES32,
+  errorAbi,
 } from "../helpers/testUtils.js";
 
 /**
@@ -713,7 +714,7 @@ describe("RngStall", function () {
 
       await expect(
         game.connect(alice).rawFulfillRandomWords(1n, [999n])
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("OnlyCoordinator()"), "OnlyCoordinator");
     });
 
     it("direct call from deployer reverts (not VRF coordinator)", async function () {
@@ -724,7 +725,7 @@ describe("RngStall", function () {
 
       await expect(
         game.connect(deployer).rawFulfillRandomWords(1n, [999n])
-      ).to.be.reverted;
+      ).to.be.revertedWithCustomError(errorAbi("OnlyCoordinator()"), "OnlyCoordinator");
     });
   });
 });

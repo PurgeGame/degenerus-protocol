@@ -99,7 +99,7 @@ contract CustomCohortRecyclingTest is CrapsPins {
         Craps.SlipResult memory win; win.bankrollIn = 1; win.bankrollOut = 1;
         vm.mockCall(ContractAddresses.CRAPS_ENGINE, abi.encodeWithSelector(CrapsEngine.settleBattle.selector), abi.encode(win));
         vm.mockCallRevert(ContractAddresses.COINFLIP, abi.encodeWithSelector(MockCoinflip.creditFlipBatch.selector), "payout failure");
-        vm.expectRevert(); _readWork(table, index);
+        vm.expectRevert(bytes("payout failure")); _readWork(table, index);
         assertFalse(cohort.rngCohortComplete(index));
         assertTrue(_pendingBit(index));
         (bytes32 key,,) = table.customBattleOf(slot);

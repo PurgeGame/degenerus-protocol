@@ -124,7 +124,7 @@ contract AccountIdOnlyTest is DeployProtocol {
             assertEq(uint48(word >> (i * 48)), (uint256(level) << 20) | 8);
             assertTrue(gnrus.hasVoted(level, voters[i], 3));
             vm.prank(voters[i]);
-            vm.expectRevert();
+            vm.expectRevert(abi.encodeWithSignature("VoteRejected(uint8)", uint8(1)));
             gnrus.vote(3);
         }
     }

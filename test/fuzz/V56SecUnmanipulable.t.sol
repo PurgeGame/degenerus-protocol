@@ -127,7 +127,7 @@ contract V56SecUnmanipulable is DeployProtocol {
         // A non-affiliate caller cannot reach the drain (it reverts before any storage write).
         uint32 subscriberId = game.walletIdOf(p);
         vm.prank(makeAddr("not_affiliate"));
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("NotApproved()")));
         IGameAfkingModule(address(game)).drainAffiliateBase(subscriberId);
         assertEq(_affiliateBaseOf(p), baseBefore, "rejected non-affiliate drain left the base intact");
     }

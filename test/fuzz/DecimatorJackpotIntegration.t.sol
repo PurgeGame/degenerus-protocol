@@ -466,7 +466,7 @@ contract DecimatorJackpotIntegrationTest is Test {
         h.prepare(LVL, 101, 60 ether, 1000 ether, WORD, true);
         h.daily(LVL, WORD, 1_000_000);
         vm.prank(address(0xa100));
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("BetLocked()")));
         c.setPreferredBoard(0, 2);
         assertEq(c.preferredBoardOf(h.walletIdOf(address(0xa100))), 3);
         _daily(WORD, 3_000_000);

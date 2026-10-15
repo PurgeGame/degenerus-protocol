@@ -135,24 +135,29 @@ describe("Feed Governance", function () {
     });
 
     it("community member with sDGNRS can propose when stall >= 7 days", async function () {
-      const { admin, sdgnrs, deployer, alice } = await loadFixture(deployFullProtocol);
+      const { admin, sdgnrs, game, alice } = await loadFixture(deployFullProtocol);
 
-      // Check if alice has sDGNRS; if not, this tests the revert path
+      // The zero feed is an unbounded stall, past the 7-day community threshold. Give alice a
+      // stake that clears the 0.5% proposal floor so the community path itself is exercised.
+      await grantSdgnrs(sdgnrs, game, alice.address, hre.ethers.parseUnits("1000", 12));
       const aliceBal = await sdgnrs.balanceOf(alice.address);
       const circ = await sdgnrs.votingSupply();
+      expect(circ).to.be.gt(0n);
+      expect(aliceBal * 10000n).to.be.gte(circ * 50n, "fixture: alice clears the proposal floor");
 
-      if (aliceBal > 0n && circ > 0n && aliceBal * 10000n >= circ * 50n) {
-        const newFeed = await deployNewFeed();
-        const tx = await admin.connect(alice).proposeFeedSwap(await newFeed.getAddress());
-        const ev = await getEvent(tx, admin, "FeedProposalCreated");
-        expect(ev.args.path).to.equal(1n); // Community path
-      } else {
-        // Alice has no sDGNRS — should revert
-        const newFeed = await deployNewFeed();
-        await expect(
-          admin.connect(alice).proposeFeedSwap(await newFeed.getAddress())
-        ).to.be.revertedWithCustomError(admin, "InsufficientStake");
-      }
+      const newFeed = await deployNewFeed();
+      const tx = await admin.connect(alice).proposeFeedSwap(await newFeed.getAddress());
+      const ev = await getEvent(tx, admin, "FeedProposalCreated");
+      expect(ev.args.path).to.equal(1n); // Community path
+    });
+
+    it("community member without sDGNRS cannot propose (InsufficientStake)", async function () {
+      const { admin, sdgnrs, alice } = await loadFixture(deployFullProtocol);
+      expect(await sdgnrs.balanceOf(alice.address)).to.equal(0n);
+      const newFeed = await deployNewFeed();
+      await expect(
+        admin.connect(alice).proposeFeedSwap(await newFeed.getAddress())
+      ).to.be.revertedWithCustomError(admin, "InsufficientStake");
     });
 
     it("reverts with FeedHealthy when current feed is healthy", async function () {
@@ -174,9 +179,17 @@ describe("Feed Governance", function () {
 
     it("reverts with InvalidFeedDecimals for wrong-decimals feed", async function () {
       const { admin, deployer } = await loadFixture(deployFullProtocol);
-      // Use a random address that will revert on decimals() call
-      // The revert should propagate (no try/catch on decimals check)
-      // Testing with deployer's address as a non-contract
+      // A feed whose decimals() answers 8 (runtime: return uint256(8) for any call).
+      const wrongDecimals = hre.ethers.Wallet.createRandom().address;
+      await hre.network.provider.send("hardhat_setCode", [wrongDecimals, "0x600860005260206000f3"]);
+      await expect(
+        admin.connect(deployer).proposeFeedSwap(wrongDecimals)
+      ).to.be.revertedWithCustomError(admin, "InvalidFeedDecimals");
+    });
+
+    it("reverts for a feed address with no code (decimals() is not answered)", async function () {
+      const { admin, deployer } = await loadFixture(deployFullProtocol);
+      // No try/catch on the decimals read: a codeless address reverts the proposal.
       await expect(
         admin.connect(deployer).proposeFeedSwap(deployer.address)
       ).to.be.reverted;

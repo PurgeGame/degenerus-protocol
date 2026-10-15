@@ -68,7 +68,7 @@ contract PostGameOverShortfall is DeployProtocol {
         vm.mockCallRevert(address(mockStETH), abi.encodeWithSelector(mockStETH.transfer.selector), "STOPPED");
 
         vm.prank(alice);
-        vm.expectRevert();
+        vm.expectRevert(bytes("STOPPED"));
         game.claimWinnings(0);
 
         vm.prank(alice);

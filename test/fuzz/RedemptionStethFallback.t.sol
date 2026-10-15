@@ -64,7 +64,7 @@ contract RedemptionStethFallbackTest is RedemptionFixture {
         bytes memory code = address(game).code;
         vm.etch(address(game), type(RedemptionCloseHarness).runtimeCode);
         vm.mockCall(address(mockStETH), abi.encodeWithSelector(mockStETH.transfer.selector), abi.encode(false));
-        vm.expectRevert(); RedemptionCloseHarness(address(game)).close();
+        vm.expectRevert(bytes4(keccak256("TransferFailed()"))); RedemptionCloseHarness(address(game)).close();
         vm.etch(address(game), code);
         assertEq(_openBatchId(), id);
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);

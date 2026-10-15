@@ -76,11 +76,11 @@ contract WholeTokenBoundaries is DeployProtocol {
         uint256 packed = tags.tag(type(uint248).max, 31);
         assertEq(packed >> 8, type(uint248).max);
         assertEq(packed & 0xff, 31);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("BadBurnTag()")));
         tags.tag(uint256(type(uint248).max) + 1, 0);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("BadBurnTag()")));
         tags.tag(1, 32);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("BadBurnTag()")));
         tags.tag(1, 256);
         vm.prank(ContractAddresses.CRAPS);
         vm.expectRevert(FLIP.InvalidCrapsFlags.selector);

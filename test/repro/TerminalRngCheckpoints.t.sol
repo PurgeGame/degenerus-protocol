@@ -131,7 +131,7 @@ contract TerminalRngCheckpointsTest is Test {
 
     function test_CoordinatorGasFailureDoesNotArmRefusalTimer() public {
         vrf.setMode(2);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("InsufficientExecutionGas()")));
         h.runGameOverAdvance{gas: 4_000_000}(
             priorDay, 10, MineFlipGas.budget(4_000_000, type(uint32).max, true));
         (uint24 day, uint48 at, bool active,) = h.identity();

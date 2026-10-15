@@ -71,9 +71,9 @@ contract CrapsGlobalWorkOrderTest is CrapsPins {
     }
 
     function test_OnlyGameCanSupplyWorkerAllowance() public {
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("OnlyGame()")));
         cohort.runCrapsReadWork(index, 9_000_000);
-        vm.expectRevert();
+        vm.expectRevert(bytes4(keccak256("OnlyGame()")));
         table.runCrapsMaintenance(9_000_000);
     }
 
