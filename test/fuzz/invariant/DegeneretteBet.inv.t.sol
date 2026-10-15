@@ -19,6 +19,8 @@ contract DegeneretteBetInvariant is DeployProtocol {
     DegeneretteHandler public degHandler;
     GameHandler public gameHandler;
     VRFHandler public vrfHandler;
+    uint256 internal fixtureBets;
+    uint256 internal fixtureResolved;
 
     function setUp() public {
         _deployProtocol();
@@ -35,6 +37,8 @@ contract DegeneretteBetInvariant is DeployProtocol {
         assertEq(degHandler.ghost_betsPlaced(), 1, "fixture must place a real bet");
         degHandler.resolveBets(0);
         assertEq(degHandler.ghost_betsResolved(), 1, "fixture must resolve a real bet");
+        fixtureBets = degHandler.ghost_betsPlaced();
+        fixtureResolved = degHandler.ghost_betsResolved();
 
         targetContract(address(gameHandler));
         targetContract(address(vrfHandler));
@@ -98,16 +102,28 @@ contract DegeneretteBetInvariant is DeployProtocol {
     }
 
 
-    /// @notice Non-vacuity lever: the run MUST place at least one real Degenerette bet, else the
-    ///         solvency invariant proves nothing about betting. Runs once after the full sequence.
-    /// @dev Guards against silent regression to the pre-seed vacuous pass (betsPlaced == 0). The
-    ///      mirror of RedemptionAccounting's `assertGt(ghost_..., 0, "lever never reached")` pattern.
-    function afterInvariant() public view {
-        assertGt(
-            degHandler.ghost_betsPlaced(),
-            0,
-            "VACUOUS: no Degenerette bet was placed -- solvency invariant exercised no betting"
-        );
+    /// @notice Non-vacuity lever: the CAMPAIGN (not the setUp fixture, which places and resolves one bet
+    ///         every run) must place and resolve real Degenerette bets.
+    /// @dev `betsPlaced > 0` alone is always satisfied by the fixture bet. Measured over 514
+    ///      default-profile runs: about 7 campaign bets placed and 2 resolved per run, but a single run can
+    ///      place none, so campaign counts are accumulated over the process (unique DB_ prefix) and must be
+    ///      non-zero once MIN_RUNS runs have completed.
+    uint256 private constant MIN_RUNS = 16;
+
+    function _acc(string memory k, uint256 v) private returns (uint256 total) {
+        total = vm.envOr(k, uint256(0)) + v;
+        vm.setEnv(k, vm.toString(total));
+    }
+
+    function afterInvariant() public {
+        uint256 runs = _acc("DB_RUNS", 1);
+        uint256 placed = _acc("DB_placed", degHandler.ghost_betsPlaced() - fixtureBets);
+        uint256 resolved = _acc("DB_resolved", degHandler.ghost_betsResolved() - fixtureResolved);
+        uint256 purchases = _acc("DB_purchases", gameHandler.ghost_successfulPurchases());
+        if (runs < MIN_RUNS) return;
+        assertGt(placed, 0, "VACUOUS: the campaign never placed a Degenerette bet");
+        assertGt(resolved, 0, "VACUOUS: the campaign never resolved a Degenerette bet");
+        assertGt(purchases, 0, "VACUOUS: no ticket purchase ever succeeded");
     }
 
 

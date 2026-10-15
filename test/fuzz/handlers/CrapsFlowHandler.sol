@@ -291,13 +291,39 @@ contract CrapsFlowHandler {
         try craps.buyFutureCrapsDays(d + 1, count, high) {} catch {}
     }
 
-    /// @dev Spend banked pass credits on a future day.
+    /// @dev Award passes the way a lootbox does: the Game delivers them (one seats tomorrow, the rest
+    ///      bank). Without an award no actor holds a banked credit, so applyPasses and convert (and the
+    ///      21:1 conversion property) are unreachable. Normal awards reach past HIGH_EV so a conversion
+    ///      is affordable.
+    function deliverPasses(uint256 actorSeed, uint256 normalSeed, uint256 highSeed) external {
+        address who = _actor(actorSeed);
+        uint32 id = game.walletIdOf(who);
+        uint32 normal = uint32(normalSeed % (3 * CrapsPriceLib.HIGH_EV));
+        uint32 high = uint32(highSeed % 3);
+        if (normal == 0 && high == 0) normal = 1;
+        vm.prank(ContractAddresses.GAME);
+        try craps.deliverPasses(id, normal, high) {
+            ++ghost_passDeliveries;
+        } catch {}
+    }
+
+    uint256 public ghost_passDeliveries;
+    uint256 public ghost_passApplies;
+
+    /// @dev Spend banked pass credits on the first open future day. A delivered award (or a bought
+    ///      day) already seats tomorrow, so trying tomorrow alone almost always hit a taken day.
     function applyPasses(uint256 actorSeed, bool high) external {
         address who = _actor(actorSeed);
         (uint256 normal, uint256 hi) = craps.passCreditsOf(who);
         if ((high ? hi : normal) == 0) return;
-        vm.prank(who);
-        try craps.applyCrapsPasses(craps.currentDayIndex() + 1, 1, high) {} catch {}
+        uint24 today = craps.currentDayIndex();
+        for (uint24 ahead = 1; ahead <= 5; ++ahead) {
+            vm.prank(who);
+            try craps.applyCrapsPasses(today + ahead, 1, high) {
+                ++ghost_passApplies;
+                return;
+            } catch {}
+        }
     }
 
     /// @dev Convert banked normal credits into high credits at the fixed 21:1 (`HIGH_EV`). The rate is

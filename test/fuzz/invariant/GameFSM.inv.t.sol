@@ -7,16 +7,40 @@ import {FSMHandler} from "../handlers/FSMHandler.sol";
 /// @title GameFSMInvariant -- Proves game FSM transitions are valid (FUZZ-03)
 /// @notice Asserts level monotonicity, gameOver terminality + terminal level freeze, VRF-progress
 ///         clock monotonicity, and bounded no-brick liveness.
+/// @dev The random walk alone never left level 0 (measured: 0 level-ups over 1,285 default-profile runs), so
+///      the level properties only ever watched level 0. setUp now plays a real-money scripted opening to
+///      OPENING_LEVEL and the handler exposes driveLevelUp (bounded real-money day walk to the next level), so
+///      level transitions happen inside the campaign and game over latches at a non-zero level.
+///      afterInvariant requires real progress (see there).
 contract GameFSMInvariant is DeployProtocol {
     FSMHandler public fsmHandler;
+
+    uint24 internal constant OPENING_LEVEL = 3;
+    uint256 internal openingPurchases;
+    uint256 internal openingAdvances;
+    uint256 internal openingVrf;
 
     function setUp() public {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
 
         fsmHandler = new FSMHandler(game, mockVRF, 10);
+        fsmHandler.scriptedOpening(OPENING_LEVEL);
+        assertGe(game.level(), OPENING_LEVEL, "GameFSM: the scripted opening must reach its level");
+        openingPurchases = fsmHandler.ghost_purchases();
+        openingAdvances = fsmHandler.ghost_advances();
+        openingVrf = fsmHandler.ghost_vrfFulfillments();
 
+        bytes4[] memory sels = new bytes4[](7);
+        sels[0] = FSMHandler.purchase.selector;
+        sels[1] = FSMHandler.mineFlip.selector;
+        sels[2] = FSMHandler.fulfillVrf.selector;
+        sels[3] = FSMHandler.recoverAndDrain.selector;
+        sels[4] = FSMHandler.warpPastVrfTimeout.selector;
+        sels[5] = FSMHandler.warpTime.selector;
+        sels[6] = FSMHandler.driveLevelUp.selector;
         targetContract(address(fsmHandler));
+        targetSelector(FuzzSelector({addr: address(fsmHandler), selectors: sels}));
     }
 
     /// @notice Level monotonicity: level never decreases
@@ -80,10 +104,36 @@ contract GameFSMInvariant is DeployProtocol {
         );
     }
 
-    /// @notice Canary: game is deployed and level is accessible.
-    function invariant_fsmCanary() public view {
-        assertTrue(address(game) != address(0), "Game not deployed");
-        // Level is uint24, so always >= 0, but verify it's accessible
-        game.level();
+    /// @dev Non-vacuity. A single run can legitimately skip a transition (game over can latch before a
+    ///      driveLevelUp is drawn), so transitions are accumulated over the process (vm.setEnv, unique FSM_
+    ///      prefix) and each must be non-zero once MIN_RUNS runs have completed; campaign-only counts exclude
+    ///      the scripted opening. Measured over 1,028 default-profile runs: a campaign level-up in 87% of runs
+    ///      (max level 3-8), game over in 97%, post-game-over actions in 97%, a VRF-clock advance in 99% (a run
+    ///      that latches game over through the deadman can legitimately process no word).
+    uint256 private constant MIN_RUNS = 16;
+
+    function _acc(string memory k, uint256 v) private returns (uint256 total) {
+        total = vm.envOr(k, uint256(0)) + v;
+        vm.setEnv(k, vm.toString(total));
     }
+
+    function afterInvariant() public {
+        uint256 runs = _acc("FSM_RUNS", 1);
+        uint256 purchases = _acc("FSM_purchases", fsmHandler.ghost_purchases() - openingPurchases);
+        uint256 advances = _acc("FSM_advances", fsmHandler.ghost_advances() - openingAdvances);
+        uint256 vrf = _acc("FSM_vrf", fsmHandler.ghost_vrfFulfillments() - openingVrf);
+        uint256 levelUps = _acc("FSM_levelUps", fsmHandler.ghost_levelUps());
+        uint256 gameOvers = _acc("FSM_gameOvers", fsmHandler.ghost_everGameOver() ? 1 : 0);
+        uint256 postGo = _acc("FSM_postGo", fsmHandler.ghost_postGameOverActions());
+        uint256 clock = _acc("FSM_clock", fsmHandler.ghost_vrfClockAdvances());
+        if (runs < MIN_RUNS) return;
+        assertGt(purchases, 0, "vacuous: no campaign purchase ever succeeded");
+        assertGt(advances, 0, "vacuous: no campaign mineFlip ever succeeded");
+        assertGt(vrf, 0, "vacuous: no campaign VRF word was ever delivered");
+        assertGt(levelUps, 0, "vacuous: the level never rose during a campaign");
+        assertGt(gameOvers, 0, "vacuous: no run ever reached game over");
+        assertGt(postGo, 0, "vacuous: no action was ever observed after game over");
+        assertGt(clock, 0, "vacuous: the VRF clock never advanced");
+    }
+
 }

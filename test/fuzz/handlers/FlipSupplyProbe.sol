@@ -10,7 +10,14 @@ import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 import {GameHandler} from "./GameHandler.sol";
 import {VRFHandler} from "../helpers/VRFHandler.sol";
 import {WhaleHandler} from "./WhaleHandler.sol";
-import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
+
+interface IVaultBurnCoin {
+    function burnCoin(uint256 amount) external returns (uint256 flipOut);
+}
+
+interface IShareBalance {
+    function balanceOf(address account) external view returns (uint256);
+}
 
 interface ICoinflipClaim {
     function claimCoinflips(uint32 id, uint256 amount) external returns (uint256 claimed);
@@ -104,7 +111,8 @@ contract FlipSupplyProbe is Test {
 
     function purchase(uint256 actorSeed, uint256 qty, uint256 lootboxAmt) external {
         (uint256 t0, uint256 v0) = _before();
-        gameH.purchase(actorSeed, qty, BoxOrderLib.boCustomFloor(lootboxAmt));
+        // GameHandler bounds the raw wei amount and encodes the box order itself.
+        gameH.purchase(actorSeed, qty, lootboxAmt);
         _reconcile(t0, v0);
     }
 
@@ -214,6 +222,22 @@ contract FlipSupplyProbe is Test {
             amt = bound(amt, 1, headroom);
             vm.prank(from);
             try coin.transfer(to, amt) {} catch {}
+        }
+        _reconcile(t0, v0);
+    }
+
+    /// @notice Redeem DGVF shares (as the creator, who holds them) for FLIP: the vault claims its coinflip
+    ///         winnings into the virtual allowance and mints the payout out of it -> exercises the
+    ///         VaultAllowanceSpent + Transfer(from == 0) pairing of vaultMintTo.
+    function vaultBurnCoin(uint256 amt) external {
+        (uint256 t0, uint256 v0) = _before();
+        address dgvf = vm.computeCreateAddress(ContractAddresses.VAULT, 1);
+        uint256 held = IShareBalance(dgvf).balanceOf(ContractAddresses.CREATOR);
+        if (held > 1) {
+            // Never the whole supply: a full burn refills the creator, which is outside this probe's scope.
+            amt = bound(amt, 1, held / 2);
+            vm.prank(ContractAddresses.CREATOR);
+            try IVaultBurnCoin(ContractAddresses.VAULT).burnCoin(amt) {} catch {}
         }
         _reconcile(t0, v0);
     }

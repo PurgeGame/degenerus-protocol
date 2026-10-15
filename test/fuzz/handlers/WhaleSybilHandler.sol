@@ -27,6 +27,9 @@ contract WhaleSybilHandler is Test {
     uint256 public ghost_whaleFailed;
     uint256 public ghost_sybilFailed;
     uint256 public ghost_totalClaimed;
+    uint256 public ghost_advances; // successful mineFlip calls
+    uint256 public ghost_vrfFulfillments; // VRF words delivered
+    uint256 public ghost_claims; // claimWinnings calls that paid out
 
     // Pool tracking
     uint256 public ghost_maxGameBalance; // Game-held ETH + stETH backing
@@ -154,6 +157,7 @@ contract WhaleSybilHandler is Test {
             uint256 balAfter = currentActor.balance;
             if (balAfter > balBefore) {
                 ghost_totalClaimed += balAfter - balBefore;
+                ghost_claims++;
             }
         } catch {}
     }
@@ -176,7 +180,9 @@ contract WhaleSybilHandler is Test {
         }
 
         vm.prank(caller);
-        try game.mineFlip(0) {} catch {}
+        try game.mineFlip(0) {
+            ghost_advances++;
+        } catch {}
     }
 
     /// @notice Fulfill VRF
@@ -187,7 +193,9 @@ contract WhaleSybilHandler is Test {
         (, , bool fulfilled) = vrf.pendingRequests(reqId);
         if (fulfilled) return;
 
-        try vrf.fulfillRandomWords(reqId, randomWord) {} catch {}
+        try vrf.fulfillRandomWords(reqId, randomWord) {
+            ghost_vrfFulfillments++;
+        } catch {}
     }
 
     /// @notice Warp time

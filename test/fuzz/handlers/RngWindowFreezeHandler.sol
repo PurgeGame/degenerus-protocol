@@ -123,6 +123,11 @@ contract RngWindowFreezeHandler is Test {
     uint256 public ghost_midDayInWindowActions;
 
     // --- Per-action coverage counters (surveillance) ---
+    /// @notice In-window placements / purchases that the contract ACCEPTED (an attempt the window rejects
+    ///         holds the freeze trivially; an accepted one is the case the isolation check exists for).
+    uint256 public ghost_inWindowSuccesses;
+    uint256 public ghost_midDaySuccesses;
+
     uint256 public calls_openWindow;
     uint256 public calls_inWindowPlacement;
     uint256 public calls_inWindowPurchase;
@@ -254,7 +259,9 @@ contract RngWindowFreezeHandler is Test {
             return;
         }
         vm.prank(currentActor);
-        try game.placeDegeneretteBet{value: amt}(0, 0, amt, 1, uint8(ticketSeed & 7)) {} catch {}
+        try game.placeDegeneretteBet{value: amt}(0, 0, amt, 1, uint8(ticketSeed & 7)) {
+            ghost_inWindowSuccesses++;
+        } catch {}
         _checkFrozenAfterIsolatedAction();
     }
 
@@ -281,7 +288,9 @@ contract RngWindowFreezeHandler is Test {
             return;
         }
         vm.prank(currentActor);
-        try game.purchase{value: cost}(0, qty, BoxOrderLib.boCustomFloor(boxAmt), bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+        try game.purchase{value: cost}(0, qty, BoxOrderLib.boCustomFloor(boxAmt), bytes32(0), MintPaymentKind.DirectEth, false) {
+            ghost_inWindowSuccesses++;
+        } catch {}
         _checkFrozenAfterIsolatedAction();
     }
 
@@ -482,7 +491,9 @@ contract RngWindowFreezeHandler is Test {
             return;
         }
         vm.prank(currentActor);
-        try game.placeDegeneretteBet{value: amt}(0, 0, amt, 1, uint8(ticketSeed & 7)) {} catch {}
+        try game.placeDegeneretteBet{value: amt}(0, 0, amt, 1, uint8(ticketSeed & 7)) {
+            ghost_midDaySuccesses++;
+        } catch {}
         _checkMidDayFrozenAfterIsolatedAction();
     }
 
@@ -504,7 +515,9 @@ contract RngWindowFreezeHandler is Test {
             return;
         }
         vm.prank(currentActor);
-        try game.purchase{value: cost}(0, qty, BoxOrderLib.boCustomFloor(boxAmt), bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
+        try game.purchase{value: cost}(0, qty, BoxOrderLib.boCustomFloor(boxAmt), bytes32(0), MintPaymentKind.DirectEth, false) {
+            ghost_midDaySuccesses++;
+        } catch {}
         _checkMidDayFrozenAfterIsolatedAction();
     }
 

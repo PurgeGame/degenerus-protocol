@@ -141,6 +141,33 @@ contract AdvanceLiveness is DeployProtocol {
             vm.toString(handler.ghost_maxLevel())
         );
         console.log(run);
+
+        // Non-vacuity. Coverage is accumulated (above) because one run can legitimately miss a shape.
+        // Measured over 65 default-profile runs (accumulated totals): checks 7,587, next-day checks 1,499,
+        // probe requests 6,918, probe on a last purchase day 319, probe with a frozen pool 22, lpd seals
+        // 185 (turbo 56, normal 129), level transitions 916, x9 levels 60, x0 levels 27, mid-day requests
+        // 332 (latch set 201, on a last purchase day 183), VRF stalls 100 (daily 44, mid-day 56), foil buys
+        // 400 (pending at mid-day 181), biased compound reaching the last purchase day 232. Shapes seen at
+        // >= 1 per run are required from 16 runs; the rarer ones (x0 levels, probe with a frozen pool,
+        // daily stalls) from 48 runs. middayLatchOnLpdFrozenPool (3 in 65 runs) is too rare to require.
+        uint256 runs = vm.envOr("LIVE_COV_runs", uint256(0));
+        if (runs < 16) return;
+        string[15] memory common = [
+            "checks", "nextDayChecks", "probeRequests", "probeOnLpd", "lpdSeals", "turboSeals", "normalSeals",
+            "levelTransitions", "x9Levels", "middayRequests", "middayLatchSet", "middayLatchOnLpd", "vrfStallsMidday",
+            "foilBuys", "biasedReachedLpd"
+        ];
+        for (uint256 i; i < common.length; ++i) {
+            assertGt(vm.envOr(string.concat("LIVE_COV_", common[i]), uint256(0)), 0,
+                string.concat("vacuous: liveness coverage never reached ", common[i]));
+        }
+        assertGt(vm.envOr("LIVE_COV_foilPendingMidday", uint256(0)), 0, "vacuous: liveness coverage never reached foilPendingMidday");
+        if (runs < 48) return;
+        string[3] memory rare = ["x0Levels", "probeOnLpdFrozenPool", "vrfStallsDaily"];
+        for (uint256 i; i < rare.length; ++i) {
+            assertGt(vm.envOr(string.concat("LIVE_COV_", rare[i]), uint256(0)), 0,
+                string.concat("vacuous: liveness coverage never reached ", rare[i]));
+        }
     }
 
     /// Deterministic replay of the biased scenario — a quick regression for the seed bug.

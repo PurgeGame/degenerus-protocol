@@ -53,6 +53,17 @@ contract PoolFlowHandler is Test {
     uint256 public success_buy;
     uint256 public success_claim;
 
+    // --- Level driver ---------------------------------------------------------------------------------------
+    // The buy/advance/claim walk alone never leaves level 0 (measured: max level 0 over 771 default-profile
+    // runs), so the level-transition consolidation (future->next->current) and the level jackpots never ran.
+    // driveLevelUp plays real money through the real engine from a funded driver, one purchase plus a large
+    // lootbox per game day, until the level rises (bounded). Every wei it sends is real inflow.
+    address public immutable driver = address(0x90D21);
+    uint256 internal constant DRIVE_BOX = 60 ether;
+    uint256 internal constant DRIVE_MAX_DAYS = 30;
+    uint256 internal constant MAX_DRIVEN_LEVELS = 2;
+    uint256 public ghost_levelUps;
+
     // --- Actors (the sole ticket buyers ⇒ the sole external ETH source/sink) -------------------------------
     address[] public actors;
     address internal currentActor;
@@ -71,6 +82,7 @@ contract PoolFlowHandler is Test {
             actors.push(actor);
             vm.deal(actor, 1_000 ether);
         }
+        vm.deal(driver, 1_000_000 ether);
     }
 
     function actorCount() external view returns (uint256) {
@@ -166,5 +178,48 @@ contract PoolFlowHandler is Test {
                 ghost_realOutflow += currentActor.balance - balBefore;
             }
         } catch {}
+    }
+
+    // =========================================================================
+    // Action 4: driveLevelUp — real-money game days until the level rises (bounded)
+    // =========================================================================
+
+    /// @notice Warp day by day; each day the driver buys tickets plus a lootbox (real inflow), the VRF word is
+    ///         fulfilled and mineFlip cranks until it refuses. Stops at the first level rise or after
+    ///         DRIVE_MAX_DAYS days. At most MAX_DRIVEN_LEVELS rises per run: an uncapped walk reaches level
+    ///         20-32 every run and makes the campaign ~50x slower without adding a new transition kind.
+    function driveLevelUp(uint256 wordSeed) external {
+        if (game.gameOver() || ghost_levelUps >= MAX_DRIVEN_LEVELS) return;
+        uint24 start = game.level();
+        for (uint256 d; d < DRIVE_MAX_DAYS && game.level() == start && !game.gameOver(); ++d) {
+            vm.warp(vm.getBlockTimestamp() + 1 days + 1);
+            (, , , bool locked, uint256 priceWei) = game.purchaseInfo();
+            if (!locked) {
+                uint256 sent = priceWei * 10 + DRIVE_BOX;
+                vm.prank(driver);
+                try game.purchase{value: sent}(
+                    0, 4000, BoxOrderLib.boCustomFloor(DRIVE_BOX), bytes32(0), MintPaymentKind.DirectEth, false
+                ) {
+                    success_buy++;
+                    ghost_realInflow += sent;
+                } catch {}
+            }
+            for (uint256 j; j < 80; ++j) {
+                uint256 reqId = vrf.lastRequestId();
+                if (reqId != 0) {
+                    (, , bool fulfilled) = vrf.pendingRequests(reqId);
+                    if (!fulfilled) {
+                        try vrf.fulfillRandomWords(reqId, uint256(keccak256(abi.encode(wordSeed, d, j))) | 1) {} catch {}
+                    }
+                }
+                vm.prank(driver);
+                try game.mineFlip(0) {
+                    ghost_advances++;
+                } catch {
+                    break;
+                }
+            }
+        }
+        if (game.level() > start) ghost_levelUps++;
     }
 }

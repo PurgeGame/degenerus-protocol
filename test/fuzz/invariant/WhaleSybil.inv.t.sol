@@ -12,7 +12,9 @@ import {SolvencyObligations} from "../helpers/SolvencyObligations.sol";
 ///         from a large actor pool.
 ///
 ///         Attack vectors targeted:
-///         1. Whale pass at level boundary + simultaneous Sybil flood = pool corruption?
+///         1. Whale pass + simultaneous Sybil flood = pool corruption? (The campaign stays at level 0:
+///            measured max level 0 over 1,285 default-profile runs, so level-boundary whale pricing is
+///            NOT exercised here; the deep-level walk is MultiLevel's.)
 ///         2. Whale overpayment combined with Sybil exact-price = accounting mismatch?
 ///         3. Large whale claims interleaved with many small Sybil purchases
 ///         4. Pool obligation tracking under mixed purchase types
@@ -72,6 +74,8 @@ contract WhaleSybilInvariant is DeployProtocol {
     }
 
     /// @notice Game over is terminal even under mixed pressure
+    /// @dev Only active once game over latches, which the 2-day warps reach rarely (24 of 1,285 measured
+    ///      runs); afterInvariant requires it to have been reached once 512 runs have accumulated.
     function invariant_gameOverTerminal() public view {
         // If game is over, further whale/sybil operations should have no effect
         // This is structurally enforced by the handler's gameOver() checks
@@ -84,8 +88,33 @@ contract WhaleSybilInvariant is DeployProtocol {
         }
     }
 
-    /// @notice Canary
-    function invariant_whaleSybilCanary() public view {
-        assertTrue(address(wsHandler) != address(0), "WhaleSybilHandler not deployed");
+    /// @dev Non-vacuity. Measured minima over
+    ///      1,285 default-profile runs: 9 successful sybil purchases and 1 successful mineFlip per run; whale
+    ///      passes, VRF words and paying claims can be absent from a single run (45, 48 and 970 runs had none),
+    ///      and game over latched in only 24 runs. Per run: sybil purchases >= 4 and mineFlip >= 1, and the
+    ///      obligation ratio must have been observed. Accumulated over the process (unique WS_ prefix): whale
+    ///      passes and VRF words from 16 runs, paying claims from 32, a game over from 512.
+    function _acc(string memory k, uint256 v) private returns (uint256 total) {
+        total = vm.envOr(k, uint256(0)) + v;
+        vm.setEnv(k, vm.toString(total));
     }
+
+    function afterInvariant() public {
+        assertGe(wsHandler.ghost_sybilSuccessful(), 4, "vacuous: sybil purchases did not succeed");
+        assertGe(wsHandler.ghost_advances(), 1, "vacuous: mineFlip never succeeded in this run");
+        assertTrue(wsHandler.ghost_minObligationRatio() != type(uint256).max, "vacuous: obligation ratio never observed");
+        uint256 runs = _acc("WS_RUNS", 1);
+        uint256 whales = _acc("WS_whales", wsHandler.ghost_whaleSuccessful());
+        uint256 vrf = _acc("WS_vrf", wsHandler.ghost_vrfFulfillments());
+        uint256 claims = _acc("WS_claims", wsHandler.ghost_claims());
+        uint256 gameOvers = _acc("WS_gameOvers", game.gameOver() ? 1 : 0);
+        if (runs < 16) return;
+        assertGt(whales, 0, "vacuous: no whale pass purchase ever succeeded");
+        assertGt(vrf, 0, "vacuous: no VRF word was ever fulfilled");
+        if (runs < 32) return;
+        assertGt(claims, 0, "vacuous: no whale claim ever paid out");
+        if (runs < 512) return;
+        assertGt(gameOvers, 0, "vacuous: no run ever reached game over");
+    }
+
 }

@@ -852,9 +852,10 @@ contract AnyInputHandler is Test {
     }
 
     function gd_burnWrapped(uint256 a, uint256 amtSeed) external act(a) {
+        // Guided: never more than the actor's wrapped balance.
         uint256 bal = IAnyBalance(DGNRS_).balanceOf(currentActor);
         uint256 span = bal / 1000 + 1;
-        _call(97, SDGNRS_, 0, abi.encodeWithSignature("burnWrapped(uint256)", 1e18 + amtSeed % span));
+        _call(97, SDGNRS_, 0, abi.encodeWithSignature("burnWrapped(uint256)", bal - amtSeed % span));
     }
 
     function gd_referPlayer(uint256 a, uint256 oSeed) external act(a) {

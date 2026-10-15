@@ -45,6 +45,11 @@ contract VRFPathHandler is Test {
     uint256 public ghost_gapBackfillFailures;
     uint48 public ghost_dayBeforeSwap;
 
+    // --- Non-vacuity: successes ---
+    uint256 public ghost_purchases;
+    uint256 public ghost_advances;
+    uint256 public ghost_fulfillments;
+
     // --- Call counters ---
     uint256 public calls_purchase;
     uint256 public calls_advanceGame;
@@ -165,7 +170,9 @@ contract VRFPathHandler is Test {
             BoxOrderLib.boCustomFloor(lootboxAmt),
             bytes32(0),
             MintPaymentKind.DirectEth, false
-        ) {} catch {
+        ) {
+            ghost_purchases++;
+        } catch {
             return;
         }
     }
@@ -188,6 +195,7 @@ contract VRFPathHandler is Test {
         try game.mineFlip(0) {} catch {
             return;
         }
+        ghost_advances++;
 
         // TEST-01: one committed request per call at most, flips only on a request.
         _noteRequests(indexBefore, reqBefore, unansweredBefore);
@@ -254,6 +262,7 @@ contract VRFPathHandler is Test {
         try vrf.fulfillRandomWords(reqId, randomWord) {} catch {
             return;
         }
+        ghost_fulfillments++;
 
         uint48 indexAfter = _lootboxRngIndex();
 

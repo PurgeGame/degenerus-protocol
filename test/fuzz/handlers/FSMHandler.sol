@@ -42,6 +42,24 @@ contract FSMHandler is Test {
     // ghost is not wireable here).
     uint256 internal constant RECOVER_CRANK_CAP = 512;
 
+    // --- Non-vacuity: successes and observed transitions ---
+    uint256 public ghost_purchases; // purchases that landed
+    uint256 public ghost_advances; // mineFlip calls that succeeded (direct and inside recoverAndDrain)
+    uint256 public ghost_vrfFulfillments; // VRF words delivered
+    uint256 public ghost_levelUps; // actions after which level was higher than before
+    uint256 public ghost_postGameOverActions; // actions observed with gameOver already latched
+    uint256 public ghost_vrfClockAdvances; // actions that moved lastVrfProcessed() forward
+
+    // --- Level driver (scripted opening + driveLevelUp action) ---
+    // The random walk alone never leaves level 0 (measured: 0 level-ups over 1,285 default-profile runs),
+    // so level monotonicity and the post-gameover level freeze would only ever watch level 0. A funded
+    // driver plays real money through the real engine, one purchase plus a large lootbox per game day,
+    // to raise the level: in setUp (scriptedOpening) and as a bounded fuzz action (driveLevelUp).
+    address public immutable driver = address(0xF5D21);
+    uint256 internal constant DRIVE_BOX = 60 ether;
+    uint256 internal constant DRIVE_MAX_DAYS = 30;
+    uint256 public openingLevel;
+
     // --- Call counters ---
     uint256 public calls_purchase;
     uint256 public calls_advanceGame;
@@ -64,6 +82,58 @@ contract FSMHandler is Test {
             address actor = address(uint160(0xF0000 + i));
             actors.push(actor);
             vm.deal(actor, 100 ether);
+        }
+    }
+
+    /// @notice Setup-only opening: drive the game with real money to `target` (bounded), so every run starts
+    ///         above level 0 and a later gameOver latches at a non-zero level.
+    function scriptedOpening(uint24 target) external {
+        vm.deal(driver, 1_000_000 ether);
+        for (uint256 d; d < 3 * DRIVE_MAX_DAYS && game.level() < target && !game.gameOver(); ++d) _driveDay(d);
+        openingLevel = game.level();
+        ghost_maxLevel = openingLevel;
+        ghost_lastVrfSeen = game.lastVrfProcessed();
+    }
+
+    /// @notice Fuzz action: play real-money game days (bounded) until the level rises once.
+    function driveLevelUp(uint256 seed) external {
+        uint256 levelBefore = game.level();
+        bool gameOverBefore = game.gameOver();
+        for (uint256 d; d < DRIVE_MAX_DAYS && game.level() == levelBefore && !game.gameOver(); ++d) {
+            _driveDay(seed + d);
+        }
+        _postAction(levelBefore, gameOverBefore);
+    }
+
+    /// @dev One game day: warp to the next day, buy tickets plus a lootbox if purchases are open, then fulfil
+    ///      the VRF word and crank mineFlip until it refuses.
+    function _driveDay(uint256 salt) private {
+        vm.warp(vm.getBlockTimestamp() + 1 days + 1);
+        (, , , bool locked, uint256 priceWei) = game.purchaseInfo();
+        if (!locked && !game.gameOver()) {
+            vm.prank(driver);
+            try game.purchase{value: priceWei * 10 + DRIVE_BOX}(
+                0, 4000, BoxOrderLib.boCustomFloor(DRIVE_BOX), bytes32(0), MintPaymentKind.DirectEth, false
+            ) {
+                ghost_purchases++;
+            } catch {}
+        }
+        for (uint256 j; j < 80; ++j) {
+            uint256 reqId = vrf.lastRequestId();
+            if (reqId != 0) {
+                (, , bool fulfilled) = vrf.pendingRequests(reqId);
+                if (!fulfilled) {
+                    try vrf.fulfillRandomWords(reqId, uint256(keccak256(abi.encode(salt, j, reqId)))) {
+                        ghost_vrfFulfillments++;
+                    } catch {}
+                }
+            }
+            vm.prank(driver);
+            try game.mineFlip(0) {
+                ghost_advances++;
+            } catch {
+                break;
+            }
         }
     }
 
@@ -96,7 +166,9 @@ contract FSMHandler is Test {
                     BoxOrderLib.boCustomFloor(lootboxAmt),
                     bytes32(0),
                     MintPaymentKind.DirectEth, false
-                ) {} catch {}
+                ) {
+                    ghost_purchases++;
+                } catch {}
             }
         }
 
@@ -113,7 +185,9 @@ contract FSMHandler is Test {
         bool gameOverBefore = game.gameOver();
 
         vm.prank(currentActor);
-        try game.mineFlip(0) {} catch {}
+        try game.mineFlip(0) {
+            ghost_advances++;
+        } catch {}
 
         _postAction(levelBefore, gameOverBefore);
     }
@@ -129,7 +203,9 @@ contract FSMHandler is Test {
         if (reqId != 0) {
             (, , bool fulfilled) = vrf.pendingRequests(reqId);
             if (!fulfilled) {
-                try vrf.fulfillRandomWords(reqId, randomWord) {} catch {}
+                try vrf.fulfillRandomWords(reqId, randomWord) {
+                    ghost_vrfFulfillments++;
+                } catch {}
             }
         }
 
@@ -168,7 +244,9 @@ contract FSMHandler is Test {
                 if (reqId != 0) {
                     (, , bool fulfilled) = vrf.pendingRequests(reqId);
                     if (!fulfilled) {
-                        try vrf.fulfillRandomWords(reqId, word) {} catch {}
+                        try vrf.fulfillRandomWords(reqId, word) {
+                            ghost_vrfFulfillments++;
+                        } catch {}
                     }
                 }
             }
@@ -177,7 +255,9 @@ contract FSMHandler is Test {
             if (!game.advanceDue() && !game.rngLocked()) break;
 
             vm.prank(cranker);
-            try game.mineFlip(0) {} catch {
+            try game.mineFlip(0) {
+                ghost_advances++;
+            } catch {
                 break;
             }
         }
@@ -211,6 +291,8 @@ contract FSMHandler is Test {
         if (levelAfter < levelBefore) {
             ghost_levelDecreaseCount++;
         }
+        if (levelAfter > levelBefore) ghost_levelUps++;
+        if (gameOverBefore) ghost_postGameOverActions++;
 
         // Track max level.
         if (levelAfter > ghost_maxLevel) {
@@ -239,6 +321,7 @@ contract FSMHandler is Test {
         if (vrfClock < ghost_lastVrfSeen) {
             ghost_vrfClockRegressions++;
         } else {
+            if (vrfClock > ghost_lastVrfSeen) ghost_vrfClockAdvances++;
             ghost_lastVrfSeen = vrfClock;
         }
     }

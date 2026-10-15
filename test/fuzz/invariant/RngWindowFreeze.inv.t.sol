@@ -53,6 +53,12 @@ import {GameSlots} from "../../helpers/GameSlots.sol";
 contract RngWindowFreeze is DeployProtocol {
     RngWindowFreezeHandler public handler;
 
+    // Counters after the setUp priming cycles: afterInvariant measures the campaign beyond them.
+    uint256 internal primedWindows;
+    uint256 internal primedInWindowActions;
+    uint256 internal primedMidDayWindows;
+    uint256 internal primedMidDayActions;
+
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED; // post Stage B pack: was 35
     uint256 private constant LR_INDEX_MASK = 0xFFFFFFFFFFFF;
     uint256 private constant RNG_WORD_BY_DAY_SLOT = GameSlots.RNG_WORD_BY_DAY;
@@ -94,6 +100,10 @@ contract RngWindowFreeze is DeployProtocol {
         handler.tryMidDayOpenBoxes(0, 1);
         handler.closeMidDayWindow(7);
         assertEq(handler.ghost_frozenSlotMutations(), 0);
+        primedWindows = handler.ghost_windowsOpened();
+        primedInWindowActions = handler.ghost_inWindowActions();
+        primedMidDayWindows = handler.ghost_midDayWindowsOpened();
+        primedMidDayActions = handler.ghost_midDayInWindowActions();
     }
 
     // =========================================================================
@@ -146,6 +156,17 @@ contract RngWindowFreeze is DeployProtocol {
             0,
             "NON-VACUITY: the campaign must attempt a mid-day in-window player action > 0 times (else the mid-day freeze property is vacuous)"
         );
+        // The four checks above are already satisfied by the setUp priming cycles. The CAMPAIGN itself must
+        // open both window kinds and act inside them: measured minima over 257 default-profile runs were 41
+        // windows, 24 in-window actions, 35 mid-day windows and 26 mid-day actions (priming included).
+        assertGe(handler.ghost_windowsOpened() - primedWindows, 10, "NON-VACUITY: the campaign (almost) never opened the VRF window");
+        assertGe(handler.ghost_inWindowActions() - primedInWindowActions, 10, "NON-VACUITY: the campaign (almost) never acted inside the VRF window");
+        assertGe(handler.ghost_midDayWindowsOpened() - primedMidDayWindows, 10, "NON-VACUITY: the campaign (almost) never opened the mid-day window");
+        assertGe(handler.ghost_midDayInWindowActions() - primedMidDayActions, 10, "NON-VACUITY: the campaign (almost) never acted inside the mid-day window");
+        // A rejected in-window action holds the freeze trivially; the contract must also have ACCEPTED some
+        // (measured minima per run: 4 accepted daily-window and 3 accepted mid-day placements/purchases).
+        assertGe(handler.ghost_inWindowSuccesses(), 1, "NON-VACUITY: no in-window placement or purchase was accepted");
+        assertGe(handler.ghost_midDaySuccesses(), 1, "NON-VACUITY: no mid-day placement or purchase was accepted");
     }
 
     // =========================================================================

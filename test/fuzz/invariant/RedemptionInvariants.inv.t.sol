@@ -29,6 +29,10 @@ contract RedemptionInvariants is DeployProtocol {
         vm.deal(address(sdgnrs), 10_000 ether);
         mockVRF.fundSubscription(1, 100 ether);
         for (uint256 i; i < handler.getActorCount(); ++i) _giveWalletId(handler.getActor(i));
+        // A wrapped gambling burn records its claim on the burner's wallet ID; without one every
+        // tryBurnWrapped reverts NoWalletId.
+        for (uint256 i; i < wrapperHandler.actorCount(); ++i) _giveWalletId(wrapperHandler.actors(i));
+        handler.setStethMock(address(mockStETH));
         // Make redemption invariants non-vacuous even when random calls end the
         // game immediately: every sequence starts with a real pending claim.
         handler.action_burn(0, 10 ether);
@@ -37,6 +41,23 @@ contract RedemptionInvariants is DeployProtocol {
         targetContract(address(handler));
         targetContract(address(vrfHandler));
         targetContract(address(wrapperHandler));
+        // The two fixture setters are configuration, not actions: a random setStethMock address makes
+        // every later funding toggle revert.
+        bytes4[] memory redemptionSelectors = new bytes4[](7);
+        redemptionSelectors[0] = RedemptionHandler.action_burn.selector;
+        redemptionSelectors[1] = RedemptionHandler.action_burnOnPreviousDay.selector;
+        redemptionSelectors[2] = RedemptionHandler.action_advanceDay.selector;
+        redemptionSelectors[3] = RedemptionHandler.action_settle.selector;
+        redemptionSelectors[4] = RedemptionHandler.action_triggerGameOverSometimes.selector;
+        redemptionSelectors[5] = RedemptionHandler.action_claim.selector;
+        redemptionSelectors[6] = RedemptionHandler.action_toggleStethFallback.selector;
+        targetSelector(FuzzSelector({addr: address(handler), selectors: redemptionSelectors}));
+        // VRF transport only: the 30-day warpTime trips the VRF deadman (liveness) within a few draws, which
+        // blocks every burn; game over is driven by the redemption handler's own trigger.
+        bytes4[] memory vrfSelectors = new bytes4[](2);
+        vrfSelectors[0] = VRFHandler.fulfillVrf.selector;
+        vrfSelectors[1] = VRFHandler.warpPastVrfTimeout.selector;
+        targetSelector(FuzzSelector({addr: address(vrfHandler), selectors: vrfSelectors}));
     }
 
     // =========================================================================
@@ -138,16 +159,40 @@ contract RedemptionInvariants is DeployProtocol {
         );
     }
 
-    /// @notice Non-vacuity: the campaign must at least ATTEMPT wrapper-path actions (four
-    ///         selectors over depth 128 makes zero attempts statistically impossible); successful
-    ///         path traversal is proven deterministically by the focused wrapper tests below.
-    function afterInvariant() public view {
-        assertGt(
-            wrapperHandler.calls_unwrapTo() + wrapperHandler.calls_burnWrapped()
-                + wrapperHandler.calls_postGameOverBurn() + wrapperHandler.calls_yearSweep(),
-            0,
-            "NON-VACUITY: the campaign never attempted a wrapper-path action"
-        );
+    /// @notice Non-vacuity: the campaign must actually complete the redemption lifecycle and move the
+    ///         wrapper, not merely attempt it.
+    /// @dev Successes, not attempts. Liveness (game over's first step) blocks every burn, so the campaign
+    ///      keeps it rare enough for the lifecycle to run first: the game-over trigger acts on one draw in four
+    ///      and the VRF warps stop at the retry timeout. Measured over 1,798 default-profile runs: about 2 campaign burns per run, a batch resolved in 90% of runs, a claim in
+    ///      94%, an unwrap in 56%, a wrapped burn in 60%, a post-game-over wrapper burn in 33%, the year sweep
+    ///      in 91%. Successes are therefore accumulated over the process (unique RI_ prefix) and each
+    ///      leg must be non-zero once MIN_RUNS runs have completed: a campaign burn beyond the seeded one,
+    ///      a resolved batch, a claim, an unwrap, a wrapped gambling burn, a post-game-over wrapper burn and
+    ///      a year sweep.
+    uint256 private constant MIN_RUNS = 16;
+
+    function _acc(string memory k, uint256 v) private returns (uint256 total) {
+        total = vm.envOr(k, uint256(0)) + v;
+        vm.setEnv(k, vm.toString(total));
+    }
+
+    function afterInvariant() public {
+        uint256 runs = _acc("RI_RUNS", 1);
+        uint256 burns = _acc("RI_burns", handler.successfulBurns() - 1); // the seeded burn excluded
+        uint256 resolved = _acc("RI_resolved", handler.ghost_resolvedBatches());
+        uint256 claims = _acc("RI_claims", handler.ghost_claimCount());
+        uint256 unwraps = _acc("RI_unwraps", wrapperHandler.ghost_unwraps());
+        uint256 wrapped = _acc("RI_wrappedBurns", wrapperHandler.ghost_wrappedBurns());
+        uint256 postGo = _acc("RI_postGoBurns", wrapperHandler.ghost_postGameOverBurns());
+        uint256 sweeps = _acc("RI_sweeps", wrapperHandler.ghost_yearSweepRan() ? 1 : 0);
+        if (runs < MIN_RUNS) return;
+        assertGt(burns, 0, "NON-VACUITY: no campaign redemption burn ever succeeded");
+        assertGt(resolved, 0, "NON-VACUITY: no redemption batch was ever resolved");
+        assertGt(claims, 0, "NON-VACUITY: no redemption was ever claimed");
+        assertGt(unwraps, 0, "NON-VACUITY: no unwrapTo ever succeeded");
+        assertGt(wrapped, 0, "NON-VACUITY: no wrapped gambling burn ever succeeded");
+        assertGt(postGo, 0, "NON-VACUITY: no post-game-over wrapper burn ever succeeded");
+        assertGt(sweeps, 0, "NON-VACUITY: the year sweep never ran");
     }
 
     // =========================================================================

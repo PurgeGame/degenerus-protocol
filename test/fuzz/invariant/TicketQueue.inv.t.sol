@@ -26,15 +26,10 @@ contract TicketQueueInvariant is DeployProtocol {
     }
 
     /// @notice No consistency violations in ticket tracking
-    /// @dev The TicketTrackingHandler verifies that entriesOwedView returns
-    ///      sensible values for every tracked (level, player) pair.
+    /// @dev verifyConsistency asserts (and so reverts on a violation) the three cohort queues against the raw
+    ///      position records and every actor's address-facing view, at every level up to level + 5.
     function invariant_noConsistencyViolations() public view {
         for (uint256 lvl; lvl <= uint256(game.level()) + 5; ++lvl) ticketHandler.verifyConsistency(lvl);
-        assertEq(
-            ticketHandler.ghost_consistencyViolations(),
-            0,
-            "TicketQueue: consistency violations detected"
-        );
     }
 
     /// @notice Ticket owed view should return 0 for addresses that never purchased
@@ -58,11 +53,27 @@ contract TicketQueueInvariant is DeployProtocol {
         );
     }
 
-    /// @notice Canary: ticket handler is operational
-    function invariant_ticketCanary() public view {
-        assertTrue(address(game) != address(0), "Game not deployed");
-        // At least some calls were attempted
-        // (may be 0 in early runs, so just check the handler exists)
-        assertTrue(address(ticketHandler) != address(0), "Handler not deployed");
+    /// @dev Non-vacuity. Per run the queue
+    ///      must actually be drained and fed words: measured minima over 771 default-profile runs were 3
+    ///      successful mineFlips and 1 VRF fulfilment. Purchases can legitimately all fail in one run (an early
+    ///      daily-RNG lock; 127 of 771 runs had none), so purchases and queued entries are accumulated over the
+    ///      process (unique TQ_ prefix) and must be non-zero once MIN_RUNS runs have completed.
+    uint256 private constant MIN_RUNS = 16;
+
+    function _acc(string memory k, uint256 v) private returns (uint256 total) {
+        total = vm.envOr(k, uint256(0)) + v;
+        vm.setEnv(k, vm.toString(total));
     }
+
+    function afterInvariant() public {
+        assertGe(ticketHandler.ghost_advances(), 1, "vacuous: mineFlip never succeeded in this run");
+        assertGe(vrfHandler.ghost_vrfFulfillments(), 1, "vacuous: no VRF word was fulfilled in this run");
+        uint256 runs = _acc("TQ_RUNS", 1);
+        uint256 purchases = _acc("TQ_purchases", ticketHandler.ghost_purchases());
+        uint256 entries = _acc("TQ_entries", ticketHandler.ghost_totalEntries());
+        if (runs < MIN_RUNS) return;
+        assertGt(purchases, 0, "vacuous: no ticket purchase ever succeeded");
+        assertGt(entries, 0, "vacuous: no purchase ever left queued entries");
+    }
+
 }

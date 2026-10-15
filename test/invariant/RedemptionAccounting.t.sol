@@ -16,7 +16,7 @@ contract RedemptionAccounting is RedemptionFixture {
         selectors[0] = RedemptionHandler.action_burn.selector;
         selectors[1] = RedemptionHandler.action_advanceDay.selector;
         selectors[2] = RedemptionHandler.action_claim.selector;
-        selectors[3] = RedemptionHandler.action_triggerGameOver.selector;
+        selectors[3] = RedemptionHandler.action_triggerGameOverSometimes.selector;
         selectors[4] = RedemptionHandler.action_burnOnPreviousDay.selector;
         selectors[5] = RedemptionHandler.action_toggleStethFallback.selector;
         selectors[6] = RedemptionHandler.action_settle.selector;
@@ -89,6 +89,30 @@ contract RedemptionAccounting is RedemptionFixture {
     function invariant_balanceCoversPendingRedemptionEth() public view {
         assertGe(address(sdgnrs).balance + mockStETH.balanceOf(address(sdgnrs)), sdgnrs.pendingRedemptionEthValue());
     }
+    /// @dev Non-vacuity: setUp seeds one admitted burn, so the campaign itself must burn, resolve and claim.
+    ///      A single run can legitimately miss a leg (game over can latch first), so successes are
+    ///      accumulated over the process (unique RA_ prefix) and each must be non-zero once 16 runs completed.
+    ///      Measured over 1,285 default-profile runs (game-over trigger acting on one draw in four, see the
+    ///      handler): about 2 campaign burns per run,
+    ///      a batch resolved in 78% of runs, a claim in all but one.
+    function afterInvariant() public {
+        uint256 runs = _acc("RA_RUNS", 1);
+        uint256 burns = _acc("RA_burns", handler.successfulBurns() - 1); // the seeded burn excluded
+        uint256 resolved = _acc("RA_resolved", handler.ghost_resolvedBatches());
+        uint256 claims = _acc("RA_claims", handler.ghost_claimCount());
+        uint256 days_ = _acc("RA_days", handler.calls_advanceDay());
+        if (runs < 16) return;
+        assertGt(burns, 0, "vacuous: no campaign redemption burn ever succeeded");
+        assertGt(resolved, 0, "vacuous: no redemption batch was ever resolved");
+        assertGt(claims, 0, "vacuous: no redemption was ever claimed");
+        assertGt(days_, 0, "vacuous: the campaign never advanced a day");
+    }
+
+    function _acc(string memory k, uint256 v) private returns (uint256 total) {
+        total = vm.envOr(k, uint256(0)) + v;
+        vm.setEnv(k, vm.toString(total));
+    }
+
     function test_HandlerCompletesRealClaimAndFundingModes() public {
         handler.action_toggleStethFallback(0);
         assertTrue(handler.stethFallbackMode());
@@ -100,4 +124,5 @@ contract RedemptionAccounting is RedemptionFixture {
         handler.action_toggleStethFallback(1);
         assertFalse(handler.stethFallbackMode());
     }
+
 }

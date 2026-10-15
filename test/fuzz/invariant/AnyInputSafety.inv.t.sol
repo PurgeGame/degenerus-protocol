@@ -84,7 +84,8 @@ contract AnyInputSafety is DeployProtocol {
                 vm.prank(a);
                 game.purchaseWhalePass{value: 2.4 ether}(0, 1, bytes32(0)); // seat + sDGNRS + far-future entries
             }
-            _dgnrsFromVault(a, 1_000_000e12);
+            // 0.5% of sDGNRS supply each, so a wrapped burn can clear the 0.01 ETH redemption floor.
+            _dgnrsFromVault(a, 5_000_000_000e12);
             vm.startPrank(ContractAddresses.CREATOR);
             _erc20Transfer(dgve, a, dgveSupply / 100);
             _erc20Transfer(dgvf, a, dgvfSupply / 100);
@@ -358,6 +359,38 @@ contract AnyInputSafety is DeployProtocol {
         uint256 maxLvl = vm.envOr("ANY_MAXLEVEL", uint256(0));
         if (game.level() > maxLvl) vm.setEnv("ANY_MAXLEVEL", vm.toString(uint256(game.level())));
         _printReport(runs, n);
+        _assertCoverage(runs, n);
+    }
+
+    /// @dev Non-vacuity over the accumulated report. Measured over 65 default-profile runs: 41 levels gained,
+    ///      15 runs reaching game over, and every door named in _requiredDoors succeeded at least 14 times
+    ///      (so at least ~10 expected by run 48). The arbitrary-input doors that never succeeded in that
+    ///      measurement are not required: their properties are checked only on rejected inputs (see the
+    ///      handler's revert report).
+    function _assertCoverage(uint256 runs, uint256 n) internal view {
+        if (runs < 16) return;
+        assertGt(vm.envOr("ANY_LEVELS", uint256(0)), 0, "vacuous: no run ever gained a level");
+        assertGt(vm.envOr("ANY_LIVE_CHECKS", uint256(0)), 0, "vacuous: the liveness probe never ran");
+        if (runs < 48) return;
+        assertGt(vm.envOr("ANY_GAMEOVER", uint256(0)), 0, "vacuous: no run ever reached game over");
+        bool[] memory req = _requiredDoors(n);
+        for (uint256 id; id < n; ++id) {
+            if (!req[id]) continue;
+            assertGt(vm.envOr(string.concat("ANY_OK_", vm.toString(id)), uint256(0)), 0,
+                string.concat("vacuous: door never succeeded: ", handler.actionName(id)));
+        }
+    }
+
+    /// @dev Doors that must succeed at least once by run 48 (handler action ids).
+    function _requiredDoors(uint256 n) internal pure returns (bool[] memory req) {
+        req = new bool[](n);
+        uint8[37] memory ids = [
+            1, 3, 7, 15, 17, 18, 19, 23, 34, 36, 38, 40, 46, 47, 53, 74, // cf/g/f/d/v/af/st doors
+            77, 78, 79, 81, 82, 83, // prog_buy, prog_bigBuy, prog_mineFlip, prog_warp, prog_driveDay, prog_topUp
+            84, 85, 86, 87, 88, 89, 90, 92, 93, 95, 100, // guided doors
+            101, 102, 103, 104 // prog_driveDayAligned, prog_deadman, gd_buyPresaleBox, gd_buyLootboxAndPresaleBox
+        ];
+        for (uint256 i; i < ids.length; ++i) req[ids[i]] = true;
     }
 
     function _printReport(uint256 runs, uint256 n) internal view {

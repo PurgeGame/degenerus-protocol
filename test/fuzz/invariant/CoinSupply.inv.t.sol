@@ -96,9 +96,36 @@ contract CoinSupplyInvariant is DeployProtocol {
         );
     }
 
-    /// @notice Canary: coin contract is deployed and functional.
-    function invariant_coinCanary() public view {
-        assertTrue(address(coin) != address(0), "Coin not deployed");
-        assertTrue(address(coin).code.length > 0, "Coin has no code");
+    /// @dev Non-vacuity. The identities above are only
+    ///      meaningful while supply actually moves through every leg. A single run can legitimately move none
+    ///      (measured at default depth: no mint in 50% of runs, no burn in 76%, no escrow in 14%), so movement
+    ///      is accumulated over the process (vm.setEnv, unique CS_ prefix) and each leg must be non-zero once
+    ///      MIN_RUNS runs have completed: mint, burn, escrow credit and allowance spend (vaultBurnCoin), plus
+    ///      the underlying game progress (purchases, mineFlips, VRF words).
+    uint256 private constant MIN_RUNS = 16;
+
+    function _acc(string memory k, uint256 v) private returns (uint256 total) {
+        total = vm.envOr(k, uint256(0)) + v;
+        vm.setEnv(k, vm.toString(total));
     }
+
+    function afterInvariant() public {
+        uint256 runs = _acc("CS_RUNS", 1);
+        uint256 minted = _acc("CS_minted", probe.ghostMinted());
+        uint256 burned = _acc("CS_burned", probe.ghostBurned());
+        uint256 escrowed = _acc("CS_escrowed", probe.ghostEscrowed());
+        uint256 spent = _acc("CS_spent", probe.ghostSpent());
+        uint256 purchases = _acc("CS_purchases", gameHandler.ghost_successfulPurchases());
+        uint256 advances = _acc("CS_advances", gameHandler.ghost_successfulAdvances());
+        uint256 vrf = _acc("CS_vrf", vrfHandler.ghost_vrfFulfillments());
+        if (runs < MIN_RUNS) return;
+        assertGt(minted, 0, "vacuous: FLIP was never minted");
+        assertGt(burned, 0, "vacuous: FLIP was never burned");
+        assertGt(escrowed, 0, "vacuous: the vault allowance was never credited");
+        assertGt(spent, 0, "vacuous: the vault allowance was never spent");
+        assertGt(purchases, 0, "vacuous: no purchase ever succeeded");
+        assertGt(advances, 0, "vacuous: mineFlip never succeeded");
+        assertGt(vrf, 0, "vacuous: no VRF word was ever fulfilled");
+    }
+
 }

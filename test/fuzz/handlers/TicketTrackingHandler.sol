@@ -19,9 +19,11 @@ contract TicketTrackingHandler is Test {
     /// @dev Maps level => player => whether we've seen them purchase at this level
     mapping(uint24 => mapping(address => bool)) public ghost_hasTicketsAtLevel;
 
-    /// @dev Track (level, player) pairs for checking consistency
+    /// @dev Successful purchases after which the buyer held queued entries at the purchase level or the next.
     uint256 public ghost_totalEntries;
-    uint256 public ghost_consistencyViolations;
+    /// @dev Non-vacuity: successful purchases and successful mineFlip calls.
+    uint256 public ghost_purchases;
+    uint256 public ghost_advances;
 
     // --- Call counters ---
     uint256 public calls_purchase;
@@ -71,20 +73,22 @@ contract TicketTrackingHandler is Test {
             bytes32(0),
             MintPaymentKind.DirectEth, false
         ) {
-            // After successful purchase, verify ticketsOwed consistency
-            // purchaseInfo().lvl returns the active ticket level
+            ghost_purchases++;
+            // The purchase queues entries at the purchase level or, during the purchase phase, the next one.
             uint32 owed = game.entriesOwedView(lvl, currentActor);
-            if (owed > 0) {
-                ghost_hasTicketsAtLevel[lvl][currentActor] = true;
-                ghost_totalEntries++;
-            }
+            uint32 owedNext = game.entriesOwedView(lvl + 1, currentActor);
+            if (owed > 0) ghost_hasTicketsAtLevel[lvl][currentActor] = true;
+            if (owedNext > 0) ghost_hasTicketsAtLevel[lvl + 1][currentActor] = true;
+            if (owed > 0 || owedNext > 0) ghost_totalEntries++;
         } catch {}
     }
 
     /// @notice Interleave queue draining with purchases and the separately targeted VRF handler.
     function advance(uint256 actorSeed) external useActor(actorSeed) {
         vm.prank(currentActor);
-        try game.mineFlip(0) {} catch {}
+        try game.mineFlip(0) {
+            ghost_advances++;
+        } catch {}
     }
 
     /// @notice Attest all three cohorts and the address-facing view against raw position records.

@@ -184,9 +184,27 @@ contract StorageRecyclingReferenceInvariant is StdInvariant, Test {
     }
     function invariant_ActualIndexReferenceMatchesRecycledCohorts() public view { cohort.assertReference(); }
     function invariant_ActualLevelReferenceMatchesRetainedTraitLanes() public view { tickets.assertReference(); }
-    function afterInvariant() public view {
+    function afterInvariant() public {
         assertGe(cohort.seals(), 4); assertGe(cohort.completions(), 4);
         assertGe(tickets.retirements(), 4);
         cohort.assertReference(); tickets.assertReference();
+        // The floors above are exactly what setUp's four primed cycles produce, so they cannot tell an idle
+        // campaign from a working one. Measured over 514 default-profile runs: every run sealed at least one
+        // more cohort (min 5 seals); campaign completions and retirements averaged 4 and 2 per run but can be
+        // absent from one run, so they are accumulated over the process (unique SR_ prefix).
+        assertGe(cohort.seals(), SETUP_CYCLES + 1, "vacuous: the campaign never sealed a cohort");
+        uint256 runs = _acc("SR_RUNS", 1);
+        uint256 completions = _acc("SR_completions", cohort.completions() - SETUP_CYCLES);
+        uint256 retirements = _acc("SR_retirements", tickets.retirements() - SETUP_CYCLES);
+        if (runs < 16) return;
+        assertGt(completions, 0, "vacuous: the campaign never completed a field");
+        assertGt(retirements, 0, "vacuous: the campaign never retired a ticket level");
+    }
+
+    uint256 private constant SETUP_CYCLES = 4;
+
+    function _acc(string memory k, uint256 v) private returns (uint256 total) {
+        total = vm.envOr(k, uint256(0)) + v;
+        vm.setEnv(k, vm.toString(total));
     }
 }

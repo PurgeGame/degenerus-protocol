@@ -155,7 +155,7 @@ contract V61SolvencyAfpay is DeployProtocol {
     ///         across the 256/128 run — otherwise the Σ would hold vacuously (no extra balance was ever moved
     ///         through the new paths). Asserting the success counters > 0 here makes a "passes because nothing
     ///         happened" green impossible: if every widened action reverted, this campaign FAILS.
-    function afterInvariant() public view {
+    function afterInvariant() public {
         uint256 widenedSuccesses = solvencyHandler.ghost_passBuys() +
             solvencyHandler.ghost_presaleBuys() +
             solvencyHandler.ghost_claims();
@@ -164,6 +164,34 @@ contract V61SolvencyAfpay is DeployProtocol {
             0,
             "NON-VACUITY: SolvencyActionHandler pass/presale/claim surfaces must succeed > 0 times (else the widened identity is vacuous)"
         );
+        // Each leg separately. Measured over 1,028 default-profile runs: at least 5 pass buys, 4 presale/box
+        // buys and a non-zero afking deposit per run; afking draws, smites, foil buys and stETH cover buys can
+        // be absent from one run (334, 49, 31, 304 runs had none); a paying claimWinnings is rare (22 runs:
+        // actors almost never hold claimable winnings at level 0), so it is required only once 512 runs have
+        // accumulated (unique V61_ prefix).
+        assertGe(solvencyHandler.ghost_passBuys(), 2, "NON-VACUITY: pass buys (almost) never succeeded");
+        assertGe(solvencyHandler.ghost_presaleBuys(), 2, "NON-VACUITY: presale/box buys (almost) never succeeded");
+        assertGt(solvencyHandler.ghost_afkingDeposited(), 0, "NON-VACUITY: no afking deposit (solvency handler)");
+        uint256 runs = _acc("V61_RUNS", 1);
+        uint256 deposited = _acc("V61_afkingDeposited", handler.ghost_afkingDeposited());
+        uint256 drawn = _acc("V61_afkingDrawn", handler.ghost_afkingDrawn());
+        uint256 smites = _acc("V61_smites", handler.ghost_smiteBurned());
+        uint256 foils = _acc("V61_foils", solvencyHandler.ghost_foilBuys());
+        uint256 steth = _acc("V61_stethBuys", solvencyHandler.ghost_stethBuys());
+        uint256 claims = _acc("V61_claims", solvencyHandler.ghost_claims() + handler.success_staleCashout());
+        if (runs < 16) return;
+        assertGt(deposited, 0, "NON-VACUITY: no afking deposit ever succeeded");
+        assertGt(drawn, 0, "NON-VACUITY: no buy ever drew afking funding");
+        assertGt(smites, 0, "NON-VACUITY: no smite ever succeeded");
+        assertGt(foils, 0, "NON-VACUITY: no foil buy ever succeeded");
+        assertGt(steth, 0, "NON-VACUITY: no stETH-funded cover buy ever landed");
+        if (runs < 512) return;
+        assertGt(claims, 0, "NON-VACUITY: no claimWinnings ever paid out");
+    }
+
+    function _acc(string memory k, uint256 v) private returns (uint256 total) {
+        total = vm.envOr(k, uint256(0)) + v;
+        vm.setEnv(k, vm.toString(total));
     }
 
     /// @notice Pin non-vacuity for the new action: actor ETH becomes stETH, then funds a real cover buy.

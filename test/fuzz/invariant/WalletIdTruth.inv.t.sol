@@ -107,6 +107,34 @@ contract WalletIdTruthInvariant is DeployProtocol {
                 " reverts:", _revList(k)
             ));
         }
+        _assertCoverage(runs, n);
+    }
+
+    /// @dev Non-vacuity over the accumulated report. Measured over 257 default-profile runs: 307 smurfs,
+    ///      820 authorized account-door successes (284 for a smurf), 1,226 unauthorized refusals, 110 gifts,
+    ///      226 levels gained; every door in `oks` succeeded >= 50 times and every door in `regs` registered
+    ///      >= 50 wallet IDs (>= ~12 expected by run 64). Doors that never succeeded in that measurement are
+    ///      not required (their wallet-ID property is then only checked on reverted calls).
+    function _assertCoverage(uint256 runs, uint256 n) internal view {
+        if (runs < 16) return;
+        assertGt(vm.envOr("WID_SMURFS", uint256(0)), 0, "vacuous: no smurf was ever created");
+        assertGt(vm.envOr("WID_ACCT_OK", uint256(0)), 0, "vacuous: no authorized account-door call succeeded");
+        assertGt(vm.envOr("WID_ACCT_SMURF_OK", uint256(0)), 0, "vacuous: no account-door call for a smurf succeeded");
+        assertGt(vm.envOr("WID_ACCT_REJECT", uint256(0)), 0, "vacuous: no unauthorized account-door call was refused");
+        assertGt(vm.envOr("WID_ACCT_GIFT", uint256(0)), 0, "vacuous: no account-door gift happened");
+        assertGt(vm.envOr("WID_LEVELS", uint256(0)), 0, "vacuous: no run ever gained a level");
+        if (runs < 64) return;
+        uint8[44] memory oks = [uint8(0), 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 26, 27, 28, 29, 31, 32, 36, 37, 38, 39, 40, 41, 42, 43, 44, 48, 50, 54, 55, 57, 59, 61, 68];
+        for (uint256 i; i < oks.length; ++i) {
+            require(oks[i] < n, "door id out of range");
+            assertGt(vm.envOr(string.concat("WID_OK_", vm.toString(uint256(oks[i]))), uint256(0)), 0,
+                string.concat("vacuous: door never succeeded: ", handler.actionName(oks[i])));
+        }
+        uint8[18] memory regs = [uint8(0), 1, 3, 4, 5, 6, 7, 13, 15, 16, 18, 19, 20, 26, 27, 29, 32, 40];
+        for (uint256 i; i < regs.length; ++i) {
+            assertGt(vm.envOr(string.concat("WID_R_", vm.toString(uint256(regs[i]))), uint256(0)), 0,
+                string.concat("vacuous: door never registered a wallet ID: ", handler.actionName(regs[i])));
+        }
     }
 
     function _revList(string memory k) internal view returns (string memory out) {

@@ -81,13 +81,36 @@ contract BoxEnqueue is DeployProtocol {
     // NON-VACUITY: the campaign created boxes across >= 2 distinct paths
     // =========================================================================
 
-    function afterInvariant() public view {
+    function afterInvariant() public {
         assertGe(
             handler.pathsExercised(),
             2,
             "NON-VACUITY: boxes must be created across >= 2 distinct paths (else the queue invariants are vacuous)"
         );
         assertGt(handler.totalBoxesCreated(), 0, "NON-VACUITY: the campaign must create > 0 boxes");
+        // The FIFO property only bites when the engine settles queued entries under observation. Measured
+        // minima over 771 default-profile runs: 50 observed resolutions and 52 boxes per run.
+        assertGe(handler.resolutionsObserved(), 10, "NON-VACUITY: the engine settled (almost) no queued entry");
+        assertGe(handler.totalBoxesCreated(), 10, "NON-VACUITY: the campaign created (almost) no boxes");
+        // Every creation path must append at least once over the process (unique BE_ prefix); lazy passes
+        // can be absent from a single run (108 of 771 runs had none).
+        uint256 runs = _acc("BE_RUNS", 1);
+        uint256[5] memory paths = [
+            _acc("BE_mintLootbox", handler.boxesCreated_mintLootbox()),
+            _acc("BE_whale", handler.boxesCreated_whale()),
+            _acc("BE_lazy", handler.boxesCreated_lazy()),
+            _acc("BE_deity", handler.boxesCreated_deity()),
+            _acc("BE_presale", handler.boxesCreated_presale())
+        ];
+        if (runs < 16) return;
+        for (uint256 i; i < paths.length; ++i) {
+            assertGt(paths[i], 0, string.concat("NON-VACUITY: box creation path never appended: ", vm.toString(i)));
+        }
+    }
+
+    function _acc(string memory k, uint256 v) private returns (uint256 total) {
+        total = vm.envOr(k, uint256(0)) + v;
+        vm.setEnv(k, vm.toString(total));
     }
 
     /// @notice Drive the handler's creation actions directly (deterministic seeds spanning the actor

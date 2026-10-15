@@ -10,6 +10,9 @@ import {RngIndexDrainHandler} from "../handlers/RngIndexDrainHandler.sol";
 /// trait consumers have separate suites; encountering one here fails rather than skips.
 contract RngIndexDrainOrderingInvariants is DeployProtocol {
     RngIndexDrainHandler public handler;
+    uint256 internal anchorDrains;
+    uint256 internal anchorEntries;
+    uint256 internal anchorBuyerEntries;
 
     function setUp() public {
         _deployProtocol();
@@ -29,6 +32,9 @@ contract RngIndexDrainOrderingInvariants is DeployProtocol {
         assertFalse(game.rngLocked(), "anchor daily cycle did not finish");
         _assertCoverage();
         _assertBinding();
+        anchorDrains = handler.ghost_dailyDrainBranchEntered();
+        anchorEntries = handler.ghost_entriesChecked();
+        anchorBuyerEntries = handler.ghost_buyerEntriesChecked();
 
         bytes4[] memory selectors = new bytes4[](4);
         selectors[0] = handler.purchase.selector;
@@ -60,9 +66,26 @@ contract RngIndexDrainOrderingInvariants is DeployProtocol {
         _assertCoverage();
     }
 
-    function afterInvariant() public view {
+    /// @dev The coverage floor above is already met by the setUp anchor, so on its own it cannot tell a
+    ///      campaign that checked nothing from one that did. The campaign's own drains and checked entries
+    ///      (beyond the anchor) are accumulated over the process (unique RD_ prefix) and must be non-zero
+    ///      once 16 runs have completed.
+    function afterInvariant() public {
         _assertCoverage();
         _assertBinding();
+        uint256 runs = _acc("RD_RUNS", 1);
+        uint256 drains = _acc("RD_drains", handler.ghost_dailyDrainBranchEntered() - anchorDrains);
+        uint256 entries = _acc("RD_entries", handler.ghost_entriesChecked() - anchorEntries);
+        uint256 buyers = _acc("RD_buyerEntries", handler.ghost_buyerEntriesChecked() - anchorBuyerEntries);
+        if (runs < 16) return;
+        assertGt(drains, 0, "vacuous: the campaign never entered the ordinary drain");
+        assertGt(entries, 0, "vacuous: the campaign never checked a persisted entry");
+        assertGt(buyers, 0, "vacuous: the campaign never checked a paid buyer entry");
+    }
+
+    function _acc(string memory k, uint256 v) private returns (uint256 total) {
+        total = vm.envOr(k, uint256(0)) + v;
+        vm.setEnv(k, vm.toString(total));
     }
 
     function test_anchorChecksPersistedEntries() public view {

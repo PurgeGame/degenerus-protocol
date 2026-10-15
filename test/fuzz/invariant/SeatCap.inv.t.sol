@@ -814,7 +814,29 @@ contract SeatCapInvariant is DeployProtocol {
                 " reverts:", _revList(k)
             ));
         }
+
+        // Non-vacuity, accumulated over the process because one run can legitimately skip an action.
+        // Measured over 65 default-profile runs: >= 1.5 successes per run for every action below, about
+        // 15 cap-boundary steps, 3.5 non-exempt insertions and 60 day cranks per run. The standalone
+        // mineFlip action is exempt: driveDay always cranks the day to NoWork first, so a lone mineFlip
+        // legitimately finds no work (0 of 180 succeeded); the day cranks are asserted instead.
+        if (runs < SEATCAP_MIN_RUNS) return;
+        assertGt(vm.envOr("SEATCAP_CAPHITS", uint256(0)), 0, "vacuous: the seat bound was never reached");
+        assertGt(vm.envOr("SEATCAP_BURNS", uint256(0)), 0, "vacuous: no seat was ever burned");
+        assertGt(vm.envOr("SEATCAP_INSERTS", uint256(0)), 0, "vacuous: no non-exempt seat was ever inserted");
+        assertGt(vm.envOr("SEATCAP_VMINTS", uint256(0)), 0, "vacuous: the vault never minted a seat");
+        assertGt(vm.envOr("SEATCAP_CRANKS", uint256(0)), 0, "vacuous: driveDay never cranked the engine");
+        for (uint256 a; a < n; ++a) {
+            if (a == 10) continue; // A_MINE, see above
+            assertGt(
+                vm.envOr(string.concat("SEATCAP_OK_", vm.toString(a)), uint256(0)),
+                0,
+                string.concat("vacuous: action never succeeded: ", handler.actionName(a))
+            );
+        }
     }
+
+    uint256 private constant SEATCAP_MIN_RUNS = 16;
 
     function _revList(string memory k) internal view returns (string memory out) {
         string memory list = vm.envOr(string.concat("SEATCAP_RVL_", k), string(""));

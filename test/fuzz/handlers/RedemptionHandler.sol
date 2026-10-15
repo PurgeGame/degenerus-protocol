@@ -31,6 +31,7 @@ contract RedemptionHandler is Test {
     uint256 public ghost_doubleClaim;
     uint256 public ghost_rollOutOfBounds;
     uint256 public ghost_claimCount;
+    uint256 public ghost_resolvedBatches; // distinct batches observed with a written roll
     uint256 public successfulBurns;
     uint256 public calls_burn;
     uint256 public calls_advanceDay;
@@ -101,6 +102,16 @@ contract RedemptionHandler is Test {
         _trackSupply(supply); _observeRolls();
     }
     function action_triggerGameOver() external {
+        _triggerGameOver();
+    }
+    /// @notice Fuzz-weighted game-over trigger: acts on one draw in four. The first trigger fires
+    ///         liveness, which blocks every later burn; acting on every draw ends the redemption
+    ///         lifecycle within a few calls of each run (measured: under one campaign burn per run).
+    function action_triggerGameOverSometimes(uint256 seed) external {
+        if (seed % 4 != 0) return;
+        _triggerGameOver();
+    }
+    function _triggerGameOver() private {
         ++calls_triggerGameOver;
         if (game.gameOver()) return;
         uint256 supply = sdgnrs.totalSupply();
@@ -186,7 +197,7 @@ contract RedemptionHandler is Test {
             (,,,,uint16 roll,) = sdgnrs.redemptionBatches(id);
             if (roll == 0) continue;
             if (roll < 21 || roll > 175) ++ghost_rollOutOfBounds;
-            if (firstRoll[id] == 0) firstRoll[id] = roll;
+            if (firstRoll[id] == 0) { firstRoll[id] = roll; ++ghost_resolvedBatches; }
             else assertEq(roll, firstRoll[id], "batch roll immutable");
         }
     }

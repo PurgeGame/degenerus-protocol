@@ -93,5 +93,9 @@ contract CrapsRealWiringConservation is DeployProtocol {
         assertGt(handler.ghost_flipBurnedIn(), 0, "vacuous: no FLIP was ever burned into the table");
         assertGt(handler.ghost_subsidies(), 0, "vacuous: no day ever opened with a budget");
         assertGt(handler.ghost_compsGranted(), 0, "vacuous: the vault never granted a comp");
+        // invariant_keeperNeverReverts needs the keeper to run (measured minimum: 47 keeps per run over 771
+        // default-profile runs), and the ledger needs real entries (minimum 18 per run).
+        assertGe(handler.ghost_keeps(), 10, "vacuous: the keeper (almost) never ran");
+        assertGe(handler.ghost_entries(), 5, "vacuous: (almost) no craps entry bound");
     }
 }

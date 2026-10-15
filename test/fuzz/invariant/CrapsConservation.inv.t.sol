@@ -68,7 +68,7 @@ contract CrapsConservationInv is CrapsPins {
         handler.advanceDay(1);
 
         targetContract(address(handler));
-        bytes4[] memory selectors = new bytes4[](13);
+        bytes4[] memory selectors = new bytes4[](14);
         selectors[0] = CrapsFlowHandler.advanceDay.selector;
         selectors[1] = CrapsFlowHandler.enterWindow.selector;
         selectors[2] = CrapsFlowHandler.enterDay.selector;
@@ -82,6 +82,7 @@ contract CrapsConservationInv is CrapsPins {
         selectors[10] = CrapsFlowHandler.settleSlot.selector;
         selectors[11] = CrapsFlowHandler.keep.selector;
         selectors[12] = CrapsFlowHandler.convert.selector;
+        selectors[13] = CrapsFlowHandler.deliverPasses.selector;
         targetSelector(FuzzSelector({addr: address(handler), selectors: selectors}));
     }
 
@@ -143,12 +144,35 @@ contract CrapsConservationInv is CrapsPins {
 
     // ── Non-vacuity ─────────────────────────────────────────────────────────
 
-    function afterInvariant() public view {
+    function afterInvariant() public {
         assertGt(handler.ghost_entries(), 0, "vacuous: no entries happened");
         assertGt(handler.ghost_settledFields(), 0, "vacuous: no field ever settled");
         assertGt(handler.ghost_scheduledSettles(), 0, "vacuous: no SCHEDULED field ever settled");
         assertGt(handler.openedDayCount(), 1, "vacuous: the campaign never left day one");
         assertGt(handler.ghost_keeps(), 0, "vacuous: the keeper never cranked");
+        // Banked-pass doors: the 21:1 conversion property and pass application are only reachable once a
+        // pass award banks credits (the handler's deliverPasses). Measured over
+        // 1,797 default-profile runs: at least 3 deliveries per run; a conversion in 95% of runs, a pass
+        // application in 98%, a high seat in 93%. Accumulated over the process (unique CC_ prefix) and asserted
+        // once MIN_RUNS runs have completed.
+        assertGe(handler.ghost_passDeliveries(), 1, "vacuous: no pass award was delivered in this run");
+        uint256 runs = _acc("CC_RUNS", 1);
+        uint256 deliveries = _acc("CC_deliveries", handler.ghost_passDeliveries());
+        uint256 applies = _acc("CC_applies", handler.ghost_passApplies());
+        uint256 conversions = _acc("CC_conversions", handler.ghost_conversions());
+        uint256 highSeats = _acc("CC_highSeats", handler.ghost_highSeats());
+        if (runs < MIN_RUNS) return;
+        assertGt(deliveries, 0, "vacuous: no pass award was ever delivered");
+        assertGt(applies, 0, "vacuous: no banked pass was ever applied");
+        assertGt(conversions, 0, "vacuous: no normal-to-high conversion ever succeeded");
+        assertGt(highSeats, 0, "vacuous: no high-lane seat was ever taken");
+    }
+
+    uint256 private constant MIN_RUNS = 16;
+
+    function _acc(string memory k, uint256 v) private returns (uint256 total) {
+        total = vm.envOr(k, uint256(0)) + v;
+        vm.setEnv(k, vm.toString(total));
     }
 
     // ── Falsifiability ──────────────────────────────────────────────────────

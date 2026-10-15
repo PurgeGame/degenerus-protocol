@@ -36,8 +36,9 @@ import {GameSlots} from "../../helpers/GameSlots.sol";
 ///             SHRINKS the obligation, so the bound stays directionally safe without subtracting it.
 ///
 ///         NON-VACUITY. The conservation property is only meaningful if pool-to-pool transfers actually ran.
-///         afterInvariant gates acceptance on ghost_advances > 0 — a campaign where mineFlip never succeeded
-///         (no consolidation/skim/jackpot transfer ran) is a vacuous green and FAILS. A focused non-vacuity test
+///         afterInvariant gates acceptance on real progress per run (successful mineFlips and buys) and, over
+///         the process, on level transitions (the handler's bounded real-money driveLevelUp; the random walk
+///         alone never left level 0) and paying claims — a campaign where nothing moved FAILS. A focused non-vacuity test
 ///         additionally drives the handler's advance action directly and asserts ghost_advances > 0 so a
 ///         transfer that silently minted unbacked credit could not hide behind a "nothing moved" green.
 ///
@@ -144,12 +145,30 @@ contract PoolConservation is DeployProtocol {
     ///         otherwise no value ever moved between pools and the bound holds vacuously. Gating on
     ///         ghost_advances > 0 makes a "green because nothing moved" pass impossible: if no advance succeeded
     ///         across the 256/128 run, this campaign FAILS.
-    function afterInvariant() public view {
+    function afterInvariant() public {
         assertGt(
             handler.ghost_advances(),
             0,
             "NON-VACUITY: mineFlip must succeed > 0 times (else no pool-to-pool transfer ran and conservation is vacuous)"
         );
+        // Measured minima over 771 default-profile runs: 91 successful mineFlips and 32 successful buys per
+        // run; a paying claim in 49% of runs.
+        assertGe(handler.ghost_advances(), 4, "NON-VACUITY: mineFlip made (almost) no progress");
+        assertGe(handler.success_buy(), 10, "NON-VACUITY: buys (almost) never succeeded");
+        // driveLevelUp makes level transitions (next->current consolidation, level jackpots) part of the
+        // campaign; transitions and paying claims are accumulated over the process (unique PC_ prefix).
+        uint256 runs = _acc("PC_RUNS", 1);
+        uint256 levelUps = _acc("PC_levelUps", handler.ghost_levelUps());
+        uint256 claims = _acc("PC_claims", handler.success_claim());
+        if (runs < 16) return;
+        assertGt(levelUps, 0, "NON-VACUITY: no level transition ever ran");
+        if (runs < 48) return;
+        assertGt(claims, 0, "NON-VACUITY: no claim ever paid out");
+    }
+
+    function _acc(string memory k, uint256 v) private returns (uint256 total) {
+        total = vm.envOr(k, uint256(0)) + v;
+        vm.setEnv(k, vm.toString(total));
     }
 
     // =========================================================================
