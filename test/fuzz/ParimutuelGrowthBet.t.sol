@@ -780,10 +780,11 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         uint24 round = _driveToLiveJackpotPhase();
 
         // Make alice level-quest eligible: a whole ticket (400 units) tagged at the
-        // current level, and levelStreak 5 for the loyalty gate.
+        // current level, and a live levelStreak of 5 (last completed at this level).
         uint256 packedMint = (uint256(400) << BitPackingLib.LEVEL_UNITS_SHIFT) |
             (uint256(round) << BitPackingLib.LEVEL_UNITS_LEVEL_SHIFT) |
-            (uint256(5) << 48);
+            (uint256(5) << 48) |
+            (uint256(round) << BitPackingLib.MINT_STREAK_LAST_COMPLETED_SHIFT);
         vm.mockCall(
             address(game),
             abi.encodeWithSelector(

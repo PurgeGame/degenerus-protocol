@@ -109,7 +109,8 @@ contract QuestsWalletIdsTest is DeployProtocol {
         uint256 w;
         w |= (uint256(game.level() + 1) << BitPackingLib.LEVEL_UNITS_LEVEL_SHIFT)
             | (uint256(400) << BitPackingLib.LEVEL_UNITS_SHIFT)
-            | (uint256(streak) << BitPackingLib.LEVEL_STREAK_SHIFT);
+            | (uint256(streak) << BitPackingLib.LEVEL_STREAK_SHIFT)
+            | (uint256(game.level() + 1) << BitPackingLib.MINT_STREAK_LAST_COMPLETED_SHIFT);
         if (deity) w |= uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT;
         vm.store(address(game), slot, bytes32(w));
     }
@@ -563,6 +564,59 @@ contract QuestsWalletIdsTest is DeployProtocol {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         assertEq(_calls(acc, address(quests), address(game), game.hasDeityPass.selector).length, 0);
         assertEq(_countTopic(logs, E_LEVEL, id), 1, "completes on the deity bit");
+    }
+
+    /// @dev A mint word with no units this level and only the given pass fields.
+    function _passOnly(address key, uint8 passType, uint24 frozenUntil, bool deity) private {
+        uint256 w = (uint256(frozenUntil) << BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT)
+            | (uint256(passType) << BitPackingLib.WHALE_PASS_TYPE_SHIFT);
+        if (deity) w |= uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT;
+        vm.store(address(game), GameSlotKeys.mintPacked(key), bytes32(w));
+    }
+
+    function _setLevel(uint24 lvl) private {
+        bytes32 w = vm.load(address(game), bytes32(GameSlots.LEVEL));
+        uint256 shift = GameSlots.LEVEL_OFFSET * 8;
+        vm.store(address(game), bytes32(GameSlots.LEVEL),
+            bytes32((uint256(w) & ~(uint256(0xffffff) << shift)) | (uint256(lvl) << shift)));
+        assertEq(game.level(), lvl);
+    }
+
+    function _eligibleView(uint32 id) private view returns (bool eligible) {
+        (,,,, eligible) = quests.getPlayerLevelQuestView(id);
+    }
+
+    function test_ActivePassAloneIsEligible() public {
+        _setLevel(20);
+        address p = makeAddr("activePass");
+        uint32 id = _giveWalletId(p);
+        _passOnly(p, 3, 20, false);
+        assertTrue(_eligibleView(id), "whale pass covering the level, no buy this level");
+        _passOnly(p, 1, 25, false);
+        assertTrue(_eligibleView(id), "lazy pass covering the level");
+        _passOnly(p, 0, 0, true);
+        assertTrue(_eligibleView(id), "deity pass");
+        _passOnly(p, 3, 19, false);
+        assertFalse(_eligibleView(id), "whale pass that ended last level");
+        _passOnly(p, 0, 0, false);
+        assertFalse(_eligibleView(id), "no pass, no buy");
+    }
+
+    function test_ExpiredPassStreakMustBeLive() public {
+        _setLevel(20);
+        address p = makeAddr("expiredPass");
+        uint32 id = _giveWalletId(p);
+        bytes32 slot = GameSlotKeys.mintPacked(p);
+        // Bought a ticket this level; stored streak 100 front-loaded by a whale pass through 15.
+        uint256 w = (uint256(21) << BitPackingLib.LEVEL_UNITS_LEVEL_SHIFT)
+            | (uint256(400) << BitPackingLib.LEVEL_UNITS_SHIFT)
+            | (uint256(100) << BitPackingLib.LEVEL_STREAK_SHIFT)
+            | (uint256(15) << BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT)
+            | (uint256(3) << BitPackingLib.WHALE_PASS_TYPE_SHIFT);
+        vm.store(address(game), slot, bytes32(w | (uint256(15) << BitPackingLib.MINT_STREAK_LAST_COMPLETED_SHIFT)));
+        assertFalse(_eligibleView(id), "the pass's streak lapsed after level 16");
+        vm.store(address(game), slot, bytes32(w | (uint256(19) << BitPackingLib.MINT_STREAK_LAST_COMPLETED_SHIFT)));
+        assertTrue(_eligibleView(id), "a streak kept alive past the pass still counts");
     }
 
     // =====================================================================

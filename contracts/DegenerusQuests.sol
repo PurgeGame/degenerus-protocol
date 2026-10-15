@@ -2611,15 +2611,22 @@ contract DegenerusQuests is IDegenerusQuests {
     ///      mint word (the Game resolves the key), then the gates apply to it.
     /// @param id The wallet ID to check.
     /// @param lvl The current game level (fetched once by the caller).
-    /// @return True if the wallet meets both gates.
+    /// @return True if the wallet holds an active pass or meets both gates.
     function _isLevelQuestEligible(uint32 id, uint24 lvl) internal view returns (bool) {
         return _levelQuestEligible(lvl, questGame.mintPackedOfId(id));
     }
 
-    /// @dev The level-quest gates on a mint word: (levelStreak >= 5 OR any pass ever held) AND
-    ///      a whole ticket's worth of units (400 = 4 entries x the 100x quantity scale) minted
-    ///      at the current or next ticket level.
+    /// @dev The level-quest gates on a mint word: an active pass (deity, or a lazy/whale pass
+    ///      whose window covers `lvl`, the activity score's test) alone, otherwise a whole
+    ///      ticket's worth of units (400 = 4 entries x the 100x quantity scale) minted at the
+    ///      current or next ticket level AND a live levelStreak >= 5. An expired pass counts for
+    ///      nothing beyond the streak it front-loaded, which lapses like any other.
     function _levelQuestEligible(uint24 lvl, uint256 packed) private pure returns (bool) {
+        if ((packed >> BitPackingLib.HAS_DEITY_PASS_SHIFT) & 1 != 0) return true;
+        uint8 passType = uint8((packed >> BitPackingLib.WHALE_PASS_TYPE_SHIFT) & 0x3);
+        uint24 frozen = uint24((packed >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) & BitPackingLib.MASK_24);
+        if ((passType == 1 || passType == 3) && frozen >= lvl) return true;
+
         // Activity gate: one whole ticket minted for this level's window. Jackpot-phase
         // buys tag units with `lvl` (tickets target the current level), purchase-phase
         // buys tag `lvl + 1` — either satisfies the quest.
@@ -2628,19 +2635,11 @@ contract DegenerusQuests is IDegenerusQuests {
         uint16 units = uint16((packed >> BitPackingLib.LEVEL_UNITS_SHIFT) & BitPackingLib.MASK_16);
         if (units < 400) return false;
 
-        // Loyalty gate: levelStreak >= 5 OR any pass ever held. By design this does NOT
-        // expire: passType is never cleared and frozenUntilLevel keeps its historical value,
-        // so a lapsed pass still satisfies the gate.
-        uint24 streak = uint24((packed >> BitPackingLib.LEVEL_STREAK_SHIFT) & BitPackingLib.MASK_24);
-        if (streak >= 5) return true;
-
-        // Whale/lazy pass from mintPacked_
-        uint24 frozen = uint24((packed >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) & BitPackingLib.MASK_24);
-        uint8 passType = uint8((packed >> BitPackingLib.WHALE_PASS_TYPE_SHIFT) & 0x3);
-        if (frozen > 0 && passType != 0) return true;
-
-        // Deity pass bit of the same word
-        return (packed >> BitPackingLib.HAS_DEITY_PASS_SHIFT) & 1 != 0;
+        // A pass front-loads the stored streak and it outlives the pass, so only a live run
+        // counts: dead once a whole level passes beyond its last completed level.
+        uint256 lastCompleted = (packed >> BitPackingLib.MINT_STREAK_LAST_COMPLETED_SHIFT) & BitPackingLib.MASK_24;
+        if (lastCompleted + 1 < lvl) return false;
+        return uint24((packed >> BitPackingLib.LEVEL_STREAK_SHIFT) & BitPackingLib.MASK_24) >= 5;
     }
 
     /// @dev Returns the 10x target for a level quest type.
