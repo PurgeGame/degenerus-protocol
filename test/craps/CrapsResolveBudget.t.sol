@@ -32,6 +32,9 @@ contract BudgetHarness is CrapsViews {
 ///         It changes only WHERE one transaction stops — so the whole of this suite is the same
 ///         assertion from different angles: chunking moves the boundary and nothing else.
 contract CrapsResolveBudgetTest is CrapsPins {
+    // Independent assertion of the protocol batch limit.
+    uint64 private constant EXPECTED_MAX_SEATS = 32;
+
     BudgetHarness internal craps;
 
     uint256 internal constant PLAIN_WORD = 40 << 8;
@@ -107,15 +110,16 @@ contract CrapsResolveBudgetTest is CrapsPins {
     /// @dev THE SEAT CEILING IS ABSOLUTE, and independent of the budget. It bounds the two credit
     ///      arrays and the loop counter, so no caller can make one call allocate without limit.
     function test_theSeatCeilingBoundsOneCallWhateverTheBudgetIs() public {
-        assertEq(craps.resolveMaxSeats(), 96, "the seat ceiling moved");
-        // The suite's fields are far below the ceiling, so this states the rule rather than
-        // driving it: the ceiling is a `from + max` clamp on the offered end, above every field
-        // any fixture here builds.
+        assertEq(craps.resolveMaxSeats(), EXPECTED_MAX_SEATS);
         (uint64 slot,) = _field(PLAIN_WORD, uint256(keccak256("ceiling")));
         uint64 entrants = uint64(craps.battleOf(craps.keyOfSlot(slot)).entrants);
-        assertLt(entrants, craps.resolveMaxSeats(), "the fixture field reaches the ceiling");
+        assertGt(entrants, EXPECTED_MAX_SEATS, "fixture crosses the credit-flush boundary");
         craps.settleSlot(slot, WHOLE_FIELD);
-        assertEq(craps.bonusCursorOf(slot), entrants, "the ceiling clipped a field below it");
+        assertEq(craps.bonusCursorOf(slot), EXPECTED_MAX_SEATS, "even an oversized allowance stops at 32 seats");
+        assertFalse(craps.battleOf(craps.keyOfSlot(slot)).finalized);
+        craps.settleSlot(slot, WHOLE_FIELD);
+        assertEq(craps.bonusCursorOf(slot), entrants, "the saved cursor resumes the remaining seats");
+        assertTrue(craps.battleOf(craps.keyOfSlot(slot)).finalized);
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -123,7 +127,7 @@ contract CrapsResolveBudgetTest is CrapsPins {
     // ════════════════════════════════════════════════════════════════════════
 
     /// @dev THE EQUIVALENCE, and it is the whole point of the change. One field and one word,
-    ///      settled three ways — in a single oversized call, one seat at a time, and in several
+    ///      settled three ways — in repeated maximum-allowance calls, one seat at a time, and in several
     ///      ordinary budgets — must land on the identical winner, roll count, pot, progressive
     ///      balance, action totals and cursor.
     function test_everyChunkingReachesTheIdenticalResult() public {
@@ -141,7 +145,7 @@ contract CrapsResolveBudgetTest is CrapsPins {
             craps.seedProgressive(1_000_000);
 
             if (mode == 0) {
-                craps.settleSlot(slot, WHOLE_FIELD);
+                _settleWhole(slot);
             } else if (mode == 1) {
                 for (uint256 i = 0; i < FIELD + 8; ++i) craps.resolveSeats(slot, 1);
             } else {
@@ -205,7 +209,7 @@ contract CrapsResolveBudgetTest is CrapsPins {
             uint256 snap = vm.snapshotState();
             (uint64 slot, uint24 day) = _field(PLAIN_WORD, uint256(keccak256("action")));
             if (mode == 0) {
-                craps.settleSlot(slot, WHOLE_FIELD);
+                _settleWhole(slot);
             } else {
                 for (uint256 i = 0; i < FIELD + 8; ++i) craps.resolveSeats(slot, 1);
             }
@@ -269,7 +273,7 @@ contract CrapsResolveBudgetTest is CrapsPins {
         assertEq(craps.bonusCursorOf(slot), marked, "a reverted call committed part of a walk");
 
         // And the field is still perfectly live, from exactly where it stopped.
-        craps.settleSlot(slot, WHOLE_FIELD);
+        _settleWhole(slot);
         assertTrue(craps.battleOf(craps.keyOfSlot(slot)).finalized, "the field was stranded by the failed call");
     }
 
@@ -306,6 +310,16 @@ contract CrapsResolveBudgetTest is CrapsPins {
 
     /// @dev Open a fresh day, seat `FIELD` players into period 1, shut it, and land `wordSalt` on
     ///      the table it took.
+    function _settleWhole(uint64 slot) private {
+        for (uint256 i; i < FIELD; ++i) {
+            uint64 beforeCursor = craps.bonusCursorOf(slot);
+            craps.settleSlot(slot, WHOLE_FIELD);
+            if (craps.battleOf(craps.keyOfSlot(slot)).finalized) return;
+            assertGt(craps.bonusCursorOf(slot), beforeCursor, "bounded settlement must progress");
+        }
+        fail("field did not finish after resuming its checkpoints");
+    }
+
     function _field(uint256 dayWord, uint256 wordSalt) internal returns (uint64 slot, uint24 day) {
         day = craps.currentDayIndex();
         _setDailyWord(day, dayWord);

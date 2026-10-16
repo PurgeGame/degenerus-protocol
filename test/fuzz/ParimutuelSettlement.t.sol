@@ -152,6 +152,9 @@ abstract contract PariSettlementSlots {
 // =====================================================================================
 
 contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
+    // Independent assertion of the protocol flush limit; 31/32/33 below test its boundaries.
+    uint256 private constant EXPECTED_CREDIT_BATCH_SIZE = 32;
+
     DegenerusParimutuel private pari;
     PariSettleMockGame private mockGame;
     uint24 private stakeDay;
@@ -241,7 +244,7 @@ contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
         while (!_settleAll()) {}
         bytes32 expected;
         for (uint32 id = 10; id < 150; ++id) expected = keccak256(abi.encode(expected, _stake(id)));
-        uint32[4] memory factors = [uint32(10_000), 15_000, 50_000, type(uint32).max];
+        uint32[7] memory factors = [uint32(2_500), 5_000, 9_999, 10_000, 15_000, 50_000, type(uint32).max];
         for (uint256 f; f < factors.length; ++f) {
             vm.revertToState(snap);
             bool finished;
@@ -250,7 +253,7 @@ contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
                 MineFlipGas.Result memory r = pari.runGrowthWork{gas: 9_000_000}(
                     MineFlipGas.budget(8_500_000, factors[f], true));
                 assertTrue(r.progressed || r.done);
-                if (f == 3) assertLe(r.rewardBasis, 1, "extreme factor still pays a winner");
+                if (factors[f] == type(uint32).max) assertLe(r.rewardBasis, 1, "extreme factor still pays a winner");
                 if (r.done) { finished = true; break; }
             }
             assertTrue(finished);
@@ -434,21 +437,17 @@ contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
 
     // ---------------------------------------------------------------- settlement chunks
 
-    /// One call drains a round of 98..101 winners; every winner is credited once at
-    /// STAKE * total / winCount, losers never, and the burned dust is below winCount.
-    function test_BatchBufferBoundaries98_99() public {
-        _checkBatchBoundary(1, 1_000, 98, 0);
-        _checkBatchBoundary(2, 2_000, 99, 0);
+    /// Every winner is paid once across full and partial 32-recipient flushes.
+    function test_BatchBuffer31FlushesOnce() public { _checkBatchBoundary(1, 1_000, 31, 1); }
+    function test_BatchBuffer32FlushesOnce() public { _checkBatchBoundary(1, 2_000, 32, 1); }
+    function test_BatchBuffer33FlushesTwice() public { _checkBatchBoundary(1, 3_000, 33, 2); }
+
+    function test_BatchBuffer100FlushesFourTimes() public {
+        _checkBatchBoundary(1, 3_000, 100, 4);
     }
 
-    /// The batch buffer holds 100: exactly 100 winners flush through one creditFlipBatch.
-    function test_BatchBuffer100FlushesOnce() public {
-        _checkBatchBoundary(1, 3_000, 100, 1);
-    }
-
-    /// 101 winners: a full buffer flushes mid-loop and the straggler flushes at the end.
-    function test_BatchBuffer101FlushesTwice() public {
-        _checkBatchBoundary(1, 4_000, 101, 2);
+    function test_BatchBuffer101FlushesFourTimes() public {
+        _checkBatchBoundary(1, 4_000, 101, 4);
     }
 
     function _checkBatchBoundary(uint24 round, uint32 firstId, uint256 n, uint64 flushes) private {
@@ -463,7 +462,7 @@ contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
         (uint24 cr, uint256 paid) = _cursor();
         assertEq(cr, round + 1);
         assertEq(paid, 0);
-        _checkRunsCover(vm.getRecordedLogs(), n, payout, n > 100 ? 2 : 1);
+        _checkRunsCover(vm.getRecordedLogs(), n, payout, (n + EXPECTED_CREDIT_BATCH_SIZE - 1) / EXPECTED_CREDIT_BATCH_SIZE);
         _checkCredits(firstId, n, 3, payout);
     }
 
@@ -472,6 +471,7 @@ contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
         uint256 total;
         for (uint256 i; i < runs.length; ++i) {
             assertEq(runs[i].payout, payout);
+            assertLe(runs[i].count, EXPECTED_CREDIT_BATCH_SIZE, "one flush never exceeds 32 recipients");
             total += runs[i].count;
         }
         assertEq(total, n, "every position paid once");
@@ -1155,6 +1155,8 @@ abstract contract PariSettlementProtocolBase is DeployProtocol, PariSettlementSl
 }
 
 contract ParimutuelSettlementProtocolTest is PariSettlementProtocolBase {
+    uint256 private constant EXPECTED_UNPAID_GAS = 1_000_000;
+
     address private constant KEEPER = address(0xC1A9);
 
     function setUp() public {
@@ -1214,6 +1216,7 @@ contract ParimutuelSettlementProtocolTest is PariSettlementProtocolBase {
     }
 
     function _keeperReward(uint256 used) private view returns (uint256 reward) {
+        if (used <= EXPECTED_UNPAID_GAS) return 0;
         uint256 requestTime =
             uint48(uint256(vm.load(address(game), bytes32(GameSlots.RNG_REQUEST_TIME))) >> (GameSlots.RNG_REQUEST_TIME_OFFSET * 8));
         uint256 due = requestTime;
@@ -1225,7 +1228,7 @@ contract ParimutuelSettlementProtocolTest is PariSettlementProtocolBase {
         uint256 cap = uint256(500_000_000) << steps;
         uint256 multiplierBps = 3_000 + 4_500 * steps;
         uint256 rate = block.basefee > cap ? cap : block.basefee;
-        uint256 numerator = (used - 1_000_000) * rate * 1_000 * multiplierBps;
+        uint256 numerator = (used - EXPECTED_UNPAID_GAS) * rate * 1_000 * multiplierBps;
         uint256 denominator = game.mintPrice() * 10_000;
         if (numerator < (denominator - 1) / 1e18 + 1) return 0;
         reward = numerator / denominator;
@@ -1242,9 +1245,9 @@ contract ParimutuelSettlementProtocolTest is PariSettlementProtocolBase {
     function _checkWorkEvent(bytes memory data) private view returns (uint256 reward) {
         (uint8 firstAction, uint256 used, uint256 paid) = abi.decode(data, (uint8, uint256, uint256));
         assertEq(firstAction, GROWTH_SETTLE);
-        assertGt(used, 1_000_000, "a settlement chunk crosses the unpaid floor");
+        assertGt(used, 0, "settlement reports its actual work");
         assertEq(paid, _keeperReward(used), "settlement gas is paid like other work");
-        assertGt(paid, 0);
+        if (used <= EXPECTED_UNPAID_GAS) assertEq(paid, 0, "small chunks remain below the unpaid floor");
         reward = paid;
     }
 

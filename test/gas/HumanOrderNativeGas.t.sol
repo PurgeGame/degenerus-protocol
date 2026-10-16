@@ -111,6 +111,8 @@ contract HumanOrderGasSeed is DegenerusGame {
 }
 
 contract HumanOrderNativeGasTest is DeployProtocol {
+    uint256 private constant NO_RESERVOIR_GAS_LIMIT = 1 << 24;
+
     address private constant PLAYER = address(0xB0A100);
     address private constant MINER = address(0xB0A200);
     bytes private gameCode;
@@ -160,10 +162,11 @@ contract HumanOrderNativeGasTest is DeployProtocol {
                 VmSafe.AccountAccess[] memory accesses = vm.stopAndReturnStateDiff();
                 GlamsterdamReprice.Result memory r = repricer.quote(measured, accesses, address(host));
                 assertLe(measured, bound, "fresh-cap Osaka admission");
-                assertLe(r.glamsterdamExec, bound, "fresh-cap repriced admission");
+                assertLe(r.glamsterdamExec + r.stateGas, bound, "fresh-cap state-inclusive admission");
                 if (r.glamsterdamExec > peakExec) peakExec = r.glamsterdamExec;
                 if (r.glamsterdamExec + r.stateGas > peakTotal) peakTotal = r.glamsterdamExec + r.stateGas;
-                if (bound - r.glamsterdamExec < minimumHeadroom) minimumHeadroom = bound - r.glamsterdamExec;
+                if (bound - r.glamsterdamExec - r.stateGas < minimumHeadroom)
+                    minimumHeadroom = bound - r.glamsterdamExec - r.stateGas;
                 assertTrue(vm.revertToState(fixture));
             }
         }
@@ -189,8 +192,8 @@ contract HumanOrderNativeGasTest is DeployProtocol {
         assertEq(resolved, count);
         assertEq(host.entriesLeft(), 0);
         assertLe(atomicGas, bound, "cold entry exceeds its declared atomic bound");
-        assertLe(bound + GasBounds.HUMAN_TAIL_GAS + MineFlipGas.CHECK_RESERVE, 10_000_000,
-            "declared entry plus tail exceeds the 10M chunk limit");
+        assertLe(bound + GasBounds.HUMAN_TAIL_GAS + MineFlipGas.CHECK_RESERVE, NO_RESERVOIR_GAS_LIMIT,
+            "accepted atomic human order fits the no-reservoir transaction envelope");
         assertTrue(vm.revertToState(snapshot));
         vm.etch(address(game), gameCode);
         assertEq(game.nextMinerAction(), uint8(DegenerusGameStorage.MinerAction.HumanBoxes), "real engine must select human FIFO");
@@ -279,8 +282,8 @@ contract HumanOrderNativeGasTest is DeployProtocol {
         emit log_named_uint(string.concat(label, ": most winning ETH spins in one run"), mostWins);
         emit log_named_uint(string.concat(label, ": declared entry bound"), _entryBound(count, presale));
         assertLe(peak, _entryBound(count, presale), "cold entry exceeds its declared atomic bound");
-        assertLe(_entryBound(count, presale) + GasBounds.HUMAN_TAIL_GAS + MineFlipGas.CHECK_RESERVE, 10_000_000,
-            "declared entry plus tail exceeds the 10M chunk limit");
+        assertLe(_entryBound(count, presale) + GasBounds.HUMAN_TAIL_GAS + MineFlipGas.CHECK_RESERVE, NO_RESERVOIR_GAS_LIMIT,
+            "accepted atomic human order fits the no-reservoir transaction envelope");
     }
 
     function _seededWord(uint256 input, bool presale) private returns (uint256 word) {

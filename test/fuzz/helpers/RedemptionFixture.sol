@@ -18,6 +18,11 @@ contract RedemptionGameOverLatch is DegenerusGame {
 ///         live request comes next (daily or mid-day), settled on the word that request returns.
 ///         Burns leave supply at once; the open batch's escrow keeps them in the holder base.
 abstract contract RedemptionFixture is DeployProtocol {
+    uint256 internal constant RESOLVE_ONLY_ALLOWANCE = 300_000;
+    uint256 private constant CLAIM_SEARCH_START_GAS = 500_000;
+    uint256 private constant CLAIM_SEARCH_LIMIT_GAS = 9_000_000;
+    uint256 private constant CLAIM_SEARCH_STEP_GAS = 25_000;
+
     address internal alice = address(0xA11CE);
     address internal bob = address(0xB0B);
     address internal carol = address(0xCA201);
@@ -221,7 +226,7 @@ abstract contract RedemptionFixture is DeployProtocol {
         settlementWord = _wordForRoll(roll);
         vm.mockCall(address(game), abi.encodeWithSignature("rngConsumerStage()"), abi.encode(uint8(1)));
         vm.prank(address(game));
-        sdgnrs.runRedemptionWork(settlementWord, 200_000);
+        sdgnrs.runRedemptionWork(settlementWord, RESOLVE_ONLY_ALLOWANCE);
         assertEq(_rollOf(id), roll);
     }
     function _work(uint256 budget) internal returns (bool done) {
@@ -231,7 +236,7 @@ abstract contract RedemptionFixture is DeployProtocol {
     function _cursor() internal view returns (uint32 cursor) { (,,cursor,) = sdgnrs.redemptionBatchState(); }
     function _oneClaimBudget() internal returns (uint256 budget) {
         uint32 cursor = _cursor();
-        for (budget = 500_000; budget <= 4_000_000; budget += 25_000) {
+        for (budget = CLAIM_SEARCH_START_GAS; budget <= CLAIM_SEARCH_LIMIT_GAS; budget += CLAIM_SEARCH_STEP_GAS) {
             uint256 snap = vm.snapshotState();
             _work(budget);
             bool moved = _cursor() != cursor || !sdgnrs.redemptionSettlementPending();

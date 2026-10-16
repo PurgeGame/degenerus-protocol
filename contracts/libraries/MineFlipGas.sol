@@ -9,6 +9,7 @@ library MineFlipGas {
     uint256 internal constant CHECK_RESERVE = 2_000;
     uint256 internal constant CALL_RESERVE = 12_000;
     uint32 internal constant DEFAULT_MULTIPLIER = 10_000;
+    uint32 internal constant MIN_MULTIPLIER = 2_500;
     uint256 private constant CONTEXT_TAG = 1 << 255;
     uint256 private constant FIRST_BIT = 1 << 224;
     uint256 private constant ALLOWANCE_MASK = type(uint192).max;
@@ -34,7 +35,7 @@ library MineFlipGas {
 
     function normalize(uint32 multiplierBps) internal pure returns (uint32) {
         if (multiplierBps == 0) return DEFAULT_MULTIPLIER;
-        if (multiplierBps < DEFAULT_MULTIPLIER) revert InvalidGasMultiplier();
+        if (multiplierBps < MIN_MULTIPLIER) revert InvalidGasMultiplier();
         return multiplierBps;
     }
 

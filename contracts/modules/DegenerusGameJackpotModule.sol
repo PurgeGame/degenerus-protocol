@@ -1154,7 +1154,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
             uint256 end = pos + ETH_AWARD_CHUNK;
             if (end > count) end = count;
             uint256 bound = (end - pos) * ETH_WINNER_GAS_MAX;
-            if (pos == 0) bound += 160_000;
+            if (pos == 0) bound += GasBounds.JACKPOT_ETH_FIRST_GROUP_GAS;
             if (!MineFlipGas.canRun(meter, bound, JACKPOT_TAIL_GAS)) break;
             uint32 first;
             if (pos == 0) {

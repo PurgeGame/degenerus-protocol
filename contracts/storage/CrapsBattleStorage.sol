@@ -160,8 +160,8 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///
     ///         A field deeper than it settles over as many calls as it needs, carried by the
     ///         slot's cursor. It also bounds the credit flush that follows the last admitted
-    ///         seat: SEAT + SETTLE_TAIL + 96 x CREDIT stays below 10M.
-    uint64 internal constant _RESOLVE_MAX_SEATS = 96;
+    ///         seat: SEAT + SETTLE_TAIL + 32 x CREDIT = 6.33M including fresh-state gas.
+    uint64 internal constant _RESOLVE_MAX_SEATS = 32;
 
     // Safety bounds admit indivisible work; actual consumed gas, never these bounds, is charged.
     // Seat includes the engine's 1,111-roll ceiling, sole-high award and full field finalization.

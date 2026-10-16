@@ -8,6 +8,58 @@ local output directories or CI artifacts.
 The dated implementation sections below are historical, scoped evidence; their
 pass counts do not certify later revisions.
 
+### Glamsterdam gas calibration (2026-10-16)
+
+Baseline: `7c8ab71b9`. The implementation was validated in the detached
+`glam-implementation-20261016` worktree and applied to `main`. Integration names
+the remaining inline estimates and growth batch limit without changing their values.
+All 37 deployment runtimes match the validated implementation after stripping
+compiler metadata. Test allowances and independent expected limits are named too.
+The [calibration table](audit/glamsterdam-calibration-2026-10-16.csv) records 123 rows
+of estimates, measurements, component derivations and their limitations.
+The [evidence record](audit/glamsterdam-calibration-2026-10-16.json) identifies the
+original runs and hashes the retained local artifacts.
+
+Admission bounds cover Osaka and Glamsterdam including new-slot state gas without
+a reservoir. Zero still selects 10,000 bps; explicit factors from 2,500 through
+`uint32.max` are accepted. The first mandatory checkpoint still bypasses estimates.
+Solo ticket prefixes, growth-credit flushes and Craps settlement calls are limited
+to 32 entries, recipients and seats respectively, with existing cursors and ordering.
+Direct jackpot sampling keeps its canonical 32-winner geometry.
+
+Native replay records 421 successful paired Osaka/Glamsterdam calls at 16,777,216
+supplied gas without a state reservoir, using pinned Geth 1.16.9 and Glamsterdam
+devnet-8. Ticket and growth resumption reach identical final storage across both
+schedules and different call partitions. These are sampled and forced witnesses;
+unisolated tails, planning, pass-only maximums and skips retain analytical reserves.
+Blank measurements in the table do not represent measured worst cases.
+
+The forced atomic 100-box order uses 12,878,642 total gas (6,122,162 execution and
+6,756,480 state). Its 15.7M admission plus applicable presale/tail reserves preserves
+the accepted exception to the 10M checkpoint target. The forced direct 32-winner
+worker uses 9,767,503; a separate materializer extrapolation is 9,827,160. Its 12M
+round admission includes margin, with sampling and checkpoint reserves additional.
+Neither witness is a proof over every reachable state. The universal recommended
+multiplier remains zero; lower factors are throughput tuning at the caller's risk.
+
+Recorded validation finishes with 810 distinct Foundry cases passing, zero unresolved
+failures and two optional skips across 91 source roots with `FOUNDRY_ISOLATE=true`.
+Fixture repairs and reruns supersede the initial failures. AdvanceLiveness and
+AnyInputSafety ran 64 campaigns of depth 100 each. The optional AFKing fixture export
+and historical-runtime comparison skipped because their external inputs were absent.
+The grouped Hardhat LootboxOpenGas run passes both tests with clean compiler/source
+identity checks. Production size gates pass; the smallest margins are CrapsBattle
+94 bytes, WhaleModule 102 and Game 210.
+
+Before the naming cleanup, integration compared all 1,043 tracked contract, test,
+tooling and build inputs with the validated worktree. After cleanup, a fresh
+production build confirms executable-runtime equivalence and passing deployment
+sizes. The 13 changed Foundry roots and final probe rerun pass 212 distinct cases
+(257 executions including inherited suites and repeats), with no failures or skips.
+Both Hardhat gas tests pass with clean compiler/source checks and no size-limit
+warning. Source-drift and audit-identity gates pass on the final sources. The earlier 810-case campaign remains
+historical evidence and is not represented as a new full battery on `main`.
+
 ### Lootbox EV allowance at opening (2026-10-15)
 
 Baseline: `b80dab839`, rebuilt in a detached checkout. Ordinary purchases and pass/cover
@@ -171,8 +223,9 @@ was run per root at 1,000 runs × 256 calls with `FOUNDRY_PROFILE=deep`. Use
 
 ### Caller-calibrated batching and AFKing ordering (2026-10-09)
 
-The public entry is `mineFlip(uint32 gasMultiplierBps)`. Zero means 10,000 basis
-points; explicit values below 10,000 revert. The multiplier changes admission of
+At this revision, the public entry was `mineFlip(uint32 gasMultiplierBps)` with
+zero selecting 10,000 basis points and explicit values below 10,000 reverting.
+The 2026-10-16 calibration lowers the explicit minimum to 2,500. The multiplier changes admission of
 optional continuation work, while the first mandatory checkpoint is always
 attempted. Insufficient caller gas can still revert the transaction. Vault calls
 forward the chosen calibration. Committed outcomes must be independent of the

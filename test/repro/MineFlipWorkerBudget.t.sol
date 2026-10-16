@@ -53,6 +53,13 @@ contract BudgetReadFixture is DegenerusGame {
 }
 
 contract MineFlipHumanBudgetTest is DeployProtocol {
+    uint256 private constant HUMAN_CALL_GAS = 16_700_000;
+    uint256 private constant HUMAN_WORK_ALLOWANCE = 16_300_000;
+    uint256 private constant ROUTER_CALL_GAS = 12_000_000;
+    // Independent expectations keep the accepted multiplier range pinned.
+    uint32 private constant EXPECTED_MIN_MULTIPLIER = 2_500;
+    uint32 private constant EXPECTED_BASE_MULTIPLIER = 10_000;
+
     BudgetReadFixture private host;
     address private constant BUYER = address(0xA11CE);
     uint256 private constant PACKED = uint256(1) << 255;
@@ -73,7 +80,7 @@ contract MineFlipHumanBudgetTest is DeployProtocol {
     }
     function test_PublicRouterAttemptsWideBoxAtMaximumCalibration() public {
         _queueWideBox();
-        game.mineFlip{gas: 12_000_000}(type(uint32).max);
+        game.mineFlip{gas: ROUTER_CALL_GAS}(type(uint32).max);
         assertEq(host.order(), 0);
         assertEq(host.cursor(), 1);
     }
@@ -81,19 +88,23 @@ contract MineFlipHumanBudgetTest is DeployProtocol {
         _queueWideBox();
         uint256 beforeOrder = host.order();
         vm.expectRevert(MineFlipGas.InvalidGasMultiplier.selector);
-        game.mineFlip(9_999);
+        game.mineFlip(EXPECTED_MIN_MULTIPLIER - 1);
         assertEq(host.order(), beforeOrder);
     }
     function test_ZeroAndExplicitBaselineProduceSameBoxOutcome() public {
         _queueWideBox();
         uint256 snap = vm.snapshotState();
-        game.mineFlip{gas: 12_000_000}(0);
+        game.mineFlip{gas: ROUTER_CALL_GAS}(0);
         uint256 expected = game.claimableWinningsOf(BUYER);
         uint256 cursor = host.cursor();
-        vm.revertToStateAndDelete(snap);
-        game.mineFlip{gas: 12_000_000}(10_000);
-        assertEq(game.claimableWinningsOf(BUYER), expected);
-        assertEq(host.cursor(), cursor);
+        uint32[4] memory factors = [EXPECTED_MIN_MULTIPLIER, EXPECTED_BASE_MULTIPLIER / 2, EXPECTED_BASE_MULTIPLIER - 1, EXPECTED_BASE_MULTIPLIER];
+        for (uint256 i; i < factors.length; ++i) {
+            assertTrue(vm.revertToState(snap));
+            game.mineFlip{gas: ROUTER_CALL_GAS}(factors[i]);
+            assertEq(game.claimableWinningsOf(BUYER), expected);
+            assertEq(host.cursor(), cursor);
+        }
+        vm.deleteStateSnapshot(snap);
     }
     function test_FirstWideBoxWaitsForItsAtomicAllowance() public {
         _queueWideBox();
@@ -102,7 +113,7 @@ contract MineFlipHumanBudgetTest is DeployProtocol {
         assertFalse(result.progressed);
         assertEq(host.order(), beforeOrder);
         assertEq(host.cursor(), 0);
-        result = host.workHuman{gas: 10_000_000}(9_000_000);
+        result = host.workHuman{gas: HUMAN_CALL_GAS}(HUMAN_WORK_ALLOWANCE);
         assertEq(result.rewardBasis, 100);
         assertTrue(result.done);
         assertEq(host.order(), 0);
@@ -155,11 +166,11 @@ contract MineFlipHumanBudgetTest is DeployProtocol {
         uint256 beforeOrder = host.order();
         bytes memory code = ContractAddresses.GAME_BOON_MODULE.code;
         vm.etch(ContractAddresses.GAME_BOON_MODULE, hex"fe");
-        vm.expectRevert(bytes4(keccak256("EmptyRevert()"))); host.workHuman(9_000_000);
+        vm.expectRevert(bytes4(keccak256("EmptyRevert()"))); host.workHuman(HUMAN_WORK_ALLOWANCE);
         assertEq(host.order(), beforeOrder);
         assertEq(host.cursor(), 0);
         vm.etch(ContractAddresses.GAME_BOON_MODULE, code);
-        MineFlipGas.Result memory result = host.workHuman{gas: 10_000_000}(9_000_000);
+        MineFlipGas.Result memory result = host.workHuman{gas: HUMAN_CALL_GAS}(HUMAN_WORK_ALLOWANCE);
         assertEq(result.rewardBasis, 100);
     }
 

@@ -136,6 +136,9 @@ contract RequestMaintenanceSeeder is CrapsBattle {
 }
 
 contract MineFlipRequestGasTest is DeployProtocol {
+    // Dispatcher, caller credit and prerequisite stage work outside the request itself.
+    uint256 private constant REQUEST_FRAME_GAS = 1_000_000;
+
     uint24 internal constant DAY = 1000;
     RequestGameSeeder internal host;
     RequestCostCoordinator internal coordinator;
@@ -335,16 +338,17 @@ contract MineFlipRequestGasTest is DeployProtocol {
         assertLe(used, Bounds.RNG_REDEMPTION_CLOSE);
         _assertClosed();
     }
-    function test_ArmAndRequestInOneMillion() public {
+    // Fund the calibrated request plus cold arming/certification, parent tails and forwarding.
+    function test_ArmAndRequestFitsCalibratedAllowance() public {
         this.configure(Scenario.Arm);
-        game.mineFlip{gas: 1_000_000}(0);
+        game.mineFlip{gas: Bounds.RNG_MIDDAY_REQUEST + REQUEST_FRAME_GAS}(0);
         emit log_named_uint("cold_arm_and_request", _isolatedExecutionGas(abi.encodeWithSignature("mineFlip(uint32)", uint32(0))));
         assertEq(table.binding(slot), 1, "armed once");
         _assertRequested();
     }
     function test_ExplicitBaselineAlsoArmsAndRequests() public {
         this.configure(Scenario.Arm);
-        game.mineFlip{gas: 1_000_000}(10_000);
+        game.mineFlip{gas: Bounds.RNG_MIDDAY_REQUEST + REQUEST_FRAME_GAS}(10_000);
         _assertRequested();
     }
     function test_LowGasKeepsArmWithoutAttemptingRequest() public {
@@ -357,7 +361,7 @@ contract MineFlipRequestGasTest is DeployProtocol {
     }
     function test_MultiplierDefersContinuationButNeverFirstRequest() public {
         this.configure(Scenario.Arm);
-        game.mineFlip{gas: 1_000_000}(20_000);
+        game.mineFlip{gas: Bounds.RNG_MIDDAY_REQUEST + REQUEST_FRAME_GAS}(20_000);
         assertEq(table.binding(slot), 1);
         assertEq(coordinator.requests(address(game)), 0, "caller doubled continuation reserve");
         game.mineFlip{gas: 1_000_000}(type(uint32).max);
@@ -388,7 +392,7 @@ contract MineFlipRequestGasTest is DeployProtocol {
     }
     function test_FundedHeavyContinuationFits() public {
         this.configure(Scenario.ArmRedeem);
-        game.mineFlip{gas: 1_300_000}(0);
+        game.mineFlip{gas: Bounds.RNG_MIDDAY_REQUEST + Bounds.RNG_REDEMPTION_CLOSE + REQUEST_FRAME_GAS}(0);
         emit log_named_uint("cold_arm_redemption_request", _isolatedExecutionGas(abi.encodeWithSignature("mineFlip(uint32)", uint32(0))));
         _assertRequested();
     }
@@ -403,7 +407,7 @@ contract MineFlipRequestGasTest is DeployProtocol {
     }
     function test_FundedDailyContinuationFits() public {
         this.configure(Scenario.CertifyDailyRedeem);
-        game.mineFlip{gas: 2_500_000}(0);
+        game.mineFlip{gas: Bounds.RNG_DAILY_REQUEST + Bounds.RNG_REDEMPTION_CLOSE + REQUEST_FRAME_GAS}(0);
         emit log_named_uint("cold_certify_daily_redemption_request", _isolatedExecutionGas(abi.encodeWithSignature("mineFlip(uint32)", uint32(0))));
         _assertRequested();
     }

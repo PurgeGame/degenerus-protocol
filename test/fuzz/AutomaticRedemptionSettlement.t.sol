@@ -56,7 +56,7 @@ contract AutomaticRedemptionSettlementTest is RedemptionFixture {
         RedemptionTerminalSeeder(payable(address(game))).seedLiveRedemptionWord(settlementWord);
         vm.etch(address(game), original);
         vm.prank(address(game));
-        sdgnrs.runRedemptionWork(settlementWord, 200_000);
+        sdgnrs.runRedemptionWork(settlementWord, RESOLVE_ONLY_ALLOWANCE);
         assertEq(_rollOf(batchId), roll);
     }
 

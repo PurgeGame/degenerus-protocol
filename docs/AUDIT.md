@@ -90,7 +90,9 @@ After the first mandatory checkpoint, the engine admits the next chunk only when
 its caller-scaled estimate, including the call, return and checkpoint envelope,
 fits both the remaining worker allowance and actual available gas. Otherwise it
 stops at a safe checkpoint before starting that chunk. Zero calibration means
-10,000 basis points; callers may select a larger multiplier after gas repricing.
+10,000 basis points. Default bounds include Glamsterdam new-state gas without a
+reservoir. Callers may choose a larger multiplier for more conservative batching,
+or a factor down to 2,500 for cheaper schedules at their own transaction's risk.
 Only estimate-admitted work is held to the floor when a worker finishes; a first unit
 that ran below the floor is not an estimate failure.
 A transaction can perform several admitted operations. Review the

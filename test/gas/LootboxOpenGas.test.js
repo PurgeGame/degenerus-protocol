@@ -19,23 +19,25 @@ import {
 } from "../helpers/readyDailyFixture.js";
 import { eth, ZERO_BYTES32 } from "../helpers/testUtils.js";
 
-// Realistic caller allowance for one mineFlip call (owner rule: per-chunk <= 10M).
+// Ordinary-order caller allowance; maximum human orders have an accepted atomic exception.
 const OPEN_GAS_ALLOWANCE = 10_000_000n;
 // MineFlipGasBounds: HUMAN_ENTRY_GAS, HUMAN_BOX_GAS, HUMAN_TAIL_GAS (one entry's admission bound).
-const HUMAN_ENTRY_GAS = 1_300_000n;
-const HUMAN_BOX_GAS = 72_000n;
+const HUMAN_ENTRY_GAS = 3_200_000n;
+const HUMAN_BOX_GAS = 125_000n;
 const HUMAN_TAIL_GAS = 80_000n;
-// One maximum entry's declared bound is 8.5M; the engine admits the next entry only while
-// the remaining allowance covers that bound, so 9M admits exactly one 100-box entry and
-// the break must leave the next owner whole for its own transaction.
-const ONE_MAX_ENTRY_ALLOWANCE = HUMAN_ENTRY_GAS + 100n * HUMAN_BOX_GAS + 500_000n;
+// A maximum entry reserves 15.7M including fresh state. One 16.2M call opens it,
+// then leaves the next owner's whole order queued for its own transaction.
+const MAX_ORDER_BOXES = 100n;
+const MAX_ORDER_FRAME_GAS = 500_000n;
+const NO_RESERVOIR_GAS_LIMIT = 1n << 24n;
+const ONE_MAX_ENTRY_ALLOWANCE = HUMAN_ENTRY_GAS + MAX_ORDER_BOXES * HUMAN_BOX_GAS + MAX_ORDER_FRAME_GAS;
 // Intrinsic gas, calldata, Game -> miner -> AFK module dispatch, the empty consumer stages
 // after the human orders and the read certificate.
 const ENGINE_OVERHEAD_GAS = 100_000n;
 const MINER_TICKETS = 4n; // DegenerusGameStorage.MinerAction.Tickets
 const TICKET_CHECKPOINT_GAS = 3_000_000;
 // Clears the AFKing consumer stage (its genesis ring scan) but cannot admit a human entry
-// (declared >= 1.41M plus the engine's worker and return reserves).
+// (declared >= 3.325M plus the engine's worker and return reserves).
 const AFKING_STAGE_GAS = 1_300_000;
 const WORD = 266266n;
 const root = async (name) => {
@@ -98,7 +100,7 @@ async function prepare(f, buyers, count, singleCustom) {
   await f.game.mineFlip(0, { gasLimit: 1_000_000 });
   // The buyers' real tickets were frozen into the read cohort by the mid-day request. Their
   // drain is a keeper-only checkpoint that precedes every box stage; a bounded allowance
-  // admits a ticket round but not a 100-box entry (declared 8.5M), so it stays unopened.
+  // admits a ticket round but not a 100-box entry (declared 15.7M), so it stays unopened.
   for (let i = 0; i < 10 && (await f.game.rngConsumerStage()) === 0n; i++) {
     expect(await f.game.nextMinerAction(), "only the ticket checkpoint precedes the boxes").to.equal(MINER_TICKETS);
     await f.game.mineFlip(0, { gasLimit: TICKET_CHECKPOINT_GAS });
@@ -142,9 +144,9 @@ async function measureOpen(f, state, player, position, count, allowance = OPEN_G
   expect(receipt.status, "realistic allowance does not run out of gas").to.equal(1);
   const declared = HUMAN_ENTRY_GAS + count * HUMAN_BOX_GAS + HUMAN_TAIL_GAS;
   // Per-chunk property: the measured entry, with intrinsic gas and engine dispatch, stays
-  // inside the declared admission bound the engine reserves for it (and so under 10M).
+  // inside the state-inclusive admission bound reserved for it.
   expect(receipt.gasUsed, "measured entry fits its declared admission bound").to.be.lte(declared + ENGINE_OVERHEAD_GAS);
-  expect(declared, "declared entry bound is a <=10M chunk").to.be.lte(10_000_000n);
+  expect(declared, "atomic human order fits without a state reservoir").to.be.lte(NO_RESERVOIR_GAS_LIMIT);
   expect(await boxCursorOf(f.game), "the queued entry opens in full").to.equal(BigInt(position) + 1n);
   expect(await entryAt(f.game, state.index ^ 1n, 0), "unrevealed next-index order survives").to.equal(state.nextOrder);
   const summaries = boxResolutions(f, [receipt], (await f.game.getAddress()).toLowerCase());

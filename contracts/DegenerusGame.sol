@@ -346,7 +346,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
 
     /// @notice Run the next ordered game actions through safe gas checkpoints.
     /// @dev Only this entry pays miners, after sufficient measured execution and actual progress.
-    /// @param gasMultiplierBps Gas-estimate factor: 0 or 10,000 = 1x; 50,000 = 5x.
+    /// @param gasMultiplierBps Gas-estimate factor: 0 or 10,000 = 1x; minimum 2,500 = 0.25x.
+    /// @dev Sub-1x packs more work on cheaper schedules at the caller's risk: an overrun
+    ///      reverts their transaction or work stops after committed units; work is never skipped.
     ///      The first eligible checkpoint ignores estimates; actual gas must still fund it.
     function mineFlip(uint32 gasMultiplierBps) external {
         (bool ok, bytes memory data) = ContractAddresses.GAME_MINER_MODULE.delegatecall(

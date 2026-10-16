@@ -46,6 +46,10 @@ contract BattleMaximumTableSeed is BattleConstructionTableSeed {
 /// Gas comes from physically cold isolated calls; all seeding/search/assertions are outside
 /// the measured call. Run with FOUNDRY_ISOLATE=true. A search maximum is not a universal proof.
 contract JackpotBattleConstructionMaximumGasTest is DeployProtocol {
+    uint256 private constant WORKER_FRAME_GAS = 100_000;
+    // Fund both delegatecall hops and their EIP-150 retention above the logical allowance.
+    uint256 private constant WORKER_CALL_GAS = 6_000_000;
+
     uint24 private constant CEILING = 40;
     address private constant MINER = address(0xA11CE888);
     bytes private gameCode;
@@ -167,7 +171,7 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol {
         _seed(c);
         bool progressed;
         vm.recordLogs();
-        (used, progressed) = _worker(c, GasBounds.JACKPOT_BATTLE_DRAW + GasBounds.DAILY_PHASE_TAIL + 100_000, 5_000_000);
+        (used, progressed) = _worker(c, GasBounds.JACKPOT_BATTLE_DRAW + GasBounds.DAILY_PHASE_TAIL + WORKER_FRAME_GAS, WORKER_CALL_GAS);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         assertTrue(progressed);
         (CrapsBattleStorage.JackpotRound memory r,, uint64 settled) =
@@ -350,7 +354,7 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol {
             c.target = targets[t];
             _seed(c);
             for (uint256 n; n < c.target; n += 50) {
-                (uint256 used, bool progressed) = _worker(c, GasBounds.JACKPOT_BATTLE_DRAW + GasBounds.DAILY_PHASE_TAIL + 100_000, 5_000_000);
+                (uint256 used, bool progressed) = _worker(c, GasBounds.JACKPOT_BATTLE_DRAW + GasBounds.DAILY_PHASE_TAIL + WORKER_FRAME_GAS, WORKER_CALL_GAS);
                 assertTrue(progressed);
                 emit log_named_uint("resume_target", c.target);
                 emit log_named_uint("resume_prior_entries", n);

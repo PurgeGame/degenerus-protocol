@@ -500,7 +500,7 @@ contract sDGNRS {
     uint256 private constant REDEMPTION_BASE_GAS = GasBounds.REDEMPTION_BASE_GAS;
     uint256 private constant REDEMPTION_TAIL_GAS = GasBounds.REDEMPTION_TAIL_GAS;
     /// @dev Resolution writes (reserve, roll, flip, batch reserve) before the first claim.
-    uint256 private constant REDEMPTION_RESOLVE_GAS = 60_000;
+    uint256 private constant REDEMPTION_RESOLVE_GAS = GasBounds.REDEMPTION_RESOLVE_GAS;
 
     /// @notice Settle the settling batch on `word` (Game only, RNG consumer stage 1).
     /// @dev Stage 1 is part of the essential chain and no request can go out before it finishes,
@@ -547,7 +547,7 @@ contract sDGNRS {
             uint32 walletId = uint32(entry >> BATCH_PLAYER_ID_SHIFT);
             uint256 claimTokens = uint80(entry);
             if (claimTokens == 0) {
-                if (!MineFlipGas.canRun(meter, 15_000, REDEMPTION_TAIL_GAS)) break;
+                if (!MineFlipGas.canRun(meter, GasBounds.REDEMPTION_SKIP_GAS, REDEMPTION_TAIL_GAS)) break;
                 _redemptionCursor = uint32(++cursor);
                 MineFlipGas.markProgress(meter);
                 continue;

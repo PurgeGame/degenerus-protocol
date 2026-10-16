@@ -2,6 +2,8 @@
 pragma solidity 0.8.34;
 
 import {Test, Vm} from "forge-std/Test.sol";
+import {VmSafe} from "forge-std/Vm.sol";
+import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
 import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJackpotModule.sol";
 import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
 import {DegenerusGameWhaleModule} from "../../contracts/modules/DegenerusGameWhaleModule.sol";
@@ -88,6 +90,9 @@ contract DirectJackpotHarness is DegenerusGameJackpotModule, DirectTicketFixture
 contract QueuedJackpotHarness is QueuedJackpotReference, DirectTicketFixture {}
 
 contract DirectJackpotTicketsTest is Test {
+    uint256 private constant FULL_WORK_ALLOWANCE = 16_000_000;
+    uint256 private constant PARTITIONED_WORK_ALLOWANCE = 13_500_000;
+
     bytes32 private constant WIN = keccak256("JackpotTicketWin(uint32,uint24,uint16,uint32,uint24,uint256,bool)");
     bytes32 private constant BATCH = keccak256("JackpotTicketBatchWin(uint24,uint24,uint16,uint16,uint8,uint32,uint256[4],uint256[4])");
     uint256 private constant WORD = 0xAC4DE45EDBEEF;
@@ -162,7 +167,7 @@ contract DirectJackpotTicketsTest is Test {
         vm.recordLogs();
         bool done;
         for (uint256 calls; !done && calls < 100; ++calls) {
-            MineFlipGas.Result memory r = h.runDailyJackpotTickets(word, 9_000_000);
+            MineFlipGas.Result memory r = h.runDailyJackpotTickets(word, FULL_WORK_ALLOWANCE);
             assertTrue(r.progressed || r.done);
             done = r.done;
         }
@@ -208,7 +213,7 @@ contract DirectJackpotTicketsTest is Test {
         (bytes32 inventory, uint256 count) = h.digest(42);
         assertTrue(vm.revertToState(snap));
         vm.recordLogs();
-        (, , uint256 calls,) = _finish(6_500_000);
+        (, , uint256 calls,) = _finish(PARTITIONED_WORK_ALLOWANCE);
         assertGt(calls, 1);
         assertEq(allEvents, full, "all events identical across partitions");
         (bytes32 got, uint256 gotCount) = h.digest(42);
@@ -226,13 +231,13 @@ contract DirectJackpotTicketsTest is Test {
         assertEq(afterDigest, before);
         r = h.runDailyJackpotTickets(WORD, 1_500_000);
         assertFalse(r.progressed);
-        _finish(9_000_000);
+        _finish(FULL_WORK_ALLOWANCE);
     }
     function test_ExistingOwedBalanceRemainsIntact() public {
         h.seed(WORD, 96, 8, true, true);
         h.addExistingOwed(address(0xBEEF), 23);
         uint80 before = h.owed(address(0xBEEF));
-        _finish(9_000_000);
+        _finish(FULL_WORK_ALLOWANCE);
         assertEq(h.owed(address(0xBEEF)), before);
         assertEq(h.queueLength(), 1);
         (,uint256 count) = h.digest(42);
@@ -240,7 +245,7 @@ contract DirectJackpotTicketsTest is Test {
     }
     function test_UnpreparedTargetFallsBackToQueue() public {
         h.seed(WORD, 96, 64, false, false);
-        _finish(9_000_000);
+        _finish(FULL_WORK_ALLOWANCE);
         assertGt(h.queueLength(), 0);
         (,uint256 count) = h.digest(42);
         assertEq(count, 0);
@@ -248,10 +253,10 @@ contract DirectJackpotTicketsTest is Test {
     function testFuzz_ThanosFallsBackToQueue(bool pending) public {
         h.seed(WORD, 96, 8, true, true);
         h.setSnap(2, pending);
-        _finish(9_000_000);
+        _finish(FULL_WORK_ALLOWANCE);
         assertEq(h.queueLength(), 1);
         h.commit(WORD + 123);
-        assertTrue(h.drain(9_000_000).done);
+        assertTrue(h.drain(FULL_WORK_ALLOWANCE).done);
         (,uint256 count) = h.digest(42);
         assertEq(count, 96, "queue applies quarter-size scaling once");
     }
@@ -267,7 +272,7 @@ contract DirectJackpotTicketsTest is Test {
         while (!awarded && awardCalls < 50) {
             vm.cool(address(queued));
             before = gasleft();
-            MineFlipGas.Result memory r = queued.runDailyJackpotTickets(WORD, 9_000_000);
+            MineFlipGas.Result memory r = queued.runDailyJackpotTickets(WORD, FULL_WORK_ALLOWANCE);
             awardGas += before - gasleft();
             awarded = r.done;
             ++awardCalls;
@@ -281,13 +286,13 @@ contract DirectJackpotTicketsTest is Test {
             vm.cool(address(queued));
             vm.cool(ContractAddresses.GAME_TICKET_MODULE);
             before = gasleft();
-            MineFlipGas.Result memory r = queued.drain(9_000_000);
+            MineFlipGas.Result memory r = queued.drain(FULL_WORK_ALLOWANCE);
             drainGas += before - gasleft();
             done = r.done;
             ++drainCalls;
         }
         assertTrue(done);
-        (,,uint256 calls,uint256 directGas) = _finish(9_000_000);
+        (,,uint256 calls,uint256 directGas) = _finish(FULL_WORK_ALLOWANCE);
         (,uint256 expectedCount) = queued.digest(42);
         (,uint256 directCount) = h.digest(42);
         assertEq(directCount, expectedCount);
@@ -334,6 +339,14 @@ contract DirectRoundGasHarness is DegenerusGameTicketModule, WalletSeed {
     function groupGas() external pure returns (uint256) { return DIRECT_GROUP_GAS; }
 }
 
+contract DirectRoundRepricer {
+    function quote(uint256 measured, VmSafe.AccountAccess[] calldata accesses, address target)
+        external pure returns (GlamsterdamReprice.Result memory)
+    {
+        return GlamsterdamReprice.reprice(measured, accesses, target);
+    }
+}
+
 /// @dev Cold cost of one full direct round (32 winners, 16 eight-lane groups).
 ///      Common seed: all sixteen groups common with distinct traits per quadrant, each a fresh
 ///      header plus a fresh word. Rare seed: five rare groups, two quadrants with both rare
@@ -341,7 +354,12 @@ contract DirectRoundGasHarness is DegenerusGameTicketModule, WalletSeed {
 ///      The theoretical round has two rare groups of distinct colours in every quadrant:
 ///      common + 8 x (rare group - common group), extrapolated from the two measurements.
 contract DirectRoundGasTest is Test {
+    uint256 private constant ROUND_WINNERS = 32;
+    uint256 private constant CHECKPOINT_TARGET_GAS = 10_000_000;
+    uint256 private constant NO_RESERVOIR_GAS_LIMIT = 1 << 24;
+
     DirectRoundGasHarness private h;
+    DirectRoundRepricer private repricer;
     uint24 private constant TARGET = 42;
     uint256 private constant COMMON_SEED = 1;
     uint256 private constant RARE_SEED = 35607;
@@ -350,11 +368,12 @@ contract DirectRoundGasTest is Test {
 
     function setUp() public {
         h = new DirectRoundGasHarness();
-        h.prepare(TARGET, 32);
+        repricer = new DirectRoundRepricer();
+        h.prepare(TARGET, ROUND_WINNERS);
     }
 
     function _lanes() private pure returns (uint256[4] memory lanes) {
-        for (uint256 j; j < 32; ++j) lanes[j >> 3] |= (j + 1) << (32 * (j & 7));
+        for (uint256 j; j < ROUND_WINNERS; ++j) lanes[j >> 3] |= (j + 1) << (ROUND_WINNERS * (j & 7));
     }
 
     function _round(uint256 seed) private returns (uint256 used) {
@@ -362,25 +381,42 @@ contract DirectRoundGasTest is Test {
         uint256[4] memory lanes = _lanes();
         vm.cool(address(h));
         uint256 g0 = gasleft();
-        h.materialize(TARGET, lanes, 32, seed);
+        h.materialize(TARGET, lanes, ROUND_WINNERS, seed);
         used = g0 - gasleft();
+        assertTrue(vm.revertToStateAndDelete(snap));
+    }
+
+    function _repricedRound(uint256 seed, uint256 measured) private returns (uint256 glam) {
+        uint256 snap = vm.snapshotState();
+        vm.startStateDiffRecording();
+        h.materialize(TARGET, _lanes(), ROUND_WINNERS, seed);
+        VmSafe.AccountAccess[] memory accesses = vm.stopAndReturnStateDiff();
+        GlamsterdamReprice.Result memory r = repricer.quote(measured, accesses, address(h));
+        glam = r.glamsterdamExec + r.stateGas;
         assertTrue(vm.revertToStateAndDelete(snap));
     }
 
     function test_DirectRoundColdWorstFitsItsBound() public {
         uint256 common = _round(COMMON_SEED);
         uint256 rare = _round(RARE_SEED);
+        // Neither recording pass may warm the other seed's cold measurement.
+        uint256 commonGlam = _repricedRound(COMMON_SEED, common);
+        uint256 rareGlam = _repricedRound(RARE_SEED, rare);
         uint256 perRareGroup = (rare - common) / RARE_GROUPS;
         uint256 worst = common + MAX_RARE_GROUPS * perRareGroup;
         emit log_named_uint("direct round, 16 fresh common groups (realistic heavy)", common);
         emit log_named_uint("direct round, 5 rare groups over cold split buckets", rare);
         emit log_named_uint("  extra per rare group", perRareGroup);
         emit log_named_uint("direct round, theoretical 8 rare groups", worst);
+        uint256 glamWorst = commonGlam + MAX_RARE_GROUPS * ((rareGlam - commonGlam) / RARE_GROUPS);
+        emit log_named_uint("direct round, theoretical 8 rare groups including Glamsterdam state", glamWorst);
+        if (glamWorst > worst) worst = glamWorst;
         uint256 declared = h.roundMax();
         emit log_named_uint("DIRECT_ROUND_GAS_MAX", declared);
         assertLe(worst, declared, "the theoretical cold round fits its admission");
-        assertLe(declared, 2 * worst, "round admission stays within 2x of its cold worst");
+        assertLe(declared, 2 * worst, "round admission stays within 2x across both schedules");
+        assertLe(worst, CHECKPOINT_TARGET_GAS, "direct materialization stays below the checkpoint target");
         assertLe(declared + 4 * h.groupGas() + GasBounds.TICKET_TAIL + MineFlipGas.CHECK_RESERVE,
-            10_000_000, "a full direct round and its tail stay within 10M");
+            NO_RESERVOIR_GAS_LIMIT, "state-inclusive admission and tails fit without a reservoir");
     }
 }

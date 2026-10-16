@@ -140,6 +140,8 @@ contract DecimatorGasHost is DecimatorJackpotHarness, BucketSeed {
 }
 
 contract DecimatorJackpotGasTest is Test {
+    uint256 private constant PLAN_FRAME_GAS = 20_000;
+
     DecimatorGasHost private h;
     DecimatorGeneratedWorkMeter private workMeter;
     mapping(uint64 => bool) private seen;
@@ -193,7 +195,7 @@ contract DecimatorJackpotGasTest is Test {
         terms.solo = 3;
         vm.cool(address(h));
         (uint256 used, MineFlipGas.Result memory r) = workMeter.run(h, terms,
-            GasBounds.DECIMATOR_PLAN_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS + 20_000);
+            GasBounds.DECIMATOR_PLAN_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS + PLAN_FRAME_GAS);
         assertTrue(r.progressed);
         assertFalse(r.done);
         assertEq(h.plan(5).cursor, 0);
@@ -324,7 +326,8 @@ contract DecimatorJackpotGasTest is Test {
             terms.shares = [uint256(133.3 ether),133.3 ether,133.4 ether,600 ether];
             terms.targets = [uint16(256),128,32,1];
             terms.solo = 3;
-            h.runDecimatorJackpotAwards(terms, 180_000);
+            h.runDecimatorJackpotAwards(terms,
+                GasBounds.DECIMATOR_PLAN_GAS_MAX + GasBounds.DECIMATOR_WORK_TAIL_GAS + PLAN_FRAME_GAS);
             assertEq(h.plan(5).generatedEntries, n);
             h.lastEntry();
             h.seedTiedOwnerHeap(word);

@@ -1,190 +1,199 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
-/// @notice Precomputed cold-path admission bounds for the mining engine.
-/// @dev Constants include the named operation only; callers additionally reserve their
-///      complete checkpoint/return tail. The baseline targets at most 10M per operation
-///      and tail on the measured schedule. Continuations apply caller calibration;
-///      mandatory first progress bypasses estimates. Revalidate these measurements when
-///      an operation, compiler setting or gas schedule changes.
-///      Each bound is its cold measured cost plus a modest margin; the measurement is noted
-///      beside it.
+/// @notice Cold-path admission bounds for Osaka and Glamsterdam, including new-state gas.
+/// @dev No state reservoir is assumed. Bounds include the named operation; callers reserve
+///      checkpoint/return tails separately. Measured witnesses or conservative component
+///      sums carry about 20% margin; fixed reserves are identified beside their constants.
+///      Continuations use caller calibration; first mandatory progress bypasses estimates.
+///      Revalidate after operation, compiler or gas-schedule changes.
 library MineFlipGasBounds {
+    // Dispatch reads/arithmetic; the enclosing worker reserves its own checkpoint tail.
     uint256 internal constant ENGINE_BOUNDARY = 100_000;
+    // Return and one fresh caller credit; native single-credit call: 130.7k.
     uint256 internal constant ENGINE_RETURN = 200_000;
-    // Cold widest live gap (29 days): 0.47M measured.
-    uint256 internal constant DAILY_GAP = 600_000;
-    // Cold century day with a 730-day vault coinflip history: 2.98M measured (seat funding
-    // rolled back; 2.56M committing).
-    uint256 internal constant DAILY_APPLY = 3_900_000;
-    // Fresh-request calibration: test/gas/MineFlipRequestGas.t.sol, cold gross execution.
-    // Pinned Chainlink VRFCoordinatorV2_5 request: 41.5k; request witnesses impose a 125k
-    // coordinator execution floor. Admin's dedicated subscription has one consumer (Game).
-    // Midday max (credit + activation + populated box/bet counts): 306.8k, +30% margin.
-    uint256 internal constant RNG_MIDDAY_REQUEST = 400_000;
-    // Daily transition, affiliate reward, 20 charity vote reads/17 edits, quest, paid battle,
-    // ticket/foil/pool freezes: 902.2k; retain 1.5M (~66% margin) for this rarer path.
-    // Post-fulfillment daily work is separate.
-    uint256 internal constant RNG_DAILY_REQUEST = 1_500_000;
-    // Add only for a nonempty open batch. Cold close + mixed ETH/stETH pull: 190.4k,
-    // +58%, including proxy and 10k balance/40k transfer stETH surcharges. sDGNRS is
-    // already coinflip-settled by every daily/gap payout; neither backing call walks
-    // historical days at a legal request boundary. These bounds exclude engine tails.
-    uint256 internal constant RNG_REDEMPTION_CLOSE = 300_000;
-    // Retain the ending's existing allowance; it never closes a redemption batch.
+    // Cold 29-day gap: 683.6k including state gas.
+    uint256 internal constant DAILY_GAP = 850_000;
+    // Cold century day with 730-day vault history: 5.954M including 25 fresh slots.
+    uint256 internal constant DAILY_APPLY = 7_200_000;
+    // Cold midday: 530.7k plus 97.9k coordinator execution-floor padding, then margin.
+    uint256 internal constant RNG_MIDDAY_REQUEST = 800_000;
+    // Cold daily request: 2.632M plus 97.9k coordinator execution-floor padding.
+    // Redemption close is additional; post-fulfillment work has separate checkpoints.
+    uint256 internal constant RNG_DAILY_REQUEST = 3_400_000;
+    // Nonempty close plus mixed ETH/stETH pull: 443.5k, including proxy and
+    // 10k balance / 40k transfer execution padding. No historical coinflip walk here.
+    uint256 internal constant RNG_REDEMPTION_CLOSE = 550_000;
+    // Conservative external-request envelope; terminal requests never close redemption.
     uint256 internal constant RNG_TERMINAL_REQUEST = 2_500_000;
-    // Century close: 32 deity renewals, stETH stake, unlock, recycle and seed arming.
-    // Cold: 3.20M measured, empty sDGNRS pools.
-    uint256 internal constant TRANSITION_CLOSE = 3_850_000;
-    uint256 internal constant LEVEL_ONE_DRAW = 2_500_000;
-    // Cold consolidation. Worst: x00 losing flip, skip mark plus the incinerator's 20-probe
-    // book search and fresh FLIP credit, Decimator seal, growth seal, yield dump, keep roll:
-    // 0.51M measured including intrinsic gas. The x00 winning flip (BAF reservation) measures 0.45M.
-    uint256 internal constant POOL_CONSOLIDATION = 580_000;
+    // Cold century close, 32 deity renewals, stake, unlock, recycle and seed: 4.762M.
+    uint256 internal constant TRANSITION_CLOSE = 5_800_000;
+    // Cold level-one draw with 51 fresh slots: 6.240M.
+    uint256 internal constant LEVEL_ONE_DRAW = 7_500_000;
+    // Cold losing x00 flip, incinerator search, seals and yield/keep roll: 1.368M.
+    uint256 internal constant POOL_CONSOLIDATION = 1_650_000;
+    // Phase cursor, caller frame and return reserve.
     uint256 internal constant DAILY_PHASE_TAIL = 150_000;
-    // Vault flip settlement at an x0 seal over the full 730-day claim window, auto-rebuy
-    // carry and loss mint included. Cold: 1.61M measured.
-    uint256 internal constant BAF_VAULT_SETTLE = 1_950_000;
-    uint256 internal constant FOIL_PACK = 1_400_000;
-
-    // One 50-entry field checkpoint, including cold initialization or final sealing.
-    uint256 internal constant JACKPOT_BATTLE_DRAW = 3_300_000;
+    // Full 730-day vault claim window with auto-rebuy and loss mint: 2.868M.
+    uint256 internal constant BAF_VAULT_SETTLE = 3_500_000;
+    // Forced all-gold grand prize with distinct traits and fresh buffer: 2.263M.
+    uint256 internal constant FOIL_PACK = 3_000_000;
+    // One full 50-entry field checkpoint, cold initialization or final seal: 3.870M.
+    uint256 internal constant JACKPOT_BATTLE_DRAW = 4_700_000;
+    // Cold terminal setup: 1.282M including new-slot state gas.
     uint256 internal constant TERMINAL_SETUP = 1_600_000;
+    // Terminal checkpoint and return reserve.
     uint256 internal constant TERMINAL_TAIL = 250_000;
+    // Record body; the fresh tally cursor is covered by TALLY_TAIL.
     uint256 internal constant TERMINAL_TALLY_RECORD = 25_000;
-    uint256 internal constant TERMINAL_TALLY_FINAL = 900_000;
-    uint256 internal constant TERMINAL_TALLY_TAIL = 100_000;
+    // Full 256-record scan plus immediate 30-refund setup: 1.878M.
+    uint256 internal constant TERMINAL_TALLY_FINAL = 2_300_000;
+    // Fresh cursor (110.1k) plus 80k frame, with margin.
+    uint256 internal constant TERMINAL_TALLY_TAIL = 250_000;
+    // Cold final sweep: 547.3k.
     uint256 internal constant TERMINAL_FINAL_SWEEP = 700_000;
+    // Sweep return reserve.
     uint256 internal constant TERMINAL_SWEEP_TAIL = 80_000;
-
-    // TICKET
-    // Eight changed seat writes, a fresh seat word, cursor and release writes, return: 65k.
-    uint256 internal constant TICKET_TAIL = 75_000;
+    // Eight changed seats, a fresh seat word, cursor/release writes and return: <=209.8k.
+    uint256 internal constant TICKET_TAIL = 260_000;
+    // Cold selection reads and arithmetic; no materialization writes.
     uint256 internal constant TICKET_SELECT_MAX = 110_000;
-    // Skip with an owed write and a cold queue word: 11.7k measured.
-    uint256 internal constant TICKET_SEAT_MAX = 17_000;
-    // Eight persisted seats re-read on a resumed call: 45k measured (one shared queue word).
+    // Cold marginal skip 15.1k plus two distinct cold reads (4.2k), with margin.
+    uint256 internal constant TICKET_SEAT_MAX = 25_000;
+    // Eight persisted seats re-read on resume: 45k; read-only allowance.
     uint256 internal constant TICKET_RELOAD_MAX = 100_000;
-    // Four rare quadrants, 32 split appends each completing a fresh word: 0.95M measured.
-    uint256 internal constant TICKET_ROUND_MAX = 1_150_000;
-    // Fixed run cost including first live-bitmap initialization: 37k measured.
-    uint256 internal constant TICKET_SOLO_BASE = 45_000;
-    // A distinct trait completing a fresh word: 28.7k measured per entry.
-    uint256 internal constant TICKET_ENTRY_MAX = 35_000;
-    // One solo trait run: SOLO_BASE + 160 x ENTRY_MAX + TAIL = 5.72M.
-    uint256 internal constant TICKET_SOLO_MAX_ENTRIES = 160;
-    // One foil pack, the foil worker's 100k tail, its preamble and the call overhead.
-    uint256 internal constant TICKET_FOIL_CALL_MAX = FOIL_PACK + 150_000;
+    // Four rare quadrants, fresh split appends: full cold worker 4.175M.
+    uint256 internal constant TICKET_ROUND_MAX = 5_100_000;
+    // Fresh live-bitmap initialization differential: 204.9k.
+    uint256 internal constant TICKET_SOLO_BASE = 250_000;
+    // Distinct trait completing a fresh word: cold marginal 124.1k including state gas.
+    uint256 internal constant TICKET_ENTRY_MAX = 150_000;
+    // One solo run: 250k + 32 x 150k + 260k tail = 5.31M reserved.
+    uint256 internal constant TICKET_SOLO_MAX_ENTRIES = 32;
+    // One foil pack plus its checkpoint, worker preamble and call overhead.
+    uint256 internal constant TICKET_FOIL_CALL_MAX = FOIL_PACK + 200_000;
+    // Delegatecall and worker dispatch reserve.
     uint256 internal constant TICKET_CALL_OVERHEAD = 35_000;
-
-    // AFK
-    // Includes successful stETH funding plus the most expensive subscriber delivery.
-    // A failed dependency call reverts instead of admitting eviction.
-    uint256 internal constant SUBSCRIBER_ITEM_GAS = 400_000;
-    // Cold sDGNRS 100-pass purchase: 1.07M measured.
-    uint256 internal constant SUBSCRIBER_WHALE_GAS = 1_300_000;
-    uint256 internal constant SUBSCRIBER_TAIL_GAS = 150_000;
-    uint256 internal constant AFKING_OPEN_GAS = 500_000;
+    // Cold stETH-funded subscriber delivery: 472.3k. Dependency failure reverts.
+    uint256 internal constant SUBSCRIBER_ITEM_GAS = 600_000;
+    // Cold sDGNRS 100-pass purchase: 2.303M.
+    uint256 internal constant SUBSCRIBER_WHALE_GAS = 2_800_000;
+    // Subscriber cursor, flush and return reserve, including fresh state.
+    uint256 internal constant SUBSCRIBER_TAIL_GAS = 250_000;
+    // Cold AFKing opening: 776.2k including EV allowance accounting.
+    uint256 internal constant AFKING_OPEN_GAS = 950_000;
+    // Empty-run reads and cursor arithmetic.
     uint256 internal constant AFKING_SKIP_GAS = 20_000;
+    // AFKing checkpoint and return reserve.
     uint256 internal constant AFKING_TAIL_GAS = 100_000;
-
-    // BOX
-    // Cold natural entry peaks: 1 box 0.33M, 10 boxes 1.00M, 50 boxes 2.19M, 100 boxes 3.15M; the
-    // entry term carries the concave first-touch writes. Forcing every box onto an ETH spin that
-    // wins with score >= 7 and recirculates on the heaviest branch: 100 boxes 6.74M, at most 36k
-    // per box above the natural peak. ENTRY + n x BOX covers natural + n x 36k for every n;
-    // ENTRY + 100 x BOX = 8.5M, which also covers 8.3M with every ticket lane cold.
-    uint256 internal constant HUMAN_ENTRY_GAS = 1_300_000;
-    uint256 internal constant HUMAN_BOX_GAS = 72_000;
-    // Cold presale resolution: 0.09M measured; the closing entry's remainder burn rides
-    // inside its entry bound.
-    uint256 internal constant HUMAN_PRESALE_GAS = 110_000;
+    // One atomic human order, including a cold fresh EV allowance read-modify-write.
+    // Forced 100-box ETH-spin/recirculation component envelope: 12.878M plus
+    // a fresh allowance RMW (110.1k) and frame. ENTRY + 100 x BOX reserves 15.7M.
+    // This rare 100-box operation is an accepted exception to the 10M checkpoint target.
+    uint256 internal constant HUMAN_ENTRY_GAS = 3_200_000;
+    // Per-box term; ENTRY covers concave first-touch costs and the EV allowance.
+    uint256 internal constant HUMAN_BOX_GAS = 125_000;
+    // Cold presale resolution: 208.1k. Closing remainder burn is in the entry bound.
+    uint256 internal constant HUMAN_PRESALE_GAS = 250_000;
+    // Human order cursor and return reserve.
     uint256 internal constant HUMAN_TAIL_GAS = 80_000;
-
-    // BET
-    // Cold: 197k measured for a 1-spin bet, 311k for 25 spins (11 capped wins, one sDGNRS award).
-    uint256 internal constant DEGENERETTE_ETH_BASE_GAS = 240_000;
-    // A capped winning spin adds about 14k; the per-spin term covers every spin winning.
+    // Forced cold winning/recirculating one-spin bet: 991.7k.
+    uint256 internal constant DEGENERETTE_ETH_BASE_GAS = 1_200_000;
+    // A capped winning spin adds at most 14k; base covers first-touch writes.
     uint256 internal constant DEGENERETTE_ETH_SPIN_GAS = 14_000;
-    uint256 internal constant DEGENERETTE_FLIP_BASE_GAS = 80_000;
-    // About 4k measured per FLIP spin.
+    // Cold base 113.1k plus two fresh FLIP slots (195.9k), with margin.
+    uint256 internal constant DEGENERETTE_FLIP_BASE_GAS = 400_000;
+    // About 4k per additional FLIP spin.
     uint256 internal constant DEGENERETTE_FLIP_SPIN_GAS = 5_000;
-    // Record claim spin chain with a cold FLIP mint: 31.9k measured.
-    uint256 internal constant DEGENERETTE_RECORD_GAS = 40_000;
-    uint256 internal constant DEGENERETTE_TAIL_GAS = 120_000;
-
-    // DEC
-    // Cold: 456k conservative sum of a 511-roll engine and the worst 200-place heap/frame.
-    uint256 internal constant DECIMATOR_RUN_GAS_MAX = 550_000;
-    // Up to 200 entries: 464k cold rank call, including any admitted payment tail.
-    uint256 internal constant DECIMATOR_RANK_GAS_MAX = 500_000;
-    // Cold: 80k measured for one payment, including the worker frame.
+    // Fresh cold FLIP mint 238.6k plus 40k record frame, with margin.
+    uint256 internal constant DEGENERETTE_RECORD_GAS = 350_000;
+    // Bet cursor, checkpoint and return reserve.
+    uint256 internal constant DEGENERETTE_TAIL_GAS = 150_000;
+    // Conservative sum: 286.2k heap/frame plus the full 511-roll engine (344.1k).
+    uint256 internal constant DECIMATOR_RUN_GAS_MAX = 800_000;
+    // Cold full rank checkpoint: 448.9k.
+    uint256 internal constant DECIMATOR_RANK_GAS_MAX = 550_000;
+    // Cold payment including worker frame: 82.6k.
     uint256 internal constant DECIMATOR_PAYMENT_GAS_MAX = 100_000;
+    // Cold isolated finalization worker: 74.7k, with margin.
+    uint256 internal constant DECIMATOR_FINAL_GAS_MAX = 90_000;
+    // Decimator checkpoint and return reserve.
     uint256 internal constant DECIMATOR_WORK_TAIL_GAS = 80_000;
-    // Scale witness: cold saved-board/heap item plus 511-roll engine totals 456,226.
-    // Keep the established generated admission; checkpoint/return tail is separate.
-    uint256 internal constant DECIMATOR_GENERATED_GAS_MAX = 469_000;
-    // Opposite-phase stratum with calibrated metering: 5,112 incremental cold gas.
-    uint256 internal constant DECIMATOR_SAMPLE_SKIP_GAS_MAX = 6_000;
-    // Cold four-cohort initialization with calibrated metering and worker frame: 60,298 gas.
-    uint256 internal constant DECIMATOR_PLAN_GAS_MAX = 65_000;
-
-    // JACKPOT
-    uint256 internal constant JACKPOT_SETUP_GAS = 500_000;
+    // Saved-board/heap item 388.4k plus full 511-roll engine 344.1k, with margin.
+    uint256 internal constant DECIMATOR_GENERATED_GAS_MAX = 900_000;
+    // Opposite-phase stratum: cold marginal 12.2k.
+    uint256 internal constant DECIMATOR_SAMPLE_SKIP_GAS_MAX = 15_000;
+    // Cold four-cohort initialization including worker frame: 102.0k.
+    uint256 internal constant DECIMATOR_PLAN_GAS_MAX = 125_000;
+    // Conservative setup, gold grand prize, arming and fresh budget sum: 596.0k.
+    uint256 internal constant JACKPOT_SETUP_GAS = 750_000;
+    // Read-only winner planning and worker frame.
     uint256 internal constant JACKPOT_PLAN_GAS = 120_000;
+    // Final jackpot accounting and return reserve.
     uint256 internal constant JACKPOT_FINAL_GAS = 150_000;
+    // Jackpot checkpoint, worker frame and return reserve.
     uint256 internal constant JACKPOT_TAIL_GAS = 180_000;
-    // Cold winner; every claimable slot holds its registration sentinel, so the credit is a
-    // nonzero write: 14.8k measured, 17.3k with a padding redraw.
-    uint256 internal constant JACKPOT_ETH_WINNER_GAS_MAX = 20_000;
-    // One sampler group, as for tickets: a quadrant's first group adds 160k for its pass
-    // conversion, gold arm and accounting; continuation groups are 8 x WINNER.
+    // Registered claimable slot is nonzero: 17.3k padded draw + 7.1k repricing.
+    uint256 internal constant JACKPOT_ETH_WINNER_GAS_MAX = 30_000;
+    // First-group pass award, fresh gold arm and accounting: 234.2k, with margin.
+    uint256 internal constant JACKPOT_ETH_FIRST_GROUP_GAS = 300_000;
+    // Canonical eight-position sampler group; its first group reserves another 300k.
     uint256 internal constant JACKPOT_ETH_AWARD_CHUNK = 8;
     // One ticket-leg pass recipient: bucket draw, cold claim write and event.
     uint256 internal constant JACKPOT_PASS_AWARD_GAS = 100_000;
-    // Cold draw: 3.4k per winner. Award with a fresh pending word: 37.6k measured.
+    // Cold draw: 3.4k per winner; one group shares a packed bucket word.
     uint256 internal constant JACKPOT_TICKET_DRAW_GAS_MAX = 4_200;
-    uint256 internal constant JACKPOT_TICKET_AWARD_GAS_MAX = 45_000;
-    // One sampler group: eight draws share one packed bucket word. Checkpoints must start a
-    // group, so this stays a multiple of eight. 8 x (DRAW + AWARD) + TAIL = 0.57M.
+    // Fresh recipient may create three slots. A full single-award call is 414.1k;
+    // AWARD + DRAW + TAIL = 534.2k covers it with margin.
+    uint256 internal constant JACKPOT_TICKET_AWARD_GAS_MAX = 350_000;
+    // Canonical eight-position sampler group: total reserve with tail 3.014M.
     uint256 internal constant JACKPOT_TICKET_AWARD_CHUNK = 8;
-    // One eight-award BAF group. Worst: a far-future pair group with four cold claimable
-    // credits and eight rolls on eight levels, 0.90M measured; whale-pass legs cost less and the
-    // cost does not grow with the round count.
-    uint256 internal constant BAF_AWARD_GROUP = 1_080_000;
-    // Cursor write and the meter's close after the last admitted group: 60k measured.
-    uint256 internal constant BAF_AWARD_TAIL = 72_000;
-
-    // CRAPS
+    // Cold eight-award far-future pair group: 1.980M, independent of round count.
+    uint256 internal constant BAF_AWARD_GROUP = 2_400_000;
+    // 60k cursor/frame plus five changed-slot repricing deltas (35.5k), with margin.
+    uint256 internal constant BAF_AWARD_TAIL = 120_000;
+    // Conservative seat frame 369.7k plus full dice engine 823.0k, with margin.
     uint256 internal constant CRAPS_SEAT_GAS_MAX = 1_650_000;
-    // One cold distinct creditFlipBatch recipient: 25.9k measured.
-    uint256 internal constant CRAPS_CREDIT_GAS_MAX = 32_000;
+    // Fresh distinct creditFlipBatch recipient: cold marginal 113.7k, state included.
+    uint256 internal constant CRAPS_CREDIT_GAS_MAX = 140_000;
+    // Craps settlement checkpoint, flush frame and return reserve.
     uint256 internal constant CRAPS_SETTLE_TAIL_GAS = 200_000;
+    // Craps work checkpoint and return reserve.
     uint256 internal constant CRAPS_WORK_TAIL_GAS = 60_000;
-    uint256 internal constant CRAPS_MAINTENANCE_GAS_MAX = 240_000;
-    uint256 internal constant CRAPS_REFUND_GAS_MAX = 65_000;
-    uint256 internal constant CRAPS_SWEEP_TAIL_GAS = 130_000;
-
-    // REDEEM
-    // Cold beneficiary without a lootbox leg: 0.23M measured (pre-batch; re-measure).
-    uint256 internal constant REDEMPTION_BASE_GAS = 500_000;
-    uint256 internal constant REDEMPTION_TAIL_GAS = 80_000;
-    // A claim's lootbox leg resolves as ONE box order of min(ceil(leg / UNIT), BOXES_MAX)
-    // equal custom boxes, admitted like a human entry: HUMAN_ENTRY_GAS + boxes * HUMAN_BOX_GAS.
+    // Cold maintenance: 515.9k.
+    uint256 internal constant CRAPS_MAINTENANCE_GAS_MAX = 650_000;
+    // Cold refund: 179.6k.
+    uint256 internal constant CRAPS_REFUND_GAS_MAX = 220_000;
+    // Two fresh cursor words (220.1k) plus 25k frame, with margin.
+    uint256 internal constant CRAPS_SWEEP_TAIL_GAS = 300_000;
+    // Growth round advance reads and cursor arithmetic; persistence uses GROWTH_TAIL_GAS.
+    uint256 internal constant GROWTH_ROUND_ADVANCE_GAS = 10_000;
+    // Read and calculate one winner's payout; its FLIP credit is reserved separately.
+    uint256 internal constant GROWTH_WINNER_GAS = 10_000;
+    // Growth cursor, credit-call frame and return reserve, excluding per-recipient credits.
+    uint256 internal constant GROWTH_TAIL_GAS = 30_000;
+    // Bound the fresh-state cost of a single growth credit flush.
+    uint256 internal constant GROWTH_CREDIT_BATCH_SIZE = 32;
+    // Cold beneficiary without a lootbox leg: 496.3k including fresh state.
+    uint256 internal constant REDEMPTION_BASE_GAS = 600_000;
+    // Redemption cursor and return reserve.
+    uint256 internal constant REDEMPTION_TAIL_GAS = 100_000;
+    // Cold batch resolution before its first claim: 69.2k, with margin.
+    uint256 internal constant REDEMPTION_RESOLVE_GAS = 85_000;
+    // Zero-token entry: packed queue read and existing cursor update, with margin.
+    uint256 internal constant REDEMPTION_SKIP_GAS = 20_000;
+    // A lootbox leg is ONE order of min(ceil(leg / UNIT), BOXES_MAX) custom boxes,
+    // priced by HUMAN_ENTRY_GAS + boxes x HUMAN_BOX_GAS, including EV accounting.
     uint256 internal constant REDEMPTION_BOX_UNIT = 1 ether;
+    // Maximum boxes per redemption order.
     uint256 internal constant REDEMPTION_BOXES_MAX = 20;
-
-    // LOANS (test/gas/LoanSeizureGas.t.sol, cold). Admission per loan is
-    // BASE + family * SUB + DEITY, family = the account plus a main's smurfs (at most six).
-    // Lone account 51.5k; main with its run and sDGNRS 82.3k; main with five smurfs and six
-    // runs 200.0k; the same with a deity smurf at symbol 31 (full registry scan) 292.9k,
-    // against a 370k admission.
-    // Loan and list reads, ownership write, a main's ID clear and sDGNRS burn, delete, event: ~59k.
-    uint256 internal constant LOAN_SEIZE_BASE = 75_000;
-    // Per family account: an active run's finalization with its Quests call, plus the walk reads: ~24k.
-    uint256 internal constant LOAN_SEIZE_SUB = 30_000;
-    // At most one deity per family: the 32-symbol scan and the cold DeityPass.seize: ~93k.
-    uint256 internal constant LOAN_SEIZE_DEITY = 115_000;
+    // Loan/list reads, ownership and main-ID writes, sDGNRS burn, deletion and event.
+    // Cold full six-account deity family: 471.7k vs BASE + 6 x SUB + DEITY = 600k.
+    uint256 internal constant LOAN_SEIZE_BASE = 160_000;
+    // Per family account: active-run finalization with Quests call and walk reads.
+    uint256 internal constant LOAN_SEIZE_SUB = 50_000;
+    // One deity per family: full 32-symbol scan and cold DeityPass.seize.
+    uint256 internal constant LOAN_SEIZE_DEITY = 140_000;
     // Pending-flag clear and return.
     uint256 internal constant LOAN_SEIZE_TAIL = 30_000;
 }

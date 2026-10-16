@@ -16,6 +16,10 @@ import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 ///         lanes are fresh (zero) unless the case says otherwise: a zero-to-nonzero lane write is
 ///         the per-winner worst case the runGrowthWork admission estimate must cover.
 contract ParimutuelSettlementGasTest is DeployProtocol {
+    uint256 private constant WORKER_CALL_GAS = 16_700_000;
+    uint256 private constant LARGE_WORKER_ALLOWANCE = 16_000_000;
+    uint256 private constant MINER_CALL_GAS = 9_000_000;
+
     bytes4 private constant GROWTH_STATE = bytes4(keccak256("growthState(uint24)"));
     bytes4 private constant MARKET_GATES = bytes4(keccak256("marketBetGates(uint32,uint24)"));
     bytes32 private constant MINER_WORK = keccak256("MinerWork(address,uint8,uint256,uint256)");
@@ -23,7 +27,7 @@ contract ParimutuelSettlementGasTest is DeployProtocol {
     uint256 private constant SETTLEMENT_SLOT = 4; // DegenerusParimutuel.growthSettlement
     uint256 private constant STAKE_ROOT = 0; // Coinflip.coinflipStakePacked
     uint256 private constant PENDING_BIT = GameSlots.RNG_FLAGS_AND_NUDGES_OFFSET * 8 + 11;
-    uint256 private constant CHUNK = 100; // runGrowthWork's batch buffer
+    uint256 private constant CHUNK = 100; // workload spans multiple 32-recipient flushes
     uint256 private constant ALLOWANCE = 8_500_000;
     // Allowance that admits part of a 200-winner round.
     uint256 private constant CHUNK_ALLOWANCE = 2_000_000;
@@ -106,7 +110,7 @@ contract ParimutuelSettlementGasTest is DeployProtocol {
         vm.cool(address(coinflip));
         vm.prank(address(game));
         uint256 g0 = gasleft();
-        r = parimutuel.runGrowthWork{gas: 9_000_000}(MineFlipGas.budget(allowance, 10_000, true));
+        r = parimutuel.runGrowthWork{gas: WORKER_CALL_GAS}(MineFlipGas.budget(allowance, 10_000, true));
         used = g0 - gasleft();
     }
 
@@ -163,7 +167,7 @@ contract ParimutuelSettlementGasTest is DeployProtocol {
     }
 
     /// One unbounded call spanning a round boundary: the rest of round 1, the step, and 100 fresh
-    /// winners of round 2 (the batch buffer flushes at 100).
+    /// winners of round 2 (the batch buffer flushes at 32).
     function test_CallSpanningRoundBoundary() public {
         _round(1, 150);
         vm.prank(address(game));
@@ -173,7 +177,7 @@ contract ParimutuelSettlementGasTest is DeployProtocol {
         assertEq(mid, head.rewardBasis);
         assertFalse(head.done);
         _round(2, CHUNK);
-        (uint256 used, MineFlipGas.Result memory r) = _settleCold(ALLOWANCE);
+        (uint256 used, MineFlipGas.Result memory r) = _settleCold(LARGE_WORKER_ALLOWANCE);
         console.log("runGrowthWork spanning rounds 1->2, winners:", r.rewardBasis);
         console.log("runGrowthWork spanning rounds 1->2, cold gas:", used);
         assertTrue(r.done);
@@ -228,7 +232,7 @@ contract ParimutuelSettlementGasTest is DeployProtocol {
         vm.recordLogs();
         vm.prank(keeper);
         uint256 g0 = gasleft();
-        game.mineFlip{gas: 4_400_000}(0);
+        game.mineFlip{gas: MINER_CALL_GAS}(0);
         uint256 total = g0 - gasleft();
         uint256 executionGas = _executionGas(vm.getRecordedLogs());
         console.log("mineFlip GrowthSettle stage, 100 fresh cold winners, MinerWork.executionGas:", executionGas);

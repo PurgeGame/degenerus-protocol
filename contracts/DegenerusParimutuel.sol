@@ -31,6 +31,7 @@ import {ICoinflip} from "./interfaces/ICoinflip.sol";
 import {IDegenerusQuests} from "./interfaces/IDegenerusQuests.sol";
 import {IDegenerusParimutuel} from "./interfaces/IDegenerusParimutuel.sol";
 import {MineFlipGas} from "./libraries/MineFlipGas.sol";
+import {MineFlipGasBounds as GasBounds} from "./libraries/MineFlipGasBounds.sol";
 
 /**
  * @title DegenerusParimutuel
@@ -273,15 +274,16 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
 
     /// @notice Gas-adaptive settlement; a winner or sealed-round advance is resumable.
     /// @dev Credits remain aggregated in memory. Every admitted winner reserves its
-    /// complete cold credit, and batches reuse the existing canonical cursor.
+    /// complete cold credit including fresh state. Flushes contain at most 32 recipients
+    /// and reuse the existing canonical cursor and winner order.
     function runGrowthWork(uint256 budget) external returns (MineFlipGas.Result memory result) {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
         MineFlipGas.Meter memory meter = MineFlipGas.start(budget);
         uint256 cursor = growthSettlement;
         uint24 round = uint24(cursor);
         uint256 pos = uint64(cursor >> 24);
-        uint32[] memory ids = new uint32[](100);
-        uint256[] memory amounts = new uint256[](100);
+        uint32[] memory ids = new uint32[](GasBounds.GROWTH_CREDIT_BATCH_SIZE);
+        uint256[] memory amounts = new uint256[](GasBounds.GROWTH_CREDIT_BATCH_SIZE);
         uint256 n;
         while (true) {
             uint8 outcome = _readOutcome(round);
@@ -289,16 +291,19 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
             uint256 counts = growthCounts[round];
             uint256 winCount = _winCount(counts, outcome);
             if (pos == winCount) {
-                if (!MineFlipGas.canRun(meter, 10_000, 30_000 + n * 32_000)) break;
+                if (!MineFlipGas.canRun(meter, GasBounds.GROWTH_ROUND_ADVANCE_GAS,
+                    GasBounds.GROWTH_TAIL_GAS + n * GasBounds.CRAPS_CREDIT_GAS_MAX)) break;
                 ++round;
                 pos = 0;
             } else {
-                if (!MineFlipGas.canRun(meter, 10_000, 30_000 + (n + 1) * 32_000)) break;
+                if (!MineFlipGas.canRun(meter, GasBounds.GROWTH_WINNER_GAS,
+                    GasBounds.GROWTH_TAIL_GAS + (n + 1) * GasBounds.CRAPS_CREDIT_GAS_MAX)) break;
                 // Coalesce this round's admitted winners into one packed read/event run.
                 uint256 take = 1;
-                uint256 room = 100 - n;
+                uint256 room = GasBounds.GROWTH_CREDIT_BATCH_SIZE - n;
                 while (take < room && pos + take < winCount
-                    && MineFlipGas.canRunAfterFirst(meter, (take + 1) * 10_000, 30_000 + (n + take + 1) * 32_000)) {
+                    && MineFlipGas.canRunAfterFirst(meter, (take + 1) * GasBounds.GROWTH_WINNER_GAS,
+                        GasBounds.GROWTH_TAIL_GAS + (n + take + 1) * GasBounds.CRAPS_CREDIT_GAS_MAX)) {
                     ++take;
                 }
                 _payRun(ids, amounts, n, round, outcome, counts, pos, take);
@@ -308,7 +313,7 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
             }
             result.progressed = true;
             MineFlipGas.markProgress(meter);
-            if (n == 100) {
+            if (n == GasBounds.GROWTH_CREDIT_BATCH_SIZE) {
                 coinflip.creditFlipBatch(ids, amounts);
                 n = 0;
             }

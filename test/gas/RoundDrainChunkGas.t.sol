@@ -5,6 +5,10 @@ import {MintBucketSeed} from "../helpers/MintBucketSeed.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 
 import {Test, Vm} from "forge-std/Test.sol";
+import {VmSafe} from "forge-std/Vm.sol";
+import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
+
+
 import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
 import {DegenerusGameMintModule} from "../../contracts/modules/DegenerusGameMintModule.sol";
 import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
@@ -13,6 +17,14 @@ import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {TicketEntropy} from "../../contracts/libraries/TicketEntropy.sol";
 import {DegenerusTraitUtils} from "../../contracts/DegenerusTraitUtils.sol";
+
+contract TicketChunkRepricer {
+    function quote(uint256 measured, VmSafe.AccountAccess[] calldata accesses, address target)
+        external pure returns (GlamsterdamReprice.Result memory)
+    {
+        return GlamsterdamReprice.reprice(measured, accesses, target);
+    }
+}
 
 /// @dev Extends the production mint module so the ticket worker runs in THIS contract's
 ///      storage through the metered `runTicketWork` entry the miner uses; adds queue seeders
@@ -245,6 +257,8 @@ contract ChunkHarness is MintBucketSeed {
 abstract contract TicketChunkProbe is Test {
     uint256 internal constant EIP7825_TX_GAS_CAP = 16_777_216;
     uint256 internal constant GAS_TARGET = 10_000_000;
+    // Search precision and replay cushion at an admission boundary.
+    uint256 internal constant ADMISSION_PROBE_TOLERANCE_GAS = 100;
     /// @dev Gas a probe call spends outside the worker's meter: the external call into the
     ///      harness, the delegatecall into the ticket module (both cold) and ABI coding.
     uint256 internal constant UNMETERED_OVERHEAD = 50_000;
@@ -253,7 +267,7 @@ abstract contract TicketChunkProbe is Test {
     /// @dev The admitted step a shape's chunk probe isolates.
     enum Step {
         Round, // one seated round (bound TICKET_ROUND_MAX)
-        Solo, // one solo trait run at its full size (bound SOLO_BASE + n * ENTRY_MAX, n <= 160)
+        Solo, // one solo trait run at its full size (bound SOLO_BASE + n * ENTRY_MAX, n <= 32)
         Seat // one seat or skip (bound TICKET_SEAT_MAX)
     }
 
@@ -296,7 +310,7 @@ abstract contract TicketChunkProbe is Test {
     /// @dev Smallest allowance (to 1k) whose cold call admits the step, then the call at exactly
     ///      that allowance measured cold. That allowance is the step's declared reservation plus
     ///      the measured prefix and tail. For Round the call runs exactly one round; for Solo the
-    ///      unused part of the full-size run's 160 x ENTRY_MAX reservation may admit further,
+    ///      unused part of the full-size run's 32 x ENTRY_MAX reservation may admit further,
     ///      smaller runs, each against its own declared bound. Reverts to the entry state.
     function _oneChunk(uint24 anchor, string memory tag, Step step)
         internal
@@ -345,7 +359,7 @@ abstract contract TicketChunkProbe is Test {
         assertTrue(vm.revertToState(snap));
         lo = GasBounds.TICKET_SELECT_MAX + GasBounds.TICKET_TAIL + MineFlipGas.CHECK_RESERVE;
         uint256 hi = EIP7825_TX_GAS_CAP;
-        while (hi - lo > 100) {
+        while (hi - lo > ADMISSION_PROBE_TOLERANCE_GAS) {
             uint256 mid = (lo + hi) / 2;
             (bool ok,,) = _probe(anchor, mid, step, first);
             assertTrue(vm.revertToState(snap));
@@ -385,15 +399,33 @@ abstract contract TicketChunkProbe is Test {
 ///         its allowance. The worker spends whatever gas it is given, so call totals are logged,
 ///         never bounded.
 contract RoundDrainChunkGas is TicketChunkProbe {
+    uint32 private constant DISTINCT_SOLO_ENTRIES = 16;
     uint24 internal constant LVL = 11;
+    TicketChunkRepricer private repricer;
 
     function setUp() public {
         h = new ChunkHarness();
+        repricer = new TicketChunkRepricer();
         vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);
         vm.etch(
             ContractAddresses.GAME_FOILPACK_MODULE,
             address(new DegenerusGameFoilPackModule()).code
         );
+    }
+
+    /// @dev Call only after every cold measurement in the test. Recording warms access
+    /// state even across snapshot restores, so this pass only collects storage changes.
+    function _repricedAt(uint24 anchor, uint256 allowance, Step step, uint256 measured)
+        private returns (uint256 total)
+    {
+        uint256 snap = vm.snapshotState();
+        vm.startStateDiffRecording();
+        (bool hit,,) = _probe(anchor, allowance, step, bytes32(0));
+        VmSafe.AccountAccess[] memory accesses = vm.stopAndReturnStateDiff();
+        assertTrue(hit, "repriced fixture must admit its step");
+        GlamsterdamReprice.Result memory r = repricer.quote(measured, accesses, address(h));
+        total = r.glamsterdamExec + r.stateGas;
+        assertTrue(vm.revertToStateAndDelete(snap));
     }
 
     function _measure(string memory tag, Step step) internal returns (uint256 g) {
@@ -575,7 +607,7 @@ contract RoundDrainChunkGas is TicketChunkProbe {
         uint256 entries = GasBounds.TICKET_SOLO_MAX_ENTRIES;
         h.seed(LVL, 1, uint32(entries), uint160(0x51000), false);
         (, uint256 used) = _oneChunk(LVL + 1, "chunk_per_entry_max_solo_run_cold", Step.Solo);
-        // One solo trait run: SOLO_BASE + 160 x ENTRY_MAX + TAIL stays below 10M (MineFlipGasBounds).
+        // One solo trait run: SOLO_BASE + 32 x ENTRY_MAX + TAIL stays below 10M (MineFlipGasBounds).
         uint256 declared = GasBounds.TICKET_SOLO_BASE + entries * GasBounds.TICKET_ENTRY_MAX + GasBounds.TICKET_TAIL;
         emit log_named_uint("chunk_per_entry_max_solo_run_declared_bound", declared);
         assertLe(declared + MineFlipGas.CHECK_RESERVE, GAS_TARGET, "declared full-size solo chunk exceeds 10M");
@@ -597,7 +629,7 @@ contract RoundDrainChunkGas is TicketChunkProbe {
         }
     }
 
-    /// @dev The solo cold worst: one owner owing the full 160-entry run, every bucket header
+    /// @dev The solo cold worst: one owner owing the full 32-entry run, every bucket header
     ///      holding seven lanes over a zero next word, so each distinct trait completes a fresh
     ///      word (cold header read, cold word read, fresh word store, header rewrite).
     function test_Chunk_PerEntry_MaxSoloRun_HeaderTails_Cold() public {
@@ -607,9 +639,9 @@ contract RoundDrainChunkGas is TicketChunkProbe {
         (uint256 item,) = _stepGas(LVL + 1, Step.Solo);
         (, uint256 used) = _oneChunk(LVL + 1, "chunk_per_entry_max_solo_run_header_tails_cold", Step.Solo);
         uint256 declared = GasBounds.TICKET_SOLO_BASE + entries * GasBounds.TICKET_ENTRY_MAX;
-        emit log_named_uint("solo_160_header_tails_step_gas", item);
-        emit log_named_uint("solo_160_declared_step_bound", declared);
-        assertLe(item, declared, "the cold 160-entry run exceeds SOLO_BASE + 160 x ENTRY_MAX");
+        emit log_named_uint("solo_32_header_tails_step_gas", item);
+        emit log_named_uint("solo_32_declared_step_bound", declared);
+        assertLe(item, declared, "the cold 32-entry run exceeds SOLO_BASE + 32 x ENTRY_MAX");
         assertLe(used, GasBounds.TICKET_SELECT_MAX + declared + GasBounds.TICKET_TAIL, "call overran its declared steps");
         assertLe(declared + GasBounds.TICKET_TAIL + MineFlipGas.CHECK_RESERVE, GAS_TARGET);
     }
@@ -628,21 +660,34 @@ contract RoundDrainChunkGas is TicketChunkProbe {
         h.seedHeaderTails(LVL);
         (uint256 one,) = _whole(LVL + 1);
         assertTrue(vm.revertToState(snap));
-        h.seed(LVL, 1, 16, uint160(0x51000), false);
+        h.seed(LVL, 1, DISTINCT_SOLO_ENTRIES, uint160(0x51000), false);
         h.seedHeaderTails(LVL);
         (uint256 sixteen, uint256 take) = _whole(LVL + 1);
         h.runTicketWork(LVL + 1, EIP7825_TX_GAS_CAP);
-        assertEq(h.bucketsTouched(LVL, 7), 16, "fixture: sixteen distinct traits");
+        assertEq(h.bucketsTouched(LVL, 7), DISTINCT_SOLO_ENTRIES, "fixture: sixteen distinct traits");
         assertEq(take, 16);
         assertTrue(vm.revertToState(snap));
         h.seed(LVL, 1, 1, uint160(0x51000), false);
         (uint256 freshRun,) = _stepGas(LVL + 1, Step.Solo);
+        // All three cold observations are complete before either recording pass starts.
+        assertTrue(vm.revertToState(snap));
+        h.seed(LVL, 1, 1, uint160(0x51000), false);
+        h.seedHeaderTails(LVL);
+        uint256 oneGlam = _repricedAt(LVL + 1, EIP7825_TX_GAS_CAP, Step.Solo, one);
+        assertTrue(vm.revertToState(snap));
+        h.seed(LVL, 1, DISTINCT_SOLO_ENTRIES, uint160(0x51000), false);
+        h.seedHeaderTails(LVL);
+        uint256 sixteenGlam = _repricedAt(LVL + 1, EIP7825_TX_GAS_CAP, Step.Solo, sixteen);
         assertTrue(vm.revertToStateAndDelete(snap));
-        uint256 perEntry = (sixteen - one) / 15;
+        uint256 perEntry = (sixteen - one) / (DISTINCT_SOLO_ENTRIES - 1);
         emit log_named_uint("solo_per_entry_cold_worst", perEntry);
         emit log_named_uint("solo_one_entry_fresh_level_step_gas", freshRun);
         assertLe(perEntry, GasBounds.TICKET_ENTRY_MAX, "per-entry cold worst exceeds ENTRY_MAX");
-        assertLe(GasBounds.TICKET_ENTRY_MAX, 2 * perEntry, "ENTRY_MAX is padded beyond 2x");
+        uint256 perEntryGlam = (sixteenGlam - oneGlam) / (DISTINCT_SOLO_ENTRIES - 1);
+        emit log_named_uint("solo_per_entry_glamsterdam_with_state", perEntryGlam);
+        assertLe(perEntryGlam, GasBounds.TICKET_ENTRY_MAX, "state-inclusive entry exceeds ENTRY_MAX");
+        uint256 worstEntry = perEntryGlam > perEntry ? perEntryGlam : perEntry;
+        assertLe(GasBounds.TICKET_ENTRY_MAX, 2 * worstEntry, "ENTRY_MAX is padded beyond 2x across both schedules");
         assertLe(freshRun, GasBounds.TICKET_SOLO_BASE + GasBounds.TICKET_ENTRY_MAX, "one-entry run exceeds its bound");
     }
 
@@ -681,27 +726,48 @@ contract RoundDrainChunkGas is TicketChunkProbe {
         h.seed(LVL, 8, 20000, uint160(0xC0000), false);
         h.seedHeaderTails(LVL);
         h.setRound(ALL_RARE_ROUND);
-        (uint256 whales,) = _stepGas(LVL + 1, Step.Round);
+        (uint256 whales, uint256 whaleFloor) = _stepGas(LVL + 1, Step.Round);
+        uint256 whaleCall = _usedAt(LVL + 1, whaleFloor + ADMISSION_PROBE_TOLERANCE_GAS, Step.Round);
         assertTrue(vm.revertToState(snap));
         h.seed(LVL, 8, 4, uint160(0xC0000), false);
         h.seedHeaderTails(LVL);
         h.setRound(ALL_RARE_ROUND);
-        (uint256 exits,) = _stepGas(LVL + 1, Step.Round);
+        (uint256 exits, uint256 exitFloor) = _stepGas(LVL + 1, Step.Round);
+        uint256 exitCall = _usedAt(LVL + 1, exitFloor + ADMISSION_PROBE_TOLERANCE_GAS, Step.Round);
+        _oneChunk(LVL + 1, "chunk_round_all_rare_header_tails", Step.Round);
         assertTrue(vm.revertToState(snap));
         h.seed(LVL, 8, 4, uint160(0xC0000), false);
         h.setRound(ALL_RARE_ROUND);
-        (uint256 freshRare,) = _stepGas(LVL + 1, Step.Round);
+        (uint256 freshRare, uint256 freshFloor) = _stepGas(LVL + 1, Step.Round);
+        uint256 freshCall = _usedAt(LVL + 1, freshFloor + ADMISSION_PROBE_TOLERANCE_GAS, Step.Round);
+
+        // Record only after all cold step, full-call and admission measurements are done.
+        assertTrue(vm.revertToState(snap));
+        h.seed(LVL, 8, 20000, uint160(0xC0000), false);
+        h.seedHeaderTails(LVL);
+        h.setRound(ALL_RARE_ROUND);
+        uint256 glamWorst = _repricedAt(LVL + 1, whaleFloor + ADMISSION_PROBE_TOLERANCE_GAS, Step.Round, whaleCall);
+        assertTrue(vm.revertToState(snap));
+        h.seed(LVL, 8, 4, uint160(0xC0000), false);
+        h.seedHeaderTails(LVL);
+        h.setRound(ALL_RARE_ROUND);
+        uint256 glamExits = _repricedAt(LVL + 1, exitFloor + ADMISSION_PROBE_TOLERANCE_GAS, Step.Round, exitCall);
+        if (glamExits > glamWorst) glamWorst = glamExits;
+        assertTrue(vm.revertToState(snap));
+        h.seed(LVL, 8, 4, uint160(0xC0000), false);
+        h.setRound(ALL_RARE_ROUND);
+        uint256 glamFresh = _repricedAt(LVL + 1, freshFloor + ADMISSION_PROBE_TOLERANCE_GAS, Step.Round, freshCall);
+        if (glamFresh > glamWorst) glamWorst = glamFresh;
         assertTrue(vm.revertToStateAndDelete(snap));
         emit log_named_uint("round_all_rare_header_tails_whales_step_gas", whales);
         emit log_named_uint("round_all_rare_header_tails_exits_step_gas", exits);
         emit log_named_uint("round_all_rare_fresh_headers_exits_step_gas", freshRare);
         uint256 worst = whales > exits ? whales : exits;
         assertLe(worst, GasBounds.TICKET_ROUND_MAX, "cold worst round exceeds ROUND_MAX");
-        assertLe(GasBounds.TICKET_ROUND_MAX, 2 * worst, "ROUND_MAX is padded beyond 2x");
-        h.seed(LVL, 8, 4, uint160(0xC0000), false);
-        h.seedHeaderTails(LVL);
-        h.setRound(ALL_RARE_ROUND);
-        _oneChunk(LVL + 1, "chunk_round_all_rare_header_tails", Step.Round);
+        emit log_named_uint("round_all_rare_glamsterdam_with_state", glamWorst);
+        assertLe(glamWorst, GasBounds.TICKET_ROUND_MAX, "state-inclusive round exceeds ROUND_MAX");
+        if (glamWorst > worst) worst = glamWorst;
+        assertLe(GasBounds.TICKET_ROUND_MAX, 2 * worst, "ROUND_MAX is padded beyond 2x across both schedules");
     }
 
     /// @dev Seats that skip with an owed write, the heaviest seat: queue lane and pending word

@@ -411,7 +411,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
                 result.progressed = true;
                 MineFlipGas.markProgress(meter);
             }
-            if (paid == winners && MineFlipGas.canRun(meter, 30_000, WORK_TAIL_GAS)) {
+            if (paid == winners && MineFlipGas.canRun(meter, GasBounds.DECIMATOR_FINAL_GAS_MAX, WORK_TAIL_GAS)) {
                 _finish(round);
                 result.progressed = true;
                 MineFlipGas.markProgress(meter);

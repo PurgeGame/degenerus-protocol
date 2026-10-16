@@ -184,7 +184,7 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
         uint32 day = _openBatchId();
         address[] memory players = _queueBurners(3, sdgnrs.totalSupply() * 16 / 1000);
         _resolve(day, 175, 99);
-        // A 4M allowance admits two twenty-box beneficiaries; the third's admission no longer fits.
+        // A 4M call completes its mandatory first beneficiary, then defers the remaining orders.
         emit log_named_uint("cold_two_maximum_router_gas", _coldRouterGasWith(4_000_000));
         (uint128 base,) = sdgnrs.pendingRedemptions(game.walletIdOf(players[2]), day);
         assertGt(base, 0, "next beneficiary remains whole");

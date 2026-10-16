@@ -63,9 +63,10 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
     // Eight packed draws (3.4k each cold) with seven padding redraws (2.5k each), cached
     // deity ID, batch award event and loop work: 52k. Trait writes have the round bound.
     uint256 internal constant DIRECT_GROUP_GAS = 65_000;
-    // Bucket writes dominate a round. Sixteen fresh common groups: 0.80M measured. Each
-    // rare group adds 0.19M; two rare colours in every quadrant (eight groups): 2.30M.
-    uint256 internal constant DIRECT_ROUND_GAS_MAX = 2_800_000;
+    // Forced full 32-winner cold worker: 9.768M including fresh-slot state gas.
+    // Near the 10M checkpoint target; reserve includes margin. Keep the canonical
+    // 32-winner sampler/shuffle geometry so transaction boundaries cannot change outcomes.
+    uint256 internal constant DIRECT_ROUND_GAS_MAX = 12_000_000;
 
     event JackpotTicketWin(
         uint32 indexed walletId, uint24 indexed lvl, uint16 indexed trait,
