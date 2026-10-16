@@ -23,7 +23,7 @@ import { eth, ZERO_BYTES32 } from "../helpers/testUtils.js";
 const OPEN_GAS_ALLOWANCE = 10_000_000n;
 // MineFlipGasBounds: HUMAN_ENTRY_GAS, HUMAN_BOX_GAS, HUMAN_TAIL_GAS (one entry's admission bound).
 const HUMAN_ENTRY_GAS = 1_300_000n;
-const HUMAN_BOX_GAS = 27_500n;
+const HUMAN_BOX_GAS = 72_000n;
 const HUMAN_TAIL_GAS = 80_000n;
 // One maximum entry's declared bound is 4.13M; the engine admits the next entry only while
 // the remaining allowance covers that bound, so 4.85M admits exactly one 100-box entry and

@@ -279,9 +279,7 @@ contract Coinflip {
     uint256 private constant BIGGEST_DICE_RUN_MIN = 1_000_000;
     /// @dev Domain tag for the BAF weighted-draw winner roll.
     bytes32 private constant BAF_DRAW_TAG = "COINFLIP_BAF_DRAW_WINNER";
-    uint16 private constant COIN_CLAIM_DAYS = 365;
-    uint16 private constant COIN_CLAIM_FIRST_DAYS = 180;
-    uint16 private constant AUTO_REBUY_OFF_CLAIM_DAYS_MAX = 1460;
+    uint16 private constant COIN_CLAIM_DAYS = 730;
     uint24 private constant MAX_BAF_BRACKET = (type(uint24).max / 10) * 10;
     /// @dev Initial-emission seed stakes: 200k FLIP per day for days 1-20, each to
     ///      VAULT and sDGNRS. All initial FLIP must survive a coinflip before minting.
@@ -527,11 +525,11 @@ contract Coinflip {
         // (claim-time routing off the promoted level) — state the pending draw
         // never reads.
 
-        uint256 mintable = _claimCoinflipsInternal( id, state, false);
+        uint256 mintable = _claimCoinflipsInternal(id, state);
         uint128 storedBefore = state.claimableStored;
         uint128 storedAfter = storedBefore;
         if (mintable != 0) {
-            storedAfter = uint128(uint256(storedAfter) + mintable);
+            storedAfter = _toUint128Sat(uint256(storedAfter) + mintable);
         }
 
         // Claimable-first waterfall: settled winnings fund the stake before the wallet does, so a
@@ -730,7 +728,7 @@ contract Coinflip {
         id = _walletId(key, id, false);
         if (id == 0) return 0;
         PlayerCoinflipState storage state = playerState[id];
-        uint256 mintable = _claimCoinflipsInternal( id, state, false);
+        uint256 mintable = _claimCoinflipsInternal(id, state);
         uint128 storedBefore = state.claimableStored;
         uint256 stored = storedBefore + mintable;
         if (stored == 0) {
@@ -743,7 +741,7 @@ contract Coinflip {
         if (toClaim > stored) {
             toClaim = stored;
         }
-        uint128 remainder = uint128(stored - toClaim);
+        uint128 remainder = _toUint128Sat(stored - toClaim);
         if (remainder != storedBefore) {
             state.claimableStored = remainder;
         }
@@ -771,15 +769,13 @@ contract Coinflip {
     /// @dev Process daily claims by account ID; loss consolation credits ID-keyed WWXRP.
     function _claimCoinflipsInternal(
         uint32 id,
-        PlayerCoinflipState storage state,
-        bool deepAutoRebuy
+        PlayerCoinflipState storage state
     ) internal returns (uint256 mintable) {
         IDegenerusGame game = degenerusGame;
         uint24 latest = flipsClaimableDay;
         uint24 start = state.lastClaim;
 
         bool rebuyActive = state.autoRebuyEnabled;
-        bool deep = deepAutoRebuy && rebuyActive;
         uint256 takeProfit = rebuyActive ? state.autoRebuyStop : 0;
         uint256 carry;
         uint256 winningBafCredit;
@@ -803,18 +799,12 @@ contract Coinflip {
             return mintable;
         }
 
-        // Enforce claim window unless auto-rebuy is enabled (settles back to enable day).
-        uint16 windowDays = start == 0 ? COIN_CLAIM_FIRST_DAYS : COIN_CLAIM_DAYS;
+        // The claim window bounds every walk, auto-rebuy included, so one walk always settles
+        // through `latest` and a carry is never acted on behind a known result. Older days
+        // forfeit; a rebuy carry that would have ridden them is dropped.
         uint24 minClaimableDay;
-        if (rebuyActive) {
-            minClaimableDay = state.autoRebuyStartDay;
-            if (minClaimableDay > latest) {
-                minClaimableDay = latest;
-            }
-        } else {
-            unchecked {
-                minClaimableDay = latest > windowDays ? latest - windowDays : 0;
-            }
+        unchecked {
+            minClaimableDay = latest > COIN_CLAIM_DAYS ? latest - COIN_CLAIM_DAYS : 0;
         }
         if (start < minClaimableDay) {
             start = minClaimableDay;
@@ -829,16 +819,7 @@ contract Coinflip {
         }
         uint24 processed = start;
 
-        uint32 remaining;
-        if (deep) {
-            uint32 available = latest - start;
-            uint32 cap = available > AUTO_REBUY_OFF_CLAIM_DAYS_MAX
-                ? AUTO_REBUY_OFF_CLAIM_DAYS_MAX
-                : available;
-            remaining = uint32(cap);
-        } else {
-            remaining = windowDays;
-        }
+        uint32 remaining = COIN_CLAIM_DAYS;
         (bool seeded, uint24 seedStart) = _seedWindow(id);
 
         // Results at or before `latest` cannot change during this walk. Cache one
@@ -853,7 +834,6 @@ contract Coinflip {
         uint24 cachedStakeKey = type(uint24).max;
         uint256 cachedStakes;
         bool stakesChanged;
-        // Auto-rebuy-off processes a larger fixed window while keeping tx cost bounded.
         while (remaining != 0 && cursor <= latest) {
             uint24 resultKey = cursor >> 5;
             if (resultKey != cachedResultKey) {
@@ -923,6 +903,7 @@ contract Coinflip {
                         }
                         if (carry != 0) {
                             carry += _recyclingBonus(carry);
+                            if (carry > type(uint128).max) carry = type(uint128).max;
                         }
                     } else {
                         mintable += payout;
@@ -974,7 +955,7 @@ contract Coinflip {
         }
 
         if (rebuyActive && oldCarry != carry) {
-            // Safe truncation: carry is bounded by a single day's coinflip payout; uint128 max is unreachable.
+            // The walk clamps carry to uint128, so the cast is exact.
             state.autoRebuyCarry = uint128(carry);
         }
 
@@ -1391,12 +1372,12 @@ contract Coinflip {
         return _claimCoinflipsAmount(key, payee, id, type(uint256).max, true);
     }
 
-    /// @dev An acquired account's FLIP to its buyer: ordinary bounded settlement, including losses
+    /// @dev An acquired account's FLIP to its buyer: ordinary settlement, including losses
     ///      through collection time. Once caught up and unfrozen, bank the remaining carry and turn
-    ///      rebuy off. A longer backlog can be collected again; no result or pending stake is skipped.
+    ///      rebuy off.
     function _claimAcquiredCoinflips(uint32 id, uint32 buyer) private returns (uint256 claimed) {
         PlayerCoinflipState storage state = playerState[id];
-        claimed = uint256(state.claimableStored) + _claimCoinflipsInternal(id, state, true);
+        claimed = uint256(state.claimableStored) + _claimCoinflipsInternal(id, state);
         if (state.autoRebuyEnabled && state.lastClaim >= flipsClaimableDay && !_flipFrozen()) {
             claimed += state.autoRebuyCarry;
             state.autoRebuyCarry = 0;
@@ -1445,14 +1426,14 @@ contract Coinflip {
         if (enabled) {
             if (takeProfit > type(uint128).max) revert TakeProfitTooLarge();
             if (state.autoRebuyEnabled) revert AutoRebuyAlreadyEnabled();
-            mintable = _claimCoinflipsInternal( id, state, false);
+            mintable = _claimCoinflipsInternal(id, state);
             state.autoRebuyStop = uint128(takeProfit);
             state.autoRebuyEnabled = true;
             state.autoRebuyStartDay = state.lastClaim;
             emit CoinflipAutoRebuyStopSet(id, takeProfit);
             emit CoinflipAutoRebuyToggled(id, true);
         } else {
-            mintable = _claimCoinflipsInternal( id, state, true);
+            mintable = _claimCoinflipsInternal(id, state);
             uint256 carry = state.autoRebuyCarry;
             if (carry != 0) {
                 mintable += carry;
@@ -1485,7 +1466,7 @@ contract Coinflip {
         if (_flipFrozen()) revert RngLocked();
         if (takeProfit > type(uint128).max) revert TakeProfitTooLarge();
 
-        uint256 mintable = _claimCoinflipsInternal( id, state, false);
+        uint256 mintable = _claimCoinflipsInternal(id, state);
         state.autoRebuyStop = uint128(takeProfit);
         emit CoinflipAutoRebuyStopSet(id, takeProfit);
 
@@ -1497,10 +1478,9 @@ contract Coinflip {
 
     /// @notice Claim up to `amount` of the auto-rebuy carry as minted FLIP while
     ///         staying on auto-rebuy; the remainder keeps rolling.
-    /// @dev Runs the ordinary bounded claim walk FIRST — up to `COIN_CLAIM_FIRST_DAYS` days on
-    ///      a first claim and `COIN_CLAIM_DAYS` after, wins rolling into the carry per the
-    ///      take-profit config and a loss zeroing it — then withdraws from the carry as
-    ///      settled so far. A longer backlog needs the walk repeated before the carry is final.
+    /// @dev Runs the claim walk FIRST — through the latest resolved day, wins rolling into the
+    ///      carry per the take-profit config and a loss zeroing it — then withdraws from the
+    ///      settled carry.
     ///      Blocked while today's flip is frozen for the same reason as the
     ///      rebuy toggle: the carry is the pending day's stake, and the day's word may
     ///      already be on-chain before the resolution walk applies it. Take-profit
@@ -1520,9 +1500,9 @@ contract Coinflip {
         if (!state.autoRebuyEnabled) revert AutoRebuyNotEnabled();
         if (_flipFrozen()) revert RngLocked();
 
-        uint256 mintable = _claimCoinflipsInternal( id, state, false);
+        uint256 mintable = _claimCoinflipsInternal(id, state);
         if (mintable != 0) {
-            state.claimableStored = uint128(
+            state.claimableStored = _toUint128Sat(
                 uint256(state.claimableStored) + mintable
             );
         }
@@ -1633,12 +1613,12 @@ contract Coinflip {
         // credits and existing carry ride the daily result after auto-rebuy is armed.
         PlayerCoinflipState storage sdgnrsState = playerState[SDGNRS_WALLET_ID];
         if (sdgnrsAutoRebuyArmed) {
-            _claimCoinflipsInternal( SDGNRS_WALLET_ID, sdgnrsState, false);
+            _claimCoinflipsInternal(SDGNRS_WALLET_ID, sdgnrsState);
         } else {
             uint256 mintable =
-                _claimCoinflipsInternal( SDGNRS_WALLET_ID, sdgnrsState, false);
+                _claimCoinflipsInternal(SDGNRS_WALLET_ID, sdgnrsState);
             if (mintable != 0) {
-                sdgnrsState.claimableStored = uint128(
+                sdgnrsState.claimableStored = _toUint128Sat(
                     uint256(sdgnrsState.claimableStored) + mintable
                 );
             }
@@ -1731,9 +1711,9 @@ contract Coinflip {
     function redeemableFlipBacking() external returns (uint256 backing) {
         if (msg.sender != ContractAddresses.SDGNRS) revert OnlysDGNRS();
         PlayerCoinflipState storage state = playerState[SDGNRS_WALLET_ID];
-        uint256 mintable = _claimCoinflipsInternal(SDGNRS_WALLET_ID, state, false);
+        uint256 mintable = _claimCoinflipsInternal(SDGNRS_WALLET_ID, state);
         if (mintable != 0) {
-            state.claimableStored = uint128(uint256(state.claimableStored) + mintable);
+            state.claimableStored = _toUint128Sat(uint256(state.claimableStored) + mintable);
         }
         _emitClaimState(SDGNRS_WALLET_ID);
         return uint256(state.claimableStored) + uint256(state.autoRebuyCarry);
@@ -1920,9 +1900,7 @@ contract Coinflip {
     ///      each winning day on its stored stake alone would report a win that a later
     ///      losing day has already destroyed.
     ///
-    ///      Walks the non-deep window (COIN_CLAIM_FIRST_DAYS / COIN_CLAIM_DAYS), matching
-    ///      every consumer of the two preview views; the deeper walk belongs to the
-    ///      auto-rebuy exit, which is not previewed.
+    ///      Walks the same COIN_CLAIM_DAYS window as every claim.
     /// @param state The position to replay.
     /// @param id The position's wallet ID (0 = none: no stake to replay).
     /// @return mintable Winnings a claim would surface: settled payouts and banked
@@ -1948,19 +1926,11 @@ contract Coinflip {
 
         uint256 takeProfit = rebuyActive ? state.autoRebuyStop : 0;
 
-        uint16 windowDays = startDay == 0 ? COIN_CLAIM_FIRST_DAYS : COIN_CLAIM_DAYS;
         uint24 minClaimableDay;
-        if (rebuyActive) {
-            minClaimableDay = state.autoRebuyStartDay;
-            if (minClaimableDay > latestDay) {
-                minClaimableDay = latestDay;
-            }
-        } else {
-            unchecked {
-                minClaimableDay = latestDay > windowDays
-                    ? latestDay - windowDays
-                    : 0;
-            }
+        unchecked {
+            minClaimableDay = latestDay > COIN_CLAIM_DAYS
+                ? latestDay - COIN_CLAIM_DAYS
+                : 0;
         }
         if (startDay < minClaimableDay) {
             startDay = minClaimableDay;
@@ -1969,7 +1939,7 @@ contract Coinflip {
             }
         }
 
-        uint16 remaining = windowDays;
+        uint16 remaining = COIN_CLAIM_DAYS;
         uint24 cursor;
         unchecked {
             cursor = startDay + 1;
@@ -2011,6 +1981,7 @@ contract Coinflip {
                         }
                         if (carry != 0) {
                             carry += _recyclingBonus(carry);
+                            if (carry > type(uint128).max) carry = type(uint128).max;
                         }
                     } else {
                         mintable += payout;
@@ -2085,6 +2056,11 @@ contract Coinflip {
         uint256 amount
     ) private pure returns (uint256 bonus) {
         bonus = (amount * uint256(RECYCLE_BONUS_BPS)) / uint256(BPS_DENOMINATOR);
+    }
+
+    /// @dev Narrows a claimable balance to its uint128 field, saturating at the maximum.
+    function _toUint128Sat(uint256 value) private pure returns (uint128) {
+        return value > type(uint128).max ? type(uint128).max : uint128(value);
     }
 
     /// @dev The target day for new coinflip deposits: tomorrow's index. GameTimeLib is the

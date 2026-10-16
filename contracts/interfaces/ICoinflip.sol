@@ -330,7 +330,7 @@ interface ICoinflip {
     /// @return enabled Whether auto-rebuy mode is currently active.
     /// @return stop The threshold amount for auto-claiming multiples.
     /// @return carry The current accumulated carry amount (winnings below threshold).
-    /// @return startDay The day auto-rebuy was enabled (used for claim window calculation).
+    /// @return startDay The claim day on which auto-rebuy was enabled.
     function coinflipAutoRebuyInfo(
         address player
     )

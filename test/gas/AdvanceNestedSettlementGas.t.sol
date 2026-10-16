@@ -22,20 +22,24 @@ contract DailyGasExtrasSeeder is DegenerusGame {
     }
 }
 
+/// @dev The vault's auto-rebuy claim backlog: `span` staked, resolved days ending at `latest`,
+///      one loss among them.
 contract VaultHistorySeeder is CoinflipStakeSetter {
-    function seedVaultHistory(bool sufficient) external {
+    function seedVaultHistory(bool sufficient, uint24 latest, uint24 span) external {
         address player = ContractAddresses.VAULT;
         PlayerCoinflipState storage s = playerState[degenerusGame.walletIdOf(player)];
+        uint24 last = latest - span;
         s.claimableStored = 0;
-        s.lastClaim = 34;
-        s.autoRebuyStartDay = 34;
+        s.lastClaim = last;
+        s.autoRebuyStartDay = last;
         s.autoRebuyEnabled = true;
         s.autoRebuyStop = 1;
         s.autoRebuyCarry = 0;
-        for (uint24 day = 35; day <= 399; ++day) {
+        uint24 lossDay = last + span / 2;
+        for (uint24 day = last + 1; day <= latest; ++day) {
             // Stake lanes hold whole FLIP: the insufficient history stakes 1 FLIP a day.
             _setFlipStake(day, 1, sufficient ? 1000 : 1);
-            _storeDayResult(day, 150, day != 200);
+            _storeDayResult(day, 150, day != lossDay);
         }
     }
 }

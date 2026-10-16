@@ -584,13 +584,15 @@ Measured gas with transaction isolation enabled:
 | Coinflip claim, one day | 173,855 | 174,034 | -179 |
 | Coinflip claim, 32 days across words | 291,804 | 289,661 | 2,143 |
 | Coinflip claim, 365 days | 981,151 | 960,903 | 20,248 |
-| Coinflip auto-rebuy exit, 1,460 days | 3,934,334 | 3,851,408 | 82,926 |
 | Craps preferred-board validation | 52,407 | 51,697 | 710 |
 | Craps settlement, 40 ordinary seats | 1,996,965 | 1,985,500 | 11,465 |
 | Craps settlement, 20 high-lane seats | 1,178,939 | 1,173,154 | 5,785 |
 
 These are fixture measurements, not universal worst-case bounds. The cache has a
-small one-day overhead. Craps differential settlement uses the real engine and
+small one-day overhead. Every claim walk is bounded by the one 730-day claim window;
+`CoinflipDeepClaimWorstCaseGas` measures a full 730-day walk cold, including intrinsic gas,
+at 1,223,548 (rebuy off), 1,439,029 (auto-rebuy exit with take-profit) and 1,237,284 (first
+claim). Craps differential settlement uses the real engine and
 JackpotBattle with mocked satellite contracts; protocol wiring is checked
 separately with the complete deployment fixture. Claim comparisons use the
 complete deployment fixture, compare ordered events and affected balances/packed
@@ -734,7 +736,7 @@ settlement flows, and constant-time cleanup for 2 versus 2,000 beneficiaries.
 The worst measured cold 20-box beneficiary uses 1,047,681 gas against the declared
 2,430,000 allowance (including the return tail). The large-value order fuzz test
 asserts the separate 1,850,000 order bound for every sampled amount and seed.
-The century variants cover both a committing and a reverting 365-day vault claim;
+The century variants cover both a committing and a reverting 730-day vault claim;
 their setup now uses whole FLIP/WWXRP units. These are measured bounds over the
 specified fixtures and fuzz samples, not a proof over every possible EVM state.
 Evidence is copied under `.audit-test-logs/foundry/`.

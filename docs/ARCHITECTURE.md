@@ -302,7 +302,7 @@ settles the vault's coinflip position through that day's applied result
 (`depositCoinflip(VAULT, 0)`), so the vault's bracket score holds every winning flip the bracket
 counts, as for a player who claims at the close of that day. The BAF day's own flip settles after
 the next request and scores the next bracket. On an x0 purchase day every leg that can seal keeps
-`BAF_VAULT_SETTLE` (one full 365-day claim walk) in its tail.
+`BAF_VAULT_SETTLE` (one full 730-day claim walk) in its tail.
 
 The global wallet registry is append-only: each wallet gets one permanent, one-based
 uint32 ID. IDs are never reassigned. Queue words pack eight IDs; trait buckets pack

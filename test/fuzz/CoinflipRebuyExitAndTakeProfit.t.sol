@@ -115,7 +115,7 @@ contract CoinflipRebuyExitAndTakeProfit is DeployProtocol {
     // A. Exit cannot dodge a settled loss
     // ---------------------------------------------------------------------
 
-    /// Disabling auto-rebuy runs the full settle FIRST (deepAutoRebuy). A day-4 loss
+    /// Disabling auto-rebuy runs the claim walk FIRST, through the latest resolved day. A day-4 loss
     /// therefore zeroes the day-3 carry before the exit can cash it out.
     function test_ExitSettlesPendingLossBeforeCashingCarry() public {
         _enterRebuyWithStake(0);

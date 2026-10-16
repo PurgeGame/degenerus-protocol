@@ -13,6 +13,7 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 import {TicketQueueStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
+import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 
 /// @dev Fixture writes compiled against the live storage layout (same seeding as WalletIdentityGas).
 contract LootboxQueueGasSeeder is DegenerusGamePayoutUtils {
@@ -314,7 +315,8 @@ contract LootboxQueueGasTest is DeployProtocol {
     function test_Gas_DrainPartialResume() public {
         for (uint256 i; i < 3; ++i) _box(REG, BoxOrderLib.boSmalls(10), _price() * 10);
         LootboxQueueGasHost host = _sealed();
-        host.work(1_300_000 + 10 * 27_500 + 80_000 + MineFlipGas.CHECK_RESERVE + 50_000);
+        host.work(GasBounds.HUMAN_ENTRY_GAS + 10 * GasBounds.HUMAN_BOX_GAS + GasBounds.HUMAN_TAIL_GAS
+            + MineFlipGas.CHECK_RESERVE + 50_000);
         (, uint256 cursor,) = host.readState();
         assertEq(cursor, 1, "first call settled one entry");
         host.work(25_000_000);

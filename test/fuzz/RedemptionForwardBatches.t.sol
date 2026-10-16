@@ -5,6 +5,7 @@ import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 
 /// @dev Both endings reach resolveTerminalRedemptions through the real Game ending worker.
 contract RedemptionForwardBatchesTest is RedemptionFixture {
@@ -431,7 +432,7 @@ contract RedemptionForwardBatchesTest is RedemptionFixture {
             // Not every box outcome emits LootBoxOpened (a WWXRP spin outcome emits BoxSpin), so
             // the open events only bound the count from above (one recirculated box per ETH spin).
             assertLe(opened, 2 * boxes);
-            uint256 bound = 1_300_000 + boxes * 27_500;
+            uint256 bound = GasBounds.HUMAN_ENTRY_GAS + boxes * GasBounds.HUMAN_BOX_GAS;
             emit log_named_uint(string.concat("redemption_leg_wei_", vm.toString(legs[i])), legs[i]);
             emit log_named_uint("  boxes", boxes);
             emit log_named_uint("  box_size_wei", boxSize);

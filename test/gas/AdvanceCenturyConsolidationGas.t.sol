@@ -3,7 +3,7 @@ import {sDGNRS} from "../../contracts/sDGNRS.sol";
 
 pragma solidity ^0.8.26;
 
-import {Vm} from "forge-std/Vm.sol";
+import {Vm, VmSafe} from "forge-std/Vm.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
@@ -14,6 +14,7 @@ import {IDegenerusGame} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {IDegenerusJackpots} from "../../contracts/interfaces/IDegenerusJackpots.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
+import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
 import {FreshWordLeg} from "./PurchaseDailyWorstCase.t.sol";
 import {ProtocolBoonDrawSeeder} from "./helpers/ProtocolBoonDrawSeeder.sol";
 import {VaultHistorySeeder} from "./AdvanceNestedSettlementGas.t.sol";
@@ -494,6 +495,9 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
     /// @dev The allowance the native daily phase runs at elsewhere in this fixture.
     uint256 internal constant COMPOSED_ALLOWANCE = 9_000_000;
     uint256 internal constant WORD = 0x0ee7fcb287531227df7efcfddb3f0151121ee9e59765e743a190d8e26ee417fd;
+    /// @dev The history variants' vault walk: one full claim window, the seeded backlog plus the
+    ///      century day the apply resolves.
+    uint24 internal constant VAULT_HISTORY_DAYS = 730;
     bytes32 internal constant ETH_SIG = BafSchedule.ETH_SIG;
     bytes32 internal constant TICKET_SIG = BafSchedule.TICKET_SIG;
     bytes32 internal constant WHALE_SIG = BafSchedule.WHALE_SIG;
@@ -555,9 +559,15 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         return 0;
     }
 
+    /// @dev The century day whose word the measured apply consumes.
+    function _centuryDay() internal pure virtual returns (uint24) {
+        return 400;
+    }
+
     function setUp() public {
         _deployProtocol();
-        vm.warp((399 + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_620 + 3 hours);
+        uint24 centuryDay = _centuryDay();
+        vm.warp((uint256(centuryDay - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_620 + 3 hours);
         Shape memory s = _shape();
         uint256 word = _rngWord();
         expectedPool = s.bafPool;
@@ -574,13 +584,13 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         // mock's full shares-based balanceOf path rather than its empty fast path.
         vm.deal(address(game), uint256(s.nextPool) + s.futurePool + 68.25 ether + uint256(s.nextPool) / 400);
         mockStETH.mint(address(game), 50 ether);
-        _armCenturyWord(word, 400);
+        _armCenturyWord(word, centuryDay);
         assertEq(game.level(), 100, "real request must pre-increment the level");
-        assertEq(game.rngWordForDay(400), 0, "the word-apply transaction must apply fresh RNG");
+        assertEq(game.rngWordForDay(centuryDay), 0, "the word-apply transaction must apply fresh RNG");
         assertFalse(game.decWindow(), "real century request closes the burn window");
 
         CenturyBafScores.seedCandidatesR(address(jackpots), address(game), rounds / 2, rounds > 48 ? 4 : 1);
-        CenturyBafScores.seedHead(address(jackpots), address(coinflip), address(game), 400);
+        CenturyBafScores.seedHead(address(jackpots), address(coinflip), address(game), centuryDay);
         assertEq(uint8(CenturyBafScores.levelWord(address(jackpots)) >> 64), 4, "bafLevel layout: four board entries");
         (, uint96 weight, uint32 count) = coinflip.bafDrawInfo();
         assertEq(count, 4096, "draw layout must match source");
@@ -603,7 +613,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         if (historyMode != 0) {
             original = address(coinflip).code;
             vm.etch(address(coinflip), type(VaultHistorySeeder).runtimeCode);
-            VaultHistorySeeder(address(coinflip)).seedVaultHistory(historyMode == 1);
+            VaultHistorySeeder(address(coinflip)).seedVaultHistory(historyMode == 1, centuryDay - 1, VAULT_HISTORY_DAYS - 1);
             vm.etch(address(coinflip), original);
             vm.store(address(crapsBattle), keccak256(abi.encode(uint256(1), CrapsSlots.PASS_CREDITS_BY_ID)), bytes32(0));
             vm.store(address(coin), bytes32(0), bytes32(uint256(uint128(uint256(vm.load(address(coin), bytes32(0)))))));
@@ -714,7 +724,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
     }
 
     /// @dev The fresh word applies alone: the day's RNG record (redemption stays pending), the
-    ///      craps day it opens and, in the history variants, the vault's 365-day claim.
+    ///      craps day it opens and, in the history variants, the vault's 730-day claim.
     function _checkWordApply(bool measureComposition) private {
         uint8 historyMode = _vaultHistoryMode();
         if (historyMode != 0) {
@@ -749,8 +759,37 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
             bytes32 stateSlot = keccak256(abi.encode(uint32(1), uint256(2)));
             uint24 cursor = uint24(uint256(vm.load(address(coinflip), stateSlot)) >> 128);
             emit log_named_uint("vault_claim_cursor_after", cursor);
-            assertEq(cursor, historyMode == 1 ? 399 : 34, "365-day settlement must commit or roll back");
+            uint24 latest = _centuryDay();
+            assertEq(cursor, historyMode == 1 ? latest : latest - VAULT_HISTORY_DAYS, "730-day settlement must commit or roll back");
         }
+    }
+
+    /// @dev The word apply re-priced under Glamsterdam (EIP-8037 / EIP-8038) from its recorded
+    ///      accesses; the figures include the call's intrinsic gas.
+    function _glamsterdamWordApply() internal {
+        vm.etch(address(game), type(CenturyNativeGasHost).runtimeCode);
+        CenturyNativeGasHost host = CenturyNativeGasHost(payable(address(game)));
+        host.publishOnly();
+        uint256 reads;
+        while (!host.prepareTicketsOnly{gas: 12_000_000}()) {
+            assertLt(++reads, 32, "century ticket prerequisites stalled");
+        }
+        // The cold figure comes from an isolated call; the recorded replay of the same call
+        // supplies the accesses (recording does not keep the call's own cold state).
+        uint256 snap = vm.snapshotState();
+        host.applyOnly{gas: 12_000_000}();
+        uint256 used = _coldCallGas();
+        vm.revertToState(snap);
+        vm.startStateDiffRecording();
+        host.applyOnly{gas: 12_000_000}();
+        VmSafe.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
+        GlamsterdamReprice.Result memory r = GlamsterdamReprice.reprice(used - 21_192, acc, address(game));
+        emit log_named_uint("osaka_gas_including_intrinsic", used);
+        emit log_named_uint("glamsterdam_exec_gas_including_intrinsic", r.glamsterdamExec + 21_192);
+        emit log_named_uint("glamsterdam_state_gas", r.stateGas);
+        emit log_named_uint("new_slots_0_to_x", r.newSlots);
+        emit log_named_uint("cold_accounts", r.coldAccounts);
+        assertLt(r.glamsterdamExec + 21_192 + r.stateGas, CAP, "the daily apply stays under 10M under Glamsterdam");
     }
 
     function _coldCallGas() private returns (uint256 used) {
@@ -1190,14 +1229,28 @@ contract AdvanceCenturyDiverseDestinations is CenturyConsolidationFixture {
     }
 }
 
+/// @dev The vault's full-window walk: century day 792, so the window's first day (63) is lane 31
+///      of a result word and lane 7 of a stake word and the walk crosses the most words it can.
 contract AdvanceCenturyVaultHistorySuccessful is AdvanceCenturyDiverseDestinations {
     function _vaultHistoryMode() internal pure override returns (uint8) {
         return 1;
+    }
+
+    function _centuryDay() internal pure override returns (uint24) {
+        return 792;
+    }
+
+    function test_CenturyWordApplyGlamsterdam() public {
+        _glamsterdamWordApply();
     }
 }
 
 contract AdvanceCenturyVaultHistoryFailed is AdvanceCenturyDiverseDestinations {
     function _vaultHistoryMode() internal pure override returns (uint8) {
         return 2;
+    }
+
+    function _centuryDay() internal pure override returns (uint24) {
+        return 792;
     }
 }

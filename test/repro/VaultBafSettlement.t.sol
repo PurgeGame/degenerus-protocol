@@ -56,7 +56,7 @@ abstract contract VaultBafRig is DeployProtocol {
     ///      replay, so the latch reproduces.
     function _driveToEve(uint24 lvlBefore) internal {
         _settleToday();
-        for (uint256 i = 0; i < 600; i++) {
+        for (uint256 i = 0; i < 1000; i++) {
             require(!game.gameOver(), "harness: gameOver before the latch");
             uint256 snap = vm.snapshotState();
             _stageDay();

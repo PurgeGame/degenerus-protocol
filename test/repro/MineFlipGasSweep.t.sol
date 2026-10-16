@@ -9,7 +9,7 @@ import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage
 import {VaultBafRig} from "./VaultBafSettlement.t.sol";
 
 /// @dev The vault's coinflip claim backlog, written through Coinflip's lane helpers, so the
-///      x0 seal's vault settlement walks a full 365-day window.
+///      x0 seal's vault settlement walks a full 730-day window.
 contract SweepVaultSeeder is CoinflipStakeSetter {
     function seedVaultHistory(uint24 latest, uint24 gap, bool rebuy) external {
         PlayerCoinflipState storage s = playerState[degenerusGame.walletIdOf(ContractAddresses.VAULT)];
@@ -60,8 +60,9 @@ contract SweepHost is DegenerusGame {
 
 /// @title MineFlipGasSweep — mineFlip never reverts once its first action fits.
 /// @notice USER requirement: with enough gas for the first action, mineFlip never reverts on
-///         gas. The state is the x0 latch day of a real game (purchase level 10: the seal arms
-///         the BAF draw and settles the vault's coinflips, a BAF_VAULT_SETTLE tail):
+///         gas. The state is the x0 latch day of a real game (purchase level 10, or 20 in the
+///         slow game: the seal arms the BAF draw and settles the vault's coinflips, a
+///         BAF_VAULT_SETTLE tail):
 ///         - from Publish: Publish, then the Tickets worker, DailyApply, the sealing DailyPhase
 ///           and the consumer stages, each admitted on estimates after the first action;
 ///         - from DailyPhase: the jackpot child runs the latch day's groups as the first
@@ -86,7 +87,9 @@ abstract contract MineFlipGasSweepBase is VaultBafRig {
 
     function _holdFor(uint24 lvl) internal view override returns (uint256) {
         if (!_slow()) return super._holdFor(lvl);
-        return lvl == 0 ? 240 : (lvl < 9 ? 14 : 0);
+        // Level 0 idles 240 days and levels 1-18 hold 27 purchase days each, so the level-20
+        // seal falls after day 730 and the vault can carry a full-window backlog.
+        return lvl == 0 ? 240 : (lvl < 19 ? 27 : 0);
     }
 
     function setUp() public override {
@@ -100,7 +103,7 @@ abstract contract MineFlipGasSweepBase is VaultBafRig {
             vm.prank(VAULT);
             coinflip.setCoinflipAutoRebuy(0, true, 7 ether);
         }
-        _driveToEve(9);
+        _driveToEve(_slow() ? 19 : 9);
         latchDay = game.currentDayView() + 1;
         _stageDay();
         simTime += 1 days + 1;
@@ -132,7 +135,8 @@ abstract contract MineFlipGasSweepBase is VaultBafRig {
         if (_slow()) {
             bytes memory original = address(coinflip).code;
             vm.etch(address(coinflip), type(SweepVaultSeeder).runtimeCode);
-            SweepVaultSeeder(address(coinflip)).seedVaultHistory(latchDay, 365, true);
+            require(latchDay > 731, "harness: the slow game reaches a full-window backlog");
+            SweepVaultSeeder(address(coinflip)).seedVaultHistory(latchDay, 730, true);
             vm.etch(address(coinflip), original);
         }
         assertEq(_action(), uint8(DegenerusGameStorage.MinerAction.DailyPhase));
@@ -285,7 +289,7 @@ contract MineFlipGasSweepTurbo is MineFlipGasSweepBase {
     function _slow() internal pure override returns (bool) { return false; }
 }
 
-/// @dev Slow game with the vault on auto-rebuy and a 365-day claim backlog on the DailyPhase
+/// @dev Slow game with the vault on auto-rebuy and a 730-day claim backlog on the DailyPhase
 ///      sweep: the seal's vault settlement is at its declared worst case.
 contract MineFlipGasSweepSlowRebuy is MineFlipGasSweepBase {
     function _slow() internal pure override returns (bool) { return true; }

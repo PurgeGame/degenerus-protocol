@@ -9,20 +9,23 @@ import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {VaultBafRig} from "../repro/VaultBafSettlement.t.sol";
+import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
+import {VmSafe} from "forge-std/Vm.sol";
 
 /// @title VaultBafSettleGas — cold cost of the vault settlement the x0 seal runs.
 ///
 /// @notice The seal settles the vault through `depositCoinflip(1, 0)`: one claim walk over
-///         the days since its last settlement, at most COIN_CLAIM_DAYS (365) per call. Its gas is
-///         the BAF_VAULT_SETTLE reserve that every seal-capable purchase leg keeps in its tail on
-///         an x0 purchase day.
+///         the days since its last settlement, at most COIN_CLAIM_DAYS (730), always through the
+///         latest resolved day. Its gas is the BAF_VAULT_SETTLE reserve that every seal-capable
+///         purchase leg keeps in its tail on an x0 purchase day.
 ///         - Settle call, cold, every walked day staked and resolved (one loss, so the WWXRP
 ///           loss mint fires too), auto-rebuy with a carry-keeping stop and auto-rebuy off: a
-///           typical 10-level gap (70 days) and the full 365-day window (a stall-length gap).
-///           Each stays under BAF_VAULT_SETTLE.
+///           typical 10-level gap (70 days) and the full 730-day window, whose first day opens
+///           a fresh result and stake word so the walk crosses the most words a window can.
+///           Each stays under BAF_VAULT_SETTLE, and the Glamsterdam re-pricing is logged.
 ///         - The real sealing chunk, cold: the runDailyPhase call that finishes the latch day's
 ///           purchase legs and seals, in a turbo game (short gap) and in a slow game whose
-///           vault walks the full 365-day window, each beside a pre-settled control. Each chunk
+///           vault walks the full 730-day window, each beside a pre-settled control. Each chunk
 ///           stays at or under 10M.
 
 /// @dev Writes the vault's coinflip history through Coinflip's own lane helpers.
@@ -87,7 +90,9 @@ contract VaultSettleHost is DegenerusGame {
 // -------------------------------------------------------------------------
 
 abstract contract VaultSettleCallGas is DeployProtocol {
-    uint24 internal constant LATEST = 400;
+    /// @dev The full window's first day, 792 - 729 = 63, is lane 31 of a result word and lane 7
+    ///      of a stake word.
+    uint24 internal constant LATEST = 792;
 
     function _gap() internal pure virtual returns (uint24);
     function _rebuy() internal pure virtual returns (bool);
@@ -112,6 +117,29 @@ abstract contract VaultSettleCallGas is DeployProtocol {
         assertEq(uint24(state >> 128), LATEST, "the walk settles every resolved day");
         assertLe(used, GasBounds.BAF_VAULT_SETTLE, "the settle call fits its declared reserve");
     }
+
+    /// @dev The same cold call re-priced under Glamsterdam (EIP-8037 / EIP-8038).
+    function test_SettleCallGlamsterdam() public {
+        // The cold figure comes from an isolated call; the recorded replay of the same call
+        // supplies the accesses (recording does not keep the call's own cold state).
+        uint256 snap = vm.snapshotState();
+        vm.prank(address(game));
+        coinflip.depositCoinflip(1, 0);
+        uint256 used = vm.lastCallGas().gasTotalUsed;
+        vm.revertToState(snap);
+        vm.startStateDiffRecording();
+        vm.prank(address(game));
+        coinflip.depositCoinflip(1, 0);
+        VmSafe.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
+        GlamsterdamReprice.Result memory r = GlamsterdamReprice.reprice(used, acc, address(coinflip));
+        emit log_named_uint("vault_settle_call_days", _gap());
+        emit log_named_uint("osaka_gas", r.osakaExec);
+        emit log_named_uint("glamsterdam_exec_gas", r.glamsterdamExec);
+        emit log_named_uint("glamsterdam_state_gas", r.stateGas);
+        emit log_named_uint("new_slots_0_to_x", r.newSlots);
+        emit log_named_uint("cold_accounts", r.coldAccounts);
+        assertLt(r.glamsterdamExec + r.stateGas, 10_000_000, "the settle unit stays under 10M under Glamsterdam");
+    }
 }
 
 contract VaultSettleCallGas70Rebuy is VaultSettleCallGas {
@@ -124,13 +152,13 @@ contract VaultSettleCallGas70Plain is VaultSettleCallGas {
     function _rebuy() internal pure override returns (bool) { return false; }
 }
 
-contract VaultSettleCallGas365Rebuy is VaultSettleCallGas {
-    function _gap() internal pure override returns (uint24) { return 365; }
+contract VaultSettleCallGas730Rebuy is VaultSettleCallGas {
+    function _gap() internal pure override returns (uint24) { return 730; }
     function _rebuy() internal pure override returns (bool) { return true; }
 }
 
-contract VaultSettleCallGas365Plain is VaultSettleCallGas {
-    function _gap() internal pure override returns (uint24) { return 365; }
+contract VaultSettleCallGas730Plain is VaultSettleCallGas {
+    function _gap() internal pure override returns (uint24) { return 730; }
     function _rebuy() internal pure override returns (bool) { return false; }
 }
 
@@ -145,10 +173,11 @@ abstract contract VaultSealChunkGas is VaultBafRig {
     uint24 internal latchDay;
     uint24 internal settledAt;
 
-    /// @dev Slow game: level 0 idles 240 days and each of levels 1-9 holds 14 purchase days.
-    ///      Automatic craps funding can settle the vault along the way, so seed its worst-case
-    ///      claim backlog immediately before the measured seal to keep the full-window gas
-    ///      measurement deterministic.
+    /// @dev Slow game: level 0 idles 240 days and each of levels 1-18 holds 27 purchase days,
+    ///      so the level-20 seal falls after day 730 and the vault can carry a full-window
+    ///      backlog. Automatic craps funding can settle the vault along the way, so seed its
+    ///      worst-case claim backlog immediately before the measured seal to keep the
+    ///      full-window gas measurement deterministic.
     function _slow() internal pure virtual returns (bool);
     /// @dev Control: settle the vault's available results before measuring the seal.
     function _presettle() internal pure virtual returns (bool);
@@ -159,7 +188,7 @@ abstract contract VaultSealChunkGas is VaultBafRig {
 
     function _holdFor(uint24 lvl) internal view override returns (uint256) {
         if (!_slow()) return super._holdFor(lvl);
-        return lvl == 0 ? 240 : (lvl < 9 ? 14 : 0);
+        return lvl == 0 ? 240 : (lvl < 19 ? 27 : 0);
     }
 
     function setUp() public override {
@@ -176,7 +205,7 @@ abstract contract VaultSealChunkGas is VaultBafRig {
             coinflip.setCoinflipAutoRebuy(0, true, 7 ether);
         }
         uint24 pokedAt = _lastClaim(VAULT);
-        _driveToEve(9);
+        _driveToEve(_slow() ? 19 : 9);
         latchDay = game.currentDayView() + 1;
         _stageDay();
         if (!_slow()) {
@@ -212,9 +241,10 @@ abstract contract VaultSealChunkGas is VaultBafRig {
             vm.deleteStateSnapshot(snap);
         }
         if (_slow()) {
+            require(latchDay > 731, "harness: the slow game reaches a full-window backlog");
             bytes memory original = address(coinflip).code;
             vm.etch(address(coinflip), type(VaultSettleSeeder).runtimeCode);
-            VaultSettleSeeder(address(coinflip)).seedVaultHistory(latchDay, 365, _rebuy());
+            VaultSettleSeeder(address(coinflip)).seedVaultHistory(latchDay, 730, _rebuy());
             vm.etch(address(coinflip), original);
             if (_presettle()) {
                 vm.prank(POKER);
@@ -222,8 +252,8 @@ abstract contract VaultSealChunkGas is VaultBafRig {
             }
         }
         emit log_named_uint("vault_days_unsettled", latchDay - _lastClaim(VAULT));
-        // One claim walks at most 365 days; compute the endpoint from the actual pre-seal state.
-        settledAt = _rebuy() && latchDay - _lastClaim(VAULT) > 365 ? _lastClaim(VAULT) + 365 : latchDay;
+        // One claim walk always settles through the latest resolved day.
+        settledAt = latchDay;
         vm.resumeGasMetering();
     }
 

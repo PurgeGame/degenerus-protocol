@@ -219,7 +219,7 @@ contract CoinflipSeedWindowTest is DeployProtocol {
     }
 
     /// @dev Deploy window with credits on seeded days and partial vault claims; a century window
-    ///      the vault rides on auto-rebuy (carry claims, a take-profit change, the deep exit walk
+    ///      the vault rides on auto-rebuy (carry claims, a take-profit change, the exit walk
     ///      inside the window); a second century window on default terms; sDGNRS redemption and
     ///      salvage reads throughout.
     function _windowsAndRebuy(Trace memory t, uint256 bits, bool stored) internal {
@@ -264,7 +264,7 @@ contract CoinflipSeedWindowTest is DeployProtocol {
                 coinflip.setCoinflipAutoRebuyTakeProfit(0, 0);
             }
             if (d == 56) {
-                // Leaves auto-rebuy mid-window: the deep walk crosses window days.
+                // Leaves auto-rebuy mid-window: the exit walk crosses window days.
                 vm.prank(VAULT);
                 coinflip.setCoinflipAutoRebuy(0, false, 0);
             }
@@ -274,8 +274,8 @@ contract CoinflipSeedWindowTest is DeployProtocol {
         }
     }
 
-    /// @dev The vault's first claim lands after the 180-day first-claim window has expired part
-    ///      of the deploy window; sDGNRS settles every resolved day. A century window follows and
+    /// @dev The vault's first claim lands after the 730-day claim window has expired part of
+    ///      the deploy window; sDGNRS settles every resolved day. A century window follows and
     ///      the vault claims it only once it has ended.
     function _lateVaultAndExpiry(Trace memory t, uint256 bits, bool stored) internal {
         for (uint24 d = 1; d <= 5; ++d) {
@@ -285,20 +285,20 @@ contract CoinflipSeedWindowTest is DeployProtocol {
             _resolve(d, r & 1 != 0);
             _observe(t);
         }
-        // Days 6..195 resolve in recovery-sized runs at 100% reward.
-        for (uint24 start = 6; start < 196; start += 31) {
-            uint24 end = start + 31 > 196 ? 196 : start + 31;
+        // Days 6..740 resolve in recovery-sized runs at 100% reward.
+        for (uint24 start = 6; start < 741; start += 31) {
+            uint24 end = start + 31 > 741 ? 741 : start + 31;
             _warpToDay(end - 1);
             vm.prank(GAME);
             coinflip.processCoinflipGap(uint256(keccak256(abi.encode(bits, "gap", start))), start, end);
             _observe(t);
         }
-        _warpToDay(195);
+        _warpToDay(740);
         _vaultClaim(type(uint256).max);
         _observe(t);
         _arm(150, stored);
         _observe(t);
-        for (uint24 d = 196; d <= 220; ++d) {
+        for (uint24 d = 741; d <= 765; ++d) {
             _warpToDay(d);
             uint256 r = uint256(keccak256(abi.encode(bits, d)));
             if (r & 2 != 0) _creditVault(7_000);

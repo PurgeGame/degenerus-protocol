@@ -14,7 +14,8 @@ library MineFlipGasBounds {
     uint256 internal constant ENGINE_RETURN = 200_000;
     // Cold widest live gap (29 days): 0.47M measured.
     uint256 internal constant DAILY_GAP = 600_000;
-    // Cold century day with a 365-day vault coinflip history: 3.23M measured.
+    // Cold century day with a 730-day vault coinflip history: 2.98M measured (seat funding
+    // rolled back; 2.56M committing).
     uint256 internal constant DAILY_APPLY = 3_900_000;
     // Fresh-request calibration: test/gas/MineFlipRequestGas.t.sol, cold gross execution.
     // Pinned Chainlink VRFCoordinatorV2_5 request: 41.5k; request witnesses impose a 125k
@@ -41,9 +42,9 @@ library MineFlipGasBounds {
     // 0.51M measured including intrinsic gas. The x00 winning flip (BAF reservation) measures 0.45M.
     uint256 internal constant POOL_CONSOLIDATION = 580_000;
     uint256 internal constant DAILY_PHASE_TAIL = 150_000;
-    // Vault flip settlement at an x0 seal over the full 365-day claim window, auto-rebuy
-    // carry and loss mint included. Cold: 1.28M measured.
-    uint256 internal constant BAF_VAULT_SETTLE = 1_550_000;
+    // Vault flip settlement at an x0 seal over the full 730-day claim window, auto-rebuy
+    // carry and loss mint included. Cold: 1.61M measured.
+    uint256 internal constant BAF_VAULT_SETTLE = 1_950_000;
     uint256 internal constant FOIL_PACK = 1_400_000;
 
     // One 50-entry field checkpoint, including cold initialization or final sealing.
@@ -88,11 +89,13 @@ library MineFlipGasBounds {
     uint256 internal constant AFKING_TAIL_GAS = 100_000;
 
     // BOX
-    // Cold entry peaks: 1 box 0.33M, 10 boxes 1.00M, 50 boxes 2.19M, 100 boxes 3.15M. Entry cost
-    // is concave in its box count (first-touch writes stop repeating), so the entry term carries
-    // them: ENTRY + 100 x BOX = 4.05M.
+    // Cold natural entry peaks: 1 box 0.33M, 10 boxes 1.00M, 50 boxes 2.19M, 100 boxes 3.15M; the
+    // entry term carries the concave first-touch writes. Forcing every box onto an ETH spin that
+    // wins with score >= 7 and recirculates on the heaviest branch: 100 boxes 6.74M, at most 36k
+    // per box above the natural peak. ENTRY + n x BOX covers natural + n x 36k for every n;
+    // ENTRY + 100 x BOX = 8.5M, which also covers 8.3M with every ticket lane cold.
     uint256 internal constant HUMAN_ENTRY_GAS = 1_300_000;
-    uint256 internal constant HUMAN_BOX_GAS = 27_500;
+    uint256 internal constant HUMAN_BOX_GAS = 72_000;
     // Cold presale resolution: 0.09M measured; the closing entry's remainder burn rides
     // inside its entry bound.
     uint256 internal constant HUMAN_PRESALE_GAS = 110_000;
