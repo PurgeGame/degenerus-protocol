@@ -41,6 +41,9 @@ contract RedemptionInvariants is DeployProtocol {
         targetContract(address(handler));
         targetContract(address(vrfHandler));
         targetContract(address(wrapperHandler));
+        // The handlers never read msg.sender. The fuzz dictionary includes protocol addresses; with sDGNRS as
+        // the sender the deep run lost its ETH between two calls (no replay reproduces it), so callers are plain accounts.
+        for (uint160 i = 1; i <= 4; ++i) targetSender(address(0xCAFE00 + i));
         // The two fixture setters are configuration, not actions: a random setStethMock address makes
         // every later funding toggle revert.
         bytes4[] memory redemptionSelectors = new bytes4[](7);
