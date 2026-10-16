@@ -64,6 +64,22 @@ contract DecimatorReferenceTest is Test {
         assertEq(cap, uint256(type(uint64).max) * 4, "cap math must widen before multiplying");
     }
 
+    /// @notice The automatic entry's cap leaves room for its worst-case credit (2x multiplier plus
+    ///         the bonus margin), and shrinks to zero once the round's aggregate is full.
+    function test_AutomaticCapFitsRoundAggregate() public {
+        uint256 margin = 30_000;
+        assertEq(h.automaticCapOf(5), 8000, "an empty round keeps the reference cap");
+        // Leave 70,000 of room: half is 35,000, less the margin admits 5,000 < the 8,000 reference.
+        _burn(address(1), type(uint64).max - 70_000);
+        uint256 cap = h.automaticCapOf(5);
+        assertEq(cap, 5000, "cap clamps to the remaining room");
+        // Worst-case credit (cap plus every bonus chip, at the 2x multiplier) fits exactly.
+        vm.prank(ContractAddresses.COIN);
+        h.recordFor(address(2), 5, cap + margin, 20_000, 0);
+        assertEq(h.roundOf(5).totalCreditedStack, type(uint64).max);
+        assertEq(h.automaticCapOf(5), 0, "a full round admits no automatic entry");
+    }
+
     function test_OversizedPoolReturnsUntouchedWithoutReference() public {
         _burn(address(1), 2000);
         uint128 pool = uint128(type(uint96).max) + 1;

@@ -196,7 +196,7 @@ interface IGameMiddayCredit {
 interface ICoinflipLinkReward {
     /// @notice Credit FLIP stake to a wallet as a LINK donation reward.
     /// @param id Recipient wallet ID (the ID `creditMiddayRng` returned; 0 is a no-op).
-    /// @param amount Amount of FLIP-denominated flip stake to credit (18 decimals).
+    /// @param amount Amount of FLIP-denominated flip stake to credit (whole FLIP).
     function creditFlip(uint32 id, uint256 amount) external;
 }
 

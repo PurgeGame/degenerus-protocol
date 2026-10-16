@@ -203,8 +203,7 @@ abstract contract DegenerusGameStorage {
     /// @dev Floor mint count points for active pass holders (25 points).
     uint16 internal constant PASS_MINT_COUNT_FLOOR_POINTS = 25;
 
-    /// @dev Conversion factor for FLIP token amounts.
-    ///      FLIP uses 18 decimals, so 1000 FLIP = 1e21 base units.
+    /// @dev Conversion factor for FLIP token amounts (FLIP has 0 decimals).
     ///      Used in price calculations: price / PRICE_COIN_UNIT = FLIP per mint.
     uint256 internal constant PRICE_COIN_UNIT = 1000;
 
@@ -4939,8 +4938,23 @@ abstract contract DegenerusGameStorage {
     ///      one active round.
     mapping(uint256 => uint32) internal decGeneratedOwners;
 
-    function _decAutomaticCap() internal view returns (uint256) {
+    /// @dev Covers the bonus chips an entry can add before its multiplier: the decimator boon's
+    ///      25,000 FLIP plus quest rewards.
+    uint256 private constant DEC_AUTO_BONUS_MARGIN = 30_000;
+
+    /// @dev Four times the previous round's average entry.
+    function _decReferenceCap() internal view returns (uint256) {
         return decPreviousCount == 0 ? 8000 : uint256(decPreviousStack) * 4 / decPreviousCount;
+    }
+
+    /// @dev The reference cap, held inside round `lvl`'s 64-bit aggregate: credited weight is at
+    ///      most twice the entry plus its bonus chips, so the automatic entry inside DailyApply
+    ///      can never trip the aggregate bound.
+    function _decAutomaticCap(uint24 lvl) internal view returns (uint256 cap) {
+        cap = _decReferenceCap();
+        uint256 room = (type(uint64).max - uint256(decBattleRounds[lvl].totalCreditedStack)) / 2;
+        uint256 fit = room > DEC_AUTO_BONUS_MARGIN ? room - DEC_AUTO_BONUS_MARGIN : 0;
+        if (fit < cap) cap = fit;
     }
 
     error AfkingStethPullFailed();

@@ -221,11 +221,12 @@ contract FinalSweepPayoutLegs is DeployProtocol {
     ///         the unclaimed cushion can cause one — splits what exists pro rata instead of
     ///         reverting, so the sweep still completes and every wei the game holds leaves it.
     function test_aShortfallSplitsWhatExistsProRata() public {
-        _driveToGameOver();
+        // Afking deposits close at game over, so the sinks are funded before it.
         vm.deal(address(this), 21 ether);
         game.depositAfkingFunding{value: 12 ether}(game.walletIdOf(ContractAddresses.VAULT));
         game.depositAfkingFunding{value: 6 ether}(game.walletIdOf(ContractAddresses.SDGNRS));
         game.depositAfkingFunding{value: 3 ether}(game.walletIdOf(ContractAddresses.GNRUS));
+        _driveToGameOver();
         uint256 oV = _owed(ContractAddresses.VAULT);
         uint256 oS = _owed(ContractAddresses.SDGNRS);
         uint256 oG = _owed(ContractAddresses.GNRUS);

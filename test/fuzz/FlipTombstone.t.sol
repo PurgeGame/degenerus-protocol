@@ -29,9 +29,9 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///                                    allowance would miss a downstream overflow).
 ///
 ///         False-confidence guard (threat T-327-03-FC1/FC2/FC3): the one-shot test calls TWICE and
-///         asserts +EXACTLY 1e18 (not 2e18) with no revert; the checked-add test drives the existing
-///         allowance to the uint128 boundary and proves both the flood-holds case AND the
-///         past-the-cap SupplyOverflow revert (the cap is a live control, not a vacuous pass); the
+///         asserts +EXACTLY 1e18 (not 2e18) with no revert; the boundary tests drive the existing
+///         allowance to the uint128 boundary and prove both the exact-fit case AND saturation
+///         past the cap (terminal setup never reverts on the allowance width); the
 ///         DGVF test drives an ACTUAL `burnCoin` against the flooded reserve and asserts a
 ///         correct-magnitude non-zero payout.
 ///
@@ -191,11 +191,11 @@ contract FlipTombstone is DeployProtocol {
     }
 
     // =====================================================================
-    //   (e) CHECKED ADD — holds at the seeded+escrowed value; live cap control
+    //   (e) FLOOD ADD — exact below the cap, saturating above it
     // =====================================================================
 
-    /// @notice The checked _toUint128 add holds at a realistic high allowance (a large
-    ///         escrow) — no SupplyOverflow, result == existing + 1e18.
+    /// @notice The flood add is exact at a realistic high allowance (a large
+    ///         escrow) — result == existing + 1e18.
     function test_BTOMB03_CheckedAddNoOverflow() public {
         // Escrow a large additional allowance by minting to the VAULT as GAME. Push the
         // existing allowance to a plausible high value.
@@ -206,18 +206,18 @@ contract FlipTombstone is DeployProtocol {
         uint256 existing = coin.vaultMintAllowance();
         assertEq(existing, SEED_VAULT_ALLOWANCE + escrow, "escrow applied");
 
-        // Flood: the checked add holds (existing + 1e18 << uint128 max ~3.4e38).
+        // Flood: exact (existing + 1e18 << uint128 max ~3.4e38).
         vm.prank(GAME);
         coin.tombstoneAtGameOver();
 
         assertEq(
             coin.vaultMintAllowance(),
             existing + TOMBSTONE_AMOUNT,
-            "checked add holds at seeded+escrowed value: result == existing + 1e18"
+            "flood is exact at seeded+escrowed value: result == existing + 1e18"
         );
     }
 
-    /// @notice The checked add holds EXACTLY at the boundary: drive the existing allowance to
+    /// @notice The flood add is exact AT the boundary: drive the existing allowance to
     ///         (uint128 max - 1e18) so existing + 1e18 == uint128 max — the flood still succeeds.
     function test_BTOMB03_CheckedAddAtBoundary() public {
         // Target existing = U128_MAX - 1e18 so existing + 1e18 == U128_MAX exactly.
@@ -238,24 +238,27 @@ contract FlipTombstone is DeployProtocol {
         );
     }
 
-    /// @notice Negative control — the cap is LIVE: pushing the existing allowance past
-    ///         (uint128 max - 1e18) makes the flood's _toUint128(existing + 1e18) revert
-    ///         SupplyOverflow. Proves the checked add is not vacuous.
-    function test_BTOMB03_CheckedAddCapIsLive() public {
-        // Drive existing to (U128_MAX - 1e18 + 1) so existing + 1e18 == U128_MAX + 1 → overflow.
+    /// @notice Past (uint128 max - 1e18) the flood saturates at uint128 max instead of
+    ///         reverting, so terminal setup can never be blocked by the allowance width.
+    function test_BTOMB03_FloodSaturatesAtCap() public {
         uint256 target = U128_MAX - TOMBSTONE_AMOUNT + 1;
         uint256 escrow = target - SEED_VAULT_ALLOWANCE;
         vm.prank(GAME);
         coin.mintForGame(VAULT, escrow);
 
-        assertEq(coin.vaultMintAllowance(), target, "existing pushed 1 wei past the flood-holds bound");
+        assertEq(coin.vaultMintAllowance(), target, "existing pushed 1 past the exact-fit bound");
 
-        vm.expectRevert(FLIP.SupplyOverflow.selector);
+        vm.expectEmit(true, false, false, true, address(coin));
+        emit FLIP.VaultEscrowRecorded(GAME, U128_MAX - target);
         vm.prank(GAME);
         coin.tombstoneAtGameOver();
 
-        // The latch was NOT set (the revert reverted state), so the allowance is unchanged.
-        assertEq(coin.vaultMintAllowance(), target, "reverted flood leaves allowance unchanged");
+        assertEq(coin.vaultMintAllowance(), U128_MAX, "flood saturates at uint128 max");
+
+        // The latch is set: a second call is a no-op.
+        vm.prank(GAME);
+        coin.tombstoneAtGameOver();
+        assertEq(coin.vaultMintAllowance(), U128_MAX, "one-shot after saturation");
     }
 
     // =====================================================================

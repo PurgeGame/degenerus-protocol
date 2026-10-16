@@ -29,7 +29,7 @@ struct QuestRequirements {
     /// @notice Count required for count-based quests: whole tickets (MINT_FLIP), foil packs (FOIL)
     ///         or craps actions (CRAPS_*)
     uint32 mints;
-    /// @notice Token amount required - FLIP in base units (18 decimals) for token quests, wei for ETH quests
+    /// @notice Token amount required - whole FLIP for token quests, wei for ETH quests
     uint256 tokenAmount;
 }
 

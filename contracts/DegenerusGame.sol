@@ -1227,7 +1227,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
     /// @notice Fund account `id`'s prepaid afking ETH bucket (consumed by the AfKing auto-buy).
     /// @dev Permissionless (fund anyone). `id` is a third-party recipient: nonzero and allocated.
     ///      The reservation rides inside claimablePool (no separate aggregate) — credited in tandem.
+    ///      Blocked once the game is over, like receive(): post-sweep afking is unwithdrawable.
     function depositAfkingFunding(uint32 id) external payable {
+        if (gameOver) revert GameOver();
         _requireAllocated(id);
         _creditAfkingValue(id, msg.value);
     }

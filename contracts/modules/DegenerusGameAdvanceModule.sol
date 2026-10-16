@@ -195,7 +195,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
             // The recorded-word return makes this once per day, and the next fresh
             // request clears _decDayOneActive(). FLIP only sizes and records the entry.
             // On this opening-day path, lvl is the request-promoted level.
-            if (decDayOne) coin.autoDecimatorBurn(lvl + 1, _decAutomaticCap());
+            if (decDayOne) coin.autoDecimatorBurn(lvl + 1, _decAutomaticCap(lvl + 1));
 
             // The craps bonus day opens on the same crank that applied its word — the
             // terms and the house's available backing have both settled. The WALL-day

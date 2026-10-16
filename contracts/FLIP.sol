@@ -182,8 +182,7 @@ contract FLIP {
     uint16 private constant BPS_DENOMINATOR = 10_000;
 
     /// @dev Gameover tombstone flood: 1e18 FLIP (1 quintillion FLIP) added one-shot to the
-    ///      VAULT mint allowance as a worthless-token overhang signal. Far below
-    ///      uint128 max (~3.4e38), so the checked add never realistically reverts.
+    ///      VAULT mint allowance as a worthless-token overhang signal.
     uint256 private constant FLIP_TOMBSTONE_AMOUNT = 1e18;
 
     /// @dev Packed supply state to keep total/vault allowance in a single slot.
@@ -591,13 +590,16 @@ contract FLIP {
     ///         vaultMintAllowance(), and balanceOfWithClaimable(VAULT) — balanceOf(VAULT) and
     ///         circulating totalSupply() are untouched.
     /// @dev GAME-only (the gameover-drain caller); fires exactly once (the _tombstoneFlooded latch
-    ///      no-ops any re-entry); the add is CHECKED via _toUint128 (reverts on uint128 overflow).
+    ///      no-ops any re-entry). The add saturates at uint128 max so terminal setup never reverts.
     function tombstoneAtGameOver() external {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
         if (_tombstoneFlooded) return;
         _tombstoneFlooded = true;
-        _supply.vaultAllowance = _toUint128(uint256(_supply.vaultAllowance) + FLIP_TOMBSTONE_AMOUNT);
-        emit VaultEscrowRecorded(msg.sender, FLIP_TOMBSTONE_AMOUNT);
+        uint128 before = _supply.vaultAllowance;
+        uint256 flooded = uint256(before) + FLIP_TOMBSTONE_AMOUNT;
+        uint128 afterFlood = flooded > type(uint128).max ? type(uint128).max : uint128(flooded);
+        _supply.vaultAllowance = afterFlood;
+        emit VaultEscrowRecorded(msg.sender, afterFlood - before);
     }
 
     /// @notice Mint tokens to recipient from vault's allowance.

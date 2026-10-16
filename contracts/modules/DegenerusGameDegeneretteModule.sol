@@ -211,7 +211,7 @@ contract DegenerusGameDegeneretteModule is
     /// @dev Minimum bet amount for ETH (0.005 ETH on mainnet).
     uint256 private constant MIN_BET_ETH = 5 ether / 1000;
 
-    /// @dev Minimum bet amount for FLIP (100 tokens with 18 decimals).
+    /// @dev Minimum bet amount for FLIP (100 whole FLIP).
     uint256 private constant MIN_BET_FLIP = 100;
 
     // -------------------------------------------------------------------------

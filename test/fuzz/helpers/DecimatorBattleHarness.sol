@@ -116,7 +116,11 @@ contract DecimatorBattleHarness is DegenerusGameDecimatorModule, WalletSeed {
     }
 
     function referenceOf() external view returns (uint64, uint40, uint256) {
-        return (decPreviousStack, decPreviousCount, _decAutomaticCap());
+        return (decPreviousStack, decPreviousCount, _decReferenceCap());
+    }
+
+    function automaticCapOf(uint24 lvl) external view returns (uint256) {
+        return _decAutomaticCap(lvl);
     }
 
     function forceCursor(uint24 lvl, uint64 cursor) external { decBattleRounds[lvl].cursor = cursor; }

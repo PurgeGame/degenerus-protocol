@@ -822,18 +822,18 @@ contract DegenerusQuests is IDegenerusQuests {
     // 6. On completion, credit rewards and check if other slot also completes
     //
     // Return values are consistent across all handlers:
-    // - reward: FLIP tokens to credit (in base units, 18 decimals)
+    // - reward: FLIP to credit (whole FLIP)
     // - questType: The type of quest that was processed
     // - streak: Player's current streak after this action
     // - completed: True if a quest was completed by this action
 
     /**
-     * @notice Handle flip-stake progress credited in FLIP base units (18 decimals).
+     * @notice Handle flip-stake progress credited in whole FLIP.
      * @dev Access: COIN, COINFLIP, GAME, or AFFILIATE contract only (`onlyCoin`).
      *      Progress tracks cumulative flip volume for the day.
      * @param id Wallet ID of the deposit's funder (the player who staked FLIP or paid for the gift).
      * @param flipCredit Amount of FLIP staked (in base units).
-     * @return reward FLIP tokens earned (in base units, 18 decimals).
+     * @return reward FLIP earned (whole FLIP).
      * @return questType The type of quest that was processed.
      * @return streak Player's current streak after this action.
      * @return completed True if a quest was completed by this action.
@@ -886,12 +886,12 @@ contract DegenerusQuests is IDegenerusQuests {
     }
 
     /**
-     * @notice Handle decimator burns counted in FLIP base units (18 decimals).
+     * @notice Handle decimator burns counted in whole FLIP.
      * @dev Access: COIN, COINFLIP, GAME, or AFFILIATE contract only (`onlyCoin`).
      *      Decimator quests share the same FLIP target as flip quests (2000 FLIP).
      * @param id Wallet ID of the player who performed the decimator burn.
      * @param burnAmount Amount of FLIP burned (in base units).
-     * @return reward FLIP tokens earned (in base units, 18 decimals).
+     * @return reward FLIP earned (whole FLIP).
      * @return questType The type of quest that was processed.
      * @return streak Player's current streak after this action.
      * @return completed True if a quest was completed by this action.
@@ -1116,11 +1116,11 @@ contract DegenerusQuests is IDegenerusQuests {
     }
 
     /**
-     * @notice Handle affiliate earnings credited in FLIP base units (18 decimals).
+     * @notice Handle affiliate earnings credited in whole FLIP.
      * @dev Access: COIN, COINFLIP, GAME, or AFFILIATE contract only (`onlyCoin`).
      * @param id Wallet ID of the affiliate (code owner or upline) who earned commission.
      * @param amount FLIP earned from affiliate referrals (in base units).
-     * @return reward FLIP tokens earned (in base units, 18 decimals).
+     * @return reward FLIP earned (whole FLIP).
      * @return questType The type of quest that was processed.
      * @return streak Player's current streak after this action.
      * @return completed True if a quest was completed by this action.
@@ -1185,8 +1185,8 @@ contract DegenerusQuests is IDegenerusQuests {
      * @param lootBoxAmount ETH spent on lootbox in wei (full amount, fresh + recycled).
      * @param mintPrice Current ticket price in wei (purchaseLevel price for daily targets).
      * @param levelQuestPrice Price for level quest targets (level+1 price).
-     * @return reward FLIP tokens earned (in base units, 18 decimals).
-     * @return questType The type of quest that was processed.
+     * @return reward FLIP earned (whole FLIP).
+     * @return questType The type of quest that was processed; MINT_ETH whenever the primary completed.
      * @return streak Player's current streak after this action.
      * @return completed True if a quest was completed by this action.
      * @return afking True while the buyer has an afking run; its live streak is held by Game.
@@ -1299,6 +1299,9 @@ contract DegenerusQuests is IDegenerusQuests {
         uint256 flipMintReward;
         uint256 lootboxReward;
         bool anyCompleted;
+        // The Game records the level mint streak on a MINT_ETH completion; a secondary completing
+        // in the same call must not mask it in the returned type.
+        bool primaryCompleted;
         uint8 outQuestType;
         uint32 outStreak = state.streak;
 
@@ -1322,6 +1325,7 @@ contract DegenerusQuests is IDegenerusQuests {
                     outQuestType = qt;
                     outStreak = s;
                     anyCompleted = true;
+                    primaryCompleted = true;
                 }
             } else {
                 _handleLevelQuestProgress(id, QUEST_TYPE_MINT_ETH, ethMintSpendWei, levelQuestPrice);
@@ -1347,6 +1351,7 @@ contract DegenerusQuests is IDegenerusQuests {
                     outQuestType = qt;
                     outStreak = s;
                     anyCompleted = true;
+                    if (qt == QUEST_TYPE_MINT_ETH) primaryCompleted = true;
                 }
             } else {
                 _handleLevelQuestProgress(id, QUEST_TYPE_MINT_FLIP, flipMintQty, levelQuestPrice);
@@ -1382,6 +1387,7 @@ contract DegenerusQuests is IDegenerusQuests {
                             outQuestType = qt;
                             outStreak = s;
                             anyCompleted = true;
+                            if (qt == QUEST_TYPE_MINT_ETH) primaryCompleted = true;
                         }
                     }
                 }
@@ -1394,7 +1400,7 @@ contract DegenerusQuests is IDegenerusQuests {
         // caller, which adds it to lootboxFlipCredit and credits it exactly once.
         uint256 totalReturned = ethMintReward + lootboxReward + flipMintReward;
         if (anyCompleted) {
-            return (totalReturned, outQuestType, outStreak, true);
+            return (totalReturned, primaryCompleted ? QUEST_TYPE_MINT_ETH : outQuestType, outStreak, true);
         }
         return (0, outQuestType != 0 ? outQuestType : quests[0].questType, outStreak, false);
     }
@@ -1406,7 +1412,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * @param amount The bet amount (wei for ETH, base units for FLIP).
      * @param paidWithEth True if bet was paid with ETH, false for FLIP.
      * @param mintPrice Current ticket price in wei (0 for FLIP bets).
-     * @return reward FLIP tokens earned (in base units, 18 decimals).
+     * @return reward FLIP earned (whole FLIP).
      * @return questType The type of quest that was processed.
      * @return streak Player's current streak after this action.
      * @return completed True if a quest was completed by this action.
