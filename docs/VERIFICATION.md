@@ -8,6 +8,105 @@ local output directories or CI artifacts.
 The dated implementation sections below are historical, scoped evidence; their
 pass counts do not certify later revisions.
 
+### Lootbox EV allowance at opening (2026-10-15)
+
+Baseline: `b80dab839`, rebuilt in a detached checkout. Ordinary purchases and pass/cover
+grants now freeze score and modifiers without drawing allowance. Opening draws once per
+order, before nested rewards, against the live opening level; sizes still use the stored
+purchase level. Redemption uses the same order draw without a separate charge. Daily AFKing,
+direct-box arithmetic, and the protocol-owned daily-box exemption retain their existing rules.
+The queue's old EV-fraction lane is reserved zero; no storage fields or slots were added.
+
+`LootboxEvLifecycleGas.t.sol` runs identical fixtures on both revisions with solc 0.8.34,
+via-IR, optimizer 1000, Osaka and `FOUNDRY_ISOLATE=true`. Purchases and the opening call
+are separate transactions; each uninstrumented measurement is replayed from the same snapshot
+to collect accesses for `GlamsterdamReprice`. The table reports isolated call gas, excluding
+fixture setup, RNG publication and transaction intrinsic gas. The opening fixture invokes
+the production worker through `QueueHost`; ordinary buys use the real purchase entrypoint.
+Pass/cover rows measure their shared production grant path. Four-order rows measure four
+separate purchases followed by one opening call. Manual + AFK includes both settlements.
+
+| Workload | Purchase before / after | Opening before / after | Combined before / after | Repriced combined delta, including state |
+| --- | ---: | ---: | ---: | ---: |
+| Fresh bonus | 367,267 / 342,989 | 92,887 / 115,086 | 460,154 / 458,075 | −2,079 |
+| Existing allowance | 350,110 / 342,989 | 92,887 / 97,929 | 442,997 / 440,918 | −2,079 |
+| Taper | 350,268 / 342,989 | 92,887 / 98,087 | 443,155 / 441,076 | −2,079 |
+| Exhausted | 346,205 / 342,989 | 92,887 / 93,999 | 439,092 / 436,988 | −2,104 |
+| Low score | 353,185 / 352,420 | 92,784 / 92,847 | 445,969 / 445,267 | −702 |
+| Mixed tiers | 367,303 / 343,025 | 151,668 / 173,847 | 518,971 / 516,872 | −2,099 |
+| 100 small boxes | 367,050 / 342,772 | 1,131,093 / 1,153,256 | 1,498,143 / 1,496,028 | −2,115 |
+| Four orders, same wallet | 725,726 / 686,085 | 267,975 / 296,902 | 993,701 / 982,987 | −32,314 |
+| Four distinct wallets | 1,171,166 / 1,080,054 | 234,372 / 323,170 | 1,405,538 / 1,403,224 | −2,314 |
+| Cover grant | 87,014 / 63,064 | 91,916 / 113,595 | 178,930 / 176,659 | −2,271 |
+| Three-box pass grant | 87,046 / 63,096 | 163,940 / 186,138 | 250,986 / 249,234 | −1,752 |
+| Nested ETH spin | 367,267 / 342,989 | 93,441 / 115,640 | 460,708 / 458,629 | −2,079 |
+| Manual + daily AFK | 367,267 / 342,989 | 117,873 / 137,245 | 485,140 / 480,234 | −12,106 |
+
+The representative workloads total 8,023,484 → 7,986,191 Osaka gas (−0.465%) and
+24,619,824 → 24,553,731 under the repository's repricing model including state gas
+(−0.268%). Every workload creates the same number of storage slots as its baseline.
+The test pins these baselines and enforces both ≤1,000 extra gas per order and ≤1% per
+workload under each schedule, plus unchanged new-slot counts. These are measured samples,
+not a claim that every entropy/outcome or economic interleaving has identical gas.
+
+Opening admission is checked independently in `HumanOrderNativeGas.t.sol`: fresh allowance
+slots, single/mixed/100-box orders, maximum custom sizes, presale and nested spins. The native
+100 × 10 ETH sweep peaks at 2,746,022 gas against its 8,500,000 entry bound; mixed 100-box
+orders plus presale peak at 2,552,266 against 8,610,000. The worker's measured overhead
+outside the atomic entry peaks at 7,274 against its 80,000 tail reserve. `HUMAN_ENTRY_GAS`
+remains 1,300,000. Repricing uses uninstrumented execution gas and a separately recorded
+replay, with the fresh cap slot included. Across 80 repriced fixtures (five order shapes,
+16 words each), peak execution is 2,032,581 gas; peak including state gas is 7,320,261.
+The smallest measured headroom below an entry's execution admission bound is 1,263,734.
+
+The Hardhat gas suite also passes through real `mineFlip` transactions: 203,226 gas for
+one ordinary box; 1,252,577 and 1,194,862 for two 100-box orders opened in separate
+transactions. Its old 4.85M fixture allowance was updated to 9M to admit the already-existing
+8.5M maximum-entry bound. Production admission constants were not increased.
+
+Fresh production builds pass EIP-170 for the entire deployment set. Changed runtime sizes:
+
+| Module | Before | After | Remaining bytes |
+| --- | ---: | ---: | ---: |
+| Whale | 24,534 | 24,474 | 102 |
+| AFKing | 24,201 | 24,172 | 404 |
+| Mint | 23,651 | 23,620 | 956 |
+| Lootbox | 18,098 | 18,000 | 6,576 |
+
+The recursive layout comparison reports no baseline changes and all 16 Game modules match
+Game storage. Interface coverage, delegatecall alignment, raw-selector, RNG-window,
+pool-write, array-delete, advance-call, RNG-taint, unchecked-block, write-owner and gasleft
+checks pass. Production size checks validate source hashes against artifact metadata.
+
+The selected Foundry campaign and focused corrective reruns finish with 169 distinct tests
+passing across 20 suites, plus the two Hardhat gas tests. This includes purchase/cover/boost
+regressions, ordinary and redemption commitment binding, Degenerette allowance, nested DGNRS
+ordering, subscriber/queue/native gas, resumption and the box-enqueue invariant suite. Each
+of its three invariants ran 256 campaigns of depth 128 (32,768 handler calls, zero reverts).
+The minimum-budget resumption fixture now re-measures each checkpoint instead of assuming
+the first call's exact minimum applies to every later wallet and engine state.
+
+Behavioral coverage includes buy-after-publication, opening-level allowance with stored prices,
+one aggregate draw before nested rewards, 1,000 taper fuzz cases, neutral/exhausted no-write
+paths, rollback/retry, grant rounding, and deterministic split processing. Grant dust can
+change the rounded eligible fraction by a basis point; `LootboxEvAtOpen.t.sol` pins the
+1 ETH + 1 wei boundary. AFK-first consumer ordering now allocates allowance before queued
+human boxes. Immediate foil-recirculation interleavings remain possible; no claim lock or
+parked-redemption behavior was changed.
+
+Reproduce the lifecycle and opening checks with:
+
+```sh
+FOUNDRY_ISOLATE=true python3 scripts/test-foundry-groups.py \
+  --file test/gas/LootboxEvLifecycleGas.t.sol \
+  --file test/gas/HumanOrderNativeGas.t.sol \
+  --file test/fuzz/LootboxEvAtOpen.t.sol \
+  --file test/fuzz/LootboxBudgetResume.t.sol --threads 4 -vv
+npx hardhat test --no-compile test/gas/LootboxOpenGas.test.js
+forge build --skip test --out forge-out-production --cache-path .foundry-cache-production
+node scripts/check-deployment-sizes.js forge-out-production
+```
+
 ### Lootbox taper, AFKing write trim and account loans (2026-10-13)
 
 `test/fuzz/LootboxEvTaper.t.sol` checks the two-tier allowance against the independent

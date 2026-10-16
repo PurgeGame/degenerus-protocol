@@ -189,8 +189,11 @@ contract LootboxBudgetResume is DeployProtocol {
         assertTrue(game.boxesPending(), "the walk still reports the index pending");
 
         // Resume until the walk reports nothing pending: every entry settles exactly once, in order.
+        // Re-measure the minimum at each checkpoint: the next wallet's fresh allowance slot
+        // and the engine's changed completion state need not share the first call's minimum.
         uint256 calls = 1;
         while (_cursor() < 5 && calls < 12) {
+            budget = _minimalOpenAllowance(1);
             vm.prank(actor);
             game.mineFlip{gas: budget}(0);
             calls++;

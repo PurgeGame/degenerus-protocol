@@ -103,8 +103,8 @@ contract QueueHost is DegenerusGame {
         (uint32 id,) = _registerWallet(player, amountWei);
         (bool ok, bytes memory data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(
             abi.encodeWithSignature(
-                "recordCoverBox(uint32,uint256,uint16,uint24,bool,uint8)",
-                id, amountWei, score, level + 1, boost, count
+                "recordCoverBox(uint32,uint256,uint16,bool,uint8)",
+                id, amountWei, score, boost, count
             )
         );
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }

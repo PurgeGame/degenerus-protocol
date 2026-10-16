@@ -38,12 +38,22 @@ claim/recipient checks. Permissionless processing is not authority to redirect p
 Every box with an activity-score bonus draws one shared per-(wallet, level) allowance.
 The first 10 ETH of bonus spend takes the full bonus; the bonus then tapers linearly to
 half at 20 ETH and to neutral at 40 ETH. A box earns the integral of that weight over
-the spend it covers, so splitting or reordering purchases cannot raise the total.
-Ordinary and pass/cover boxes draw at purchase. AFKing boxes, internal ETH reward-spin
-recirculation, a purchased ETH Degenerette bet's combined win box (one per bet ID), and
-an sDGNRS redemption's lootbox leg draw at settlement, keyed to the level live then, so
-purchases made between commitment and settlement draw first. Penalty and neutral boxes
-draw nothing.
+the spend it covers. Every route draws at settlement against the live opening level.
+Ordinary and pass/cover orders freeze their score, price and modifiers at purchase;
+opening draws once for the entire order before any reward roll or nested ETH spin.
+Purchases made after a cohort's word is published consume no allowance until their
+later cohort opens. The engine settles redemption, daily AFKing, then queued human
+boxes, so daily AFKing boxes now receive allowance before human orders in that cohort.
+Direct reward and ETH recirculation boxes also draw when they settle; existing immediate
+foil-claim recirculation can still consume allowance between keeper calls. Penalty and
+neutral boxes draw nothing, and protocol-owned sDGNRS daily boxes remain exempt.
+
+Queued orders use the existing basis-point eligible fraction, shared across their boxes;
+daily AFKing and direct boxes retain their exact-wei calculation. Pass/cover grants draw
+against count times stored gwei-sized box value, with discarded dust remaining in the
+funded pools. Dust can move the rounded fraction by one basis point: a 1 ETH + 1 wei
+cover at 9 ETH used now represents 1 ETH and gets a 10,000-bps fraction rather than
+9,999 bps. Its bonus budget at 145% EV increases by 0.000045 ETH, not merely one wei.
 
 Game-over processing reserves existing claims and applicable deity refunds, credits 2% of
 the remaining pool to the terminal level's top affiliate, and sends the rest to the main

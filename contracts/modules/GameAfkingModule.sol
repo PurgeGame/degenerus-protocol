@@ -950,7 +950,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 // queue, so the signup cover never becomes an AFKing-cohort obligation.
                 _recordAfkingCoverBox(
                     element,
-                    currentLevel,
                     amount,
                     score
                 );
@@ -1042,17 +1041,13 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @dev Append a subscribe-time grounding lootbox as its own cover entry in the live write
     ///      buffer, mirroring the manual `_recordLootboxEntry` minus the boons-off legs (no boost,
     ///      no distress tally, no mint-day record). The entry opens on that buffer's word, requested
-    ///      only after the append, and rolls from the LIVE open level. The append draws this box's
-    ///      EV fraction from the shared per-(wallet, level) accumulator (`add = min(spend, CAP -
-    ///      used)`) and freezes it with the score into the entry. The EV-cap key is
-    ///      `currentLevel + 1` (== the resolver's open level = level + 1).
+    ///      only after the append, and rolls from the LIVE open level. The entry freezes the
+    ///      score; its EV allowance is drawn at opening against the live level, like daily AFKing.
     /// @param player The box recipient.
-    /// @param currentLevel The live game level (== the STAGE's hoisted currentLevel).
     /// @param amount The lootbox spend in wei (boons off ⇒ no boost; amount == spend).
     /// @param score The frozen activity score EV input.
     function _recordAfkingCoverBox(
         uint32 player,
-        uint24 currentLevel,
         uint256 amount,
         uint16 score
     ) private {
@@ -1064,7 +1059,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 player,
                 amount,
                 score,
-                currentLevel + 1,
                 false,
                 0
             )

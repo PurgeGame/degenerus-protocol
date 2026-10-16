@@ -25,10 +25,10 @@ const OPEN_GAS_ALLOWANCE = 10_000_000n;
 const HUMAN_ENTRY_GAS = 1_300_000n;
 const HUMAN_BOX_GAS = 72_000n;
 const HUMAN_TAIL_GAS = 80_000n;
-// One maximum entry's declared bound is 4.13M; the engine admits the next entry only while
-// the remaining allowance covers that bound, so 4.85M admits exactly one 100-box entry and
+// One maximum entry's declared bound is 8.5M; the engine admits the next entry only while
+// the remaining allowance covers that bound, so 9M admits exactly one 100-box entry and
 // the break must leave the next owner whole for its own transaction.
-const ONE_MAX_ENTRY_ALLOWANCE = 4_850_000n;
+const ONE_MAX_ENTRY_ALLOWANCE = HUMAN_ENTRY_GAS + 100n * HUMAN_BOX_GAS + 500_000n;
 // Intrinsic gas, calldata, Game -> miner -> AFK module dispatch, the empty consumer stages
 // after the human orders and the read certificate.
 const ENGINE_OVERHEAD_GAS = 100_000n;
@@ -98,7 +98,7 @@ async function prepare(f, buyers, count, singleCustom) {
   await f.game.mineFlip(0, { gasLimit: 1_000_000 });
   // The buyers' real tickets were frozen into the read cohort by the mid-day request. Their
   // drain is a keeper-only checkpoint that precedes every box stage; a bounded allowance
-  // admits a ticket round but not a 100-box entry (declared ~4.13M), so it stays unopened.
+  // admits a ticket round but not a 100-box entry (declared 8.5M), so it stays unopened.
   for (let i = 0; i < 10 && (await f.game.rngConsumerStage()) === 0n; i++) {
     expect(await f.game.nextMinerAction(), "only the ticket checkpoint precedes the boxes").to.equal(MINER_TICKETS);
     await f.game.mineFlip(0, { gasLimit: TICKET_CHECKPOINT_GAS });

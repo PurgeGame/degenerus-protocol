@@ -42,12 +42,12 @@ contract DelegateOnlyGuards is DeployProtocol {
 
     function test_recordCoverBox_directCallReverts() public {
         vm.expectRevert(bytes4(keccak256("OnlyDelegatecall()")));
-        lootboxModule.recordCoverBox(1, 1 ether, 1, 0, false, 1);
+        lootboxModule.recordCoverBox(1, 1 ether, 1, false, 1);
     }
 
     function test_applyBoxOrderScore_directCallReverts() public {
         vm.expectRevert(bytes4(keccak256("OnlyDelegatecall()")));
-        lootboxModule.applyBoxOrderScore(1, 1, 0, 1 ether);
+        lootboxModule.applyBoxOrderScore(1, 1);
     }
 
     function test_resolveLootboxDirect_directCallReverts() public {

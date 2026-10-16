@@ -2448,7 +2448,7 @@ abstract contract DegenerusGameStorage {
     //   [32:56]    level           purchase level; prices the preset tiers
     //   [56:71]    score           post-action activity score, clamped to the effective cap
     //   [71:85]    boostBps        boon uplift as a fraction of this purchase's spend
-    //   [85:99]    evBps           weighted EV-eligible fraction drawn at purchase
+    //   [85:99]    reserved        zero; EV allowance is drawn at opening
     //   [99]       distress        bought in distress mode
     //   [100:128]  small/med/large/custom counts, 7 bits each, summing to at most 100
     //   [128:184]  size            custom or cover box size in gwei
@@ -3492,9 +3492,9 @@ abstract contract DegenerusGameStorage {
     // =========================================================================
 
     /// @dev Per-player lootbox EV-multiplier benefit used, two level-stamped windows in
-    ///      one slot. At any instant only the keys {currentLevel, currentLevel+1} are live
-    ///      (opens RMW currentLevel, deposits RMW level+1), so two windows hold the full
-    ///      live set with no eviction of a live key. Each window: used (72 bits) + level
+    ///      one slot. All box routes draw at settlement against their live opening level;
+    ///      deposits leave the allowance untouched. Retain the two-window storage layout.
+    ///      Each window: used (72 bits) + level
     ///      stamp (24 bits). `used` is the cumulative bonus spend, clamped to
     ///      LOOTBOX_EV_ZERO_ETH = 4e19 < 2^72 at every write. A non-matching stamp reads as 0
     ///      (a fresh allowance).

@@ -44,10 +44,9 @@ contract LootboxOpenBoundsTest is DeployProtocol {
         vm.deal(address(game), 100_000 ether);
     }
 
-    /// @dev Every modifier at its ceiling: score at the effective cap, a 25% boost, a fully
-    ///      EV-eligible fraction and the distress bit.
+    /// @dev Score at the effective cap, a 25% boost and distress; the opener draws EV.
     function _maxed(uint256 word) internal pure returns (uint256) {
-        return word | (uint256(30_000) << 56) | (uint256(2500) << 71) | (uint256(10_000) << 85) | (uint256(1) << 99);
+        return word | (uint256(30_000) << 56) | (uint256(2500) << 71) | (uint256(1) << 99);
     }
 
     function _base(uint24 lvl) internal view returns (uint256) {

@@ -386,29 +386,23 @@ interface IDegenerusGameLootboxModule {
     /// @param id Player receiving the boxes
     /// @param amountWei Box spend in wei
     /// @param score Activity-score snapshot
-    /// @param capKey Level key for the shared per-(wallet, level) EV-cap accumulator
     /// @param boost Whether to consume a live lootbox-boost boon and snapshot distress
     /// @param count Custom boxes, one per pass; zero for the afking cover box
     function recordCoverBox(
         uint32 id,
         uint256 amountWei,
         uint16 score,
-        uint24 capKey,
         bool boost,
         uint8 count
     ) external payable;
 
-    /// @notice Finalize a purchase's ordinary entry with its post-action score and EV-cap draw
+    /// @notice Finalize a purchase's ordinary entry with its post-action score
     /// @param word The in-flight entry from `beginBoxOrder`
     /// @param cachedScore Caller's post-action activity score in whole points
-    /// @param capLevel Level key for the shared per-(wallet, level) EV-cap accumulator
-    /// @param costWei This purchase's box spend
     /// @return The completed ordinary fields
     function applyBoxOrderScore(
         uint256 word,
-        uint256 cachedScore,
-        uint24 capLevel,
-        uint256 costWei
+        uint256 cachedScore
     ) external payable returns (uint256);
 
     /// @notice Resolves a lootbox directly with provided randomness

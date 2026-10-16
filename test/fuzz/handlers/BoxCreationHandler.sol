@@ -443,6 +443,7 @@ contract BoxCreationHandler is Test {
         uint32 id = game.walletIdOf(currentActor);
         if (id == 0 || word.boId() != id) return "entry wallet ID is not the buyer's";
         if (word >> 255 != 0) return "entry spare bit set";
+        if (BoxOrderLib.boEvBps(word) != 0) return "reserved EV lane set";
         if (word.boCover()) return "a purchase appended a cover entry";
         if (word.boSmall() + word.boMed() + word.boLarge() != 0) return "unexpected preset boxes";
         if (word.boCustomCount() != x.custom) return "entry custom count does not match the action";

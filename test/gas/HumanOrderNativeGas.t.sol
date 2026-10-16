@@ -11,6 +11,18 @@ import {ActivityCurveLib} from "../../contracts/libraries/ActivityCurveLib.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {VmSafe} from "forge-std/Vm.sol";
+import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
+
+/// @dev Each repricing replay gets fresh memory; the large scratch tables must not accumulate
+///      across a many-word sweep inside the test contract's single call frame.
+contract HumanOrderRepricer {
+    function quote(uint256 measured, VmSafe.AccountAccess[] calldata accesses, address target)
+        external pure returns (GlamsterdamReprice.Result memory)
+    {
+        return GlamsterdamReprice.reprice(measured, accesses, target);
+    }
+}
 
 contract HumanOrderGasSeed is DegenerusGame {
     /// @dev Seed the sealed read buffer with ONE entry for `player`: the `input` purchase priced at
@@ -38,9 +50,7 @@ contract HumanOrderGasSeed is DegenerusGame {
         if (input != 0) (word,) = _decodeBoxOrder(input, 100);
         word |= uint256(_walletIdOf(player))
             | uint256(ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS) << LB_SCORE_SHIFT;
-        uint256 nominal = BoxOrderLib.boNominal(word, PriceLookupLib.priceForLevel(100));
-        (uint256 eligible,) = _lootboxEvEligible(0, nominal);
-        if (nominal != 0) word |= (eligible * 10_000 / nominal) << LB_EV_SHIFT;
+        // The opener draws the fresh allowance once for the whole order.
         if (presale) {
             // One purchase applies the whole 50 ETH from zero sold: tier 0, and it closes the sale.
             word |= (uint256(50 ether) << LB_PRESALE_SHIFT) | (_presaleTier(0) << LB_TIER_SHIFT) | LB_CLOSING;
@@ -122,6 +132,44 @@ contract HumanOrderNativeGasTest is DeployProtocol {
         vm.cool(ContractAddresses.GAME_LOOTBOX_MODULE); vm.cool(ContractAddresses.GAME_BOON_MODULE);
         vm.cool(ContractAddresses.GAME_DEGENERETTE_MODULE); vm.cool(ContractAddresses.GAME_WHALE_MODULE);
         vm.cool(ContractAddresses.GAME_FOILPACK_MODULE);
+    }
+
+    function test_RepricedFreshCapEntryBounds() public {
+        require(vm.envOr("FOUNDRY_ISOLATE", false), "requires isolated transactions");
+        HumanOrderGasSeed host = HumanOrderGasSeed(payable(address(game)));
+        HumanOrderRepricer repricer = new HumanOrderRepricer();
+        uint256[5] memory orders = [BoxOrderLib.boSmalls(1), BoxOrderLib.boSmalls(100),
+            BoxOrderLib.boOrder(25, 25, 25, 25, 1 ether),
+            BoxOrderLib.boOrder(0, 0, 0, 100, 10 ether),
+            BoxOrderLib.boOrder(0, 0, 0, 100, ((uint256(1) << 56) - 1) * 1 gwei)];
+        uint256 peakExec;
+        uint256 peakTotal;
+        uint256 minimumHeadroom = type(uint256).max;
+        for (uint256 i; i < orders.length; ++i) {
+            for (uint256 w = 1; w <= 16; ++w) {
+                uint256 fixture = vm.snapshotState();
+                host.seedOrder(PLAYER, orders[i], i == 2, uint256(keccak256(abi.encode("ev-open", w))));
+                uint256 count = BoxOrderLib.boCount(host.entry());
+                uint256 bound = _entryBound(count, i == 2);
+                uint256 snap = vm.snapshotState();
+                host.rawAtomic();
+                uint256 measured = vm.lastCallGas().gasTotalUsed;
+                assertTrue(vm.revertToState(snap));
+                vm.startStateDiffRecording();
+                host.rawAtomic();
+                VmSafe.AccountAccess[] memory accesses = vm.stopAndReturnStateDiff();
+                GlamsterdamReprice.Result memory r = repricer.quote(measured, accesses, address(host));
+                assertLe(measured, bound, "fresh-cap Osaka admission");
+                assertLe(r.glamsterdamExec, bound, "fresh-cap repriced admission");
+                if (r.glamsterdamExec > peakExec) peakExec = r.glamsterdamExec;
+                if (r.glamsterdamExec + r.stateGas > peakTotal) peakTotal = r.glamsterdamExec + r.stateGas;
+                if (bound - r.glamsterdamExec < minimumHeadroom) minimumHeadroom = bound - r.glamsterdamExec;
+                assertTrue(vm.revertToState(fixture));
+            }
+        }
+        emit log_named_uint("repriced fresh-cap peak execution", peakExec);
+        emit log_named_uint("repriced fresh-cap peak including state", peakTotal);
+        emit log_named_uint("repriced fresh-cap minimum entry headroom", minimumHeadroom);
     }
 
     function _probe(uint256 input, bool presale, uint256 word) private {

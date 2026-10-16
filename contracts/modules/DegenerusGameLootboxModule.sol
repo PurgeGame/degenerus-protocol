@@ -463,7 +463,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///         rather than two: the caller holds them across a long stretch of its body, and
     ///         two live locals there is exactly what tips it into a Yul stack-too-deep.
     /// @return flipCredit Any biggest-box bounty claim, to join the buyer's flip credit.
-    /// @return word The in-flight entry word, still missing its score and EV fraction.
+    /// @return word The in-flight entry word, still missing its score.
     function beginBoxOrder(uint32 buyerId, uint256 boxOrder)
         external
         payable
@@ -493,17 +493,15 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
     }
 
-    /// @notice Finalize a purchase's ordinary entry: its post-action score and its EV-cap draw.
+    /// @notice Finalize a purchase's ordinary entry with its post-action activity score.
     /// @dev Delegatecall entrypoint from the Mint module, called once the post-action score is
     ///      known. The score is the resolver's frozen EV knob — the anti-gaming property, since
     ///      the open level is not player-timable but the buy is. Clamped to the curve's effective
     ///      cap so it fits the 15-bit lane; the multiplier is flat above that point.
     /// @param word The in-flight entry from `beginBoxOrder`.
     /// @param cachedScore Caller's post-action activity score in whole points.
-    /// @param capLevel Level key for the shared per-(wallet, level) EV-cap accumulator.
-    /// @param costWei This purchase's box spend, the basis of the EV fraction.
     /// @return The completed ordinary fields.
-    function applyBoxOrderScore(uint256 word, uint256 cachedScore, uint24 capLevel, uint256 costWei)
+    function applyBoxOrderScore(uint256 word, uint256 cachedScore)
         external
         payable
         returns (uint256)
@@ -512,8 +510,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 score = cachedScore > ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS
             ? ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS
             : cachedScore;
-        uint256 evExtra = _drawEvBenefit(uint32(word), capLevel, costWei, score);
-        return word | (score << LB_SCORE_SHIFT) | ((evExtra * 10_000 / costWei) << LB_EV_SHIFT);
+        return word | (score << LB_SCORE_SHIFT);
     }
 
     /// @notice Append a system-granted box entry — the pass purchases and the afking cover.
@@ -526,7 +523,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param id Player receiving the boxes (registered; its mint word is already loaded).
     /// @param amountWei Box spend in wei.
     /// @param score Caller's activity-score snapshot.
-    /// @param capKey Level key for the shared per-(wallet, level) EV-cap accumulator.
     /// @param boost Whether to consume a live lootbox-boost boon and snapshot distress (pass
     ///        purchases yes, afking no).
     /// @param count Custom boxes (one per pass bought, at most 100); zero for the afking cover.
@@ -534,7 +530,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint32 id,
         uint256 amountWei,
         uint16 score,
-        uint24 capKey,
         bool boost,
         uint8 count
     ) external payable {
@@ -550,26 +545,21 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             word |= (_consumeBoxBoost(id, amountWei) * 10_000 / amountWei) << LB_BOOST_SHIFT;
             if (_isDistressMode()) word |= LB_DISTRESS;
         }
-        word |= (_drawEvBenefit(id, capKey, amountWei, capped) * 10_000 / amountWei) << LB_EV_SHIFT;
         (uint48 idx, uint32 position) = _appendBoxEntry(word, amountWei);
         emit LootBoxBuy(id, idx, position, amountWei);
     }
 
-    /// @dev The EV-allowance draw an entry's EV fraction records: a bonus score (mult > NEUTRAL)
-    ///      advances the shared per-(wallet, level) bonus spend by `spend` and returns its
-    ///      weighted eligible share (`_lootboxEvEligible`); the accumulator never resets per
-    ///      entry. Neutral and sub-neutral scores draw nothing. Shared by the purchase paths
-    ///      and the sDGNRS redemption order, which draws at resolution.
-    function _drawEvBenefit(uint32 id, uint24 capLevel, uint256 spend, uint256 score)
+    /// @dev Draw an order's weighted eligible share at opening, before any reward can recurse.
+    ///      The caller only draws for a bonus multiplier and a nonzero represented nominal value.
+    ///      All orders share the same per-(wallet, opening level) accumulator.
+    function _drawEvBenefit(uint32 id, uint24 capLevel, uint256 spend)
         private
         returns (uint256 evExtra)
     {
-        if (_lootboxEvMultiplierFromScore(score) > LOOTBOX_EV_NEUTRAL_BPS) {
-            uint256 used = _lootboxEvUsedFor(id, capLevel);
-            uint256 usedAfter;
-            (evExtra, usedAfter) = _lootboxEvEligible(used, spend);
-            if (usedAfter != used) _setLootboxEvUsedFor(id, capLevel, usedAfter);
-        }
+        uint256 used = _lootboxEvUsedFor(id, capLevel);
+        uint256 usedAfter;
+        (evExtra, usedAfter) = _lootboxEvEligible(used, spend);
+        if (usedAfter != used) _setLootboxEvUsedFor(id, capLevel, usedAfter);
     }
 
     /// @dev Per-entry reward accumulator. Every lane an entry's boxes can pay into is summed
@@ -628,7 +618,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 boonSeed; // each box's draw is (boonSeed, its nonce)
     }
 
-    /// @dev Storage-free order core: resolve every box of the entry `word` for wallet `id`
+    /// @dev Draw the order's EV allowance, then resolve every box of `word` for wallet `id`
     ///      off `rootWord`, then settle the entry. Box `n` (1-based across
     ///      all tiers) seeds from hash4(rootWord, id, BOX_OPEN_TAG, n) and the entry's boon
     ///      draws from hash4(rootWord, id, BOX_BOON_TAG, boonIndex). Queued entries pass their
@@ -659,13 +649,24 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         c.evBps = _lootboxEvMultiplierFromScore(c.score);
         c.boostBps = (word >> LB_BOOST_SHIFT) & LB_BPS_MASK;
         c.distressBps = word & LB_DISTRESS != 0 ? 10_000 : 0;
-        c.adjBps = (word >> LB_EV_SHIFT) & LB_BPS_MASK;
-
         uint256 size = ((word >> LB_SIZE_SHIFT) & LB_SIZE_MASK) * LB_SIZE_UNIT;
+        // Price the boxes at their stored purchase level, but draw the allowance against
+        // the live opening level. One draw covers the WHOLE order before the first roll,
+        // including before any nested ETH-spin box. Covers need no price lookup.
+        uint256 price = word & LB_COVER != 0
+            ? 0 : PriceLookupLib.priceForLevel(uint24(word >> LB_LEVEL_SHIFT));
+        if (c.evBps > LOOTBOX_EV_NEUTRAL_BPS) {
+            uint256 nominal = word & LB_COVER != 0 ? size
+                : price * (((word >> LB_SMALL_SHIFT) & LB_COUNT_MASK)
+                    + LB_MED_MULTIPLE * ((word >> LB_MED_SHIFT) & LB_COUNT_MASK)
+                    + LB_LARGE_MULTIPLE * ((word >> LB_LARGE_SHIFT) & LB_COUNT_MASK))
+                    + size * ((word >> LB_CUSTOM_COUNT_SHIFT) & LB_COUNT_MASK);
+            // System-grant dust stays in the funded pools; only represented boxes draw EV.
+            if (nominal != 0) c.adjBps = _drawEvBenefit(id, currentLevel, nominal) * 10_000 / nominal;
+        }
         if (word & LB_COVER != 0) {
             _rollTierImmediate(c, 1, size);
         } else {
-            uint256 price = PriceLookupLib.priceForLevel(uint24(word >> LB_LEVEL_SHIFT));
             // Keep the overwhelmingly common one-tier entry on the lean path. Only a
             // genuinely mixed entry allocates the batch and pays its packing work.
             if (_boxOrderIsMixed(word)) {
@@ -841,12 +842,12 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             // The boon uplift was banked as a fraction of the order's nominal value; each box
             // carries its proportional share.
             uint256 boosted = size + (size * c.boostBps) / 10_000;
-            // Frozen EV application: a penalty or neutral order scales the whole box; a bonus
-            // order scales only the weighted eligible fraction drawn at buy and pays the rest —
+            // A penalty or neutral order scales the whole box; a bonus order scales only the
+            // weighted eligible fraction drawn once at the start of this open and pays the rest —
             // including the boon uplift — at 100%. The adj fraction applies to the RAW size,
-            // matching the buy-side draw (which capped raw spend, not boosted): applying it to
+            // matching the order's allowance draw (raw nominal value, not boosted): applying it to
             // the boosted basis would quietly extend the EV bonus onto the boost itself. No
-            // cap read here — the draw happened at purchase.
+            // cap read per tier or box — the order's fraction is already fixed in memory.
             uint256 adjWei = (size * c.adjBps) / 10_000;
             scaled = c.evBps <= LOOTBOX_EV_NEUTRAL_BPS
                 ? (boosted * c.evBps) / 10_000
@@ -1205,9 +1206,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint256 score = activityScore > ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS
             ? ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS
             : activityScore;
-        uint256 nominal = boxes * size * LB_SIZE_UNIT;
         uint256 word = uint256(id) | (uint256(currentLevel) << LB_LEVEL_SHIFT) | (score << LB_SCORE_SHIFT)
-            | ((_drawEvBenefit(id, currentLevel, nominal, score) * 10_000 / nominal) << LB_EV_SHIFT)
             | (boxes << LB_CUSTOM_COUNT_SHIFT) | (size << LB_SIZE_SHIFT);
         // No queue position: the ID-mixed redemption word is the root and the tagged batch keys
         // the boon draw.
@@ -1261,10 +1260,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      and the SINGLE `_applyEvMultiplierWithCap(id, currentLevel, amount,
     ///      evMultiplierBps)` RMW — the sole residual live-read, a benign monotonic
     ///      down-clamp, keyed on the SAME per-level window of
-    ///      `lootboxEvCapPacked[id]` the human buy-time write uses
+    ///      `lootboxEvCapPacked[id]` the queued-order opener uses
     ///      so the human + afking boxes share the one per-level EV allowance.
-    ///      The buy-time EV write is bypassed for afking boxes (the process pass STAMPS only),
-    ///      so this is the single draw (no double-draw). The allowance hard-clamps at 40 ETH
+    ///      The process pass STAMPS only, so this is the single draw (no double-draw).
+    ///      The allowance hard-clamps at 40 ETH
     ///      with the no-write 100%-EV short-circuit ⇒ NO revert. The seed carries ZERO `block.*`
     ///      entropy.
     ///
@@ -1312,7 +1311,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
         // The SINGLE EV-cap RMW at open — the sole residual live-read, a benign
         // monotonic down-clamp, keyed [id][currentLevel] on the SAME
-        // per-level EV allowance the human buy-time write uses. Fed the FROZEN
+        // per-level EV allowance the queued-order opener uses. Fed the FROZEN
         // evMultiplierBps from the stamped activityScore. Hard-clamped, no revert.
         // sDGNRS's protocol-owned self-subscription boxes are exempt: the full amount
         // takes the multiplier and no per-level budget is drawn — its EV benefit is

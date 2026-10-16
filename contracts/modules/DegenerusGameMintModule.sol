@@ -1072,16 +1072,14 @@ contract DegenerusGameMintModule is
             _queuePurchaseEntries(buyerId, targetLevel, adjustedQty);
         }
 
-        // --- Box-order score and EV fraction (delegatecalled; needs the post-action score) ---
+        // --- Freeze the box-order score; the opener draws its EV allowance. ---
         if (lootBoxAmount != 0) {
             boxWord = abi.decode(
                 _lootboxLeg(
                     abi.encodeWithSelector(
                         IDegenerusGameLootboxModule.applyBoxOrderScore.selector,
                         boxWord,
-                        cachedScore,
-                        cachedLevel + 1,
-                        lootBoxAmount
+                        cachedScore
                     )
                 ),
                 (uint256)

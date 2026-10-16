@@ -8,6 +8,7 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
+import {EvTaperRef} from "../helpers/EvTaperRef.sol";
 
 /// @dev Reads a stored entry's rate lanes and the EV multiplier its score maps to, through the
 ///      game's own storage layout and curve.
@@ -21,7 +22,9 @@ contract RateViewer is DegenerusGame {
         level = (w >> LB_LEVEL_SHIFT) & type(uint24).max;
         evBps = _lootboxEvMultiplierFromScore((w >> LB_SCORE_SHIFT) & LB_SCORE_MASK);
         boostBps = (w >> LB_BOOST_SHIFT) & LB_BPS_MASK;
-        adjBps = (w >> LB_EV_SHIFT) & LB_BPS_MASK;
+        uint256 nominal = BoxOrderLib.boNominal(w, PriceLookupLib.priceForLevel(uint24(level)));
+        (uint256 eligible,) = EvTaperRef.eligible(_lootboxEvUsedFor(uint32(w), _activeTicketLevel()), nominal);
+        adjBps = evBps > 10_000 && nominal != 0 ? eligible * 10_000 / nominal : 0;
         distress = w & LB_DISTRESS != 0;
     }
 }

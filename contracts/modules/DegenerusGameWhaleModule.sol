@@ -1164,7 +1164,6 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                 buyerId,
                 lootboxAmount,
                 _clampScore(_playerActivityScore(buyerId, _effectiveQuestStreak(buyerId))),
-                level + 1,
                 true,
                 boxes
             )
