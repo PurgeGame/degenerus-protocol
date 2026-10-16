@@ -183,6 +183,18 @@ contract DeadVrfTallyParityHarness is DegenerusGameGameOverModule, WalletSeed {
 }
 
 contract DeadVrfTallyParityTest is Test {
+    uint256 private constant EXPECTED_TALLY_FINAL = 2_300_000; // Independent assertion of the protocol limit
+    uint256 private constant EXPECTED_TALLY_TAIL = 250_000; // Independent assertion of the protocol limit
+    uint256 private constant ENGINE_MARGIN = 2_000; // Independent assertion of the protocol limit
+    // The call's own entry spend (state reads, frame) comes off the allowance before the scan is admitted.
+    uint256 private constant ENTRY_HEADROOM = 150_000;
+    /// @dev Smallest realistic plain allowance that admits the fixed 256-bucket scan from a fresh call.
+    uint256 private constant FULL_SCAN_ALLOWANCE =
+        EXPECTED_TALLY_FINAL + EXPECTED_TALLY_TAIL + ENGINE_MARGIN + ENTRY_HEADROOM;
+    /// @dev About twice the fixed scan's admission bound: a generous call that still cannot hold the whole backlog.
+    uint256 private constant ROOMY_ALLOWANCE = 2 * FULL_SCAN_ALLOWANCE;
+    uint256 private constant MAX_CALLS = 64;
+
     DeadVrfTallyParityHarness private h;
 
     function setUp() public {
@@ -231,12 +243,15 @@ contract DeadVrfTallyParityTest is Test {
         assertTrue(vm.revertToStateAndDelete(snapshot));
         done = false;
         uint256 calls;
-        while (!done && calls < 64) {
+        while (!done && calls < MAX_CALLS) {
             vm.cool(address(h));
             done = _tally(callGas);
             ++calls;
         }
+        emit log_named_uint("tally allowance", callGas);
+        emit log_named_uint("tally calls to complete", calls);
         assertTrue(done, "gas-checkpointed tally completes");
+        assertLt(calls, MAX_CALLS, "call cap was not what ended the loop");
         assertGt(calls, 1, "cold tally spans actual gas checkpoints");
         assertEq(h.tallyDigest(), expected, "same completed counters and ticket weight");
     }
@@ -253,16 +268,16 @@ contract DeadVrfTallyParityTest is Test {
 
     function test_ResumeAfterFullRegistryBatch() public {
         h.seed(3001, 777, 3, 0);
-        _compareCompleted(2_000_000);
+        _compareCompleted(ROOMY_ALLOWANCE);
     }
 
     function test_ExactRegistryBudgetThenFoilContinuation() public {
         h.seed(2800, 888, 1, 0);
-        _compareCompleted(2_000_000);
+        _compareCompleted(ROOMY_ALLOWANCE);
     }
 
     function test_TraitScanDefersAtBudgetBoundary() public {
         h.seed(2800, 999, 4, 0);
-        _compareCompleted(1_100_000);
+        _compareCompleted(FULL_SCAN_ALLOWANCE);
     }
 }

@@ -29,8 +29,12 @@ abstract contract RedemptionCloseTools is DeployProtocol {
         RecyclingState.seedWord(address(game), RecyclingState.readBuffer(address(game)), bytes32(batchWord));
         uint256 state = uint256(vm.load(address(game), bytes32(0)));
         vm.store(address(game), bytes32(0), bytes32(state | (uint256(1) << 192)));
+        (,, uint32 cursor,) = sdgnrs.redemptionBatchState();
         vm.prank(address(game));
-        sdgnrs.runRedemptionWork(batchWord, 200_000);
+        // Admits the 85k resolution bound with its 100k tail after a cold prelude; never a 600k claim.
+        sdgnrs.runRedemptionWork(batchWord, 300_000);
         assertEq(_batchRoll(id), roll);
+        (,, uint32 after_,) = sdgnrs.redemptionBatchState();
+        assertEq(after_, cursor, "resolution only: no claim settled");
     }
 }

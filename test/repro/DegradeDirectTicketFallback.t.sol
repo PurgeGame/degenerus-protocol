@@ -56,6 +56,17 @@ contract DegradeDirectTicketFallbackTest is Test {
         keccak256("JackpotTicketBatchWin(uint24,uint24,uint16,uint16,uint8,uint32,uint256[4],uint256[4])");
     uint256 private constant WORD = 0xAC4DE45EDBEEF;
     uint256 private constant TICKETS = 96;
+    // Independent assertion of the protocol limits: the direct round bound plus 65k per eight-winner
+    // sampler group, the ticket tail and the 2k engine margin.
+    uint256 private constant EXPECTED_DIRECT_ROUND = 12_000_000;
+    uint256 private constant EXPECTED_DIRECT_GROUP = 65_000;
+    uint256 private constant EXPECTED_TICKET_TAIL = 260_000;
+    uint256 private constant ENGINE_MARGIN = 2_000;
+    // The call's own setup (750k) and plan (120k) spend comes off the allowance before a round is admitted.
+    uint256 private constant SETUP_HEADROOM = 1_000_000;
+    // Admits any 32-winner direct round (four sampler groups) from a fresh call, so every step makes progress.
+    uint256 private constant ANY_ROUND_ALLOWANCE =
+        EXPECTED_DIRECT_ROUND + 4 * EXPECTED_DIRECT_GROUP + EXPECTED_TICKET_TAIL + ENGINE_MARGIN + SETUP_HEADROOM;
     DegradeDirectFallbackHarness private h;
 
     function setUp() public {
@@ -85,7 +96,7 @@ contract DegradeDirectTicketFallbackTest is Test {
     function _finish() private returns (uint256 direct, uint256 queued, uint256 calls) {
         bool done;
         while (!done && calls < 100) {
-            (MineFlipGas.Result memory r, uint256 d, uint256 q) = _step(12_000_000);
+            (MineFlipGas.Result memory r, uint256 d, uint256 q) = _step(ANY_ROUND_ALLOWANCE);
             direct += d;
             queued += q;
             done = r.done;
@@ -98,13 +109,18 @@ contract DegradeDirectTicketFallbackTest is Test {
     ///      the rest of the draw is delivered by the queued path from the same cursor.
     function test_SnapDriftFallsBackAfterDirectGroups() public {
         h.seed(WORD, TICKETS);
-        // Admits one 32-winner direct group (2.8M round bound + 4 x 65k + tail), not a second.
-        (MineFlipGas.Result memory first, uint256 direct, uint256 queued) = _step(4_000_000);
+        // Admits one direct group (12M round bound + sampler groups + tail), not a second: the
+        // first group's actual spend leaves less than another round bound.
+        (MineFlipGas.Result memory first, uint256 direct, uint256 queued) = _step(ANY_ROUND_ALLOWANCE);
         assertFalse(first.done, "harness: the first call must leave work for the fallback");
         assertEq(queued, 0, "harness: the first call ran the direct lane only");
         (uint8 quadrant, uint16 winner, uint32 round, bool wasDirect,,) = h.state();
         assertTrue(wasDirect, "harness: the direct lane is latched");
         assertEq(round, 0, "single-round groups leave no partial group");
+        emit log_named_uint("direct winners paid by the first call", direct);
+        emit log_named_uint("cursor quadrant", quadrant);
+        emit log_named_uint("cursor winner", winner);
+        assertGt(direct, 0, "harness: the first call materialized a direct group");
         assertTrue(direct != 0 || (quadrant == 0 && winner == 0), "cursor and batch events agree");
 
         h.driftSnap();

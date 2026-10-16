@@ -85,6 +85,31 @@ contract TicketCheckpointDeterminismTest is Test {
     TicketCheckpointHarness private h;
     uint256 private constant FULL = 9_000_000;
     uint256 private constant WORD = 0x12902fc2cb1a37;
+    // Independent assertions of the protocol limits (MineFlipGasBounds).
+    uint256 private constant EXPECTED_TICKET_TAIL = 260_000;
+    uint256 private constant EXPECTED_SOLO_BASE = 250_000;
+    uint256 private constant EXPECTED_ENTRY_MAX = 150_000;
+    uint256 private constant EXPECTED_SOLO_MAX_ENTRIES = 32;
+    uint256 private constant EXPECTED_FOIL_CALL_MAX = 3_200_000;
+    uint256 private constant ENGINE_MARGIN = 2_000;
+    // The worker's own entry spend (state reads, frame) comes off the allowance before a step is admitted.
+    uint256 private constant ENTRY_HEADROOM = 250_000;
+    uint256 private constant ALIGNED_SOLO_ENTRIES = 16;
+    /// @dev Smallest realistic plain allowance that admits one aligned 16-entry solo chunk
+    ///      (a 32-entry chunk needs 2.4M more), so a split run uses 16-entry chunks against the full run's 32.
+    uint256 private constant SOLO_CHUNK_ALLOWANCE = EXPECTED_SOLO_BASE + ALIGNED_SOLO_ENTRIES * EXPECTED_ENTRY_MAX
+        + EXPECTED_TICKET_TAIL + ENGINE_MARGIN + ENTRY_HEADROOM;
+    /// @dev Smallest realistic plain allowance that admits one foil pack (and so the solo chunk too).
+    uint256 private constant FOIL_STEP_ALLOWANCE =
+        EXPECTED_FOIL_CALL_MAX + EXPECTED_TICKET_TAIL + ENGINE_MARGIN + ENTRY_HEADROOM;
+    uint256 private constant EXPECTED_ROUND_MAX = 5_100_000;
+    uint256 private constant EXPECTED_ROUND_MIN_SEATS = 4;
+    /// @dev Smallest realistic plain allowance that admits one seated round.
+    uint256 private constant ROUND_ALLOWANCE =
+        EXPECTED_ROUND_MAX + EXPECTED_TICKET_TAIL + ENGINE_MARGIN + ENTRY_HEADROOM;
+    uint256 private constant SEAT_ONLY_ALLOWANCE = 650_000; // seats and skips only; below every round, solo and foil bound
+    uint256 private lowCalls;
+    uint256 private lowProgressed;
     function setUp() public {
         vm.warp(10 days);
         vm.etch(ContractAddresses.GAME, address(new TicketCheckpointHarness()).code);
@@ -95,9 +120,16 @@ contract TicketCheckpointDeterminismTest is Test {
     function player(uint256 i) private pure returns (address) { return address(uint160(0x10000 + i)); }
 
     function finish(uint24 anchor, uint256 low, bool alternating) private returns (uint256 calls) {
+        lowCalls = 0;
+        lowProgressed = 0;
         for (; calls < 600; ++calls) {
-            uint256 budget = alternating && calls % 2 == 1 ? FULL : low;
+            bool isLow = !(alternating && calls % 2 == 1);
+            uint256 budget = isLow ? low : FULL;
             MineFlipGas.Result memory r = h.runTicketWork(anchor, budget);
+            if (isLow) {
+                ++lowCalls;
+                if (r.progressed) ++lowProgressed;
+            }
             if (r.done) return calls + 1;
             // Isolated future completion intentionally leaves the daily lock to its owner.
             (uint32 cursor, uint256 seats) = h.frontier();
@@ -108,11 +140,16 @@ contract TicketCheckpointDeterminismTest is Test {
 
     function compare(uint24 target, uint24 anchor, uint256 low, bool alternating) private {
         uint256 snap = vm.snapshotState();
-        finish(anchor, FULL, false);
+        uint256 fullCalls = finish(anchor, FULL, false);
         (bytes32 full, uint256 count) = h.digest(target);
         bytes32 control = h.control();
         assertTrue(vm.revertToStateAndDelete(snap));
-        finish(anchor, low, alternating);
+        emit log_named_uint("full-allowance calls", fullCalls);
+        uint256 splitCalls = finish(anchor, low, alternating);
+        emit log_named_uint("split calls", splitCalls);
+        emit log_named_uint("low-budget calls", lowCalls);
+        emit log_named_uint("low-budget calls that progressed", lowProgressed);
+        assertGt(lowProgressed, 0, "the low budget itself admits work");
         (bytes32 split, uint256 splitCount) = h.digest(target);
         assertEq(splitCount, count, "exact fractional quantity");
         assertEq(split, full, "exact ordered owner lanes across checkpoints");
@@ -122,7 +159,7 @@ contract TicketCheckpointDeterminismTest is Test {
     function test_soloGroupsAndFractionalTailAcrossBudgets() public {
         h.credit(player(0), 1, 300_075);
         h.commit(WORD, false);
-        compare(1, 2, 1_300_000, true);
+        compare(1, 2, SOLO_CHUNK_ALLOWANCE, true);
     }
     function test_ExtremeCalibrationPreservesSeatedRoundAndNestedFoil() public {
         for (uint256 i; i < 9; ++i) h.credit(player(i), 1, uint32(4_075 + i * 100));
@@ -213,10 +250,13 @@ contract TicketCheckpointDeterminismTest is Test {
             (, uint32 take) = abi.decode(logs[i].data, (uint256, uint32));
             uint32 owner = uint32(uint256(logs[i].topics[1]));
             for (uint256 j; j < 3; ++j) if (owner == h.idOf(player(j))) owners |= 1 << j;
+            assertLe(take, EXPECTED_SOLO_MAX_ENTRIES, "a solo run never exceeds the admitted maximum");
             emitted += take;
             ++chunks;
         }
-        assertGe(chunks, 7, "scratch memory is reused within one worker invocation");
+        assertGe(chunks, (emitted + EXPECTED_SOLO_MAX_ENTRIES - 1) / EXPECTED_SOLO_MAX_ENTRIES,
+            "scratch memory is reused within one worker invocation");
+        assertGe(chunks, 21, "scratch memory is reused across 32-entry solo runs");
         assertEq(owners, 7, "all three distinct owner streams ran");
         (bytes32 expected, uint256 count) = h.digest(1);
         assertEq(count, emitted, "no stale counter creates or drops occurrences");
@@ -224,7 +264,20 @@ contract TicketCheckpointDeterminismTest is Test {
         assertLe(count, 664);
         bytes32 control = h.control();
         assertTrue(vm.revertToStateAndDelete(snap));
-        assertGt(finish(2, 950_000, false), 1, "reference uses fresh worker frames");
+        vm.recordLogs();
+        uint256 refCalls = finish(2, SOLO_CHUNK_ALLOWANCE, false);
+        emit log_named_uint("fresh-frame reference calls", refCalls);
+        assertGt(refCalls, 1, "reference uses fresh worker frames");
+        logs = vm.getRecordedLogs();
+        uint256 refChunks;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics.length != 2 || logs[i].topics[0]
+                != keccak256("TraitsGenerated(uint32,uint256,uint32)")) continue;
+            ++refChunks;
+        }
+        emit log_named_uint("single-call solo runs", chunks);
+        emit log_named_uint("reference solo runs", refChunks);
+        assertGt(refChunks, chunks, "reference partitions the streams into more, smaller runs");
         (bytes32 actual, uint256 actualCount) = h.digest(1);
         assertEq(actualCount, count, "same whole entries and fractional results");
         assertEq(actual, expected, "same ordered owner lanes after dirty scratch reuse");
@@ -235,8 +288,8 @@ contract TicketCheckpointDeterminismTest is Test {
     function test_terminalSwapNeverResumesStaleCheckpointOnNewQueue() public {
         h.credit(player(0), 1, 600_075);
         h.commit(WORD, false);
-        h.runTicketWork(1, 1_500_000);
-        assertGt(h.offset(), 0, "fixture: solo run left part-drained");
+        h.runTicketWork(1, SOLO_CHUNK_ALLOWANCE);
+        assertEq(h.offset(), ALIGNED_SOLO_ENTRIES, "fixture: solo run left part-drained after one aligned chunk");
         for (uint256 i = 1; i <= 6; ++i) h.credit(player(i), 1, 400);
         h.flipSlot();
         h.terminal(1);
@@ -269,7 +322,7 @@ contract TicketCheckpointDeterminismTest is Test {
         for (uint256 i; i < 11; ++i) h.credit(player(i), 3, uint32(400_000 + i * 400));
         h.setSnap(3);
         h.commit(WORD, true);
-        compare(3, 0, 1_300_000, true);
+        compare(3, 0, ROUND_ALLOWANCE, true);
     }
     function testFuzz_wholeFutureSnapCheckpointParity(uint32 seed, uint8 exponent) public {
         for (uint256 i; i < 9; ++i) {
@@ -287,7 +340,7 @@ contract TicketCheckpointDeterminismTest is Test {
             entries += 40 + i * 4;
         }
         h.commit(WORD, true);
-        compare(3, 0, 2_000_000, true);
+        compare(3, 0, ROUND_ALLOWANCE, true);
         (bytes32 result, uint256 count) = h.digest(3);
         assertEq(count, entries, "every whole credited entry is generated exactly once");
         emit log_named_bytes32("OWED8_FUTURE_DIGEST", result);
@@ -296,7 +349,7 @@ contract TicketCheckpointDeterminismTest is Test {
         h.credit(player(0), 1, 600_075);
         h.setSnap(3);
         h.commit(WORD, false);
-        compare(1, 2, 1_300_000, true);
+        compare(1, 2, SOLO_CHUNK_ALLOWANCE, true);
         (, uint256 entries) = h.digest(1);
         assertGe(entries, 750);
         assertLe(entries, 751);
@@ -307,7 +360,7 @@ contract TicketCheckpointDeterminismTest is Test {
         h.credit(player(0), 3, 160_025);
         for (uint256 i; i < 20; ++i) h.seedFoil(player(i + 100), 3);
         h.commit(WORD, false);
-        compare(3, 3, 2_000_000, false);
+        compare(3, 3, FOIL_STEP_ALLOWANCE, false);
     }
     function test_nonmonotonicFoilLevelsAndOrdinaryDependencies() public {
         h.initialize(3);
@@ -322,7 +375,8 @@ contract TicketCheckpointDeterminismTest is Test {
         (bytes32 a,) = h.digest(3);
         (bytes32 b,) = h.digest(4);
         assertTrue(vm.revertToStateAndDelete(snap));
-        finish(4, 2_000_000, true);
+        finish(4, FOIL_STEP_ALLOWANCE, true);
+        assertGt(lowProgressed, 0, "the low budget itself admits work");
         (bytes32 c,) = h.digest(3);
         (bytes32 d,) = h.digest(4);
         assertEq(a, c);
@@ -340,7 +394,8 @@ contract TicketCheckpointDeterminismTest is Test {
         (bytes32 a,) = h.digest(2);
         (bytes32 b,) = h.digest(3);
         assertTrue(vm.revertToStateAndDelete(snap));
-        finish(2, 2_000_000, true);
+        finish(2, FOIL_STEP_ALLOWANCE, true);
+        assertGt(lowProgressed, 0, "the low budget itself admits work");
         (bytes32 c,) = h.digest(2);
         (bytes32 d,) = h.digest(3);
         assertEq(a, c);
@@ -353,7 +408,7 @@ contract TicketCheckpointDeterminismTest is Test {
         h.credit(player(1), 2, 120_025);
         for (uint256 i; i < 8; ++i) h.seedFoil(player(i + 100), 3);
         h.commit(WORD, false);
-        compare(3, 3, 2_000_000, true);
+        compare(3, 3, FOIL_STEP_ALLOWANCE, true);
         assertEq(h.owed(player(0), 1, false), 0, "parity blocker fully consumed");
     }
     function test_sufficientTransactionGasCannotChooseAnotherCheckpoint() public {
@@ -379,14 +434,15 @@ contract TicketCheckpointDeterminismTest is Test {
         h.initialize(0);
         h.credit(player(0), 1, 600_075);
         h.commit(WORD, false);
-        h.runTicketWork(1, 1_500_000);
-        assertGt(h.offset(), 0, "actual partial owner");
+        h.runTicketWork(1, SOLO_CHUNK_ALLOWANCE);
+        assertEq(h.offset(), ALIGNED_SOLO_ENTRIES, "actual partial owner after one aligned chunk");
         uint256 snap = vm.snapshotState();
         finish(1, FULL, false);
         (bytes32 normal, uint256 count) = h.digest(1);
         assertTrue(vm.revertToStateAndDelete(snap));
         h.terminal(1);
-        finish(uint24(1 | (1 << 23)), 1_500_000, true);
+        finish(uint24(1 | (1 << 23)), SOLO_CHUNK_ALLOWANCE, true);
+        assertGt(lowProgressed, 0, "the low budget itself admits work");
         (bytes32 terminal, uint256 terminalCount) = h.digest(1);
         assertEq(terminalCount, count);
         assertEq(terminal, normal, "terminal takeover must not restart surviving stream");
@@ -419,7 +475,7 @@ contract TicketCheckpointDeterminismTest is Test {
         bool done;
         uint256 calls;
         for (; calls < 600 && !done; ++calls) {
-            (bool ok, bytes memory data) = address(h).call{gas: 2_000_000}(
+            (bool ok, bytes memory data) = address(h).call{gas: SOLO_CHUNK_ALLOWANCE}(
                 abi.encodeCall(h.runTicketWork, (uint24(2), FULL))
             );
             assertTrue(ok, "low-gas transaction returns at an admitted checkpoint");
@@ -446,7 +502,7 @@ contract TicketCheckpointDeterminismTest is Test {
         assertTrue(vm.revertToStateAndDelete(snap));
         bool done;
         for (uint256 calls; calls < 300 && !done; ++calls) {
-            (bool ok, bytes memory data) = address(h).call{gas: 2_200_000}(
+            (bool ok, bytes memory data) = address(h).call{gas: FOIL_STEP_ALLOWANCE}(
                 abi.encodeCall(h.runTicketWork, (uint24(3), FULL))
             );
             assertTrue(ok, "foil checkpoint must reserve the return tail");
@@ -462,6 +518,8 @@ contract TicketCheckpointDeterminismTest is Test {
         uint256 n = 1 + uint256(low) % 11;
         for (uint256 i; i < n; ++i) h.credit(player(i), 1, uint32(1 + uint256(amount) % 500) * 100 + uint32(i * 29 % 100));
         h.commit(word, false);
-        compare(1, 2, 650_000 + uint256(low) * 10_000, true);
+        // Fewer than four owners drain solo and need a whole aligned solo chunk; four or more seat.
+        uint256 base = n < EXPECTED_ROUND_MIN_SEATS ? SOLO_CHUNK_ALLOWANCE : SEAT_ONLY_ALLOWANCE;
+        compare(1, 2, base + uint256(low) * 10_000, true);
     }
 }

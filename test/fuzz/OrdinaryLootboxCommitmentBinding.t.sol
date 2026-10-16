@@ -54,6 +54,9 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
     /// @dev The owners' entry positions in the committed buffer, set by `_prepare`.
     uint256 private posA;
     uint256 private posB;
+    /// @dev The committed word in force when the latest opening call consumed its last owner
+    ///      entry, proven from that call's chronological storage accesses (`_assertConsumedUnder`).
+    uint256 private consumedUnder;
 
     struct Balance {
         uint256[51] entries;
@@ -456,6 +459,41 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         assertEq(seen, 1, "one MinerWork per mineFlip");
     }
 
+    /// @dev Chronological storage-access proof that the opening call consumed the owner entry at
+    ///      `position` (its box cursor moved past it) before ANY write could retarget or replace
+    ///      the committed word: the word slot, the read/write buffer selector (bit 252) and the
+    ///      delivered flag (bit 255). Every read of the word slot up to that point returns
+    ///      `committed`. A call that finishes the cohort may then seal the next request in the
+    ///      same transaction; that recycling is legitimate only after consumption, which is what
+    ///      this orders. Foundry's Resume records keep a frame's accesses after a child call in
+    ///      order, so the flattened list is chronological.
+    function _assertConsumedUnder(Vm.AccountAccess[] memory accesses, uint256 position, uint256 committed) private {
+        bool consumed;
+        for (uint256 i; i < accesses.length && !consumed; ++i) {
+            for (uint256 j; j < accesses[i].storageAccesses.length; ++j) {
+                Vm.StorageAccess memory a = accesses[i].storageAccesses[j];
+                if (a.account != address(game) || a.reverted) continue;
+                uint256 slot = uint256(a.slot);
+                if (slot == GameSlots.RNG_WORD_CURRENT) {
+                    assertFalse(a.isWrite && a.newValue != a.previousValue, "consumption cannot alter the commitment");
+                    assertEq(uint256(a.previousValue), committed, "every consumer reads the committed word");
+                } else if (slot == GameSlots.RNG_FLAGS_AND_NUDGES && a.isWrite) {
+                    uint256 changed = uint256(a.previousValue) ^ uint256(a.newValue);
+                    assertEq(changed & ((uint256(1) << 252) | (uint256(1) << 255)), 0,
+                        "consumption cannot reseal or unpublish the committed index");
+                } else if (slot == GameSlots.BOX_CURSOR && a.isWrite) {
+                    uint256 cursor = (uint256(a.newValue) >> (GameSlots.BOX_CURSOR_OFFSET * 8)) & type(uint48).max;
+                    if (cursor > position) {
+                        consumed = true;
+                        break;
+                    }
+                }
+            }
+        }
+        assertTrue(consumed, "the call consumed the owner's committed entry");
+        consumedUnder = committed;
+    }
+
     /// @dev One mineFlip by `caller`. `boxesPerOrder` is each owner's committed box count, so the
     ///      owners' consumed orders give the exact number of consumed boxes.
     function _open(uint256 budget, address caller, uint256 expectedCount, uint48 index, uint256 boxesPerOrder) private {
@@ -472,18 +510,32 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         // With nothing left to open the call is unbounded.
         uint256 entries = expectedCount / boxesPerOrder;
         uint256 allowance = budget == 2 ? _drainBudget(index, 1) : entries != 0 ? _drainBudget(index, entries) : 0;
+        // FIFO: the call's last consumed owner entry is Alice's when it is the first one drained.
+        uint256 lastPosition = drainedBefore + (budget == 2 ? 1 : entries) == 1 ? posA : posB;
+        uint256 committed = _word(index);
+        uint256 requestBefore = mockVRF.lastRequestId();
+        if (expectedCount != 0) vm.startStateDiffRecording();
         vm.recordLogs();
         vm.prank(caller);
         (bool ok, bytes memory ret) = allowance == 0
             ? address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)))
             : address(game).call{gas: allowance}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+        if (expectedCount != 0) _assertConsumedUnder(vm.stopAndReturnStateDiff(), lastPosition, committed);
         uint256 reward;
         if (ok) {
             reward = _minerReward(vm.getRecordedLogs());
         } else {
-            // Only a fully consumed cohort can leave the engine idle.
+            // Only a fully consumed cohort can leave the engine idle, or waiting on the next
+            // cohort's word: that request was sealed only after every committed consumer finished.
             assertEq(expectedCount, 0, "the engine had work while boxes remained");
-            assertEq(bytes4(ret), bytes4(keccak256("NoWork()")), "an idle engine reports NoWork");
+            if (bytes4(ret) == bytes4(keccak256("RngNotReady()"))) {
+                assertEq(mockVRF.lastRequestId(), requestBefore, "the waiting request predates this call");
+                (,, bool answered) = mockVRF.pendingRequests(requestBefore);
+                assertFalse(answered, "the engine waits on an unanswered next-cohort request");
+                assertEq(RecyclingState.readBuffer(address(game)), index ^ 1, "the committed index was recycled");
+            } else {
+                assertEq(bytes4(ret), bytes4(keccak256("NoWork()")), "an idle engine reports NoWork");
+            }
         }
         assertEq((_drained(index) - drainedBefore) * boxesPerOrder, expectedCount, "exact number of consumed boxes");
         assertEq(_writeSide(index ^ 1), writeSide, "unrevealed next-index entries survive old-index opening");
@@ -500,6 +552,7 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         private
         returns (bytes32 outcome)
     {
+        consumedUnder = 0;
         if (daily) {
             vm.warp(block.timestamp + 1 days);
             _requestDaily();
@@ -577,7 +630,11 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         assertEq(
             _pool(), inventory - alice.dgnrs - bob.dgnrs, "actual pool debit equals both independently priced awards"
         );
-        assertEq(_word(index), word, "consumption cannot alter the commitment");
+        // The delivered word governed both owners' consumption. A call that completes the cohort
+        // may legitimately seal the next request in the same transaction (daily cohorts carry
+        // stamped AFKing boxes on the write side), so this is the word in force at consumption,
+        // proven per call from its chronological storage accesses rather than the post-call view.
+        assertEq(consumedUnder, word, "consumption cannot alter the commitment");
         assertEq(_word((index ^ 1)), 0);
         beforeAlice = _balance(ALICE);
         beforeBob = _balance(BOB);

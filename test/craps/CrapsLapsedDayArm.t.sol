@@ -307,7 +307,7 @@ contract CrapsLapsedDayArmTest is CrapsPins {
         while (craps.minerSlot() < daySlotG + 8) {
             vm.cool(address(craps));
             vm.prank(ContractAddresses.GAME);
-            MineFlipGas.Result memory step = JackpotBattle(address(craps)).runCrapsMaintenance{gas: 400_000}(400_000);
+            MineFlipGas.Result memory step = JackpotBattle(address(craps)).runCrapsMaintenance{gas: 800_000}(800_000);
             assertTrue(step.progressed, "sufficient supplied gas must advance frozen refund frontier");
             uint256 refunded = flip.compLane() - laneBefore;
             assertGe(refunded, priorRefunds, "refund checkpoints cannot debit earlier credits");

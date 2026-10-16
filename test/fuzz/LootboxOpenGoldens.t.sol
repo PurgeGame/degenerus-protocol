@@ -180,7 +180,10 @@ contract LootboxOpenGoldens is DeployProtocol {
     /// @dev The golden fixture: on buffer 0, the whale's mixed order (6 small, 3 medium, 2 large and
     ///      one 1-ETH custom box) is entry 0 and a 0.5-ETH presale-only purchase is entry 1. Every
     ///      queued seed is H(H(QUEUED_ORDER_DOMAIN, word, buffer, position), walletId, tag, n), so the
-    ///      pinned figures belong to these wallet IDs and positions; the fixture asserts both.
+    ///      pinned figures belong to these wallet IDs and positions; the fixture asserts both. The
+    ///      purchase completes the MINT_ETH quest alongside a secondary, which records the level
+    ///      mint streak, so the order freezes score 2: a 90.33% multiplier, below neutral, so no EV
+    ///      allowance is drawn and every box scales by exactly 9033 bps.
     function _goldenFixture() internal returns (address whale, address pre) {
         _driveDailyCycleOnce();
         assertFalse(game.rngLocked(), "stage: mid-day path reachable");
@@ -203,6 +206,7 @@ contract LootboxOpenGoldens is DeployProtocol {
         assertEq(BoxOrderLib.boId(RecyclingState.boxEntry(address(game), 0, 0)), 5, "golden fixture: whale wallet ID 5 at position 0");
         assertEq(BoxOrderLib.boId(RecyclingState.boxEntry(address(game), 0, 1)), 6, "golden fixture: presale wallet ID 6 at position 1");
         assertEq(BoxOrderLib.boPresaleWei(RecyclingState.boxEntry(address(game), 0, 1)), 0.5 ether, "golden fixture: presale-only entry");
+        assertEq((RecyclingState.boxEntry(address(game), 0, 0) >> 56) & 0x7fff, 2, "golden fixture: whale's frozen score");
     }
 
     /// @dev Fixed word ("golden_word", 28): nine plain boxes, three queued levels, one DGNRS batch
@@ -261,9 +265,9 @@ contract LootboxOpenGoldens is DeployProtocol {
 
         assertEq(nOpened, 9, "nine boxes opened plainly on this word");
         uint24[9] memory levels = [uint24(5), 4, 4, 3, 3, 2, 4, 19, 2];
-        uint32[9] memory tickets = [uint32(47), 150, 0, 0, 308, 0, 1096, 0, 0];
-        uint256[9] memory flips = [uint256(0), 0, 560, 0, 0, 0, 0, 0, 0];
-        uint256[9] memory amounts = [uint256(9016e12), 9016e12, 9016e12, 9016e12, 45080e12, 45080e12, 45080e12, 225400e12, 225400e12];
+        uint32[9] memory tickets = [uint32(47), 150, 0, 0, 309, 0, 1098, 0, 0];
+        uint256[9] memory flips = [uint256(0), 0, 561, 0, 0, 0, 0, 0, 0];
+        uint256[9] memory amounts = [uint256(9033e12), 9033e12, 9033e12, 9033e12, 45165e12, 45165e12, 45165e12, 225825e12, 225825e12];
         for (uint256 k; k < 9; k++) {
             assertEq(opened[k].amount, amounts[k], "box amount");
             assertEq(opened[k].level, levels[k], "target level");
@@ -279,8 +283,8 @@ contract LootboxOpenGoldens is DeployProtocol {
             assertEq(qEntries[k], expectedEntries[k], "whole-ticket entries");
         }
         assertEq(nDgnrs, 1, "one DGNRS batch");
-        assertEq(dReq[0], 32_902_300e12, "DGNRS requested");
-        assertEq(dPaid[0], 32_902_300e12, "DGNRS paid in full");
+        assertEq(dReq[0], 33_003_400e12, "DGNRS requested");
+        assertEq(dPaid[0], 33_003_400e12, "DGNRS paid in full");
         assertEq(nPresale, 1, "the presale box opened");
         assertEq(presaleFlip, 0, "presale FLIP branch not drawn");
         assertEq(presaleDgnrs, 3_750_000_000e12, "presale DGNRS roll");
@@ -296,10 +300,10 @@ contract LootboxOpenGoldens is DeployProtocol {
         Vm.Log[] memory logs = _fulfilAndOpen(uint256(keccak256(abi.encode("golden_word", uint256(3)))) | 1);
         assertTrue(game.boxIndexComplete(0), "opened");
 
-        uint256[8] memory amount = [uint256(9016e12), 9016e12, 9016e12, 9016e12, 9016e12, 45080e12, 45080e12, 901600e12];
+        uint256[8] memory amount = [uint256(9033e12), 9033e12, 9033e12, 9033e12, 9033e12, 45165e12, 45165e12, 903300e12];
         uint24[8] memory level = [uint24(5), 5, 3, 3, 18, 3, 9, 2];
-        uint32[8] memory tickets = [uint32(0), 42, 0, 119, 47, 0, 263, 0];
-        uint256[8] memory flip = [uint256(0), 0, 618, 0, 0, 3800, 0, 67700];
+        uint32[8] memory tickets = [uint32(0), 42, 0, 119, 47, 0, 264, 0];
+        uint256[8] memory flip = [uint256(0), 0, 620, 0, 0, 3800, 0, 67800];
         bool[8] memory up = [false, false, false, true, false, false, false, false];
         uint24[2] memory qLevel = [uint24(3), 9];
         uint32[2] memory qEntries = [uint32(8), 8];

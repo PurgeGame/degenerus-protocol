@@ -273,7 +273,7 @@ contract CrapsHighReserveTest is CrapsPins {
         _lock(50_000); _start(_word(true), 0);
         vm.recordLogs();
         table.settleSlot(slot, WHOLE_FIELD);
-        assertEq(cold.highRollerDrawOf(slot).eligible, 96);
+        assertEq(cold.highRollerDrawOf(slot).eligible, 32, "one settlement call stops at 32 seats");
         assertFalse(cold.highRollerDrawOf(slot).resolved);
         assertEq(cold.highRollerReserve(), 2_500);
         _finish(1);

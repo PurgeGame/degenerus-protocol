@@ -66,11 +66,11 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
     // -------------------------------------------------------------------------
 
     /// @dev Deterministic anchor owed value (D-TST03-03): two contiguous solo runs
-    ///      (160 + 140) against many short bounded-gas runs.
+    ///      (nine 32-entry runs + 12) against many short bounded-gas runs.
     uint32 private constant ANCHOR_OWED = 300;
 
     /// @dev Boundary-fuzz range (D-TST03-01). [293, 492] spans contiguous trajectories of
-    ///      two (<= 320), three (<= 480) and four 160-entry solo runs, so the contiguous
+    ///      ten to sixteen 32-entry solo runs, with and without a short tail, so the contiguous
     ///      path itself crosses every run-boundary shape the split path is compared with.
     uint32 private constant BOUNDARY_OWED_FLOOR = 293;
     uint32 private constant BOUNDARY_OWED_CEIL = 492;
@@ -79,11 +79,11 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
     uint24 private constant ANCHOR_LVL = 1;
 
     /// @dev Bounded per-call gas for the split path. The base admits one 16-entry aligned
-    ///      run (TICKET_SOLO_BASE + 16 * TICKET_ENTRY_MAX + TICKET_TAIL ~= 0.68M plus the
-    ///      call overhead); larger steps admit longer first runs, and the shrinking
-    ///      remainder of each call admits shorter aligned runs after it.
-    uint256 private constant SPLIT_GAS_BASE = 1_600_000;
-    uint256 private constant SPLIT_GAS_STEP = 500_000;
+    ///      run (TICKET_SOLO_BASE + 16 * TICKET_ENTRY_MAX + TICKET_TAIL ~= 2.91M plus the
+    ///      call overhead); the largest step admits a full 32-entry first run (~5.31M), and
+    ///      the shrinking remainder of each call admits shorter aligned runs after it.
+    uint256 private constant SPLIT_GAS_BASE = 3_000_000;
+    uint256 private constant SPLIT_GAS_STEP = 1_000_000;
     uint256 private constant SPLIT_MAX_CALLS = 200;
 
     /// @dev Entropy word seeded as the published read-buffer word.
@@ -259,8 +259,8 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
         emit log_named_uint("tst03_contiguous_runs", runsA);
         emit log_named_uint("tst03_split_runs", runsB);
         emit log_named_uint("tst03_split_calls", callsB);
-        // Contiguous reference: full TICKET_SOLO_MAX_ENTRIES (160) runs plus one tail run.
-        assertEq(runsA, (uint256(owed) + 159) / 160, "TST-03: contiguous path uses full 160-entry runs");
+        // Contiguous reference: full TICKET_SOLO_MAX_ENTRIES (32) runs plus one tail run.
+        assertEq(runsA, (uint256(owed) + 31) / 32, "TST-03: contiguous path uses full 32-entry runs");
         // A real split: more checkpoints than the contiguous path, across several calls.
         assertGt(runsB, runsA, "TST-03: bounded gas must split the cohort at more checkpoints");
         assertGt(callsB, 1, "TST-03: the split spans several worker calls");
@@ -271,7 +271,7 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
     // =========================================================================
 
     /// @notice Cross-path equality for the anchor scenario: owed=300 at level 1, drained
-    ///         contiguously (160 + 140) versus in bounded-gas aligned runs.
+    ///         contiguously (nine 32-entry runs + 12) versus in bounded-gas aligned runs.
     function testMintDivCrossPathEquality_OwedSplitsAcrossSlices() public {
         address player = makeAddr("mintdiv-300-player");
         (bytes32 digestA, uint256 totalA, bytes32 digestB, uint256 totalB,) =

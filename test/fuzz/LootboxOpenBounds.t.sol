@@ -15,8 +15,10 @@ import {QueueHost} from "../helpers/BoxQueueHost.sol";
 ///         milestone price, mixed tiers, a cover at the maximum size, presale-only and closing
 ///         presale legs, and the in-memory redemption order — through the production worker, cold,
 ///         and assert the measured gas stays inside the bound the worker admitted it under and inside
-///         one 10M chunk. Entries no affordable purchase can build are appended through the
-///         production `_appendBoxEntry` with an exact word.
+///         one 10M chunk. Every admission fits one 10M chunk except the accepted atomic 100-box
+///         order, whose admission must fit the no-reservoir transaction cap instead. Entries no
+///         affordable purchase can build are appended through the production `_appendBoxEntry`
+///         with an exact word.
 contract LootboxOpenBoundsTest is DeployProtocol {
     QueueHost internal host;
     address internal alice;
@@ -24,7 +26,12 @@ contract LootboxOpenBoundsTest is DeployProtocol {
 
     uint256 internal constant WORD = 0xb0b0000000000000000000000000000000000000000000000000000000000ace;
     uint256 internal constant MAX_SIZE = (uint256(1) << 56) - 1; // gwei
-    uint256 internal constant ALLOWANCE = 16_000_000;
+    /// @dev EIP-7825 transaction gas cap: the hard ceiling for the accepted atomic 100-box order.
+    uint256 internal constant NO_RESERVOIR_GAS_LIMIT = 1 << 24;
+    /// @dev The checkpoint target every other admission, and every measured opening, must fit.
+    uint256 internal constant CHECKPOINT_GAS_TARGET = 10_000_000;
+    /// @dev A whole transaction's allowance, so the largest admission can be admitted.
+    uint256 internal constant ALLOWANCE = NO_RESERVOIR_GAS_LIMIT;
 
     function setUp() public {
         _deployProtocol();
@@ -62,8 +69,13 @@ contract LootboxOpenBoundsTest is DeployProtocol {
     }
 
     /// @dev Append `word`, seal it as the only entry of the read cohort, open it through the
-    ///      production worker and return the call's gas.
-    function _open(uint256 word, uint256 boxes, bool presale, string memory label) internal returns (uint256 used) {
+    ///      production worker and return the call's gas. `admissionLimit` is the ceiling the
+    ///      worker's admission must fit: the 10M checkpoint target, or the transaction cap for
+    ///      the accepted atomic 100-box order.
+    function _open(uint256 word, uint256 boxes, bool presale, uint256 admissionLimit, string memory label)
+        internal
+        returns (uint256 used)
+    {
         host.appendEntry(word, 0);
         host.sealAndPublish(WORD);
         _cool();
@@ -80,7 +92,8 @@ contract LootboxOpenBoundsTest is DeployProtocol {
         emit log_named_uint(label, used);
         emit log_named_uint(string.concat(label, " admitted"), admitted);
         assertLe(used, admitted, "cold opening stays inside the bound the worker admitted it under");
-        assertLe(admitted + MineFlipGas.CHECK_RESERVE, 10_000_000, "the admission fits one 10M chunk");
+        assertLe(used + MineFlipGas.CHECK_RESERVE, CHECKPOINT_GAS_TARGET, "the measured cold opening fits one 10M chunk");
+        assertLe(admitted + MineFlipGas.CHECK_RESERVE, admissionLimit, "the admission fits its gas ceiling");
     }
 
     /// @notice The largest admissible entry: 100 customs at the maximum encoded size, every
@@ -88,47 +101,56 @@ contract LootboxOpenBoundsTest is DeployProtocol {
     function test_Open100MaxCustomsPlusClosingPresale() public {
         uint256 word = _maxed(_base(100)) | (uint256(100) << 121) | (MAX_SIZE << 128)
             | (uint256(50 ether) << 185) | (uint256(1) << 254);
-        _open(word, 100, true, "max_custom_100_plus_closing_presale");
+        _open(word, 100, true, NO_RESERVOIR_GAS_LIMIT, "max_custom_100_plus_closing_presale");
     }
 
     function test_Open100MaxCustoms() public {
-        _open(_maxed(_base(100)) | (uint256(100) << 121) | (MAX_SIZE << 128), 100, false, "max_custom_100");
+        _open(
+            _maxed(_base(100)) | (uint256(100) << 121) | (MAX_SIZE << 128), 100, false, NO_RESERVOIR_GAS_LIMIT,
+            "max_custom_100"
+        );
     }
 
     /// @notice 100 large presets at the milestone price (the most expensive preset entry).
     function test_Open100LargesAtMilestone() public {
-        _open(_maxed(_base(100)) | (uint256(100) << 114), 100, false, "large_100_milestone");
+        _open(_maxed(_base(100)) | (uint256(100) << 114), 100, false, NO_RESERVOIR_GAS_LIMIT, "large_100_milestone");
     }
 
     function test_Open100SmallsAtMilestone() public {
-        _open(_maxed(_base(100)) | (uint256(100) << 100), 100, false, "small_100_milestone");
+        _open(_maxed(_base(100)) | (uint256(100) << 100), 100, false, NO_RESERVOIR_GAS_LIMIT, "small_100_milestone");
     }
 
     /// @notice Mixed tiers: 25 of each, the customs at the maximum size.
     function test_OpenMixedTiersMax() public {
         uint256 word = _maxed(_base(100)) | (uint256(25) << 100) | (uint256(25) << 107) | (uint256(25) << 114)
             | (uint256(25) << 121) | (MAX_SIZE << 128);
-        _open(word, 100, false, "mixed_25x4_max_custom");
+        _open(word, 100, false, NO_RESERVOIR_GAS_LIMIT, "mixed_25x4_max_custom");
     }
 
     /// @notice One cover box at the maximum size.
     function test_OpenMaxCover() public {
-        _open(_maxed(_base(100)) | (MAX_SIZE << 128) | (uint256(1) << 184), 1, false, "cover_max");
+        _open(_maxed(_base(100)) | (MAX_SIZE << 128) | (uint256(1) << 184), 1, false, CHECKPOINT_GAS_TARGET, "cover_max");
     }
 
     /// @notice A presale-only entry at the full 50 ETH, tier 0, not closing.
     function test_OpenPresaleOnlyMax() public {
-        _open(_base(1) | (uint256(50 ether) << 185), 0, true, "presale_only_50");
+        _open(_base(1) | (uint256(50 ether) << 185), 0, true, CHECKPOINT_GAS_TARGET, "presale_only_50");
     }
 
     /// @notice The closing presale-only entry: its own roll, then the whole remaining pool.
     function test_OpenClosingPresaleOnly() public {
-        _open(_base(1) | (uint256(50 ether) << 185) | (uint256(1) << 254), 0, true, "presale_closing_50");
+        _open(
+            _base(1) | (uint256(50 ether) << 185) | (uint256(1) << 254), 0, true, CHECKPOINT_GAS_TARGET,
+            "presale_closing_50"
+        );
     }
 
     /// @notice The highest tier a purchase can freeze (`_presaleTier` caps at 4) opens.
     function test_OpenPresaleHighestTier() public {
-        _open(_base(1) | (uint256(1 ether) << 185) | (uint256(4) << 251), 0, true, "presale_tier_4");
+        _open(
+            _base(1) | (uint256(1 ether) << 185) | (uint256(4) << 251), 0, true, CHECKPOINT_GAS_TARGET,
+            "presale_tier_4"
+        );
     }
 
     /// @notice The in-memory redemption order at its 20-box ceiling with a very large leg.

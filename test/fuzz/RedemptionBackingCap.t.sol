@@ -6,6 +6,11 @@ import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 contract RedemptionBackingCapTest is RedemptionFixture {
+    /// @dev Independent assertion of the protocol limit: a claim's admission bound is base 600k plus
+    ///      one 3.2M human entry and 125k per box, capped at twenty boxes (6.3M); with its 1/63
+    ///      call retention, 12k call reserve, 100k tail and 2k check reserve it needs ~6.514M.
+    uint256 private constant TWENTY_BOX_CLAIM_ALLOWANCE = 7_000_000;
+
     function test_TwoClaimsShareOneStorageWord() public {
         uint32 id = _openBatchId();
         assertEq(id, 1);
@@ -33,10 +38,11 @@ contract RedemptionBackingCapTest is RedemptionFixture {
         _burn(alice, sdgnrs.totalSupply() * 60 / 100);
         uint32 id = _resolveLive(175);
         uint256 before = gasleft();
-        assertTrue(_work(3_000_000));
+        assertTrue(_work(TWENTY_BOX_CLAIM_ALLOWANCE));
         uint256 used = before - gasleft();
         assertEq(_claimTokens(alice, id), 0, "large claim paid, not parked");
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
+        emit log_named_uint("capped claim settlement gas", used);
         assertLt(used, 2_500_000, "bounded twenty-box work despite uncapped burn");
     }
 

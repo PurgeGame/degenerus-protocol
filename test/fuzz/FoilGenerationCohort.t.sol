@@ -102,6 +102,12 @@ contract FoilGenerationCohortTest is Test {
     address private constant A = address(0xA11CE);
     address private constant B = address(0xB0B);
     uint256 private constant READY = uint256(1) << 255;
+    uint256 private constant EXPECTED_FOIL_PACK = 3_000_000; // Independent assertion of the protocol limit
+    uint256 private constant FOIL_WORKER_TAIL = 100_000; // Independent assertion of the protocol limit
+    uint256 private constant ENGINE_MARGIN = 2_000; // Independent assertion of the protocol limit
+    /// @dev Admits exactly one pack (with slack well under a second pack's bound), so two queued packs
+    ///      are split across calls.
+    uint256 private constant ONE_PACK_ALLOWANCE = EXPECTED_FOIL_PACK + FOIL_WORKER_TAIL + ENGINE_MARGIN + 100_000;
 
     function setUp() public {
         vm.warp(86400);
@@ -224,7 +230,7 @@ contract FoilGenerationCohortTest is Test {
         h.enqueue(B);
         h.commit(0xA11CE);
         uint24 day = GameTimeLib.currentDayIndex();
-        MineFlipGas.Result memory first = h.runFoilWork(1_600_000);
+        MineFlipGas.Result memory first = h.runFoilWork(ONE_PACK_ALLOWANCE);
         assertFalse(first.done);
         assertTrue(first.progressed);
         vm.warp(vm.getBlockTimestamp() + 1 days);

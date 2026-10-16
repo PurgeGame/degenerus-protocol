@@ -32,10 +32,14 @@ contract JackpotTicketAwardChunksTest is Test {
     uint256 private constant WORD = 0xAC4DE45EDBEEF;
     uint256 private constant MAX_WINNERS = 192;
     uint256 private constant CHUNK = GasBounds.JACKPOT_TICKET_AWARD_CHUNK;
-    // Admits the plan (120k + tail) but never a group (393.6k + tail).
-    uint256 private constant BELOW_GROUP = 400_000;
-    // Admits setup (500k + tail); whether a group follows depends on setup's actual cost.
-    uint256 private constant SETUP_CALL = 700_000;
+    uint256 private constant EXPECTED_GROUP_BOUND = 2_833_600; // 8 * (4,200 + 350,000). Independent assertion of the protocol limit
+    uint256 private constant EXPECTED_TAIL = 180_000; // Independent assertion of the protocol limit
+    uint256 private constant EXPECTED_GROUP_ADMISSION = 3_015_600; // bound + tail + 2,000 engine margin
+    // Admits the plan (120k + tail) but never a group (2.8336M + tail + 2k).
+    uint256 private constant BELOW_GROUP = 3_000_000;
+    // Admits setup (750k + tail + 2k) with headroom for the call's own entry spend; a group never
+    // follows, it needs 3.0156M.
+    uint256 private constant SETUP_CALL = 1_032_000;
     bytes32 private constant TICKET_WIN = keccak256("JackpotTicketWin(uint32,uint24,uint16,uint32,uint24,uint256,bool)");
 
     uint256 private dataStart;
@@ -137,7 +141,7 @@ contract JackpotTicketAwardChunksTest is Test {
             + GasBounds.JACKPOT_TAIL_GAS;
         assertEq(CHUNK, 8, "one sampler group per chunk");
         assertEq(MAX_WINNERS % CHUNK, 0);
-        assertEq(bound, 573_600);
+        assertEq(bound, EXPECTED_GROUP_BOUND + EXPECTED_TAIL);
         assertLe(bound + MineFlipGas.CHECK_RESERVE, 10_000_000);
     }
 
@@ -149,27 +153,31 @@ contract JackpotTicketAwardChunksTest is Test {
         assertEq(one.calls, 1, "one large call finishes the leg");
         assertEq(one.basis, MAX_WINNERS, "the concentrated quadrant holds all 192 winners");
         uint256 readsOnce = one.bucketReads;
-        assertGt(readsOnce, 0);
+        assertGt(readsOnce, 0, "the single call reads bucket words");
         bytes32 owedOne = _owedDigest();
-        assertEq(h.pending(), 0);
-        assertTrue(vm.revertToState(snap));
+        assertEq(h.pending(), 0, "the single call clears the leg budget");
+        assertTrue(vm.revertToState(snap), "snapshot restores");
 
         // Setup checkpoint first (it may already pay a group), then the smallest group call.
         Call memory setup = _call(SETUP_CALL);
-        assertTrue(setup.progressed);
+        assertTrue(setup.progressed, "the setup call checkpoints the setup");
         uint256 afterSetup = vm.snapshotState();
         bytes32 setupStream = stream;
         uint256 minimum = _minimumGroupAllowance();
         emit log_named_uint("minimum allowance admitting one 8-winner group", minimum);
         emit log_named_uint("bucket word reads for the whole 192-winner quadrant", readsOnce);
-        assertLt(minimum, 1_000_000, "one group is admitted well below 1M");
-        uint256[7] memory sizes = [minimum, minimum + 200_000, 1_500_000, 3_000_000, 5_000_000, 12_000_000, 30_000_000];
+        assertGe(minimum, EXPECTED_GROUP_ADMISSION, "a group is never admitted below its declared bound and tail");
+        // The worker call reserves its own tail again and the engine call spends its plan first.
+        assertLe(minimum, EXPECTED_GROUP_ADMISSION + EXPECTED_TAIL + 100_000, "one group is admitted at its declared bound");
+        uint256[7] memory sizes = [minimum, minimum + 200_000, 4_000_000, 6_000_000, 9_000_000, 12_000_000, 30_000_000];
         for (uint256 s; s < sizes.length * 2; ++s) {
             stream = setupStream;
             Run memory run = _run(sizes[s / 2], s % 2 == 1);
             assertEq(setup.bucketReads + run.bucketReads, readsOnce, "every group's bucket word is read exactly once");
             assertEq(setup.basis + run.basis, MAX_WINNERS);
-            if (sizes[s / 2] < 3_000_000) assertTrue(run.midQuadrant, "mid-quadrant checkpoints exercised");
+            emit log_named_uint("allowance", sizes[s / 2]);
+            emit log_named_uint("  calls", run.calls);
+            if (sizes[s / 2] < 6_000_000) assertTrue(run.midQuadrant, "mid-quadrant checkpoints exercised");
             assertEq(_owedDigest(), owedOne, "queued entries match the single call");
             assertEq(h.pending(), 0);
             assertEq(stream, oneStream, "ordered events match the single call");
@@ -301,7 +309,10 @@ contract JackpotTicketChunkGasTest is Test {
     // 67.2k measured.
     uint256 private constant NEW_OWNER_GAS = 70_000;
     address private constant DEITY = address(0xDE17);
-    uint256 private constant SETUP_CALL = 700_000;
+    // Admits setup (750k + tail + 2k) with headroom for the call's own entry spend.
+    uint256 private constant SETUP_CALL = 1_032_000;
+    // Admits the setup, the plan and several eight-winner groups (each needs 3.0156M left), never the leg.
+    uint256 private constant MID_LEG_CALL = 4_000_000;
     uint8 private trait;
 
     function setUp() public {
@@ -362,7 +373,7 @@ contract JackpotTicketChunkGasTest is Test {
     /// @return allowance The smallest allowance admitting that group.
     function _resumedGroup() private returns (uint256 used, uint256 allowance) {
         _tx(SETUP_CALL);
-        _tx(1_200_000);
+        _tx(MID_LEG_CALL);
         (, , uint16 winner,) = h.progress();
         assertGt(winner, 0, "checkpoint sits inside the quadrant");
         allowance = _minimumGroupAllowance();
@@ -454,6 +465,8 @@ contract JackpotEthQuadrantGasTest is Test {
     uint256 private constant WORD = 0xAC4DE45EDBEEF;
     uint256 private constant INTRINSIC = 21_000;
     uint256 private constant REDRAW_GAS = 2_500;
+    // 300,000 first-group extra + 8 * 30,000 + 180,000 tail. Independent assertion of the protocol limit
+    uint256 private constant EXPECTED_FIRST_GROUP_BOUND = 720_000;
     uint256 private constant CHUNK = GasBounds.JACKPOT_ETH_AWARD_CHUNK;
     // Exactly the setup admission: the setup checkpoint commits without admitting a group.
     uint256 private constant SETUP_CALL =
@@ -507,9 +520,10 @@ contract JackpotEthQuadrantGasTest is Test {
     }
 
     function test_DeclaredGroupBoundsStayBelowTenMillion() public pure {
-        uint256 first = 160_000 + CHUNK * GasBounds.JACKPOT_ETH_WINNER_GAS_MAX + GasBounds.JACKPOT_TAIL_GAS;
+        uint256 first = GasBounds.JACKPOT_ETH_FIRST_GROUP_GAS + CHUNK * GasBounds.JACKPOT_ETH_WINNER_GAS_MAX
+            + GasBounds.JACKPOT_TAIL_GAS;
         assertEq(CHUNK, 8, "one sampler group per chunk");
-        assertEq(first, 500_000);
+        assertEq(first, EXPECTED_FIRST_GROUP_BOUND);
         assertLe(first + MineFlipGas.CHECK_RESERVE, 10_000_000);
     }
 

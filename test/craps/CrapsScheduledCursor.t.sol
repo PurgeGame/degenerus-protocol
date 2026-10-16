@@ -300,7 +300,7 @@ contract CrapsScheduledCursorTest is CrapsPins {
         vm.prank(ContractAddresses.GAME);
         craps.openBonusDay();
         vm.prank(ContractAddresses.GAME);
-        MineFlipGas.Result memory result = craps.runCrapsMaintenance(450_000);
+        MineFlipGas.Result memory result = craps.runCrapsMaintenance(900_000);
         assertTrue(result.progressed, "partial refunds must report progress");
         uint256 refunded;
         for (uint256 i; i < owners.length; ++i) {

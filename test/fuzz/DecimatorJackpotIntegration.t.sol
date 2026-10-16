@@ -112,6 +112,10 @@ contract DecimatorJackpotIntegrationTest is Test {
     DegenerusGameLens private lens;
     uint24 private constant LVL = 5;
     uint256 private constant WORD = 777;
+    /// @dev Covers the plan (125k + 80k tail + 40k frame) and the solo payout's first group
+    ///      (300k + 30k + 180k tail), yet is far below scanning 1000 strata at the protocol's
+    ///      15k sample-skip bound (15M). Independent assertion of the protocol limit.
+    uint256 private constant ZERO_FIELD_ALLOWANCE = 1_000_000;
     bytes32 private constant GENERATED = keccak256("DecimatorGenerated(uint24,uint64,uint32,uint8,uint32,uint256,uint256)");
     bytes32 private constant RUN = keccak256("DecimatorRun(uint24,uint64,uint256)");
 
@@ -222,7 +226,9 @@ contract DecimatorJackpotIntegrationTest is Test {
     function test_ZeroEntriesAndSubWeiReferenceStillUseWholeEntryMath() public {
         uint256 clean = vm.snapshotState();
         h.prepare(LVL, 8000, 2000 ether, 1, WORD, false);
-        MineFlipGas.Result memory result = h.daily(LVL, WORD, 500_000);
+        uint256 gasBefore = gasleft();
+        MineFlipGas.Result memory result = h.daily(LVL, WORD, ZERO_FIELD_ALLOWANCE);
+        emit log_named_uint("zero-field daily gas", gasBefore - gasleft());
         assertTrue(result.done, "zero generated entries finish without scanning 1000 strata");
         DegenerusGameStorage.DecJackpotPlan memory p = h.plan(LVL);
         assertEq(p.generatedEntries, 0);

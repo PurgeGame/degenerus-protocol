@@ -87,6 +87,20 @@ contract BucketLaneHarness is DegenerusGameTicketModule, WalletSeed {
 
 /// @title BucketLanePacking — the packed trait buckets decode to the addresses that were appended
 contract BucketLanePacking is Test {
+    // Independent assertions of the protocol limits (MineFlipGasBounds).
+    uint256 private constant EXPECTED_SOLO_BASE = 250_000;
+    uint256 private constant EXPECTED_ENTRY_MAX = 150_000;
+    uint256 private constant EXPECTED_SOLO_MAX_ENTRIES = 32;
+    uint256 private constant EXPECTED_TICKET_TAIL = 260_000;
+    uint256 private constant ENGINE_MARGIN = 2_000;
+    // The worker's own entry spend (state reads, frame) comes off the allowance before a step is admitted.
+    uint256 private constant ENTRY_HEADROOM = 250_000;
+    /// @dev Gas and allowance that admit a full 32-entry solo run; the call ends once the remainder
+    ///      cannot admit another.
+    uint256 private constant SOLO_RUN_GAS = EXPECTED_SOLO_BASE + EXPECTED_SOLO_MAX_ENTRIES * EXPECTED_ENTRY_MAX
+        + EXPECTED_TICKET_TAIL + ENGINE_MARGIN + ENTRY_HEADROOM;
+    uint256 private constant MAX_DRAIN_CALLS = 64;
+
     BucketLaneHarness internal h;
 
     function setUp() public {
@@ -163,16 +177,18 @@ contract BucketLanePacking is Test {
     function test_LiveDrain_SplitResume_OneRegistryEntry() public {
         uint24 lvl = 5;
         address p = address(0xD00D);
-        uint32 owed = 1200; // enough work for several physically gas-limited calls
+        uint32 owed = 1200; // 38 full 32-entry solo runs, several per physically gas-limited call
         h.seedQueue(lvl, p, owed);
         uint256 calls;
         bool finished;
         while (!finished) {
-            finished = h.runTicketWork{gas: 2_000_000}(lvl + 1, 2_000_000).done;
+            finished = h.runTicketWork{gas: SOLO_RUN_GAS}(lvl + 1, SOLO_RUN_GAS).done;
             ++calls;
-            assertLt(calls, 64, "drain did not finish");
+            assertLt(calls, MAX_DRAIN_CALLS, "drain did not finish");
         }
+        emit log_named_uint("drain calls", calls);
         assertGt(calls, 1, "the drain must span more than one chunk to test the resume");
+
         // ownerCount excludes the ID-zero sentinel; only the drained player is registered.
         assertEq(h.ownerCount(lvl), 1);
         assertEq(h.ownerAt(lvl, 0, 0) == p || h.bucketLen(lvl, 0) == 0, true);

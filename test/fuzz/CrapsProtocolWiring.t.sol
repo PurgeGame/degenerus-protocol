@@ -414,7 +414,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         // `test/fuzz/CrapsKeeperBudgetGas.t.sol`. Owner gas rule (2026-10-03): the engine admits
         // checkpoints while the supplied allowance covers the next declared bound, so a whole call
         // is never bounded here; the call is given a realistic 10M allowance and must succeed and
-        // make progress. The per-chunk settle bound (96-seat cap) is pinned in test/craps/CrapsGas.t.sol.
+        // make progress. The per-chunk settle bound (32-seat cap) is pinned in test/craps/CrapsResolveBudget.t.sol.
         assertGt(walked, 1, "the crank barely moved the field");
 
         // And the rest follows on later cranks rather than being stranded.

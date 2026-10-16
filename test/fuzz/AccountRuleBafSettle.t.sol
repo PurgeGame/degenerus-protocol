@@ -23,6 +23,12 @@ contract AccountRuleBafSettle is DeployProtocol {
     uint256 private simTime;
     uint256 private vaultSettles;
 
+    /// @dev Calls per driven day. Each call takes the smallest admitting allowance, and a single
+    ///      call runs only the units its bounds admit (calibrated for Glamsterdam state gas), so a
+    ///      day needs many calls. A truncated day would spill its work into the next and move the seal.
+    uint256 private constant MAX_MINE_CALLS = 10_000;
+    uint256 private maxDayCalls;
+
     function setUp() public {
         _deployProtocol();
         simTime = block.timestamp + 1 days + 1;
@@ -55,6 +61,8 @@ contract AccountRuleBafSettle is DeployProtocol {
         );
         vm.expectCall(address(game), abi.encodeCall(game.resolveAccount, (uint32(1), address(game))));
         _driveToLevelTenLatchDay();
+        emit log_named_uint("most mining calls in one driven day", maxDayCalls);
+        assertLt(maxDayCalls, MAX_MINE_CALLS, "harness: every driven day drains before its cap");
         assertEq(vaultSettles, 1, "one zero-amount vault settle, at the level-10 seal");
         (uint24 lvl, , bool lpd, , ) = game.purchaseInfo();
         assertEq(lvl, 9);
@@ -94,19 +102,26 @@ contract AccountRuleBafSettle is DeployProtocol {
     function _runFullDayUntilX0Latch() private {
         simTime += 1 days + 1;
         vm.warp(simTime);
-        for (uint256 i = 0; i < 300; i++) {
+        uint256 calls = MAX_MINE_CALLS;
+        for (uint256 i = 0; i < MAX_MINE_CALLS; i++) {
             _fulfillPending();
-            if (!_mine()) break;
+            if (!_mine()) { calls = i; break; }
             (uint24 lvl, , bool lastPurchaseDay_, bool locked, ) = game.purchaseInfo();
-            if (lastPurchaseDay_ && lvl == 9 && (!locked || (_jackpotFlags() == 1 && _requestInFlight()))) break;
+            if (lastPurchaseDay_ && lvl == 9 && (!locked || (_jackpotFlags() == 1 && _requestInFlight()))) {
+                calls = i + 1;
+                break;
+            }
         }
+        if (calls > maxDayCalls) maxDayCalls = calls;
     }
 
     function _settleToday() private {
-        for (uint256 i = 0; i < 300; i++) {
+        uint256 calls = MAX_MINE_CALLS;
+        for (uint256 i = 0; i < MAX_MINE_CALLS; i++) {
             _fulfillPending();
-            if (!_mine()) break;
+            if (!_mine()) { calls = i; break; }
         }
+        if (calls > maxDayCalls) maxDayCalls = calls;
     }
 
     function _mine() private returns (bool) {

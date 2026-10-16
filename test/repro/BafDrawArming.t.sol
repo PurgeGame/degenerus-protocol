@@ -26,6 +26,11 @@ contract BafDrawArming is DeployProtocol {
 
     uint256 private simTime;
 
+    /// @dev Calls per driven day. Each call takes the smallest admitting allowance, and a single
+    ///      call runs only the units its bounds admit (calibrated for Glamsterdam state gas), so a day needs many calls.
+    uint256 private constant MAX_MINE_CALLS = 10_000;
+    uint256 private maxDayCalls;
+
     /// @dev Clock offset folded into every fulfillment word (word = keccak(simTime, reqId)).
     ///      Chosen so the level-10 BAF's daily-flip bit lands 1 (a skipped BAF would leave
     ///      the draw unexercised; the epoch reachability assert guards against that).
@@ -45,6 +50,9 @@ contract BafDrawArming is DeployProtocol {
     function testLevelTenLatchArmsTheDrawAndTheMinnowCanWin() public {
         vm.pauseGasMetering();
         _driveToLevelTenLatchDay();
+
+        emit log_named_uint("most mining calls in one driven day", maxDayCalls);
+        assertLt(maxDayCalls, MAX_MINE_CALLS, "harness: every driven day drains before its cap");
 
         // The latch armed tomorrow's flip day; nothing was armed before it
         // (asserted every pre-latch day inside the driver).
@@ -108,7 +116,7 @@ contract BafDrawArming is DeployProtocol {
 
     /// @dev Run the advance chain to exhaustion on the current (already-warped) day.
     function _settleToday() internal {
-        for (uint256 i = 0; i < 300; i++) {
+        for (uint256 i = 0; i < MAX_MINE_CALLS; i++) {
             _fulfillPending();
             if (!_mine()) break;
         }
@@ -172,9 +180,12 @@ contract BafDrawArming is DeployProtocol {
     function _runFullDay() internal {
         simTime += 1 days + 1;
         vm.warp(simTime);
-        for (uint256 i = 0; i < 300; i++) {
+        for (uint256 i = 0; i < MAX_MINE_CALLS; i++) {
             _fulfillPending();
-            if (!_mine()) break;
+            if (!_mine()) {
+                if (i > maxDayCalls) maxDayCalls = i;
+                break;
+            }
         }
     }
 

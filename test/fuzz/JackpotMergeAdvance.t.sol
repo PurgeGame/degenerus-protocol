@@ -289,7 +289,8 @@ contract JackpotMergeAdvanceTest is DeployProtocol {
         assertGt(draws, 0, "the field was drawn");
         assertLe(draws, 10, "500 awards finish within ten 50-entry checkpoints");
         assertGt(settles, 0, "metered settle calls");
-        assertLe(settles, 10, "metered settle calls at 10.5M");
+        // 500 awards settle at most 32 seats per call, plus the finishing call.
+        assertLe(settles, uint256(500 + 31) / 32 + 1, "metered settle calls at 10.5M");
         // The sealing draw returns before settlement; metered calls settle afterwards
         // (was: the sealing call settled on its unused 1,500-unit budget).
         assertEq(sealCursor, 0, "the sealing call settles nothing");

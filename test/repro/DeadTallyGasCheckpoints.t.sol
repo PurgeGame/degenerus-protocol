@@ -57,6 +57,15 @@ contract DeadTallyCheckpointHarness is DegenerusGameGameOverModule, BucketSeed {
 }
 
 contract DeadTallyGasCheckpointsTest is Test {
+    uint256 private constant EXPECTED_TALLY_FINAL = 2_300_000; // Independent assertion of the protocol limit
+    uint256 private constant EXPECTED_TALLY_TAIL = 250_000; // Independent assertion of the protocol limit
+    uint256 private constant ENGINE_MARGIN = 2_000; // Independent assertion of the protocol limit
+    // The call's own entry spend (state reads, frame) comes off the allowance before the scan is admitted.
+    uint256 private constant ENTRY_HEADROOM = 150_000;
+    /// @dev Smallest realistic plain allowance that admits the fixed 256-bucket scan from a fresh call.
+    uint256 private constant FULL_SCAN_ALLOWANCE =
+        EXPECTED_TALLY_FINAL + EXPECTED_TALLY_TAIL + ENGINE_MARGIN + ENTRY_HEADROOM;
+
     /// @dev Past the 14-day VRF-dead window from a zero request time.
     function setUp() public {
         vm.warp(30 days);
@@ -87,8 +96,8 @@ contract DeadTallyGasCheckpointsTest is Test {
         (uint256 expectedCreated, uint256 expectedTraits) = h.seedCreated(110, live, salt);
         vm.cool(address(h));
         uint256 start = gasleft();
-        assertTrue(_tally(h, 110, 1_100_000));
-        assertLt(start - gasleft(), 1_100_000, "full scan fits existing admission bound and tail");
+        assertTrue(_tally(h, 110, FULL_SCAN_ALLOWANCE));
+        assertLt(start - gasleft(), FULL_SCAN_ALLOWANCE, "full scan fits existing admission bound and tail");
         (uint64 created, uint16 traits) = h.createdState();
         assertEq(created, expectedCreated, "counts ignore dead backing words and upper header bits");
         assertEq(traits, expectedTraits, "live zero-count bucket is not a populated trait");
@@ -130,11 +139,13 @@ contract DeadTallyGasCheckpointsTest is Test {
         assertTrue(vm.revertToState(snap));
         done = false;
         calls = 0;
-        while (!done && calls++ < 30) {
+        while (!done && calls++ < 60) {
             vm.cool(address(h));
-            done = _tally(h, 110, 2_000_000);
+            done = _tally(h, 110, FULL_SCAN_ALLOWANCE);
         }
+        emit log_named_uint("calls at the minimum full-scan allowance", calls);
         assertTrue(done);
+        assertGt(calls, 2, "minimum allowance still splits the backlog across many calls");
         uint64 splitWeight;
         (stage,, splitWeight) = h.tallyState();
         assertEq(stage, 3);

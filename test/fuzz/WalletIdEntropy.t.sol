@@ -129,6 +129,19 @@ contract WalletIdEntropyTest is Test {
     bytes32 private constant TRAITS_GENERATED = keccak256("TraitsGenerated(uint32,uint256,uint32)");
     uint64 private constant LCG = 6364136223846793005;
     uint256 private constant FULL = 9_000_000;
+    // Independent assertions of the protocol limits (MineFlipGasBounds).
+    uint256 private constant EXPECTED_SOLO_MAX_ENTRIES = 32;
+    uint256 private constant EXPECTED_TICKET_ROUND_MAX = 5_100_000;
+    uint256 private constant EXPECTED_TICKET_TAIL = 260_000;
+    uint256 private constant ENGINE_MARGIN = 2_000;
+    // The worker's own entry spend (state reads, frame) comes off the allowance before a step is admitted.
+    uint256 private constant ENTRY_HEADROOM = 250_000;
+    /// @dev Smallest realistic plain allowance that admits one seated round.
+    uint256 private constant ROUND_ALLOWANCE =
+        EXPECTED_TICKET_ROUND_MAX + EXPECTED_TICKET_TAIL + ENGINE_MARGIN + ENTRY_HEADROOM;
+    /// @dev Whole entries of the solo fixture: two solo runs (32 + 16), so the second resumes at offset 32.
+    uint32 private constant SOLO_FIXTURE_ENTRIES = 48;
+    uint256 private constant SOLO_FIXTURE_RUNS = 2;
     WalletIdEntropyHarness private h;
 
     function setUp() public {
@@ -209,38 +222,69 @@ contract WalletIdEntropyTest is Test {
         }
     }
 
-    /// @dev One owner, solo path; returns (keyed, take) of its single run.
-    function _soloRun(uint256 nextId, uint256 entropy) private returns (uint32 id, uint256 keyed, uint32 take) {
+    /// @dev One owner, solo path; returns the (keyed, take) of each of its runs. Each run is
+    ///      at most EXPECTED_SOLO_MAX_ENTRIES entries and resumes where the previous one stopped.
+    function _soloRun(uint256 nextId, uint256 entropy)
+        private returns (uint32 id, uint256[] memory keyed, uint32[] memory take)
+    {
         h.setNextWalletId(nextId);
-        id = h.credit(_player(0), 1, 4_800); // 48 whole entries: three aligned groups
+        id = h.credit(_player(0), 1, SOLO_FIXTURE_ENTRIES * 100); // 48 whole entries: three aligned groups
         assertEq(id, nextId, "fixture wallet ID");
         h.commit(entropy, false);
         vm.recordLogs();
         MineFlipGas.Result memory r = h.runTicketWork(2, FULL);
         assertTrue(r.done, "one call drains the solo owner");
-        Vm.Log[] memory logs = vm.getRecordedLogs();
+        (keyed, take) = _soloRuns(vm.getRecordedLogs(), id);
+    }
+
+    function _soloRuns(Vm.Log[] memory logs, uint32 id)
+        private pure returns (uint256[] memory keyed, uint32[] memory take)
+    {
+        keyed = new uint256[](SOLO_FIXTURE_RUNS);
+        take = new uint32[](SOLO_FIXTURE_RUNS);
         uint256 runs;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics.length != 2 || logs[i].topics[0] != TRAITS_GENERATED) continue;
             assertEq(uint256(logs[i].topics[1]), id, "TraitsGenerated topic is the wallet ID");
-            (keyed, take) = abi.decode(logs[i].data, (uint256, uint32));
+            assertLt(runs, SOLO_FIXTURE_RUNS, "no more solo runs than the 32-entry cap implies");
+            (keyed[runs], take[runs]) = abi.decode(logs[i].data, (uint256, uint32));
             ++runs;
         }
-        assertEq(runs, 1, "one solo run");
+        assertEq(runs, SOLO_FIXTURE_RUNS, "48 entries split into a 32-entry run and a 16-entry resume");
+    }
+
+    /// @dev Summed replay of every run, each from its own offset.
+    function _replayRuns(uint32 id, uint256[] memory keyed, uint32[] memory take, uint256 entropy)
+        private pure returns (uint256 inv, uint256 entries)
+    {
+        for (uint256 r; r < keyed.length; ++r) {
+            unchecked { inv += _soloReplay(id, keyed[r], take[r], entropy); }
+            entries += take[r];
+        }
     }
 
     function _checkSolo(uint256 nextId) private {
         uint256 entropy = uint256(keccak256(abi.encode("solo", nextId)));
-        (uint32 id, uint256 keyed, uint32 take) = _soloRun(nextId, entropy);
-        assertEq(take, 48);
+        (uint32 id, uint256[] memory keyed, uint32[] memory take) = _soloRun(nextId, entropy);
+        assertEq(take[0], EXPECTED_SOLO_MAX_ENTRIES, "first run is the capped 32 entries");
+        assertEq(take[1], SOLO_FIXTURE_ENTRIES - EXPECTED_SOLO_MAX_ENTRIES, "second run resumes with the remaining 16");
         uint256 stream = TicketEntropy.identity(h.readKey(1), 1, 0, id);
-        assertEq(keyed & ~TicketEntropy.GOLD_SIX_TAKEN, stream, "key = wallet-ID identity at offset 0");
+        assertEq(keyed[0] & ~TicketEntropy.GOLD_SIX_TAKEN, stream, "key = wallet-ID identity at offset 0");
+        assertEq(keyed[1] & ~TicketEntropy.GOLD_SIX_TAKEN, stream | EXPECTED_SOLO_MAX_ENTRIES,
+            "resumed run keeps the identity and starts at offset 32");
         (uint256 inv, uint256 entries) = h.inventory(1);
-        assertEq(entries, take);
-        assertEq(_soloReplay(id, keyed, take, entropy), inv, "replay of the ID stream equals the stored inventory");
+        (uint256 replayed, uint256 replayedEntries) = _replayRuns(id, keyed, take, entropy);
+        assertEq(entries, SOLO_FIXTURE_ENTRIES);
+        assertEq(replayedEntries, entries);
+        assertEq(replayed, inv, "replay of the ID stream equals the stored inventory");
         // Non-vacuity: the address-keyed stream would have generated a different inventory.
-        uint256 addressKeyed = _addressIdentity(h.readKey(1), 1, 0, _player(0)) | (keyed & TicketEntropy.GOLD_SIX_TAKEN);
-        assertTrue(_soloReplay(id, addressKeyed, take, entropy) != inv, "address stream differs");
+        uint256 addressStream = _addressIdentity(h.readKey(1), 1, 0, _player(0));
+        uint256[] memory addressKeyed = new uint256[](keyed.length);
+        for (uint256 r; r < keyed.length; ++r) {
+            addressKeyed[r] = addressStream | uint256(uint32(keyed[r])) | (keyed[r] & TicketEntropy.GOLD_SIX_TAKEN);
+        }
+        (uint256 addressReplayed,) = _replayRuns(id, addressKeyed, take, entropy);
+        assertTrue(addressReplayed != inv, "address stream differs");
     }
 
     function test_SoloRunStreamIsWalletId1() public { _checkSolo(1); }
@@ -256,25 +300,23 @@ contract WalletIdEntropyTest is Test {
         h.seedGold(1, marker);
         uint256 entropy = uint256(keccak256("gold-six-flag"));
         h.setNextWalletId(7_000_000);
-        uint32 id = h.credit(_player(0), 1, 4_800);
+        uint32 id = h.credit(_player(0), 1, SOLO_FIXTURE_ENTRIES * 100);
         h.commit(entropy, false);
         (uint256 invBefore, uint256 entriesBefore) = h.inventory(1);
         vm.recordLogs();
         h.runTicketWork(2, FULL);
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        uint256 keyed;
-        uint32 take;
-        for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics.length == 2 && logs[i].topics[0] == TRAITS_GENERATED) {
-                (keyed, take) = abi.decode(logs[i].data, (uint256, uint32));
-            }
+        (uint256[] memory keyed, uint32[] memory take) = _soloRuns(vm.getRecordedLogs(), id);
+        uint256 stream = TicketEntropy.identity(h.readKey(1), 1, 0, id);
+        for (uint256 r; r < keyed.length; ++r) {
+            assertEq(keyed[r] >> 255, 1, "gold six already taken: event flag set");
+            assertEq(keyed[r] & ~TicketEntropy.GOLD_SIX_TAKEN & ~uint256(type(uint32).max), stream,
+                "flag stripped, identity unchanged across the resume");
         }
-        assertEq(keyed >> 255, 1, "gold six already taken: event flag set");
-        assertEq(keyed & ~TicketEntropy.GOLD_SIX_TAKEN, TicketEntropy.identity(h.readKey(1), 1, 0, id));
         (uint256 inv, uint256 entries) = h.inventory(1);
-        assertEq(entries - entriesBefore, take);
+        (uint256 replayed, uint256 replayedEntries) = _replayRuns(id, keyed, take, entropy);
+        assertEq(entries - entriesBefore, replayedEntries);
         unchecked {
-            assertEq(_soloReplay(id, keyed, take, entropy), inv - invBefore, "replay from the stripped stream");
+            assertEq(replayed, inv - invBefore, "replay from the stripped stream");
         }
     }
 
@@ -383,11 +425,16 @@ contract WalletIdEntropyTest is Test {
         (bytes32 full, uint256 count) = h.digest(1);
         assertTrue(vm.revertToStateAndDelete(snap));
         uint256 calls;
-        for (; calls < 400; ++calls) {
-            MineFlipGas.Result memory r = h.runTicketWork(2, 1_400_000);
+        uint256 maxCalls = 400;
+        bool done;
+        for (; calls < maxCalls && !done; ++calls) {
+            MineFlipGas.Result memory r = h.runTicketWork(2, ROUND_ALLOWANCE);
             assertTrue(r.progressed, "each bounded call progresses");
-            if (r.done) break;
+            done = r.done;
         }
+        emit log_named_uint("bounded calls to drain", calls);
+        assertTrue(done, "the bounded drain finished");
+        assertLt(calls, maxCalls, "the call cap was not what ended the loop");
         assertGt(calls, 2, "the small budget split the drain");
         (bytes32 split, uint256 splitCount) = h.digest(1);
         assertEq(splitCount, count);

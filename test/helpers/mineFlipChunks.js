@@ -15,10 +15,11 @@ import { getEvents, getLastVRFRequestId } from "./testUtils.js";
 export const REALISTIC_ALLOWANCE = 10_000_000;
 export const CEILING_ALLOWANCE = 16_700_000;
 export const CHUNK_GAS_TARGET = 10_000_000n;
-// A pre-daily allowance that admits publication and ticket-drain work but not the 3.6M
-// DailyApply bound (plus engine reserves) behind it, so the daily phase that follows is
-// walked one chunk at a time.
-export const PRE_DAILY_ALLOWANCE = 3_500_000;
+// A pre-daily allowance that admits publication and ticket-drain work but not the 7.2M
+// DailyApply bound (plus its 0.3M engine reserves) behind it, so the daily phase that
+// follows is walked one chunk at a time. It must also stay above one ticket round's
+// bound (5.1M + 0.26M tail) so the drain runs a round per call rather than a seat.
+export const PRE_DAILY_ALLOWANCE = 7_100_000;
 
 // DegenerusGameStorage.MinerAction ordinals.
 export const MINER_IDLE = 0n;
@@ -82,19 +83,23 @@ export async function measureNextChunk(game, signer, label) {
 export async function walkDailyChunks(game, signer, advanceModule, label,
   { maxCalls = 400, untilUnlocked = false, receipts = null } = {}) {
   const chunks = [];
+  let preDailyCalls = 0;
+  const report = () => console.log(`      [WALK ${label}] pre-daily calls=${preDailyCalls} measured chunks=${chunks.length}`);
   for (let i = 0; i < maxCalls; i++) {
-    if (untilUnlocked && !(await game.rngLocked())) return chunks;
+    if (untilUnlocked && !(await game.rngLocked())) { report(); return chunks; }
     const action = await game.nextMinerAction();
-    if (action === MINER_IDLE || action === MINER_WAIT) return chunks;
+    if (action === MINER_IDLE || action === MINER_WAIT) { report(); return chunks; }
     if (action === MINER_PUBLISH || action === MINER_TICKETS) {
       const { receipt } = await mine(game, signer, PRE_DAILY_ALLOWANCE);
       if (receipts) receipts.push(receipt);
+      preDailyCalls++;
       continue;
     }
     const { allowance, tx, receipt } = await measureNextChunk(game, signer, `${label} action=${action}`);
     if (receipts) receipts.push(receipt);
     chunks.push({ action, allowance, gasUsed: receipt.gasUsed, receipt, stages: await stagesOf(tx, advanceModule) });
   }
+  report();
   expect.fail(`${label}: daily cohort did not settle within ${maxCalls} calls`);
 }
 

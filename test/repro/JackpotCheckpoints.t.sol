@@ -67,6 +67,14 @@ contract JackpotCheckpointsTest is Test {
     uint24 private constant LVL = 110;
     uint256 private constant WORD = 0xAC4DE45EDBEEF;
     uint256 private constant POOL = 1000 ether + 997;
+    // One eight-winner ticket group: 8 * (4,200 draw + 350,000 award) plus the 180,000 jackpot tail
+    // and the 2,000 engine margin. Independent assertion of the protocol limit.
+    uint256 private constant EXPECTED_TICKET_GROUP_ADMISSION = 8 * (4_200 + 350_000) + 180_000 + 2_000;
+    // Admits setup, plan and one group (the child call reserves another 180,000 tail and the call
+    // spends its setup first), never a second group after the first group's actual spend.
+    uint256 private constant ONE_GROUP_ALLOWANCE = EXPECTED_TICKET_GROUP_ADMISSION + 400_000;
+    // Gas supplied with that allowance: it must cover the admission of the group.
+    uint256 private constant ONE_GROUP_GAS = ONE_GROUP_ALLOWANCE + 200_000;
     bytes32 private constant ETH_WIN = keccak256("JackpotEthWin(uint32,uint24,uint16,uint256,uint256)");
     bytes32 private constant TICKET_WIN = keccak256("JackpotTicketWin(uint32,uint24,uint16,uint32,uint24,uint256,bool)");
 
@@ -150,12 +158,12 @@ contract JackpotCheckpointsTest is Test {
     }
 
     function test_ConcentratedTicketsAwardInFixedGroups() public {
-        _ticketParity(1_000_000);
+        _ticketParity(ONE_GROUP_ALLOWANCE, ONE_GROUP_GAS);
     }
     function test_ExtremeCalibrationPreservesNestedTicketGroups() public {
-        _ticketParity(MineFlipGas.budget(1_000_000, type(uint32).max, true));
+        _ticketParity(MineFlipGas.budget(1_000_000, type(uint32).max, true), 1_500_000);
     }
-    function _ticketParity(uint256 splitBudget) private {
+    function _ticketParity(uint256 splitBudget, uint256 splitGas) private {
         h.seed(LVL, WORD, true);
         uint256 snap = vm.snapshotState();
         vm.recordLogs();
@@ -179,7 +187,7 @@ contract JackpotCheckpointsTest is Test {
         while (!done && calls < 128) {
             vm.recordLogs();
             // Small calls stop between eight-winner groups inside the 128-winner quadrant.
-            MineFlipGas.Result memory result = _earlyBird(splitBudget, 1_500_000);
+            MineFlipGas.Result memory result = _earlyBird(splitBudget, splitGas);
             Vm.Log[] memory logs = vm.getRecordedLogs();
             digestSplit = _digest(digestSplit, logs);
             for (uint256 i; i < logs.length; ++i) {
@@ -201,6 +209,7 @@ contract JackpotCheckpointsTest is Test {
         }
         assertTrue(done);
         assertTrue(midQuadrant, "mid-quadrant checkpoints exercised");
+        emit log_named_uint("split ticket calls", calls);
         assertGt(calls, 2);
         assertEq(splitAwards, awards);
         assertEq(digestSplit, digestFull);
@@ -219,8 +228,10 @@ contract JackpotCheckpointsTest is Test {
         }
         assertTrue(vm.revertToState(snap));
         vm.recordLogs();
-        result = _earlyBird(9_000_000, 3_000_000);
+        // Supplied gas admits the setup and a few groups (each needs 3.016M left), never the leg.
+        result = _earlyBird(9_000_000, 4_000_000);
         bytes32 actual = _digest(0, vm.getRecordedLogs());
+        assertTrue(result.progressed, "the low-gas call still checkpoints real work");
         assertFalse(result.done, "low gas stops at a safe checkpoint");
         uint256 calls;
         while (!result.done && calls++ < 12) {

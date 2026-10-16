@@ -6,6 +6,11 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @notice Regression coverage for request-bound, forward-priced redemption batches.
 contract RedemptionGasTest is RedemptionFixture {
+    /// @dev Admits any single claim. Independent assertion of the protocol limit: a claim's
+    ///      admission bound is base 600k plus one 3.2M human entry and 125k per box, capped at
+    ///      twenty boxes (6.3M); with its 1/63 call retention, 12k call reserve, 100k tail and
+    ///      2k check reserve it needs ~6.514M.
+    uint256 private constant ONE_CLAIM_ALLOWANCE = 7_000_000;
 
     function test_gas_burn_gambling() public {
         vm.cool(address(sdgnrs)); vm.cool(address(game));
@@ -32,7 +37,7 @@ contract RedemptionGasTest is RedemptionFixture {
         _burn(alice, sdgnrs.totalSupply() / 1000);
         _resolveLive(175);
         vm.cool(address(sdgnrs)); vm.cool(address(game));
-        uint256 before = gasleft(); assertTrue(_work(4_000_000));
+        uint256 before = gasleft(); assertTrue(_work(ONE_CLAIM_ALLOWANCE));
         emit log_named_uint("cold claim settlement", before - gasleft());
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
     }
