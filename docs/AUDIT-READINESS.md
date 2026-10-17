@@ -1,15 +1,92 @@
-# Audit readiness — 2026-10-13
+# Audit readiness — 2026-10-16
 
-## Frozen source — `audit-2026-10-13`
+## Frozen source — `audit-2026-10-16`
+
+Annotated tag: `audit-2026-10-16`. Production source commit:
+`1375c3e31` (full hash in [the freeze record](audit/freeze.json)). The full battery ran on
+`ea41f2222`, which adds one test-only change (the redemption invariant suite fuzzes from plain
+accounts) and re-pinned manifests. Tests written for the earlier gas limits were fixed
+test-only in `e232c7d34` and `5963e7ba8`; every Foundry group and Hardhat were rerun in full on
+those commits, and hosted CI ran on `5963e7ba8`. The tagged handoff commit adds this section
+and the freeze record; `contracts/` is byte-identical across all of them. This freeze
+supersedes `audit-2026-10-13` (production `dc4e48562`, section below). See
+[the freeze record](audit/freeze.json) for hashes, per-group results and evidence identities.
+
+Production changes since the earlier freeze (32 contract files):
+
+- Loans. At the due level, a borrower whose own claimable winnings (above the sentinel) plus
+  prepaid AFKing funding cover principal × (1 + 5% × term) repays automatically, claimable
+  first; otherwise the account is seized as before, and an acquired account always defaults.
+  A loan taken more than 20 days into a level's purchase phase pays half its principal, in
+  whole tickets, as tickets at the live ticket level, priced and pooled like a ticket purchase
+  with no affiliate, quest or activity credit; jackpot-phase loans stay all ETH. Interest and
+  repayment run on the whole principal. The borrower chooses the amount, up to the quote
+  (`borrow(id, dueLevel, amount, minEthOut)`); the whole account stays the collateral.
+- Accounts. Every wallet ID starts with an unbacked 1-wei claimable sentinel that sits
+  outside `claimablePool` and is never paid or spent. `Game.sweepAccounts` and
+  `Vault.gameSweepAccounts` collect a subaccount's ETH and settled FLIP to its current owner
+  (permissionless for sDGNRS-owned IDs), replacing `harvestAcquiredAccounts` and
+  `Coinflip.claimAcquiredCoinflips`. A miner without a wallet ID runs the work unpaid, and
+  `mineFlip` no longer registers miners.
+- Fewer storage writes: the pending prize-pool word is folded but not zeroed at unfreeze,
+  `jackpotWork` is retired by clearing its kind, BAF board lanes and settled redemption entries
+  stay in place behind their bounds and cursors, and redundant RNG session-flag resets are gone.
+- Coinflip claims walk one 730-day window that ends at the latest resolved day; older days
+  forfeit. The separate first-claim window and the 1,460-day exit walk are gone, so an
+  auto-rebuy backlog can no longer leave a claim acting on carry behind public results. The
+  rolled carry clamps to `uint128` and banked balances saturate.
+- Level quests: an active pass (a deity pass, or a lazy or whale pass covering the current
+  level) qualifies with no ticket bought this level. Otherwise the account needs a whole ticket
+  in this level's window and a live level streak of at least 5. The growth-bet reward shares
+  this gate.
+- The lootbox EV allowance is drawn once per order when the order opens, before any reward
+  roll, against the live opening level; a purchase freezes only the score and modifiers. Box
+  sizes still price at the stored purchase level.
+- Game over closes AFKing deposits. A purchase that completes the primary `MINT_ETH` quest
+  keeps the level mint streak when a secondary quest completes in the same call. The terminal
+  tombstone saturates the vault allowance instead of reverting. The opening-day automatic
+  Decimator entry is capped to the round's remaining 64-bit room.
+- Mining admission bounds include Glamsterdam new-slot state gas without a reservoir
+  ([calibration](VERIFICATION.md#glamsterdam-gas-calibration-2026-10-16)). Zero still selects
+  10,000 bps, and callers may pass factors from 2,500. Solo ticket runs, growth-credit flushes
+  and Craps settlement calls take at most 32 entries, recipients and seats. The forced atomic
+  100-box order uses 12.88M gas, 6.76M of it state gas: the accepted exception to the 10M
+  checkpoint target. The forced direct 32-winner jackpot round uses 9.77M.
+
+Verification: the battery ran in parallel worktrees on `ea41f2222`: structural gates, Hardhat,
+Halmos (56 properties), the mainnet-fork suite (16 tests), the 25 deep-invariant roots at 1,000
+runs × 256 calls (294 tests; `LoanAccounting` is new), static analysis and the seven Foundry
+groups. Every Foundry failure, and one Hardhat failure, was a test written for the earlier
+limits or for the lootbox score before `235ececf2`; the other Hardhat failure
+(`DefaultReferralCode`) timed out under host load. No contract changed. Worker allowances and
+driver call caps were rescaled to the new admission bounds, and each rescaled schedule asserts
+that it still splits or checkpoints; driven days now revert when they hit their call cap. Each
+group was rerun in full on the fix commits and is counted only from that rerun: the standard
+Foundry battery is 5,164 passing, 0 failing, 3 skipped over 30 batches, and Hardhat is 96 files,
+1,650 passing (`dd225b060` removed five tests that could not fail and added three). The host
+killed one Foundry lane at its memory cap (signal 9) during `repro-symbolic`; that group's count
+is also from its full rerun. The structural gates passed again on `5963e7ba8`: deployment sizes
+are tightest for CrapsBattle (24,482 bytes, 94 spare), the Whale module (102) and Game (210).
+Hosted CI ran on `5963e7ba8` (run 38988401219) and every job passed; the deep and Halmos jobs
+are push-skipped by design. Static analysis is compared by delta against the earlier tree
+analysed in the same session: Slither 1,334 to 1,345 results across seven existing detectors
+(the account sweeps, loan seizure and borrowing, two zero-initialised locals and the
+module-storage false positive) and Aderyn 2,969 to 2,979 instances in the same 34 categories;
+neither has a new category.
+
+Insufficient caller gas for the first unit can still revert. No deployment, external audit
+approval or absence-of-bugs claim is implied.
+
+## Earlier freeze — `audit-2026-10-13`
 
 Annotated tag: `audit-2026-10-13`. Production source commit:
-`dc4e48562` (full hash in [the freeze record](audit/freeze.json)). The full battery ran on
-`b06427257`, which differs from the production commit only in re-pinned manifests; the
+`dc4e48562` (full hash in [the freeze record](audit/freeze-audit-2026-10-13.json)). The full
+battery ran on `b06427257`, which differs from the production commit only in re-pinned manifests; the
 Foundry groups that needed a rerun, the structural identity checks and hosted CI ran on
 `6a960ddcd`, which adds one test-file fix and its manifest re-pin. The tagged handoff commit
 adds this section and the freeze record; `contracts/` is byte-identical across all of them.
 This freeze supersedes `audit-2026-10-12` (production `fd9d30f6f`, section below). See
-[the freeze record](audit/freeze.json) for hashes, per-group results and evidence identities.
+[the freeze record](audit/freeze-audit-2026-10-13.json) for hashes, per-group results and evidence identities.
 
 Production changes since the earlier freeze (16 contract files):
 
@@ -29,7 +106,7 @@ Production changes since the earlier freeze (16 contract files):
 - Account loans replace account sale ([ACCOUNT-LOANS](ACCOUNT-LOANS.md)). An account borrows
   against its far-future tickets: whole tickets at the due level + 2 and above are valued at
   10% of face two levels ahead, 5% at twenty and 2% at a hundred, with no randomness and a
-  0.05 ETH minimum. The borrower may take any part of the quote. sDGNRS lends, or the Vault when sDGNRS cannot fund it and fallback is
+  0.05 ETH minimum. sDGNRS lends, or the Vault when sDGNRS cannot fund it and fallback is
   enabled. Repaying before the due level costs 5% of principal per level used plus 1% per unused
   level of the chosen term, paid to the lender. Borrowing and repaying are deliberately not
   request-locked. The daily request that enters the due level arms the seizure of every unpaid

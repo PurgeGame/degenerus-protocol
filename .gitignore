@@ -73,6 +73,7 @@ docs/audit/*
 !docs/audit/freeze-audit-2026-10-10.json
 !docs/audit/freeze-audit-2026-10-10b.json
 !docs/audit/freeze-audit-2026-10-12.json
+!docs/audit/freeze-audit-2026-10-13.json
 !docs/audit/source-sha256.txt
 !docs/audit/verification-sha256.txt
 !docs/audit/glamsterdam-calibration-2026-10-16.csv

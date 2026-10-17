@@ -1,190 +1,264 @@
 {
   "schema_version": 3,
   "status": "source frozen for external audit; standard battery, deep invariants, Halmos and hosted CI reconciled for this revision",
-  "audit_tag": "audit-2026-10-13",
-  "recorded_at_utc": "2026-10-14T17:04:23.100271+00:00",
-  "production_source_commit": "dc4e485620461dd9edd52db62562112772f48210",
-  "battery_commit": "b06427257e61932f427bb5d67c1524d5aefe5d14",
-  "final_test_inputs_commit": "40c1968189779f1c0fc0d3d43cd6201b778a647f",
-  "verified_commit": "6a960ddcd1b4fee8f76ecf438ab7a07bc7e3e780",
-  "hosted_ci_commit": "6a960ddcd1b4fee8f76ecf438ab7a07bc7e3e780",
+  "audit_tag": "audit-2026-10-16",
+  "recorded_at_utc": "2026-10-17T04:35:45.734673+00:00",
+  "production_source_commit": "1375c3e315b3d2313dee094a7a54fa8bd994f684",
+  "battery_commit": "ea41f2222dddb7b45b41a33a3e536107d3fa9c22",
+  "final_test_inputs_commit": "5963e7ba8a2ff378c7bed0f1464eb70cc429a8fb",
+  "verified_commit": "5963e7ba8a2ff378c7bed0f1464eb70cc429a8fb",
+  "hosted_ci_commit": "5963e7ba8a2ff378c7bed0f1464eb70cc429a8fb",
   "predecessor_freeze": {
-    "tag": "audit-2026-10-12",
-    "production_source_commit": "fd9d30f6fba04c54bd7be96f95f7c78584f9e098",
-    "record": "docs/audit/freeze-audit-2026-10-12.json"
+    "tag": "audit-2026-10-13",
+    "production_source_commit": "dc4e485620461dd9edd52db62562112772f48210",
+    "record": "docs/audit/freeze-audit-2026-10-13.json"
   },
-  "contract_changes_since_predecessor": "16 files changed, 674 insertions(+), 343 deletions(-); lootbox EV two-tier taper (17e10bce0), AFKing write trim and family cancel (ae11e3175), account loans replace account sale (dc4e48562)",
+  "contract_changes_since_predecessor": "32 files changed, 607 insertions(+), 475 deletions(-); loan auto-repay, late-level ticket half, account sweeps and storage write trims (b382aa568), borrower-chosen loan size (5df291b8e), pass-based level-quest eligibility (8d8c65891), one 730-day coinflip claim window (bb17612f5), game-over AFKing deposit close, mint streak on quest pair completion and mining-stage hardening (235ececf2), lootbox EV allowance drawn at opening (66797551d), Glamsterdam gas calibration (1375c3e31)",
   "contracts_unchanged_after_production_commit": true,
   "lane_commits": {
-    "battery_commit": "b06427257e61932f427bb5d67c1524d5aefe5d14: structural gates, Hardhat, Halmos, 24 deep roots, static analysis, and the Foundry groups fuzz-1, fuzz-4 and invariants",
-    "verified_commit": "6a960ddcd1b4fee8f76ecf438ab7a07bc7e3e780: the full reruns of repro-symbolic, fuzz-2, fuzz-3 and integration-gas, the structural identity checks and hosted CI",
-    "relation": "contracts/ is byte-identical across dc4e48562, b06427257, 40c196818 and 6a960ddcd; 40c196818 changes one test file and 6a960ddcd re-pins the verification manifest"
+    "battery_commit": "ea41f2222dddb7b45b41a33a3e536107d3fa9c22: structural gates, Halmos, the mainnet-fork suite, 25 deep roots and static analysis; the first attempt at every Foundry group and Hardhat (superseded by the reruns)",
+    "fix_commit": "e232c7d34459c01a78602932fb0882a132b9ff1a: the full reruns of fuzz-1, fuzz-2, fuzz-3, fuzz-4, integration-gas, invariants and Hardhat, and the structural gates",
+    "verified_commit": "5963e7ba8a2ff378c7bed0f1464eb70cc429a8fb: the full rerun of repro-symbolic, the structural gates, the split-arithmetic checks and hosted CI",
+    "relation": "contracts/ is byte-identical across 1375c3e31, ea41f2222, e232c7d34 and 5963e7ba8; ea41f2222 changes one invariant suite (plain-account callers in RedemptionInvariants), e232c7d34 and 5963e7ba8 change tests and test helpers only, and each re-pins the verification manifest. No deep-invariant root imports a file changed after ea41f2222."
   },
   "snapshot_files": {
-    "snapshot.json": "655e9b5328876596562dfa0047dcb537a750d035217c3298bcdcb83ad1e2a315",
-    "source-sha256.txt": "8840742eafee14d5769ce43b69fb8cc21eb41acd27ca6be410066d168ff6219b",
-    "verification-sha256.txt": "0d634e562682b495fb6baadfd14e65ab5ea1f2377ff1638c92aa8ca4eef6143f"
+    "snapshot.json": "38e8f948a77b8eaafecac0207b6d3d841376b5da877b91548c2dff1aad1a3476",
+    "source-sha256.txt": "d8f03783a38181c350a5dca0c01a651a52147772dadd2c30d1291bda91cb020b",
+    "verification-sha256.txt": "684511b0f0183d7126a8fd3b9c7f10c50b69c0ac040fe2789df6a5a0b98ddc79"
   },
   "local_verification": {
-    "structural_at_battery_commit": "production build, deployment-size ceiling (Game 24,294 B / 282 spare; tightest WhaleModule 24,504 B / 72 spare, CrapsBattle 24,480 / 96, JackpotModule 24,474 / 102; Vault 11,922; DGNRS 4,735; Icons32Data 2,340), storage-layout oracle, recursive layout check (16 modules, no mismatches) and the 11 source-drift gates exit 0; assurance tooling tests exit 0; audit-snapshot identity and source manifest re-checked at the verified commit",
+    "structural_at_verified_commit": "production build, deployment-size ceiling (tightest CrapsBattle 24,482 B / 94 spare, WhaleModule 24,474 / 102, Game 24,366 / 210; Vault 12,256; DGNRS 4,735; Icons32Data 2,340), storage-layout oracle, recursive layout check (16 modules, no mismatches) and the 11 source-drift gates exit 0; assurance tooling tests and the audit-snapshot identity exit 0 (also at e232c7d34 and ea41f2222)",
     "foundry_standard": {
-      "foundry lane 1 (repro-symbolic and fuzz-2 rerun at 6a960ddcd; fuzz-1 at b06427257)": [
+      "foundry lane 1 (repro-symbolic rerun at 5963e7ba8; fuzz-1 rerun at e232c7d34)": [
         {
           "group": "repro-symbolic",
-          "ran_at": "6a960ddcd1b4fee8f76ecf438ab7a07bc7e3e780",
-          "attempt": "rerun",
-          "run_id": "20261014T123653.343939Z-10407e8f",
-          "batches": 4,
-          "source_files": 80,
-          "suites": 91,
-          "passed": 433,
+          "ran_at": "5963e7ba8a2ff378c7bed0f1464eb70cc429a8fb",
+          "attempt": "second rerun",
+          "run_id": "20261017T003218.514501Z-5e2e7e95",
+          "batches": 5,
+          "source_files": 85,
+          "suites": 99,
+          "passed": 461,
           "failed": 0,
           "skipped": 0,
           "nonzero_exit_batches": []
         },
         {
           "group": "fuzz-1",
-          "ran_at": "b06427257e61932f427bb5d67c1524d5aefe5d14",
-          "attempt": "first",
-          "run_id": "20261014T032802.182209Z-39f0b103",
+          "ran_at": "e232c7d34459c01a78602932fb0882a132b9ff1a",
+          "attempt": "rerun",
+          "run_id": "20261016T190451.566349Z-627c965e",
           "batches": 4,
-          "source_files": 79,
-          "suites": 109,
-          "passed": 881,
+          "source_files": 80,
+          "suites": 110,
+          "passed": 909,
           "failed": 0,
           "skipped": 0,
-          "nonzero_exit_batches": []
-        },
-        {
-          "group": "fuzz-2",
-          "ran_at": "6a960ddcd1b4fee8f76ecf438ab7a07bc7e3e780",
-          "attempt": "rerun",
-          "run_id": "20261014T125349.560106Z-908db7b3",
-          "batches": 4,
-          "source_files": 79,
-          "suites": 89,
-          "passed": 652,
-          "failed": 0,
-          "skipped": 1,
           "nonzero_exit_batches": []
         }
       ],
-      "foundry lane 2 (fuzz-3 rerun at 6a960ddcd; fuzz-4 and invariants at b06427257)": [
+      "foundry lane 2 (fuzz-2 and fuzz-3 rerun at e232c7d34)": [
+        {
+          "group": "fuzz-2",
+          "ran_at": "e232c7d34459c01a78602932fb0882a132b9ff1a",
+          "attempt": "rerun",
+          "run_id": "20261016T184519.349039Z-270544b5",
+          "batches": 4,
+          "source_files": 80,
+          "suites": 90,
+          "passed": 667,
+          "failed": 0,
+          "skipped": 1,
+          "nonzero_exit_batches": []
+        },
         {
           "group": "fuzz-3",
-          "ran_at": "6a960ddcd1b4fee8f76ecf438ab7a07bc7e3e780",
+          "ran_at": "e232c7d34459c01a78602932fb0882a132b9ff1a",
           "attempt": "rerun",
-          "run_id": "20261014T131000.732492Z-2d5dfde3",
+          "run_id": "20261016T190539.877084Z-ff2caead",
           "batches": 4,
-          "source_files": 79,
-          "suites": 108,
-          "passed": 730,
+          "source_files": 80,
+          "suites": 109,
+          "passed": 746,
           "failed": 0,
           "skipped": 0,
+          "nonzero_exit_batches": []
+        }
+      ],
+      "foundry lane 3 (integration-gas, fuzz-4 and invariants rerun at e232c7d34)": [
+        {
+          "group": "integration-gas",
+          "ran_at": "e232c7d34459c01a78602932fb0882a132b9ff1a",
+          "attempt": "rerun",
+          "run_id": "20261016T185319.400129Z-e3475cf3",
+          "batches": 7,
+          "source_files": 138,
+          "suites": 234,
+          "passed": 1487,
+          "failed": 0,
+          "skipped": 2,
           "nonzero_exit_batches": []
         },
         {
           "group": "fuzz-4",
-          "ran_at": "b06427257e61932f427bb5d67c1524d5aefe5d14",
-          "attempt": "first",
-          "run_id": "20261014T033756.520556Z-bfa470d0",
+          "ran_at": "e232c7d34459c01a78602932fb0882a132b9ff1a",
+          "attempt": "rerun",
+          "run_id": "20261016T203538.431479Z-6a5d50bd",
           "batches": 4,
-          "source_files": 76,
-          "suites": 85,
-          "passed": 727,
+          "source_files": 77,
+          "suites": 86,
+          "passed": 738,
           "failed": 0,
           "skipped": 0,
           "nonzero_exit_batches": []
         },
         {
           "group": "invariants",
-          "ran_at": "b06427257e61932f427bb5d67c1524d5aefe5d14",
-          "attempt": "first",
-          "run_id": "20261014T040248.328883Z-958bbbd3",
+          "ran_at": "e232c7d34459c01a78602932fb0882a132b9ff1a",
+          "attempt": "rerun",
+          "run_id": "20261016T205343.369313Z-78762b91",
           "batches": 2,
-          "source_files": 24,
-          "suites": 28,
-          "passed": 154,
+          "source_files": 25,
+          "suites": 29,
+          "passed": 156,
           "failed": 0,
           "skipped": 0,
-          "nonzero_exit_batches": []
-        }
-      ],
-      "foundry lane 3 (integration-gas rerun at 6a960ddcd)": [
-        {
-          "group": "integration-gas",
-          "ran_at": "6a960ddcd1b4fee8f76ecf438ab7a07bc7e3e780",
-          "attempt": "rerun",
-          "run_id": "20261014T132941.029926Z-95176ae1",
-          "batches": 7,
-          "source_files": 136,
-          "suites": 231,
-          "passed": 1461,
-          "failed": 0,
-          "skipped": 1,
           "nonzero_exit_batches": []
         }
       ]
     },
     "foundry_totals": {
-      "passed": 5038,
+      "passed": 5164,
       "failed": 0,
-      "skipped": 2
+      "skipped": 3,
+      "batches": 30
     },
     "foundry_first_attempt_incidents": [
       {
-        "group": "fuzz-2",
-        "batch": "fuzz-2-03",
-        "run_id": "20261014T040448.622637Z-cbd8ec0a",
-        "cause": "test failure: 2 failed tests in JackpotCommitmentFreeze (stale probe)",
-        "disposition": "whole group rerun on 6a960ddcd, all batches exit 0, rerun run_id 20261014T125349.560106Z-908db7b3"
+        "group": "integration-gas",
+        "ran_at": "ea41f2222dddb7b45b41a33a3e536107d3fa9c22",
+        "run_id": "20261016T163746.254240Z-5341f668",
+        "batches": [
+          "integration-gas-01",
+          "integration-gas-02",
+          "integration-gas-03",
+          "integration-gas-04"
+        ],
+        "cause": "4 failed tests: tests written for the earlier gas limits or lootbox score (no contract change); fixed test-only in e232c7d34",
+        "disposition": "whole group rerun, all batches exit 0, counted only from run_id 20261016T185319.400129Z-e3475cf3"
+      },
+      {
+        "group": "repro-symbolic",
+        "ran_at": "ea41f2222dddb7b45b41a33a3e536107d3fa9c22",
+        "run_id": "20261016T164146.291892Z-34489668",
+        "batches": [
+          "repro-symbolic-01",
+          "repro-symbolic-02",
+          "repro-symbolic-04"
+        ],
+        "cause": "10 failed tests: tests written for the earlier gas limits or lootbox score (no contract change); fixed test-only in e232c7d34",
+        "disposition": "whole group rerun, all batches exit 0, counted only from run_id 20261017T003218.514501Z-5e2e7e95"
       },
       {
         "group": "fuzz-3",
-        "batch": "fuzz-3-03",
-        "run_id": "20261014T031043.728966Z-5f1f75a6",
-        "cause": "compiler killed by signal 9 (SIGKILL) before any test ran",
-        "disposition": "whole group rerun on 6a960ddcd, all batches exit 0, rerun run_id 20261014T131000.732492Z-2d5dfde3"
+        "ran_at": "ea41f2222dddb7b45b41a33a3e536107d3fa9c22",
+        "run_id": "20261016T164546.350682Z-7654f785",
+        "batches": [
+          "fuzz-3-01",
+          "fuzz-3-03"
+        ],
+        "cause": "13 failed tests: tests written for the earlier gas limits or lootbox score (no contract change); fixed test-only in e232c7d34",
+        "disposition": "whole group rerun, all batches exit 0, counted only from run_id 20261016T190539.877084Z-ff2caead"
       },
       {
-        "group": "integration-gas",
-        "batch": "integration-gas-03",
-        "run_id": "20261014T030243.688209Z-39196fa6",
-        "cause": "compiler killed by signal 9 (SIGKILL) before any test ran",
-        "disposition": "whole group rerun on 6a960ddcd, all batches exit 0, rerun run_id 20261014T132941.029926Z-95176ae1"
+        "group": "fuzz-1",
+        "ran_at": "ea41f2222dddb7b45b41a33a3e536107d3fa9c22",
+        "run_id": "20261016T171054.428148Z-6a4a5526",
+        "batches": [
+          "fuzz-1-01",
+          "fuzz-1-03"
+        ],
+        "cause": "3 failed tests: tests written for the earlier gas limits or lootbox score (no contract change); fixed test-only in e232c7d34",
+        "disposition": "whole group rerun, all batches exit 0, counted only from run_id 20261016T190451.566349Z-627c965e"
       },
       {
-        "group": "integration-gas",
-        "batch": "integration-gas-04",
-        "run_id": "20261014T030243.688209Z-39196fa6",
-        "cause": "compiler killed by signal 9 (SIGKILL) before any test ran",
-        "disposition": "whole group rerun on 6a960ddcd, all batches exit 0, rerun run_id 20261014T132941.029926Z-95176ae1"
+        "group": "fuzz-4",
+        "ran_at": "ea41f2222dddb7b45b41a33a3e536107d3fa9c22",
+        "run_id": "20261016T171726.034747Z-bda35030",
+        "batches": [
+          "fuzz-4-02",
+          "fuzz-4-03"
+        ],
+        "cause": "10 failed tests: tests written for the earlier gas limits or lootbox score (no contract change); fixed test-only in e232c7d34",
+        "disposition": "whole group rerun, all batches exit 0, counted only from run_id 20261016T203538.431479Z-6a5d50bd"
+      },
+      {
+        "group": "fuzz-2",
+        "ran_at": "ea41f2222dddb7b45b41a33a3e536107d3fa9c22",
+        "run_id": "20261016T174630.586038Z-261f3078",
+        "batches": [
+          "fuzz-2-01",
+          "fuzz-2-02",
+          "fuzz-2-04"
+        ],
+        "cause": "6 failed tests: tests written for the earlier gas limits or lootbox score (no contract change); fixed test-only in e232c7d34",
+        "disposition": "whole group rerun, all batches exit 0, counted only from run_id 20261016T184519.349039Z-270544b5"
       },
       {
         "group": "repro-symbolic",
-        "batch": "repro-symbolic-03",
-        "run_id": "20261014T030643.710766Z-af64338d",
-        "cause": "compiler killed by signal 9 (SIGKILL) before any test ran",
-        "disposition": "whole group rerun on 6a960ddcd, all batches exit 0, rerun run_id 20261014T123653.343939Z-10407e8f"
+        "ran_at": "e232c7d34459c01a78602932fb0882a132b9ff1a",
+        "run_id": "20261016T184119.349387Z-9155dd27",
+        "batches": [
+          "repro-symbolic-04",
+          "repro-symbolic-05"
+        ],
+        "cause": "7 failed tests: tests written for the earlier gas limits or lootbox score (no contract change); fixed test-only in 5963e7ba8 (driver day caps and partition budgets)",
+        "disposition": "whole group rerun, all batches exit 0, counted only from run_id 20261017T003218.514501Z-5e2e7e95"
       },
       {
         "group": "repro-symbolic",
-        "batch": "repro-symbolic-04",
-        "run_id": "20261014T030643.710766Z-af64338d",
-        "cause": "compiler killed by signal 9 (SIGKILL) before any test ran",
-        "disposition": "whole group rerun on 6a960ddcd, all batches exit 0, rerun run_id 20261014T123653.343939Z-10407e8f"
+        "ran_at": "ea41f2222dddb7b45b41a33a3e536107d3fa9c22",
+        "run_id": "20261016T164146.291892Z-34489668",
+        "batches": [
+          "repro-symbolic-04",
+          "repro-symbolic-05"
+        ],
+        "cause": "the lane was killed at its 14G memory cap (signal 9) during repro-symbolic-04; batch 05 never ran",
+        "disposition": "fuzz-1 and fuzz-2 relaunched in a 20G lane; repro-symbolic rerun in full, counted only from run_id 20261017T003218.514501Z-5e2e7e95"
+      },
+      {
+        "group": "hardhat",
+        "ran_at": "ea41f2222dddb7b45b41a33a3e536107d3fa9c22",
+        "run_id": "20261016T164946.315406Z-620537db",
+        "batches": [
+          "batch-009 (DefaultReferralCode)",
+          "batch-072 (AdvanceGameGas)"
+        ],
+        "cause": "DefaultReferralCode: two 120 s timeouts under host load and a cascading revert; AdvanceGameGas: the daily walk hit its 400-call driver cap (stale helper allowance)",
+        "disposition": "helper fixed test-only in e232c7d34 (test/helpers/mineFlipChunks.js); full Hardhat rerun at e232c7d34, all 96 batches exit 0"
       }
     ],
     "hardhat": {
+      "ran_at": "e232c7d34459c01a78602932fb0882a132b9ff1a",
+      "run_id": "20261016T184919.335440Z-0559ee2a",
       "files": 96,
-      "passed": 1652,
+      "batches": 96,
+      "passed": 1650,
       "failed": 0,
       "pending": 0,
+      "exit_codes_nonzero": 0,
       "source_drift": "none reported in any of 96 batches",
-      "batches": 96,
-      "exit_codes_nonzero": 0
+      "count_change": "1,652 to 1,650: dd225b060 removed five Hardhat tests that could not fail and added three"
+    },
+    "mainnet_fork": {
+      "ran_at": "ea41f2222dddb7b45b41a33a3e536107d3fa9c22",
+      "run_id": "20261016T163346.262354Z-27e85431",
+      "suites": 2,
+      "passed": 16,
+      "failed": 0
     },
     "deep_invariants_1000x256": {
+      "ran_at": "ea41f2222dddb7b45b41a33a3e536107d3fa9c22",
       "roots": {
         "AdvanceLiveness": {
           "worktree": "d1",
@@ -192,7 +266,23 @@
           "failed": 0,
           "skipped": 0,
           "exit_code": 0,
-          "run_id": "20261014T024243.641996Z-fb74e432"
+          "run_id": "20261016T161746.208416Z-b79d4dad"
+        },
+        "GameFSM": {
+          "worktree": "d1",
+          "passed": 10,
+          "failed": 0,
+          "skipped": 0,
+          "exit_code": 0,
+          "run_id": "20261016T200440.083540Z-5add31bf"
+        },
+        "PoolConservation": {
+          "worktree": "d1",
+          "passed": 11,
+          "failed": 0,
+          "skipped": 0,
+          "exit_code": 0,
+          "run_id": "20261016T205659.145948Z-1baf3417"
         },
         "CrapsRngSeal": {
           "worktree": "d2",
@@ -200,47 +290,7 @@
           "failed": 0,
           "skipped": 0,
           "exit_code": 0,
-          "run_id": "20261014T023843.633016Z-a709b135"
-        },
-        "GameFSM": {
-          "worktree": "d3",
-          "passed": 11,
-          "failed": 0,
-          "skipped": 0,
-          "exit_code": 0,
-          "run_id": "20261014T024643.636719Z-204802e9"
-        },
-        "CrapsConservation": {
-          "worktree": "d3",
-          "passed": 16,
-          "failed": 0,
-          "skipped": 0,
-          "exit_code": 0,
-          "run_id": "20261014T025225.209144Z-56da44a5"
-        },
-        "CoinSupply": {
-          "worktree": "d3",
-          "passed": 11,
-          "failed": 0,
-          "skipped": 0,
-          "exit_code": 0,
-          "run_id": "20261014T031216.929281Z-485fea22"
-        },
-        "BoxEnqueue": {
-          "worktree": "d3",
-          "passed": 11,
-          "failed": 0,
-          "skipped": 0,
-          "exit_code": 0,
-          "run_id": "20261014T032044.407163Z-283a13e2"
-        },
-        "SeatCap": {
-          "worktree": "d3",
-          "passed": 9,
-          "failed": 0,
-          "skipped": 0,
-          "exit_code": 0,
-          "run_id": "20261014T033318.610579Z-19e7b332"
+          "run_id": "20261016T160946.203207Z-6b9dc844"
         },
         "CrapsRealWiringConservation": {
           "worktree": "d3",
@@ -248,7 +298,39 @@
           "failed": 0,
           "skipped": 0,
           "exit_code": 0,
-          "run_id": "20261014T033453.997889Z-d45c5663"
+          "run_id": "20261016T161346.211489Z-115f1c9a"
+        },
+        "CrapsConservation": {
+          "worktree": "d3",
+          "passed": 16,
+          "failed": 0,
+          "skipped": 0,
+          "exit_code": 0,
+          "run_id": "20261016T220848.606342Z-491c4827"
+        },
+        "CoinSupply": {
+          "worktree": "d3",
+          "passed": 10,
+          "failed": 0,
+          "skipped": 0,
+          "exit_code": 0,
+          "run_id": "20261016T222442.088684Z-13fb1a2d"
+        },
+        "BoxEnqueue": {
+          "worktree": "d3",
+          "passed": 11,
+          "failed": 0,
+          "skipped": 0,
+          "exit_code": 0,
+          "run_id": "20261016T222938.540672Z-2cd5176b"
+        },
+        "SeatCap": {
+          "worktree": "d3",
+          "passed": 9,
+          "failed": 0,
+          "skipped": 0,
+          "exit_code": 0,
+          "run_id": "20261016T223943.356547Z-bdf4ca93"
         },
         "EthSolvency": {
           "worktree": "d3",
@@ -256,7 +338,7 @@
           "failed": 0,
           "skipped": 0,
           "exit_code": 0,
-          "run_id": "20261014T085246.306615Z-83b7b850"
+          "run_id": "20261016T224053.912061Z-952091c4"
         },
         "DegeneretteBet": {
           "worktree": "d3",
@@ -264,7 +346,7 @@
           "failed": 0,
           "skipped": 0,
           "exit_code": 0,
-          "run_id": "20261014T085726.624036Z-8e274a96"
+          "run_id": "20261016T224614.605660Z-c2e940e9"
         },
         "VaultShareMath": {
           "worktree": "d3",
@@ -272,15 +354,15 @@
           "failed": 0,
           "skipped": 0,
           "exit_code": 0,
-          "run_id": "20261014T090105.222681Z-77d374b0"
+          "run_id": "20261016T225005.843571Z-d78943eb"
         },
         "TicketQueue": {
           "worktree": "d3",
-          "passed": 9,
+          "passed": 8,
           "failed": 0,
           "skipped": 0,
           "exit_code": 0,
-          "run_id": "20261014T090436.826798Z-44493427"
+          "run_id": "20261016T225341.398761Z-124158c5"
         },
         "AnyInputSafety": {
           "worktree": "d4",
@@ -288,7 +370,7 @@
           "failed": 0,
           "skipped": 0,
           "exit_code": 0,
-          "run_id": "20261014T025043.647937Z-52cb6806"
+          "run_id": "20261016T162146.216179Z-2aad3968"
         },
         "V61SolvencyAfpay": {
           "worktree": "d4",
@@ -296,23 +378,15 @@
           "failed": 0,
           "skipped": 0,
           "exit_code": 0,
-          "run_id": "20261014T031235.181365Z-226c3a3e"
+          "run_id": "20261016T164736.599734Z-9ee35e13"
         },
         "MultiLevel": {
-          "worktree": "d4",
-          "passed": 10,
-          "failed": 0,
-          "skipped": 0,
-          "exit_code": 0,
-          "run_id": "20261014T032050.868614Z-f8b3d8e5"
-        },
-        "PoolConservation": {
           "worktree": "d4",
           "passed": 11,
           "failed": 0,
           "skipped": 0,
           "exit_code": 0,
-          "run_id": "20261014T032619.684985Z-aa611f6a"
+          "run_id": "20261016T165555.261716Z-fb49731c"
         },
         "RedemptionInvariants": {
           "worktree": "d4",
@@ -320,7 +394,7 @@
           "failed": 0,
           "skipped": 0,
           "exit_code": 0,
-          "run_id": "20261014T033314.065224Z-ef65962e"
+          "run_id": "20261016T170629.577370Z-f0ea0081"
         },
         "WalletIdTruth": {
           "worktree": "d4",
@@ -328,7 +402,15 @@
           "failed": 0,
           "skipped": 0,
           "exit_code": 0,
-          "run_id": "20261014T034028.899124Z-f7329816"
+          "run_id": "20261016T171748.044061Z-66a51997"
+        },
+        "LoanAccounting": {
+          "worktree": "d5",
+          "passed": 11,
+          "failed": 0,
+          "skipped": 0,
+          "exit_code": 0,
+          "run_id": "20261016T162546.236299Z-96f85ee2"
         },
         "Composition": {
           "worktree": "d5",
@@ -336,7 +418,7 @@
           "failed": 0,
           "skipped": 0,
           "exit_code": 0,
-          "run_id": "20261014T025443.668357Z-b4fd0beb"
+          "run_id": "20261016T183415.251412Z-79d1782b"
         },
         "RngIndexDrainOrdering": {
           "worktree": "d5",
@@ -344,7 +426,7 @@
           "failed": 0,
           "skipped": 0,
           "exit_code": 0,
-          "run_id": "20261014T030303.624189Z-7a57f256"
+          "run_id": "20261016T190548.036701Z-4ca6feca"
         },
         "RngWindowFreeze": {
           "worktree": "d5",
@@ -352,7 +434,7 @@
           "failed": 0,
           "skipped": 0,
           "exit_code": 0,
-          "run_id": "20261014T033841.388610Z-837c44b3"
+          "run_id": "20261016T194853.241981Z-e0068208"
         },
         "StorageRecyclingModel": {
           "worktree": "d5",
@@ -360,7 +442,7 @@
           "failed": 0,
           "skipped": 0,
           "exit_code": 0,
-          "run_id": "20261014T035206.383070Z-02772d52"
+          "run_id": "20261016T200009.716365Z-ffed8329"
         },
         "VRFPathInvariants": {
           "worktree": "d5",
@@ -368,80 +450,85 @@
           "failed": 0,
           "skipped": 0,
           "exit_code": 0,
-          "run_id": "20261014T035655.625408Z-2d9b5f5e"
+          "run_id": "20261016T200351.227957Z-474306e3"
         },
         "WhaleSybil": {
           "worktree": "d5",
-          "passed": 11,
+          "passed": 10,
           "failed": 0,
           "skipped": 0,
           "exit_code": 0,
-          "run_id": "20261014T040108.524709Z-8838fdce"
+          "run_id": "20261016T200709.333900Z-ad758f1a"
         }
       },
-      "root_count": 24,
-      "advance_liveness": "1000 runs, 256000 calls, 15782 handler-permitted reverts, pass (10,243 s suite time)"
+      "root_count": 25,
+      "passed": 294,
+      "per_test_overrides": "AnyInputSafety and SeatCap each pin one invariant to fewer runs in source (forge-config); every other invariant ran 1,000 runs x 256 calls",
+      "new_root": "LoanAccounting (spec-ledger loan accounting, added after audit-2026-10-13)"
     },
     "halmos": {
+      "ran_at": "ea41f2222dddb7b45b41a33a3e536107d3fa9c22",
       "properties": 56,
       "failed": 0
     },
-    "split_arithmetic": "tests and exact check exit 0 (24 checks)",
+    "split_arithmetic": "tests and exact check exit 0 at the verified commit (24 checks)",
     "skipped_tests": [
       "testFuzz_FoilMatchesArchivedRuntime",
-      "testFuzz_TransitionMatchesHistoricalRuntime"
+      "testFuzz_TransitionMatchesHistoricalRuntime",
+      "test_ExportRepricingFixtures"
     ],
-    "test_changes_since_predecessor": "AccountLiquidation replaced by AccountLoans, LoanSeizure and LoanSeizureGas; new AfkingWriteTrim and LootboxEvTaper (with the EvTaperRef helper); DegeneretteWinLootboxCap renamed DegeneretteWinLootboxAllowance; the AFKing, miner, slot-pin, repro and any-input suites move to borrow-then-default. The JackpotCommitmentFreeze probe (40c196818) expects the lender-stage Insolvent() from borrow, because borrowing is deliberately not request-locked."
+    "test_changes_since_predecessor": "Stale tests written for the earlier gas limits were rescaled test-only (e232c7d34, 5963e7ba8): worker allowances and driver call caps follow the new admission bounds, solo runs are 32 entries, Craps settles 32 seats, each rescaled schedule asserts that it still splits or checkpoints, and driven days revert when they hit their call cap. Lootbox goldens follow the mint-streak fix in 235ececf2 (frozen score 2). The 100-box order is admitted under the 2^24 transaction cap with every measured opening still under 10M. The shared redemption resolve helper and the Hardhat daily walk get allowances that clear the bounds when every call runs cold. RedemptionInvariants fuzzes from plain accounts (ea41f2222)."
   },
   "static_analysis_local_like_for_like": {
     "slither": {
       "version": "0.11.5",
       "args": "--exclude-informational --exclude-optimization",
-      "predecessor_results": 1314,
-      "this_results": 1334,
-      "note": "baseline is the audit-2026-10-12 tree analysed in the same session; the growth is the new loan, seizure, taper and family-cancel code (reentrancy-events/no-eth/benign on the seizure and AFKing paths, calls-loop on the metered seizure stage, uninitialized-state on the new storage roots, divide-before-multiply in the loan quote) plus two write-after-write notes in the Lens views loansDue and smurfsOf, the only new detector category; exit code 255 is Slither's normal findings exit and matches the baseline"
+      "predecessor_results": 1334,
+      "this_results": 1345,
+      "note": "baseline is the audit-2026-10-13 tree analysed in the same session; +11 across seven existing detectors (calls-loop and reentrancy notes on the account sweeps and the loan seizure stage, divide-before-multiply in borrow and the loan ticket half, two zero-initialised locals, unused tuple returns on the sweeps and the uninitialized-state false positive on module storage); most other changed rows are renamed signatures; no new detector category; exit code 255 is Slither's normal findings exit and matches the baseline"
     },
     "aderyn": {
       "version": "0.6.8",
-      "predecessor_instances": 2460,
-      "this_instances": 2499,
+      "predecessor_instances": 2969,
+      "this_instances": 2979,
       "new_categories": 0,
-      "note": "same 34 report categories as the baseline; total nSLOC 29,989 to 30,242"
+      "note": "same 34 report categories (High 10, Low 24) as the baseline analysed in the same session; total nSLOC 30,242 to 30,312"
     }
   },
   "hosted_ci": {
-    "run_id": 38583216944,
-    "url": "https://github.com/PurgeGame/degenerus-protocol/actions/runs/38583216944",
-    "commit": "6a960ddcd1b4fee8f76ecf438ab7a07bc7e3e780",
+    "run_id": 38988401219,
+    "url": "https://github.com/PurgeGame/degenerus-protocol/actions/runs/38988401219",
+    "commit": "5963e7ba8a2ff378c7bed0f1464eb70cc429a8fb",
     "status": "completed",
     "conclusion": "success",
     "jobs": {
-      "Hardhat tests in bounded batches": "success",
-      "Aderyn (static analysis, non-blocking)": "success",
       "Production build + assurance gates": "success",
-      "Slither (static analysis, non-blocking)": "success",
-      "Foundry fuzz-2": "success",
-      "Foundry repro-symbolic": "success",
-      "Foundry fuzz-1": "success",
+      "Foundry mainnet fork (real Lido / Chainlink)": "success",
+      "Aderyn (static analysis, non-blocking)": "success",
       "Foundry invariants": "success",
-      "Foundry fuzz-4": "success",
+      "Slither (static analysis, non-blocking)": "success",
       "Foundry fuzz-3": "success",
+      "Foundry repro-symbolic": "success",
+      "Hardhat tests in bounded batches": "success",
+      "Foundry fuzz-1": "success",
       "Foundry integration-gas": "success",
-      "Discover deep invariant partitions": "skipped",
+      "Foundry fuzz-4": "success",
+      "Foundry fuzz-2": "success",
       "Halmos proofs (scheduled / manual)": "skipped",
       "Deep ${{ matrix.file }} / ${{ matrix.label }}": "skipped",
+      "Discover deep invariant partitions": "skipped",
       "Foundry build + tests": "success"
     }
   },
   "evidence_archive": {
-    "path": "/home/zak/Dev/PurgeGame/degenerus-audit-archive/freeze-2026-10-13/evidence.tar.gz",
-    "sha256": "5168ecfd1c5c68655bc3bc4e861c2efa686958fc2fde965dbd1c47dcf5ae7096"
+    "path": "/home/zak/Dev/PurgeGame/degenerus-audit-archive/freeze-2026-10-16/evidence.tar.gz",
+    "sha256": "a5304a1dd9ccf13fe60e3c8e6665d2a0f90e64c022fccea600928ad9417bb579"
   },
   "limits": [
     "Counts are runner executions; helper suites may repeat between batches.",
-    "Two optional archived-runtime comparisons are skipped (their historical fixtures are not configured).",
-    "The first attempt at five Foundry batches was killed by the compiler (signal 9, memory pressure) before any test ran, and one batch failed on a stale test; each of those groups was rerun in full on the verified commit and is counted only from that rerun.",
-    "The Foundry groups fuzz-1, fuzz-4 and invariants, Hardhat, Halmos, the deep roots and the analysers ran on the battery commit; contracts/ is byte-identical to the verified commit and only one Foundry test file differs (rerun in fuzz-2).",
+    "Three optional tests are skipped: two archived-runtime comparisons and a repricing fixture export, whose external inputs are not configured.",
+    "Every Foundry group and Hardhat first ran on the battery commit; failures there were stale tests, and one lane was killed by the host at its memory cap. Each group was rerun in full on a test-only fix commit and is counted only from that rerun.",
+    "Halmos, the mainnet-fork suite, the deep roots and the analysers ran on the battery commit; contracts/ is byte-identical to the verified commit and no deep root imports a file changed since.",
     "Analyser output is retained and triaged by delta, not presented as zero findings.",
     "No audit approval, absence-of-bugs claim or deployment is implied."
   ]

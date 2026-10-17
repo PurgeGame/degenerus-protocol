@@ -8,6 +8,20 @@ local output directories or CI artifacts.
 The dated implementation sections below are historical, scoped evidence; their
 pass counts do not certify later revisions.
 
+### Freeze battery (2026-10-16)
+
+The battery for `audit-2026-10-16` ran on `ea41f2222`. Its Foundry failures, and one Hardhat
+failure, were tests written for the earlier gas limits: allowances below the new admission
+bounds that no longer admit a unit, driver call caps that truncated a day once each call runs
+fewer units, 32-entry solo runs and 32-seat Craps settlement, and lootbox goldens from before
+the mint-streak fix in `235ececf2`. The other Hardhat failure was a timeout under host load.
+The stale tests were fixed test-only in `e232c7d34` and `5963e7ba8`. Rescaled schedules log and
+assert that they still split or checkpoint, and driven days revert when they reach their call
+cap instead of spilling into the next day. Every Foundry group and Hardhat were rerun in full
+on those commits and are counted only from that rerun. The deep roots, Halmos and the fork
+suite ran on `ea41f2222`; no deep root imports a file changed since. Use [the freeze
+record](audit/freeze.json) for recorded results and input identities.
+
 ### Glamsterdam gas calibration (2026-10-16)
 
 Baseline: `7c8ab71b9`. The implementation was validated in the detached
@@ -178,7 +192,7 @@ Local lanes ran on the battery commit in parallel worktrees (Foundry groups, Har
 invariants at 1,000 runs × 256 calls, Halmos). A Foundry batch whose compiler was killed by
 the host (signal 9, before any test ran) is not a result: its whole group was rerun on the
 verified commit and is counted only from the rerun. Use
-[the freeze record](audit/freeze.json) for recorded results and input identities.
+[the freeze record](audit/freeze-audit-2026-10-13.json) for recorded results and input identities.
 
 ### Comment corrections (2026-10-12)
 
