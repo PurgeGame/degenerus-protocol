@@ -116,7 +116,8 @@ contract BafDrawArming is DeployProtocol {
 
     /// @dev Run the advance chain to exhaustion on the current (already-warped) day.
     function _settleToday() internal {
-        for (uint256 i = 0; i < MAX_MINE_CALLS; i++) {
+        for (uint256 i = 0; ; i++) {
+            require(i < MAX_MINE_CALLS, "harness: every driven day drains before its cap");
             _fulfillPending();
             if (!_mine()) break;
         }
@@ -180,7 +181,8 @@ contract BafDrawArming is DeployProtocol {
     function _runFullDay() internal {
         simTime += 1 days + 1;
         vm.warp(simTime);
-        for (uint256 i = 0; i < MAX_MINE_CALLS; i++) {
+        for (uint256 i = 0; ; i++) {
+            require(i < MAX_MINE_CALLS, "harness: every driven day drains before its cap");
             _fulfillPending();
             if (!_mine()) {
                 if (i > maxDayCalls) maxDayCalls = i;

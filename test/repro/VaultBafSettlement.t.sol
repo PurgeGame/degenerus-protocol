@@ -20,6 +20,11 @@ abstract contract VaultBafRig is DeployProtocol {
     /// @dev Daily protocol-style flip credit to the vault (whole FLIP), staked tomorrow.
     uint256 internal constant VAULT_CREDIT = 5_000;
 
+    /// @dev Calls per driven day. Each call takes the smallest admitting allowance and runs only the
+    ///      units its bounds admit, so a day needs many calls; a truncated day would spill its work
+    ///      into the next and move the latch.
+    uint256 internal constant MAX_MINE_CALLS = 10_000;
+
     bytes32 internal constant BAF_RECORDED = keccak256("BafFlipRecorded(uint32,uint24,uint256,uint256)");
     bytes32 internal constant DAY_RESOLVED = keccak256("CoinflipDayResolved(uint24,bool,uint16,uint128)");
     bytes32 internal constant DRAW_ARMED = keccak256("BafDrawArmed(uint24)");
@@ -104,7 +109,8 @@ abstract contract VaultBafRig is DeployProtocol {
     }
 
     function _settleToday() internal {
-        for (uint256 i = 0; i < 300; i++) {
+        for (uint256 i = 0; ; i++) {
+            require(i < MAX_MINE_CALLS, "harness: every driven day drains before its cap");
             _fulfillPending();
             if (!_mine()) break;
         }

@@ -28,7 +28,8 @@ contract StateEngineIntegrationTest is RedemptionCloseTools {
     address private constant MINER = address(0xA11CE999);
     address private constant ALICE = address(0xA11CE);
     bytes32 private constant MINER_WORK = keccak256("MinerWork(address,uint8,uint256,uint256)");
-    uint256 private constant HIGH_GAS = 15_000_000;
+    // The Osaka transaction cap (EIP-7825): the largest call a miner can send.
+    uint256 private constant HIGH_GAS = 1 << 24;
     uint256 private constant LOW_GAS = 9_500_000;
     // Admits one fixed ticket-award chunk (6.53M declared) through the miner frames.
     uint256 private constant TICKET_CHUNK_GAS = 7_700_000;

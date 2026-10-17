@@ -55,6 +55,11 @@ contract TurboBafTicketFloor is DeployProtocol {
     ///      the floor path unexercised; the epoch reachability assert guards against that).
     uint256 private constant WORD_NUDGE = 1;
 
+    /// @dev Calls per driven day. Each call takes the smallest admitting allowance and runs only the
+    ///      units its bounds admit, so a day needs many calls; a truncated day would spill its work
+    ///      into the next and disarm turbo.
+    uint256 private constant MAX_MINE_CALLS = 10_000;
+
     function setUp() public {
         _deployProtocol();
         // Derive simTime arithmetically from ONE pre-warp timestamp read: a second
@@ -247,7 +252,8 @@ contract TurboBafTicketFloor is DeployProtocol {
     function _runFullDayUntilX0Latch() internal {
         simTime += 1 days + 1;
         vm.warp(simTime);
-        for (uint256 i = 0; i < 300; i++) {
+        for (uint256 i = 0; ; i++) {
+            require(i < MAX_MINE_CALLS, "harness: every driven day drains before its cap");
             _fulfillPending();
             if (!_mine()) break;
             (uint24 lvl, , bool lastPurchaseDay_, bool locked, ) = game.purchaseInfo();
@@ -265,7 +271,8 @@ contract TurboBafTicketFloor is DeployProtocol {
 
     /// @dev Run the advance chain to exhaustion on the current (already-warped) day.
     function _settleToday() internal {
-        for (uint256 i = 0; i < 300; i++) {
+        for (uint256 i = 0; ; i++) {
+            require(i < MAX_MINE_CALLS, "harness: every driven day drains before its cap");
             _fulfillPending();
             if (!_mine()) break;
         }
@@ -340,7 +347,8 @@ contract TurboBafTicketFloor is DeployProtocol {
     function _runFullDay() internal {
         simTime += 1 days + 1;
         vm.warp(simTime);
-        for (uint256 i = 0; i < 300; i++) {
+        for (uint256 i = 0; ; i++) {
+            require(i < MAX_MINE_CALLS, "harness: every driven day drains before its cap");
             _fulfillPending();
             if (!_mine()) break;
         }
@@ -377,7 +385,7 @@ contract TurboBafTicketFloor is DeployProtocol {
     /// @dev Finish the session in flight with the smallest admitting allowances. Returns true,
     ///      leaving the word unanswered, as soon as the miner composes its own mid-day request.
     function _settleReadsUntilRequest() internal returns (bool minerRequested) {
-        for (uint256 i; i < 300; ++i) {
+        for (uint256 i; i < MAX_MINE_CALLS; ++i) {
             _fulfillPending();
             uint256 id = mockVRF.lastRequestId();
             (,, bool fulfilled) = mockVRF.pendingRequests(id);
@@ -405,7 +413,8 @@ contract TurboBafTicketFloor is DeployProtocol {
             abi.encodeWithSignature("mineFlip(uint32)", uint32(0))
         );
         ok; // the promotion entry may or may not revert once its stage breaks
-        for (uint256 i = 0; i < 300; i++) {
+        for (uint256 i = 0; ; i++) {
+            require(i < MAX_MINE_CALLS, "harness: every driven day drains before its cap");
             _fulfillPending();
             ok = _mine();
             if (game.jackpotPhase()) _assertLateTicketsMaterialized();

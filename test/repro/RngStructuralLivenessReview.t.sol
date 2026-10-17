@@ -125,7 +125,7 @@ contract RngStructuralLivenessReviewTest is DeployProtocol {
         _queue(owner, child, 100);
         _requestMidday(word);
         uint256 snapshot = vm.snapshotState();
-        (bytes32 transcript, uint256 bets, uint256 fullCalls) = _drain(15_000_000, address(0xCA11));
+        (bytes32 transcript, uint256 bets, uint256 fullCalls) = _drain(1 << 24, address(0xCA11));
         assertEq(bets, 4);
         bytes32 balances = _balances(child);
         assertTrue(vm.revertToStateAndDelete(snapshot));
