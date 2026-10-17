@@ -847,8 +847,8 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
             assembly { o := gameOver.offset }
             over = uint8(w >> (o << 3)) != 0;
         }
-        if (dueLevel <= lvl || uint256(dueLevel) + 2 > uint256(cl) + 100) return q;
-        for (uint256 target = uint256(dueLevel) + 2; target <= uint256(cl) + 100; ++target) {
+        if (dueLevel <= lvl || uint256(dueLevel) + 2 > uint256(cl) + LOAN_HORIZON_LEVELS) return q;
+        for (uint256 target = uint256(dueLevel) + 2; target <= uint256(cl) + LOAN_HORIZON_LEVELS; ++target) {
             uint256 lane = _farFutureLaneMirror(game, uint24(target), id);
             if (lane & 0x80000000 == 0) continue;
             uint256 entries = (lane & 0x3fffffff) & ~uint256(3);
@@ -875,7 +875,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
     }
 
     /// @notice The open loan of `id` and what repaying it costs at the current level; zero when
-    ///         none is open.
+    ///         none is open. A game over decided with VRF alive auto-repays at this same price.
     function loanOf(address game, uint32 id) external view returns (LoanInfo memory info) {
         uint256 base;
         assembly { base := _loans.slot }
@@ -890,13 +890,12 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         assembly { o := level.offset }
         uint256 lvl = uint24(_levelWord(game) >> (o << 3));
         if (lvl >= info.dueLevel) return info;
-        uint256 used = lvl > info.startLevel ? lvl - info.startLevel : 1;
-        info.owed = info.principal * (10_000 + used * LOAN_INTEREST_BPS_PER_LEVEL
-            + (info.dueLevel - info.startLevel - used) * LOAN_EARLY_FEE_BPS_PER_LEVEL) / 10_000;
+        info.owed = _loanOwedAt(loan, lvl);
     }
 
     /// @notice Accounts with loans due at `dueLevel`, in seizure order. Once the game has
-    ///         entered `dueLevel` the list is history: those loans were repaid or seized.
+    ///         entered `dueLevel`, or a game over decided with VRF alive has finished settling,
+    ///         the list is history: those loans were repaid or seized.
     function loansDue(address game, uint24 dueLevel) external view returns (uint32[] memory ids) {
         uint256 base;
         assembly { base := _loansDueCount.slot }

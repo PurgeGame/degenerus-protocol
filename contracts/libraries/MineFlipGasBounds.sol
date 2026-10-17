@@ -194,6 +194,8 @@ library MineFlipGasBounds {
     uint256 internal constant LOAN_SEIZE_SUB = 50_000;
     // One deity per family: full 32-symbol scan and cold DeityPass.seize.
     uint256 internal constant LOAN_SEIZE_DEITY = 140_000;
-    // Pending-flag clear and return.
-    uint256 internal constant LOAN_SEIZE_TAIL = 30_000;
+    // Cursor and pending-flag writes, game over's loan cursor, event and return.
+    uint256 internal constant LOAN_SEIZE_TAIL = 60_000;
+    // Game over's loan scan: one due level's cold count read and step.
+    uint256 internal constant LOAN_TERMINAL_LEVEL = 10_000;
 }

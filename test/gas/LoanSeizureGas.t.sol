@@ -7,6 +7,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {MineFlipGasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 
 contract SeizureGasSeeder is DegenerusGameStorage {
@@ -51,6 +52,10 @@ abstract contract LoanSeizureGasBase is DeployProtocol {
     DegenerusGameLens internal lens;
 
     function _setUpCase(uint256 smurfs, bool subscribed, bool deity, bool holdsSdgnrs) internal {
+        _setUpCase(smurfs, subscribed, deity, holdsSdgnrs, false);
+    }
+
+    function _setUpBase() internal {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
         borrower = makeAddr("gas-borrower");
@@ -64,6 +69,11 @@ abstract contract LoanSeizureGasBase is DeployProtocol {
         _etch(); SeizureGasSeeder(address(game)).fund(2, 500 ether); _unetch();
         _etch(); SeizureGasSeeder(address(game)).seedLevel(root, 8, 400); _unetch();
         _etch(); SeizureGasSeeder(address(game)).prime(); _unetch();
+    }
+
+    /// @dev `terminal` leaves level 1 unentered: game over settles the loan instead.
+    function _setUpCase(uint256 smurfs, bool subscribed, bool deity, bool holdsSdgnrs, bool terminal) internal {
+        _setUpBase();
         if (subscribed) _sub(root);
         uint32 lastChild;
         for (uint256 i; i < smurfs; ++i) {
@@ -85,11 +95,12 @@ abstract contract LoanSeizureGasBase is DeployProtocol {
         vm.prank(borrower);
         game.borrow(root, 1, type(uint256).max, q.principal);
         family = lens.loanOf(address(game), root).family;
-        // One wei short of the full-term amount: the auto-repay check reads everything, then defaults.
+        // One wei short of the repayment price (a one-level term costs its full term both at the
+        // due level and at a game over before it): the auto-repay check reads everything, then defaults.
         DegenerusGameLens.LoanInfo memory info = lens.loanOf(address(game), root);
         uint256 owed = info.principal * (10_000 + (info.dueLevel - info.startLevel) * 500) / 10_000;
         _setBalances(root, owed / 2, owed - owed / 2);
-        _etch(); SeizureGasSeeder(address(game)).enterDue(1); _unetch();
+        if (!terminal) { _etch(); SeizureGasSeeder(address(game)).enterDue(1); _unetch(); }
     }
 
     function _setBalances(uint32 id, uint256 claimable, uint256 afking) internal {
@@ -152,6 +163,68 @@ contract LoanAutoRepayGas is LoanSeizureGasBase {
         _setBalances(root, 1, 100 ether);
     }
     function test_Gas_AutoRepayWorstFamily() public { _measureAs("auto_repay_worst_family_cold", borrower); }
+}
+
+/// @notice Game over's loan checkpoint through the full engine stack, cold: the decision ran in
+///         setUp (a VRF-alive deadman), so the measured call settles the worst six-account deity
+///         family and scans every later due level in one transaction.
+abstract contract LoanTerminalGasBase is LoanSeizureGasBase {
+    uint256 private constant GO_LOAN_STEP_SHIFT = 64;
+
+    function _decideTerminal() internal {
+        vm.warp(block.timestamp + 31 days);
+        assertTrue(game.livenessTriggered(), "deadman with VRF alive");
+        game.mineFlip(0);
+        assertEq(_loanStep(), 1, "the decision owes settlement");
+    }
+
+    function _loanStep() internal view returns (uint256) {
+        return uint8(uint256(vm.load(address(game), bytes32(uint256(GameSlots.GAME_OVER_STATE_PACKED))))
+            >> GO_LOAN_STEP_SHIFT);
+    }
+
+    function _measureTerminal(string memory label) internal returns (uint256 used) {
+        uint256 before = gasleft();
+        game.mineFlip(0);
+        used = before - gasleft();
+        emit log_named_uint(label, used);
+        assertEq(_loanStep(), 0, "one call finishes the book");
+        assertLt(used, 10_000_000, "the checkpoint stays under the 10M chunk rule");
+    }
+}
+
+contract LoanTerminalGasWorst is LoanTerminalGasBase {
+    function setUp() public {
+        _setUpCase(5, true, true, true, true);
+        _decideTerminal();
+    }
+
+    function test_Gas_TerminalWorstFamilyAndFullScan() public {
+        uint256 used = _measureTerminal("terminal_worst_family_and_99_level_scan_cold");
+        (, address payee, ) = game.resolveAccount(root, address(0));
+        assertEq(payee, address(sdgnrs), "seized");
+        uint256 bound = MineFlipGasBounds.LOAN_SEIZE_BASE + family * MineFlipGasBounds.LOAN_SEIZE_SUB
+            + MineFlipGasBounds.LOAN_SEIZE_DEITY + 99 * MineFlipGasBounds.LOAN_TERMINAL_LEVEL
+            + MineFlipGasBounds.LOAN_SEIZE_TAIL;
+        emit log_named_uint("admission_bound_plus_scan", bound);
+        assertLe(used, bound + MineFlipGasBounds.ENGINE_BOUNDARY + MineFlipGasBounds.ENGINE_RETURN,
+            "the admission estimates cover the cold checkpoint");
+    }
+}
+
+/// @notice The scan alone: 99 cold empty levels, against the per-level admission estimate.
+contract LoanTerminalGasEmptyScan is LoanTerminalGasBase {
+    function setUp() public {
+        _setUpBase();
+        _decideTerminal();
+    }
+
+    function test_Gas_TerminalEmptyScan() public {
+        uint256 used = _measureTerminal("terminal_99_level_empty_scan_cold");
+        assertLe(used, 99 * MineFlipGasBounds.LOAN_TERMINAL_LEVEL + MineFlipGasBounds.LOAN_SEIZE_TAIL
+            + MineFlipGasBounds.ENGINE_BOUNDARY + MineFlipGasBounds.ENGINE_RETURN,
+            "the per-level estimate covers a cold empty level");
+    }
 }
 
 /// @notice Player-paid entry points, for the record.

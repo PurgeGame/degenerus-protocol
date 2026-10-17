@@ -162,7 +162,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         returns (uint256 face, uint256 principal)
     {
         uint256 cl = _activeTicketLevel();
-        for (uint256 target = uint256(dueLevel) + 2; target <= cl + 100; ++target) {
+        for (uint256 target = uint256(dueLevel) + 2; target <= cl + LOAN_HORIZON_LEVELS; ++target) {
             if (target > type(uint24).max) break;
             uint256 lane = _farFutureLane(uint24(target), id);
             if (lane & 0x80000000 == 0) continue;

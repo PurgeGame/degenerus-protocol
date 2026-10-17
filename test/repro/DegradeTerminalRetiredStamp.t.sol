@@ -71,12 +71,15 @@ contract DegradeTerminalRetiredStampTest is DeployProtocol {
         vm.etch(address(game), realCode);
     }
 
-    /// @dev Latch, request, fulfil and apply the terminal word; the payout runs on a later call.
+    /// @dev Latch, settle the (empty) loan book, request, fulfil and apply the terminal word; the
+    ///      payout runs on a later call.
     function _reachPayout() private {
         _fixture(abi.encodeCall(RetiredStampSeeder.seedEnding, (HOLDER)));
         vm.deal(address(game), 100 ether);
         assertTrue(game.livenessTriggered(), "caught up past the deadline");
-        game.mineFlip(0); // latches the cohort level and requests the terminal word
+        game.mineFlip(0); // latches the cohort level; VRF alive, so the loan book settles first
+        game.mineFlip(0); // the (empty) loan book
+        game.mineFlip(0); // requests the terminal word
         uint256 requestId = mockVRF.lastRequestId();
         mockVRF.fulfillRandomWords(requestId, WORD);
         game.mineFlip(0); // applies the word in its own transaction

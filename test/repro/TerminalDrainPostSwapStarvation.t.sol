@@ -99,9 +99,10 @@ contract TerminalDrainPostSwapStarvationTest is DeployProtocol {
     }
 
     /// @dev Real flow from a deadline-past, caught-up, VRF-alive purchase phase with the whole
-    ///      terminal cohort on the WRITE side: call 1 performs the ending's one swap and sends
-    ///      the terminal request, `word` lands, call 2 applies it. Then `preBatches` gas-limited
-    ///      drain batches. Ends one call before the batch under test.
+    ///      terminal cohort on the WRITE side: call 1 decides the ending, call 2 settles the
+    ///      (empty) loan book, call 3 performs the ending's one swap and sends the terminal
+    ///      request, `word` lands, call 4 applies it. Then `preBatches` gas-limited drain batches.
+    ///      Ends one call before the batch under test.
     function _toPostSwapWorded(uint256 owners, uint32 entries, uint256 word, uint256 preBatches) private {
         PostSwapSeeder s = _seeder();
         s.seedDeadlineWithLandedCohort(LVL, 0xB0B5);
@@ -114,6 +115,8 @@ contract TerminalDrainPostSwapStarvationTest is DeployProtocol {
         assertTrue(game.livenessTriggered(), "deadline passed, caught up, VRF alive");
 
         uint256 req0 = mockVRF.lastRequestId();
+        game.mineFlip(0); // decision: VRF alive, so the loan book settles first
+        game.mineFlip(0); // the (empty) loan book
         game.mineFlip(0); // the one terminal swap + terminal request
         (uint256 rl, uint256 wl, uint256 sw) = _queues();
         assertEq(sw, 1, "swap latch set");

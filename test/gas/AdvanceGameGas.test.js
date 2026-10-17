@@ -126,22 +126,19 @@ describe("AdvanceGame Gas Benchmarks", function () {
 
   /** Trigger game over at level 0 (multi-step VRF flow). */
   async function triggerGameOverAtLevel0(game, deployer, mockVRF) {
-    await game.connect(deployer).mineFlip(0);
-    const requestId = await getLastVRFRequestId(mockVRF);
-    if (requestId > 0n) {
-      await mockVRF.fulfillRandomWords(requestId, 42n);
-    }
-    await game.connect(deployer).mineFlip(0);
-    // Drain any queued tickets: with non-empty queues the terminal stage takes
-    // several mineFlip calls before the game-over drain runs and latches
-    // gameOver=true.
+    // The ending decides, settles the (empty) loan book, requests its word, applies it and
+    // drains: fulfil each request as it appears. With non-empty queues the terminal stage
+    // takes several mineFlip calls before the game-over drain runs and latches gameOver=true.
     for (let i = 0; i < 50; i++) {
       if (await game.gameOver()) return;
+      const before = await getLastVRFRequestId(mockVRF);
       try {
         await game.connect(deployer).mineFlip(0);
       } catch {
         return;
       }
+      const after = await getLastVRFRequestId(mockVRF);
+      if (after > before) await mockVRF.fulfillRandomWords(after, 42n);
     }
   }
 
@@ -400,7 +397,17 @@ describe("AdvanceGame Gas Benchmarks", function () {
       // Advance 912+ days
       await advanceTime(912 * 86400 + 86400);
 
-      // Step 1: mineFlip -> VRF request (realistic allowance; terminal work is checkpointed)
+      // Step 1: mineFlip -> the decision (VRF alive: the loan book settles first)
+      const { tx: txD, receipt: receiptD } = await mine(game, deployer);
+      const eventsD = await getAdvanceEvents(txD, advanceModule);
+      recordGas(`Game Over Decision (stage=${eventsD.length > 0 ? eventsD[0].args.stage : "?"})`, receiptD);
+
+      // Step 1b: mineFlip -> the loan stage scans every due level (empty book here)
+      const { tx: txL, receipt: receiptL } = await mine(game, deployer);
+      const eventsL = await getAdvanceEvents(txL, advanceModule);
+      recordGas(`Game Over Loan Settlement (stage=${eventsL.length > 0 ? eventsL[0].args.stage : "?"})`, receiptL);
+
+      // Step 1c: mineFlip -> VRF request (realistic allowance; terminal work is checkpointed)
       const { tx: tx1, receipt: receipt1 } = await mine(game, deployer);
       const events1 = await getAdvanceEvents(tx1, advanceModule);
       const stage1 = events1.length > 0 ? events1[0].args.stage : "?";

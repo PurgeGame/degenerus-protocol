@@ -52,6 +52,7 @@ contract SeizureSeeder is DegenerusGameStorage {
 
 /// @notice Loan seizure runs on schedule inside the mining engine: the transition request that
 ///         enters the due level arms it, and it runs before anything uses that level's word.
+///         Game-over settlement shares its runner (TerminalLoanSettlement.t.sol).
 ///         Pins for the advance-call manifest: IsDGNRS.burnForLiquidation and IDeityPassSeize.seize.
 contract LoanSeizureTest is DeployProtocol {
     uint256 private constant POOL_HALF_MASK = (uint256(1) << 128) - 1;
@@ -281,13 +282,16 @@ contract LoanSeizureTest is DeployProtocol {
 
     // ---------------------------------------------------------------- terminal precedence
 
-    function test_GameOverWhilePendingLeavesBorrowerTheAccount() public {
+    /// @dev A pending batch still armed once the game is over was left by a VRF-dead ending (a
+    ///      VRF-alive ending finishes it first; TerminalLoanSettlement). The ordinary stage never
+    ///      runs after game over.
+    function test_GameOverNeverRunsALeftoverPendingBatch() public {
         uint256 principal = _borrow(borrower, root, 1);
         _enterDue(1);
         _etch(); SeizureSeeder(address(game)).end(); _unetch();
         assertTrue(game.nextMinerAction() != ACTION_SEIZE_LOANS, "terminal handling outranks seizure");
         _mineAll(50);
-        assertEq(_payee(root), borrower, "the borrower wins at game over");
+        assertEq(_payee(root), borrower, "the leftover loan stands");
         assertGt(principal, 0);
     }
 

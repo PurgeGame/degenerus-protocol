@@ -75,7 +75,7 @@ OWNER	foilGenerationDay	modules/DegenerusGameFoilPackModule.sol	cohort generatio
 OWNER	foilGenerationDay	modules/DegenerusGameRngUtils.sol	cohort generation stamps reset on swap and pinned on materialization
 OWNER	foilMatchClaimed	storage/DegenerusGameStorage.sol	_markFoilMatchClaimed sets the exact-day ticket bit before payout (CEI); expiry-gated claims recycle one of two per-player day lanes while preserving the other lane
 OWNER	gameOver	modules/DegenerusGameGameOverModule.sol	_handleGameOverDrain latches terminal state; sole writer, one-way
-HELPER	gameOverStatePacked	storage/DegenerusGameStorage.sol	_goWrite field mutator for the packed game-over state (time, jackpotPaid, swept)
+HELPER	gameOverStatePacked	storage/DegenerusGameStorage.sol	_goWrite field mutator for the packed game-over state (time, jackpotPaid, swept, game-over loan step and index)
 OWNER	goldenTicket	modules/DegenerusGameJackpotModule.sol	_armGoldenTicket packs winner/quadrant/symbol/day; _resolveGoldenTicket rewrites to the resolved form; both jackpot-module
 HELPER	humanReadComplete	storage/DegenerusGameStorage.sol	Initial idle true, fresh seals false; only box/bet worker completes the read.
 OWNER	jackpotCounter	modules/DegenerusGameAdvanceModule.sol	_endPhase zeroes the counter at level end; the jackpot module advances it (counterStep) per paid daily jackpot
@@ -212,7 +212,7 @@ OWNER	lootboxRngPacked	DegenerusGame.sol	setCrapsRngPending is CRAPS-only and ch
 OWNER	_subOpenCursor	modules/DegenerusGameMinerModule.sol	Reset once at daily preparation after the previous read cohort completed
 OWNER	_subBoxCount	modules/GameAfkingModule.sol	Box-section membership maintained by insert, mode change and same-section removal
 OWNER	_loans	modules/DegenerusGameMintModule.sol	borrow writes the account's packed loan; repay deletes it and rewrites the index of the loan it swaps into the freed lane. One loan per account.
-OWNER	_loans	modules/DegenerusGameAdvanceModule.sol	_seizeLoan deletes each loan it seizes; seizure only runs at the due level, after which borrow/repay can no longer touch that level's loans.
+OWNER	_loans	modules/DegenerusGameAdvanceModule.sol	_autoRepayLoan and _seizeLoan delete each loan they settle: at the due level, or at a game over decided with VRF alive (borrowing closed, repay only removes unsettled entries).
 HELPER	_loansDue	storage/DegenerusGameStorage.sol	_setLoanDueAt writes one packed lane of a due level's ID list; borrow appends and repay swap-and-pops through it.
-OWNER	_loansDueCount	modules/DegenerusGameMintModule.sol	borrow increments and repay decrements the due level's open-loan count (sole writer); seizure only reads it and leaves the count behind.
-OWNER	loanSeizeCursor	modules/DegenerusGameAdvanceModule.sol	prepareRequestBoundary resets it when arming a due level; runLoanSeizureWork advances it before each seizure.
+OWNER	_loansDueCount	modules/DegenerusGameMintModule.sol	borrow increments and repay decrements the due level's open-loan count (sole writer); settlement only reads it and leaves the count behind.
+OWNER	loanSeizeCursor	modules/DegenerusGameAdvanceModule.sol	prepareRequestBoundary resets it when arming a due level; _settleLevelLoans advances it past each chunk, from the ordinary stage or the game-over loan stage.

@@ -514,6 +514,8 @@ contract MinerNoProgressTest is Test {
         vm.recordLogs();
         game.mineFlip{gas: 16_700_000}(0);
         _assertWorkUnpaid();
+        assertEq(game.minerAction(), 1, "a VRF-alive decision settles the loan book before any wait");
+        game.mineFlip{gas: 16_700_000}(0); // the (empty) loan book
         assertEq(game.minerAction(), 2);
         assertLt(_expectFailure(DegenerusGameMinerModule.RngNotReady.selector, 16_700_000), 100_000);
         vm.warp(block.timestamp + 15 days);

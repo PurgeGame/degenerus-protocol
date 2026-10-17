@@ -22,9 +22,11 @@ const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
  * GameOver edge-case tests.
  *
  * The game over flow is multi-step:
- *   1. mineFlip when liveness guard fires → issues VRF request (does NOT yet set gameOver)
- *   2. VRF fulfillment stores word in rngWordCurrent
- *   3. mineFlip again → processes the word → terminal drain → gameOver = true
+ *   1. mineFlip when liveness guard fires → decides the ending; with VRF alive every
+ *      outstanding loan settles first (the next mineFlip, more for a large book)
+ *   2. mineFlip → issues the terminal VRF request (does NOT yet set gameOver)
+ *   3. VRF fulfillment stores word in rngWordCurrent
+ *   4. mineFlip again → processes the word → terminal drain → gameOver = true
  *
  * Two liveness guards:
  *   - level==0 && currentDay - purchaseStartDay > DEPLOY_IDLE_TIMEOUT_DAYS  (pre-game 250-day idle timeout)
@@ -131,7 +133,13 @@ describe("GameOver", function () {
 
       await advanceTime(SECONDS_912_DAYS + 86400);
 
-      // First call: issues VRF (gameOver still false)
+      // First call decides the ending: VRF is alive, so the loan book settles before any
+      // request. Second call settles the (empty) book. Neither requests a word.
+      await game.connect(deployer).mineFlip(0);
+      await game.connect(deployer).mineFlip(0);
+      expect(await getLastVRFRequestId(mockVRF)).to.equal(0n);
+
+      // Third call: issues VRF (gameOver still false)
       await game.connect(deployer).mineFlip(0);
       expect(await game.gameOver()).to.equal(false);
 
@@ -146,7 +154,9 @@ describe("GameOver", function () {
       );
 
       await advanceTime(SECONDS_912_DAYS + 86400);
-      await game.connect(deployer).mineFlip(0);
+      await game.connect(deployer).mineFlip(0); // decision
+      await game.connect(deployer).mineFlip(0); // the (empty) loan book
+      await game.connect(deployer).mineFlip(0); // terminal request
 
       const requestId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(requestId, 42n);

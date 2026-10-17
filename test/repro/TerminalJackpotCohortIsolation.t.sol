@@ -263,6 +263,7 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         _restoreGame();
         vm.deal(address(game), 100 ether);
 
+        _decideEnding();
         // The pre-freeze daily request's word only finalizes the lootbox index it reserved.
         game.mineFlip(0);
         assertFalse(game.rngLocked(), "pre-freeze request dropped");
@@ -321,6 +322,7 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         _restoreGame();
         vm.deal(address(game), 100 ether);
 
+        _decideEnding();
         // No RNG boundary existed, so terminal entry must first swap write->read, then request VRF.
         game.mineFlip(0);
         assertTrue(game.rngLocked(), "terminal VRF request opened after cohort snapshot");
@@ -366,6 +368,7 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         _restoreGame();
         vm.deal(address(game), 100 ether);
 
+        _decideEnding();
         game.mineFlip(0);
         assertTrue(game.rngLocked(), "terminal request opened");
         seeder = _installSeeder();
@@ -423,6 +426,7 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         _restoreGame();
         vm.deal(address(game), 100 ether);
 
+        _decideEnding();
         game.mineFlip(0); // Release the earlier request; retain its delivered word.
         seeder = _installSeeder();
         assertEq(seeder.foilCursorState(), 1, "earlier partial foil cursor preserved");
@@ -480,6 +484,7 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
 
         // The first entry latches the promoted level while the last-purchase request still holds
         // the lock; that request's word then only finalizes its lootbox index and it is dropped.
+        _decideEnding();
         game.mineFlip(0);
         assertFalse(game.rngLocked(), "pre-freeze request dropped");
 
@@ -508,6 +513,7 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         seeder.seedTerminalState(LEVEL, false, false, false, true, 0, LEVEL + 1, address(0), address(0), 0);
         _restoreGame();
         vm.deal(address(game), 100 ether);
+        _decideEnding();
         vm.mockCallRevert(address(mockVRF), bytes4(keccak256("requestRandomWords((bytes32,uint256,uint16,uint32,uint32,bytes))")), abi.encodeWithSignature("Error(string)", "refused"));
         game.mineFlip(0);
         uint256 state = uint256(game.extsload(bytes32(0)));
@@ -547,6 +553,13 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         assertEq(_holderEntryCount(LEVEL + 1, committedBuyer), 0, "no ticket was materialized");
         assertEq(_totalQueuedOwed(LEVEL + 1, committedBuyer), ENTRIES, "the cohort stays queued for its claim");
         assertTrue(game.livenessTriggered(), "the trigger stays on after game over");
+    }
+
+    /// @dev The ending's first call only decides it (VRF alive: the loan book settles first) and
+    ///      the second settles the empty book; the ending's own work starts on the next call.
+    function _decideEnding() private {
+        game.mineFlip(0);
+        game.mineFlip(0);
     }
 
     function _installSeeder() private returns (TerminalCohortSeeder seeder) {

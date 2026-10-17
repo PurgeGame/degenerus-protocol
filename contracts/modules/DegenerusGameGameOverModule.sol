@@ -226,6 +226,14 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             dailyJackpotCoinTicketsPending = false;
             work.progressed = true;
             MineFlipGas.markProgress(meter);
+            // Decided with VRF alive: every outstanding loan settles, repaying at the current
+            // repayment price or seized, before the terminal request (the Advance module's
+            // terminal loan stage runs next). A VRF already dead leaves loans as they stand.
+            // Later VRF failure never revisits this.
+            if (!dead) {
+                _goWrite(GO_LOAN_STEP_SHIFT, GO_LOAN_STEP_MASK, 1);
+                return (true, STAGE_GAMEOVER, false);
+            }
         }
 
         // --- Deterministic ending ---

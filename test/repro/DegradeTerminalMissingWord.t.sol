@@ -123,7 +123,9 @@ contract DegradeTerminalMissingWordTest is DeployProtocol {
         vm.prank(address(game));
         affiliate.payAffiliate(1000 ether, bytes32(uint256(uint160(TOP))), 0xB001, 11, true, 0);
         assertTrue(game.livenessTriggered(), "caught up past the deadline");
-        game.mineFlip(0); // latch + terminal request
+        game.mineFlip(0); // latch: VRF alive, so the loan book settles first
+        game.mineFlip(0); // the (empty) loan book
+        game.mineFlip(0); // terminal request
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), WORD);
         game.mineFlip(0); // apply the word
         assertFalse(game.gameOver(), "applying the word does not pay out");

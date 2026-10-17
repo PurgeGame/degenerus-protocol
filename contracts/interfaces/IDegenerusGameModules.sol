@@ -654,7 +654,7 @@ interface IGameAfkingModule {
     function runAfkingWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory);
     function runHumanBoxWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory);
     /// @notice Loan-seizure only: cancel the seized account's AFKing run and, for a main,
-    ///         every smurf's (AdvanceModule.runLoanSeizureWork delegatecall target).
+    ///         every smurf's (AdvanceModule `_seizeLoan` delegatecall target).
     function cancelLiquidatedSubscriptions(uint32 id, bool mainSale) external;
 
     /// @notice The SINGLE subscription entrypoint: create / replace (dailyQuantity >= 1)

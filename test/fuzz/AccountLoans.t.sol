@@ -682,7 +682,10 @@ contract AccountLoansTest is RedemptionCloseTools {
         vm.prank(seller); vm.expectRevert(bytes4(keccak256("E()"))); game.repay{value: 1 ether}(root + 9);
     }
 
-    function test_GameOverBorrowerKeepsEverything() public {
+    /// @dev A loan still open once the game is over was left by a VRF-dead ending (a VRF-alive
+    ///      ending settles every loan before it ends; TerminalLoanSettlement). Repayment is closed
+    ///      and nothing settles it later.
+    function test_GameOverClosesRepaymentOfALoanTheEndingLeftOpen() public {
         uint256 p = _borrow(root, 3);
         _endGame();
         vm.prank(seller); vm.expectRevert(bytes4(keccak256("E()"))); game.repay{value: 10 ether}(root);

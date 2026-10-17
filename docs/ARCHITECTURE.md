@@ -55,9 +55,12 @@ funded pools. Dust can move the rounded fraction by one basis point: a 1 ETH + 1
 cover at 9 ETH used now represents 1 ETH and gets a 10,000-bps fraction rather than
 9,999 bps. Its bonus budget at 145% EV increases by 0.000045 ETH, not merely one wei.
 
-Game-over processing reserves existing claims and applicable deity refunds, credits 2% of
-the remaining pool to the terminal level's top affiliate, and sends the rest to the main
-terminal ticket jackpot. If no affiliate is ranked, the jackpot receives the entire pool.
+An ending decided with VRF alive first settles every outstanding account loan, repaying at
+the current manual-repayment price or seizing ([account loans](ACCOUNT-LOANS.md)), so a
+defaulted borrower's refunds and terminal awards accrue to its lender. Game-over processing
+reserves existing claims and applicable deity refunds, credits 2% of the remaining pool to the terminal level's top affiliate, and
+sends the rest to the main terminal ticket jackpot. If no affiliate is ranked, the
+jackpot receives the entire pool.
 The affiliate winner is fixed when the terminal cohort is latched, before any terminal
 word exists; later score claims do not reopen the award. The terminal word is one the
 game-over path requests itself after liveness froze purchases, even when the deadman

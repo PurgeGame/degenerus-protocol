@@ -89,6 +89,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
     uint8 private constant STAGE_PURCHASE_BATTLE = 17;
     uint8 private constant STAGE_DAILY_WORD_APPLIED = 18;
     uint8 private constant STAGE_JACKPOT_BAF_AWARDS = 19;
+    uint8 private constant STAGE_TERMINAL_LOANS = 20;
     uint16 private constant NEXT_TO_FUTURE_BPS_FAST = 3000;
     uint16 private constant NEXT_TO_FUTURE_BPS_MIN = 1500;
     uint16 private constant NEXT_TO_FUTURE_BPS_DEADLINE = 4500;
@@ -361,18 +362,39 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
 
     /// @notice Settle the loans due at the level just entered, in list order, before anything
     ///         uses that level's word. A borrower whose balances cover the full-term amount repays;
-    ///         otherwise the lender takes the account exactly as a sale does.
-    ///         Pending loans die with the game: terminal handling outranks this stage.
+    ///         otherwise the lender takes the account exactly as a sale does. An ending decided
+    ///         with VRF alive finishes this batch and settles every later loan before its
+    ///         terminal request (`runTerminalPhase`), at the price of repaying it then.
     function runLoanSeizureWork(uint256 allowance) external returns (MineFlipGas.Result memory result) {
         MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
         if (address(this) != ContractAddresses.GAME) revert E();
-        if (!_loansDuePending()) {
-            result.done = true;
-            return result;
-        }
+        result.done = !_loansDuePending() || _settleLevelLoans(meter, result);
+        MineFlipGas.finish(meter);
+    }
+
+    /// @dev The pending batch of the level just entered, from its cursor. Clears the pending flag
+    ///      and returns true once the list is done.
+    function _settleLevelLoans(MineFlipGas.Meter memory meter, MineFlipGas.Result memory result)
+        private returns (bool)
+    {
         uint24 due = level;
-        uint256 count = _loansDueCount[due];
         uint256 i = loanSeizeCursor;
+        (uint256 next, bool done) = _settleLoans(due, i, meter, result);
+        if (next != i) loanSeizeCursor = uint32(next);
+        if (!done) return false;
+        _setLoansDuePending(false);
+        result.progressed = true;
+        MineFlipGas.markProgress(meter);
+        return true;
+    }
+
+    /// @dev Settle `due`'s list in order from entry `i` while the meter admits a worst-case unit.
+    ///      Every entry from the cursor on is an open loan due at `due`: settlement deletes each
+    ///      loan as the cursor passes it, and repayment swaps in only another open entry.
+    function _settleLoans(uint24 due, uint256 i, MineFlipGas.Meter memory meter, MineFlipGas.Result memory result)
+        private returns (uint256, bool)
+    {
+        uint256 count = _loansDueCount[due];
         while (i < count) {
             uint32 id = _loanDueAt(due, i);
             uint256 loan = _loans[id];
@@ -381,31 +403,55 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
                 meter,
                 GasBounds.LOAN_SEIZE_BASE + family * GasBounds.LOAN_SEIZE_SUB + GasBounds.LOAN_SEIZE_DEITY,
                 GasBounds.LOAN_SEIZE_TAIL
-            )) break;
-            loanSeizeCursor = uint32(++i);
-            if (!_autoRepayLoan(id, loan, due)) _seizeLoan(id, uint32(uint8(loan >> LOAN_LENDER_SHIFT)));
+            )) return (i, false);
+            ++i;
+            if (!_autoRepayLoan(id, loan)) _seizeLoan(id, uint32(uint8(loan >> LOAN_LENDER_SHIFT)));
             result.progressed = true;
             MineFlipGas.markProgress(meter);
             ++result.rewardBasis;
         }
-        if (i == count) {
-            _setLoansDuePending(false);
-            result.progressed = true;
-            MineFlipGas.markProgress(meter);
-            result.done = true;
-        }
-        MineFlipGas.finish(meter);
+        return (i, true);
     }
 
-    /// @dev A borrower whose own claimable plus AFKing funding covers the full-term amount repays
-    ///      instead of defaulting: claimable first (keeping its 1-wei sentinel), then AFKing. An
-    ///      account already acquired by a lender defaults as before. Both legs sit inside
-    ///      claimablePool and move to the lender's claimable, so the pool is unchanged.
-    function _autoRepayLoan(uint32 id, uint256 loan, uint24 due) private returns (bool) {
+    /// @dev Game over decided with VRF alive: settle every outstanding loan before the terminal
+    ///      request, repaying at what a manual repayment would cost now or else seizing. The level
+    ///      just entered finishes its pending batch, then each later due level in turn. Borrowing
+    ///      closed at liveness and `level` no longer moves, so the scan up to the borrow horizon
+    ///      reaches every open loan, and no loan being settled is due below `level`.
+    function _settleTerminalLoans(MineFlipGas.Meter memory meter, MineFlipGas.Result memory result) private {
+        if (_loansDuePending() && !_settleLevelLoans(meter, result)) return;
+        uint24 lvl = level;
+        uint256 last = type(uint24).max - lvl;
+        if (last > LOAN_HORIZON_LEVELS - 1) last = LOAN_HORIZON_LEVELS - 1;
+        uint256 step = _goRead(GO_LOAN_STEP_SHIFT, GO_LOAN_STEP_MASK);
+        uint256 i = _goRead(GO_LOAN_INDEX_SHIFT, GO_LOAN_INDEX_MASK);
+        while (step <= last) {
+            if (!MineFlipGas.canRun(meter, GasBounds.LOAN_TERMINAL_LEVEL, GasBounds.LOAN_SEIZE_TAIL)) break;
+            bool done;
+            (i, done) = _settleLoans(uint24(lvl + step), i, meter, result);
+            if (!done) break;
+            ++step;
+            i = 0;
+            result.progressed = true;
+            MineFlipGas.markProgress(meter);
+        }
+        if (step > last) {
+            step = 0;
+            result.progressed = true;
+        }
+        _goWrite(GO_LOAN_STEP_SHIFT, GO_LOAN_STEP_MASK, step);
+        _goWrite(GO_LOAN_INDEX_SHIFT, GO_LOAN_INDEX_MASK, i);
+    }
+
+    /// @dev A borrower whose own claimable plus AFKing funding covers what repaying would cost now
+    ///      (the full term at its due level; the manual repayment price at a game over that comes
+    ///      first) repays instead of defaulting: claimable first (keeping its 1-wei sentinel), then
+    ///      AFKing. An account already acquired by a lender defaults as before. Both legs sit
+    ///      inside claimablePool and move to the lender's claimable, so the pool is unchanged.
+    function _autoRepayLoan(uint32 id, uint256 loan) private returns (bool) {
         uint256 element = _walletElement(id);
         if (_acquiredRoot(id, element) != 0) return false;
-        uint256 owed = uint96(loan) * (10_000 + (due - uint24(loan >> LOAN_START_SHIFT))
-            * LOAN_INTEREST_BPS_PER_LEVEL) / 10_000;
+        uint256 owed = _loanOwedAt(loan, level);
         uint256 packed = balancesPacked[id];
         uint256 claimable = uint128(packed);
         uint256 fromClaim = claimable > 1 ? claimable - 1 : 0;
@@ -477,11 +523,18 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         return abi.decode(data, (MineFlipGas.Result));
     }
 
-    /// @notice Terminal handling always precedes live-game mutations.
+    /// @notice Terminal handling always precedes live-game mutations. Loan settlement owed by an
+    ///         ending decided with VRF alive runs alone until every loan is settled.
     function runTerminalPhase(uint256 allowance) external returns (MineFlipGas.Result memory result) {
         MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
         if (!MineFlipGas.canRun(meter, 100_000, 150_000)) return result;
         if (address(this) != ContractAddresses.GAME || (!gameOver && !_livenessTriggered())) revert E();
+        if (_goRead(GO_LOAN_STEP_SHIFT, GO_LOAN_STEP_MASK) != 0) {
+            _settleTerminalLoans(meter, result);
+            MineFlipGas.finish(meter);
+            if (result.progressed) emit Advance(STAGE_TERMINAL_LOANS, level);
+            return result;
+        }
         (bool handled, uint8 stage, bool progressed) = _handleGameOverPath(_simulatedDayIndex(), level, MineFlipGas.child(meter, GasBounds.DAILY_PHASE_TAIL));
         MineFlipGas.finish(meter);
         if (!handled) revert E();

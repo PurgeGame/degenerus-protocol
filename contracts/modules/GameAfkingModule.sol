@@ -1104,8 +1104,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     }
 
     /// @notice Stop the AFKing runs a loan seizure hands to its lender: the seized account's own
-    ///         and, for a main, every smurf's. Reached only by AdvanceModule's
-    ///         `runLoanSeizureWork` delegatecall, after the ownership write.
+    ///         and, for a main, every smurf's. Reached only by AdvanceModule's `_seizeLoan`
+    ///         delegatecall, after the ownership write.
     /// @dev Walks the main's append-only smurf list (`_smurfWords`, length = lifetime
     ///      `SMURF_COUNT`). A smurf seized on its own earlier was cancelled by its own seizure
     ///      and cannot re-subscribe, so it reads inactive here. Each cancel keeps the run's paid box

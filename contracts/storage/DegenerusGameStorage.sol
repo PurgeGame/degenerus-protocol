@@ -1082,8 +1082,10 @@ abstract contract DegenerusGameStorage {
         }
         if (_livenessTriggered()) {
             // The first terminal call must latch its cohort. Once latched, waiting
-            // cannot advance it; a dead VRF still takes precedence over the wait.
+            // cannot advance it; a dead VRF still takes precedence over the wait, and
+            // loan settlement owed by the ending runs ahead of both.
             if (_lrRead(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK) != 0
+                && _goRead(GO_LOAN_STEP_SHIFT, GO_LOAN_STEP_MASK) == 0
                 && _lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK) == 0
                 && _rngRequestActive() && _currentRngWord() == 0 && !_vrfDead()) return MinerAction.Wait;
             return MinerAction.Terminal;
@@ -2627,13 +2629,15 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant PRESALE_BOX_ETH_CAP = 50 ether;
 
     // =========================================================================
-    // Game Over State (packed: 3 variables in 64/256 bits)
+    // Game Over State (packed: 5 variables in 104/256 bits)
     // =========================================================================
     //
     // Layout (LSB -> MSB):
     //   [bits  0:47]  gameOverTime              uint48   Timestamp when gameover triggered (0 = active)
     //   [bits 48:55]  gameOverFinalJackpotPaid   uint8   1 = final jackpot paid
     //   [bits 56:63]  finalSwept                 uint8   1 = 30-day sweep executed
+    //   [bits 64:71]  terminalLoanStep           uint8   0 = no terminal loan work; else settling level + step
+    //   [bits 72:103] terminalLoanIndex          uint32  Next entry of that level's due list
 
     /// @dev Packed game over state. See layout comment above.
     uint256 internal gameOverStatePacked;
@@ -2645,6 +2649,13 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant GO_JACKPOT_PAID_MASK = 0xFF;       // 8 bits
     uint256 internal constant GO_SWEPT_SHIFT = 56;
     uint256 internal constant GO_SWEPT_MASK = 0xFF;              // 8 bits
+    /// @dev The due level being settled, as an offset from `level`: 1 when an ending decided with
+    ///      VRF alive latches, up to LOAN_HORIZON_LEVELS - 1; zero when no settlement is owed or it
+    ///      has finished. While nonzero, the terminal phase settles loans and nothing else.
+    uint256 internal constant GO_LOAN_STEP_SHIFT = 64;
+    uint256 internal constant GO_LOAN_STEP_MASK = 0xFF;          // 8 bits
+    uint256 internal constant GO_LOAN_INDEX_SHIFT = 72;
+    uint256 internal constant GO_LOAN_INDEX_MASK = 0xFFFFFFFF;   // 32 bits
 
     /// @dev Read a field from the packed game over state.
     function _goRead(uint256 shift, uint256 mask) internal view returns (uint256) {
@@ -4987,6 +4998,10 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant LOAN_INTEREST_BPS_PER_LEVEL = 500;
     uint256 internal constant LOAN_EARLY_FEE_BPS_PER_LEVEL = 100;
     uint256 internal constant LOAN_MAX_SMURFS = 5;
+    /// @dev Borrowing needs dueLevel + 2 <= the live ticket level + LOAN_HORIZON_LEVELS, and the
+    ///      live ticket level is at most level + 1, so every open loan is due by
+    ///      level + LOAN_HORIZON_LEVELS - 1. Game over settles exactly that range.
+    uint256 internal constant LOAN_HORIZON_LEVELS = 100;
     /// @dev A loan taken more than this many days into a level pays half its principal as tickets.
     uint256 internal constant LOAN_TICKET_AFTER_DAYS = 20;
 
@@ -4995,6 +5010,16 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant LOAN_DUE_SHIFT = 128;
     uint256 internal constant LOAN_INDEX_SHIFT = 152;
     uint256 internal constant LOAN_FAMILY_SHIFT = 184;
+
+    /// @dev What repaying `loan` costs while the game is at level `lvl` (at most its due level):
+    ///      principal plus 5% per level used (at least one) plus 1% per unused level of the
+    ///      chosen term. At the due level every level is used, so this is the full term.
+    function _loanOwedAt(uint256 loan, uint256 lvl) internal pure returns (uint256) {
+        uint256 start = uint24(loan >> LOAN_START_SHIFT);
+        uint256 used = lvl > start ? lvl - start : 1;
+        return uint96(loan) * (10_000 + used * LOAN_INTEREST_BPS_PER_LEVEL
+            + (uint24(loan >> LOAN_DUE_SHIFT) - start - used) * LOAN_EARLY_FEE_BPS_PER_LEVEL) / 10_000;
+    }
 
     function _loanDueAt(uint24 due, uint256 i) internal view returns (uint32) {
         return uint32(_loansDue[due][i >> 3] >> ((i & 7) << 5));

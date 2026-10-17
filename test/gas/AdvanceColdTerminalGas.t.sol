@@ -36,7 +36,8 @@ contract ColdTerminalSeeder is DegenerusGame, BucketSeed {
 }
 
 /// @dev The normal ending runs in separate transactions: the first latches the terminal level
-///      and sends the ending's own terminal request; once answered, the next applies the
+///      (VRF alive, so the loan book settles next), the second settles the empty loan book, the
+///      third sends the ending's own terminal request; once answered, the next applies the
 ///      word and settles capped coinflip backfill; later calls finish the payout checkpoints.
 ///      setUp runs everything before the measured step, so the test body starts cold.
 abstract contract ColdTerminalFixture is DeployProtocol {
@@ -137,6 +138,9 @@ abstract contract ColdTerminalFixture is DeployProtocol {
     ///      answers it with the word the winning buckets were seeded for.
     function _requestTerminalWord() private {
         uint256 before = mockVRF.lastRequestId();
+        game.mineFlip(0); // decision
+        game.mineFlip(0); // the (empty) loan book
+        assertEq(mockVRF.lastRequestId(), before, "no request before the loan book is settled");
         game.mineFlip(0);
         uint256 id = mockVRF.lastRequestId();
         assertGt(id, before, "the ending sends its own terminal request");
