@@ -19,7 +19,7 @@ contract DegenerusGameRngModule is DegenerusGameRngUtils {
     event Advance(uint8 stage, uint24 lvl);
     uint8 private constant STAGE_RNG_REQUESTED = 1;
     uint32 private constant VRF_CALLBACK_GAS_LIMIT = 300_000;
-    uint16 private constant VRF_REQUEST_CONFIRMATIONS = 10;
+    uint16 private constant VRF_REQUEST_CONFIRMATIONS = 6;
     uint16 private constant VRF_MIDDAY_CONFIRMATIONS = 4;
     uint48 private constant RNG_RETRY_TIMEOUT = 20 hours;
 

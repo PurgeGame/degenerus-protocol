@@ -101,7 +101,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
 
     /// @dev VRF request parameters (mirror the advance module's daily/mid-day lanes).
     uint32 private constant VRF_CALLBACK_GAS_LIMIT = 300_000;
-    uint16 private constant VRF_REQUEST_CONFIRMATIONS = 10;
+    uint16 private constant VRF_REQUEST_CONFIRMATIONS = 6;
     uint16 private constant VRF_MIDDAY_CONFIRMATIONS = 4;
 
     /// @notice Emitted when the VRF coordinator is wired or rotated.

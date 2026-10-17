@@ -134,7 +134,7 @@ contract ForkVrfTest is ForkDeployProtocol {
 
         (uint16 minConf, uint32 maxGasLimit,,,,,,, uint8 linkPremium) = coordinator.s_config();
         assertLe(minConf, 4, "mid-day confirmations (4) are above the coordinator minimum");
-        assertGe(coordinator.MAX_REQUEST_CONFIRMATIONS(), 10, "daily confirmations (10) are below the maximum");
+        assertGe(coordinator.MAX_REQUEST_CONFIRMATIONS(), 6, "daily confirmations (6) are below the maximum");
         assertGe(maxGasLimit, GAME_CALLBACK_GAS, "the 300k callback fits the coordinator ceiling");
         assertGe(coordinator.MAX_NUM_WORDS(), 1);
         // DegenerusGameStorage.MIDDAY_RNG_CHARGE_MULT = 6 is "a 5x markup times the coordinator's
@@ -152,7 +152,7 @@ contract ForkVrfTest is ForkDeployProtocol {
         assertEq(r.keyHash, ForkPins.VRF_KEY_HASH, "keyHash");
         assertEq(r.subId, subId, "subId");
         assertEq(r.sender, address(game), "sender");
-        assertEq(r.confirmations, 10, "daily confirmations");
+        assertEq(r.confirmations, 6, "daily confirmations");
         assertEq(r.callbackGas, 300_000, "callback gas");
         assertEq(r.numWords, 1, "numWords");
         assertEq(r.extraArgs, abi.encodeWithSelector(EXTRA_ARGS_V1_TAG, false), "extraArgs = V1{nativePayment:false}");
@@ -211,7 +211,7 @@ contract ForkVrfTest is ForkDeployProtocol {
         Request[] memory retried = _decodeRequests(vm.getRecordedLogs());
         assertEq(retried.length, 1, "one retry request");
         assertTrue(retried[0].id != first.id);
-        assertEq(retried[0].confirmations, 10, "a daily retry keeps daily confirmations");
+        assertEq(retried[0].confirmations, 6, "a daily retry keeps daily confirmations");
         assertTrue(coordinator.s_requestCommitments(first.id) != bytes32(0), "old request still pending");
         assertTrue(coordinator.s_requestCommitments(retried[0].id) != bytes32(0), "new request pending");
 
@@ -349,7 +349,7 @@ contract ForkVrfTest is ForkDeployProtocol {
         assertEq(reissued.length, 1, "the stalled daily request was re-issued");
         assertEq(reissued[0].subId, newSub);
         assertEq(reissued[0].keyHash, KEY_HASH_1000_GWEI);
-        assertEq(reissued[0].confirmations, 10);
+        assertEq(reissued[0].confirmations, 6);
         (uint96 oldBal,,, address oldOwner,) = coordinator.getSubscription(subId);
         assertEq(oldBal, 50 ether, "the retired subscription still holds the LINK");
         assertEq(oldOwner, address(admin));
