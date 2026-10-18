@@ -1,7 +1,7 @@
 {
   "date": "2026-10-18",
   "status": "working-tree source identity; verification status is recorded separately",
-  "base_commit": "7144ca6af45753776041b5f20f6d42225908a979",
+  "base_commit": "31317efa7862ca7b0242120e471a2a03cf0b89d9",
   "source_file_count": 85,
   "source_files": [
     "contracts/AFKingSubscriptionToken.sol",

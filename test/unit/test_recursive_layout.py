@@ -25,5 +25,6 @@ class RecursiveLayoutTests(unittest.TestCase):
    with self.assertRaisesRegex(ValueError,'duplicate'):
     module.read(out)
  def test_expected_modules_come_from_deployment_registry(self):
-  self.assertEqual(len(module.expected_modules()),16)
+  self.assertEqual(len(module.expected_modules()),17)
   self.assertIn('DegenerusGameRngModule',module.expected_modules())
+  self.assertIn('DegenerusGameDegenesisModule',module.expected_modules())
