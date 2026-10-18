@@ -1215,7 +1215,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // STAGE pass of each new level (the `_sdgnrsBonusLevel` latch — level 0 excluded, latch
         // starts at 0), the whale module sizes and delivers sDGNRS's aggregate whale-pass
         // purchase: the largest whole group of five paid passes whose quote fits a quarter of
-        // its claimable, capped at the route's 100. The latch stamps on the ATTEMPT, whatever
+        // its claimable, capped at the route's 1,000. The latch stamps on the ATTEMPT, whatever
         // its outcome: a level whose first STAGE pass finds sDGNRS too poor for one group buys
         // nothing that level, and no later chunk/day this level tries again — one probe per
         // level, never a per-day poll of the claimable. The module re-checks the RNG timing
