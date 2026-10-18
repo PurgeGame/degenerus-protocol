@@ -69,6 +69,7 @@ contracts/modules/DegenerusGameBingoModule.sol
 contracts/modules/DegenerusGameBoonModule.sol
 contracts/modules/DegenerusGameDecimatorModule.sol
 contracts/modules/DegenerusGameDegeneretteModule.sol
+contracts/modules/DegenerusGameDegenesisModule.sol
 contracts/modules/DegenerusGameFoilPackModule.sol
 contracts/modules/DegenerusGameGameOverModule.sol
 contracts/modules/DegenerusGameJackpotDrawModule.sol
