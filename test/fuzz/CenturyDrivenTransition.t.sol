@@ -78,6 +78,15 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
     }
 
     /// @dev Zero futurePrizePool (the high half of the packed pools slot), keeping next.
+    /// @dev Stamp `_sdgnrsBonusLevel` (uint24) without touching its slot-mates.
+    function _stampSdgnrsBonusLevel(uint24 lvl) internal {
+        bytes32 slot = bytes32(GameSlots.SDGNRS_BONUS_LEVEL);
+        uint256 shift = GameSlots.SDGNRS_BONUS_LEVEL_OFFSET * 8;
+        uint256 word = uint256(vm.load(address(game), slot));
+        word = (word & ~(uint256(type(uint24).max) << shift)) | (uint256(lvl) << shift);
+        vm.store(address(game), slot, bytes32(word));
+    }
+
     function _clearFuturePool() internal {
         uint256 packed = uint256(
             vm.load(address(game), bytes32(PRIZE_POOLS_PACKED_SLOT))
@@ -231,9 +240,14 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
         );
 
         // Above the plain ratchet but below the floor: the transition must NOT latch.
+        // sDGNRS's once-per-level whale buy (up to 1,000 passes) and the future-pool drip those
+        // buys feed are real ETH into the next pool that can clear the floor on their own.
+        // Stamping its level-199 attempt and emptying the future pool keep this window on the floor.
+        _stampSdgnrsBonusLevel(199);
         _seedNextPool(ratchet199 + 100 ether);
         assertLt(_nextPool(), floor, "setup: pool must stay below the floor");
         for (uint256 i = 0; i < 4; i++) {
+            _clearFuturePool();
             _driveDay();
         }
         assertEq(game.level(), 199, "sub-floor pool must not advance the century");

@@ -31,6 +31,11 @@ contract DegenesisFoilSnapPayout is FoilSnapPayout, DegenesisDeployProtocol {
     function _deployTimestamp() internal pure override(DeployProtocol, DegenesisDeployProtocol) returns (uint256) {
         return DEPLOY_TS_DEGENESIS;
     }
+
+    /// @dev The day-1 deploy draws a different trajectory; this series surfaces a FLIP-lane match.
+    function _wordSeries() internal pure override returns (uint256) {
+        return 31;
+    }
 }
 
 contract DegenesisFoilClaimBatch is FoilClaimBatch, DegenesisDeployProtocol {

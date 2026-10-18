@@ -134,6 +134,9 @@ contract ForkStethTest is ForkDeployProtocol {
         assertGe(lido.balanceOf(address(game)) + STETH_ROUNDING * autoStakes, autoStaked, "auto-stake minted");
         _assertSolvent("after auto-stake");
 
+        // The auto-stake leaves ETH only for ETH-settled claims. Vault claimable settles in stETH,
+        // so a backed Vault credit is ETH the owner may stake.
+        _seedClaimable(game.walletIdOf(ContractAddresses.VAULT), 10 ether);
         uint256 amount = _stakeable() / 2;
         assertGt(amount, 1 ether, "fixture: free ETH to stake");
         uint256 eth0 = address(game).balance;

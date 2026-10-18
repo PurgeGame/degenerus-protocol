@@ -1190,18 +1190,22 @@ contract ParimutuelSettlementProtocolTest is PariSettlementProtocolBase {
     }
 
     /// @dev Drives whole days until the one that seals `round`, then replays that day one
-    ///      checkpoint at a time and returns right after the sealing checkpoint.
+    ///      checkpoint at a time and returns right after the sealing checkpoint. sDGNRS's
+    ///      level-start whale buys (up to 1,000 passes) queue thousands of ticket checkpoints.
     function _driveUntilSealed(uint24 round) private {
         for (uint256 d; d < 60; ++d) {
             if (!game.jackpotPhase()) _seedNextPool(5_000 ether);
             uint256 snap = vm.snapshotState();
             _driveDay();
-            if (_outcome(round) == 0) continue;
-            vm.revertToState(snap);
+            if (_outcome(round) == 0) {
+                vm.deleteStateSnapshot(snap);
+                continue;
+            }
+            vm.revertToStateAndDelete(snap);
             simTime += 1 days + 1;
             vm.warp(simTime);
             vm.resumeGasMetering();
-            for (uint256 j; j < 800; ++j) {
+            for (uint256 j; j < 20_000; ++j) {
                 _fulfillVrfIfPending();
                 bool ok = _mineStep();
                 if (_outcome(round) != 0) {
@@ -1475,7 +1479,7 @@ contract ParimutuelSettlementProtocolTest is PariSettlementProtocolBase {
     function _stepUntilClear() private returns (Vm.Log[] memory logs) {
         vm.recordLogs();
         vm.resumeGasMetering();
-        for (uint256 i; i < 800 && _pending(); ++i) {
+        for (uint256 i; i < 20_000 && _pending(); ++i) {
             _fulfillVrfIfPending();
             if (!_mineStep()) {
                 simTime += 1 days + 1;

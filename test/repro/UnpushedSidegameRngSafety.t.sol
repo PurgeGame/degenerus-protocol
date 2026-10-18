@@ -42,6 +42,7 @@ contract UnpushedSidegameRngSafety is CrapsPins {
         // holds the three protocol IDs, so the next two are 4 and 5.
         assertEq(_idFor(address(0xA11CE)), 4);
         assertEq(_idFor(address(0xB0B)), 5);
+        _warpToAwardGenesis();
         table = new CrapsViews();
         api = JackpotBattle(address(table));
         uint256 elapsed = (vm.getBlockTimestamp() - 82_620) % 1 days;

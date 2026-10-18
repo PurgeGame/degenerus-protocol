@@ -880,11 +880,16 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
             for (uint256 j = 0; j < 400; j++) {
                 _fulfillVrfIfPending();
                 bool wasLive = game.jackpotPhase();
+                // Only the ending call rewinds to its snapshot; every other one is freed.
                 uint256 snap = vm.snapshotState();
                 vm.recordLogs();
-                if (!_mineStep()) break;
+                if (!_mineStep()) {
+                    vm.deleteStateSnapshot(snap);
+                    break;
+                }
                 // The span: draws ended, flag not yet dropped.
                 if (game.jackpotPhase()) {
+                    vm.deleteStateSnapshot(snap);
                     (, , , , bool open, uint8 phaseDay) = game.growthState(0);
                     if (!open) {
                         sawSpan = true;
@@ -894,7 +899,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
                 } else if (wasLive) {
                     // The ending call: the draws ended, then the transition closed, in one call.
                     _assertEndsDrawsBeforeTransition(vm.getRecordedLogs());
-                    vm.revertToState(snap);
+                    vm.revertToStateAndDelete(snap);
                     uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
                     slot0 = (slot0 & ~(uint256(0xFF) << 128)) | (uint256(1) << 160); // jackpotCounter = 0, phaseTransitionActive
                     vm.store(address(game), bytes32(0), bytes32(slot0));
@@ -904,6 +909,8 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
                     sawSpan = true;
                     _assertSpanClosed(phaseDay);
                     break;
+                } else {
+                    vm.deleteStateSnapshot(snap);
                 }
                 if (game.level() > round) break;
             }

@@ -61,6 +61,7 @@ contract SdgnrsLevelHighPasses is DeployProtocol {
         uint256 creditedHigh;
         uint256 creditedNormal;
         uint256 allNormalCredits;
+        uint256 allHighCredits;
         // sDGNRS's once-per-level automatic whale purchase banks one NORMAL craps pass per pass
         // bought below level 10, exactly as any whale buyer's does. Lootbox rewards may also
         // bank normal passes, independently of the high-only level cut.
@@ -70,7 +71,8 @@ contract SdgnrsLevelHighPasses is DeployProtocol {
             if (l.emitter == address(crapsBattle) && l.topics[0] == PASSES_CREDITED_SIG
                 && uint32(uint256(l.topics[1])) == SDGNRS_ID) {
                 (bool high, uint256 count) = abi.decode(l.data, (bool, uint256));
-                if (!high) allNormalCredits += count;
+                if (high) allHighCredits += count;
+                else allNormalCredits += count;
             }
             if (
                 l.emitter == address(game) && l.topics[0] == WHALE_PURCHASED_SIG
@@ -108,9 +110,9 @@ contract SdgnrsLevelHighPasses is DeployProtocol {
         assertGe(allNormalCredits, whaleNormals, "whale purchases still bank their normal passes");
 
         // What the run banked minus what the daily seat already spent: the seat takes one high
-        // pass per opened day; independent reward credits are included in the normal bank.
+        // pass per opened day; passes sDGNRS won off its own lootboxes bank in either lane.
         (uint256 normalAfter, uint256 highAfter) = crapsBattle.passCreditsOf(ContractAddresses.SDGNRS);
-        assertLe(highAfter, creditedHigh, "the bank holds no more than was credited");
+        assertLe(highAfter, highBefore + allHighCredits, "the bank holds no more than was credited");
         assertLe(
             normalAfter,
             normalBefore + allNormalCredits,

@@ -34,10 +34,6 @@ contract FoilSnapPayout is DeployProtocol {
     ///      RNG here is a pure function of that trajectory; the guard below fails the run if the
     ///      word series surfaces no foil match.
     uint256 private constant PURCHASE_DAYS = 30;
-    /// @dev Series label of the VRF word sequence. Each foil line's seed is keyed by the buyer's
-    ///      wallet ID, so the draws that produce claimable matches depend on it; this series
-    ///      surfaces a FLIP-lane match (1 claim, 4,800 FLIP).
-    uint256 private constant WORD_SERIES = 3;
     uint256 private constant RUN_DAYS = PURCHASE_DAYS + 50;
 
     /// @dev snapShift is a uint8 at slot 14, byte 7 — packed with ticketCursor (bytes 0-3)
@@ -80,6 +76,14 @@ contract FoilSnapPayout is DeployProtocol {
             if (!game.rngLocked()) break;
             _advance();
         }
+    }
+
+    /// @dev Series label of the VRF word sequence. Each foil line's seed is keyed by the buyer's
+    ///      wallet ID, so the draws that produce claimable matches depend on it; this series
+    ///      surfaces a FLIP-lane match (1 claim, 4,800 FLIP). A timeline that moves the
+    ///      trajectory overrides it.
+    function _wordSeries() internal pure virtual returns (uint256) {
+        return 3;
     }
 
     function _seed(uint256 a, uint256 b) internal pure returns (uint256 w) {
@@ -147,7 +151,7 @@ contract FoilSnapPayout is DeployProtocol {
                     0, 50 * 400, 0, bytes32(0), MintPaymentKind.DirectEth, false
                 ) {} catch {}
             }
-            _completeDay(_seed(WORD_SERIES, d));
+            _completeDay(_seed(_wordSeries(), d));
             _endDay = game.currentDayView();
             uint256 snapshot = vm.snapshotState();
             (, uint256 paidFlip,, uint256 claims) = _claimAll();

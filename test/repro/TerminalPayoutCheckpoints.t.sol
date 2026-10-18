@@ -19,6 +19,7 @@ contract TerminalPayoutHarness is DegenerusGameGameOverModule, BucketSeed {
     function seed(uint24 lvl, uint256 word) external returns (uint24 day) {
         day = _simulatedDayIndex();
         level = lvl;
+        degenesisClosed = uint8(DEGENESIS_DAYS);
         jackpotPhaseFlag = true;
         dailyIdx = day - 31;
         rngRequestDay = day;
@@ -61,7 +62,8 @@ contract TerminalPayoutCheckpointsTest is Test {
         uint24 day = h.seed(110, 0xAC4DE45EDBEEF);
         vm.deal(address(h), 1000 ether);
         vm.cool(address(h));
-        (,, bool unlocked,) = h.runGameOverAdvance{gas: 10_000_000}(day, 110, 2_000_000);
+        // Covers the setup's admission bound, Degenesis split included.
+        (,, bool unlocked,) = h.runGameOverAdvance{gas: 10_000_000}(day, 110, 2_500_000);
         assertFalse(unlocked);
         (bool ended, uint256 paid, uint256 time, uint256 budget,) = h.terminalState();
         assertTrue(ended);

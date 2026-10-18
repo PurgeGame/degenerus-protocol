@@ -564,14 +564,19 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
         // Stall-window cohort: the daily lock does not block ticket buys (they land
         // on the fresh write buffer), so bypass the checked helper's lock-skip.
         _buyTicketsUnchecked();
+        // A target met at the evening seal makes this request the level transition, which
+        // routes the stall-window cohort one level up.
+        uint24 stallLvl = _level() + 1;
         assertGt(
-            _queueLen(_writeKeyOf(L + 1)),
+            _queueLen(_writeKeyOf(stallLvl)),
             0,
             "harness: the stall-window cohort must stage on the write side"
         );
 
         uint256 owedBefore = _owedOf(L + 1, buyer) + _owedOf((L + 1) | TICKET_SLOT_BIT, buyer);
         assertGt(owedBefore, 0, "harness: the buyer holds queued entries at the payout key");
+        uint256 stallOwedBefore = stallLvl == L + 1 ? 0 : _owedOf(stallLvl, buyer) + _owedOf(stallLvl | TICKET_SLOT_BIT, buyer);
+        assertTrue(stallLvl == L + 1 || stallOwedBefore != 0, "harness: the stall-window entries are owed");
 
         // Dead VRF: never fulfill again; past the 14-day window the ending is deterministic.
         for (uint256 i = 0; i < 10 && !game.gameOver(); i++) {
@@ -596,6 +601,18 @@ contract MiddaySwapJackpotCohort is DeployProtocol {
             owedBefore,
             "dead ending: every queued entry is left for its claim"
         );
+        if (stallLvl != L + 1) {
+            assertGt(
+                _queueLen(stallLvl) + _queueLen(stallLvl | TICKET_SLOT_BIT),
+                0,
+                "dead ending: the stall-window cohort stays queued"
+            );
+            assertEq(
+                _owedOf(stallLvl, buyer) + _owedOf(stallLvl | TICKET_SLOT_BIT, buyer),
+                stallOwedBefore,
+                "dead ending: every stall-window entry is left for its claim"
+            );
+        }
     }
 
     /// @dev Terminal end-state: the PAYOUT key is fully drained on both parities and

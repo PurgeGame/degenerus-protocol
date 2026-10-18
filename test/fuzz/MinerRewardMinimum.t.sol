@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
 /// @title MinerRewardMinimum — whole-FLIP mining rewards with a 1 FLIP floor on positive pay
@@ -35,6 +36,7 @@ contract MinerRewardMinimum is DeployProtocol {
         uint256 dayStart = ((block.timestamp - 82_620) / 1 days + 1) * 1 days + 82_620;
         vm.warp(dayStart + 1 minutes);
         vm.fee(1 gwei);
+        _queueDayTickets();
         // The day's preparation and request. Any call whose measured gas stays inside the
         // unpaid first million pays exactly zero, nonzero base fee or not.
         for (uint256 i; i < 16 && !game.rngLocked(); ++i) {
@@ -68,6 +70,18 @@ contract MinerRewardMinimum is DeployProtocol {
         snapshot = vm.snapshotState();
         assertGt(rawPerWei, 0, "non-vacuity: a 1 wei fee prices a positive raw reward");
         assertLt(rawPerWei, 1 ether, "fixture: the 1 wei raw reward is below 1 FLIP");
+    }
+
+    /// @dev Ordinary ticket buys queued before the day's request, so the delivered day's work
+    ///      measures past the unpaid first million.
+    function _queueDayTickets() private {
+        (, , , , uint256 priceWei) = game.purchaseInfo();
+        for (uint256 i; i < 8; ++i) {
+            address buyer = makeAddr(string(abi.encodePacked("day_ticket_buyer", vm.toString(i))));
+            vm.deal(buyer, 10 ether);
+            vm.prank(buyer);
+            game.purchase{value: (priceWei * 4000) / 400}(0, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        }
     }
 
     /// @dev Replay the prepared advance at `fee` and return (measured gas, MinerWork reward,

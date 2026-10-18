@@ -337,12 +337,20 @@ contract SdgnrsConstructorSubscribeTest is DeployProtocol {
             abi.encodeWithSelector(AFKingSubscriptionToken.consumeSeat.selector),
             0
         );
+        // The Vault drains game credit first; sDGNRS spends its AFKing funding first.
         vm.expectCall(
             ContractAddresses.GAME,
             abi.encodeWithSignature(
                 "subscribe(uint32,bool,bool,uint8,uint32,uint256)", uint32(0), true, false, uint8(1), uint32(0), uint256(0)
             ),
-            2
+            1
+        );
+        vm.expectCall(
+            ContractAddresses.GAME,
+            abi.encodeWithSignature(
+                "subscribe(uint32,bool,bool,uint8,uint32,uint256)", uint32(0), false, false, uint8(1), uint32(0), uint256(0)
+            ),
+            1
         );
         vm.recordLogs();
         _deployProtocol();
@@ -359,7 +367,7 @@ contract SdgnrsConstructorSubscribeTest is DeployProtocol {
             uint32 player = uint32(uint256(logs[i].topics[1]));
             (uint8 qty, bool drain, bool tickets) = abi.decode(logs[i].data, (uint8, bool, bool));
             assertEq(qty, 1);
-            assertTrue(drain);
+            assertEq(drain, player == 1, "only the Vault drains game credit first");
             assertFalse(tickets);
             assertEq(logs[i].topics[2], bytes32(0), "self-funded");
             if (player == 2) sdgnrsSub = i;

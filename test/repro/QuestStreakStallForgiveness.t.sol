@@ -112,33 +112,34 @@ contract QuestStreakStallForgiveness is DeployProtocol {
         address completedPlayer = makeAddr("mask-player");
         address debtPlayer = makeAddr("debt-player");
 
-        _roll(8);
-        _award(debtPlayer, 5, 8);
-        _roll(10); // bank day 9
+        // setUp rolled days 9 and 10, so this run starts on day 11.
+        _roll(11);
+        _award(debtPlayer, 5, 11);
+        _roll(13); // bank day 12
 
-        _award(completedPlayer, 5, 10);
+        _award(completedPlayer, 5, 13);
         _completePrimary(completedPlayer);
         assertEq(_questField(completedPlayer, OFF_COMPLETION_MASK, 8) & 1, 1, "primary is complete");
 
         // Game-side callers pass wall time here during a stalled advance. They must synchronize
-        // against the newest rolled quest day (10), not move the completion epoch to wall day 13.
+        // against the newest rolled quest day (13), not move the completion epoch to wall day 16.
         uint32 qid1 = _qid(completedPlayer);
         vm.prank(ContractAddresses.GAME);
-        quests.beginAfking(qid1, 13);
-        assertEq(_questField(completedPlayer, OFF_LAST_SYNC, 24), 10, "sync clock stays on rolled day");
+        quests.beginAfking(qid1, 16);
+        assertEq(_questField(completedPlayer, OFF_LAST_SYNC, 24), 13, "sync clock stays on rolled day");
         assertEq(_questField(completedPlayer, OFF_COMPLETION_MASK, 8) & 1, 1, "completion mask stays closed");
         (, , , bool duplicate) = _completePrimary(completedPlayer);
         assertFalse(duplicate, "the same stale quest cannot pay twice");
 
-        // This player has an older anchor. A wall-day bonus advances it only to quest day 10;
+        // This player has an older anchor. A wall-day bonus advances it only to quest day 13;
         // the rolled-day history then makes later gap accounting independent of wall time.
-        _award(debtPlayer, 4, 13);
-        assertEq(_questField(debtPlayer, OFF_LAST_ACTIVE, 24), 10, "bonus anchor normalized to quest day");
+        _award(debtPlayer, 4, 16);
+        assertEq(_questField(debtPlayer, OFF_LAST_ACTIVE, 24), 13, "bonus anchor normalized to quest day");
         assertEq(_questField(debtPlayer, OFF_STREAK, 16), 9, "bonus reaches the raw streak");
         assertEq(quests.effectiveBaseStreak(_qid(debtPlayer)), 5, "same-day view remains the start-of-day snapshot");
 
-        _roll(16);
-        assertFalse(_questWasRolled(15), "later gap day remains unrolled");
+        _roll(19);
+        assertFalse(_questWasRolled(18), "later gap day remains unrolled");
         assertEq(quests.effectiveBaseStreak(_qid(debtPlayer)), 9, "recovery cannot panic or erase the bonus");
     }
 

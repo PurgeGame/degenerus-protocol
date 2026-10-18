@@ -83,8 +83,9 @@ contract FSMEmptyDependencies {
         ++burns;
     }
 
-    function lockJackpotBattle(uint24, uint256, uint24) external {
+    function lockJackpotBattle(uint24, uint256, uint24) external returns (bool) {
         ++battleLocks;
+        return true;
     }
     function openBonusDay() external pure {}
 

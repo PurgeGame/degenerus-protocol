@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
@@ -44,6 +45,7 @@ contract MinerKeeperRegistration is DeployProtocol {
         uint256 dayStart = ((block.timestamp - 82_620) / 1 days + 1) * 1 days + 82_620;
         vm.warp(dayStart + 1 minutes);
         vm.fee(1 gwei);
+        _queueDayTickets();
         preSnapshot = vm.snapshotState();
         for (uint256 i; i < 16 && !game.rngLocked(); ++i) {
             vm.prank(preparer);
@@ -52,6 +54,18 @@ contract MinerKeeperRegistration is DeployProtocol {
         assertTrue(game.rngLocked(), "the request took the daily lock");
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), uint256(keccak256("registration_word")));
         snapshot = vm.snapshotState();
+    }
+
+    /// @dev Ordinary ticket buys queued before the day's request, so the delivered day's work
+    ///      measures past the unpaid first million.
+    function _queueDayTickets() private {
+        (, , , , uint256 priceWei) = game.purchaseInfo();
+        for (uint256 i; i < 8; ++i) {
+            address buyer = makeAddr(string(abi.encodePacked("day_ticket_buyer", vm.toString(i))));
+            vm.deal(buyer, 10 ether);
+            vm.prank(buyer);
+            game.purchase{value: (priceWei * 4000) / 400}(0, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        }
     }
 
     // ---------------------------------------------------------------------

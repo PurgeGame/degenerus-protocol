@@ -125,7 +125,8 @@ contract VaultAfkingFunding is DeployProtocol {
     }
 
     // ---------------------------------------------------------------------
-    // D. The final sweep pays each sink its afking balance
+    // D. The final sweep pays the Vault and GNRUS their afking balance; sDGNRS's afking
+    //    leaves claimablePool for the final prizes at game over
     // ---------------------------------------------------------------------
 
     function test_finalSweepPaysEachSinkItsAfkingAndClaimable() public {
@@ -147,8 +148,9 @@ contract VaultAfkingFunding is DeployProtocol {
         uint256 owedS = claimableBalance(game, ContractAddresses.SDGNRS) + game.afkingFundingOf(ContractAddresses.SDGNRS);
         uint256 owedG = claimableBalance(game, ContractAddresses.GNRUS) + game.afkingFundingOf(ContractAddresses.GNRUS);
         assertGe(owedV, 3 ether, "harness: the vault's afking survives to the sweep");
-        assertGe(owedS, 5 ether, "harness: sDGNRS's afking survives to the sweep");
         assertGe(owedG, 7 ether, "harness: GNRUS's afking survives to the sweep");
+        // Terminal setup released sDGNRS's whole AFKing bucket, deposits included, to the final prizes.
+        assertEq(game.afkingFundingOf(ContractAddresses.SDGNRS), 0, "sDGNRS's afking left for the final prizes");
 
         // Backed obligations only: each sink's 1-wei claimable sentinel is not ETH the game holds.
         uint256 total = address(game).balance;
@@ -163,7 +165,7 @@ contract VaultAfkingFunding is DeployProtocol {
         assertTrue(game.isFinalSwept(), "harness: the sweep ran");
 
         assertEq(ContractAddresses.VAULT.balance - v0, owedV + third, "vault: claimable + afking + a third");
-        assertEq(ContractAddresses.SDGNRS.balance - s0, owedS + third, "sDGNRS: claimable + afking + a third");
+        assertEq(ContractAddresses.SDGNRS.balance - s0, owedS + third, "sDGNRS: claimable + a third");
         assertEq(
             ContractAddresses.GNRUS.balance - g0,
             owedG + (total - owedV - owedS - owedG - third - third),
