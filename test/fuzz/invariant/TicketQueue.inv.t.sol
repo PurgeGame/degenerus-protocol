@@ -14,7 +14,7 @@ contract TicketQueueInvariant is DeployProtocol {
     TicketTrackingHandler public ticketHandler;
     VRFHandler public vrfHandler;
 
-    function setUp() public {
+    function setUp() public virtual {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
 
@@ -60,7 +60,7 @@ contract TicketQueueInvariant is DeployProtocol {
     ///      process (unique TQ_ prefix) and must be non-zero once MIN_RUNS runs have completed.
     uint256 private constant MIN_RUNS = 16;
 
-    function _acc(string memory k, uint256 v) private returns (uint256 total) {
+    function _acc(string memory k, uint256 v) internal virtual returns (uint256 total) {
         total = vm.envOr(k, uint256(0)) + v;
         vm.setEnv(k, vm.toString(total));
     }

@@ -178,7 +178,7 @@ contract RedemptionInvariants is DeployProtocol {
     ///      single-test runs) is required only once enough cumulative runs hold distinct ones.
     uint256 private constant POST_GO_MIN_RUNS = 256;
 
-    function _acc(string memory k, uint256 v) private returns (uint256 total) {
+    function _acc(string memory k, uint256 v) internal virtual returns (uint256 total) {
         total = vm.envOr(k, uint256(0)) + v;
         vm.setEnv(k, vm.toString(total));
     }

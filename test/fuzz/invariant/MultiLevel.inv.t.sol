@@ -17,7 +17,7 @@ import {SolvencyObligations} from "../helpers/SolvencyObligations.sol";
 contract MultiLevelInvariant is DeployProtocol {
     MultiLevelHandler public mlHandler;
 
-    function setUp() public {
+    function setUp() public virtual {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
         mlHandler = new MultiLevelHandler(game, mockVRF, 15);
@@ -75,7 +75,7 @@ contract MultiLevelInvariant is DeployProtocol {
         );
     }
 
-    function test_openingReachesLevelTen() public view {
+    function test_openingReachesLevelTen() public view virtual {
         assertGe(uint256(game.level()), mlHandler.OPENING_LEVEL(), "opening level");
         assertGe(mlHandler.ghost_levelTransitions(), mlHandler.OPENING_LEVEL(), "each level was a recorded transition");
         assertLe(mlHandler.openingDays(), mlHandler.OPENING_MAX_DAYS(), "opening bound");

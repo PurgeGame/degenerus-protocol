@@ -742,7 +742,7 @@ contract SeatCapInvariant is DeployProtocol {
     SeatCapHandler public handler;
     address internal vaultOp;
 
-    function setUp() public {
+    function setUp() public virtual {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
         mockVRF.fundSubscription(1, 1_000_000 ether);
@@ -770,47 +770,47 @@ contract SeatCapInvariant is DeployProtocol {
     }
 
     function afterInvariant() public {
-        uint256 runs = vm.envOr("SEATCAP_RUNS", uint256(0)) + 1;
-        vm.setEnv("SEATCAP_RUNS", vm.toString(runs));
-        uint256 prevMax = vm.envOr("SEATCAP_MAXSUM", uint256(0));
-        if (handler.maxSum() > prevMax) vm.setEnv("SEATCAP_MAXSUM", vm.toString(handler.maxSum()));
-        _bump("SEATCAP_CAPHITS", handler.capHits());
-        _bump("SEATCAP_BURNS", handler.gBurns());
-        _bump("SEATCAP_INSERTS", handler.gInsertions());
-        _bump("SEATCAP_VMINTS", handler.gVaultMints());
-        _bump("SEATCAP_CRANKS", handler.dayCranks());
+        uint256 runs = vm.envOr(_counterKey("SEATCAP_RUNS"), uint256(0)) + 1;
+        vm.setEnv(_counterKey("SEATCAP_RUNS"), vm.toString(runs));
+        uint256 prevMax = vm.envOr(_counterKey("SEATCAP_MAXSUM"), uint256(0));
+        if (handler.maxSum() > prevMax) vm.setEnv(_counterKey("SEATCAP_MAXSUM"), vm.toString(handler.maxSum()));
+        _bump(_counterKey("SEATCAP_CAPHITS"), handler.capHits());
+        _bump(_counterKey("SEATCAP_BURNS"), handler.gBurns());
+        _bump(_counterKey("SEATCAP_INSERTS"), handler.gInsertions());
+        _bump(_counterKey("SEATCAP_VMINTS"), handler.gVaultMints());
+        _bump(_counterKey("SEATCAP_CRANKS"), handler.dayCranks());
         uint256 n = handler.N_ACTIONS();
         for (uint256 a; a < n; ++a) {
             string memory k = vm.toString(a);
-            _bump(string.concat("SEATCAP_C_", k), handler.calls(a));
-            _bump(string.concat("SEATCAP_OK_", k), handler.oks(a));
+            _bump(string.concat(_counterKey("SEATCAP_C_"), k), handler.calls(a));
+            _bump(string.concat(_counterKey("SEATCAP_OK_"), k), handler.oks(a));
             bytes4[] memory sels = handler.revertSelectors(a);
             for (uint256 j; j < sels.length; ++j) {
-                string memory sk = string.concat("SEATCAP_RV_", k, "_", vm.toString(abi.encodePacked(sels[j])));
+                string memory sk = string.concat(_counterKey("SEATCAP_RV_"), k, "_", vm.toString(abi.encodePacked(sels[j])));
                 uint256 prior = vm.envOr(sk, uint256(0));
                 if (prior == 0) {
-                    string memory lk = string.concat("SEATCAP_RVL_", k);
+                    string memory lk = string.concat(_counterKey("SEATCAP_RVL_"), k);
                     vm.setEnv(lk, string.concat(vm.envOr(lk, string("")), " ", vm.toString(abi.encodePacked(sels[j]))));
                 }
                 vm.setEnv(sk, vm.toString(prior + handler.revCount(a, sels[j])));
             }
         }
         console.log("SEATCAP runs", runs);
-        console.log("SEATCAP state-engine cranks inside driveDay (summed)", vm.envOr("SEATCAP_CRANKS", uint256(0)));
-        console.log("SEATCAP max L+S", vm.envOr("SEATCAP_MAXSUM", uint256(0)));
-        console.log("SEATCAP steps at/over the cap (summed)", vm.envOr("SEATCAP_CAPHITS", uint256(0)));
+        console.log("SEATCAP state-engine cranks inside driveDay (summed)", vm.envOr(_counterKey("SEATCAP_CRANKS"), uint256(0)));
+        console.log("SEATCAP max L+S", vm.envOr(_counterKey("SEATCAP_MAXSUM"), uint256(0)));
+        console.log("SEATCAP steps at/over the cap (summed)", vm.envOr(_counterKey("SEATCAP_CAPHITS"), uint256(0)));
         console.log("SEATCAP burns / non-exempt insertions / vault seats (summed)",
             string.concat(
-                vm.toString(vm.envOr("SEATCAP_BURNS", uint256(0))), " / ",
-                vm.toString(vm.envOr("SEATCAP_INSERTS", uint256(0))), " / ",
-                vm.toString(vm.envOr("SEATCAP_VMINTS", uint256(0)))
+                vm.toString(vm.envOr(_counterKey("SEATCAP_BURNS"), uint256(0))), " / ",
+                vm.toString(vm.envOr(_counterKey("SEATCAP_INSERTS"), uint256(0))), " / ",
+                vm.toString(vm.envOr(_counterKey("SEATCAP_VMINTS"), uint256(0)))
             ));
         for (uint256 a; a < n; ++a) {
             string memory k = vm.toString(a);
             console.log(string.concat(
                 "SEATCAP_ACTION ", handler.actionName(a),
-                " calls=", vm.toString(vm.envOr(string.concat("SEATCAP_C_", k), uint256(0))),
-                " ok=", vm.toString(vm.envOr(string.concat("SEATCAP_OK_", k), uint256(0))),
+                " calls=", vm.toString(vm.envOr(string.concat(_counterKey("SEATCAP_C_"), k), uint256(0))),
+                " ok=", vm.toString(vm.envOr(string.concat(_counterKey("SEATCAP_OK_"), k), uint256(0))),
                 " reverts:", _revList(k)
             ));
         }
@@ -821,15 +821,15 @@ contract SeatCapInvariant is DeployProtocol {
         // mineFlip action is exempt: driveDay always cranks the day to NoWork first, so a lone mineFlip
         // legitimately finds no work (0 of 180 succeeded); the day cranks are asserted instead.
         if (runs < SEATCAP_MIN_RUNS) return;
-        assertGt(vm.envOr("SEATCAP_CAPHITS", uint256(0)), 0, "vacuous: the seat bound was never reached");
-        assertGt(vm.envOr("SEATCAP_BURNS", uint256(0)), 0, "vacuous: no seat was ever burned");
-        assertGt(vm.envOr("SEATCAP_INSERTS", uint256(0)), 0, "vacuous: no non-exempt seat was ever inserted");
-        assertGt(vm.envOr("SEATCAP_VMINTS", uint256(0)), 0, "vacuous: the vault never minted a seat");
-        assertGt(vm.envOr("SEATCAP_CRANKS", uint256(0)), 0, "vacuous: driveDay never cranked the engine");
+        assertGt(vm.envOr(_counterKey("SEATCAP_CAPHITS"), uint256(0)), 0, "vacuous: the seat bound was never reached");
+        assertGt(vm.envOr(_counterKey("SEATCAP_BURNS"), uint256(0)), 0, "vacuous: no seat was ever burned");
+        assertGt(vm.envOr(_counterKey("SEATCAP_INSERTS"), uint256(0)), 0, "vacuous: no non-exempt seat was ever inserted");
+        assertGt(vm.envOr(_counterKey("SEATCAP_VMINTS"), uint256(0)), 0, "vacuous: the vault never minted a seat");
+        assertGt(vm.envOr(_counterKey("SEATCAP_CRANKS"), uint256(0)), 0, "vacuous: driveDay never cranked the engine");
         for (uint256 a; a < n; ++a) {
             if (a == 10) continue; // A_MINE, see above
             assertGt(
-                vm.envOr(string.concat("SEATCAP_OK_", vm.toString(a)), uint256(0)),
+                vm.envOr(string.concat(_counterKey("SEATCAP_OK_"), vm.toString(a)), uint256(0)),
                 0,
                 string.concat("vacuous: action never succeeded: ", handler.actionName(a))
             );
@@ -838,14 +838,19 @@ contract SeatCapInvariant is DeployProtocol {
 
     uint256 private constant SEATCAP_MIN_RUNS = 16;
 
+    /// @dev Process-environment key for a campaign counter; a variant sharing the process overrides it.
+    function _counterKey(string memory k) internal pure virtual returns (string memory) {
+        return k;
+    }
+
     function _revList(string memory k) internal view returns (string memory out) {
-        string memory list = vm.envOr(string.concat("SEATCAP_RVL_", k), string(""));
+        string memory list = vm.envOr(string.concat(_counterKey("SEATCAP_RVL_"), k), string(""));
         if (bytes(list).length == 0) return "";
         string[] memory parts = vm.split(list, " ");
         for (uint256 i; i < parts.length; ++i) {
             if (bytes(parts[i]).length == 0) continue;
             out = string.concat(out, " ", parts[i], "x",
-                vm.toString(vm.envOr(string.concat("SEATCAP_RV_", k, "_", parts[i]), uint256(0))));
+                vm.toString(vm.envOr(string.concat(_counterKey("SEATCAP_RV_"), k, "_", parts[i]), uint256(0))));
         }
     }
 

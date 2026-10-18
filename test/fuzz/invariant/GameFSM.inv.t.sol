@@ -20,7 +20,7 @@ contract GameFSMInvariant is DeployProtocol {
     uint256 internal openingAdvances;
     uint256 internal openingVrf;
 
-    function setUp() public {
+    function setUp() public virtual {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
 
@@ -112,7 +112,7 @@ contract GameFSMInvariant is DeployProtocol {
     ///      that latches game over through the deadman can legitimately process no word).
     uint256 private constant MIN_RUNS = 16;
 
-    function _acc(string memory k, uint256 v) private returns (uint256 total) {
+    function _acc(string memory k, uint256 v) internal virtual returns (uint256 total) {
         total = vm.envOr(k, uint256(0)) + v;
         vm.setEnv(k, vm.toString(total));
     }

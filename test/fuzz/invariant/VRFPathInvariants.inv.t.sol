@@ -11,7 +11,7 @@ import {VRFPathHandler} from "../handlers/VRFPathHandler.sol";
 contract VRFPathInvariants is DeployProtocol {
     VRFPathHandler public handler;
 
-    function setUp() public {
+    function setUp() public virtual {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
 
@@ -123,7 +123,7 @@ contract VRFPathInvariants is DeployProtocol {
         assertGt(gaps, 0, "VRFPath: no recovery ever spanned a skipped day - gap backfill unexercised");
     }
 
-    function _acc(string memory k, uint256 v) private returns (uint256 total) {
+    function _acc(string memory k, uint256 v) internal virtual returns (uint256 total) {
         total = vm.envOr(k, uint256(0)) + v;
         vm.setEnv(k, vm.toString(total));
     }

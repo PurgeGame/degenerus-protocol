@@ -27,7 +27,7 @@ contract CoinSupplyInvariant is DeployProtocol {
     WhaleHandler public whaleHandler;
     FlipSupplyProbe public probe;
 
-    function setUp() public {
+    function setUp() public virtual {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
 
@@ -104,7 +104,7 @@ contract CoinSupplyInvariant is DeployProtocol {
     ///      the underlying game progress (purchases, mineFlips, VRF words).
     uint256 private constant MIN_RUNS = 16;
 
-    function _acc(string memory k, uint256 v) private returns (uint256 total) {
+    function _acc(string memory k, uint256 v) internal virtual returns (uint256 total) {
         total = vm.envOr(k, uint256(0)) + v;
         vm.setEnv(k, vm.toString(total));
     }

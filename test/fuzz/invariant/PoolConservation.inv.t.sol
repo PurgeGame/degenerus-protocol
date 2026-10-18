@@ -64,7 +64,7 @@ contract PoolConservation is DeployProtocol {
     // Used ONLY by the focused falsifiability test to inject unbacked credit into futurePrizePool.
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = GameSlots.PRIZE_POOLS_PACKED;
 
-    function setUp() public {
+    function setUp() public virtual {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
         // Back the pool-moving buys with solvent funds so a buy/advance that DOES run does not revert on the
@@ -166,7 +166,7 @@ contract PoolConservation is DeployProtocol {
         assertGt(claims, 0, "NON-VACUITY: no claim ever paid out");
     }
 
-    function _acc(string memory k, uint256 v) private returns (uint256 total) {
+    function _acc(string memory k, uint256 v) internal virtual returns (uint256 total) {
         total = vm.envOr(k, uint256(0)) + v;
         vm.setEnv(k, vm.toString(total));
     }

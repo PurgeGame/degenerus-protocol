@@ -27,7 +27,7 @@ contract WalletIdTruthInvariant is DeployProtocol {
     bytes4 internal constant NO_WORK = bytes4(keccak256("NoWork()"));
     bytes4 internal constant RNG_NOT_READY = bytes4(keccak256("RngNotReady()"));
 
-    function setUp() public {
+    function setUp() public virtual {
         // Every WalletRegistered from Game construction on reaches the handler's ghost list.
         vm.recordLogs();
         _deployProtocol();
@@ -61,49 +61,49 @@ contract WalletIdTruthInvariant is DeployProtocol {
 
     /// @notice Coverage report, accumulated across runs through the process environment.
     function afterInvariant() public virtual {
-        uint256 runs = vm.envOr("WID_RUNS", uint256(0)) + 1;
-        vm.setEnv("WID_RUNS", vm.toString(runs));
-        uint256 regs = vm.envOr("WID_REGS", uint256(0)) + handler.regCount();
-        vm.setEnv("WID_REGS", vm.toString(regs));
-        uint256 lv = vm.envOr("WID_LEVELS", uint256(0)) + handler.ghost_levels();
-        vm.setEnv("WID_LEVELS", vm.toString(lv));
+        uint256 runs = vm.envOr(_counterKey("WID_RUNS"), uint256(0)) + 1;
+        vm.setEnv(_counterKey("WID_RUNS"), vm.toString(runs));
+        uint256 regs = vm.envOr(_counterKey("WID_REGS"), uint256(0)) + handler.regCount();
+        vm.setEnv(_counterKey("WID_REGS"), vm.toString(regs));
+        uint256 lv = vm.envOr(_counterKey("WID_LEVELS"), uint256(0)) + handler.ghost_levels();
+        vm.setEnv(_counterKey("WID_LEVELS"), vm.toString(lv));
         uint256 n = handler.N_ACTIONS();
         for (uint256 id; id < n; ++id) {
             string memory k = vm.toString(id);
-            _bump(string.concat("WID_C_", k), handler.calls(id));
-            _bump(string.concat("WID_OK_", k), handler.oks(id));
-            _bump(string.concat("WID_R_", k), handler.regsBy(id));
+            _bump(string.concat(_counterKey("WID_C_"), k), handler.calls(id));
+            _bump(string.concat(_counterKey("WID_OK_"), k), handler.oks(id));
+            _bump(string.concat(_counterKey("WID_R_"), k), handler.regsBy(id));
             bytes4[] memory sels = handler.revertSelectors(id);
             for (uint256 j; j < sels.length; ++j) {
-                string memory sk = string.concat("WID_RV_", k, "_", vm.toString(abi.encodePacked(sels[j])));
+                string memory sk = string.concat(_counterKey("WID_RV_"), k, "_", vm.toString(abi.encodePacked(sels[j])));
                 uint256 prior = vm.envOr(sk, uint256(0));
                 if (prior == 0) {
-                    string memory lk = string.concat("WID_RVL_", k);
+                    string memory lk = string.concat(_counterKey("WID_RVL_"), k);
                     vm.setEnv(lk, string.concat(vm.envOr(lk, string("")), " ", vm.toString(abi.encodePacked(sels[j]))));
                 }
                 vm.setEnv(sk, vm.toString(prior + handler.revCount(id, sels[j])));
             }
         }
-        _bump("WID_SMURFS", handler.smurfCount());
-        _bump("WID_ACCT_OK", handler.acctAuthorizedOks());
-        _bump("WID_ACCT_SMURF_OK", handler.acctSmurfOks());
-        _bump("WID_ACCT_REJECT", handler.acctRejects());
-        _bump("WID_ACCT_GIFT", handler.acctGifts());
+        _bump(_counterKey("WID_SMURFS"), handler.smurfCount());
+        _bump(_counterKey("WID_ACCT_OK"), handler.acctAuthorizedOks());
+        _bump(_counterKey("WID_ACCT_SMURF_OK"), handler.acctSmurfOks());
+        _bump(_counterKey("WID_ACCT_REJECT"), handler.acctRejects());
+        _bump(_counterKey("WID_ACCT_GIFT"), handler.acctGifts());
         console.log("WID_REPORT runs", runs);
-        console.log("WID_REPORT smurfs created (summed over runs)", vm.envOr("WID_SMURFS", uint256(0)));
-        console.log("WID_REPORT account doors: authorized ok", vm.envOr("WID_ACCT_OK", uint256(0)));
-        console.log("WID_REPORT account doors: authorized ok for a smurf", vm.envOr("WID_ACCT_SMURF_OK", uint256(0)));
-        console.log("WID_REPORT account doors: unauthorized refused", vm.envOr("WID_ACCT_REJECT", uint256(0)));
-        console.log("WID_REPORT account doors: gifts", vm.envOr("WID_ACCT_GIFT", uint256(0)));
+        console.log("WID_REPORT smurfs created (summed over runs)", vm.envOr(_counterKey("WID_SMURFS"), uint256(0)));
+        console.log("WID_REPORT account doors: authorized ok", vm.envOr(_counterKey("WID_ACCT_OK"), uint256(0)));
+        console.log("WID_REPORT account doors: authorized ok for a smurf", vm.envOr(_counterKey("WID_ACCT_SMURF_OK"), uint256(0)));
+        console.log("WID_REPORT account doors: unauthorized refused", vm.envOr(_counterKey("WID_ACCT_REJECT"), uint256(0)));
+        console.log("WID_REPORT account doors: gifts", vm.envOr(_counterKey("WID_ACCT_GIFT"), uint256(0)));
         console.log("WID_REPORT registrations (incl. setUp, summed over runs)", regs);
         console.log("WID_REPORT levels gained (summed over runs)", lv);
         for (uint256 id; id < n; ++id) {
             string memory k = vm.toString(id);
             console.log(string.concat(
                 "WID_ACTION ", handler.actionName(id),
-                " calls=", vm.toString(vm.envOr(string.concat("WID_C_", k), uint256(0))),
-                " ok=", vm.toString(vm.envOr(string.concat("WID_OK_", k), uint256(0))),
-                " regs=", vm.toString(vm.envOr(string.concat("WID_R_", k), uint256(0))),
+                " calls=", vm.toString(vm.envOr(string.concat(_counterKey("WID_C_"), k), uint256(0))),
+                " ok=", vm.toString(vm.envOr(string.concat(_counterKey("WID_OK_"), k), uint256(0))),
+                " regs=", vm.toString(vm.envOr(string.concat(_counterKey("WID_R_"), k), uint256(0))),
                 " reverts:", _revList(k)
             ));
         }
@@ -118,34 +118,39 @@ contract WalletIdTruthInvariant is DeployProtocol {
     ///      box is one of them, since this timeline deploys after the sale.
     function _assertCoverage(uint256 runs, uint256 n) internal view {
         if (runs < 16) return;
-        assertGt(vm.envOr("WID_SMURFS", uint256(0)), 0, "vacuous: no smurf was ever created");
-        assertGt(vm.envOr("WID_ACCT_OK", uint256(0)), 0, "vacuous: no authorized account-door call succeeded");
-        assertGt(vm.envOr("WID_ACCT_SMURF_OK", uint256(0)), 0, "vacuous: no account-door call for a smurf succeeded");
-        assertGt(vm.envOr("WID_ACCT_REJECT", uint256(0)), 0, "vacuous: no unauthorized account-door call was refused");
-        assertGt(vm.envOr("WID_ACCT_GIFT", uint256(0)), 0, "vacuous: no account-door gift happened");
-        assertGt(vm.envOr("WID_LEVELS", uint256(0)), 0, "vacuous: no run ever gained a level");
+        assertGt(vm.envOr(_counterKey("WID_SMURFS"), uint256(0)), 0, "vacuous: no smurf was ever created");
+        assertGt(vm.envOr(_counterKey("WID_ACCT_OK"), uint256(0)), 0, "vacuous: no authorized account-door call succeeded");
+        assertGt(vm.envOr(_counterKey("WID_ACCT_SMURF_OK"), uint256(0)), 0, "vacuous: no account-door call for a smurf succeeded");
+        assertGt(vm.envOr(_counterKey("WID_ACCT_REJECT"), uint256(0)), 0, "vacuous: no unauthorized account-door call was refused");
+        assertGt(vm.envOr(_counterKey("WID_ACCT_GIFT"), uint256(0)), 0, "vacuous: no account-door gift happened");
+        assertGt(vm.envOr(_counterKey("WID_LEVELS"), uint256(0)), 0, "vacuous: no run ever gained a level");
         if (runs < 64) return;
         uint8[43] memory oks = [uint8(0), 1, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 26, 27, 28, 29, 31, 32, 36, 37, 38, 39, 40, 41, 42, 43, 44, 48, 50, 54, 55, 57, 59, 61, 68];
         for (uint256 i; i < oks.length; ++i) {
             require(oks[i] < n, "door id out of range");
-            assertGt(vm.envOr(string.concat("WID_OK_", vm.toString(uint256(oks[i]))), uint256(0)), 0,
+            assertGt(vm.envOr(string.concat(_counterKey("WID_OK_"), vm.toString(uint256(oks[i]))), uint256(0)), 0,
                 string.concat("vacuous: door never succeeded: ", handler.actionName(oks[i])));
         }
         uint8[18] memory regs = [uint8(0), 1, 3, 4, 5, 6, 7, 13, 15, 16, 18, 19, 20, 26, 27, 29, 32, 40];
         for (uint256 i; i < regs.length; ++i) {
-            assertGt(vm.envOr(string.concat("WID_R_", vm.toString(uint256(regs[i]))), uint256(0)), 0,
+            assertGt(vm.envOr(string.concat(_counterKey("WID_R_"), vm.toString(uint256(regs[i]))), uint256(0)), 0,
                 string.concat("vacuous: door never registered a wallet ID: ", handler.actionName(regs[i])));
         }
     }
 
+    /// @dev Process-environment key for a campaign counter; a variant sharing the process overrides it.
+    function _counterKey(string memory k) internal pure virtual returns (string memory) {
+        return k;
+    }
+
     function _revList(string memory k) internal view returns (string memory out) {
-        string memory list = vm.envOr(string.concat("WID_RVL_", k), string(""));
+        string memory list = vm.envOr(string.concat(_counterKey("WID_RVL_"), k), string(""));
         if (bytes(list).length == 0) return "";
         string[] memory parts = vm.split(list, " ");
         for (uint256 i; i < parts.length; ++i) {
             if (bytes(parts[i]).length == 0) continue;
             out = string.concat(out, " ", parts[i], "x",
-                vm.toString(vm.envOr(string.concat("WID_RV_", k, "_", parts[i]), uint256(0))));
+                vm.toString(vm.envOr(string.concat(_counterKey("WID_RV_"), k, "_", parts[i]), uint256(0))));
         }
     }
 

@@ -61,7 +61,7 @@ contract AnyInputSafety is DeployProtocol {
     bytes4 internal constant NO_WORK = bytes4(keccak256("NoWork()"));
     bytes4 internal constant RNG_NOT_READY = bytes4(keccak256("RngNotReady()"));
 
-    function setUp() public {
+    function setUp() public virtual {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
         mockVRF.fundSubscription(1, 1_000_000 ether);
@@ -254,11 +254,11 @@ contract AnyInputSafety is DeployProtocol {
             console.log("  maxGas", r.maxGas);
             revert("(d) LIVENESS: day did not seal to NoWork within the bound");
         }
-        uint256 prev = vm.envOr("ANY_LIVE_MAXGAS", uint256(0));
-        if (r.maxGas > prev) vm.setEnv("ANY_LIVE_MAXGAS", vm.toString(r.maxGas));
-        uint256 prevC = vm.envOr("ANY_LIVE_MAXCRANKS", uint256(0));
-        if (r.cranks > prevC) vm.setEnv("ANY_LIVE_MAXCRANKS", vm.toString(r.cranks));
-        vm.setEnv("ANY_LIVE_CHECKS", vm.toString(vm.envOr("ANY_LIVE_CHECKS", uint256(0)) + 1));
+        uint256 prev = vm.envOr(_counterKey("ANY_LIVE_MAXGAS"), uint256(0));
+        if (r.maxGas > prev) vm.setEnv(_counterKey("ANY_LIVE_MAXGAS"), vm.toString(r.maxGas));
+        uint256 prevC = vm.envOr(_counterKey("ANY_LIVE_MAXCRANKS"), uint256(0));
+        if (r.cranks > prevC) vm.setEnv(_counterKey("ANY_LIVE_MAXCRANKS"), vm.toString(r.cranks));
+        vm.setEnv(_counterKey("ANY_LIVE_CHECKS"), vm.toString(vm.envOr(_counterKey("ANY_LIVE_CHECKS"), uint256(0)) + 1));
     }
 
     function _liveness() internal returns (LiveResult memory r) {
@@ -336,28 +336,28 @@ contract AnyInputSafety is DeployProtocol {
 
     function afterInvariant() public {
         _checkLiveness();
-        uint256 runs = vm.envOr("ANY_RUNS", uint256(0)) + 1;
-        vm.setEnv("ANY_RUNS", vm.toString(runs));
+        uint256 runs = vm.envOr(_counterKey("ANY_RUNS"), uint256(0)) + 1;
+        vm.setEnv(_counterKey("ANY_RUNS"), vm.toString(runs));
         uint256 n = handler.N_ACTIONS();
         for (uint256 id; id < n; ++id) {
             string memory k = vm.toString(id);
-            vm.setEnv(string.concat("ANY_C_", k), vm.toString(vm.envOr(string.concat("ANY_C_", k), uint256(0)) + handler.calls(id)));
-            vm.setEnv(string.concat("ANY_OK_", k), vm.toString(vm.envOr(string.concat("ANY_OK_", k), uint256(0)) + handler.oks(id)));
+            vm.setEnv(string.concat(_counterKey("ANY_C_"), k), vm.toString(vm.envOr(string.concat(_counterKey("ANY_C_"), k), uint256(0)) + handler.calls(id)));
+            vm.setEnv(string.concat(_counterKey("ANY_OK_"), k), vm.toString(vm.envOr(string.concat(_counterKey("ANY_OK_"), k), uint256(0)) + handler.oks(id)));
             bytes4[] memory sels = handler.revertSelectors(id);
             for (uint256 j; j < sels.length; ++j) {
-                string memory sk = string.concat("ANY_RV_", k, "_", vm.toString(abi.encodePacked(sels[j])));
+                string memory sk = string.concat(_counterKey("ANY_RV_"), k, "_", vm.toString(abi.encodePacked(sels[j])));
                 uint256 prior = vm.envOr(sk, uint256(0));
                 if (prior == 0) {
-                    string memory lk = string.concat("ANY_RVL_", k);
+                    string memory lk = string.concat(_counterKey("ANY_RVL_"), k);
                     vm.setEnv(lk, string.concat(vm.envOr(lk, string("")), " ", vm.toString(abi.encodePacked(sels[j]))));
                 }
                 vm.setEnv(sk, vm.toString(prior + handler.revCount(id, sels[j])));
             }
         }
-        vm.setEnv("ANY_LEVELS", vm.toString(vm.envOr("ANY_LEVELS", uint256(0)) + handler.ghost_levels()));
-        vm.setEnv("ANY_GAMEOVER", vm.toString(vm.envOr("ANY_GAMEOVER", uint256(0)) + handler.ghost_gameOver()));
-        uint256 maxLvl = vm.envOr("ANY_MAXLEVEL", uint256(0));
-        if (game.level() > maxLvl) vm.setEnv("ANY_MAXLEVEL", vm.toString(uint256(game.level())));
+        vm.setEnv(_counterKey("ANY_LEVELS"), vm.toString(vm.envOr(_counterKey("ANY_LEVELS"), uint256(0)) + handler.ghost_levels()));
+        vm.setEnv(_counterKey("ANY_GAMEOVER"), vm.toString(vm.envOr(_counterKey("ANY_GAMEOVER"), uint256(0)) + handler.ghost_gameOver()));
+        uint256 maxLvl = vm.envOr(_counterKey("ANY_MAXLEVEL"), uint256(0));
+        if (game.level() > maxLvl) vm.setEnv(_counterKey("ANY_MAXLEVEL"), vm.toString(uint256(game.level())));
         _printReport(runs, n);
         _assertCoverage(runs, n);
     }
@@ -369,14 +369,14 @@ contract AnyInputSafety is DeployProtocol {
     ///      handler's revert report).
     function _assertCoverage(uint256 runs, uint256 n) internal view {
         if (runs < 16) return;
-        assertGt(vm.envOr("ANY_LEVELS", uint256(0)), 0, "vacuous: no run ever gained a level");
-        assertGt(vm.envOr("ANY_LIVE_CHECKS", uint256(0)), 0, "vacuous: the liveness probe never ran");
+        assertGt(vm.envOr(_counterKey("ANY_LEVELS"), uint256(0)), 0, "vacuous: no run ever gained a level");
+        assertGt(vm.envOr(_counterKey("ANY_LIVE_CHECKS"), uint256(0)), 0, "vacuous: the liveness probe never ran");
         if (runs < 48) return;
-        assertGt(vm.envOr("ANY_GAMEOVER", uint256(0)), 0, "vacuous: no run ever reached game over");
+        assertGt(vm.envOr(_counterKey("ANY_GAMEOVER"), uint256(0)), 0, "vacuous: no run ever reached game over");
         bool[] memory req = _requiredDoors(n);
         for (uint256 id; id < n; ++id) {
             if (!req[id]) continue;
-            assertGt(vm.envOr(string.concat("ANY_OK_", vm.toString(id)), uint256(0)), 0,
+            assertGt(vm.envOr(string.concat(_counterKey("ANY_OK_"), vm.toString(id)), uint256(0)), 0,
                 string.concat("vacuous: door never succeeded: ", handler.actionName(id)));
         }
     }
@@ -395,31 +395,36 @@ contract AnyInputSafety is DeployProtocol {
 
     function _printReport(uint256 runs, uint256 n) internal view {
         console.log("ANY_REPORT runs", runs);
-        console.log("ANY_REPORT liveness checks", vm.envOr("ANY_LIVE_CHECKS", uint256(0)));
-        console.log("ANY_REPORT liveness max crank gas", vm.envOr("ANY_LIVE_MAXGAS", uint256(0)));
-        console.log("ANY_REPORT liveness max cranks", vm.envOr("ANY_LIVE_MAXCRANKS", uint256(0)));
-        console.log("ANY_REPORT levels gained (sum over runs)", vm.envOr("ANY_LEVELS", uint256(0)));
-        console.log("ANY_REPORT max level", vm.envOr("ANY_MAXLEVEL", uint256(0)));
-        console.log("ANY_REPORT runs reaching game over", vm.envOr("ANY_GAMEOVER", uint256(0)));
+        console.log("ANY_REPORT liveness checks", vm.envOr(_counterKey("ANY_LIVE_CHECKS"), uint256(0)));
+        console.log("ANY_REPORT liveness max crank gas", vm.envOr(_counterKey("ANY_LIVE_MAXGAS"), uint256(0)));
+        console.log("ANY_REPORT liveness max cranks", vm.envOr(_counterKey("ANY_LIVE_MAXCRANKS"), uint256(0)));
+        console.log("ANY_REPORT levels gained (sum over runs)", vm.envOr(_counterKey("ANY_LEVELS"), uint256(0)));
+        console.log("ANY_REPORT max level", vm.envOr(_counterKey("ANY_MAXLEVEL"), uint256(0)));
+        console.log("ANY_REPORT runs reaching game over", vm.envOr(_counterKey("ANY_GAMEOVER"), uint256(0)));
         for (uint256 id; id < n; ++id) {
             string memory k = vm.toString(id);
             console.log(string.concat(
                 "ANY_ACTION ", handler.actionName(id),
-                " calls=", vm.toString(vm.envOr(string.concat("ANY_C_", k), uint256(0))),
-                " ok=", vm.toString(vm.envOr(string.concat("ANY_OK_", k), uint256(0))),
+                " calls=", vm.toString(vm.envOr(string.concat(_counterKey("ANY_C_"), k), uint256(0))),
+                " ok=", vm.toString(vm.envOr(string.concat(_counterKey("ANY_OK_"), k), uint256(0))),
                 " reverts:", _revList(k)
             ));
         }
     }
 
+    /// @dev Process-environment key for a campaign counter; a variant sharing the process overrides it.
+    function _counterKey(string memory k) internal pure virtual returns (string memory) {
+        return k;
+    }
+
     function _revList(string memory k) internal view returns (string memory out) {
-        string memory list = vm.envOr(string.concat("ANY_RVL_", k), string(""));
+        string memory list = vm.envOr(string.concat(_counterKey("ANY_RVL_"), k), string(""));
         if (bytes(list).length == 0) return "";
         string[] memory parts = vm.split(list, " ");
         for (uint256 i; i < parts.length; ++i) {
             if (bytes(parts[i]).length == 0) continue;
             out = string.concat(out, " ", parts[i], "x",
-                vm.toString(vm.envOr(string.concat("ANY_RV_", k, "_", parts[i]), uint256(0))));
+                vm.toString(vm.envOr(string.concat(_counterKey("ANY_RV_"), k, "_", parts[i]), uint256(0))));
         }
     }
 

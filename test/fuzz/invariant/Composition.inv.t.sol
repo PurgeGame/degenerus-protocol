@@ -18,7 +18,7 @@ import {CompositionHandler} from "../handlers/CompositionHandler.sol";
 contract CompositionInvariant is DeployProtocol {
     CompositionHandler public compositionHandler;
 
-    function setUp() public {
+    function setUp() public virtual {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
 

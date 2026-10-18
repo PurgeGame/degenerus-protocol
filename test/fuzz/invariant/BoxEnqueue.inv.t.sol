@@ -40,7 +40,7 @@ import {BoxCreationHandler} from "../handlers/BoxCreationHandler.sol";
 contract BoxEnqueue is DeployProtocol {
     BoxCreationHandler public handler;
 
-    function setUp() public {
+    function setUp() public virtual {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
         // Back the box-creating buys with solvent funds so a creation that DOES run does not revert on
@@ -107,7 +107,7 @@ contract BoxEnqueue is DeployProtocol {
         }
     }
 
-    function _acc(string memory k, uint256 v) private returns (uint256 total) {
+    function _acc(string memory k, uint256 v) internal virtual returns (uint256 total) {
         total = vm.envOr(k, uint256(0)) + v;
         vm.setEnv(k, vm.toString(total));
     }

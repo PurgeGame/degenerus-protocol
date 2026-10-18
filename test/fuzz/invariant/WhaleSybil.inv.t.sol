@@ -21,7 +21,7 @@ import {SolvencyObligations} from "../helpers/SolvencyObligations.sol";
 contract WhaleSybilInvariant is DeployProtocol {
     WhaleSybilHandler public wsHandler;
 
-    function setUp() public {
+    function setUp() public virtual {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
 
@@ -94,7 +94,7 @@ contract WhaleSybilInvariant is DeployProtocol {
     ///      and game over latched in only 24 runs. Per run: sybil purchases >= 4 and mineFlip >= 1, and the
     ///      obligation ratio must have been observed. Accumulated over the process (unique WS_ prefix): whale
     ///      passes and VRF words from 16 runs, paying claims from 32, a game over from 512.
-    function _acc(string memory k, uint256 v) private returns (uint256 total) {
+    function _acc(string memory k, uint256 v) internal virtual returns (uint256 total) {
         total = vm.envOr(k, uint256(0)) + v;
         vm.setEnv(k, vm.toString(total));
     }

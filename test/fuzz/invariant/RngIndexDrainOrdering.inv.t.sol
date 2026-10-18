@@ -83,7 +83,7 @@ contract RngIndexDrainOrderingInvariants is DeployProtocol {
         assertGt(buyers, 0, "vacuous: the campaign never checked a paid buyer entry");
     }
 
-    function _acc(string memory k, uint256 v) private returns (uint256 total) {
+    function _acc(string memory k, uint256 v) internal virtual returns (uint256 total) {
         total = vm.envOr(k, uint256(0)) + v;
         vm.setEnv(k, vm.toString(total));
     }
