@@ -13,9 +13,8 @@
 //                     flipOut, EntropyLib.hash2(rollSeed, FLIP_ROUND_TAG))
 //               : FlipRoundLib.floorWholeFlip(flipOut);
 //
-//   SITE 4 — `_resolvePresaleBox` (same module, the 50% FLIP branch)
-//     was:  flipOut = (flipOut / 1 ether) * 1 ether;
-//     now:  the same threshold-gated collapse, keyed on the box's own committed `seed`.
+//   SITE 4 — `_degenesisOutcome` (`DegenerusGameDegenesisModule.sol`, the 50% FLIP branch)
+//     the same threshold-gated collapse, keyed on the order's own committed `seed`.
 //
 // The whole-FLIP floor itself is NOT retired — it moved behind
 // `FlipRoundLib.floorWholeFlip` and now serves only the sub-threshold branch, so no award
@@ -24,7 +23,7 @@
 // Two properties are load-bearing and are asserted structurally below:
 //
 //   1. THE THRESHOLD GATE IS PRESENT AT BOTH SITES. A minimum box at the milestone price
-//      pays about 18 FLIP on the roll leg and about 59 FLIP on the presale leg. An
+//      pays about 18 FLIP on the roll leg and a similarly small figure on the Degenesis FLIP leg. An
 //      ungated 100-FLIP granule would round those to nothing outright, so the
 //      `> FLIP_ROUND_THRESHOLD` gate is what keeps small wins whole-FLIP rather than zero.
 //
@@ -59,6 +58,10 @@ import path from "node:path";
 const MODULE_SOURCE_PATH = path.resolve(
   process.cwd(),
   "contracts/modules/DegenerusGameLootboxModule.sol"
+);
+const DEGENESIS_SOURCE_PATH = path.resolve(
+  process.cwd(),
+  "contracts/modules/DegenerusGameDegenesisModule.sol"
 );
 
 // Brace-match function-body extractor (copied from
@@ -98,8 +101,8 @@ function stripLineComments(body) {
 
 // Every structural pattern below is `\s*`-tolerant between tokens, so a formatter
 // breaking a ternary across lines does not invalidate the proof.
-function loadBody(signature) {
-  const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
+function loadBody(signature, file = MODULE_SOURCE_PATH) {
+  const source = fs.readFileSync(file, "utf8");
   const body = extractBody(source, signature);
   expect(body, `\`${signature}\` body not found`).to.not.equal(null);
   return stripLineComments(body);
@@ -198,22 +201,23 @@ describe("LootboxFlipRoundHundreds — threshold-gated 100-FLIP collapse (§3c)"
     });
   });
 
-  describe("SITE 4 — `_resolvePresaleBox` collapses the presale FLIP branch", function () {
-    const SIG = "function _resolvePresaleBox(";
+  describe("SITE 4 — `_degenesisOutcome` collapses the Degenesis FLIP branch", function () {
+    const SIG = "function _degenesisOutcome(";
+    const load = () => loadBody(SIG, DEGENESIS_SOURCE_PATH);
 
-    it("[02a] the FLIP branch applies the same threshold-gated collapse, keyed on the box `seed`", function () {
-      const body = loadBody(SIG);
+    it("[02a] the FLIP branch applies the same threshold-gated collapse, keyed on the order `seed`", function () {
+      const body = load();
       expect(
         /flipOut\s*=\s*flipOut\s*>\s*FlipRoundLib\.FLIP_ROUND_THRESHOLD/.test(
           body
         ),
-        "the presale FLIP branch must gate on `flipOut > FlipRoundLib.FLIP_ROUND_THRESHOLD`"
+        "the Degenesis FLIP branch must gate on `flipOut > FlipRoundLib.FLIP_ROUND_THRESHOLD`"
       ).to.equal(true);
       expect(
         /\?\s*FlipRoundLib\.roundFlipToHundreds\(\s*flipOut\s*,\s*EntropyLib\.hash2\(\s*seed\s*,\s*FLIP_ROUND_TAG\s*\)\s*\)/.test(
           body
         ),
-        "the collapse must key on `EntropyLib.hash2(seed, FLIP_ROUND_TAG)` — the box's own committed seed"
+        "the collapse must key on `EntropyLib.hash2(seed, FLIP_ROUND_TAG)` — the order's own committed seed"
       ).to.equal(true);
       expect(
         /:\s*FlipRoundLib\.floorWholeFlip\(\s*flipOut\s*\)\s*;/.test(body),
@@ -221,44 +225,40 @@ describe("LootboxFlipRoundHundreds — threshold-gated 100-FLIP collapse (§3c)"
       ).to.equal(true);
     });
 
-
-
-    it("[02c] index-ordering: the collapse precedes the `!= 0` guard, which precedes `creditFlip`, and `PresaleBoxOpened` reports the collapsed figure", function () {
-      const body = loadBody(SIG);
+    it("[02c] index-ordering: the collapse precedes the zero-award WWXRP fallback, the pass denomination and the `o.flip` assignment", function () {
+      const body = load();
       const collapseIdx = body.search(
         /flipOut\s*=\s*flipOut\s*>\s*FlipRoundLib\.FLIP_ROUND_THRESHOLD/
       );
-      const guardIdx = body.search(/if\s*\(\s*flipOut\s*!=\s*0\s*\)/);
-      const creditIdx = body.indexOf("coinflip.creditFlip(uint32(entry), flipOut)");
-      const emitIdx = body.indexOf("emit PresaleBoxOpened(");
+      const zeroIdx = body.search(/if\s*\(\s*flipOut\s*==\s*0\s*\)/);
+      const passIdx = body.indexOf("passCount");
+      const assignIdx = body.search(/o\.flip\s*=\s*flipOut\s*;/);
 
-      expect(collapseIdx, "the presale collapse not found").to.be.greaterThan(
-        -1
-      );
-      expect(guardIdx, "`if (flipOut != 0)` guard not found").to.be.greaterThan(
-        -1
-      );
-      expect(
-        creditIdx,
-        "`coinflip.creditFlip(uint32(entry), flipOut)` call not found"
-      ).to.be.greaterThan(-1);
-      expect(
-        emitIdx,
-        "`PresaleBoxOpened` emit not found"
-      ).to.be.greaterThan(-1);
+      expect(collapseIdx, "the Degenesis collapse not found").to.be.greaterThan(-1);
+      expect(zeroIdx, "`if (flipOut == 0)` fallback not found").to.be.greaterThan(-1);
+      expect(passIdx, "pass denomination not found").to.be.greaterThan(-1);
+      expect(assignIdx, "`o.flip = flipOut` not found").to.be.greaterThan(-1);
 
       expect(
         collapseIdx,
-        "the collapse must precede the `!= 0` guard"
-      ).to.be.lessThan(guardIdx);
+        "the collapse must precede the zero-award fallback"
+      ).to.be.lessThan(zeroIdx);
       expect(
-        guardIdx,
-        "the `!= 0` guard must precede the `creditFlip` call"
-      ).to.be.lessThan(creditIdx);
+        zeroIdx,
+        "the zero-award fallback must precede the pass denomination"
+      ).to.be.lessThan(passIdx);
       expect(
-        creditIdx,
-        "the credit must precede the `PresaleBoxOpened` emit, so the event reports what was credited"
-      ).to.be.lessThan(emitIdx);
+        passIdx,
+        "the pass denomination must precede the recorded `o.flip` award"
+      ).to.be.lessThan(assignIdx);
+    });
+
+    it("[02d] the module declares its own `FLIP_ROUND_TAG` domain separator", function () {
+      const source = fs.readFileSync(DEGENESIS_SOURCE_PATH, "utf8");
+      expect(
+        /uint256\s+private\s+constant\s+FLIP_ROUND_TAG\s*=/.test(source),
+        "`FLIP_ROUND_TAG` must be declared in the Degenesis module"
+      ).to.equal(true);
     });
   });
 

@@ -428,12 +428,8 @@ contract DegenerusGameFoilPackModule is
             }
         }
 
-        // Coin-presale-box credit accrual: while the box presale is open, the foil premium
-        // earns 25% spendable box credit on its gross cost, exactly as the ticket/lootbox
-        // spend and the pass buys do, independent of the funding mix.
-        if (!presaleOver) {
-            presaleBoxCredit[buyerId] += cost / 4;
-        }
+        // Degenesis credit on the gross foil cost: it is ETH, claimable or AFKing funded.
+        _accrueDegenesisCredit(buyerId, cost);
 
         // Recycle bonus: spending at least three whole tickets' worth of claimable on the
         // foil leg earns 10% of that claimable spend back as FLIP, exactly as a recycled

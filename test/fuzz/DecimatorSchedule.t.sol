@@ -10,6 +10,7 @@ contract DecimatorScheduleHost is DegenerusGameAdvanceModule {
     function prime(uint24 next, bool fast, bool sealing) external returns (uint24 day) {
         day = _simulatedDayIndex();
         level = next - 1;
+        degenesisClosed = 7;
         dailyIdx = day - 1;
         purchaseStartDay = day - (fast ? 1 : 3);
         lastPurchaseDay = !fast && !sealing;
@@ -40,13 +41,13 @@ contract DecimatorScheduleHost is DegenerusGameAdvanceModule {
 contract DecimatorScheduleTest is Test {
     DecimatorScheduleHost private h;
     function setUp() public {
-        vm.warp(uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621 + 5 days);
+        vm.warp(uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621 + 9 days); // day index 10, past Degenesis
         vm.etch(ContractAddresses.GAME, type(DecimatorScheduleHost).runtimeCode);
         vm.etch(ContractAddresses.GAME_JACKPOT_MODULE, type(DegenerusGameJackpotModule).runtimeCode);
         vm.mockCall(ContractAddresses.AFFILIATE, abi.encodeWithSignature("affiliateTop(uint24)"), abi.encode(uint32(0), uint96(0)));
         vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("poolBalance(uint8)"), abi.encode(uint256(0)));
         vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
-        vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("lockJackpotBattle(uint24,uint256,uint24)"), abi.encode(uint64(0)));
+        vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("lockJackpotBattle(uint24,uint256,uint24)"), abi.encode(true));
         vm.mockCall(ContractAddresses.QUESTS, abi.encodeWithSignature("rollDailyQuest(uint24,uint256,bool,bool,bool)"), abi.encode(false));
         vm.mockCall(ContractAddresses.STETH_TOKEN, abi.encodeWithSignature("balanceOf(address)"), abi.encode(uint256(0)));
         // Charity address is read from the shared interface constant; no-return mock catches its selector.

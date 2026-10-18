@@ -12,6 +12,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {Icons32Data} from "../../contracts/Icons32Data.sol";
 import {DegenerusGameJackpotDrawModule} from "../../contracts/modules/DegenerusGameJackpotDrawModule.sol";
+import {DegenerusGameDegenesisModule} from "../../contracts/modules/DegenerusGameDegenesisModule.sol";
 import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
 import {DegenerusGameMinerModule} from "../../contracts/modules/DegenerusGameMinerModule.sol";
 import {DegenerusGameRngModule} from "../../contracts/modules/DegenerusGameRngModule.sol";
@@ -238,6 +239,7 @@ abstract contract ForkDeployProtocol is DeployProtocol {
         minerModule = new DegenerusGameMinerModule();
         rngModule = new DegenerusGameRngModule();
         jackpotDrawModule = new DegenerusGameJackpotDrawModule();
+        degenesisModule = new DegenerusGameDegenesisModule();
         game.initProtocolDeity();
 
         // Every CREATE landed on its compile-time constant: the fork build is the same protocol.
@@ -247,7 +249,7 @@ abstract contract ForkDeployProtocol is DeployProtocol {
         require(address(sdgnrs) == ContractAddresses.SDGNRS, "fork: SDGNRS address drift");
         require(address(dgnrs) == ContractAddresses.DGNRS, "fork: DGNRS address drift");
         require(address(gnrus) == ContractAddresses.GNRUS, "fork: GNRUS address drift");
-        require(address(jackpotDrawModule) == ContractAddresses.GAME_JACKPOT_DRAW_MODULE, "fork: last module drift");
+        require(address(degenesisModule) == ContractAddresses.GAME_DEGENESIS_MODULE, "fork: last module drift");
     }
 
     // ------------------------------------------------------------------ VRF

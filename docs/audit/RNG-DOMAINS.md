@@ -12,7 +12,7 @@ is known. Existing commitment guards remain necessary.
 - Jackpot ETH shares and ticket award sizes no longer enter winner seeds. Each
   trait bucket derives from the unchanged root and its trait ordinal; skipping or
   changing an earlier bucket's award does not shift subsequent buckets.
-- Ordinary lootbox size, presale value, redemption chunk value and AFKing amount
+- Ordinary lootbox size, redemption chunk value and AFKing amount
   no longer enter box seeds. Amounts still determine awards and applicable tables.
 - Decimator battle snapshots retain the full 256-bit word. Distinct dice, board,
   sample and tie tags separate draws; dice exclude entry identity. Sampling hashes a
@@ -25,6 +25,16 @@ is known. Existing commitment guards remain necessary.
   hero-symbol, craps schedule/tie/rounding and Degenerette auxiliary draws have
   explicit domains. Numeric ordinals, owners and period identifiers provide
   uniqueness within those domains; they are not sources of entropy.
+
+## Compact lootbox orders on 2026-10-17
+
+Ordinary purchases carry one box type, and the queue packs three 85-bit orders per word.
+Every seed keeps its logical identity: the queued root still hashes the buffer and the
+logical position, the event tag still carries `position << 1 | buffer`, and each order's box
+nonces still run from 1. The packed word, the word index and the lane number enter no seed.
+The frozen activity score is stored as a 12-bit code and the opener uses its decoded value;
+the score is a payout input, never a seed input. Redemption, AFKing and direct box seeds are
+unchanged.
 
 ## Jackpot price and hidden subsidy on 2026-10-05
 
@@ -251,6 +261,27 @@ retries are outside the mining chain and receive no miner compensation. The mine
 selector is caller-independent; only explicit donor requests can spend LINK credit.
 Gas price, work age and the multiplier affect miner stake compensation only.
 
+## Degenesis cohort binding
+
+Degenesis orders draw from the daily word of the request that follows their cohort's pricing.
+Every outcome input is fixed before that request:
+
+- Order lanes (wallet ID, amount units, seconds-into-day) are written at purchase and a cohort is
+  sealed once its day index is below the request day, so no order joins a cohort whose word was
+  requested.
+- `prepareDegenesis(day)` runs in `prepareRequestBoundary` before the request: it splits sealed
+  cohorts, then prices at most one nonempty cohort from its volume `V` and the `Pool.Degenesis`
+  balance, writing `degenesisActive` with the bound day. Pricing requires the previous cohort to have
+  closed, so a backlog delays the binding word and cannot alter a rate.
+- `_recordDailyRng` copies the word into `degenesisWord` when `degenesisClosed < 7` and the bound day
+  equals the recorded day, on the apply path and on gap backfill. The copy is the only way a word
+  reaches the module; mid-day words never bind.
+- `_degenesisOutcome` is pure in (`degenesisWord`, cohort day, `V`, `Q`, lane, index): reordering or
+  partitioning settlement calls cannot change any order's reward, and the cursor only selects which
+  index is paid next.
+- Settlement amounts depend on `Q` and `V` frozen at pricing, never on the live pool, and category,
+  size and pass side come from distinct tags on the order seed.
+
 ## Domain map
 
 Jackpot-phase quadrant conversion uses
@@ -282,10 +313,10 @@ named constants in the consumer; full string hashes are constant expressions.
 
 | Consumer | Root or domain | Sharing / fixed inputs |
 | --- | --- | --- |
-| Queued entry root | `H(QUEUED_ORDER_DOMAIN, word, buffer, position)` | One entry per purchase; buffer and position fixed by the append before the buffer's word is requested |
-| Ordinary box roll | `H(entryRoot, walletId, BOX_OPEN_TAG, nonce)` | Nonce advances across tiers in the entry; size excluded; wallet ID read from the entry |
-| Ordinary box boon | `H(entryRoot, walletId, BOX_BOON_TAG, buffer)` | Separate from reward rolls and craps scatter; tier nonce for each boon draw |
-| Presale box | `H(entryRoot, walletId, PRESALE_BOX_TAG, buffer)` | Presale leg of the same entry; amount excluded |
+| Queued entry root | `H(QUEUED_ORDER_DOMAIN, word, buffer, position)` | One 85-bit entry per purchase, three per storage word; `position` is the logical entry position (never the word index or lane); buffer and position fixed by the append before the buffer's word is requested, so identical orders sharing a word keep distinct roots |
+| Ordinary box roll | `H(entryRoot, walletId, BOX_OPEN_TAG, nonce)` | Nonce is the box's 1-based position in its one-type order; size excluded; wallet ID read from the entry |
+| Ordinary box boon | `H(entryRoot, walletId, BOX_BOON_TAG, buffer)` | Separate from reward rolls and craps scatter; box `n` draws at boon nonce `n - 1` |
+| Degenesis order | `seed = H(DEGENESIS_ORDER_DOMAIN, word, day << 32 \| index, walletId)`; category `H(seed, DEGENESIS_CATEGORY_TAG) % 100`, size `H(seed, DEGENESIS_SIZE_TAG)`, pass side `H(seed, DEGENESIS_PASS_TAG) & 1`, plus `FLIP_ROUND_TAG` and `BOX_PASS_ROUND_TAG` on `seed` | Tags `"DegenesisOrder"`, `"DegCategory"`, `"DegSize"`, `"PassSide"`; `word` is `degenesisWord`, the daily word of the cohort's bound day; `day` is the Degenesis day (1..7), `index` the order's position in its cohort, `walletId` the lane's reward account; amount excluded from the seed. Separate from the queued-entry root and every box tag |
 | Redemption box | roll `H(redemptionWord, walletId, BOX_OPEN_TAG, nonce)`, boon `H(redemptionWord, walletId, BOX_BOON_TAG, REDEMPTION_INDEX_TAG \| batchId)` | `redemptionWord = H(batchWord, beneficiaryWalletId)` in sDGNRS; claim keyed by the beneficiary ID at the burn; no queue position |
 | AFKing box | `H(word, walletId, AFKING_BOX_TAG, stampedDay)` | Day recorded before fulfillment; amount excluded |
 | Decimator battle | `H(tag, fullWord, level[, entryId])` | Tags `decimator.battle.dice.v1`, `.board.v1`, `.tie.v1`; dice omit entry id, board/tie include it; engine survival salt is the entry's committed wallet ID (generated entries: the 160-bit `uint160(H(generated.player.v1, fullWord, level, id))`); hot activation follows shared dice duration |

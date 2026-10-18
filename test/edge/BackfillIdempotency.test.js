@@ -73,7 +73,8 @@ describe("BackfillIdempotency", function () {
     const resumeWord = paidNudge ? 0xbadc0fffn : RESUME_WORD;
     const appliedResumeWord = resumeWord + (paidNudge ? 1n : 0n);
     const initial = await readClocks(game);
-    expect(initial).to.deep.equal({ purchaseStartDay: 1n, dailyIdx: 1n });
+    const deployDay = await game.currentDayView();
+    expect(initial).to.deep.equal({ purchaseStartDay: deployDay, dailyIdx: deployDay });
 
     await game.connect(alice).purchase(
       0, 400n, 0n, ZERO_BYTES32, 0, false, { value: eth(0.01) }

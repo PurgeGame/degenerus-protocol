@@ -33,7 +33,8 @@ import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {
     IDegenerusGameLootboxModule,
-    IDegenerusGameWhaleModule
+    IDegenerusGameWhaleModule,
+    IDegenerusGameDegenesisModule
 } from "../interfaces/IDegenerusGameModules.sol";
 import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
 import {IDegenerusGame, MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
@@ -96,7 +97,6 @@ interface ISeatToken {
 contract GameAfkingModule is DegenerusGameMintStreakUtils {
     uint256 private constant HUMAN_ENTRY_GAS = GasBounds.HUMAN_ENTRY_GAS;
     uint256 private constant HUMAN_BOX_GAS = GasBounds.HUMAN_BOX_GAS;
-    uint256 private constant HUMAN_PRESALE_GAS = GasBounds.HUMAN_PRESALE_GAS;
     uint256 private constant HUMAN_TAIL_GAS = GasBounds.HUMAN_TAIL_GAS;
 
     uint256 private constant SUBSCRIBER_ITEM_GAS = GasBounds.SUBSCRIBER_ITEM_GAS;
@@ -422,9 +422,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // purchase-grounded gate below, keyed on the un-spoofable resolved
         // subscriber identity. Every other sub must clear both.
         if (wasActive) {
-            // Settle the prior run's pendingFlip under its CURRENT flag + dailyQuantity before
-            // the overwrite below, so the presale-box credit keys on the state in force during
-            // accrual.
+            // Settle the prior run's pendingFlip before the overwrite below.
             _settlePendingFlip(subId, s);
         } else if (!exemptSub) {
             // A new run burns one seat held by the subscriber's payee, before the run is
@@ -893,6 +891,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // subtraction can only fail if solvency is already broken.
         if (coverBuy && (ethValue != 0 || claimableUse != 0)) {
             claimablePool -= uint128(ethValue + claimableUse);
+            // The subscribe-time cover-buy earns Degenesis credit like a normal buy; daily
+            // deliveries earn none.
+            _accrueDegenesisCredit(element, ethValue + claimableUse);
         }
 
         // Reframe the run before freezing any lootbox activity score. The returned value is the
@@ -1141,27 +1142,14 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
 
     /// @dev Settle a sub's accrued `pendingFlip` (the per-delivered-day slot-0 quest
     ///      reward + the ticket buyer-bonus): zero it FIRST (CEI — before the external
-    ///      credit, so a re-entrant claim finds 0), grant the presale-box credit while
-    ///      presale is open (the slot-0 FLIP owed approximates the afking mint spend;
-    ///      25% of that spend is the manual buyer's presale-box credit; a ticket sub's
-    ///      owed also carries the quantity-scaling buyer-bonus on top of the flat slot-0,
-    ///      overstating the mint spend — divide the ticket grant back toward it: /3 for
-    ///      heavy buyers (dailyQuantity >= 10, where the bonus rises to 15%), else /2),
-    ///      then pay the whole-FLIP owed in ONE `creditFlip`. Always credits the sub,
-    ///      never the caller; no-op at owed == 0. Keyed on the record's CURRENT flags +
-    ///      dailyQuantity, so the credit reflects the state in force during accrual.
-    /// @param id The subscriber's wallet ID (keys the presale-box credit).
+    ///      credit, so a re-entrant claim finds 0), then pay the whole-FLIP owed in ONE
+    ///      `creditFlip`. Always credits the sub, never the caller; no-op at owed == 0.
+    /// @param id The subscriber's wallet ID.
     /// @param s The subscriber's record (storage ref — pendingFlip zeroed here).
     function _settlePendingFlip(uint32 id, Sub storage s) private {
         uint256 owed = uint256(s.pendingFlip); // whole FLIP
         if (owed == 0) return;
         s.pendingFlip = 0;
-        if (!presaleOver) {
-            uint256 credit = (owed * 0.0025 ether) / 100;
-            if ((s.flags & FLAG_USE_TICKETS) != 0)
-                credit /= (s.dailyQuantity >= 10 ? 3 : 2);
-            presaleBoxCredit[id] += credit;
-        }
         emit AfkingFlipClaimed(id, owed);
         coinflip.creditFlip(id, owed); // whole → base units
     }
@@ -1242,7 +1230,14 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         if (!swept && currentLevel > _sdgnrsBonusLevel) {
             if (!MineFlipGas.canRun(meter, SUBSCRIBER_WHALE_GAS, SUBSCRIBER_TAIL_GAS)) return result;
             _sdgnrsBonusLevel = currentLevel;
-            (bool ok, bytes memory data) = ContractAddresses.GAME_WHALE_MODULE.delegatecall(
+            // Before the whale module sizes its budget, sDGNRS AFKing funding is topped up to its
+            // target, kept whether or not a group is bought. The STAGE gate above already
+            // excludes every state the whale module refuses.
+            (bool ok, bytes memory data) = ContractAddresses.GAME_DEGENESIS_MODULE.delegatecall(
+                abi.encodeWithSelector(IDegenerusGameDegenesisModule.topUpSdgnrsAfking.selector)
+            );
+            if (!ok) _revertDelegate(data);
+            (ok, data) = ContractAddresses.GAME_WHALE_MODULE.delegatecall(
                 abi.encodeWithSelector(
                     IDegenerusGameWhaleModule.purchaseWhalePassForSdgnrs.selector, processDay
                 )
@@ -1590,11 +1585,13 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         return _runHumanBoxWork(gasAllowance);
     }
 
-    /// @dev Each entry is admitted against its own box and presale bound, then the advanced
+    /// @dev Each entry is admitted against its own box bound, then the advanced
     ///      cursor is stored BEFORE the entry's rewards run: the cursor alone marks an entry
-    ///      settled, and the entry's legs and the cursor move revert together. Once every entry
-    ///      has settled, completion needs only the tail allowance; a call that cannot afford it
-    ///      leaves boxCursor at the read count and the next call completes without replaying.
+    ///      settled, and the entry's legs and the cursor move revert together. The cursor counts
+    ///      entries, not words, so a call may stop or resume at any of a word's three lanes.
+    ///      Once every entry has settled, completion needs only the tail allowance; a call that
+    ///      cannot afford it leaves boxCursor at the read count and the next call completes
+    ///      without replaying.
     function _runHumanBoxWork(uint256 gasAllowance) private returns (MineFlipGas.Result memory result) {
         MineFlipGas.Meter memory meter = MineFlipGas.start(gasAllowance);
         if (humanReadComplete) { result.done = true; return result; }
@@ -1607,10 +1604,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         while (cur < qlen) {
             uint256 entry = _boxEntryAt(idx, cur);
             uint256 boxes = _boxEntryCount(entry);
-            bool presale = (entry >> LB_PRESALE_SHIFT) & LB_PRESALE_MASK != 0;
-            if (!MineFlipGas.canRun(
-                meter, HUMAN_ENTRY_GAS + boxes * HUMAN_BOX_GAS + (presale ? HUMAN_PRESALE_GAS : 0), HUMAN_TAIL_GAS
-            )) break;
+            if (!MineFlipGas.canRun(meter, HUMAN_ENTRY_GAS + boxes * HUMAN_BOX_GAS, HUMAN_TAIL_GAS)) break;
             boxCursor = uint48(cur + 1);
             (bool ok, bytes memory data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(
                 abi.encodeWithSelector(IDegenerusGameLootboxModule.resolveHumanBoxOrder.selector,
@@ -1620,7 +1614,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             ++cur;
             result.progressed = true;
             MineFlipGas.markProgress(meter);
-            result.rewardBasis += boxes + (presale ? 1 : 0);
+            result.rewardBasis += boxes;
         }
         if (cur == qlen && MineFlipGas.canRun(meter, 0, HUMAN_TAIL_GAS)) {
             humanReadComplete = true;
@@ -1669,12 +1663,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     function claimAfkingFlip(uint32[] calldata ids) external {
         uint256 len = ids.length;
         uint32 self = _walletIdOf(msg.sender);
-        // Presale-box eligibility for afking buyers, materialized at claim (no advance-path cost).
-        // The slot-0 FLIP owed approximates the afking mint spend (100 whole FLIP == one
-        // 0.01-ETH early-level buy, the price at the levels presale spans), and 25% of that spend is
-        // the manual buyer's presale-box credit. Granting it off the DRAINED `owed` counts each
-        // FLIP exactly once (cover-buys included — they accrue slot-0 like any buy), so there is no
-        // double-count. Only while presale is open; the credit is unspendable once presaleOver.
         for (uint256 i; i < len; ) {
             uint32 id = ids[i];
             if (id == 0) id = self;

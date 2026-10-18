@@ -121,7 +121,8 @@ contract LootboxBudgetResume is DeployProtocol {
             assertEq(RecyclingState.boxCount(address(game), N), k + 1, "fixture: one entry per purchase");
             entries[k] = RecyclingState.boxEntry(address(game), N, k);
             assertEq(BoxOrderLib.boId(entries[k]), game.walletIdOf(who), "fixture: the entry holds the buyer's ID");
-            assertEq(BoxOrderLib.boSmall(entries[k]), 2, "fixture: two small boxes");
+            assertEq(BoxOrderLib.boCount(entries[k]), 2, "fixture: two small boxes");
+            assertEq(BoxOrderLib.boSizeWei(entries[k]), priceWei, "fixture: small boxes at the ticket price");
         }
     }
 

@@ -438,6 +438,26 @@ abstract contract CrapsPins is Test {
         vault.setOwner(vaultOwner, true);
     }
 
+    /// @dev Windows open on day DEGENESIS_START_DAY + 1 at the earliest. A table built on
+    ///      DEGENESIS_START_DAY has its first window on genesis + 1, the timeline these suites
+    ///      play.
+    function _warpToTableGenesis() internal {
+        _warpToDay(GameTimeLib.DEGENESIS_START_DAY);
+    }
+
+    /// @dev Jackpot battles carry awarded seats from window day MAIN_LAUNCH_DAY. A table built
+    ///      the day before has its first window, and its first awarded field, on genesis + 1.
+    function _warpToAwardGenesis() internal {
+        _warpToDay(GameTimeLib.MAIN_LAUNCH_DAY - 1);
+    }
+
+    /// @dev Whole-day steps up to `day`, keeping the time of day.
+    function _warpToDay(uint24 day) internal {
+        while (GameTimeLib.currentDayIndexAt(vm.getBlockTimestamp()) < day) {
+            vm.warp(vm.getBlockTimestamp() + 1 days);
+        }
+    }
+
     /// @dev Writes the packed slot the way the protocol lays it out: index in bits 0..47, with
     ///      unrelated fields above it that the decode must ignore.
     function _setIndex(uint48 buffer) internal {

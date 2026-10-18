@@ -36,8 +36,8 @@ contract FoilSnapPayout is DeployProtocol {
     uint256 private constant PURCHASE_DAYS = 30;
     /// @dev Series label of the VRF word sequence. Each foil line's seed is keyed by the buyer's
     ///      wallet ID, so the draws that produce claimable matches depend on it; this series
-    ///      surfaces matches in both lanes (2 claims, 4,800 FLIP).
-    uint256 private constant WORD_SERIES = 31;
+    ///      surfaces a FLIP-lane match (1 claim, 4,800 FLIP).
+    uint256 private constant WORD_SERIES = 3;
     uint256 private constant RUN_DAYS = PURCHASE_DAYS + 50;
 
     /// @dev snapShift is a uint8 at slot 14, byte 7 — packed with ticketCursor (bytes 0-3)

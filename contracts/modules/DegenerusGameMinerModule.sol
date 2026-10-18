@@ -10,8 +10,8 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
 
 import {IDegenerusGameAdvanceModule, IDegenerusGameRngModule, IDegenerusGameTicketModule,
-    IDegenerusGameDegeneretteModule, IDegenerusGameDecimatorModule, IGameAfkingModule}
-    from "../interfaces/IDegenerusGameModules.sol";
+    IDegenerusGameDegeneretteModule, IDegenerusGameDecimatorModule, IGameAfkingModule,
+    IDegenerusGameDegenesisModule} from "../interfaces/IDegenerusGameModules.sol";
 import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
 
 interface IMinerCrapsWork {
@@ -121,14 +121,16 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
                 basicResult = true;
                 target = ContractAddresses.GAME_ADVANCE_MODULE;
                 callData = abi.encodeWithSelector(IDegenerusGameAdvanceModule.runTerminalPhase.selector, allowance);
-            } else if (action == MinerAction.DailyGap) {
-                if (!MineFlipGas.canRun(meter, GasBounds.DAILY_GAP, RETURN_RESERVE + WORKER_BOUNDARY)) break;
+            } else if (action == MinerAction.DailyGap || action == MinerAction.DailyApply) {
+                bool gap = action == MinerAction.DailyGap;
+                uint256 applyMax = gap ? GasBounds.DAILY_GAP : GasBounds.DAILY_APPLY;
+                // Recording a word also copies it for Degenesis until the seventh cohort closes.
+                if (degenesisClosed < DEGENESIS_DAYS) applyMax += GasBounds.DEGENESIS_WORD_COPY_GAS;
+                if (!MineFlipGas.canRun(meter, applyMax, RETURN_RESERVE + WORKER_BOUNDARY)) break;
                 target = ContractAddresses.GAME_ADVANCE_MODULE;
-                callData = abi.encodeWithSelector(IDegenerusGameAdvanceModule.applyDailyGap.selector);
-            } else if (action == MinerAction.DailyApply) {
-                if (!MineFlipGas.canRun(meter, GasBounds.DAILY_APPLY, RETURN_RESERVE + WORKER_BOUNDARY)) break;
-                target = ContractAddresses.GAME_ADVANCE_MODULE;
-                callData = abi.encodeWithSelector(IDegenerusGameAdvanceModule.applyDailyWord.selector);
+                callData = abi.encodeWithSelector(
+                    gap ? IDegenerusGameAdvanceModule.applyDailyGap.selector : IDegenerusGameAdvanceModule.applyDailyWord.selector
+                );
             } else if (action == MinerAction.DailyPhase) {
                 basicResult = true;
                 target = ContractAddresses.GAME_ADVANCE_MODULE;
@@ -145,6 +147,10 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
                 }
                 uint256 requestMax = action == MinerAction.RequestDaily
                     ? GasBounds.RNG_DAILY_REQUEST : GasBounds.RNG_MIDDAY_REQUEST;
+                // The daily request splits and prices Degenesis cohorts until the seventh closes.
+                if (action == MinerAction.RequestDaily && degenesisClosed < DEGENESIS_DAYS) {
+                    requestMax += GasBounds.DEGENESIS_REQUEST_GAS;
+                }
                 // Batch pricing, backing settlement and ETH/stETH funding stay atomic with
                 // the commitment. Only a nonempty open batch pays their rare admission cost.
                 // The first mandatory action bypasses estimates, including this sizing read.
@@ -159,6 +165,10 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
                     target = ContractAddresses.GAME_TICKET_MODULE;
                     uint24 anchor = !jackpotPhaseFlag && lastPurchaseDay && rngLockedFlag ? level : level + 1;
                     callData = abi.encodeWithSelector(IDegenerusGameTicketModule.runTicketWork.selector, anchor, allowance);
+                } else if (action == MinerAction.DegenesisSettle) {
+                    // Not an RNG consumer: a Degenesis backlog never gates completion or requests.
+                    target = ContractAddresses.GAME_DEGENESIS_MODULE;
+                    callData = abi.encodeWithSelector(IDegenerusGameDegenesisModule.runDegenesisWork.selector, allowance);
                 } else if (action == MinerAction.SeizeLoans) {
                     target = ContractAddresses.GAME_ADVANCE_MODULE;
                     callData = abi.encodeWithSelector(IDegenerusGameAdvanceModule.runLoanSeizureWork.selector, allowance);

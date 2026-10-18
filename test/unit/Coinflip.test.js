@@ -936,6 +936,8 @@ describe("Coinflip", function () {
       // that point, through the drains that follow settlement. And it is scoped to positions
       // that hold a carry: arming is always open, because there is no carry to front-run yet.
       const { coinflip, game, alice } = await loadFixture(deployFullProtocol);
+      // The deploy day opens with the previous flip day settled, as the daily engine leaves it.
+      await resolveDay(hre.ethers, game, coinflip, (await game.currentDayView()) - 1n, 2n);
       expect(await game.rngLocked()).to.equal(false);
       expect(await coinflip.flipResolvedToday()).to.equal(false);
 

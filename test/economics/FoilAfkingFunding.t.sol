@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
-import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
+import {DeployProtocol, DegenesisDeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
@@ -14,7 +14,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///         on DirectEth), then prepaid afking — identical to the ticket leg's `_processMintPayment`.
 ///         This file pins each tier, the reclassification that rides with it (afking is own
 ///         principal, so it pays the FRESH affiliate rate and stays OUT of the recycle-bonus
-///         basis), the presale box credit the leg now accrues, and the solvency identity across
+///         basis), the Degenesis credit the leg now accrues, and the solvency identity across
 ///         an afking-funded buy.
 /// @dev Every buy here happens in the opening purchase phase, so `_activeTicketLevel()` is
 ///      `level + 1` and the pack costs exactly `FOIL_PACK_TICKETS * priceForLevel(level + 1)`
@@ -239,34 +239,6 @@ contract FoilAfkingFunding is DeployProtocol {
     }
 
     // ──────────────────────────────────────────────────────────────────────
-    // Presale box credit
-    // ──────────────────────────────────────────────────────────────────────
-
-    /// @dev While the box presale is open, every ETH spend accrues 25% spendable box credit —
-    ///      the ticket/lootbox leg and all three pass buys do it on their gross price. The foil
-    ///      premium now does too, on `cost`, independent of which tier funded it.
-    function test_foilAccruesPresaleBoxCredit() public {
-        uint256 cost = _foilCost();
-
-        address freshBuyer = _newPlayer("foilCreditFresh");
-        _buyFoil(freshBuyer, cost, MintPaymentKind.DirectEth);
-        assertEq(
-            game.presaleBoxCreditOf(freshBuyer),
-            cost / 4,
-            "fresh-funded foil accrues 25% of the gross premium"
-        );
-
-        address afkBuyer = _newPlayer("foilCreditAfk");
-        _fundAfking(afkBuyer, cost);
-        _buyFoil(afkBuyer, 0, MintPaymentKind.DirectEth);
-        assertEq(
-            game.presaleBoxCreditOf(afkBuyer),
-            cost / 4,
-            "afking-funded foil accrues the same credit"
-        );
-    }
-
-    // ──────────────────────────────────────────────────────────────────────
     // Solvency
     // ──────────────────────────────────────────────────────────────────────
 
@@ -299,5 +271,43 @@ contract FoilAfkingFunding is DeployProtocol {
             poolAfter,
             "claimable pool stays backed by contract ETH"
         );
+    }
+}
+
+/// @title FoilAfkingFundingDegenesis — the foil premium earns Degenesis credit on the sale timeline
+/// @dev While the Degenesis credit window is open, every ETH spend accrues 25% spendable credit
+///      (the ticket/lootbox leg and all three pass buys on their gross price). The foil premium does
+///      too, on `cost`, independent of which tier funded it.
+contract FoilAfkingFundingDegenesis is DegenesisDeployProtocol {
+    function setUp() public {
+        _deployProtocol();
+        vm.warp(vm.getBlockTimestamp() + 1 days); // Degenesis day 1
+    }
+
+    function _foilCost() internal view returns (uint256) {
+        return 10 * PriceLookupLib.priceForLevel(game.level() + 1);
+    }
+
+    function _player(string memory label) internal returns (address who) {
+        who = makeAddr(label);
+        vm.deal(who, 1_000 ether);
+        _giveWalletId(who);
+    }
+
+    function test_foilAccruesDegenesisCredit() public {
+        uint256 cost = _foilCost();
+
+        address freshBuyer = _player("foilCreditFresh");
+        vm.prank(freshBuyer);
+        game.purchase{value: cost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        assertEq(game.degenesisCreditOf(freshBuyer), cost / 4, "fresh-funded foil accrues 25% of the gross premium");
+
+        address afkBuyer = _player("foilCreditAfk");
+        uint32 afkId = game.walletIdOf(afkBuyer);
+        vm.prank(afkBuyer);
+        game.depositAfkingFunding{value: cost}(afkId);
+        vm.prank(afkBuyer);
+        game.purchase(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
+        assertEq(game.degenesisCreditOf(afkBuyer), cost / 4, "afking-funded foil accrues the same credit");
     }
 }

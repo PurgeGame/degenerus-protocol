@@ -128,8 +128,8 @@ contract StallResilience is DeployProtocol {
     function test_stallSwapResume() public {
         // Complete the first post-deploy day normally
         _completeDay(0xDEAD0001);
-        assertEq(game.currentDayView(), 2);
-        assertTrue(game.rngWordForDay(2) != 0, "Day 2 has RNG word");
+        assertEq(game.currentDayView(), _relDay(2));
+        assertTrue(game.rngWordForDay(_relDay(2)) != 0, "Day 2 has RNG word");
 
         // Warp to the next day, trigger VRF request (this will stall)
         vm.warp(block.timestamp + 1 days);
@@ -143,9 +143,9 @@ contract StallResilience is DeployProtocol {
         _resumeAfterSwap(newVRF, 0xCAFE0003);
         // rngWordForDay retains only today and yesterday (c729ecfc9), and the wall day is 6:
         // read day 3's exact-tag ring entry, which the wall day's request has not yet replaced.
-        assertEq(RecyclingState.dailyWord(address(game), 3), 0xCAFE0003, "Stalled day 3 finishes on its own word");
-        assertEq(game.rngWordForDay(4), 0, "Day 4 not derived before the wall day's request");
-        assertEq(game.rngWordForDay(5), 0, "Day 5 not derived before the wall day's request");
+        assertEq(RecyclingState.dailyWord(address(game), _relDay(3)), 0xCAFE0003, "Stalled day 3 finishes on its own word");
+        assertEq(game.rngWordForDay(_relDay(4)), 0, "Day 4 not derived before the wall day's request");
+        assertEq(game.rngWordForDay(_relDay(5)), 0, "Day 5 not derived before the wall day's request");
 
         // Day 6's fresh request derives the skipped days 4 and 5 (TEST-01 core assertion).
         uint256 resumeWord = 0xCAFEBABE;
@@ -153,20 +153,20 @@ contract StallResilience is DeployProtocol {
         // The two-slot daily ring retains only the final gap day's derived word next to the
         // wall day's (6d0e64b09 / c729ecfc9: _backfillGapDays "retain just the last derived
         // word"); every gap day is still settled, through its coinflip day.
-        assertEq(game.rngWordForDay(4), 0, "Gap day 4 keeps no word: only the final gap day is retained");
-        assertEq(RecyclingState.dailyWord(address(game), 4), 0, "Gap day 4 has no ring entry");
-        assertTrue(game.rngWordForDay(5) != 0, "Gap day 5 backfilled");
-        assertTrue(game.rngWordForDay(6) != 0, "Current day 6 processed");
-        (uint16 reward4,) = coinflip.getCoinflipDayResult(4);
-        (uint16 reward5,) = coinflip.getCoinflipDayResult(5);
+        assertEq(game.rngWordForDay(_relDay(4)), 0, "Gap day 4 keeps no word: only the final gap day is retained");
+        assertEq(RecyclingState.dailyWord(address(game), _relDay(4)), 0, "Gap day 4 has no ring entry");
+        assertTrue(game.rngWordForDay(_relDay(5)) != 0, "Gap day 5 backfilled");
+        assertTrue(game.rngWordForDay(_relDay(6)) != 0, "Current day 6 processed");
+        (uint16 reward4,) = coinflip.getCoinflipDayResult(_relDay(4));
+        (uint16 reward5,) = coinflip.getCoinflipDayResult(_relDay(5));
         assertTrue(reward4 != 0, "Gap day 4 still settles (coinflip)");
         assertTrue(reward5 != 0, "Gap day 5 still settles (coinflip)");
 
         // Gap words derive from the raw VRF word (backfill runs before _applyDailyRng), with
         // the day packed as uint24 (the backfill loop counter type).
-        uint256 expectedDay5 = uint256(keccak256(abi.encodePacked(resumeWord, uint24(5))));
+        uint256 expectedDay5 = uint256(keccak256(abi.encodePacked(resumeWord, _relDay(5))));
         if (expectedDay5 == 0) expectedDay5 = 1;
-        assertEq(game.rngWordForDay(5), expectedDay5, "Day 5 word is keccak256(vrfWord, 5)");
+        assertEq(game.rngWordForDay(_relDay(5)), expectedDay5, "Day 5 word is keccak256(vrfWord, 5)");
     }
 
     // ── TEST-02: Coinflip claims across gap days ────────────────────
@@ -216,9 +216,9 @@ contract StallResilience is DeployProtocol {
         _catchUp(newVRF, 0xF11FCAFF);
 
         // processCoinflipPayouts always writes coinflipDayResult (rewardPercent >= 50).
-        (uint16 reward3,) = coinflip.getCoinflipDayResult(3);
-        (uint16 reward4,) = coinflip.getCoinflipDayResult(4);
-        (uint16 reward5,) = coinflip.getCoinflipDayResult(5);
+        (uint16 reward3,) = coinflip.getCoinflipDayResult(_relDay(3));
+        (uint16 reward4,) = coinflip.getCoinflipDayResult(_relDay(4));
+        (uint16 reward5,) = coinflip.getCoinflipDayResult(_relDay(5));
 
         assertTrue(reward3 != 0, "Day 3 coinflip resolved after backfill");
         assertTrue(reward4 != 0, "Day 4 coinflip resolved after backfill");

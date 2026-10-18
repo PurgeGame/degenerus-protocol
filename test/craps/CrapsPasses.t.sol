@@ -6,6 +6,7 @@ import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol
 import {Craps} from "../../contracts/Craps.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 import {CrapsViews} from "./CrapsViews.sol";
 import {CrapsPins} from "./CrapsPins.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -934,6 +935,39 @@ contract CrapsPassesTest is CrapsPins {
         vm.expectRevert(CrapsBattleStorage.DayNotReservable.selector);
         vm.prank(alice);
         craps.upgradeReservedDay(0, today);
+    }
+
+    // ── Degenesis floor ─────────────────────────────────────────────────────
+
+    /// @dev WINDOWS OPEN ON DEGENESIS DAY 2. This table is built on day 1, the deploy day, so its
+    ///      cursor is born at day 3's separator. On day 1 the next day is Degenesis day 1, which has
+    ///      no windows: a delivered pass seats its owner on day 3, a pass applied to day 2 reverts,
+    ///      and day 3 takes a reservation normally.
+    function test_noPassReservesADayBeforeDegenesisDayTwo() public {
+        uint24 first = GameTimeLib.DEGENESIS_START_DAY + 1;
+        assertEq(craps.minerSlot(), uint64(uint256(first) * craps.BONUS_SLOTS_PER_DAY()), "the cursor was not born at the first window day");
+
+        // Back to the deploy day, with no word standing for either Degenesis day.
+        vm.warp(vm.getBlockTimestamp() - 1 days);
+        assertEq(_today(), 1, "not the deploy day");
+        _setDailyWord(0, 0);
+        _setDailyWord(1, 0);
+
+        uint32 aliceId = _idFor(alice);
+        vm.prank(ContractAddresses.GAME);
+        craps.deliverPasses(aliceId, 1, 0);
+        assertEq(craps.dayStateOf(GameTimeLib.DEGENESIS_START_DAY, alice), 0, "a pass seated a day with no windows");
+        assertEq(craps.dayStateOf(first, alice), craps.DAY_SEATED(), "the delivered pass did not seat the first window day");
+
+        vm.prank(ContractAddresses.GAME);
+        craps.creditPasses(_idFor(bob), 2, 0);
+        vm.prank(bob);
+        vm.expectRevert(CrapsBattleStorage.DayNotReservable.selector);
+        craps.applyCrapsPasses(GameTimeLib.DEGENESIS_START_DAY, 2, false, PACKED_SEVEN);
+        vm.prank(bob);
+        craps.applyCrapsPasses(first, 2, false, PACKED_SEVEN);
+        assertEq(craps.dayStateOf(first, bob), craps.DAY_SEATED(), "the first window day refused a reservation");
+        assertEq(craps.dayStateOf(first + 1, bob), craps.DAY_SEATED(), "the run did not continue");
     }
 }
 

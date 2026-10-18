@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
-import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {DeployProtocol, DegenesisDeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
@@ -76,23 +76,6 @@ contract OverpayToAfking is DeployProtocol {
 
         assertTrue(ok, "plain send accepted");
         assertEq(game.afkingFundingOf(sender), amt, "plain send -> afking");
-    }
-
-    /// @notice Combined mint+box overpay (past mint cost + box) -> payer afking.
-    function test_CombinedOverpayCreditsAfking() public {
-        address buyer = makeAddr("comboOver");
-        uint256 mintCost = 0.24 ether; // 24 tickets -> earns 0.06 box credit
-        uint256 boxAmount = 0.05 ether;
-        uint256 over = 0.02 ether;
-        vm.deal(buyer, mintCost + boxAmount + over);
-
-        vm.prank(buyer);
-        game.buyLootboxAndPresaleBox{value: mintCost + boxAmount + over}(
-            0, 9600, 0, bytes32(0), MintPaymentKind.DirectEth, boxAmount
-        );
-
-        assertEq(game.afkingFundingOf(buyer), over, "combined overpay -> afking");
-        assertEq(buyer.balance, 0, "nothing returned/stranded");
     }
 
     /// @notice Whale-pass overpay (fixed price) -> payer afking (was a revert).
@@ -194,5 +177,32 @@ contract OverpayToAfking is DeployProtocol {
         game.subscribe{value: funded}(0, false, true, 1, funderId, seat);
 
         assertEq(game.afkingFundingOf(sub), 0, "subscriber's own bucket untouched");
+    }
+}
+
+/// @notice A Degenesis box bought with more ETH than it costs credits the excess to the payer's afking.
+contract OverpayToAfkingDegenesis is DegenesisDeployProtocol {
+    function setUp() public {
+        _deployProtocol();
+        vm.warp(block.timestamp + 1 days); // Degenesis day 1
+    }
+
+    function test_DegenesisOverpayCreditsAfking() public {
+        address buyer = makeAddr("degOver");
+        uint256 mintCost = 0.24 ether; // 24 tickets -> earns 0.06 Degenesis credit
+        uint256 boxAmount = 0.05 ether;
+        uint256 over = 0.02 ether;
+        vm.deal(buyer, mintCost + boxAmount + over);
+
+        vm.prank(buyer);
+        game.purchase{value: mintCost}(0, 9600, 0, bytes32(0), MintPaymentKind.DirectEth, false);
+        assertEq(game.degenesisCreditOf(buyer), mintCost / 4, "the buy earned a quarter as credit");
+
+        vm.prank(buyer);
+        game.buyDegenesisBox{value: boxAmount + over}(0, boxAmount);
+
+        assertEq(game.afkingFundingOf(buyer), over, "Degenesis overpay -> afking");
+        assertEq(game.degenesisCreditOf(buyer), mintCost / 4 - boxAmount, "the box consumed its amount in credit");
+        assertEq(buyer.balance, 0, "nothing returned/stranded");
     }
 }

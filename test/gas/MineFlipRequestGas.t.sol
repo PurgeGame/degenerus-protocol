@@ -407,7 +407,9 @@ contract MineFlipRequestGasTest is DeployProtocol {
     }
     function test_FundedDailyContinuationFits() public {
         this.configure(Scenario.CertifyDailyRedeem);
-        game.mineFlip{gas: Bounds.RNG_DAILY_REQUEST + Bounds.RNG_REDEMPTION_CLOSE + REQUEST_FRAME_GAS}(0);
+        // The engine adds the Degenesis step to the daily request until the seventh cohort closes.
+        uint256 degenesis = _degenesisClosed() < 7 ? Bounds.DEGENESIS_REQUEST_GAS : 0;
+        game.mineFlip{gas: Bounds.RNG_DAILY_REQUEST + Bounds.RNG_REDEMPTION_CLOSE + degenesis + REQUEST_FRAME_GAS}(0);
         emit log_named_uint("cold_certify_daily_redemption_request", _isolatedExecutionGas(abi.encodeWithSignature("mineFlip(uint32)", uint32(0))));
         _assertRequested();
     }
@@ -438,6 +440,11 @@ contract MineFlipRequestGasTest is DeployProtocol {
         coinflip.withdrawRedeemedFlip(backing / 2);
         _assertBackingCursor(21 + gap);
         vm.stopPrank();
+    }
+
+    /// @dev degenesisClosed, slot 0 byte 27.
+    function _degenesisClosed() private view returns (uint8) {
+        return uint8(uint256(vm.load(address(game), bytes32(0))) >> (27 * 8));
     }
 
     function _assertBackingCursor(uint24 expected) private view {

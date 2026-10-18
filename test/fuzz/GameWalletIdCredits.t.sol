@@ -81,8 +81,6 @@ contract GameWalletIdCredits is DeployProtocol {
     bytes32 private constant GOLDEN_TICKET_WIN =
         keccak256("GoldenTicketWin(uint32,uint24,uint8,uint8,bool,uint256,uint256,uint256,uint256)");
     bytes32 private constant JACKPOT_FLIP_WIN = keccak256("JackpotFlipWin(uint32,uint24,uint8,uint256,uint256)");
-    bytes32 private constant PRESALE_BOX_OPENED =
-        keccak256("PresaleBoxOpened(uint32,uint48,uint256,uint256,uint256,uint256,bool,uint32,uint32)");
     bytes32 private constant AFKING_FLIP_CLAIMED = keccak256("AfkingFlipClaimed(uint32,uint256)");
     bytes32 private constant SUB_DRAW_WON = keccak256("SubDrawWon(uint32,uint24,uint24,uint256)");
     bytes32 private constant FOIL_CCY_TAG = keccak256("foil-currency");
@@ -95,7 +93,6 @@ contract GameWalletIdCredits is DeployProtocol {
     uint256 private constant FOIL_DRAW_SEED_SHIFT = 88;
     uint256 private constant FOIL_DRAW_SEEDED = uint256(1) << 216;
     uint256 private constant FOIL_DRAW_DAY_SHIFT = 217;
-    uint256 private constant LB_PRESALE_SHIFT = 185;
 
     CreditsGameExt private ext;
 
@@ -394,7 +391,7 @@ contract GameWalletIdCredits is DeployProtocol {
     }
 
     // ---------------------------------------------------------------------
-    // Lootbox: box flush and presale FLIP
+    // Lootbox: box flush
     // ---------------------------------------------------------------------
 
     function test_BoxFlushCreditsEntryId() public {
@@ -421,42 +418,6 @@ contract GameWalletIdCredits is DeployProtocol {
             assertEq(_lane(id) - before, credited, "stake lane moved by the flushed FLIP");
         }
         assertTrue(paid, "fixture: a box rolled FLIP");
-    }
-
-    function test_PresaleBoxFlipCreditsEntryWordId() public {
-        (address player, uint32 id) = _wallet("presale_player");
-        uint256 entry = uint256(id) | (uint256(0.1 ether) << LB_PRESALE_SHIFT);
-        bool paid;
-        for (uint256 k; k < 64 && !paid; ++k) {
-            uint256 snap = vm.snapshotState();
-            uint256 before = _lane(id);
-            vm.recordLogs();
-            ext.x_delegate(
-                ContractAddresses.GAME_LOOTBOX_MODULE,
-                abi.encodeCall(
-                    DegenerusGameLootboxModule.resolveHumanBoxOrder,
-                    (uint48(0), uint256(0), entry, uint256(keccak256(abi.encode("presale_word", k))), game.level() + 1)
-                )
-            );
-            Vm.Log[] memory logs = vm.getRecordedLogs();
-            uint256 flipOut;
-            for (uint256 i; i < logs.length; ++i) {
-                if (logs[i].emitter == address(game) && logs[i].topics[0] == PRESALE_BOX_OPENED) {
-                    assertEq(uint32(uint256(logs[i].topics[1])), game.walletIdOf(player), "owner ID");
-                    (, flipOut,,,,,) = abi.decode(logs[i].data, (uint256, uint256, uint256, uint256, bool, uint32, uint32));
-                }
-            }
-            if (flipOut == 0) {
-                vm.revertToState(snap);
-                continue;
-            }
-            paid = true;
-            (uint256 credited, uint256 others) = _credits(logs, id);
-            assertEq(credited, flipOut, "presale FLIP credited by the entry word's ID");
-            assertEq(others, 0, "no other ID credited");
-            assertEq(_lane(id) - before, flipOut, "stake lane moved");
-        }
-        assertTrue(paid, "fixture: a presale box kept its FLIP roll");
     }
 
     // ---------------------------------------------------------------------

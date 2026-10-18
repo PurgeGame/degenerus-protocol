@@ -22,9 +22,10 @@ contract CrapsPreferredBoardTest is CrapsPins {
 
     function setUp() public {
         _installPins();
+        _warpToTableGenesis();
         c = new CrapsViews();
         flip.setCompLane(type(uint128).max);
-        vm.warp(block.timestamp + 1 days);
+        vm.warp(vm.getBlockTimestamp() + 1 days);
         _setIndex(0);
         _setDailyWord(c.currentDayIndex(), 40 << 8);
         game.setScore(alice, c.SYBIL_SCORE_FLOOR());

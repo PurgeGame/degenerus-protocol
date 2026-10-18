@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -23,12 +24,6 @@ contract BoonStaticDiscard is DeployProtocol {
     uint256 constant SLOT_BOON_PACKED = GameSlots.BOON_PACKED; // mapping(address => BoonPacked)
     uint256 constant SLOT_LOOTBOX_WORD = GameSlots.RNG_DAY_TAGS; // mapping(uint48 => uint256)
     uint256 constant SLOT_LOOTBOX_RNG_IDX = GameSlots.LOOTBOX_RNG_PACKED; // lootboxRngPacked (low 48 bits = lootboxRngIndex)
-
-    // Queue entry word (LB_* layout in DegenerusGameStorage).
-    uint256 constant LB_LEVEL_SHIFT = 32;
-    uint256 constant LB_SCORE_SHIFT = 56;
-    uint256 constant LB_CUSTOM_COUNT_SHIFT = 121;
-    uint256 constant LB_SIZE_SHIFT = 128;
 
     // BoonPacked field shifts (DegenerusGameStorage)
     uint256 constant BP_DECIMATOR_TIER_SHIFT = 168; // slot0
@@ -74,14 +69,10 @@ contract BoonStaticDiscard is DeployProtocol {
     }
 
     function _setupLootbox(address player, uint48 index, uint256 ethAmount, uint256 vrfWord) internal {
-        // One CUSTOM box of `ethAmount`, score=1, frozen to the live level, as a single queue
+        // One box of `ethAmount`, score=1, as a single queue
         // entry in buffer `index`; the seal then latches it as the read cohort.
         uint32 id = _giveWalletId(player);
-        uint256 word = uint256(id)
-            | (uint256(game.level()) << LB_LEVEL_SHIFT)
-            | (uint256(1) << LB_SCORE_SHIFT)
-            | (uint256(1) << LB_CUSTOM_COUNT_SHIFT)
-            | ((ethAmount / 1 gwei) << LB_SIZE_SHIFT);
+        uint256 word = BoxOrderLib.boEntry(id, ethAmount / BoxOrderLib.SCALE, 1, 0, 1, false);
         RecyclingState.seedWriteBuffer(address(game), index);
         bytes32 data = keccak256(abi.encode(keccak256(abi.encode(uint256(index), GameSlots.BOX_QUEUE))));
         vm.store(address(game), data, bytes32(word));

@@ -41,7 +41,7 @@ interface IsDGNRS {
         Affiliate,
         Lootbox,
         Reward,
-        PresaleBox
+        Degenesis
     }
 
     /// @notice Deposit stETH to sDGNRS reserves

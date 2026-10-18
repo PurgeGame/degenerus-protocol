@@ -143,10 +143,10 @@ contract LootboxTicketLanesFlush is DeployProtocol {
         uint48 N = _idx();
         uint256 position = RecyclingState.boxCount(address(game), N);
         uint48 ref = QUEUED_ENTRY_TAG | (uint48(position) << 1) | N;
-        // Thirty smalls spread over the target band, plus a one-ETH custom so the pending ETH
-        // clears the mid-day request threshold.
+        // Thirty 0.05 ETH boxes spread over the target band; the 1.5 ETH order clears the
+        // mid-day request threshold.
         vm.prank(actor);
-        game.purchase{value: 30 * priceWei + 2 ether}(0, 400, BoxOrderLib.boOrder(30, 0, 0, 1, 1 ether), bytes32(0), MintPaymentKind.DirectEth, false);
+        game.purchase{value: priceWei + 2.5 ether}(0, 400, BoxOrderLib.boCustoms(30, 0.05 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         uint256 reqId = _mineMiddayRequest(actor);
         uint256 base = game.level();
 

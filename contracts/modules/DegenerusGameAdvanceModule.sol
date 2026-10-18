@@ -30,9 +30,10 @@ import {IJackpotBattle} from "../interfaces/IJackpotBattle.sol";
 import {IDegenerusGame, MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {IDegenerusJackpots} from "../interfaces/IDegenerusJackpots.sol";
 import {IDegenerusGameJackpotModule, IDegenerusGameFoilPackModule, IDegenerusGameBoonModule, IDegenerusGameGameOverModule,
-    IGameAfkingModule} from "../interfaces/IDegenerusGameModules.sol";
+    IGameAfkingModule, IDegenerusGameDegenesisModule} from "../interfaces/IDegenerusGameModules.sol";
 import {IDeityPassSeize} from "../interfaces/ILiquidation.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
+import {GameTimeLib} from "../libraries/GameTimeLib.sol";
 import {IStETH} from "../interfaces/IStETH.sol";
 import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
 import {EntropyLib} from "../libraries/EntropyLib.sol";
@@ -90,6 +91,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
     uint8 private constant STAGE_DAILY_WORD_APPLIED = 18;
     uint8 private constant STAGE_JACKPOT_BAF_AWARDS = 19;
     uint8 private constant STAGE_TERMINAL_LOANS = 20;
+    uint8 private constant STAGE_DEGENESIS_DAY = 21;
     uint16 private constant NEXT_TO_FUTURE_BPS_FAST = 3000;
     uint16 private constant NEXT_TO_FUTURE_BPS_MIN = 1500;
     uint16 private constant NEXT_TO_FUTURE_BPS_DEADLINE = 4500;
@@ -291,6 +293,15 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
                 ));
                 if (result.done) _sealPurchaseDay(purchaseLevel, day, _simulatedDayIndex(), purchaseStartDay);
                 stage = STAGE_PURCHASE_DAILY_TICKETS;
+            } else if (!lastPurchase && purchaseLevel == 1 && day < GameTimeLib.MAIN_LAUNCH_DAY) {
+                // A Degenesis day, keyed on the processed day: no level-1 FLIP draw, no foil draw
+                // record and no last-purchase latch. Randomness still unlocks.
+                if (!MineFlipGas.canRun(meter, GasBounds.DEGENESIS_DAY_CLOSE, GasBounds.DAILY_PHASE_TAIL)) return result;
+                _unlockRng(day);
+                result.progressed = true;
+                MineFlipGas.markProgress(meter);
+                result.done = true;
+                stage = STAGE_DEGENESIS_DAY;
             } else if (!lastPurchase) {
                 if (purchaseLevel == 1) {
                     if (!MineFlipGas.canRun(meter, GasBounds.LEVEL_ONE_DRAW, GasBounds.DAILY_PHASE_TAIL)) return result;
@@ -546,11 +557,21 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
     function prepareRequestBoundary(uint24 day) external {
         if (address(this) != ContractAddresses.GAME || !_lootboxReadComplete() || _livenessTriggered()
             || day != _afkingResetDay || day <= dailyIdx || !subsFullyProcessed) revert E();
-        uint24 wallDay = _simulatedDayIndex();
+        // Degenesis cohorts split and price before the request. Every cohort is split no later than
+        // the call that closes it, so once the seventh closes no call is made.
+        if (degenesisClosed < DEGENESIS_DAYS) {
+            (bool okDeg, bytes memory degData) = ContractAddresses.GAME_DEGENESIS_MODULE.delegatecall(
+                abi.encodeWithSelector(IDegenerusGameDegenesisModule.prepareDegenesis.selector, day)
+            );
+            if (!okDeg) _revertDelegate(degData);
+        }
         uint24 psd = purchaseStartDay;
-        if (!jackpotPhaseFlag && !lastPurchaseDay && day == wallDay && day >= psd
+        // The early turbo waits for the main launch; the first request after Degenesis qualifies
+        // whenever it lands.
+        if (day >= GameTimeLib.MAIN_LAUNCH_DAY && !jackpotPhaseFlag && !lastPurchaseDay && day >= psd
             && _lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) != 1) {
-            if (day - psd <= 1 && level % 10 != 9 && _getNextPrizePool() > _prizePoolTarget(level + 1)) {
+            if ((dailyIdx < GameTimeLib.MAIN_LAUNCH_DAY || (day == _simulatedDayIndex() && day - psd <= 1))
+                && level % 10 != 9 && _getNextPrizePool() > _prizePoolTarget(level + 1)) {
                 lastPurchaseDay = true;
                 jackpotFlags |= JACKPOT_TURBO;
                 _markTicketGenerationStart(level + 2);
@@ -568,8 +589,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         uint24 battleDay = uint24(lvlAndQuestDay >> 24);
         if (battleDay != 0) {
             uint24 poolLevel = jackpotPhaseFlag && level != 0 ? level - 1 : level;
-            IJackpotBattle(ContractAddresses.CRAPS).lockJackpotBattle(battleDay, levelPrizePool[poolLevel], level);
-            dailyTicketBudgetsPacked |= _JACKPOT_BATTLE_PENDING;
+            if (IJackpotBattle(ContractAddresses.CRAPS).lockJackpotBattle(battleDay, levelPrizePool[poolLevel], level)) {
+                dailyTicketBudgetsPacked |= _JACKPOT_BATTLE_PENDING;
+            }
         }
 
         // Decimator opening-day quest / auto-entry latch closes at the next fresh daily request.
@@ -943,8 +965,9 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
     }
 
     function _sealPurchaseDay(uint24 purchaseLevel, uint24 day, uint24 wallDay, uint24 psd) private {
-        bool targetMet = _getNextPrizePool() > _prizePoolTarget(purchaseLevel);
-        if (targetMet && day == wallDay && day >= psd) {
+        // No Degenesis day latches, however late it is cranked.
+        if (day >= GameTimeLib.MAIN_LAUNCH_DAY && day == wallDay && day >= psd
+            && _getNextPrizePool() > _prizePoolTarget(purchaseLevel)) {
             lastPurchaseDay = true;
             if (purchaseLevel % 10 == 5 && purchaseLevel % 100 != 95) jackpotFlags |= JACKPOT_TURBO;
             // Level L+1's first generation window opens with this latch: its frozen pool mints

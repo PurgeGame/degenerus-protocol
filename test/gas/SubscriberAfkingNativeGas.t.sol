@@ -46,8 +46,9 @@ contract SubscriberNativeGasHost is DegenerusGame, WalletSeed {
         delete ticketPending[_walletIdOf(ContractAddresses.SDGNRS)];
         delete ticketPending[_walletIdOf(ContractAddresses.VAULT)];
         if (whale) {
-            _creditClaimable(_seedWallet(ContractAddresses.SDGNRS), 2_000 ether);
-            claimablePool += 2_000 ether;
+            // 1,650 ETH: 1,640 after the top-up, whose quarter (410 ETH) buys exactly 20 groups.
+            _creditClaimable(_seedWallet(ContractAddresses.SDGNRS), 1_650 ether);
+            claimablePool += 1_650 ether;
         }
     }
 
@@ -264,8 +265,10 @@ contract SubscriberAfkingNativeGasTest is DeployProtocol {
         assertLe(used, GasBounds.SUBSCRIBER_WHALE_GAS + GasBounds.SUBSCRIBER_TAIL_GAS,
             "whale action exceeds saved atomic envelope");
         assertLe(used, STEP_GAS_TARGET);
-        // Plus the 1-wei registration sentinel.
-        assertEq(host.claimableOf(ContractAddresses.SDGNRS), 1_600 ether + 1, "all100 paid passes bought");
+        // The top-up moves 10 ETH of claimable into sDGNRS AFKing before the purchase, which then
+        // spends 400 ETH; plus the 1-wei registration sentinel.
+        assertEq(game.afkingFundingOf(ContractAddresses.SDGNRS), 10 ether, "AFKing topped up to target");
+        assertEq(host.claimableOf(ContractAddresses.SDGNRS), 1_240 ether + 1, "all100 paid passes bought");
         uint256 purchaseLogs;
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {

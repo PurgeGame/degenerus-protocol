@@ -41,6 +41,7 @@ contract JackpotVariablePricingTest is CrapsPins {
 
     function setUp() public {
         _installPins();
+        _warpToAwardGenesis();
         table = JackpotVariableHarness(deployCode("JackpotVariablePricing.t.sol:JackpotVariableHarness"));
         cold = JackpotBattle(address(table));
         start = vm.getBlockTimestamp() + 1 days - (vm.getBlockTimestamp() - 82_620) % 1 days;

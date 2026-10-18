@@ -55,6 +55,8 @@ interface IDegenerusGamePlayerActions {
         MintPaymentKind payKind,
         bool foil
     ) external payable;
+    /// @notice Spend the Vault's Degenesis budget on an ordinary purchase for the Vault.
+    function spendDegenesis(bool whalePass, uint256 quantity, uint256 boxOrder, uint256 maxCost) external;
     /// @notice Claim account `id`'s accumulated ETH winnings (0 = caller); pays the payee.
     function claimWinnings(uint32 id) external;
     function sweepAccounts(uint32[] calldata ids) external returns (uint256 ethCollected, uint256 flipCollected);
@@ -686,6 +688,22 @@ contract DegenerusVault {
         gamePlayer.purchase{value: totalValue}(
             0, entryQuantityScaled, boxOrder, affiliateCode, payKind, false
         );
+    }
+
+    /// @notice Spend the restricted Degenesis budget on tickets and lootboxes, or whale passes,
+    ///         for the vault at their normal price
+    /// @dev The game moves at most `maxCost` of the budget into the purchase and returns the
+    ///      rest in the same call; the budget has no other way out.
+    /// @param whalePass True for whale passes, false for tickets and lootboxes
+    /// @param quantity Whale passes, or ticket purchase units (400 = one whole ticket)
+    /// @param boxOrder Packed box order (ignored with whale passes)
+    /// @param maxCost Budget made available to the purchase
+    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
+    function spendDegenesis(bool whalePass, uint256 quantity, uint256 boxOrder, uint256 maxCost)
+        external
+        onlyVaultOwner
+    {
+        gamePlayer.spendDegenesis(whalePass, quantity, boxOrder, maxCost);
     }
 
     /// @notice Purchase FLIP tickets through the game contract

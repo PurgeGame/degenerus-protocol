@@ -37,7 +37,7 @@ contract WhaleModuleForwarder {
 /// @notice Replaces the sDGNRS 5%-of-claimable level-start box. On the first afking process
 ///         STAGE pass of each new level, `DegenerusGameWhaleModule.purchaseWhalePassForSdgnrs`
 ///         buys the largest whole group of five paid passes whose canonical quote fits a quarter
-///         of sDGNRS's game-side claimable (cap 100 paid passes), nothing below one group. The
+///         of sDGNRS's game-side claimable (cap 1,000 paid passes), nothing below one group. The
 ///         proof of firing is the `WhalePassPurchased(SDGNRS, qty, price)` log plus the claimable
 ///         debit, the aggregate ticket shape across the 100-level span, and the batched DGNRS
 ///         minter reward (poolBalance read once, ONE transferFromPool, per-pass 1% rounding kept).
@@ -62,6 +62,10 @@ contract SdgnrsWhaleBuy is DeployProtocol {
     uint256 private constant EARLY = 2.4 ether;
     uint256 private constant STANDARD = 4 ether;
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
+    /// @dev sDGNRS AFKing target: before each attempt, claimable above the 1-wei sentinel tops
+    ///      AFKing funding up to it, and the whale budget is a quarter of what remains. The level
+    ///      stage starts AFKing at zero, so the top-up takes min(10 ETH, claimable - 1).
+    uint256 private constant TOP_UP = 10 ether;
 
     bytes32 private constant WHALE_PURCHASED_SIG = keccak256("WhalePassPurchased(uint32,uint256,uint256)");
 
@@ -92,31 +96,38 @@ contract SdgnrsWhaleBuy is DeployProtocol {
     }
 
     // =====================================================================================
-    // Sizing: thresholds, rounding to five, the 25% bound, the 100-pass cap
+    // Sizing: thresholds, rounding to five, the 25% bound, the 1,000-pass cap
     // =====================================================================================
 
-    /// @notice Early price (stored levels 1-3, 2.4 ETH): one wei under 48 ETH buys nothing and
-    ///         leaves the latch open; exactly 48 ETH buys one group of five for 12 ETH.
+    /// @notice Early price (stored levels 1-3, 2.4 ETH): after the 10 ETH AFKing top-up, one wei
+    ///         under 48 ETH of remaining claimable buys nothing and leaves the latch open; exactly
+    ///         48 ETH remaining buys one group of five for 12 ETH.
     function test_EarlyPrice_ThresholdAt48Eth() public {
         uint256 snap = vm.snapshotState();
-        _runLevelStage(1, 48 ether - 1, 0x5D70001);
-        (bool bought,,) = _lastWhalePurchase();
-        assertFalse(bought, "47.999.. ETH: no purchase");
+        _runLevelStage(1, 48 ether + TOP_UP - 1, 0x5D70001);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        (bool bought,,) = _whalePurchaseIn(logs);
+        assertFalse(bought, "47.999.. ETH after the top-up: no purchase");
+        assertEq(_sdgnrsTopUpIn(logs), TOP_UP, "the top-up is kept when no group is bought");
         assertEq(_sdgnrsBonusLevel(), 1, "the attempt latches the level even without a purchase");
         vm.revertToState(snap);
 
-        _runLevelStage(1, 48 ether, 0x5D70002);
-        (bool bought2, uint256 qty, uint256 price) = _lastWhalePurchase();
-        assertTrue(bought2, "48 ETH: bought");
+        _runLevelStage(1, 48 ether + TOP_UP, 0x5D70002);
+        logs = vm.getRecordedLogs();
+        (bool bought2, uint256 qty, uint256 price) = _whalePurchaseIn(logs);
+        assertEq(_sdgnrsTopUpIn(logs), TOP_UP, "top-up before the attempt");
+        assertTrue(bought2, "48 ETH after the top-up: bought");
         assertEq(qty, 5, "one group of five");
         assertEq(price, 5 * EARLY, "12 ETH at the early price");
         assertEq(_sdgnrsBonusLevel(), 1, "latch stamped to the level");
     }
 
-    /// @notice Standard price (stored level 4+, 4 ETH): the requested table. 79.99 -> 0,
-    ///         80 -> 5, 100 -> 5, 159 -> 5, 160 -> 10, 240 -> 15; spend is always the quote.
+    /// @notice Standard price (stored level 4+, 4 ETH): the requested table on claimable left after
+    ///         the 10 ETH top-up. 79.99 -> 0, 80 -> 5, 100 -> 5, 159 -> 5, 160 -> 10, 240 -> 15;
+    ///         spend is always the quote.
     function test_StandardPrice_Table() public {
         uint256[6] memory cl = [uint256(80 ether - 1), 80 ether, 100 ether, 159 ether, 160 ether, 240 ether];
+        for (uint256 i; i < cl.length; ++i) cl[i] += TOP_UP;
         uint256[6] memory want = [uint256(0), 5, 5, 5, 10, 15];
         for (uint256 i; i < cl.length; ++i) {
             uint256 snap = vm.snapshotState();
@@ -129,32 +140,51 @@ contract SdgnrsWhaleBuy is DeployProtocol {
                 assertTrue(bought, "table: bought");
                 assertEq(qty, want[i], "table: paid passes");
                 assertEq(price, want[i] * STANDARD, "table: spend == qty * 4 ETH");
-                assertLe(price, cl[i] / 4, "table: spend <= 25% of claimable");
+                assertLe(price, (cl[i] - TOP_UP) / 4, "table: spend <= 25% of claimable after the top-up");
             }
             vm.revertToState(snap);
         }
     }
 
-    /// @notice 2,000 ETH claimable affords 25 groups; the route cap holds it at 100 paid passes.
-    function test_CapAt100PaidPasses() public {
-        _runLevelStage(4, 2_000 ether, 0x5D70200);
+    /// @notice The spec §8 example at the standard price: 80 ETH claimable and 4 ETH AFKing become
+    ///         74 and 10, the whale budget is 18.5 ETH, and the 20 ETH minimum group is skipped;
+    ///         the top-up stays and the attempt latches the level.
+    function test_TopUp_SpecExample_80_4_SkipsTwentyEthGroup() public {
+        _setLevel(4);
+        _setAfking(ContractAddresses.SDGNRS, 4 ether);
+        _setClaimable(ContractAddresses.SDGNRS, 80 ether);
+        _nextDay(0x5D70A00);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        (bool bought,,) = _whalePurchaseIn(logs);
+        assertFalse(bought, "18.5 ETH budget: the 20 ETH group is skipped");
+        assertEq(_sdgnrsTopUpIn(logs), 6 ether, "top-up 6 ETH: 74 claimable / 10 AFKing");
+        assertEq(_sdgnrsBonusLevel(), 4, "the attempt latched the level");
+        assertGt(_claimableOf(ContractAddresses.SDGNRS), 73 ether, "claimable 74 kept (less any delivery leg)");
+    }
+
+    /// @notice 20,000 ETH claimable affords 249 groups; the route cap holds it at 1,000 paid passes.
+    function test_CapAt1000PaidPasses() public {
+        _runLevelStage(4, 20_000 ether, 0x5D70200);
         (bool bought, uint256 qty, uint256 price) = _lastWhalePurchase();
         assertTrue(bought, "bought");
-        assertEq(qty, 100, "capped at 100 paid passes");
-        assertEq(price, 400 ether, "100 * 4 ETH");
+        assertEq(qty, 1_000, "capped at 1,000 paid passes");
+        assertEq(price, 4_000 ether, "1,000 * 4 ETH");
     }
 
     /// @notice Fuzz: whatever the claimable and level, a purchase is a multiple of five within the
-    ///         cap, priced at the canonical no-boon quote, never above a quarter of claimable.
+    ///         cap, priced at the canonical no-boon quote, never above a quarter of the claimable
+    ///         left after the AFKing top-up.
     /// forge-config: default.fuzz.runs = 24
     function testFuzz_SpendNeverExceedsQuarter(uint256 claimable, uint8 lvlSeed) public {
-        claimable = bound(claimable, 0, 3_000 ether);
+        claimable = bound(claimable, 0, 20_000 ether);
         uint24 lvl = [uint24(1), 3, 4, 27, 50][lvlSeed % 5];
         _runLevelStage(lvl, claimable, uint256(keccak256(abi.encode(claimable, lvl))) | 1);
         (bool bought, uint256 qty, uint256 price) = _lastWhalePurchase();
         uint256 unit = lvl <= 3 ? EARLY : STANDARD;
-        uint256 groups = (claimable / 4) / (5 * unit);
-        if (groups > 20) groups = 20;
+        uint256 topUp = claimable <= 1 ? 0 : (claimable - 1 < TOP_UP ? claimable - 1 : TOP_UP);
+        uint256 left = claimable - topUp;
+        uint256 groups = (left / 4) / (5 * unit);
+        if (groups > 200) groups = 200;
         if (groups == 0) {
             assertFalse(bought, "below one group: nothing");
             assertEq(_sdgnrsBonusLevel(), lvl, "the attempt latches anyway");
@@ -162,7 +192,7 @@ contract SdgnrsWhaleBuy is DeployProtocol {
             assertTrue(bought, "bought");
             assertEq(qty, groups * 5, "largest whole group");
             assertEq(price, qty * unit, "canonical quote");
-            assertLe(price, claimable / 4, "<= 25%");
+            assertLe(price, left / 4, "<= 25%");
             assertEq(_sdgnrsBonusLevel(), lvl, "latched");
         }
     }
@@ -211,7 +241,7 @@ contract SdgnrsWhaleBuy is DeployProtocol {
         _nextDay(0x5D70402);
         (bool b3, uint256 qty,) = _lastWhalePurchase();
         assertTrue(b3, "level 5: its one attempt buys");
-        assertEq(qty, 100, "1,000 ETH -> 25 groups -> capped at 100 paid passes");
+        assertEq(qty, 1_000, "level 5: its one attempt buys, capped at 1,000 paid passes");
         assertEq(_sdgnrsBonusLevel(), 5, "latched at 5");
     }
 
@@ -255,7 +285,7 @@ contract SdgnrsWhaleBuy is DeployProtocol {
         uint256 supply0 = sdgnrs.totalSupply();
         assertGt(pool0, 0, "fixture: whale pool funded at deploy");
 
-        _runLevelStage(4, 240 ether, 0x5D70600);
+        _runLevelStage(4, 240 ether + TOP_UP, 0x5D70600);
         // One read of the run's logs: the purchase and every sDGNRS pool transfer.
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 qty;
@@ -346,11 +376,12 @@ contract SdgnrsWhaleBuy is DeployProtocol {
     // =====================================================================================
 
     /// @notice A live tier-3 whale boon (35% off the first pass, standard after) makes a group
-    ///         cost 2.6 + 16 = 18.6 ETH, so 79 ETH claimable (no-boon threshold 80) buys one group
-    ///         at exactly that quote and consumes the boon.
+    ///         cost 2.6 + 16 = 18.6 ETH, so 79 ETH claimable after the top-up (no-boon threshold
+    ///         80) buys one group at exactly that quote and consumes the boon.
     function test_Boon_QuoteAndDebitAgree_BoonConsumed() public {
         _setLevel(4);
-        _setClaimable(ContractAddresses.SDGNRS, 79 ether);
+        _setAfking(ContractAddresses.SDGNRS, 0);
+        _setClaimable(ContractAddresses.SDGNRS, 79 ether + TOP_UP);
         _t += 1 days;
         vm.warp(_t);
         _injectWhaleBoon(ContractAddresses.SDGNRS, game.currentDayView(), 3);
@@ -389,9 +420,11 @@ contract SdgnrsWhaleBuy is DeployProtocol {
     // Harness
     // =====================================================================================
 
-    /// @dev Set the level, fund sDGNRS's claimable, advance one new day through the STAGE.
+    /// @dev Set the level, zero sDGNRS's AFKing funding, fund its claimable, advance one new day
+    ///      through the STAGE.
     function _runLevelStage(uint24 lvl, uint256 claimable, uint256 vrfWord) internal {
         _setLevel(lvl);
+        _setAfking(ContractAddresses.SDGNRS, 0);
         _setClaimable(ContractAddresses.SDGNRS, claimable);
         _nextDay(vrfWord);
     }
@@ -413,7 +446,10 @@ contract SdgnrsWhaleBuy is DeployProtocol {
 
     /// @dev The last WhalePassPurchased log since recordLogs, if any.
     function _lastWhalePurchase() internal returns (bool found, uint256 qty, uint256 price) {
-        Vm.Log[] memory logs = vm.getRecordedLogs();
+        return _whalePurchaseIn(vm.getRecordedLogs());
+    }
+
+    function _whalePurchaseIn(Vm.Log[] memory logs) internal pure returns (bool found, uint256 qty, uint256 price) {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics.length == 2 && logs[i].topics[0] == WHALE_PURCHASED_SIG
                 && uint32(uint256(logs[i].topics[1])) == 2) {
@@ -421,6 +457,31 @@ contract SdgnrsWhaleBuy is DeployProtocol {
                 found = true;
             }
         }
+    }
+
+    /// @dev Sum of the Game's AfkingFunded(sDGNRS) logs: the top-up (no Degenesis split runs on
+    ///      this fixture).
+    function _sdgnrsTopUpIn(Vm.Log[] memory logs) internal view returns (uint256 total) {
+        bytes32 sig = keccak256("AfkingFunded(uint32,uint256)");
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter == address(game) && logs[i].topics.length == 2 && logs[i].topics[0] == sig
+                && uint32(uint256(logs[i].topics[1])) == 2) {
+                total += abi.decode(logs[i].data, (uint256));
+            }
+        }
+    }
+
+    /// @dev Force `who`'s AFKing funding (balancesPacked high-128), moving claimablePool in tandem.
+    function _setAfking(address who, uint256 amount) internal {
+        uint256 mask128 = (uint256(1) << 128) - 1;
+        bytes32 cwSlot = keccak256(abi.encode(_walletId(who), uint256(GAME_CLAIMABLE_SLOT)));
+        uint256 packed = uint256(vm.load(address(game), cwSlot));
+        uint256 prev = packed >> 128;
+        vm.store(address(game), cwSlot, bytes32((packed & mask128) | (amount << 128)));
+        bytes32 s1 = bytes32(uint256(CLAIMABLE_POOL_SLOT));
+        uint256 p1 = uint256(vm.load(address(game), s1));
+        uint256 pool = (p1 >> 128) + amount - prev;
+        vm.store(address(game), s1, bytes32((p1 & mask128) | (pool << 128)));
     }
 
     function _setLevel(uint24 lvl) internal {

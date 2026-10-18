@@ -115,10 +115,6 @@ contract DegenerusGameMintModule is
     // Purchase / Lootbox Constants
     // -------------------------------------------------------------------------
 
-    /// @dev Coin-presale-box minimum purchase amount (0.01 ETH). Checked on the
-    ///      REQUESTED amount BEFORE the exactly-50-ETH clamp, so a sub-floor gap to
-    ///      the 50-ETH cap can never lock the presale close.
-    uint256 private constant PRESALE_BOX_MIN = 0.01 ether;
     /// @dev Absolute minimum ticket buy-in (ETH equivalent).
     uint256 private constant TICKET_MIN_BUYIN_WEI = 0.0025 ether;
     /// @dev Entry floor for the biggest-buy record, in whole tickets.
@@ -151,21 +147,6 @@ contract DegenerusGameMintModule is
         uint48 indexed index,
         uint32 position,
         uint256 amount
-    );
-    /// @notice Emitted when a coin-presale box joins a purchase's entry.
-    /// @param buyer The player who bought the box.
-    /// @param index The physical write buffer (0/1) the entry joined.
-    /// @param position The entry's zero-based position in that buffer (shared with the same
-    ///        call's ordinary boxes).
-    /// @param amount The applied box ETH (post-clamp).
-    /// @param closing True iff this buy crossed the 50-ETH cap. It latches presaleOver, and
-    ///        this box's own resolution burns the Pool.PresaleBox remainder.
-    event PresaleBoxBuy(
-        uint32 indexed buyer,
-        uint48 indexed index,
-        uint32 position,
-        uint256 amount,
-        bool closing
     );
 
     /// @notice entryQuantityScaled in purchase units (4 * QTY_SCALE = 400 = one whole ticket);
@@ -310,7 +291,7 @@ contract DegenerusGameMintModule is
     /// @dev Delegatecalled by DegenerusGame. Handles payment routing, affiliates, and queues.
     /// @param buyerId Recipient of the purchased items.
     /// @param entryQuantityScaled Purchase units: 100 = one entry (a quarter ticket), 400 = one whole ticket.
-    /// @param boxOrder Packed box order: [small:8][med:8][large:8][customCount:8][customSize:56 gwei].
+    /// @param boxOrder Packed box order: [quantity:7][kind:2][customUnits:21].
     /// @param affiliateCode Referral code for affiliate attribution.
     /// @param payKind Payment kind selector (ETH/claimable/combined).
     function purchase(
@@ -1111,12 +1092,9 @@ contract DegenerusGameMintModule is
             lootboxFlipCredit += affKickback;
         }
 
-        // Coin-presale-box credit accrual: while the box presale is open, every ETH
-        // ticket + lootbox spend (fresh + recycled) earns 25% spendable box credit.
-        // Covers the afking ticket buy, which routes through this path.
-        if (!presaleOver) {
-            presaleBoxCredit[buyerId] += totalCost / 4;
-        }
+        // Degenesis credit on the whole ticket + lootbox spend: every leg of this body is ETH,
+        // claimable or AFKing funded (FLIP-paid tickets route through redeemFlip instead).
+        _accrueDegenesisCredit(buyerId, totalCost);
 
         // Recycle bonus: spending at least 3 whole tickets' worth of claimable
         // winnings (priceWei is the per-whole-ticket cost) earns 10% of the
@@ -1140,154 +1118,6 @@ contract DegenerusGameMintModule is
                 affWinnerCredit
             );
         }
-    }
-
-    /// @notice Buy a credit-gated coin-presale box (standalone), funded by msg.value
-    ///         plus an optional claimable shortfall.
-    /// @dev The box queues at the current lootbox RNG index and resolves off the
-    ///      committed word later (RNG-freeze discipline). Reverts once presaleOver.
-    /// @param id Account receiving the box (0 = caller; account rule). Raw msg.data target of
-    ///        Game.buyPresaleBox.
-    /// @param boxAmount Requested box ETH (>= PRESALE_BOX_MIN, checked pre-clamp).
-    function buyPresaleBox(uint32 id, uint256 boxAmount) external payable {
-        // Delegatecall-only: address(this) == GAME under the nested dispatch. A direct call on the
-        // deployed module would trap the in-flight msg.value against empty local state.
-        if (address(this) != ContractAddresses.GAME) revert E();
-        uint32 buyerId = _resolveAccountId(id);
-        buyerId = _registerCallerAccount(buyerId, boxAmount);
-        _buyPresaleBoxFor(buyerId, boxAmount, msg.value, 0, 0);
-    }
-
-    /// @notice Buy tickets/lootbox (earning 25% presale-box credit) AND a presale box
-    ///         in one call, sharing one queue entry. The mint leg takes fresh ETH up to its
-    ///         own cost (none for Claimable payKind); the rest of msg.value funds the box,
-    ///         with any shortfall drawn from the buyer's claimable, then afking balance. The
-    ///         box is gated by the just-earned + banked presale-box credit.
-    /// @param id Account receiving both legs (0 = caller; account rule). Raw msg.data target of
-    ///        Game.buyLootboxAndPresaleBox.
-    /// @param entryQuantityScaled Tickets to buy (0 to skip).
-    /// @param boxOrder Packed box order (0 to skip): [small:8][med:8][large:8][customCount:8][customSize:56 gwei].
-    /// @param affiliateCode Affiliate/referral code for the mint leg.
-    /// @param payKind Payment method for the mint leg.
-    /// @param boxAmount Requested presale-box ETH (>= PRESALE_BOX_MIN; leftover msg.value
-    ///        first, then the buyer's claimable/afking).
-    function buyLootboxAndPresaleBox(
-        uint32 id,
-        uint256 entryQuantityScaled,
-        uint256 boxOrder,
-        bytes32 affiliateCode,
-        MintPaymentKind payKind,
-        uint256 boxAmount
-    ) external payable {
-        uint32 buyerId = _resolveAccountId(id);
-        // Split msg.value across both legs so the box accepts the same funding mix as
-        // every other purchase. The mint leg takes fresh ETH up to its own cost — capped
-        // so the Combined/DirectEth payment guards never revert on or strand overpay;
-        // the remainder funds the box as fresh ETH, with claimable/afking covering any
-        // box shortfall. Claimable payKind sends no fresh ETH to the mint leg, leaving
-        // all of msg.value for the box.
-        (
-            bool cachedJpFlag,
-            uint24 cachedLevel,
-            uint256 priceWei,
-            uint256 ticketCost
-        ) = _purchaseCostInputs(entryQuantityScaled);
-        uint256 mintCost = ticketCost + _boxQuote(boxOrder);
-        buyerId = _registerCallerAccount(buyerId, mintCost + boxAmount);
-        uint256 mintFresh = payKind == MintPaymentKind.Claimable
-            ? 0
-            : (msg.value < mintCost ? msg.value : mintCost);
-        // Mint leg first: accrues the 25% presale-box credit that gates the box below.
-        uint256 boxWord = _purchaseForWithCached(
-            buyerId,
-            entryQuantityScaled,
-            boxOrder,
-            affiliateCode,
-            payKind,
-            mintFresh,
-            cachedJpFlag,
-            cachedLevel,
-            priceWei,
-            ticketCost,
-            buyerId
-        );
-        // Both box legs share this call's one entry; the presale leg appends it.
-        _buyPresaleBoxFor(buyerId, boxAmount, msg.value - mintFresh, boxWord, mintCost - ticketCost);
-    }
-
-    /// @dev Core credit-gated presale-box buy: clamp-to-50 close, 1:1 credit consume,
-    ///      msg.value + claimable-shortfall payment, 80/20 ETH routing via
-    ///      _creditBoxProceeds, then the presale fields join the purchase's entry and the
-    ///      entry is appended. Independent presale purchases are independent entries.
-    /// @param buyerId Player receiving the box.
-    /// @param buyerId The buyer's wallet ID.
-    /// @param boxAmount Requested box ETH (the MIN floor + no-overpay checks key on this).
-    /// @param valueForBox The fresh-ETH (msg.value) portion available to fund the box.
-    /// @param word The same call's ordinary entry, or zero for a presale-only entry.
-    /// @param ordinaryCost The ordinary leg's box ETH (its RNG-pending ETH), or zero.
-    function _buyPresaleBoxFor(
-        uint32 buyerId,
-        uint256 boxAmount,
-        uint256 valueForBox,
-        uint256 word,
-        uint256 ordinaryCost
-    ) private {
-        if (presaleOver) revert E();
-        if (_livenessTriggered()) revert E();
-        // MIN floor on the REQUESTED amount, BEFORE the exactly-50 clamp, so a
-        // sub-floor gap to the 50-ETH cap can never lock the close.
-        if (boxAmount < PRESALE_BOX_MIN) revert E();
-        // Overpay vs the requested amount is credited to the payer's afking, not reverted.
-        if (valueForBox > boxAmount) {
-            _creditAfkingValue(_requireWalletId(msg.sender), valueForBox - boxAmount);
-            valueForBox = boxAmount;
-        }
-
-        uint256 sold = presaleBoxEthSold;
-        uint256 remaining = PRESALE_BOX_ETH_CAP - sold; // sold <= cap by construction
-        if (remaining == 0) revert E(); // sold out
-
-        // Clamp the crossing box to land cumulative box-ETH at exactly 50.
-        uint256 applied = boxAmount > remaining ? remaining : boxAmount;
-        bool closing = applied == remaining;
-
-        // Credit gate: consume spendable presale-box credit 1:1 (no clamp-to-credit;
-        // an over-credit request reverts — the caller sizes the box to their credit).
-        if (applied > presaleBoxCredit[buyerId]) revert E();
-        unchecked {
-            presaleBoxCredit[buyerId] -= applied;
-        }
-
-        // Payment: msg.value first (capped at the applied amount; clamp excess -> afking),
-        // claimable shortfall for the rest (STRICT 1-wei sentinel preserved).
-        uint256 freshUsed = valueForBox > applied ? applied : valueForBox;
-        uint256 refund = valueForBox - freshUsed;
-        uint256 shortfall = applied - freshUsed;
-        _settleShortfall(buyerId, shortfall, true);
-
-        // 80/20 routing: claimablePool += applied; VAULT 80% + SDGNRS 20% claimable.
-        // The claimable-funded portion (shortfall) nets pool delta 0 (debited above,
-        // re-credited here); the fresh-ETH portion bumps the pool by that ETH.
-        _creditBoxProceeds(applied);
-
-        // The DGNRS tier freezes off the purchase's starting position (sold), so a box crossing
-        // a tier boundary keeps its starting tier. The closing purchase is the last presale box
-        // ever appended; its own resolution burns the Pool.PresaleBox remainder.
-        (uint48 index, uint32 position) = _appendBoxOrder(
-            word | buyerId | (applied << LB_PRESALE_SHIFT) | (_presaleTier(sold) << LB_TIER_SHIFT)
-                | (closing ? LB_CLOSING : 0),
-            ordinaryCost
-        );
-
-        presaleBoxEthSold = uint96(sold + applied);
-        // Latch the terminal in the crossing buy (stops further credit accrual and box buys).
-        if (closing) presaleOver = true;
-
-        emit PresaleBoxBuy(buyerId, index, position, applied, closing);
-
-        // Fresh ETH the clamp-to-50 left unused is credited to the payer's afking, not
-        // sent back via a value call (no reentrancy surface, consistent with overpay).
-        if (refund != 0) _creditAfkingValue(_requireWalletId(msg.sender), refund);
     }
 
     /// @dev Bubble up revert reason from delegatecall failure.

@@ -38,7 +38,7 @@ import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
  * @notice Delegatecall module for the boon lifecycle: box draws, deity issuance, consumption,
  *         and expiry maintenance.
  *
- * @dev Rolls and delivers box-drawn boons (`rollBoxBoons` / `rollBoxBoonTiers`), lets a
+ * @dev Rolls and delivers box-drawn boons (`rollBoxBoons`), lets a
  *      deity-pass holder issue a daily boon to another player (`issueDeityBoon`), consumes
  *      coinflip, craps, purchase, and decimator boons, and separately clears expired
  *      coinflip, lootbox, purchase, decimator, whale, deity-pass, and lazy-pass boons.
@@ -513,11 +513,6 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     // which loops the entry's boxes internally rather than making the caller pay a call frame
     // per box.
 
-    /// @dev Portion of lootbox EV reserved for boon/pass draw (10%)
-    uint16 private constant LOOTBOX_BOON_BUDGET_BPS = 1000;
-    /// @dev Maximum boon/pass budget per lootbox (1 ETH scaled)
-    uint256 private constant LOOTBOX_BOON_MAX_BUDGET =
-        1 ether;
     /// @dev Assumed utilization of max boon value (50%)
     uint16 private constant LOOTBOX_BOON_UTILIZATION_BPS = 5000;
     /// @dev Whale boon discount tiers 1/2/3 (10%, 20%, 35%).
@@ -717,8 +712,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     /// @param originalAmount One box's resolution amount, for the reward events.
     /// @param currentLevel Open level (level + 1), threaded from the resolver.
     /// @param seed Player-mixed entry seed; box i draws off `hash2(seed, nonceBase + i)`.
-    /// @param nonceBase Global box position of this batch's first box within its entry, so two
-    ///        tiers of one entry can never share a draw index (and therefore a roll value).
+    /// @param nonceBase Box position of this batch's first box within its entry.
     function rollBoxBoons(
         uint32 id,
         uint256 perBoxBudget,
@@ -743,45 +737,6 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
             expectedPerBoon,
             currentDay
         );
-    }
-
-    /// @notice Draw boons for every populated tier in one mixed box order.
-    /// @dev Counts are five packed uint8 lanes in small/medium/large/custom/cover order. Amounts
-    ///      remain independent: each lane computes its own capped chance, preserving the current
-    ///      saturation economics exactly. Nonces advance cumulatively in the same tier order.
-    function rollBoxBoonTiers(
-        uint32 id,
-        uint256[5] calldata amounts,
-        uint40 countsPacked,
-        uint24 currentLevel,
-        uint256 seed
-    ) external payable {
-        if (countsPacked == 0) return;
-
-        (uint256 expectedPerBoon, uint24 currentDay) = _boxBoonContext(id, currentLevel);
-        if (expectedPerBoon == 0) return;
-
-        uint256 nonceBase;
-        for (uint256 lane; lane < 5; ) {
-            uint256 count = uint8(countsPacked >> (lane * 8));
-            uint256 amount = amounts[lane];
-            if (count != 0 && amount != 0) {
-                _rollBoxBoonLane(
-                    id,
-                    _boxBoonBudget(amount),
-                    count,
-                    amount,
-                    seed,
-                    nonceBase,
-                    expectedPerBoon,
-                    currentDay
-                );
-                nonceBase += count;
-            }
-            unchecked {
-                ++lane;
-            }
-        }
     }
 
     /// @dev Clear expiry and derive the immutable-for-this-entry normalization once.
@@ -836,12 +791,6 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
             }
         }
     }
-
-    function _boxBoonBudget(uint256 amount) private pure returns (uint256 boonBudget) {
-        boonBudget = (amount * LOOTBOX_BOON_BUDGET_BPS) / 10_000;
-        if (boonBudget > LOOTBOX_BOON_MAX_BUDGET) boonBudget = LOOTBOX_BOON_MAX_BUDGET;
-    }
-
 
     /// @dev Keep-or-discard delivery filter for a lootbox-drawn boon. The TYPE is already
     ///      fixed (static table); live state may only decide whether the known outcome is

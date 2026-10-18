@@ -120,21 +120,21 @@ contract LootboxEvLifecycleGasTest is DeployProtocol {
 
     /// @dev Same fixtures on b80dab839, solc 0.8.34/via-IR/1000 runs/Osaka, isolated calls.
     ///      These ceilings include purchase AND opening; the opener itself is bounded separately
-    ///      by HumanOrderNativeGas. See docs/VERIFICATION.md for the comparison and commands.
+    ///      by HumanOrderNativeGas. Slot counts are exact for the compact queue (three orders per
+    ///      word). See docs/VERIFICATION.md for the comparison and commands.
     function _baseline(bytes32 label) private pure returns (uint256, uint256, uint256) {
         if (label == keccak256("cover")) return (178930, 467390, 3);
-        if (label == keccak256("distinct_wallets")) return (1405538, 4847478, 37);
-        if (label == keccak256("exhausted")) return (439092, 1440912, 11);
-        if (label == keccak256("existing_bonus")) return (442997, 1452017, 11);
-        if (label == keccak256("fresh_bonus")) return (460154, 1549994, 12);
-        if (label == keccak256("low_score")) return (445969, 1528609, 12);
-        if (label == keccak256("manual_with_afk")) return (485140, 1589780, 12);
-        if (label == keccak256("100_boxes")) return (1498143, 3384523, 19);
-        if (label == keccak256("mixed")) return (518971, 1711231, 13);
-        if (label == keccak256("nested_eth_spin")) return (460708, 1550148, 12);
+        if (label == keccak256("distinct_wallets")) return (1405538, 4847478, 31);
+        if (label == keccak256("exhausted")) return (439092, 1440912, 10);
+        if (label == keccak256("existing_bonus")) return (442997, 1452017, 10);
+        if (label == keccak256("fresh_bonus")) return (460154, 1549994, 11);
+        if (label == keccak256("low_score")) return (445969, 1528609, 11);
+        if (label == keccak256("manual_with_afk")) return (485140, 1589780, 11);
+        if (label == keccak256("100_boxes")) return (1498143, 3384523, 18);
+        if (label == keccak256("nested_eth_spin")) return (460708, 1550148, 11);
         if (label == keccak256("pass_grant")) return (250986, 729886, 5);
-        if (label == keccak256("same_wallet")) return (993701, 2915681, 19);
-        if (label == keccak256("taper")) return (443155, 1452175, 11);
+        if (label == keccak256("same_wallet")) return (993701, 2915681, 16);
+        if (label == keccak256("taper")) return (443155, 1452175, 10);
         revert("missing lifecycle baseline");
     }
 
@@ -143,7 +143,6 @@ contract LootboxEvLifecycleGasTest is DeployProtocol {
     function test_Gas_Taper() public { _cycle("taper", BoxOrderLib.boCustom(1 ether), 1, false, 15 ether, true, false); }
     function test_Gas_Exhausted() public { _cycle("exhausted", BoxOrderLib.boCustom(1 ether), 1, false, 40 ether, true, false); }
     function test_Gas_LowScore() public { _cycle("low_score", BoxOrderLib.boCustom(1 ether), 1, false, 0, false, false); }
-    function test_Gas_Mixed() public { _cycle("mixed", BoxOrderLib.boOrder(1, 1, 1, 1, 1 ether), 1, false, 0, true, false); }
     function test_Gas_MaxOrder() public { _cycle("100_boxes", BoxOrderLib.boSmalls(100), 1, false, 0, true, false); }
     function test_Gas_SameWallet() public { _cycle("same_wallet", BoxOrderLib.boCustom(1 ether), 4, false, 0, true, false); }
     function test_Gas_DistinctWallets() public { _cycle("distinct_wallets", BoxOrderLib.boCustom(1 ether), 4, true, 0, true, false); }

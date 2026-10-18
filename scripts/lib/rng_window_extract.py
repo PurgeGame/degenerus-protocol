@@ -51,6 +51,7 @@ VRF_WORD_IDENTIFIERS = [
     "_rawDailyRngWord",
     "_lootboxWord",
     "lootboxRngPacked",
+    "degenesisWord",  # the active Degenesis cohort's bound copy of its request day's daily word
     # CROSS-CONTRACT READERS. A satellite that reaches the same words through the game's
     # `extsload` names no storage variable at all — it names a numeric slot — so identifier
     # matching alone would leave it invisible while the gate still reported full coverage.

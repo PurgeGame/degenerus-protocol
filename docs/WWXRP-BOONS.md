@@ -13,8 +13,13 @@ their existing whole-token floor: 1.9 pays 1, and 2.9 pays 2.
 
 The minimum applies before the vault owner's `gameMintScale`. That whole-number
 multiplier still applies at mint time, including scale 0 disabling game minting.
-Coinflip loss prizes, presale-box duds and golden-ticket consolation are already
+Coinflip loss prizes, the Degenesis-box consolation and golden-ticket consolation are already
 whole-token awards; the lootbox cold-bust award already has a one-token minimum.
+
+The Degenesis consolation is a fixed 1 WWXRP credit (`WWXRP.creditPrize`, before `gameMintScale`).
+An order pays it when it rolls the 10% WWXRP category, when its FLIP-valued result rounds below one
+whole FLIP, when a pass denomination loses its fractional pass, and when an sDGNRS award is zero or
+the Degenesis pool cannot pay it. Such an order pays nothing else.
 
 ## Daily burn and century incinerator
 

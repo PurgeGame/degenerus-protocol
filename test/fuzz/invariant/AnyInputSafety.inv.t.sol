@@ -384,11 +384,11 @@ contract AnyInputSafety is DeployProtocol {
     /// @dev Doors that must succeed at least once by run 48 (handler action ids).
     function _requiredDoors(uint256 n) internal pure returns (bool[] memory req) {
         req = new bool[](n);
-        uint8[37] memory ids = [
+        uint8[35] memory ids = [
             1, 3, 7, 15, 17, 18, 19, 23, 34, 36, 38, 40, 46, 47, 53, 74, // cf/g/f/d/v/af/st doors
             77, 78, 79, 81, 82, 83, // prog_buy, prog_bigBuy, prog_mineFlip, prog_warp, prog_driveDay, prog_topUp
             84, 85, 86, 87, 88, 89, 90, 92, 93, 95, 100, // guided doors
-            101, 102, 103, 104 // prog_driveDayAligned, prog_deadman, gd_buyPresaleBox, gd_buyLootboxAndPresaleBox
+            101, 102 // prog_driveDayAligned, prog_deadman
         ];
         for (uint256 i; i < ids.length; ++i) req[ids[i]] = true;
     }
@@ -499,7 +499,7 @@ contract AnyInputSafety is DeployProtocol {
     }
 
     function _selectors() internal pure returns (bytes4[] memory s) {
-        s = new bytes4[](117);
+        s = new bytes4[](115);
         uint256 i;
         s[i++] = AnyInputHandler.cf_deposit.selector;
         s[i++] = AnyInputHandler.cf_claim.selector;
@@ -510,7 +510,6 @@ contract AnyInputSafety is DeployProtocol {
         s[i++] = AnyInputHandler.g_redeemFlip.selector;
         s[i++] = AnyInputHandler.g_borrow.selector;
         s[i++] = AnyInputHandler.g_repay.selector;
-        s[i++] = AnyInputHandler.g_buyLootboxAndPresaleBox.selector;
         s[i++] = AnyInputHandler.g_claimBingo.selector;
         s[i++] = AnyInputHandler.g_claimDeadVrf.selector;
         s[i++] = AnyInputHandler.g_claimFoilMatch.selector;
@@ -534,7 +533,7 @@ contract AnyInputSafety is DeployProtocol {
         s[i++] = AnyInputHandler.g_purchaseWhalePass.selector;
         s[i++] = AnyInputHandler.g_purchaseLazyPass.selector;
         s[i++] = AnyInputHandler.g_purchaseDeityPass.selector;
-        s[i++] = AnyInputHandler.g_buyPresaleBox.selector;
+        s[i++] = AnyInputHandler.g_buyDegenesisBox.selector;
         s[i++] = AnyInputHandler.g_claimWinningsStethFirst.selector;
         s[i++] = AnyInputHandler.f_transfer.selector;
         s[i++] = AnyInputHandler.f_transferFrom.selector;
@@ -603,9 +602,8 @@ contract AnyInputSafety is DeployProtocol {
         s[i++] = AnyInputHandler.gd_setOwnSeatTraits.selector;
         for (uint256 w; w < 2; ++w) s[i++] = AnyInputHandler.prog_driveDayAligned.selector;
         s[i++] = AnyInputHandler.prog_deadman.selector;
-        s[i++] = AnyInputHandler.gd_buyPresaleBox.selector;
-        s[i++] = AnyInputHandler.gd_buyLootboxAndPresaleBox.selector;
-        require(i == 117, "selector table size");
+        s[i++] = AnyInputHandler.gd_buyDegenesisBox.selector;
+        require(i == 115, "selector table size");
     }
 
     // =====================================================================================

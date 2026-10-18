@@ -12,7 +12,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 contract PurchaseHotPathSeeder is DegenerusGameStorage, WalletSeed {
-    function seed(uint24 lvl, address buyer, bool presale, bool frozen) external {
+    function seed(uint24 lvl, address buyer, bool frozen) external {
         level = lvl;
         purchaseStartDay = _simulatedDayIndex();
         dailyIdx = purchaseStartDay;
@@ -21,7 +21,6 @@ contract PurchaseHotPathSeeder is DegenerusGameStorage, WalletSeed {
         lastPurchaseDay = false;
         rngLockedFlag = false;
         phaseTransitionActive = false;
-        presaleOver = !presale;
         prizePoolFrozen = frozen;
         // Pre-existing pools make the measurements independent of zero-pool initialization.
         _setPrizePools(10 ether, 10 ether);
@@ -52,7 +51,7 @@ contract PurchaseHotPathGasTest is DeployProtocol {
         vm.warp(block.timestamp + 20 days);
         vm.deal(BUYER, 1_000 ether);
         vm.deal(address(game), 1_000 ether);
-        _seed(24, false, false);
+        _seed(24, false);
         vm.prank(REFERRER);
         affiliate.createAffiliateCode(CODE, 10);
         uint24 day = uint24(game.currentDayView());
@@ -87,11 +86,11 @@ contract PurchaseHotPathGasTest is DeployProtocol {
         vm.etch(target, vm.parseJsonBytes(json, string.concat(".", name)));
     }
 
-    function _seed(uint24 lvl, bool presale, bool frozen) internal {
+    function _seed(uint24 lvl, bool frozen) internal {
         TicketQueueStorage.retireCompleted(address(game), lvl);
         bytes memory code = address(game).code;
         vm.etch(address(game), type(PurchaseHotPathSeeder).runtimeCode);
-        PurchaseHotPathSeeder(address(game)).seed(lvl, BUYER, presale, frozen);
+        PurchaseHotPathSeeder(address(game)).seed(lvl, BUYER, frozen);
         vm.etch(address(game), code);
     }
 
@@ -141,7 +140,7 @@ contract PurchaseHotPathGasTest is DeployProtocol {
         digest = keccak256(abi.encode(digest,
             vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), GameSlots.BALANCES_PACKED))),
             game.claimablePoolView(),
-            vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), GameSlots.PRESALE_BOX_CREDIT))),
+            vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), GameSlots.DEGENESIS_CREDIT))),
             vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), GameSlots.LOOTBOX_EV_CAP_PACKED))),
             vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), GameSlots.CENTURY_BONUS_USED))),
             vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), GameSlots.SUB_OF))),
@@ -169,11 +168,6 @@ contract PurchaseHotPathGasTest is DeployProtocol {
         _prime(0);
         _measure("repeat_ticket", 400, 0, 0, MintPaymentKind.DirectEth, _price());
     }
-    function test_Gas_Presale() public {
-        _seed(24, true, false);
-        _prime(0);
-        _measure("presale_repeat", 400, 0, 0, MintPaymentKind.DirectEth, _price());
-    }
     function test_Gas_Referral() public {
         _measure("first_referral", 400, 0, CODE, MintPaymentKind.DirectEth, _price());
         _measure("repeat_referral", 400, 0, CODE, MintPaymentKind.DirectEth, _price());
@@ -195,7 +189,7 @@ contract PurchaseHotPathGasTest is DeployProtocol {
         _measure("overpay", 400, 0, 0, MintPaymentKind.DirectEth, _price() * 2);
     }
     function test_Gas_FrozenPool() public {
-        _seed(24, false, true);
+        _seed(24, true);
         _prime(0);
         _measure("frozen_pool", 400, 0, 0, MintPaymentKind.DirectEth, _price());
     }
@@ -207,7 +201,7 @@ contract PurchaseHotPathGasTest is DeployProtocol {
         _measure("box_only", 0, 1, 0, MintPaymentKind.DirectEth, _price());
     }
     function test_Gas_Century() public {
-        _seed(99, false, false);
+        _seed(99, false);
         _measure("century", 400, 0, 0, MintPaymentKind.DirectEth, _price());
     }
     function test_Gas_AfkingBox() public {

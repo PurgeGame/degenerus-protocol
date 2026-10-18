@@ -10,7 +10,7 @@ import {TicketQueueStorage as TQ} from "./helpers/TicketQueueStorage.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 contract SeedInputSeeder is DegenerusGame, WalletSeed {
-    function seed(address player, uint256 word, uint256 amount, bool presale) external {
+    function seed(address player, uint256 word, uint256 amount) external {
         // Reaching level 10 means every earlier level's queues materialized. Queue slots recycle
         // 1..100 under a level tag (c729ecfc9): an unretired genesis queue would refuse the
         // box's own future-level queue binding.
@@ -23,11 +23,9 @@ contract SeedInputSeeder is DegenerusGame, WalletSeed {
         // (consumer order: tickets, redemption, AFKing, human boxes; 60d31f775).
         ticketsFullyProcessed = true;
         humanReadComplete = false;
-        // One sealed entry for `player` at read buffer 1, position 0: a presale-only entry or one
-        // custom box of `amount`, at level 10.
-        uint256 entry = uint256(_seedWallet(player)) | (uint256(10) << LB_LEVEL_SHIFT);
-        if (presale) entry |= amount << LB_PRESALE_SHIFT;
-        else entry |= (uint256(1) << LB_CUSTOM_COUNT_SHIFT) | ((amount / LB_SIZE_UNIT) << LB_SIZE_SHIFT);
+        // One sealed entry for `player` at read buffer 1, position 0: one box of `amount`.
+        uint256 entry = uint256(_seedWallet(player)) | ((amount / LB_VALUE_UNIT) << LB_UNITS_SHIFT)
+            | (uint256(1) << LB_QTY_SHIFT);
         uint256[] storage q = boxQueue[1];
         assembly ("memory-safe") {
             mstore(0x00, q.slot)
@@ -46,14 +44,13 @@ contract SeedInputSeeder is DegenerusGame, WalletSeed {
 }
 
 /// @dev Compare production resolutions from identical snapshots. Value is allowed to size
-///      awards; it must not choose a different target-level roll or presale reward branch.
+///      awards; it must not choose a different target-level roll roll.
 contract RandomnessSeedInputsTest is DeployProtocol {
     address private constant PLAYER = address(0xB0B);
     uint256 private constant QUEUED_ORDER_DOMAIN = 0x5175657565644f72646572;
     uint256 private constant BOX_OPEN_TAG = 0x426f784f70656e;
     uint256 private constant AFKING_BOX_TAG = 0x41666b696e67426f78;
     bytes32 private constant OPENED = keccak256("LootBoxOpened(uint32,uint48,uint256,uint24,uint32,uint256,bool)");
-    bytes32 private constant PRESALE = keccak256("PresaleBoxOpened(uint32,uint48,uint256,uint256,uint256,uint256,bool,uint32,uint32)");
     bytes32 private constant SPIN = keccak256("BoxSpin(uint32,uint64,uint256,uint256,uint256)");
 
     function setUp() public {
@@ -66,9 +63,9 @@ contract RandomnessSeedInputsTest is DeployProtocol {
 
     function _resolve(uint8 route, uint256 word, uint256 amount) private returns (uint256 result) {
         SeedInputSeeder host = SeedInputSeeder(payable(address(game)));
-        host.seed(PLAYER, word, amount, route == 3);
+        host.seed(PLAYER, word, amount);
         vm.recordLogs();
-        if (route == 0 || route == 3) game.mineFlip(0);
+        if (route == 0) game.mineFlip(0);
         else if (route == 1) host.afking(PLAYER, amount, word);
         else {
             uint32 id = game.walletIdOf(PLAYER);
@@ -81,16 +78,11 @@ contract RandomnessSeedInputsTest is DeployProtocol {
         // excess into a further box whose events follow; that box is not this draw's identity.
         for (uint256 i; i < logs.length && !found; ++i) {
             if (logs[i].emitter != address(game) || logs[i].topics.length == 0) continue;
-            if (route == 3 && logs[i].topics[0] == PRESALE) {
-                (, , uint256 dgnrs, uint256 wwxrp, , ,) =
-                    abi.decode(logs[i].data, (uint256, uint256, uint256, uint256, bool, uint32, uint32));
-                result = dgnrs != 0 ? 1 : wwxrp != 0 ? 2 : 0;
-                found = true;
-            } else if (route != 3 && logs[i].topics[0] == OPENED) {
+            if (logs[i].topics[0] == OPENED) {
                 (, uint24 target,,,) = abi.decode(logs[i].data, (uint256, uint24, uint32, uint256, bool));
                 result = target;
                 found = true;
-            } else if (route != 3 && logs[i].topics[0] == SPIN) {
+            } else if (logs[i].topics[0] == SPIN) {
                 (uint64 betId,,,) = abi.decode(logs[i].data, (uint64, uint256, uint256, uint256));
                 // The box-spin id is derived from its seed; payout and survival are not identity.
                 result = uint256(betId) | (uint256(1) << 255);
@@ -104,8 +96,8 @@ contract RandomnessSeedInputsTest is DeployProtocol {
         // Final words 0 and 1 are never published (they leave a request waiting, 60d31f775):
         // map them into the deliverable domain instead of rejecting runs.
         word = word < 2 ? word + 2 : word;
-        uint8 route = routeSeed % 4;
-        if (route != 3) {
+        uint8 route = routeSeed % 3;
+        {
             // First-box seeds by route, keyed by the wallet ID: the queued entry at (buffer 1,
             // position 0), the AFKing box at its frozen day 100, the redemption order's box 1.
             uint256 id = game.walletIdOf(PLAYER);

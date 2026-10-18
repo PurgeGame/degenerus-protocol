@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
-// LootboxDgnrsSigFigs.test.js — three-significant-figure collapse on both DGNRS box legs.
+// LootboxDgnrsSigFigs.test.js — three-significant-figure collapse on the lootbox DGNRS leg.
 //
 // The DGNRS counterpart to the 100-FLIP granule. A FIXED granule cannot work here: both
 // box legs price against a LIVE pool balance (`dgnrs.poolBalance(...)`), so the award
@@ -10,11 +10,13 @@
 // discarded tail is under one unit in the third figure, so the relative cost is under
 // 1/mantissa: worst case 1/100, best case 1/999).
 //
-//   SITE A — `_presaleBoxDgnrsReward`   (the presale box's 40% DGNRS branch)
 //   SITE B — `_lootboxDgnrsReward`      (the lootbox DGNRS leg)
 //
+// The Degenesis box's sDGNRS leg is a cohort-pro-rata award bounded by the cohort's
+// total (x * Q * [5000, 15000] bps / V) and is not collapsed.
+//
 // OWNER-RULED (2026-08-06):
-//   - SCOPE: the two box legs only. The AdvanceModule affiliate-pool DGNRS reward is NOT
+//   - SCOPE: the ordinary-lootbox DGNRS leg only. The AdvanceModule affiliate-pool DGNRS reward is NOT
 //     collapsed, matching the standing ruling that every affiliate path stays out of the
 //     award-rounding work. [03a] pins that negatively.
 //   - FORM: a plain truncate. No entropy is threaded anywhere, so this adds nothing to the
@@ -81,7 +83,7 @@ function floorToThreeSigFigs(amount) {
   return mantissa * scale;
 }
 
-describe("LootboxDgnrsSigFigs — 3-significant-figure collapse on the DGNRS box legs", function () {
+describe("LootboxDgnrsSigFigs — 3-significant-figure collapse on the lootbox DGNRS leg", function () {
   this.timeout(30_000);
 
   describe("The primitive", function () {
@@ -106,19 +108,6 @@ describe("LootboxDgnrsSigFigs — 3-significant-figure collapse on the DGNRS box
   });
 
   describe("Site structure", function () {
-    it("[01a] site A `_presaleBoxDgnrsReward` collapses its award", function () {
-      const body = bodyOf(LOOTBOX, "function _presaleBoxDgnrsReward(");
-      expect(
-        /SigFigLib\.floorToThreeSigFigs\(/.test(body),
-        "the presale DGNRS branch must collapse via `SigFigLib.floorToThreeSigFigs`"
-      ).to.equal(true);
-      // The collapse wraps the derivation, so no un-collapsed figure can reach the payout.
-      expect(
-        /uint256\s+dgnrsAmount\s*=\s*SigFigLib\.floorToThreeSigFigs\(/.test(body),
-        "`dgnrsAmount` must be assigned the COLLAPSED figure, not collapsed afterwards"
-      ).to.equal(true);
-    });
-
     it("[01b] site B `_lootboxDgnrsReward` collapses BEFORE the pool clamp", function () {
       const body = bodyOf(LOOTBOX, "function _lootboxDgnrsReward(");
       const collapseIdx = body.indexOf("SigFigLib.floorToThreeSigFigs(");

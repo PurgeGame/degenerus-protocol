@@ -27,7 +27,7 @@ contract GameSlotHarness is DegenerusGameStorage {
     function s_ticketsFullyProcessed() external pure returns (uint256 s, uint256 o) { assembly { s := ticketsFullyProcessed.slot o := ticketsFullyProcessed.offset } }
     function s_ticketWriteSlot() external pure returns (uint256 s, uint256 o) { assembly { s := ticketWriteSlot.slot o := ticketWriteSlot.offset } }
     function s_prizePoolFrozen() external pure returns (uint256 s, uint256 o) { assembly { s := prizePoolFrozen.slot o := prizePoolFrozen.offset } }
-    function s_presaleOver() external pure returns (uint256 s, uint256 o) { assembly { s := presaleOver.slot o := presaleOver.offset } }
+    function s_degenesisClosed() external pure returns (uint256 s, uint256 o) { assembly { s := degenesisClosed.slot o := degenesisClosed.offset } }
     function s_subsFullyProcessed() external pure returns (uint256 s, uint256 o) { assembly { s := subsFullyProcessed.slot o := subsFullyProcessed.offset } }
     function s_humanReadComplete() external pure returns (uint256 s, uint256 o) { assembly { s := humanReadComplete.slot o := humanReadComplete.offset } }
     function s_rngFlagsAndNudges() external pure returns (uint256 s, uint256 o) { assembly { s := rngFlagsAndNudges.slot o := rngFlagsAndNudges.offset } }
@@ -63,8 +63,8 @@ contract GameSlotHarness is DegenerusGameStorage {
     function s_ticketSoloOffset() external pure returns (uint256 s, uint256 o) { assembly { s := ticketSoloOffset.slot o := ticketSoloOffset.offset } }
     function s_degeneretteCursor() external pure returns (uint256 s, uint256 o) { assembly { s := degeneretteCursor.slot o := degeneretteCursor.offset } }
     function s_degeneretteReadCount() external pure returns (uint256 s, uint256 o) { assembly { s := degeneretteReadCount.slot o := degeneretteReadCount.offset } }
-    function s_presaleBoxEthSold() external pure returns (uint256 s, uint256 o) { assembly { s := presaleBoxEthSold.slot o := presaleBoxEthSold.offset } }
-    function s_presaleBoxCredit() external pure returns (uint256 s, uint256 o) { assembly { s := presaleBoxCredit.slot o := presaleBoxCredit.offset } }
+    function s_degenesisVaultBudget() external pure returns (uint256 s, uint256 o) { assembly { s := degenesisVaultBudget.slot o := degenesisVaultBudget.offset } }
+    function s_degenesisCredit() external pure returns (uint256 s, uint256 o) { assembly { s := degenesisCredit.slot o := degenesisCredit.offset } }
     function s_gameOverStatePacked() external pure returns (uint256 s, uint256 o) { assembly { s := gameOverStatePacked.slot o := gameOverStatePacked.offset } }
     function s_degeneretteQueue() external pure returns (uint256 s, uint256 o) { assembly { s := degeneretteQueue.slot o := degeneretteQueue.offset } }
     function s_operatorApprovals() external pure returns (uint256 s, uint256 o) { assembly { s := operatorApprovals.slot o := operatorApprovals.offset } }
@@ -74,7 +74,7 @@ contract GameSlotHarness is DegenerusGameStorage {
     function s_deityPassPricePaid() external pure returns (uint256 s, uint256 o) { assembly { s := deityPassPricePaid.slot o := deityPassPricePaid.offset } }
     function s_deityPassIds() external pure returns (uint256 s, uint256 o) { assembly { s := deityPassIds.slot o := deityPassIds.offset } }
     function s_deityBySymbol() external pure returns (uint256 s, uint256 o) { assembly { s := deityBySymbol.slot o := deityBySymbol.offset } }
-    function s_presaleBoxDgnrsPoolStart() external pure returns (uint256 s, uint256 o) { assembly { s := presaleBoxDgnrsPoolStart.slot o := presaleBoxDgnrsPoolStart.offset } }
+    function s_degenesisActive() external pure returns (uint256 s, uint256 o) { assembly { s := degenesisActive.slot o := degenesisActive.offset } }
     function s_vrfCoordinator() external pure returns (uint256 s, uint256 o) { assembly { s := vrfCoordinator.slot o := vrfCoordinator.offset } }
     function s_vrfKeyHash() external pure returns (uint256 s, uint256 o) { assembly { s := vrfKeyHash.slot o := vrfKeyHash.offset } }
     function s_vrfSubscriptionId() external pure returns (uint256 s, uint256 o) { assembly { s := vrfSubscriptionId.slot o := vrfSubscriptionId.offset } }
@@ -144,6 +144,9 @@ contract GameSlotHarness is DegenerusGameStorage {
     function s_decPreviousCount() external pure returns (uint256 s, uint256 o) { assembly { s := decPreviousCount.slot o := decPreviousCount.offset } }
     function s_decJackpotPlans() external pure returns (uint256 s, uint256 o) { assembly { s := decJackpotPlans.slot o := decJackpotPlans.offset } }
     function s_decGeneratedOwners() external pure returns (uint256 s, uint256 o) { assembly { s := decGeneratedOwners.slot o := decGeneratedOwners.offset } }
+    function s_degenesisWord() external pure returns (uint256 s, uint256 o) { assembly { s := degenesisWord.slot o := degenesisWord.offset } }
+    function s_degenesisDays() external pure returns (uint256 s, uint256 o) { assembly { s := degenesisDays.slot o := degenesisDays.offset } }
+    function s_degenesisOrders() external pure returns (uint256 s, uint256 o) { assembly { s := degenesisOrders.slot o := degenesisOrders.offset } }
 }
 
 /// @dev Reads Craps `.slot`s off the audited Craps storage, plus the LootboxCraps Game-slot pins.
@@ -151,6 +154,7 @@ contract CrapsSlotHarness is CrapsBattleStorage {
     function dayStaked() external pure returns (uint256 s) { assembly { s := _dayStaked.slot } }
     function highField() external pure returns (uint256 s) { assembly { s := _highField.slot } }
     function passCreditsById() external pure returns (uint256 s) { assembly { s := _passCreditsById.slot } }
+    function firstWindowDay() external pure returns (uint256 s, uint256 o) { assembly { s := _firstWindowDay.slot o := _firstWindowDay.offset } }
     function lootboxCrapsPins() external pure returns (uint256, uint256, uint256, uint256) {
         return (RNG_STATE_SLOT, LOOTBOX_RNG_WORD_SLOT, RNG_WORD_BY_DAY_SLOT, RNG_DAY_TAGS_SLOT);
     }
@@ -196,6 +200,9 @@ contract StorageSlotPinsTest is Test {
         assertEq(CrapsSlots.PASS_CREDITS_BY_ID, c.passCreditsById(), "CrapsSlots.PASS_CREDITS_BY_ID");
         assertEq(CrapsSlots.DAY_STAKED, c.dayStaked(), "CrapsSlots.DAY_STAKED");
         assertEq(CrapsSlots.HIGH_FIELD, c.highField(), "CrapsSlots.HIGH_FIELD");
+        (uint256 s, uint256 o) = c.firstWindowDay();
+        assertEq(CrapsSlots.FIRST_WINDOW_DAY, s, "CrapsSlots.FIRST_WINDOW_DAY");
+        assertEq(CrapsSlots.FIRST_WINDOW_DAY_OFFSET, o, "CrapsSlots.FIRST_WINDOW_DAY_OFFSET");
     }
 
     function test_GameSlotsLibrary() public view {
@@ -217,7 +224,7 @@ contract StorageSlotPinsTest is Test {
         (s, o) = h.s_ticketsFullyProcessed(); assertEq(s, GameSlots.TICKETS_FULLY_PROCESSED, "ticketsFullyProcessed.slot"); assertEq(o, GameSlots.TICKETS_FULLY_PROCESSED_OFFSET, "ticketsFullyProcessed.offset");
         (s, o) = h.s_ticketWriteSlot(); assertEq(s, GameSlots.TICKET_WRITE_SLOT, "ticketWriteSlot.slot"); assertEq(o, GameSlots.TICKET_WRITE_SLOT_OFFSET, "ticketWriteSlot.offset");
         (s, o) = h.s_prizePoolFrozen(); assertEq(s, GameSlots.PRIZE_POOL_FROZEN, "prizePoolFrozen.slot"); assertEq(o, GameSlots.PRIZE_POOL_FROZEN_OFFSET, "prizePoolFrozen.offset");
-        (s, o) = h.s_presaleOver(); assertEq(s, GameSlots.PRESALE_OVER, "presaleOver.slot"); assertEq(o, GameSlots.PRESALE_OVER_OFFSET, "presaleOver.offset");
+        (s, o) = h.s_degenesisClosed(); assertEq(s, GameSlots.DEGENESIS_CLOSED, "degenesisClosed.slot"); assertEq(o, GameSlots.DEGENESIS_CLOSED_OFFSET, "degenesisClosed.offset");
         (s, o) = h.s_subsFullyProcessed(); assertEq(s, GameSlots.SUBS_FULLY_PROCESSED, "subsFullyProcessed.slot"); assertEq(o, GameSlots.SUBS_FULLY_PROCESSED_OFFSET, "subsFullyProcessed.offset");
         (s, o) = h.s_humanReadComplete(); assertEq(s, GameSlots.HUMAN_READ_COMPLETE, "humanReadComplete.slot"); assertEq(o, GameSlots.HUMAN_READ_COMPLETE_OFFSET, "humanReadComplete.offset");
         (s, o) = h.s_rngFlagsAndNudges(); assertEq(s, GameSlots.RNG_FLAGS_AND_NUDGES, "rngFlagsAndNudges.slot"); assertEq(o, GameSlots.RNG_FLAGS_AND_NUDGES_OFFSET, "rngFlagsAndNudges.offset");
@@ -253,8 +260,8 @@ contract StorageSlotPinsTest is Test {
         (s, o) = h.s_ticketSoloOffset(); assertEq(s, GameSlots.TICKET_SOLO_OFFSET, "ticketSoloOffset.slot"); assertEq(o, GameSlots.TICKET_SOLO_OFFSET_OFFSET, "ticketSoloOffset.offset");
         (s, o) = h.s_degeneretteCursor(); assertEq(s, GameSlots.DEGENERETTE_CURSOR, "degeneretteCursor.slot"); assertEq(o, GameSlots.DEGENERETTE_CURSOR_OFFSET, "degeneretteCursor.offset");
         (s, o) = h.s_degeneretteReadCount(); assertEq(s, GameSlots.DEGENERETTE_READ_COUNT, "degeneretteReadCount.slot"); assertEq(o, GameSlots.DEGENERETTE_READ_COUNT_OFFSET, "degeneretteReadCount.offset");
-        (s, o) = h.s_presaleBoxEthSold(); assertEq(s, GameSlots.PRESALE_BOX_ETH_SOLD, "presaleBoxEthSold.slot"); assertEq(o, 0, "presaleBoxEthSold.offset");
-        (s, o) = h.s_presaleBoxCredit(); assertEq(s, GameSlots.PRESALE_BOX_CREDIT, "presaleBoxCredit.slot"); assertEq(o, 0, "presaleBoxCredit.offset");
+        (s, o) = h.s_degenesisVaultBudget(); assertEq(s, GameSlots.DEGENESIS_VAULT_BUDGET, "degenesisVaultBudget.slot"); assertEq(o, 0, "degenesisVaultBudget.offset");
+        (s, o) = h.s_degenesisCredit(); assertEq(s, GameSlots.DEGENESIS_CREDIT, "degenesisCredit.slot"); assertEq(o, 0, "degenesisCredit.offset");
         (s, o) = h.s_gameOverStatePacked(); assertEq(s, GameSlots.GAME_OVER_STATE_PACKED, "gameOverStatePacked.slot"); assertEq(o, 0, "gameOverStatePacked.offset");
         (s, o) = h.s_degeneretteQueue(); assertEq(s, GameSlots.DEGENERETTE_QUEUE, "degeneretteQueue.slot"); assertEq(o, 0, "degeneretteQueue.offset");
         (s, o) = h.s_operatorApprovals(); assertEq(s, GameSlots.OPERATOR_APPROVALS, "operatorApprovals.slot"); assertEq(o, 0, "operatorApprovals.offset");
@@ -264,7 +271,7 @@ contract StorageSlotPinsTest is Test {
         (s, o) = h.s_deityPassPricePaid(); assertEq(s, GameSlots.DEITY_PASS_PRICE_PAID, "deityPassPricePaid.slot"); assertEq(o, 0, "deityPassPricePaid.offset");
         (s, o) = h.s_deityPassIds(); assertEq(s, GameSlots.DEITY_PASS_IDS, "deityPassIds.slot"); assertEq(o, 0, "deityPassIds.offset");
         (s, o) = h.s_deityBySymbol(); assertEq(s, GameSlots.DEITY_BY_SYMBOL, "deityBySymbol.slot"); assertEq(o, 0, "deityBySymbol.offset");
-        (s, o) = h.s_presaleBoxDgnrsPoolStart(); assertEq(s, GameSlots.PRESALE_BOX_DGNRS_POOL_START, "presaleBoxDgnrsPoolStart.slot"); assertEq(o, 0, "presaleBoxDgnrsPoolStart.offset");
+        (s, o) = h.s_degenesisActive(); assertEq(s, GameSlots.DEGENESIS_ACTIVE, "degenesisActive.slot"); assertEq(o, 0, "degenesisActive.offset");
         (s, o) = h.s_vrfCoordinator(); assertEq(s, GameSlots.VRF_COORDINATOR, "vrfCoordinator.slot"); assertEq(o, 0, "vrfCoordinator.offset");
         (s, o) = h.s_vrfKeyHash(); assertEq(s, GameSlots.VRF_KEY_HASH, "vrfKeyHash.slot"); assertEq(o, 0, "vrfKeyHash.offset");
         (s, o) = h.s_vrfSubscriptionId(); assertEq(s, GameSlots.VRF_SUBSCRIPTION_ID, "vrfSubscriptionId.slot"); assertEq(o, 0, "vrfSubscriptionId.offset");
@@ -334,5 +341,8 @@ contract StorageSlotPinsTest is Test {
         (s, o) = h.s_decPreviousCount(); assertEq(s, GameSlots.DEC_PREVIOUS_COUNT, "decPreviousCount.slot"); assertEq(o, GameSlots.DEC_PREVIOUS_COUNT_OFFSET, "decPreviousCount.offset");
         (s, o) = h.s_decJackpotPlans(); assertEq(s, GameSlots.DEC_JACKPOT_PLANS, "decJackpotPlans.slot"); assertEq(o, 0, "decJackpotPlans.offset");
         (s, o) = h.s_decGeneratedOwners(); assertEq(s, GameSlots.DEC_GENERATED_OWNERS, "decGeneratedOwners.slot"); assertEq(o, 0, "decGeneratedOwners.offset");
+        (s, o) = h.s_degenesisWord(); assertEq(s, GameSlots.DEGENESIS_WORD, "degenesisWord.slot"); assertEq(o, 0, "degenesisWord.offset");
+        (s, o) = h.s_degenesisDays(); assertEq(s, GameSlots.DEGENESIS_DAYS, "degenesisDays.slot"); assertEq(o, 0, "degenesisDays.offset");
+        (s, o) = h.s_degenesisOrders(); assertEq(s, GameSlots.DEGENESIS_ORDERS, "degenesisOrders.slot"); assertEq(o, 0, "degenesisOrders.offset");
     }
 }

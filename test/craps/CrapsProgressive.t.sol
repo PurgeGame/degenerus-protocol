@@ -214,10 +214,11 @@ contract CrapsProgressiveTest is CrapsPins {
         game.registerWallet(alice, true);
         game.registerWallet(bob, true);
         vm.etch(ContractAddresses.JACKPOT_BATTLE, address(new JackpotBattleViews()).code);
+        _warpToTableGenesis();
         craps = new ProgHarness();
         // The deployment day is a Craps warm-up day with no windows; every fixture plays
         // from genesis + 1, the first day the table opens.
-        vm.warp(block.timestamp + 1 days);
+        vm.warp(vm.getBlockTimestamp() + 1 days);
         _setIndex(0);
         _setDailyWord(craps.currentDayIndex(), PLAIN_WORD);
     }

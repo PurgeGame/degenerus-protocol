@@ -46,10 +46,11 @@ contract CrapsResolveBudgetTest is CrapsPins {
 
     function setUp() public {
         _installPins();
+        _warpToTableGenesis();
         craps = new BudgetHarness();
         // The deployment day is a Craps warm-up day with no windows; every fixture plays
         // from genesis + 1, the first day the table opens.
-        vm.warp(block.timestamp + 1 days);
+        vm.warp(vm.getBlockTimestamp() + 1 days);
         _setIndex(0);
         _setDailyWord(craps.currentDayIndex(), PLAIN_WORD);
     }

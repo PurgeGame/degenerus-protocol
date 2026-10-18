@@ -120,7 +120,7 @@ contract StorageFoundationTest is Test {
     // =====================================================================
 
     /// @dev Verify ticketWriteSlot at Slot 0, offset 25; prizePoolFrozen at offset 26.
-    ///      ticketsFullyProcessed at Slot 0 offset 24. presaleOver (offset 27),
+    ///      ticketsFullyProcessed at Slot 0 offset 24. degenesisClosed (offset 27),
     ///      subsFullyProcessed (offset 28), humanReadComplete (offset 29) and
     ///      ticketRedemptionOpen (offset 30) occupy the high bytes of slot 0 above these flags.
     function testSlot0FieldOffsets() public {

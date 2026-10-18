@@ -23,12 +23,12 @@ contract SdgnrsConstructorAllocation is DeployProtocol {
 
     function test_constructorSupplySplit() public view {
         // Frozen BPS: creator 2000 / whale 1000 / affiliate 3000 / lootbox 2000 / reward 1000
-        // / presaleBox 1000 == 10000 (dust-free).
+        // / degenesis 1000 == 10000 (dust-free).
         assertEq(sdgnrs.poolBalance(sDGNRS.Pool.Whale),      INITIAL_SUPPLY * 1000 / BPS, "whale pool");
         assertEq(sdgnrs.poolBalance(sDGNRS.Pool.Affiliate),  INITIAL_SUPPLY * 3000 / BPS, "affiliate pool");
         assertEq(sdgnrs.poolBalance(sDGNRS.Pool.Lootbox),    INITIAL_SUPPLY * 2000 / BPS, "lootbox pool");
         assertEq(sdgnrs.poolBalance(sDGNRS.Pool.Reward),     INITIAL_SUPPLY * 1000 / BPS, "reward pool");
-        assertEq(sdgnrs.poolBalance(sDGNRS.Pool.PresaleBox), INITIAL_SUPPLY * 1000 / BPS, "presaleBox pool");
+        assertEq(sdgnrs.poolBalance(sDGNRS.Pool.Degenesis),  INITIAL_SUPPLY * 1000 / BPS, "degenesis pool");
 
         // Creator allocation minted to the DGNRS wrapper (line 385/402).
         assertEq(sdgnrs.balanceOf(ContractAddresses.DGNRS), INITIAL_SUPPLY * 2000 / BPS, "creator to DGNRS");

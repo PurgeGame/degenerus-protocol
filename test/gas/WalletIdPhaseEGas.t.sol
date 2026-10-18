@@ -22,7 +22,7 @@ contract WalletIdPhaseEGasSeeder is DegenerusGameStorage, WalletSeed {
         lastPurchaseDay = false;
         rngLockedFlag = false;
         phaseTransitionActive = false;
-        presaleOver = true;
+        degenesisClosed = 7;
         _setPrizePools(10 ether, 10 ether);
         prizePoolPendingPacked = uint256(1 ether) | (uint256(1 ether) << 128);
     }

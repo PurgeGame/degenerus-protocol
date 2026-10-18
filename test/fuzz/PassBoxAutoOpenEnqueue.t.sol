@@ -6,7 +6,7 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 /// @title PassBoxAutoOpenEnqueue — WHALE-01: pass-bundled lootboxes must enqueue for auto-open
-/// @notice Mint, presale, afking-cover and pass-bundled lootboxes all append an entry to the
+/// @notice Mint, afking-cover and pass-bundled lootboxes all append an entry to the
 ///         write buffer's box queue, which the mineFlip HumanBoxes stage settles in FIFO order.
 ///         A pass-bundled box recorded but NOT queued could be held closed by its owner
 ///         and opened at a favorable live level/boon state, defeating the "permissionless

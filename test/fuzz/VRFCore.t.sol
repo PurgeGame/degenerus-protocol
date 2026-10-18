@@ -848,7 +848,7 @@ contract VRFCore is DeployProtocol {
         _completeDay(0xDEAD0001);
 
         // Trigger VRF request for the next day using absolute timestamp
-        uint256 nextDayStart = 3 * 86400;
+        uint256 nextDayStart = _relTs(3 * 86400);
         vm.warp(nextDayStart);
         game.mineFlip(0);
         assertTrue(game.rngLocked(), "Next day VRF pending");
@@ -860,7 +860,7 @@ contract VRFCore is DeployProtocol {
         assertEq(_readRngWordCurrent(), 0xC0FFEE, "Word should be stored");
 
         // Warp PAST day boundary to the following day using absolute timestamp
-        uint256 followingDayStart = 4 * 86400;
+        uint256 followingDayStart = _relTs(4 * 86400);
         vm.warp(followingDayStart);
 
         // mineFlip on the following day: rngGate sees rngWordCurrent != 0 but requestDay < current day.
@@ -882,6 +882,6 @@ contract VRFCore is DeployProtocol {
         assertFalse(game.rngLocked(), "Should be unlocked after processing");
 
         // The day with the in-flight VRF should have an RNG word recorded (from the stale redirect)
-        assertTrue(game.rngWordForDay(3) != 0, "Day 3 should have RNG word from stale redirect");
+        assertTrue(game.rngWordForDay(_relDay(3)) != 0, "Day 3 should have RNG word from stale redirect");
     }
 }

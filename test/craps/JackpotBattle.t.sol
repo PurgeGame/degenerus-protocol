@@ -15,6 +15,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {Craps} from "../../contracts/Craps.sol";
 import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 import {FlipRoundLib} from "../../contracts/libraries/FlipRoundLib.sol";
 import {CrapsPriceLib} from "../../contracts/libraries/CrapsPriceLib.sol";
 import {LegacyCrapsEngine} from "../helpers/LegacyCrapsEngine.sol";
@@ -114,6 +115,7 @@ contract JackpotBattleTest is CrapsPins {
 
     function setUp() public {
         _installPins();
+        _warpToAwardGenesis();
         legacyEngine = new LegacyCrapsEngine();
         // Deployed from the artifact: embedding its creation code here overflows solc's tag width.
         table = JackpotTableHarness(deployCode("JackpotBattle.t.sol:JackpotTableHarness"));
@@ -377,6 +379,55 @@ contract JackpotBattleTest is CrapsPins {
         assertEq(table.bonusCursorOf(detached), 40, "the sweep moved the completed battle cursor");
         assertEq(flip.compLane(), settledLane, "the sweep refunded awards as reservations");
         assertEq(table.battleOf(bytes32(uint256(detached))).resolved, 40);
+    }
+
+    /// @dev THE DEGENESIS WEEK. A table built on the deploy day opens its first windows on day 3.
+    ///      No round locks for an earlier window day, detached or not, so the Game raises no
+    ///      pending battle; from day 3 a battle locks with its paid field only until MAIN_LAUNCH_DAY,
+    ///      and an award-free field seals on an empty append.
+    function test_DegenesisWeekLocksFromTheFirstWindowWithThePaidFieldOnly() public {
+        vm.warp(vm.getBlockTimestamp() - uint256(day - 1) * 1 days);
+        assertEq(table.currentDayIndex(), 1, "not the deploy day");
+        JackpotTableHarness fresh = JackpotTableHarness(deployCode("JackpotBattle.t.sol:JackpotTableHarness"));
+        IJackpotBattle fapi = IJackpotBattle(address(fresh));
+        uint24 first = GameTimeLib.DEGENESIS_START_DAY + 1;
+        game.setRngLocked(true);
+        for (uint24 d = 1; d < first; ++d) {
+            vm.prank(ContractAddresses.GAME);
+            assertFalse(fapi.lockJackpotBattle(d + 1, 400_000 ether / 500, 2), "a round locked before the first window day");
+            (uint64 active,,,) = fapi.jackpotProgress();
+            assertEq(active, 0, "a window day without windows holds a round");
+            vm.warp(vm.getBlockTimestamp() + 1 days);
+        }
+
+        assertEq(fresh.currentDayIndex(), first);
+        game.setRngLocked(false);
+        _setDailyWord(first, 123456);
+        vm.prank(ContractAddresses.GAME);
+        fresh.openBonusDay();
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        game.setRngLocked(true);
+        vm.prank(ContractAddresses.GAME);
+        assertTrue(fapi.lockJackpotBattle(first + 1, 400_000 ether / 500, 2), "the first window day did not lock");
+        uint64 firstSlot = uint64(uint256(first) * 8 + 6);
+        (uint64 locked,,,) = fapi.jackpotProgress();
+        assertEq(locked, firstSlot, "the round is not the first window day's battle");
+        (CrapsBattleStorage.JackpotRound memory r,,) = JackpotBattle(address(fresh)).jackpotBattleOf(firstSlot);
+        assertGt(r.added, 0, "the paid field lost its subsidy");
+        assertEq(r.awardTarget, 0, "a Degenesis battle carries awarded seats");
+
+        vm.startPrank(ContractAddresses.GAME);
+        (, uint256 cursor, uint256 remaining) = fapi.prepareJackpotBattle(7, 123);
+        assertEq(remaining, 0, "an award-free field owes draws");
+        fapi.appendJackpotBattle(new uint256[](0), cursor, true);
+        for (uint256 i; i < 50; ++i) {
+            (,,, bool done) = fapi.jackpotProgress();
+            if (done) break;
+            JackpotBattle(address(fresh)).runDailyBattleWork(gasleft());
+        }
+        vm.stopPrank();
+        (,, bool started, bool complete) = fapi.jackpotProgress();
+        assertTrue(started && complete, "the award-free field did not settle");
     }
 
     function test_OnlyPaidFeesAreBookedAsActionAndComped() public {

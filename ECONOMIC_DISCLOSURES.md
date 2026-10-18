@@ -14,7 +14,7 @@ price tables and reward curves.
   to do with it: burn it for backing, which lands ETH/stETH in vault reserves, unwrap up to
   **40B** over the contract's life into soulbound sDGNRS, or sweep it out.
 - Other initial sDGNRS allocations: affiliate 30%, lootbox 20%, whale 10%, reward 10%,
-  presale box 10%. See `sDGNRS` and `DGNRS` for pool movements and redemption conditions.
+  Degenesis 10%. See `sDGNRS` and `DGNRS` for pool movements and redemption conditions.
 - At the final transition close after levels **100, 200, 300, etc.**, a random **25–75%** of all
   sDGNRS burned since the previous such close is minted back into the ongoing
   pools, split **Whale : Affiliate : Lootbox : Reward = 1 : 3 : 2 : 1**. The first
@@ -22,7 +22,7 @@ price tables and reward curves.
   redemptions' underlying sDGNRS burn, and automatic self-award burns. The committed
   transition RNG word selects a whole percentage (25 through 75; mean 50%). Each mint
   rounds down in raw token units; allocation dust goes to Lootbox. Vault and
-  PresaleBox allocations receive no refill.
+  Degenesis allocations receive no refill.
 - Recycling adds no ETH/stETH/FLIP backing and reduces existing tokens' share of
   that backing at the refill. If a fraction `b` of the supply standing at the
   previous checkpoint was burned during the century and the refill fraction is
@@ -35,8 +35,49 @@ price tables and reward curves.
   reward settlement retains live-pool pricing, so an unresolved win may pay more
   tokens after replenishment. Game over permanently ends recycling, with no final
   catch-up mint for an unfinished century.
-- Presale-box proceeds are capped at **50 ETH** and split **80% Vault / 20% sDGNRS**.
-  Ordinary ticket/lootbox prize-pool funding is distinct from this presale allocation.
+- Degenesis is a seven-day launch sale (day indices 2 through 8; the main game starts on day 9)
+  with no cap on aggregate ETH. It is not a return guarantee, and every reward below is random.
+  - **Eligibility.** A buyer first spends on normal assets (tickets, lootboxes, passes, foil
+    packs, and the AFKing subscribe-time cover buy). While the window is open each such ETH,
+    claimable or prepaid spend earns Degenesis credit equal to **25%** of the price paid; FLIP-paid
+    spend, reward grants and Degenesis purchases earn none, and the Vault and sDGNRS earn none.
+    Credit is permission to spend, not payment, and expires unused when the window closes. Buying a
+    Degenesis box consumes credit 1:1 and is paid separately. The Vault cannot buy.
+  - **Orders.** A box costs at least **0.01 ETH**, in whole **0.0001 ETH** units, up to a per-order
+    bound of about **27.5M ETH**. One roll per order; splitting an order changes variance, not the
+    expected sDGNRS per ETH (apart from rounding and the fixed WWXRP consolation). A Degenesis box
+    pays no affiliate commission and earns no quest, streak or activity credit.
+  - **ETH routing.** Each day's ETH is held as a reserved obligation, then split once per daily
+    cohort at the first daily request after the day ends: **50%** to the future prize pool, **25%** to
+    a restricted Vault purchase budget, **25%** to sDGNRS AFKing funding. The Vault budget buys
+    tickets, lootboxes or whale passes for the Vault through `spendDegenesis` and is never
+    withdrawable. Unspent Vault budget and all sDGNRS AFKing funding join the final prize
+    distribution at game over.
+  - **Outcomes.** Each order rolls one exclusive category: **50%** FLIP-valued reward, **40%**
+    sDGNRS, **10%** WWXRP, with an independent size roll for FLIP and sDGNRS. A FLIP result below
+    one whole FLIP, a lost fractional pass, or a zero sDGNRS award pays the WWXRP consolation
+    (1 WWXRP before the vault owner's `gameMintScale`) instead; no order resolves to nothing.
+  - **sDGNRS schedule.** The sale pool is **100B** sDGNRS (10% of the initial supply). For a cohort
+    with applied ETH `V` and remaining pool `R`, `Q = min(2.5T, 2/3 R)` with target `T = 20B` on days
+    1-3 and `10B` on days 4-7. An sDGNRS order of `x` ETH receives `x * Q * m / V`, with `m`
+    uniform from 0.5 to 1.5 (mean 1), so every order's expected award is proportional to its ETH and
+    independent of other orders. The cohort reserves `1.5Q`, which no combination of rolls can
+    exceed; the unused reservation is released when the cohort closes. Cohorts price strictly in
+    order. Expected payout is about 20, 20, 16, 10, 9.1, 6.7 and 4.9B on days 1-7 (86.6B in total
+    with many small orders); it is not guaranteed, varies with concentration, and a quiet day pays
+    more per ETH. Whatever remains after the seventh cohort closes is burned, which raises every
+    holder's share of the backing.
+  - **FLIP ceiling.** The FLIP-valued reward keeps its random ladder, scaled by a day schedule
+    (nominal mean 2.5x purchase value on day 1, falling 0.125x per day to 1.75x on day 7), an early
+    bonus (up to +5%, falling to zero after six hours of the day), and a daily volume factor
+    `46 ETH / (46 ETH + V)` frozen for the cohort. Expected FLIP-valued rewards over the sale stay
+    below about **718 ETH of FLIP value (72M FLIP at 0.01 ETH per 1,000 FLIP)**, however much is
+    sold; individual rolls are random and uncapped. A busy day pays less FLIP per ETH and a quiet
+    day more.
+  - **Settlement and forfeiture.** Orders resolve through the miner engine after their cohort's
+    daily word; reward amounts are fixed by that word and the frozen cohort. **Unopened boxes are
+    forfeited at game over**: their rewards are not claimable against the burned inventory.
+  - Ordinary ticket/lootbox prize-pool funding is distinct from the Degenesis allocation.
 - The vault receives prescribed surplus/yield, default-referrer rewards and protocol-owned
   gameplay positions. It holds a genesis deity pass and, like every deity, receives **one
   perpetual ticket per level** (4 entries, granted 100 levels ahead and extended one level per

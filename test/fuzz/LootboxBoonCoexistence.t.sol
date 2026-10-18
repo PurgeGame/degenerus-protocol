@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -22,13 +23,6 @@ contract LootboxBoonCoexistence is DeployProtocol {
     // ──────────────────────────────────────────────────────────────────────
 
     uint256 constant SLOT_BOON_PACKED     = GameSlots.BOON_PACKED;   // mapping(uint32 => BoonPacked)
-
-    // Queue entry word (LB_* layout in DegenerusGameStorage): id[0:32) | level[32:56) |
-    // score[56:71) | customCount[121:128) | customSize[128:184) in gwei.
-    uint256 constant LB_LEVEL_SHIFT       = 32;
-    uint256 constant LB_SCORE_SHIFT       = 56;
-    uint256 constant LB_CUSTOM_COUNT_SHIFT = 121;
-    uint256 constant LB_SIZE_SHIFT        = 128;
 
     // BoonPacked bit layout (slot0)
     uint256 constant BP_COINFLIP_DAY_SHIFT  = 0;
@@ -117,11 +111,7 @@ contract LootboxBoonCoexistence is DeployProtocol {
     ) internal {
         purchaseLevel; day;
         uint32 id = _giveWalletId(player);
-        uint256 word = uint256(id)
-            | (uint256(game.level()) << LB_LEVEL_SHIFT)
-            | (uint256(1) << LB_SCORE_SHIFT)
-            | (uint256(1) << LB_CUSTOM_COUNT_SHIFT)
-            | ((ethAmount / 1 gwei) << LB_SIZE_SHIFT);
+        uint256 word = BoxOrderLib.boEntry(id, ethAmount / BoxOrderLib.SCALE, 1, 0, 1, false);
         RecyclingState.seedWriteBuffer(address(game), index);
         bytes32 data = keccak256(abi.encode(keccak256(abi.encode(uint256(index), GameSlots.BOX_QUEUE))));
         vm.store(address(game), data, bytes32(word));

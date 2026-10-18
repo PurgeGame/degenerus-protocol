@@ -41,15 +41,11 @@ contract QueueHost is DegenerusGame {
         return _decodeBoxOrder(boxOrder, lvl);
     }
 
-    function tierOf(uint256 soldBefore) external pure returns (uint256) { return _presaleTier(soldBefore); }
-
     function activeLevel() external view returns (uint24) { return _activeTicketLevel(); }
 
     function walletOf(uint32 id) external view returns (address) { return address(uint160(_walletElement(id))); }
 
     function evUsed(uint32 id, uint24 lvl) external view returns (uint256) { return _lootboxEvUsedFor(id, lvl); }
-
-    function presaleCredit(uint32 id) external view returns (uint256) { return presaleBoxCredit[id]; }
 
     /// @dev Seal the write buffer (the request path's `_swapRngBuffers`) and publish `word` as its
     ///      session word, leaving the human-box stage as the next consumer.
@@ -144,9 +140,21 @@ contract QueueHost is DegenerusGame {
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
     }
 
-    function seedPresale(uint96 sold, address buyer, uint256 credit) external {
-        presaleBoxEthSold = sold;
-        presaleBoxCredit[_walletIdOf(buyer)] = credit;
+    /// @dev The production score encoder: `applyBoxOrderScore` on an empty entry.
+    function scoreWord(uint256 score) external returns (uint256) {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(
+            abi.encodeWithSignature("applyBoxOrderScore(uint256,uint256)", uint256(0), score)
+        );
+        if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
+        return abi.decode(data, (uint256));
+    }
+
+    function evMultiplier(uint256 score) external pure returns (uint256) {
+        return _lootboxEvMultiplierFromScore(score);
+    }
+
+    function seedDegenesisCredit(address buyer, uint256 credit) external {
+        degenesisCredit[_walletIdOf(buyer)] = credit;
     }
 
     function seedBoost(address player, uint8 tier) external {

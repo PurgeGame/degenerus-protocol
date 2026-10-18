@@ -1,0 +1,1098 @@
+[
+  {
+    "bytes": "3",
+    "encoding": "inplace",
+    "label": "purchaseStartDay",
+    "offset": 0,
+    "slot": 0,
+    "typeLabel": "uint24"
+  },
+  {
+    "bytes": "3",
+    "encoding": "inplace",
+    "label": "dailyIdx",
+    "offset": 3,
+    "slot": 0,
+    "typeLabel": "uint24"
+  },
+  {
+    "bytes": "6",
+    "encoding": "inplace",
+    "label": "rngRequestTime",
+    "offset": 6,
+    "slot": 0,
+    "typeLabel": "uint48"
+  },
+  {
+    "bytes": "3",
+    "encoding": "inplace",
+    "label": "level",
+    "offset": 12,
+    "slot": 0,
+    "typeLabel": "uint24"
+  },
+  {
+    "bytes": "1",
+    "encoding": "inplace",
+    "label": "jackpotPhaseFlag",
+    "offset": 15,
+    "slot": 0,
+    "typeLabel": "bool"
+  },
+  {
+    "bytes": "1",
+    "encoding": "inplace",
+    "label": "jackpotCounter",
+    "offset": 16,
+    "slot": 0,
+    "typeLabel": "uint8"
+  },
+  {
+    "bytes": "1",
+    "encoding": "inplace",
+    "label": "lastPurchaseDay",
+    "offset": 17,
+    "slot": 0,
+    "typeLabel": "bool"
+  },
+  {
+    "bytes": "1",
+    "encoding": "inplace",
+    "label": "decimatorFlags",
+    "offset": 18,
+    "slot": 0,
+    "typeLabel": "uint8"
+  },
+  {
+    "bytes": "1",
+    "encoding": "inplace",
+    "label": "rngLockedFlag",
+    "offset": 19,
+    "slot": 0,
+    "typeLabel": "bool"
+  },
+  {
+    "bytes": "1",
+    "encoding": "inplace",
+    "label": "phaseTransitionActive",
+    "offset": 20,
+    "slot": 0,
+    "typeLabel": "bool"
+  },
+  {
+    "bytes": "1",
+    "encoding": "inplace",
+    "label": "gameOver",
+    "offset": 21,
+    "slot": 0,
+    "typeLabel": "bool"
+  },
+  {
+    "bytes": "1",
+    "encoding": "inplace",
+    "label": "dailyJackpotCoinTicketsPending",
+    "offset": 22,
+    "slot": 0,
+    "typeLabel": "bool"
+  },
+  {
+    "bytes": "1",
+    "encoding": "inplace",
+    "label": "jackpotFlags",
+    "offset": 23,
+    "slot": 0,
+    "typeLabel": "uint8"
+  },
+  {
+    "bytes": "1",
+    "encoding": "inplace",
+    "label": "ticketsFullyProcessed",
+    "offset": 24,
+    "slot": 0,
+    "typeLabel": "bool"
+  },
+  {
+    "bytes": "1",
+    "encoding": "inplace",
+    "label": "ticketWriteSlot",
+    "offset": 25,
+    "slot": 0,
+    "typeLabel": "bool"
+  },
+  {
+    "bytes": "1",
+    "encoding": "inplace",
+    "label": "prizePoolFrozen",
+    "offset": 26,
+    "slot": 0,
+    "typeLabel": "bool"
+  },
+  {
+    "bytes": "1",
+    "encoding": "inplace",
+    "label": "degenesisClosed",
+    "offset": 27,
+    "slot": 0,
+    "typeLabel": "uint8"
+  },
+  {
+    "bytes": "1",
+    "encoding": "inplace",
+    "label": "subsFullyProcessed",
+    "offset": 28,
+    "slot": 0,
+    "typeLabel": "bool"
+  },
+  {
+    "bytes": "1",
+    "encoding": "inplace",
+    "label": "humanReadComplete",
+    "offset": 29,
+    "slot": 0,
+    "typeLabel": "bool"
+  },
+  {
+    "bytes": "2",
+    "encoding": "inplace",
+    "label": "rngFlagsAndNudges",
+    "offset": 30,
+    "slot": 0,
+    "typeLabel": "uint16"
+  },
+  {
+    "bytes": "16",
+    "encoding": "inplace",
+    "label": "currentPrizePool",
+    "offset": 0,
+    "slot": 1,
+    "typeLabel": "uint128"
+  },
+  {
+    "bytes": "16",
+    "encoding": "inplace",
+    "label": "claimablePool",
+    "offset": 16,
+    "slot": 1,
+    "typeLabel": "uint128"
+  },
+  {
+    "bytes": "32",
+    "encoding": "inplace",
+    "label": "prizePoolsPacked",
+    "offset": 0,
+    "slot": 2,
+    "typeLabel": "uint256"
+  },
+  {
+    "bytes": "32",
+    "encoding": "inplace",
+    "label": "rngWordCurrent",
+    "offset": 0,
+    "slot": 3,
+    "typeLabel": "uint256"
+  },
+  {
+    "bytes": "32",
+    "encoding": "inplace",
+    "label": "vrfRequestId",
+    "offset": 0,
+    "slot": 4,
+    "typeLabel": "uint256"
+  },
+  {
+    "bytes": "3",
+    "encoding": "inplace",
+    "label": "rngRequestDay",
+    "offset": 0,
+    "slot": 5,
+    "typeLabel": "uint24"
+  },
+  {
+    "bytes": "1",
+    "encoding": "inplace",
+    "label": "rngGapApplied",
+    "offset": 3,
+    "slot": 5,
+    "typeLabel": "bool"
+  },
+  {
+    "bytes": "6",
+    "encoding": "inplace",
+    "label": "lastVrfProcessedTimestamp",
+    "offset": 4,
+    "slot": 5,
+    "typeLabel": "uint48"
+  },
+  {
+    "bytes": "6",
+    "encoding": "inplace",
+    "label": "ticketBufferLevels",
+    "offset": 10,
+    "slot": 5,
+    "typeLabel": "uint48"
+  },
+  {
+    "bytes": "4",
+    "encoding": "inplace",
+    "label": "loanSeizeCursor",
+    "offset": 16,
+    "slot": 5,
+    "typeLabel": "uint32"
+  },
+  {
+    "bytes": "32",
+    "encoding": "inplace",
+    "label": "dailyTicketBudgetsPacked",
+    "offset": 0,
+    "slot": 6,
+    "typeLabel": "uint256"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "balancesPacked",
+    "offset": 0,
+    "slot": 7,
+    "typeLabel": "mapping(uint32 => uint256)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "lvlTraitEntry",
+    "offset": 0,
+    "slot": 8,
+    "typeLabel": "mapping(uint24 => uint256[256])"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "mintPacked_",
+    "offset": 0,
+    "slot": 9,
+    "typeLabel": "mapping(uint32 => uint256)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "rngWordByDay",
+    "offset": 0,
+    "slot": 10,
+    "typeLabel": "mapping(uint24 => uint256)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "inplace",
+    "label": "prizePoolPendingPacked",
+    "offset": 0,
+    "slot": 11,
+    "typeLabel": "uint256"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "ticketQueue",
+    "offset": 0,
+    "slot": 12,
+    "typeLabel": "mapping(uint24 => uint256[])"
+  },
+  {
+    "bytes": "32",
+    "encoding": "dynamic_array",
+    "label": "wallets",
+    "offset": 0,
+    "slot": 13,
+    "typeLabel": "uint256[]"
+  },
+  {
+    "bytes": "4",
+    "encoding": "inplace",
+    "label": "ticketCursor",
+    "offset": 0,
+    "slot": 14,
+    "typeLabel": "uint32"
+  },
+  {
+    "bytes": "3",
+    "encoding": "inplace",
+    "label": "ticketLevel",
+    "offset": 4,
+    "slot": 14,
+    "typeLabel": "uint24"
+  },
+  {
+    "bytes": "1",
+    "encoding": "inplace",
+    "label": "snapShift",
+    "offset": 7,
+    "slot": 14,
+    "typeLabel": "uint8"
+  },
+  {
+    "bytes": "3",
+    "encoding": "inplace",
+    "label": "snapLevel",
+    "offset": 8,
+    "slot": 14,
+    "typeLabel": "uint24"
+  },
+  {
+    "bytes": "1",
+    "encoding": "inplace",
+    "label": "snapPendingShift",
+    "offset": 11,
+    "slot": 14,
+    "typeLabel": "uint8"
+  },
+  {
+    "bytes": "4",
+    "encoding": "inplace",
+    "label": "ticketRound",
+    "offset": 12,
+    "slot": 14,
+    "typeLabel": "uint32"
+  },
+  {
+    "bytes": "4",
+    "encoding": "inplace",
+    "label": "ticketSoloOffset",
+    "offset": 16,
+    "slot": 14,
+    "typeLabel": "uint32"
+  },
+  {
+    "bytes": "6",
+    "encoding": "inplace",
+    "label": "degeneretteCursor",
+    "offset": 20,
+    "slot": 14,
+    "typeLabel": "uint48"
+  },
+  {
+    "bytes": "4",
+    "encoding": "inplace",
+    "label": "degeneretteReadCount",
+    "offset": 26,
+    "slot": 14,
+    "typeLabel": "uint32"
+  },
+  {
+    "bytes": "16",
+    "encoding": "inplace",
+    "label": "degenesisVaultBudget",
+    "offset": 0,
+    "slot": 15,
+    "typeLabel": "uint128"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "degenesisCredit",
+    "offset": 0,
+    "slot": 16,
+    "typeLabel": "mapping(uint32 => uint256)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "inplace",
+    "label": "gameOverStatePacked",
+    "offset": 0,
+    "slot": 17,
+    "typeLabel": "uint256"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "degeneretteQueue",
+    "offset": 0,
+    "slot": 18,
+    "typeLabel": "mapping(uint48 => uint256[])"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "operatorApprovals",
+    "offset": 0,
+    "slot": 19,
+    "typeLabel": "mapping(uint32 => mapping(address => bool))"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "levelPrizePool",
+    "offset": 0,
+    "slot": 20,
+    "typeLabel": "mapping(uint24 => uint256)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "playerClaimWord",
+    "offset": 0,
+    "slot": 21,
+    "typeLabel": "mapping(uint32 => uint256)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "levelDgnrsPacked",
+    "offset": 0,
+    "slot": 22,
+    "typeLabel": "mapping(uint24 => uint256)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "deityPassPricePaid",
+    "offset": 0,
+    "slot": 23,
+    "typeLabel": "mapping(uint32 => uint96)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "dynamic_array",
+    "label": "deityPassIds",
+    "offset": 0,
+    "slot": 24,
+    "typeLabel": "uint256[]"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "deityBySymbol",
+    "offset": 0,
+    "slot": 25,
+    "typeLabel": "mapping(uint8 => uint32)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "inplace",
+    "label": "degenesisActive",
+    "offset": 0,
+    "slot": 26,
+    "typeLabel": "uint256"
+  },
+  {
+    "bytes": "20",
+    "encoding": "inplace",
+    "label": "vrfCoordinator",
+    "offset": 0,
+    "slot": 27,
+    "typeLabel": "contract IVRFCoordinator"
+  },
+  {
+    "bytes": "32",
+    "encoding": "inplace",
+    "label": "vrfKeyHash",
+    "offset": 0,
+    "slot": 28,
+    "typeLabel": "bytes32"
+  },
+  {
+    "bytes": "32",
+    "encoding": "inplace",
+    "label": "vrfSubscriptionId",
+    "offset": 0,
+    "slot": 29,
+    "typeLabel": "uint256"
+  },
+  {
+    "bytes": "32",
+    "encoding": "inplace",
+    "label": "lootboxRngPacked",
+    "offset": 0,
+    "slot": 30,
+    "typeLabel": "uint256"
+  },
+  {
+    "bytes": "32",
+    "encoding": "inplace",
+    "label": "rngDayTags",
+    "offset": 0,
+    "slot": 31,
+    "typeLabel": "uint256"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "deityBoonPacked",
+    "offset": 0,
+    "slot": 32,
+    "typeLabel": "mapping(uint32 => uint32)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "deityBoonRecipientDay",
+    "offset": 0,
+    "slot": 33,
+    "typeLabel": "mapping(uint32 => uint24)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "degeneretteRecordBounty",
+    "offset": 0,
+    "slot": 34,
+    "typeLabel": "mapping(uint256 => uint256)"
+  },
+  {
+    "bytes": "3",
+    "encoding": "inplace",
+    "label": "earlyTicketLevel",
+    "offset": 0,
+    "slot": 35,
+    "typeLabel": "uint24"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "lootboxEvCapPacked",
+    "offset": 0,
+    "slot": 36,
+    "typeLabel": "mapping(uint32 => uint256)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "decBattleEntries",
+    "offset": 0,
+    "slot": 37,
+    "typeLabel": "mapping(uint256 => uint256)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "decBattleRounds",
+    "offset": 0,
+    "slot": 38,
+    "typeLabel": "mapping(uint24 => struct DegenerusGameStorage.DecBattleRound)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "decBattleHeap",
+    "offset": 0,
+    "slot": 39,
+    "typeLabel": "mapping(uint256 => uint256)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "decBattlePlayers",
+    "offset": 0,
+    "slot": 40,
+    "typeLabel": "mapping(uint32 => uint256)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "dailyHeroWagers",
+    "offset": 0,
+    "slot": 41,
+    "typeLabel": "mapping(uint24 => uint256[4])"
+  },
+  {
+    "bytes": "32",
+    "encoding": "inplace",
+    "label": "yieldAccumulator",
+    "offset": 0,
+    "slot": 42,
+    "typeLabel": "uint256"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "centuryBonusUsed",
+    "offset": 0,
+    "slot": 43,
+    "typeLabel": "mapping(uint32 => uint256)"
+  },
+  {
+    "bytes": "1",
+    "encoding": "inplace",
+    "label": "deityPassSales",
+    "offset": 0,
+    "slot": 44,
+    "typeLabel": "uint8"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "protocolBoonPools",
+    "offset": 0,
+    "slot": 45,
+    "typeLabel": "mapping(uint32 => mapping(uint24 => struct DegenerusGameStorage.ProtocolBoonPool))"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "protocolBoonEntries",
+    "offset": 0,
+    "slot": 46,
+    "typeLabel": "mapping(uint32 => mapping(uint24 => mapping(uint32 => struct DegenerusGameStorage.ProtocolBoonEntry)))"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "boonPacked",
+    "offset": 0,
+    "slot": 47,
+    "typeLabel": "mapping(uint32 => struct DegenerusGameStorage.BoonPacked)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "_subOf",
+    "offset": 0,
+    "slot": 48,
+    "typeLabel": "mapping(uint32 => struct DegenerusGameStorage.Sub)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "_fundingSourceOf",
+    "offset": 0,
+    "slot": 49,
+    "typeLabel": "mapping(uint32 => uint32)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "dynamic_array",
+    "label": "_subscribers",
+    "offset": 0,
+    "slot": 50,
+    "typeLabel": "uint32[]"
+  },
+  {
+    "bytes": "2",
+    "encoding": "inplace",
+    "label": "_subCursor",
+    "offset": 0,
+    "slot": 51,
+    "typeLabel": "uint16"
+  },
+  {
+    "bytes": "2",
+    "encoding": "inplace",
+    "label": "_subOpenCursor",
+    "offset": 2,
+    "slot": 51,
+    "typeLabel": "uint16"
+  },
+  {
+    "bytes": "3",
+    "encoding": "inplace",
+    "label": "_afkingResetDay",
+    "offset": 4,
+    "slot": 51,
+    "typeLabel": "uint24"
+  },
+  {
+    "bytes": "6",
+    "encoding": "inplace",
+    "label": "boxCursor",
+    "offset": 7,
+    "slot": 51,
+    "typeLabel": "uint48"
+  },
+  {
+    "bytes": "4",
+    "encoding": "inplace",
+    "label": "boxReadCount",
+    "offset": 13,
+    "slot": 51,
+    "typeLabel": "uint32"
+  },
+  {
+    "bytes": "3",
+    "encoding": "inplace",
+    "label": "_sdgnrsBonusLevel",
+    "offset": 17,
+    "slot": 51,
+    "typeLabel": "uint24"
+  },
+  {
+    "bytes": "2",
+    "encoding": "inplace",
+    "label": "_pendingBoxCount",
+    "offset": 20,
+    "slot": 51,
+    "typeLabel": "uint16"
+  },
+  {
+    "bytes": "2",
+    "encoding": "inplace",
+    "label": "_subBoxCount",
+    "offset": 22,
+    "slot": 51,
+    "typeLabel": "uint16"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "boxQueue",
+    "offset": 0,
+    "slot": 52,
+    "typeLabel": "mapping(uint48 => uint256[])"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "foilRecord",
+    "offset": 0,
+    "slot": 53,
+    "typeLabel": "mapping(uint24 => mapping(uint32 => uint256))"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "foilMatchClaimed",
+    "offset": 0,
+    "slot": 54,
+    "typeLabel": "mapping(uint32 => uint256)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "dailyFoilDraw",
+    "offset": 0,
+    "slot": 55,
+    "typeLabel": "mapping(uint24 => uint256)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "foilQueue",
+    "offset": 0,
+    "slot": 56,
+    "typeLabel": "mapping(uint24 => uint256[])"
+  },
+  {
+    "bytes": "4",
+    "encoding": "inplace",
+    "label": "foilCursor",
+    "offset": 0,
+    "slot": 57,
+    "typeLabel": "uint32"
+  },
+  {
+    "bytes": "3",
+    "encoding": "inplace",
+    "label": "foilGenerationDay",
+    "offset": 4,
+    "slot": 57,
+    "typeLabel": "uint24"
+  },
+  {
+    "bytes": "3",
+    "encoding": "inplace",
+    "label": "foilFirstDrawDay",
+    "offset": 7,
+    "slot": 57,
+    "typeLabel": "uint24"
+  },
+  {
+    "bytes": "1",
+    "encoding": "inplace",
+    "label": "foilWriteSlot",
+    "offset": 10,
+    "slot": 57,
+    "typeLabel": "bool"
+  },
+  {
+    "bytes": "4",
+    "encoding": "inplace",
+    "label": "foilWriteCount",
+    "offset": 11,
+    "slot": 57,
+    "typeLabel": "uint32"
+  },
+  {
+    "bytes": "4",
+    "encoding": "inplace",
+    "label": "foilReadCount",
+    "offset": 15,
+    "slot": 57,
+    "typeLabel": "uint32"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "deityRecipientBoonCount",
+    "offset": 0,
+    "slot": 58,
+    "typeLabel": "mapping(uint32 => mapping(uint32 => uint8))"
+  },
+  {
+    "bytes": "32",
+    "encoding": "inplace",
+    "label": "goldenTicket",
+    "offset": 0,
+    "slot": 59,
+    "typeLabel": "uint256"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "middayRngCredit",
+    "offset": 0,
+    "slot": 60,
+    "typeLabel": "mapping(uint32 => uint256)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "dynamic_array",
+    "label": "centuryPrizePools",
+    "offset": 0,
+    "slot": 61,
+    "typeLabel": "uint128[]"
+  },
+  {
+    "bytes": "32",
+    "encoding": "inplace",
+    "label": "ticketSeats",
+    "offset": 0,
+    "slot": 62,
+    "typeLabel": "uint256"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "ticketGenerationStartBlock",
+    "offset": 0,
+    "slot": 63,
+    "typeLabel": "mapping(uint256 => uint256)"
+  },
+  {
+    "bytes": "4",
+    "encoding": "inplace",
+    "label": "deadTallyPos",
+    "offset": 0,
+    "slot": 64,
+    "typeLabel": "uint32"
+  },
+  {
+    "bytes": "3",
+    "encoding": "inplace",
+    "label": "deadTallyFoilDay",
+    "offset": 4,
+    "slot": 64,
+    "typeLabel": "uint24"
+  },
+  {
+    "bytes": "4",
+    "encoding": "inplace",
+    "label": "deadTallyFoilIdx",
+    "offset": 7,
+    "slot": 64,
+    "typeLabel": "uint32"
+  },
+  {
+    "bytes": "1",
+    "encoding": "inplace",
+    "label": "deadTallyStage",
+    "offset": 11,
+    "slot": 64,
+    "typeLabel": "uint8"
+  },
+  {
+    "bytes": "2",
+    "encoding": "inplace",
+    "label": "deadTraitCount",
+    "offset": 12,
+    "slot": 64,
+    "typeLabel": "uint16"
+  },
+  {
+    "bytes": "8",
+    "encoding": "inplace",
+    "label": "deadUncreated",
+    "offset": 14,
+    "slot": 64,
+    "typeLabel": "uint64"
+  },
+  {
+    "bytes": "8",
+    "encoding": "inplace",
+    "label": "deadCreated",
+    "offset": 22,
+    "slot": 64,
+    "typeLabel": "uint64"
+  },
+  {
+    "bytes": "16",
+    "encoding": "inplace",
+    "label": "deadPot",
+    "offset": 0,
+    "slot": 65,
+    "typeLabel": "uint128"
+  },
+  {
+    "bytes": "8",
+    "encoding": "inplace",
+    "label": "deadTotal",
+    "offset": 16,
+    "slot": 65,
+    "typeLabel": "uint64"
+  },
+  {
+    "bytes": "8",
+    "encoding": "inplace",
+    "label": "deadUncreatedLeft",
+    "offset": 24,
+    "slot": 65,
+    "typeLabel": "uint64"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "deadClaimed",
+    "offset": 0,
+    "slot": 66,
+    "typeLabel": "mapping(uint256 => uint256)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "inplace",
+    "label": "decBattleQueue",
+    "offset": 0,
+    "slot": 67,
+    "typeLabel": "uint256"
+  },
+  {
+    "bytes": "64",
+    "encoding": "inplace",
+    "label": "traitBucketLive",
+    "offset": 0,
+    "slot": 68,
+    "typeLabel": "uint256[2]"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "ticketPending",
+    "offset": 0,
+    "slot": 70,
+    "typeLabel": "mapping(uint32 => uint256)"
+  },
+  {
+    "bytes": "64",
+    "encoding": "inplace",
+    "label": "jackpotWork",
+    "offset": 0,
+    "slot": 71,
+    "typeLabel": "struct DegenerusGameStorage.JackpotWork"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "farFutureOwed",
+    "offset": 0,
+    "slot": 73,
+    "typeLabel": "mapping(uint32 => uint256[13])"
+  },
+  {
+    "bytes": "8",
+    "encoding": "inplace",
+    "label": "decPreviousStack",
+    "offset": 0,
+    "slot": 74,
+    "typeLabel": "uint64"
+  },
+  {
+    "bytes": "5",
+    "encoding": "inplace",
+    "label": "decPreviousCount",
+    "offset": 8,
+    "slot": 74,
+    "typeLabel": "uint40"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "decJackpotPlans",
+    "offset": 0,
+    "slot": 75,
+    "typeLabel": "mapping(uint24 => struct DegenerusGameStorage.DecJackpotPlan)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "decGeneratedOwners",
+    "offset": 0,
+    "slot": 76,
+    "typeLabel": "mapping(uint256 => uint32)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "walletIds",
+    "offset": 0,
+    "slot": 77,
+    "typeLabel": "mapping(address => uint64)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "afkingFundingApprovals",
+    "offset": 0,
+    "slot": 78,
+    "typeLabel": "mapping(uint32 => mapping(uint32 => bool))"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "_smurfWords",
+    "offset": 0,
+    "slot": 79,
+    "typeLabel": "mapping(uint32 => mapping(uint256 => uint256))"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "_loans",
+    "offset": 0,
+    "slot": 80,
+    "typeLabel": "mapping(uint32 => uint256)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "_loansDue",
+    "offset": 0,
+    "slot": 81,
+    "typeLabel": "mapping(uint24 => mapping(uint256 => uint256))"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "_loansDueCount",
+    "offset": 0,
+    "slot": 82,
+    "typeLabel": "mapping(uint24 => uint256)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "inplace",
+    "label": "degenesisWord",
+    "offset": 0,
+    "slot": 83,
+    "typeLabel": "uint256"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "degenesisDays",
+    "offset": 0,
+    "slot": 84,
+    "typeLabel": "mapping(uint256 => uint256)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "degenesisOrders",
+    "offset": 0,
+    "slot": 85,
+    "typeLabel": "mapping(uint256 => uint256)"
+  }
+]

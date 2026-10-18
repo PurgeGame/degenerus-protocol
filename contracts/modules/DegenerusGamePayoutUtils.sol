@@ -71,20 +71,6 @@ abstract contract DegenerusGamePayoutUtils is DegenerusGameStorage {
         }
     }
 
-    /// @dev Route coin-presale-box ETH proceeds: 80% to the vault, 20% to sDGNRS,
-    ///      both as claimable credits, while bumping claimablePool by the full
-    ///      boxEth to reserve the credits.
-    ///      The integer-division remainder lands on the VAULT (80%) side, so the
-    ///      two credits sum to exactly boxEth.
-    /// @param boxEth Box proceeds in wei to route.
-    function _creditBoxProceeds(uint256 boxEth) internal {
-        if (boxEth == 0) return;
-        uint256 sdgnrsShare = boxEth / 5;
-        claimablePool += uint128(boxEth);
-        _creditClaimableLogged(VAULT_WALLET_ID, boxEth - sdgnrsShare);
-        _creditClaimableLogged(SDGNRS_WALLET_ID, sdgnrsShare);
-    }
-
     /// @dev Queue deferred whale pass claims for large payouts. Credits the sub-half-pass
     ///      remainder to claimableWinnings and returns it (mirrors _addClaimableEth): the
     ///      caller folds it into its claimableDelta so the single claimablePool bump and the

@@ -65,6 +65,7 @@ DEFAULT_SCOPE = [
     "modules/DegenerusGameFoilPackModule.sol",
     "modules/DegenerusGameDecimatorModule.sol",
     "modules/DegenerusGameDegeneretteModule.sol",
+    "modules/DegenerusGameDegenesisModule.sol",
 ]
 
 SCOPE_FILES = DEFAULT_SCOPE

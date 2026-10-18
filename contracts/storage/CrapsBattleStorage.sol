@@ -9,6 +9,7 @@ import {LootboxCraps} from "../LootboxCraps.sol";
 import {CrapsCustomTerms} from "../CrapsCustomTerms.sol";
 import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 import {CrapsPreferenceLib} from "../libraries/CrapsPreferenceLib.sol";
+import {GameTimeLib} from "../libraries/GameTimeLib.sol";
 
 interface IGameCrapsWorkStage {
     function rngConsumerStage() external view returns (uint8);
@@ -515,9 +516,12 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
         return slot < _CUSTOM_SLOT_BASE && slot / _BONUS_SLOTS_PER_DAY + _SETTLEMENT_DAYS < _currentDayIndex();
     }
 
+    /// @dev Windows open from Degenesis day 2 (or the day after a later deployment, which
+    ///      `day > today` already covers).
     function _reservableDay(uint24 day) internal view returns (bool) {
         uint256 today = _currentDayIndex();
-        return day > today && day <= today + _RESERVATION_DAYS && _dailyWordAt(day) == 0;
+        return day > today && day > GameTimeLib.DEGENESIS_START_DAY && day <= today + _RESERVATION_DAYS
+            && _dailyWordAt(day) == 0;
     }
 
     /// @dev Three 72-bit lanes per word. Position zero remains reserved.
@@ -723,8 +727,8 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      Every scheduled slot strictly below it is completely finalized, an armed field with
     ///      no seats, a LAPSED day whose reservations were credited back, or the remainder-zero
     ///      separator — nothing of value is ever left behind it. Born in the constructor at
-    ///      genesis + 1's separator: the deployment day is a warm-up day with no windows, so
-    ///      tomorrow is the first day that can owe anything.
+    ///      the first window day's separator: no earlier day has windows, so that is the first
+    ///      day that can owe anything.
     ///
     ///      It only ever moves FORWARD, and only past a slot proven spent. A day the advance
     ///      never opened — a protocol stall — is not replayed: nobody could have entered it (the
@@ -1066,6 +1070,9 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     }
     mapping(uint256 => JackpotRound) internal _jackpotRounds;
     uint64 internal _activeJackpotSlot;
+    /// @dev The first day with scheduled windows, set at construction; no jackpot battle locks
+    ///      for an earlier window day. Shares the active slot's word.
+    uint24 internal _firstWindowDay;
     /// @dev One packed word per event. The nominee is sampled over the immutable paid high
     ///      field as settlement advances; cursor counts paid seats examined, including normals.
     struct HighRollerDraw {

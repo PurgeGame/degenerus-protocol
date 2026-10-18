@@ -45,6 +45,7 @@ DEFAULT_SCOPE = [
     "modules/DegenerusGameDecimatorModule.sol",
     "modules/DegenerusGameDegeneretteModule.sol",
     "modules/DegenerusGameBingoModule.sol",
+    "modules/DegenerusGameDegenesisModule.sol",
 ]
 SCOPE = [s.strip() for s in os.environ.get("SCOPE_FILES", "").split(",") if s.strip()] or DEFAULT_SCOPE
 

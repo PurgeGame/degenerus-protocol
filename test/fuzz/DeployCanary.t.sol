@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
-import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {DeployProtocol, DegenesisDeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 
-/// @title DeployCanary -- Validates all 25+4 addresses match patched constants
+/// @title DeployCanary -- Validates every protocol and mock address against the patched constants
 /// @notice If any assertion fails, the nonce prediction or deploy order is wrong.
 /// @dev v55.0: the standalone AfKing was dissolved into DegenerusGame (GameAfkingModule);
 ///      this canary now guards that the two new game-resident delegatecall modules land at
@@ -18,7 +19,7 @@ contract DeployCanary is DeployProtocol {
 
     /// @notice Every deployed contract address must match its ContractAddresses constant
     function test_allAddressesMatch() public view {
-        // Protocol contracts (25)
+        // Protocol contracts
         assertEq(address(icons32), ContractAddresses.ICONS_32, "ICONS_32 mismatch");
         assertEq(address(mintModule), ContractAddresses.GAME_MINT_MODULE, "GAME_MINT_MODULE mismatch");
         assertEq(address(advanceModule), ContractAddresses.GAME_ADVANCE_MODULE, "GAME_ADVANCE_MODULE mismatch");
@@ -45,6 +46,19 @@ contract DeployCanary is DeployProtocol {
         assertEq(address(dgnrs), ContractAddresses.DGNRS, "DGNRS mismatch");
         assertEq(address(admin), ContractAddresses.ADMIN, "ADMIN mismatch");
         assertEq(address(gnrus), ContractAddresses.GNRUS, "GNRUS mismatch");
+        assertEq(address(foilModule), ContractAddresses.GAME_FOILPACK_MODULE, "GAME_FOILPACK_MODULE mismatch");
+        assertEq(address(afkingSubToken), ContractAddresses.AFKING_SUB_TOKEN, "AFKING_SUB_TOKEN mismatch");
+        assertEq(address(parimutuel), ContractAddresses.PARIMUTUEL, "PARIMUTUEL mismatch");
+        assertEq(address(recordBounty), ContractAddresses.RECORD_BOUNTY, "RECORD_BOUNTY mismatch");
+        assertEq(address(crapsBattle), ContractAddresses.CRAPS, "CRAPS mismatch");
+        assertEq(address(crapsEngine), ContractAddresses.CRAPS_ENGINE, "CRAPS_ENGINE mismatch");
+        assertEq(address(jackpotBattle), ContractAddresses.JACKPOT_BATTLE, "JACKPOT_BATTLE mismatch");
+        assertEq(address(ticketModule), ContractAddresses.GAME_TICKET_MODULE, "GAME_TICKET_MODULE mismatch");
+        assertEq(address(minerModule), ContractAddresses.GAME_MINER_MODULE, "GAME_MINER_MODULE mismatch");
+        assertEq(address(rngModule), ContractAddresses.GAME_RNG_MODULE, "GAME_RNG_MODULE mismatch");
+        assertEq(address(jackpotDrawModule), ContractAddresses.GAME_JACKPOT_DRAW_MODULE, "GAME_JACKPOT_DRAW_MODULE mismatch");
+        assertEq(address(degenesisModule), ContractAddresses.GAME_DEGENESIS_MODULE, "GAME_DEGENESIS_MODULE mismatch");
+        assertGt(address(degenesisModule).code.length, 0, "DegenesisModule not deployed");
 
         // External/mock contracts (4)
         assertEq(address(mockVRF), ContractAddresses.VRF_COORDINATOR, "VRF_COORDINATOR mismatch");
@@ -69,5 +83,26 @@ contract DeployCanary is DeployProtocol {
         assertTrue(address(afkingModule).code.length > 0, "GameAfkingModule not deployed");
         assertTrue(address(bingoModule).code.length > 0, "DegenerusGameBingoModule not deployed");
         assertTrue(address(gnrus).code.length > 0, "GNRUS not deployed");
+    }
+
+    /// @notice The default fixture deploys on MAIN_LAUNCH_DAY.
+    function test_legacyFixtureDeploysOnMainLaunchDay() public view {
+        assertEq(game.currentDayView(), GameTimeLib.MAIN_LAUNCH_DAY);
+        assertEq(block.timestamp, DEPLOY_TS_LEGACY);
+    }
+}
+
+/// @title DegenesisDeployCanary -- the day-index-1 fixture lands on the same addresses
+contract DegenesisDeployCanary is DegenesisDeployProtocol {
+    function setUp() public {
+        _deployProtocol();
+    }
+
+    function test_degenesisFixtureAddressesAndDay() public view {
+        assertEq(address(game), ContractAddresses.GAME, "GAME mismatch");
+        assertEq(address(jackpotDrawModule), ContractAddresses.GAME_JACKPOT_DRAW_MODULE, "GAME_JACKPOT_DRAW_MODULE mismatch");
+        assertEq(address(degenesisModule), ContractAddresses.GAME_DEGENESIS_MODULE, "GAME_DEGENESIS_MODULE mismatch");
+        assertEq(game.currentDayView(), 1);
+        assertEq(block.timestamp, DEPLOY_TS_DEGENESIS);
     }
 }

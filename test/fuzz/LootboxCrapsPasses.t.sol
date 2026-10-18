@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {Vm} from "forge-std/Vm.sol";
@@ -12,12 +13,6 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///         craps table. Nothing about the conversion is mirrored or restated — a mirror could agree
 ///         with itself while the shipped arithmetic drifted underneath it.
 contract LootboxCrapsPasses is DeployProtocol {
-    // Queue entry word (LB_* layout in DegenerusGameStorage).
-    uint256 constant LB_LEVEL_SHIFT = 32;
-    uint256 constant LB_SCORE_SHIFT = 56;
-    uint256 constant LB_CUSTOM_COUNT_SHIFT = 121;
-    uint256 constant LB_SIZE_SHIFT = 128;
-
     bytes32 constant PASS_EVENT = keccak256("LootBoxCrapsPasses(uint32,uint32,uint32,uint24)");
 
     uint256 private _lastFulfilledReqId;
@@ -43,15 +38,13 @@ contract LootboxCrapsPasses is DeployProtocol {
     }
 
     /// @dev mineFlip's human-box stage only ever finds a box by walking `boxQueue[read]`, so this
-    ///      forged setup makes `player`'s one custom box the only entry of buffer `index` and seals
+    ///      forged setup makes `player`'s one box the only entry of buffer `index` and seals
     ///      it with the delivered word -- every call is self-contained (the write buffer, the entry
     ///      count and the cursors are unconditionally overwritten each time), so the many
     ///      non-monotonic index sequences the callers below use are each independently reachable
     ///      regardless of call order.
     function _setupLootbox(address player, uint48 index, uint256 ethAmount, uint256 vrfWord) internal {
-        uint256 word = uint256(game.walletIdOf(player)) | (uint256(game.level()) << LB_LEVEL_SHIFT)
-            | (uint256(1) << LB_SCORE_SHIFT) | (uint256(1) << LB_CUSTOM_COUNT_SHIFT)
-            | ((ethAmount / 1 gwei) << LB_SIZE_SHIFT);
+        uint256 word = BoxOrderLib.boEntry(game.walletIdOf(player), ethAmount / BoxOrderLib.SCALE, 1, 0, 1, false);
         RecyclingState.seedWriteBuffer(address(game), index);
         bytes32 data = keccak256(abi.encode(keccak256(abi.encode(uint256(index), GameSlots.BOX_QUEUE))));
         vm.store(address(game), data, bytes32(word));

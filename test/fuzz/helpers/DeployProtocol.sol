@@ -8,6 +8,7 @@ import "forge-std/Test.sol";
 import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 import {Icons32Data} from "../../../contracts/Icons32Data.sol";
 import {DegenerusGameJackpotDrawModule} from "../../../contracts/modules/DegenerusGameJackpotDrawModule.sol";
+import {DegenerusGameDegenesisModule} from "../../../contracts/modules/DegenerusGameDegenesisModule.sol";
 import {DegenerusGameTicketModule} from "../../../contracts/modules/DegenerusGameTicketModule.sol";
 import {DegenerusGameMinerModule} from "../../../contracts/modules/DegenerusGameMinerModule.sol";
 import {DegenerusGameRngModule} from "../../../contracts/modules/DegenerusGameRngModule.sol";
@@ -51,10 +52,16 @@ import {MockLinkToken} from "../../../contracts/mocks/MockLinkToken.sol";
 import {MockLinkEthFeed} from "../../../contracts/mocks/MockLinkEthFeed.sol";
 import {GameSlots, GameSlotKeys} from "../../helpers/GameSlots.sol";
 import {BitPackingLib} from "../../../contracts/libraries/BitPackingLib.sol";
+import {GameTimeLib} from "../../../contracts/libraries/GameTimeLib.sol";
 
 /// @title DeployProtocol -- Abstract base for Foundry invariant tests
-/// @notice Deploys all 4 mocks + 36 protocol contracts in setUp().
+/// @notice Deploys all 4 mocks + 37 protocol contracts in setUp().
 ///         Inherit this, call _deployProtocol() in your setUp().
+///         Deploy time: `_deployTimestamp()` (virtual). The default, DEPLOY_TS_LEGACY, is day index 9
+///         (GameTimeLib.MAIN_LAUNCH_DAY): Degenesis is over at deploy and normal level-0 play starts
+///         on the deploy day. Inherit `DegenesisDeployProtocol` (or override the hook to return
+///         DEPLOY_TS_DEGENESIS) to deploy on day index 1 with the Degenesis sale ahead.
+///         DEPLOY_DAY_BOUNDARY stays 0 (patchForFoundry), so day indices are absolute in both.
 /// @dev Address correctness depends on patchForFoundry.js having patched
 ///      ContractAddresses.sol before forge build (there is no pretest hook —
 ///      run `node scripts/...patchForFoundry...` before `forge build` to align
@@ -96,6 +103,7 @@ abstract contract DeployProtocol is Test {
     DegenerusGameMinerModule public minerModule;
     DegenerusGameRngModule public rngModule;
     DegenerusGameJackpotDrawModule public jackpotDrawModule;
+    DegenerusGameDegenesisModule public degenesisModule;
     DegenerusGameAdvanceModule public advanceModule;
     DegenerusGameWhaleModule public whaleModule;
     DegenerusGameJackpotModule public jackpotModule;
@@ -255,8 +263,31 @@ abstract contract DeployProtocol is Test {
         }
     }
 
-    /// @notice Deploy the full protocol. Must be called from setUp().
-    /// @dev Uses vm.warp(86400) to match the fixed timestamp in patchForFoundry.js.
+    /// @dev patchForFoundry.js DEPLOY_TIMESTAMP: day index 1 under DEPLOY_DAY_BOUNDARY = 0.
+    uint256 internal constant DEPLOY_TS_DEGENESIS = 86400;
+    /// @dev Day index 9 (MAIN_LAUNCH_DAY), at the same time of day.
+    uint256 internal constant DEPLOY_TS_LEGACY = 86400 + 8 days;
+
+    /// @dev Timestamp `_deployProtocol` warps to before the first CREATE.
+    function _deployTimestamp() internal pure virtual returns (uint256) {
+        return DEPLOY_TS_LEGACY;
+    }
+
+    /// @dev Day index of the deploy day: 1 on the Degenesis fixture, 9 on the default one.
+    function _deployDay() internal pure returns (uint24) {
+        return GameTimeLib.currentDayIndexAt(_deployTimestamp());
+    }
+
+    /// @dev Day index `day`, counted for a day-1 deploy, moved onto this fixture's deploy day.
+    function _relDay(uint256 day) internal pure returns (uint24) {
+        return uint24(day + _deployDay() - 1);
+    }
+
+    /// @dev Timestamp `ts`, written for a deploy at DEPLOY_TS_DEGENESIS, moved onto this fixture's deploy time.
+    function _relTs(uint256 ts) internal pure returns (uint256) {
+        return ts + _deployTimestamp() - DEPLOY_TS_DEGENESIS;
+    }
+
     function _affiliateBootstrap() internal pure virtual returns (
         address[] memory, bytes32[] memory, uint8[] memory, address[] memory, bytes32[] memory
     ) {
@@ -281,11 +312,10 @@ abstract contract DeployProtocol is Test {
 
     /// @dev Genesis batching tests leave the one-time setup for the measured transaction.
     function _deployProtocol(bool initializeDeities) internal {
-        // Set timestamp to match patchForFoundry.js DEPLOY_TIMESTAMP = 86400
-        vm.warp(86400);
+        vm.warp(_deployTimestamp());
 
         // --- Deploy 4 mocks (nonces 1-4) ---
-        // Then 36 protocol contracts (nonces 5-40) ---
+        // Then 37 protocol contracts (nonces 5-41) ---
         mockVRF = new MockVRFCoordinator();           // nonce 1
         mockStETH = new MockStETH();                  // nonce 2
         mockLINK = new MockLinkToken();               // nonce 3
@@ -388,6 +418,7 @@ abstract contract DeployProtocol is Test {
         minerModule = new DegenerusGameMinerModule();                      // N+33 = nonce 38
         rngModule = new DegenerusGameRngModule();                          // N+34 = nonce 39
         jackpotDrawModule = new DegenerusGameJackpotDrawModule();          // N+35 = nonce 40
+        degenesisModule = new DegenerusGameDegenesisModule();              // N+36 = nonce 41
         if (initializeDeities) game.initProtocolDeity();
     }
 
@@ -472,5 +503,12 @@ abstract contract DeployProtocol is Test {
             RecyclingState.seedDailyWord(address(game), d, uint256(keccak256(abi.encode("primeRng", d))));
         }
         require(game.rngWordForDay(d) != 0, "primeRng: rngWordByDay slot mismatch");
+    }
+}
+
+/// @title DegenesisDeployProtocol -- DeployProtocol on day index 1 (the Degenesis deploy day)
+abstract contract DegenesisDeployProtocol is DeployProtocol {
+    function _deployTimestamp() internal pure virtual override returns (uint256) {
+        return DEPLOY_TS_DEGENESIS;
     }
 }

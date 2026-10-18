@@ -21,8 +21,9 @@ export const MOCK_COUNT = 4;
 // Mocks use nonces 1..4, protocol starts at nonce 5.
 export const PROTOCOL_START_NONCE = MOCK_COUNT + 1; // = 5
 
-// Fixed deploy timestamp for reproducibility (1 day = 86400 seconds).
-// DeployProtocol.sol must vm.warp() to this same value before deploying.
+// Fixed boundary timestamp for reproducibility (1 day = 86400 seconds): DEPLOY_DAY_BOUNDARY
+// is derived from it, so 86400 is day index 1. DeployProtocol.sol deploys at this timestamp
+// (DEPLOY_TS_DEGENESIS) or 8 days later on day index 9 (DEPLOY_TS_LEGACY, its default).
 const DEPLOY_TIMESTAMP = 86400;
 
 /**

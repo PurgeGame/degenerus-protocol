@@ -170,9 +170,13 @@ contract RedemptionInvariants is DeployProtocol {
     ///      94%, an unwrap in 56%, a wrapped burn in 60%, a post-game-over wrapper burn in 33%, the year sweep
     ///      in 91%. Successes are therefore accumulated over the process (unique RI_ prefix) and each
     ///      leg must be non-zero once MIN_RUNS runs have completed: a campaign burn beyond the seeded one,
-    ///      a resolved batch, a claim, an unwrap, a wrapped gambling burn, a post-game-over wrapper burn and
-    ///      a year sweep.
+    ///      a resolved batch, a claim, an unwrap, a wrapped gambling burn, a year sweep and, after
+    ///      POST_GO_MIN_RUNS runs, a post-game-over wrapper burn.
     uint256 private constant MIN_RUNS = 16;
+    /// @dev The ten invariants of this contract run in parallel on the same fuzz seed, so the first runs are the
+    ///      same few sequences counted ten times; the rarest leg (a wrapper burn after game over: 113 burns over 256
+    ///      single-test runs) is required only once enough cumulative runs hold distinct ones.
+    uint256 private constant POST_GO_MIN_RUNS = 256;
 
     function _acc(string memory k, uint256 v) private returns (uint256 total) {
         total = vm.envOr(k, uint256(0)) + v;
@@ -194,8 +198,9 @@ contract RedemptionInvariants is DeployProtocol {
         assertGt(claims, 0, "NON-VACUITY: no redemption was ever claimed");
         assertGt(unwraps, 0, "NON-VACUITY: no unwrapTo ever succeeded");
         assertGt(wrapped, 0, "NON-VACUITY: no wrapped gambling burn ever succeeded");
-        assertGt(postGo, 0, "NON-VACUITY: no post-game-over wrapper burn ever succeeded");
         assertGt(sweeps, 0, "NON-VACUITY: the year sweep never ran");
+        if (runs < POST_GO_MIN_RUNS) return;
+        assertGt(postGo, 0, "NON-VACUITY: no post-game-over wrapper burn ever succeeded");
     }
 
     // =========================================================================
@@ -215,7 +220,7 @@ contract RedemptionInvariants is DeployProtocol {
             + sdgnrs.poolBalance(sDGNRS.Pool.Affiliate)
             + sdgnrs.poolBalance(sDGNRS.Pool.Lootbox)
             + sdgnrs.poolBalance(sDGNRS.Pool.Reward)
-            + sdgnrs.poolBalance(sDGNRS.Pool.PresaleBox);
+            + sdgnrs.poolBalance(sDGNRS.Pool.Degenesis);
         assertEq(
             pools,
             sdgnrs.balanceOf(address(sdgnrs)),

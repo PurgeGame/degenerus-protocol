@@ -293,13 +293,10 @@ contract V56SecUnmanipulable is DeployProtocol {
     ///      claim with repeated IDs. Exact recipient deltas also reject payment to the relayer.
     function _observeChurnAction(ChurnLedger memory ledger, uint8 action) private {
         uint256[5] memory beforeAssets;
-        uint256[5] memory beforePresale;
         for (uint256 i; i < 5; ++i) {
             address recipient = _ledgerRecipient(ledger, i);
             beforeAssets[i] = _flipAssets(recipient);
-            beforePresale[i] = game.presaleBoxCreditOf(recipient);
         }
-        bool presale = game.lootboxPresaleActiveFlag();
         uint256 fundingBefore = game.afkingFundingOf(ledger.player);
         uint256 price = game.mintPrice();
         uint256 playerOwed = action == 3 ? 0 : uint256(_pendingFlipOf(ledger.player));
@@ -327,9 +324,6 @@ contract V56SecUnmanipulable is DeployProtocol {
         for (uint256 i; i < 5; ++i) {
             uint256 received = _flipAssets(_ledgerRecipient(ledger, i)) - beforeAssets[i];
             assertEq(received, expected[i], "all automatic/explicit payments must reach the exact entitled recipient");
-            uint256 presaleDelta = game.presaleBoxCreditOf(_ledgerRecipient(ledger, i)) - beforePresale[i];
-            assertEq(presaleDelta, i == 0 && presale ? playerOwed * 1 ether * 0.0025 ether / (100 ether) : 0,
-                "automatic settlement grants presale credit once and only to the subscriber");
             if (i == 0) ledger.playerPaid += received;
             else if (i < 4) ledger.affiliatePaid += received;
         }

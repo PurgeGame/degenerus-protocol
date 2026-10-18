@@ -34,10 +34,10 @@ CONSUMER_SEALED = {
     "_tryClaimFoilMatch", "_payFoilTier", "_runFoilWork", "_resolveBet",
     "_openBoxBoth", "_runHumanBoxWork", "_openLootBoxLeg", "issueDeityBoon",
     "_runTicketWork", "_runAfkingWork", "_runDecimatorWork", "_runDegeneretteWork",
-    "_lootboxWord", "_shareOf", "_keepScheduled", "_keepRngCohort", "_windowTerms",
+    "_lootboxWord", "runDegenesisWork", "_shareOf", "_keepScheduled", "_keepRngCohort", "_windowTerms",
 }
 GATE = {
-    "_placeDegeneretteBetCore", "_buyPresaleBoxFor", "boxesPending", "_foilDrainPending",
+    "_placeDegeneretteBetCore", "_degenesisSettlePending", "boxesPending", "_foilDrainPending",
     "_nextMinerAction", "_rngConsumerStage", "_rngConsumersComplete",
     "_rngRetryDue", "_terminalWordApplied", "runDecimatorJackpot",
 }

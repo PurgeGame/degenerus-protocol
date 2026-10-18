@@ -98,6 +98,7 @@ contract CrapsWalletIdsTest is CrapsPins {
 
     function setUp() public {
         _installPins();
+        _warpToAwardGenesis();
         legacyEngine = new LegacyCrapsEngine();
         c = WalletIdTable(deployCode("CrapsWalletIds.t.sol:WalletIdTable"));
         flip.setCompLane(1e30);

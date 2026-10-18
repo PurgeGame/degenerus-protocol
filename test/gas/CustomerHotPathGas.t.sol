@@ -28,7 +28,7 @@ contract CustomerHotPathSeeder is DegenerusGameStorage, WalletSeed {
         rngRequestTime = uint48(block.timestamp);
         lastPurchaseDay = false;
         jackpotPhaseFlag = false;
-        presaleOver = true;
+        degenesisClosed = 7;
         _setPrizePools(10 ether, 10 ether);
         balancesPacked[_seedWallet(player)] = uint256(10 ether) | (uint256(10 ether) << 128);
         claimablePool = 20 ether;

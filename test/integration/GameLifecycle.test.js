@@ -299,7 +299,8 @@ describe("GameLifecycle", function () {
         if (!await game.rngLocked()) break;
         const tx = await game.connect(deployer).mineFlip(0);
         const events = await getAdvanceEvents(tx, advanceModule);
-        if (events.length > 0) finalStage = Number(events[0].args.stage);
+        // One crank can apply the word and run the daily phase; the last stage is the one that unlocks.
+        if (events.length > 0) finalStage = Number(events[events.length - 1].args.stage);
       }
 
       // STAGE_PURCHASE_DAILY = 6 is emitted when the daily jackpot is processed; a funded day's

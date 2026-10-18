@@ -32,7 +32,7 @@ contract CustomerFollowupSeeder is DegenerusGameStorage {
         rngRequestTime = uint48(block.timestamp);
         lastPurchaseDay = false;
         jackpotPhaseFlag = false;
-        presaleOver = true;
+        degenesisClosed = 7;
         _setPrizePools(10 ether, 10 ether);
         (uint32 id,) = _registerWallet(player, type(uint256).max);
         balancesPacked[id] = uint256(10 ether) | (uint256(10 ether) << 128);

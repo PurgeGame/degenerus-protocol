@@ -626,6 +626,8 @@ contract CoinflipAccountsTest is DeployProtocol {
     /// @notice Auto-rebuy and the carry live in S's own Coinflip state; P's carry claim, P's
     ///         take-profit and O's disable all act on S's key and every mint goes to O.
     function test_SmurfAutoRebuyAndCarry_StateOnSmurfKey_PaysOwner() public {
+        // The deploy day opens with the previous flip day settled, as the daily engine leaves it.
+        _resolveDay(_today() - 1, false);
         vm.recordLogs();
         vm.prank(owner);
         coinflip.setCoinflipAutoRebuy(smurfId, true, 0);

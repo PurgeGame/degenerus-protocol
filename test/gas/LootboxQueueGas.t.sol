@@ -26,26 +26,22 @@ contract LootboxQueueGasSeeder is DegenerusGamePayoutUtils {
         lastPurchaseDay = false;
         rngLockedFlag = false;
         phaseTransitionActive = false;
-        presaleOver = true;
         _setPrizePools(10 ether, 10 ether);
         prizePoolPendingPacked = uint256(1 ether) | (uint256(1 ether) << 128);
     }
 
-    function openPresale(address buyer, uint256 credit) external {
-        presaleOver = false;
-        presaleBoxEthSold = 1 ether;
-        presaleBoxCredit[_walletIdOf(buyer)] = credit;
-    }
-
-    /// @dev Leave a nonzero stale word at `count` future positions of the write buffer, as a
-    ///      drained cohort leaves its old entries behind for the next occupant to overwrite.
+    /// @dev Leave a stale three-entry word under every queue word the next `count` positions of
+    ///      the write buffer occupy, as a drained cohort leaves its old entries behind for the next
+    ///      occupant's lane-0 write to overwrite.
     function dirtyWritePositions(uint256 count) external {
         uint48 buffer = _rngWriteBuffer();
         uint256 base = uint256(keccak256(abi.encode(keccak256(abi.encode(uint256(buffer), GameSlots.BOX_QUEUE)))));
         uint256 start = (lootboxRngPacked >> LR_BOX_COUNT_SHIFT) & LR_COUNT_MASK;
-        for (uint256 i; i < count; ++i) {
-            uint256 slot = base + start + i;
-            assembly ("memory-safe") { sstore(slot, 1) }
+        uint256 stale = 7 | (uint256(1) << 77);
+        stale |= (stale << 85) | (stale << 170);
+        for (uint256 w = start / 3; w <= (start + count - 1) / 3; ++w) {
+            uint256 slot = base + w;
+            assembly ("memory-safe") { sstore(slot, stale) }
         }
     }
 }
@@ -175,7 +171,7 @@ contract LootboxQueueGasTest is DeployProtocol {
     function test_Gas_BoxTierMedium() public {
         _seeder().dirtyWritePositions(1);
         _restoreGame();
-        _box(REG, BoxOrderLib.boOrder(0, 1, 0, 0, 0), _price() * 5);
+        _box(REG, BoxOrderLib.boMeds(1), _price() * 5);
         _report("box_medium_recycled");
     }
 
@@ -186,12 +182,40 @@ contract LootboxQueueGasTest is DeployProtocol {
         _report("box_custom_recycled");
     }
 
-    function test_Gas_BoxMixedTiers() public {
+    function test_Gas_BoxTierLarge() public {
         _seeder().dirtyWritePositions(1);
         _restoreGame();
-        _box(REG, BoxOrderLib.boOrder(1, 1, 1, 1, 0.5 ether), _price() * 31 + 0.5 ether);
-        _report("box_mixed_recycled");
+        _box(REG, BoxOrderLib.boLarges(1), _price() * 25);
+        _report("box_large_recycled");
     }
+
+    // ----- append lanes: positions 0, 1 and 2 of one queue word, each its own transaction -----
+
+    /// @dev Buy `before` one-box orders from OTHER, then measure REG's order at position `before`
+    ///      (lane before % 3) as its own transaction.
+    function _laneAppend(uint256 before, bool recycled, string memory scenario) private {
+        if (recycled) {
+            _seeder().dirtyWritePositions(before + 1);
+            _restoreGame();
+        }
+        for (uint256 i; i < before; ++i) _box(OTHER, 1, _price());
+        _box(REG, 1, _price());
+        _report(scenario);
+        uint48 wb = RecyclingState.writeBuffer(address(game));
+        assertEq(BoxOrderLib.boId(RecyclingState.boxEntry(address(game), wb, before)), game.walletIdOf(REG));
+        for (uint256 i; i < before; ++i) {
+            assertEq(BoxOrderLib.boId(RecyclingState.boxEntry(address(game), wb, i)), game.walletIdOf(OTHER),
+                "earlier lanes intact");
+        }
+    }
+
+    function test_Gas_AppendLane0Fresh() public { _laneAppend(0, false, "append_lane0_fresh"); }
+    function test_Gas_AppendLane1Fresh() public { _laneAppend(1, false, "append_lane1_fresh"); }
+    function test_Gas_AppendLane2Fresh() public { _laneAppend(2, false, "append_lane2_fresh"); }
+    function test_Gas_AppendLane0Recycled() public { _laneAppend(0, true, "append_lane0_recycled"); }
+    function test_Gas_AppendLane1Recycled() public { _laneAppend(1, true, "append_lane1_recycled"); }
+    function test_Gas_AppendLane2Recycled() public { _laneAppend(2, true, "append_lane2_recycled"); }
+    function test_Gas_AppendLane0SecondWordFresh() public { _laneAppend(3, false, "append_lane0_second_word_fresh"); }
 
     function test_Gas_Box100Smalls() public {
         _seeder().dirtyWritePositions(1);
@@ -207,27 +231,6 @@ contract LootboxQueueGasTest is DeployProtocol {
         vm.prank(REG);
         game.purchase{value: price * 2}(0, 400, 1, 0, MintPaymentKind.DirectEth, false);
         _report("box_and_ticket_registered_recycled");
-    }
-
-    // ----- presale -----
-
-    function test_Gas_PresaleOnly() public {
-        _seeder().openPresale(REG, 10 ether);
-        _seeder().dirtyWritePositions(1);
-        _restoreGame();
-        vm.prank(REG);
-        game.buyPresaleBox{value: 0.1 ether}(0, 0.1 ether);
-        _report("presale_only_recycled");
-    }
-
-    function test_Gas_PresaleSameCall() public {
-        _seeder().openPresale(REG, 10 ether);
-        _seeder().dirtyWritePositions(1);
-        _restoreGame();
-        uint256 price = _price();
-        vm.prank(REG);
-        game.buyLootboxAndPresaleBox{value: price + 0.1 ether}(0, 0, 1, 0, MintPaymentKind.DirectEth, 0.1 ether);
-        _report("presale_same_call_recycled");
     }
 
     // ----- Degenerette and foil (C8 counters) -----
@@ -267,6 +270,26 @@ contract LootboxQueueGasTest is DeployProtocol {
         vm.prank(REG);
         game.purchaseWhalePass{value: 40 ether}(0, 10, 0);
         _report("whale_pass_10_registered");
+    }
+
+    function test_Gas_WhalePassHundred() public {
+        vm.prank(REG);
+        game.purchaseWhalePass{value: 400 ether}(0, 100, 0);
+        _report("whale_pass_100_registered");
+    }
+
+    /// @dev The 1,000-pass maximum: the DGNRS recurrence runs 1,000 steps, the box leg folds to
+    ///      100 boxes of 4 ETH.
+    function test_Gas_WhalePassThousand() public {
+        vm.prank(REG);
+        game.purchaseWhalePass{value: 4_000 ether}(0, 1000, 0);
+        _report("whale_pass_1000_registered");
+    }
+
+    function test_Gas_WhalePassThousandFreshWallet() public {
+        vm.prank(FRESH);
+        game.purchaseWhalePass{value: 4_000 ether}(0, 1000, 0);
+        _report("whale_pass_1000_fresh_wallet");
     }
 
     // ----- drains (the human-box worker, cold, one call each) -----

@@ -359,9 +359,8 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
         position = RecyclingState.boxCount(address(game), index);
         _buy(1 ether);
         uint32 id = game.walletIdOf(PLAYER);
-        uint256 committed =
-            uint256(id) | (uint256(1) << 32) | (uint256(1) << 56) | (uint256(1) << 121) | (uint256(1e9) << 128);
-        assertEq(_entry(index, position), committed, "real purchase committed level one, score one, one unboosted box");
+        uint256 committed = uint256(id) | (uint256(1000) << 32) | (uint256(1) << 53) | (uint256(1) << 77);
+        assertEq(_entry(index, position), committed, "real purchase committed score one, one unboosted 1 ETH box");
         // The purchase's pending ETH clears the threshold: the engine's mid-day request.
         game.mineFlip(0);
         uint256 request = mockVRF.lastRequestId();

@@ -33,8 +33,9 @@ contract CrapsAliasedSlotTest is CrapsPins {
 
     function setUp() public {
         _installPins();
+        _warpToTableGenesis();
         craps = new BattleHarness();
-        vm.warp(block.timestamp + 1 days);
+        vm.warp(vm.getBlockTimestamp() + 1 days);
         _setIndex(0);
         _setDailyWord(craps.currentDayIndex(), PLAIN_WORD);
     }

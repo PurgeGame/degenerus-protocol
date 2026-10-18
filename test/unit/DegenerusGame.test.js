@@ -67,11 +67,6 @@ describe("DegenerusGame", function () {
       expect(await game.mintPrice()).to.equal(eth("0.01"));
     });
 
-    it("lootbox presale is active by default", async function () {
-      const { game } = await loadFixture(deployFullProtocol);
-      expect(await game.lootboxPresaleActiveFlag()).to.be.true;
-    });
-
     it("rng is not locked initially", async function () {
       const { game } = await loadFixture(deployFullProtocol);
       expect(await game.rngLocked()).to.be.false;
@@ -333,9 +328,6 @@ describe("DegenerusGame", function () {
       expect(completed[0]).to.equal(true);
     });
   });
-
-  // There is no admin presale setter — the presale flag mirrors !presaleOver,
-  // which latches only when the coin-presale-box 50-ETH cap is filled.
 
   // ---------------------------------------------------------------------------
   // 5. setLootboxRngThreshold

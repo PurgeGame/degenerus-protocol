@@ -93,6 +93,7 @@ export const DEPLOY_ORDER = [
   "GAME_MINER_MODULE",  // N+33: the permissionless state engine
   "GAME_RNG_MODULE",     // N+34: request, retry and publication
   "GAME_JACKPOT_DRAW_MODULE", // N+35: daily battle and FLIP drawings
+  "GAME_DEGENESIS_MODULE", // N+36: Degenesis box sale, settlement and release
 ];
 
 /**
@@ -135,6 +136,7 @@ export const KEY_TO_CONTRACT = {
   GAME_MINER_MODULE: "DegenerusGameMinerModule",
   GAME_RNG_MODULE: "DegenerusGameRngModule",
   GAME_JACKPOT_DRAW_MODULE: "DegenerusGameJackpotDrawModule",
+  GAME_DEGENESIS_MODULE: "DegenerusGameDegenesisModule",
 };
 
 /**

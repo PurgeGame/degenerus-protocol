@@ -42,10 +42,11 @@ contract CrapsScheduledCursorTest is CrapsPins {
         _installPins();
         game.registerWallet(alice, true);
         game.registerWallet(bob, true);
+        _warpToTableGenesis();
         craps = new CursorHarness();
         // The deployment day is a Craps warm-up day with no windows; every fixture plays
         // from genesis + 1, the first day the table opens.
-        vm.warp(block.timestamp + 1 days);
+        vm.warp(vm.getBlockTimestamp() + 1 days);
         _setIndex(0);
         _setDailyWord(craps.currentDayIndex(), PLAIN_WORD);
     }

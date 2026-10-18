@@ -130,10 +130,10 @@
   {
     "bytes": "1",
     "encoding": "inplace",
-    "label": "presaleOver",
+    "label": "degenesisClosed",
     "offset": 27,
     "slot": 0,
-    "typeLabel": "bool"
+    "typeLabel": "uint8"
   },
   {
     "bytes": "1",
@@ -376,17 +376,17 @@
     "typeLabel": "uint32"
   },
   {
-    "bytes": "12",
+    "bytes": "16",
     "encoding": "inplace",
-    "label": "presaleBoxEthSold",
+    "label": "degenesisVaultBudget",
     "offset": 0,
     "slot": 15,
-    "typeLabel": "uint96"
+    "typeLabel": "uint128"
   },
   {
     "bytes": "32",
     "encoding": "mapping",
-    "label": "presaleBoxCredit",
+    "label": "degenesisCredit",
     "offset": 0,
     "slot": 16,
     "typeLabel": "mapping(uint32 => uint256)"
@@ -466,7 +466,7 @@
   {
     "bytes": "32",
     "encoding": "inplace",
-    "label": "presaleBoxDgnrsPoolStart",
+    "label": "degenesisActive",
     "offset": 0,
     "slot": 26,
     "typeLabel": "uint256"
@@ -1070,5 +1070,29 @@
     "offset": 0,
     "slot": 82,
     "typeLabel": "mapping(uint24 => uint256)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "inplace",
+    "label": "degenesisWord",
+    "offset": 0,
+    "slot": 83,
+    "typeLabel": "uint256"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "degenesisDays",
+    "offset": 0,
+    "slot": 84,
+    "typeLabel": "mapping(uint256 => uint256)"
+  },
+  {
+    "bytes": "32",
+    "encoding": "mapping",
+    "label": "degenesisOrders",
+    "offset": 0,
+    "slot": 85,
+    "typeLabel": "mapping(uint256 => uint256)"
   }
 ]

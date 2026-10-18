@@ -47,7 +47,7 @@ abstract contract SdgnrsRecycleGasFixture is BoundaryGasFixture {
             for (uint8 i; i < 4; ++i) {
                 expectedBurns += sdgnrs.transferFromPool(sDGNRS.Pool(i), address(sdgnrs), type(uint256).max);
             }
-            sdgnrs.transferFromPool(sDGNRS.Pool.PresaleBox, address(0xA11CE), type(uint256).max);
+            sdgnrs.transferFromPool(sDGNRS.Pool.Degenesis, address(0xA11CE), type(uint256).max);
         } else {
             expectedBurns = sdgnrs.transferFromPool(sDGNRS.Pool.Whale, address(sdgnrs), 7_000e12 + 1);
         }

@@ -12,7 +12,6 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 
 contract AffiliateIdentitySeeder is DegenerusGameStorage {
     function length(uint256 n) external { assembly ("memory-safe") { sstore(wallets.slot, add(n, 1)) } }
-    function presale(bool value) external { presaleOver = !value; }
     function rawOwner(uint32 id) external view returns (address) { return WalletTableLib.ownerOf(id); }
     function setElement(uint32 id, uint256 word) external { wallets[id] = word; }
 }
@@ -181,8 +180,7 @@ contract AffiliateIdentityTest is DeployProtocol {
         assertEq(owner, a); assertEq(ownerId, _id(a)); assertEq(kickback, 12);
     }
 
-    function test_PresaleVaultReferralIsPermanentAndCacheable() public {
-        _seed(abi.encodeCall(AffiliateIdentitySeeder.presale, (true)));
+    function test_VaultReferralIsPermanentAndCacheable() public {
         vm.prank(a); affiliate.referPlayer(bytes32("VAULT"));
         assertEq(_pay(A, 1, 0), VAULT_ID);
         assertEq((_earningsWord(5, a) >> 192) & 1, 1);
@@ -197,8 +195,7 @@ contract AffiliateIdentityTest is DeployProtocol {
         assertEq(_pay(A, 1, 100), VAULT_ID);
     }
 
-    function test_PresaleLockedDefaultCannotBeReplaced() public {
-        _seed(abi.encodeCall(AffiliateIdentitySeeder.presale, (true)));
+    function test_LockedDefaultCannotBeReplaced() public {
         uint32 aId = _id(a);
         vm.prank(address(game)); affiliate.payAffiliate(10000, bytes32(0), aId, 5, true, 0);
         vm.expectRevert(bytes4(keccak256("Insufficient()")));

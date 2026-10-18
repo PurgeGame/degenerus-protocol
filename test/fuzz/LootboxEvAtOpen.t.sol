@@ -117,7 +117,7 @@ contract LootboxEvAtOpenTest is DeployProtocol {
     function test_BuyAfterPublicationCannotTakePendingAllowance() public {
         _buy(BoxOrderLib.boCustom(1 ether));
         uint48 b = host.writeBuffer();
-        assertEq(BoxOrderLib.boEvBps(host.entryAt(b, 0)), 0);
+        assertEq(BoxOrderLib.boHighBits(host.entryAt(b, 0)), 0, "no EV field in the entry");
         assertEq(host.evUsed(id, key), 0);
         host.sealAndPublish(_word(b, 0, false));
         vm.startStateDiffRecording();
@@ -132,7 +132,7 @@ contract LootboxEvAtOpenTest is DeployProtocol {
         _buy(BoxOrderLib.boSmalls(1));
         uint48 b = host.writeBuffer();
         uint256 entry = host.entryAt(b, 0);
-        uint256 nominal = PriceLookupLib.priceForLevel(BoxOrderLib.boLevel(entry));
+        uint256 nominal = BoxOrderLib.boNominal(entry);
         host.seed(PLAYER, key, 40 ether);
         host.setLevel(99);
         host.sealAndPublish(_word(b, 0, false));
@@ -146,7 +146,8 @@ contract LootboxEvAtOpenTest is DeployProtocol {
 
     function testFuzz_TaperAtOpen(uint96 rawUsed, uint64 rawSpend) public {
         uint256 used = bound(rawUsed, 0, 40 ether);
-        uint256 spend = bound(rawSpend, 1, 40_000_000_000) * 1 gwei;
+        // Grants are whole 0.001 ETH per box, at most 2,000 ETH (the producers' bound).
+        uint256 spend = bound(rawSpend, 1, 2_000_000) * 0.001 ether;
         host.seed(PLAYER, key, used);
         host.grant(PLAYER, spend, 30_000, false, 0);
         uint48 b = host.writeBuffer();
@@ -194,14 +195,14 @@ contract LootboxEvAtOpenTest is DeployProtocol {
         assertEq(_capWrites(vm.stopAndReturnStateDiff()), 0);
     }
 
-    function test_MixedAndHundredBoxOrderDrawOnceBeforeNestedReward() public {
-        uint256[2] memory orders = [BoxOrderLib.boOrder(1, 1, 1, 1, 1 ether), BoxOrderLib.boSmalls(100)];
+    function test_MultiAndHundredBoxOrderDrawOnceBeforeNestedReward() public {
+        uint256[2] memory orders = [BoxOrderLib.boCustoms(4, 1 ether), BoxOrderLib.boSmalls(100)];
         for (uint256 i; i < orders.length; ++i) {
             uint256 snap = vm.snapshotState();
             _buy(orders[i]);
             uint48 b = host.writeBuffer();
             uint256 entry = host.entryAt(b, 0);
-            uint256 nominal = BoxOrderLib.boNominal(entry, PriceLookupLib.priceForLevel(BoxOrderLib.boLevel(entry)));
+            uint256 nominal = BoxOrderLib.boNominal(entry);
             vm.etch(ContractAddresses.GAME_DEGENERETTE_MODULE, address(new EvNestedProbe(nominal)).code);
             host.sealAndPublish(_word(b, 0, true));
             vm.recordLogs();
@@ -295,16 +296,5 @@ contract LootboxEvAtOpenTest is DeployProtocol {
         host.scoredSingle(protocolId, 1 ether, 30_000, word, true);
         assertEq(_openedAmount(vm.getRecordedLogs()), 1.45 ether);
         assertEq(host.evUsed(protocolId, key), before);
-    }
-
-    function test_PresaleOnlyDoesNotDraw() public {
-        host.seedPresale(0, PLAYER, 1 ether);
-        vm.prank(PLAYER);
-        host.buyPresaleBox{value: 1 ether}(0, 1 ether);
-        host.sealAndPublish(17);
-        vm.startStateDiffRecording();
-        assertTrue(host.work(25_000_000).done);
-        assertEq(_capWrites(vm.stopAndReturnStateDiff()), 0);
-        assertEq(host.evUsed(id, key), 0);
     }
 }

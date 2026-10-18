@@ -14,16 +14,20 @@ import {SolvencyObligations} from "../helpers/SolvencyObligations.sol";
 import {BoxOrderLib} from "../../helpers/BoxOrderLib.sol";
 import {GameSlots} from "../../helpers/GameSlots.sol";
 
-/// @title SolvencyActionHandler — widens the SOLVENCY-01 action space to the pass + presale-box + claim
+/// @title SolvencyActionHandler — widens the SOLVENCY-01 action space to the pass + box + Degenesis + claim
 ///        surfaces so the packed-balance Σ identity is fuzzed beyond the afking-only V61AfkingSpendHandler.
 /// @notice Drives, in a randomized sequence, the buyer surfaces that mutate claimablePool but were NOT under
-///         the afking-spend identity: the whale pass, the lazy pass, the deity pass, the coin-presale box
-///         (and a lootbox-bearing buy that persists a box + paired pool move when the presale index is not yet
-///         live), prepaid-afking funding, stETH-funded subscriptions, and the claim cashout. Every ETH balance is created ONLY through a
-///         real paired contract entrypoint:
+///         the afking-spend identity: the whale pass, the lazy pass, the deity pass, the Degenesis box (a
+///         credit-earning purchase followed by a Degenesis buy paid from fresh ETH, claimable or prepaid
+///         afking), a lootbox-bearing buy that persists a box + paired pool move, the Vault's Degenesis
+///         budget spend, prepaid-afking funding, stETH-funded subscriptions, and the claim cashout. Every ETH
+///         balance is created ONLY through a real paired contract entrypoint:
 ///           depositAfkingFunding pairs `claimablePool += value` (the afking high half);
 ///           subscribe pulls approved stETH backed by the actor's own submitted ETH, then pays the daily buy;
-///           buyPresaleBox routes 80/20 to VAULT/SDGNRS claimable and bumps `claimablePool += boxEth`;
+///           buyDegenesisBox holds the whole amount in `claimablePool` with no per-wallet owner until its
+///           cohort splits; the split (at a daily request) moves half to the prize pool and a quarter each to
+///           the Vault's Degenesis budget (inside claimablePool, outside every claimable half) and sDGNRS afking;
+///           spendDegenesis moves budget into a Vault purchase, pairing `claimablePool -=` the cost;
 ///           a ticket/lootbox purchase shortfall pairs `claimablePool -=`; a jackpot win pairs the pool credit;
 ///           claimWinnings pairs `claimablePool -=` the payout.
 ///         The handler NEVER vm.stores a balance into existence — that would test the seeder instead of the
@@ -32,10 +36,12 @@ import {GameSlots} from "../../helpers/GameSlots.sol";
 ///
 /// @dev Tracked-set completeness: ETH balances accrue ONLY to the bounded actor pool (the sole ticket buyers ⇒
 ///      the sole jackpot winners) and to the three protocol addresses (VAULT / SDGNRS / GNRUS) that receive the
-///      jackpot quarter-shares and the presale-box 80/20 credits. trackedAddrs() returns exactly that union, so
-///      the invariant's half-sum is a complete cover for every balance mutation the campaign can produce.
-///      Actors live in the 0x5A000 band — disjoint from V61AfkingSpendHandler (0xAF000) and WhaleHandler
-///      (0xB0000) so the two invariants' actor sets never collide when co-targeted in one campaign.
+///      jackpot quarter-shares and the Degenesis sdgnrs quarter. trackedAddrs() returns exactly that union, so
+///      the invariant's half-sum, plus the Vault's Degenesis budget and the unsplit Degenesis volume (both
+///      read from the real slots), is a complete cover for every balance mutation the campaign can produce.
+///      Actors live in the 0x5A000 band — disjoint from V61AfkingSpendHandler (0xAF000) and
+///      WhaleHandler (0xB0000) so the two invariants' actor sets never collide when co-targeted in one campaign.
+///      Day warps are opt-in (constructor flag): only the Degenesis-timeline campaign needs cohorts to seal.
 contract SolvencyActionHandler is Test {
     DegenerusGame public game;
     DegenerusDeityPass public deityPass;
@@ -46,11 +52,17 @@ contract SolvencyActionHandler is Test {
     uint256 private constant WHALE_PASS_PRICE = 2.4 ether; // levels 0-3 (WhaleHandler bound)
     uint256 private constant LAZY_PASS_PRICE = 0.24 ether; // levels 0-2
     uint256 private constant DEITY_PASS_BASE = 24 ether; // first pass (k = 0)
-    uint256 private constant PRESALE_BOX_MIN = 0.01 ether;
+    uint256 private constant DEGENESIS_BOX_MIN = 0.01 ether;
+    uint256 private constant DEGENESIS_UNIT = 0.0001 ether;
+    uint256 private constant MAX_WARP_DAYS = 10;
 
     // --- Per-surface success ghosts (the invariant's non-vacuity gate keys on these) ---
     uint256 public ghost_passBuys; // successful whale + lazy + deity pass buys
-    uint256 public ghost_presaleBuys; // successful presale-box OR lootbox-bearing buys (a box persisted)
+    uint256 public ghost_boxBuys; // successful lootbox-bearing buys (a box persisted)
+    uint256 public ghost_degenesisBuys; // successful Degenesis box buys
+    uint256 public ghost_degenesisVolume; // Σ amount of those buys
+    uint256 public ghost_degenesisClaimableFunded; // Degenesis buys that drew claimable or afking
+    uint256 public ghost_vaultSpends; // successful spendDegenesis calls
     uint256 public ghost_claims; // successful claimWinnings cashouts
     uint256 public ghost_afkingDeposited; // ETH credited via depositAfkingFunding
     uint256 public ghost_foilBuys; // successful foil packs (short fresh leg -> claimable + afking tiers)
@@ -62,7 +74,10 @@ contract SolvencyActionHandler is Test {
     uint256 public calls_whalePass;
     uint256 public calls_lazyPass;
     uint256 public calls_deityPass;
-    uint256 public calls_presaleBox;
+    uint256 public calls_boxBuy;
+    uint256 public calls_degenesis;
+    uint256 public calls_vaultSpend;
+    uint256 public calls_warp;
     uint256 public calls_fundAfking;
     uint256 public calls_foil;
     uint256 public calls_claim;
@@ -71,6 +86,10 @@ contract SolvencyActionHandler is Test {
 
     address[] public actors;
     address internal currentActor;
+
+    /// @notice Whether `warpDay` may move time. Off by default so the single-day campaigns are unchanged.
+    bool public immutable dayWarpsEnabled;
+    uint256 public daysWarped;
 
     modifier useActor(uint256 seed) {
         currentActor = actors[bound(seed, 0, actors.length - 1)];
@@ -87,8 +106,10 @@ contract SolvencyActionHandler is Test {
         DegenerusGame game_,
         DegenerusDeityPass deityPass_,
         MockVRFCoordinator vrf_,
-        uint256 numActors
+        uint256 numActors,
+        bool dayWarps
     ) {
+        dayWarpsEnabled = dayWarps;
         game = game_;
         deityPass = deityPass_;
         vrf = vrf_;
@@ -110,7 +131,7 @@ contract SolvencyActionHandler is Test {
     // =========================================================================
 
     /// @notice The complete cover: the actor pool (the only ticket buyers ⇒ the only jackpot winners) plus the
-    ///         three protocol addresses that receive the jackpot quarter-shares and the presale-box 80/20.
+    ///         three protocol addresses that receive the jackpot quarter-shares and the Degenesis sdgnrs quarter.
     function trackedAddrs() external view returns (address[] memory addrs) {
         uint256 n = actors.length;
         addrs = new address[](n + 3);
@@ -176,46 +197,102 @@ contract SolvencyActionHandler is Test {
     }
 
     // =========================================================================
-    // Action 4: presale box (the 80/20 VAULT/SDGNRS routing) with a lootbox-bearing fallback
+    // Action 4: lootbox-bearing buy (credit-earning) and the Degenesis box it funds
     // =========================================================================
 
-    /// @notice Exercise the coin-presale-box surface, whose `_creditBoxProceeds` bumps `claimablePool += boxEth`
-    ///         and routes 80/20 to VAULT/SDGNRS claimable. The box buy is credit-gated (25% earned on prior ETH
-    ///         buys) and needs a live lootbox RNG index (LR_INDEX != 0, set after the first advance), so it only
-    ///         clears after the campaign has bought + advanced. To guarantee a box + paired pool move is
-    ///         exercised even before the presale index is live at a fresh deploy, this action ALSO drives a
-    ///         lootbox-bearing ETH ticket buy (purchase with a non-zero lootBoxAmount): that persists a lootbox
-    ///         box and moves the pools through the same paired accounting. Either successful leg counts a
-    ///         presale-style buy.
-    function buyPresaleBox(uint256 actorSeed, uint256 boxSeed, uint256 lbSeed) external useActor(actorSeed) {
-        calls_presaleBox++;
+    /// @notice A lootbox-bearing ETH ticket buy: always persists a box and moves the pools through the paired
+    ///         mint accounting, and while the Degenesis credit window is open it earns the 25% credit that
+    ///         gates `buyDegenesis`.
+    function buyBox(uint256 actorSeed, uint256 lbSeed) external useActor(actorSeed) {
+        calls_boxBuy++;
         if (game.gameOver()) return;
+        _boxBuy(lbSeed);
+    }
 
-        // Leg A — the real credit-gated presale box. Sized to the actor's earned credit so an over-credit
-        // request does not auto-revert; a still-zero index / closed presale reverts in the contract (caught).
-        uint256 credit = game.presaleBoxCreditOf(currentActor);
-        if (credit >= PRESALE_BOX_MIN) {
-            uint256 boxAmount = bound(boxSeed, PRESALE_BOX_MIN, credit);
-            if (boxAmount <= currentActor.balance) {
-                vm.prank(currentActor);
-                try game.buyPresaleBox{value: boxAmount}(0, boxAmount) {
-                    ghost_presaleBuys++;
-                } catch {}
+    /// @notice A credit-earning purchase followed by a Degenesis box buy. The box is sized to the credit just
+    ///         earned and paid one of four ways: exact fresh ETH, fresh ETH with overpay (the excess pairs a
+    ///         prepaid-afking credit), a part-ETH shortfall, or no ETH at all (claimable then prepaid afking,
+    ///         the actor's afking prefunded through the real deposit entrypoint when it holds none). Outside
+    ///         the sale days the buy reverts in the contract (caught).
+    function buyDegenesis(uint256 actorSeed, uint256 amtSeed, uint256 lbSeed, uint256 modeSeed)
+        external
+        useActor(actorSeed)
+    {
+        calls_degenesis++;
+        if (game.gameOver()) return;
+        _boxBuy(lbSeed);
+
+        uint256 credit = game.degenesisCreditOf(currentActor);
+        if (credit < DEGENESIS_BOX_MIN) return;
+        uint256 units = bound(amtSeed, DEGENESIS_BOX_MIN / DEGENESIS_UNIT, credit / DEGENESIS_UNIT);
+        uint256 amount = units * DEGENESIS_UNIT;
+
+        uint256 mode = modeSeed % 4;
+        uint256 value;
+        if (mode == 0) value = amount;
+        else if (mode == 1) value = amount + bound(modeSeed >> 8, 1, 1 ether);
+        else if (mode == 2) value = amount / 3;
+        else value = 0;
+
+        if (mode >= 2 && game.afkingFundingOf(currentActor) < amount - value && value < amount) {
+            // No claimable is assumed: prefund the shortfall through the paired deposit entrypoint.
+            uint256 dep = amount - value;
+            if (dep + value > currentActor.balance) return;
+            uint32 actorId = game.walletIdOf(currentActor);
+            vm.prank(currentActor);
+            try game.depositAfkingFunding{value: dep}(actorId) {
+                ghost_afkingDeposited += dep;
+            } catch {
+                return;
             }
         }
+        if (value > currentActor.balance) return;
+        vm.prank(currentActor);
+        try game.buyDegenesisBox{value: value}(0, amount) {
+            ghost_degenesisBuys++;
+            ghost_degenesisVolume += amount;
+            if (value < amount) ghost_degenesisClaimableFunded++;
+        } catch {}
+    }
 
-        // Leg B — a lootbox-bearing ticket buy: always persists a box and moves the pools via the paired mint
-        // accounting, and (while the presale is open) earns the 25% credit that gates Leg A on the next call.
+    /// @dev One ticket of fresh ETH plus a lootbox spend: persists a box and, in the credit window, earns credit.
+    function _boxBuy(uint256 lbSeed) internal {
         (, , , , uint256 priceWei) = game.purchaseInfo();
         if (priceWei == 0) return;
         uint256 lootBoxAmount = bound(lbSeed, 0.01 ether, 1 ether);
-        uint256 ethSent = priceWei + lootBoxAmount; // one ticket of fresh ETH + the lootbox spend
+        uint256 ethSent = priceWei + lootBoxAmount;
         if (ethSent > currentActor.balance) return;
         vm.prank(currentActor);
         try game.purchase{value: ethSent}(0, 400, BoxOrderLib.boCustomFloor(lootBoxAmount), bytes32(0), MintPaymentKind.DirectEth, false) {
-            ghost_presaleBuys++;
+            ghost_boxBuys++;
         } catch {}
     }
+
+    /// @notice The Vault spends part of its Degenesis budget on one ticket-plus-nothing purchase or a whale
+    ///         pass. The budget is zero until a cohort has split, so most early calls are caught no-ops.
+    function spendVaultBudget(uint256 qtySeed, uint256 extraSeed, uint256 whaleSeed) external {
+        calls_vaultSpend++;
+        if (game.gameOver()) return;
+        (, , , , uint256 priceWei) = game.purchaseInfo();
+        if (priceWei == 0) return;
+        bool whale = whaleSeed % 4 == 0;
+        uint256 qty = whale ? 1 : bound(qtySeed, 400, 4000);
+        uint256 cost = whale ? WHALE_PASS_PRICE : priceWei * qty / 400;
+        uint256 maxCost = cost + bound(extraSeed, 0, 1 ether);
+        vm.prank(ContractAddresses.VAULT);
+        try game.spendDegenesis(whale, qty, 0, maxCost) {
+            ghost_vaultSpends++;
+        } catch {}
+    }
+
+    /// @notice Advance time by one day (opt-in, bounded) so cohorts seal and the daily request splits them.
+    function warpDay() external {
+        calls_warp++;
+        if (!dayWarpsEnabled || daysWarped >= MAX_WARP_DAYS) return;
+        daysWarped++;
+        vm.warp(block.timestamp + 1 days);
+    }
+
 
     // =========================================================================
     // Action 5: fund afking (real paired credit — depositAfkingFunding pairs claimablePool +=)
@@ -316,7 +393,7 @@ contract SolvencyActionHandler is Test {
     /// @notice Satisfy the daily purchase gate with a small actor buy, advance the state machine, and fulfill
     ///         any pending VRF. Settlement credits jackpot claimable to ticket-holding actors and the protocol
     ///         quarter-shares to VAULT/SDGNRS/GNRUS (all tracked, each paired with the claimablePool credit), and
-    ///         the VRF fulfill advances LR_INDEX past 0 so the presale-box leg can later clear.
+    ///         the VRF fulfill advances LR_INDEX past 0 so the lootbox leg can later clear.
     function advance(uint256 actorSeed, uint256 wordSeed) external useActor(actorSeed) {
         calls_advance++;
         if (game.gameOver()) return;
@@ -327,7 +404,8 @@ contract SolvencyActionHandler is Test {
             try game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
         }
 
-        for (uint256 i; i < 3; i++) {
+        uint256 rounds = dayWarpsEnabled ? 8 : 3;
+        for (uint256 i; i < rounds; i++) {
             vm.prank(currentActor);
             try game.mineFlip(0) {} catch {}
             uint256 reqId = vrf.lastRequestId();

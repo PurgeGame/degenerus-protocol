@@ -23,7 +23,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 /// claimed immutable award amount. Pass awards include an automatic reservation.
 ///
 /// Scope: one/two unboosted 1-ETH custom boxes per owner at level zero, low frozen
-/// activity score, four ordinary reward lanes. Spins, boon formulas, presale,
+/// activity score, four ordinary reward lanes. Spins, boon formulas,
 /// AFKing/direct/redemption boxes, high-pass conversion and level changes are
 /// outside this proof. Unsupported reward rolls fail rather than silently skip.
 ///
@@ -246,10 +246,10 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         assertEq(RecyclingState.boxCount(address(game), index), posB + 1);
         orders[0] = _entry(index, posA);
         orders[1] = _entry(index, posB);
-        // Exact full words: the owner's wallet ID, level 1, score 1, no boost/distress/EV-cap/
-        // cover/presale lane, `count` customs of 1 ETH (1e9 gwei). The fresh purchase supplies
-        // this score; it is not injected by the test.
-        uint256 lanes = (uint256(1) << 32) | (uint256(1) << 56) | (count << 121) | (uint256(1e9) << 128);
+        // Exact full entries: the owner's wallet ID, `count` boxes of 1 ETH (1,000 units), score
+        // code 1, no boost or distress. The fresh purchase supplies this score; it is not
+        // injected by the test.
+        uint256 lanes = (uint256(1000) << 32) | (uint256(1) << 53) | (count << 77);
         assertEq(orders[0], uint256(game.walletIdOf(ALICE)) | lanes, "Alice's exact committed entry fields");
         assertEq(orders[1], uint256(game.walletIdOf(BOB)) | lanes, "Bob's exact committed entry fields");
         assertEq(_word(index), 0, "purchase must precede word revelation");

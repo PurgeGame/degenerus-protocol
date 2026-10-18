@@ -289,7 +289,7 @@ interface IDegenerusGameMintModule {
     /// @notice Processes a ticket and lootbox purchase
     /// @param buyerId Address of the buyer
     /// @param entryQuantityScaled Ticket quantity in scaled entry units (400 = one whole ticket; 2 decimals, x100)
-    /// @param boxOrder Packed box order (0 to skip): [small:8][med:8][large:8][customCount:8][customSize:56 gwei].
+    /// @param boxOrder Packed box order (0 to skip): [quantity:7][kind:2][customUnits:21].
     /// @param affiliateCode Affiliate code for referral tracking
     /// @param payKind Payment method used for the purchase
     function purchase(
@@ -324,40 +324,15 @@ interface IDegenerusGameMintModule {
         uint32 id,
         uint256 entryQuantityScaled
     ) external;
-
-
-
-    /// @notice Buys a credit-gated coin-presale box (msg.value, then claimable + afking shortfall).
-    ///         Raw msg.data target of Game.buyPresaleBox.
-    /// @param id Account receiving the box (0 = caller; account rule)
-    /// @param boxAmount Requested box ETH (>= 0.01 ETH, pre-clamp)
-    function buyPresaleBox(uint32 id, uint256 boxAmount) external payable;
-
-    /// @notice Buys a mint leg AND a presale box in one tx sharing one RNG index. Raw msg.data
-    ///         target of Game.buyLootboxAndPresaleBox.
-    /// @param id Account receiving both legs (0 = caller; account rule)
-    /// @param entryQuantityScaled Tickets to buy
-    /// @param boxOrder Packed box order (0 to skip): [small:8][med:8][large:8][customCount:8][customSize:56 gwei].
-    /// @param affiliateCode Affiliate code for the mint leg
-    /// @param payKind Payment method for the mint leg
-    /// @param boxAmount Requested presale-box ETH (funded by the mint leg's leftover fresh ETH, then claimable, then afking)
-    function buyLootboxAndPresaleBox(
-        uint32 id,
-        uint256 entryQuantityScaled,
-        uint256 boxOrder,
-        bytes32 affiliateCode,
-        MintPaymentKind payKind,
-        uint256 boxAmount
-    ) external payable;
 }
 
 /// @title IDegenerusGameLootboxModule
 /// @notice Interface for opening lootboxes and managing boons
 interface IDegenerusGameLootboxModule {
-    /// @notice Settle one queued box entry (ordinary leg, then presale leg)
+    /// @notice Settle one queued box entry
     /// @param buffer Physical read buffer (0/1)
-    /// @param position The entry's zero-based position in that buffer
-    /// @param entry The stored entry word
+    /// @param position The entry's zero-based logical position in that buffer
+    /// @param entry The stored 85-bit entry (LB_* layout)
     /// @param rngWord The buffer's published session word
     /// @param currentLevel Open level (`level + 1`)
     function resolveHumanBoxOrder(uint48 buffer, uint256 position, uint256 entry, uint256 rngWord,
@@ -367,7 +342,7 @@ interface IDegenerusGameLootboxModule {
     ///         snapshot distress, arm the box bounty. Nothing is queued
     /// @param buyerId Player the entry is for
     /// @param buyerId The buyer's wallet ID
-    /// @param boxOrder Packed input: [small:8][med:8][large:8][customCount:8][customSize:56 gwei]
+    /// @param boxOrder Packed input: [quantity:7][kind:2][customUnits:21]
     /// @return costWei Total wei the order costs
     /// @return shares Prize-pool shares packed as (future << 128) | next
     /// @return flipCredit Biggest-box bounty claim, to join the buyer's flip credit
@@ -387,7 +362,7 @@ interface IDegenerusGameLootboxModule {
     /// @param amountWei Box spend in wei
     /// @param score Activity-score snapshot
     /// @param boost Whether to consume a live lootbox-boost boon and snapshot distress
-    /// @param count Custom boxes, one per pass; zero for the afking cover box
+    /// @param count Boxes of equal value (whale: min(passes, 100)); zero for one box
     function recordCoverBox(
         uint32 id,
         uint256 amountWei,
@@ -479,20 +454,6 @@ interface IDegenerusGameBoonModule {
         uint24 currentLevel,
         uint256 seed,
         uint256 nonceBase
-    ) external payable;
-
-    /// @notice Draw boons for a mixed box order in one delegatecall
-    /// @param id Box owner's wallet ID (boon and quest state key)
-    /// @param amounts Per-box resolution amount for small/medium/large/custom/cover lanes
-    /// @param countsPacked Five uint8 lane counts packed from least significant to most
-    /// @param currentLevel Open level (level + 1)
-    /// @param seed Player-mixed entry seed; nonces run cumulatively across populated lanes
-    function rollBoxBoonTiers(
-        uint32 id,
-        uint256[5] calldata amounts,
-        uint40 countsPacked,
-        uint24 currentLevel,
-        uint256 seed
     ) external payable;
 
     /// @notice Issues a deity boon from deity account `deityId` (0 = caller; account rule) to the
@@ -768,4 +729,34 @@ interface IDegenerusGameFoilPackModule {
         uint24[] calldata drawDays,
         uint8[] calldata ticketIndexes
     ) external;
+}
+
+/// @title IDegenerusGameDegenesisModule
+/// @notice Degenesis sale: purchase, daily cohort preparation and the settlement stage
+interface IDegenerusGameDegenesisModule {
+    /// @notice Buy a credit-gated Degenesis box. Raw msg.data target of Game.buyDegenesisBox.
+    /// @param id Account receiving the order (0 = caller; account rule)
+    /// @param amount Degenesis ETH: at least 0.01 ETH in whole 0.0001-ETH units, within the per-order bound
+    function buyDegenesisBox(uint32 id, uint256 amount) external payable;
+
+    /// @notice Split sealed cohorts and price the next one at a fresh daily request
+    /// @param day The request day
+    function prepareDegenesis(uint24 day) external;
+
+    /// @notice Settle the active Degenesis cohort's orders in order, then close the cohort
+    /// @param gasAllowance Metered allowance from the miner engine
+    function runDegenesisWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory);
+
+    /// @notice Top sDGNRS AFKing funding up to its target from claimable before the bulk whale attempt
+    function topUpSdgnrsAfking() external;
+
+    /// @notice Split every unsplit Degenesis cohort; idempotent. Terminal setup's entry.
+    function splitDegenesis() external;
+
+    /// @notice Vault-only: spend the Vault's Degenesis budget on an ordinary purchase for the Vault.
+    /// @param whalePass True for whale passes, false for tickets and lootboxes
+    /// @param quantity Whale passes, or ticket purchase units (400 = one whole ticket)
+    /// @param boxOrder Packed lootbox order (zero with whale passes)
+    /// @param maxCost Budget moved in for the purchase; the unspent part returns
+    function spendDegenesis(bool whalePass, uint256 quantity, uint256 boxOrder, uint256 maxCost) external;
 }

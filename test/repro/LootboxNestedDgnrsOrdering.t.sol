@@ -18,7 +18,7 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
     address private constant PLAYER = address(0xBEEF);
     uint48 private constant PARENT_BUFFER = 1;
     uint256 private constant CUSTOM_SIZE = 10 ether;
-    uint256 private constant BOX_ORDER = (uint256(3) << 24) | ((CUSTOM_SIZE / 1 gwei) << 32);
+    uint256 private constant BOX_ORDER = 3 | (uint256(3) << 7) | ((CUSTOM_SIZE / 0.001 ether) << 9); // 3 customs
     // Derived from the queued-entry seed formula for PLAYER's entry (wallet ID 5, buffer 1,
     // position 0): box n = H(H(QUEUED_ORDER_DOMAIN, word, 1, 0), 5, BOX_OPEN_TAG, n) draws parent
     // DGNRS / a score-5 ETH spin (one result wild) whose recirculated child, seeded

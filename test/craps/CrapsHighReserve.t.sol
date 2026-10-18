@@ -26,6 +26,7 @@ contract CrapsHighReserveTest is CrapsPins {
 
     function setUp() public {
         _installPins();
+        _warpToAwardGenesis();
         table = new JackpotTableHarness();
         cold = JackpotBattle(address(table));
         api = IJackpotBattle(address(table));

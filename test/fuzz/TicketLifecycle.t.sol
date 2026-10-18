@@ -54,7 +54,7 @@ contract TLHumanBoxWorker is DegenerusGame {
 ///                [18:19]decWindowOpen [19:20]rngLockedFlag [20:21]phaseTransitionActive
 ///                [21:22]gameOver [22:23]dailyJackpotCoinTicketsPending
 ///                [23:24]jackpotFlags [24:25]ticketsFullyProcessed
-///                [25:26]ticketWriteSlot [26:27]prizePoolFrozen [27:28]presaleOver
+///                [25:26]ticketWriteSlot [26:27]prizePoolFrozen [27:28]degenesisClosed
 ///                [28:29]subsFullyProcessed [29:30]humanReadComplete [30:31]ticketRedemptionOpen
 ///      - Slot 1: [0:16]currentPrizePool(uint128) [16:32]claimablePool(uint128)
 ///      - ticketQueue: slot 12 (mapping(uint24 => uint256[]))
@@ -2441,7 +2441,7 @@ contract TicketLifecycleTest is DeployProtocol {
 
     /// @dev The entry sweep's per-box seed for the FIRST queued entry of `player` in `buffer`:
     ///      hash4(hash4(QUEUED_ORDER_DOMAIN, word, buffer, position), walletId, BOX_OPEN_TAG, nonce),
-    ///      where the nonce is the box's 1-based position in the entry (LootboxModule._rollTier).
+    ///      where the nonce is the box's 1-based position in the entry (LootboxModule._rollBoxes).
     function _boxSeed(uint256 word, uint48 buffer, address player, uint256 nonce) internal view returns (uint256) {
         uint32 id = game.walletIdOf(player);
         uint256 n = RecyclingState.boxCount(address(game), buffer);

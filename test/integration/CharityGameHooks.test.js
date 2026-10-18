@@ -297,6 +297,8 @@ describe("CharityGameHooks", function () {
       const sdgnrsVotingBefore = await sdgnrs.votingSupply({ blockTag: beforeBlock });
       const dgnrsTotalBefore = await dgnrs.totalSupply({ blockTag: beforeBlock });
       const danBalanceBefore = await charity.balanceOf(dan.address, { blockTag: beforeBlock });
+      const DEGENESIS_POOL = 4;
+      const degenesisPoolBefore = await sdgnrs.poolBalance(DEGENESIS_POOL, { blockTag: beforeBlock });
 
       const gnrusUnallocAfter = await charity.balanceOf(charityAddr, { blockTag: resolvedBlock });
       const gnrusTotalAfter = await charity.totalSupply({ blockTag: resolvedBlock });
@@ -304,6 +306,10 @@ describe("CharityGameHooks", function () {
       const sdgnrsVotingAfter = await sdgnrs.votingSupply({ blockTag: resolvedBlock });
       const dgnrsTotalAfter = await dgnrs.totalSupply({ blockTag: resolvedBlock });
       const danBalanceAfter = await charity.balanceOf(dan.address, { blockTag: resolvedBlock });
+      const degenesisPoolAfter = await sdgnrs.poolBalance(DEGENESIS_POOL, { blockTag: resolvedBlock });
+      // On this deploy the last Degenesis cohort closes in the same crank; the leftover pool is
+      // burned from sDGNRS supply. That is the only supply change allowed in the pinned block.
+      const degenesisBurn = degenesisPoolBefore - degenesisPoolAfter;
 
       // BALANCE-DELTA ASSERTIONS -- derived from the contract math at GNRUS.sol:660,670-671.
       const expectedDist = (gnrusUnallocBefore * 200n) / 10_000n;
@@ -312,9 +318,9 @@ describe("CharityGameHooks", function () {
       expect(gnrusUnallocAfter).to.equal(gnrusUnallocBefore - expectedDist);
 
       // SUPPLY-INVARIANT ASSERTIONS -- pickCharity touches only GNRUS balances,
-      // never sDGNRS / DGNRS supplies.
+      // never sDGNRS / DGNRS supplies (beyond the Degenesis inventory burn above).
       expect(gnrusTotalAfter).to.equal(gnrusTotalBefore);
-      expect(sdgnrsTotalAfter).to.equal(sdgnrsTotalBefore);
+      expect(sdgnrsTotalAfter).to.equal(sdgnrsTotalBefore - degenesisBurn);
       expect(sdgnrsVotingAfter).to.equal(sdgnrsVotingBefore);
       expect(dgnrsTotalAfter).to.equal(dgnrsTotalBefore);
 

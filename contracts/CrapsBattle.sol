@@ -11,6 +11,7 @@ import {LootboxCraps} from "./LootboxCraps.sol";
 import {CrapsPreferenceLib} from "./libraries/CrapsPreferenceLib.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
 import {FlipRoundLib} from "./libraries/FlipRoundLib.sol";
+import {GameTimeLib} from "./libraries/GameTimeLib.sol";
 
 /// @dev The dice engine, a pure function at its own pinned address: the table hands it a slip's
 ///      packed chips and every term of the run, and reads the run back. Reached by STATICCALL —
@@ -179,17 +180,16 @@ contract CrapsBattle is CrapsBattleStorage {
     ///      ReverseRegistrar and Base's L2ReverseRegistrar. Constructor code is init code, so this
     ///      costs nothing against the deployed contract's EIP-170 ceiling.
     constructor() {
-        // THE DEPLOYMENT DAY IS A WARM-UP DAY WITH NO WINDOWS. Genesis is marked consumed and the
-        // scheduled cursor born pointing at TOMORROW'S separator, so the first Craps windows open
-        // on genesis + 1 and nothing can ever fall behind initialization: a pass awarded on
-        // genesis reserves genesis + 1 normally, and the cursor is already standing there.
-        // Derived from the clock rather than hard-coded, so deployment timing cannot move the
-        // rule — and written from INIT code, which costs the runtime nothing.
-        uint24 genesis = _currentDayIndex();
-        unchecked {
-            _bonus = uint256(genesis) + 1;
-            _minerSlot = uint64(_daySlotOf(uint256(genesis) + 1));
-        }
+        // WINDOWS OPEN ON DEGENESIS DAY 2, or the day after deployment if that is later. Every
+        // earlier day is marked consumed and the scheduled cursor is born at the first window
+        // day's separator, so nothing can ever fall behind initialization: a pass awarded
+        // earlier reserves the first window day, and the cursor is already standing there.
+        // Written from INIT code, which costs the runtime nothing.
+        uint256 first = uint256(_currentDayIndex()) + 1;
+        if (first <= GameTimeLib.DEGENESIS_START_DAY) first = GameTimeLib.DEGENESIS_START_DAY + 1;
+        _bonus = first;
+        _minerSlot = uint64(_daySlotOf(first));
+        _firstWindowDay = uint24(first);
 
         // TWENTY SEED DAYS EACH, banked to the two protocol bodies. The day lane seats both of
         // them every day and spends a banked pass before it burns anything, so this is twenty days
@@ -687,8 +687,14 @@ contract CrapsBattle is CrapsBattleStorage {
     /// @param high   High-lane passes to bank.
     function creditPasses(uint32 id, uint32 normal, uint32 high) external {
         if (msg.sender != _GAME) revert OnlyGame();
-        if (normal != 0) _credit(id, false, normal);
-        if (high != 0) _credit(id, true, high);
+        _bankPasses(id, normal, high);
+    }
+
+    /// @dev Bank both lanes. Each lane flag is a computed value: a literal flag makes via-IR
+    ///      compile a separate copy of `_credit` per lane.
+    function _bankPasses(uint32 id, uint256 normal, uint256 high) private {
+        if (normal != 0) _credit(id, normal == 0, normal);
+        if (high != 0) _credit(id, high != 0, high);
     }
 
     /// @notice The Craps progressive's live balance, in whole FLIP — one pool, shared by every
@@ -1040,6 +1046,8 @@ contract CrapsBattle is CrapsBattleStorage {
         if (msg.sender != _GAME) revert OnlyGame();
         unchecked {
             uint256 tomorrow = uint256(_currentDayIndex()) + 1;
+            // No pass is booked before the first window day.
+            if (tomorrow <= GameTimeLib.DEGENESIS_START_DAY) tomorrow = GameTimeLib.DEGENESIS_START_DAY + 1;
             // A day index that will not fit is not a day anyone can reserve; the award simply
             // banks. The protocol runs out of uint24 days long before this matters.
             if (tomorrow <= type(uint24).max && (normal | high) != 0) {
@@ -1052,8 +1060,7 @@ contract CrapsBattle is CrapsBattleStorage {
                     else --normal;
                 }
             }
-            if (normal != 0) _credit(id, false, normal);
-            if (high != 0) _credit(id, true, high);
+            _bankPasses(id, normal, high);
         }
     }
 
@@ -1290,6 +1297,8 @@ contract CrapsBattle is CrapsBattleStorage {
         // Keep the per-day word check: even an early future word must reject entry.
         uint256 today = _currentDayIndex();
         uint256 dayTags = _dailyWordTags();
+        // No day before the first window day; later days of the run only climb.
+        if (startDay <= GameTimeLib.DEGENESIS_START_DAY) revert DayNotReservable();
         unchecked {
             for (uint256 i = 0; i < count; ++i) {
                 uint256 d = uint256(startDay) + i;

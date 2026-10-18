@@ -17,7 +17,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///   ARM A — the canonical shortfall sink `_settleShortfall(buyer, shortfall, allowClaimable)`
 ///   (DegenerusGameStorage.sol:857) is exercised in isolation via the SettleClaimableShortfallTester (it
 ///   inherits the canonical storage layout and runs the EXACT production body — NOT a re-implementation).
-///   This is the ONE helper the lootbox / presale / 3 whale sites (AFPAY-01/03/04) all call, so proving its
+///   This is the ONE helper the lootbox / Degenesis / 3 whale sites (AFPAY-01/03/04) all call, so proving its
 ///   ordering + the AfkingSpent emit + the both-short revert + the paired claimablePool debit certifies that
 ///   shared spend path. Arm A asserts: tier-1 claimable drawn only to the STRICT 1-wei sentinel, tier-2
 ///   afking to 0, `AfkingSpent(buyer, afkingUsed)` at the exact afking amount, `allowClaimable=false`
@@ -80,7 +80,7 @@ contract V61AfpayWaterfall is DeployProtocol {
     }
 
     // =========================================================================
-    // ARM A — the canonical _settleShortfall sink (AFPAY-01; lootbox/presale/whale share it)
+    // ARM A — the canonical _settleShortfall sink (AFPAY-01; lootbox/Degenesis/whale share it)
     // =========================================================================
 
     /// @notice Claimable-allowed waterfall: claimable drawn FIRST to the strict 1-wei sentinel, then afking

@@ -6,7 +6,6 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
-import {IsDGNRS} from "../../contracts/interfaces/IsDGNRS.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {SigFigLib} from "../../contracts/libraries/SigFigLib.sol";
@@ -60,11 +59,7 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
     address internal bob;
 
     bytes32 internal constant OPENED = keccak256("LootBoxOpened(uint32,uint48,uint256,uint24,uint32,uint256,bool)");
-    bytes32 internal constant PRESALE_OPENED =
-        keccak256("PresaleBoxOpened(uint32,uint48,uint256,uint256,uint256,uint256,bool,uint32,uint32)");
-    bytes32 internal constant REMAINDER = keccak256("PresaleBoxRemainderBurned(uint256)");
     bytes32 internal constant BOX_BUY = keccak256("LootBoxBuy(uint32,uint48,uint32,uint256)");
-    bytes32 internal constant PRESALE_BUY = keccak256("PresaleBoxBuy(uint32,uint48,uint32,uint256,bool)");
 
     uint256 internal constant QUEUED_ORDER_DOMAIN = 0x5175657565644f72646572;
     uint256 internal constant BOX_OPEN_TAG = 0x426f784f70656e;
@@ -174,95 +169,116 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
     // Packing
     // =========================================================================
 
-    /// @notice The entry fields tile bits 0..254 without overlap; bit 255 is never written.
+    /// @notice The entry fields tile bits 0..84 without overlap; three entries fill bits 0..254.
     function test_Packing_FieldsTileWithoutOverlap() public pure {
-        uint256[17] memory masks = [
+        uint256[6] memory masks = [
             uint256(0xFFFFFFFF), // id
-            uint256(0xFFFFFF) << 32, // level
-            uint256(0x7FFF) << 56, // score
-            uint256(0x3FFF) << 71, // boost
-            uint256(0x3FFF) << 85, // ev
-            uint256(1) << 99, // distress
-            uint256(0x7F) << 100,
-            uint256(0x7F) << 107,
-            uint256(0x7F) << 114,
-            uint256(0x7F) << 121, // counts
-            uint256(0xFFFFFFFFFFFFFF) << 128, // size
-            uint256(1) << 184, // cover
-            uint256(0x3FFFFFFFFFFFFFFFF) << 185, // presale amount
-            uint256(7) << 251, // tier
-            uint256(1) << 254, // closing
-            0,
-            0
+            uint256(0x1FFFFF) << 32, // per-box units
+            uint256(0xFFF) << 53, // score code
+            uint256(0xFFF) << 65, // boost bps
+            uint256(0x7F) << 77, // quantity
+            uint256(1) << 84 // distress
         ];
         uint256 union;
         for (uint256 i; i < masks.length; ++i) {
             assertEq(union & masks[i], 0, "fields overlap");
             union |= masks[i];
         }
-        assertEq(union, type(uint256).max >> 1, "fields tile bits 0..254");
+        assertEq(union, (uint256(1) << 85) - 1, "fields tile bits 0..84");
+        assertEq(union | (union << 85) | (union << 170), type(uint256).max >> 1, "three lanes tile bits 0..254");
     }
 
-    /// @notice Input validation: four independent counts, sum 100 accepted and 101 rejected, an
-    ///         empty order, an under-minimum custom, a size without customs and any bit >= 88 rejected.
+    /// @notice Input validation: every kind at quantities 1 and 100; zero input is no leg; a zero
+    ///         count, 101, high bits, a preset carrying units and custom units outside 10..2,000,000
+    ///         (including the 21-bit maximum) reject; custom 10 and 2,000,000 accept.
     function test_Packing_InputCodecBounds() public {
         uint24 lvl = host.activeLevel();
         uint256 price = PriceLookupLib.priceForLevel(lvl);
-        (uint256 lanes, uint256 cost) = host.decode(BoxOrderLib.boOrder(100, 0, 0, 0, 0), lvl);
-        assertEq(BoxOrderLib.boSmall(lanes), 100);
-        assertEq(cost, 100 * price);
-        (lanes, cost) = host.decode(BoxOrderLib.boOrder(0, 100, 0, 0, 0), lvl);
-        assertEq(BoxOrderLib.boMed(lanes), 100);
-        assertEq(cost, 500 * price);
-        (lanes, cost) = host.decode(BoxOrderLib.boOrder(0, 0, 100, 0, 0), lvl);
-        assertEq(BoxOrderLib.boLarge(lanes), 100);
-        assertEq(cost, 2500 * price);
-        (lanes, cost) = host.decode(BoxOrderLib.boOrder(0, 0, 0, 100, 0.01 ether), lvl);
-        assertEq(BoxOrderLib.boCustomCount(lanes), 100);
-        assertEq(cost, 1 ether);
-        (lanes, cost) = host.decode(BoxOrderLib.boOrder(25, 25, 25, 25, 0.02 ether), lvl);
-        assertEq(BoxOrderLib.boSmall(lanes) + BoxOrderLib.boMed(lanes) + BoxOrderLib.boLarge(lanes)
-            + BoxOrderLib.boCustomCount(lanes), 100);
-        assertEq(BoxOrderLib.boLevel(lanes), lvl);
-        assertEq(cost, 25 * 31 * price + 25 * 0.02 ether);
+        uint256[3] memory mult = [uint256(1), 5, 25];
+        for (uint256 k; k < 3; ++k) {
+            for (uint256 q = 1; q <= 100; q += 99) {
+                (uint256 fields, uint256 cost) = host.decode(BoxOrderLib.boInput(k, q, 0), lvl);
+                assertEq(BoxOrderLib.boCount(fields), q, "quantity field");
+                assertEq(BoxOrderLib.boSizeWei(fields), mult[k] * price, "preset value at the purchase level");
+                assertEq(cost, q * mult[k] * price, "cost = quantity x per-box value");
+                assertEq(uint32(fields), 0, "no wallet ID from the decoder");
+            }
+        }
+        (uint256 f2, uint256 c2) = host.decode(BoxOrderLib.boInput(3, 100, 10), lvl);
+        assertEq(BoxOrderLib.boUnits(f2), 10);
+        assertEq(c2, 1 ether);
+        (f2, c2) = host.decode(BoxOrderLib.boInput(3, 1, 2_000_000), lvl);
+        assertEq(BoxOrderLib.boUnits(f2), 2_000_000);
+        assertEq(c2, 2_000 ether);
+        (f2, c2) = host.decode(BoxOrderLib.boInput(3, 100, 2_000_000), lvl);
+        assertEq(c2, 200_000 ether, "100 maximum boxes in one order");
 
-        vm.expectRevert(bytes4(keccak256("E()")));
-        host.decode(BoxOrderLib.boOrder(26, 25, 25, 25, 0.02 ether), lvl);
-        vm.expectRevert(bytes4(keccak256("E()")));
-        host.decode(0x80, lvl); // 128 smalls: under the 8-bit lane, over the cap
-        vm.expectRevert(bytes4(keccak256("E()")));
-        host.decode(uint256(1) << 24, lvl); // a custom with no size
-        vm.expectRevert(bytes4(keccak256("E()")));
-        host.decode(BoxOrderLib.boOrder(0, 0, 0, 1, 0.01 ether - 1 gwei), lvl);
-        vm.expectRevert(bytes4(keccak256("E()")));
-        host.decode(1 | (uint256(1) << 32), lvl); // size without customs
-        vm.expectRevert(bytes4(keccak256("E()")));
-        host.decode(1 | (uint256(1) << 88), lvl); // a nonzero bit at 88
-        vm.expectRevert(bytes4(keccak256("E()")));
-        host.decode(1 | (uint256(1) << 255), lvl);
+        bytes4 e = bytes4(keccak256("E()"));
+        uint256[13] memory bad = [
+            BoxOrderLib.boInput(0, 0, 0) | (uint256(1) << 7), // a kind with zero count
+            BoxOrderLib.boInput(3, 0, 50), // custom with zero count
+            BoxOrderLib.boInput(0, 101, 0), // 101
+            uint256(127), // 127 smalls: inside the 7-bit field, over the cap
+            BoxOrderLib.boInput(0, 1, 1), // preset carrying units
+            BoxOrderLib.boInput(2, 1, 2_000_000), // preset carrying units
+            BoxOrderLib.boInput(3, 1, 0),
+            BoxOrderLib.boInput(3, 1, 9),
+            BoxOrderLib.boInput(3, 1, 2_000_001),
+            BoxOrderLib.boInput(3, 1, 2_097_151), // 21-bit mask maximum
+            BoxOrderLib.boInput(0, 1, 0) | (uint256(1) << 30), // first high bit
+            BoxOrderLib.boInput(3, 1, 10) | (uint256(1) << 255),
+            BoxOrderLib.boInput(3, 1, 10) | (uint256(1) << 30)
+        ];
+        for (uint256 i; i < bad.length; ++i) {
+            vm.expectRevert(e);
+            host.decode(bad[i], lvl);
+        }
     }
 
-    /// @notice The maximum encoded size is accepted and stored exactly; one gwei more rejects
-    ///         before anything could truncate.
-    function test_Amounts_MaximumEncodedSizeStoredExactly() public {
-        uint256 maxSize = (uint256(1) << 56) - 1;
-        uint256 order = (uint256(1) << 24) | (maxSize << 32);
-        (uint48 b, uint256 p) = _buy(alice, order);
-        uint256 word = host.entryAt(b, p);
-        assertEq(BoxOrderLib.boSizeWei(word), maxSize * 1 gwei);
-        assertEq(BoxOrderLib.boCustomCount(word), 1);
-        assertEq(word >> 255, 0, "bit 255 zero");
+    /// @notice Every distinct preset price tier, at every multiplier, is a whole number of
+    ///         0.001 ETH units, so presets store their exact purchase-time value.
+    function test_Packing_EveryPresetTierIsWholeUnits() public view {
+        for (uint24 lvl; lvl <= 300; ++lvl) {
+            uint256 price = PriceLookupLib.priceForLevel(lvl);
+            for (uint256 k; k < 3; ++k) {
+                (uint256 fields, uint256 cost) = host.decode(BoxOrderLib.boInput(k, 1, 0), lvl);
+                uint256 m = k == 0 ? 1 : (k == 1 ? 5 : 25);
+                assertEq(BoxOrderLib.boSizeWei(fields), m * price, "exact preset value");
+                assertEq(cost, m * price);
+            }
+        }
+        (uint256 top,) = host.decode(BoxOrderLib.boInput(2, 1, 0), 100);
+        assertEq(BoxOrderLib.boSizeWei(top), 6 ether, "the largest preset box is 6 ETH");
+    }
 
-        uint256 over = (uint256(1) << 24) | ((maxSize + 1) << 32);
+    /// @notice The maximum custom (2,000 ETH) is stored exactly; one unit more rejects with the
+    ///         whole payment rolled back and a live boost left unconsumed.
+    function test_Amounts_MaximumCustomStoredExactly() public {
+        _buy(alice, BoxOrderLib.boSmalls(1)); // registers alice
+        (uint48 b, uint256 p) = _buy(alice, BoxOrderLib.boCustom(2_000 ether));
+        uint256 word = host.entryAt(b, p);
+        assertEq(BoxOrderLib.boSizeWei(word), 2_000 ether);
+        assertEq(BoxOrderLib.boCount(word), 1);
+        assertEq(BoxOrderLib.boHighBits(word), 0, "bits 85..255 zero");
+
+        host.seedBoost(alice, 3);
+        uint256 over = BoxOrderLib.boInput(3, 1, 2_000_001);
+        uint256 balanceBefore = alice.balance;
+        uint256 countBefore = host.boxWriteCount();
+        uint256 pendingBefore = host.pendingMilliEth();
         vm.prank(alice);
         vm.expectRevert(bytes4(keccak256("E()")));
-        host.purchase{value: (maxSize + 1) * 1 gwei}(0, 0, over, bytes32(0), MintPaymentKind.DirectEth, false);
+        host.purchase{value: 2_000.001 ether}(0, 0, over, bytes32(0), MintPaymentKind.DirectEth, false);
+        assertEq(alice.balance, balanceBefore, "payment rolled back");
+        assertEq(host.boxWriteCount(), countBefore, "nothing appended");
+        assertEq(host.pendingMilliEth(), pendingBefore, "no pending ETH");
+        assertEq(host.boostTier(alice), 3, "the rejected input consumed no boost");
     }
 
-    /// @notice An exact-gwei custom is charged exactly, banks exactly in pending ETH, and a 100,000 ETH
-    ///         box resolves through every reward branch without reverting.
-    function test_Amounts_ExactGweiChargeAndLargeBox() public {
-        uint256 size = 0.012345678 ether; // whole gwei
+    /// @notice A whole-unit custom is charged exactly and banks exactly in pending ETH; 100
+    ///         maximum (2,000 ETH) boxes resolve without reverting.
+    function test_Amounts_ExactUnitChargeAndLargeOrder() public {
+        uint256 size = 0.012 ether;
         uint256 order = BoxOrderLib.boCustoms(3, size);
         assertEq(_cost(order), 3 * size);
         uint256 pendingBefore = host.pendingMilliEth();
@@ -272,8 +288,8 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
         assertEq(BoxOrderLib.boSizeWei(host.entryAt(b, p)), size);
         assertEq(host.pendingMilliEth(), pendingBefore + 3 * size / 1e15);
 
-        (b, p) = _buy(bob, BoxOrderLib.boCustom(100_000 ether));
-        assertEq(BoxOrderLib.boSizeWei(host.entryAt(b, p)), 100_000 ether);
+        (b, p) = _buy(bob, BoxOrderLib.boCustoms(100, 2_000 ether));
+        assertEq(BoxOrderLib.boSizeWei(host.entryAt(b, p)), 2_000 ether);
         _drain(WORD);
         (uint256 count, uint256 cursor, bool complete) = host.readState();
         assertEq(count, 2);
@@ -285,14 +301,14 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
     // Appends
     // =========================================================================
 
-    /// @notice Two purchases by one wallet are two entries at consecutive positions; different sizes
-    ///         and levels; the first entry is byte-for-byte unchanged by the second; LootBoxBuy
+    /// @notice Two purchases by one wallet are two entries at consecutive positions; different
+    ///         types and sizes; the first entry is byte-for-byte unchanged by the second; LootBoxBuy
     ///         carries each position.
     function test_Appends_SameWalletTwiceIsTwoEntries() public {
         vm.recordLogs();
         (uint48 b0, uint256 p0) = _buy(alice, BoxOrderLib.boCustoms(2, 0.05 ether));
         uint256 first = host.entryAt(b0, p0);
-        (uint48 b1, uint256 p1) = _buy(alice, BoxOrderLib.boOrder(3, 1, 0, 1, 0.07 ether));
+        (uint48 b1, uint256 p1) = _buy(alice, BoxOrderLib.boSmalls(3));
         Vm.Log[] memory logs = vm.getRecordedLogs();
         assertEq(b0, b1);
         assertEq(p1, p0 + 1);
@@ -301,10 +317,9 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
         assertEq(BoxOrderLib.boId(first), _id(alice));
         assertEq(BoxOrderLib.boId(second), _id(alice));
         assertEq(BoxOrderLib.boSizeWei(first), 0.05 ether);
-        assertEq(BoxOrderLib.boSizeWei(second), 0.07 ether);
-        assertEq(BoxOrderLib.boCustomCount(first), 2);
-        assertEq(BoxOrderLib.boSmall(second), 3);
-        assertEq(BoxOrderLib.boMed(second), 1);
+        assertEq(BoxOrderLib.boSizeWei(second), PriceLookupLib.priceForLevel(host.activeLevel()));
+        assertEq(BoxOrderLib.boCount(first), 2);
+        assertEq(BoxOrderLib.boCount(second), 3);
         uint256 seenBuys;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics.length == 0 || logs[i].topics[0] != BOX_BUY) continue;
@@ -391,8 +406,7 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
         uint256 p = host.boxWriteCount();
         for (uint256 i; i < 8; ++i) {
             host.grant(alice, 6 ether, 30_000, false, 0);
-            uint256 bps = BoxOrderLib.boEvBps(host.entryAt(b, p + i));
-            assertEq(bps, 0, "reserved EV lane stays zero");
+            assertEq(BoxOrderLib.boHighBits(host.entryAt(b, p + i)), 0, "no EV field in the entry");
             assertEq(host.evUsed(id, key), 0, "grant does not draw");
         }
         _drain(WORD);
@@ -400,121 +414,11 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
     }
 
     // =========================================================================
-    // Presale
-    // =========================================================================
-
-    function _presale(address who, uint256 amount) internal returns (uint48 buffer, uint256 position) {
-        buffer = host.writeBuffer();
-        position = host.boxWriteCount();
-        vm.prank(who);
-        host.buyPresaleBox{value: amount}(0, amount);
-    }
-
-    /// @notice The DGNRS tier freezes from the purchase's starting sold amount at every boundary.
-    function test_Presale_TierBoundaries() public {
-        uint256[10] memory sold = [uint256(0), 9.99 ether, 10 ether, 19.99 ether, 20 ether, 29.99 ether,
-            30 ether, 39.99 ether, 40 ether, 49.99 ether];
-        uint256[10] memory tier = [uint256(0), 0, 1, 1, 2, 2, 3, 3, 4, 4];
-        for (uint256 i; i < sold.length; ++i) assertEq(host.tierOf(sold[i]), tier[i]);
-        _buy(alice, BoxOrderLib.boSmalls(1)); // registers alice
-        // A purchase straddling a boundary keeps its starting tier.
-        host.seedPresale(9.995 ether, alice, 1 ether);
-        (uint48 b2, uint256 p2) = _presale(alice, 0.5 ether);
-        assertEq(BoxOrderLib.boPresaleTier(host.entryAt(b2, p2)), 0);
-        assertEq(BoxOrderLib.boPresaleWei(host.entryAt(b2, p2)), 0.5 ether);
-        for (uint256 i; i < sold.length; ++i) {
-            host.seedPresale(uint96(sold[i]), alice, 1 ether);
-            (uint48 b, uint256 p) = _presale(alice, 0.01 ether);
-            uint256 word = host.entryAt(b, p);
-            assertEq(BoxOrderLib.boPresaleTier(word), tier[i], "tier frozen at purchase");
-            assertEq(BoxOrderLib.boPresaleWei(word), 0.01 ether);
-            assertEq(BoxOrderLib.boCount(word), 0, "presale-only entry");
-        }
-    }
-
-    /// @notice One wallet's repeat presale purchases are independent entries; a credit shortfall
-    ///         reverts the whole purchase, appending nothing.
-    function test_Presale_RepeatPurchasesAndShortfallRollback() public {
-        _buy(alice, BoxOrderLib.boSmalls(1));
-        host.seedPresale(0, alice, 0.05 ether);
-        (uint48 b, uint256 p) = _presale(alice, 0.02 ether);
-        (, uint256 q) = _presale(alice, 0.02 ether);
-        assertEq(q, p + 1);
-        assertEq(BoxOrderLib.boPresaleWei(host.entryAt(b, p)), 0.02 ether);
-        assertEq(BoxOrderLib.boPresaleWei(host.entryAt(b, q)), 0.02 ether);
-        uint256 count = host.boxWriteCount();
-        vm.prank(alice);
-        vm.expectRevert(bytes4(keccak256("E()")));
-        host.buyPresaleBox{value: 0.02 ether}(0, 0.02 ether); // 0.01 credit left
-        assertEq(host.boxWriteCount(), count, "nothing appended");
-        assertEq(host.presaleCredit(_id(alice)), 0.01 ether);
-    }
-
-    /// @notice A same-call ordinary + presale purchase is one entry carrying both legs.
-    function test_Presale_SameCallSharesOneEntry() public {
-        _buy(alice, BoxOrderLib.boSmalls(1));
-        host.seedPresale(0, alice, 1 ether);
-        uint48 b = host.writeBuffer();
-        uint256 p = host.boxWriteCount();
-        uint256 order = BoxOrderLib.boCustoms(2, 0.04 ether);
-        uint256 cost = _cost(order);
-        vm.recordLogs();
-        vm.prank(alice);
-        host.buyLootboxAndPresaleBox{value: cost + 0.03 ether}(
-            0, 0, order, bytes32(0), MintPaymentKind.DirectEth, 0.03 ether
-        );
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        assertEq(host.boxWriteCount(), p + 1, "one entry");
-        uint256 word = host.entryAt(b, p);
-        assertEq(BoxOrderLib.boCustomCount(word), 2);
-        assertEq(BoxOrderLib.boPresaleWei(word), 0.03 ether);
-        assertEq(_count(logs, BOX_BUY), 1);
-        assertEq(_count(logs, PRESALE_BUY), 1);
-    }
-
-    /// @notice The requested amount clamps to the cap; the exact applied amount is stored, down to
-    ///         1 wei. The closing entry's own resolution burns the remainder, after every earlier
-    ///         presale box has settled, and no other entry burns it.
-    function test_Presale_OneWeiCloseAndRemainderBurnAfterEarlierBoxes() public {
-        _buy(alice, BoxOrderLib.boSmalls(1));
-        _buy(bob, BoxOrderLib.boSmalls(1));
-        host.seedPresale(40 ether, alice, 1 ether);
-        (, uint256 pa) = _presale(alice, 0.5 ether);
-        host.seedPresale(50 ether - 1, bob, 1 ether);
-        uint256 balanceBefore = bob.balance;
-        (uint48 b, uint256 pb) = _presale(bob, 0.01 ether);
-        assertEq(balanceBefore - bob.balance, 0.01 ether, "the payer sent the request");
-        uint256 closing = host.entryAt(b, pb);
-        assertEq(BoxOrderLib.boPresaleWei(closing), 1, "exact 1-wei applied amount");
-        assertTrue(BoxOrderLib.boPresaleClosing(closing));
-        assertTrue(host.presaleBoxEthRemaining() == 0);
-
-        Vm.Log[] memory logs = _drain(WORD);
-        uint256 openedA = type(uint256).max;
-        uint256 openedB = type(uint256).max;
-        uint256 burned = type(uint256).max;
-        for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics.length == 0) continue;
-            if (logs[i].topics[0] == PRESALE_OPENED) {
-                if (uint256(logs[i].topics[2]) == _ref(b, pa)) openedA = i;
-                if (uint256(logs[i].topics[2]) == _ref(b, pb)) openedB = i;
-            }
-            if (logs[i].topics[0] == REMAINDER) {
-                assertEq(burned, type(uint256).max, "one burn");
-                burned = i;
-            }
-        }
-        assertLt(openedA, openedB);
-        assertLt(openedB, burned, "remainder burn follows the closing box's own roll");
-        assertEq(IsDGNRS(address(sdgnrs)).poolBalance(IsDGNRS.Pool.PresaleBox), 0, "pool burned out");
-    }
-
-    // =========================================================================
     // Grants
     // =========================================================================
 
     /// @notice A cover after a full manual order is its own one-box entry; repeated covers are
-    ///         repeated entries; a 100-pass bundle is 100 equal customs; a grant under one gwei per
+    ///         repeated entries; a 100-pass bundle is 100 equal boxes; a grant under 0.001 ETH per
     ///         box appends nothing and does not revert.
     function test_Grants_CoversAndPassBundles() public {
         (uint48 b, uint256 p) = _buy(alice, BoxOrderLib.boSmalls(100));
@@ -524,22 +428,21 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
         uint256 c1 = host.entryAt(b, p + 1);
         uint256 c2 = host.entryAt(b, p + 2);
         assertEq(host.entryAt(b, p), manual, "manual entry untouched");
-        assertTrue(BoxOrderLib.boCover(c1) && BoxOrderLib.boCover(c2));
-        assertEq(BoxOrderLib.boCount(c1), 1);
-        assertEq(BoxOrderLib.boSizeWei(c1), 0.3 ether, "gwei floor; the 7 wei stay accounting-side");
+        assertEq(BoxOrderLib.boCount(c1), 1, "count 0 stores one box");
+        assertEq(BoxOrderLib.boCount(c2), 1);
+        assertEq(BoxOrderLib.boSizeWei(c1), 0.3 ether, "unit floor; the 7 wei stay accounting-side");
         assertEq(BoxOrderLib.boSizeWei(c2), 0.2 ether);
 
         _buy(bob, BoxOrderLib.boSmalls(1)); // registered, as every pass buyer is
         host.grant(bob, 100 * 0.04 ether + 99, 100, true, 100);
         uint256 bundle = host.entryAt(b, p + 4);
         assertEq(BoxOrderLib.boId(bundle), _id(bob));
-        assertEq(BoxOrderLib.boCustomCount(bundle), 100);
         assertEq(BoxOrderLib.boCount(bundle), 100);
         assertEq(BoxOrderLib.boSizeWei(bundle), 0.04 ether);
 
         uint256 count = host.boxWriteCount();
-        host.grant(alice, 99 gwei, 100, true, 100);
-        assertEq(host.boxWriteCount(), count, "sub-gwei-per-box grant appends nothing");
+        host.grant(alice, 0.099 ether, 100, true, 100);
+        assertEq(host.boxWriteCount(), count, "sub-unit-per-box grant appends nothing");
         assertTrue(host.work(ALLOWANCE).progressed == false, "nothing sealed yet");
         _drain(WORD);
         (uint256 readCount, uint256 cursor, bool complete) = host.readState();
@@ -637,7 +540,7 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
 
     function _openedDigest(Vm.Log[] memory logs) internal pure returns (bytes32 digest) {
         for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics.length != 0 && (logs[i].topics[0] == OPENED || logs[i].topics[0] == PRESALE_OPENED)) {
+            if (logs[i].topics.length != 0 && logs[i].topics[0] == OPENED) {
                 digest = keccak256(abi.encode(digest, logs[i].topics, logs[i].data));
             }
         }
@@ -732,29 +635,6 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
             assertGe(cursor, last);
             last = cursor;
         }
-    }
-
-    /// @notice A failing presale leg reverts its entry's ordinary leg and the cursor move with it.
-    function test_Lifecycle_AtomicMixedLegRevert() public {
-        _buy(alice, BoxOrderLib.boSmalls(1));
-        host.seedPresale(50 ether - 0.01 ether, alice, 1 ether);
-        uint256 order = BoxOrderLib.boSmalls(3);
-        uint256 cost = _cost(order);
-        vm.prank(alice);
-        host.buyLootboxAndPresaleBox{value: cost + 0.01 ether}(
-            0, 0, order, bytes32(0), MintPaymentKind.DirectEth, 0.01 ether
-        );
-        host.sealAndPublish(WORD);
-        vm.mockCallRevert(
-            address(sdgnrs), abi.encodeWithSelector(IsDGNRS.poolBalance.selector, IsDGNRS.Pool.PresaleBox), "boom"
-        );
-        vm.expectRevert(bytes("boom"));
-        host.work(ALLOWANCE);
-        (, uint256 cursor, bool complete) = host.readState();
-        assertEq(cursor, 0, "cursor move rolled back");
-        assertFalse(complete);
-        vm.clearMockedCalls();
-        assertTrue(host.work(ALLOWANCE).done);
     }
 
     /// @notice Settlement is at-most-once; an empty cohort completes at once; a drained cohort whose

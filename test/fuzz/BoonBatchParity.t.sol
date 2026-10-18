@@ -41,7 +41,7 @@ contract BoonBatchQuestRecorder {
     }
 }
 
-/// @notice Locks the mixed-tier entrypoint to the pre-batch sequence of homogeneous calls.
+/// @notice Locks the batched box-boon entrypoint to the sequence of one-box calls it replaces.
 contract BoonBatchParity is Test {
     address private constant PLAYER = address(0xB00B);
     uint24 private constant CURRENT_LEVEL = 101;
@@ -65,15 +65,14 @@ contract BoonBatchParity is Test {
         questRecorder = BoonBatchQuestRecorder(ContractAddresses.QUESTS);
     }
 
-    function testFuzzMixedBatchMatchesFiveLegacyLaneCalls(uint256 seed) public {
-        uint256[5] memory amounts = [uint256(0.01 ether), 0.05 ether, 0.25 ether, 1 ether, 10 ether];
-        uint40 countsPacked = 0x0101010101;
+    function testFuzzBatchMatchesOneBoxCalls(uint256 seed, uint8 rawAmount) public {
+        uint256[5] memory sizes = [uint256(0.01 ether), 0.05 ether, 0.25 ether, 1 ether, 10 ether];
+        uint256 amount = sizes[rawAmount % 5];
         uint256 snapshot = vm.snapshotState();
 
         vm.recordLogs();
-        uint256 nonceBase;
-        for (uint256 lane; lane < 5; ++lane) {
-            gameBoon.rollBoxBoons(playerId, _budget(amounts[lane]), 1, amounts[lane], CURRENT_LEVEL, seed, nonceBase++);
+        for (uint256 n; n < 5; ++n) {
+            gameBoon.rollBoxBoons(playerId, _budget(amount), 1, amount, CURRENT_LEVEL, seed, n);
         }
         Vm.Log[] memory expectedLogs = vm.getRecordedLogs();
         bytes32 expectedState = _stateHash();
@@ -81,7 +80,7 @@ contract BoonBatchParity is Test {
         assertTrue(vm.revertToState(snapshot), "snapshot restore failed");
 
         vm.recordLogs();
-        gameBoon.rollBoxBoonTiers(playerId, amounts, countsPacked, CURRENT_LEVEL, seed);
+        gameBoon.rollBoxBoons(playerId, _budget(amount), 5, amount, CURRENT_LEVEL, seed, 0);
         Vm.Log[] memory actualLogs = vm.getRecordedLogs();
 
         assertEq(_stateHash(), expectedState, "batched boon state drift");

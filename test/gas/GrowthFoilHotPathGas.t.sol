@@ -18,7 +18,7 @@ contract GrowthFoilGasSeeder is DegenerusGameStorage {
         dailyIdx = _simulatedDayIndex();
         purchaseStartDay = dailyIdx;
         rngRequestTime = uint48(block.timestamp);
-        presaleOver = true;
+        degenesisClosed = 7;
         _setPrizePools(10 ether, 10 ether);
         (uint32 id, ) = _registerWallet(player, 0);
         mintPacked_[id] = mintData & ((uint256(1) << 224) - 1);

@@ -287,10 +287,10 @@ contract ProtocolBoonDrawTest is DeployProtocol {
     }
 
     function testLaunchDayEthBetsReceiveAllSixBoonsThroughRealAdvance() public {
-        vm.warp(86_400); // DeployProtocol's day-1 timestamp.
+        vm.warp(_deployTimestamp());
         day = game.currentDayView();
-        assertEq(day, 1);
-        assertEq(game.rngWordForDay(1), 0);
+        assertEq(day, _deployDay());
+        assertEq(game.rngWordForDay(day), 0);
         vm.prank(bettor); _bet(0, 0.005 ether);
         vm.prank(bettor); _bet(6, 0.005 ether);
         assertEq(lens.protocolBoonPool(address(game), address(vault), day).entryCount, 1);

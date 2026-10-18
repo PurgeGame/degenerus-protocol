@@ -196,9 +196,10 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     uint16 private constant WHALE_LOOTBOX_BPS = 1000;
 
     /// @dev Paid passes one whale purchase may carry (player route and the sDGNRS automatic
-    ///      purchase alike). Bounds the bundled box count (`uint8`), the Craps credit and the
-    ///      local reward recurrence; the aggregate ticket award is one range walk regardless.
-    uint256 private constant WHALE_MAX_QUANTITY = 100;
+    ///      purchase alike). Bounds the Craps credit and the local reward recurrence; the
+    ///      aggregate ticket award is one range walk regardless. The bundled boxes fold to at
+    ///      most MAX_BOXES_PER_ORDER whatever the quantity.
+    uint256 private constant WHALE_MAX_QUANTITY = 1000;
 
     /// @dev sDGNRS's automatic purchase spends at most this fraction of its game-side claimable
     ///      (1/4): `budget = claimable / SDGNRS_WHALE_BUDGET_DIVISOR`.
@@ -235,8 +236,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      *        awardQty = paid quantity plus the bulk bonus below.
      *      - Bulk buy: every 5 passes in one purchase award one more pass's entries; the
      *        price, lootbox, DGNRS, affiliate and Craps credit follow the paid quantity.
-     *      - Lootbox: 10% of price, as its own queue entry of one equal custom box per pass
-     *        bought (at most 100 passes, so at most 100 boxes).
+     *      - Lootbox: 10% of price, as its own queue entry of min(quantity, 100) equal boxes
+     *        (at most 4 ETH each, floored to whole 0.001 ETH).
      *      - Below level 10: one Craps day-pass credit per pass purchased, banked at the
      *        table (credit-only, spendable via applyCrapsPasses). Keys on passes bought,
      *        not price paid, so a boon-discounted purchase earns the same.
@@ -252,10 +253,10 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      *      - Pre-game (level 0): 30% next pool, 70% future pool
      *      - Post-game (level > 0): 5% next pool, 95% future pool
      * @param buyerId The account receiving the pass (resolved by the Game; its payee takes the token payouts).
-     * @param quantity Number of passes to purchase (1-100).
+     * @param quantity Number of passes to purchase (1-1,000).
      * @param affiliateCode Affiliate/referral code for the purchase (bytes32(0) = stored code).
      * @custom:reverts GameOver When gameOver is true.
-     * @custom:reverts InvalidQuantity When quantity is 0 or exceeds 100.
+     * @custom:reverts InvalidQuantity When quantity is 0 or exceeds 1,000.
      * @custom:reverts MinQuantityRequired When a century (x00) pass level is purchased with quantity < 2
      *         on the standard-price path. A boon purchase takes the discount branch and is not gated.
      */
@@ -333,7 +334,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         if (groups == 0) return 0;
 
         uint256 totalPrice;
-        // The group cap bounds paidPasses to 5..100 and both unit prices to at most 4 ETH.
+        // The group cap bounds paidPasses to 5..1,000 and both unit prices to at most 4 ETH.
         unchecked {
             paidPasses = groups * WHALE_BULK_BONUS_DIVISOR;
             totalPrice = firstPrice + restPrice * (paidPasses - 1);
@@ -404,10 +405,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         // Whale-pass ETH-in (any funding source): the full price routes to the pools; the
         // pass lootbox is a pool-funded reward, so its LootBoxBuy must NOT be re-counted.
         emit WhalePassPurchased(buyerId, quantity, totalPrice);
-        // Coin-presale-box credit accrual: 25% of the committed ETH while presale open.
-        if (!presaleOver) {
-            presaleBoxCredit[buyerId] += totalPrice / 4;
-        }
+        _accrueDegenesisCredit(buyerId, totalPrice);
 
         uint256 prevData = mintPacked_[buyerId];
 
@@ -576,9 +574,12 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             );
         }
 
-        // Lootbox: 10% of price, one box per pass bought
+        // Lootbox: 10% of price over one box per pass bought, folded to at most
+        // MAX_BOXES_PER_ORDER boxes (at most 4 ETH each).
         uint256 lootboxAmount = (totalPrice * WHALE_LOOTBOX_BPS) / 10_000;
-        _recordLootboxEntry(buyerId, lootboxAmount, uint8(quantity));
+        _recordLootboxEntry(
+            buyerId, lootboxAmount, uint8(quantity > MAX_BOXES_PER_ORDER ? MAX_BOXES_PER_ORDER : quantity)
+        );
         // Below level 10 (passLevel == level + 1, invariant across this call) every pass
         // bought banks one Craps day-pass credit on the table's credit-only door.
         if (passLevel <= 10) {
@@ -674,7 +675,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         // Boon at 0-2: same benefits, discounted payment
         // Levels 3+: baseCost, boon applies discount to baseCost
         // benefitValue = undiscounted package value; derives totalPrice + the level 0-2 bonus
-        // tickets. Presale-box credit, lootbox, and pool splits all scale on totalPrice (paid).
+        // tickets. Degenesis credit, lootbox, and pool splits all scale on totalPrice (paid).
         uint256 totalPrice;
         uint256 benefitValue;
         uint32 bonusEntries;
@@ -716,10 +717,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         // Lazy-pass ETH-in (any funding source): the full price routes to the pools; the
         // pass lootbox is a pool-funded reward, so its LootBoxBuy must NOT be re-counted.
         emit LazyPassPurchased(buyerId, startLevel, totalPrice);
-        // Coin-presale-box credit accrual: 25% of the price paid while presale open.
-        if (!presaleOver) {
-            presaleBoxCredit[buyerId] += totalPrice / 4;
-        }
+        _accrueDegenesisCredit(buyerId, totalPrice);
 
         // Affiliate, fresh 25% at affiliate levels 1-3 / 20% at 4+ (paid at level + 1) and 5% recycle exactly like a
         // normal ticket mint: the fresh portion (freshPaid) at the fresh rate, the
@@ -892,10 +890,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         // Record the price paid (caps the early-game-over refund). A buyer holds exactly one deity
         // pass (the HAS_DEITY_PASS guard above blocks a second), so this is a plain assignment.
         deityPassPricePaid[buyerId] = uint96(totalPrice);
-        // Coin-presale-box credit accrual: 25% of the committed ETH while presale open.
-        if (!presaleOver) {
-            presaleBoxCredit[buyerId] += totalPrice / 4;
-        }
+        _accrueDegenesisCredit(buyerId, totalPrice);
 
         _registerDeity(buyerId, symbolId);
         // The next transition extends every deity to level + 100. In the purchase phase
@@ -1146,7 +1141,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         return DEITY_DOUBLING_ANCHOR_PRICE << (sold - DEITY_DOUBLING_ANCHOR_SOLD);
     }
 
-    /// @dev Record a pass purchase's lootbox spend as `boxes` custom boxes of equal value.
+    /// @dev Record a pass purchase's lootbox spend as `boxes` boxes of equal value.
     function _recordLootboxEntry(
         uint32 buyerId,
         uint256 lootboxAmount,

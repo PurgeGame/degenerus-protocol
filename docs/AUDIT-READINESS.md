@@ -1,5 +1,53 @@
 # Audit readiness — 2026-10-16
 
+## Degenesis sale — review scope (not in the frozen source below)
+
+The seven-day Degenesis sale, its module and the supporting changes are in the working tree
+after `audit-2026-10-16` and are not covered by that freeze. A later freeze supersedes the
+section below once it records a battery on this source.
+
+New and changed surface:
+
+- `DegenerusGameDegenesisModule` (new delegatecall module, `GAME_DEGENESIS_MODULE`): the standalone
+  `buyDegenesisBox`, `prepareDegenesis` (split and pricing at the daily request), `runDegenesisWork`
+  (the `DegenesisSettle` miner stage), `splitDegenesis` (terminal), `topUpSdgnrsAfking` and
+  `spendDegenesis` (the Vault's restricted purchase). See [architecture](ARCHITECTURE.md#degenesis-sale).
+- Storage: slot 0 byte 27 `degenesisClosed`, slot 15 `degenesisVaultBudget`, slot 16 `degenesisCredit`,
+  slot 26 `degenesisActive`, appended `degenesisWord`, `degenesisDays` and `degenesisOrders`.
+  `Pool.Degenesis` is sDGNRS pool index 4 (10% of the initial supply).
+- Credit accrual at the Mint, Whale, FoilPack and AFKing cover-buy spend sites; credit is 25% of
+  qualifying ETH, claimable and prepaid spend while `block.timestamp < DEGENESIS_END_TS`, and
+  the Vault and sDGNRS earn none.
+- RNG: `degenesisWord` is copied in `_recordDailyRng`; new tags are listed in
+  [RNG domains](audit/RNG-DOMAINS.md#degenesis-cohort-binding). Pricing inputs (volume, pool, orders)
+  are fixed before the request.
+- Daily engine: Degenesis days (indices 2..8) unlock randomness only (`STAGE_DEGENESIS_DAY`); both
+  `lastPurchaseDay` latches require `day >= MAIN_LAUNCH_DAY` (9), keyed on the processed day. Craps
+  windows and battle locks start on day 2 (`lockJackpotBattle` returns `bool`), and awarded seats start
+  at `MAIN_LAUNCH_DAY`.
+- Terminal: `splitDegenesis()` runs first in terminal setup; the Vault budget and sDGNRS AFKing funding
+  leave `claimablePool` before `gameOver` is set (`DegenesisFundsReleased`); unresolved orders are
+  forfeited with the inventory burn.
+- Gas: `MineFlipGasBounds.DEGENESIS_*` constants; the `DegenesisSettle` stage admits per branch plus a
+  growing flush reserve. See the [gas review](MINEFLIP-GAS-REVIEW.md) and
+  [caller budgeting](CALLER-GAS-BUDGETING.md).
+
+Questions for review:
+
+- Every order's reward is a pure function of the bound word and the frozen cohort; settlement
+  order, chunking and caller gas cannot change it.
+- The sum of sDGNRS awards in a cohort cannot exceed the `1.5Q` reservation, and `Q` never reads the
+  live pool after pricing.
+- Conservation: purchase, split, Vault spend, sDGNRS top-up and terminal release each leave
+  `claimablePool` equal to the sum of claimable and prepaid balances plus unsplit cohort volume.
+- The level cannot advance before day 9, on any cranking schedule.
+- The Vault cannot buy a Degenesis box through any path, and the restricted budget never becomes
+  withdrawable.
+
+Unopened boxes are forfeited at game over and unspent credit has no value after the window; both are
+disclosed in [economic disclosures](../ECONOMIC_DISCLOSURES.md). Verification of this source is
+recorded in [verification](VERIFICATION.md#degenesis-sale-verification).
+
 ## Frozen source — `audit-2026-10-16`
 
 Annotated tag: `audit-2026-10-16`. Production source commit:
@@ -192,8 +240,8 @@ Production changes since the earlier freeze:
 - `Icons32Data` setters and `finalize` follow `isVaultOwner` (`NotVaultOwner`) instead of
   CREATOR, so cosmetic control moves with DGVE ownership. `initProtocolDeity` stays
   CREATOR-gated at level 0 and grants CREATOR no allocation.
-- The closing presale box burns the remaining `Pool.PresaleBox` balance
-  (`PresaleBoxRemainderBurned(uint256)`) instead of paying it to the closing buyer.
+- The closing box of the sale burns the remaining sale-pool balance instead of paying it to the
+  closing buyer; the Degenesis closing burn (`DegenesisInventoryBurned(uint256)`) is the current form.
 - Comments and naming say miner, not keeper (`_keeperSlot` is `_minerSlot`; the layout
   goldens follow). Game stays 24,467 bytes (109 spare); Vault 11,922; DGNRS 4,735.
 

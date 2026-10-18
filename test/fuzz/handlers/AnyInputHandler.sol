@@ -285,20 +285,6 @@ contract AnyInputHandler is Test {
         _call(51, address(game), _val(value), abi.encodeWithSignature("repay(uint32)", _id(pSeed)));
     }
 
-    function g_buyLootboxAndPresaleBox(
-        uint256 a,
-        uint256 bSeed,
-        uint256 qty,
-        uint256 boxOrder,
-        bytes32 code,
-        uint8 payKind,
-        uint256 boxAmount,
-        uint256 value
-    ) external act(a) {
-        _call(8, address(game), _val(value), abi.encodeWithSelector(
-            DegenerusGame.buyLootboxAndPresaleBox.selector, _id(bSeed), qty, boxOrder, code, uint256(payKind % 5), boxAmount));
-    }
-
     function g_claimBingo(uint256 a, uint256 pSeed, uint24 lvl, uint8 symbol, uint32[8] calldata slots) external act(a) {
         _call(9, address(game), 0, abi.encodeWithSignature("claimBingo(uint32,uint24,uint8,uint32[8])", _id(pSeed), lvl, symbol, slots));
     }
@@ -410,8 +396,8 @@ contract AnyInputHandler is Test {
             "purchaseDeityPass(uint32,uint8,bytes32)", _id(bSeed), symbolId, code));
     }
 
-    function g_buyPresaleBox(uint256 a, uint256 bSeed, uint256 boxAmount, uint256 value) external act(a) {
-        _call(32, address(game), _val(value), abi.encodeWithSignature("buyPresaleBox(uint32,uint256)", _id(bSeed), boxAmount));
+    function g_buyDegenesisBox(uint256 a, uint256 bSeed, uint256 boxAmount, uint256 value) external act(a) {
+        _call(32, address(game), _val(value), abi.encodeWithSignature("buyDegenesisBox(uint32,uint256)", _id(bSeed), boxAmount));
     }
 
     function g_claimWinningsStethFirst(uint256 a) external act(a) {
@@ -931,22 +917,11 @@ contract AnyInputHandler is Test {
     }
 
 
-    function gd_buyPresaleBox(uint256 a, uint256 amtSeed) external act(a) {
-        uint256 credit = game.presaleBoxCreditOf(currentActor);
+    function gd_buyDegenesisBox(uint256 a, uint256 amtSeed) external act(a) {
+        uint256 credit = game.degenesisCreditOf(currentActor);
         uint256 amount = credit > 0.01 ether ? 0.01 ether + amtSeed % (credit - 0.01 ether + 1) : 0.01 ether;
         uint256 value = amount <= currentActor.balance ? amount : 0;
-        _call(103, address(game), value, abi.encodeWithSignature("buyPresaleBox(uint32,uint256)", uint32(0), amount));
-    }
-
-    function gd_buyLootboxAndPresaleBox(uint256 a, uint256 amtSeed) external act(a) {
-        (,,,, uint256 priceWei) = game.purchaseInfo();
-        uint256 credit = game.presaleBoxCreditOf(currentActor) + priceWei / 4;
-        uint256 boxAmount = credit > 0.01 ether ? 0.01 ether + amtSeed % (credit - 0.01 ether + 1) : 0.01 ether;
-        uint256 value = priceWei + boxAmount;
-        if (value > currentActor.balance) value = 0;
-        _call(104, address(game), value, abi.encodeWithSelector(
-            DegenerusGame.buyLootboxAndPresaleBox.selector, uint32(0), uint256(400), uint256(0), bytes32(0),
-            uint256(0), boxAmount));
+        _call(103, address(game), value, abi.encodeWithSignature("buyDegenesisBox(uint32,uint256)", uint32(0), amount));
     }
 
     function _fulfill(uint256 word) internal returns (bool) {
@@ -978,13 +953,13 @@ contract AnyInputHandler is Test {
         string[N_ACTIONS] memory n = [
             string("cf_depositCoinflip"), "cf_claimCoinflips", "cf_claimCoinflipCarry", "cf_setCoinflipAutoRebuy",
             "cf_setCoinflipAutoRebuyTakeProfit", "g_purchase", "g_redeemFlip", "g_borrow",
-            "g_buyLootboxAndPresaleBox", "g_claimBingo", "g_claimDeadVrf", "g_claimFoilMatch",
+            "unused_8", "g_claimBingo", "g_claimDeadVrf", "g_claimFoilMatch",
             "g_claimFoilMatchMany", "g_claimGoldenTicket", "g_claimAffiliateDgnrs(addr)", "g_claimAffiliateDgnrs(addr[])",
             "g_claimWhalePass", "g_claimAfkingFlip", "g_withdrawAfkingFunding", "g_depositAfkingFunding",
             "g_reverseFlip", "g_issueDeityBoon", "g_subscribe", "g_setOperatorApproval",
             "g_placeDegeneretteBet", "g_claimWinnings", "g_claimWinnings(amount)", "g_decurse",
             "g_smite", "g_purchaseWhalePass", "g_purchaseLazyPass", "g_purchaseDeityPass",
-            "g_buyPresaleBox", "g_claimWinningsStethFirst", "f_transfer", "f_transferFrom",
+            "g_buyDegenesisBox", "g_claimWinningsStethFirst", "f_transfer", "f_transferFrom",
             "f_approve", "f_decimatorBurn", "d_transfer", "d_transferFrom",
             "d_approve", "d_burn", "s_burn", "s_burnWrapped",
             "s_claimRedemption", "s_claimParkedRedemption", "v_burnEth", "v_burnCoin",
@@ -1001,8 +976,8 @@ contract AnyInputHandler is Test {
             "gd_enterBonusDay", "gd_createBattle", "gd_enterBattle", "gd_amendSlip",
             "gd_reverseFlip", "gd_transferOwnSeat", "gd_claimFoilMatch", "gd_smite",
             "gd_sdgnrsBurn", "gd_burnWrapped", "gd_referPlayer", "gd_closeBattle",
-            "gd_setOwnSeatTraits", "prog_driveDayAligned", "prog_deadman", "gd_buyPresaleBox",
-            "gd_buyLootboxAndPresaleBox"
+            "gd_setOwnSeatTraits", "prog_driveDayAligned", "prog_deadman", "gd_buyDegenesisBox",
+            "unused_104"
         ];
         for (uint256 i; i < N_ACTIONS; ++i) _names[i] = n[i];
     }

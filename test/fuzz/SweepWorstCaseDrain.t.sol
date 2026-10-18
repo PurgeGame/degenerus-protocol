@@ -10,7 +10,6 @@ import {MineFlipGasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IGameAfkingModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
-import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @dev View/seed overlay etched onto the live game to inspect internal box-queue state.
 ///      A DegenerusGame subclass: etching type().runtimeCode (no constructor) gives the reads access
@@ -76,7 +75,7 @@ contract SweepViewer is DegenerusGame {
 ///
 /// @notice The human sweep (GameAfkingModule._runHumanBoxWork, reached only from the mineFlip
 ///         HumanBoxes action) walks the sealed read cohort boxQueue[read] from
-///         boxCursor, opening every entry (ordinary leg then presale leg). Lootbox RNG
+///         boxCursor, opening every entry. Lootbox RNG
 ///         uses two physical buffers (slot 0 bit 252, read = write ^ 1) and a fresh request
 ///         waits for every read consumer, so at most ONE sealed cohort is ever outstanding; its
 ///         frontier is (humanReadComplete, boxCursor). The worst case the gas checkpoints defend
@@ -90,9 +89,9 @@ contract SweepViewer is DegenerusGame {
 ///           (1) every mineFlip() call given a realistic bounded allowance succeeds;
 ///           (2) the read frontier advances MONOTONICALLY on every call (cursor, then completion);
 ///           (3) the drain COMPLETES: the cohort's frontier reaches humanReadComplete;
-///           (4) the live lootbox box AND a presale box are auto-opened by the sweep.
+///           (4) the live lootbox box is auto-opened by the sweep.
 ///
-/// @dev Test-only. ZERO contracts/*.sol mutation. Real lootbox + presale boxes are created through
+/// @dev Test-only. ZERO contracts/*.sol mutation. A real lootbox box is created through
 ///      the genuine purchase entrypoints (so their resolution is solvent); the walls are clones of
 ///      one real purchase's entry appended through the production append in an etched overlay,
 ///      and the cohort is sealed through the overlay running the storage contract's own swap.
@@ -143,14 +142,12 @@ contract SweepWorstCaseDrain is DeployProtocol {
         return RecyclingState.boxCount(address(game), index);
     }
 
-    /// @dev Position of `who`'s first entry in `index` that carries a presale leg when `presale`,
-    ///      else an ordinary leg and no presale leg.
-    function _entryPos(uint48 index, address who, bool presale) internal view returns (uint256 pos) {
+    /// @dev Position of `who`'s first entry in `index`.
+    function _entryPos(uint48 index, address who) internal view returns (uint256 pos) {
         uint32 id = game.walletIdOf(who);
         uint256 n = _queueLen(index);
         for (; pos < n; ++pos) {
-            uint256 word = RecyclingState.boxEntry(address(game), index, pos);
-            if (BoxOrderLib.boId(word) == id && (BoxOrderLib.boPresaleWei(word) != 0) == presale) return pos;
+            if (BoxOrderLib.boId(RecyclingState.boxEntry(address(game), index, pos)) == id) return pos;
         }
         revert("fixture: entry not queued");
     }
@@ -158,8 +155,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
     /// @dev The human sweep's declared admission bound for entry `word`
     ///      (GameAfkingModule._runHumanBoxWork).
     function _declaredGas(uint256 word) internal pure returns (uint256) {
-        return MineFlipGasBounds.HUMAN_ENTRY_GAS + BoxOrderLib.boCount(word) * MineFlipGasBounds.HUMAN_BOX_GAS
-            + (BoxOrderLib.boPresaleWei(word) != 0 ? MineFlipGasBounds.HUMAN_PRESALE_GAS : 0);
+        return MineFlipGasBounds.HUMAN_ENTRY_GAS + BoxOrderLib.boCount(word) * MineFlipGasBounds.HUMAN_BOX_GAS;
     }
 
     /// @dev Entry `pos` of the read cohort has settled (the cursor moved past it).
@@ -275,44 +271,21 @@ contract SweepWorstCaseDrain is DeployProtocol {
         game.purchase{value: lootboxWei + 1 ether}(0, 400, BoxOrderLib.boCustomFloor(lootboxWei), bytes32(0), MintPaymentKind.DirectEth, false);
     }
 
-    /// @dev Buy a REAL presale box into the current write cohort (credit-funded; enqueues for auto-open).
-    function _buyPresaleBox(address who, uint256 boxWei) internal returns (bool created) {
-        if (game.presaleBoxEthRemaining() == 0) return false;
-        vm.deal(who, boxWei + 2 ether);
-        if (game.walletIdOf(who) == 0) {
-            // Entry-point registration: a plain ticket buy gives the wallet its ID (no box entry).
-            (, , , , uint256 priceWei) = game.purchaseInfo();
-            vm.prank(who);
-            game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
-        }
-        // Seed spendable presale-box credit (presaleBoxCredit — a credit ALLOWANCE keyed by wallet ID).
-        bytes32 cslot = keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.PRESALE_BOX_CREDIT));
-        uint256 existing = uint256(vm.load(address(game), cslot));
-        vm.store(address(game), cslot, bytes32(existing + boxWei));
-        vm.deal(who, boxWei + 1 ether);
-        vm.prank(who);
-        try game.buyPresaleBox{value: boxWei}(0, boxWei) {
-            created = true;
-        } catch {
-            created = false;
-        }
-    }
-
     // =========================================================================
     // The worst-case drain
     // =========================================================================
 
-    /// @notice FUZZ: long walls of small entries before and after a live lootbox box and a presale box in the
+    /// @notice FUZZ: long walls of small entries before and after a live lootbox box in the
     ///         sealed read cohort all drain across mineFlip calls given a bounded realistic
     ///         allowance — every call succeeds, the frontier advances monotonically, the drain
-    ///         completes and both real boxes open. (No assertion is weakened: the drain MUST
-    ///         complete and both real boxes MUST open.)
+    ///         completes and the real box opens. (No assertion is weakened: the drain MUST
+    ///         complete and the real box MUST open.)
     function testFuzz_WorstCaseSweepDrainsBoundedNoBrick(
         uint256 prefixSeed,
         uint256 chunkSeed,
         uint256 lootSeed
     ) public {
-        // 1) Live game so a real lootbox + presale box resolve solvently; settled and idle.
+        // 1) Live game so a real lootbox box resolves solvently; settled and idle.
         _driveDailyCycleOnce();
         vm.assume(!game.rngLocked());
         _settleIdle();
@@ -327,7 +300,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
         uint256 headB = bound(prefixSeed >> 16, 3, 10);
         address wallOwner = makeAddr("wall-owner");
         _buyLootbox(wallOwner, 0.01 ether);
-        uint256 template = RecyclingState.boxEntry(address(game), cohort, _entryPos(cohort, wallOwner, false));
+        uint256 template = RecyclingState.boxEntry(address(game), cohort, _entryPos(cohort, wallOwner));
         _appendClones(template, headA);
         _appendClones(template, headB);
 
@@ -335,19 +308,13 @@ contract SweepWorstCaseDrain is DeployProtocol {
         address lootOwner = makeAddr("loot-owner");
         uint256 lootboxWei = bound(lootSeed, 0.05 ether, 2 ether);
         _buyLootbox(lootOwner, lootboxWei);
-        uint256 lootPos = _entryPos(cohort, lootOwner, false);
-
-        address presaleOwner = makeAddr("presale-owner");
-        bool presaleCreated = _buyPresaleBox(presaleOwner, 1 ether);
-        // Presale must actually be created for the presale-leg assertion to be non-vacuous.
-        vm.assume(presaleCreated);
-        uint256 presalePos = _entryPos(cohort, presaleOwner, true);
+        uint256 lootPos = _entryPos(cohort, lootOwner);
 
         // 4) A LONG tail wall after the real entries: the sweep must still scan past it to drain the
         //    cohort, proving the cursor persists past the real opens.
         uint256 prefixLen = bound(prefixSeed, 6, 20);
         _appendClones(template, prefixLen);
-        uint256 totalEntries = 1 + headA + headB + 2 + prefixLen;
+        uint256 totalEntries = 1 + headA + headB + 1 + prefixLen;
         assertEq(_queueLen(cohort), totalEntries, "fixture: walls and real entries queued in the cohort");
 
         // 5) Seal: the cohort becomes the read buffer with its word landed.
@@ -359,8 +326,6 @@ contract SweepWorstCaseDrain is DeployProtocol {
 
         // 6) Per-chunk property: the heaviest entry's declared bound fits a realistic 10M call.
         uint256 heaviest = _declaredGas(RecyclingState.boxEntry(address(game), cohort, lootPos));
-        uint256 presaleEntry = _declaredGas(RecyclingState.boxEntry(address(game), cohort, presalePos));
-        if (presaleEntry > heaviest) heaviest = presaleEntry;
         // The Game's delegatecall retains 1/64 of the forwarded gas.
         uint256 minChunk = (heaviest + MineFlipGasBounds.HUMAN_TAIL_GAS + ENGINE_OVERHEAD) * 64 / 63;
         emit log_named_uint("heaviest human entry declared gas", heaviest);
@@ -391,9 +356,8 @@ contract SweepWorstCaseDrain is DeployProtocol {
         assertTrue(prevDone, "DRAIN COMPLETE: the whole cohort drains in bounded chunks (no brick / infinite stall)");
         assertLe(calls, totalEntries + 1, "DRAIN COMPLETE: at least one entry per bounded call");
 
-        // (4) the live lootbox box AND the presale box were auto-opened (both legs drained).
+        // (4) the live lootbox box was auto-opened.
         assertTrue(_settled(lootPos), "DRAINED: the live lootbox box was auto-opened by the sweep");
-        assertTrue(_settled(presalePos), "DRAINED: the presale box was auto-opened by the sweep (presale leg)");
 
         // The frontier swept the whole cohort — nothing marooned behind it.
         (, uint48 finalCur) = _frontier();
@@ -416,13 +380,13 @@ contract SweepWorstCaseDrain is DeployProtocol {
         uint48 index = _lrIndex();
         address wallOwner = makeAddr("audit-wall-owner");
         _buyLootbox(wallOwner, 0.01 ether);
-        uint256 template = RecyclingState.boxEntry(address(game), index, _entryPos(index, wallOwner, false));
+        uint256 template = RecyclingState.boxEntry(address(game), index, _entryPos(index, wallOwner));
         uint256 skipPrefixLen = SKIP_WALL;
         _appendClones(template, skipPrefixLen - 1);
 
         address liveOwner = makeAddr("audit-live-owner");
         _buyLootbox(liveOwner, 1 ether);
-        uint256 livePos = _entryPos(index, liveOwner, false);
+        uint256 livePos = _entryPos(index, liveOwner);
         assertEq(_queueLen(index), skipPrefixLen + 1, "fixture: a wall of entries precedes one live box");
         assertEq(livePos, skipPrefixLen, "fixture: tail box sits behind the wall");
 

@@ -8,7 +8,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 ///         `address(this) == GAME`. A DIRECT call on the deployed module address would run
 ///         against the module's empty local state and trap the caller's `msg.value`, so each
 ///         guards `address(this) == GAME` and reverts a direct call. Regression for the
-///         `buyPresaleBox` / `purchaseLazyPass` / `purchaseDeityPass` guards (the same class as
+///         `buyDegenesisBox` / `purchaseLazyPass` / `purchaseDeityPass` guards (the same class as
 ///         the v67 DELEGATE-FIND-01 fix for the Boon / resolveLootboxDirect entrypoints).
 contract DelegateOnlyGuards is DeployProtocol {
     function setUp() public {
@@ -16,9 +16,9 @@ contract DelegateOnlyGuards is DeployProtocol {
         vm.deal(address(this), 10 ether);
     }
 
-    function test_buyPresaleBox_directCallReverts() public {
+    function test_buyDegenesisBox_directCallReverts() public {
         vm.expectRevert(bytes4(keccak256("E()")));
-        mintModule.buyPresaleBox{value: 1 ether}(0, 1 ether);
+        degenesisModule.buyDegenesisBox{value: 1 ether}(0, 1 ether);
     }
 
     function test_purchaseLazyPass_directCallReverts() public {

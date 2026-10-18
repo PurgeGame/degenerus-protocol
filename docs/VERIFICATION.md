@@ -8,6 +8,65 @@ local output directories or CI artifacts.
 The dated implementation sections below are historical, scoped evidence; their
 pass counts do not certify later revisions.
 
+### Compact lootbox orders (2026-10-17)
+
+One box type per purchase; three 85-bit orders per queue word (see `docs/ARCHITECTURE.md`).
+Gas measured in isolated transactions (`FOUNDRY_ISOLATE=true`, Osaka, solc 0.8.34 via-IR):
+
+| Workload | Gas |
+| --- | ---: |
+| Box append, lane 0 of a fresh word (`LootboxQueueGas`) | 147,341 |
+| Box append, lane 0 of a recycled word | 130,241 |
+| Box append, lane 1 or 2 (fresh or recycled buffer) | 130,244 |
+| One 100-small order, settled (`drain_one_entry_100_smalls`) | 1,245,027 |
+| Cold atomic 100 × 10 ETH order, sweep peak (`HumanOrderNativeGas`) | 2,742,070 of 15,700,000 admitted |
+| 100 × 2,000 ETH order at every modifier ceiling (`LootboxOpenBounds`) | 1,846,307 |
+| Repriced fresh-cap peak including state gas (80 fixtures) | 7,318,463 |
+| sDGNRS whale stage increment, 100 / 1,000 passes, with the top-up (`SdgnrsWhaleBuyStageGas`, cooled accounts in one test transaction; 726,951 / 802,539 Osaka when isolated) | 453,351 / 528,939 Osaka; 1,588,771 / 1,664,359 repriced with state gas |
+| Player whale purchase, 1,000 passes, registered / fresh wallet | 1,799,231 / 1,950,919 |
+
+A lane-1/2 append replaces a fresh-slot write with a warm read-modify-write of the word its
+lane-0 order cleared, so growth past a buffer's high-water mark saves one new slot per two of
+three orders; recycled appends cost the same as before. `LootboxEvLifecycleGas` slot counts
+follow: four same-wallet or distinct-wallet orders create two fewer slots. Settlement reads
+each order's word again (a warm slot); no word cache is kept. The admission constants are
+unchanged: `SUBSCRIBER_WHALE_GAS` (2.8M) covers the 1,000-pass sDGNRS purchase, which shares
+the 200-group cap with the player route.
+
+### Degenesis sale verification
+
+The Degenesis sale ([architecture](ARCHITECTURE.md#degenesis-sale)) is verified against the 21
+acceptance checks of its design. Results are recorded with the battery that covers this source;
+until then this section lists what each check must show, not pass counts.
+
+| Area | Must show |
+| --- | --- |
+| Outcomes | Categories 50/40/10 from separate tags on `hash4(DEGENESIS_ORDER_DOMAIN, word, day << 32 \| index, walletId)`; independent FLIP and sDGNRS size rolls; an order never receives both; a FLIP result below one whole FLIP, a lost sub-pass fraction and a zero sDGNRS award pay the 1-WWXRP consolation |
+| sDGNRS bound | For every cohort, awards never exceed `1.5Q <= pool`; `Q = min(2.5T, 2/3 pool)`; a 9 ETH and a 1 ETH order have a 9:1 expected ratio before rounding; reordering or partitioning settlement calls changes no reward |
+| FLIP scale | Day schedule, early bonus (opening, three hours, six hours, day boundaries) and `K / (K + V)` volume factor match the formula; splitting or reordering purchases in a cohort leaves the scale unchanged; the nominal mean stays under `K x sum(base) x 1.05` |
+| Credit | 25% of ETH, claimable and prepaid spend while the window is open, once per qualifying spend; none for FLIP-paid parts, deliveries, Degenesis purchases, the Vault or sDGNRS; the AFKing cover buy earns credit |
+| Purchase | 0.01 ETH minimum, 0.0001 ETH units, the 38-bit per-order bound reverts rather than truncates; the Vault wallet ID cannot buy, including through an operator; no affiliate, quest, streak or activity credit |
+| Accounting | `claimablePool` holds unsplit volume; the split is exact in wei (half to the future pool, quarters to the Vault budget and sDGNRS AFKing); fresh, claimable and prepaid funding conserve obligations |
+| Pricing order | A cohort prices only after the previous one closed; a backlog delays the binding word and never lowers the rate; empty cohorts and zero inventory follow the stated rules; late keeper calls are replay-safe |
+| Vault and sDGNRS | `spendDegenesis` is atomic, exact-cost and owner-only, leaves no withdrawable balance, handles the 1-wei sentinel, and reverts for a non-Vault caller or `maxCost` above the budget; the sDGNRS top-up conserves `claimablePool`, persists when no group is bought and runs before the whale attempt |
+| Engine | Degenesis days unlock randomness only; neither `lastPurchaseDay` latch fires before day 9, however late the day is cranked; the day-9 request latches the early turbo only above the level-1 target; craps windows and battle locks start on day 2; day 7's battle awards no seats; foil is unchanged |
+| Terminal | Both endings split every cohort and release the Vault budget and sDGNRS AFKing funding exactly once, before `gameOver`, with no loss of player claims; unresolved orders are forfeited |
+| Burn | The seventh close burns the remaining `Pool.Degenesis` balance exactly once, after every reservation is released, including an empty final day and a sale with no orders |
+| Gas | Per-branch admission and the flush reserve cover the measured worst case of each branch; see the [gas review](MINEFLIP-GAS-REVIEW.md). Results: `test/gas/DegenesisGas.t.sol` (27 suites, 30 tests) passes. Each forced branch, flush, tail, request step, word copy, day close and terminal addition is within its bound on Osaka and on the no-reservoir Glamsterdam total, and every checkpoint stays under 10M execution gas. |
+
+Suites (all under `test/fuzz/` unless noted): `DegenesisCohortMath`, `DegenesisSettlement`,
+`DegenesisSettlementInventory`, `DegenesisDayMapping`, `DegenesisClosingBurn`, `DegenesisWordBinding`,
+`DegenesisFlipSchedule`, `DegenesisLanes`, `DegenesisSmurfPayee`, `DegenesisCredit`,
+`DegenesisAccounting`, `DegenesisVaultSpend`, `DegenesisSdgnrsTopUp`, `DegenesisTerminal`,
+`DegenesisDailyEngine`, `DegenesisCraps`, `DegenesisFoil`, `CombinedDegenesisBoxFunding`, the
+Degenesis variants in `invariant/V61SolvencyAfpay.inv.t.sol` and `invariant/WalletIdTruth.inv.t.sol`,
+`test/craps/CrapsPasses.t.sol`, `test/craps/JackpotBattle.t.sol` and `test/gas/DegenesisGas.t.sol`.
+
+Structural gates cover the new module's selectors and delegatecall pairs, the layout goldens
+(slots 0, 15, 16, 26 and appended 83-85; CrapsBattle's `_firstWindowDay`), the storage slot pins and
+the source manifests. Runtime sizes are checked by the deployment-size gate; CrapsBattle, Game, the
+Advance and Whale modules are the tightest.
+
 ### Freeze battery (2026-10-16)
 
 The battery for `audit-2026-10-16` ran on `ea41f2222`. Its Foundry failures, and one Hardhat
@@ -49,7 +108,7 @@ unisolated tails, planning, pass-only maximums and skips retain analytical reser
 Blank measurements in the table do not represent measured worst cases.
 
 The forced atomic 100-box order uses 12,878,642 total gas (6,122,162 execution and
-6,756,480 state). Its 15.7M admission plus applicable presale/tail reserves preserves
+6,756,480 state). Its 15.7M admission plus applicable tail reserves preserves
 the accepted exception to the 10M checkpoint target. The forced direct 32-winner
 worker uses 9,767,503; a separate materializer extrapolation is 9,827,160. Its 12M
 round admission includes margin, with sampling and checkpoint reserves additional.
@@ -116,10 +175,9 @@ workload under each schedule, plus unchanged new-slot counts. These are measured
 not a claim that every entropy/outcome or economic interleaving has identical gas.
 
 Opening admission is checked independently in `HumanOrderNativeGas.t.sol`: fresh allowance
-slots, single/mixed/100-box orders, maximum custom sizes, presale and nested spins. The native
-100 × 10 ETH sweep peaks at 2,746,022 gas against its 8,500,000 entry bound; mixed 100-box
-orders plus presale peak at 2,552,266 against 8,610,000. The worker's measured overhead
-outside the atomic entry peaks at 7,274 against its 80,000 tail reserve. `HUMAN_ENTRY_GAS`
+slots, single and 100-box orders, maximum custom sizes and nested spins. The native
+100 × 10 ETH sweep peaks at 2,746,022 gas against its 8,500,000 entry bound. The worker's
+measured overhead outside the atomic entry peaks at 7,274 against its 80,000 tail reserve. `HUMAN_ENTRY_GAS`
 remains 1,300,000. Repricing uses uninstrumented execution gas and a separately recorded
 replay, with the fresh cap slot included. Across 80 repriced fixtures (five order shapes,
 16 words each), peak execution is 2,032,581 gas; peak including state gas is 7,320,261.
@@ -202,7 +260,7 @@ CBOR metadata hash: every artifact matches, so earlier test results apply unchan
 helpers that embed a contract's creation code differ only inside those embedded metadata
 hashes. Use [the freeze record](audit/freeze-audit-2026-10-12.json) for the recorded identities.
 
-### Vault-held allocations and presale burn (2026-10-10)
+### Vault-held allocations and sale-pool burn (2026-10-10)
 
 `DGNRS` pays its initial 50B and every level-vested release to the Vault, and
 `Icons32Data` setters follow `isVaultOwner`. `test/fuzz/DgnrsWrapperPaths.t.sol` covers the
@@ -214,9 +272,9 @@ exposes `_dgnrsFromVault` and `_unwrapFromVault` for fixtures that need circulat
 Hardhat fixtures that need DGNRS sweep it out of the Vault (`vault.sweepToken`) or unwrap
 through `vault.dgnrsUnwrapTo`.
 
-The closing presale box burns the `Pool.PresaleBox` remainder with a self-directed pool
-transfer; `WardenLbxClosingBoxOrder` and `PresaleBoxDrain` assert the burn and that the
-closing buyer receives only the purchased amount. Local lanes ran on the verified commit
+The sale pool's remainder burns with a self-directed pool transfer. The Degenesis closing burn
+(the seventh cohort close, `DegenesisInventoryBurned`) is verified in
+[Degenesis sale verification](#degenesis-sale-verification). Local lanes ran on the verified commit
 in parallel worktrees (Foundry groups, Hardhat, deep invariants at 1,000 runs × 256 calls,
 Halmos); use [the freeze record](audit/freeze-audit-2026-10-10b.json) for recorded results and
 input identities.
@@ -823,7 +881,7 @@ applies it before returning the award to lootbox/foil callers and emitting
 `BoxSpin`. Zero scores, stale/claimed scores and losing spins still pay zero.
 Larger awards retain their whole-token floor. The token's existing `gameMintScale`
 still applies at mint time, including its zero-emission setting. Coinflip losses,
-presale duds, golden-ticket consolation and lootbox cold-bust awards were already
+Degenesis consolation, golden-ticket consolation and lootbox cold-bust awards were already
 whole-token amounts or had a one-token minimum.
 
 The focused isolated run `20261004T141035.230963Z-178f5094` passes all 38 test

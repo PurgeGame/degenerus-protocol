@@ -141,7 +141,7 @@ contract SdgnrsCenturyRecycleTest is RedemptionCloseTools {
         assertEq(afterPools[1] - beforePools[1], affiliateShare);
         assertEq(afterPools[2] - beforePools[2], lootbox);
         assertEq(afterPools[3] - beforePools[3], whale);
-        assertEq(afterPools[4], beforePools[4], "presale never refilled");
+        assertEq(afterPools[4], beforePools[4], "degenesis never refilled");
         assertEq(_sum(afterPools) - _sum(beforePools), mint, "pool credits conserve the mint");
         assertEq(sdgnrs.balanceOf(address(sdgnrs)) - prior.inventory, mint, "prior.inventory funded exactly once");
         assertEq(sdgnrs.balanceOf(address(sdgnrs)) - _sum(afterPools), prior.inventory - _sum(beforePools));
@@ -288,7 +288,7 @@ contract SdgnrsCenturyRecycleTest is RedemptionCloseTools {
     function testEmptyPoolsAndInventoryCanBeRefilled() public {
         uint256 burns;
         for (uint8 i; i < 4; ++i) burns += _award(sDGNRS.Pool(i), address(sdgnrs), type(uint256).max);
-        _award(sDGNRS.Pool.PresaleBox, ALICE, type(uint256).max);
+        _award(sDGNRS.Pool.Degenesis, ALICE, type(uint256).max);
         assertEq(sdgnrs.balanceOf(address(sdgnrs)), 0);
         _assertRefill(100, burns);
     }

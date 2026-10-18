@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
-import {DeployProtocol} from "./helpers/DeployProtocol.sol";
+import {DegenesisDeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IsDGNRS} from "../../contracts/interfaces/IsDGNRS.sol";
 import {
@@ -33,7 +33,8 @@ import {
 ///        FLIP entry floor.
 ///      All assertions are behavioural (getters, stakes, pool balances) — nothing
 ///      here pins a storage slot.
-contract BigRecordPoolTest is DeployProtocol {
+/// @dev Day-1 deploy: the record clocks and the Coinflip seed window both start on day 1.
+contract BigRecordPoolTest is DegenesisDeployProtocol {
     address internal constant GAME = ContractAddresses.GAME;
 
     uint256 internal constant FLIP_MIN = 200_000;

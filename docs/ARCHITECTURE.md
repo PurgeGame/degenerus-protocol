@@ -4,7 +4,7 @@
 
 | Component | Responsibility |
 | --- | --- |
-| `DegenerusGame` + 16 game modules | Purchases, ticket materialization, the miner engine and VRF, jackpots, lootboxes, side-games and terminal distribution. The sixteen delegatecall modules are Advance, Afking (`GameAfkingModule`), Bingo, Boon, Decimator, Degenerette, FoilPack, GameOver, Jackpot, JackpotDraw, Lootbox, Miner, Mint, Rng, Ticket and Whale; `DegenerusGameMintStreakUtils` and `DegenerusGamePayoutUtils` are abstract bases inherited by modules, the Game and the Lens, not deployments |
+| `DegenerusGame` + 17 game modules | Purchases, ticket materialization, the miner engine and VRF, jackpots, lootboxes, side-games and terminal distribution. The seventeen delegatecall modules are Advance, Afking (`GameAfkingModule`), Bingo, Boon, Decimator, Degenerette, Degenesis, FoilPack, GameOver, Jackpot, JackpotDraw, Lootbox, Miner, Mint, Rng, Ticket and Whale; `DegenerusGameMintStreakUtils` and `DegenerusGamePayoutUtils` are abstract bases inherited by modules, the Game and the Lens, not deployments |
 | `DegenerusGameStorage` | Shared game/module storage; every delegatecall executes in the Game's storage context. Modules also delegatecall sibling modules from inside a delegatecall (Advance to GameOver, Jackpot and Mint; Jackpot to Whale for early-bird and quadrant pass awards; Mint to FoilPack and Lootbox; FoilPack to Degenerette and Jackpot; Afking and Whale to Lootbox; Degenerette and Lootbox to further modules); `make check-delegatecall` pins each selector/target pair |
 | `FLIP` + `Coinflip` | `FLIP`: token supply, burns, the virtual vault allowance and the separate craps comp lane (`_crapsCompAllowance`). `Coinflip`: daily flip stakes, settled credits and the record pool; it holds no comp state |
 | `Craps`, `LootboxCraps`, `CrapsBattle` + `CrapsEngine` | `CrapsBattle is LootboxCraps is Craps` holds seat/field state and payouts; `CrapsEngine is Craps` is the one deployment after the table and exposes `settleSlip` and `settleBattle` as `external pure`, which is what makes the table's pinned call a STATICCALL; the table calls `settleBattle`, which plays a seat's whole run (board, scatter, shooter boost and rotation) under the shared 600-roll between-shooter budget and 1,111-roll ceiling and also returns the battle ranking score (goals: high point, then ending bankroll; busts: shooters completed, then whether anything was kept, then high point, then remainder), so the comparator lives in the engine, not the table |
@@ -21,17 +21,15 @@
 coordinator and key hash, the LINK token, the LINK/ETH feed, stETH, the ENS reverse registrar
 and the CREATOR address. The ENS registrar receives a best-effort raw `setName(string)` call
 from the constructors of Coinflip, DeityPass, Parimutuel, AFKingSubscriptionToken and
-RecordBounty, skipped when the pin is zero. The deployment order has 32 entries;
+RecordBounty, skipped when the pin is zero. The deployment order has 37 entries;
 the Vault also creates its two share tokens. `DegenerusGameLens` and `DeityBoonViewer`
 are in scope but are not entries in that deployment sequence. Third-party renderers,
 Chainlink, LINK and stETH have distinct trust boundaries described in Security.
 
 ## Main value flow
 
-Ticket and ordinary lootbox ETH funds protocol prize pools. Presale-box ETH is credited
-80% to the Vault and 20% to sDGNRS as claimable (`_creditBoxProceeds`); the box that fills the
-presale cap is the last presale box to resolve, and its resolution burns whatever remains in the
-sDGNRS `PresaleBox` pool. Jackpot and redemption paths create claimable
+Ticket and ordinary lootbox ETH funds protocol prize pools. Degenesis-box ETH is held in
+`claimablePool` until its cohort splits (below). Jackpot and redemption paths create claimable
 obligations or game-specific credits; moving ETH/stETH to a player follows the relevant
 claim/recipient checks. Permissionless processing is not authority to redirect payment.
 
@@ -39,7 +37,7 @@ Every box with an activity-score bonus draws one shared per-(wallet, level) allo
 The first 10 ETH of bonus spend takes the full bonus; the bonus then tapers linearly to
 half at 20 ETH and to neutral at 40 ETH. A box earns the integral of that weight over
 the spend it covers. Every route draws at settlement against the live opening level.
-Ordinary and pass/cover orders freeze their score, price and modifiers at purchase;
+Ordinary and pass/cover orders freeze their score, per-box value and modifiers at purchase;
 opening draws once for the entire order before any reward roll or nested ETH spin.
 Purchases made after a cohort's word is published consume no allowance until their
 later cohort opens. The engine settles redemption, daily AFKing, then queued human
@@ -50,10 +48,24 @@ neutral boxes draw nothing, and protocol-owned sDGNRS daily boxes remain exempt.
 
 Queued orders use the existing basis-point eligible fraction, shared across their boxes;
 daily AFKing and direct boxes retain their exact-wei calculation. Pass/cover grants draw
-against count times stored gwei-sized box value, with discarded dust remaining in the
-funded pools. Dust can move the rounded fraction by one basis point: a 1 ETH + 1 wei
+against count times the stored per-box value (whole 0.001 ETH units), with discarded dust
+remaining in the funded pools. Dust can move the rounded fraction by one basis point: a 1 ETH + 1 wei
 cover at 9 ETH used now represents 1 ETH and gets a 10,000-bps fraction rather than
 9,999 bps. Its bonus budget at 145% EV increases by 0.000045 ETH, not merely one wei.
+
+Each ordinary purchase picks one box type: small, medium or large (1x/5x/25x the purchase
+level's ticket price, resolved at purchase) or a custom of 0.01–2,000 ETH in 0.001 ETH steps,
+1–100 boxes (input `[quantity:7][kind:2][customUnits:21]`). The queue stores one 85-bit
+entry per order, three per storage word: wallet ID, per-box units, a 12-bit activity-score
+code (exact to 2,042, then 14-point steps to 30,000), effective boost bps, quantity and the
+distress flag. Logical position `p` lives in word `p / 3` at bit `(p % 3) * 85`; write
+counts, `boxCursor`, event tags and seeds stay in logical positions, so the worker admits,
+settles and resumes one order at a time at any lane. A lane-0 append overwrites the whole
+word; lanes 1 and 2 OR into it. System grants (whale, lazy, deity, subscription cover) floor
+per box to whole units and stay inside the 2,000 ETH cap by their formulas; a whale purchase
+of up to 1,000 paid passes folds its 10% box leg to `min(quantity, 100)` boxes of at most
+4 ETH. Redemption, daily AFKing, direct and recirculated boxes never enter the queue and keep
+their wide amounts.
 
 An ending decided with VRF alive first settles every outstanding account loan, repaying at
 the current manual-repayment price or seizing ([account loans](ACCOUNT-LOANS.md)), so a
@@ -73,6 +85,87 @@ Read the terminal paths separately from live-game withdrawal paths.
 FLIP has special routing for VAULT and sDGNRS: their backing/allowances are not ordinary
 wallet balances. Coinflip credits are not equivalent to minting immediately spendable
 FLIP. The comp allowance is neither circulating FLIP nor vault mint backing.
+
+## Degenesis sale
+
+Degenesis is a seven-day launch sale of boxes, kept separate from purchases and lootboxes. Day 1 is
+the deploy day; Degenesis day `c` (1..7) is day index `c + 1` (`GameTimeLib.DEGENESIS_START_DAY = 2`),
+and `MAIN_LAUNCH_DAY = 9` is the first post-Degenesis day. The sale has no aggregate ETH cap.
+All its logic lives in `DegenerusGameDegenesisModule`; outside it the game pays a constant
+timestamp compare (credit accrual) and slot-0 reads of `degenesisClosed`.
+
+**Credit.** While `block.timestamp < DEGENESIS_END_TS`, a qualifying spend earns `spend / 4`
+Degenesis credit on the buyer's wallet ID (`degenesisCredit`, view `degenesisCreditOf`): tickets
+(Mint `totalCost`), ordinary lootboxes, whale, lazy and deity passes (full charged price), foil premiums,
+and the AFKing subscribe-time cover buy (`ethValue + claimableUse`, to the subscriber). Only ETH,
+claimable and prepaid parts qualify; FLIP-paid parts, reward grants, daily AFKing deliveries, Degenesis
+purchases and the Vault and sDGNRS bodies earn nothing. Credit is permission to spend, not payment, and
+expires unused when the window closes.
+
+**Purchase.** `buyDegenesisBox(uint32 id, uint256 amount)` is payable, a standalone entry
+forwarded by the Game facade to the module. Sale day 2..8 and liveness are required, `amount` is at
+least 0.01 ETH in whole 0.0001-ETH units, and the unit count fits 38 bits (about 27.5M ETH per order).
+It consumes `amount` of credit 1:1, pays from `msg.value`, then the buyer's claimable, then prepaid
+AFKing balance (overpay is credited to the payer's AFKing), and adds `amount` to `claimablePool`.
+The Vault wallet ID cannot buy. It pays no affiliate commission and earns no quest, streak or
+activity credit. Orders pack three to a slot (`degenesisOrders`: ID 32, units 38, seconds-into-day
+15 bits per lane); `degenesisDays[c]` holds the cohort's volume `V` in units, its order count and the
+split flag.
+
+**Cohort split and pricing.** `prepareDegenesis(day)` runs inside `prepareRequestBoundary`, before the
+daily request, while `degenesisClosed < 7`. A cohort is sealed once its day index is below the
+request day. The split sends `V / 4` to the Vault budget (`degenesisVaultBudget`, inside
+`claimablePool`, excluded from Vault claimables), `V / 4` to sDGNRS AFKing funding, and `V / 2` to
+the future pool; the quarters stay inside `claimablePool` and only the future half leaves it. A
+request after a stretch with no requests splits every sealed cohort at once. Pricing then closes
+empty sealed cohorts and prices one nonempty cohort once the previous cohort has closed, with
+`Q = min(2.5T, 2/3 of the Degenesis pool)` and `T` = 20B tokens on days 1-3, 10B on days 4-7. Pricing
+writes `degenesisActive` (Q, paid, bound day, cursor); the reservation is `1.5Q`, which no award
+sum can exceed. Cohorts price strictly in order, so a settlement backlog delays the next cohort's
+randomness and never lowers its rate.
+
+**Binding.** `_recordDailyRng` copies the bound day's word into `degenesisWord` when
+`degenesisClosed < 7 && boundDay == day`, on both the apply and gap-backfill paths. V, the pool
+balance and the orders are fixed before the request, so no outcome input changes afterwards.
+
+**Settlement.** `MinerAction.DegenesisSettle` is selected after `GrowthSettle` while `degenesisWord`
+is nonzero and the terminal bit is clear; it delegatecalls `runDegenesisWork(allowance)`. It is not
+an RNG consumer and never gates daily completion or requests. Each order's outcome is a pure function
+of the bound word and the frozen cohort, with seed `hash4(DEGENESIS_ORDER_DOMAIN, word, day << 32 |
+index, walletId)`: 50% FLIP-valued, 40% sDGNRS, 10% WWXRP, with an independent size roll.
+FLIP-valued results scale the ladder by `base(day) / 2 x earlyBonus x K / (K + V)` (K = 46 ETH),
+collapse to hundreds above the round threshold, and denominate half the time into Craps day passes
+(12 high-roller passes at most); a result below one whole FLIP, or a lost sub-pass fraction, pays the
+WWXRP consolation. sDGNRS awards are `units x Q x [5000, 15000] bps / V`; a zero award or an empty
+pool pays WWXRP. Coin credits flush in one `creditFlipBatch` per chunk of at most 128 orders; the
+cursor advances before each order pays, and each order admits against its own branch bound plus the
+flush it still owes. Orders resolve to the reward account's wallet ID; sDGNRS goes to its payee.
+
+**Closing.** The cohort closes when its last order resolves (or immediately when empty): the
+reservation is released, `degenesisActive` and `degenesisWord` clear and `degenesisClosed`
+increments. The seventh close burns the remaining `Pool.Degenesis` balance, once.
+
+**Vault and sDGNRS funding.** `Vault.spendDegenesis(whalePass, quantity, boxOrder, maxCost)`
+(owner only) reaches the module through the facade. It moves `maxCost` from `degenesisVaultBudget`
+into Vault claimable, runs the existing claimable-funded Mint or Whale purchase, and returns what the
+purchase did not take, so the budget never becomes withdrawable and `claimablePool` is unchanged.
+sDGNRS subscribes with AFKing funding first, and `topUpSdgnrsAfking()` tops its AFKing funding up to
+10 ETH from claimable (above the 1-wei sentinel) before each once-per-level bulk whale attempt.
+
+**Daily engine and craps.** Before `MAIN_LAUNCH_DAY` the daily phase processes a Degenesis day by
+unlocking randomness only (`STAGE_DEGENESIS_DAY = 21`): no level-1 FLIP draw, no purchase-phase
+ticket or ETH leg, no `lastPurchaseDay` latch (the seal and the early-turbo latch both require
+`day >= MAIN_LAUNCH_DAY`, keyed on the processed day), so the level cannot advance. The request that
+opens day 9 follows the normal early-turbo rule. Scheduled craps windows and jackpot-battle locks
+start on Degenesis day 2 (`lockJackpotBattle` returns false before `_firstWindowDay`); the battle
+awards no seats for window days before `MAIN_LAUNCH_DAY`, so paid seats share the whole subsidy; pass
+reservations before day 3 are refused and `deliverPasses` clamps to day 3.
+
+**Terminal.** Game-over setup first runs `splitDegenesis()` over all cohorts (idempotent). After the
+deity-refund budget and before `gameOver` is set, it zeroes `degenesisVaultBudget` and sDGNRS's whole
+AFKing balance and subtracts them from `claimablePool`, so they join the final prizes
+(`DegenesisFundsReleased`); the missing-randomness check counts them as distributable. Unresolved
+orders are forfeited: `degenesisActive` clears with the terminal inventory burn.
 
 ## Purchase timing and pool acceleration
 
@@ -471,7 +564,7 @@ deterministically. The NatSpec of `_livenessTriggered`,
 
 At the first AFKing stage of each level, sDGNRS attempts a whale-pass purchase of
 the largest group of five paid passes affordable from a quarter of its claimable,
-capped at 100 paid passes. The attempt latch advances even if it buys nothing;
+capped at 1,000 paid passes. The attempt latch advances even if it buys nothing;
 later chunks and days cannot retry the same level. A purchase consumes the stage's
 shared work budget. Its ordinary daily box is separate from this level-start action.
 
@@ -486,7 +579,7 @@ selects one of the 51 whole percentages; the event records it, and retries canno
 reroll a completed century. Its post-refill supply checkpoint captures both
 redemption burns and automatic self-award burns without per-burn accounting writes. New inventory
 is split Whale/Affiliate/Lootbox/Reward in a 1:3:2:1 ratio, with allocation dust to
-Lootbox; PresaleBox and the wrapper receive no allocation. A processed-century
+Lootbox; Degenesis and the wrapper receive no allocation. A processed-century
 marker prevents replay, and terminal pool destruction permanently closes the
 mechanism even when inventory is zero. Recycling moves no backing and changes no
 pending redemption claims. See [economic disclosures](../ECONOMIC_DISCLOSURES.md)

@@ -48,11 +48,11 @@ contract LootboxPendingEthLane is DeployProtocol {
         (, , , , uint256 priceWei) = game.purchaseInfo();
         (uint48 idx0, uint64 pend0, uint64 thr0, uint40 flip0) = _lanes();
 
-        // Two smalls and a 0.5 ETH custom: cost is the order's nominal.
-        uint256 cost1 = 2 * priceWei + 0.5 ether;
+        // Two 0.25 ETH customs: cost is the order's nominal.
+        uint256 cost1 = 0.5 ether;
         vm.prank(actor);
         game.purchase{value: cost1 + 1 ether}(
-            0, 400, BoxOrderLib.boOrder(2, 0, 0, 1, 0.5 ether), bytes32(0), MintPaymentKind.DirectEth, false
+            0, 400, BoxOrderLib.boCustoms(2, 0.25 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
         (uint48 idx1, uint64 pend1, uint64 thr1, uint40 flip1) = _lanes();
         assertEq(idx1, idx0, "the index lane is untouched by a buy");

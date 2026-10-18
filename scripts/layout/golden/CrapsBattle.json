@@ -152,6 +152,14 @@
     "typeLabel": "uint64"
   },
   {
+    "bytes": "3",
+    "encoding": "inplace",
+    "label": "_firstWindowDay",
+    "offset": 8,
+    "slot": 18,
+    "typeLabel": "uint24"
+  },
+  {
     "bytes": "32",
     "encoding": "inplace",
     "label": "_highRollerReserve",

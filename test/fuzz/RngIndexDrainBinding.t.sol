@@ -35,13 +35,13 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
     /// @dev Nominal ordinary-leg ETH of every queued entry of `player` in buffer `index & 1`.
     ///      A box buy appends one entry at the LIVE buffer, so a nonzero total proves the box
     ///      bound to that exact buffer.
-    function _presaleBoxEth(uint48 index, address player) internal view returns (uint256 total) {
+    function _boxEth(uint48 index, address player) internal view returns (uint256 total) {
         uint32 id = game.walletIdOf(player);
         uint256 n = RecyclingState.boxCount(address(game), index & 1);
         for (uint256 p; p < n; ++p) {
             uint256 word = RecyclingState.boxEntry(address(game), index & 1, p);
             if (BoxOrderLib.boId(word) != id) continue;
-            total += BoxOrderLib.boNominal(word, PriceLookupLib.priceForLevel(BoxOrderLib.boLevel(word)));
+            total += BoxOrderLib.boNominal(word);
         }
     }
 
@@ -112,11 +112,35 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
         fail("harness: mid-day work did not settle");
     }
 
-    function _advanceAndCheck(bool checkWrongWord) internal returns (uint256 batches, uint256 entries, uint256 buyerEntries) {
+    /// @dev One engine call under the smallest allowance that admits the next chunk (2M covers every
+    ///      ticket chunk here), so a drain spans calls and the committed word is still readable
+    ///      after each one; an unbounded call drains the cohort, completes it and recycles its word.
+    function _mineBounded() internal returns (Vm.Log[] memory logs) {
+        uint256[3] memory allowances = [uint256(2_000_000), 4_500_000, 9_000_000];
+        for (uint256 k; k < 3; ++k) {
+            vm.recordLogs();
+            try game.mineFlip{gas: allowances[k]}(0) {
+                return vm.getRecordedLogs();
+            } catch (bytes memory err) {
+                vm.getRecordedLogs();
+                if (err.length != 0 && bytes4(err) != bytes4(keccak256("InsufficientExecutionGas()"))) {
+                    assembly ("memory-safe") { revert(add(err, 32), mload(err)) }
+                }
+            }
+        }
+        fail("no allowance admitted the next engine chunk");
+    }
+
+    function _advanceAndCheck(bool checkWrongWord, bool bounded) internal returns (uint256 batches, uint256 entries, uint256 buyerEntries) {
         DrainSnapshot memory snap = _snapshotDrain(game);
-        vm.recordLogs();
-        game.mineFlip(0);
-        Vm.Log[] memory logs = vm.getRecordedLogs();
+        Vm.Log[] memory logs;
+        if (bounded) {
+            logs = _mineBounded();
+        } else {
+            vm.recordLogs();
+            game.mineFlip(0);
+            logs = vm.getRecordedLogs();
+        }
         // Two physical buffers (6d0e64b09): the committed word is the read buffer's (write ^ 1).
         uint256 word = _wordAt(game, snap.index ^ 1);
         DrainResult memory result = _checkDrain(game, snap, logs, word, buyer);
@@ -138,12 +162,12 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
         // round floor. This size requires repeated ordinary batches / budget resumes.
         _purchase(40_000, 0);
         uint256 buyerEntries;
-        (batches, entries, buyerEntries) = _advanceAndCheck(checkWrongWord);
+        (batches, entries, buyerEntries) = _advanceAndCheck(checkWrongWord, false);
         uint256 request = mockVRF.lastRequestId();
         assertGt(request, 0, "daily fixture did not request VRF");
         mockVRF.fulfillRandomWords(request, uint256(keccak256("binding-daily-drain-word")));
         for (uint256 i; i < 100 && game.rngLocked(); ++i) {
-            (uint256 b, uint256 n, uint256 paid) = _advanceAndCheck(checkWrongWord);
+            (uint256 b, uint256 n, uint256 paid) = _advanceAndCheck(checkWrongWord, true);
             batches += b;
             entries += n;
             buyerEntries += paid;
@@ -197,7 +221,7 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
         _purchase(400, 1 ether);
         uint48 idxN = _lrIndex();
         assertEq(_boxIdAt0(idxN), game.walletIdOf(buyer), "box A not keyed at live LR_INDEX");
-        assertEq(_presaleBoxEth(idxN, buyer), 1 ether, "box A applied-ETH mis-keyed");
+        assertEq(_boxEth(idxN, buyer), 1 ether, "box A applied-ETH mis-keyed");
         assertEq(_lootboxWord(idxN), 0, "live index already worded before request");
 
         // ── Mid-day VRF request: bumps LR_INDEX N -> N+1 and reserves the in-flight
@@ -227,8 +251,8 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
             0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
         assertEq(_boxIdAt0(idxLive), game.walletIdOf(buyerB), "box B not keyed at the LIVE post-request index");
-        assertEq(_presaleBoxEth(idxLive, buyerB), 1 ether, "box B applied-ETH not at live index");
-        assertEq(_presaleBoxEth(idxN, buyerB), 0, "box B leaked onto the in-flight index N");
+        assertEq(_boxEth(idxLive, buyerB), 1 ether, "box B applied-ETH not at live index");
+        assertEq(_boxEth(idxN, buyerB), 0, "box B leaked onto the in-flight index N");
 
         // ── Deliver the in-flight mid-day word. It lands ONLY at index N (LR_INDEX-1).
         uint256 midWord = uint256(keccak256("midday-binding-inflight-word"));

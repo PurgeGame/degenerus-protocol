@@ -208,9 +208,10 @@ contract CrapsBattleTest is CrapsPins {
         _installPins();
         game.registerWallet(alice, true);
         game.registerWallet(bob, true);
+        _warpToTableGenesis();
         craps = new BattleHarness();
         // Genesis is a Craps warm-up day; every fixture plays from genesis + 1.
-        vm.warp(block.timestamp + 1 days);
+        vm.warp(vm.getBlockTimestamp() + 1 days);
         _setIndex(0);
         // Arming needs today's word in. This one lands on preset 0 with no spread, so the fixed
         // terms below can be named as constants: `% 4 == 0` picks the preset, `(>> 8) % 40 == 0`

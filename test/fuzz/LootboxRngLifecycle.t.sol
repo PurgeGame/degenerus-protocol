@@ -204,7 +204,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         assertEq(RecyclingState.boxCount(address(game), index), position + 1, "one appended entry per purchase");
         uint256 entry = _entry(index, position);
         assertEq(BoxOrderLib.boId(entry), game.walletIdOf(buyer), "the entry holds the buyer's wallet ID");
-        assertEq(BoxOrderLib.boCustomCount(entry), 1, "one custom box");
+        assertEq(BoxOrderLib.boCount(entry), 1, "one box");
         assertEq(BoxOrderLib.boSizeWei(entry), lootboxAmount, "of the purchased size");
     }
 
@@ -292,7 +292,7 @@ contract LootboxRngLifecycle is DeployProtocol {
 
         // Complete each day using absolute timestamps, starting from day 2 (setUp already warped there)
         for (uint8 d = 2; d <= numDays + 1; d++) {
-            vm.warp(uint256(d) * 86400);
+            vm.warp(_relTs(uint256(d) * 86400));
             _completeDay(uint256(0xDEAD0000 + d));
         }
 
@@ -367,7 +367,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         _completeDay(0xDEAD0001);
 
         // Next day (day 3 absolute): trigger VRF request
-        uint256 day3Start = 3 * 86400;
+        uint256 day3Start = _relTs(3 * 86400);
         vm.warp(day3Start);
         game.mineFlip(0);
         assertTrue(game.rngLocked(), "Day 3 VRF pending");
@@ -383,7 +383,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         _lastFulfilledReqId = reqId;
 
         // Warp past day boundary to day 4 WITHOUT calling mineFlip
-        uint256 day4Start = 4 * 86400;
+        uint256 day4Start = _relTs(4 * 86400);
         vm.warp(day4Start);
 
         // The stale word should be stored at the reserved index. It is read before day 4's
@@ -405,7 +405,7 @@ contract LootboxRngLifecycle is DeployProtocol {
             assertEq(_readLootboxWord(reservedIndex), storedWord, "stale word stays at the reserved index");
             game.mineFlip(0);
         }
-        assertTrue(game.rngWordForDay(3) != 0, "Stale word completes its own day");
+        assertTrue(game.rngWordForDay(_relDay(3)) != 0, "Stale word completes its own day");
     }
 
     /// @notice A coordinator swap re-sends the stalled request for the same reserved index, and
@@ -415,7 +415,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         _completeDay(0xDEAD0001);
 
         // Next day (day 3 absolute): trigger VRF request
-        vm.warp(3 * 86400);
+        vm.warp(_relTs(3 * 86400));
         game.mineFlip(0);
         assertTrue(game.rngLocked(), "Day 3 VRF pending");
         uint48 reservedIndex = (_readLootboxRngIndex() ^ 1);
@@ -427,7 +427,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         assertEq(_readLootboxWord(reservedIndex), 0, "no word yet");
 
         // The re-sent request is answered two days late and finishes day 3
-        vm.warp(5 * 86400);
+        vm.warp(_relTs(5 * 86400));
         newVRF.fundSubscription(1, 100e18);
         uint256 published = _fulfillAndDrain(newVRF, 0xDEAD0005, reservedIndex);
         assertTrue(published != 0, "the re-sent request's word finalizes the reserved index");
@@ -621,7 +621,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         uint256 word1 = _readLootboxWord(index1);
 
         // Warp to day 3: purchase 2 ether lootbox
-        vm.warp(3 * 86400);
+        vm.warp(_relTs(3 * 86400));
         uint48 index2 = _readLootboxRngIndex();
         uint256 pos2 = _makePurchase(buyer, 2 ether);
         uint256 word2Seed = vrfWord ^ 0xBEEF;
@@ -654,7 +654,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         uint256 word1 = _readLootboxWord(index1);
 
         // Warp to day 3: purchase same amount
-        vm.warp(3 * 86400);
+        vm.warp(_relTs(3 * 86400));
         uint48 index2 = _readLootboxRngIndex();
         uint256 pos2 = _makePurchase(buyer, 1 ether);
         // Use same VRF word to isolate the day variable
@@ -791,7 +791,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         assertTrue(_settled(indexN, posN), "the first day's box opened on its word");
 
         // Next day (day 3 absolute): purchase at index N+1
-        vm.warp(3 * 86400);
+        vm.warp(_relTs(3 * 86400));
         uint48 indexN1 = _readLootboxRngIndex();
         assertEq(indexN1, indexN ^ 1, "Index should have incremented after first day");
 

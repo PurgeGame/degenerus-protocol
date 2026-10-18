@@ -16,11 +16,9 @@ import {
 } from "../helpers/testUtils.js";
 
 // Pool enum mapping (from DGNRS.sol)
-// v47: the 4-ordinal pool was renamed Earlybird -> PresaleBox (the earlybird
-// subsystem was removed; the pool itself survives, renamed, still seeded at deploy).
 const dgnrsUnits = (value) => hre.ethers.parseUnits(value, 12);
 
-const Pool = { Whale: 0, Affiliate: 1, Lootbox: 2, Reward: 3, PresaleBox: 4 };
+const Pool = { Whale: 0, Affiliate: 1, Lootbox: 2, Reward: 3, Degenesis: 4 };
 
 // Distribution constants from contract
 const INITIAL_SUPPLY = 1_000_000_000_000n * dgnrsUnits("1"); // 1 trillion
@@ -29,7 +27,7 @@ const WHALE_POOL_BPS = 1000n;
 const AFFILIATE_POOL_BPS = 3000n;
 const LOOTBOX_POOL_BPS = 2000n;
 const REWARD_POOL_BPS = 1000n;
-const PRESALE_BOX_POOL_BPS = 1000n; // v47: was EARLYBIRD_POOL_BPS; pool renamed, BPS unchanged
+const DEGENESIS_POOL_BPS = 1000n;
 const BPS_DENOM = 10_000n;
 
 // Helper: give a player sDGNRS from the Reward pool via game impersonation
@@ -150,17 +148,12 @@ describe("DGNRS", function () {
       expect(rewardPool).to.be.closeTo(expected, dgnrsUnits("100"));
     });
 
-    it("PresaleBox pool balance is correct (seeded at deploy)", async function () {
-      // v47: the 4-ordinal pool (was Earlybird, now PresaleBox) is still seeded at
-      // deploy from PRESALE_BOX_POOL_BPS. The earlybird ACCRUAL mechanics
-      // (_awardEarlybirdDgnrs / _finalizeEarlybird) were removed in v47, but the
-      // pool seeding survives unchanged.
+    it("Degenesis pool balance is correct (seeded at deploy)", async function () {
       const { sdgnrs } = await loadFixture(deployFullProtocol);
-      const presaleBoxPool = await sdgnrs.poolBalance(Pool.PresaleBox);
-      const expected = (INITIAL_SUPPLY * PRESALE_BOX_POOL_BPS) / BPS_DENOM;
-      expect(presaleBoxPool).to.be.closeTo(expected, dgnrsUnits("100"));
+      const degenesisPool = await sdgnrs.poolBalance(Pool.Degenesis);
+      const expected = (INITIAL_SUPPLY * DEGENESIS_POOL_BPS) / BPS_DENOM;
+      expect(degenesisPool).to.be.closeTo(expected, dgnrsUnits("100"));
     });
-
   });
 
   // ---------------------------------------------------------------------------

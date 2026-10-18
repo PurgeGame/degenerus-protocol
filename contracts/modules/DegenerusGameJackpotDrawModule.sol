@@ -178,6 +178,15 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
         if (!MineFlipGas.canRun(meter, GasBounds.JACKPOT_BATTLE_DRAW, GasBounds.DAILY_PHASE_TAIL)) return result;
         uint256 battleWord = uint256(keccak256(abi.encode(rngWord, lvl, FAR_FUTURE_FLIP_TAG)));
         (uint256 word, uint256 cursor, uint256 remaining) = battle.prepareJackpotBattle(lvl, battleWord);
+        if (remaining == 0) {
+            // No awarded seats to draw (a paid-field-only round): seal without the level scan.
+            battle.appendJackpotBattle(new uint256[](0), cursor, true);
+            result.progressed = true;
+            MineFlipGas.markProgress(meter);
+            ++result.rewardBasis;
+            MineFlipGas.finish(meter);
+            return result;
+        }
         JackpotDrawLevels memory levels = _jackpotDrawLevels(lvl, cursor);
         do {
             (uint32[] memory winners, uint256 next, bool exhausted) =

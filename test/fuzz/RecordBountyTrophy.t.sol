@@ -91,7 +91,7 @@ contract RecordBountyTrophyTest is DeployProtocol {
             (address holder, uint128 mark, uint24 sinceDay, ) = recordBounty.recordInfo(i);
             assertEq(holder, HOME, "recordInfo holder");
             assertEq(mark, 0, "mark starts unset");
-            assertEq(sinceDay, 1, "since-day stamps the deploy day");
+            assertEq(sinceDay, _deployDay(), "since-day stamps the deploy day");
         }
     }
 

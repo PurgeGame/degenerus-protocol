@@ -462,11 +462,12 @@ contract WalletIdTruthHandler is Test {
         _call(1, p, GAME, amt, _purchaseData(0, 0, amt, _code(codeSel, p), false, false), false);
     }
 
-    function g_presaleBox(uint256 a, uint256 amtSeed) external {
+    function g_degenesisBox(uint256 a, uint256 amtSeed) external {
         address p = _actor(a);
-        uint256 credit = game.presaleBoxCreditOf(p);
-        uint256 amount = credit > 0.01 ether ? 0.01 ether + amtSeed % (credit - 0.01 ether + 1) : 0.01 ether;
-        _call(2, p, GAME, amount, abi.encodeWithSignature("buyPresaleBox(uint32,uint256)", uint32(0), amount), false);
+        uint256 credit = game.degenesisCreditOf(p);
+        uint256 spare = credit > 0.01 ether ? (credit - 0.01 ether) / 1e14 : 0;
+        uint256 amount = 0.01 ether + (amtSeed % (spare + 1)) * 1e14;
+        _call(2, p, GAME, amount, abi.encodeWithSignature("buyDegenesisBox(uint32,uint256)", uint32(0), amount), false);
     }
 
     function g_degenerette(uint256 a, uint256 oSeed, uint256 cSeed, uint256 aSeed, uint256 sSeed, uint256 sym)
@@ -1790,7 +1791,7 @@ contract WalletIdTruthHandler is Test {
     function _initNames() internal {
         _names[0] = "g_purchase";
         _names[1] = "g_boxOnly";
-        _names[2] = "g_presaleBox";
+        _names[2] = "g_degenesisBox";
         _names[3] = "g_degenerette";
         _names[4] = "g_whalePass";
         _names[5] = "g_lazyPass";

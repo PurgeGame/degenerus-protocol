@@ -16,7 +16,12 @@ import {GameSlots} from "../../helpers/GameSlots.sol";
 ///
 ///   invariant_v61PoolEqualsSumOfHalves — the master identity (DegenerusGameStorage.sol:358):
 ///     `claimablePool == Σ over all tracked addresses of (claimable low half + afking high half of
-///     balancesPacked[*])`. The afking reservation rides INSIDE claimablePool (no separate aggregate); every
+///     balancesPacked[*]) + degenesisVaultBudget + unsplit Degenesis volume`. The last two terms are
+///     obligations inside claimablePool that no wallet's balance word owns: the Vault's Degenesis budget (a
+///     quarter of each split cohort, outside Vault claimable) and the ETH of cohorts whose daily request has
+///     not split them yet. Both are read from the real slots (slot 15, and the per-cohort header of
+///     `degenesisDays`), never from a handler mirror. A split moves half to the prize pool, a quarter to the
+///     budget and a quarter to the sDGNRS afking half, so the three terms hand over to each other exactly. The afking reservation rides INSIDE claimablePool (no separate aggregate); every
 ///     mutation pairs a claimablePool move at the call site (D-01: the pairing is kept at the call sites, not
 ///     in the accessor). This invariant would FAIL under a seeded violation — e.g. an afking debit that dropped
 ///     its paired `claimablePool -=` would leave claimablePool > Σ(halves) (the falsifiability guarantee per
@@ -34,15 +39,17 @@ import {GameSlots} from "../../helpers/GameSlots.sol";
 ///   stale cashout, smite) plus decurse + advance under the [invariant] profile (runs=256, depth=128). The
 ///   SolvencyActionHandler (FUZZ-01, 381-01) is a SECOND target that WIDENS the same identity to the buyer
 ///   surfaces that mutate claimablePool but were NOT under the afking-only handler: the whale pass, the lazy
-///   pass, the deity pass, the coin-presale box (and a lootbox-bearing fallback buy), prepaid-afking funding,
-///   approved stETH subscription inflows,
-///   and the claim cashout. Both handlers' tracked sets are summed over their UNION (the three protocol
+///   pass, the deity pass, the Degenesis box (a credit-earning purchase then a Degenesis buy paid from fresh ETH, claimable
+///   or prepaid afking), a lootbox-bearing buy, the Vault's Degenesis budget spend, prepaid-afking funding,
+///   approved stETH subscription inflows, and the claim cashout. The Degenesis-timeline variant
+///   (V61SolvencyAfpayDegenesis) deploys on day 1 and lets the handler warp days, so cohorts seal and split
+///   at the daily request; the base contract keeps the legacy timeline (sale already over). Both handlers' tracked sets are summed over their UNION (the three protocol
 ///   addresses de-duplicated to a single count), so the Σ identity and the backing bound assert across the
 ///   afking spends AND the wider buyer set in a single campaign — this is case (b) PROMOTE/EXTEND, not a new
 ///   invariant. Focused non-fuzz scenario tests below additionally prove each named path leaves the identity
 ///   intact and that curse/smite are pool-neutral (move claimablePool by exactly zero); a falsifiability test
 ///   (testSolvencyIdentityIsFalsifiable_droppedPairing) and a non-vacuity check (the wider handler's
-///   pass/presale/claim success counters end > 0) prove the widened identity is neither vacuous nor unbreakable.
+///   pass/box/claim success counters end > 0) prove the widened identity is neither vacuous nor unbreakable.
 ///
 /// @dev Test-only: ZERO contracts/*.sol mutation.
 contract V61SolvencyAfpay is DeployProtocol {
@@ -70,7 +77,12 @@ contract V61SolvencyAfpay is DeployProtocol {
 
     uint8 private _nextDeityId;
 
-    function setUp() public {
+    /// @dev Whether the solvency handler may warp days (the Degenesis-timeline variant).
+    function _dayWarps() internal pure virtual returns (bool) {
+        return false;
+    }
+
+    function setUp() public virtual {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
         vm.deal(address(game), 5_000_000 ether);
@@ -80,10 +92,10 @@ contract V61SolvencyAfpay is DeployProtocol {
         // disjoint from it.
         _nextDeityId = 1;
 
-        // The wider buyer-surface handler (FUZZ-01): pass buys + presale-box + claim over a DISJOINT actor band
+        // The wider buyer-surface handler (FUZZ-01): pass buys + Degenesis box + claim over a DISJOINT actor band
         // (0x5A000) so the two handlers' actor sets never collide. Both are targeted in the same campaign; the
         // invariants below sum the halves over the UNION of the two tracked sets.
-        solvencyHandler = new SolvencyActionHandler(game, deityPass, mockVRF, 5);
+        solvencyHandler = new SolvencyActionHandler(game, deityPass, mockVRF, 5, _dayWarps());
         // Seats enable real subscription calls without seeding either half of balancesPacked.
         for (uint256 i; i < solvencyHandler.actorCount(); ++i) {
             _grantSeat(solvencyHandler.actors(i));
@@ -91,6 +103,10 @@ contract V61SolvencyAfpay is DeployProtocol {
 
         targetContract(address(handler));
         targetContract(address(solvencyHandler));
+        // The handlers never read msg.sender. The fuzz dictionary includes protocol addresses, and a campaign
+        // whose caller was one of them lost the Game's dealt ETH between two calls (no replay reproduces it),
+        // so callers are plain accounts.
+        for (uint160 i = 1; i <= 4; ++i) targetSender(address(0xCAFE00 + i));
     }
 
     // =========================================================================
@@ -115,10 +131,11 @@ contract V61SolvencyAfpay is DeployProtocol {
             // Claimable low half above the unpooled registration sentinel, plus the afking high half.
             sum += uint128(packed) - 1 + (packed >> 128);
         }
+        sum += _degenesisObligations();
         assertEq(
             game.claimablePoolView(),
             sum,
-            "SOLVENCY-01: claimablePool == Sigma (claimable - sentinel + afking) across all tracked addresses"
+            "SOLVENCY-01: claimablePool == Sigma (claimable - sentinel + afking) across all tracked addresses + Degenesis budget + unsplit volume"
         );
     }
 
@@ -136,6 +153,14 @@ contract V61SolvencyAfpay is DeployProtocol {
         );
     }
 
+    /// @notice The unsplit-plus-split Degenesis volume in the real cohort headers equals the volume the handler
+    ///         bought, and the Vault budget never exceeds the quarter of the split volume it came from.
+    function invariant_degenesisVolumeAndBudget() public view {
+        (uint256 total, uint256 splitVolume) = _degenesisVolumes();
+        assertEq(total, solvencyHandler.ghost_degenesisVolume(), "cohort headers carry exactly the bought volume");
+        assertLe(_vaultBudget(), splitVolume / 4, "Vault budget never exceeds a quarter of the split volume");
+    }
+
     /// @notice Diagnostic: afking deposited via the real entrypoint >= afking drawn by the waterfall (no spend
     ///         path draws more afking than was ever credited).
     function invariant_v61AfkingDepositsGeDraws() public view {
@@ -151,28 +176,29 @@ contract V61SolvencyAfpay is DeployProtocol {
     // =========================================================================
 
     /// @notice afterInvariant runs once at the END of the campaign. The widened identity is only meaningful if
-    ///         SolvencyActionHandler's pass-buy / presale-box / claim surfaces actually succeeded at least once
+    ///         SolvencyActionHandler's pass-buy / box / Degenesis / claim surfaces actually succeeded at least once
     ///         across the 256/128 run — otherwise the Σ would hold vacuously (no extra balance was ever moved
     ///         through the new paths). Asserting the success counters > 0 here makes a "passes because nothing
     ///         happened" green impossible: if every widened action reverted, this campaign FAILS.
     function afterInvariant() public {
         uint256 widenedSuccesses = solvencyHandler.ghost_passBuys() +
-            solvencyHandler.ghost_presaleBuys() +
+            solvencyHandler.ghost_boxBuys() +
             solvencyHandler.ghost_claims();
         assertGt(
             widenedSuccesses,
             0,
-            "NON-VACUITY: SolvencyActionHandler pass/presale/claim surfaces must succeed > 0 times (else the widened identity is vacuous)"
+            "NON-VACUITY: SolvencyActionHandler pass/box/claim surfaces must succeed > 0 times (else the widened identity is vacuous)"
         );
-        // Each leg separately. Measured over 1,028 default-profile runs: at least 5 pass buys, 4 presale/box
+        // Each leg separately. Measured over 1,028 default-profile runs: at least 5 pass buys, 4 box
         // buys and a non-zero afking deposit per run; afking draws, smites, foil buys and stETH cover buys can
         // be absent from one run (334, 49, 31, 304 runs had none); a paying claimWinnings is rare (22 runs:
         // actors almost never hold claimable winnings at level 0), so it is required only once 512 runs have
         // accumulated (unique V61_ prefix).
         assertGe(solvencyHandler.ghost_passBuys(), 2, "NON-VACUITY: pass buys (almost) never succeeded");
-        assertGe(solvencyHandler.ghost_presaleBuys(), 2, "NON-VACUITY: presale/box buys (almost) never succeeded");
+        assertGe(solvencyHandler.ghost_boxBuys(), 2, "NON-VACUITY: box buys (almost) never succeeded");
         assertGt(solvencyHandler.ghost_afkingDeposited(), 0, "NON-VACUITY: no afking deposit (solvency handler)");
         uint256 runs = _acc("V61_RUNS", 1);
+        _degenesisNonVacuity();
         uint256 deposited = _acc("V61_afkingDeposited", handler.ghost_afkingDeposited());
         uint256 drawn = _acc("V61_afkingDrawn", handler.ghost_afkingDrawn());
         uint256 smites = _acc("V61_smites", handler.ghost_smiteBurned());
@@ -189,9 +215,40 @@ contract V61SolvencyAfpay is DeployProtocol {
         assertGt(claims, 0, "NON-VACUITY: no claimWinnings ever paid out");
     }
 
-    function _acc(string memory k, uint256 v) private returns (uint256 total) {
+    /// @dev Env-key prefix: the variants of this suite share a process, so each accumulates on its own keys.
+    function _keyPrefix() internal pure virtual returns (string memory) {
+        return "";
+    }
+
+    /// @dev Hook for the Degenesis-timeline variant's extra non-vacuity gates.
+    function _degenesisNonVacuity() internal virtual {}
+
+    function _acc(string memory k, uint256 v) internal returns (uint256 total) {
+        k = string.concat(_keyPrefix(), k);
         total = vm.envOr(k, uint256(0)) + v;
         vm.setEnv(k, vm.toString(total));
+    }
+
+    /// @dev Degenesis obligations inside claimablePool that no tracked balance word owns: the Vault's budget
+    ///      (slot 15) plus the ETH of every cohort whose split flag is still clear.
+    function _degenesisObligations() internal view returns (uint256) {
+        (uint256 total, uint256 splitVolume) = _degenesisVolumes();
+        return _vaultBudget() + (total - splitVolume);
+    }
+
+    function _vaultBudget() internal view returns (uint256) {
+        return uint128(uint256(vm.load(address(game), bytes32(GameSlots.DEGENESIS_VAULT_BUDGET))));
+    }
+
+    /// @dev Σ cohort volume and the part of it already split, from the real per-cohort headers
+    ///      ([0:48] volume in 0.0001 ETH, bit 80 split flag).
+    function _degenesisVolumes() internal view returns (uint256 total, uint256 splitVolume) {
+        for (uint256 c = 1; c <= 7; ++c) {
+            uint256 header = uint256(vm.load(address(game), keccak256(abi.encode(c, GameSlots.DEGENESIS_DAYS))));
+            uint256 volume = uint256(uint48(header)) * 0.0001 ether;
+            total += volume;
+            if (header & (uint256(1) << 80) != 0) splitVolume += volume;
+        }
     }
 
     /// @notice Pin non-vacuity for the new action: actor ETH becomes stETH, then funds a real cover buy.
@@ -421,6 +478,7 @@ contract V61SolvencyAfpay is DeployProtocol {
             uint256 packed = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(addrs[i])), BALANCES_PACKED_SLOT))));
             sum += (uint128(packed) > 1 ? uint128(packed) - 1 : 0) + (packed >> 128);
         }
+        sum += _degenesisObligations();
     }
 
     /// @dev The boolean form of the invariant's equality (used by the falsifiability test).
@@ -446,6 +504,7 @@ contract V61SolvencyAfpay is DeployProtocol {
             uint256 packed = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(infra[i])), BALANCES_PACKED_SLOT))));
             sum += (uint128(packed) > 1 ? uint128(packed) - 1 : 0) + (packed >> 128);
         }
+        sum += _degenesisObligations();
         assertEq(game.claimablePoolView(), sum, "focused: claimablePool == Sigma (claimable + afking halves)");
     }
 
@@ -510,5 +569,60 @@ contract V61SolvencyAfpay is DeployProtocol {
     function _fundFlip(address who, uint256 amount) internal {
         vm.prank(address(game));
         coin.mintForGame(who, amount);
+    }
+}
+
+/// @title V61SolvencyAfpayDegenesis -- the same identities on the Degenesis timeline (deploy on day 1)
+/// @notice The Degenesis buy, the Vault budget spend and the daily-request cohort split are reachable here:
+///         setUp crosses into day index 2 (Degenesis day 1) and the handler may warp up to ten more days, so
+///         every cohort can seal, split and settle inside one campaign. The solvency equality carries the
+///         Vault budget and the unsplit volume as explicit obligations.
+contract V61SolvencyAfpayDegenesis is V61SolvencyAfpay {
+    function _deployTimestamp() internal pure override returns (uint256) {
+        return DEPLOY_TS_DEGENESIS;
+    }
+
+    function _keyPrefix() internal pure override returns (string memory) {
+        return "D_";
+    }
+
+    function _dayWarps() internal pure override returns (bool) {
+        return true;
+    }
+
+    /// @notice The Degenesis ETH sits in claimablePool with no per-wallet owner until its cohort splits, then
+    ///         the Vault budget is the part no balance word owns: the half-sum alone is short by exactly the
+    ///         unsplit volume before the split and by exactly the budget after it.
+    function testDegenesisObligationsCarryTheEquality() public {
+        for (uint256 mode; mode < 4; ++mode) solvencyHandler.buyDegenesis(1, 1 ether, 1 ether, mode);
+        uint256 volume = solvencyHandler.ghost_degenesisVolume();
+        assertGt(volume, 0, "fixture: a Degenesis box was bought");
+        assertEq(_vaultBudget(), 0, "nothing has split before the cohort seals");
+        assertEq(_degenesisObligations(), volume, "unsplit volume is the whole obligation");
+        assertEq(game.claimablePoolView(), _sumUnionHalves() - _degenesisObligations() + volume, "pool = halves + unsplit volume");
+        assertTrue(_identityHoldsOverUnion());
+
+        solvencyHandler.warpDay();
+        solvencyHandler.advance(1, 7);
+        solvencyHandler.advance(1, 8);
+        uint256 budget = _vaultBudget();
+        assertGt(budget, 0, "the daily request split the cohort");
+        assertEq(budget, volume / 4, "the Vault budget is a quarter of the split volume");
+        assertEq(_degenesisObligations(), budget, "only the budget remains outside the balance words");
+        assertTrue(_identityHoldsOverUnion());
+        assertNotEq(game.claimablePoolView(), _sumUnionHalves() - _degenesisObligations(), "the half-sum alone no longer matches");
+    }
+
+    function _degenesisNonVacuity() internal override {
+        uint256 split = _acc("V61_degSplitRuns", _vaultBudget() > 0 || solvencyHandler.ghost_vaultSpends() > 0 ? 1 : 0);
+        uint256 buys = _acc("V61_degBuys", solvencyHandler.ghost_degenesisBuys());
+        uint256 drawn = _acc("V61_degClaimableFunded", solvencyHandler.ghost_degenesisClaimableFunded());
+        uint256 spends = _acc("V61_vaultSpends", solvencyHandler.ghost_vaultSpends());
+        uint256 runs = _acc("V61_degRuns", 1);
+        if (runs < 16) return;
+        assertGt(buys, 0, "NON-VACUITY: no Degenesis box ever bought");
+        assertGt(drawn, 0, "NON-VACUITY: no Degenesis buy ever drew claimable or afking");
+        assertGt(split, 0, "NON-VACUITY: no cohort ever split into the Vault budget");
+        assertGt(spends, 0, "NON-VACUITY: the Vault budget was never spent");
     }
 }

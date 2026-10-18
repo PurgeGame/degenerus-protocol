@@ -131,6 +131,15 @@ async function measureLevelOneAdvance(prevPoolEth, expectedAwards) {
   };
   const fieldOwners = new Set();
 
+  // The legacy fixture deploys on day index 9, so the table's first window would be day 10 and
+  // this first request would open no battle. Production deploys on index 1 and opens windows
+  // on Degenesis day 2 (index 3); restore that so level 1's request locks its battle.
+  const firstWindow = crapsLayout.find((entry) => entry.label === "_firstWindowDay");
+  const windowSlot = BigInt(firstWindow.slot);
+  const windowShift = BigInt(firstWindow.offset) * 8n;
+  await setSlot(crapsAddr, windowSlot,
+    ((await getSlot(crapsAddr, windowSlot)) & ~(0xffffffn << windowShift)) | (3n << windowShift));
+
   await setSlot(gameAddr, mapSlot(VAULT_DEITY_SYMBOL, deityRoot), 0n);
   await setSlot(gameAddr, mapSlot(SDGNRS_DEITY_SYMBOL, deityRoot), 0n);
   await setSlot(gameAddr, 5n, (await getSlot(gameAddr, 5n)) | (1n << 104n));

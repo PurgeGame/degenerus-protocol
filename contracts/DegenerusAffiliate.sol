@@ -409,7 +409,7 @@ contract DegenerusAffiliate {
      * @dev This is the explicit user-initiated way to set a referrer.
      *      Accepts both custom codes and default address-derived codes.
      *      Alternatively, referrers can be set implicitly during payAffiliate().
-     *      Once set, cannot be changed, including VAULT and locked defaults during presale.
+     *      Once set, cannot be changed, including VAULT and locked defaults.
      *      A default code's owner registers its wallet ID here (affiliate code owners are the
      *      one third-party registration).
      *

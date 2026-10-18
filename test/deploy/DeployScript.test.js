@@ -8,6 +8,8 @@ import {
 import { DEPLOY_ORDER } from "../../scripts/lib/predictAddresses.js";
 import { ZERO_ADDRESS } from "../helpers/testUtils.js";
 
+const deployDegenesisProtocol = () => deployFullProtocol({ degenesis: true });
+
 describe("Deploy Pipeline", function () {
   after(function () {
     restoreAddresses();
@@ -23,6 +25,21 @@ describe("Deploy Pipeline", function () {
         predicted.toLowerCase(),
         `Address mismatch for ${key}`
       );
+    }
+  });
+
+  it("the default fixture deploys on day index 9 (MAIN_LAUNCH_DAY)", async function () {
+    const f = await loadFixture(deployFullProtocol);
+    expect(await f.game.currentDayView()).to.equal(9n);
+    expect(await f.degenesisModule.getAddress()).to.equal(f.predicted.get("GAME_DEGENESIS_MODULE"));
+  });
+
+  it("the Degenesis fixture deploys on day index 1 at the predicted addresses", async function () {
+    const f = await loadFixture(deployDegenesisProtocol);
+    expect(await f.game.currentDayView()).to.equal(1n);
+    expect(f.deployedAddrs.size).to.equal(DEPLOY_ORDER.length);
+    for (const [key, predicted] of f.predicted) {
+      expect(f.deployedAddrs.get(key).toLowerCase()).to.equal(predicted.toLowerCase(), `Address mismatch for ${key}`);
     }
   });
 

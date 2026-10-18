@@ -17,31 +17,28 @@ import {
   ZERO_BYTES32,
   errorAbi,
 } from "../helpers/testUtils.js";
-import { boCustomFloor, boNominal } from "../helpers/boxOrder.js";
+import { boCustomFloor, boNominal, boLane } from "../helpers/boxOrder.js";
 import { compiledStorageSlot } from "../helpers/storageLayout.js";
 
 const MintPaymentKind = { DirectEth: 0, Claimable: 1, Combined: 2 };
 
 // These purchases remain in the live write buffer, one queue entry per purchase. boxQueue is
-// manually addressed (its array length slot is never written): entry p of buffer b lives at
-// keccak(keccak(b . boxQueue.slot)) + p.
+// manually addressed (its array length slot is never written), three 85-bit entries per word:
+// entry p of buffer b is lane p % 3 of word keccak(keccak(b . boxQueue.slot)) + p / 3.
 async function boxEntryAt(gameAddress, buffer, position) {
   const abi = hre.ethers.AbiCoder.defaultAbiCoder();
   const inner = hre.ethers.keccak256(
     abi.encode(["uint256", "uint256"], [BigInt(buffer), await compiledStorageSlot("boxQueue")])
   );
   const base = BigInt(hre.ethers.keccak256(inner));
-  return BigInt(await hre.ethers.provider.getStorage(gameAddress, base + BigInt(position)));
+  return boLane(await hre.ethers.provider.getStorage(gameAddress, base + BigInt(position) / 3n), position);
 }
 
-// Every purchase in this file goes through `purchaseLootbox` -> `boCustom(...)`
-// (a pure custom-size order, small/med/large always 0), so the level price
-// multiplied against those zero counts is irrelevant to `boNominal` — 0n is a
-// safe placeholder regardless of the active level's price.
+// Nominal value of a stored entry: quantity x its per-box value.
 async function lootboxNominalOf(gameAddress, position) {
   const state = BigInt(await hre.ethers.provider.getStorage(gameAddress, 0));
   const index = (state >> 252n) & 1n;
-  return boNominal(await boxEntryAt(gameAddress, index, position), 0n);
+  return boNominal(await boxEntryAt(gameAddress, index, position));
 }
 
 // 250 days in seconds (deploy idle timeout for level 0, per _DEPLOY_IDLE_TIMEOUT_DAYS)
@@ -60,7 +57,7 @@ describe("Distress-Mode Lootboxes", function () {
     // boCustomFloor (not boCustom): the zero-amount edge case below must reach
     // the chain and revert on-chain (empty order), not throw a JS-side "bad wei"
     // error before the call is even made. Every other amount in this file is an
-    // exact multiple of 1 gwei (whole/fractional ETH), so the floor is exact there too.
+    // exact multiple of 0.001 ETH, so the floor is exact there too.
     return game.connect(player).purchase(
       0,
       0n,
@@ -126,7 +123,7 @@ describe("Distress-Mode Lootboxes", function () {
   }
 
   // ---------------------------------------------------------------------------
-  // 1. Pool Split — Normal Mode (90% future / 10% next for non-presale)
+  // 1. Pool Split — Normal Mode (90% future / 10% next)
   // ---------------------------------------------------------------------------
   describe("Pool split in normal mode", function () {
     it("lootbox purchase routes ETH to future and next pools normally", async function () {
@@ -144,7 +141,7 @@ describe("Distress-Mode Lootboxes", function () {
       const futureAfter = await game.futurePrizePoolView();
       const nextAfter = await game.nextPrizePoolView();
 
-      // Presale is active at level 0 (50/30/20 split): both pools should increase
+      // Normal 90/10 split: both pools should increase
       expect(futureAfter).to.be.gt(futureBefore);
       expect(nextAfter).to.be.gt(nextBefore);
     });
@@ -176,11 +173,8 @@ describe("Distress-Mode Lootboxes", function () {
       expect(nextAfter - nextBefore).to.equal(eth("1"));
     });
 
-    it("presale vault share is also zeroed during distress", async function () {
+    it("vault share is also zeroed during distress", async function () {
       const { game, alice, mintModule } = await loadFixture(deployFullProtocol);
-
-      // Verify presale is active
-      expect(await game.lootboxPresaleActiveFlag()).to.be.true;
 
       await advanceToDistress(game);
 
@@ -194,7 +188,7 @@ describe("Distress-Mode Lootboxes", function () {
       const futureAfter = await game.futurePrizePoolView();
       const nextAfter = await game.nextPrizePoolView();
 
-      // Even in presale, distress overrides: no future share, no vault share.
+      // Distress overrides the split: no future share, no vault share.
       // All ETH goes to next pool.
       expect(futureAfter).to.equal(futureBefore);
       expect(nextAfter - nextBefore).to.equal(eth("1"));
@@ -220,7 +214,7 @@ describe("Distress-Mode Lootboxes", function () {
 
       const futureAfter = await game.futurePrizePoolView();
 
-      // Should have normal presale split: future pool increases (50% share)
+      // Normal split: future pool increases
       expect(futureAfter).to.be.gt(futureBefore);
     });
 

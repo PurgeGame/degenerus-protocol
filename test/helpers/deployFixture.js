@@ -16,21 +16,42 @@ let _patchedVrfKeyHash = null;
 // loadFixture restores chain snapshots without restoring JavaScript module globals. Retain
 // each Game's registrar so helpers never use a different fixture's most recent deployment.
 const _registrarByGame = new Map();
+// Legacy fixtures deploy on day index 9 (GameTimeLib.MAIN_LAUNCH_DAY): 8 days past day index 1.
+const LEGACY_DEPLOY_OFFSET = 8 * 86400;
 
 /**
  * Deploy the full Degenerus protocol with mock external dependencies.
  * Designed for use with Hardhat's loadFixture().
  *
+ * Options:
+ *   affiliateBootstrap  DegenerusAffiliate constructor arrays.
+ *   degenesis           false (default): the chain advances 8 days after DEPLOY_DAY_BOUNDARY is
+ *                       taken, so every contract deploys on day index 9 (MAIN_LAUNCH_DAY) and
+ *                       normal level-0 play starts on the deploy day. true: deploy on day index 1,
+ *                       with the Degenesis sale (day indices 2..8) ahead.
+ *
  * Flow:
- *   1. Deploy mock contracts (VRF, stETH, LINK)
- *   2. Predict addresses for every protocol contract
- *   3. Patch ContractAddresses.sol + recompile (once per test run)
- *   4. Deploy every protocol contract in order
- *   5. Verify deployed addresses match predictions
+ *   1. Take DEPLOY_DAY_BOUNDARY from the latest block (day index 1), then advance 8 days unless
+ *      `degenesis` is set
+ *   2. Deploy mock contracts (VRF, stETH, LINK)
+ *   3. Predict addresses for every protocol contract
+ *   4. Patch ContractAddresses.sol + recompile (once per test run)
+ *   5. Deploy every protocol contract in order
+ *   6. Verify deployed addresses match predictions
  */
-export async function deployFullProtocol({ affiliateBootstrap = [[], [], [], [], []] } = {}) {
+export async function deployFullProtocol({
+  affiliateBootstrap = [[], [], [], [], []],
+  degenesis = false,
+} = {}) {
   const signers = await hre.ethers.getSigners();
   const [deployer, alice, bob, carol, dan, eve, ...others] = signers;
+
+  const block = await hre.ethers.provider.getBlock("latest");
+  const deployDayBoundary = computeDeployDayBoundary(block.timestamp);
+  if (!degenesis) {
+    await hre.network.provider.send("evm_increaseTime", [LEGACY_DEPLOY_OFFSET]);
+    await hre.network.provider.send("evm_mine");
+  }
 
   // --- Phase 1: Deploy mocks ---
   const mockVRF = await deploy("MockVRFCoordinator");
@@ -42,8 +63,6 @@ export async function deployFullProtocol({ affiliateBootstrap = [[], [], [], [],
 
   // --- Phase 2: Predict protocol addresses ---
   const startingNonce = await deployer.getNonce();
-  const block = await hre.ethers.provider.getBlock("latest");
-  const deployDayBoundary = computeDeployDayBoundary(block.timestamp);
   const predicted = predictAddresses(deployer.address, startingNonce);
 
   const vrfKeyHash =
@@ -65,7 +84,8 @@ export async function deployFullProtocol({ affiliateBootstrap = [[], [], [], [],
   // We need to re-patch if addresses changed (fresh fixture = different mock addresses)
   const needsPatch =
     !_patched ||
-    _patchedExternal?.VRF_COORDINATOR !== external.VRF_COORDINATOR;
+    _patchedExternal?.VRF_COORDINATOR !== external.VRF_COORDINATOR ||
+    _patchedDayBoundary !== deployDayBoundary;
 
   if (needsPatch) {
     patchContractAddresses(predicted, external, deployDayBoundary, vrfKeyHash);
@@ -154,6 +174,7 @@ export async function deployFullProtocol({ affiliateBootstrap = [[], [], [], [],
     lootboxModule: contracts.GAME_LOOTBOX_MODULE,
     boonModule: contracts.GAME_BOON_MODULE,
     degeneretteModule: contracts.GAME_DEGENERETTE_MODULE,
+    degenesisModule: contracts.GAME_DEGENESIS_MODULE,
 
     // Metadata
     predicted,

@@ -12,6 +12,7 @@ contract CrapsNewcomerTest is CrapsPins {
 
     function setUp() public {
         _installPins();
+        _warpToTableGenesis();
         table = new CrapsViews();
         game.setLevel(10);
         _idFor(player);

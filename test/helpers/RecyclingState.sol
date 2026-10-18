@@ -65,10 +65,23 @@ library RecyclingState {
         if (buffer == writeBuffer(host)) return (uint256(vm.load(host, bytes32(GameSlots.LOOTBOX_RNG_PACKED))) >> 152) & type(uint32).max;
         return (uint256(vm.load(host, bytes32(GameSlots.DEGENERETTE_READ_COUNT))) >> (GameSlots.DEGENERETTE_READ_COUNT_OFFSET * 8)) & type(uint32).max;
     }
-    /// @dev Stored box entry `position` of `buffer`.
-    function boxEntry(address host, uint48 buffer, uint256 position) internal view returns (uint256) {
+    /// @dev Physical storage slot holding box entry `position` of `buffer` (three entries a word).
+    function boxWordSlot(uint48 buffer, uint256 position) internal pure returns (bytes32) {
         bytes32 data = keccak256(abi.encode(keccak256(abi.encode(uint256(buffer), GameSlots.BOX_QUEUE))));
-        return uint256(vm.load(host, bytes32(uint256(data) + position)));
+        return bytes32(uint256(data) + position / 3);
+    }
+    /// @dev Stored 85-bit box entry `position` of `buffer`: word `position / 3`, lane `position % 3`.
+    function boxEntry(address host, uint48 buffer, uint256 position) internal view returns (uint256) {
+        uint256 w = uint256(vm.load(host, boxWordSlot(buffer, position)));
+        return (w >> ((position % 3) * 85)) & ((uint256(1) << 85) - 1);
+    }
+    /// @dev Overwrite box entry `position` of `buffer`, keeping the word's other two lanes.
+    function storeBoxEntry(address host, uint48 buffer, uint256 position, uint256 entry) internal {
+        bytes32 slot = boxWordSlot(buffer, position);
+        uint256 shift = (position % 3) * 85;
+        uint256 mask = ((uint256(1) << 85) - 1) << shift;
+        uint256 w = uint256(vm.load(host, slot));
+        vm.store(host, slot, bytes32((w & ~mask) | ((entry << shift) & mask)));
     }
     function word(address host, uint48 buffer) internal view returns (uint256) {
         uint256 state = uint256(vm.load(host, bytes32(GameSlots.RNG_FLAGS_AND_NUDGES)));

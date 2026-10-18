@@ -136,6 +136,8 @@ library ContractAddresses {
         address(0xE194aA6b80fFd71989dd196c7f84fa624b8d7D5d);
     address internal constant GAME_JACKPOT_DRAW_MODULE =
         address(0x98E53ecDDd253E5A7f845a713D7fc8853CF47EDE);
+    address internal constant GAME_DEGENESIS_MODULE =
+        address(0x688B74D1C43f65C2236A81bdaADF85671Dfe8072);
     // Chainlink LINK/ETH aggregator that values LINK donations. Optional:
     // address(0) leaves DegenerusAdmin's feed slot empty, so the reward lane
     // stays dark until the feed-swap governance path installs one. Patched per

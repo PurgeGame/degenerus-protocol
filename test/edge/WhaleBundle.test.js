@@ -144,17 +144,17 @@ describe("WhaleBundle", function () {
       ).to.be.revertedWithCustomError(errorAbi("InvalidQuantity()"), "InvalidQuantity");
     });
 
-    it("quantity > 100 reverts", async function () {
+    it("quantity > 1,000 reverts", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
 
       await expect(
         game
           .connect(alice)
-          .purchaseWhalePass(0, 101, hre.ethers.ZeroHash, { value: eth(242.4) })
+          .purchaseWhalePass(0, 1001, hre.ethers.ZeroHash, { value: eth(2402.4) })
       ).to.be.revertedWithCustomError(errorAbi("InvalidQuantity()"), "InvalidQuantity");
     });
 
-    it("quantity = 100 at level 0 succeeds (max bundle)", async function () {
+    it("quantity = 100 at level 0 succeeds", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
 
       const tx = await game
@@ -162,6 +162,18 @@ describe("WhaleBundle", function () {
         .purchaseWhalePass(0, 100, hre.ethers.ZeroHash, { value: eth(240) });
       const receipt = await tx.wait();
       expect(receipt.status).to.equal(1);
+    });
+
+    it("quantity = 1,000 at level 0 succeeds (max bundle, 100 boxes of 2.4 ETH)", async function () {
+      const { game, alice, whaleModule } = await loadFixture(deployFullProtocol);
+
+      const tx = await game
+        .connect(alice)
+        .purchaseWhalePass(0, 1000, hre.ethers.ZeroHash, { value: eth(2400) });
+      const events = await getEvents(tx, whaleModule, "LootBoxBuy");
+      expect(events.length).to.equal(1);
+      expect(events[0].args.amount).to.equal(eth(240), "the funded 10% is announced unfloored");
+      expect(await game.afkingFundingOf(alice.address)).to.equal(0n, "charged exactly the quoted price");
     });
 
     it("overpay is accepted and the excess is credited to the payer's afking", async function () {

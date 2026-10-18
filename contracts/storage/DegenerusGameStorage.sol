@@ -101,7 +101,7 @@ interface IAdminLinkValue {
  * | [24:25] ticketsFullyProcessed    bool     Read slot fully drained flag          |
  * | [25:26] ticketWriteSlot          bool     Double-buffer write toggle            |
  * | [26:27] prizePoolFrozen          bool     Prize pool freeze active flag         |
- * | [27:28] presaleOver              bool     Coin-presale-box terminal latch       |
+ * | [27:28] degenesisClosed          uint8    Degenesis cohorts closed (0..7)       |
  * | [28:29] subsFullyProcessed       bool     Afking STAGE drain-complete flag      |
  * | [29:30] humanReadComplete        bool     Read cohort's box entries all settled |
  * | [30:32] rngFlagsAndNudges        uint16   Eight-bit nudges, completion and window  |
@@ -484,11 +484,10 @@ abstract contract DegenerusGameStorage {
     ///      point.
     bool internal prizePoolFrozen;
 
-    /// @dev Latching terminal for the coin-presale-box window. Set once, in the
-    ///      box purchase that crosses the 50-ETH cumulative box cap. While false,
-    ///      ETH buys accrue presaleBoxCredit; once true, no further box buys or
-    ///      credit accrual occur. Packed into slot 0.
-    bool internal presaleOver;
+    /// @dev Degenesis cohorts closed, 0..7. The next cohort to price is Degenesis day
+    ///      degenesisClosed + 1; reaching 7 burns the leftover Degenesis inventory. One byte in
+    ///      slot 0 (LootboxCraps reads this slot's top bits).
+    uint8 internal degenesisClosed;
 
     /// @dev Afking process-STAGE drain-completion flag — the subscriber-drain sibling
     ///      of `ticketsFullyProcessed`. False while the STAGE is stamping the funded
@@ -721,10 +720,12 @@ abstract contract DegenerusGameStorage {
         return rngWordByDay[day & 1];
     }
 
+    /// @dev The active Degenesis cohort keeps its bound day's word past the two-day ring.
     function _recordDailyRng(uint24 day, uint256 word) internal {
         uint256 shift = uint256(day & 1) * 24;
         rngDayTags = uint48((uint256(rngDayTags) & ~(uint256(type(uint24).max) << shift)) | (uint256(day) << shift));
         rngWordByDay[day & 1] = word;
+        if (degenesisClosed < DEGENESIS_DAYS && uint24(degenesisActive >> GA_DAY_SHIFT) == day) degenesisWord = word;
     }
 
     function _retainedDailyWord(uint24 day) internal view returns (uint256) {
@@ -1064,7 +1065,7 @@ abstract contract DegenerusGameStorage {
         Idle, Terminal, Wait, Publish, Tickets, DailyGap, DailyApply, DailyPhase,
         Redemption, Afking, HumanBoxes, Degenerette, Decimator, Craps,
         CertifyRead, PrepareSubscriptions, Maintenance, RequestDaily, RequestMidday, GrowthSettle,
-        SeizeLoans
+        SeizeLoans, DegenesisSettle
     }
 
     function _minerMaintenancePending() internal view returns (bool) {
@@ -1120,6 +1121,7 @@ abstract contract DegenerusGameStorage {
         // Behind the day's request, so a long settlement never delays the daily word; ahead of
         // the optional mid-day request, which would otherwise starve it.
         if (_growthSettlePending()) return MinerAction.GrowthSettle;
+        if (_degenesisSettlePending()) return MinerAction.DegenesisSettle;
         return _minerMiddayEligible(caller) ? MinerAction.RequestMidday : MinerAction.Idle;
     }
 
@@ -2445,45 +2447,35 @@ abstract contract DegenerusGameStorage {
     // Loot Box State
     // =========================================================================
 
-    // Box queue entry (`boxQueue`), one complete word per purchase, LSB -> MSB:
-    //   [0:32]     wallet ID       nonzero beneficiary
-    //   [32:56]    level           purchase level; prices the preset tiers
-    //   [56:71]    score           post-action activity score, clamped to the effective cap
-    //   [71:85]    boostBps        boon uplift as a fraction of this purchase's spend
-    //   [85:99]    reserved        zero; EV allowance is drawn at opening
-    //   [99]       distress        bought in distress mode
-    //   [100:128]  small/med/large/custom counts, 7 bits each, summing to at most 100
-    //   [128:184]  size            custom or cover box size in gwei
-    //   [184]      cover           one system-granted cover box of `size`; no counts
-    //   [185:251]  presaleAmount   exact applied presale wei; zero means no presale leg
-    //   [251:254]  presaleTier     DGNRS tier frozen from the purchase's starting sold amount
-    //   [254]      presaleClosing  this purchase closed the presale
-    //   [255]      zero
-    uint256 internal constant LB_LEVEL_SHIFT = 32;
-    uint256 internal constant LB_SCORE_SHIFT = 56;
-    uint256 internal constant LB_SCORE_MASK = 0x7FFF;
-    uint256 internal constant LB_BOOST_SHIFT = 71;
-    uint256 internal constant LB_EV_SHIFT = 85;
-    uint256 internal constant LB_BPS_MASK = 0x3FFF;
-    uint256 internal constant LB_DISTRESS = uint256(1) << 99;
-    uint256 internal constant LB_SMALL_SHIFT = 100;
-    uint256 internal constant LB_MED_SHIFT = 107;
-    uint256 internal constant LB_LARGE_SHIFT = 114;
-    uint256 internal constant LB_CUSTOM_COUNT_SHIFT = 121;
-    uint256 internal constant LB_COUNT_MASK = 0x7F;
-    uint256 internal constant LB_SIZE_SHIFT = 128;
-    uint256 internal constant LB_SIZE_MASK = 0xFFFFFFFFFFFFFF;                    // 56 bits
-    uint256 internal constant LB_COVER = uint256(1) << 184;
-    uint256 internal constant LB_PRESALE_SHIFT = 185;
-    uint256 internal constant LB_PRESALE_MASK = 0x3FFFFFFFFFFFFFFFF;              // 66 bits
-    uint256 internal constant LB_TIER_SHIFT = 251;
-    uint256 internal constant LB_CLOSING = uint256(1) << 254;
+    // Box queue (`boxQueue`): three 85-bit entries per word. Logical position p sits in word
+    // p / 3 at bit (p % 3) * 85; bit 255 stays zero. Entry, LSB -> MSB:
+    //   [0:32]   wallet ID   nonzero beneficiary
+    //   [32:53]  units       per-box value in LB_VALUE_UNIT, 1..LB_UNITS_MAX
+    //   [53:65]  score code  post-action activity score, 12-bit piecewise code (Lootbox module)
+    //   [65:77]  boostBps    boon uplift as a fraction of the order's spend, at most 2,500
+    //   [77:84]  quantity    boxes, 1..MAX_BOXES_PER_ORDER
+    //   [84]     distress    bought in distress mode
+    uint256 internal constant LB_ENTRY_BITS = 85;
+    uint256 internal constant LB_ENTRY_MASK = 0x1FFFFFFFFFFFFFFFFFFFFF;
+    uint256 internal constant LB_UNITS_SHIFT = 32;
+    uint256 internal constant LB_UNITS_MASK = 0x1FFFFF;
+    uint256 internal constant LB_SCORE_SHIFT = 53;
+    uint256 internal constant LB_SCORE_MASK = 0xFFF;
+    uint256 internal constant LB_BOOST_SHIFT = 65;
+    uint256 internal constant LB_BOOST_MASK = 0xFFF;
+    uint256 internal constant LB_QTY_SHIFT = 77;
+    uint256 internal constant LB_QTY_MASK = 0x7F;
+    uint256 internal constant LB_DISTRESS = uint256(1) << 84;
 
-    /// @dev Custom and cover sizes are whole gwei; the remainder of a system grant below one
-    ///      gwei per box is reward-side only, the pool split banks the exact wei.
-    uint256 internal constant LB_SIZE_UNIT = 1 gwei;
+    /// @dev Queued box values are whole 0.001 ETH units. A system grant floors per box; the
+    ///      remainder stays in the pools its payment funded.
+    uint256 internal constant LB_VALUE_UNIT = 0.001 ether;
 
-    /// @dev Preset multipliers against the entry's level ticket price.
+    /// @dev Hard per-box cap for queued boxes (2,000 ETH). Purchases revert above it; system
+    ///      grants stay inside it by their producer formulas.
+    uint256 internal constant LB_UNITS_MAX = 2_000_000;
+
+    /// @dev Preset multipliers against the purchase level's ticket price.
     uint256 internal constant LB_MED_MULTIPLE = 5;
     uint256 internal constant LB_LARGE_MULTIPLE = 25;
 
@@ -2493,54 +2485,51 @@ abstract contract DegenerusGameStorage {
     ///      exposure buys a larger custom, or another entry.
     uint256 internal constant MAX_BOXES_PER_ORDER = 100;
 
-    /// @dev Minimum custom box. Presets clear it structurally: the cheapest ticket price is
-    ///      0.01 ETH and a small is one of those.
-    uint256 internal constant BOX_CUSTOM_MIN = 0.01 ether;
+    /// @dev Minimum custom box (0.01 ETH). Presets clear it structurally: the cheapest ticket
+    ///      price is 0.01 ETH and a small is one of those.
+    uint256 internal constant BOX_CUSTOM_MIN_UNITS = 10;
 
-    // Purchase input (`boxOrder`): [small:8][med:8][large:8][customCount:8][customSize:56 gwei].
-    // Every bit at or above 88 must be zero; zero means no ordinary leg.
-    uint256 internal constant BO_MED_SHIFT = 8;
-    uint256 internal constant BO_LARGE_SHIFT = 16;
-    uint256 internal constant BO_CUSTOM_COUNT_SHIFT = 24;
-    uint256 internal constant BO_SIZE_SHIFT = 32;
-    uint256 internal constant BO_COUNT_MASK = 0xFF;
+    // Purchase input (`boxOrder`): [quantity:7][kind:2][customUnits:21]; kind 0 small, 1 medium,
+    // 2 large, 3 custom; custom units are zero for presets. Every bit at or above 30 must be
+    // zero; zero means no ordinary leg.
+    uint256 internal constant BO_QTY_MASK = 0x7F;
+    uint256 internal constant BO_KIND_SHIFT = 7;
+    uint256 internal constant BO_UNITS_SHIFT = 9;
+    uint256 internal constant BO_KIND_CUSTOM = 3;
 
     /// @dev Validate one purchase's `boxOrder` input as wide integers and price it at `lvl`.
-    ///      `lanes` holds the counts, size and level already positioned for the entry word.
-    /// @custom:reverts E On a nonzero bit at or above 88, an empty order, more than
-    ///         MAX_BOXES_PER_ORDER boxes, a custom below BOX_CUSTOM_MIN, or a size without customs.
-    function _decodeBoxOrder(uint256 boxOrder, uint24 lvl) internal pure returns (uint256 lanes, uint256 cost) {
-        uint256 small = boxOrder & BO_COUNT_MASK;
-        uint256 med = (boxOrder >> BO_MED_SHIFT) & BO_COUNT_MASK;
-        uint256 large = (boxOrder >> BO_LARGE_SHIFT) & BO_COUNT_MASK;
-        uint256 custom = (boxOrder >> BO_CUSTOM_COUNT_SHIFT) & BO_COUNT_MASK;
-        uint256 size = boxOrder >> BO_SIZE_SHIFT;
-        uint256 boxes = small + med + large + custom;
-        if (
-            size > LB_SIZE_MASK || boxes == 0 || boxes > MAX_BOXES_PER_ORDER
-                || (custom == 0 ? size != 0 : size * LB_SIZE_UNIT < BOX_CUSTOM_MIN)
-        ) revert E();
-        unchecked {
-            cost = (small + LB_MED_MULTIPLE * med + LB_LARGE_MULTIPLE * large) * PriceLookupLib.priceForLevel(lvl)
-                + custom * size * LB_SIZE_UNIT;
+    ///      `fields` holds the per-box units and quantity already positioned for the entry.
+    /// @custom:reverts E On a quantity outside 1..MAX_BOXES_PER_ORDER, a nonzero bit at or above
+    ///         30, custom units outside BOX_CUSTOM_MIN_UNITS..LB_UNITS_MAX, or a preset carrying units.
+    function _decodeBoxOrder(uint256 boxOrder, uint24 lvl) internal pure returns (uint256 fields, uint256 cost) {
+        uint256 qty = boxOrder & BO_QTY_MASK;
+        uint256 kind = (boxOrder >> BO_KIND_SHIFT) & 3;
+        uint256 units = boxOrder >> BO_UNITS_SHIFT;
+        if (qty == 0 || qty > MAX_BOXES_PER_ORDER) revert E();
+        if (kind == BO_KIND_CUSTOM) {
+            if (units < BOX_CUSTOM_MIN_UNITS || units > LB_UNITS_MAX) revert E();
+        } else {
+            if (units != 0) revert E();
+            units = PriceLookupLib.priceForLevel(lvl)
+                * (kind == 0 ? 1 : (kind == 1 ? LB_MED_MULTIPLE : LB_LARGE_MULTIPLE)) / LB_VALUE_UNIT;
         }
-        lanes = (uint256(lvl) << LB_LEVEL_SHIFT) | (small << LB_SMALL_SHIFT) | (med << LB_MED_SHIFT)
-            | (large << LB_LARGE_SHIFT) | (custom << LB_CUSTOM_COUNT_SHIFT) | (size << LB_SIZE_SHIFT);
+        unchecked {
+            cost = qty * units * LB_VALUE_UNIT;
+        }
+        fields = (units << LB_UNITS_SHIFT) | (qty << LB_QTY_SHIFT);
     }
 
-    /// @dev Boxes an entry resolves: the four bought counts, or its one cover box.
-    function _boxEntryCount(uint256 word) internal pure returns (uint256) {
-        unchecked {
-            return ((word >> LB_SMALL_SHIFT) & LB_COUNT_MASK) + ((word >> LB_MED_SHIFT) & LB_COUNT_MASK)
-                + ((word >> LB_LARGE_SHIFT) & LB_COUNT_MASK) + ((word >> LB_CUSTOM_COUNT_SHIFT) & LB_COUNT_MASK)
-                + ((word >> 184) & 1);
-        }
+    /// @dev Boxes an entry resolves.
+    function _boxEntryCount(uint256 entry) internal pure returns (uint256) {
+        return (entry >> LB_QTY_SHIFT) & LB_QTY_MASK;
     }
 
-    /// @dev Append a complete entry to the write buffer at position = its write count. The
-    ///      count and `pendingWei` (the ordinary leg's RNG-pending ETH) commit in one
-    ///      lootboxRngPacked write. Returns the buffer and position the entry occupies.
-    function _appendBoxEntry(uint256 word, uint256 pendingWei) internal returns (uint48 buffer, uint32 position) {
+    /// @dev Append a complete entry (no bit above 84) to the write buffer at position = its write
+    ///      count. The count and `pendingWei` (the ordinary leg's RNG-pending ETH) commit in one
+    ///      lootboxRngPacked write. Lane 0 overwrites the whole word, clearing the buffer's stale
+    ///      lanes; lanes 1 and 2 OR into the word their group's lane 0 cleared, since the write
+    ///      count only grows until the buffer is resealed. Returns the buffer and position.
+    function _appendBoxEntry(uint256 entry, uint256 pendingWei) internal returns (uint48 buffer, uint32 position) {
         uint256 lr = lootboxRngPacked;
         position = uint32(lr >> LR_BOX_COUNT_SHIFT);
         uint256 pending = ((lr >> LR_PENDING_ETH_SHIFT) + pendingWei / LR_ETH_SCALE) & LR_PENDING_ETH_MASK;
@@ -2550,29 +2539,25 @@ abstract contract DegenerusGameStorage {
         uint256[] storage q = boxQueue[buffer];
         assembly ("memory-safe") {
             mstore(0x00, q.slot)
-            sstore(add(keccak256(0x00, 0x20), position), word)
+            let slot := add(keccak256(0x00, 0x20), div(position, 3))
+            let lane := mod(position, 3)
+            switch lane
+            case 0 { sstore(slot, entry) }
+            default { sstore(slot, or(sload(slot), shl(mul(lane, LB_ENTRY_BITS), entry))) }
         }
     }
 
     /// @dev Entry `position` of `buffer`. Callers bound `position` by that buffer's count.
-    function _boxEntryAt(uint48 buffer, uint256 position) internal view returns (uint256 word) {
+    function _boxEntryAt(uint48 buffer, uint256 position) internal view returns (uint256 entry) {
         uint256[] storage q = boxQueue[buffer];
         assembly ("memory-safe") {
             mstore(0x00, q.slot)
-            word := sload(add(keccak256(0x00, 0x20), position))
+            entry := and(
+                shr(mul(mod(position, 3), LB_ENTRY_BITS), sload(add(keccak256(0x00, 0x20), div(position, 3)))),
+                LB_ENTRY_MASK
+            )
         }
     }
-
-    /// @dev Presale DGNRS tier of a purchase that starts at `soldBefore` cumulative box ETH:
-    ///      [0,10) [10,20) [20,30) [30,40) [40,50) ETH map to tiers 0..4. A purchase crossing a
-    ///      boundary keeps its starting tier. Settlement prices the tier, never the amount.
-    function _presaleTier(uint256 soldBefore) internal pure returns (uint256 tier) {
-        tier = soldBefore / PRESALE_TIER_WIDTH;
-        if (tier > 4) tier = 4;
-    }
-
-    /// @dev Cumulative box-ETH width of each presale DGNRS tier.
-    uint256 internal constant PRESALE_TIER_WIDTH = 10 ether;
 
     uint8 internal constant JACKPOT_DAYS = 3;
 
@@ -2607,26 +2592,16 @@ abstract contract DegenerusGameStorage {
     }
 
     // =========================================================================
-    // Coin-Presale-Box State
+    // Degenesis State
     // =========================================================================
 
-    /// @dev Cumulative ETH spent on coin-presale boxes. Read+written per box buy
-    ///      during the presale to enforce the 50-ETH cap, freeze each purchase's DGNRS tier
-    ///      and detect the closing purchase. Never read after the presaleOver latch.
-    uint96 internal presaleBoxEthSold;
+    /// @dev The Vault's 25% of split Degenesis volume: a reserved purchase obligation inside
+    ///      claimablePool, outside Vault claimable, AFKing, backing and lending capacity.
+    uint128 internal degenesisVaultBudget;
 
-    /// @dev Spendable presale-box credit accrued per wallet from ETH buys while
-    ///      the presale is open (presaleBoxCredit += 0.25 * purchaseEth). Consumed
-    ///      1:1 when a box is bought.
-    mapping(uint32 => uint256) internal presaleBoxCredit;
-
-    // =========================================================================
-    // Presale State
-    // =========================================================================
-
-    /// @dev Cumulative coin-presale-box ETH cap. The box buy crossing this latches
-    ///      presaleOver.
-    uint256 internal constant PRESALE_BOX_ETH_CAP = 50 ether;
+    /// @dev Degenesis spending credit per wallet: 25% of qualifying spend while the credit
+    ///      window is open, consumed 1:1 by Degenesis purchases.
+    mapping(uint32 => uint256) internal degenesisCredit;
 
     // =========================================================================
     // Game Over State (packed: 5 variables in 104/256 bits)
@@ -2824,13 +2799,13 @@ abstract contract DegenerusGameStorage {
     mapping(uint8 => uint32) internal deityBySymbol;
 
     // =========================================================================
-    // Coin-Presale-Box DGNRS Curve
+    // Degenesis Settlement
     // =========================================================================
 
-    /// @dev Pool.PresaleBox DGNRS balance snapshot, set on the first box resolution.
-    ///      The per-box DGNRS award uses base = presaleBoxDgnrsPoolStart / 100 and the
-    ///      5-tier cumulative-volume multiplier curve [3.0, 2.5, 2.0, 1.5, 1.0].
-    uint256 internal presaleBoxDgnrsPoolStart;
+    /// @dev The one priced, unsettled Degenesis cohort (degenesisClosed + 1); zero when none.
+    ///      [0:80] Q payout budget, [80:160] sDGNRS paid, [160:184] bound request day,
+    ///      [184:216] settlement cursor. The reservation is 1.5Q - paid.
+    uint256 internal degenesisActive;
 
     // =========================================================================
     // Internal Helpers
@@ -4288,14 +4263,14 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant SUBSCRIBER_CAP = 2000;
     uint256 internal constant SUBSCRIBER_TICKET_PHASE = 1 << 15;
 
-    /// @dev Box purchase queue per physical RNG buffer (keys 0/1): one complete entry word per
-    ///      purchase, appended to the write buffer and settled FIFO from `boxCursor` once the
-    ///      buffer is sealed and its word published. Entries are never updated after their
-    ///      append; the array index is the position. Entry `p` sits at
-    ///      `keccak256(boxQueue[buffer].slot) + p`; the write count lives in lootboxRngPacked
-    ///      and the read length in `boxReadCount`. Never use Solidity length, push, pop or
-    ///      indexing on this mapping. A drained buffer is reused by resetting only its count.
-    ///      Entry layout: the LB_* constants.
+    /// @dev Box purchase queue per physical RNG buffer (keys 0/1): one 85-bit entry per
+    ///      purchase, three to a word, appended to the write buffer and settled FIFO from
+    ///      `boxCursor` once the buffer is sealed and its word published. Entries are never
+    ///      updated after their append. Logical position `p` sits in word
+    ///      `keccak256(boxQueue[buffer].slot) + p / 3` at bit `(p % 3) * 85`; the write count
+    ///      lives in lootboxRngPacked and the read length in `boxReadCount`, both in entries.
+    ///      Never use Solidity length, push, pop or indexing on this mapping. A drained buffer is
+    ///      reused by resetting only its count. Entry layout: the LB_* constants.
     mapping(uint48 => uint256[]) internal boxQueue;
 
     // =========================================================================
@@ -5063,5 +5038,52 @@ abstract contract DegenerusGameStorage {
         if (_isAcquired(subscriberId) || _isAcquired(funderId)) return false;
         return subscriberId == funderId || afkingFundingApprovals[funderId][subscriberId]
             || _ownerWalletId(subscriberId) == _ownerWalletId(funderId);
+    }
+
+    // =========================================================================
+    // Degenesis Orders
+    // =========================================================================
+
+    /// @dev The settling cohort's daily word, copied when its bound day's word is recorded.
+    uint256 internal degenesisWord;
+    /// @dev Per Degenesis day (1..7): [0:48] volume V in DEGENESIS_UNIT, [48:80] order count, [80] split.
+    mapping(uint256 => uint256) internal degenesisDays;
+    /// @dev Orders keyed degenesisDay << 32 | index / 3, three 85-bit lanes per word, order `index`
+    ///      at bit 85 * (index % 3): [0:32] wallet ID, [32:70] amount in DEGENESIS_UNIT,
+    ///      [70:85] seconds into its day, capped at DEGENESIS_BONUS_WINDOW.
+    mapping(uint256 => uint256) internal degenesisOrders;
+
+    uint256 internal constant DEGENESIS_DAYS = 7;
+    uint256 internal constant DEGENESIS_UNIT = 0.0001 ether;
+    uint256 internal constant DEGENESIS_MIN = 0.01 ether;
+    /// @dev Per-order bound in DEGENESIS_UNIT (about 27.5M ETH); larger orders revert.
+    uint256 internal constant DEGENESIS_AMOUNT_MASK = (uint256(1) << 38) - 1;
+    uint256 internal constant DEGENESIS_LANE_BITS = 85;
+    uint256 internal constant DEGENESIS_LANE_MASK = (uint256(1) << 85) - 1;
+    uint256 internal constant DEGENESIS_AMOUNT_SHIFT = 32;
+    uint256 internal constant DEGENESIS_SECONDS_SHIFT = 70;
+    uint256 internal constant DEGENESIS_BONUS_WINDOW = 6 hours;
+    uint256 internal constant GD_COUNT_SHIFT = 48;
+    uint256 internal constant GD_SPLIT = uint256(1) << 80;
+    uint256 internal constant GA_FIELD_MASK = (uint256(1) << 80) - 1;
+    uint256 internal constant GA_PAID_SHIFT = 80;
+    uint256 internal constant GA_DAY_SHIFT = 160;
+    uint256 internal constant GA_CURSOR_SHIFT = 184;
+
+    function _degenesisCreditOpen() internal view returns (bool) {
+        return block.timestamp < GameTimeLib.DEGENESIS_END_TS;
+    }
+
+    /// @dev Credit 25% of a qualifying spend while the window is open. The protocol bodies earn none.
+    function _accrueDegenesisCredit(uint32 id, uint256 spend) internal {
+        if (_degenesisCreditOpen() && id != VAULT_WALLET_ID && id != SDGNRS_WALLET_ID) {
+            degenesisCredit[id] += spend / 4;
+        }
+    }
+
+    /// @dev A priced cohort's word has arrived and the game is not terminal. The word is set only
+    ///      for the active cohort and cleared when it closes.
+    function _degenesisSettlePending() internal view returns (bool) {
+        return degenesisClosed < DEGENESIS_DAYS && rngFlagsAndNudges & (uint16(1) << 13) == 0 && degenesisWord != 0;
     }
 }

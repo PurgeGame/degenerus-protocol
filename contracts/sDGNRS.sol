@@ -293,12 +293,12 @@ contract sDGNRS {
         Affiliate,
         Lootbox,
         Reward,
-        PresaleBox
+        Degenesis
     }
 
     /// @notice Balances for each reward pool.
     /// @dev uint128 elements: the compiler packs the 5 lanes into 3 slots in index order
-    ///      (Whale|Affiliate, Lootbox|Reward, PresaleBox), co-locating the warm whale/affiliate pair
+    ///      (Whale|Affiliate, Lootbox|Reward, Degenesis), co-locating the warm whale/affiliate pair
     ///      debited together in a pass purchase. Each balance is <= INITIAL_SUPPLY (1e24) << uint128 max.
     uint128[5] private poolBalances;
 
@@ -671,7 +671,7 @@ contract sDGNRS {
     uint16 private constant AFFILIATE_POOL_BPS = 3000;
     uint16 private constant LOOTBOX_POOL_BPS = 2000;
     uint16 private constant REWARD_POOL_BPS = 1000;
-    uint16 private constant PRESALE_BOX_POOL_BPS = 1000;
+    uint16 private constant DEGENESIS_POOL_BPS = 1000;
 
     /// @dev Maximum redemption roll (percent). The resolve roll is in [21, 175]; at batch close the
     ///      MAX possible payout min(base × MAX_ROLL / 100, free backing) is reserved and held in this contract's ETH +
@@ -741,11 +741,11 @@ contract sDGNRS {
     constructor() {
         uint256 vaultAmount = (INITIAL_SUPPLY * VAULT_BPS) / BPS_DENOM;
         uint256 whaleAmount = (INITIAL_SUPPLY * WHALE_POOL_BPS) / BPS_DENOM;
-        uint256 presaleBoxAmount = (INITIAL_SUPPLY * PRESALE_BOX_POOL_BPS) / BPS_DENOM;
+        uint256 degenesisAmount = (INITIAL_SUPPLY * DEGENESIS_POOL_BPS) / BPS_DENOM;
         uint256 affiliateAmount = (INITIAL_SUPPLY * AFFILIATE_POOL_BPS) / BPS_DENOM;
         uint256 lootboxAmount = (INITIAL_SUPPLY * LOOTBOX_POOL_BPS) / BPS_DENOM;
         uint256 rewardAmount = (INITIAL_SUPPLY * REWARD_POOL_BPS) / BPS_DENOM;
-        uint256 totalAllocated = vaultAmount + whaleAmount + presaleBoxAmount + affiliateAmount + lootboxAmount + rewardAmount;
+        uint256 totalAllocated = vaultAmount + whaleAmount + degenesisAmount + affiliateAmount + lootboxAmount + rewardAmount;
         if (totalAllocated < INITIAL_SUPPLY) {
             uint256 dust;
             unchecked {
@@ -754,7 +754,7 @@ contract sDGNRS {
             lootboxAmount += dust;
         }
         uint256 poolTotal =
-            whaleAmount + presaleBoxAmount + affiliateAmount + lootboxAmount + rewardAmount;
+            whaleAmount + degenesisAmount + affiliateAmount + lootboxAmount + rewardAmount;
 
         _mint(ContractAddresses.DGNRS, vaultAmount);
         _mint(address(this), poolTotal);
@@ -765,10 +765,11 @@ contract sDGNRS {
         poolBalances[uint8(Pool.Affiliate)] = uint128(affiliateAmount);
         poolBalances[uint8(Pool.Lootbox)] = uint128(lootboxAmount);
         poolBalances[uint8(Pool.Reward)] = uint128(rewardAmount);
-        poolBalances[uint8(Pool.PresaleBox)] = uint128(presaleBoxAmount);
+        poolBalances[uint8(Pool.Degenesis)] = uint128(degenesisAmount);
 
-        // Protocol-owned self-subscription: claimable-first daily lootbox
-        // buy of flat quantity 1, for the caller's own account (`id == 0`), self-funded.
+        // Protocol-owned self-subscription: AFKing-funding-first daily lootbox
+        // buy of flat quantity 1, for the caller's own account (`id == 0`), self-funded;
+        // claimable covers any shortfall.
         // The afking module exempts the pinned SDGNRS address from its seat burn and
         // purchase gates, so this subscribe lands before the seat token is deployed and
         // `seatId` is ignored; the token's constructor then mints sDGNRS its construction
@@ -778,7 +779,7 @@ contract sDGNRS {
         // (sDGNRS never holds a FLIP wallet balance); Coinflip arms perpetual
         // auto-rebuy (0 take-profit) once the final seeded day settles, after which
         // wins roll into the carry.
-        game.subscribe(0, true, false, 1, 0, 0);
+        game.subscribe(0, false, false, 1, 0, 0);
 
         // Pre-approve GAME to pull stETH for both redemption claim legs. Live settlement funds
         // each leg (resolveRedemptionLootbox / creditRedemptionDirect) with msg.value ETH and the
@@ -954,7 +955,7 @@ contract sDGNRS {
         if (minted != 0) {
             _mint(address(this), minted);
             // Every pool plus its credit is <= the new total supply, so each share
-            // fits uint128. Checked additions preserve pool inventory; PresaleBox receives zero.
+            // fits uint128. Checked additions preserve pool inventory; Degenesis receives zero.
             poolBalances[uint8(Pool.Whale)] += uint128(whale);
             poolBalances[uint8(Pool.Affiliate)] += uint128(affiliate);
             poolBalances[uint8(Pool.Lootbox)] += uint128(lootbox);

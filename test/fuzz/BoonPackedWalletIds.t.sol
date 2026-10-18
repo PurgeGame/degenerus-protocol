@@ -185,32 +185,6 @@ contract BoonPackedWalletIds is DeployProtocol {
         assertTrue(wrote, "fixture: a box roll stored a boon");
     }
 
-    function test_BoxRollMixedTiersWritesById() public {
-        (address player, uint32 id) = _wallet("roll_mixed");
-        uint24 lvl = game.level() + 1;
-        uint256[5] memory amounts = [uint256(1 ether), 5 ether, 25 ether, 2 ether, 0];
-        uint40 counts = uint40(1) | (uint40(1) << 8) | (uint40(1) << 16) | (uint40(1) << 24);
-        bool wrote;
-        for (uint256 k; k < 64 && !wrote; ++k) {
-            uint256 snap = vm.snapshotState();
-            ext.x_delegate(
-                ContractAddresses.GAME_BOON_MODULE,
-                abi.encodeCall(
-                    DegenerusGameBoonModule.rollBoxBoonTiers,
-                    (id, amounts, counts, lvl, uint256(keccak256(abi.encode("mixed", k))))
-                )
-            );
-            (uint256 s0, uint256 s1) = _boon(id);
-            if (s0 | s1 == 0) {
-                vm.revertToState(snap);
-                continue;
-            }
-            wrote = true;
-            _assertIdZeroEmpty();
-        }
-        assertTrue(wrote, "fixture: a mixed-tier roll stored a boon");
-    }
-
     function test_DeityGiftWritesRecipientId() public {
         (address deity,) = _wallet("gift_deity");
         ext.x_grantDeity(deity);

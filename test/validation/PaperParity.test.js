@@ -217,10 +217,10 @@ describe("Paper Parity (Phase 46)", function () {
       expect(nextDelta).to.equal(expectedNext, "Next share should be 90%");
     });
 
-    it("lootbox: 90% future, 10% next (presale and after)", async function () {
+    it("lootbox: 90% future, 10% next", async function () {
       // MintModule constants: LOOTBOX_SPLIT_FUTURE_BPS = 9000, LOOTBOX_SPLIT_NEXT_BPS = 1000.
-      // Rake-free: ALL lootbox ETH (presale and after) routes 100% to the pools at 90/10
-      // future/next. There is no presale-specific split and no vault diversion.
+      // Rake-free: ALL lootbox ETH routes 100% to the pools at 90/10
+      // future/next. There is no vault diversion.
       const { game, alice } = await loadFixture(deployWithTester);
 
       const nextBefore = await game.nextPrizePoolView();

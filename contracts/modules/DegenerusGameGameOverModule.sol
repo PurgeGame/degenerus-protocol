@@ -31,7 +31,7 @@ import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 import {IDegenerusGame, MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {DegenerusGameRngUtils} from "./DegenerusGameRngUtils.sol";
-import {IDegenerusGameTicketModule} from "../interfaces/IDegenerusGameModules.sol";
+import {IDegenerusGameTicketModule, IDegenerusGameDegenesisModule} from "../interfaces/IDegenerusGameModules.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {
     IVRFCoordinator,
@@ -113,6 +113,10 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     /// @dev Deity-pass early-gameover refunds, as one aggregate. `totalRefunded` bounds
     ///      the refund credits exactly, without a separate refund event per holder.
     event DeityPassRefundsSettled(uint256 totalRefunded);
+
+    /// @notice The Vault's Degenesis budget and sDGNRS's whole AFKing balance left claimablePool
+    ///         for the final prizes.
+    event DegenesisFundsReleased(uint256 vaultBudget, uint256 sdgnrsAfking);
 
     /// @notice The deterministic (VRF-dead) ending fixed its payout: `pot` is shared by every
     ///         ticket of `level`. Uncreated entries (queued or in an undrained foil pack, whose
@@ -473,9 +477,22 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         if (gameOver) return _resumeTerminalPayout(day, meter, work);
         // At most 32 deity refunds, terminal burns and accounting, with no draw
         // admitted until the remaining allowance is measured after this setup.
-        if (!MineFlipGas.canRun(meter, GasBounds.TERMINAL_SETUP, GasBounds.TERMINAL_TAIL)) return false;
+        if (!MineFlipGas.canRun(meter, GasBounds.TERMINAL_SETUP + GasBounds.DEGENESIS_TERMINAL_GAS, GasBounds.TERMINAL_TAIL)) {
+            return false;
+        }
         work.progressed = true;
         MineFlipGas.markProgress(meter); // Admitted setup below sets gameOver or latches the dead ending.
+
+        // Every unsplit Degenesis cohort splits first, so none of its volume stays reserved. The
+        // split is idempotent, and once the seventh cohort closes every cohort is split.
+        if (degenesisClosed < DEGENESIS_DAYS) {
+            (bool okDeg, bytes memory degData) = ContractAddresses.GAME_DEGENESIS_MODULE.delegatecall(
+                abi.encodeWithSelector(IDegenerusGameDegenesisModule.splitDegenesis.selector)
+            );
+            if (!okDeg) {
+                assembly ("memory-safe") { revert(add(degData, 32), mload(degData)) }
+            }
+        }
 
         bool dead = _lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK) != 0;
         uint24 lvl = level;
@@ -493,7 +510,9 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         // The normal ending draws on the terminal word. Without one, distributable funds take
         // the deterministic ending: the next terminal call tallies the cohort and fixes the
         // pot, so fund release never waits on a word that is not there. Nothing is paid here.
-        if (preRefundAvailable != 0 && !dead && _lootboxWord(_rngReadBuffer()) == 0) {
+        // Funds released below count as distributable even when nothing else is.
+        if ((preRefundAvailable != 0 || degenesisVaultBudget != 0 || _afkingOf(SDGNRS_WALLET_ID) != 0)
+            && !dead && _lootboxWord(_rngReadBuffer()) == 0) {
             _latchDeadEnding();
             return false;
         }
@@ -543,12 +562,27 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             }
         }
 
+        // After the refund budget is fixed and before the prize budget is: the Vault's Degenesis
+        // budget and all sDGNRS AFKing funding leave claimablePool for the final prizes. The
+        // gameOver latch below makes this exactly once.
+        uint256 degVault = degenesisVaultBudget;
+        uint256 sdgnrsPacked = balancesPacked[SDGNRS_WALLET_ID];
+        uint256 degSdgnrs = sdgnrsPacked >> 128;
+        if (degVault + degSdgnrs != 0) {
+            degenesisVaultBudget = 0;
+            balancesPacked[SDGNRS_WALLET_ID] = uint128(sdgnrsPacked);
+            claimablePool -= uint128(degVault + degSdgnrs);
+            emit DegenesisFundsReleased(degVault, degSdgnrs);
+        }
+
         // Latch terminal state
         gameOver = true;
 
         // Burn unallocated tokens
         charityGameOver.burnAtGameOver();
         dgnrs.burnAtGameOver();
+        // Unresolved Degenesis orders are forfeited with the burned inventory.
+        degenesisActive = 0;
         // Flood FLIP's VAULT mint allowance as a one-shot worthless-token tombstone
         flip.tombstoneAtGameOver();
 

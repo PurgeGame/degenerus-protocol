@@ -12,6 +12,7 @@ const SRC = (rel) => path.resolve(process.cwd(), rel);
 const JACKPOT = SRC("contracts/modules/DegenerusGameJackpotDrawModule.sol");
 const JACKPOT_CORE = SRC("contracts/modules/DegenerusGameJackpotModule.sol");
 const LOOTBOX = SRC("contracts/modules/DegenerusGameLootboxModule.sol");
+const DEGENESIS = SRC("contracts/modules/DegenerusGameDegenesisModule.sol");
 const DEGENERETTE = SRC("contracts/modules/DegenerusGameDegeneretteModule.sol");
 const CRAPS_ENGINE = SRC("contracts/CrapsEngine.sol");
 
@@ -150,7 +151,7 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
 
   describe("§3c small-award sites carry the threshold-gated collapse", function () {
     const SITES = [
-      { n: 4, file: LOOTBOX, sig: "function _resolvePresaleBox(", seed: "seed" },
+      { n: 4, file: DEGENESIS, sig: "function _degenesisOutcome(", seed: "seed" },
       {
         n: 5,
         file: LOOTBOX,

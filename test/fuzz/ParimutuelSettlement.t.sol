@@ -1655,7 +1655,7 @@ contract ParimutuelBetGateDoorsTest is DeployProtocol {
         } else if (kind == 13) {
             ok = _call(who, 1 ether, abi.encodeCall(DegenerusGame.depositAfkingFunding, (_idOrRegister(who))));
         } else {
-            ok = _call(who, 0.05 ether, abi.encodeCall(DegenerusGame.buyPresaleBox, (uint32(0), 0.05 ether)));
+            ok = _call(who, 0.05 ether, abi.encodeCall(DegenerusGame.buyDegenesisBox, (uint32(0), 0.05 ether)));
         }
     }
 
@@ -1671,16 +1671,16 @@ contract ParimutuelBetGateDoorsTest is DeployProtocol {
         }
     }
 
-    /// Each door succeeds on its own and leaves the gate consistent.
+    /// Each door succeeds on its own and leaves the gate consistent. The Degenesis box (door 14) is
+    /// closed on this timeline: it reverts and its registration rolls back with it.
     function test_EveryDoorKeepsTheGate() public {
-        bool[KINDS] memory expectOk = [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true];
+        bool[KINDS] memory expectOk = [true, true, true, true, true, true, true, true, true, true, true, true, true, true, false];
         for (uint256 k; k < KINDS; ++k) {
             uint256 snap = vm.snapshotState();
             address who = _actor(k % ACTORS);
             address other = _actor((k + 1) % ACTORS);
             if (k == 12) _door(8, who, other, 0);
             if (k == 13) _giveWalletId(who);
-            if (k == 14) _door(3, who, other, 0);
             bool ok = _door(k, who, other, k);
             assertEq(ok, expectOk[k], string.concat("door ", vm.toString(k)));
             _assertAll();

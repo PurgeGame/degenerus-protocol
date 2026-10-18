@@ -28,6 +28,8 @@
 #   _nudgeCount             frozen daily nudge input in slot-0 bytes30..31
 #   rngRequestDay           pinned logical request/application identity (slot 5 low24)
 #   lootboxRngPacked        read-work flags, pending values and queue write counts (slot 30)
+#   degenesisWord           bound copy of the active Degenesis cohort's daily word (derived from the ring
+#                           word by the exempt recorder; not a separate frozen slot, so not in FROZEN_SET)
 #
 # CROSS-CONTRACT READERS (_wordAt, _dailyWordAt). A satellite outside the game — CRAPS — reads
 # the same three slots through `DegenerusGame.extsload`, naming NUMERIC SLOTS and never a storage
@@ -165,6 +167,7 @@ ACCESSOR	rngFlagsAndNudges	<file-scope>	storage/DegenerusGameStorage.sol	WRITE	D
 DECL	rngRequestDay	<file-scope>	storage/DegenerusGameStorage.sol	DECL	Logical commitment/application identity: set only on fresh normal/terminal boundary, preserved by callback/retry and all consumer checkpoints.
 DECL	rngWordByDay	<file-scope>	storage/DegenerusGameStorage.sol	DECL
 DECL	rngWordCurrent	<file-scope>	storage/DegenerusGameStorage.sol	DECL
+DECL	degenesisWord	<file-scope>	storage/DegenerusGameStorage.sol	DECL	The active Degenesis cohort's bound copy of its request day's daily word; zero outside a priced cohort.
 GATE	_recordedDailyWord	_afkingStreak	storage/DegenerusGameStorage.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
 ACCESSOR	rngFlagsAndNudges	_clearAppliedNudges	storage/DegenerusGameStorage.sol	READ	Daily recorder clears the frozen receipt once after using the finalized word.
 ACCESSOR	rngFlagsAndNudges	_clearAppliedNudges	storage/DegenerusGameStorage.sol	WRITE	Miner recorder clears only nudge bits, never in the billed callback.
@@ -209,13 +212,18 @@ ACCESSOR	rngFlagsAndNudges	_setTicketRedemptionOpen	storage/DegenerusGameStorage
 EXEMPT-ADVANCE	rngFlagsAndNudges	_swapRngBuffers	storage/DegenerusGameStorage.sol	WRITE	Normal completion gate precedes seal; terminal bypass kills unfinished box/bet/Craps work. Retry never swaps.
 GATE	rngWordCurrent	_vrfDead	storage/DegenerusGameStorage.sol	READ	existence check only, read once a request is a whole VRF-dead window old: a delivered daily word means VRF works even if the day processing it never completes (a stuck stage or a backlog), so that game ends by the deadman on a fresh terminal word instead; no value decision
 GATE	_dailyWordAt	_reservableDay	storage/CrapsBattleStorage.sol	READ
+GATE	degenesisWord	_degenesisSettlePending	storage/DegenerusGameStorage.sol	READ	Existence test (word != 0) selecting the DegenesisSettle stage; no value decision.
+GATE	rngFlagsAndNudges	_degenesisSettlePending	storage/DegenerusGameStorage.sol	READ	Terminal-bit test (bit 13) so the stage never runs once the terminal word is applied; no entropy consumed.
 CONSUMER-SEALED	_lootboxWord	mineFlip	modules/DegenerusGameMinerModule.sol	READ	Stage 1 passes the published read word to the batch closed by its request; every later request waits for that stage to drain.
+CONSUMER-SEALED	degenesisWord	runDegenesisWork	modules/DegenerusGameDegenesisModule.sol	READ	DegenesisSettle miner stage: loads the bound word once into the frozen cohort and derives every outcome from it; the order list closed with the sale day and the cohort was split and priced at the word-free request boundary, so nothing a player can still change reaches the derivation.
 
 # Decimator jackpot integration (2026-10-05)
 
 # 2026-10-06 Phase C: queue write counts ride lootboxRngPacked; the seal latches them
 CURSOR	lootboxRngPacked	_appendBoxEntry	storage/DegenerusGameStorage.sol	READ	Reads pending ETH and the write-buffer box count: the count is the entry position. Purchases append only to the write buffer; the sealed read length lives in boxReadCount, which appends never write.
 PRODUCER	lootboxRngPacked	_appendBoxEntry	storage/DegenerusGameStorage.sol	WRITE	Adds the entry's pending ETH and increments the write-buffer box count in one write; no entropy, read-buffer or readiness field.
+PRODUCER	degenesisWord	_recordDailyRng	storage/DegenerusGameStorage.sol	WRITE	Copies the landed daily word, in the same exempt recorder that writes the ring, only when the day is the active cohort's bound request day and the cohort is not yet closed; no actor writes it.
+PRODUCER	degenesisWord	_closeDegenesisCohort	modules/DegenerusGameDegenesisModule.sol	WRITE	Clears the bound word when the cohort closes, from the DegenesisSettle stage; runs after the last order pays.
 ACCESSOR	lootboxRngPacked	degeneretteBetInfo	DegenerusGame.sol	READ	View bound for a write-buffer bet id (the write count); no RNG consumer.
 CURSOR	lootboxRngPacked	_placeDegeneretteBetCore	modules/DegenerusGameDegeneretteModule.sol	READ	Reads the write-buffer bet count to fix the bet id (position + 1) before the buffer is sealed; _collectBetFunds commits the increment.
 EXEMPT-ADVANCE	lootboxRngPacked	_swapRngBuffers	storage/DegenerusGameStorage.sol	READ	Seal (normal request or terminal request): latches the write counts into the read lengths. Retry never swaps.

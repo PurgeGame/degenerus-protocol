@@ -16,13 +16,13 @@ contract RateViewer is DegenerusGame {
     function rates(uint48 buffer, uint256 position)
         external
         view
-        returns (uint256 level, uint256 evBps, uint256 boostBps, uint256 adjBps, bool distress)
+        returns (uint256 sizeWei, uint256 evBps, uint256 boostBps, uint256 adjBps, bool distress)
     {
         uint256 w = _boxEntryAt(buffer, position);
-        level = (w >> LB_LEVEL_SHIFT) & type(uint24).max;
-        evBps = _lootboxEvMultiplierFromScore((w >> LB_SCORE_SHIFT) & LB_SCORE_MASK);
-        boostBps = (w >> LB_BOOST_SHIFT) & LB_BPS_MASK;
-        uint256 nominal = BoxOrderLib.boNominal(w, PriceLookupLib.priceForLevel(uint24(level)));
+        sizeWei = BoxOrderLib.boSizeWei(w);
+        evBps = _lootboxEvMultiplierFromScore(BoxOrderLib.boScore(w));
+        boostBps = BoxOrderLib.boBoostBps(w);
+        uint256 nominal = BoxOrderLib.boNominal(w);
         (uint256 eligible,) = EvTaperRef.eligible(_lootboxEvUsedFor(uint32(w), _activeTicketLevel()), nominal);
         adjBps = evBps > 10_000 && nominal != 0 ? eligible * 10_000 / nominal : 0;
         distress = w & LB_DISTRESS != 0;
@@ -30,11 +30,12 @@ contract RateViewer is DegenerusGame {
 }
 
 /// @title LootboxTierSizes -- a medium box is five ticket prices and a large box twenty-five
-/// @notice A queue entry stores tier COUNTS; the open multiplies the entry level's ticket price by
-///         the tier's multiple (1x / 5x / 25x) to size each roll. Mutation v78 rewrote the medium
-///         size `price * 5` as `price - 5` in the open walk and no foundry oracle noticed: the
-///         tier multiples were asserted nowhere. This buys one box of each tier in one purchase,
-///         lands the word, auto-opens, and reads the three sizes back off `LootBoxOpened`.
+/// @notice A purchase picks ONE box type; the input decoder resolves a preset to the purchase
+///         level's ticket price times its multiple (1x / 5x / 25x) and the entry stores that
+///         per-box value. Mutation v78 rewrote the medium size `price * 5` as `price - 5` and no
+///         foundry oracle noticed: the tier multiples were asserted nowhere. These buy each type
+///         as its own purchase, read the stored per-box values, then open the boxes and read the
+///         sizes back off `LootBoxOpened`.
 contract LootboxTierSizes is DeployProtocol {
     address internal actor;
 
@@ -121,79 +122,39 @@ contract LootboxTierSizes is DeployProtocol {
         assertTrue(game.rngComplete(), "harness: the day's cohorts all completed");
     }
 
-    function test_tiersOpenAtOneFiveAndTwentyFivePrices() public {
+    /// @notice Each preset stores 1x / 5x / 25x the purchase level's ticket price per box and a
+    ///         custom its exact units; the charged wei is quantity times that value.
+    function test_kindsStoreOneFiveTwentyFivePricesPerBox() public {
         _driveDailyCycleOnce();
-        assertFalse(game.rngLocked(), "stage: mid-day path reachable");
         (, , , , uint256 priceWei) = game.purchaseInfo();
         uint48 N = _idx();
-
-        // One of each tier, plus a one-ETH custom box so the pending ETH clears the mid-day
-        // request threshold (the tiers alone are 31 ticket prices).
-        uint256 order = BoxOrderLib.boOrder(1, 1, 1, 1, 1 ether);
-        uint256 nominal = 31 * priceWei + 1 ether;
-        uint256 pos = RecyclingState.boxCount(address(game), N);
-        vm.prank(actor);
-        game.purchase{value: nominal + 1 ether}(0, 400, order, bytes32(0), MintPaymentKind.DirectEth, false);
-        assertEq(RecyclingState.boxCount(address(game), N), pos + 1, "the purchase appended one entry");
-
-        uint256 reqId = _mineMiddayRequest(actor);
-
-        // A box that draws the ETH or WWXRP spin reports through the spin contracts instead of
-        // `LootBoxOpened`, so search the word for a draw where all four boxes open plainly. The
-        // word only moves the spin lottery and the ticket targets; the SIZES are the order's.
-        uint256[4] memory sizes;
-        bool found;
-        for (uint256 w = 1; w <= 64 && !found; w++) {
-            uint256 snap = vm.snapshotState();
-            mockVRF.fulfillRandomWords(reqId, uint256(keccak256(abi.encode("tier_word", w))) | 1);
-            // The engine publishes the word and resolves the read cohort, the order included, as
-            // read consumers.
-            vm.recordLogs();
+        uint256[4] memory orders =
+            [BoxOrderLib.boSmalls(2), BoxOrderLib.boMeds(2), BoxOrderLib.boLarges(2), BoxOrderLib.boCustoms(2, 1.234 ether)];
+        uint256[4] memory perBox = [priceWei, 5 * priceWei, 25 * priceWei, 1.234 ether];
+        for (uint256 t; t < 4; t++) {
+            uint256 pos = RecyclingState.boxCount(address(game), N);
+            uint256 balBefore = actor.balance;
             vm.prank(actor);
-            game.mineFlip(0);
-            Vm.Log[] memory logs = vm.getRecordedLogs();
-            assertGt(_word(N), 0, "the word landed for the entry's buffer");
-            assertTrue(game.boxIndexComplete(N), "the walk opened the entry");
-            uint256 n;
-            for (uint256 i; i < logs.length; i++) {
-                if (logs[i].topics[0] != OPENED || logs[i].emitter != address(game)) continue;
-                if (uint32(uint256(logs[i].topics[1])) != game.walletIdOf(actor)) continue;
-                if (uint48(uint256(logs[i].topics[2])) != _tag(N, pos)) continue;
-                (uint256 amount,,,,) = abi.decode(logs[i].data, (uint256, uint24, uint32, uint256, bool));
-                if (n < 4) sizes[n] = amount;
-                n++;
-            }
-            assertLe(n, 4, "never more than the four boxes ordered");
-            if (n == 4) found = true;
-            else vm.revertToState(snap);
+            game.purchase{value: 2 * perBox[t]}(0, 0, orders[t], bytes32(0), MintPaymentKind.DirectEth, false);
+            assertEq(balBefore - actor.balance, 2 * perBox[t], "charged quantity x per-box value");
+            uint256 entry = RecyclingState.boxEntry(address(game), N, pos);
+            assertEq(BoxOrderLib.boCount(entry), 2, "quantity stored");
+            assertEq(BoxOrderLib.boSizeWei(entry), perBox[t], "per-box value stored at purchase");
         }
-        assertTrue(found, "some word opens all four boxes without a spin");
-        // Sort; the custom (one ETH) is the largest, the three tiers sit below it.
-        for (uint256 a; a < 4; a++) {
-            for (uint256 b = a + 1; b < 4; b++) {
-                if (sizes[b] < sizes[a]) (sizes[a], sizes[b]) = (sizes[b], sizes[a]);
-            }
-        }
-        // `amount` is the box's EV-scaled figure: the wallet's EV, boost and adjustment rates ride
-        // every tier alike, so the four figures keep the order's size ratios to within flooring.
-        assertGt(sizes[0], 0, "the small box opened with a size");
-        assertApproxEqAbs(sizes[1], 5 * sizes[0], 8, "the medium box is five small boxes");
-        assertApproxEqAbs(sizes[2], 25 * sizes[0], 32, "the large box is twenty-five small boxes");
-        assertApproxEqAbs(sizes[3], (1 ether / priceWei) * sizes[0], 1 ether / priceWei + 1, "the custom box is its own size in small boxes");
     }
 
     /// @dev The rate lanes of queued entry `position` in `buffer`.
     function _rates(uint48 buffer, uint256 position)
         internal
-        returns (uint256 level, uint256 evBps, uint256 boostBps, uint256 adjBps)
+        returns (uint256 sizeWei, uint256 evBps, uint256 boostBps, uint256 adjBps)
     {
         bytes memory real = address(game).code;
         vm.etch(address(game), type(RateViewer).runtimeCode);
-        (level, evBps, boostBps, adjBps,) = RateViewer(payable(address(game))).rates(buffer, position);
+        (sizeWei, evBps, boostBps, adjBps,) = RateViewer(payable(address(game))).rates(buffer, position);
         vm.etch(address(game), real);
     }
 
-    /// @dev The figure `_rollTier` reports for a box of `size`: the boosted size, EV-scaled below
+    /// @dev The figure `_rollBoxes` reports for a box of `size`: the boosted size, EV-scaled below
     ///      neutral, or the adjusted part EV-scaled plus the rest above it.
     function _expected(uint256 size, uint256 evBps, uint256 boostBps, uint256 adjBps) internal pure returns (uint256) {
         uint256 boosted = size + (size * boostBps) / 10_000;
@@ -214,9 +175,9 @@ contract LootboxTierSizes is DeployProtocol {
         }
     }
 
-    /// @notice A one-tier entry takes the lean immediate path (no five-lane batch). Three fresh
-    ///         wallets buy three boxes of one tier each into the same buffer; the daily word lands,
-    ///         the walk opens all nine, and the three per-tier figures keep 1 : 5 : 25.
+    /// @notice Three fresh wallets buy three boxes of one tier each into the same buffer; the
+    ///         daily word lands, the walk opens all nine, and the three per-tier figures keep
+    ///         1 : 5 : 25.
     function test_singleTierOrdersOpenAtTheirMultiples() public {
         _driveDailyCycleOnce();
         assertFalse(game.rngLocked(), "stage: a fresh day");
@@ -239,8 +200,9 @@ contract LootboxTierSizes is DeployProtocol {
         // the tier's size alone.
         uint256[3] memory expected;
         for (uint256 t; t < 3; t++) {
-            (uint256 lvl, uint256 ev, uint256 boost, uint256 adj) = _rates(N, pos[t]);
-            expected[t] = _expected(mults[t] * PriceLookupLib.priceForLevel(uint24(lvl)), ev, boost, adj);
+            (uint256 size, uint256 ev, uint256 boost, uint256 adj) = _rates(N, pos[t]);
+            assertEq(size, mults[t] * priceWei, "stored per-box value is the tier's multiple");
+            expected[t] = _expected(size, ev, boost, adj);
         }
 
         // The daily word seals the buffer and lands the boxes' word without a mid-day request;

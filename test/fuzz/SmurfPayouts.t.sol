@@ -10,6 +10,7 @@ import {RECORD_KIND_SPIN} from "../../contracts/interfaces/ICoinflip.sol";
 import {DegenerusGameLootboxModule} from "../../contracts/modules/DegenerusGameLootboxModule.sol";
 import {DegenerusGameDegeneretteModule} from "../../contracts/modules/DegenerusGameDegeneretteModule.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
 
 /// @title SmurfPayouts -- every protocol payout for a smurf account reaches its owner
@@ -19,7 +20,7 @@ import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
 ///         pass or record trophy. Each edge is also run for an ordinary wallet, whose payout must
 ///         still land on its own key.
 /// @dev Flows the public doors cannot reach on demand are driven the way existing suites drive
-///      them: the box resolvers (human, presale, AFKing, redemption, direct), the Degenerette ETH
+///      them: the box resolvers (human, AFKing, redemption, direct), the Degenerette ETH
 ///      box spin and the foil draw run through the harness's module delegatecall with seeded
 ///      words; bingo buckets, the level DGNRS allocation and claimable ETH are seeded through the
 ///      harness; the affiliate score is mocked. Claims, withdrawals, pass purchases and
@@ -35,17 +36,12 @@ contract SmurfPayoutsTest is SmurfFixture {
     uint256 private constant FOIL_DRAW_DAY_SHIFT = 217;
     bytes32 private constant FOIL_CCY_TAG = keccak256("foil-currency");
 
-    uint256 private constant LB_PRESALE_SHIFT = 185;
-    uint256 private constant LB_CLOSING = uint256(1) << 254;
-    bytes32 private constant PRESALE_BURNED = keccak256("PresaleBoxRemainderBurned(uint256)");
-
     uint256 private constant PLAYER_TICKET_TAG = 0x446567656e506c61796572; // "DegenPlayer"
     uint256 private constant RESULT_TICKET_TAG = 0x446567656e526573756c74; // "DegenResult"
     uint8 private constant HERO = 3;
 
     enum Box {
         Human,
-        Presale,
         Afking,
         Redemption,
         Direct
@@ -288,7 +284,7 @@ contract SmurfPayoutsTest is SmurfFixture {
     }
 
     // =====================================================================
-    // Boxes: human, presale, AFKing, redemption, direct
+    // Boxes: human, AFKing, redemption, direct
     // =====================================================================
 
     function test_HumanBox_SmurfPaysOwner() public {
@@ -299,24 +295,6 @@ contract SmurfPayoutsTest is SmurfFixture {
     function test_HumanBox_OrdinaryPaysKey() public {
         _boxPays(Box.Human, plainId, plainId, plain, true);
         _boxPays(Box.Human, plainId, plainId, plain, false);
-    }
-
-    function test_PresaleBox_SmurfPaysOwner() public {
-        _boxPays(Box.Presale, smurfId, smurfId, owner, true);
-        _boxPays(Box.Presale, smurfId, smurfId, owner, false);
-    }
-
-    function test_PresaleBox_OrdinaryPaysKey() public {
-        _boxPays(Box.Presale, plainId, plainId, plain, true);
-        _boxPays(Box.Presale, plainId, plainId, plain, false);
-    }
-
-    function test_PresaleClosingRemainder_BurnedForSmurf() public {
-        _presaleClosing(smurfId, owner);
-    }
-
-    function test_PresaleClosingRemainder_BurnedForOrdinary() public {
-        _presaleClosing(plainId, plain);
     }
 
     function test_AfkingBox_SmurfPaysOwner() public {
@@ -361,7 +339,6 @@ contract SmurfPayoutsTest is SmurfFixture {
                 || topic == keccak256("LootBoxCrapsPasses(uint32,uint32,uint32,uint24)")
                 || topic == keccak256("LootBoxReward(uint32,uint8,uint256,uint256)")
                 || topic == keccak256("BoonDiscarded(uint32,uint8)")
-                || topic == keccak256("PresaleBoxOpened(uint32,uint48,uint256,uint256,uint256,uint256,bool,uint32,uint32)")
                 || topic == keccak256("LootBoxWhalePassJackpot(uint32,uint256,uint24,uint32,uint24,uint24)")
             ) {
                 assertEq(uint256(logs[i].topics[1]), id, "resolution logs identify the credited account");
@@ -377,14 +354,8 @@ contract SmurfPayoutsTest is SmurfFixture {
         uint24 cur = game.level() + 1;
         address lootbox = ContractAddresses.GAME_LOOTBOX_MODULE;
         if (kind == Box.Human) {
-            // Twenty custom boxes of 0.5 ETH at the open level.
-            uint256 entry = uint256(id) | (uint256(cur) << 32) | (uint256(20) << 121) | (uint256(0.5 ether / 1 gwei) << 128);
-            ext.x_delegate(
-                lootbox,
-                abi.encodeCall(DegenerusGameLootboxModule.resolveHumanBoxOrder, (uint48(0), uint256(0), entry, word, cur))
-            );
-        } else if (kind == Box.Presale) {
-            uint256 entry = uint256(id) | (uint256(1 ether) << LB_PRESALE_SHIFT);
+            // Twenty custom boxes of 0.5 ETH.
+            uint256 entry = BoxOrderLib.boEntry(id, 0.5 ether / 0.001 ether, 0, 0, 20, false);
             ext.x_delegate(
                 lootbox,
                 abi.encodeCall(DegenerusGameLootboxModule.resolveHumanBoxOrder, (uint48(0), uint256(0), entry, word, cur))
@@ -438,35 +409,6 @@ contract SmurfPayoutsTest is SmurfFixture {
             assertEq(toPayee, dGain, "every DGNRS transfer of the box went to the payee");
             }
         assertTrue(paid, "fixture: a box paid the wanted token");
-    }
-
-    /// @dev The closing presale box burns the whole remaining PresaleBox pool: the account, smurf
-    ///      or ordinary, receives only its own presale roll.
-    function _presaleClosing(uint32 id, address payee) private {
-        uint24 cur = game.level() + 1;
-        uint256 entry = uint256(id) | (uint256(0.1 ether) << LB_PRESALE_SHIFT) | LB_CLOSING;
-        uint256 before = sdgnrs.balanceOf(payee);
-        uint256 supplyBefore = sdgnrs.totalSupply();
-        vm.recordLogs();
-        ext.x_delegate(
-            ContractAddresses.GAME_LOOTBOX_MODULE,
-            abi.encodeCall(
-                DegenerusGameLootboxModule.resolveHumanBoxOrder,
-                (uint48(0), uint256(0), entry, uint256(keccak256("smurf_presale_closing")), cur)
-            )
-        );
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        uint256 burned;
-        for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].emitter != address(game) || logs[i].topics[0] != PRESALE_BURNED) continue;
-            burned = abi.decode(logs[i].data, (uint256));
-        }
-        assertGt(burned, 0, "the closing box burned the remainder");
-        assertEq(_poolBalance(IsDGNRS.Pool.PresaleBox), 0, "the PresaleBox pool is empty");
-        assertEq(supplyBefore - sdgnrs.totalSupply(), burned, "the remainder left total supply");
-        uint256 toPayee = _poolTransfers(logs, payee);
-        assertEq(sdgnrs.balanceOf(payee) - before, toPayee, "the payee received only its own presale roll");
-        assertLt(toPayee, burned, "the remainder did not go to the payee");
     }
 
     // =====================================================================

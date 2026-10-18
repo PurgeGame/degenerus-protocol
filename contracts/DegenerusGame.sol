@@ -36,7 +36,7 @@ import {MineFlipGas} from "./libraries/MineFlipGas.sol";
  *      - Level-centered lifecycle; mineFlip() is permissionless (caller tier gates only the miner bounty)
  *      - jackpotPhaseFlag selects the daily payout mode within a level: PURCHASE(false) / JACKPOT(true)
  *      - gameOver flag is terminal
- *      - Presale: single coin presale-box (presaleOver) latch, closing at the 50-ETH applied-box-spend cap
+ *      - Degenesis: seven daily cohorts from GameTimeLib.DEGENESIS_START_DAY, gated by purchase credit
  *      - Chainlink VRF for randomness with RNG lock to prevent manipulation
  *      - Delegatecall modules: advance, afking, bingo, boon, decimator, degenerette, foilpack,
  *        gameover, jackpot, lootbox, mint, whale (must inherit DegenerusGameStorage)
@@ -46,7 +46,7 @@ import {MineFlipGas} from "./libraries/MineFlipGas.sol";
  *      - address(this).balance + steth.balanceOf(this) >= claimablePool
  *      - claimablePool >= total payable winnings + total afking funding
  *      - jackpotPhaseFlag is the daily payout mode: false(PURCHASE) / true(JACKPOT); gameOver is terminal
- *      - Presale is the coin-presale-box sale, active until applied box spend fills the 50-ETH cap (presaleOver latch; one-way, no admin setter)
+ *      - Unsplit Degenesis volume, the Vault's Degenesis budget and sDGNRS AFKing funding ride in claimablePool
  *
  * @dev SECURITY:
  *      - Pull pattern for ETH/stETH withdrawals (claimWinnings)
@@ -654,14 +654,18 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
     ///      Adds affiliate support for loot box purchases.
     ///      Account `id` (0 = caller) receives the purchases; the caller must be authorized
     ///      for it. Fresh ETH comes from the caller; claimable and AFKing legs spend the account's.
-    ///        [small:8][med:8][large:8][customCount:8][customSize:56 in gwei]; every bit at or
-    ///        above 88 must be zero. Presets are 1x/5x/25x the active level's ticket price; a
-    ///        custom is customCount boxes of customSize each (min 0.01 ETH). At most 100 boxes;
-    ///        each purchase is its own queue entry.
-    ///        the level's snap exponent) in the same
-    ///        tx. The foil leg is one-per-cycle and adds to — never replaces — the ticket
-    ///        and lootbox legs, sharing the combined spend's affiliate, quest, and streak
-    ///        recording so a foil pack counts exactly like a ticket purchase.
+    /// @param id Account receiving the purchases (0 = caller).
+    /// @param entryQuantityScaled Scaled entry quantity (400 units = 1 whole ticket; 0 to skip).
+    /// @param boxOrder Packed box order (0 to skip): [quantity:7][kind:2][customUnits:21], every
+    ///        bit at or above 30 zero. One box type per purchase: kind 0/1/2 is 1x/5x/25x the
+    ///        active level's ticket price, kind 3 a custom of customUnits x 0.001 ETH per box
+    ///        (0.01 to 2,000 ETH). Quantity 1-100; each purchase is its own queue entry.
+    /// @param affiliateCode Affiliate/referral code for all purchases.
+    /// @param payKind Payment method (DirectEth, Claimable, or Combined).
+    /// @param foil True to additively buy one foil pack (10x the price scaled by the level's
+    ///        snap exponent) in the same tx. The foil leg is one-per-cycle and adds to — never
+    ///        replaces — the ticket and lootbox legs, sharing the combined spend's affiliate,
+    ///        quest, and streak recording so a foil pack counts exactly like a ticket purchase.
     function purchase(
         uint32 id,
         uint256 entryQuantityScaled,
@@ -731,15 +735,23 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Buy a credit-gated coin-presale box with ETH and/or claimable.
-    /// @dev Box is gated by presaleBoxCredit (earned 25% on prior ETH buys), consumes
-    ///      credit 1:1, caps cumulatively at 50 ETH, and queues for later resolution.
-    ///      Signature: buyPresaleBox(uint32 id, uint256 boxAmount) — the account receiving the box
-    ///      (0 = caller) and the requested box ETH (>= 0.01 ETH; excess credited to AFKing if
-    ///      clamped). The mint module resolves the account, so the calldata and msg.value
-    ///      forward as-is.
-    function buyPresaleBox(uint32, uint256) external payable {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(msg.data);
+    /// @notice Buy a credit-gated Degenesis box with ETH and/or claimable.
+    /// @dev Gated by degenesisCredit (25% of qualifying spend), consumed 1:1; the order joins
+    ///      today's cohort and settles after the cohort is priced.
+    ///      Signature: buyDegenesisBox(uint32 id, uint256 amount) — the account receiving the order
+    ///      (0 = caller) and the Degenesis ETH. The module resolves the account, so the
+    ///      calldata and msg.value forward as-is to the Degenesis module.
+    function buyDegenesisBox(uint32, uint256) external payable {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_DEGENESIS_MODULE.delegatecall(msg.data);
+        if (!ok) _revertDelegate(data);
+    }
+
+    /// @notice Vault-only: spend the Vault's Degenesis budget on tickets and lootboxes, or whale
+    ///         passes, for the Vault at their normal price.
+    /// @dev Signature: spendDegenesis(bool whalePass, uint256 quantity, uint256 boxOrder,
+    ///      uint256 maxCost). Forwards as-is so the module sees the Vault as msg.sender.
+    function spendDegenesis(bool, uint256, uint256, uint256) external {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_DEGENESIS_MODULE.delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
 
@@ -794,28 +806,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_FOILPACK_MODULE
             .delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
-    }
-
-    /// @notice Buy tickets/lootbox AND a presale box in one tx, sharing one RNG index.
-    /// @dev The mint leg earns 25% presale-box credit that gates the box leg. msg.value is
-    ///      split across both legs (mint cost first, remainder to the box), so the box is
-    ///      funded by the same mix as any other purchase — fresh ETH, claimable, or afking
-    ///      per payKind. Both queue at one index for co-resolution.
-    ///      Signature: buyLootboxAndPresaleBox(uint32 id, uint256 entryQuantityScaled, uint256
-    ///      boxOrder, bytes32 affiliateCode, MintPaymentKind payKind, uint256 boxAmount) — the
-    ///      account receiving both legs (0 = caller), the ticket units, the packed box order,
-    ///      the mint leg's code and payment method, and the requested presale-box ETH. The mint
-    ///      module resolves the account, so the calldata and msg.value forward as-is.
-    function buyLootboxAndPresaleBox(
-        uint32,
-        uint256,
-        uint256,
-        bytes32,
-        MintPaymentKind,
-        uint256
-    ) external payable {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
 
@@ -1751,25 +1741,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
         return _loadDegeneretteBet(index, betId - 1);
     }
 
-    /// @notice Check whether lootbox presale mode is currently active.
-    /// @return active True if presale is active.
-    function lootboxPresaleActiveFlag() external view returns (bool active) {
-        return !presaleOver;
-    }
-
-    /// @notice Spendable coin-presale-box credit accrued by a player.
+    /// @notice Spendable Degenesis credit accrued by a player.
     /// @param player Player to query.
-    /// @return credit Remaining credit (consumed 1:1 when buying a box).
-    function presaleBoxCreditOf(address player) external view returns (uint256 credit) {
-        return presaleBoxCredit[_walletIdOf(player)];
-    }
-
-    /// @notice Remaining coin-presale-box ETH capacity before the 50-ETH close.
-    /// @return remaining ETH still buyable in boxes (0 once presaleOver / sold out).
-    function presaleBoxEthRemaining() external view returns (uint256 remaining) {
-        if (presaleOver) return 0;
-        uint256 sold = presaleBoxEthSold;
-        return sold >= PRESALE_BOX_ETH_CAP ? 0 : PRESALE_BOX_ETH_CAP - sold;
+    /// @return credit Remaining credit (consumed 1:1 by Degenesis purchases).
+    function degenesisCreditOf(address player) external view returns (uint256 credit) {
+        return degenesisCredit[_walletIdOf(player)];
     }
 
     /// @notice Get the current prize pool (jackpots are paid from this).

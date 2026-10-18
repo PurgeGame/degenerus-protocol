@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -26,7 +27,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///         DegenerusGame wrapper forwards its selector, and DegenerusGame has no fallback(),
 ///         so an arbitrary-selector call on the deployed Game reverts. The only reachable path
 ///         from a full-protocol harness is indirect: `game.openBox` (LootboxModule) delegatecalls
-///         into GAME_BOON_MODULE's rollBoxBoons/rollBoxBoonTiers, both of which route through
+///         into GAME_BOON_MODULE's rollBoxBoons, which routes through
 ///         DegenerusGameBoonModule._boxBoonContext, which runs
 ///         `if (bp.slot0 != 0 || bp.slot1 != 0) checkAndClearExpiredBoon(player);`
 ///         unconditionally, before any new boon is drawn or budget-gated. So opening one
@@ -41,13 +42,6 @@ contract WhaleBoonExpiry is DeployProtocol {
     uint256 constant SLOT_BOON_PACKED  = GameSlots.BOON_PACKED;   // mapping(uint32 => BoonPacked)
     uint256 constant SLOT_LOOTBOX_WORD = GameSlots.RNG_DAY_TAGS;   // mapping(uint48 => uint256) lootboxRngWordByIndex
     uint256 constant SLOT_BOX_QUEUE = GameSlots.BOX_QUEUE;         // mapping(uint48 => uint256[]) boxQueue (manually addressed)
-
-    // Queue entry bit layout (mirrors the LB_* constants in DegenerusGameStorage).
-    uint256 constant LB_LEVEL_SHIFT        = 32;
-    uint256 constant LB_SCORE_SHIFT        = 56;
-    uint256 constant LB_CUSTOM_COUNT_SHIFT = 121;
-    uint256 constant LB_SIZE_SHIFT         = 128;
-    uint256 constant LB_SIZE_UNIT          = 1 gwei;
 
     // BoonPacked slot0 whale-lane bit layout (DegenerusGameStorage.sol).
     uint256 constant BP_WHALE_DAY_SHIFT       = 200; // uint24 whaleDay
@@ -119,7 +113,7 @@ contract WhaleBoonExpiry is DeployProtocol {
         return whaleDay == 0 && deityWhaleDay == 0 && tier == 0;
     }
 
-    /// @dev Set up a lootbox ready to open: one queued CUSTOM-box entry of `ethAmount`, score=1, at
+    /// @dev Set up a lootbox ready to open: one queued entry of one `ethAmount` box, score=1, at
     ///      the live level -- identical shape to LootboxBoonCoexistence.t.sol's _setupLootbox.
     function _setupLootbox(address player, uint48 index, uint256 ethAmount) internal {
         if (game.walletIdOf(player) == 0) {
@@ -127,11 +121,7 @@ contract WhaleBoonExpiry is DeployProtocol {
             vm.prank(player);
             game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         }
-        uint256 entry = uint256(game.walletIdOf(player))
-            | (uint256(game.level()) << LB_LEVEL_SHIFT)
-            | (uint256(1) << LB_SCORE_SHIFT)
-            | (uint256(1) << LB_CUSTOM_COUNT_SHIFT)
-            | ((ethAmount / LB_SIZE_UNIT) << LB_SIZE_SHIFT);
+        uint256 entry = BoxOrderLib.boEntry(game.walletIdOf(player), ethAmount / BoxOrderLib.SCALE, 1, 0, 1, false);
         bytes32 dataBase = keccak256(abi.encode(keccak256(abi.encode(uint256(index), SLOT_BOX_QUEUE))));
         vm.store(address(game), dataBase, bytes32(entry)); // position 0: previous case was fully consumed
 

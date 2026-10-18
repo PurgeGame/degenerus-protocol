@@ -11,6 +11,7 @@ import {CrapsPreferenceLib} from "./libraries/CrapsPreferenceLib.sol";
 import {PriceLookupLib} from "./libraries/PriceLookupLib.sol";
 import {IReadCohortLifecycle, IVaultOwnership} from "./CrapsBattle.sol";
 import {JackpotBattleFieldLib} from "./libraries/JackpotBattleFieldLib.sol";
+import {GameTimeLib} from "./libraries/GameTimeLib.sol";
 
 interface IGameCrapsPending {
     function setCrapsRngPending(uint48 index, bool pending) external;
@@ -197,23 +198,29 @@ contract JackpotBattle is CrapsBattleStorage {
 
     /// @param pool The recorded prize pool the Added allocation is drawn from, in wei.
     /// @param level The Game's level at the request: it prices the pool in FLIP and picks the floor.
-    function lockJackpotBattle(uint24 requestDay, uint256 pool, uint24 level) external {
+    /// @return locked True when a round is active for the daily phase: this one, a retry's or an
+    ///         unfinished prior one. False for a window day before the first window day.
+    function lockJackpotBattle(uint24 requestDay, uint256 pool, uint24 level) external returns (bool locked) {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
+        locked = true;
         if (_activeJackpotSlot != 0 && !_scheduledExpired(_activeJackpotSlot)) {
             JackpotRound storage prior = _jackpotRounds[_activeJackpotSlot];
             // A retry never changes the field, allocation or request identity.
             uint256 priorBoard = _battles[bytes32(uint256(_activeJackpotSlot))];
             if (prior.requestDay == requestDay || prior.word == 0
-                || uint32(priorBoard >> _BG_RESOLVED_SHIFT) != uint32(priorBoard)) return;
+                || uint32(priorBoard >> _BG_RESOLVED_SHIFT) != uint32(priorBoard)) return locked;
         }
         uint256 day = _bonus == 0 ? 0 : _bonus - 1;
         uint64 slot = uint64(day * _BONUS_SLOTS_PER_DAY + _BONUS_PERIODS_PER_DAY);
         // Warm-up/skipped days have no paid field. Their free-only draw uses the unused
         // remainder-seven namespace, so lapsed reservations remain available to their refund walk.
         bool detached = _scheduledExpired(slot) || _boostBudget[uint24(day)] == 0 || _slotIndexOf(slot) != 0;
-        if (detached) slot = uint64((uint256(requestDay) - 1) * _BONUS_SLOTS_PER_DAY + 7);
+        uint256 windowDay = detached ? uint256(requestDay) - 1 : day;
+        // No round, award or reserve funding exists before the first window day.
+        if (windowDay < _firstWindowDay) return false;
+        if (detached) slot = uint64(windowDay * _BONUS_SLOTS_PER_DAY + 7);
         JackpotRound storage r = _jackpotRounds[slot];
-        if (r.requestDay != 0) return;
+        if (r.requestDay != 0) return locked;
         bytes32 key = bytes32(uint256(slot));
         uint256 g = _battles[key];
         if (!detached) {
@@ -232,7 +239,8 @@ contract JackpotBattle is CrapsBattleStorage {
         // in the same packed word as the fee/counts before any settlement word exists.
         uint256 added = CrapsPriceLib.jackpotAdded(pool * _PRICE_COIN_UNIT / (PriceLookupLib.priceForLevel(level) * 200), level);
         uint256 target = added / CrapsPriceLib.JACKPOT_AWARD_VALUE;
-        r.awardTarget = uint32(target > 500 ? 500 : target);
+        // Degenesis battles run with their paid field only.
+        r.awardTarget = windowDay < GameTimeLib.MAIN_LAUNCH_DAY ? 0 : uint32(target > 500 ? 500 : target);
         r.entryPrice = uint32(entryPrice);
         r.added = added * entryPrice / _JACKPOT_PRICE;
         r.paidCount = uint32(g);

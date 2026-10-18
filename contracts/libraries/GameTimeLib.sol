@@ -36,6 +36,14 @@ library GameTimeLib {
     /// @notice Daily reset time in seconds from midnight UTC (22:57 UTC = 82620 seconds)
     uint32 internal constant JACKPOT_RESET_TIME = 82620;
 
+    /// @notice Day index of Degenesis day 1, the first full day after the deploy day.
+    uint24 internal constant DEGENESIS_START_DAY = 2;
+    /// @notice First post-Degenesis day index. Degenesis day `n` is index DEGENESIS_START_DAY + n - 1.
+    uint24 internal constant MAIN_LAUNCH_DAY = DEGENESIS_START_DAY + 7;
+    /// @notice Timestamp at which day MAIN_LAUNCH_DAY begins.
+    uint256 internal constant DEGENESIS_END_TS =
+        (uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) + MAIN_LAUNCH_DAY - 1) * 1 days + JACKPOT_RESET_TIME;
+
     /**
      * @notice Get current day index relative to deploy time.
      * @dev Day 1 = deploy day. Days reset at JACKPOT_RESET_TIME (22:57 UTC).

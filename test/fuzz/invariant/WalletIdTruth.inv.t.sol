@@ -60,7 +60,7 @@ contract WalletIdTruthInvariant is DeployProtocol {
     }
 
     /// @notice Coverage report, accumulated across runs through the process environment.
-    function afterInvariant() public {
+    function afterInvariant() public virtual {
         uint256 runs = vm.envOr("WID_RUNS", uint256(0)) + 1;
         vm.setEnv("WID_RUNS", vm.toString(runs));
         uint256 regs = vm.envOr("WID_REGS", uint256(0)) + handler.regCount();
@@ -114,7 +114,8 @@ contract WalletIdTruthInvariant is DeployProtocol {
     ///      820 authorized account-door successes (284 for a smurf), 1,226 unauthorized refusals, 110 gifts,
     ///      226 levels gained; every door in `oks` succeeded >= 50 times and every door in `regs` registered
     ///      >= 50 wallet IDs (>= ~12 expected by run 64). Doors that never succeeded in that measurement are
-    ///      not required (their wallet-ID property is then only checked on reverted calls).
+    ///      not required (their wallet-ID property is then only checked on reverted calls); the Degenesis
+    ///      box is one of them, since this timeline deploys after the sale.
     function _assertCoverage(uint256 runs, uint256 n) internal view {
         if (runs < 16) return;
         assertGt(vm.envOr("WID_SMURFS", uint256(0)), 0, "vacuous: no smurf was ever created");
@@ -124,7 +125,7 @@ contract WalletIdTruthInvariant is DeployProtocol {
         assertGt(vm.envOr("WID_ACCT_GIFT", uint256(0)), 0, "vacuous: no account-door gift happened");
         assertGt(vm.envOr("WID_LEVELS", uint256(0)), 0, "vacuous: no run ever gained a level");
         if (runs < 64) return;
-        uint8[44] memory oks = [uint8(0), 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 26, 27, 28, 29, 31, 32, 36, 37, 38, 39, 40, 41, 42, 43, 44, 48, 50, 54, 55, 57, 59, 61, 68];
+        uint8[43] memory oks = [uint8(0), 1, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 26, 27, 28, 29, 31, 32, 36, 37, 38, 39, 40, 41, 42, 43, 44, 48, 50, 54, 55, 57, 59, 61, 68];
         for (uint256 i; i < oks.length; ++i) {
             require(oks[i] < n, "door id out of range");
             assertGt(vm.envOr(string.concat("WID_OK_", vm.toString(uint256(oks[i]))), uint256(0)), 0,
@@ -157,7 +158,7 @@ contract WalletIdTruthInvariant is DeployProtocol {
         uint256 i;
         for (uint256 w; w < 3; ++w) s[i++] = WalletIdTruthHandler.g_purchase.selector;
         s[i++] = WalletIdTruthHandler.g_boxOnly.selector;
-        s[i++] = WalletIdTruthHandler.g_presaleBox.selector;
+        s[i++] = WalletIdTruthHandler.g_degenesisBox.selector;
         for (uint256 w; w < 2; ++w) s[i++] = WalletIdTruthHandler.g_degenerette.selector;
         s[i++] = WalletIdTruthHandler.g_whalePass.selector;
         s[i++] = WalletIdTruthHandler.g_lazyPass.selector;
@@ -549,5 +550,23 @@ contract WalletIdTruthInvariant is DeployProtocol {
         if (a.length < b.length) return false;
         for (uint256 i; i < b.length; ++i) if (a[i] != b[i]) return false;
         return true;
+    }
+}
+
+/// @title WalletIdTruthInvariantDegenesis -- the same truth on the Degenesis timeline (deploy on day 1)
+/// @notice setUp crosses into day index 2 (Degenesis day 1), so the Degenesis box door can succeed: its
+///         registration and its credit debit are held to the same registry truth as every other door. The
+///         base campaign's coverage report is replaced by one gate: the box was bought at least once.
+contract WalletIdTruthInvariantDegenesis is WalletIdTruthInvariant {
+    function _deployTimestamp() internal pure override returns (uint256) {
+        return DEPLOY_TS_DEGENESIS;
+    }
+
+    function afterInvariant() public override {
+        uint256 runs = vm.envOr("WIDD_RUNS", uint256(0)) + 1;
+        vm.setEnv("WIDD_RUNS", vm.toString(runs));
+        uint256 bought = vm.envOr("WIDD_BOX_OK", uint256(0)) + handler.oks(2);
+        vm.setEnv("WIDD_BOX_OK", vm.toString(bought));
+        if (runs >= 64) assertGt(bought, 0, "vacuous: the Degenesis box door never succeeded");
     }
 }

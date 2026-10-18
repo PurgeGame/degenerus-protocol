@@ -7,8 +7,8 @@ import {BoxCreationHandler} from "../handlers/BoxCreationHandler.sol";
 
 /// @title BoxEnqueue — FUZZ-04 (BOX-ENQUEUE) canonical always-on box-queue invariant.
 ///
-/// @notice Every box purchase — mint-with-lootbox, the whale / lazy / deity pass bundles and the
-///         coin-presale box — appends ONE complete entry to the write buffer's box queue, which the
+/// @notice Every box purchase — mint-with-lootbox, and the whale / lazy / deity pass bundles —
+///         appends ONE complete entry to the write buffer's box queue, which the
 ///         permissionless mineFlip human-box stage settles in FIFO order from `boxCursor` once the
 ///         buffer is sealed and its word published. A box that never reached the queue could be held
 ///         closed by its owner and opened at a favorable live level/boon (the WHALE-01 finding); an
@@ -18,7 +18,7 @@ import {BoxCreationHandler} from "../handlers/BoxCreationHandler.sol";
 ///         THE PROPERTIES.
 ///           (1) invariant_everyCreationAppendsOneMatchingEntry: each successful creating call grew
 ///               the write buffer by exactly one entry, at the prior count, whose wallet ID, level,
-///               box counts/size or presale amount/tier/closing flag match the action and whose
+///               box counts/size match the action and whose
 ///               purchase event names that (buffer, position). One entry per purchase, however many
 ///               boxes it holds; a ticket-only purchase appends nothing.
 ///           (2) invariant_entriesAreNeverRewritten: every tracked entry whose cohort still lives
@@ -95,12 +95,11 @@ contract BoxEnqueue is DeployProtocol {
         // Every creation path must append at least once over the process (unique BE_ prefix); lazy passes
         // can be absent from a single run (108 of 771 runs had none).
         uint256 runs = _acc("BE_RUNS", 1);
-        uint256[5] memory paths = [
+        uint256[4] memory paths = [
             _acc("BE_mintLootbox", handler.boxesCreated_mintLootbox()),
             _acc("BE_whale", handler.boxesCreated_whale()),
             _acc("BE_lazy", handler.boxesCreated_lazy()),
-            _acc("BE_deity", handler.boxesCreated_deity()),
-            _acc("BE_presale", handler.boxesCreated_presale())
+            _acc("BE_deity", handler.boxesCreated_deity())
         ];
         if (runs < 16) return;
         for (uint256 i; i < paths.length; ++i) {
@@ -121,12 +120,11 @@ contract BoxEnqueue is DeployProtocol {
         for (uint256 a; a < handler.actorCount(); a++) {
             handler.mintWithLootbox(a, 0.5 ether, uint8(a));
         }
-        // pass bundles: whale + lazy + deity across the actors, and a presale box each.
+        // pass bundles: whale + lazy + deity across the actors.
         for (uint256 a; a < handler.actorCount(); a++) {
             handler.buyWhalePass(a, 1);
             handler.buyLazyPass(a);
             handler.buyDeityPass(a, a);
-            handler.buyPresaleBox(a, 0.5 ether);
         }
 
         assertGt(handler.totalBoxesCreated(), 0, "fixture: at least one box was created");
@@ -154,7 +152,7 @@ contract BoxEnqueue is DeployProtocol {
 
         // Rewrite the first entry in place, as a purchase that merged into it would.
         BoxCreationHandler.EntryRef memory first = handler.trackedEntry(0);
-        handler.debugRewriteEntry(0, first.word + (uint256(1) << 121));
+        handler.debugRewriteEntry(0, first.word ^ (uint256(1) << 77));
         assertEq(handler.rewrittenEntries(), 1, "FALSIFIABILITY: a rewritten live entry registers the break");
 
         // Restoring the word returns the check to green (the break was the injection).

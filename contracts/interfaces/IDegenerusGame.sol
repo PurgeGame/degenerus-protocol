@@ -389,49 +389,33 @@ interface IDegenerusGame {
     function creditMiddayRng(address to, uint256 linkAmount) external returns (uint32 id);
 
 
-    /// @notice Check whether lootbox presale mode is currently active.
-    /// @return active True if presale is active.
-    function lootboxPresaleActiveFlag() external view returns (bool active);
-
-    /// @notice Buy a credit-gated coin-presale box (ETH + claimable shortfall) for account `id`.
-    /// @dev Authorized (account rule). The box, its credit gate and the claimable/AFKing legs are
-    ///      the account's; fresh ETH comes from the caller. Overpay and clamp-to-50 excess credit
-    ///      the payer's AFKing balance: the account's own ID when the caller is the account, else
-    ///      the caller's existing ID. Box payouts go to the account's payee.
-    /// @param id Account receiving the box (0 = caller).
-    /// @param boxAmount Requested box ETH (>= 0.01 ETH; overpay and clamp-to-50 excess credit to AFKing).
+    /// @notice Buy a credit-gated Degenesis box (ETH + claimable shortfall) for account `id`.
+    /// @dev Authorized (account rule). The order, its credit gate and the claimable/AFKing legs are
+    ///      the account's; fresh ETH comes from the caller. Overpay credits the payer's AFKing
+    ///      balance: the account's own ID when the caller is the account, else the caller's
+    ///      existing ID. Rewards go to the account's payee. Degenesis days 1-7 only; the Vault
+    ///      account cannot buy.
+    /// @param id Account receiving the order (0 = caller).
+    /// @param amount Degenesis ETH: at least 0.01 ETH, a whole multiple of 0.0001 ETH, below
+    ///        2^38 units of 0.0001 ETH (about 27.5M ETH).
     /// @custom:reverts NotApproved If the caller may not act for `id`.
-    /// @custom:reverts E If `id` is unallocated.
-    function buyPresaleBox(uint32 id, uint256 boxAmount) external payable;
+    /// @custom:reverts E If `id` is unallocated, outside the sale, over credit, or out of bounds.
+    function buyDegenesisBox(uint32 id, uint256 amount) external payable;
 
-    /// @notice Buy tickets/lootbox AND a presale box in one tx for account `id`, sharing one RNG index.
-    /// @dev Authorized (account rule); funding and refunds as `purchase`.
-    /// @param id Account receiving both legs (0 = caller).
-    /// @param entryQuantityScaled Scaled entry quantity (400 units = 1 whole ticket; 0 to skip).
-    /// @param boxOrder Packed box order (0 to skip; see purchase()).
-    /// @param affiliateCode Affiliate/referral code for the mint leg.
-    /// @param payKind Payment method for the mint leg.
-    /// @param boxAmount Requested presale-box ETH (funded by the mint leg's leftover fresh ETH,
-    ///        then claimable, then afking).
-    /// @custom:reverts NotApproved If the caller may not act for `id`.
-    /// @custom:reverts E If `id` is unallocated.
-    function buyLootboxAndPresaleBox(
-        uint32 id,
-        uint256 entryQuantityScaled,
-        uint256 boxOrder,
-        bytes32 affiliateCode,
-        MintPaymentKind payKind,
-        uint256 boxAmount
-    ) external payable;
+    /// @notice Vault-only: spend the Vault's Degenesis budget on an ordinary purchase for the
+    ///         Vault at its normal price. The unspent part of `maxCost` returns to the budget.
+    /// @param whalePass True for whale passes, false for tickets and lootboxes.
+    /// @param quantity Whale passes, or ticket purchase units (400 = one whole ticket).
+    /// @param boxOrder Packed lootbox order (ignored with whale passes).
+    /// @param maxCost Budget made available to the purchase.
+    /// @custom:reverts E If the caller is not the Vault, the budget is short, or the purchase
+    ///         costs more than `maxCost`.
+    function spendDegenesis(bool whalePass, uint256 quantity, uint256 boxOrder, uint256 maxCost) external;
 
-    /// @notice Spendable coin-presale-box credit accrued by a player.
+    /// @notice Spendable Degenesis credit accrued by a player.
     /// @param player Player to query.
-    /// @return credit Remaining credit (consumed 1:1 when buying a box).
-    function presaleBoxCreditOf(address player) external view returns (uint256 credit);
-
-    /// @notice Remaining coin-presale-box ETH capacity before the 50-ETH close.
-    /// @return remaining ETH still buyable in boxes (0 once presaleOver / sold out).
-    function presaleBoxEthRemaining() external view returns (uint256 remaining);
+    /// @return credit Remaining credit (consumed 1:1 by Degenesis purchases).
+    function degenesisCreditOf(address player) external view returns (uint256 credit);
 
     /// @notice Place single-symbol Degenerette bets for account `id`.
     /// @dev Gift door. `id == 0` is the caller. When the caller is authorized for `id` (key, smurf
@@ -556,9 +540,9 @@ interface IDegenerusGame {
     ///      smurf's owner gets its own refund). Box and pass payouts go to the account's payee.
     /// @param id Account receiving the purchases (0 = caller).
     /// @param entryQuantityScaled Scaled entry quantity (400 units = 1 whole ticket; 0 to skip).
-    /// @param boxOrder Packed box order (0 to skip):
-    ///        [small:8][med:8][large:8][customCount:8][customSize:56 in gwei]; at most 100 boxes,
-    ///        every bit at or above 88 zero.
+    /// @param boxOrder Packed box order (0 to skip): [quantity:7][kind:2][customUnits:21];
+    ///        kind 0/1/2 small/medium/large preset, 3 custom of customUnits x 0.001 ETH per box
+    ///        (10..2,000,000 units); quantity 1-100; every bit at or above 30 zero.
     /// @param affiliateCode Affiliate/referral code for all purchases.
     /// @param payKind Payment method (DirectEth, Claimable, or Combined).
     /// @param foil True to additively buy one foil pack (10x price) in the same tx; the

@@ -76,7 +76,7 @@ library MineFlipGasBounds {
     uint256 internal constant TICKET_CALL_OVERHEAD = 35_000;
     // Cold stETH-funded subscriber delivery: 472.3k. Dependency failure reverts.
     uint256 internal constant SUBSCRIBER_ITEM_GAS = 600_000;
-    // Cold sDGNRS 100-pass purchase: 2.303M.
+    // Cold sDGNRS 1,000-pass purchase 2.378M plus the AFKing top-up 20.2k.
     uint256 internal constant SUBSCRIBER_WHALE_GAS = 2_800_000;
     // Subscriber cursor, flush and return reserve, including fresh state.
     uint256 internal constant SUBSCRIBER_TAIL_GAS = 250_000;
@@ -93,10 +93,28 @@ library MineFlipGasBounds {
     uint256 internal constant HUMAN_ENTRY_GAS = 3_200_000;
     // Per-box term; ENTRY covers concave first-touch costs and the EV allowance.
     uint256 internal constant HUMAN_BOX_GAS = 125_000;
-    // Cold presale resolution: 208.1k. Closing remainder burn is in the entry bound.
-    uint256 internal constant HUMAN_PRESALE_GAS = 250_000;
     // Human order cursor and return reserve.
     uint256 internal constant HUMAN_TAIL_GAS = 80_000;
+    // Cold first order with a fresh WWXRP consolation: <=134.1k including state gas.
+    uint256 internal constant DEGENESIS_WWXRP_GAS = 165_000;
+    // Coin-credit order with the next order's cold decode and frame: <=37.7k.
+    uint256 internal constant DEGENESIS_FLIP_CREDIT_GAS = 46_000;
+    // Cold capped pass order, fresh CrapsBattle credit, rest's flush apart: <=144.2k.
+    uint256 internal constant DEGENESIS_FLIP_PASS_GAS = 175_000;
+    // Cold first sDGNRS award to a fresh two-link payee: <=165.8k; fallback 147.3k.
+    uint256 internal constant DEGENESIS_DGNRS_GAS = 200_000;
+    // Fresh distinct creditFlipBatch recipient: cold marginal <=113.4k including state gas.
+    uint256 internal constant DEGENESIS_FLUSH_PER_CREDIT = 140_000;
+    // Flush frame, seventh close with the burn, one decode and return: <=100.9k.
+    uint256 internal constant DEGENESIS_TAIL_GAS = 125_000;
+    // Degenesis day-close branch with a fresh seat-draw credit: <=177.2k including state gas.
+    uint256 internal constant DEGENESIS_DAY_CLOSE = 215_000;
+    // Seven cold splits, fresh budget, pool and pricing slots: 472.2k; seven closes and burn 98.3k.
+    uint256 internal constant DEGENESIS_REQUEST_GAS = 570_000;
+    // Seven-cohort split, release and active clear: 367.8k peak with the transient budget slot.
+    uint256 internal constant DEGENESIS_TERMINAL_GAS = 450_000;
+    // Bound day's word into a fresh degenesisWord slot, with the gate reads: 120.4k.
+    uint256 internal constant DEGENESIS_WORD_COPY_GAS = 145_000;
     // Forced cold winning/recirculating one-spin bet: 991.7k.
     uint256 internal constant DEGENERETTE_ETH_BASE_GAS = 1_200_000;
     // A capped winning spin adds at most 14k; base covers first-touch writes.

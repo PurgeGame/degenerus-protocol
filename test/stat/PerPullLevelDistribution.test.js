@@ -436,14 +436,24 @@ describe("D-IMPL-01 — current trait draw routes level 1 and rotates coin trait
       );
 
       // The jackpot battle's award draw appends its entries on the craps table, one event each.
+      // No round exists before the first window day, so the deploy day's first request carries
+      // none; the next purchase-day draw runs the battle over the future queues.
       const BATTLE_RUN_TOPIC = hre.ethers.id("JackpotBattleEntry(uint64,uint256,uint32,uint256,uint32)");
-      let battleRuns = 0;
-      for (const { receipt } of receipts) {
-        for (const log of receipt.logs) {
-          if (log.topics[0] === BATTLE_RUN_TOPIC) battleRuns++;
+      const countBattleRuns = (rs) => {
+        let runs = 0;
+        for (const { receipt } of rs) {
+          for (const log of receipt.logs) {
+            if (log.topics[0] === BATTLE_RUN_TOPIC) runs++;
+          }
         }
-      }
-      expect(battleRuns, "the second purchase-day draw must use the future queue's battle").to.be.greaterThan(0);
+        return runs;
+      };
+      expect(countBattleRuns(receipts), "no battle runs before the first window day").to.equal(0);
+      const nextDayReceipts = await driveOneFullDay(game, deployer, mockVRF, advanceModule, seed + 1n);
+      expect(
+        countBattleRuns(nextDayReceipts),
+        "the second purchase-day draw must use the future queue's battle"
+      ).to.be.greaterThan(0);
     });
   }
 });

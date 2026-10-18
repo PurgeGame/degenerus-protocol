@@ -670,7 +670,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
         for (uint256 i = sealed_ ? cursor : 0; i < n; ++i) {
             uint256 word = RecyclingState.boxEntry(address(game), index, i);
             if (BoxOrderLib.boId(word) != id) continue;
-            total += BoxOrderLib.boNominal(word, PriceLookupLib.priceForLevel(BoxOrderLib.boLevel(word)));
+            total += BoxOrderLib.boNominal(word);
         }
     }
 

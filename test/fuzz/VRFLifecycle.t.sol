@@ -93,11 +93,8 @@ contract VRFLifecycle is DeployProtocol {
         // claimable/afking/future pools), so ~460 buys are needed to cross the 50-ETH
         // bootstrap target (prizePoolTargetView). 480 gives a safety margin over the
         // 50.14-ETH crossing point measured against the frozen subject.
-        // Spread across buyers: every buy adds ONE custom box to that (index, buyer)'s order, and
-        // `_mergeBoxOrder` reverts `E()` once an order passes MAX_BOXES_PER_ORDER (100). A single
-        // buyer doing 480 buys therefore reverts on the 101st — which is the bare `E()` this
-        // fixture used to die on, since `purchase` here is deliberately unwrapped. Eight buyers x
-        // 60 buys keeps every order at 60 boxes while spending the identical 480 x 1.01 ETH, so
+        // Spread across buyers: every buy appends its own one-box entry. Eight buyers x
+        // 60 buys spends the identical 480 x 1.01 ETH, so
         // the nextPrizePool arithmetic the comment above describes is untouched.
         uint256 constant_buysPerBuyer = 60;
         for (uint256 b = 0; b < 8; b++) {

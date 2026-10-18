@@ -58,6 +58,7 @@ MAPPINGS=(
   "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameBingoModule|contracts/modules/DegenerusGameBingoModule.sol:DegenerusGameBingoModule"
   "contracts/interfaces/IDegenerusGameModules.sol:IGameAfkingModule|contracts/modules/GameAfkingModule.sol:GameAfkingModule"
   "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameFoilPackModule|contracts/modules/DegenerusGameFoilPackModule.sol:DegenerusGameFoilPackModule"
+  "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameDegenesisModule|contracts/modules/DegenerusGameDegenesisModule.sol:DegenerusGameDegenesisModule"
 )
 
 # Fail closed when a new interface has not been assigned an implementation. The two

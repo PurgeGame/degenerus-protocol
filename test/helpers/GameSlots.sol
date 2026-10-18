@@ -43,8 +43,8 @@ library GameSlots {
     uint256 internal constant TICKET_WRITE_SLOT_OFFSET = 25;
     uint256 internal constant PRIZE_POOL_FROZEN = 0;
     uint256 internal constant PRIZE_POOL_FROZEN_OFFSET = 26;
-    uint256 internal constant PRESALE_OVER = 0;
-    uint256 internal constant PRESALE_OVER_OFFSET = 27;
+    uint256 internal constant DEGENESIS_CLOSED = 0;
+    uint256 internal constant DEGENESIS_CLOSED_OFFSET = 27;
     uint256 internal constant SUBS_FULLY_PROCESSED = 0;
     uint256 internal constant SUBS_FULLY_PROCESSED_OFFSET = 28;
     uint256 internal constant HUMAN_READ_COMPLETE = 0;
@@ -95,8 +95,8 @@ library GameSlots {
     uint256 internal constant DEGENERETTE_CURSOR_OFFSET = 20;
     uint256 internal constant DEGENERETTE_READ_COUNT = 14;
     uint256 internal constant DEGENERETTE_READ_COUNT_OFFSET = 26;
-    uint256 internal constant PRESALE_BOX_ETH_SOLD = 15;
-    uint256 internal constant PRESALE_BOX_CREDIT = 16;
+    uint256 internal constant DEGENESIS_VAULT_BUDGET = 15;
+    uint256 internal constant DEGENESIS_CREDIT = 16;
     uint256 internal constant GAME_OVER_STATE_PACKED = 17;
     uint256 internal constant DEGENERETTE_QUEUE = 18;
     uint256 internal constant OPERATOR_APPROVALS = 19;
@@ -106,7 +106,7 @@ library GameSlots {
     uint256 internal constant DEITY_PASS_PRICE_PAID = 23;
     uint256 internal constant DEITY_PASS_IDS = 24;
     uint256 internal constant DEITY_BY_SYMBOL = 25;
-    uint256 internal constant PRESALE_BOX_DGNRS_POOL_START = 26;
+    uint256 internal constant DEGENESIS_ACTIVE = 26;
     uint256 internal constant VRF_COORDINATOR = 27;
     uint256 internal constant VRF_KEY_HASH = 28;
     uint256 internal constant VRF_SUBSCRIPTION_ID = 29;
@@ -197,6 +197,9 @@ library GameSlots {
     uint256 internal constant DEC_PREVIOUS_COUNT_OFFSET = 8;
     uint256 internal constant DEC_JACKPOT_PLANS = 75;
     uint256 internal constant DEC_GENERATED_OWNERS = 76;
+    uint256 internal constant DEGENESIS_WORD = 83;
+    uint256 internal constant DEGENESIS_DAYS = 84;
+    uint256 internal constant DEGENESIS_ORDERS = 85;
 }
 
 /// @title CrapsSlots
@@ -207,6 +210,8 @@ library CrapsSlots {
     uint256 internal constant HIGH_FIELD = 11;
 
     uint256 internal constant PASS_CREDITS_BY_ID = 14;
+    uint256 internal constant FIRST_WINDOW_DAY = 18;
+    uint256 internal constant FIRST_WINDOW_DAY_OFFSET = 8;
 }
 
 /// @title GameSlotKeys

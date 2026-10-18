@@ -31,9 +31,6 @@ contract BigRecordArmingTest is DeployProtocol {
     uint256 private constant RECORD_BOUNTY_SLOT = GameSlots.DEGENERETTE_RECORD_BOUNTY;
     uint48 private constant BET_INDEX = 1;
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = GameSlots.PRIZE_POOLS_PACKED;
-    uint256 private constant LB_COVER_FLAG = uint256(1) << 184;
-    uint256 private constant LB_SIZE_SHIFT = 128;
-    uint256 private constant LB_LEVEL_SHIFT = 32;
 
     /// @dev Bet-word flag: a biggest-spin record claim waits in the side slot.
     uint256 private constant BET_RECORD_FLAG = uint256(1) << 43;
@@ -475,7 +472,7 @@ contract BigRecordArmingTest is DeployProtocol {
         for (uint256 i; i < n; ++i) {
             uint256 word = RecyclingState.boxEntry(address(game), buffer, i);
             if (BoxOrderLib.boId(word) != id) continue;
-            total += BoxOrderLib.boNominal(word, PriceLookupLib.priceForLevel(BoxOrderLib.boLevel(word)));
+            total += BoxOrderLib.boNominal(word);
         }
     }
 
@@ -484,10 +481,8 @@ contract BigRecordArmingTest is DeployProtocol {
     function _presetBox(address who, uint256 amount) internal {
         uint48 buffer = RecyclingState.writeBuffer(address(game));
         uint256 n = RecyclingState.boxCount(address(game), buffer);
-        uint256 word = uint256(game.walletIdOf(player)) | (uint256(1) << LB_LEVEL_SHIFT) | LB_COVER_FLAG
-            | ((amount / 1 gwei) << LB_SIZE_SHIFT);
-        bytes32 data = keccak256(abi.encode(keccak256(abi.encode(uint256(buffer), GameSlots.BOX_QUEUE))));
-        vm.store(address(game), bytes32(uint256(data) + n), bytes32(word));
+        uint256 word = BoxOrderLib.boEntry(game.walletIdOf(player), amount / BoxOrderLib.SCALE, 0, 0, 1, false);
+        RecyclingState.storeBoxEntry(address(game), buffer, n, word);
         uint256 lr = uint256(vm.load(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED)));
         vm.store(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED), bytes32(lr + (uint256(1) << 120)));
         who;
