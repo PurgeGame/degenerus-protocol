@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
-import {Vm} from "forge-std/Vm.sol";
+import {Vm, VmSafe} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
@@ -11,6 +11,8 @@ import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlip
 import {DegenerusGameLootboxModule} from "../../contracts/modules/DegenerusGameLootboxModule.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {IDegenerusGameBoonModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {QueueHost} from "../helpers/BoxQueueHost.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
@@ -176,21 +178,27 @@ contract LootboxCompactQueueTest is DeployProtocol {
         assertLe(codec.decode(codec.code(a)), codec.decode(codec.code(b)), "decode is monotone");
     }
 
-    /// @notice The opener uses the DECODED score: a grant frozen at 2,055 opens at the
-    ///         multiplier of 2,042, an independent immediate box at its own exact score.
+    /// @notice The opener uses the DECODED score. A grant frozen at 2,110 stores code 2,098
+    ///         (14 points low), and those two scores sit on either side of a multiplier step, so
+    ///         every plainly opened box must carry the decoded score's multiplier, not the raw
+    ///         one. The grant is a bonus order inside the fresh 10 ETH full-rate allowance, so
+    ///         each box's opened amount is exactly size x multiplier.
     function test_ScoreCode_OpenerUsesDecodedScore() public {
         _buy(alice, BoxOrderLib.boSmalls(1)); // registers alice
-        host.grant(alice, 0.5 ether, 2055, false, 10);
+        host.grant(alice, 0.5 ether, 2110, false, 10);
         uint48 b = host.writeBuffer();
         uint256 p = host.boxWriteCount() - 1;
-        assertEq(BoxOrderLib.boScore(host.entryAt(b, p)), 2042);
+        assertEq(BoxOrderLib.boScore(host.entryAt(b, p)), 2098, "2,110 floors to code 2,098");
+        uint256 decodedMult = host.evMultiplier(2098);
+        uint256 rawMult = host.evMultiplier(2110);
+        assertGt(decodedMult, 10_000, "a bonus order");
+        assertTrue(decodedMult != rawMult, "the two scores price differently");
         Vm.Log[] memory logs = _drain(WORD);
         uint256 seen;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics.length == 3 && logs[i].topics[0] == OPENED && uint256(logs[i].topics[2]) == _ref(b, p)) {
                 (uint256 amount,,,,) = abi.decode(logs[i].data, (uint256, uint24, uint32, uint256, bool));
-                uint256 mult = host.evMultiplier(2042);
-                if (mult <= 10_000) assertEq(amount, 0.05 ether * mult / 10_000, "box scaled by the decoded score");
+                assertEq(amount, 0.05 ether * decodedMult / 10_000, "box scaled by the decoded score");
                 ++seen;
             }
         }
@@ -326,17 +334,48 @@ contract LootboxCompactQueueTest is DeployProtocol {
         _buy(alice, order);
         assertEq(host.entryAt(b, 0), host.entryAt(b, 1));
         assertEq(host.entryAt(b, 1), host.entryAt(b, 2), "three identical entries");
-        Vm.Log[] memory logs = _drain(WORD);
+        host.sealAndPublish(WORD);
+        vm.recordLogs();
+        vm.startStateDiffRecording();
+        assertTrue(host.work(ALLOWANCE).done, "drain completes");
+        VmSafe.AccountAccess[] memory accesses = vm.stopAndReturnStateDiff();
+        Vm.Log[] memory logs = vm.getRecordedLogs();
         uint32 id = _id(alice);
         bytes32[3] memory seq;
-        uint256[3] memory boon;
         for (uint256 p; p < 3; ++p) {
             seq[p] = _assertSeeded(logs, _ref(b, p), _root(WORD, b, p), id, 10);
-            boon[p] = EntropyLib.hash4(_root(WORD, b, p), uint256(id), BOX_BOON_TAG, b);
         }
         assertTrue(_root(WORD, b, 0) != _root(WORD, b, 1) && _root(WORD, b, 1) != _root(WORD, b, 2));
         assertTrue(seq[0] != seq[1] && seq[1] != seq[2] && seq[0] != seq[2], "distinct box seed sequences");
+
+        // The boon seeds the contract actually passed: one rollBoxBoons delegatecall per order,
+        // in position order, each carrying its own order's seed.
+        uint256[3] memory boon;
+        uint256 calls;
+        for (uint256 i; i < accesses.length; ++i) {
+            VmSafe.AccountAccess memory a = accesses[i];
+            if (a.kind != VmSafe.AccountAccessKind.DelegateCall || a.data.length < 4
+                || bytes4(a.data) != IDegenerusGameBoonModule.rollBoxBoons.selector) continue;
+            (uint32 boonId,, uint256 boxCount,, uint24 lvl, uint256 seed, uint256 nonceBase) =
+                abi.decode(_args(a.data), (uint32, uint256, uint256, uint256, uint24, uint256, uint256));
+            if (boonId != id || boxCount != 10) continue;
+            assertEq(a.account, ContractAddresses.GAME_BOON_MODULE, "the boon draw runs the Boon module");
+            assertFalse(a.reverted, "the boon draw completed");
+            assertEq(lvl, host.level() + 1, "drawn at the open level");
+            assertEq(nonceBase, 0, "each order's boxes number from its own start");
+            assertLt(calls, 3, "one boon dispatch per order");
+            assertEq(seed, EntropyLib.hash4(_root(WORD, b, calls), uint256(id), BOX_BOON_TAG, b),
+                "the order's boon seed binds its logical position");
+            boon[calls++] = seed;
+        }
+        assertEq(calls, 3, "every order dispatched its boon draw");
         assertTrue(boon[0] != boon[1] && boon[1] != boon[2] && boon[0] != boon[2], "distinct boon seeds");
+    }
+
+    /// @dev Calldata without its selector.
+    function _args(bytes memory data) internal pure returns (bytes memory out) {
+        out = new bytes(data.length - 4);
+        for (uint256 i; i < out.length; ++i) out[i] = data[i + 4];
     }
 
     // =========================================================================
