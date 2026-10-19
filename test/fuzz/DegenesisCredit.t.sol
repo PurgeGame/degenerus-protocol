@@ -210,7 +210,14 @@ contract DegenesisCredit is DegenesisFixture {
     function test_VaultAndSdgnrs_EarnNone() public {
         vm.deal(ContractAddresses.CREATOR, 1 ether);
         vm.prank(ContractAddresses.CREATOR);
-        vault.gamePurchase{value: 0.2 ether}(8000, 0, bytes32(0), MintPaymentKind.DirectEth, 0);
+        vault.playerAction{value: 0.2 ether}(
+            ContractAddresses.GAME,
+            abi.encodeWithSignature(
+                "purchase(uint32,uint256,uint256,bytes32,uint8,bool)",
+                0, 8000, 0, bytes32(0), MintPaymentKind.DirectEth, false
+            ),
+            0
+        );
         assertEq(_creditOfId(VAULT_ID), 0, "the Vault earns no credit");
 
         // sDGNRS's daily deliveries run on Degenesis-split AFKing funding.
@@ -273,7 +280,11 @@ contract DegenesisCredit is DegenesisFixture {
         _seedCredit(VAULT_ID, 10 ether);
         address op = _player("operator", 2 ether);
         vm.prank(ContractAddresses.CREATOR);
-        vault.gameSetOperatorApproval(op, true);
+        vault.playerAction(
+            ContractAddresses.GAME,
+            abi.encodeWithSignature("setOperatorApproval(uint32,address,bool)", 0, op, true),
+            0
+        );
         vm.prank(op);
         vm.expectRevert();
         game.buyDegenesisBox{value: 0.1 ether}(VAULT_ID, 0.1 ether);

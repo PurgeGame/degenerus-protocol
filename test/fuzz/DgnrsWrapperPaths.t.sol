@@ -220,9 +220,9 @@ contract DgnrsWrapperPaths is DeployProtocol {
 
         vm.prank(address(0xBAD));
         vm.expectRevert(abi.encodeWithSignature("NotVaultOwner()"));
-        vault.dgnrsBurnWrapped(amount);
+        vault.playerAction(ContractAddresses.SDGNRS, abi.encodeWithSignature("burnWrapped(uint256)", amount), 0);
 
-        vault.dgnrsBurnWrapped(amount);
+        vault.playerAction(ContractAddresses.SDGNRS, abi.encodeWithSignature("burnWrapped(uint256)", amount), 0);
         assertEq(before - dgnrs.balanceOf(ContractAddresses.VAULT), amount, "vault DGNRS -= amount");
         (uint80 pending,) = sdgnrs.pendingRedemptions(game.walletIdOf(ContractAddresses.VAULT), batchId);
         assertEq(pending, amount, "the claim is recorded for the vault's wallet");
@@ -237,7 +237,11 @@ contract DgnrsWrapperPaths is DeployProtocol {
         uint256 vaultBalanceBefore = ContractAddresses.VAULT.balance;
         uint256 vaultStethBefore = mockStETH.balanceOf(ContractAddresses.VAULT);
 
-        (uint256 ethOut, uint256 stethOut,) = vault.dgnrsBurnWrapped(amount);
+        (uint256 ethOut, uint256 stethOut,) = abi.decode(vault.playerAction(
+            ContractAddresses.SDGNRS,
+            abi.encodeWithSignature("burnWrapped(uint256)", amount),
+            0
+        ), (uint256, uint256, uint256));
 
         assertEq(dgnrs.totalSupply(), supplyBefore - amount, "DGNRS supply fell by the burn");
         assertEq(ContractAddresses.VAULT.balance - vaultBalanceBefore, ethOut, "ETH landed in the vault");

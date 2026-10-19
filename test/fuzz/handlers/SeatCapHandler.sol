@@ -609,7 +609,7 @@ contract SeatCapHandler is Test {
         address to = _recipient(seed >> 16);
         if (from == address(vault)) {
             vm.prank(CREATOR);
-            try vault.afkingSeatTransfer(serial, to) {} catch {
+            try vault.sweepNft(ContractAddresses.AFKING_SUB_TOKEN, to, serial) {} catch {
                 _violate("the vault could not move a seat it holds");
                 return;
             }

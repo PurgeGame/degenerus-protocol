@@ -170,4 +170,10 @@ interface IDegenerusAffiliate {
     /// @return upline1 The direct referrer's referrer.
     /// @return upline2 upline1's referrer.
     function referrerIds(address player) external view returns (uint32 affiliate, uint32 upline1, uint32 upline2);
+
+    /// @notice Register a referral code and its player kickback percentage.
+    function createAffiliateCode(bytes32 code, uint8 kickbackPct) external;
+
+    /// @notice Set the caller's referral code, subject to the referral lock.
+    function referPlayer(bytes32 code) external;
 }

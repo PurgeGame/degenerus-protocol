@@ -391,61 +391,58 @@ describe("DegenerusVault", function () {
   // 10. Vault owner gameplay functions (access control)
   // ---------------------------------------------------------------------------
   describe("vault owner gameplay functions", function () {
-    it("gameAdvance reverts when caller is not vault owner", async function () {
-      const { vault, alice } = await loadFixture(deployFullProtocol);
+    it("mining through playerAction reverts when caller is not vault owner", async function () {
+      const { vault, alice, game } = await loadFixture(deployFullProtocol);
       await expect(
-        vault.connect(alice).gameAdvance(0)
+        vault.connect(alice).playerAction(await game.getAddress(), game.interface.encodeFunctionData("mineFlip", [0]), 0)
       ).to.be.revertedWithCustomError(vault, "NotVaultOwner");
     });
 
-    it("gamePurchase reverts when caller is not vault owner", async function () {
-      const { vault, alice } = await loadFixture(deployFullProtocol);
+    it("purchase through playerAction reverts when caller is not vault owner", async function () {
+      const { vault, alice, game } = await loadFixture(deployFullProtocol);
       const ZERO_BYTES32 =
         "0x0000000000000000000000000000000000000000000000000000000000000000";
       await expect(
         vault
           .connect(alice)
-          .gamePurchase(0n, 0n, ZERO_BYTES32, MintPaymentKind.DirectEth, 0n)
+          .playerAction(await game.getAddress(), game.interface.encodeFunctionData("purchase", [0, 0n, 0n, ZERO_BYTES32, MintPaymentKind.DirectEth, false]), 0)
       ).to.be.revertedWithCustomError(vault, "NotVaultOwner");
     });
 
-    it("gameClaimWinnings reverts when caller is not vault owner", async function () {
-      const { vault, alice } = await loadFixture(deployFullProtocol);
+    it("claiming through playerAction reverts when caller is not vault owner", async function () {
+      const { vault, alice, game } = await loadFixture(deployFullProtocol);
       await expect(
-        vault.connect(alice).gameClaimWinnings()
+        vault.connect(alice).playerAction(await game.getAddress(), game.interface.encodeFunctionData("claimWinningsStethFirst", []), 0)
       ).to.be.revertedWithCustomError(vault, "NotVaultOwner");
     });
 
-    // gameSetAutoRebuy wrapper — REMOVED (v46 legacy removal, df4ef365):
-    // auto-rebuy no longer exists, so the vault wrapper is gone too.
-
-    it("gameSetOperatorApproval reverts when caller is not vault owner", async function () {
-      const { vault, alice, bob } = await loadFixture(deployFullProtocol);
+    it("operator approval through playerAction reverts when caller is not vault owner", async function () {
+      const { vault, alice, bob, game } = await loadFixture(deployFullProtocol);
       await expect(
-        vault.connect(alice).gameSetOperatorApproval(bob.address, true)
+        vault.connect(alice).playerAction(await game.getAddress(), game.interface.encodeFunctionData("setOperatorApproval", [0, bob.address, true]), 0)
       ).to.be.revertedWithCustomError(vault, "NotVaultOwner");
     });
 
-    it("coinDepositCoinflip reverts when caller is not vault owner", async function () {
-      const { vault, alice } = await loadFixture(deployFullProtocol);
+    it("coinflip deposit through playerAction reverts when caller is not vault owner", async function () {
+      const { vault, alice, coinflip } = await loadFixture(deployFullProtocol);
       await expect(
-        vault.connect(alice).coinDepositCoinflip(flip("1"))
+        vault.connect(alice).playerAction(await coinflip.getAddress(), coinflip.interface.encodeFunctionData("depositCoinflip", [0, flip("1")]), 0)
       ).to.be.revertedWithCustomError(vault, "NotVaultOwner");
     });
 
-    it("deployer (vault owner) can call gameAdvance", async function () {
-      const { vault, deployer } = await loadFixture(deployFullProtocol);
+    it("deployer (vault owner) can call mining through playerAction", async function () {
+      const { vault, deployer, game } = await loadFixture(deployFullProtocol);
       await advanceToNextDay();
       // Deployer holds 100% DGVE initially
       await expect(
-        vault.connect(deployer).gameAdvance(0)
+        vault.connect(deployer).playerAction(await game.getAddress(), game.interface.encodeFunctionData("mineFlip", [0]), 0)
       ).to.not.be.reverted;
     });
 
     it("deployer (vault owner) can set operator approval", async function () {
-      const { vault, deployer, alice } = await loadFixture(deployFullProtocol);
+      const { vault, deployer, alice, game } = await loadFixture(deployFullProtocol);
       await expect(
-        vault.connect(deployer).gameSetOperatorApproval(alice.address, true)
+        vault.connect(deployer).playerAction(await game.getAddress(), game.interface.encodeFunctionData("setOperatorApproval", [0, alice.address, true]), 0)
       ).to.not.be.reverted;
     });
 
@@ -464,27 +461,19 @@ describe("DegenerusVault", function () {
       ).to.not.be.reverted;
     });
 
-    it("gamePurchaseTicketsFlip reverts when caller is not vault owner", async function () {
-      const { vault, alice } = await loadFixture(deployFullProtocol);
+    it("FLIP redemption through playerAction reverts when caller is not vault owner", async function () {
+      const { vault, alice, game } = await loadFixture(deployFullProtocol);
       await expect(
-        vault.connect(alice).gamePurchaseTicketsFlip(400n)
+        vault.connect(alice).playerAction(await game.getAddress(), game.interface.encodeFunctionData("redeemFlip", [0, 400n]), 0)
       ).to.be.revertedWithCustomError(vault, "NotVaultOwner");
     });
 
-    it("gamePurchaseTicketsFlip reverts when ticketQuantity is zero", async function () {
-      const { vault, deployer } = await loadFixture(deployFullProtocol);
+    it("playerAction preserves the Game zero-ticket no-op", async function () {
+      const { vault, deployer, game } = await loadFixture(deployFullProtocol);
       await expect(
-        vault.connect(deployer).gamePurchaseTicketsFlip(0n)
-      ).to.be.revertedWithCustomError(vault, "Insufficient");
+        vault.connect(deployer).playerAction(await game.getAddress(), game.interface.encodeFunctionData("redeemFlip", [0, 0n]), 0)
+      ).to.not.be.reverted;
     });
-
-    // gamePurchaseFlipLootbox revert-on-zero — REMOVED (v47): the vault's
-    // FLIP-lootbox wrapper was removed (terminal-paradox closure). The
-    // FLIP->tickets wrapper (gamePurchaseTicketsFlip) is KEPT and still tested
-    // above. Removed-by-design, not skipped.
-
-    // gameSetAutoRebuyTakeProfit wrapper — REMOVED (v46 legacy removal,
-    // df4ef365): auto-rebuy take-profit no longer exists.
 
   });
 

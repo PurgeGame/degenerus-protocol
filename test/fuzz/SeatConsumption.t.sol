@@ -484,7 +484,11 @@ contract SeatConsumptionTest is SeatFixture {
 
     function _approveVaultOperator() internal {
         vm.prank(ContractAddresses.CREATOR);
-        vault.gameSetOperatorApproval(op, true);
+        vault.playerAction(
+            ContractAddresses.GAME,
+            abi.encodeWithSignature("setOperatorApproval(uint32,address,bool)", 0, op, true),
+            0
+        );
     }
 
     /// @notice A change of the VAULT run through a vault-approved operator never calls
@@ -684,8 +688,8 @@ contract SeatConsumptionTest is SeatFixture {
         address x = makeAddr("seat-two");
         address y = makeAddr("seat-two-swept");
         vm.prank(ContractAddresses.CREATOR);
-        vault.afkingSeatTransfer(2, x);
-        assertEq(afkingSubToken.ownerOf(2), x, "afkingSeatTransfer moves serial 2");
+        vault.sweepNft(ContractAddresses.AFKING_SUB_TOKEN, x, 2);
+        assertEq(afkingSubToken.ownerOf(2), x, "sweepNft moves serial 2");
         assertTrue(_inSet(VAULT_ID) && _activeId(VAULT_ID), "vault run untouched");
 
         vm.prank(x);
@@ -702,7 +706,11 @@ contract SeatConsumptionTest is SeatFixture {
 
     function test_vaultPauseAndResumeKeepCombinedCapAtTwoThousand() public {
         vm.prank(ContractAddresses.CREATOR);
-        vault.gameSetOperatorApproval(op, true);
+        vault.playerAction(
+            ContractAddresses.GAME,
+            abi.encodeWithSignature("setOperatorApproval(uint32,address,bool)", 0, op, true),
+            0
+        );
         _fillFreeTrancheTo(1000);
 
         vm.prank(op);

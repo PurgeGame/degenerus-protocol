@@ -12,14 +12,10 @@ import {IsDGNRS} from "../../contracts/interfaces/IsDGNRS.sol";
 import {IVaultCoin} from "../../contracts/interfaces/IVaultCoin.sol";
 import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 
-/// @title VaultAccountWrappers — every DegenerusVault wrapper reaches its callee on the
-///        account-ID ABI (F-token notes §1 wrapper table, §6 Vault tests).
-/// @notice Self actions pass account 0 (the vault itself); the third-party afking deposit
-///         names the vault's wallet ID 1. Each wrapper's callee is mocked at the exact calldata
-///         (built from the callee's canonical interface or its signature string) and expected
-///         exactly once, so a selector or argument drift fails here. Real (unmocked) paths:
-///         the ID-1 deposit credits the vault's bucket, the operator approval lands on ID 1,
-///         `burnEth` claims then withdraws, and the zero-amount withdrawal is a no-op.
+/// @title Vault account forwarding and internal share-redemption calls.
+/// @notice playerAction forwards canonical account-ID calldata unchanged. Mocks check
+///         return propagation; real paths check funding, operator permissions and the
+///         claim/withdraw order inside burnEth.
 contract VaultAccountWrappersTest is SeatFixture {
     event OperatorApproval(uint32 indexed id, address indexed operator, bool approved);
 
@@ -42,42 +38,61 @@ contract VaultAccountWrappersTest is SeatFixture {
         vm.expectCall(target, data, 1);
     }
 
-    // ═══════════════ Game wrappers ═══════════════
+    // ═══════════════ Game forwarding ═══════════════
 
-    function test_gameDepositAfkingFundingNamesWalletIdOne() public {
+    function test_forwardGameDepositAfkingFundingNamesWalletIdOne() public {
         vm.deal(address(vault), 3 ether);
         uint256 before = game.afkingFundingOf(address(vault));
         vm.expectCall(address(game), 1.5 ether, abi.encodeCall(IDegenerusGame.depositAfkingFunding, (uint32(1))), 1);
         vm.prank(owner);
-        vault.gameDepositAfkingFunding{value: 0.5 ether}(1 ether);
+        vault.playerAction{value: 0.5 ether}(
+            ContractAddresses.GAME,
+            abi.encodeWithSignature("depositAfkingFunding(uint32)", 1),
+            1 ether
+        );
         assertEq(game.afkingFundingOf(address(vault)), before + 1.5 ether, "the vault's bucket (ID 1) credited");
     }
 
     function test_recoverAfkingFundingWithdrawsTheWholeBucketAsSelf() public {
         vm.deal(address(vault), 2 ether);
         vm.prank(owner);
-        vault.gameDepositAfkingFunding(2 ether);
+        vault.playerAction(ContractAddresses.GAME, abi.encodeWithSignature("depositAfkingFunding(uint32)", 1), 2 ether);
         uint256 bucket = game.afkingFundingOf(address(vault));
         uint256 bal0 = address(vault).balance;
 
         vm.expectCall(address(game), abi.encodeCall(IDegenerusGame.withdrawAfkingFunding, (uint32(0), bucket)), 1);
+        uint256 recoverAmount0 = game.afkingFundingOf(address(vault));
         vm.prank(owner);
-        vault.recoverAfkingFunding();
+        vault.playerAction(
+            ContractAddresses.GAME,
+            abi.encodeWithSignature("withdrawAfkingFunding(uint32,uint256)", 0, recoverAmount0),
+            0
+        );
         assertEq(game.afkingFundingOf(address(vault)), 0, "bucket emptied");
         assertEq(address(vault).balance, bal0 + bucket, "paid to the vault");
     }
 
-    /// @notice With the bucket empty, the wrapper's `withdrawAfkingFunding(0, 0)` is a no-op.
+    /// @notice With the bucket empty, the Game's `withdrawAfkingFunding(0, 0)` is a no-op.
     function test_zeroWithdrawalIsANoOp() public {
         if (game.afkingFundingOf(address(vault)) != 0) {
+            uint256 recoverAmount1 = game.afkingFundingOf(address(vault));
             vm.prank(owner);
-            vault.recoverAfkingFunding();
+            vault.playerAction(
+                ContractAddresses.GAME,
+                abi.encodeWithSignature("withdrawAfkingFunding(uint32,uint256)", 0, recoverAmount1),
+                0
+            );
         }
         uint256 bal0 = address(vault).balance;
         vm.recordLogs();
         vm.expectCall(address(game), abi.encodeCall(IDegenerusGame.withdrawAfkingFunding, (uint32(0), uint256(0))), 1);
+        uint256 recoverAmount2 = game.afkingFundingOf(address(vault));
         vm.prank(owner);
-        vault.recoverAfkingFunding();
+        vault.playerAction(
+            ContractAddresses.GAME,
+            abi.encodeWithSignature("withdrawAfkingFunding(uint32,uint256)", 0, recoverAmount2),
+            0
+        );
         assertEq(address(vault).balance, bal0, "nothing moved");
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
@@ -88,7 +103,7 @@ contract VaultAccountWrappersTest is SeatFixture {
         game.withdrawAfkingFunding(4_000_000, 0);
     }
 
-    function test_gamePurchaseActsAsSelf() public {
+    function test_forwardGamePurchaseActsAsSelf() public {
         bytes32 code = bytes32("CODE");
         bytes memory data = abi.encodeCall(
             IDegenerusGame.purchase, (uint32(0), uint256(800), uint256(0.02 ether), code, MintPaymentKind.Combined, false)
@@ -96,29 +111,40 @@ contract VaultAccountWrappersTest is SeatFixture {
         vm.mockCall(address(game), data, "");
         vm.expectCall(address(game), 0.3 ether, data, 1);
         vm.prank(owner);
-        vault.gamePurchase{value: 0.3 ether}(800, 0.02 ether, code, MintPaymentKind.Combined, 0);
+        vault.playerAction{value: 0.3 ether}(
+            ContractAddresses.GAME,
+            abi.encodeWithSignature(
+                "purchase(uint32,uint256,uint256,bytes32,uint8,bool)",
+                0, 800, 0.02 ether, code, MintPaymentKind.Combined, false
+            ),
+            0
+        );
     }
 
-    function test_gamePurchaseTicketsFlipActsAsSelf() public {
+    function test_forwardGamePurchaseTicketsFlipActsAsSelf() public {
         _expectOnce(address(game), abi.encodeCall(IDegenerusGame.redeemFlip, (uint32(0), uint256(1200))), "");
         vm.prank(owner);
-        vault.gamePurchaseTicketsFlip(1200);
+        vault.playerAction(ContractAddresses.GAME, abi.encodeWithSignature("redeemFlip(uint32,uint256)", 0, 1200), 0);
     }
 
-    function test_gameDegeneretteBetActsAsSelf() public {
+    function test_forwardGameDegeneretteBetActsAsSelf() public {
         _expectOnce(
             address(game),
             abi.encodeCall(IDegenerusGame.placeDegeneretteBet, (uint32(0), uint8(1), uint128(5e18), uint8(3), uint8(7))),
             ""
         );
         vm.prank(owner);
-        vault.gameDegeneretteBet(1, 5e18, 3, 7, 0);
+        vault.playerAction(
+            ContractAddresses.GAME,
+            abi.encodeWithSignature("placeDegeneretteBet(uint32,uint8,uint128,uint8,uint8)", 0, 1, 5e18, 3, 7),
+            0
+        );
     }
 
 
 
     /// @notice The vault's own approval lands on wallet ID 1 and emits the ID.
-    function test_gameSetOperatorApprovalWritesIdOne() public {
+    function test_forwardGameSetOperatorApprovalWritesIdOne() public {
         address op = makeAddr("vault-op");
         bytes32 slot = keccak256(abi.encode(op, keccak256(abi.encode(uint256(1), GameSlots.OPERATOR_APPROVALS))));
         assertEq(uint256(vm.load(address(game), slot)), 0);
@@ -127,7 +153,11 @@ contract VaultAccountWrappersTest is SeatFixture {
         vm.expectEmit(true, true, false, true, address(game));
         emit OperatorApproval(1, op, true);
         vm.prank(owner);
-        vault.gameSetOperatorApproval(op, true);
+        vault.playerAction(
+            ContractAddresses.GAME,
+            abi.encodeWithSignature("setOperatorApproval(uint32,address,bool)", 0, op, true),
+            0
+        );
 
         assertEq(uint256(vm.load(address(game), slot)), 1, "operatorApprovals[1][op]");
         (address key, address payee, bool authorized) = game.resolveAccount(VAULT_ID, op);
@@ -138,7 +168,11 @@ contract VaultAccountWrappersTest is SeatFixture {
         vm.expectEmit(true, true, false, true, address(game));
         emit OperatorApproval(1, op, false);
         vm.prank(owner);
-        vault.gameSetOperatorApproval(op, false);
+        vault.playerAction(
+            ContractAddresses.GAME,
+            abi.encodeWithSignature("setOperatorApproval(uint32,address,bool)", 0, op, false),
+            0
+        );
         assertEq(uint256(vm.load(address(game), slot)), 0, "revoked");
     }
 
@@ -149,70 +183,106 @@ contract VaultAccountWrappersTest is SeatFixture {
         new DegenerusVault();
     }
 
-    // ═══════════════ Craps wrappers ═══════════════
+    // ═══════════════ Craps forwarding ═══════════════
 
-    function test_crapsSetPreferredBoardActsAsSelf() public {
+    function test_forwardCrapsSetPreferredBoardActsAsSelf() public {
         _expectOnce(CRAPS, abi.encodeWithSignature("setPreferredBoard(uint32,uint32)", uint32(0), uint32(0x01020304)), "");
         vm.prank(owner);
-        vault.crapsSetPreferredBoard(0x01020304);
+        vault.playerAction(
+            ContractAddresses.CRAPS,
+            abi.encodeWithSignature("setPreferredBoard(uint32,uint32)", 0, 0x01020304),
+            0
+        );
     }
 
-    function test_crapsEnterBattleActsAsSelf() public {
+    function test_forwardCrapsEnterBattleActsAsSelf() public {
         _expectOnce(
             CRAPS,
             abi.encodeWithSignature("enterBattle(uint32,uint64,uint32,uint16)", uint32(0), uint64(9), uint32(55), uint16(3)),
             abi.encode(uint256(77))
         );
         vm.prank(owner);
-        uint256 betId = vault.crapsEnterBattle(9, 55, 3);
+        uint256 betId = abi.decode(vault.playerAction(
+            ContractAddresses.CRAPS,
+            abi.encodeWithSignature("enterBattle(uint32,uint64,uint32,uint16)", 0, 9, 55, 3),
+            0
+        ), (uint256));
         assertEq(betId, 77, "bet ID passed through");
     }
 
-    function test_crapsAmendSlipActsAsSelf() public {
+    function test_forwardCrapsAmendSlipActsAsSelf() public {
         _expectOnce(CRAPS, abi.encodeWithSignature("amendSlip(uint32,uint256,uint32)", uint32(0), uint256(41), uint32(66)), "");
         vm.prank(owner);
-        vault.crapsAmendSlip(41, 66);
+        vault.playerAction(
+            ContractAddresses.CRAPS,
+            abi.encodeWithSignature("amendSlip(uint32,uint256,uint32)", 0, 41, 66),
+            0
+        );
     }
 
-    // ═══════════════ Coinflip / FLIP / sDGNRS wrappers ═══════════════
+    // ═══════════════ Coinflip / FLIP / sDGNRS forwarding ═══════════════
 
-    function test_coinDepositCoinflipActsAsSelf() public {
+    function test_forwardCoinDepositCoinflipActsAsSelf() public {
         _expectOnce(address(coinflip), abi.encodeCall(ICoinflip.depositCoinflip, (uint32(0), uint256(500e18))), "");
         vm.prank(owner);
-        vault.coinDepositCoinflip(500e18);
+        vault.playerAction(
+            ContractAddresses.COINFLIP,
+            abi.encodeWithSignature("depositCoinflip(uint32,uint256)", 0, 500e18),
+            0
+        );
     }
 
-    function test_coinClaimCoinflipsActsAsSelf() public {
+    function test_forwardCoinClaimCoinflipsActsAsSelf() public {
         _expectOnce(
             address(coinflip), abi.encodeCall(ICoinflip.claimCoinflips, (uint32(0), uint256(9e18))), abi.encode(uint256(8e18))
         );
         vm.prank(owner);
-        uint256 claimed = vault.coinClaimCoinflips(9e18);
+        uint256 claimed = abi.decode(vault.playerAction(
+            ContractAddresses.COINFLIP,
+            abi.encodeWithSignature("claimCoinflips(uint32,uint256)", 0, 9e18),
+            0
+        ), (uint256));
         assertEq(claimed, 8e18, "claimed amount passed through");
     }
 
-    function test_coinDecimatorBurnActsAsSelf() public {
+    function test_forwardCoinDecimatorBurnActsAsSelf() public {
         _expectOnce(address(coin), abi.encodeCall(IDegenerusCoin.decimatorBurn, (uint32(0), uint256(3e18), uint32(12))), "");
         vm.prank(owner);
-        vault.coinDecimatorBurn(3e18, 12);
+        vault.playerAction(
+            ContractAddresses.COIN,
+            abi.encodeWithSignature("decimatorBurn(uint32,uint256,uint32)", 0, 3e18, 12),
+            0
+        );
     }
 
-    function test_coinSetAutoRebuyActsAsSelf() public {
+    function test_forwardCoinSetAutoRebuyActsAsSelf() public {
         _expectOnce(address(coinflip), abi.encodeCall(ICoinflip.setCoinflipAutoRebuy, (uint32(0), true, uint256(7e18))), "");
         vm.prank(owner);
-        vault.coinSetAutoRebuy(true, 7e18);
+        vault.playerAction(
+            ContractAddresses.COINFLIP,
+            abi.encodeWithSignature("setCoinflipAutoRebuy(uint32,bool,uint256)", 0, true, 7e18),
+            0
+        );
     }
 
-    function test_coinSetAutoRebuyTakeProfitActsAsSelf() public {
+    function test_forwardCoinSetAutoRebuyTakeProfitActsAsSelf() public {
         _expectOnce(address(coinflip), abi.encodeCall(ICoinflip.setCoinflipAutoRebuyTakeProfit, (uint32(0), uint256(11e18))), "");
         vm.prank(owner);
-        vault.coinSetAutoRebuyTakeProfit(11e18);
+        vault.playerAction(
+            ContractAddresses.COINFLIP,
+            abi.encodeWithSignature("setCoinflipAutoRebuyTakeProfit(uint32,uint256)", 0, 11e18),
+            0
+        );
     }
 
-    function test_sdgnrsClaimRedemptionActsAsSelf() public {
+    function test_forwardSdgnrsClaimRedemptionActsAsSelf() public {
         _expectOnce(address(sdgnrs), abi.encodeCall(IsDGNRS.claimRedemption, (uint32(0), uint32(5))), "");
         vm.prank(owner);
-        vault.sdgnrsClaimRedemption(5);
+        vault.playerAction(
+            ContractAddresses.SDGNRS,
+            abi.encodeWithSignature("claimRedemption(uint32,uint32)", 0, 5),
+            0
+        );
     }
 
     /// @notice The permissionless DGVF burn claims the vault's coinflip winnings as itself.
@@ -252,7 +322,7 @@ contract VaultAccountWrappersTest is SeatFixture {
         // Empty the vault's own ETH so both legs run; afking 2 ETH, claimable 1 ETH.
         vm.deal(address(vault), 2 ether);
         vm.prank(owner);
-        vault.gameDepositAfkingFunding(2 ether);
+        vault.playerAction(ContractAddresses.GAME, abi.encodeWithSignature("depositAfkingFunding(uint32)", 1), 2 ether);
         vm.deal(address(vault), 0);
         uint256 c0 = game.claimableWinningsOf(address(vault));
         _seedClaimable(VAULT_ID, 1 ether);

@@ -238,7 +238,11 @@ contract SeatTenureDraw is DeployProtocol {
         }
         address operator = makeAddr("vault-sub-operator");
         vm.prank(ContractAddresses.CREATOR);
-        vault.gameSetOperatorApproval(operator, true);
+        vault.playerAction(
+            ContractAddresses.GAME,
+            abi.encodeWithSignature("setOperatorApproval(uint32,address,bool)", 0, operator, true),
+            0
+        );
         uint32 vaultId = game.walletIdOf(ContractAddresses.VAULT);
         vm.prank(operator);
         vm.expectRevert(abi.encodeWithSignature("E()"));

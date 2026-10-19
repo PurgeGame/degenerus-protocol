@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "docs/abi/Decimator.json"
 MEMBERS = {
-    "FLIP": {"decimatorBurn", "coinDecimatorBurn", "autoDecimatorBurn", "DecimatorBurn"},
+    "FLIP": {"decimatorBurn", "autoDecimatorBurn", "DecimatorBurn"},
     "DegenerusGame": {"recordDecBurn", "runDecimatorJackpot", "decWindow"},
     "DegenerusGameDecimatorModule": {"runDecimatorJackpotAwards", "runDecimatorWork", "DecBurnRecorded"},
     "DegenerusGameLens": set(),

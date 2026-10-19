@@ -627,7 +627,11 @@ contract LoanAccountingHandler is Test {
         bool ok;
         if (owner == VAULT_ID) {
             vm.prank(ContractAddresses.CREATOR);
-            try vault.gameSweepAccounts(ids) {ok = true;} catch {}
+            try vault.playerAction(
+                ContractAddresses.GAME,
+                abi.encodeWithSignature("sweepAccounts(uint32[])", ids),
+                0
+            ) {ok = true;} catch {}
         } else {
             vm.prank(owner == SDGNRS_ID ? address(this) : actors[accts[first].actor]);
             try game.sweepAccounts(ids) {ok = true;} catch {}

@@ -393,7 +393,7 @@ contract AFKingSubscriptionToken {
     ///      The VAULT may additionally restyle the SDGNRS-held construction seat (serial 1).
     ///      SDGNRS is a protocol contract with no admin surface, so that seat's art would
     ///      otherwise be frozen at the constructor defaults forever; the vault (owner-gated
-    ///      on its side, `afkingSeatRestyle`) is its steward. Cosmetic only — it confers no
+    ///      on its side, `playerAction`) is its steward. Cosmetic only — it confers no
     ///      authority over the seat itself, which SDGNRS still owns and which has no
     ///      ERC721-out path.
     /// @param tokenId Seat serial to restyle

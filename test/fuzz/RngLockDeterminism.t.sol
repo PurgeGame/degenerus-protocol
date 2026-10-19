@@ -341,15 +341,24 @@ contract RngLockDeterminism is DeployProtocol {
             vm.deal(address(vault), 1 ether);
             uint256 tickets = bound(nonce, 1, 4);
             vm.prank(vaultOwner);
-            try vault.gamePurchase{value: 0}(
-                tickets, 0, bytes32(0), MintPaymentKind.DirectEth, 0.01 ether
+            try vault.playerAction{value: 0}(
+                ContractAddresses.GAME,
+                abi.encodeWithSignature(
+                    "purchase(uint32,uint256,uint256,bytes32,uint8,bool)",
+                    0, tickets, 0, bytes32(0), MintPaymentKind.DirectEth, false
+                ),
+                0.01 ether
             ) {} catch { return; }
             return;
         }
         if (action == 7) {
             uint256 tickets = bound(nonce, 1, 2);
             vm.prank(vaultOwner);
-            try vault.gamePurchaseTicketsFlip(tickets) {} catch { return; }
+            try vault.playerAction(
+                ContractAddresses.GAME,
+                abi.encodeWithSignature("redeemFlip(uint32,uint256)", 0, tickets),
+                0
+            ) {} catch { return; }
             return;
         }
         if (action == 8) {
@@ -377,8 +386,13 @@ contract RngLockDeterminism is DeployProtocol {
             uint256 total = uint256(amtPer) * ticketCount;
             vm.deal(address(vault), total);
             vm.prank(vaultOwner);
-            try vault.gameDegeneretteBet{value: 0}(
-                0, amtPer, ticketCount, uint8((customTraits >> (hero*8)) & 7) | (hero << 3), total
+            try vault.playerAction{value: 0}(
+                ContractAddresses.GAME,
+                abi.encodeWithSignature(
+                    "placeDegeneretteBet(uint32,uint8,uint128,uint8,uint8)",
+                    0, 0, amtPer, ticketCount, uint8((customTraits >> (hero*8)) & 7) | (hero << 3)
+                ),
+                total
             ) {} catch { return; }
             return;
         }
@@ -397,18 +411,30 @@ contract RngLockDeterminism is DeployProtocol {
         if (action == 15) {
             uint256 amt = bound(nonce, 1e18, 100e18);
             vm.prank(vaultOwner);
-            try vault.coinDepositCoinflip(amt) {} catch { return; }
+            try vault.playerAction(
+                ContractAddresses.COINFLIP,
+                abi.encodeWithSignature("depositCoinflip(uint32,uint256)", 0, amt),
+                0
+            ) {} catch { return; }
             return;
         }
         if (action == 16) {
             uint256 amt = bound(nonce, 1e18, 100e18);
             vm.prank(vaultOwner);
-            try vault.coinDecimatorBurn(amt, 0) {} catch { return; }
+            try vault.playerAction(
+                ContractAddresses.COIN,
+                abi.encodeWithSignature("decimatorBurn(uint32,uint256,uint32)", 0, amt, 0),
+                0
+            ) {} catch { return; }
             return;
         }
         if (action == 17) {
             vm.prank(vaultOwner);
-            try vault.gameClaimWinnings() {} catch { return; }
+            try vault.playerAction(
+                ContractAddresses.GAME,
+                abi.encodeWithSignature("claimWinningsStethFirst()"),
+                0
+            ) {} catch { return; }
             return;
         }
         if (action == 18) {
@@ -428,14 +454,22 @@ contract RngLockDeterminism is DeployProtocol {
         if (action == 20) {
             uint256 amt = bound(nonce, 1, 1e18);
             vm.prank(vaultOwner);
-            try vault.sdgnrsBurn(amt) {} catch { return; }
+            try vault.playerAction(
+                ContractAddresses.SDGNRS,
+                abi.encodeWithSignature("burn(uint256)", amt),
+                0
+            ) {} catch { return; }
             return;
         }
         if (action == 21) {
             uint32 today = game.currentDayView();
             uint32 claimDay = today == 0 ? 0 : today - 1;
             vm.prank(vaultOwner);
-            try vault.sdgnrsClaimRedemption(uint24(claimDay)) {} catch { return; }
+            try vault.playerAction(
+                ContractAddresses.SDGNRS,
+                abi.encodeWithSignature("claimRedemption(uint32,uint32)", 0, uint24(claimDay)),
+                0
+            ) {} catch { return; }
             return;
         }
     }

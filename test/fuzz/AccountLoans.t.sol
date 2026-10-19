@@ -920,7 +920,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         game.sweepAccounts(ids);
         uint256 before = address(vault).balance + mockStETH.balanceOf(address(vault));
         vm.prank(ContractAddresses.CREATOR);
-        vault.gameClaimWinnings();
+        vault.playerAction(ContractAddresses.GAME, abi.encodeWithSignature("claimWinningsStethFirst()"), 0);
         assertEq(address(vault).balance + mockStETH.balanceOf(address(vault)), before + 3 ether);
     }
 
@@ -1247,11 +1247,19 @@ contract AccountLoansTest is RedemptionCloseTools {
         game.sweepAccounts(_one(child));
         vm.prank(stranger); vm.expectRevert(bytes4(keccak256("OnlyDegenerusGame()")));
         coinflip.sweepAccountCoinflips(child);
-        vm.prank(stranger); vm.expectRevert(bytes4(keccak256("NotVaultOwner()"))); vault.gameSweepAccounts(_one(child));
+        vm.prank(stranger); vm.expectRevert(bytes4(keccak256("NotVaultOwner()"))); vault.playerAction(
+            ContractAddresses.GAME,
+            abi.encodeWithSignature("sweepAccounts(uint32[])", _one(child)),
+            0
+        );
         uint256 mainBefore = game.claimableWinningsOf(address(vault));
         uint256 flipBefore = coin.vaultMintAllowance();
         vm.prank(ContractAddresses.CREATOR);
-        (uint256 ethOut, uint256 flipOut) = vault.gameSweepAccounts(_one(child));
+        (uint256 ethOut, uint256 flipOut) = abi.decode(vault.playerAction(
+            ContractAddresses.GAME,
+            abi.encodeWithSignature("sweepAccounts(uint32[])", _one(child)),
+            0
+        ), (uint256, uint256));
         assertEq(ethOut, 5 ether); assertEq(flipOut, 1311);
         assertEq(game.claimableWinningsOf(address(vault)), mainBefore + ethOut);
         assertEq(coin.vaultMintAllowance(), flipBefore + flipOut);
@@ -1272,7 +1280,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         game.sweepAccounts(ids);
         assertEq(game.claimableWinningsOf(address(sdgnrs)), sdBefore, "unauthorized batch rolls back fully");
         vm.prank(ContractAddresses.CREATOR);
-        vault.gameSweepAccounts(ids);
+        vault.playerAction(ContractAddresses.GAME, abi.encodeWithSignature("sweepAccounts(uint32[])", ids), 0);
         assertEq(game.claimableWinningsOf(address(sdgnrs)), sdBefore + 1 ether);
         assertEq(game.claimableWinningsOf(address(vault)), vaultBefore + 2 ether);
     }

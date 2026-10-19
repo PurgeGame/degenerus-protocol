@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
+
 import {StdInvariant} from "forge-std/StdInvariant.sol";
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {DegenesisWeekOpening} from "../helpers/DegenesisWeekOpening.sol";
@@ -24,7 +26,11 @@ contract SeatCapDegenesis is SeatCapInvariant, DegenesisWeekOpening {
         handler = new SeatCapHandler(game, afkingSubToken, vault, mockVRF, address(sdgnrs));
         vaultOp = handler.vaultOp();
         // This contract is CREATOR, the vault owner.
-        vault.gameSetOperatorApproval(vaultOp, true);
+        vault.playerAction(
+            ContractAddresses.GAME,
+            abi.encodeWithSignature("setOperatorApproval(uint32,address,bool)", 0, vaultOp, true),
+            0
+        );
         // Wallets 0..4 start registered, each holding its pass's free seat; wallets 0 and 1
         // own a smurf. Wallets 5..9 start unregistered.
         for (uint256 i; i < 5; ++i) handler.passPurchase(i);

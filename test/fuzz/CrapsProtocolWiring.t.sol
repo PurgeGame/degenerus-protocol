@@ -198,7 +198,11 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         vm.prank(ContractAddresses.GAME);
         coin.mintForGame(address(vault), 630);
         vm.prank(ContractAddresses.CREATOR);
-        uint256 betId = vault.crapsEnterBattle(slot, board, 1);
+        uint256 betId = abi.decode(vault.playerAction(
+            ContractAddresses.CRAPS,
+            abi.encodeWithSignature("enterBattle(uint32,uint64,uint32,uint16)", 0, slot, board, 1),
+            0
+        ), (uint256));
 
         CrapsViews.Bet memory bet = crapsBattle.betOf(betId);
         assertEq(bet.player, address(vault), "the proxy seated its owner instead of the vault");
@@ -206,7 +210,11 @@ contract CrapsProtocolWiringTest is DeployProtocol {
 
         uint32 amended = uint32((3 << 9) | (1 << 18) | (3 << 24));
         vm.prank(ContractAddresses.CREATOR);
-        vault.crapsAmendSlip(betId, amended);
+        vault.playerAction(
+            ContractAddresses.CRAPS,
+            abi.encodeWithSignature("amendSlip(uint32,uint256,uint32)", 0, betId, amended),
+            0
+        );
 
         assertEq(crapsBattle.betOf(betId).chips, amended, "the amended packed board changed across the vault call");
 
@@ -214,11 +222,19 @@ contract CrapsProtocolWiringTest is DeployProtocol {
             uint32 overflowing = board | uint32(1 << bit);
             vm.prank(ContractAddresses.CREATOR);
             vm.expectRevert(CrapsBattleStorage.BadRandomCount.selector);
-            vault.crapsAmendSlip(betId, overflowing);
+            vault.playerAction(
+                ContractAddresses.CRAPS,
+                abi.encodeWithSignature("amendSlip(uint32,uint256,uint32)", 0, betId, overflowing),
+                0
+            );
 
             vm.prank(ContractAddresses.CREATOR);
             vm.expectRevert(CrapsBattleStorage.BadRandomCount.selector);
-            vault.crapsSetPreferredBoard(overflowing);
+            vault.playerAction(
+                ContractAddresses.CRAPS,
+                abi.encodeWithSignature("setPreferredBoard(uint32,uint32)", 0, overflowing),
+                0
+            );
         }
     }
 
@@ -226,23 +242,39 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         uint32 board = uint32(3 | (3 << 12) | (1 << 15));
         vm.prank(STRANGER);
         vm.expectRevert(bytes4(keccak256("NotVaultOwner()")));
-        vault.crapsSetPreferredBoard(board);
+        vault.playerAction(
+            ContractAddresses.CRAPS,
+            abi.encodeWithSignature("setPreferredBoard(uint32,uint32)", 0, board),
+            0
+        );
         assertEq(crapsBattle.preferredBoardOf(game.walletIdOf(address(vault))), 0);
 
         vm.prank(ContractAddresses.CREATOR);
-        vault.crapsSetPreferredBoard(board);
+        vault.playerAction(
+            ContractAddresses.CRAPS,
+            abi.encodeWithSignature("setPreferredBoard(uint32,uint32)", 0, board),
+            0
+        );
         assertEq(crapsBattle.preferredBoardOf(game.walletIdOf(address(vault))), board);
         assertEq(crapsBattle.preferredBoardOf(game.walletIdOf(ContractAddresses.CREATOR)), 0);
 
         vm.mockCall(address(game), abi.encodeWithSignature("rngLocked()"), abi.encode(true));
         vm.prank(ContractAddresses.CREATOR);
         vm.expectRevert(CrapsBattleStorage.BetLocked.selector);
-        vault.crapsSetPreferredBoard(0);
+        vault.playerAction(
+            ContractAddresses.CRAPS,
+            abi.encodeWithSignature("setPreferredBoard(uint32,uint32)", 0, 0),
+            0
+        );
         assertEq(crapsBattle.preferredBoardOf(game.walletIdOf(address(vault))), board);
         vm.clearMockedCalls();
 
         vm.prank(ContractAddresses.CREATOR);
-        vault.crapsSetPreferredBoard(0);
+        vault.playerAction(
+            ContractAddresses.CRAPS,
+            abi.encodeWithSignature("setPreferredBoard(uint32,uint32)", 0, 0),
+            0
+        );
         assertEq(crapsBattle.preferredBoardOf(game.walletIdOf(address(vault))), 0);
     }
 

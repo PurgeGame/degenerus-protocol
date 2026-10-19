@@ -239,14 +239,18 @@ contract AfKingSeatToken is SeatFixture {
     function testVaultSeatTransferIsOwnerGated() public {
         vm.prank(makeAddr("rando"));
         vm.expectRevert(NotVaultOwner.selector);
-        vault.afkingSeatTransfer(2, makeAddr("nope"));
+        vault.sweepNft(ContractAddresses.AFKING_SUB_TOKEN, makeAddr("nope"), 2);
         assertEq(afkingSubToken.ownerOf(2), address(vault));
     }
 
     function testVaultSeatRestyleIsOwnerGated() public {
         vm.prank(makeAddr("rando"));
         vm.expectRevert(NotVaultOwner.selector);
-        vault.afkingSeatRestyle(2, 1, 1, 1);
+        vault.playerAction(
+            ContractAddresses.AFKING_SUB_TOKEN,
+            abi.encodeWithSignature("setSeatTraits(uint256,uint8,uint24,uint24)", 2, 1, 1, 1),
+            0
+        );
     }
 
     /// @dev The vault restyles its own construction seat (serial 2) AND the SDGNRS
@@ -255,14 +259,22 @@ contract AfKingSeatToken is SeatFixture {
     function testVaultRestylesOwnAndSdgnrsConstructionSeats() public {
         address owner_ = ContractAddresses.CREATOR;
         vm.prank(owner_);
-        vault.afkingSeatRestyle(2, 9, 0xabcdef, 0x123456);
+        vault.playerAction(
+            ContractAddresses.AFKING_SUB_TOKEN,
+            abi.encodeWithSignature("setSeatTraits(uint256,uint8,uint24,uint24)", 2, 9, 0xabcdef, 0x123456),
+            0
+        );
         (uint8 s2, uint24 bg2, uint24 tr2) = afkingSubToken.seatTraits(2);
         assertEq(s2, 9, "vault seat restyled");
         assertEq(bg2, 0xabcdef);
         assertEq(tr2, 0x123456);
 
         vm.prank(owner_);
-        vault.afkingSeatRestyle(1, 4, 0x0f0f0f, 0xf0f0f0);
+        vault.playerAction(
+            ContractAddresses.AFKING_SUB_TOKEN,
+            abi.encodeWithSignature("setSeatTraits(uint256,uint8,uint24,uint24)", 1, 4, 0x0f0f0f, 0xf0f0f0),
+            0
+        );
         (uint8 s1, uint24 bg1, uint24 tr1) = afkingSubToken.seatTraits(1);
         assertEq(s1, 4, "sdgnrs seat restyled by its vault steward");
         assertEq(bg1, 0x0f0f0f);

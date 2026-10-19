@@ -261,7 +261,11 @@ contract AfkingCompactTest is DeployProtocol {
     // ───────────────────────────── protocol seats ─────────────────────────────
 
     function test_VaultOwnerPauseEarnsNothingAndResumeRestarts() public {
-        vault.gameSetOperatorApproval(VAULT_OP, true);
+        vault.playerAction(
+            ContractAddresses.GAME,
+            abi.encodeWithSignature("setOperatorApproval(uint32,address,bool)", 0, VAULT_OP, true),
+            0
+        );
         game.depositAfkingFunding{value: 10 ether}(VAULT_ID);
         _nextDay();
         assertEq(_info(VAULT_ID).owedFlip, 100, "the Vault earns like any box member");

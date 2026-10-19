@@ -822,4 +822,16 @@ interface IDegenerusGame {
     /// @param id Claimant wallet ID credited.
     /// @param amount Total direct-half value (msg.value ETH + the stETH remainder pulled here).
     function creditRedemptionDirect(uint32 id, uint256 amount) external payable;
+
+    /// @notice Claim the caller's winnings, preferring stETH over native ETH.
+    function claimWinningsStethFirst() external;
+
+    /// @notice Spend FLIP to influence the next daily result, at the expected cost.
+    function reverseFlip(uint256 expectedCost) external;
+
+    /// @notice Raw claimable balance, including its 1-wei sentinel.
+    function claimableWinningsOf(address player) external view returns (uint256);
+
+    /// @notice Prepaid AFKing ETH belonging to a wallet.
+    function afkingFundingOf(address player) external view returns (uint256);
 }

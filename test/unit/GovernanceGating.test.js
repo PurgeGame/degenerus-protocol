@@ -197,8 +197,8 @@ describe("Governance & Gating (Phase 43)", function () {
   // ===========================================================================
   describe("ADMIN-02: Vault onlyVaultOwner requires >50.1% DGVE", function () {
     it("deployer (100% DGVE) passes onlyVaultOwner", async function () {
-      const { vault, deployer } = await loadFixture(deployFullProtocol);
-      const tx = vault.connect(deployer).gameAdvance(0);
+      const { vault, deployer, game } = await loadFixture(deployFullProtocol);
+      const tx = vault.connect(deployer).playerAction(await game.getAddress(), game.interface.encodeFunctionData("mineFlip", [0]), 0);
       await expect(tx).to.not.be.revertedWithCustomError(
         vault,
         "NotVaultOwner"
@@ -206,9 +206,9 @@ describe("Governance & Gating (Phase 43)", function () {
     });
 
     it("alice (0% DGVE) fails onlyVaultOwner with NotVaultOwner", async function () {
-      const { vault, alice } = await loadFixture(deployFullProtocol);
+      const { vault, alice, game } = await loadFixture(deployFullProtocol);
       await expect(
-        vault.connect(alice).gameAdvance(0)
+        vault.connect(alice).playerAction(await game.getAddress(), game.interface.encodeFunctionData("mineFlip", [0]), 0)
       ).to.be.revertedWithCustomError(vault, "NotVaultOwner");
     });
 
@@ -231,24 +231,23 @@ describe("Governance & Gating (Phase 43)", function () {
     });
 
     it("deployer fails onlyVaultOwner after giving away majority", async function () {
-      const { vault, deployer, alice } = await loadFixture(deployFullProtocol);
+      const { vault, deployer, alice, game } = await loadFixture(deployFullProtocol);
 
       const dgve = await getDgveToken(vault);
       const amount = (INITIAL_SUPPLY * 51n) / 100n;
       await dgve.connect(deployer).transfer(alice.address, amount);
 
       await expect(
-        vault.connect(deployer).gameAdvance(0)
+        vault.connect(deployer).playerAction(await game.getAddress(), game.interface.encodeFunctionData("mineFlip", [0]), 0)
       ).to.be.revertedWithCustomError(vault, "NotVaultOwner");
     });
 
     it("multiple vault-owner-gated functions all check DGVE majority", async function () {
-      const { vault, alice } = await loadFixture(deployFullProtocol);
+      const { vault, alice, game } = await loadFixture(deployFullProtocol);
 
-      // gameSetAutoRebuy wrapper REMOVED (v46 legacy removal, df4ef365).
 
       await expect(
-        vault.connect(alice).gameClaimWinnings()
+        vault.connect(alice).playerAction(await game.getAddress(), game.interface.encodeFunctionData("claimWinningsStethFirst", []), 0)
       ).to.be.revertedWithCustomError(vault, "NotVaultOwner");
     });
   });

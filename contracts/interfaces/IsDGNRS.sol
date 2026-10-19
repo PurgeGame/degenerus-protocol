@@ -157,4 +157,7 @@ interface IsDGNRS {
 
     /// @notice Settle the closed batch on `word`, the published word of the current session.
     function runRedemptionWork(uint256 word, uint256 gasAllowance) external returns (MineFlipGas.Result memory);
+
+    /// @notice Burn the caller's wrapped DGNRS for backing through sDGNRS redemption.
+    function burnWrapped(uint256 amount) external returns (uint256 ethOut, uint256 stethOut, uint256 flipOut);
 }

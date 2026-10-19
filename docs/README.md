@@ -12,3 +12,4 @@ Technical references supplement the architecture:
 - [Deity tickets and boon draws](DEITY-BOONS.md)
 - [Deity pass customization, frontend ABI and activation](DEITY-PASS-CUSTOMIZATION.md)
 - [WWXRP boons](WWXRP-BOONS.md)
+- [Vault player actions, funding and access rules](VAULT_PLAYER_ACTIONS.md)

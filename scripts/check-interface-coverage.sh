@@ -38,6 +38,11 @@ MAPPINGS=(
   "contracts/interfaces/IJackpotBattle.sol:IJackpotBattle|contracts/CrapsBattle.sol:CrapsBattle+contracts/JackpotBattle.sol:JackpotBattle"
   "contracts/interfaces/IsDGNRS.sol:IsDGNRS|contracts/sDGNRS.sol:sDGNRS"
   "contracts/interfaces/IVaultCoin.sol:IVaultCoin|contracts/FLIP.sol:FLIP"
+  # Overload aliases the Vault's player-action allowlist takes selectors from.
+  "contracts/interfaces/IVaultPlayerActions.sol:IVaultWinnings|contracts/DegenerusGame.sol:DegenerusGame"
+  "contracts/interfaces/IVaultPlayerActions.sol:IVaultPartialWinnings|contracts/DegenerusGame.sol:DegenerusGame"
+  "contracts/interfaces/IVaultPlayerActions.sol:IVaultAffiliateClaim|contracts/DegenerusGame.sol:DegenerusGame"
+  "contracts/interfaces/IVaultPlayerActions.sol:IVaultBatchAffiliateClaim|contracts/DegenerusGame.sol:DegenerusGame"
   # IDegenerusGameModules.sol contains the module interfaces. Each module is deployed
   # as a separate contract that DegenerusGame delegatecalls into. Check the module
   # contract itself (code runs from the module, storage lives on DegenerusGame via

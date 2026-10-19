@@ -438,7 +438,7 @@ contract V56SubHardening is DeployProtocol {
         _assertMinerProgress(miner);
     }
 
-    /// @notice Vault keeper routing: DegenerusVault.gameAdvance(0) now routes through game.mineFlip(0)
+    /// @notice Vault keeper routing: Vault.playerAction routes mineFlip with its gas multiplier unchanged
     ///         (subject to the successful-work reward floor); it performs the crank when work is due and reverts NoWork() when
     ///         idle. The vault is owner-gated (onlyVaultOwner) — prank as CREATOR (the DGVE majority
     ///         owner). Mining participation itself has no ownership requirement. Both arms asserted.
@@ -447,7 +447,7 @@ contract V56SubHardening is DeployProtocol {
         vm.mockCall(address(game), callData, bytes(""));
         vm.expectCall(address(game), callData, 2);
         vm.prank(ContractAddresses.CREATOR);
-        vault.gameAdvance(50_000);
+        vault.playerAction(ContractAddresses.GAME, abi.encodeWithSignature("mineFlip(uint32)", 50_000), 0);
         sdgnrs.gameAdvance(50_000);
     }
 
@@ -463,14 +463,18 @@ contract V56SubHardening is DeployProtocol {
         _quietCrapsTable();
         vm.prank(ContractAddresses.CREATOR);
         vm.expectRevert(abi.encodeWithSignature("NoWork()"));
-        vault.gameAdvance(0);
+        vault.playerAction(ContractAddresses.GAME, abi.encodeWithSignature("mineFlip(uint32)", 0), 0);
 
         // Work-due arm: roll a fresh day -> advance due -> gameAdvance cranks via mineFlip (no revert).
         _warpToDayBoundary(5);
         assertTrue(game.advanceDue(), "fixture: advance due for the vault crank");
         vm.recordLogs();
         vm.prank(ContractAddresses.CREATOR);
-        vault.gameAdvance(50_000);           // MUST NOT revert — routes through mineFlip and does the work
+        vault.playerAction(
+            ContractAddresses.GAME,
+            abi.encodeWithSignature("mineFlip(uint32)", 50_000),
+            0
+        );           // MUST NOT revert — routes through mineFlip and does the work
         _assertMinerProgress(address(vault));
     }
 

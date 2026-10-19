@@ -52,15 +52,20 @@ contract VaultAfkingFunding is DeployProtocol {
     function test_stagingAndRecoveryAreOwnerOnly() public {
         vm.deal(address(vault), 5 ether);
         vm.prank(owner);
-        vault.gameDepositAfkingFunding(2 ether);
+        vault.playerAction(ContractAddresses.GAME, abi.encodeWithSignature("depositAfkingFunding(uint32)", 1), 2 ether);
+
+        uint256 recoverAmount0 = game.afkingFundingOf(address(vault));
+        vm.prank(stranger);
+        vm.expectRevert(DegenerusVault.NotVaultOwner.selector);
+        vault.playerAction(
+            ContractAddresses.GAME,
+            abi.encodeWithSignature("withdrawAfkingFunding(uint32,uint256)", 0, recoverAmount0),
+            0
+        );
 
         vm.prank(stranger);
         vm.expectRevert(DegenerusVault.NotVaultOwner.selector);
-        vault.recoverAfkingFunding();
-
-        vm.prank(stranger);
-        vm.expectRevert(DegenerusVault.NotVaultOwner.selector);
-        vault.gameDepositAfkingFunding(1 ether);
+        vault.playerAction(ContractAddresses.GAME, abi.encodeWithSignature("depositAfkingFunding(uint32)", 1), 1 ether);
 
         assertEq(game.afkingFundingOf(address(vault)), _afking0 + 2 ether, "a stranger moved nothing");
     }
@@ -74,14 +79,23 @@ contract VaultAfkingFunding is DeployProtocol {
         (uint256 eth0, ) = vault.previewEth(_dgveSupply());
 
         vm.prank(owner);
-        vault.gameDepositAfkingFunding{value: 1 ether}(3 ether);
+        vault.playerAction{value: 1 ether}(
+            ContractAddresses.GAME,
+            abi.encodeWithSignature("depositAfkingFunding(uint32)", 1),
+            3 ether
+        );
         assertEq(game.afkingFundingOf(address(vault)), _afking0 + 4 ether, "msg.value plus vault ETH staged");
         assertEq(address(vault).balance, 2 ether, "vault ETH left the vault");
         (uint256 eth1, uint256 st1) = vault.previewEth(_dgveSupply());
         assertEq(eth1 + st1, eth0 + 1 ether, "staged ETH still backs DGVE (only msg.value is new)");
 
+        uint256 recoverAmount1 = game.afkingFundingOf(address(vault));
         vm.prank(owner);
-        vault.recoverAfkingFunding();
+        vault.playerAction(
+            ContractAddresses.GAME,
+            abi.encodeWithSignature("withdrawAfkingFunding(uint32,uint256)", 0, recoverAmount1),
+            0
+        );
         assertEq(game.afkingFundingOf(address(vault)), 0, "everything recovered");
         assertEq(address(vault).balance, 2 ether + 4 ether + _afking0, "back in the vault");
         (uint256 eth2, uint256 st2) = vault.previewEth(_dgveSupply());
@@ -92,7 +106,7 @@ contract VaultAfkingFunding is DeployProtocol {
         vm.deal(address(vault), 1 ether);
         vm.prank(owner);
         vm.expectRevert(DegenerusVault.Insufficient.selector);
-        vault.gameDepositAfkingFunding(2 ether);
+        vault.playerAction(ContractAddresses.GAME, abi.encodeWithSignature("depositAfkingFunding(uint32)", 1), 2 ether);
     }
 
     // ---------------------------------------------------------------------
@@ -102,7 +116,7 @@ contract VaultAfkingFunding is DeployProtocol {
     function test_burnEthWithdrawsTheShortfallFromAfking() public {
         vm.deal(address(vault), 10 ether);
         vm.prank(owner);
-        vault.gameDepositAfkingFunding(9 ether);
+        vault.playerAction(ContractAddresses.GAME, abi.encodeWithSignature("depositAfkingFunding(uint32)", 1), 9 ether);
         assertEq(address(vault).balance, 1 ether, "harness: the vault keeps 1 ETH on hand");
 
         uint256 supply = _dgveSupply();

@@ -1,0 +1,118 @@
+# Vault player controls
+
+The holder of **more than 50.1% of DGVE** can call
+`vault.playerAction(target, data, ethValue)` to perform player actions as the Vault.
+`data` is the destination's normal ABI-encoded function call. `ethValue` is ETH
+drawn from the Vault in addition to the transaction's `msg.value`. Return values
+are returned as ABI-encoded `bytes`; destination reverts propagate unchanged.
+
+Before game over, the Vault can hold native ETH, stETH, Game-side claimable
+winnings and prepaid AFKing funding. These are different locations: `ethValue`
+spends only native ETH already held by the Vault. Purchases can instead use the
+Game's claimable/combined payment modes; claims and prepaid-funding withdrawals
+can bring ETH back to the Vault while the game is live. Calling Game
+`claimWinningsStethFirst()` prefers stETH, so it does not guarantee a native ETH
+balance. The restricted Degenesis budget uses `vault.spendDegenesis` exclusively.
+
+For calls that support a self-account shorthand, **ID 0 means the Vault**, not
+the DGVE holder. Funding deposits require an explicit beneficiary ID (Vault = 1).
+Explicit IDs still require the destination's normal authorization, so the Vault can also
+act for accounts it owns or is approved for. Claim proceeds follow the underlying
+account's payee rules. The transaction caller gains no power over unrelated IDs.
+
+Vault-owned smurfs use that same route: encode the smurf's explicit ID for
+purchases, account settings, bets and claims supported by the destination.
+`sweepAccounts` also collects proceeds from acquired account families. Ownership
+is checked at execution, including children that have been seized separately.
+Wallet-wide functions without an account-ID argument still act on the Vault wallet.
+
+## Available actions
+
+| Target | Player actions reachable through `playerAction` |
+| --- | --- |
+| Game | Tickets, boxes, foil packs, FLIP tickets, Degenesis boxes, whale/lazy/deity pass purchases, Degenerette, mining, reverseFlip, decurse, smite, deity boons, smurf creation, operator approvals, acquired-account sweeps |
+| Game subscriptions and claims | AFKing pause/resume/quantity and funding; full/partial ETH claims or stETH-first claims; AFKing FLIP, Bingo, dead-VRF, foil matches, golden tickets, whale passes, affiliate DGNRS |
+| Coinflip / FLIP | Deposits, banked winnings, partial carry withdrawal, auto-rebuy and take-profit settings, decimator burns |
+| Craps | Boards, custom battle creation/entry/closing, slip amendments, bonus window/day entries, pass reservations, future days, normal-to-high conversion, reserved-day/window upgrades |
+| Parimutuel | Growth bets |
+| WWXRP | Reward withdrawals, acquired-account collection, burn-game entries and claims |
+| sDGNRS / DGNRS | Native/wrapped burns, ordinary and parked redemption claims, vesting and year sweep |
+| Affiliate / Jackpots | Create a Vault-owned referral code, referral registration, affiliate claims, BAF consolation claims |
+| AFKing seat token | Restyle, approve operators (seats move with `sweepNft`) |
+| GNRUS | Charity votes and GNRUS burns |
+| LINK | `transferAndCall`, including LINK donations credited to the Vault |
+
+For example, buy a foil pack with 0.1 ETH from Vault reserves:
+
+```solidity
+vault.playerAction(
+    GAME,
+    abi.encodeCall(
+        IDegenerusGame.purchase,
+        (0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true)
+    ),
+    0.1 ether // Must cover the current quote; normal payment rules apply.
+);
+```
+
+Ordinary gameplay uses `playerAction`; the 22 former gameplay wrappers have been
+removed. Callers encode the destination ABI and decode returned `bytes` where
+needed. Dedicated Vault controls remain for restricted Degenesis spending, capped
+DGNRS unwrapping, WWXRP and AFKing seat minting, Craps comp batches/donations and
+delegate budgets, foreign-token/NFT sweeps, liquidation fallback settings, and
+share redemption. Their privileged destination selectors are excluded from
+`playerAction`, so each budgeted operation has one route. Approved Game operators can continue
+to use explicit account ID 1; that approval does not grant access to
+`playerAction` or ETH held directly by the Vault. Such approvals persist across a
+change of DGVE majority holder; the current holder revokes any of them through
+`playerAction`.
+
+## Rules that still apply
+
+The fixed allowlist in `contracts/libraries/VaultPlayerActions.sol` checks both
+the destination and selector. Calls use ordinary `CALL`, never `delegatecall`.
+There is no configurable target or selector list. Arbitrary calls, stETH transfers
+or approvals, direct FLIP allowance minting, and internal settlement hooks are
+outside this entry point. DGVF and DGVE redemption paths retain their accounting.
+Player actions can spend or risk Vault backing.
+
+Underlying restrictions are deliberately preserved:
+
+- Vault AFKing is box-only, quantity 0 pauses its permanent seat, and quantity 1–8
+  resumes/changes it. The normal AFKing timing gates still apply.
+- The Vault never borrows: `borrow` and `repay` are not on the allowlist. Its protocol
+  deity cannot manually issue boons.
+  The Vault already owns a deity pass, so purchasing a second remains prohibited.
+- The Vault's referral is already assigned permanently; it cannot replace it.
+- VRF/feed proposals and votes are excluded: `sDGNRS.votingSupply()` excludes
+  the Vault's treasury allocation. Counting that balance as votes would violate
+  the governance denominator. The DGVE holder retains its own Admin owner path
+  and any voting rights from its personal eligible holdings.
+- Craps custom battle creation requires creator authorization. The DGVE owner
+  can grant that to the Vault with `CrapsBattle.setBattleCreator(VAULT, true)`.
+- Normal RNG/day locks, game-over restrictions, prices, quotas, balances,
+  claim existence and voting eligibility remain enforced at the destination.
+
+Controls that check `isVaultOwner(msg.sender)` are called **directly by the DGVE
+holder**, rather than through the Vault: Game thresholds/Thanos/smurf allowances,
+Craps creator permissions, WWXRP mint scale/trusted minters, GNRUS charity/recovery
+controls, and Admin owner operations. Permissionless maintenance and cache/identity
+helpers can likewise be called externally without impersonating the Vault.
+
+## Verification
+
+`test/fuzz/VaultPlayerActions.t.sol` exercises real payment/identity routes,
+authorization, timing restrictions, rejection of system hooks and protected-token
+calls, return values and revert propagation. Existing Vault suites cover the
+retained controls and share accounting.
+
+After compiling the focused Foundry suites, run:
+
+```sh
+node scripts/check-vault-player-actions.js
+```
+
+This checks every allowed signature against compiled ABIs, requires every other
+mutable method on those targets to have an explicit classification, confirms the
+removed wrappers stay absent, detects
+excluded-method selector collisions, and checks the Vault's deployment size.

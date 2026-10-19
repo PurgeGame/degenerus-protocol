@@ -80,7 +80,11 @@ contract AfkingStreakFrameNoRegress is DeployProtocol {
         vm.warp(block.timestamp + 1 days);
         uint32 vaultId = _aid(address(vault));
         vm.prank(ContractAddresses.CREATOR);
-        vault.gameSetOperatorApproval(OP, true);
+        vault.playerAction(
+            ContractAddresses.GAME,
+            abi.encodeWithSignature("setOperatorApproval(uint32,address,bool)", 0, OP, true),
+            0
+        );
         AfkingStethHost.SubView memory beforeSub = _sub(address(vault));
         vm.prank(OP);
         vm.expectRevert(DegenerusGameStorage.RngLocked.selector);

@@ -591,7 +591,11 @@ contract VaultBurnStethFallbackTest is RedemptionCloseTools {
     function test_burnEthPaysInFullWhenTheGameHoldsMostlyStEth() public {
         vm.deal(address(vault), 100 ether);
         vm.prank(owner);
-        vault.gameDepositAfkingFunding(90 ether);
+        vault.playerAction(
+            ContractAddresses.GAME,
+            abi.encodeWithSignature("depositAfkingFunding(uint32)", 1),
+            90 ether
+        );
         assertEq(address(vault).balance, 10 ether, "harness: the vault keeps 10 ETH");
 
         // The game's reserve is mostly stETH: 10 ETH on hand, 200 stETH.

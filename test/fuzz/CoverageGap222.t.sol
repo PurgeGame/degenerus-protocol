@@ -1002,191 +1002,22 @@ contract CoverageGap222 is DeployProtocol {
         assertFalse(ok, "vault.deposit rejected non-vaultOwner caller");
     }
 
-    function test_gap_vault_game_passthrough_guards() public {
+    function test_gap_vault_playerAction_requiresOwner() public {
         vm.prank(buyer);
-        (bool o1, ) = address(vault).call(
-            abi.encodeWithSignature("gameAdvance(uint32)", uint32(0))
-        );
-        vm.prank(buyer);
-        (bool o2, ) = address(vault).call(
-            abi.encodeWithSignature("gameClaimWinnings()")
-        );
-        vm.prank(buyer);
-        (bool o4, ) = address(vault).call(
-            abi.encodeWithSignature("gameSetAutoRebuy(bool)", true)
-        );
-        vm.prank(buyer);
-        (bool o5, ) = address(vault).call(
-            abi.encodeWithSignature(
-                "gameSetAutoRebuyTakeProfit(uint256)",
-                uint256(1 ether)
-            )
-        );
-        vm.prank(buyer);
-        (bool o6, ) = address(vault).call(
-            abi.encodeWithSignature(
-                "gameSetAfKingMode(bool,uint256,uint256)",
-                true,
-                uint256(1),
-                uint256(1)
-            )
-        );
-        vm.prank(buyer);
-        (bool o7, ) = address(vault).call(
-            abi.encodeWithSignature(
-                "gameSetOperatorApproval(address,bool)",
-                buyer,
-                true
-            )
-        );
-        assertFalse(o1, "vault.gameAdvance rejected non-vaultOwner caller");
-        assertFalse(o2, "vault.gameClaimWinnings rejected non-vaultOwner caller");
-        assertFalse(o4, "vault.gameSetAutoRebuy rejected non-vaultOwner caller");
-        assertFalse(o5, "vault.gameSetAutoRebuyTakeProfit rejected non-vaultOwner caller");
-        assertFalse(o6, "vault.gameSetAfKingMode rejected non-vaultOwner caller");
-        assertFalse(o7, "vault.gameSetOperatorApproval rejected non-vaultOwner caller");
+        vm.expectRevert(bytes4(keccak256("NotVaultOwner()")));
+        vault.playerAction(address(game), abi.encodeWithSignature("mineFlip(uint32)", uint32(0)), 0);
     }
 
-    function test_gap_vault_game_purchase_guards() public {
+    function test_gap_vault_mintsAndShareBurns_keepTheirGuards() public {
         vm.prank(buyer);
-        (bool o1, ) = address(vault).call{value: 1 ether}(
-            abi.encodeWithSignature(
-                "gamePurchase(uint256,uint256,bytes32,uint8,uint256)",
-                uint256(100),
-                uint256(0),
-                bytes32(0),
-                uint8(0),
-                uint256(1 ether)
-            )
-        );
+        vm.expectRevert(bytes4(keccak256("NotVaultOwner()")));
+        vault.wwxrpMint(buyer, 1);
         vm.prank(buyer);
-        (bool o2, ) = address(vault).call(
-            abi.encodeWithSignature(
-                "gamePurchaseTicketsFlip(uint256)",
-                uint256(100)
-            )
-        );
-        // v47: vault.gamePurchaseFlipLootbox removed (FLIP-lootbox surface deleted); its
-        // negative-auth probe is dropped — the selector no longer exists to be access-controlled.
-        // vault.gameOpenLootBox removed: opening boxes for any address is permissionless, so the
-        // vault needs no owner-gated open wrapper — there is no selector left to access-control.
-        // vault.gamePurchaseDeityPassFromBoon removed (the GAME constructor sets the vault's
-        // HAS_DEITY_PASS bit and nothing clears it, so the call could only ever revert
-        // AlreadyOwnsDeityPass); its negative-auth probe is dropped — the selector no longer
-        // exists to be access-controlled.
-        assertFalse(o1, "vault.gamePurchase rejected non-vaultOwner caller");
-        assertFalse(o2, "vault.gamePurchaseTicketsFlip rejected non-vaultOwner caller");
-    }
-
-    function test_gap_vault_game_degenerette_guards() public {
+        vm.expectRevert();
+        vault.burnCoin(1);
         vm.prank(buyer);
-        (bool o1, ) = address(vault).call{value: 1 ether}(
-            abi.encodeWithSignature(
-                "gameDegeneretteBet(uint8,uint128,uint8,uint8,uint256)",
-                uint8(0),
-                uint128(1),
-                uint8(1),
-                uint8(0),
-                uint256(1 ether)
-            )
-        );
-        uint64[] memory betIds = new uint64[](1);
-        betIds[0] = 0;
-        vm.prank(buyer);
-        (bool o2, ) = address(vault).call(
-            abi.encodeWithSignature(
-                "gameResolveDegeneretteBets(uint64[])",
-                betIds
-            )
-        );
-        assertFalse(o1, "vault.gameDegeneretteBet rejected non-vaultOwner caller");
-        assertFalse(o2, "vault.gameResolveDegeneretteBets rejected non-vaultOwner caller");
-    }
-
-    function test_gap_vault_coin_passthrough_guards() public {
-        vm.prank(buyer);
-        (bool o1, ) = address(vault).call(
-            abi.encodeWithSignature(
-                "coinDepositCoinflip(uint256)",
-                uint256(1)
-            )
-        );
-        vm.prank(buyer);
-        (bool o2, ) = address(vault).call(
-            abi.encodeWithSignature(
-                "coinClaimCoinflips(uint256)",
-                uint256(1)
-            )
-        );
-        vm.prank(buyer);
-        (bool o3, ) = address(vault).call(
-            abi.encodeWithSignature(
-                "coinDecimatorBurn(uint256,uint32)",
-                uint256(1),
-                uint32(0)
-            )
-        );
-        vm.prank(buyer);
-        (bool o4, ) = address(vault).call(
-            abi.encodeWithSignature(
-                "coinSetAutoRebuy(bool,uint256)",
-                true,
-                uint256(1 ether)
-            )
-        );
-        vm.prank(buyer);
-        (bool o5, ) = address(vault).call(
-            abi.encodeWithSignature(
-                "coinSetAutoRebuyTakeProfit(uint256)",
-                uint256(1 ether)
-            )
-        );
-        assertFalse(o1, "vault.coinDepositCoinflip rejected non-vaultOwner caller");
-        assertFalse(o2, "vault.coinClaimCoinflips rejected non-vaultOwner caller");
-        assertFalse(o3, "vault.coinDecimatorBurn rejected non-vaultOwner caller");
-        assertFalse(o4, "vault.coinSetAutoRebuy rejected non-vaultOwner caller");
-        assertFalse(o5, "vault.coinSetAutoRebuyTakeProfit rejected non-vaultOwner caller");
-    }
-
-    function test_gap_vault_jackpot_sdgnrs_wwxrp_guards() public {
-        vm.prank(buyer);
-        (bool o1, ) = address(vault).call(
-            abi.encodeWithSignature(
-                "wwxrpMint(address,uint256)",
-                buyer,
-                uint256(1)
-            )
-        );
-        vm.prank(buyer);
-        (bool o3, ) = address(vault).call(
-            abi.encodeWithSignature(
-                "sdgnrsBurn(uint256)",
-                uint256(1)
-            )
-        );
-        vm.prank(buyer);
-        (bool o4, ) = address(vault).call(
-            abi.encodeWithSignature("sdgnrsClaimRedemption(uint32)", uint32(0))
-        );
-        vm.prank(buyer);
-        (bool o5, ) = address(vault).call(
-            abi.encodeWithSignature(
-                "burnCoin(uint256)",
-                uint256(1)
-            )
-        );
-        vm.prank(buyer);
-        (bool o6, ) = address(vault).call(
-            abi.encodeWithSignature(
-                "burnEth(uint256)",
-                uint256(1)
-            )
-        );
-        assertFalse(o1, "vault.wwxrpMint rejected non-vaultOwner caller");
-        assertFalse(o3, "vault.sdgnrsBurn rejected non-vaultOwner caller");
-        assertFalse(o4, "vault.sdgnrsClaimRedemption rejected non-vaultOwner caller");
-        assertFalse(o5, "vault.burnCoin rejected caller with no DGVF shares");
-        assertFalse(o6, "vault.burnEth rejected caller with no DGVE shares");
+        vm.expectRevert();
+        vault.burnEth(1);
     }
 
     // ====================================================================
