@@ -92,34 +92,32 @@ contract VRFPathInvariants is DeployProtocol {
     }
 
 
-    /// @notice Runs after each call sequence: at least one fresh request committed a
-    ///         buffer (two physical buffers since 6d0e64b09: the selector is 0/1, so the count
-    ///         of committed flips replaces the old "index above its initial 1" test), so the
-    ///         TEST-01 detection sites were exercised — a sequence where the selector never
-    ///         moves would make every index invariant above pass vacuously.
+    /// @notice Runs after each call sequence: the detection sites above were actually exercised.
+    ///         A sequence where the 0/1 buffer selector never flips would make every index invariant
+    ///         pass vacuously. One sequence can legitimately make no request (time warps past the liveness
+    ///         deadline before the first daily request routes it into the terminal flow), so every
+    ///         coverage gate is pooled across the process (unique VP_ prefix). The six invariant
+    ///         functions run in parallel and add into the same counters, so the thresholds count runs
+    ///         from all of them: about 31% of runs evaluate a post-swap recovery and about 4% recover
+    ///         across a real gap (seed 0xdeadbeef and default-profile measurements).
     function afterInvariant() public {
-        assertGt(
-            handler.ghost_freshRequests(),
-            0,
-            "VRFPath: no fresh index allocation in sequence - TEST-01 unexercised"
-        );
-        // Measured over 1,542 default-profile runs: at least 2 successful mineFlips and 1 VRF fulfilment per
-        // run. A coordinator swap (TEST-02) was absent from 36 runs, a post-swap recovery evaluation (TEST-03)
-        // from 76% of runs, a recovery across a real gap (>= 1 skipped day) from 95%, so those are accumulated
-        // over the process (unique VP_ prefix) and required from 16, 32 and 256 runs respectively.
-        assertGe(handler.ghost_advances(), 1, "VRFPath: mineFlip never succeeded in this run");
-        assertGe(handler.ghost_fulfillments(), 1, "VRFPath: no VRF word was fulfilled in this run");
         uint256 runs = _acc("VP_RUNS", 1);
+        uint256 advances = _acc("VP_advances", handler.ghost_advances());
+        uint256 fulfillments = _acc("VP_fulfillments", handler.ghost_fulfillments());
+        uint256 fresh = _acc("VP_fresh", handler.ghost_freshRequests());
         uint256 swaps = _acc("VP_swaps", handler.ghost_stallCount());
         uint256 purchases = _acc("VP_purchases", handler.ghost_purchases());
         uint256 recoveries = _acc("VP_recoveries", handler.ghost_recoveryCount());
         uint256 gaps = _acc("VP_gaps", handler.ghost_maxGapSize() > 0 ? 1 : 0);
         if (runs < 16) return;
+        assertGt(advances, 0, "VRFPath: mineFlip never succeeded");
+        assertGt(fulfillments, 0, "VRFPath: no VRF word was ever fulfilled");
+        assertGt(fresh, 0, "VRFPath: no fresh index allocation ever committed - TEST-01 unexercised");
         assertGt(swaps, 0, "VRFPath: no coordinator swap ever succeeded - TEST-02 unexercised");
         assertGt(purchases, 0, "VRFPath: no purchase ever succeeded");
-        if (runs < 32) return;
+        if (runs < 192) return;
         assertGt(recoveries, 0, "VRFPath: no post-swap recovery was ever evaluated - TEST-03 unexercised");
-        if (runs < 256) return;
+        if (runs < 1024) return;
         assertGt(gaps, 0, "VRFPath: no recovery ever spanned a skipped day - gap backfill unexercised");
     }
 
