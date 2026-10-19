@@ -98,15 +98,13 @@ ACCESSOR	_retainedDailyWord	rngWordForDay	DegenerusGame.sol	READ	exact tag authe
 CURSOR	lootboxRngPacked	setCrapsRngPending	DegenerusGame.sol	WRITE	CRAPS-only assembly RMW of parity pending bits 250/251, never entropy/index/readiness slices.
 ACCESSOR	rngFlagsAndNudges	_decActiveWordOf	DegenerusGameLens.sol	READ
 ACCESSOR	rngWordCurrent	_decActiveWordOf	DegenerusGameLens.sol	READ
-ACCESSOR	rngDayTags	_rngWordByDayOf	DegenerusGameLens.sol	READ	authenticate two-slot day tag before reading reused payload
-GATE	rngWordByDay	_rngWordByDayOf	DegenerusGameLens.sol	READ	read-only periphery mirror of _afkingStreak's decay gate (existence test on the sealed word via extsload); the lens is never called by game logic and can move no value
 CONSUMER-SEALED	_wordAt	_keepRngCohort	JackpotBattle.sol	READ	registered slot index is closed before the word exists; exact field key and bounded cursor; pending count discharges only after payout
 CONSUMER-SEALED	_wordAt	_keepScheduled	JackpotBattle.sol	READ
 CONSUMER-SEALED	_dailyWordAt	_shareOf	JackpotBattle.sol	READ
 CONSUMER-SEALED	_dailyWordAt	_windowTerms	JackpotBattle.sol	READ
 ACCESSOR	_dailyWordAt	_dailyWordAt	LootboxCraps.sol	READ
 ACCESSOR	_wordAt	_wordAt	LootboxCraps.sol	READ
-EXEMPT-ADVANCE	_recordedDailyWord	_afKingSubDraw	modules/DegenerusGameAdvanceModule.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
+EXEMPT-ADVANCE	_recordedDailyWord	runSubDraw	modules/GameAfkingModule.sol	READ	exact tag authenticates processing word; reached only by the AdvanceModule seal delegatecall
 EXEMPT-ADVANCE	_currentRngWord	applyDailyGap	modules/DegenerusGameAdvanceModule.sol	READ	Decoded delivered entropy; waiting1 returns absence; accepted final words are >=2. Same locked daily/terminal consumption as before.
 EXEMPT-ADVANCE	_rawDailyRngWord	applyDailyGap	modules/DegenerusGameAdvanceModule.sol	READ	Gap days use the exact original raw word before daily nudge.
 EXEMPT-ADVANCE	_recordedDailyWord	applyDailyGap	modules/DegenerusGameAdvanceModule.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
@@ -168,7 +166,6 @@ DECL	rngRequestDay	<file-scope>	storage/DegenerusGameStorage.sol	DECL	Logical co
 DECL	rngWordByDay	<file-scope>	storage/DegenerusGameStorage.sol	DECL
 DECL	rngWordCurrent	<file-scope>	storage/DegenerusGameStorage.sol	DECL
 DECL	degenesisWord	<file-scope>	storage/DegenerusGameStorage.sol	DECL	The active Degenesis cohort's bound copy of its request day's daily word; zero outside a priced cohort.
-GATE	_recordedDailyWord	_afkingStreak	storage/DegenerusGameStorage.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
 ACCESSOR	rngFlagsAndNudges	_clearAppliedNudges	storage/DegenerusGameStorage.sol	READ	Daily recorder clears the frozen receipt once after using the finalized word.
 ACCESSOR	rngFlagsAndNudges	_clearAppliedNudges	storage/DegenerusGameStorage.sol	WRITE	Miner recorder clears only nudge bits, never in the billed callback.
 ACCESSOR	_currentRngWord	_currentRngWord	storage/DegenerusGameStorage.sol	READ	Shared encoding accessor for current slot3; no extra state, all entropy readers use this decoder.

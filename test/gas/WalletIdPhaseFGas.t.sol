@@ -14,6 +14,7 @@ contract WalletIdPhaseFGasSeeder is DegenerusGamePayoutUtils {
         level = lvl;
         purchaseStartDay = _simulatedDayIndex();
         dailyIdx = purchaseStartDay;
+        _afkingEndpointDay = purchaseStartDay;
         rngRequestTime = uint48(block.timestamp);
         jackpotPhaseFlag = false;
         lastPurchaseDay = false;
@@ -219,14 +220,14 @@ contract WalletIdPhaseFGasTest is DeployProtocol {
     }
 
     function _subscribe(address caller, address account, uint8 qty, uint256 seat) private {
-        bytes memory data = abi.encodeWithSignature("subscribe(uint32,bool,bool,uint8,uint32,uint256)",
-                _acct(caller, account), false, true, qty, uint32(0), seat);
+        bytes memory data = abi.encodeWithSignature("subscribe(uint32,bool,uint8,uint256)",
+                _acct(caller, account), false, qty, seat);
         _call(caller, address(game), 0, data);
     }
 
     function _subscribe(address caller, uint32 account, uint8 qty, uint256 seat) private {
-        bytes memory data = abi.encodeWithSignature("subscribe(uint32,bool,bool,uint8,uint32,uint256)",
-                _acct(caller, account), false, true, qty, uint32(0), seat);
+        bytes memory data = abi.encodeWithSignature("subscribe(uint32,bool,uint8,uint256)",
+                _acct(caller, account), false, qty, seat);
         _call(caller, address(game), 0, data);
     }
 

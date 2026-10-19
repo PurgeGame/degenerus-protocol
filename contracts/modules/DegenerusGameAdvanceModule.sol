@@ -75,7 +75,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
     event StEthStakeFailed(uint256 amount);
     event AffiliateDgnrsReward(address indexed affiliate, uint24 indexed level, uint256 dgnrsAmount);
     event LevelDgnrsAllocated(uint24 indexed level, uint256 allocation);
-    event SubDrawWon(uint32 indexed winner, uint24 day, uint24 spanDays, uint256 flipAmount);
 
     uint8 private constant STAGE_TRANSITION_DONE = 3;
     uint8 private constant STAGE_PURCHASE_DAILY = 6;
@@ -109,8 +108,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
     bytes32 private constant FUTURE_KEEP_TAG = keccak256("future-keep");
     bytes32 private constant SKIM_BPS_TAG = keccak256("degenerus.skim.bps");
     bytes32 private constant SKIM_VARIANCE_TAG = keccak256("degenerus.skim.variance");
-    uint256 private constant SEAT_DRAW_FLIP_PER_DAY = 10;
-    uint256 private constant SEAT_DRAW_MAX_FLIP = 4000;
     uint16 private constant AFFILIATE_POOL_REWARD_BPS = 50;
     uint16 private constant AFFILIATE_DGNRS_LEVEL_BPS = 250;
 
@@ -1131,32 +1128,16 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
                 yieldAccumulator,
                 day
             );
-            if (wasLocked) _afKingSubDraw(day);
+            if (wasLocked) {
+                (bool ok, bytes memory data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(
+                    abi.encodeWithSelector(IGameAfkingModule.runSubDraw.selector, day)
+                );
+                if (!ok) _revertDelegate(data);
+            }
         }
         _tryCompleteRng();
     }
 
-    function _afKingSubDraw(uint24 day) private {
-        uint256 len = _subscribers.length;
-        uint256 word = _recordedDailyWord(day);
-        if (len < 2 || word == 0) return;
-        uint256 boxes = _subBoxCount;
-        // Vault is permanently box position 0; sDGNRS at position 1 remains eligible.
-        uint256 idx = 1 + uint256(keccak256(abi.encodePacked("SEATDRAW", word))) % (len - 1);
-        uint32 winner = _subscriberAt(idx < boxes ? idx : SUBSCRIBER_CAP - (idx - boxes));
-        Sub storage s = _subOf[winner];
-        uint24 startDay = s.afkingStartDay;
-        uint24 covered = s.afkCoveredThroughDay;
-        if (s.dailyQuantity == 0 || startDay == 0 || covered <= startDay) return;
-        uint256 spanDays;
-        unchecked {
-            spanDays = covered - startDay;
-        }
-        uint256 prize = spanDays * SEAT_DRAW_FLIP_PER_DAY;
-        if (prize > SEAT_DRAW_MAX_FLIP) prize = SEAT_DRAW_MAX_FLIP;
-        coinflip.creditFlip(winner, prize);
-        emit SubDrawWon(winner, day, uint24(spanDays), prize);
-    }
 
     /// @dev Ceiling on any declared snap exponent: 2^8 = 256x is the deepest
     ///      division a thanos level can apply.

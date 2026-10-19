@@ -13,7 +13,7 @@ import {PlayerQuestView} from "../../contracts/interfaces/IDegenerusQuests.sol";
 /// @notice Spec checks 2, 14 and 18 on the Degenesis timeline, every purchase through the real
 ///         facade. Credit is 25% of the actual charged price of a qualifying ETH, claimable or
 ///         prepaid purchase while block.timestamp < DEGENESIS_END_TS; FLIP-paid tickets, AFKing
-///         daily deliveries, the Vault and sDGNRS earn none. A Degenesis buy pays no affiliate
+///         signup and daily deliveries, the Vault and sDGNRS earn none. A Degenesis buy pays no affiliate
 ///         commission and earns no quest, streak or activity credit.
 ///         Claimable balances are seeded with vm.store (ledger, claimablePool and ETH in tandem)
 ///         because no real payout lands one on demand; the FLIP-redemption window and the Vault
@@ -188,42 +188,20 @@ contract DegenesisCredit is DegenesisFixture {
 
     // ------------------------------------------------------------------ AFKing
 
-    /// @notice The subscribe-time cover-buy earns credit at its actual spend; daily deliveries
-    ///         earn none.
-    function test_AfkingCoverBuy_Credits_DailyDeliveriesDoNot() public {
+    /// @notice Signup buys nothing, and the daily deliveries that follow earn no credit.
+    function test_AfkingSignupAndDailyDeliveriesEarnNone() public {
         address sub = _player("subscriber", 1 ether);
         uint32 id = _idOf(sub);
         uint256 seat = _grantSeat(sub);
         vm.prank(sub);
-        game.subscribe{value: 1 ether}(0, false, false, 1, 0, seat);
-        uint256 coverSpend = 1 ether - _afkingOf(id);
-        assertGt(coverSpend, 0, "fixture: the cover-buy spent");
-        assertEq(game.degenesisCreditOf(sub), coverSpend / 4, "cover-buy earns at its actual spend");
+        game.subscribe{value: 1 ether}(0, false, 1, seat);
+        assertEq(_afkingOf(id), 1 ether, "signup buys nothing");
+        assertEq(game.degenesisCreditOf(sub), 0, "signup earns none");
 
-        uint256 afkingBefore = _afkingOf(id);
         _driveDay(2);
         _driveDay(3);
-        assertLt(_afkingOf(id), afkingBefore, "fixture: daily deliveries spent");
-        assertEq(game.degenesisCreditOf(sub), coverSpend / 4, "daily deliveries earn none");
-    }
-
-    /// @notice With an approved external funder, the cover-buy's credit goes to the subscriber.
-    function test_AfkingCoverBuy_ExternalFunder_CreditGoesToSubscriber() public {
-        address sub = _player("subscriber2", 0);
-        address funder = _player("funder", 1 ether);
-        uint32 subId = _idOf(sub);
-        uint32 funderId = _idOf(funder);
-        vm.prank(funder);
-        game.setAfkingFundingApproval(funderId, subId, true);
-        vm.prank(funder);
-        game.depositAfkingFunding{value: 1 ether}(funderId);
-        uint256 seat = _grantSeat(sub);
-        vm.prank(sub);
-        game.subscribe(0, false, false, 1, funderId, seat);
-        uint256 coverSpend = 1 ether - _afkingOf(funderId);
-        assertGt(coverSpend, 0, "fixture: the funder paid the cover-buy");
-        assertEq(game.degenesisCreditOf(sub), coverSpend / 4, "the subscriber earns");
-        assertEq(game.degenesisCreditOf(funder), 0, "the funder earns nothing");
+        assertLt(_afkingOf(id), 1 ether, "fixture: daily deliveries spent");
+        assertEq(game.degenesisCreditOf(sub), 0, "daily deliveries earn none");
     }
 
     // ------------------------------------------------------------------ protocol bodies

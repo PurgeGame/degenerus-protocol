@@ -101,6 +101,7 @@ contract SdgnrsWhaleBuyStageGas is DeployProtocol {
     }
 
     uint256 private constant TOP_UP_TARGET = 10 ether;
+    bytes32 private constant AFKING_DELIVERED_SIG = keccak256("AfkingDelivered(uint32,uint256)");
 
     /// @dev Level 4 (standard price), sDGNRS funded, a new day: cool everything and bracket the
     ///      first mineFlip call, which runs the day's reset + STAGE (+ the RNG request). An AFKing
@@ -128,6 +129,7 @@ contract SdgnrsWhaleBuyStageGas is DeployProtocol {
         vm.cool(address(crapsBattle));
         vm.cool(address(afkingSubToken));
         // A realistic allowance succeeds; the engine keeps admitting chunks while it lasts.
+        vm.recordLogs();
         vm.startStateDiffRecording();
         uint256 before = gasleft();
         game.mineFlip{gas: KEEPER_ALLOWANCE}(0);
@@ -138,12 +140,23 @@ contract SdgnrsWhaleBuyStageGas is DeployProtocol {
 
         // The attempt latches the level either way; the claimable debit tells buy from no-buy.
         require(_sdgnrsBonusLevel() == 4, "fixture: the attempt ran in the measured call");
-        uint256 debit = claimable0 - _claimableOf(ContractAddresses.SDGNRS);
+        // sDGNRS's own daily delivery in the same call spends claimable first; take it out.
+        uint256 debit = claimable0 - _claimableOf(ContractAddresses.SDGNRS) - _sdgnrsDelivered(vm.getRecordedLogs());
         if (expectBuy) {
             uint256 topUp = afking >= TOP_UP_TARGET ? 0 : TOP_UP_TARGET - afking;
             require(debit == topUp + passes * 4 ether, "fixture: the exact purchase fired in the measured call");
         } else {
             require(debit < 1 ether, "fixture: no purchase in the baseline (daily box only)");
+        }
+    }
+
+    function _sdgnrsDelivered(VmSafe.Log[] memory logs) internal view returns (uint256 weiIn) {
+        bytes32 id = bytes32(uint256(game.walletIdOf(ContractAddresses.SDGNRS)));
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter == address(game) && logs[i].topics.length == 2
+                && logs[i].topics[0] == AFKING_DELIVERED_SIG && logs[i].topics[1] == id) {
+                weiIn += uint128(abi.decode(logs[i].data, (uint256)));
+            }
         }
     }
 

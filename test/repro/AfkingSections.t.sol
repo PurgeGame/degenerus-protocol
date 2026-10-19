@@ -13,20 +13,15 @@ contract AfkingSectionsHarness is GameAfkingModule, WalletSeed {
 
     function put(address owner, bool tickets) external returns (uint32 id) {
         id = _seedWallet(owner);
-        Sub storage s = _subOf[id];
-        s.flags = tickets ? 4 : 0;
-        s.dailyQuantity = 1;
-        s.lastAutoBoughtDay = _simulatedDayIndex();
-        _addToSet(s, id);
+        _insertMember(id, uint256(id) | (tickets ? SUB_TICKETS_BIT : 0), _simulatedDayIndex());
     }
     function remove(uint32 id) external {
-        uint256 position = _subOf[id].setPosition;
-        delete _subOf[id];
-        _removeFromSet(position);
+        _removeFromSet(_subPosition1(id));
+        _setSubMetaLane(id, 0);
     }
     function book() external view returns (uint256, uint256) { return (_subscribers.length, _subBoxCount); }
     function at(uint256 p) external view returns (uint32) { return _subscriberAt(p); }
-    function position(uint32 id) external view returns (uint256) { return _subOf[id].setPosition; }
+    function position(uint32 id) external view returns (uint256) { return _subPosition1(id); }
     function owner(uint32 id) external view returns (address) { return _walletKey(id); }
     function setGate(uint8 mode) external {
         uint24 day = _simulatedDayIndex();
@@ -35,7 +30,7 @@ contract AfkingSectionsHarness is GameAfkingModule, WalletSeed {
         rngLockedFlag = mode == 3;
         _pendingBoxCount = mode == 4 ? 1 : 0;
     }
-    function seedOpen(uint32 id, uint24 day) external {
+    function seedOpen(uint24 day) external {
         dailyIdx = day;
         _afkingResetDay = day;
         rngWordCurrent = 991;
@@ -43,14 +38,14 @@ contract AfkingSectionsHarness is GameAfkingModule, WalletSeed {
         humanReadComplete = false;
         _setRngComplete(false);
         _setRngSessionPublished(true);
-        _subOf[id].lastAutoBoughtDay = day;
-        _subOf[id].amount = 10;
+        _afkingCohortPriceMilli = 10;
         ++_pendingBoxCount;
     }
     function cursor() external view returns (uint256) { return _subOpenCursor; }
     function pending() external view returns (uint256) { return _pendingBoxCount; }
-    function subSlot(uint32 id) external pure returns (bytes32 slot) {
-        assembly ("memory-safe") { mstore(0, id) mstore(32, _subOf.slot) slot := keccak256(0, 64) }
+    /// @dev Storage slot of the word holding the first ticket position (2000).
+    function ticketWordSlot() external pure returns (bytes32 slot) {
+        assembly ("memory-safe") { mstore(0, _subscribers.slot) slot := add(keccak256(0, 32), 666) }
     }
 }
 
@@ -105,7 +100,7 @@ contract AfkingSectionsTest is Test {
                     // Physical membership move uses exactly the production subscribe path.
                     address owner = h.owner(id);
                     vm.prank(owner);
-                    h.subscribe(id, false, !ticket, 1, 0, 0);
+                    h.subscribe(id, !ticket, 1, 0);
                 } else h.remove(id);
                 if (ticket) {
                     tickets[index] = tickets[--t];
@@ -132,7 +127,7 @@ contract AfkingSectionsTest is Test {
         vm.expectRevert(DegenerusGameStorage.E.selector);
         h.put(address(0xFFFFF), false);
         vm.prank(address(0x10000));
-        h.subscribe(boxes[0], false, true, 1, 0, 0);
+        h.subscribe(boxes[0], true, 1, 0);
         tickets[1000] = boxes[0];
         boxes[0] = boxes[999];
         _verify(boxes, 999, tickets, 1001);
@@ -146,27 +141,27 @@ contract AfkingSectionsTest is Test {
             for (uint8 quantity; quantity < 2; ++quantity) {
                 vm.prank(owner);
                 vm.expectRevert(DegenerusGameStorage.RngLocked.selector);
-                h.subscribe(id, false, true, quantity, 0, 0);
+                h.subscribe(id, true, quantity, 0);
             }
             vm.prank(address(0xBB22));
             vm.expectRevert(DegenerusGameStorage.RngLocked.selector);
-            h.subscribe(0, false, false, 1, 0, 0);
+            h.subscribe(0, false, 1, 0);
             assertEq(h.position(id), 1);
         }
         h.setGate(0);
         vm.prank(owner);
-        h.subscribe(id, false, true, 1, 0, 0);
+        h.subscribe(id, true, 1, 0);
         assertEq(h.position(id), 2001, "unlocked switch is immediate");
     }
 
     function test_OpenerNeverReadsTicketsAndProtocolSkipIsMandatoryProgress() public {
         h.put(ContractAddresses.VAULT, false);
-        uint32 box = h.put(address(0xAA11), false);
-        uint32 ticket = h.put(address(0xBB22), true);
+        h.put(address(0xAA11), false);
+        h.put(address(0xBB22), true);
         uint24 day = uint24((block.timestamp - 82_620) / 1 days);
-        h.seedOpen(box, day);
+        h.seedOpen(day);
         uint256 budget = MineFlipGas.budget(16_000_000, type(uint32).max, true);
-        bytes32 ticketSlot = h.subSlot(ticket);
+        bytes32 ticketSlot = h.ticketWordSlot();
         vm.record();
         MineFlipGas.Result memory result = h.runAfkingWork(budget);
         (bytes32[] memory reads,) = vm.accesses(address(h));

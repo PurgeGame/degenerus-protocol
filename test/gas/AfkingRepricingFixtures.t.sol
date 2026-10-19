@@ -10,10 +10,6 @@ contract AfkingRepricingHost is SubscriberNativeGasHost {
         for (uint256 i; i < 2; ++i) {
             uint32 id = _seedWallet(i == 0 ? ContractAddresses.VAULT : ContractAddresses.SDGNRS);
             _seedSubscriber(id, false);
-            Sub storage sub = _subOf[id];
-            sub.flags = 0;
-            sub.dailyQuantity = i == 0 ? 0 : 1;
-            sub.lastAutoBoughtDay = dailyIdx;
         }
     }
     function moreOpenMembers(uint256 boxes, uint256 tickets) external {
@@ -21,12 +17,8 @@ contract AfkingRepricingHost is SubscriberNativeGasHost {
             bool ticket = i < tickets;
             uint32 id = _seedWallet(address(uint160(0x900000 + i)));
             _seedSubscriber(id, ticket);
-            Sub storage sub = _subOf[id];
-            sub.dailyQuantity = 1;
-            sub.flags = ticket ? 4 : 0;
-            sub.amount = 10;
-            sub.score = 305;
-            sub.lastAutoBoughtDay = dailyIdx;
+            uint256 position1 = _subPosition1(id);
+            _setSubLaneAt(position1 - 1, _subLaneAt(position1 - 1) | (uint256(305) << SUB_SCORE_SHIFT));
             if (!ticket) ++_pendingBoxCount;
         }
     }

@@ -137,7 +137,7 @@ contract DegenerusGameMintModule is
     // -------------------------------------------------------------------------
 
     /// @notice Emitted when a purchase's box entry is appended, whether bought directly or
-    ///         system-granted (`recordCoverBox`: pass purchases and the afking auto-buy).
+    ///         system-granted (`recordCoverBox`: pass purchases).
     /// @param buyer The player whose entry this is.
     /// @param index The physical write buffer (0/1) the entry joined.
     /// @param position The entry's zero-based position in that buffer.

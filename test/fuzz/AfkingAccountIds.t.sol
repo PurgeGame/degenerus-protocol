@@ -2,104 +2,102 @@
 pragma solidity 0.8.34;
 
 import {Test} from "forge-std/Test.sol";
-import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {GameAfkingModule} from "../../contracts/modules/GameAfkingModule.sol";
-import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 
 contract AfkingIdSetHarness is GameAfkingModule {
-    function add(address owner) external returns (uint32 id) {
+    function add(address owner, bool tickets) external returns (uint32 id) {
         (id,) = _registerWallet(owner, 0);
-        _addToSet(_subOf[id], id);
+        _insertMember(id, uint256(id) | (tickets ? SUB_TICKETS_BIT : 0), 7);
     }
-    function remove(uint256 position) external {
-        delete _subOf[_subscriberAt(position - 1)];
-        _removeFromSet(position);
+    function remove(uint256 position1) external {
+        uint32 id = _subscriberAt(position1 - 1);
+        _removeFromSet(position1);
+        _setSubMetaLane(id, 0);
     }
-    function at(uint256 index) external view returns (uint32) { return _subscriberAt(index); }
-    function position(uint32 id) external view returns (uint32) { return _subOf[id].setPosition; }
+    function laneAt(uint256 position) external view returns (uint256) { return _subLaneAt(position); }
+    function position1(uint32 id) external view returns (uint256) { return _subPosition1(id); }
+    function runStart(uint32 id) external view returns (uint24) { return _subRunStart(id); }
     function root() external pure returns (uint256 r) { assembly { r := _subscribers.slot } }
-    function smurf(uint32 ownerId) external returns (uint32 id) {
-        id = uint32(wallets.length);
-        wallets.push(uint256(ownerId) << 160);
-    }
-    function allowed(uint32 subId, uint32 fundId) external view returns (bool) {
-        return _afkingFundingAllowed(subId, fundId);
+    function encode(uint256 score) external pure returns (uint256) { return _encodeSubScore(score); }
+    function decode(uint256 code) external pure returns (uint16) { return _decodeSubScore(code); }
+    function checkpoint(uint256 lane, uint256 day, uint256 streak) external pure returns (uint256) {
+        return _withSubCheckpoint(lane, day, streak);
     }
 }
 
 contract AfkingIdPackingTest is Test {
-    function testFuzz_EightIdsPerWordAndSwapPopPreservesNeighbors(uint8 positionSeed) public {
+    uint256 private constant LANE = (uint256(1) << 85) - 1;
+
+    function _word(AfkingIdSetHarness h, uint256 index) private view returns (uint256) {
+        return uint256(vm.load(address(h), bytes32(uint256(keccak256(abi.encode(h.root()))) + index)));
+    }
+
+    function testFuzz_ThreeLanesPerWordAndSwapPopPreservesNeighbors(uint8 positionSeed) public {
         AfkingIdSetHarness h = new AfkingIdSetHarness();
-        uint256 expected;
-        for (uint32 i = 1; i <= 9; ++i) {
-            assertEq(h.add(address(uint160(i))), i);
-            if (i <= 8) expected |= uint256(i) << ((i - 1) * 32);
+        for (uint32 i = 1; i <= 9; ++i) assertEq(h.add(address(uint160(i)), false), i);
+        for (uint256 w; w < 3; ++w) {
+            uint256 expected;
+            for (uint256 k; k < 3; ++k) expected |= uint256(w * 3 + k + 1) << (k * 85);
+            assertEq(_word(h, w), expected, "three lanes per word");
         }
-        uint256 base = uint256(keccak256(abi.encode(h.root())));
-        assertEq(uint256(vm.load(address(h), bytes32(base))), expected);
-        assertEq(uint256(vm.load(address(h), bytes32(base + 1))), 9);
-        uint32 position = uint32(positionSeed % 8) + 1;
-        h.remove(position);
-        expected = (expected & ~(uint256(type(uint32).max) << ((position - 1) * 32)))
-            | (uint256(9) << ((position - 1) * 32));
-        assertEq(uint256(vm.load(address(h), bytes32(base))), expected);
-        assertEq(uint256(vm.load(address(h), bytes32(base + 1))), 0, "tail lane cleared");
-        assertEq(h.position(9), position);
-        assertEq(h.position(position), 0);
-        for (uint32 i; i < 8; ++i) assertEq(h.position(h.at(i)), i + 1);
-        h.add(address(9));
-        assertEq(uint256(vm.load(address(h), bytes32(h.root()))), 8, "idempotent set insertion");
+        assertEq(uint256(vm.load(address(h), bytes32(h.root()))), 9, "logical length");
+
+        uint256 position1 = uint256(positionSeed % 8) + 1;
+        uint256 before = _word(h, (position1 - 1) / 3);
+        h.remove(position1);
+        uint256 shift = ((position1 - 1) % 3) * 85;
+        uint256 expected = (before & ~(LANE << shift)) | (uint256(9) << shift);
+        // The tail (position 8) shares word 2 with positions 6 and 7; its lane is cleared.
+        if ((position1 - 1) / 3 == 2) expected &= ~(LANE << 170);
+        assertEq(_word(h, (position1 - 1) / 3), expected, "neighbors kept");
+        assertEq(h.laneAt(8), 0, "tail lane cleared");
+        assertEq(h.position1(9), position1, "mover's lookup follows it");
+        assertEq(h.position1(uint32(position1)), 0, "removed member's lookup cleared");
+        assertEq(h.runStart(9), 7, "mover keeps its run start");
+        for (uint256 p; p < 8; ++p) assertEq(h.position1(uint32(h.laneAt(p))), p + 1);
     }
 
-    function test_SameOwnerFundingUsesAccountIds() public {
+    function test_TicketSectionDescendsFromTheCap() public {
         AfkingIdSetHarness h = new AfkingIdSetHarness();
-        uint32 a = h.add(address(11));
-        uint32 b = h.add(address(12));
-        uint32 s1 = h.smurf(a);
-        uint32 s2 = h.smurf(a);
-        assertTrue(h.allowed(s1, a));
-        assertTrue(h.allowed(a, s1));
-        assertTrue(h.allowed(s1, s2));
-        assertFalse(h.allowed(s1, b));
-        assertFalse(h.allowed(b, s2));
-    }
-}
-
-contract AfkingFundingConsentIdsTest is DeployProtocol {
-    address private constant FUNDER = address(0xF00D);
-    address private constant SUB = address(0xA11CE);
-    address private constant OP = address(0xB0B);
-    uint32 private fundId;
-    uint32 private subId;
-
-    function setUp() public {
-        _deployProtocol();
-        fundId = _giveWalletId(FUNDER);
-        subId = _giveWalletId(SUB);
+        h.add(address(1), false);
+        uint32 t1 = h.add(address(2), true);
+        uint32 t2 = h.add(address(3), true);
+        uint32 t3 = h.add(address(4), true);
+        assertEq(h.position1(t1), 2001);
+        assertEq(h.position1(t2), 2000);
+        assertEq(h.position1(t3), 1999);
+        // 1998..2000 share word 666; removing the newest ticket clears its lane only.
+        h.remove(2001);
+        assertEq(h.position1(t3), 2001, "ticket tail moved to the head");
+        assertEq(uint32(h.laneAt(2000)), t3);
+        assertEq(h.laneAt(1998), 0);
+        assertEq(uint32(h.laneAt(1999)), t2);
+        assertEq(uint32(h.laneAt(0)), 1, "box section untouched");
     }
 
-    function test_FundingConsentIsSeparateFromOperatorRightsAndRevocable() public {
-        vm.startPrank(FUNDER);
-        game.setOperatorApproval(fundId, SUB, true);
-        assertFalse(game.afkingFundingApproved(fundId, subId));
-        game.setAfkingFundingApproval(0, subId, true);
-        assertTrue(game.afkingFundingApproved(fundId, subId));
-        game.setAfkingFundingApproval(fundId, subId, false);
-        assertFalse(game.afkingFundingApproved(fundId, subId));
-        vm.stopPrank();
+    function testFuzz_CheckpointRewriteSaturatesAndKeepsOtherFields(uint256 lane, uint24 day, uint32 streak) public {
+        AfkingIdSetHarness h = new AfkingIdSetHarness();
+        lane &= LANE;
+        uint256 d = day & ((uint256(1) << 22) - 1);
+        uint256 out = h.checkpoint(lane, d, streak);
+        assertEq((out >> 46) & ((uint256(1) << 22) - 1), d, "day written");
+        assertEq(out >> 69, streak > 0xffff ? 0xffff : streak, "streak saturates");
+        uint256 kept = LANE & ~(((uint256(1) << 22) - 1) << 46) & ~(uint256(0xffff) << 69);
+        assertEq(out & kept, lane & kept, "id, quantity, mode, score and removal bit kept");
+        assertEq(out >> 85, 0, "stays inside its lane");
     }
 
-    function test_OperatorCannotGrantFundingConsent() public {
-        vm.prank(FUNDER);
-        game.setOperatorApproval(fundId, OP, true);
-        vm.prank(OP);
-        vm.expectRevert(DegenerusGameStorage.NotApproved.selector);
-        game.setAfkingFundingApproval(fundId, subId, true);
-    }
-
-    function test_ConsentRejectsUnallocatedSubscriber() public {
-        vm.prank(FUNDER);
-        vm.expectRevert(DegenerusGameStorage.E.selector);
-        game.setAfkingFundingApproval(fundId, type(uint32).max, true);
+    function testFuzz_ScoreCodeExactThroughKneeThenRoundsDown(uint16 score) public {
+        AfkingIdSetHarness h = new AfkingIdSetHarness();
+        uint256 code = h.encode(score);
+        assertLe(code, 961);
+        uint256 decoded = h.decode(code);
+        if (score <= 500) assertEq(decoded, score);
+        else if (score >= 30_000) assertEq(decoded, 30_000);
+        else {
+            assertLe(decoded, score);
+            assertLt(score - decoded, 64);
+        }
+        assertEq(h.encode(decoded), code, "decode is a fixed point");
     }
 }

@@ -199,12 +199,15 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
      * @dev All addresses and deploy day boundary are compile-time constants from ContractAddresses.
      *      purchaseStartDay is initialized to the deploy day index.
      *      dailyIdx is set to the current day index so gap detection starts from deploy day.
+     *      The deploy day is also the first AFKing reward endpoint: no subscriber pass runs for
+     *      it, so runs started that day are checkpointed on it and first buy the next day.
      *      Deploy day boundary determines which calendar day is "day 1" in the game.
      */
     constructor() {
         uint24 currentDay = GameTimeLib.currentDayIndex();
         purchaseStartDay = currentDay;
         dailyIdx = currentDay;
+        _afkingEndpointDay = currentDay;
         levelPrizePool[0] = BOOTSTRAP_PRIZE_POOL;
         // Level 1 is the first level with tickets (every sink targets level + 1 or later).
         ticketGenerationStartBlock[1] = block.number;
@@ -303,9 +306,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
       +==========================================================================+
       |  Thin delegatecall dispatch stubs into GAME_AFKING_MODULE (the AfKing    |
       |  subscription logic), shaped exactly like claimBingo.                    |
-      |  The afking subscriber set / cursors / Sub stamps live in this Game's    |
+      |  The afking subscriber set / cursors / lanes live in this Game's        |
       |  storage (DegenerusGameStorage), so the module MUST run in this          |
-      |  contract's context — delegatecall preserves msg.sender, so the consent  |
+      |  contract's context — delegatecall preserves msg.sender, so the account  |
       |  gates and the mineFlip bounty payee read the real caller. These are the |
       |  canonical afking entrypoints. `subscribe` is the SINGLE subscription    |
       |  mutator (create / replace / cancel). Afking box opens run only as a     |
@@ -313,19 +316,16 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
       +==========================================================================+*/
 
     /// @notice Start, change or cancel a daily afking subscription for account `id`.
-    /// @dev The account and funding-source consent checks run in-context (delegatecall
-    ///      preserves msg.sender). A new run burns seat `seatId` of the subscriber's payee.
-    ///      msg.value > 0 credits the funding bucket the draws debit (the external source's,
-    ///      else the subscriber's; claimablePool in tandem).
-    ///      Signature: subscribe(uint32 id, bool drainGameCreditFirst, bool useTickets,
-    ///      uint8 dailyQuantity, uint32 fundingSourceId, uint256 seatId). The signature matches
-    ///      the module function exactly (identical selector), so the calldata forwards as-is.
+    /// @dev The account check runs in-context (delegatecall preserves msg.sender). A new run
+    ///      burns seat `seatId` of the subscriber's payee. msg.value > 0 credits the
+    ///      subscriber's prepaid afking ETH (claimablePool in tandem).
+    ///      Signature: subscribe(uint32 id, bool useTickets, uint8 dailyQuantity, uint256 seatId).
+    ///      The signature matches the module function exactly (identical selector), so the
+    ///      calldata forwards as-is.
     function subscribe(
         uint32,
         bool,
-        bool,
         uint8,
-        uint32,
         uint256
     ) external payable {
         (bool ok, bytes memory data) = ContractAddresses
@@ -376,9 +376,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
         }
     }
 
-    /// @notice Permissionless FLIP claim — pays each listed account its accrued `pendingFlip`
-    ///         (the per-delivered-day quest reward + ticket buyer-bonus) in one creditFlip,
-    ///         zeroed. Always credits the account, never the caller.
+    /// @notice Permissionless AFKing claim — settles each listed account on both sides: its own
+    ///         reward and its affiliate base to the upline, for every day since its last
+    ///         settlement. Always credits the accounts and uplines, never the caller.
     /// @dev Signature: claimAfkingFlip(uint32[] ids) (0 = caller). The signature matches the
     ///      module function exactly (identical selector), so the calldata forwards as-is.
     function claimAfkingFlip(uint32[] calldata) external {
@@ -388,18 +388,22 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Affiliate-only drain of a sub's accrued `affiliateBase`, zeroed and
-    ///         returned to the caller. Routed from DegenerusAffiliate.claim(); the
-    ///         module impl enforces the AFFILIATE-only access gate under delegatecall.
-    /// @dev Signature: drainAffiliateBase(uint32 sub). The signature matches the module
-    ///      function exactly (identical selector), so the calldata forwards as-is — re-encoding
-    ///      here would cost contract-size headroom for no behavior change.
-    function drainAffiliateBase(uint32) external returns (uint256) {
+    /// @notice Affiliate-only settlement of up to eight packed subs of one run: pays each sub its
+    ///         own reward and returns their summed affiliate base. Routed from
+    ///         DegenerusAffiliate.claim(); the module impl enforces the AFFILIATE-only access gate
+    ///         under delegatecall.
+    /// @dev Signature: drainAffiliateBases(uint256 ids, uint256 uplines). The signature matches the
+    ///      module function exactly (identical selector), so the calldata forwards as-is and the
+    ///      module's return data passes through unchanged — re-encoding here would cost
+    ///      contract-size headroom for no behavior change.
+    function drainAffiliateBases(uint256, uint256) external returns (uint256, uint256, uint256) {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_AFKING_MODULE
             .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
-        return abi.decode(data, (uint256));
+        assembly ("memory-safe") {
+            return(add(data, 32), mload(data))
+        }
     }
 
     /// @notice Permissionless paid cure of account `id`'s cashout/smite curse (100 FLIP from
@@ -414,18 +418,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
         if (!ok) _revertDelegate(data);
     }
 
-    function setAfkingFundingApproval(uint32, uint32, bool) external {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
-    }
-
-    function afkingFundingApproved(uint32 funderId, uint32 subscriberId) external view returns (bool) {
-        return !_isAcquired(funderId) && !_isAcquired(subscriberId) && afkingFundingApprovals[funderId][subscriberId];
-    }
-
     /// @notice Length of the afking subscriber set: live subscriptions, the two exempt
-    ///         protocol subscriptions and cancel/eviction tombstones awaiting the in-pass
-    ///         reclaim. The seat token's capped vault mint reads it.
+    ///         protocol subscriptions and seized runs awaiting the in-pass removal. The seat
+    ///         token's capped vault mint reads it.
     function subscriberSetLength() external view returns (uint256) {
         return _subscribers.length;
     }

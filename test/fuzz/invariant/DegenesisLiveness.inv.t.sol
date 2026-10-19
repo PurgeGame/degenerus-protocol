@@ -72,7 +72,7 @@ contract DegenesisLiveness is DegenesisDeployProtocol {
             console.log("gameOver", game.gameOver());
             console.log("closed", uint256(uint8(uint256(vm.load(address(game), bytes32(0))) >> 216)));
             console.logBytes32(vm.load(address(game), bytes32(uint256(26))));
-            console.logBytes32(vm.load(address(game), bytes32(uint256(83))));
+            console.logBytes32(vm.load(address(game), bytes32(uint256(81))));
             console.log("nextMinerAction", uint256(game.nextMinerAction()));
             console.log("rngLocked", game.rngLocked());
             console.log("liveness fired on day", uint256(handler.finishLivenessDay()));

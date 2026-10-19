@@ -150,7 +150,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         vm.prank(address(game));
         coin.mintForGame(alice, 456);
         uint32 aliceId = game.walletIdOf(alice);
-        bytes32 boonSlot = bytes32(uint256(keccak256(abi.encode(uint256(aliceId), uint256(50)))) + 1);
+        bytes32 boonSlot = bytes32(uint256(keccak256(abi.encode(uint256(aliceId), GameSlots.BOON_PACKED))) + 1);
         uint256 lane = (uint256(game.currentDayView()) << 3) | 3;
         vm.store(address(game), boonSlot, bytes32((lane << 184) | (lane << 208)));
         uint8[3] memory currencies = [uint8(2), 3, 255];
@@ -201,7 +201,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         vm.prank(address(game));
         coin.mintForGame(gifter, 1000);
         uint32 aliceId = game.walletIdOf(alice);
-        bytes32 boonSlot = bytes32(uint256(keccak256(abi.encode(uint256(aliceId), uint256(50)))) + 1);
+        bytes32 boonSlot = bytes32(uint256(keccak256(abi.encode(uint256(aliceId), GameSlots.BOON_PACKED))) + 1);
         address[3] memory callers = [alice, bob, gifter];
         for (uint256 route; route < callers.length; ++route) {
             for (uint8 currency; currency < 2; ++currency) {

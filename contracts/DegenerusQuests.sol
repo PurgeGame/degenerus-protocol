@@ -356,7 +356,7 @@ contract DegenerusQuests is IDegenerusQuests {
      * - `baseStreak` snapshots streak at day start for consistent view rendering
      * - `lastActiveDay` tracks slot-0 (the funded primary mint) — the reset anchor
      * - Missing a day (gap > 1 between lastActiveDay and currentDay) resets streak;
-     *   suppressed while afking, where the run keeps it alive via the funded high-water
+     *   suppressed while afking, where the Game-side run keeps it alive
      *
      * Progress Freshness:
      * - `lastProgressDay{0,1}` must match the active quest day
@@ -733,8 +733,8 @@ contract DegenerusQuests is IDegenerusQuests {
     /**
      * @notice Begins an afking run for a subscriber: snapshots the (gap-synced) streak and
      *         flips the afking flag so subsequent slot-0 completions are streak-neutral.
-     * @dev GAME-only. While afking, the afking compute-on-read (Game-side, off the Sub slot)
-     *      owns the player's quest streak; the manual `state.streak` is dormant and is
+     * @dev GAME-only. While afking, the Game-side run's derived streak owns the player's quest
+     *      streak; the manual `state.streak` is dormant and is
      *      overwritten by `finalizeAfking` when the run ends. Returns the synced streak so the
      *      caller can base the run's snapshot on it.
      *
@@ -762,23 +762,22 @@ contract DegenerusQuests is IDegenerusQuests {
     /**
      * @notice Ends an afking run: hands the afking-computed streak back to the manual quest
      *         system. Idempotent — a no-op unless the player is currently afking.
-     * @dev GAME-only, called on every sub-ending path (cancel / cancel-reclaim / pass-eviction
-     *      / funding-kill) BEFORE the Sub slot is deleted. The last valid mint day is the later of
-     *      the Game-side handback anchor (`afkingCoveredDay` — the day before the sub ended,
-     *      floored at the funded high-water, since any covered-day lag on a live sub is
-     *      protocol-caused) and `lastActiveDay` (which
+     * @dev GAME-only, called on every run-ending path (cancel, funding expiry, loan seizure)
+     *      before the run leaves the subscriber set. The last valid mint day is the later of
+     *      the Game-side handback anchor (`afkingCoveredDay` — the day before the run ended,
+     *      floored at the reward endpoint, since any lag on a live run is protocol-caused) and
+     *      `lastActiveDay` (which
      *      captures manual primary completions during the run — a slot-0 completion still bumps it
      *      even though it is streak-neutral while afking). The rolled-day bitmap then answers whether any
      *      playable quest existed strictly after that anchor and before `currentDay`; skipped stall
      *      days have no bit, and a delivered anchor remains valid even when its quest rolls later.
      *      Anchors the manual system at that handback day and clears
-     *      `afkingActive`. A
-     *      double-call (cancel then in-stage reclaim) is safe: the second finds `afkingActive`
-     *      already false and returns.
+     *      `afkingActive`. A double-call is safe: the second finds `afkingActive` already false
+     *      and returns.
      * @param id Wallet ID of the subscriber whose run is ending.
-     * @param earnedStreak The run's earned streak (snapshot + funded delivered days), Game-computed.
-     * @param afkingCoveredDay The Game-side handback anchor (the day before the sub ended,
-     *        floored at the afking funded high-water day).
+     * @param earnedStreak The run's live streak at the reward endpoint, Game-computed.
+     * @param afkingCoveredDay The Game-side handback anchor (the day before the run ended,
+     *        floored at the reward endpoint).
      * @param currentDay The current calendar day (the decay reference).
      * @custom:reverts OnlyGame When caller is not GAME contract.
      */
@@ -2305,7 +2304,7 @@ contract DegenerusQuests is IDegenerusQuests {
      *
      *      Reward Calculation:
      *      - Slot 0 (deposit ETH) pays a fixed 100 FLIP off a run; while afking it pays 0 here
-     *        (the run's per-delivered-day pendingFlip accrual is that reward)
+     *        (the run's per-day settlement pays that reward)
      *      - Slot 1 (random quest) pays a fixed 100 FLIP
      * @param id The completing wallet (event subject; streak and century-shield bookkeeping).
      * @param state Storage reference to player's quest state.
@@ -2333,9 +2332,9 @@ contract DegenerusQuests is IDegenerusQuests {
             return (0, quest.questType, state.streak, false);
         }
 
-        // While afking, the compute-on-read owns the streak (off the Game-side Sub slot), so
-        // a completion of EITHER slot is streak-neutral here, and the slot-0 reward is the
-        // per-delivered-day pendingFlip accrual (paying it here too would double-credit). The
+        // While afking, the Game-side run owns the streak, so a completion of EITHER slot is
+        // streak-neutral here, and the slot-0 reward is part of the run's per-day settlement
+        // (paying it here too would double-credit). The
         // slot-1 (manual) quest stays fully accessible and pays its reward normally.
         bool afking = state.afkingActive;
 
@@ -2344,10 +2343,10 @@ contract DegenerusQuests is IDegenerusQuests {
         uint24 questDay24 = uint24(quest.day);
         // `lastActiveDay` tracks ONLY a normal funded mint (slot 0 is always MINT_ETH) — a
         // slot-1 completion never advances it. This keeps it the honest "last funded manual
-        // mint day": the afking finalize's no-zero protection keys on max(afkCovered,
+        // mint day": the afking finalize's no-zero protection keys on max(handback anchor,
         // lastActiveDay), so a cheap slot-1 quest cannot hold a lapsed afking streak
         // alive. During an active afking run with no manual mint, lastActiveDay stays put and
-        // the afking machinery (afkCoveredThroughDay) carries the streak.
+        // the run's derived Game-side streak carries it.
         if (slot == 0 && questDay24 > state.lastActiveDay) {
             state.lastActiveDay = questDay24;
         }
@@ -2360,9 +2359,9 @@ contract DegenerusQuests is IDegenerusQuests {
         // Every quest completion adds to the streak; each slot completes at most once per day
         // (the completionMask check above dedups), so the primary and the secondary credit
         // independently. Off a run, both credit the manual `state.streak`. While afking the
-        // compute-on-read streak owns the run: the PRIMARY rides the funded delivered days (slot 0
-        // stays streak-neutral here) and a SECONDARY the player completes bumps the Sub streak base
-        // via recordAfkingSecondary, so the run's unified score reflects it. lastCompletedDay tracks
+        // Game-side run owns the streak: the PRIMARY rides the run's elapsed days (slot 0 stays
+        // streak-neutral here) and a SECONDARY the player completes bumps the run's streak via
+        // recordAfkingSecondary, so the run's unified score reflects it. lastCompletedDay tracks
         // only the primary, keeping the missed-day reset keyed to it.
         if (!afking) {
             if (newStreak < type(uint16).max) {

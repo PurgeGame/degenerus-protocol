@@ -31,10 +31,11 @@ contract PurchaseHotPathSeeder is DegenerusGameStorage, WalletSeed {
 
     function seedAfking(address buyer, bool lapsed) external {
         uint24 today = _simulatedDayIndex();
-        Sub storage sub = _subOf[_seedWallet(buyer)];
-        sub.afkingStartDay = today - 5;
-        sub.afkCoveredThroughDay = lapsed ? today - 3 : today;
-        sub.subStreakLatch = 20;
+        uint32 id = _seedWallet(buyer);
+        _seedSubscriber(id, false);
+        _afkingEndpointDay = today - 1;
+        uint256 lane = _withSubCheckpoint(_subLaneAt(0), today - 5, 20);
+        _setSubLaneAt(0, lapsed ? lane | SUB_REMOVAL_BIT : lane);
     }
 }
 
@@ -143,7 +144,7 @@ contract PurchaseHotPathGasTest is DeployProtocol {
             vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), GameSlots.DEGENESIS_CREDIT))),
             vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), GameSlots.LOOTBOX_EV_CAP_PACKED))),
             vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), GameSlots.CENTURY_BONUS_USED))),
-            vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), GameSlots.SUB_OF))),
+            vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)) >> 2, GameSlots.SUB_META))),
             vm.load(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED)),
             _newestBoxEntry(),
             vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), keccak256(abi.encode(uint256((game.level() + 1) & 3), GameSlots.FOIL_RECORD)))))
@@ -242,7 +243,7 @@ contract PurchaseHotPathGasTest is DeployProtocol {
         _buy(400, 0, 0, MintPaymentKind.DirectEth, price);
         (bytes32[] memory reads,) = vm.accesses(address(game));
         assertFalse(_contains(reads, bytes32(GameSlots.EARLY_TICKET_LEVEL)), "purchase does not need earlyTicketLevel");
-        assertFalse(_contains(reads, _subSlot()), "ticket-only buy needs no Sub");
+        assertFalse(_contains(reads, _subSlot()), "ticket-only buy needs no subscriber record");
         (reads,) = vm.accesses(address(quests));
         assertFalse(_contains(reads, bytes32(uint256(2))), "level quest shares the active daily word");
     }
@@ -261,11 +262,11 @@ contract PurchaseHotPathGasTest is DeployProtocol {
         vm.record();
         _buy(400, 1, 0, MintPaymentKind.DirectEth, price * 2);
         (bytes32[] memory reads,) = vm.accesses(address(game));
-        assertTrue(_contains(reads, _subSlot()), "afking score resolves live streak");
+        assertTrue(_contains(reads, _subSlot()), "afking score resolves live streak from the subscriber record");
     }
 
     function _subSlot() private view returns (bytes32) {
-        return keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), GameSlots.SUB_OF));
+        return keccak256(abi.encode(uint256(game.walletIdOf(BUYER)) >> 2, GameSlots.SUB_META));
     }
 
     function _contains(bytes32[] memory words, bytes32 word) private pure returns (bool) {

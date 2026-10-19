@@ -232,15 +232,15 @@ interface IDegenerusQuests {
     function beginAfking(uint32 id, uint24 currentDay) external returns (uint24 streak);
 
     /// @notice Ends an afking run: hands the afking-computed streak back to the manual system
-    /// @dev GAME-only, called on every sub-ending path before the Sub slot is deleted.
+    /// @dev GAME-only, called on every run-ending path before the run leaves the subscriber set.
     ///      Idempotent (a no-op unless the player is currently afking). Keeps the Game-computed
     ///      earned streak when no rolled quest day lies strictly between the newest valid mint
     ///      anchor and the current day; skipped stall days are never treated as playable misses.
     ///      Revert-free for any input (it runs on mineFlip sub-ending paths).
     /// @param id Wallet ID of the subscriber whose run is ending
-    /// @param earnedStreak The run's earned streak (snapshot + funded delivered days), Game-computed
-    /// @param afkingCoveredDay The Game-side handback anchor: the day before the sub ended,
-    ///        floored at the afking funded high-water day
+    /// @param earnedStreak The run's live streak at the reward endpoint, Game-computed
+    /// @param afkingCoveredDay The Game-side handback anchor: the day before the run ended,
+    ///        floored at the reward endpoint
     /// @param currentDay The current calendar day (the decay reference)
     function finalizeAfking(uint32 id, uint24 earnedStreak, uint24 afkingCoveredDay, uint24 currentDay) external;
 

@@ -73,8 +73,8 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         _deployProtocol();
         mockVRF.fundSubscription(1, 100e18);
         vm.warp(block.timestamp + 1 days);
-        // Subscribed before the bootstrap request, so their subscribe-time cover boxes resolve in
-        // the bootstrap cohort and never share a cohort with the owners' orders.
+        // Subscribed before the bootstrap request, so their first boxes (stamped by the bootstrap day's
+        // preparation) resolve in the bootstrap cohort and never share a cohort with the owners' orders.
         _finishSubscriptionWindow();
         _spawnAfkingSubscribers(40);
         vm.warp(vm.getBlockTimestamp() + 1 days);
@@ -171,7 +171,7 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
             vm.deal(address(this), 10 ether);
             game.depositAfkingFunding{value: 10 ether}(subId);
             vm.prank(sub);
-            game.subscribe(0, false, false, 1, 0, seat);
+            game.subscribe(0, false, 1, seat);
         }
     }
 

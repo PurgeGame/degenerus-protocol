@@ -642,33 +642,25 @@
   {
     "bytes": "32",
     "encoding": "mapping",
-    "label": "_subOf",
+    "label": "_subMeta",
     "offset": 0,
     "slot": 48,
-    "typeLabel": "mapping(uint32 => struct DegenerusGameStorage.Sub)"
-  },
-  {
-    "bytes": "32",
-    "encoding": "mapping",
-    "label": "_fundingSourceOf",
-    "offset": 0,
-    "slot": 49,
-    "typeLabel": "mapping(uint32 => uint32)"
+    "typeLabel": "mapping(uint256 => uint256)"
   },
   {
     "bytes": "32",
     "encoding": "dynamic_array",
     "label": "_subscribers",
     "offset": 0,
-    "slot": 50,
-    "typeLabel": "uint32[]"
+    "slot": 49,
+    "typeLabel": "uint256[]"
   },
   {
     "bytes": "2",
     "encoding": "inplace",
     "label": "_subCursor",
     "offset": 0,
-    "slot": 51,
+    "slot": 50,
     "typeLabel": "uint16"
   },
   {
@@ -676,7 +668,7 @@
     "encoding": "inplace",
     "label": "_subOpenCursor",
     "offset": 2,
-    "slot": 51,
+    "slot": 50,
     "typeLabel": "uint16"
   },
   {
@@ -684,7 +676,7 @@
     "encoding": "inplace",
     "label": "_afkingResetDay",
     "offset": 4,
-    "slot": 51,
+    "slot": 50,
     "typeLabel": "uint24"
   },
   {
@@ -692,7 +684,7 @@
     "encoding": "inplace",
     "label": "boxCursor",
     "offset": 7,
-    "slot": 51,
+    "slot": 50,
     "typeLabel": "uint48"
   },
   {
@@ -700,7 +692,7 @@
     "encoding": "inplace",
     "label": "boxReadCount",
     "offset": 13,
-    "slot": 51,
+    "slot": 50,
     "typeLabel": "uint32"
   },
   {
@@ -708,7 +700,7 @@
     "encoding": "inplace",
     "label": "_sdgnrsBonusLevel",
     "offset": 17,
-    "slot": 51,
+    "slot": 50,
     "typeLabel": "uint24"
   },
   {
@@ -716,7 +708,7 @@
     "encoding": "inplace",
     "label": "_pendingBoxCount",
     "offset": 20,
-    "slot": 51,
+    "slot": 50,
     "typeLabel": "uint16"
   },
   {
@@ -724,15 +716,39 @@
     "encoding": "inplace",
     "label": "_subBoxCount",
     "offset": 22,
-    "slot": 51,
+    "slot": 50,
     "typeLabel": "uint16"
+  },
+  {
+    "bytes": "2",
+    "encoding": "inplace",
+    "label": "_afkingCohortPriceMilli",
+    "offset": 24,
+    "slot": 50,
+    "typeLabel": "uint16"
+  },
+  {
+    "bytes": "1",
+    "encoding": "inplace",
+    "label": "_afkingProtocolFlags",
+    "offset": 26,
+    "slot": 50,
+    "typeLabel": "uint8"
+  },
+  {
+    "bytes": "3",
+    "encoding": "inplace",
+    "label": "_afkingEndpointDay",
+    "offset": 27,
+    "slot": 50,
+    "typeLabel": "uint24"
   },
   {
     "bytes": "32",
     "encoding": "mapping",
     "label": "boxQueue",
     "offset": 0,
-    "slot": 52,
+    "slot": 51,
     "typeLabel": "mapping(uint48 => uint256[])"
   },
   {
@@ -740,7 +756,7 @@
     "encoding": "mapping",
     "label": "foilRecord",
     "offset": 0,
-    "slot": 53,
+    "slot": 52,
     "typeLabel": "mapping(uint24 => mapping(uint32 => uint256))"
   },
   {
@@ -748,7 +764,7 @@
     "encoding": "mapping",
     "label": "foilMatchClaimed",
     "offset": 0,
-    "slot": 54,
+    "slot": 53,
     "typeLabel": "mapping(uint32 => uint256)"
   },
   {
@@ -756,7 +772,7 @@
     "encoding": "mapping",
     "label": "dailyFoilDraw",
     "offset": 0,
-    "slot": 55,
+    "slot": 54,
     "typeLabel": "mapping(uint24 => uint256)"
   },
   {
@@ -764,7 +780,7 @@
     "encoding": "mapping",
     "label": "foilQueue",
     "offset": 0,
-    "slot": 56,
+    "slot": 55,
     "typeLabel": "mapping(uint24 => uint256[])"
   },
   {
@@ -772,7 +788,7 @@
     "encoding": "inplace",
     "label": "foilCursor",
     "offset": 0,
-    "slot": 57,
+    "slot": 56,
     "typeLabel": "uint32"
   },
   {
@@ -780,7 +796,7 @@
     "encoding": "inplace",
     "label": "foilGenerationDay",
     "offset": 4,
-    "slot": 57,
+    "slot": 56,
     "typeLabel": "uint24"
   },
   {
@@ -788,7 +804,7 @@
     "encoding": "inplace",
     "label": "foilFirstDrawDay",
     "offset": 7,
-    "slot": 57,
+    "slot": 56,
     "typeLabel": "uint24"
   },
   {
@@ -796,7 +812,7 @@
     "encoding": "inplace",
     "label": "foilWriteSlot",
     "offset": 10,
-    "slot": 57,
+    "slot": 56,
     "typeLabel": "bool"
   },
   {
@@ -804,7 +820,7 @@
     "encoding": "inplace",
     "label": "foilWriteCount",
     "offset": 11,
-    "slot": 57,
+    "slot": 56,
     "typeLabel": "uint32"
   },
   {
@@ -812,7 +828,7 @@
     "encoding": "inplace",
     "label": "foilReadCount",
     "offset": 15,
-    "slot": 57,
+    "slot": 56,
     "typeLabel": "uint32"
   },
   {
@@ -820,7 +836,7 @@
     "encoding": "mapping",
     "label": "deityRecipientBoonCount",
     "offset": 0,
-    "slot": 58,
+    "slot": 57,
     "typeLabel": "mapping(uint32 => mapping(uint32 => uint8))"
   },
   {
@@ -828,7 +844,7 @@
     "encoding": "inplace",
     "label": "goldenTicket",
     "offset": 0,
-    "slot": 59,
+    "slot": 58,
     "typeLabel": "uint256"
   },
   {
@@ -836,7 +852,7 @@
     "encoding": "mapping",
     "label": "middayRngCredit",
     "offset": 0,
-    "slot": 60,
+    "slot": 59,
     "typeLabel": "mapping(uint32 => uint256)"
   },
   {
@@ -844,7 +860,7 @@
     "encoding": "dynamic_array",
     "label": "centuryPrizePools",
     "offset": 0,
-    "slot": 61,
+    "slot": 60,
     "typeLabel": "uint128[]"
   },
   {
@@ -852,7 +868,7 @@
     "encoding": "inplace",
     "label": "ticketSeats",
     "offset": 0,
-    "slot": 62,
+    "slot": 61,
     "typeLabel": "uint256"
   },
   {
@@ -860,7 +876,7 @@
     "encoding": "mapping",
     "label": "ticketGenerationStartBlock",
     "offset": 0,
-    "slot": 63,
+    "slot": 62,
     "typeLabel": "mapping(uint256 => uint256)"
   },
   {
@@ -868,7 +884,7 @@
     "encoding": "inplace",
     "label": "deadTallyPos",
     "offset": 0,
-    "slot": 64,
+    "slot": 63,
     "typeLabel": "uint32"
   },
   {
@@ -876,7 +892,7 @@
     "encoding": "inplace",
     "label": "deadTallyFoilDay",
     "offset": 4,
-    "slot": 64,
+    "slot": 63,
     "typeLabel": "uint24"
   },
   {
@@ -884,7 +900,7 @@
     "encoding": "inplace",
     "label": "deadTallyFoilIdx",
     "offset": 7,
-    "slot": 64,
+    "slot": 63,
     "typeLabel": "uint32"
   },
   {
@@ -892,7 +908,7 @@
     "encoding": "inplace",
     "label": "deadTallyStage",
     "offset": 11,
-    "slot": 64,
+    "slot": 63,
     "typeLabel": "uint8"
   },
   {
@@ -900,7 +916,7 @@
     "encoding": "inplace",
     "label": "deadTraitCount",
     "offset": 12,
-    "slot": 64,
+    "slot": 63,
     "typeLabel": "uint16"
   },
   {
@@ -908,7 +924,7 @@
     "encoding": "inplace",
     "label": "deadUncreated",
     "offset": 14,
-    "slot": 64,
+    "slot": 63,
     "typeLabel": "uint64"
   },
   {
@@ -916,7 +932,7 @@
     "encoding": "inplace",
     "label": "deadCreated",
     "offset": 22,
-    "slot": 64,
+    "slot": 63,
     "typeLabel": "uint64"
   },
   {
@@ -924,7 +940,7 @@
     "encoding": "inplace",
     "label": "deadPot",
     "offset": 0,
-    "slot": 65,
+    "slot": 64,
     "typeLabel": "uint128"
   },
   {
@@ -932,7 +948,7 @@
     "encoding": "inplace",
     "label": "deadTotal",
     "offset": 16,
-    "slot": 65,
+    "slot": 64,
     "typeLabel": "uint64"
   },
   {
@@ -940,7 +956,7 @@
     "encoding": "inplace",
     "label": "deadUncreatedLeft",
     "offset": 24,
-    "slot": 65,
+    "slot": 64,
     "typeLabel": "uint64"
   },
   {
@@ -948,7 +964,7 @@
     "encoding": "mapping",
     "label": "deadClaimed",
     "offset": 0,
-    "slot": 66,
+    "slot": 65,
     "typeLabel": "mapping(uint256 => uint256)"
   },
   {
@@ -956,7 +972,7 @@
     "encoding": "inplace",
     "label": "decBattleQueue",
     "offset": 0,
-    "slot": 67,
+    "slot": 66,
     "typeLabel": "uint256"
   },
   {
@@ -964,7 +980,7 @@
     "encoding": "inplace",
     "label": "traitBucketLive",
     "offset": 0,
-    "slot": 68,
+    "slot": 67,
     "typeLabel": "uint256[2]"
   },
   {
@@ -972,7 +988,7 @@
     "encoding": "mapping",
     "label": "ticketPending",
     "offset": 0,
-    "slot": 70,
+    "slot": 69,
     "typeLabel": "mapping(uint32 => uint256)"
   },
   {
@@ -980,7 +996,7 @@
     "encoding": "inplace",
     "label": "jackpotWork",
     "offset": 0,
-    "slot": 71,
+    "slot": 70,
     "typeLabel": "struct DegenerusGameStorage.JackpotWork"
   },
   {
@@ -988,7 +1004,7 @@
     "encoding": "mapping",
     "label": "farFutureOwed",
     "offset": 0,
-    "slot": 73,
+    "slot": 72,
     "typeLabel": "mapping(uint32 => uint256[13])"
   },
   {
@@ -996,7 +1012,7 @@
     "encoding": "inplace",
     "label": "decPreviousStack",
     "offset": 0,
-    "slot": 74,
+    "slot": 73,
     "typeLabel": "uint64"
   },
   {
@@ -1004,7 +1020,7 @@
     "encoding": "inplace",
     "label": "decPreviousCount",
     "offset": 8,
-    "slot": 74,
+    "slot": 73,
     "typeLabel": "uint40"
   },
   {
@@ -1012,7 +1028,7 @@
     "encoding": "mapping",
     "label": "decJackpotPlans",
     "offset": 0,
-    "slot": 75,
+    "slot": 74,
     "typeLabel": "mapping(uint24 => struct DegenerusGameStorage.DecJackpotPlan)"
   },
   {
@@ -1020,7 +1036,7 @@
     "encoding": "mapping",
     "label": "decGeneratedOwners",
     "offset": 0,
-    "slot": 76,
+    "slot": 75,
     "typeLabel": "mapping(uint256 => uint32)"
   },
   {
@@ -1028,23 +1044,15 @@
     "encoding": "mapping",
     "label": "walletIds",
     "offset": 0,
-    "slot": 77,
+    "slot": 76,
     "typeLabel": "mapping(address => uint64)"
-  },
-  {
-    "bytes": "32",
-    "encoding": "mapping",
-    "label": "afkingFundingApprovals",
-    "offset": 0,
-    "slot": 78,
-    "typeLabel": "mapping(uint32 => mapping(uint32 => bool))"
   },
   {
     "bytes": "32",
     "encoding": "mapping",
     "label": "_smurfWords",
     "offset": 0,
-    "slot": 79,
+    "slot": 77,
     "typeLabel": "mapping(uint32 => mapping(uint256 => uint256))"
   },
   {
@@ -1052,7 +1060,7 @@
     "encoding": "mapping",
     "label": "_loans",
     "offset": 0,
-    "slot": 80,
+    "slot": 78,
     "typeLabel": "mapping(uint32 => uint256)"
   },
   {
@@ -1060,7 +1068,7 @@
     "encoding": "mapping",
     "label": "_loansDue",
     "offset": 0,
-    "slot": 81,
+    "slot": 79,
     "typeLabel": "mapping(uint24 => mapping(uint256 => uint256))"
   },
   {
@@ -1068,7 +1076,7 @@
     "encoding": "mapping",
     "label": "_loansDueCount",
     "offset": 0,
-    "slot": 82,
+    "slot": 80,
     "typeLabel": "mapping(uint24 => uint256)"
   },
   {
@@ -1076,7 +1084,7 @@
     "encoding": "inplace",
     "label": "degenesisWord",
     "offset": 0,
-    "slot": 83,
+    "slot": 81,
     "typeLabel": "uint256"
   },
   {
@@ -1084,7 +1092,7 @@
     "encoding": "mapping",
     "label": "degenesisDays",
     "offset": 0,
-    "slot": 84,
+    "slot": 82,
     "typeLabel": "mapping(uint256 => uint256)"
   },
   {
@@ -1092,7 +1100,7 @@
     "encoding": "mapping",
     "label": "degenesisOrders",
     "offset": 0,
-    "slot": 85,
+    "slot": 83,
     "typeLabel": "mapping(uint256 => uint256)"
   }
 ]

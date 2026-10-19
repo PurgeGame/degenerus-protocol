@@ -37,7 +37,7 @@ import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 ///
 /// @dev Builds on the DeployProtocol fixture (GameAfkingModule at GAME_AFKING_MODULE). Drives REAL
 ///      lootbox purchases through the public mint API; the per-sub buy is `mineFlip()`'s pre-RNG STAGE
-///      (the Afking stage); cancel is `subscribe(_, dailyQuantity=0)` (the in-place tombstone); the
+///      (the Afking stage); cancel is `subscribe(_, dailyQuantity=0)`; the
 ///      pool ETH lives in the game-resident `afkingFunding` ledger (deposited via `depositAfkingFunding`,
 ///      withdrawn via `withdrawAfkingFunding` under CEI). RE-DERIVED every pinned slot via
 ///      `forge inspect storage DegenerusGame`. Test-only: ZERO `contracts/*.sol` mutation.
@@ -78,19 +78,9 @@ contract KeeperNonBrick is DeployProtocol {
     uint256 private constant CLAIMABLE_WINNINGS_SLOT = GameSlots.BALANCES_PACKED; // balancesPacked root; low 128 bits = claimable
     uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED; // mintPacked_ mapping root (deity bit @ bit 184)
     uint256 private constant RNG_WORD_BY_DAY_SLOT = GameSlots.RNG_WORD_BY_DAY; // mapping(uint24 => uint256) — the afking box's DAY-keyed word
-    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF; // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = GameSlots.SUBSCRIBERS; // address[] _subscribers
-
-    // Sub packed-field byte offsets (DegenerusGameStorage.sol:2341; the AFKing-Coin repack dropped
-    // validThroughLevel, shifting every field after it down 3 bytes).
-    uint256 private constant OFF_DAILY = 0; // uint8  dailyQuantity     (byte 0)
-    uint256 private constant OFF_SCORE = 2; // uint16 score             (bytes 2..3)
-    uint256 private constant OFF_AMOUNT = 4; // uint24 amount            (bytes 4..6)
-    uint256 private constant OFF_LASTBOUGHT = 7; // uint24 lastAutoBoughtDay (bytes 7..9)
-
     uint256 private constant DEITY_SHIFT = BitPackingLib.HAS_DEITY_PASS_SHIFT;
 
-    /// @dev SubscriptionExpired(address indexed player, uint8 reason). reason 1 = AutoPause, 2 = CancelReclaim.
+    /// @dev SubscriptionExpired(uint32 indexed player, uint8 reason). reason 1 = unfunded, 2 = seized.
     bytes32 private constant SUB_EXPIRED_SIG = keccak256("SubscriptionExpired(uint32,uint8)");
 
     // -------------------------------------------------------------------------
@@ -234,7 +224,7 @@ contract KeeperNonBrick is DeployProtocol {
             _aid(who);
             uint256 seat = _grantSeat(who);
             vm.prank(who);
-            game.subscribe(0, false, false, 1, 0, seat); // self, lootbox mode, qty 1
+            game.subscribe(0, false, 1, seat); // self, lootbox mode, qty 1
             _fundPool(who, poolEach);
         }
     }
@@ -242,7 +232,7 @@ contract KeeperNonBrick is DeployProtocol {
     function _subscribeLootbox(address who, uint8 q) internal {
         uint256 seat = _grantSeat(who);
         vm.prank(who);
-        game.subscribe(0, false, false, q, 0, seat); // self, lootbox mode, no reinvest
+        game.subscribe(0, false, q, seat); // self, lootbox mode, no reinvest
     }
 
     function _fundPool(address who, uint256 amount) internal {
@@ -270,49 +260,6 @@ contract KeeperNonBrick is DeployProtocol {
 
     function _simDay() internal view returns (uint32) {
         return uint32((block.timestamp - 82_620) / 1 days);
-    }
-
-    // ---- Sub field reads (RE-DERIVED slot 52 + verified offsets) ----
-
-    function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
-        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT))))) >> (off * 8);
-        return p & ((uint256(1) << widthBits) - 1);
-    }
-
-    function _dailyQtyOf(address who) internal view returns (uint8) {
-        return uint8(_subField(who, OFF_DAILY, 8));
-    }
-
-    function _lastBoughtDayOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_LASTBOUGHT, 24));
-    }
-
-    function _lastOpenedDayOf(address who) internal view returns (uint32) {
-        return GameSlotKeys.afkingOpenedDay(address(game), game.walletIdOf(who));
-    }
-
-    function _subscriberIndexOf(address who) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.SUB_OF)))) >> 200; // Sub.setPosition (1-based)
-    }
-
-    function _subscriberCount() internal view returns (uint256) {
-        return uint256(vm.load(address(game), bytes32(uint256(SUBSCRIBERS_SLOT))));
-    }
-
-    // ---- pass-validity + level poking (AFSUB-03 mass-eviction setup) ----
-
-    /// @dev Pin `who`'s validThroughLevel (uint32 @ byte offset 1 of the packed Sub slot) — used to force a
-    ///      crossing-evict scenario. The Sub layout: dailyQuantity(0) | flags(1) | validThroughLevel(2..5) |
-    ///      ... actually validThroughLevel sits in the low bytes alongside dailyQuantity/flags; re-derived by
-    ///      the 351-02 round-trip as bytes 1..4 region. We zero it (force the crossing) which is the only
-    ///      value this test needs.
-    function _setValidThroughLevel(address who, uint32 lvl) internal {
-        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT)));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        // validThroughLevel is the uint32 occupying bytes 1..4 (after dailyQuantity at byte 0). Clear+set.
-        packed &= ~(uint256(0xFFFFFFFF) << (1 * 8));
-        packed |= (uint256(lvl) << (1 * 8));
-        vm.store(address(game), slot, bytes32(packed));
     }
 
     /// @dev Set the live game `level` (uint24 @ slot 0, byte offset 14).

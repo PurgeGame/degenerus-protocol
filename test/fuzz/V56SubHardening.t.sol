@@ -6,46 +6,28 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IGameAfkingModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
-import {GameSlots} from "../helpers/GameSlots.sol";
+import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 
-/// @title V56SubHardening -- the D-14 positive proofs for the 357-00 subscribe-hardening gates
-///        (D-11 coin-required / D-12 purchase-grounded / D-13 VAULT/sDGNRS bootstrap exemption) and the
-///        F-356-01 drainAffiliateBase Game dispatch-stub reachability. Run against the re-frozen audit
-///        subject HEAD' = ac5f1e033a785d18a9f0b89b7de5d05268431dbd (the sole .sol commit of phase 357).
+/// @title V56SubHardening -- the subscribe-hardening gates and the drain stub reachability.
 ///
-/// @notice The 357-00 gates as built (GameAfkingModule.subscribe, the UPSERT branch), post the
-///         AFKing Subscription Token credential swap (sub <=> coin: `Sub.validThroughLevel` / `_passHorizonOf` /
-///         `NoPass()` / `SubscriptionExtendedFree` all DELETED from the module):
-///   - D-11 (seat burn): a new non-exempt run calls the token's `consumeSeat(payee, seatId)`, which reverts
-///     `InvalidToken` unless the payee holds `seatId`; checked at subscribe ONLY. Deity confers nothing for
-///     afking gating (a deity holder without a seat still reverts InvalidToken); any payee holding a seat
-///     clears it regardless of level.
-///   - D-12 (MustPurchaseToBeginAfking, :561): in the NEW-run leg (`!wasActive`), when the subscriber is
-///     not grounded on a real purchase — neither `done[0]` (manual slot-0 today) NOR a funded in-tx
-///     cover-buy executes — the start reverts. VAULT/sDGNRS take the `else if (exemptSub)` base-0
-///     bootstrap branch instead of reverting.
-///   - D-13 (exemptSub, :410-411): `subscriber == ContractAddresses.VAULT || subscriber ==
-///     ContractAddresses.SDGNRS` short-circuits BOTH gates, keyed on the un-spoofable resolved
-///     subscriber identity. Load-bearing for the construction-time VAULT/sDGNRS self-subscribe, which
-///     predates the coin's deploy (the coin seeds them 999/1 on construction, after they have already
-///     self-subscribed through this identity carve).
-///   - Level-crossing membership eviction is GONE: a sub is never evicted by a level change. Membership
-///     ends only via cancel or funding-skip kill (SubscriptionExpired reason 1). The STAGE runs a
-///     subscribed account through arbitrary level changes untouched.
+/// @notice The gates as built (GameAfkingModule.subscribe):
+///   - Seat burn: a new non-exempt run calls the token's `consumeSeat(payee, seatId)`, which reverts
+///     `InvalidToken` unless the payee holds `seatId`; checked at subscribe ONLY. Deity confers nothing
+///     for afking gating; any payee holding a seat clears it regardless of level.
+///   - Completed-pass signup: a new ordinary run needs today's subscriber pass to be complete (`RngLocked`
+///     otherwise), buys nothing, needs no funding, and checkpoints today; its first purchase and first
+///     credited day are the next day's.
+///   - Protocol exemption: VAULT / sDGNRS subscribed in their own constructors (before the token exists),
+///     keyed on the resolved wallet ID, and later changes to their runs never call the token.
+///   - Membership ends only via cancel or an unfunded pass (SubscriptionExpired reason 1); a level change
+///     never evicts.
+///   - Same-day churn credits nothing: rewards derive from the checkpoint, so subscribe / cancel /
+///     subscribe on one day neither buys nor pays.
 ///
-/// @notice F-356-01 (drainAffiliateBase Game dispatch stub, DegenerusGame.sol:428): the guard-less
-///   delegatecall to GAME_AFKING_MODULE.drainAffiliateBase (mirrors claimAfkingFlip), `_revertDelegate`
-///   on failure, `data.length == 0` guard, `abi.decode(data,(uint256))` return tail (mirrors
-///   runDecimatorJackpot). The module impl owns the AFFILIATE-only access gate
-///   (GameAfkingModule.sol:1328 `if (msg.sender != ContractAddresses.AFFILIATE) revert NotApproved()`),
-///   which under delegatecall sees `msg.sender` as the caller of the Game stub. So the affiliate path
-///   (msg.sender == AFFILIATE) drains-and-zeroes; any other caller reverts NotApproved().
-///
-/// @dev Copies the V56SecUnmanipulable harness VERBATIM for the delivery helpers + the funded/unfunded
-///   pool helpers, with the Sub-slot offset block RE-DERIVED for the post-coin-gate packed layout
-///   (`validThroughLevel` deleted from the struct — every field at/after the old byte-1 slot shifts down
-///   3 bytes) and a `_grantSeat`-driven credential poke replacing the deity/finite-pass/validThroughLevel
-///   pokes. Test-only: ZERO contracts/*.sol mutation.
+/// @notice drainAffiliateBases Game dispatch stub: the guard-less delegatecall to the AFKing module whose
+///   AFFILIATE-only gate sees the Game stub's caller. The affiliate path settles the sub (pays its own
+///   share, moves the checkpoint) and returns the settled affiliate base; any other caller reverts
+///   NotApproved().
 contract V56SubHardening is DeployProtocol {
 
     mapping(address => uint32) private _aidCache;
@@ -60,23 +42,10 @@ contract V56SubHardening is DeployProtocol {
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Game-resident storage slots + the Sub-slot offset block (post-coin-gate layout;
-    // validThroughLevel deleted, every later field shifted down 3 bytes)
-    // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF;            // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED;        // mintPacked_ mapping root (deity bit @ 184)
+    uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED; // mintPacked_ mapping root (deity bit)
 
-    //   dailyQuantity u8 @0 · flags u8 @1 · score u16 @2 · amount u24 @4
-    //   lastAutoBoughtDay u24 @7 · afkCoveredThroughDay u24 @10 · afkingStartDay u24 @13
-    //   affiliateBase u32 @16 · pendingFlip u24 @20 · subStreakLatch u16 @23
-    uint256 private constant OFF_DAILY = 0;           // uint8  dailyQuantity        (byte 0)
-    uint256 private constant OFF_LASTBOUGHT = 7;      // uint24 lastAutoBoughtDay    (bytes 7..9)
-    uint256 private constant OFF_AFKCOVERED = 10;     // uint24 afkCoveredThroughDay (bytes 10..12)
-    uint256 private constant OFF_AFKINGSTART = 13;    // uint24 afkingStartDay       (bytes 13..15)
-    uint256 private constant OFF_AFFBASE = 16;        // uint32 affiliateBase        (bytes 16..19)
-    uint256 private constant OFF_PENDINGFLIP = 20;    // uint24 pendingFlip          (bytes 20..22)
-    uint256 private constant OFF_STREAKLATCH = 23;    // uint16 subStreakLatch       (bytes 23..24)
+    /// @dev Whole FLIP a box-mode member earns per credited day.
+    uint256 private constant SLOT0_FLIP_PER_BUY = 100;
 
     uint256 private constant DEITY_SHIFT = BitPackingLib.HAS_DEITY_PASS_SHIFT;       // HAS_DEITY_PASS_SHIFT in mintPacked_ (confers nothing for afking credentials or mining participation)
 
@@ -84,8 +53,7 @@ contract V56SubHardening is DeployProtocol {
     ///      membership-survival proof (the fixture level does not advance organically).
     uint256 private constant LEVEL_OFF = 12;
 
-    /// @dev SubscriptionExpired(player indexed, uint8 reason): reason 1 = funding-skip kill; reason 2 =
-    ///      cancel-tombstone reclaim. Neither is level-crossing related anymore.
+    /// @dev SubscriptionExpired(player indexed, uint8 reason): reason 1 = unfunded; reason 2 = seized.
     bytes32 private constant SUB_EXPIRED_SIG = keccak256("SubscriptionExpired(uint32,uint8)");
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
@@ -113,11 +81,11 @@ contract V56SubHardening is DeployProtocol {
     ///         EOA is funded to isolate the credential failure.
     function testD11SeatlessEoaRevertsInvalidToken() public {
         address p = makeAddr("d11_nocoin");
-        _fundPool(p, 50 ether);       // funded, so the revert can ONLY be InvalidToken (not MustPurchase)
+        _fundPool(p, 50 ether);       // funded, so the revert can ONLY be InvalidToken (not a funding revert)
         uint256 seat = _grantSeat(makeAddr("d11_other_holder")); // a seat p does not hold
         vm.prank(p);
         vm.expectRevert(abi.encodeWithSignature("InvalidToken()"));
-        game.subscribe(0, false, false, 1, 0, seat);
+        game.subscribe(0, false, 1, seat);
         assertEq(_subscriberIndexOf(p), 0, "D-11: the coinless sub was never created");
     }
 
@@ -130,7 +98,7 @@ contract V56SubHardening is DeployProtocol {
         uint256 seat = _grantSeat(p);
         _fundPool(p, 50 ether);
         vm.prank(p);
-        game.subscribe(0, false, false, 1, 0, seat); // MUST NOT revert
+        game.subscribe(0, false, 1, seat); // MUST NOT revert
         assertGt(_subscriberIndexOf(p), 0, "D-11: seated sub created");
     }
 
@@ -139,87 +107,118 @@ contract V56SubHardening is DeployProtocol {
     function testD11DeityHolderWithoutSeatRevertsInvalidToken() public {
         address p = makeAddr("d11_deity_nocoin");
         _grantDeityPass(p);           // deity bit set — confers nothing for the coin gate
-        _fundPool(p, 50 ether);       // funded, so the revert can ONLY be InvalidToken (not MustPurchase)
+        _fundPool(p, 50 ether);       // funded, so the revert can ONLY be InvalidToken (not a funding revert)
         uint256 seat = _grantSeat(makeAddr("d11_other_holder")); // a seat p does not hold
         vm.prank(p);
         vm.expectRevert(abi.encodeWithSignature("InvalidToken()"));
-        game.subscribe(0, false, false, 1, 0, seat);
+        game.subscribe(0, false, 1, seat);
         assertEq(_subscriberIndexOf(p), 0, "D-11: a deity holder without a coin is still rejected (InvalidToken)");
     }
 
     // =========================================================================
-    // D-12 — purchase-grounded subscribe (MustPurchaseToBeginAfking on the unfunded NEW run)
+    // Signup — completed pass, no purchase, no funding requirement
     // =========================================================================
 
-    /// @notice D-12 NEGATIVE: a seated (coin-holding, so D-11 is cleared) but UNFUNDED EOA reverts
-    ///         MustPurchaseToBeginAfking() on a NEW-run UPSERT subscribe — neither bought-today (`done[0]`)
-    ///         nor a funded in-tx cover-buy, so the start would free-ride the advance gate. The revert is
-    ///         the D-12 leg (the unfunded NEW-run else branch), NOT InvalidToken (the seat clears D-11),
-    ///         isolating the grounding failure.
-    function testD12UnfundedEoaRevertsMustPurchase() public {
-        address p = makeAddr("d12_unfunded");
-        uint256 seat = _grantSeat(p);                // clears D-11; isolates the D-12 grounding failure
-        _aid(p);
-        // NO _fundPool: afkingFunding[p] == 0 -> the cover-buy is unfunded -> the NEW-run start reverts.
-        vm.prank(p);
-        vm.expectRevert(abi.encodeWithSignature("MustPurchaseToBeginAfking()"));
-        game.subscribe(0, false, false, 1, 0, seat);
-        assertEq(_subscriberIndexOf(p), 0, "D-12: the unfunded sub was never created");
-    }
-
-    /// @notice D-12 POSITIVE (funded): a seated EOA pre-funded so the in-tx cover-buy executes subscribes
-    ///         successfully (the funded NEW-run leg keeps the snapshot + delivers the buy). No MustPurchase
-    ///         revert.
-    function testD12FundedEoaSubscribes() public {
-        address p = makeAddr("d12_funded");
+    /// @notice A seated but UNFUNDED EOA starts a run: signup buys nothing, so it needs no funds.
+    ///         The run checkpoints today and the next daily pass expires it for lack of funding.
+    function testSignupNeedsNoFundingAndBuysNothing() public {
+        address p = makeAddr("sig_unfunded");
         uint256 seat = _grantSeat(p);
-        _fundPool(p, 50 ether);       // funds the cover-buy -> grounded NEW run
+        _aid(p);
         vm.prank(p);
-        game.subscribe(0, false, false, 1, 0, seat); // MUST NOT revert
-        assertGt(_subscriberIndexOf(p), 0, "D-12: funded sub created");
-        assertEq(_lastBoughtDayOf(p), uint32(game.currentDayView()), "D-12: the funded cover-buy delivered today");
+        game.subscribe(0, false, 1, seat); // MUST NOT revert
+        assertGt(_subscriberIndexOf(p), 0, "unfunded run created");
+        assertEq(_checkpointDayOf(p), uint32(game.currentDayView()), "checkpointed today");
+        assertEq(game.afkingFundingOf(p), 0);
+        assertFalse(GameSlotKeys.afkingBoxPending(address(game), game.walletIdOf(p)), "no box at signup");
+
+        vm.recordLogs();
+        _deliverDay(_singleton(p), 0x51671);
+        assertEq(_countExpired(p, 1), 1, "the next pass expires the unfunded run");
+        assertEq(_subscriberIndexOf(p), 0);
     }
 
-    /// @notice D-12 POSITIVE (already-bought-today re-sub): an ACTIVE sub re-subscribe (`wasActive`) skips
-    ///         the NEW-run grounding gate entirely — D-12 fires only on the NEW-run leg. A funded sub that
-    ///         already delivered today re-subscribes with no MustPurchase revert (the no-orphan / bought-
-    ///         today skip preserves the run). Proves D-12 never reverts a genuinely-grounded re-subscribe.
-    function testD12ActiveResubAlreadyGroundedNoRevert() public {
-        address p = makeAddr("d12_resub");
-        _grantSeat(p);
-        _fundPool(p, 80 ether);       // fund BEFORE subscribe so the NEW-run cover-buy is grounded (D-12)
-        _subscribeLootbox(p, 1);      // grounded NEW run (seat clears D-11, funded clears D-12)
-        _deliverDay(_singleton(p), 0xD12E50); // an active funded run; box opened, bought today
-        assertGt(_subscriberIndexOf(p), 0, "non-vacuity: the sub is active");
-        // Re-subscribe the active sub (wasActive == true) — the NEW-run D-12 gate is not on this path.
+    /// @notice A funded signup debits nothing, and the first purchase is the next day's.
+    function testFundedSignupDebitsNothingFirstBuyNextDay() public {
+        address p = makeAddr("sig_funded");
+        uint256 seat = _grantSeat(p);
+        _fundPool(p, 50 ether);
+        uint256 poolBefore = game.afkingFundingOf(p);
         vm.prank(p);
-        game.subscribe(0, false, false, 1, 0, 0); // MUST NOT revert (grounded re-sub; a live run burns no seat)
-        assertGt(_subscriberIndexOf(p), 0, "D-12: grounded re-sub stays active (no MustPurchase revert)");
+        game.subscribe(0, false, 1, seat);
+        assertEq(game.afkingFundingOf(p), poolBefore, "signup debits nothing");
+        _deliverDay(_singleton(p), 0x51672);
+        assertLt(game.afkingFundingOf(p), poolBefore, "the next day's pass bought");
+    }
+
+    /// @notice A new run needs today's subscriber pass to be complete: after the day rolls and before
+    ///         the pass runs, signup reverts RngLocked.
+    function testNewRunBeforeTodaysPassReverts() public {
+        address p = makeAddr("sig_early");
+        uint256 seat = _grantSeat(p);
+        _fundPool(p, 50 ether);
+        _t += 1 days;
+        vm.warp(_t);
+        vm.prank(p);
+        vm.expectRevert(abi.encodeWithSignature("RngLocked()"));
+        game.subscribe(0, false, 1, seat);
+        assertEq(_subscriberIndexOf(p), 0);
+        _finishSubscriptionWindow();
+        vm.prank(p);
+        game.subscribe(0, false, 1, seat); // the completed pass opens signup
+        assertGt(_subscriberIndexOf(p), 0);
+    }
+
+    /// @notice An active run changed after a delivered day keeps its run; the change buys nothing.
+    function testActiveResubAfterDeliveredDayBuysNothing() public {
+        address p = makeAddr("sig_resub");
+        _grantSeat(p);
+        _fundPool(p, 80 ether);
+        _subscribeLootbox(p, 1);
+        _deliverDay(_singleton(p), 0xD12E50);
+        assertGt(_subscriberIndexOf(p), 0, "non-vacuity: the sub is active");
+        uint256 poolBefore = game.afkingFundingOf(p);
+        vm.prank(p);
+        game.subscribe(0, false, 2, 0); // a live run burns no seat
+        assertGt(_subscriberIndexOf(p), 0, "re-sub stays active");
+        assertEq(_dailyQtyOf(p), 2);
+        assertEq(game.afkingFundingOf(p), poolBefore, "the change buys nothing");
     }
 
     // =========================================================================
     // D-13 — VAULT / sDGNRS bootstrap exemption (no coin + unfunded still subscribes)
     // =========================================================================
 
-    /// @notice D-13 (VAULT exempt): VAULT subscribes with NO AFKing Subscription Token and UNFUNDED and is NOT reverted
-    ///         by either gate — the `exemptSub` short-circuit (D-11 via `!exemptSub`, D-12 via the
-    ///         `else if (exemptSub)` base-0 bootstrap). Load-bearing: VAULT self-subscribes at
-    ///         construction, BEFORE the coin exists in the deploy order. Self-subscribe shape
-    ///         (`subscribe(address(this), ...)`) keyed on the resolved identity.
-    function testD13VaultExemptSubscribesSeatlessUnfunded() public {
-        vm.prank(ContractAddresses.VAULT);
-        game.subscribe(0, true, false, 1, 0, 0); // no seat, unfunded
-        assertGt(_subscriberIndexOf(ContractAddresses.VAULT), 0, "D-13: VAULT exempt subscribe succeeded (no InvalidToken / no MustPurchase)");
+    /// @notice The protocol seats subscribed in their own constructors, seatless and unfunded, at box
+    ///         positions 0 (Vault) and 1 (sDGNRS) with quantity 1 — load-bearing because the token
+    ///         does not exist yet at construction.
+    function testD13ProtocolSeatsBootstrapSeatlessAtBoxPositions() public view {
+        (uint256 vaultLane, uint256 vaultPos) = GameSlotKeys.subLane(address(game), 1);
+        (uint256 sdgnrsLane, uint256 sdgnrsPos) = GameSlotKeys.subLane(address(game), 2);
+        assertEq(vaultPos, 1, "Vault at box position 0");
+        assertEq(sdgnrsPos, 2, "sDGNRS at box position 1");
+        assertEq(((vaultLane >> 32) & 7) + 1, 1, "Vault quantity 1");
+        assertEq(((sdgnrsLane >> 32) & 7) + 1, 1, "sDGNRS quantity 1");
+        assertEq(vaultLane & (uint256(1) << 35), 0, "Vault lootbox mode");
     }
 
-    /// @notice D-13 (sDGNRS exempt): sDGNRS subscribes with NO AFKing Subscription Token and UNFUNDED and is NOT
-    ///         reverted — the same pinned-identity exemption. Both protocol self-subscribers bootstrap at
-    ///         construction with no coin + no funds (the coin deploys LAST and seeds them 999/1
-    ///         afterward); the gates MUST carve them out or deploy breaks.
-    function testD13SdgnrsExemptSubscribesSeatlessUnfunded() public {
+    /// @notice The exempt Vault changes its own run with no seat: no consumeSeat call.
+    function testD13VaultChangeNeverCallsTheToken() public {
+        vm.expectCall(address(afkingSubToken), abi.encodeWithSignature("consumeSeat(address,uint256)"), 0);
+        vm.prank(ContractAddresses.VAULT);
+        game.subscribe(0, false, 2, 0); // no seat, unfunded
+        assertEq(_dailyQtyOf(ContractAddresses.VAULT), 2, "VAULT change succeeded without a seat");
+    }
+
+    /// @notice The exempt sDGNRS changes its own run with no seat, and cannot cancel.
+    function testD13SdgnrsChangeNeverCallsTheTokenAndCannotCancel() public {
+        vm.expectCall(address(afkingSubToken), abi.encodeWithSignature("consumeSeat(address,uint256)"), 0);
         vm.prank(ContractAddresses.SDGNRS);
-        game.subscribe(0, true, false, 1, 0, 0); // no seat, unfunded
-        assertGt(_subscriberIndexOf(ContractAddresses.SDGNRS), 0, "D-13: sDGNRS exempt subscribe succeeded (no InvalidToken / no MustPurchase)");
+        game.subscribe(0, false, 2, 0);
+        assertEq(_dailyQtyOf(ContractAddresses.SDGNRS), 2, "sDGNRS change succeeded without a seat");
+        vm.prank(ContractAddresses.SDGNRS);
+        vm.expectRevert(abi.encodeWithSignature("E()"));
+        game.subscribe(0, false, 0, 0);
     }
 
     // =========================================================================
@@ -238,7 +237,7 @@ contract V56SubHardening is DeployProtocol {
     function testSeatedSubSurvivesLevelCrossingNoEviction() public {
         address p = makeAddr("crossing_survives");
         _grantSeat(p);                 // the coin is the sole credential; no pass anywhere
-        _fundPool(p, 50 ether);        // fund BEFORE subscribe so the grounded NEW run is created (D-12)
+        _fundPool(p, 50 ether);
         _subscribeLootbox(p, 1);
         _deliverDay(_singleton(p), 0xC10551); // an active afking run; box opened (no pending-box skip)
         assertGt(_subscriberIndexOf(p), 0, "non-vacuity: sub active before the crossing");
@@ -250,91 +249,53 @@ contract V56SubHardening is DeployProtocol {
         _setLevel(10);                 // poke the level up across a fresh-day STAGE pass
         _settleGame(uint256(keccak256("cross_go")) | 1); // STAGE runs -> no eviction branch exists anymore
 
-        assertEq(_countExpired(p, 1), 0, "crossing: no funding-skip kill fired (the sub stayed funded)");
-        assertEq(_countExpired(p, 2), 0, "crossing: no cancel-tombstone reclaim fired (never cancelled)");
+        assertEq(_countExpired(p, 1), 0, "crossing: no unfunded expiry fired (the sub stayed funded)");
+        assertEq(_countExpired(p, 2), 0, "crossing: no seizure removal fired (never seized)");
         assertGt(_subscriberIndexOf(p), 0, "crossing: the seated sub was NOT evicted by the level change");
         assertGt(_dailyQtyOf(p), 0, "crossing: dailyQuantity preserved across the crossing");
     }
 
     // =========================================================================
-    // CHURN-IDEMPOTENCY (HEAD''' = 7b0b2a0b) — the NEW-run subscribe per-day slot-0
-    // guard: subscribe -> funded cover-buy -> cancel -> subscribe (same day) accrues
-    // the flat per-day slot-0 FLIP (pendingFlip) EXACTLY ONCE, not once-per-cycle.
-    // The cancel branch tombstones in place (dailyQuantity = 0, record kept), so the
-    // lastAutoBoughtDay stamp survives the unsub; the re-subscribe re-enters the NEW
-    // run (wasActive == false) but now takes the new `else if (s.lastAutoBoughtDay ==
-    // uint24(today))` guard (:451) — keep the snapshot, skip a SECOND cover-buy, no
-    // slot-0 re-accrual. Mirrors the active-sub re-subscribe guard at :395.
+    // CHURN-IDEMPOTENCY — rewards derive from the checkpoint, never accumulate per cycle
     // =========================================================================
 
-    /// @notice CHURN-IDEMPOTENCY: a seated + funded EOA subscribes (a grounded NEW run whose funded
-    ///         cover-buy stamps `lastAutoBoughtDay = today` and accrues the flat per-day slot-0 FLIP into
-    ///         `pendingFlip` ONCE), then churns subscribe(dailyQuantity 0) [cancel] -> subscribe N times
-    ///         in the SAME day. After every same-day churn cycle `pendingFlip` is UNCHANGED — the per-day
-    ///         flat slot-0 reward is accrued EXACTLY ONCE, not N×. Pre-HEAD''' the NEW-run cover-buy guarded
-    ///         only on the manual `done[0]` (which an afking buy never sets), so each re-subscribe re-ran the
-    ///         cover-buy and re-accrued the flat reward; the HEAD''' guard (`s.lastAutoBoughtDay ==
-    ///         uint24(today)`) closes that. Seated (clears D-11; the coin persists unspent across cancel/
-    ///         re-subscribe cycles) + funded (grounds D-12) so the churn loop actually reaches the cover-buy
-    ///         on the FIRST subscribe.
-    function testChurnSameDayAccruesSlot0Once() public {
+    /// @notice A seated + funded EOA subscribes, then churns cancel -> subscribe N times in the SAME
+    ///         day. Signup buys nothing and checkpoints today, and a cancel settles nothing (no elapsed
+    ///         day), so the churn pays no FLIP, debits no funding and leaves no stranded record. The
+    ///         next completed pass credits the single day exactly once.
+    function testChurnSameDayCreditsNothingThenOneDayOnce() public {
         address p = makeAddr("churn_idempotency");
-        _grantSeat(p);                 // clears D-11 for every cycle (the coin is never spent by subscribe)
-        _fundPool(p, 200 ether);       // funds the FIRST cover-buy (grounds D-12) + leaves headroom
+        _grantSeat(p);
+        _fundPool(p, 200 ether);
+        uint256 fundingBefore = game.afkingFundingOf(p);
+        uint32 id = game.walletIdOf(p);
 
-        // FIRST subscribe — a grounded NEW run; the funded cover-buy stamps lastAutoBoughtDay = today and
-        // accrues the flat slot-0 FLIP into pendingFlip ONCE.
         _subscribeLootbox(p, 1);
         uint32 today = uint32(game.currentDayView());
-        assertEq(_lastBoughtDayOf(p), today, "non-vacuity: the first funded cover-buy stamped today");
-        uint32 pendingAfterFirst = _pendingFlipOf(p);
-        assertGt(pendingAfterFirst, 0, "non-vacuity: the first cover-buy accrued the flat slot-0 FLIP");
+        assertEq(_checkpointDayOf(p), today, "signup checkpoints today");
+        uint256 setLen = game.subscriberSetLength();
 
-        // Churn N times in the SAME day: cancel (dailyQuantity = 0) -> re-subscribe. The frozen cancel
-        // branch (GameAfkingModule:349-363) AUTO-CLAIMS before tombstoning — it pays out the accrued
-        // pendingFlip via coinflip.creditFlip and zeroes the slot (c.pendingFlip = 0 at :355) — so
-        // pendingFlip reads 0 right after each cancel. The re-subscribe is a NEW run (wasActive == false,
-        // stored dailyQuantity is 0) but lastAutoBoughtDay == today, so the idempotency guard at :521 keeps
-        // the snapshot and SKIPS a second cover-buy -> NO slot-0 re-accrual. So after each cancel/re-sub
-        // cycle pendingFlip stays 0: the per-day flat reward was accrued (and paid out) EXACTLY ONCE,
-        // never re-accrued per cycle. (The drain-on-cancel is the c4d48008 behavior; the prior model
-        // expected pendingFlip to PERSIST unchanged at 100, which the auto-claim cancel contradicts.)
         for (uint256 i; i < 5; i++) {
-            _subscribeLootbox(p, 0);   // cancel — auto-claims + zeroes pendingFlip, tombstones in place
-            assertEq(_dailyQtyOf(p), 0, "cancel wrote the dailyQuantity=0 tombstone in place");
-            assertEq(_pendingFlipOf(p), 0, "cancel auto-claimed + zeroed pendingFlip (drain-on-cancel)");
-            _subscribeLootbox(p, 1);   // re-subscribe SAME day — the NEW-run idempotency guard fires
-            assertGt(_subscriberIndexOf(p), 0, "re-subscribe keeps the sub active");
-            assertEq(_dailyQtyOf(p), 1, "re-subscribe restored the dailyQuantity (a NEW run, wasActive==false)");
-            assertEq(_lastBoughtDayOf(p), today, "the stamp survived the churn (still today)");
-            assertEq(
-                _pendingFlipOf(p),
-                0,
-                "CHURN-IDEMPOTENCY: re-subscribe does NOT re-accrue the slot-0 flat reward (guard skips the cover-buy; cancel already paid it out)"
-            );
+            _subscribeLootbox(p, 0);   // cancel: settles both sides (nothing elapsed) and removes the record
+            assertEq(_subscriberIndexOf(p), 0, "cancel removed the record at once");
+            assertEq(game.subscriberSetLength(), setLen - 1, "no tombstone stays in the set");
+            _subscribeLootbox(p, 1);   // a new run: burns another seat
+            assertEq(_dailyQtyOf(p), 1, "re-subscribe restored the run");
+            assertEq(_checkpointDayOf(p), today, "the new run checkpoints today");
+            assertEq(coinflip.coinflipAmount(p), 0, "churn paid no FLIP");
+            assertEq(game.afkingFundingOf(p), fundingBefore, "churn bought nothing");
         }
 
-        // NEXT-day subscribe (lastAutoBoughtDay != today) DOES a fresh funded cover-buy — the guard only
-        // skips a SAME-day re-entry. Roll a clean fresh day, re-subscribe, assert the stamp advances AND
-        // the cover-buy accrues exactly one fresh slot-0. Measured as a DELTA so it holds whether or not
-        // the settle reclaimed the cancelled tombstone first (reclaim wipes the cancelled run's unclaimed
-        // pendingFlip — a cancelled sub forfeits unclaimed FLIP unless it claims before the sweep,
-        // consistent with ticket subs; either way the new-day cover-buy adds one fresh 100).
-        _subscribeLootbox(p, 0);       // cancel before the day roll (so the next subscribe is a NEW run)
-        _settleClean(uint256(keccak256("churn_nextday")) | 1);
-        _t += 1 days;
-        vm.warp(_t);
-        _settleClean(uint256(keccak256("churn_nextday2")) | 1);
-        uint32 nextDay = uint32(game.currentDayView());
-        require(nextDay > today, "fixture: the day actually rolled forward");
-        uint32 pendingBeforeNextDay = _pendingFlipOf(p);
-        _subscribeLootbox(p, 1);       // NEW run on the fresh day — lastAutoBoughtDay != today -> fresh buy
-        assertEq(_lastBoughtDayOf(p), nextDay, "NEXT-day subscribe did a fresh funded cover-buy (stamp advanced)");
-        assertEq(
-            _pendingFlipOf(p) - pendingBeforeNextDay,
-            pendingAfterFirst,
-            "NEXT-day cover-buy accrued exactly one fresh slot-0 (a real new day is not suppressed)"
-        );
+        _deliverDay(_singleton(p), 0xC4012);
+        assertLt(game.afkingFundingOf(p), fundingBefore, "the next day bought once");
+        uint32[] memory ids = new uint32[](1);
+        ids[0] = id;
+        vm.recordLogs();
+        game.claimAfkingFlip(ids);
+        assertEq(_flipClaimed(p), SLOT0_FLIP_PER_BUY, "one day credited exactly once");
+        vm.recordLogs();
+        game.claimAfkingFlip(ids);
+        assertEq(_flipClaimed(p), 0, "a repeat claim credits nothing");
     }
 
     // =========================================================================
@@ -347,54 +308,52 @@ contract V56SubHardening is DeployProtocol {
     // =========================================================================
 
     // =========================================================================
-    // F-356-01 — the drainAffiliateBase Game dispatch stub is reachable + AFFILIATE-only
+    // F-356-01 — the drainAffiliateBases Game dispatch stub is reachable + AFFILIATE-only
     // =========================================================================
 
-    /// @notice F-356-01 reachability: the NEW DegenerusGame.drainAffiliateBase(sub) dispatch stub
-    ///         (:428, guard-less delegatecall to GAME_AFKING_MODULE) is now reachable from the affiliate
-    ///         path. Pranked as ContractAddresses.AFFILIATE (the caller the DegenerusAffiliate.claim()
-    ///         drain loop routes through), the stub delegatecalls the module impl whose `msg.sender ==
-    ///         AFFILIATE` access gate (:1328) is satisfied, so it drains-and-zeroes the accrued
-    ///         affiliateBase and returns it. Pre-357-00 this call reverted (no stub + no fallback) ->
-    ///         claim() reverted (the F-356-01 bug). NOW it succeeds.
+    /// @notice F-356-01 reachability: the DegenerusGame.drainAffiliateBases dispatch stub is reachable
+    ///         from the affiliate path. Pranked as ContractAddresses.AFFILIATE (the caller the
+    ///         DegenerusAffiliate.claim() loop routes through), the stub delegatecalls the module past
+    ///         its AFFILIATE-only gate, settles the sub and returns the elapsed affiliate base
+    ///         (70 per unit per day); a second drain finds nothing.
     function testDrainAffiliateBaseReachableFromAffiliatePath() public {
         address p = makeAddr("drain_reach");
         _grantSeat(p);
-        _fundPool(p, 50 ether);       // fund BEFORE subscribe so the grounded NEW run is created (D-12)
+        _fundPool(p, 50 ether);
         _subscribeLootbox(p, 1);
-        _deliverDay(_singleton(p), 0xD4A10B); // accrue affiliateBase via a delivered buy
-        uint32 baseBefore = _affiliateBaseOf(p);
-        assertGt(baseBefore, 0, "non-vacuity: affiliateBase accrued");
-
-        // The affiliate-path call (msg.sender == AFFILIATE) reaches the NEW Game stub, which delegatecalls
-        // the module impl past its AFFILIATE-only gate -> drains-and-zeroes, returns the drained base.
+        _deliverDay(_singleton(p), 0xD4A10B); // one completed pass after signup
         uint32 subscriberId = game.walletIdOf(p);
+        uint256 cpBefore = _checkpointDayOf(p);
+
+        vm.recordLogs();
         vm.prank(ContractAddresses.AFFILIATE);
-        uint256 drained = game.drainAffiliateBase(subscriberId);
-        assertEq(drained, uint256(baseBefore), "F-356-01: the stub returned the accrued base (reachable + decoded)");
-        assertEq(_affiliateBaseOf(p), 0, "F-356-01: the affiliate path zeroed the base (read-and-zero)");
+        (uint256 drained,,) = game.drainAffiliateBases(subscriberId, 0);
+        assertEq(drained, 70, "F-356-01: the stub returned the one elapsed day's base");
+        assertEq(_checkpointDayOf(p), cpBefore + 1, "the drain settled the sub to the endpoint");
+        assertEq(_flipClaimed(p), SLOT0_FLIP_PER_BUY, "the drain paid the sub's own share");
+
+        vm.recordLogs();
+        vm.prank(ContractAddresses.AFFILIATE);
+        (drained,,) = game.drainAffiliateBases(subscriberId, 0);
+        assertEq(drained, 0, "a second drain finds nothing");
+        assertEq(_flipClaimed(p), 0, "and pays nothing");
     }
 
     /// @notice F-356-01 AFFILIATE-only: a NON-affiliate caller routed through the SAME Game dispatch stub
-    ///         reverts NotApproved() (the module impl's access gate, propagated verbatim by
-    ///         `_revertDelegate`), leaving the base intact. Proves the new stub did NOT widen access — it
-    ///         is reachable ONLY for the affiliate, never a third party redirecting another sub's base.
+    ///         reverts NotApproved(), leaving the checkpoint (and so the owed base) intact.
     function testDrainAffiliateBaseStubAffiliateOnly() public {
         address p = makeAddr("drain_gate");
         _grantSeat(p);
-        _fundPool(p, 50 ether);       // fund BEFORE subscribe so the grounded NEW run is created (D-12)
+        _fundPool(p, 50 ether);
         _subscribeLootbox(p, 1);
         _deliverDay(_singleton(p), 0xD4A106);
-        uint32 baseBefore = _affiliateBaseOf(p);
-        assertGt(baseBefore, 0, "non-vacuity: affiliateBase accrued");
+        uint256 cpBefore = _checkpointDayOf(p);
 
-        // A non-affiliate caller hits the module impl's AFFILIATE-only gate -> NotApproved() bubbles back
-        // through the Game stub's _revertDelegate before any storage write.
         uint32 subscriberId = game.walletIdOf(p);
         vm.prank(makeAddr("not_affiliate"));
         vm.expectRevert(abi.encodeWithSignature("NotApproved()"));
-        game.drainAffiliateBase(subscriberId);
-        assertEq(_affiliateBaseOf(p), baseBefore, "F-356-01: the rejected non-affiliate drain left the base intact");
+        game.drainAffiliateBases(subscriberId, 0);
+        assertEq(_checkpointDayOf(p), cpBefore, "the rejected non-affiliate drain left the checkpoint intact");
     }
 
     // =========================================================================
@@ -470,7 +429,7 @@ contract V56SubHardening is DeployProtocol {
         uint256 seat = _grantSeat(makeAddr("miner_other_holder")); // a seat the miner does not hold
         vm.prank(miner);
         vm.expectRevert(abi.encodeWithSignature("InvalidToken()"));
-        game.subscribe(0, false, false, 1, 0, seat);
+        game.subscribe(0, false, 1, seat);
         assertEq(_subscriberIndexOf(miner), 0, "subscription credential still required");
         _warpToDayBoundary(6);
         vm.recordLogs();
@@ -636,7 +595,7 @@ contract V56SubHardening is DeployProtocol {
     function _subscribeLootbox(address who, uint8 q) internal {
         uint256 seat = _grantSeat(who);
         vm.prank(who);
-        game.subscribe(0, false, false, q, 0, seat); // self, lootbox mode, no reinvest
+        game.subscribe(0, false, q, seat); // self, lootbox mode, no reinvest
     }
 
     function _fundPool(address who, uint256 amount) internal {
@@ -676,30 +635,31 @@ contract V56SubHardening is DeployProtocol {
         arr[0] = a;
     }
 
-    // ---- Sub-slot reads (_subOf slot 52 + the post-coin-gate offsets) ----
-
-    function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
-        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT))))) >> (off * 8);
-        return p & ((uint256(1) << widthBits) - 1);
+    /// @dev Whole FLIP the AfkingFlipClaimed events recorded since the last vm.recordLogs() paid `who`.
+    function _flipClaimed(address who) internal returns (uint256 total) {
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bytes32 sig = keccak256("AfkingFlipClaimed(uint32,uint256)");
+        uint32 id = game.walletIdOf(who);
+        for (uint256 i; i < logs.length; i++) {
+            if (logs[i].emitter != address(game) || logs[i].topics.length < 2 || logs[i].topics[0] != sig) continue;
+            if (uint32(uint256(logs[i].topics[1])) != id) continue;
+            total += abi.decode(logs[i].data, (uint256));
+        }
     }
+
+    // ---- Lane reads ----
 
     function _dailyQtyOf(address who) internal view returns (uint8) {
-        return uint8(_subField(who, OFF_DAILY, 8));
+        return uint8(GameSlotKeys.subQuantity(address(game), game.walletIdOf(who)));
     }
 
-    function _lastBoughtDayOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_LASTBOUGHT, 24));
+    /// @dev `who`'s set position + 1; 0 = not in the set.
+    function _subscriberIndexOf(address who) internal view returns (uint256 position1) {
+        (, position1) = GameSlotKeys.subLane(address(game), game.walletIdOf(who));
     }
 
-    function _affiliateBaseOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_AFFBASE, 32));
-    }
-
-    function _pendingFlipOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_PENDINGFLIP, 24));
-    }
-
-    function _subscriberIndexOf(address who) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.SUB_OF)))) >> 200; // Sub.setPosition (1-based)
+    function _checkpointDayOf(address who) internal view returns (uint32) {
+        (uint256 lane,) = GameSlotKeys.subLane(address(game), game.walletIdOf(who));
+        return uint32((lane >> 46) & ((uint256(1) << 22) - 1));
     }
 }

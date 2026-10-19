@@ -442,7 +442,7 @@ contract ForkStethTest is ForkDeployProtocol {
         uint256 gameSt = lido.balanceOf(address(game));
         vm.recordLogs();
         vm.prank(player);
-        game.subscribe(0, false, true, 1, 0, seat);
+        game.subscribe(0, true, 1, seat);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 shortfall;
         uint256 received;

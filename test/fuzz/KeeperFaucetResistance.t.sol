@@ -110,9 +110,6 @@ contract KeeperFaucetResistance is DeployProtocol {
     // Game-resident afking storage-slot constants (RE-DERIVED via `forge inspect storage DegenerusGame`).
     // -------------------------------------------------------------------------
 
-    /// @dev _subOf mapping root (one packed Sub slot per subscriber).
-    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF;
-    uint256 private constant OFF_LASTBOUGHT = 7; // uint24 lastAutoBoughtDay (bytes 7..9; Sub: u8 qty, u8 flags, u16 score, u24 amount)
     uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED; // mintPacked_ mapping root (deity bit)
     uint256 private constant DEITY_SHIFT = BitPackingLib.HAS_DEITY_PASS_SHIFT;
 
@@ -198,7 +195,7 @@ contract KeeperFaucetResistance is DeployProtocol {
         // Non-vacuity: each afking box actually opened (the open marker advanced to the stamp day) — the
         // gas is for k real materializations, so the round-trip comparison is against true work cost.
         for (uint256 i; i < k; ++i) {
-            assertEq(_lastOpenedDayOf(subs[i]), stampDay, "open non-vacuity: each self-crank afking box opened");
+            assertFalse(_isPending(subs[i]), "open non-vacuity: each self-crank afking box opened");
         }
         assertGt(stakeDelta, 0, "open-leg reward is positive for k>=1");
 
@@ -548,15 +545,15 @@ contract KeeperFaucetResistance is DeployProtocol {
             _grantDeityPass(w);
             uint256 seat_w = _grantSeat(w);
             vm.prank(w);
-            game.subscribe(0, false, false, 1, 0, seat_w); // self, lootbox mode, qty 1
+            game.subscribe(0, false, 1, seat_w); // self, lootbox mode, qty 1
             _fundPool(w, 5 ether);
         }
         _runStageNewDay(uint256(keccak256(abi.encode("stampK", salt))) & 0xFFFFFF);
         _settleGame(uint256(keccak256(abi.encode("settleK", salt))) & 0xFFFFFF);
-        stampDay = _lastAutoBoughtDayOf(subs[0]);
+        stampDay = _stampDay();
         require(stampDay > 0, "stampK: the STAGE stamped a box");
         for (uint256 i; i < k; ++i) {
-            require(_lastOpenedDayOf(subs[i]) < stampDay, "stampK: each afking box is pending pre-open");
+            require(_isPending(subs[i]), "stampK: each afking box is pending pre-open");
         }
     }
 
@@ -578,7 +575,7 @@ contract KeeperFaucetResistance is DeployProtocol {
             _grantDeityPass(who);
             uint256 seat_who = _grantSeat(who);
             vm.prank(who);
-            game.subscribe(0, false, false, 1, 0, seat_who); // self, lootbox mode, qty 1
+            game.subscribe(0, false, 1, seat_who); // self, lootbox mode, qty 1
             _fundPool(who, 5 ether);
         }
     }
@@ -603,15 +600,13 @@ contract KeeperFaucetResistance is DeployProtocol {
         vm.store(address(game), slot, bytes32(packed));
     }
 
-    /// @dev Read `who`'s lastAutoBoughtDay (_subOf slot 52, uint24 bytes 11..13) — the buy non-vacuity oracle.
-    function _lastAutoBoughtDayOf(address who) internal view returns (uint32) {
-        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT)));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        return uint32(uint24(packed >> (OFF_LASTBOUGHT * 8)));
+    /// @dev The day the current cohort's boxes are stamped for.
+    function _stampDay() internal view returns (uint32) {
+        return uint24(uint256(vm.load(address(game), bytes32(GameSlots.AFKING_RESET_DAY))) >> (8 * GameSlots.AFKING_RESET_DAY_OFFSET));
     }
 
-    /// @dev The day whose afking box `who` has opened: the stamp day, one earlier while pending.
-    function _lastOpenedDayOf(address who) internal view returns (uint32) {
-        return GameSlotKeys.afkingOpenedDay(address(game), game.walletIdOf(who));
+    /// @dev True while `who` holds an unopened box of the current cohort.
+    function _isPending(address who) internal view returns (bool) {
+        return GameSlotKeys.afkingBoxPending(address(game), game.walletIdOf(who));
     }
 }

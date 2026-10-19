@@ -440,7 +440,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         vm.record();
         vm.startStateDiffRecording();
         vm.prank(p);
-        game.subscribe(0, false, false, 1, 0, seat);
+        game.subscribe(0, false, 1, seat);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         (, bytes32[] memory writes) = vm.accesses(address(quests));
         assertEq(_onlyId(acc, address(game), quests.beginAfking.selector), id);
@@ -449,7 +449,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
 
         vm.startStateDiffRecording();
         vm.prank(p);
-        game.subscribe(0, false, false, 0, 0, 0);
+        game.subscribe(0, false, 0, 0);
         acc = vm.stopAndReturnStateDiff();
         assertEq(_onlyId(acc, address(game), quests.finalizeAfking.selector), id);
         assertEq(_field(id, OFF_AFKING, 8), 0, "finalized under the sub ID");

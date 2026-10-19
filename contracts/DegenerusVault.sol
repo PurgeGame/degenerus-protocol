@@ -35,14 +35,12 @@ interface IDegenerusGamePlayerActions {
     function mineFlip(uint32 gasMultiplierBps) external;
     /// @notice Start or extend a daily afking subscription for account `id` (0 = caller).
     /// @dev The afking subscription surface is GAME-resident. The vault self-subscribes with
-    ///      `id == 0` and `fundingSourceId == 0`. VAULT's subscription is exempt from the seat
-    ///      burn, so `seatId` is ignored (pass 0).
+    ///      `id == 0`. VAULT's subscription is exempt from the seat burn, so `seatId` is
+    ///      ignored (pass 0).
     function subscribe(
         uint32 id,
-        bool drainGameCreditFirst,
         bool useTickets,
         uint8 dailyQuantity,
-        uint32 fundingSourceId,
         uint256 seatId
     ) external payable;
     /// @notice Purchase tickets and/or lootboxes for account `id` (0 = caller). The trailing
@@ -605,11 +603,11 @@ contract DegenerusVault {
         ethShare = new DegenerusVaultShare("Degenerus Vault Eth", "DGVE", "dgve.degenerus.eth");
 
         // Protocol-owned self-subscription: claimable-first daily lootbox buy of flat
-        // quantity 1, self-funded (id 0 = the vault itself). The afking module exempts
-        // the pinned VAULT address from the seat burn and the purchase gate, so this
-        // subscribe lands before the seat token is deployed and names no seat; the
-        // token's constructor then mints the vault its construction seat.
-        gamePlayer.subscribe(0, true, false, 1, 0, 0);
+        // quantity 1 (id 0 = the vault itself). The afking module exempts the pinned VAULT
+        // wallet from the seat burn and the completed-day signup gate, so this subscribe
+        // lands before the seat token is deployed and names no seat; the token's constructor
+        // then mints the vault its construction seat.
+        gamePlayer.subscribe(0, false, 1, 0);
 
 
 

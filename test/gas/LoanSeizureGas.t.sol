@@ -16,12 +16,14 @@ contract SeizureGasSeeder is DegenerusGameStorage {
         claimablePool += claimable;
     }
     function seedLevel(uint32 id, uint24 level_, uint32 entries) external { _queueEntries(id, level_, entries, false); }
-    /// @dev Record yesterday's word and seal today, so subscriptions open as on an ordinary day.
+    /// @dev Record yesterday's word, seal today and complete its subscriber pass, so new runs open
+    ///      as on an ordinary day.
     function prime() external {
         uint24 day = _simulatedDayIndex();
         _recordDailyRng(day - 1, 123456);
         dailyIdx = day;
         purchaseStartDay = day;
+        _afkingEndpointDay = day;
     }
     function setBalances(uint32 id, uint128 claimable, uint128 afking) external {
         uint256 old = balancesPacked[id];
@@ -113,7 +115,7 @@ abstract contract LoanSeizureGasBase is DeployProtocol {
     function _sub(uint32 id) internal {
         uint256 seat = _grantSeat(borrower);
         vm.prank(borrower);
-        game.subscribe{value: 2 ether}(id, false, false, 1, 0, seat);
+        game.subscribe{value: 2 ether}(id, false, 1, seat);
     }
 
     function _measure(string memory label) internal returns (uint256 used) {

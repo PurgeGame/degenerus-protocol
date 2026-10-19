@@ -357,7 +357,7 @@ interface IDegenerusGameLootboxModule {
             uint256 word
         );
 
-    /// @notice Append a system-granted box entry (pass purchases, afking cover)
+    /// @notice Append a system-granted box entry (pass purchases)
     /// @param id Player receiving the boxes
     /// @param amountWei Box spend in wei
     /// @param score Activity-score snapshot
@@ -600,16 +600,15 @@ interface IDegenerusGameBingoModule {
 /// @title IGameAfkingModule
 /// @notice Interface for the AfKing subscription logic.
 /// @dev The GameAfkingModule is a delegatecall module operating on the Game's storage
-///      (the subscriber set / cursors / Sub stamps live in
+///      (the subscriber set / cursors / lanes live in
 ///      DegenerusGameStorage). This interface declares the mutating surface
 ///      so the Game-hosted dispatch stubs and the AdvanceModule process STAGE call
 ///      resolve against a real ABI. Every function runs IN the Game's storage context
-///      (delegatecall), so msg.sender is preserved end-to-end (the consent gates and
+///      (delegatecall), so msg.sender is preserved end-to-end (the account gates and
 ///      the bounty payee read the original caller).
 interface IGameAfkingModule {
     /// @notice GAME-only atomic stETH fallback funding operation.
-    function setAfkingFundingApproval(uint32 funderId, uint32 subscriberId, bool approved) external;
-    function pullAfkingSteth(uint32 subWord, address source, uint256 shortfall) external returns (uint256);
+    function pullAfkingSteth(uint32 subId, address source, uint256 shortfall) external returns (uint256);
 
     function runSubscriberWork(uint24 processDay, uint256 gasAllowance) external returns (MineFlipGas.Result memory);
     function runAfkingWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory);
@@ -617,38 +616,40 @@ interface IGameAfkingModule {
     /// @notice Loan-seizure only: cancel the seized account's AFKing run and, for a main,
     ///         every smurf's (AdvanceModule `_seizeLoan` delegatecall target).
     function cancelLiquidatedSubscriptions(uint32 id, bool mainSale) external;
+    /// @notice The daily subscriber draw for `day` (AdvanceModule delegatecall target).
+    function runSubDraw(uint24 day) external;
 
-    /// @notice The SINGLE subscription entrypoint: create / replace (dailyQuantity >= 1)
-    ///         or cancel (dailyQuantity == 0, tombstone) for account `id` (0 = caller).
+    /// @notice The SINGLE subscription entrypoint: create / change (dailyQuantity 1..8)
+    ///         or cancel (dailyQuantity == 0) for account `id` (0 = caller).
     /// @dev Raw msg.data target of Game.subscribe (identical selector; see IDegenerusGame).
-    ///      rngLock guard on all of create / replace / cancel; account-rule authorization;
-    ///      funding-source consent by ID (the same main wallet as the subscriber, or an operator
-    ///      approval of the subscriber's key on the source's ID); a new run burns seat
-    ///      `seatId` of the subscriber's payee through AFKING_SUB_TOKEN.consumeSeat before the
-    ///      run is written (changes, cancels and the exempt VAULT/SDGNRS subs burn nothing).
+    ///      rngLock guard on all of create / change / cancel; account-rule authorization; a new
+    ///      run starts after today's subscriber pass and burns seat `seatId` of the subscriber's
+    ///      payee through AFKING_SUB_TOKEN.consumeSeat before the run is written (changes,
+    ///      cancels and the exempt VAULT/SDGNRS subs burn nothing).
     function subscribe(
         uint32 id,
-        bool drainGameCreditFirst,
         bool useTickets,
         uint8 dailyQuantity,
-        uint32 fundingSourceId,
         uint256 seatId
     ) external payable;
 
-    /// @notice Permissionless FLIP claim — pays each account its accrued pendingFlip (the
-    ///         per-delivered-day slot-0 quest reward + ticket buyer-bonus) in one creditFlip
-    ///         and zeroes it; always credits the account, never the caller. Off the solvency path.
-    /// @dev Raw msg.data target of Game.claimAfkingFlip. `ids[i] == 0` is the caller; an ID with
-    ///      nothing accrued (unallocated included) settles nothing and does not revert.
+    /// @notice Permissionless AFKing claim — settles each account on both sides (its own reward
+    ///         and its affiliate base to the upline) for every day since its last settlement;
+    ///         always credits the accounts and uplines, never the caller. Off the solvency path.
+    /// @dev Raw msg.data target of Game.claimAfkingFlip. `ids[i] == 0` is the caller; a
+    ///      non-member settles nothing and does not revert.
     function claimAfkingFlip(uint32[] calldata ids) external;
 
-    /// @notice Affiliate-only atomic read-and-zero of a sub's accrued affiliateBase (the
-    ///         running flat-7% affiliate balance, whole FLIP). Read and zero happen
-    ///         together so a duplicate sub drains 0 the second time; there is no separate
-    ///         read accessor.
-    /// @param sub The subscriber whose affiliate base is drained.
-    /// @return base The drained whole-FLIP affiliate base (0 if already drained).
-    function drainAffiliateBase(uint32 sub) external returns (uint256 base);
+    /// @notice Affiliate-only settlement of up to eight subs sharing one direct affiliate: pays
+    ///         each sub its own reward and returns their summed affiliate base (whole FLIP). Each
+    ///         settlement moves its checkpoint first, so a duplicate sub settles nothing the second time.
+    /// @param ids Up to eight subscriber IDs, 32 bits each from the low end (zero lanes skipped).
+    /// @param uplines The run's two upline IDs packed low/high 32 bits (zero for no referrer).
+    /// @return sumB The settled affiliate base.
+    /// @return skipU1 The part of `sumB` from subs that are themselves the first upline.
+    /// @return skipU2 The part of `sumB` from subs that are themselves the second upline.
+    function drainAffiliateBases(uint256 ids, uint256 uplines)
+        external returns (uint256 sumB, uint256 skipU1, uint256 skipU2);
 
     /// @notice Cashout-curse SET hook, delegatecalled from the Game's claimWinnings.
     function maybeCurse(uint32 player) external;

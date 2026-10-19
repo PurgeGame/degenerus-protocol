@@ -39,14 +39,12 @@ interface IDegenerusGamePlayer {
     function mineFlip(uint32 gasMultiplierBps) external;
     /// @notice Start or extend a daily afking subscription for account `id` (0 = caller).
     /// @dev The afking subscription surface is GAME-resident. sDGNRS self-subscribes with
-    ///      `id == 0` and `fundingSourceId == 0`. SDGNRS's subscription is exempt from the seat
-    ///      burn, so `seatId` is ignored (pass 0).
+    ///      `id == 0`. SDGNRS's subscription is exempt from the seat burn, so `seatId` is
+    ///      ignored (pass 0).
     function subscribe(
         uint32 id,
-        bool drainGameCreditFirst,
         bool useTickets,
         uint8 dailyQuantity,
-        uint32 fundingSourceId,
         uint256 seatId
     ) external payable;
     /// @notice Claim account `id`'s accumulated ETH winnings (0 = caller); pays the payee.
@@ -767,19 +765,18 @@ contract sDGNRS {
         poolBalances[uint8(Pool.Reward)] = uint128(rewardAmount);
         poolBalances[uint8(Pool.Degenesis)] = uint128(degenesisAmount);
 
-        // Protocol-owned self-subscription: AFKing-funding-first daily lootbox
-        // buy of flat quantity 1, for the caller's own account (`id == 0`), self-funded;
-        // claimable covers any shortfall.
-        // The afking module exempts the pinned SDGNRS address from its seat burn and
-        // purchase gates, so this subscribe lands before the seat token is deployed and
-        // `seatId` is ignored; the token's constructor then mints sDGNRS its construction
-        // seat.
+        // Protocol-owned self-subscription: daily lootbox buy of flat quantity 1 for the
+        // caller's own account (`id == 0`), claimable first, then prepaid AFKing ETH.
+        // The afking module exempts the pinned SDGNRS wallet from its seat burn and the
+        // completed-day signup gate, so this subscribe lands before the seat token is deployed
+        // and `seatId` is ignored; the token's constructor then mints sDGNRS its construction
+        // seat. An unfunded day pauses the seat until it can pay again.
         // Coinflip auto-rebuy is NOT enabled here: during the 20-day seed window
         // sDGNRS's daily flip wins accumulate as unminted coinflip claimable backing
         // (sDGNRS never holds a FLIP wallet balance); Coinflip arms perpetual
         // auto-rebuy (0 take-profit) once the final seeded day settles, after which
         // wins roll into the carry.
-        game.subscribe(0, false, false, 1, 0, 0);
+        game.subscribe(0, false, 1, 0);
 
         // Pre-approve GAME to pull stETH for both redemption claim legs. Live settlement funds
         // each leg (resolveRedemptionLootbox / creditRedemptionDirect) with msg.value ETH and the

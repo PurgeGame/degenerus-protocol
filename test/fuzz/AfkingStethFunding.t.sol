@@ -7,7 +7,23 @@ import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
-import {GameSlots} from "../helpers/GameSlots.sol";
+import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
+import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
+
+/// @dev Registers a smurf of `owner` the way the mint module records one, without a purchase.
+contract SmurfHost is AfkingStethHost {
+    function makeSmurf(address owner) external returns (uint32 smurfId) {
+        uint32 ownerId = _seedWallet(owner);
+        smurfId = uint32(wallets.length);
+        wallets.push(uint256(ownerId) << 160);
+        mintPacked_[smurfId] = uint256(1) << BitPackingLib.SMURF_FLAG_SHIFT;
+        balancesPacked[smurfId] = 1;
+        _smurfWords[ownerId][0] = smurfId;
+        mintPacked_[ownerId] = BitPackingLib.setPacked(
+            mintPacked_[ownerId], BitPackingLib.SMURF_COUNT_SHIFT, BitPackingLib.MASK_16, 1
+        );
+    }
+}
 
 contract AfkingStethFundingTest is DeployProtocol {
 
@@ -24,37 +40,30 @@ contract AfkingStethFundingTest is DeployProtocol {
     }
 
 
-    /// @dev operatorApprovals[id][op] read from storage.
-    function _approved(uint32 id, address op) internal view returns (bool) {
-        return game.afkingFundingApproved(id, game.walletIdOf(op));
-    }
-    AfkingStethHost internal host;
+    SmurfHost internal host;
     AdversarialAfkingSteth internal badToken;
     address internal constant PLAYER = address(0xA11CE);
-    address internal constant FUNDER = address(0xF00D);
     address internal constant NEXT = address(0xB0B);
     uint256 internal constant WORK_GAS = 6_000_000;
+
+    event SubscriptionExpired(uint32 indexed player, uint8 reason);
 
     function setUp() public {
         _deployProtocol();
         vm.warp(block.timestamp + 2 days);
-        vm.etch(address(game), type(AfkingStethHost).runtimeCode);
-        host = AfkingStethHost(payable(address(game)));
+        vm.etch(address(game), type(SmurfHost).runtimeCode);
+        host = SmurfHost(payable(address(game)));
         vm.deal(address(game), 100 ether);
         host.prepare();
     }
 
-    function _consent(address funder, address player) internal {
-        if (funder == player) return;
-        _aid(funder);
-        uint32 playerId = _aid(player);
-        vm.prank(funder);
-        game.setAfkingFundingApproval(0, playerId, true);
+    function _flags() internal view returns (uint8) {
+        return uint8(uint256(vm.load(address(game), bytes32(GameSlots.AFKING_PROTOCOL_FLAGS)))
+            >> (8 * GameSlots.AFKING_PROTOCOL_FLAGS_OFFSET));
     }
 
-    function _authorize(address funder, address player, uint256 allowance_) internal {
-        _consent(funder, player);
-        vm.prank(funder);
+    function _authorize(address player, uint256 allowance_) internal {
+        vm.prank(player);
         mockStETH.approve(address(game), allowance_);
     }
 
@@ -68,16 +77,8 @@ contract AfkingStethFundingTest is DeployProtocol {
         assertTrue(result.done, "worker drains admitted cohort");
     }
 
-    function _add(
-        address player,
-        address source,
-        bool drainFirst,
-        bool tickets,
-        uint8 quantity,
-        uint256 prepaid,
-        uint256 claimable
-    ) internal {
-        host.add(player, source, drainFirst, tickets, quantity, prepaid, claimable);
+    function _add(address player, bool tickets, uint8 quantity, uint256 prepaid, uint256 claimable) internal {
+        host.add(player, tickets, quantity, prepaid, claimable);
     }
 
     function _expectNoTokenCalls() internal {
@@ -91,94 +92,58 @@ contract AfkingStethFundingTest is DeployProtocol {
 
     function _assertEvicted(address player) internal view {
         assertEq(host.memberOf(player), 0, "unpaid member removed");
-        DegenerusGameStorage.Sub memory sub = host.stateOf(player);
-        assertEq(sub.dailyQuantity, 0);
-        assertEq(sub.lastAutoBoughtDay, 0, "no paid marker survives");
-        assertEq(sub.affiliateBase, 0, "unclaimed affiliate accrual forfeited");
-        assertEq(sub.pendingFlip, 0, "unclaimed FLIP forfeited");
+        assertEq(host.stateOf(player).position1, 0, "no record survives");
         assertEq(host.entries(player), 0, "no tickets delivered");
     }
 
-    function testFuzz_OnlyResidualPaidBothOrdersAndSources(
-        bool sponsored,
-        bool drainFirst,
+    function testFuzz_OnlyResidualPaidClaimableThenPrepaidThenSteth(
         bool tickets,
         uint8 quantitySeed,
         uint96 prepaidSeed,
         uint96 claimSeed
     ) public {
-        uint8 quantity = uint8(bound(quantitySeed, 1, 255));
+        uint8 quantity = uint8(bound(quantitySeed, 1, 8));
         uint256 cost = host.price() * quantity;
         uint256 prepaid = bound(prepaidSeed, 0, cost - 1);
         uint256 claimable = bound(claimSeed, 0, cost - prepaid - 1);
-        address source = sponsored ? FUNDER : PLAYER;
-        _add(PLAYER, sponsored ? FUNDER : address(0), drainFirst, tickets, quantity, prepaid, claimable + 1);
-        mockStETH.mint(source, 100 ether);
+        _add(PLAYER, tickets, quantity, prepaid, claimable + 1);
+        mockStETH.mint(PLAYER, 100 ether);
         uint256 missing = cost - prepaid - claimable;
-        _authorize(source, PLAYER, missing);
+        _authorize(PLAYER, missing);
         uint256 backingBefore = mockStETH.balanceOf(address(game));
         uint256 poolBefore = game.claimablePoolView();
         uint256 prizesBefore = game.nextPrizePoolView() + game.futurePrizePoolView();
         _work();
         assertEq(mockStETH.balanceOf(address(game)) - backingBefore, missing, "only original residual pulled");
-        assertEq(mockStETH.allowance(source, address(game)), 0, "GAME consumes exact finite allowance");
+        assertEq(mockStETH.allowance(PLAYER, address(game)), 0, "GAME consumes exact finite allowance");
         assertEq(host.claimableOf(PLAYER), 1, "original claimable slice retained with sentinel");
-        assertEq(game.afkingFundingOf(source), 0, "original prepaid slice consumed");
+        assertEq(game.afkingFundingOf(PLAYER), 0, "original prepaid slice consumed");
         assertEq(game.claimablePoolView(), poolBefore + missing - cost, "receipt and both debits conserve liabilities");
         assertEq(game.nextPrizePoolView() + game.futurePrizePoolView(), prizesBefore + cost);
         assertGt(host.memberOf(PLAYER), 0);
-        assertEq(host.stateOf(PLAYER).lastAutoBoughtDay, game.currentDayView());
+        assertEq(host.endpoint(), game.currentDayView(), "the pass completed");
         if (tickets) assertGt(host.entries(PLAYER), 0);
         else assertEq(host.pendingBoxes(), 1);
     }
 
     function test_InternallyFundedDoesNotInteractWithSteth() public {
-        _add(PLAYER, address(0), false, true, 1, host.price(), 0);
-        _authorize(PLAYER, PLAYER, type(uint256).max);
+        _add(PLAYER, true, 1, host.price(), 0);
+        _authorize(PLAYER, type(uint256).max);
         _expectNoTokenCalls();
         _work();
         assertGt(host.entries(PLAYER), 0);
     }
 
     function test_ClaimableOnlyFundingDoesNotInteractWithSteth() public {
-        _add(PLAYER, address(0), true, true, 1, 0, host.price() + 1);
-        _authorize(PLAYER, PLAYER, type(uint256).max);
+        _add(PLAYER, true, 1, 0, host.price() + 1);
+        _authorize(PLAYER, type(uint256).max);
         _expectNoTokenCalls();
         _work();
         assertEq(host.claimableOf(PLAYER), 1);
     }
 
-    function test_SponsoredFundingRequiresLiveOperatorApproval() public {
-        _add(PLAYER, FUNDER, false, true, 1, 0, 0);
-        mockStETH.mint(FUNDER, 1 ether);
-        vm.startPrank(FUNDER);
-        mockStETH.approve(address(game), type(uint256).max);
-        game.setOperatorApproval(0, NEXT, true);
-        vm.stopPrank();
-        vm.prank(PLAYER);
-        game.setOperatorApproval(0, FUNDER, true);
-        assertFalse(_approved(game.walletIdOf(FUNDER), PLAYER));
-        _expectNoTokenCalls();
-        _work();
-        _assertEvicted(PLAYER);
-    }
-
-    function test_OperatorApprovalIsPairScopedAndRevocableWhileLockedOrClosed() public {
-        _consent(FUNDER, PLAYER);
-        uint32 funderId = game.walletIdOf(FUNDER);
-        assertFalse(_approved(funderId, NEXT));
-        host.setLock(true);
-        vm.prank(FUNDER);
-        game.setAfkingFundingApproval(0, _aidCache[PLAYER], false);
-        assertFalse(_approved(funderId, PLAYER));
-        host.setClosed(true);
-        _consent(FUNDER, PLAYER);
-        assertTrue(_approved(funderId, PLAYER));
-    }
-
     function test_WrongSpenderAllowanceCannotPay() public {
-        _add(PLAYER, address(0), false, true, 1, 0, 0);
-        _consent(PLAYER, PLAYER);
+        _add(PLAYER, true, 1, 0, 0);
         mockStETH.mint(PLAYER, 1 ether);
         vm.prank(PLAYER);
         mockStETH.approve(address(afkingModule), type(uint256).max);
@@ -187,62 +152,74 @@ contract AfkingStethFundingTest is DeployProtocol {
         assertEq(mockStETH.balanceOf(PLAYER), 1 ether);
     }
 
-    function test_LiveOperatorRevocationEvictsDespiteStoredFundingSource() public {
-        _add(PLAYER, FUNDER, false, true, 1, 0, 0);
-        mockStETH.mint(FUNDER, 1 ether);
-        _authorize(FUNDER, PLAYER, type(uint256).max);
-        vm.prank(FUNDER);
-        game.setAfkingFundingApproval(0, _aidCache[PLAYER], false);
-        _work();
-        _assertEvicted(PLAYER);
-        _consent(FUNDER, PLAYER);
-        assertTrue(_approved(game.walletIdOf(FUNDER), PLAYER));
-        assertEq(mockStETH.balanceOf(FUNDER), 1 ether);
-    }
-
-    function test_LiveAllowanceRevocationEvictsAndDoesNotClearOperatorApproval() public {
-        _add(PLAYER, FUNDER, false, true, 1, 0, 0);
-        mockStETH.mint(FUNDER, 1 ether);
-        _authorize(FUNDER, PLAYER, type(uint256).max);
-        vm.prank(FUNDER);
+    function test_AllowanceRevocationEvicts() public {
+        _add(PLAYER, true, 1, 0, 0);
+        mockStETH.mint(PLAYER, 1 ether);
+        _authorize(PLAYER, type(uint256).max);
+        vm.prank(PLAYER);
         mockStETH.approve(address(game), 0);
         _work();
         _assertEvicted(PLAYER);
-        assertTrue(_approved(game.walletIdOf(FUNDER), PLAYER));
+        assertEq(mockStETH.balanceOf(PLAYER), 1 ether);
     }
 
-    function test_SourceChangeRequiresNewWalletOperatorApproval() public {
-        _add(PLAYER, FUNDER, false, true, 1, 0, 0);
-        mockStETH.mint(FUNDER, 1 ether);
-        mockStETH.mint(NEXT, 1 ether);
-        _authorize(FUNDER, PLAYER, type(uint256).max);
-        vm.prank(NEXT);
-        mockStETH.approve(address(game), type(uint256).max);
-        host.setSource(PLAYER, NEXT);
-        _expectNoTokenCalls();
+    /// @notice An unfunded ordinary member expires and the rewards it has not settled are
+    ///         forfeited: no FLIP reaches the member or its upline.
+    function test_UnfundedExpiryForfeitsUnsettledRewards() public {
+        _add(PLAYER, true, 1, host.price() * 2, 0);
+        uint32 id = game.walletIdOf(PLAYER);
         _work();
-        _assertEvicted(PLAYER);
-        assertEq(mockStETH.sharesOf(FUNDER), 1 ether);
-        assertEq(mockStETH.sharesOf(NEXT), 1 ether);
+        assertEq(host.stateOf(PLAYER).checkpointDay + 1, host.endpoint(), "one unsettled day is owed");
+        host.setBalances(PLAYER, 0, 0);
+        vm.warp(block.timestamp + 1 days);
+        host.nextDay();
+        uint256 stakeBefore = coinflip.coinflipAmount(PLAYER);
+        vm.expectEmit(true, false, false, true, address(game));
+        emit SubscriptionExpired(id, 1);
+        _work();
+        assertEq(host.memberOf(PLAYER), 0, "unpaid member removed");
+        assertEq(coinflip.coinflipAmount(PLAYER), stakeBefore, "the unsettled day is forfeited");
+    }
+
+    /// @notice A smurf's residual is pulled from its owner's stETH, the subscriber's payee.
+    function test_SmurfFallbackPullsFromTheOwner() public {
+        host.subscriptionWindow();
+        uint32 smurfId = host.makeSmurf(PLAYER);
+        uint256 seat = _grantSeat(PLAYER);
+        vm.prank(PLAYER);
+        game.subscribe(smurfId, true, 1, seat);
+        mockStETH.mint(PLAYER, 1 ether);
+        mockStETH.mint(NEXT, 1 ether);
+        _authorize(PLAYER, type(uint256).max);
+        _authorize(NEXT, type(uint256).max);
+        vm.warp(block.timestamp + 1 days);
+        host.nextDay();
+        uint256 ownerShares = mockStETH.sharesOf(PLAYER);
+        _work();
+        assertLt(mockStETH.sharesOf(PLAYER), ownerShares, "the owner paid");
+        assertEq(mockStETH.sharesOf(NEXT), 1 ether, "no other holder is touched");
+        (, uint256 position1) = GameSlotKeys.subLane(address(game), smurfId);
+        assertGt(position1, 0, "the smurf stays subscribed");
+        assertEq(host.memberOf(PLAYER), 0, "the owner is not itself subscribed");
     }
 
     function test_OnlyGameCanCallAtomicPull() public {
         vm.expectRevert(bytes4(keccak256("OnlySelf()")));
-        game.pullAfkingSteth(uint32(1), FUNDER, 1);
+        game.pullAfkingSteth(uint32(1), PLAYER, 1);
         vm.expectRevert(bytes4(keccak256("E()")));
-        afkingModule.pullAfkingSteth(uint32(1), FUNDER, 1);
+        afkingModule.pullAfkingSteth(uint32(1), PLAYER, 1);
     }
 
     function testFuzz_TokenRefusalExpiresButGasFailureRollsBack(uint8 operationSeed, uint8 faultSeed) public {
         _adversarial();
-        _add(PLAYER, FUNDER, false, true, 1, 0, 1);
-        _add(NEXT, address(0), false, true, 1, host.price(), 0);
-        badToken.mint(FUNDER, 1 ether);
-        _authorize(FUNDER, PLAYER, 1 ether);
+        _add(PLAYER, true, 1, 0, 1);
+        _add(NEXT, true, 1, host.price(), 0);
+        badToken.mint(PLAYER, 1 ether);
+        _authorize(PLAYER, 1 ether);
         AdversarialAfkingSteth.Operation op = AdversarialAfkingSteth.Operation(bound(operationSeed, 1, 5));
         AdversarialAfkingSteth.Fault fault_ = AdversarialAfkingSteth.Fault(bound(faultSeed, 1, 4));
         badToken.configureFault(op, fault_);
-        uint256 beforeSource = badToken.sharesOf(FUNDER);
+        uint256 beforeSource = badToken.sharesOf(PLAYER);
         uint256 beforeGame = badToken.sharesOf(address(game));
         uint256 poolBefore = game.claimablePoolView();
         bool executionFailure = fault_ == AdversarialAfkingSteth.Fault.Malformed
@@ -250,20 +227,20 @@ contract AfkingStethFundingTest is DeployProtocol {
         if (executionFailure) {
             vm.expectRevert();
             host.subWork{gas: WORK_GAS}(WORK_GAS);
-            assertGt(host.stateOf(PLAYER).setPosition, 0, "execution failure preserves membership");
+            assertGt(host.stateOf(PLAYER).position1, 0, "execution failure preserves membership");
             assertEq(game.claimablePoolView(), poolBefore);
-            assertLt(host.stateOf(NEXT).lastAutoBoughtDay, game.currentDayView(), "following subscriber is untouched");
+            assertEq(host.entries(NEXT), 0, "following subscriber is untouched");
         } else {
             _work();
             _assertEvicted(PLAYER);
             assertGt(host.entries(NEXT), 0, "token refusal cannot block the next funded subscriber");
             assertEq(game.claimablePoolView(), poolBefore - host.price());
         }
-        assertEq(badToken.sharesOf(FUNDER), beforeSource, "failed pull rolls source shares back");
+        assertEq(badToken.sharesOf(PLAYER), beforeSource, "failed pull rolls source shares back");
         assertEq(badToken.sharesOf(address(game)), beforeGame, "failed pull rolls receipt back");
-        assertEq(badToken.allowance(FUNDER, address(game)), 1 ether, "failed pull rolls allowance back");
+        assertEq(badToken.allowance(PLAYER, address(game)), 1 ether, "failed pull rolls allowance back");
         assertEq(badToken.transferCalls(), 0, "failed post-transfer read rolls token state back");
-        assertEq(game.afkingFundingOf(FUNDER), 0);
+        assertEq(game.afkingFundingOf(PLAYER), 0);
         assertEq(host.claimableOf(PLAYER), 1);
         if (executionFailure) {
             badToken.configureFault(op, AdversarialAfkingSteth.Fault.None);
@@ -275,9 +252,9 @@ contract AfkingStethFundingTest is DeployProtocol {
 
     function testFuzz_InvalidTransferReceiptsRollBack(uint8 faultSeed) public {
         _adversarial();
-        _add(PLAYER, address(0), false, false, 1, 0, 0);
+        _add(PLAYER, false, 1, 0, 0);
         badToken.mint(PLAYER, 1 ether);
-        _authorize(PLAYER, PLAYER, 1 ether);
+        _authorize(PLAYER, 1 ether);
         badToken.configureFault(
             AdversarialAfkingSteth.Operation.Transfer, AdversarialAfkingSteth.Fault(bound(faultSeed, 5, 7))
         );
@@ -290,91 +267,83 @@ contract AfkingStethFundingTest is DeployProtocol {
 
     function test_RoundingCreditsExcessForOneWeiShortfall() public {
         _adversarial();
-        _add(PLAYER, FUNDER, false, true, 1, host.price() - 1, 0);
+        _add(PLAYER, true, 1, host.price() - 1, 0);
         badToken.configureRatio(3 ether, 2 ether);
-        badToken.configureShares(FUNDER, 2 ether);
+        badToken.configureShares(PLAYER, 2 ether);
         badToken.configureShares(address(game), 1);
-        _authorize(FUNDER, PLAYER, 1);
+        _authorize(PLAYER, 1);
         uint256 beforeBacking = badToken.balanceOf(address(game));
         _work();
         assertEq(
             badToken.balanceOf(address(game)) - beforeBacking, 2, "recipient delta can exceed pooled return by one"
         );
-        assertEq(game.afkingFundingOf(FUNDER), 1, "recipient rounding excess belongs to funder");
-        assertEq(badToken.allowance(FUNDER, address(game)), 0, "allowance spends returned pooled value");
+        assertEq(game.afkingFundingOf(PLAYER), 1, "recipient rounding excess stays in the prepaid balance");
+        assertEq(badToken.allowance(PLAYER, address(game)), 0, "allowance spends returned pooled value");
         assertGt(host.entries(PLAYER), 0);
     }
 
     function test_RoundingCanRequireAllowanceAboveShortfall() public {
         _adversarial();
-        _add(PLAYER, FUNDER, false, true, 1, host.price() - 1, 0);
+        _add(PLAYER, true, 1, host.price() - 1, 0);
         badToken.configureRatio(5 ether, 2 ether);
-        badToken.configureShares(FUNDER, 2 ether);
-        _authorize(FUNDER, PLAYER, 1);
+        badToken.configureShares(PLAYER, 2 ether);
+        _authorize(PLAYER, 1);
         _work();
         _assertEvicted(PLAYER);
-        assertEq(badToken.allowance(FUNDER, address(game)), 1);
-        assertEq(game.afkingFundingOf(FUNDER), host.price() - 1);
+        assertEq(badToken.allowance(PLAYER, address(game)), 1);
+        assertEq(game.afkingFundingOf(PLAYER), host.price() - 1);
     }
 
     function test_RoundingWithNonzeroShareQuotePaysMinimumShares() public {
         _adversarial();
         uint256 shortfall = 5;
-        _add(PLAYER, FUNDER, false, true, 1, host.price() - shortfall, 0);
+        _add(PLAYER, true, 1, host.price() - shortfall, 0);
         badToken.configureRatio(3 ether, 2 ether);
-        badToken.configureShares(FUNDER, 2 ether);
-        _authorize(FUNDER, PLAYER, 6);
+        badToken.configureShares(PLAYER, 2 ether);
+        _authorize(PLAYER, 6);
         _work();
-        assertEq(badToken.sharesOf(FUNDER), 2 ether - 4);
-        assertEq(game.afkingFundingOf(FUNDER), 1);
-        assertEq(badToken.allowance(FUNDER, address(game)), 0);
+        assertEq(badToken.sharesOf(PLAYER), 2 ether - 4);
+        assertEq(game.afkingFundingOf(PLAYER), 1);
+        assertEq(badToken.allowance(PLAYER, address(game)), 0);
     }
 
-    function test_CompletedPassPendingReadAndCanceledNeverPull() public {
-        _add(PLAYER, address(0), false, true, 0, 0, 0);
+    function test_CompletedPassAndPendingReadNeverPull() public {
         _expectNoTokenCalls();
         _work();
-        assertEq(host.memberOf(PLAYER), 0);
         assertTrue(host.subWork(WORK_GAS).done, "completed pass does not replay");
         host.nextDay();
         host.closeReadForTest();
         assertFalse(host.subWork(WORK_GAS).progressed, "prior read blocks new preparation");
     }
 
-    function test_ProtocolSubscriptionKeepsExistingFundingFailureExemption() public {
-        _add(ContractAddresses.VAULT, address(0), false, false, 1, 0, 0);
-        _add(ContractAddresses.SDGNRS, address(0), false, false, 1, 0, 0);
+    /// @notice A protocol seat that cannot pay is paused, never pulled from and never removed.
+    function test_ProtocolSeatNeverPullsStethAndPausesWhenUnfunded() public {
+        _add(ContractAddresses.VAULT, false, 1, 0, 0);
+        _add(ContractAddresses.SDGNRS, false, 1, 0, 0);
         mockStETH.mint(ContractAddresses.VAULT, 1 ether);
         mockStETH.mint(ContractAddresses.SDGNRS, 1 ether);
-        _authorize(ContractAddresses.VAULT, ContractAddresses.VAULT, type(uint256).max);
-        _authorize(ContractAddresses.SDGNRS, ContractAddresses.SDGNRS, type(uint256).max);
+        vm.prank(ContractAddresses.VAULT);
+        mockStETH.approve(address(game), type(uint256).max);
+        vm.prank(ContractAddresses.SDGNRS);
+        mockStETH.approve(address(game), type(uint256).max);
         _expectNoTokenCalls();
         _work();
         assertGt(host.memberOf(ContractAddresses.VAULT), 0);
         assertGt(host.memberOf(ContractAddresses.SDGNRS), 0);
+        assertTrue(_flags() & 8 != 0, "unfunded Vault is paused");
+        assertTrue(_flags() & 16 != 0, "unfunded sDGNRS is paused");
         assertEq(mockStETH.balanceOf(ContractAddresses.VAULT), 1 ether, "vault backing remains reserved");
         assertEq(mockStETH.balanceOf(ContractAddresses.SDGNRS), 1 ether, "redemption backing remains reserved");
         assertEq(mockStETH.allowance(ContractAddresses.VAULT, address(game)), type(uint256).max);
         assertEq(mockStETH.allowance(ContractAddresses.SDGNRS, address(game)), type(uint256).max);
     }
 
-    function testFuzz_ProtocolFundingWalletCannotSponsorStethPull(bool sdgnrsSource) public {
-        address source = sdgnrsSource ? ContractAddresses.SDGNRS : ContractAddresses.VAULT;
-        _add(PLAYER, source, false, true, 1, 0, 0);
-        mockStETH.mint(source, 1 ether);
-        _authorize(source, PLAYER, type(uint256).max);
-        _expectNoTokenCalls();
-        _work();
-        _assertEvicted(PLAYER);
-        assertEq(mockStETH.balanceOf(source), 1 ether, "operator approval cannot release protocol reserves");
-        assertEq(mockStETH.allowance(source, address(game)), type(uint256).max);
-    }
-
     function testFuzz_AtomicPullRefusesProtocolFundingWallet(bool sdgnrsSource) public {
         address source = sdgnrsSource ? ContractAddresses.SDGNRS : ContractAddresses.VAULT;
-        _add(PLAYER, source, false, true, 1, 0, 0);
+        _add(PLAYER, true, 1, 0, 0);
         mockStETH.mint(source, 1 ether);
-        _authorize(source, PLAYER, type(uint256).max);
+        vm.prank(source);
+        mockStETH.approve(address(game), type(uint256).max);
         _expectNoTokenCalls();
         uint32 subscriber = game.walletIdOf(PLAYER);
         vm.prank(address(game));
@@ -384,8 +353,8 @@ contract AfkingStethFundingTest is DeployProtocol {
     }
 
     function test_ClosedGameDoesNotAttemptFallback() public {
-        _add(PLAYER, address(0), false, true, 1, 0, 0);
-        _authorize(PLAYER, PLAYER, type(uint256).max);
+        _add(PLAYER, true, 1, 0, 0);
+        _authorize(PLAYER, type(uint256).max);
         vm.warp(block.timestamp + 100 days);
         _expectNoTokenCalls();
         MineFlipGas.Result memory result = host.subWork(WORK_GAS);
@@ -394,70 +363,54 @@ contract AfkingStethFundingTest is DeployProtocol {
         uint256 seat = _grantSeat(PLAYER);
         vm.prank(PLAYER);
         vm.expectRevert(abi.encodeWithSignature("GameOver()"));
-        game.subscribe(0, false, true, 1, 0, seat);
+        game.subscribe(0, true, 1, seat);
     }
 
-    function test_NewSubscribeAndNextDailyBuyUseFallbackWithoutDuplicateCover() public {
+    /// @notice Signup buys nothing and pulls nothing; the next daily pass pays the cost from the
+    ///         subscriber's own stETH, and a later change buys nothing.
+    function test_SignupPullsNothingAndNextDailyBuyUsesFallback() public {
         host.subscriptionWindow();
         uint256 seat = _grantSeat(PLAYER);
-        _aid(PLAYER);
-        uint32 funderId = _aid(FUNDER);
-        mockStETH.mint(FUNDER, 1 ether);
-        _authorize(FUNDER, PLAYER, type(uint256).max);
+        mockStETH.mint(PLAYER, 1 ether);
+        _authorize(PLAYER, type(uint256).max);
         vm.prank(PLAYER);
-        game.subscribe(0, false, true, 1, funderId, seat);
-        assertEq(mockStETH.balanceOf(FUNDER), 1 ether - host.price());
-        uint256 firstEntries = host.entries(PLAYER);
+        game.subscribe(0, true, 1, seat);
+        assertEq(mockStETH.balanceOf(PLAYER), 1 ether, "signup pulls nothing");
+        assertEq(host.entries(PLAYER), 0, "signup buys nothing");
         vm.warp(block.timestamp + 1 days);
         host.nextDay();
         vm.prank(PLAYER);
         vm.expectRevert(DegenerusGameStorage.RngLocked.selector);
-        game.subscribe(0, false, true, 2, funderId, 0);
+        game.subscribe(0, true, 2, 0);
         _work();
+        assertEq(mockStETH.balanceOf(PLAYER), 1 ether - host.price(), "the daily buy paid from the payee");
+        assertGt(host.entries(PLAYER), 0);
         host.subscriptionWindow();
         vm.prank(PLAYER);
-        game.subscribe(0, false, true, 2, funderId, 0);
-        assertEq(mockStETH.balanceOf(FUNDER), 1 ether - 2 * host.price(), "update after daily purchase does not buy again");
-        assertGt(host.entries(PLAYER), firstEntries);
-        assertEq(host.stateOf(PLAYER).lastAutoBoughtDay, game.currentDayView());
+        game.subscribe(0, true, 2, 0);
+        assertEq(mockStETH.balanceOf(PLAYER), 1 ether - host.price(), "a change after the daily purchase buys nothing");
+        assertEq(host.endpoint(), game.currentDayView());
     }
 
-    function test_NewSubscribeFailureRevertsWithoutCreatingUnfundedMember() public {
-        host.subscriptionWindow();
-        uint256 seat = _grantSeat(PLAYER);
-        _aid(PLAYER);
-        _authorize(PLAYER, PLAYER, type(uint256).max);
-        vm.prank(PLAYER);
-        vm.expectRevert(abi.encodeWithSignature("MustPurchaseToBeginAfking()"));
-        game.subscribe(0, false, true, 1, 0, seat);
-        assertEq(host.memberOf(PLAYER), 0);
-        mockStETH.mint(PLAYER, 1 ether);
-        vm.prank(PLAYER);
-        game.subscribe(0, false, true, 1, 0, seat);
-        assertGt(host.memberOf(PLAYER), 0);
-        assertEq(host.stateOf(PLAYER).lastAutoBoughtDay, game.currentDayView());
-    }
-
-    function test_AllowancePersistsThroughCancellationAndReenrollment() public {
+    function test_SameDayReenrollmentPaysNothingAndKeepsAllowance() public {
         host.subscriptionWindow();
         uint256 seat = _grantSeat(PLAYER);
         mockStETH.mint(PLAYER, 1 ether);
-        _authorize(PLAYER, PLAYER, type(uint256).max);
-        _aid(PLAYER);
+        _authorize(PLAYER, type(uint256).max);
         vm.prank(PLAYER);
-        game.subscribe(0, false, true, 1, 0, seat);
+        game.subscribe(0, true, 1, seat);
         vm.prank(PLAYER);
-        game.subscribe(0, false, true, 0, 0, 0);
+        game.subscribe(0, true, 0, 0);
         uint256 seat2 = _grantSeat(PLAYER);
         vm.prank(PLAYER);
-        game.subscribe(0, false, true, 1, 0, seat2);
+        game.subscribe(0, true, 1, seat2);
         assertEq(mockStETH.allowance(PLAYER, address(game)), type(uint256).max);
-        assertEq(mockStETH.balanceOf(PLAYER), 1 ether - host.price(), "same-day re-enrollment does not double-pay");
+        assertEq(mockStETH.balanceOf(PLAYER), 1 ether, "same-day re-enrollment pays nothing");
     }
 
-    function test_AtomicPullRechecksConfiguredSource() public {
-        _add(PLAYER, FUNDER, false, true, 1, 0, 0);
-        _authorize(NEXT, PLAYER, type(uint256).max);
+    function test_AtomicPullRechecksPayee() public {
+        _add(PLAYER, true, 1, 0, 0);
+        _authorize(NEXT, type(uint256).max);
         uint32 subscriber = game.walletIdOf(PLAYER);
         vm.prank(address(game));
         vm.expectRevert(abi.encodeWithSignature("AfkingStethPullFailed()"));
@@ -465,9 +418,9 @@ contract AfkingStethFundingTest is DeployProtocol {
     }
 
     function test_PoolOverflowRejectsPullWithoutTruncatingCredit() public {
-        _add(PLAYER, address(0), false, true, 1, 0, 0);
+        _add(PLAYER, true, 1, 0, 0);
         mockStETH.mint(PLAYER, 1 ether);
-        _authorize(PLAYER, PLAYER, type(uint256).max);
+        _authorize(PLAYER, type(uint256).max);
         host.setPool(type(uint128).max);
         _work();
         _assertEvicted(PLAYER);
@@ -476,10 +429,10 @@ contract AfkingStethFundingTest is DeployProtocol {
     }
 
     function test_ExtremeCalibrationFundsExactlyOneSubscriberThenResumes() public {
-        _add(PLAYER, address(0), false, true, 1, 0, 0);
-        _add(NEXT, address(0), false, true, 1, host.price(), 0);
+        _add(PLAYER, true, 1, 0, 0);
+        _add(NEXT, true, 1, host.price(), 0);
         mockStETH.mint(PLAYER, 1 ether);
-        _authorize(PLAYER, PLAYER, type(uint256).max);
+        _authorize(PLAYER, type(uint256).max);
         uint256 budget = MineFlipGas.budget(WORK_GAS, type(uint32).max, true);
         MineFlipGas.Result memory result = host.subWork{gas: WORK_GAS}(budget);
         assertTrue(result.progressed); // empty box section -> ticket phase is a durable checkpoint
@@ -494,9 +447,9 @@ contract AfkingStethFundingTest is DeployProtocol {
     }
 
     function test_LowWorkerAllowanceDefersBeforeAttemptThenSucceeds() public {
-        _add(PLAYER, address(0), false, true, 1, 0, 0);
+        _add(PLAYER, true, 1, 0, 0);
         mockStETH.mint(PLAYER, 1 ether);
-        _authorize(PLAYER, PLAYER, type(uint256).max);
+        _authorize(PLAYER, type(uint256).max);
         MineFlipGas.Result memory deferred =
             host.subWork(GasBounds.SUBSCRIBER_ITEM_GAS + GasBounds.SUBSCRIBER_TAIL_GAS - 1);
         assertTrue(deferred.progressed, "empty box section advanced to tickets");

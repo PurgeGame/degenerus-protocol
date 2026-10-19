@@ -5,7 +5,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {activityScoreOf} from "../helpers/ActivityScoreOf.sol";
-import {GameSlots} from "../helpers/GameSlots.sol";
+import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 
 /// @title V61CurseSet — TST-03 proof: the cashout-curse SET (+2 on a stale ghost-cashout), every exemption
@@ -26,7 +26,7 @@ import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 ///
 ///   The penalty (MintStreakUtils._playerActivityScore:322-326 `penaltyBps = curse * 100; bonusBps = bonusBps
 ///   > penaltyBps ? bonusBps - penaltyBps : 0`) is proven against the public playerActivityScore view AND a
-///   frozen snapshot (the afking lootbox sub's `scorePlus1`, GameAfkingModule:863-870, frozen at delivery and
+///   frozen snapshot (the afking lootbox sub's lane score code, frozen at delivery and
 ///   read from the Sub slot). To exercise the APPLY independently of the SET, the curse counter is seeded
 ///   directly via vm.store — the active-afker exemption blocks the SET, never the APPLY.
 ///
@@ -54,7 +54,6 @@ contract V61CurseSet is DeployProtocol {
     uint256 private constant CLAIMABLE_POOL_SLOT = GameSlots.CLAIMABLE_POOL; // uint128 @ byte 16
     uint256 private constant CLAIMABLE_POOL_OFFBYTES = 16;
     uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED;
-    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF; // was 58
 
     // mintPacked_ field shifts (BitPackingLib).
     uint256 private constant DAY_SHIFT = BitPackingLib.DAY_SHIFT; // lastEthDay (24 bits)
@@ -65,7 +64,6 @@ contract V61CurseSet is DeployProtocol {
     uint256 private constant AFFILIATE_BONUS_POINTS_SHIFT = BitPackingLib.AFFILIATE_BONUS_POINTS_SHIFT; // (6 bits)
     uint256 private constant CURSE_COUNT_SHIFT = BitPackingLib.CURSE_COUNT_SHIFT; // (5 bits)
 
-    uint256 private constant OFF_SCOREPLUS1 = 2; // uint16 scorePlus1 (Sub.score) in the Sub slot
     uint256 private constant CURSE_COUNT_CAP = 20;
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
@@ -84,6 +82,7 @@ contract V61CurseSet is DeployProtocol {
         // by construction (0 + 5 <= 100), and a "today" claimant (lastEthDay == 100) is non-stale.
         _seedDailyIdx(100);
         _finishSubscriptionWindow();
+        _seedEndpoint(uint24(game.currentDayView()));
     }
 
     // =========================================================================
@@ -236,8 +235,8 @@ contract V61CurseSet is DeployProtocol {
         assertEq(activityScoreOf(address(game), p), 0, "penalty floors the score at 0 (no underflow)");
     }
 
-    /// @notice The penalty is visible in a FROZEN SNAPSHOT consumer: a funded lootbox sub's `scorePlus1`
-    ///         (frozen at delivery, GameAfkingModule:863-870) is lower for a cursed sub than an un-cursed twin
+    /// @notice The penalty is visible in a FROZEN SNAPSHOT consumer: a funded lootbox sub's frozen score code
+    ///         (frozen at delivery) is lower for a cursed sub than an un-cursed twin
     ///         by exactly the curse-point penalty. Both subs share an identical positive base (affiliate
     ///         cache). The curse is seeded directly (the APPLY is independent of the active-afker SET bail).
     function testPenaltyOnFrozenAfkingSnapshot() public {
@@ -251,13 +250,13 @@ contract V61CurseSet is DeployProtocol {
         // once the wall day passes dailyIdx (a new day is due), so bring the wall clock to day 100.
         _t += (100 - uint256(game.currentDayView())) * 1 days;
         vm.warp(_t);
-        _deliverDay(0x5C0E); // freezes scorePlus1 for both subs at this delivery
+        _deliverDay(0x5C0E); // freezes the score for both subs at this delivery
 
-        uint256 snapCursed = _scorePlus1Of(cursed);
-        uint256 snapTwin = _scorePlus1Of(twin);
-        assertGt(snapTwin, 1, "non-vacuity: the twin froze a positive score (scorePlus1 > 1)");
-        // scorePlus1 == activityScore + 1; the cursed snapshot is exactly 2 points lower.
-        assertEq(snapTwin - snapCursed, 2, "frozen snapshot: cursed scorePlus1 lower by curse (2 points)");
+        uint256 snapCursed = _frozenScoreOf(cursed);
+        uint256 snapTwin = _frozenScoreOf(twin);
+        assertGt(snapTwin, 0, "non-vacuity: the twin froze a positive score");
+        // The cursed snapshot is exactly 2 points lower.
+        assertEq(snapTwin - snapCursed, 2, "frozen snapshot: cursed frozen score lower by curse (2 points)");
     }
 
     // =========================================================================
@@ -410,6 +409,15 @@ contract V61CurseSet is DeployProtocol {
 
     /// @dev Field-isolated seed of dailyIdx (slot 0, byte 3, uint24) — preserves every other slot-0 field
     ///      (purchaseStartDay, level, gameOver, the FSM flags).
+    /// @dev Mark today's subscriber pass complete, which the fixture's seeded dailyIdx leaves undone: a
+    ///      new run starts only once the day's pass has.
+    function _seedEndpoint(uint24 day) internal {
+        uint256 shift = GameSlots.AFKING_ENDPOINT_DAY_OFFSET * 8;
+        bytes32 slot = bytes32(GameSlots.AFKING_ENDPOINT_DAY);
+        uint256 word = uint256(vm.load(address(game), slot));
+        vm.store(address(game), slot, bytes32((word & ~(uint256(0xFFFFFF) << shift)) | (uint256(day) << shift)));
+    }
+
     function _seedDailyIdx(uint256 day) internal {
         uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(0))));
         slot0 &= ~(uint256(0xFFFFFF) << 24);
@@ -417,17 +425,14 @@ contract V61CurseSet is DeployProtocol {
         vm.store(address(game), bytes32(uint256(0)), bytes32(slot0));
     }
 
-    function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
-        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT))))) >> (off * 8);
-        return p & ((uint256(1) << widthBits) - 1);
-    }
-
     function _dailyQtyOf(address who) internal view returns (uint8) {
-        return uint8(_subField(who, 0, 8));
+        return uint8(GameSlotKeys.subQuantity(address(game), game.walletIdOf(who)));
     }
 
-    function _scorePlus1Of(address who) internal view returns (uint256) {
-        return _subField(who, OFF_SCOREPLUS1, 16);
+    /// @dev The activity-score code frozen into the lane (exact below 500).
+    function _frozenScoreOf(address who) internal view returns (uint256) {
+        (uint256 lane,) = GameSlotKeys.subLane(address(game), game.walletIdOf(who));
+        return (lane >> 36) & 0x3ff;
     }
 
     // =========================================================================
@@ -512,7 +517,7 @@ contract V61CurseSet is DeployProtocol {
     function _subscribeLootbox(address who, uint8 q) internal {
         uint256 seat = _grantSeat(who); // the AFKing Subscription Token is the subscribe credential (a new run burns one seat)
         vm.prank(who);
-        game.subscribe(0, false, false, q, 0, seat);
+        game.subscribe(0, false, q, seat);
     }
 
     function _fundPool(address who, uint256 amount) internal {

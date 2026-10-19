@@ -4,14 +4,25 @@ pragma solidity ^0.8.26;
 import {Vm} from "forge-std/Test.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
+import {RecyclingState} from "../helpers/RecyclingState.sol";
+
+/// @dev Runs the production draw worker in the Game's own storage context for a chosen day.
+contract DrawHost is DegenerusGame {
+    function drawFor(uint24 day) external {
+        (bool ok, bytes memory data) =
+            ContractAddresses.GAME_AFKING_MODULE.delegatecall(abi.encodeWithSignature("runSubDraw(uint24)", day));
+        if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
+    }
+}
 
 /// @title SeatTenureDraw — integration tests for the daily seat-tenure drawing:
 ///        one uniform draw over logical box/ticket order at each day-seal (_unlockRng),
-///        VAULT excluded by identity, prize = 10 whole FLIP per funded
-///        tenure day capped at 4,000, credited via coinflip.creditFlip. The
-///        winner is fully deterministic from the sealed day's word, so each
-///        day's SubDrawWon (or its dud absence) is asserted exactly.
+///        VAULT excluded by position, prize = 10 whole FLIP per day of run age (endpoint minus
+///        run-start day) capped at 4,000, credited via coinflip.creditFlip. A paused protocol
+///        seat sits out as a silent dud. The winner is fully deterministic from the sealed day's
+///        word, so each day's SubDrawWon (or its dud absence) is asserted exactly.
 contract SeatTenureDraw is DeployProtocol {
 
     mapping(address => uint32) private _aidCache;
@@ -49,7 +60,7 @@ contract SeatTenureDraw is DeployProtocol {
         uint256 seat = _grantSeat(who);
         _fundPool(who, 5 ether);
         vm.prank(who);
-        game.subscribe(0, false, false, qty, 0, seat);
+        game.subscribe(0, false, qty, seat);
     }
 
     /// @dev Complete a full day: advance -> VRF fulfill -> drain to unlock.
@@ -94,50 +105,33 @@ contract SeatTenureDraw is DeployProtocol {
         }
     }
 
-    /// @dev (active, dailyQuantity, afkingStartDay, afkCoveredThroughDay) from the Sub word.
-    function _subInfo(address who) internal view returns (bool, uint8, uint24, uint24) {
-        uint256 w = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.SUB_OF))));
-        return (uint8(w) != 0, uint8(w), uint24(w >> 104), uint24(w >> 80));
+    /// @dev The last completed subscriber pass day.
+    function _endpoint() internal view returns (uint24) {
+        return uint24(uint256(vm.load(address(game), bytes32(GameSlots.AFKING_ENDPOINT_DAY)))
+            >> (8 * GameSlots.AFKING_ENDPOINT_DAY_OFFSET));
     }
 
+    function _metaSlot(address who) internal view returns (bytes32) {
+        return keccak256(abi.encode(uint256(game.walletIdOf(who) >> 2), GameSlots.SUB_META));
+    }
+
+    /// @dev The run-start day of `who` (reverse-lookup lane bits 11..32).
+    function _runStart(address who) internal view returns (uint24) {
+        uint256 meta = uint256(vm.load(address(game), _metaSlot(who))) >> ((game.walletIdOf(who) & 3) * 64);
+        return uint24((meta >> 11) & ((uint256(1) << 22) - 1));
+    }
+
+    /// @dev Run age in days: the endpoint minus the run-start day (0 when not yet past it).
     function _spanOf(address who) internal view returns (uint24) {
-        (, , uint24 startDay, uint24 covered) = _subInfo(who);
-        if (startDay == 0 || covered <= startDay) return 0;
-        return covered - startDay;
+        uint24 start = _runStart(who);
+        uint24 end = _endpoint();
+        return end > start ? end - start : 0;
     }
 
-    /// @dev Locate `who`'s single-slot Sub record by scanning candidate mapping
-    ///      base slots and matching the packed day-field lanes against subInfo
-    ///      (self-validating: reverts if the layout drifted), then fake a long
-    ///      funded tenure: covered (bits 80-103) = start + spanDays, with
-    ///      lastAutoBoughtDay (56-79) set to the same future day so the next
-    ///      STAGE's AlreadyAutoBoughtToday skip preserves the poke (delivery
-    ///      writes covered unconditionally) and no pending box exists.
-    function _pokeTenure(address who, uint24 spanDays) internal {
-        (, uint8 qty, uint24 startDay, uint24 covered) = _subInfo(who);
-        require(startDay != 0, "poke: no live run");
-        uint24 newCovered = startDay + spanDays;
-        for (uint256 base = 0; base < 160; base++) {
-            bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), base));
-            uint256 word = uint256(vm.load(address(game), slot));
-            if (
-                uint8(word) == qty &&
-                uint24(word >> 104) == startDay &&
-                uint24(word >> 80) == covered
-            ) {
-                uint256 mask24 = (uint256(1) << 24) - 1;
-                word =
-                    (word &
-                        ~((mask24 << 80) | (mask24 << 56))) |
-                    (uint256(newCovered) << 80) |
-                    (uint256(newCovered) << 56);
-                vm.store(address(game), slot, bytes32(word));
-                (, , , uint24 checkCovered) = _subInfo(who);
-                require(checkCovered == newCovered, "poke: Sub slot mismatch");
-                return;
-            }
-        }
-        revert("poke: Sub slot not found");
+    /// @dev sDGNRS is paused (unfunded) until it can pay: a paused seat sits out the draw.
+    function _sdgnrsPaused() internal view returns (bool) {
+        return uint8(uint256(vm.load(address(game), bytes32(GameSlots.AFKING_PROTOCOL_FLAGS)))
+            >> (8 * GameSlots.AFKING_PROTOCOL_FLAGS_OFFSET)) & 16 != 0;
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -146,8 +140,8 @@ contract SeatTenureDraw is DeployProtocol {
 
     /// @notice With ring [VAULT, sDGNRS, player] every sealed day's outcome is
     ///         computable from the day's word: index 0 (VAULT) is never drawn,
-    ///         a drawn live sub pays exactly 10 FLIP per funded tenure day, and
-    ///         a drawn span-0 sub is a silent dud.
+    ///         a drawn live sub pays exactly 10 FLIP per day of run age, and
+    ///         a drawn span-0 or paused sub is a silent dud.
     function testDrawDeterministicSelectionAndPrize() public {
         address p = makeAddr("tenure_p");
         _seatAndSubscribe(p, 1);
@@ -169,7 +163,7 @@ contract SeatTenureDraw is DeployProtocol {
             uint256 idx = _expectedIdx(word, 3);
             address expected = idx == 1 ? ContractAddresses.SDGNRS : p;
             uint24 expectedSpan = idx == 1
-                ? _spanOf(ContractAddresses.SDGNRS)
+                ? (_sdgnrsPaused() ? 0 : _spanOf(ContractAddresses.SDGNRS))
                 : _spanOf(p);
 
             if (expectedSpan == 0) {
@@ -196,34 +190,41 @@ contract SeatTenureDraw is DeployProtocol {
         assertTrue(playerWinChecked, "fixture: the player won at least one of 8 days");
     }
 
-    /// @notice The prize ceiling binds at 4,000 FLIP (a 400-day span): a poked
-    ///         500+-day tenure pays exactly the cap, span reported uncapped.
+    /// @notice The prize ceiling binds at 4,000 FLIP (a 400-day age): with the endpoint 450 days past the
+    ///         run start, a draw landing on the player pays exactly the cap, span reported uncapped.
     function testDrawPrizeCapBinds() public {
         address p = makeAddr("cap_p");
         _seatAndSubscribe(p, 1);
         _completeDay(uint256(keccak256("cap-warm")) | 1);
+        uint24 e = _endpoint();
 
-        _pokeTenure(p, 450);
-        for (uint256 d = 1; d <= 12; d++) {
-            vm.recordLogs();
-            _completeDay(uint256(keccak256(abi.encode("cap-day", d))) | 1);
-            (uint256 count, address winner, , uint24 span, uint256 flipAmount) = _drawEvents();
+        // Ring [VAULT, sDGNRS, player]: pick a word whose draw lands on the player (logical index 2).
+        uint256 word = 1;
+        while (_expectedIdx(word, 3) != 2) ++word;
+        RecyclingState.seedDailyWord(address(game), e, word);
 
-            if (count == 1 && winner == p) {
-                assertEq(span, _spanOf(p), "span reported uncapped");
-                assertGt(span, 400, "fixture: poked span exceeds the cap knee");
-                assertEq(flipAmount, 4000, "prize capped at 4,000 FLIP");
-                return;
-            }
-        }
-        revert("fixture: player never drawn in 12 days");
+        // The fixture's calendar is young, so move the endpoint 450 days ahead of the run start.
+        bytes32 slot = bytes32(GameSlots.AFKING_ENDPOINT_DAY);
+        uint256 shift = 8 * GameSlots.AFKING_ENDPOINT_DAY_OFFSET;
+        uint256 packed = uint256(vm.load(address(game), slot));
+        vm.store(address(game), slot, bytes32((packed & ~(uint256(type(uint24).max) << shift)) | (uint256(e + 450) << shift)));
+        vm.etch(address(game), type(DrawHost).runtimeCode);
+
+        vm.recordLogs();
+        DrawHost(payable(address(game))).drawFor(e);
+        (uint256 count, address winner, , uint24 span, uint256 flipAmount) = _drawEvents();
+        assertEq(count, 1, "one draw");
+        assertEq(winner, p, "the player was drawn");
+        assertEq(span, _spanOf(p), "span reported uncapped");
+        assertGt(span, 400, "fixture: the age exceeds the cap knee");
+        assertEq(flipAmount, 4000, "prize capped at 4,000 FLIP");
     }
 
     function _assertProtocolPositions() private view {
         bytes32 root = keccak256(abi.encode(GameSlots.SUBSCRIBERS));
         uint256 ids = uint256(vm.load(address(game), root));
         assertEq(uint32(ids), game.walletIdOf(ContractAddresses.VAULT), "Vault stays first");
-        assertEq(uint32(ids >> 32), game.walletIdOf(ContractAddresses.SDGNRS), "sDGNRS stays second");
+        assertEq(uint32(ids >> 85), game.walletIdOf(ContractAddresses.SDGNRS), "sDGNRS stays second");
     }
 
     function test_ProtocolTicketModeRevertsForSelfAndApprovedVaultOperator() public {
@@ -232,7 +233,7 @@ contract SeatTenureDraw is DeployProtocol {
             for (uint8 quantity; quantity < 2; ++quantity) {
                 vm.prank(protocols[i]);
                 vm.expectRevert(abi.encodeWithSignature("E()"));
-                game.subscribe(0, false, true, quantity, 0, 0);
+                game.subscribe(0, true, quantity, 0);
             }
         }
         address operator = makeAddr("vault-sub-operator");
@@ -241,51 +242,51 @@ contract SeatTenureDraw is DeployProtocol {
         uint32 vaultId = game.walletIdOf(ContractAddresses.VAULT);
         vm.prank(operator);
         vm.expectRevert(abi.encodeWithSignature("E()"));
-        game.subscribe(vaultId, false, true, 1, 0, 0);
+        game.subscribe(vaultId, true, 1, 0);
         vm.prank(operator);
-        game.subscribe(vaultId, false, false, 0, 0, 0);
+        game.subscribe(vaultId, false, 0, 0); // the owner's pause keeps the entry
         _completeDay(0xAF01);
         _assertProtocolPositions();
-        assertEq(game.subscriberSetLength(), 2, "zero-quantity Vault remains counted");
+        assertEq(game.subscriberSetLength(), 2, "a paused Vault remains counted");
         vm.prank(operator);
-        game.subscribe(vaultId, false, false, 1, 0, 0);
+        game.subscribe(vaultId, false, 1, 0);
         _assertProtocolPositions();
     }
 
-    function test_OrdinaryModeChangesAndReclaimCannotMoveProtocolPositions() public {
+    function test_OrdinaryModeChangesAndCancelCannotMoveProtocolPositions() public {
         address a = makeAddr("fixed-a");
         address b = makeAddr("fixed-b");
         _seatAndSubscribe(a, 1);
         _seatAndSubscribe(b, 1);
         _assertProtocolPositions();
         vm.prank(a);
-        game.subscribe(0, false, true, 1, 0, 0);
+        game.subscribe(0, true, 1, 0);
         _assertProtocolPositions();
         vm.prank(b);
-        game.subscribe(0, false, false, 0, 0, 0);
+        game.subscribe(0, false, 0, 0);
         _completeDay(0xAF02);
         _assertProtocolPositions();
-        assertEq(game.subscriberSetLength(), 3, "ordinary tombstone reclaimed");
+        assertEq(game.subscriberSetLength(), 3, "the cancelled ordinary member left the set");
         vm.prank(a);
-        game.subscribe(0, false, false, 1, 0, 0);
+        game.subscribe(0, false, 1, 0);
         _assertProtocolPositions();
     }
 
-    function test_DrawCoversEveryNonVaultRankWithPermanentVaultAtZeroOrNonzeroQuantity() public {
+    function test_DrawCoversEveryNonVaultRankWithVaultPausedOrLive() public {
         address box = makeAddr("draw-box");
         address ticket = makeAddr("draw-ticket");
         _seatAndSubscribe(box, 1);
         _seatAndSubscribe(ticket, 1);
         _fundPool(ContractAddresses.SDGNRS, 5 ether);
         vm.prank(ticket);
-        game.subscribe(0, false, true, 1, 0, 0);
+        game.subscribe(0, true, 1, 0);
         _completeDay(0xC0FFEE);
         for (uint8 quantity; quantity < 2; ++quantity) {
             uint256 quantitySnapshot = vm.snapshotState();
             vm.prank(ContractAddresses.VAULT);
-            game.subscribe(0, false, false, quantity, 0, 0);
+            game.subscribe(0, false, quantity, 0);
             _assertProtocolPositions();
-            assertEq(game.subscriberSetLength(), 4, "zero quantity keeps Vault counted");
+            assertEq(game.subscriberSetLength(), 4, "a paused Vault stays counted");
             uint256 packed = uint256(vm.load(address(game), bytes32(GameSlots.SUB_BOX_COUNT)));
             uint256 boxes = (packed >> (GameSlots.SUB_BOX_COUNT_OFFSET * 8)) & 0xffff;
             uint256 root = uint256(keccak256(abi.encode(GameSlots.SUBSCRIBERS)));
@@ -293,8 +294,8 @@ contract SeatTenureDraw is DeployProtocol {
             uint256 n;
             for (uint256 rank; rank < 4; ++rank) {
                 uint256 physical = rank < boxes ? rank : 2000 - (rank - boxes);
-                uint256 ids = uint256(vm.load(address(game), bytes32(root + (physical >> 3))));
-                address owner = _fixturePayee(uint32(ids >> ((physical & 7) * 32)));
+                uint256 ids = uint256(vm.load(address(game), bytes32(root + (physical / 3))));
+                address owner = _fixturePayee(uint32(ids >> ((physical % 3) * 85)));
                 if (owner != ContractAddresses.VAULT) expected[n++] = owner;
             }
             assertEq(n, 3);
@@ -314,8 +315,8 @@ contract SeatTenureDraw is DeployProtocol {
     }
 
     /// @notice Protocol-only ring (len 2): index 0 (VAULT) is structurally
-    ///         excluded, so every draw lands on sDGNRS — a dud until its span
-    ///         accrues, never a vault payout.
+    ///         excluded, so every draw lands on sDGNRS — a dud while it is paused,
+    ///         never a vault payout.
     function testProtocolOnlyRingNeverPaysVault() public {
         assertEq(game.subscriberSetLength(), 2, "fixture: protocol subs only");
         for (uint256 d = 1; d <= 4; d++) {

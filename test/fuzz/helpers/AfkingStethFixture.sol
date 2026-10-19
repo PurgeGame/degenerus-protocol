@@ -5,18 +5,30 @@ import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 import {MockStETH} from "../../../contracts/mocks/MockStETH.sol";
 import {MineFlipGas} from "../../../contracts/libraries/MineFlipGas.sol";
-import {BitPackingLib} from "../../../contracts/libraries/BitPackingLib.sol";
 import {PriceLookupLib} from "../../../contracts/libraries/PriceLookupLib.sol";
 import {WalletSeed} from "../../helpers/WalletSeed.sol";
 
 /// @dev Only setup/read helpers are synthetic; subscription, pull, delivery and eviction
 ///      all use the production facade and delegatecalled AFKing worker.
 contract AfkingStethHost is DegenerusGame, WalletSeed {
+    /// @dev A member's decoded lane plus its set position.
+    struct SubView {
+        uint256 position1;
+        uint256 quantity;
+        bool tickets;
+        uint256 scoreCode;
+        uint24 checkpointDay;
+        uint256 checkpointStreak;
+        bool removalPending;
+    }
+
     function prepare() external {
         uint24 day = _simulatedDayIndex();
         level = 4;
         dailyIdx = day - 1;
         _afkingResetDay = day;
+        _afkingEndpointDay = day - 1;
+        _afkingProtocolFlags = 0;
         _subCursor = 0;
         _subOpenCursor = 0;
         _pendingBoxCount = 0;
@@ -41,32 +53,21 @@ contract AfkingStethHost is DegenerusGame, WalletSeed {
         }
     }
 
+    /// @dev Seed a member checkpointed at the last completed pass, streak 9.
     function add(
         address player,
-        address source,
-        bool drainFirst,
         bool tickets,
         uint8 quantity,
         uint256 prepaid,
         uint256 claimable
-    ) external {
-        (uint32 id, ) = _registerWallet(player, 0);
+    ) external returns (uint32 id) {
+        (id, ) = _registerWallet(player, 0);
         _seedSubscriber(id, tickets);
-        Sub storage sub = _subOf[id];
-        sub.dailyQuantity = quantity;
-        sub.flags = (source == address(0) ? 0 : 1) | (drainFirst ? 2 : 0) | (tickets ? 4 : 0);
-        uint32 sourceId;
-        if (source != address(0)) {
-            (sourceId, ) = _registerWallet(source, 0);
-            _fundingSourceOf[id] = sourceId;
-        }
-        sub.lastAutoBoughtDay = _afkingResetDay - 1;
-        sub.afkingStartDay = _afkingResetDay - 1;
-        sub.afkCoveredThroughDay = _afkingResetDay - 1;
-        sub.affiliateBase = 31;
-        sub.pendingFlip = 17;
-        sub.subStreakLatch = 9;
-        if (prepaid != 0) _creditAfkingValue(source == address(0) ? id : sourceId, prepaid);
+        uint256 position = _subPosition1(id) - 1;
+        _setSubLaneAt(position, _withSubCheckpoint(
+            _subLaneAt(position) | ((uint256(quantity) - 1) << SUB_QTY_SHIFT), _afkingEndpointDay, 9));
+        _setSubRunStart(id, _afkingEndpointDay);
+        if (prepaid != 0) _creditAfkingValue(id, prepaid);
         if (claimable != 0) {
             // The argument includes the unbacked 1-wei sentinel seeded at registration.
             _creditClaimable(id, claimable - 1);
@@ -93,20 +94,29 @@ contract AfkingStethHost is DegenerusGame, WalletSeed {
         require(_pendingBoxCount == 0);
         dailyIdx = _simulatedDayIndex();
         _afkingResetDay = dailyIdx;
+        _afkingEndpointDay = dailyIdx;
         subsFullyProcessed = true;
     }
     function closeReadForTest() external { _setRngComplete(false); }
 
-    function stateOf(address player) external view returns (Sub memory) {
-        return _subOf[_walletIdOf(player)];
-    }
-
-    function sourceOf(address player) external view returns (address) {
-        return _walletKey(_fundingSourceOf[_walletIdOf(player)]);
+    function stateOf(address player) external view returns (SubView memory v) {
+        (uint256 lane, uint256 position1) = _subLaneOf(_walletIdOf(player));
+        v.position1 = position1;
+        if (position1 == 0) return v;
+        v.quantity = _subQuantity(lane);
+        v.tickets = lane & SUB_TICKETS_BIT != 0;
+        v.scoreCode = (lane >> SUB_SCORE_SHIFT) & SUB_SCORE_MASK;
+        v.checkpointDay = _subDay(lane);
+        v.checkpointStreak = _subCheckpointStreak(lane);
+        v.removalPending = lane & SUB_REMOVAL_BIT != 0;
     }
 
     function memberOf(address player) external view returns (uint256) {
-        return _subOf[_walletIdOf(player)].setPosition;
+        return _subPosition1(_walletIdOf(player));
+    }
+
+    function endpoint() external view returns (uint24) {
+        return _afkingEndpoint();
     }
 
     function pendingBoxes() external view returns (uint256) {
@@ -125,19 +135,10 @@ contract AfkingStethHost is DegenerusGame, WalletSeed {
         return _entriesOwedTotal(level + 1, _walletIdOf(player));
     }
 
-    function setMarkers(address player, uint24 bought) external {
-        _subOf[_seedWallet(player)].lastAutoBoughtDay = bought;
-    }
-
     function setQuantity(address player, uint8 quantity) external {
-        _subOf[_seedWallet(player)].dailyQuantity = quantity;
-    }
-
-    function setSource(address player, address source) external {
-        _fundingSourceOf[_seedWallet(player)] =
-            source == address(0) ? 0 : _seedWallet(source);
-        if (source == address(0)) _subOf[_seedWallet(player)].flags &= ~uint8(1);
-        else _subOf[_seedWallet(player)].flags |= 1;
+        uint256 position = _subPosition1(_seedWallet(player)) - 1;
+        uint256 lane = _subLaneAt(position);
+        _setSubLaneAt(position, (lane & ~(uint256(7) << SUB_QTY_SHIFT)) | ((uint256(quantity) - 1) << SUB_QTY_SHIFT));
     }
 
     function setLock(bool locked) external {

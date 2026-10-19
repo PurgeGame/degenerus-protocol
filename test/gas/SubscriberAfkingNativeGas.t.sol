@@ -18,6 +18,7 @@ contract SubscriberNativeGasHost is DegenerusGame, WalletSeed {
         level = 4;
         dailyIdx = day - 1;
         _afkingResetDay = day;
+        _afkingEndpointDay = day - 1;
         _subCursor = 0;
         _subOpenCursor = 0;
         _pendingBoxCount = 0;
@@ -52,31 +53,32 @@ contract SubscriberNativeGasHost is DegenerusGame, WalletSeed {
         }
     }
 
-    /// @param mode 0=self funded ticket,1=claimable ticket,2=external mixed funding,
-    ///             3=unfunded expiry,4=cancelled tombstone,5=maximum box stamp.
+    /// @dev A maximum-quantity lane checkpointed at `day`, optionally pending removal.
+    function _configureLane(uint32 id, uint24 day, bool removal) private {
+        uint256 position1 = _subPosition1(id);
+        uint256 lane = _subLaneAt(position1 - 1);
+        lane |= uint256(SUB_MAX_QUANTITY - 1) << SUB_QTY_SHIFT;
+        lane = _withSubCheckpoint(lane, day, 0);
+        if (removal) lane |= SUB_REMOVAL_BIT;
+        _setSubLaneAt(position1 - 1, lane);
+        _setSubMetaLane(id, position1 | (uint256(day) << 11));
+    }
+
+    /// @param mode 0=self funded ticket,1=claimable ticket,2=claimable then prepaid ticket,
+    ///             3=unfunded expiry,4=seized removal,5=maximum box stamp.
     function add(address player, uint8 mode) external {
         uint32 id = _seedWallet(player);
         _seedSubscriber(id, mode != 5);
-        Sub storage sub = _subOf[id];
-        uint24 yesterday = _afkingResetDay - 1;
-        sub.dailyQuantity = mode == 4 ? 0 : 255;
-        sub.flags = mode == 5 ? 0 : 4;
-        sub.lastAutoBoughtDay = yesterday;
-        sub.afkingStartDay = yesterday;
-        sub.afkCoveredThroughDay = yesterday;
-        if (mode == 0 || mode == 5) _creditAfkingValue(_seedWallet(player), 100 ether);
+        _configureLane(id, _afkingResetDay - 1, mode == 4);
+        if (mode == 0 || mode == 5) _creditAfkingValue(id, 100 ether);
         if (mode == 1) {
-            sub.flags |= 2;
-            _creditClaimable(_seedWallet(player), 100 ether);
+            _creditClaimable(id, 100 ether);
             claimablePool += 100 ether;
         }
         if (mode == 2) {
-            address funder = address(uint160(player) + 0x100000);
-            sub.flags |= 1;
-            _fundingSourceOf[id] = _seedWallet(funder);
-            _creditAfkingValue(_seedWallet(funder), 1 ether);
-            _creditClaimable(_seedWallet(player), 100 ether);
-            claimablePool += 100 ether;
+            _creditAfkingValue(id, 1 ether);
+            _creditClaimable(id, 0.01 ether + 1);
+            claimablePool += 0.01 ether + 1;
         }
     }
 
@@ -99,13 +101,13 @@ contract SubscriberNativeGasHost is DegenerusGame, WalletSeed {
         _subOpenCursor = 0;
         _pendingBoxCount = 1;
         _afkingResetDay = day; // the cohort's stamp day, as preparation leaves it
-        Sub storage sub = _subOf[id];
-        sub.setPosition = 1;
-        sub.dailyQuantity = 255;
-        sub.flags = 0;
-        sub.lastAutoBoughtDay = day;
-        sub.amount = 61_200; //255 tickets at the maximum0.24ETH price.
-        sub.score = 305; //Maximum useful activity-score multiplier.
+        _configureLane(id, day - 1, false);
+        _afkingEndpointDay = day;
+        _afkingCohortPriceMilli = uint16(_packEthToMilliEth(0.24 ether)); // the maximum unit price
+        if (player == ContractAddresses.SDGNRS) _afkingProtocolFlags = AFK_SDGNRS_BOUGHT;
+        // The maximum quantity at the maximum price and the maximum useful activity-score code.
+        uint256 position1 = _subPosition1(id);
+        _setSubLaneAt(position1 - 1, _subLaneAt(position1 - 1) | (uint256(305) << SUB_SCORE_SHIFT));
         // All following destinations are newly funded, cold far-future queues.
         for (uint24 oldLevel = 1; oldLevel <= 100; ++oldLevel) {
             uint256[] storage q = ticketQueue[_ticketQueueStorageKey(_tqFarFutureKey(oldLevel))];
@@ -163,14 +165,20 @@ contract SubscriberNativeGasHost is DegenerusGame, WalletSeed {
     }
     function pendingBoxes() external view returns (uint256) { return _pendingBoxCount; }
     function memberCount() external view returns (uint256) { return _subscribers.length; }
-    /// @dev (stamp day, day whose box has been opened). The open marker is derived: a stamped box
-    ///      is pending exactly while the stamp is this cohort's, the count is nonzero, the sub sits
-    ///      in the box section and the opener cursor has not passed it.
+    /// @dev (day bought, day whose box has been opened). The preparation cursor passing a member
+    ///      is its purchase; a stamped box is pending exactly while the count is nonzero, the
+    ///      member sits in the box section and the opener cursor has not passed it.
     function delivered(address player) external view returns (uint24, uint24) {
-        Sub storage sub = _subOf[_walletIdOf(player)];
-        uint24 bought = sub.lastAutoBoughtDay;
-        bool pending = sub.setPosition != 0 && bought == _afkingResetDay && _pendingBoxCount != 0
-            && sub.setPosition <= _subBoxCount && sub.setPosition - 1 >= _subOpenCursor;
+        uint256 position1 = _subPosition1(_walletIdOf(player));
+        if (position1 == 0) return (0, 0);
+        uint256 position = position1 - 1;
+        uint256 cursor = _subCursor;
+        bool visited = subsFullyProcessed
+            || (position < _subBoxCount ? position < cursor : cursor >= SUBSCRIBER_TICKET_PHASE
+                && cursor - SUBSCRIBER_TICKET_PHASE > SUBSCRIBER_CAP - position);
+        if (!visited) return (0, 0);
+        uint24 bought = _afkingResetDay;
+        bool pending = _pendingBoxCount != 0 && position < _subBoxCount && position >= _subOpenCursor;
         return (bought, pending ? bought - 1 : bought);
     }
     function claimableOf(address player) external view returns (uint256) { return _claimableOf(_walletIdOf(player)); }
@@ -209,25 +217,22 @@ contract SubscriberAfkingNativeGasTest is DeployProtocol {
     }
     function test_AcquiredSubscriptionsStopBeforeAnyFurtherFundingDebit() public {
         uint256 base = vm.snapshotState();
-        for (uint8 mode; mode < 3; ++mode) {
+        for (uint8 mode; mode < 2; ++mode) {
             host.prepare(false);
-            host.add(PLAYER, mode == 2 ? 2 : 0);
-            address funder = mode == 2 ? address(uint160(PLAYER) + 0x100000) : PLAYER;
-            // Own sale (0) and main sale with the smurf (1) stop at liquidation; a sold funder (2)
-            // is the one case the stage still polls.
-            if (mode == 2) host.acquireForTest(funder, false);
-            else host.liquidateForTest(funder, mode == 1);
-            uint256 fundingBefore = game.afkingFundingOf(funder);
+            host.add(PLAYER, 0);
+            // Own sale (0) and main sale with the smurf (1) stop at liquidation.
+            host.liquidateForTest(PLAYER, mode == 1);
+            uint256 fundingBefore = game.afkingFundingOf(PLAYER);
             uint256 claimableBefore = host.claimableOf(PLAYER);
             MineFlipGas.Result memory result = host.subWork{gas: 2_000_000}(2_000_000);
             uint256 used = _lastGas();
             emit log_named_uint("acquired_subscriber_cleanup_gas", used);
             assertTrue(result.progressed && result.done);
             assertEq(host.memberCount(), 0);
-            assertEq(game.afkingFundingOf(funder), fundingBefore);
+            assertEq(game.afkingFundingOf(PLAYER), fundingBefore);
             assertEq(host.claimableOf(PLAYER), claimableBefore);
             assertEq(host.pendingEntries(PLAYER, 5), 0);
-            assertLe(used, (mode == 2 ? 2 : 1) * GasBounds.SUBSCRIBER_ITEM_GAS + GasBounds.SUBSCRIBER_TAIL_GAS);
+            assertLe(used, GasBounds.SUBSCRIBER_ITEM_GAS + GasBounds.SUBSCRIBER_TAIL_GAS);
             assertTrue(vm.revertToState(base));
         }
     }

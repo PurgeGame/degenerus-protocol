@@ -7,41 +7,27 @@ import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
+import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 
-/// @title V56FreezeSolvency -- the SEC-02 proof in three legs (CONTEXT D-05) against the FROZEN v56 subject:
-///        (1) the ETH/claimablePool debit path is byte-unchanged vs 453f8073 (the SOLVENCY-01 site); (2) a
+/// @title V56FreezeSolvency -- the SEC-02 proof in three legs against the frozen subject:
+///        (1) the ETH/claimablePool debit path (one in-context site, the delivered buy); (2) a
 ///        solvency invariant fuzz; (3) an RNG-freeze determinism fuzz.
 ///
-/// @notice Leg 1 (forge arm). The ETH/claimablePool debit happens at exactly one in-context site —
-///   `_deliverAfkingBuy` (GameAfkingModule.sol): `afkingFunding[src] -= ethValue; claimablePool -=
-///   uint128(ethValue);` — and the debit equals the delivered ethValue EXACTLY. The affiliate base and the
-///   slot-0 quest reward are accrued as FLIP (pendingFlip / affiliateBase, claimed via creditFlip), OFF
-///   the ETH/claimablePool path: claiming FLIP leaves claimablePool byte-unchanged. The literal git
-///   byte-diff anchor (`git diff 453f8073 HEAD` shows the debit two-liner re-added verbatim) is recorded by
-///   356-07's ledger; this file asserts the BEHAVIOR (debit == delivered value; FLIP claim moves no pool).
+/// @notice Leg 1. The ETH/claimablePool debit happens at exactly one in-context site -- the funded
+///   delivery in the subscriber pass -- and the pool moves by the delivered value EXACTLY. Rewards are
+///   derived from checkpoints and paid as FLIP (creditFlip) at settlement, OFF the ETH/claimablePool
+///   path: claiming FLIP leaves claimablePool byte-unchanged.
 ///
-/// @notice Leg 2 (solvency invariant). The master invariant the Game maintains (DegenerusGame.sol:18) is
+/// @notice Leg 2. The master invariant the Game maintains is
 ///   `address(this).balance + steth.balanceOf(this) >= claimablePool`. Across random {sub, unsub, buy,
-///   accrue, claimAfkingFlip} sequences it always holds: the buy-delivery debit decreases claimablePool by
-///   exactly the fresh-ETH it spends from the (already-reserved) afking funding, and the FLIP accrue/claim
-///   never touches the pool.
+///   claimAfkingFlip, top-up} sequences it always holds: the delivery debit decreases claimablePool by
+///   exactly the ETH it spends from the (already-reserved) afking funding, and FLIP settlement never
+///   touches the pool.
 ///
-/// @notice Leg 3 (RNG-freeze determinism). The subscribe min-buy STAMPS a box for-later-open and NEVER
-///   inline-resolves pre-RNG (no LootBoxOpened at subscribe time). The single-roll open seed is
-///   `keccak256(abi.encode(_recordedDailyWord(stampDay), player, AFKING_BOX_TAG, stampDay))` — it carries NO block.*
-///   entropy, so two opens of the SAME stamp at DIFFERENT blocks (vm.roll/warp + perturbed
-///   prevrandao/coinbase) materialize byte-identical boxes. The afking open is reached only through
-///   mineFlip().
-///
-/// @dev Reuses the funded-sub + seated + new-day STAGE harness (the accumulating-`_t` warp +
-///   fulfill-first `_settleGame`/`_settleClean`/`_fulfillPending` from V56AfkingGasMarginal / the 356-03
-///   V56SecUnmanipulable), the materialized-box byte-identity oracle from the v56-migrated
-///   V55FreezeDeterminism, and the claimablePool slot read from the v56-migrated V55RevertFreeEvCap. Copies
-///   the v56 Sub-slot offset block VERBATIM from V56AfkingGasMarginal:68-89 (NOT the stale v55 offsets).
-///   v56 harness semantics: Sub.amount is packed milli-ETH (_packEthToMilliEth), the subscribe min-buy
-///   carries a 0.01-ETH funding delta, the affiliate is a single-step claim. Seeded-fuzz deterministic
-///   (`foundry.toml [fuzz] seed=0xdeadbeef`); the assertions are an unseeded-invariant subset of the seeded
-///   closure (Pitfall 5). Test-only: ZERO contracts/*.sol mutation.
+/// @notice Leg 3. The daily pass STAMPS a box for-later-open and NEVER inline-resolves it pre-RNG (no
+///   LootBoxOpened at signup or at the pass). The single-roll open seed carries NO block.* entropy, so
+///   two opens of the SAME stamp at DIFFERENT blocks (vm.roll/warp + perturbed prevrandao/coinbase)
+///   materialize byte-identical boxes. The afking open is reached only through mineFlip().
 contract V56FreezeSolvency is DeployProtocol {
 
     mapping(address => uint32) private _aidCache;
@@ -62,36 +48,21 @@ contract V56FreezeSolvency is DeployProtocol {
         for (uint256 i; i < a.length; ++i) ids[i] = _aid(a[i]);
     }
 
-    // -------------------------------------------------------------------------
-    // Game-resident storage slots + the v56 Sub-slot offset block (V56AfkingGasMarginal:68-89)
-    // -------------------------------------------------------------------------
     uint256 private constant CLAIMABLE_POOL_SLOT = GameSlots.CLAIMABLE_POOL; // uint128 @ slot 1, byte 16
     uint256 private constant CLAIMABLE_POOL_OFFBYTES = 16;
-    uint256 private constant RNG_WORD_BY_DAY_SLOT = GameSlots.RNG_WORD_BY_DAY; // mapping(uint32 => uint256) — the afking box DAY-keyed word
-    uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED; // [0:47] lootboxRngIndex (was 35)
-    uint256 private constant LOOTBOX_RNG_WORD_BY_INDEX_SLOT = 3; // mapping(uint48 => uint256) (was 36)
-    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF; // _subOf mapping root (address => Sub, one packed slot) (was 58)
-
-    //   dailyQuantity u8 @0 · flags u8 @1 · score u16 @2 · amount u24 @4 (milli-ETH)
-    //   lastAutoBoughtDay u24 @7 · afkCoveredThroughDay u24 @10 · afkingStartDay u24 @13
-    //   affiliateBase u32 @16 · pendingFlip u24 @20 · subStreakLatch u16 @23
-    uint256 private constant OFF_SCOREPLUS1 = 2; // uint16 score             (bytes 2..3)
-    uint256 private constant OFF_AMOUNT = 4; // uint24 amount (milli-ETH)   (bytes 4..6)
-    uint256 private constant OFF_LASTBOUGHT = 7; // uint24 lastAutoBoughtDay (bytes 7..9)
-    uint256 private constant OFF_AFKCOVERED = 10; // uint24 afkCoveredThroughDay (bytes 10..12)
-    uint256 private constant OFF_PENDINGFLIP = 20; // uint24 pendingFlip (bytes 20..22)
 
     /// @dev keccak256 of the materialized-box event — the byte-identity oracle's source signature.
     bytes32 private constant LOOTBOX_OPENED_SIG =
         keccak256("LootBoxOpened(uint32,uint48,uint256,uint24,uint32,uint256,bool)");
 
-    /// @dev QUEST_SLOT0_REWARD / 1 ether = 100 whole FLIP accrued to pendingFlip per delivered buy.
+    /// @dev Whole FLIP a box-mode unit earns per credited day.
     uint256 private constant SLOT0_FLIP_PER_BUY = 100;
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
     uint256 private _lastFulfilledReqId;
     uint256 private _t; // explicit accumulating timestamp (the Foundry block.timestamp caching workaround)
     uint256 private _deliverNonce;
+    DegenerusGameLens private lens;
 
     /// @dev A decoded LootBoxOpened payload — every non-indexed field of the materialized box.
     struct Box {
@@ -110,6 +81,7 @@ contract V56FreezeSolvency is DeployProtocol {
         _t = block.timestamp + 1 days;
         vm.warp(_t);
         vm.deal(address(game), 5_000_000 ether);
+        lens = new DegenerusGameLens();
         _finishSubscriptionWindow();
     }
 
@@ -118,17 +90,15 @@ contract V56FreezeSolvency is DeployProtocol {
     // =========================================================================
 
     /// @notice The master solvency invariant `game.balance + steth.balanceOf(game) >= claimablePool` holds
-    ///         after EVERY action in a fuzzed {sub, unsub, buy(=deliver a funded day), claimAfkingFlip}
-    ///         sequence. Each delivered day debits claimablePool by exactly its fresh-ETH spend (already
-    ///         reserved inside the pool by the funding deposit), and the FLIP accrue/claim moves no ETH —
-    ///         so the invariant is never broken by the v56 accrual/settle redesign. Non-vacuous: at least one
-    ///         delivered buy actually moved the pool and accrued claimable FLIP.
+    ///         after EVERY action in a fuzzed {sub, unsub, buy(=deliver a funded day), claimAfkingFlip,
+    ///         top-up} sequence. Each delivered day debits claimablePool by exactly its ETH spend (already
+    ///         reserved inside the pool by the funding deposit), and FLIP settlement moves no ETH.
+    ///         Non-vacuous: at least one delivered buy actually moved the pool.
     function testFuzzSolvencyInvariantUnderChurn(uint256 seq, uint8 rounds) public {
         address a = makeAddr("solv_a");
         address b = makeAddr("solv_b");
         _grantSeat(a);
         _grantSeat(b);
-        // Fund BEFORE subscribe so each NEW-run cover-buy is grounded (D-12 — an unfunded start reverts).
         _fundPool(a, 200 ether);
         _fundPool(b, 200 ether);
         _subscribeLootbox(a, 1);
@@ -138,48 +108,41 @@ contract V56FreezeSolvency is DeployProtocol {
 
         // Anchor buy: always deliver one funded day first so the invariant is exercised against a pool a
         // real buy has moved (the fuzzed action stream may otherwise pick no buy at all).
+        uint256 poolBeforeAnchor = _claimablePool();
         _deliverDay(uint256(keccak256(abi.encode("solvanchor", seq))) | 1);
+        assertLt(_claimablePool(), poolBeforeAnchor, "non-vacuity: the anchor buy moved the pool");
         _assertSolvent("post-anchor-buy");
 
-        uint256 delivered = 1;
         uint256 n = 3 + (uint256(rounds) % 6); // 3..8 actions
         for (uint256 i; i < n; i++) {
             uint256 action = (seq >> (i * 3)) & 0x7;
             if (action < 4) {
-                // buy: deliver a funded day to BOTH subs (debits the pool by the fresh-ETH spend).
+                // buy: deliver a funded day to BOTH subs (debits the pool by the ETH spend).
                 _deliverDay(uint256(keccak256(abi.encode("solvbuy", seq, i))) | 1);
-                delivered++;
             } else if (action == 4) {
-                // claimAfkingFlip: pulls the accrued FLIP — must NOT move claimablePool.
+                // claimAfkingFlip: pays the elapsed FLIP — must NOT move claimablePool.
                 uint256 poolBefore = _claimablePool();
                 game.claimAfkingFlip(_aids(_pair(a, b)));
                 assertEq(_claimablePool(), poolBefore, "claimAfkingFlip left claimablePool byte-unchanged (OFF the ETH path)");
             } else if (action == 5) {
-                // unsub a (tombstone) — only if currently an active sub (a real user can't cancel a
-                // non-existent sub; the contract reverts NotSubscribed otherwise). Refunds nothing, so the
-                // pool stays reserved against the residual funding.
-                if (_subscriberIndexOf(a) != 0 && _dailyQtyOf(a) != 0) {
+                // cancel a: the record is removed at once; the residual funding stays reserved in the pool.
+                if (_subscriberIndexOf(a) != 0) {
                     vm.prank(a);
-                    game.subscribe(0, false, false, 0, 0, 0);
+                    game.subscribe(0, false, 0, 0);
                 }
             } else if (action == 6) {
-                // re-sub a (re-uses the in-place slot) if it is not currently active. Top up its funding
-                // FIRST so the re-sub's NEW-run cover-buy is grounded (D-12).
-                if (_dailyQtyOf(a) == 0) {
+                // re-sub a (a new run) if it is not currently a member.
+                if (_subscriberIndexOf(a) == 0) {
                     _fundPool(a, 20 ether);
                     _subscribeLootbox(a, 1);
                 }
             } else {
-                // top up b's funding (deposit credits afkingFunding + claimablePool in tandem); fund FIRST
-                // then re-sub b if a STAGE reclaim deleted its slot (grounds the re-sub cover-buy — D-12).
+                // top up b's funding (deposit credits afkingFunding + claimablePool in tandem).
                 _fundPool(b, 20 ether);
-                if (_dailyQtyOf(b) == 0) _subscribeLootbox(b, 1);
+                if (_subscriberIndexOf(b) == 0) _subscribeLootbox(b, 1);
             }
             _assertSolvent("post-action");
         }
-
-        // Non-vacuity: the churn delivered at least one buy that moved the pool + accrued claimable FLIP.
-        assertGt(delivered, 0, "non-vacuity: at least one delivered buy");
         _assertSolvent("final");
     }
 
@@ -189,95 +152,94 @@ contract V56FreezeSolvency is DeployProtocol {
     function testSolvencyHoldsBuyThenFlipClaim() public {
         address p = makeAddr("solv_repro");
         _grantSeat(p);
-        // Fund-before-subscribe grounds the NEW-run cover-buy (D-12); under the hardened gate the grounded
-        // subscribe IS the delivered buy, so measure the claimablePool debit across the subscribe itself.
         _fundPool(p, 50 ether);
         _assertSolvent("post-fund");
 
+        uint256 poolBeforeSignup = _claimablePool();
+        _subscribeLootbox(p, 1);
+        assertEq(_claimablePool(), poolBeforeSignup, "signup buys nothing: the pool is untouched");
+
         uint256 poolBeforeBuy = _claimablePool();
-        _subscribeLootbox(p, 1); // the grounded NEW-run cover-buy debits the fresh-ETH spend at this site
-        uint256 poolAfterBuy = _claimablePool();
-        // The delivered buy spent fresh ETH from the (reserved) funding -> the pool decreased by the spend.
-        assertLt(poolAfterBuy, poolBeforeBuy, "the delivered buy debited claimablePool by its fresh-ETH spend");
+        _deliverDay(0xB04E0F1);
+        assertLt(_claimablePool(), poolBeforeBuy, "the delivered buy debited claimablePool by its spend");
         _assertSolvent("post-buy");
+        assertEq(_owedFlip(p), SLOT0_FLIP_PER_BUY, "the delivered day owes 100 whole FLIP (OFF the ETH path)");
 
-        // The buy accrued claimable FLIP OFF the ETH path.
-        assertEq(_pendingFlipOf(p), SLOT0_FLIP_PER_BUY, "the buy accrued 100 whole FLIP into pendingFlip (OFF the ETH path)");
-
-        // Claiming the FLIP moves no ETH: the pool is byte-unchanged across the claim.
         uint256 poolBeforeClaim = _claimablePool();
+        vm.recordLogs();
         game.claimAfkingFlip(_aids(_singleton(p)));
         assertEq(_claimablePool(), poolBeforeClaim, "claimAfkingFlip: claimablePool byte-unchanged (FLIP is OFF the ETH/pool path)");
-        assertEq(_pendingFlipOf(p), 0, "the FLIP was paid (pendingFlip zeroed)");
+        assertEq(_flipClaimed(p), SLOT0_FLIP_PER_BUY, "the FLIP was paid");
+        assertEq(_owedFlip(p), 0, "nothing owed after the claim");
         _assertSolvent("post-claim");
     }
 
     // =========================================================================
-    // Leg 1 (forge arm) — the SOLVENCY-01 debit equals the delivered ethValue EXACTLY,
-    //                     and the FLIP accrue/claim is OFF the ETH/claimablePool path
+    // Leg 1 (forge arm) — the debit equals the delivered value EXACTLY,
+    //                     and the FLIP settlement is OFF the ETH/claimablePool path
     // =========================================================================
 
     /// @notice The ETH/claimablePool debit happens ONLY at the buy-delivery site and equals the delivered
-    ///         ethValue EXACTLY. A funded sub's afking funding is reserved inside claimablePool by the deposit
-    ///         (the SOLVENCY-01 invariant is balanced); a delivered buy then transfers exactly the per-buy
-    ///         fresh-ETH spend out of BOTH afkingFunding[player] AND claimablePool in lockstep
-    ///         (GameAfkingModule.sol `afkingFunding[src] -= ethValue; claimablePool -= uint128(ethValue)`).
-    ///         Proven by reading both deltas across a single delivered buy: ΔafkingFunding == ΔclaimablePool
-    ///         (the debit is the same `ethValue` on both ledgers — the byte-frozen v55 SOLVENCY-01 behavior).
-    function testDebitEqualsDeliveredEthValueExactly() public {
+    ///         value EXACTLY. A funded sub's afking funding is reserved inside claimablePool by the deposit;
+    ///         a preparation call that delivers moves exactly the sum of the AfkingDelivered values out of
+    ///         claimablePool, and the subscriber's own prepaid balance drops by its own delivered value.
+    function testDebitEqualsDeliveredValueExactly() public {
         address p = makeAddr("debit_eq");
         _grantSeat(p);
-        // Fund BEFORE subscribe; under D-12 the grounded subscribe IS the delivered buy (the cover-buy
-        // debits the fresh-ETH spend at the subscribe site), so measure the SOLVENCY-01 leg-1 debit across
-        // the grounded subscribe itself — exactly the byte-frozen `afkingFunding -= ethValue; claimablePool
-        // -= ethValue` two-liner.
         _fundPool(p, 50 ether);
+        _subscribeLootbox(p, 1);
+        _settleClean(0xDEB17);
+        _t += 1 days;
+        vm.warp(_t);
 
-        uint256 fundingBefore = game.afkingFundingOf(p);
-        uint256 poolBefore = _claimablePool();
-        assertGt(fundingBefore, 0, "non-vacuity: the sub is funded pre-buy");
-
-        _subscribeLootbox(p, 1); // the grounded NEW-run cover-buy debits fresh ETH at this site
-
-        uint256 fundingAfter = game.afkingFundingOf(p);
-        uint256 poolAfter = _claimablePool();
-        uint256 fundingDebit = fundingBefore - fundingAfter;
-        uint256 poolDebit = poolBefore - poolAfter;
-
-        assertGt(fundingDebit, 0, "non-vacuity: the grounded subscribe cover-buy spent fresh ETH");
-        // The debit is the SAME ethValue on both ledgers (the byte-frozen SOLVENCY-01 two-liner).
-        assertEq(
-            poolDebit,
-            fundingDebit,
-            "SOLVENCY-01: claimablePool -= ethValue == afkingFunding[player] -= ethValue (debit equals delivered value exactly)"
-        );
+        uint32 id = game.walletIdOf(p);
+        uint256 fundingDebit;
+        uint256 poolDebit;
+        uint256 delivered;
+        for (uint256 i; i < DRAIN_MAX_ITERATIONS && delivered == 0; ++i) {
+            uint256 poolBefore = _claimablePool();
+            uint256 fundingBefore = game.afkingFundingOf(p);
+            vm.recordLogs();
+            game.mineFlip(0);
+            Vm.Log[] memory logs = vm.getRecordedLogs();
+            uint256 total;
+            for (uint256 j; j < logs.length; ++j) {
+                if (logs[j].emitter != address(game) || logs[j].topics.length < 2
+                    || logs[j].topics[0] != keccak256("AfkingDelivered(uint32,uint256)")) continue;
+                uint256 wei_ = uint128(abi.decode(logs[j].data, (uint256)));
+                total += wei_;
+                if (uint32(uint256(logs[j].topics[1])) == id) delivered = wei_;
+            }
+            if (delivered != 0) {
+                fundingDebit = fundingBefore - game.afkingFundingOf(p);
+                poolDebit = poolBefore - _claimablePool();
+                assertEq(poolDebit, total, "claimablePool moved by exactly the delivered values");
+            }
+        }
+        assertGt(delivered, 0, "non-vacuity: the sub's buy was delivered");
+        assertEq(fundingDebit, delivered, "the prepaid balance paid exactly the delivered value");
         _assertSolvent("post-debit");
     }
 
-    /// @notice The FLIP accrual + claim is OFF the ETH/claimablePool path: across a delivered buy that
-    ///         accrues both the slot-0 pendingFlip reward AND the affiliate base, then a claimAfkingFlip,
-    ///         the claimablePool delta is attributable ENTIRELY to the ETH buy debit — the FLIP legs add
-    ///         and remove ZERO from the pool. (affiliate/quest rewards are creditFlip-paid, never an ETH
-    ///         debit.) Asserted by isolating the claim: the pool is byte-unchanged across the claim alone.
+    /// @notice The FLIP settlement is OFF the ETH/claimablePool path: across a delivered buy that owes both
+    ///         the member reward AND the affiliate base, a claimAfkingFlip leaves the pool byte-unchanged.
     function testFlipClaimLeavesClaimablePoolUnchanged() public {
         address p = makeAddr("flip_offpath");
         _grantSeat(p);
         _fundPool(p, 50 ether);
-        _subscribeLootbox(p, 1); // join-day cover-buy accrues 100
-        _deliverDay(0xB04E0FF); // next-day STAGE buy accrues another 100 + affiliateBase
+        _subscribeLootbox(p, 1);
+        _deliverDay(0xB04E0FF);
 
-        // Cover-buy (join day) + one delivered STAGE day = TWO paid buys = 200 whole FLIP.
-        uint256 owed = _pendingFlipOf(p);
-        assertEq(owed, 2 * SLOT0_FLIP_PER_BUY, "non-vacuity: cover-buy + one delivered STAGE buy accrued claimable FLIP (200)");
+        DegenerusGameLens.SubFull memory owed = lens.subInfoFullById(address(game), game.walletIdOf(p));
+        assertEq(owed.owedFlip, SLOT0_FLIP_PER_BUY, "non-vacuity: one delivered day owes the member reward");
+        assertEq(owed.owedAffiliateBase, 70, "and the affiliate base");
 
-        // Isolate the FLIP claim: the pool must be byte-identical before/after (FLIP is a creditFlip, not
-        // an ETH/pool debit) — this is the exact equality the acceptance criterion demands.
         uint256 poolBefore = _claimablePool();
-        uint256 stakeBefore = coinflip.coinflipAmount(p);
+        vm.recordLogs();
         game.claimAfkingFlip(_aids(_singleton(p)));
         assertEq(_claimablePool(), poolBefore, "FLIP claim: claimablePool byte-unchanged (OFF the ETH path)");
-        assertEq(coinflip.coinflipAmount(p) - stakeBefore, owed, "FLIP claim paid via creditFlip (not an ETH move)");
-        assertEq(_pendingFlipOf(p), 0, "pendingFlip zeroed (paid exactly once, CEI)");
+        assertEq(_flipClaimed(p), owed.owedFlip, "FLIP claim paid via creditFlip (not an ETH move)");
+        assertEq(_owedFlip(p), 0, "owed zeroed (paid exactly once)");
         _assertSolvent("post-flip-claim");
     }
 
@@ -286,45 +248,40 @@ contract V56FreezeSolvency is DeployProtocol {
     //         ONLY the frozen _recordedDailyWord(stampDay) (two blocks -> byte-identical box)
     // =========================================================================
 
-    /// @notice STAMP-NOT-RESOLVE: the subscribe min-buy + the STAGE buy STAMP a box for-later-open and NEVER
-    ///         inline-resolve it pre-RNG — across the subscribe AND a new-day STAGE, NO LootBoxOpened is
-    ///         emitted (the box is stamped, the materialization is deferred to the open). Non-vacuous: a box
-    ///         WAS stamped (lastAutoBoughtDay advanced, the box is pending),
-    ///         and a subsequent open DOES emit LootBoxOpened (so the absence above is real, not vacuous).
-    function testSubscribeMinBuyStampsNoInlineResolve() public {
+    /// @notice STAMP-NOT-RESOLVE: signup buys nothing and the pass STAMPS a box for-later-open without
+    ///         inline-resolving it pre-RNG — across the signup AND a new-day pass, NO LootBoxOpened is
+    ///         emitted. Non-vacuous: a box WAS stamped (it is pending), and a subsequent open DOES emit
+    ///         LootBoxOpened.
+    function testPassStampsNoInlineResolve() public {
         address p = makeAddr("stamp_noresolve");
         _grantSeat(p);
 
-        // Record across BOTH the subscribe (min-buy) AND the funded STAGE buy (the new day's
-        // subscriber preparation, through its daily request): neither materializes a box. The open
-        // is the session's AFKing consumer step, after the stamped day's word is delivered, so the
-        // current day's own STAGE box opens when that day settles (between the two recorded windows).
         vm.recordLogs();
         _fundPool(p, 50 ether);
         _subscribeLootbox(p, 1);
-        assertEq(_countLootBoxOpened(p), 0, "STAMP-not-resolve: no LootBoxOpened at subscribe time (the box is stamped, not resolved)");
+        assertEq(_countLootBoxOpened(p), 0, "no LootBoxOpened at signup");
+        assertFalse(GameSlotKeys.afkingBoxPending(address(game), game.walletIdOf(p)), "signup stamps no box");
         _settleGame(0x57A10);
         vm.recordLogs();
         _stampNewDay(0x57A11);
-        assertEq(_countLootBoxOpened(p), 0, "STAMP-not-resolve: no LootBoxOpened at subscribe/STAGE time (the box is stamped, not resolved)");
+        assertEq(_countLootBoxOpened(p), 0, "STAMP-not-resolve: no LootBoxOpened at the pass (the box is stamped, not resolved)");
 
         // The box WAS stamped (pending), so the absence of a resolve above is non-vacuous.
-        uint32 stampDay = _lastBoughtDayOf(p);
-        assertGt(stampDay, 0, "non-vacuity: a box was stamped (lastAutoBoughtDay advanced)");
-        assertTrue(_lastOpenedDayOf(p) < stampDay, "non-vacuity: the box is pending (lastOpenedDay < lastAutoBoughtDay)");
+        uint32 stampDay = _resetDay();
+        assertTrue(GameSlotKeys.afkingBoxPending(address(game), game.walletIdOf(p)), "non-vacuity: a box was stamped and is pending");
+        assertTrue(_lastOpenedDayOf(p) < stampDay, "the opened day trails the stamp day");
 
         // And the open DOES emit LootBoxOpened — the materialization is reached only at the (deferred) open.
         vm.recordLogs();
         Box memory opened = _openAfkingBoxAt(p, 7, 5 minutes, 0xA11CE, makeAddr("stamp_opener"));
         assertTrue(opened.present, "the deferred open materialized the box (LootBoxOpened emitted at open, not stamp)");
-        assertEq(_lastOpenedDayOf(p), stampDay, "the open advanced lastOpenedDay to the stamp day");
+        assertEq(_lastOpenedDayOf(p), stampDay, "the open advanced the opened day to the stamp day");
     }
 
     /// @notice TWO-BLOCK DETERMINISM (the freeze observable): open the SAME stamp twice at DIFFERENT blocks
     ///         (vm.roll/warp + perturbed prevrandao/coinbase) and the materialized box is BYTE-IDENTICAL —
-    ///         the single-roll open seed `keccak256(abi.encode(_recordedDailyWord(stampDay), player, stampDay,
-    ///         amount))` carries NO block.* entropy. The box resolves against the FROZEN stamp day (the live
-    ///         day moved between stamp and open). Adapted from V55FreezeDeterminism:91+ to the v56 harness.
+    ///         the single-roll open seed carries NO block.* entropy. The box resolves against the FROZEN
+    ///         stamp day (the live day moved between stamp and open).
     function testStampedDayOpenAtTwoBlocksByteIdentical() public {
         address afk = makeAddr("freeze_twoblock");
         _grantSeat(afk);
@@ -332,9 +289,9 @@ contract V56FreezeSolvency is DeployProtocol {
         _subscribeLootbox(afk, 1);
         _stampNewDay(0xF00D01);
 
-        uint32 stampDay = _lastBoughtDayOf(afk);
-        assertGt(stampDay, 0, "non-vacuity: the afking box was stamped");
-        assertTrue(_lastOpenedDayOf(afk) < stampDay, "box pending (lastOpenedDay < lastAutoBoughtDay)");
+        uint32 stampDay = _resetDay();
+        assertTrue(GameSlotKeys.afkingBoxPending(address(game), game.walletIdOf(afk)), "non-vacuity: the afking box was stamped");
+        assertTrue(_lastOpenedDayOf(afk) < stampDay, "box pending (opened day trails the stamp day)");
 
         // Snapshot the SHARED pre-open state (stamp taken, its day's request in flight) so both opens
         // replay from an identical stamp; each open delivers the same word and runs the session.
@@ -346,7 +303,7 @@ contract V56FreezeSolvency is DeployProtocol {
         assertTrue(_rngWordByDay(stampDay) != 0, "the stamped day's word landed before its open");
 
         vm.revertToState(snap);
-        assertEq(_lastBoughtDayOf(afk), stampDay, "revert restored the stamp day");
+        assertEq(_resetDay(), stampDay, "revert restored the stamp day");
         assertTrue(_lastOpenedDayOf(afk) < stampDay, "revert restored the pending box");
         Box memory box2 = _openAfkingBoxAt(afk, 999_999, 47 minutes, 0xBB22BB22, makeAddr("coinbase_2"));
         assertEq(_lastOpenedDayOf(afk), stampDay, "open#2 materialized the box");
@@ -354,15 +311,11 @@ contract V56FreezeSolvency is DeployProtocol {
 
         // FREEZE: byte-identical across the two block contexts (the seed froze on the stamped day; no block.*).
         _assertBoxByteIdentical(box1, box2, "RNG-freeze two-block determinism");
-        // The materialization bound to the FROZEN stamp day: the seed is _recordedDailyWord(stampDay) and the open
-        // advanced the opened day to that same stampDay (the live day moved between stamp and open, yet the box
-        // resolved against the frozen stamp day — no open-time entropy).
-        assertEq(_lastOpenedDayOf(afk), stampDay, "the box materialized against the frozen stamp day (single-roll open, no open-time entropy)");
     }
 
     /// @notice TWO-BLOCK DETERMINISM fuzz: for RANDOM perturbed open-block contexts (prevrandao/coinbase/
     ///         number/timestamp), the SAME stamp opens to a byte-identical box — ANY two block contexts agree,
-    ///         so the single-roll open + pendingFlip credit consume ONLY the frozen _recordedDailyWord(stampDay).
+    ///         so the single-roll open consumes ONLY the frozen _recordedDailyWord(stampDay).
     function testFuzzTwoBlockOpenNoBlockEntropy(uint256 r1, uint256 r2, uint64 dt1, uint64 dt2) public {
         address afk = makeAddr("freeze_twoblock_fz");
         _grantSeat(afk);
@@ -370,8 +323,8 @@ contract V56FreezeSolvency is DeployProtocol {
         _subscribeLootbox(afk, 1);
         _stampNewDay(0xACE5EED);
 
-        uint32 stampDay = _lastBoughtDayOf(afk);
-        assertGt(stampDay, 0, "non-vacuity: stamped");
+        uint32 stampDay = _resetDay();
+        assertTrue(GameSlotKeys.afkingBoxPending(address(game), game.walletIdOf(afk)), "non-vacuity: stamped");
         assertTrue(_lastOpenedDayOf(afk) < stampDay, "stamp pending its day's word");
 
         // Keep both opens inside the same level/day window (< ~6h each) so the live level is unchanged; the
@@ -491,7 +444,7 @@ contract V56FreezeSolvency is DeployProtocol {
     /// @dev Deliver ONE funded day to the in-set subs: a new-day STAGE buy (stamps each pending box +
     ///      debits the fresh-ETH spend + accrues), then settle clean and OPEN every pending box (so the
     ///      no-orphan guard does not skip the next day's buy). Each delivered day debits claimablePool by the
-    ///      fresh-ETH spend and accrues 100 pendingFlip per in-set sub.
+    ///      fresh-ETH spend and owes 100 whole FLIP per in-set box sub.
     function _deliverDay(uint256 vrfWord) internal {
         uint256 w = uint256(keccak256(abi.encode("dlv", vrfWord, _deliverNonce++))) | 1;
         _runStageNewDay(w);
@@ -560,7 +513,7 @@ contract V56FreezeSolvency is DeployProtocol {
     function _subscribeLootbox(address who, uint8 q) internal {
         uint256 seat = _grantSeat(who);
         vm.prank(who);
-        game.subscribe(0, false, false, q, 0, seat); // self, lootbox mode, no reinvest
+        game.subscribe(0, false, q, seat); // self, lootbox mode, no reinvest
     }
 
     function _fundPool(address who, uint256 amount) internal {
@@ -580,31 +533,36 @@ contract V56FreezeSolvency is DeployProtocol {
         arr[1] = b;
     }
 
-    // ---- Sub-slot + claimablePool reads (_subOf slot 52 + the v56 offsets; slot 1 byte 16) ----
+    // ---- Lane reads + claimablePool ----
 
-    function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
-        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT))))) >> (off * 8);
-        return p & ((uint256(1) << widthBits) - 1);
-    }
-
-    function _dailyQtyOf(address who) internal view returns (uint8) {
-        return uint8(_subField(who, 0, 8));
-    }
-
-    function _lastBoughtDayOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_LASTBOUGHT, 24));
+    function _resetDay() internal view returns (uint32) {
+        return uint24(uint256(vm.load(address(game), bytes32(GameSlots.AFKING_RESET_DAY)))
+            >> (GameSlots.AFKING_RESET_DAY_OFFSET * 8));
     }
 
     function _lastOpenedDayOf(address who) internal view returns (uint32) {
         return GameSlotKeys.afkingOpenedDay(address(game), game.walletIdOf(who));
     }
 
-    function _pendingFlipOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_PENDINGFLIP, 24));
+    /// @dev `who`'s set position + 1; 0 = not in the set.
+    function _subscriberIndexOf(address who) internal view returns (uint256 position1) {
+        (, position1) = GameSlotKeys.subLane(address(game), game.walletIdOf(who));
     }
 
-    function _subscriberIndexOf(address who) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.SUB_OF)))) >> 200; // Sub.setPosition (1-based)
+    function _owedFlip(address who) internal view returns (uint256) {
+        return lens.subInfoFullById(address(game), game.walletIdOf(who)).owedFlip;
+    }
+
+    /// @dev Whole FLIP the AfkingFlipClaimed events recorded since the last vm.recordLogs() paid `who`.
+    function _flipClaimed(address who) internal returns (uint256 total) {
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bytes32 sig = keccak256("AfkingFlipClaimed(uint32,uint256)");
+        uint32 id = game.walletIdOf(who);
+        for (uint256 i; i < logs.length; i++) {
+            if (logs[i].emitter != address(game) || logs[i].topics.length < 2 || logs[i].topics[0] != sig) continue;
+            if (uint32(uint256(logs[i].topics[1])) != id) continue;
+            total += abi.decode(logs[i].data, (uint256));
+        }
     }
 
     function _claimablePool() internal view returns (uint256) {

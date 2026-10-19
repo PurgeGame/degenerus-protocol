@@ -4,54 +4,24 @@ pragma solidity ^0.8.26;
 // Permanently skipped historical cases were retired in the test review.
 // See docs/TEST_REVIEW.md for replacement suites and remaining coverage limits.
 
-import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
-import {GameSlots} from "../helpers/GameSlots.sol";
+import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 
-/// @title AfKingConcurrency -- Proves the v55.0 game-resident afking subscriber-set mutation
-///        correctness: the per-sub buy now runs INSIDE `mineFlip()`'s required-path process
-///        STAGE (the Afking stage, `SUB_STAGE_BATCH=50`), strictly
-///        PRE-RNG. The standalone `autoBuy(maxCount)` keeper entrypoint and its mid-block cursor are
-///        GONE (D-351-01 successor remap, PATTERNS §3); the STAGE is the single per-day buy driver.
-///        This file is the PRIMARY set-mutation / swap-pop / tombstone analog for TST-04: it proves
-///        the H-CANCEL-SWAP-MISS resolution (the in-place cancel-tombstone + deferred reclaim that
-///        advances NO cursor) that TST-04 regresses ([[afking-cancel-tombstone-streak-finding]]).
+/// @title AfKingConcurrency -- the game-resident subscriber-set mutation correctness: the per-sub buy
+///        runs INSIDE `mineFlip()`'s required-path subscriber pass, strictly pre-RNG, and the pass is the
+///        single per-day buy driver.
 ///
-/// @notice The v55 set-mutation floor (reframed onto the game-resident STAGE):
-///   - Exactly-once / no double-buy: a full STAGE cycle (mineFlip over a new day) buys every
-///     active funded sub EXACTLY ONCE; the per-entry `lastAutoBoughtDay >= processDay` idempotency
-///     skip (GameAfkingModule.sol:598) prevents a second buy if the STAGE re-visits an index already
-///     stamped this cycle (the chunked-same-day case across partial-drain advance calls).
-///   - Daily reset: the first advance into a NEW day flips `subsFullyProcessed=false` + `_subCursor=0`
-///     (AdvanceModule:305-309) so the new day re-stamps every active sub once.
-///   - In-place cancel-tombstone no-miss (CONSENT-02 / H-CANCEL-SWAP-MISS): `subscribe(_,0)` is a
-///     TRUE in-place tombstone -- it writes `dailyQuantity=0` and relocates NO ONE (the entry stays
-///     in the iterable set). The swap-pop is DEFERRED to the STAGE's top-of-loop reclaim branch
-///     (GameAfkingModule.sol:586-594) that `delete _subOf[player]` + `_removeFromSet` + continues
-///     WITHOUT advancing the cursor, so the swap-pop occupant (a mover from ahead, still pending) is
-///     re-read at the freed index THIS pass -- no active sub is skipped. Because the cancel moves
-///     nothing, it can never push a still-pending tail behind the cursor (H-CANCEL-SWAP-MISS resolved).
-///   - Pass-eviction swap-pop invariant (CONSENT-01): a no-pass crossing eviction routes through the
-///     SAME tombstone-then-reclaim shape (`sub.dailyQuantity=0; _removeFromSet; continue` WITHOUT a
-///     cursor advance, GameAfkingModule.sol:619-628) -- membership ⟺ packed-index != 0 preserved.
-///
-/// @notice The five call-site deltas applied (D-351-01, PATTERNS §"five call-site deltas"):
-///   Δ1: dropped the deleted standalone-contract source dependency -- the receiver is the game path.
-///   Δ2 subscribe: `afKing.subscribe(...)` -> `game.subscribe(...)` (identical 6-arg sig, dispatch stub
-///      DegenerusGame.sol:363 -> GameAfkingModule.sol:234).
-///   Δ4 autoBuy: `afKing.autoBuy(N)` has NO successor -- the per-sub buy folded into `mineFlip()`'s
-///      required-path STAGE; driven here via a new-day `mineFlip()` + the `_settleGame` VRF drain.
-///   Δ5 views/cancel: `afKing.subscriberCount()`/`subscriberAt()`/`subscriptionOf()`/`autoBuyProgress()`
-///      have NO game-exposed external view -> read `_subscribers`/`_subOf`/`_subCursor` via `vm.load`
-///      RE-DERIVED slots (the AfKing-standalone-layout constants were WRONG); `setDailyQuantity(0)` ->
-///      re-`subscribe(...,dailyQuantity=0,...)`; `poolOf`/`withdraw`/`depositFor` ->
-///      `afkingFundingOf`/`withdrawAfkingFunding`/`depositAfkingFunding`.
-///
-/// @dev Builds on the 351-01-repaired DeployProtocol fixture (GameAfkingModule live at
-///      GAME_AFKING_MODULE; the two SUB-09 self-subscribes VAULT + SDGNRS already in the set). Test
-///      subs are driven through the public game.subscribe() API. Test-only: no contracts/*.sol mutated.
+/// @notice The set-mutation floor:
+///   - Exactly-once / no double-buy: a full pass over a new day buys every funded member EXACTLY ONCE.
+///   - Daily reset: the first advance into a new day flips `subsFullyProcessed=false` + `_subCursor=0`
+///     so the new day buys for every member once.
+///   - Cancel removes at once: `subscribe(_, 0)` settles both sides and swap-removes the member from
+///     the set, so a signup after it is a plain new entry with no duplicate membership. The set only
+///     changes outside the lock window, so no active member is ever skipped by a cancel.
+///   - Expiry swap-pop no-miss: an unfunded member removed during the pass is replaced by its section's
+///     tail, which is processed at the same cursor in the same pass.
 contract AfKingConcurrency is DeployProtocol {
 
     mapping(address => uint32) private _aidCache;
@@ -66,30 +36,10 @@ contract AfKingConcurrency is DeployProtocol {
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Game-resident storage slots (via `forge inspect DegenerusGame storageLayout`).
-    // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF; // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = GameSlots.SUBSCRIBERS; // _subscribers address[] (length here; data at keccak(54))
-    uint256 private constant SUBCURSOR_SLOT = GameSlots.SUB_CURSOR; // _subCursor uint16 at offset 0 (the STAGE walk cursor)
-    uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED; // mintPacked_ mapping root (deity bit lives here)
+    uint256 private constant SUBSCRIBERS_SLOT = GameSlots.SUBSCRIBERS; // _subscribers (length here)
+    uint256 private constant SUBCURSOR_SLOT = GameSlots.SUB_CURSOR; // _subCursor uint16 at offset 0 (the pass cursor)
 
-    // Sub packed-field byte offsets (cumulative little-endian within the single packed slot —
-    // DegenerusGameStorage.sol:1895 is the authoritative layout; the v56 compute-on-read re-pack
-    // narrowed `amount` to uint24 and the day markers to uint24).
-    uint256 private constant OFF_DAILY = 0; // uint8  dailyQuantity      (byte 0)
-    uint256 private constant OFF_VALIDTHROUGH = 1; // uint24 validThroughLevel  (bytes 1..3)
-    uint256 private constant OFF_REINVEST = 4; // uint8  reinvestPct        (byte 4)
-    uint256 private constant OFF_FLAGS = 1; // uint8  flags              (byte 1; bit1=drainFirst, bit2=useTickets)
-    uint256 private constant OFF_SCOREPLUS1 = 5; // uint16 scorePlus1         (bytes 6..7)
-    uint256 private constant OFF_AMOUNT = 7; // uint24 amount             (bytes 8..10)
-    uint256 private constant OFF_LASTBOUGHT = 7; // uint24 lastAutoBoughtDay  (bytes 7..9)
-
-    uint256 private constant DEITY_SHIFT = BitPackingLib.HAS_DEITY_PASS_SHIFT; // HAS_DEITY_PASS_SHIFT in mintPacked_
-
-    /// @dev SubscriptionExpired(address indexed player, uint8 reason) — the game-resident module
-    ///      event (emitter == address(game) via delegatecall). reason 2 = CancelReclaim,
-    ///      reason 1 = AutoPause (pass-eviction at crossing OR funding-skip kill).
+    /// @dev SubscriptionExpired(uint32 indexed player, uint8 reason): 1 = unfunded, 2 = seized.
     bytes32 private constant SUB_EXPIRED_SIG = keccak256("SubscriptionExpired(uint32,uint8)");
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
@@ -106,90 +56,112 @@ contract AfKingConcurrency is DeployProtocol {
     }
 
 
-    /// @notice v55 daily reset gate (AdvanceModule:305-309): a STAGE run drives `_subCursor` to the
-    ///         set end and sets `subsFullyProcessed = true` (afking done for THIS day). The
-    ///         forward-looking `_afkingResetDay != day` gate is what re-opens processing on a fresh
-    ///         day — flipping `subsFullyProcessed` back to false + `_subCursor` to 0. Proves the gate
-    ///         non-vacuously: after a full STAGE the gate is closed (subsFullyProcessed true, cursor at
-    ///         end); a fresh-day reset re-opens it and a subsequent STAGE re-stamps each sub exactly
-    ///         once. (The idle fixture's real day index saturates without ticket purchases, so the
-    ///         fresh-day reset is driven via the documented `_afkingResetDay` gate slot — the same
-    ///         field the contract itself writes at AdvanceModule:306.)
+    /// @notice Daily reset gate: a pass drives `_subCursor` to the set end and sets `subsFullyProcessed = true`
+    ///         (afking done for THIS day). A fresh-day reset flips `subsFullyProcessed` back to false and
+    ///         `_subCursor` to 0, and a subsequent pass buys for each member exactly once.
     function testStageResetGateReopensProcessingPerDay() public {
         uint256 N = 4;
         address[] memory subs = _setupHealthyBuyingSubs(N, "daily_");
+        uint256 price = game.mintPrice();
 
+        _snapshotFunding(subs);
         _runStageNewDay(0xD1);
         for (uint256 i; i < N; i++) {
-            assertEq(_countBoughtFor(subs[i]), 1, "day-1: each sub bought exactly once");
+            assertEq(_boughtFor(subs[i]), price, "day-1: each sub bought exactly once");
         }
-        // After a completed STAGE: the gate is CLOSED for this day (no more processing).
-        assertTrue(_subsFullyProcessed(), "post-STAGE: subsFullyProcessed == true (gate closed for the day)");
+        assertTrue(_subsFullyProcessed(), "post-pass: subsFullyProcessed == true (gate closed for the day)");
         assertEq(_subCursorVal(), uint16(1 << 15), "all-box pass ended at the empty ticket section");
 
-        // Fresh-day reset: open the reset gate exactly as the contract does at a new-day entry
-        // (AdvanceModule:306-308: `subsFullyProcessed = false; _subCursor = 0`).
-        _openAfkingResetGate();
+        // A real new day re-opens the gate by itself: each member buys exactly once again.
+        _snapshotFunding(subs);
+        _runStageNewDay(0xD2);
+        for (uint256 i; i < N; i++) {
+            assertEq(_boughtFor(subs[i]), price, "day-2: each sub bought exactly once again");
+        }
 
-        // Re-open confirmed (NON-VACUOUS — the gate was demonstrably CLOSED above with the cursor at
-        // the set end): the per-day reset re-enables STAGE processing for the next cycle. This is the
-        // exact AdvanceModule:305-309 gate the contract re-opens on a fresh day.
+        // The reset gate the contract opens at a new-day entry: `subsFullyProcessed = false; _subCursor = 0`.
+        _openAfkingResetGate();
         assertFalse(_subsFullyProcessed(), "reset re-opened the gate (subsFullyProcessed == false)");
         assertEq(_subCursorVal(), 0, "reset rewound the cursor to 0 (set re-walked from the start)");
     }
 
-
-    /// @notice TST-04: reactivating a still-in-set tombstone (before any STAGE reclaims it) flips it
-    ///         back to active IN PLACE with NO duplicate set membership (idempotent `_addToSet`).
-    function testReactivateTombstonedSubNoDoubleAdd() public {
+    /// @notice Cancel removes the member at once (no tombstone); a later signup is a plain new entry that
+    ///         never double-adds, and the new run buys on the next pass like any other.
+    function testCancelRemovesAtOnceAndResubscribeNeverDoubleAdds() public {
         address[] memory subs = _setupHealthyBuyingSubs(1, "react_");
         address sub = subs[0];
 
-        uint256 idx = _subscriberIndexOf(sub);
         uint256 lenBefore = _subscribersLen();
+        assertGt(_subscriberIndexOf(sub), 0);
 
         vm.prank(sub);
-        game.subscribe(0, false, false, 0, 0, 0); // tombstone, still in set
-        assertEq(_subscriberIndexOf(sub), idx, "tombstone in set, same index");
+        game.subscribe(0, false, 0, 0); // cancel
+        assertEq(_subscriberIndexOf(sub), 0, "cancel removed the member at once");
+        assertEq(_subscribersLen(), lenBefore - 1, "no tombstone stays in the set");
 
-        // Re-subscribe the still-in-set tombstoned address (a new run burns a new seat).
         uint256 seat = _grantSeat(sub);
         vm.prank(sub);
-        game.subscribe(0, false, false, 3, 0, seat);
-        assertEq(_subscriberIndexOf(sub), idx, "re-subscribe kept the same set slot (idempotent _addToSet)");
-        assertEq(_subscribersLen(), lenBefore, "re-subscribe of an in-set tombstone never double-adds");
-        assertEq(_dailyQtyOf(sub), 3, "re-subscribe reactivated the sub (dailyQuantity restored)");
+        game.subscribe(0, false, 3, seat);
+        assertGt(_subscriberIndexOf(sub), 0, "re-subscribe re-added the member");
+        assertEq(_subscribersLen(), lenBefore, "re-subscribe adds exactly one entry");
+        assertEq(_dailyQtyOf(sub), 3, "re-subscribe restored the quantity");
 
-        // A STAGE now treats it as a normal active sub (not a tombstone) -- it buys, not reclaims.
+        _snapshotFunding(subs);
         vm.recordLogs();
         _runStageNewDay(0xAE1);
         _drainLogs();
-        assertEq(_countExpiredFor(sub, 2), 0, "reactivated sub is NOT reclaimed as a tombstone");
-        assertEq(_countBoughtFor(sub), 1, "reactivated sub buys as a normal active sub");
+        assertEq(_countExpiredFor(sub, 1), 0, "the new run is not expired");
+        assertEq(_boughtFor(sub), 3 * game.mintPrice(), "the new run buys once at its quantity");
     }
 
+    /// @notice Cancelling a member ahead of the others moves the section tail into its place; every
+    ///         remaining member is still bought exactly once on the next pass.
+    function testCancelSwapPopSkipsNoActiveMember() public {
+        address[] memory subs = _setupHealthyBuyingSubs(4, "swap_");
+        vm.prank(subs[0]);
+        game.subscribe(0, false, 0, 0);
+        _snapshotFunding(subs);
+        _runStageNewDay(0x5A9);
+        uint256 price = game.mintPrice();
+        assertEq(_boughtFor(subs[0]), 0, "the cancelled member is gone");
+        for (uint256 i = 1; i < 4; i++) assertEq(_boughtFor(subs[i]), price, "each remaining member bought once");
+    }
 
-    /// @notice TST-04: a cancelled sub's stranded afking ETH stays withdrawable (game-resident
-    ///         afkingFunding -- `withdrawAfkingFunding`).
+    /// @notice An unfunded member expiring mid-pass is replaced by its section's tail, which is processed
+    ///         at the same cursor in the same pass: no funded member is skipped.
+    function testExpiryMoverIsStillProcessedThisPass() public {
+        address[] memory subs = _setupHealthyBuyingSubs(4, "mover_");
+        vm.prank(subs[0]);
+        game.withdrawAfkingFunding(0, 1 ether);
+        _snapshotFunding(subs);
+        vm.recordLogs();
+        _runStageNewDay(0x30FE);
+        _drainLogs();
+        uint256 price = game.mintPrice();
+        assertEq(_countExpiredFor(subs[0], 1), 1, "the unfunded member expired");
+        assertEq(_subscriberIndexOf(subs[0]), 0);
+        for (uint256 i = 1; i < 4; i++) assertEq(_boughtFor(subs[i]), price, "each funded member bought once");
+    }
+
+    /// @notice A cancelled sub's prepaid afking ETH stays withdrawable.
     function testCancelledSubFundingWithdrawable() public {
         address[] memory subs = _setupHealthyBuyingSubs(1, "strandfund_");
         address sub = subs[0];
 
         _fundPool(sub, 3 ether);
         uint256 fundedBefore = game.afkingFundingOf(sub);
-        assertGt(fundedBefore, 0, "sub has stranded afking ETH");
+        assertGt(fundedBefore, 0, "sub has prepaid afking ETH");
 
         vm.prank(sub);
-        game.subscribe(0, false, false, 0, 0, 0); // tombstone
-        assertGt(_subscriberIndexOf(sub), 0, "v55: cancel is an in-place tombstone -- still in set");
-        assertEq(_dailyQtyOf(sub), 0, "cancel wrote the in-place sentinel");
+        game.subscribe(0, false, 0, 0); // cancel
+        assertEq(_subscriberIndexOf(sub), 0, "cancel removed the member");
         assertEq(game.afkingFundingOf(sub), fundedBefore, "cancel did not confiscate the afking ETH");
 
         uint256 balBefore = sub.balance;
         vm.prank(sub);
         game.withdrawAfkingFunding(0, fundedBefore);
         assertEq(game.afkingFundingOf(sub), 0, "afking ETH drained on withdraw");
-        assertEq(sub.balance - balBefore, fundedBefore, "stranded afking ETH returned to the cancelled sub");
+        assertEq(sub.balance - balBefore, fundedBefore, "prepaid afking ETH returned to the cancelled sub");
     }
 
 
@@ -197,13 +169,11 @@ contract AfKingConcurrency is DeployProtocol {
     // Internal helpers
     // =========================================================================
 
-    /// @dev Drive the per-sub buy STAGE for a NEW day: warp a day forward, then run mineFlip +
-    ///      the mock-VRF drain so the Afking stage (`SUB_STAGE_BATCH`) stamps the funded set.
-    ///      This is the Δ4 successor to the deleted `afKing.autoBuy(N)` (the buy folded into advance).
-    function _runStageNewDay(uint256 vrfWord) internal {
-        _settleGame(vrfWord ^ 0xF00D); // settle any in-flight day first
-        vm.warp(block.timestamp + 1 days);
-        _settleGame(vrfWord);
+    /// @dev Drive the subscriber pass for a NEW day: warp a day forward and crank the whole day, so
+    ///      the pass buys for the funded set and every box opens before the next day.
+    function _runStageNewDay(uint256) internal {
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        _finishSubscriptionWindow();
     }
 
     /// @dev Run the STAGE exactly ONCE on a fresh day via a SINGLE `mineFlip()` (no full settle),
@@ -243,34 +213,10 @@ contract AfKingConcurrency is DeployProtocol {
             address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
             subs[i] = who;
             uint256 seat = _grantSeat(who); // the AFKing Subscription Token is the subscribe credential (sub <=> coin)
-            _approveKeeper(who);
-            _fundPool(who, 1 ether); // fund BEFORE subscribe to ground the NEW-run cover-buy (D-12)
+            _fundPool(who, 1 ether);
             vm.prank(who);
-            game.subscribe(0, false, false, 1, 0, seat); // self, lootbox mode, qty 1
+            game.subscribe(0, false, 1, seat); // self, lootbox mode, qty 1
         }
-    }
-
-    /// @dev Subscribe `n` fresh NO-PASS players (lootbox mode, funded) — _passHorizonOf == 0, so a
-    ///      forced crossing at level>0 EVICTS them. Used by the pass-eviction tests.
-    function _setupNoPassBuyingSubs(uint256 n, string memory prefix) internal returns (address[] memory subs) {
-        subs = new address[](n);
-        for (uint256 i; i < n; i++) {
-            address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
-            subs[i] = who;
-            _approveKeeper(who);
-            _fundPool(who, 1 ether); // fund BEFORE subscribe to ground the NEW-run cover-buy (D-12); still NO deity
-            uint256 seat = _grantSeat(who);
-            vm.prank(who);
-            game.subscribe(0, false, false, 1, 0, seat); // self, lootbox mode, qty 1, NO deity
-        }
-    }
-
-    /// @dev Approve the game (the afking module is game-resident) as `who`'s operator. Self-funded
-    ///      subs don't strictly need it, but it keeps parity with operator-funded paths.
-    function _approveKeeper(address who) internal {
-        _aid(who);
-        vm.prank(who);
-        game.setOperatorApproval(0, address(game), true);
     }
 
     /// @dev Credit `who`'s afkingFunding bucket with `amount` ETH (Δ5: depositAfkingFunding replaces
@@ -278,53 +224,6 @@ contract AfKingConcurrency is DeployProtocol {
     function _fundPool(address who, uint256 amount) internal {
         vm.deal(address(this), amount);
         game.depositAfkingFunding{value: amount}(_aid(who));
-    }
-
-    /// @dev Grant `who` the permanent deity bit so _passHorizonOf(who) == type(uint24).max. RE-DERIVED
-    ///      slot: mintPacked_ is slot 10 on DegenerusGame (the old helper used slot 9 — WRONG).
-    function _grantDeityPass(address who) internal {
-        bytes32 slot = keccak256(abi.encode(game.walletIdOf(who), uint256(MINTPACKED_SLOT)));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        packed |= (uint256(1) << DEITY_SHIFT);
-        vm.store(address(game), slot, bytes32(packed));
-    }
-
-    /// @dev Bump game.level (uint24 packed at slot-0 bytes 14..16) from 0 to 1 if needed, so a sub
-    ///      with validThroughLevel = 0 triggers the AFSUB-03 crossing predicate `currentLevel > 0`.
-    function _bumpGameLevelToAtLeastOne() internal {
-        uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(0))));
-        uint256 levelMask = uint256(0xFFFFFF) << (14 * 8);
-        if (uint24((slot0 & levelMask) >> (14 * 8)) == 0) {
-            slot0 = (slot0 & ~levelMask) | (uint256(1) << (14 * 8));
-            vm.store(address(game), bytes32(uint256(0)), bytes32(slot0));
-        }
-    }
-
-    // ---- Sub field reads (game-resident _subOf slot 52 + the verified packed offsets) ----
-
-    function _subSlot(address who) internal view returns (bytes32) {
-        return keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT)));
-    }
-
-    function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
-        uint256 p = uint256(vm.load(address(game), _subSlot(who))) >> (off * 8);
-        return p & ((uint256(1) << widthBits) - 1);
-    }
-
-    function _lastBoughtDayOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_LASTBOUGHT, 24));
-    }
-
-    function _dailyQtyOf(address who) internal view returns (uint8) {
-        return uint8(_subField(who, OFF_DAILY, 8));
-    }
-
-    function _validThroughLevelOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_VALIDTHROUGH, 24));
-    }
-
-    function _flagsOf(address who) internal view returns (uint8) {
-        return uint8(_subField(who, OFF_FLAGS, 8));
     }
 
     /// @dev `subsFullyProcessed` (slot 0, offset 28, bool) — the per-day afking-done gate.
@@ -356,18 +255,13 @@ contract AfKingConcurrency is DeployProtocol {
         vm.store(address(game), s0, bytes32(p0));
     }
 
-    /// @dev Pin `who`'s validThroughLevel (uint24, bytes 1..3) -- force / clear the crossing predicate.
-    function _setValidThroughLevel(address who, uint32 lvl) internal {
-        bytes32 slot = _subSlot(who);
-        uint256 packed = uint256(vm.load(address(game), slot));
-        packed &= ~(uint256(0xFFFFFF) << (OFF_VALIDTHROUGH * 8));
-        packed |= ((uint256(lvl) & 0xFFFFFF) << (OFF_VALIDTHROUGH * 8));
-        vm.store(address(game), slot, bytes32(packed));
+    /// @dev `who`'s set position + 1; 0 = not in the set.
+    function _subscriberIndexOf(address who) internal view returns (uint256 position1) {
+        (, position1) = GameSlotKeys.subLane(address(game), game.walletIdOf(who));
     }
 
-    /// @dev Read `who`'s 1-indexed subscriber index (slot 55); 0 = not in set.
-    function _subscriberIndexOf(address who) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.SUB_OF)))) >> 200; // Sub.setPosition (1-based)
+    function _dailyQtyOf(address who) internal view returns (uint8) {
+        return uint8(GameSlotKeys.subQuantity(address(game), game.walletIdOf(who)));
     }
 
     /// @dev `_subscribers.length` (slot 54 holds the array length).
@@ -375,32 +269,17 @@ contract AfKingConcurrency is DeployProtocol {
         return uint256(vm.load(address(game), bytes32(uint256(SUBSCRIBERS_SLOT))));
     }
 
-    /// @dev `_subscribers[i]` (data at keccak256(56) + i).
-    function _subscriberAt(uint256 i) internal view returns (address) {
-        bytes32 base = keccak256(abi.encode(uint256(SUBSCRIBERS_SLOT)));
-        uint32 id = uint32(uint256(vm.load(address(game), bytes32(uint256(base) + i / 8))) >> ((i % 8) * 32));
-        return _fixturePayee(id);
+    // ---- Buy oracle: the prepaid funding delta across a pass ----
+
+    mapping(address => uint256) private _fundingBefore;
+
+    function _snapshotFunding(address[] memory tracked) internal {
+        for (uint256 i; i < tracked.length; i++) _fundingBefore[tracked[i]] = game.afkingFundingOf(tracked[i]);
     }
 
-    /// @dev The stamp day a sub was last processed (for the "this cycle" assertions).
-    function _stampDay(address who) internal view returns (uint32) {
-        return _lastBoughtDayOf(who);
-    }
-
-    // ---- Buy oracle (the storage-stamp delta, the GASOPT-04 successor to the deleted AutoBought event) ----
-
-    mapping(address => uint32) private _baselineBoughtDay;
-
-    function _snapshotBought(address[] memory tracked) internal {
-        for (uint256 i; i < tracked.length; i++) {
-            _baselineBoughtDay[tracked[i]] = _lastBoughtDayOf(tracked[i]);
-        }
-    }
-
-    /// @dev 1 if `who` was freshly stamped (lastAutoBoughtDay advanced past the snapshot), else 0.
-    function _countBoughtFor(address who) internal view returns (uint256) {
-        uint32 stamp = _lastBoughtDayOf(who);
-        return (stamp > _baselineBoughtDay[who]) ? 1 : 0;
+    /// @dev Wei debited from `who`'s prepaid bucket since the snapshot.
+    function _boughtFor(address who) internal view returns (uint256) {
+        return _fundingBefore[who] - game.afkingFundingOf(who);
     }
 
     // ---- Event drain (emitter == address(game) — the game-resident module emits via delegatecall) ----

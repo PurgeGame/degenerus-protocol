@@ -57,8 +57,6 @@ PURE-DERIVE	ARG	EntropyLib.hash2	sampleFarFutureTickets	DegenerusGame.sol	Mix th
 EXEMPT-ADVANCE	PARAM	entropy	sampleFarFutureTickets	DegenerusGame.sol	view sampler over the far-future ticketQueue; consumed by bafPairWinners inside the locked BAF award stage (one sample of eight lanes per round pair); far-future pushes revert RngLocked across request->unlock
 PURE-DERIVE	ARG	PackedTicketSampleLib.begin	sampleTraitEntries	DegenerusGame.sol	BAF scatter derives word and lane rotation from its advance-dispatched entropy; pure memory operation over the committed bucket length
 EXEMPT-ADVANCE	PARAM	entropy	sampleTraitEntries	DegenerusGame.sol	view sampler of the bool-selected even/current or odd/next BAF trait buffer; runBafJackpot prepares both once under the daily lock before bafPairWinners samples them; buckets advance-written only
-NOT-RNG	PARAM	subWord	_afkingStreakMirror	DegenerusGameLens.sol	subWord = packed Sub record (covered day, start day, latch); the sealed-word presence test inside is the window gate's _rngWordByDayOf row; lens only
-NOT-RNG	PARAM	subWord	_effectiveQuestStreakMirror	DegenerusGameLens.sol	subWord is the afking Sub struct's packed storage word read via extsload, not a VRF value; read-only lens
 NOT-RNG	PARAM	maxWords	_findPackedIndex	DegenerusGameLens.sol	bounded count (1..2048) of packed storage words to scan; not a VRF value
 NOT-RNG	PARAM	maxWords	findQueueEntry	DegenerusGameLens.sol	read-only queue pagination budget, not an entropy word; forwarded to _findPackedIndex
 NOT-RNG	PARAM	maxWords	findTraitEntry	DegenerusGameLens.sol	read-only packed-entry pagination budget, not an entropy word; forwarded to _findPackedIndex

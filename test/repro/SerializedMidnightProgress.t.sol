@@ -41,7 +41,7 @@ contract SerializedMidnightProgressTest is MiddayFrozenPoolLatch {
                 afkingSubToken.vaultMintSeats(owner, 1);
             }
             vm.prank(owner);
-            game.subscribe{value: 1 ether}(0, false, false, 1, 0, seat);
+            game.subscribe{value: 1 ether}(0, false, 1, seat);
         }
         if (subscribers != 0) assertEq(game.subscriberSetLength(), subscribers, "nonvacuity: full subscriber ring");
         // Subscribing queues indexed cover boxes, also bound to the next write cohort.

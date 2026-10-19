@@ -14,15 +14,14 @@ import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 ///           manages them, and the event carries the ID;
 ///         - acting for a smurf: state follows the smurf, value out goes to the owner, the caller's
 ///           fresh ETH pays and its overpay credits the caller's ID, FLIP burns from the owner;
-///         - AFKing funding by ID: an own-ID source is self-funding, accounts sharing a main
-///           wallet fund each other without approval, an unrelated source must approve the
-///           subscriber's key;
+///         - AFKing subscriptions by ID: the account rule authorizes the caller, the payee's seat
+///           burns, nothing is bought at signup, and each day's buy is paid from the subscriber's
+///           own bucket;
 ///         - the batch doors map an element 0 to the caller before their isolating self-calls.
 contract AccountRuleGame is DeployProtocol {
     /// @dev Coinflip.playerState root and flipsClaimableDay slot (scripts/layout/golden/Coinflip.json).
     uint256 private constant CF_PLAYER_STATE_ROOT = 2;
     uint256 private constant CF_CLAIMABLE_DAY_SLOT = 4;
-    uint8 private constant FLAG_EXTERNAL_FUNDING = 1;
 
     error E();
     error NotApproved();
@@ -34,19 +33,14 @@ contract AccountRuleGame is DeployProtocol {
     event LootBoxBuy(uint32 indexed buyer, uint48 indexed index, uint32 position, uint256 amount);
     event WinningsClaimed(uint32 indexed player, uint256 amount, uint128 claimableAfter);
     event AfkingWithdrew(uint32 indexed player, uint256 amount);
-    event SubscriptionUpdated(
-        uint32 indexed player, uint8 dailyQuantity, bool drainGameCreditFirst, bool useTickets,
-        uint32 indexed fundingSource
-    );
+    event SubscriptionUpdated(uint32 indexed player, uint8 dailyQuantity, bool useTickets);
 
     address private owner;
     address private operator;
     address private stranger;
     address private wallet; // an ordinary registered wallet unrelated to the owner
-    address private source; // an unrelated funding source
     uint32 private ownerId;
     uint32 private walletId;
-    uint32 private sourceId;
     uint32 private smurfId;
     uint256 private price;
 
@@ -58,12 +52,10 @@ contract AccountRuleGame is DeployProtocol {
         operator = makeAddr("acct_operator");
         stranger = makeAddr("acct_stranger");
         wallet = makeAddr("acct_wallet");
-        source = makeAddr("acct_source");
         vm.deal(owner, 100 ether);
         vm.deal(operator, 100 ether);
         vm.deal(stranger, 100 ether);
         vm.deal(wallet, 100 ether);
-        vm.deal(source, 100 ether);
         price = game.mintPrice();
         mockVRF.fundSubscription(1, 1_000 ether);
 
@@ -71,7 +63,6 @@ contract AccountRuleGame is DeployProtocol {
         _buyTicket(wallet);
         ownerId = game.walletIdOf(owner);
         walletId = game.walletIdOf(wallet);
-        sourceId = _giveWalletId(source);
         _grantSmurfBase(owner, 2);
         (smurfId,) = _createSmurf();
         _finishSubscriptionWindow();
@@ -123,12 +114,8 @@ contract AccountRuleGame is DeployProtocol {
         game.depositAfkingFunding{value: amount}(id);
     }
 
-    function _subWord(uint32 id) private view returns (uint256) {
-        return uint256(vm.load(address(game), GameSlotKeys.byId(id, GameSlots.SUB_OF)));
-    }
-
-    function _fundingSourceWord(uint32 id) private view returns (uint256) {
-        return uint256(vm.load(address(game), GameSlotKeys.byId(id, GameSlots.FUNDING_SOURCE_OF)));
+    function _lane(uint32 id) private view returns (uint256 lane, uint256 position1) {
+        return GameSlotKeys.subLane(address(game), id);
     }
 
     function _flip(address who, uint256 amount) private {
@@ -473,8 +460,8 @@ contract AccountRuleGame is DeployProtocol {
     // 5. AFKing funding by ID
     // =====================================================================
 
-    /// @dev Run the next day's advance to idle, so the day's quests re-roll and no account has
-    ///      completed slot 0: a new run then grounds itself on a funded day-0 cover buy.
+    /// @dev Run the next day's advance to idle, so the day's subscriber pass has completed and a
+    ///      new run can start.
     function _advanceDay() private {
         vm.warp(block.timestamp + 1 days);
         for (uint256 i; i < 50; ++i) {
@@ -489,114 +476,77 @@ contract AccountRuleGame is DeployProtocol {
         assertFalse(game.rngLocked(), "fixture: day settled");
     }
 
-    function _requireCoverBuyDue(uint32 id) private view {
-        (bool done0, ) = quests.questCompletionToday(id);
-        require(!done0, "fixture: a completed slot-0 quest would ground the run without a cover buy");
-    }
-
-    /// @notice An explicit own-ID source is self-funding: no external flag, the sparse map is
-    ///         cleared, the event names no source, and the own bucket pays the day-0 buy.
-    function test_Subscribe_OwnIdSourceIsSelf() public {
+    /// @notice A subscriber acting for its own ID: the event names the run, the seat burns, the run
+    ///         is checkpointed today and nothing is bought or debited at signup.
+    function test_Subscribe_OwnId_BuysNothingAtSignup() public {
         _advanceDay();
         _fundAfking(walletId, 1 ether);
-        // A stale sparse entry: a fresh run must clear it.
-        vm.store(address(game), GameSlotKeys.byId(walletId, GameSlots.FUNDING_SOURCE_OF), bytes32(uint256(0xdead)));
-        _requireCoverBuyDue(walletId);
         uint256 seat = _grantSeat(wallet);
-        vm.expectEmit(true, true, false, true, address(game));
-        emit SubscriptionUpdated(_fixtureId(wallet), 1, false, true, 0);
+        vm.expectEmit(true, false, false, true, address(game));
+        emit SubscriptionUpdated(_fixtureId(wallet), 1, true);
         vm.prank(wallet);
-        game.subscribe(0, false, true, 1, walletId, seat);
-        assertEq(uint8(_subWord(walletId) >> 8) & FLAG_EXTERNAL_FUNDING, 0, "no external-funding flag");
-        assertEq(_fundingSourceWord(walletId), 0, "sparse map cleared");
-        assertEq(_fixtureAfking(wallet), 1 ether - price, "the own bucket paid");
+        game.subscribe(0, true, 1, seat);
+        (uint256 lane, uint256 position1) = _lane(walletId);
+        assertGt(position1, 0, "the run is live");
+        assertEq((lane >> 46) & 0x3fffff, game.currentDayView(), "checkpointed on the signup day");
+        assertEq(_fixtureAfking(wallet), 1 ether, "no purchase at signup");
         assertEq(afkingSubToken.balanceOf(wallet), 0, "the seat burned");
     }
 
-    /// @notice The owner funds its smurf's subscription without any approval; draws debit the
-    ///         owner's bucket and the owner's seat burns.
-    function test_Subscribe_OwnerFundsSmurf_NoApproval() public {
-        _advanceDay();
-        _fundAfking(ownerId, 1 ether);
-        _requireCoverBuyDue(smurfId);
-        uint256 seat = _grantSeat(owner);
-        vm.expectEmit(true, true, false, true, address(game));
-        emit SubscriptionUpdated(_fixtureId(smurfId), 1, false, true, ownerId);
-        vm.prank(owner);
-        game.subscribe(smurfId, false, true, 1, ownerId, seat);
-        assertEq(uint8(_subWord(smurfId) >> 8) & FLAG_EXTERNAL_FUNDING, FLAG_EXTERNAL_FUNDING);
-        assertEq(_fundingSourceWord(smurfId), ownerId);
-        assertEq(_fixtureAfking(owner), 1 ether - price, "the owner's bucket paid");
-        assertEq(_fixtureAfking(smurfId), 0);
-        assertEq(afkingSubToken.balanceOf(owner), 0, "the payee's seat burned");
-        assertEq(uint8(_subWord(smurfId)), 1, "the smurf's run is live");
-    }
-
-    /// @notice A smurf funds its owner's subscription without approval.
-    function test_Subscribe_SmurfFundsOwner_NoApproval() public {
+    /// @notice The owner subscribes its smurf without any approval: the run is the smurf's, the
+    ///         payee's (owner's) seat burns, and each day's buy debits the smurf's own bucket.
+    function test_Subscribe_OwnerRunsSmurf_PaidFromSmurfBucket() public {
         _advanceDay();
         _fundAfking(smurfId, 1 ether);
-        _requireCoverBuyDue(ownerId);
+        _fundAfking(ownerId, 1 ether);
         uint256 seat = _grantSeat(owner);
+        vm.expectEmit(true, false, false, true, address(game));
+        emit SubscriptionUpdated(_fixtureId(smurfId), 1, true);
         vm.prank(owner);
-        game.subscribe(0, false, true, 1, smurfId, seat);
-        assertEq(_fundingSourceWord(ownerId), smurfId);
-        assertEq(_fixtureAfking(smurfId), 1 ether - price, "the smurf's bucket paid");
-        assertEq(_fixtureAfking(owner), 0);
+        game.subscribe(smurfId, true, 1, seat);
+        (uint256 lane, uint256 position1) = _lane(smurfId);
+        assertGt(position1, 0, "the smurf's run is live");
+        assertEq(uint32(lane), smurfId);
+        (, uint256 ownerPosition) = _lane(ownerId);
+        assertEq(ownerPosition, 0, "the owner has no run of its own");
+        assertEq(afkingSubToken.balanceOf(owner), 0, "the payee's seat burned");
+        assertEq(_fixtureAfking(smurfId), 1 ether, "no purchase at signup");
+
+        _advanceDay();
+        assertEq(_fixtureAfking(smurfId), 1 ether - price, "the smurf's bucket paid the day's buy");
+        assertEq(_fixtureAfking(owner), 1 ether, "the owner's bucket untouched");
     }
 
-    /// @notice One smurf funds a sibling smurf without approval.
-    function test_Subscribe_SiblingSmurfFunds_NoApproval() public {
+    /// @notice A stranger cannot subscribe for another account; an operator approved on the exact
+    ///         ID can, and the run is the account's.
+    function test_Subscribe_StrangerNeedsApproval() public {
         _advanceDay();
-        vm.prank(owner);
-        uint32 siblingId = game.createSmurf{value: price}(bytes32(0), MintPaymentKind.DirectEth);
-        uint32 siblingKey = siblingId;
-        _fundAfking(siblingId, 1 ether);
-        _requireCoverBuyDue(smurfId);
-        uint256 seat = _grantSeat(owner);
-        vm.prank(owner);
-        game.subscribe(smurfId, false, true, 1, siblingId, seat);
-        assertEq(_fundingSourceWord(smurfId), siblingId);
-        assertEq(_fixtureAfking(siblingKey), 1 ether - price, "the sibling's bucket paid");
-        assertEq(_fixtureAfking(smurfId), 0);
-    }
-
-    /// @notice An unrelated source must approve the subscriber's key on its own ID.
-    function test_Subscribe_UnrelatedSourceNeedsApproval() public {
-        _advanceDay();
-        _fundAfking(sourceId, 1 ether);
-        _requireCoverBuyDue(walletId);
         uint256 seat = _grantSeat(wallet);
-        vm.prank(wallet);
+        vm.prank(stranger);
         vm.expectRevert(NotApproved.selector);
-        game.subscribe(0, false, true, 1, sourceId, seat);
+        game.subscribe(walletId, true, 1, seat);
 
-        vm.prank(source);
-        game.setAfkingFundingApproval(sourceId, walletId, true);
-        vm.prank(wallet);
-        game.subscribe(0, false, true, 1, sourceId, seat);
-        assertEq(_fixtureAfking(source), 1 ether - price, "the approving source paid");
-        assertEq(_fundingSourceWord(walletId), sourceId);
+        _approve(wallet, walletId, operator);
+        vm.prank(operator);
+        game.subscribe(walletId, true, 1, seat);
+        (, uint256 position1) = _lane(walletId);
+        assertGt(position1, 0, "the account's run is live");
+        assertEq(afkingSubToken.balanceOf(wallet), 0, "the account payee's seat burned");
     }
 
-    /// @notice For a smurf subscriber the consent is to the smurf's KEY: approving its owner is not
-    ///         enough, approving the smurf key is.
-    function test_Subscribe_UnrelatedSourceForSmurf_ApprovesSmurfKey() public {
+    /// @notice An approval on the smurf's owner account does not authorize a stranger for the smurf.
+    function test_Subscribe_SmurfNeedsOwnerOrOperator() public {
         _advanceDay();
-        _fundAfking(sourceId, 1 ether);
-        _requireCoverBuyDue(smurfId);
         uint256 seat = _grantSeat(owner);
-        vm.prank(source);
-        game.setOperatorApproval(0, owner, true);
-        vm.prank(owner);
+        vm.prank(stranger);
         vm.expectRevert(NotApproved.selector);
-        game.subscribe(smurfId, false, true, 1, sourceId, seat);
+        game.subscribe(smurfId, true, 1, seat);
 
-        vm.prank(source);
-        game.setAfkingFundingApproval(sourceId, smurfId, true);
-        vm.prank(owner);
-        game.subscribe(smurfId, false, true, 1, sourceId, seat);
-        assertEq(_fixtureAfking(source), 1 ether - price, "the source paid");
+        _approve(owner, smurfId, operator);
+        vm.prank(operator);
+        game.subscribe(smurfId, true, 1, seat);
+        (, uint256 position1) = _lane(smurfId);
+        assertGt(position1, 0);
     }
 
     function test_DepositAfkingFunding_ZeroOrUnallocatedRevertsE() public {

@@ -11,6 +11,7 @@ import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title GoldenTicketHarness -- drives the live runDailyJackpot arm/resolve surface
 /// @notice Extends the production DegenerusGameJackpotModule so the inherited external
@@ -388,7 +389,7 @@ contract GoldenTicketArmResolve is Test {
 
     function testSealedFoilDrawIgnoresDifferentRngWordWithoutRevert() public {
         armDay([1, 2, 3, 4]);
-        bytes32 slot = keccak256(abi.encode(uint256((ARM_IDX + 1) & 1), uint256(60)));
+        bytes32 slot = keccak256(abi.encode(uint256((ARM_IDX + 1) & 1), GameSlots.DAILY_FOIL_DRAW));
         bytes32 sealedDraw = vm.load(address(h), slot);
         vm.recordLogs();
         h.runDailyJackpot(true, LVL, allGoldWord([1, 2, 3, 4], 0xBEEF), gasleft());
@@ -720,7 +721,7 @@ contract GoldenTicketArmResolve is Test {
         (bool present, uint32 recordedMain, ) = h.foilDrawFor(day);
         assertTrue(present, "the day's foil record was written");
         assertEq(mainPacked, recordedMain, "the event's board equals the one recorded for foil claims");
-        uint256 draw = uint256(vm.load(address(h), keccak256(abi.encode(uint256(day & 1), uint256(55)))));
+        uint256 draw = uint256(vm.load(address(h), keccak256(abi.encode(uint256(day & 1), GameSlots.DAILY_FOIL_DRAW))));
         assertEq(uint128(draw >> 88), uint128(uint256(keccak256(abi.encode(word, day, keccak256("foil-payout-seed"))))), "seed binds logical day");
         assertTrue(draw & (uint256(1) << 216) != 0);
         assertEq(uint24(draw >> 217), day, "draw ring authenticates the logical day");

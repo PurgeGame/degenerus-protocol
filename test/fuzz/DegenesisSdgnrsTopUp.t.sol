@@ -28,7 +28,7 @@ interface IDegenesisTopUp {
 /// @notice Spec §8: need = max(10 ETH - afking, 0), topUp = min(need, claimable - 1); the whale
 ///         budget is a quarter of the remaining claimable. A reclassification inside claimablePool,
 ///         kept when no group is bought; the whale buy spends claimable and leaves AFKing funding
-///         for the daily deliveries, which spend AFKing first. The unit cases run the module entry
+///         as the reserve behind the daily deliveries, which spend claimable first. The unit cases run the module entry
 ///         in the Game's storage through an etched forwarder; the level-1 cases run the real STAGE
 ///         on the Degenesis timeline, with sDGNRS's two balances written in storage (claimablePool
 ///         in tandem) just before the STAGE so the example's numbers are exact.
@@ -147,7 +147,7 @@ contract DegenesisSdgnrsTopUp is DegenesisFixture {
     /// @notice The spec example at the real first attempt (level 1, 2.4 ETH passes): the top-up
     ///         moves 6 ETH (80/4 -> 74/10), the whale budget is 74/4 = 18.5 ETH, one group of five
     ///         is bought for 12 ETH out of claimable, AFKing is not drawn by the whale buy, and the
-    ///         daily delivery then spends AFKing.
+    ///         daily delivery then spends claimable, leaving the 10 ETH reserve whole.
     function test_FirstWhaleAttempt_TopsUpThenBuysFromClaimable() public {
         _toFirstWhaleAttempt();
         _setSdgnrs(80 ether, 4 ether);
@@ -160,9 +160,8 @@ contract DegenesisSdgnrsTopUp is DegenesisFixture {
         assertEq(r.passes, 5, "one group");
         assertEq(r.price, 12 ether, "at the early price");
         assertEq(r.afkingSpentBeforeWhale, 0, "the whale buy draws no AFKing funding");
-        // The daily delivery (AFKing first) then spends a little of the topped-up funding.
-        assertLt(_afkingOf(SDGNRS_ID), 10 ether, "the daily delivery spent AFKing");
-        assertGt(_afkingOf(SDGNRS_ID), 9 ether, "out of the protected 10 ETH");
+        assertEq(_afkingOf(SDGNRS_ID), 10 ether, "the daily delivery leaves the reserve whole");
+        assertLt(_claimableOf(SDGNRS_ID), 62 ether, "the daily delivery spent claimable after the whale buy");
     }
 
     /// @notice A top-up is kept when the recalculated budget buys no group: 50 ETH claimable and
@@ -178,12 +177,13 @@ contract DegenesisSdgnrsTopUp is DegenesisFixture {
         assertFalse(r.bought, "no group fits 10 ETH");
         uint256 latch = _slot(GameSlots.SDGNRS_BONUS_LEVEL) >> (GameSlots.SDGNRS_BONUS_LEVEL_OFFSET * 8);
         assertEq(uint24(latch), 1, "the attempt latched level 1");
-        assertGt(_afkingOf(SDGNRS_ID), 9 ether, "the top-up stayed in AFKing (less the daily delivery)");
+        assertEq(_afkingOf(SDGNRS_ID), 10 ether, "the top-up stayed in AFKing");
+        assertLt(_claimableOf(SDGNRS_ID), 40 ether, "the daily delivery spent claimable");
     }
 
     /// @notice No top-up and no whale attempt at level 0: across the Degenesis week sDGNRS's
-    ///         deliveries spend its Degenesis-funded AFKing first and never touch its claimable.
-    function test_LevelZero_NoTopUp_DeliveriesSpendAfkingFirst() public {
+    ///         deliveries spend claimable first and leave its Degenesis-funded AFKing untouched.
+    function test_LevelZero_NoTopUp_DeliveriesSpendClaimableFirst() public {
         address alice = _player("alice", 0);
         _earnCredit(alice, 10 ether);
         _drain();
@@ -196,15 +196,15 @@ contract DegenesisSdgnrsTopUp is DegenesisFixture {
         vm.recordLogs();
         _driveThrough(8);
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        uint256 claimableSpends;
+        uint256 afkingSpends;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2
                 || uint32(uint256(logs[i].topics[1])) != SDGNRS_ID) continue;
-            if (logs[i].topics[0] == CLAIMABLE_SPENT_SIG) ++claimableSpends;
+            if (logs[i].topics[0] == AFKING_SPENT_SIG) ++afkingSpends;
         }
-        assertEq(claimableSpends, 0, "no top-up and no claimable draw at level 0");
-        assertLt(_afkingOf(SDGNRS_ID), afking, "deliveries spent AFKing funding");
-        assertGe(_claimableOf(SDGNRS_ID), 100 ether, "claimable intact");
+        assertEq(afkingSpends, 0, "deliveries never draw AFKing while claimable covers them");
+        assertGe(_afkingOf(SDGNRS_ID), afking, "AFKing funding untouched");
+        assertLt(_claimableOf(SDGNRS_ID), 100 ether, "deliveries spent claimable");
         assertEq(_level(), 0, "still level 0");
     }
 }

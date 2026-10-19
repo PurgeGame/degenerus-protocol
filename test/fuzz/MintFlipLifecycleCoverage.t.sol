@@ -16,7 +16,7 @@ import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 ///   - STAMP/BUY leg (DegenerusGameAdvanceModule `_runSubscriberStage`, cursor `_subCursor`): an
 ///     UNCONDITIONAL per-day reset (`_afkingResetDay != day -> _subCursor = 0; subsFullyProcessed =
 ///     false`) then a weight-budgeted walk of the FULL `[0, len)` set until `subsFullyProcessed`. So
-///     every in-set sub is stamped each day — `lastAutoBoughtDay == activeDay`.
+///     every in-set sub is stamped each day.
 ///   - OPEN leg (mineFlip's Afking stage, GameAfkingModule `runAfkingWork`, cursor `_subOpenCursor`):
 ///     a FULL-RING scan that visits up to `len` subs from the cursor, wrapping mid-scan, admitting
 ///     each box against the call's gas allowance and resuming mid-ring across calls. The stage is
@@ -26,7 +26,7 @@ import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 ///     human boxes all fully drained.
 ///
 /// @notice A box is openable iff the entry-gate is open (`!rngLockedFlag && !_livenessTriggered`) AND
-///   a pending stamped box AND `_recordedDailyWord(sub.lastAutoBoughtDay) != 0`.
+///   a pending stamped box AND `_recordedDailyWord(stamp day) != 0`.
 ///
 /// @dev N is chosen > OPEN_BATCH = 80 so the open leg MUST span multiple calls and the cursor resumes
 ///   mid-ring (the load-bearing condition for the open leg's resume property — proven explicitly in
@@ -34,7 +34,7 @@ import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 ///   drive VERBATIM (deity-pass + funded-sub + new-day STAGE harness, the fulfill-first settle loop,
 ///   the accumulating-`t` warp, the post-PACK Sub-slot offset block, the packed-cursor slot reads).
 ///   The full day cycle is driven through the production engine (mineFlip only);
-///   per-sub markers are read from `_subOf[player]`. Test-only: ZERO contracts/*.sol mutation.
+///   per-sub state is read from the packed subscriber lanes. Test-only: ZERO contracts/*.sol mutation.
 contract MintFlipLifecycleCoverage is DeployProtocol {
     // -------------------------------------------------------------------------
     // Game-resident storage slots + the post-PACK Sub-slot offset block
@@ -42,17 +42,11 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
     //  cursors@56 — _subCursor u16 @byte0 · _subOpenCursor u16 @byte2 · _afkingResetDay u24 @byte4;
     //  subsFullyProcessed bool @slot0 byte28.)
     // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF;            // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = GameSlots.SUBSCRIBERS;      // address[] _subscribers (length @ slot; elements @ keccak256(slot)+i)
+    uint256 private constant SUBSCRIBERS_SLOT = GameSlots.SUBSCRIBERS;      // packed 85-bit lanes (length @ slot)
     uint256 private constant CURSOR_SLOT = GameSlots.SUB_CURSOR;           // packed: _subCursor u16 @byte0 · _subOpenCursor u16 @byte2 · _afkingResetDay u24 @byte4
     uint256 private constant SUBCURSOR_BYTE = 0;         // byte offset of _subCursor within CURSOR_SLOT
     uint256 private constant OPEN_CURSOR_BYTE = 2;       // byte offset of _subOpenCursor within CURSOR_SLOT
     uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED;        // mintPacked_ mapping root (deity bit @ 184)
-
-    //   dailyQuantity u8 @0 · flags u8 @1 · score u16 @2 · amount u24 @4
-    //   lastAutoBoughtDay u24 @7 · afkCoveredThroughDay u24 @10 · afkingStartDay u24 @13
-    //   affiliateBase u32 @16 · pendingFlip u24 @20 · subStreakLatch u16 @23
-    uint256 private constant OFF_LASTBOUGHT = 7;      // uint24 lastAutoBoughtDay (bytes 7..9)
 
     uint256 private constant DEITY_SHIFT = BitPackingLib.HAS_DEITY_PASS_SHIFT;
 
@@ -79,7 +73,7 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
     // =========================================================================
 
     /// @notice The headline invariant. With N > OPEN_BATCH subs, drive ONE full day cycle:
-    ///   (a) after the stamp phase, EVERY sub has `lastAutoBoughtDay == activeDay` (full STAMP coverage,
+    ///   (a) after the stamp phase, EVERY sub carries a pending box of the active day (full STAMP coverage,
     ///       proving the buy-leg cursor walked the whole [0, len) set with no strand);
     ///   (b) drain the boxes across MULTIPLE mineFlip calls (the open leg spans calls and
     ///       resumes mid-ring because N > OPEN_BATCH);
@@ -97,10 +91,8 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
         // (a) FULL STAMP COVERAGE: every sub was stamped this day. The buy-leg cursor reached the set
         // end (subsFullyProcessed) and walked the whole [0, len) set — no sub left unstamped.
         assertTrue(_subsFullyProcessed(), "stamp phase completed (subsFullyProcessed)");
-        uint32 activeDay = _lastBoughtDayOf(subs[0]);
-        assertGt(activeDay, 0, "non-vacuity: the STAGE stamped a real process day");
+        assertGt(_stampDay(), 0, "non-vacuity: the STAGE stamped a real process day");
         for (uint256 i; i < N; i++) {
-            assertEq(_lastBoughtDayOf(subs[i]), activeDay, "STAMP coverage: every sub stamped for the active day");
             // The box resolves on the session word of the request that commits it, once the
             // stamp day seals (the per-day word readiness gate became the read-cohort order).
             assertTrue(_isPending(subs[i]), "post-stamp: every sub carries a pending box committed to the day's request");
@@ -116,7 +108,7 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
 
         // (c) FULL OPEN COVERAGE: every sub's box was opened — no stamp left pending.
         for (uint256 i; i < N; i++) {
-            assertEq(_lastOpenedDayOf(subs[i]), _lastBoughtDayOf(subs[i]), "OPEN coverage: every stamped box was opened (marker advanced)");
+            assertFalse(_isPending(subs[i]), "OPEN coverage: every stamped box was opened (marker advanced)");
             assertFalse(_isOpenable(subs[i]), "OPEN coverage: no openable box left behind for any sub");
         }
 
@@ -240,25 +232,27 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
 
         // Run ANOTHER full day cycle. The buy-leg per-day reset rewinds _subCursor to 0 and re-walks the
         // WHOLE grown set, so the churned subs (and wave1) are all stamped for the new day.
+        vm.recordLogs();
         _runStageNewDay(uint256(keccak256("churn_w2stamp")) | 1);
         _settleClean(uint256(keccak256("churn_w2stampc")) | 1);
         assertTrue(_subsFullyProcessed(), "the new-day STAGE drained the whole grown set");
-        uint32 day2 = _lastBoughtDayOf(wave2[0]);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint24 day2 = uint24(_stampDay());
         for (uint256 i; i < N2; i++) {
-            assertEq(_lastBoughtDayOf(wave2[i]), day2, "churn: each churned sub stamped on the new day (buy-leg reset re-walked the set)");
+            assertEq(_deliveries(logs, wave2[i], day2), 1, "churn: each churned sub stamped on the new day (buy-leg reset re-walked the set)");
         }
         for (uint256 i; i < N1; i++) {
-            assertEq(_lastBoughtDayOf(wave1[i]), day2, "churn: each wave1 sub re-stamped on the new day too");
+            assertEq(_deliveries(logs, wave1[i], day2), 1, "churn: each wave1 sub re-stamped on the new day too");
         }
 
         // The open leg's full-ring scan drains every sub regardless of where _subOpenCursor parked —
         // the churned (post-parked-cursor) subs and the wave1 subs ([0, parked-cursor)) all open.
         _drainAllOpenable();
         for (uint256 i; i < N2; i++) {
-            assertEq(_lastOpenedDayOf(wave2[i]), _lastBoughtDayOf(wave2[i]), "churn: each churned sub's box opened (full-ring reached it)");
+            assertFalse(_isPending(wave2[i]), "churn: each churned sub's box opened (full-ring reached it)");
         }
         for (uint256 i; i < N1; i++) {
-            assertEq(_lastOpenedDayOf(wave1[i]), _lastBoughtDayOf(wave1[i]), "churn: each wave1 sub's box opened (no strand below the parked cursor)");
+            assertFalse(_isPending(wave1[i]), "churn: each wave1 sub's box opened (no strand below the parked cursor)");
         }
 
         // Both legs drained -> mineFlip cleanly signals NoWork (no churned sub permanently skipped).
@@ -291,17 +285,16 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
             _stampToRequest(uint256(keccak256(abi.encode("multi_stamp", dayIdx))) | 1);
             assertTrue(_subsFullyProcessed(), "each day: the STAGE drained the whole set");
 
-            uint32 dayMark = _lastBoughtDayOf(subs[0]);
+            uint32 dayMark = _stampDay();
             assertGt(dayMark, prevDay, "each day advances the stamp marker (a genuinely new day)");
             for (uint256 i; i < N; i++) {
-                assertEq(_lastBoughtDayOf(subs[i]), dayMark, "multi-day STAMP: every sub stamped this day");
                 assertTrue(_isPending(subs[i]), "multi-day: every sub has a pending box this day");
             }
 
             // OPEN the whole set for this day (spans multiple calls at the keeper allowance).
             _drainDay(subs, makeAddr("multi_keeper"), uint256(keccak256(abi.encode("multi_stampc", dayIdx))) | 1, false);
             for (uint256 i; i < N; i++) {
-                assertEq(_lastOpenedDayOf(subs[i]), dayMark, "multi-day OPEN: every sub's box opened this day");
+                assertFalse(_isPending(subs[i]), "multi-day OPEN: every sub's box opened this day");
             }
             prevDay = dayMark;
         }
@@ -312,16 +305,17 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
     // =========================================================================
 
     /// @dev Spawn `n` seated, funded, lootbox-mode subscribers. They join `_subscribers`; the
-    ///      first new-day STAGE buy stamps a box on each. Funding is generous so the cover-buy + daily
+    ///      first new-day STAGE buy stamps a box on each. Funding is generous so the daily
     ///      buys never underflow the pool (no funding-kill mid-test).
     function _spawnSubs(uint256 n, string memory prefix) internal returns (address[] memory subs) {
         subs = new address[](n);
         for (uint256 i; i < n; i++) {
             address p = makeAddr(string(abi.encodePacked(prefix, vm.toString(i))));
             _grantSeat(p);           // the AFKing Subscription Token is the sole subscribe credential
-            _fundPool(p, 200 ether); // generous: grounds the cover-buy + every daily buy across the test
+            _fundPool(p, 200 ether); // generous: covers every daily buy across the test
             _subscribeLootbox(p, 1);
-            require(_subscriberIndexOf(p) > 0, "fixture: the sub joined the set");
+            (, uint256 position1) = GameSlotKeys.subLane(address(game), game.walletIdOf(p));
+            require(position1 > 0, "fixture: the sub joined the set");
             subs[i] = p;
         }
     }
@@ -331,7 +325,23 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
     uint256 private constant BOUNDED_OPEN_ALLOWANCE = 2_000_000;
 
     function _isPending(address who) internal view returns (bool) {
-        return _lastOpenedDayOf(who) < _lastBoughtDayOf(who);
+        return GameSlotKeys.afkingBoxPending(address(game), game.walletIdOf(who));
+    }
+
+    /// @dev The day the current cohort's boxes are stamped for.
+    function _stampDay() internal view returns (uint32) {
+        return uint24(uint256(vm.load(address(game), bytes32(GameSlots.AFKING_RESET_DAY))) >> (8 * GameSlots.AFKING_RESET_DAY_OFFSET));
+    }
+
+    /// @dev AfkingDelivered events for `who` on `day` among `logs`.
+    function _deliveries(Vm.Log[] memory logs, address who, uint24 day) internal view returns (uint256 c) {
+        bytes32 sig = keccak256("AfkingDelivered(uint32,uint256)");
+        uint32 id = game.walletIdOf(who);
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter != address(game) || logs[i].topics.length != 2 || logs[i].topics[0] != sig) continue;
+            if (uint32(uint256(logs[i].topics[1])) != id) continue;
+            if (uint24(abi.decode(logs[i].data, (uint256)) >> 128) == day) ++c;
+        }
     }
 
     function _countPending(address[] memory subs) internal view returns (uint256 c) {
@@ -501,7 +511,7 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
     function _subscribeLootbox(address who, uint8 q) internal {
         uint256 seat_who = _grantSeat(who);
         vm.prank(who);
-        game.subscribe(0, false, false, q, 0, seat_who); // self, lootbox mode, no reinvest
+        game.subscribe(0, false, q, seat_who); // self, lootbox mode, no reinvest
     }
 
     function _fundPool(address who, uint256 amount) internal {
@@ -556,28 +566,10 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
         return uint8(p0 >> (SUBS_FULLY_PROCESSED_BYTE * 8)) != 0;
     }
 
-    function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
-        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT))))) >> (off * 8);
-        return p & ((uint256(1) << widthBits) - 1);
-    }
-
-    function _lastBoughtDayOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_LASTBOUGHT, 24));
-    }
-
-    function _lastOpenedDayOf(address who) internal view returns (uint32) {
-        return GameSlotKeys.afkingOpenedDay(address(game), game.walletIdOf(who));
-    }
-
-    function _subscriberIndexOf(address who) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.SUB_OF)))) >> 200; // Sub.setPosition (1-based)
-    }
-
-    /// @dev Openable under the entry-gate: pending box (stamped, unopened) AND the frozen
-    ///      stamp-day word has landed (_recordedDailyWord(lastAutoBoughtDay) != 0).
+    /// @dev Openable under the entry-gate: an unopened box of the current cohort and the cohort's
+    ///      stamp-day word has landed.
     function _isOpenable(address who) internal view returns (bool) {
-        uint32 bought = _lastBoughtDayOf(who);
-        if (_lastOpenedDayOf(who) >= bought) return false;
-        return game.rngWordForDay(uint24(bought)) != 0;
+        if (!_isPending(who)) return false;
+        return game.rngWordForDay(uint24(_stampDay())) != 0;
     }
 }

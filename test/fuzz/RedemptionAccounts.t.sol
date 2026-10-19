@@ -326,10 +326,10 @@ contract RedemptionAccountsTest is RedemptionFixture {
     }
 }
 
-/// @notice sDGNRS and the vault subscribe in their constructors with `subscribe(0, true, false, 1,
-///         0, 0)`, before the seat token is deployed: the exempt subscriptions never call it.
+/// @notice sDGNRS and the vault subscribe in their constructors with `subscribe(0, false, 1, 0)`,
+///         before the seat token is deployed: the exempt subscriptions never call it.
 contract SdgnrsConstructorSubscribeTest is DeployProtocol {
-    bytes32 internal constant SUBSCRIPTION_UPDATED = keccak256("SubscriptionUpdated(uint32,uint8,bool,bool,uint32)");
+    bytes32 internal constant SUBSCRIPTION_UPDATED = keccak256("SubscriptionUpdated(uint32,uint8,bool)");
 
     function test_ConstructorSubscribe_BeforeSeatTokenExists() public {
         vm.expectCall(
@@ -337,20 +337,11 @@ contract SdgnrsConstructorSubscribeTest is DeployProtocol {
             abi.encodeWithSelector(AFKingSubscriptionToken.consumeSeat.selector),
             0
         );
-        // The Vault drains game credit first; sDGNRS spends its AFKing funding first.
+        // Both protocol seats subscribe once, one lootbox unit a day.
         vm.expectCall(
             ContractAddresses.GAME,
-            abi.encodeWithSignature(
-                "subscribe(uint32,bool,bool,uint8,uint32,uint256)", uint32(0), true, false, uint8(1), uint32(0), uint256(0)
-            ),
-            1
-        );
-        vm.expectCall(
-            ContractAddresses.GAME,
-            abi.encodeWithSignature(
-                "subscribe(uint32,bool,bool,uint8,uint32,uint256)", uint32(0), false, false, uint8(1), uint32(0), uint256(0)
-            ),
-            1
+            abi.encodeWithSignature("subscribe(uint32,bool,uint8,uint256)", uint32(0), false, uint8(1), uint256(0)),
+            2
         );
         vm.recordLogs();
         _deployProtocol();
@@ -365,11 +356,9 @@ contract SdgnrsConstructorSubscribeTest is DeployProtocol {
             }
             if (logs[i].emitter != ContractAddresses.GAME || logs[i].topics[0] != SUBSCRIPTION_UPDATED) continue;
             uint32 player = uint32(uint256(logs[i].topics[1]));
-            (uint8 qty, bool drain, bool tickets) = abi.decode(logs[i].data, (uint8, bool, bool));
+            (uint8 qty, bool tickets) = abi.decode(logs[i].data, (uint8, bool));
             assertEq(qty, 1);
-            assertEq(drain, player == 1, "only the Vault drains game credit first");
             assertFalse(tickets);
-            assertEq(logs[i].topics[2], bytes32(0), "self-funded");
             if (player == 2) sdgnrsSub = i;
             if (player == 1) vaultSub = i;
         }

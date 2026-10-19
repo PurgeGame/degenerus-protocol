@@ -469,10 +469,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         }
     }
 
-    /// @notice Append a system-granted box entry — the pass purchases and the afking cover.
+    /// @notice Append a system-granted box entry — the pass purchases.
     ///         A grant is `count` boxes of equal value (`count == 0` is one box). Each grant is
     ///         its own entry.
-    /// @dev Delegatecall entrypoint shared by the Whale and Afking modules; runs in the Game's
+    /// @dev Delegatecall entrypoint of the Whale module; runs in the Game's
     ///      storage context. Each box floors to whole LB_VALUE_UNITs; the remainder is reward-side
     ///      only, since the paid and credited ETH stays in the callers' accounting. A grant below
     ///      one unit per box appends nothing, consumes no boost and never blocks the caller. The
@@ -481,8 +481,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @param id Player receiving the boxes (registered; its mint word is already loaded).
     /// @param amountWei Box spend in wei.
     /// @param score Caller's activity-score snapshot.
-    /// @param boost Whether to consume a live lootbox-boost boon and snapshot distress (pass
-    ///        purchases yes, afking no).
+    /// @param boost Whether to consume a live lootbox-boost boon and snapshot distress.
     /// @param count Boxes (whale: min(passes, 100)); zero for one box.
     function recordCoverBox(
         uint32 id,
@@ -612,7 +611,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     }
 
     /// @dev One box's boon draw, for the resolvers that settle a single box outside the
-    ///      entry sweep (afking covers, degenerette auto-resolve, ETH-spin recirc).
+    ///      entry sweep (daily afking boxes, degenerette auto-resolve, ETH-spin recirc).
     ///      Identical draw to the entry path's per-order call;
     ///      `seed` is the box's own account-specific resolution seed, drawn at nonce 0.
     function _rollSingleBoxBoons(uint32 id, uint256 amount, uint24 currentLevel, uint256 seed) private {
@@ -962,28 +961,22 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @notice Resolve an AfKing-subscription box at the LIVE level from a caller-passed
     ///         frozen-day word.
     /// @dev The afking open route: the LIVE-LEVEL twin of `resolveLootboxDirect` — identical
-    ///      resolution shape (derive the seed, roll the target level from the LIVE level, do
-    ///      the SINGLE `_applyEvMultiplierWithCap` RMW at open, then `_resolveLootboxCommon`)
-    ///      — with two AFKing-specific twists (vs a queued entry):
+    ///      resolution shape (derive the seed, roll the target level from the LIVE level, apply
+    ///      the frozen EV multiplier, then `_resolveLootboxCommon`) — with three AFKing-specific
+    ///      twists (vs a queued entry):
     ///
     ///        1. the RNG `rngWord` is a CALLER-PASSED param (the GameAfkingModule open-leg
     ///           passes the frozen stamp day's word), NOT read from any index-keyed map; and
     ///        2. the seed `day` is the FROZEN stamped process day (a passed param), NOT the
     ///           live `_simulatedDayIndex()` — the day MUST stay frozen in the seed or a
-    ///           self-mining id could grind the seed by open-timing.
+    ///           self-mining id could grind the seed by open-timing; and
+    ///        3. the per-level EV allowance is neither read nor drawn: the subscription's 1-8
+    ///           unit daily cap bounds these boxes instead.
     ///
     ///      The live-level handling matches `resolveLootboxDirect`: `currentLevel = level +
     ///      1` LIVE, `targetLevel = _rollTargetLevel(currentLevel, seed)` rolls from the LIVE
     ///      level (NO stored baseLevel floor — auto-open removes the id's ability to time
-    ///      the level, so the level freeze is unnecessary),
-    ///      and the SINGLE `_applyEvMultiplierWithCap(id, currentLevel, amount,
-    ///      evMultiplierBps)` RMW — the sole residual live-read, a benign monotonic
-    ///      down-clamp, keyed on the SAME per-level window of
-    ///      `lootboxEvCapPacked[id]` the queued-order opener uses
-    ///      so the human + afking boxes share the one per-level EV allowance.
-    ///      The process pass STAMPS only, so this is the single draw (no double-draw).
-    ///      The allowance hard-clamps at 40 ETH
-    ///      with the no-write 100%-EV short-circuit ⇒ NO revert. The seed carries ZERO `block.*`
+    ///      the level, so the level freeze is unnecessary). The seed carries ZERO `block.*`
     ///      entropy.
     ///
     ///      Boons OFF for afking boxes ⇒ `amount` IS the spend exactly (there is no
@@ -1028,17 +1021,10 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint24 currentLevel = level + 1;
         uint24 targetLevel = _rollTargetLevel(currentLevel, seed);
 
-        // The SINGLE EV-cap RMW at open — the sole residual live-read, a benign
-        // monotonic down-clamp, keyed [id][currentLevel] on the SAME
-        // per-level EV allowance the queued-order opener uses. Fed the FROZEN
-        // evMultiplierBps from the stamped activityScore. Hard-clamped, no revert.
-        // sDGNRS's protocol-owned self-subscription boxes are exempt: the full amount
-        // takes the multiplier and no per-level budget is drawn — its EV benefit is
-        // redemption backing, not a player subsidy to bound.
-        uint256 evMultiplierBps = _lootboxEvMultiplierFromScore(uint256(activityScore));
-        uint256 scaledAmount = id == SDGNRS_WALLET_ID
-            ? (amount * evMultiplierBps) / 10_000
-            : _applyEvMultiplierWithCap(id, currentLevel, amount, evMultiplierBps);
+        // Daily AFKing boxes neither read nor draw the per-level EV allowance: the whole
+        // amount takes the FROZEN multiplier. The subscription's 1-8 unit daily cap bounds
+        // them instead; manual and recycled boxes keep the allowance.
+        uint256 scaledAmount = (amount * _lootboxEvMultiplierFromScore(uint256(activityScore))) / 10_000;
 
         BoxAcc memory acc;
         acc.id = id;

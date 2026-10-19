@@ -21,6 +21,9 @@ contract AfkingAffiliateCacheHost is DegenerusGame, WalletSeed {
         _pendingBoxCount = 0;
         _clearSubscriberSet();
         _seedSubscriber(id, false);
+        uint256 lane = _subLaneAt(0);
+        _setSubLaneAt(0, _withSubCheckpoint(lane | (uint256(SUB_MAX_QUANTITY - 1) << SUB_QTY_SHIFT), today - 1, 0));
+        _afkingEndpointDay = today - 1;
         subsFullyProcessed = false;
         ticketsFullyProcessed = true;
         humanReadComplete = true;
@@ -34,13 +37,6 @@ contract AfkingAffiliateCacheHost is DegenerusGame, WalletSeed {
         mintPacked_[_walletIdOf(player)] |= uint256(23) | (uint256(10) << 24)
             | (uint256(today - 1) << BitPackingLib.DAY_SHIFT)
             | (uint256(cacheHit ? 24 : 23) << BitPackingLib.AFFILIATE_BONUS_LEVEL_SHIFT);
-        Sub storage sub = _subOf[id];
-        sub.setPosition = 1;
-        sub.dailyQuantity = 255;
-        sub.flags = 0;
-        sub.lastAutoBoughtDay = today - 1;
-        sub.afkingStartDay = today - 1;
-        sub.afkCoveredThroughDay = today - 1;
         _creditAfkingValue(id, 100 ether);
     }
 
@@ -53,7 +49,7 @@ contract AfkingAffiliateCacheHost is DegenerusGame, WalletSeed {
     }
 
     function pending() external view returns (uint256) { return _pendingBoxCount; }
-    function bought(address player) external view returns (uint24) { return _subOf[_walletIdOf(player)].lastAutoBoughtDay; }
+    function visited() external view returns (bool) { return _subCursor != 0 || subsFullyProcessed; }
 }
 
 contract AfkingAffiliateCacheGasTest is DeployProtocol {
@@ -85,7 +81,7 @@ contract AfkingAffiliateCacheGasTest is DeployProtocol {
         assertTrue(result.progressed && result.done);
         assertEq(result.rewardBasis, 1);
         assertEq(host.pending(), 1);
-        assertEq(host.bought(PLAYER), game.currentDayView());
+        assertTrue(host.visited());
         assertLe(used, bound, "cold durable-history box buy exceeds worker envelope");
     }
 

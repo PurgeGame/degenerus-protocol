@@ -132,51 +132,43 @@ contract OverpayToAfking is DeployProtocol {
         address sub = makeAddr("subSelfFunded");
         vm.deal(sub, 2 ether);
 
-        // A sub needs a seat (the sole afking credential) and a grounding purchase.
+        // A sub needs a seat (the sole afking credential).
         vm.prank(ContractAddresses.GAME);
         afkingSubToken.mintSeatFor(sub);
-        vm.prank(sub);
-        game.purchase{value: 0.01 ether}(
-            0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false
-        );
+        uint32 subId = _aid(sub);
 
         uint256 funded = 1 ether;
         vm.expectEmit(true, false, false, true, address(game));
-        emit AfkingFunded(_fixtureId(sub), funded);
+        emit AfkingFunded(subId, funded);
         uint256 seat = _seatOf(sub);
         vm.prank(sub);
-        game.subscribe{value: funded}(0, false, true, 1, 0, seat);
+        game.subscribe{value: funded}(0, true, 1, seat);
+        assertEq(game.afkingFundingOf(sub), funded, "the subscriber's own bucket holds it");
     }
 
-    /// @notice On an operator-funded sub the credit — and the log — name the FUNDER's
-    ///         bucket, never the subscriber's. This is the misdirection guard.
-    function test_SubscribeValueEmitsAfkingFundedForOperatorFunder() public {
+    /// @notice An approved operator subscribing for the account credits — and logs — the
+    ///         SUBSCRIBER's bucket, never the operator's. This is the misdirection guard.
+    function test_SubscribeValueByOperatorCreditsSubscriber() public {
         _finishSubscriptionWindow();
         address sub = makeAddr("subOperatorFunded");
-        address funder = makeAddr("subFunder");
-        vm.deal(sub, 2 ether);
+        address operator = makeAddr("subOperator");
+        vm.deal(operator, 2 ether);
 
         vm.prank(ContractAddresses.GAME);
         afkingSubToken.mintSeatFor(sub);
-        vm.prank(sub);
-        game.purchase{value: 0.01 ether}(
-            0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false
-        );
-
-        // The funder consents to fund this subscriber.
-        uint32 funderId = _aid(funder);
         uint32 subscriberId = _aid(sub);
         uint256 seat = _seatOf(sub);
-        vm.prank(funder);
-        game.setAfkingFundingApproval(funderId, subscriberId, true);
+        vm.prank(sub);
+        game.setOperatorApproval(subscriberId, operator, true);
 
         uint256 funded = 1 ether;
         vm.expectEmit(true, false, false, true, address(game));
-        emit AfkingFunded(_fixtureId(funder), funded);
-        vm.prank(sub);
-        game.subscribe{value: funded}(0, false, true, 1, funderId, seat);
+        emit AfkingFunded(subscriberId, funded);
+        vm.prank(operator);
+        game.subscribe{value: funded}(subscriberId, true, 1, seat);
 
-        assertEq(game.afkingFundingOf(sub), 0, "subscriber's own bucket untouched");
+        assertEq(game.afkingFundingOf(sub), funded, "subscriber's bucket credited");
+        assertEq(game.afkingFundingOf(operator), 0, "operator's own bucket untouched");
     }
 }
 

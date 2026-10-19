@@ -87,21 +87,19 @@ function resultsFromTrace(trace, game) {
   visit(trace);
   return found;
 }
+// Each member is an 85-bit lane, three to a word; the lane is the whole record.
 function subscriberDigest(state, game) {
-  const root = layout.find(f => f.label === "_subOf").slot;
   const idsRoot = layout.find(f => f.label === "_subscribers").slot;
   const base = BigInt(keccak256(word(BigInt(idsRoot))));
   const count = Number(field(state, game, "_subscribers", 256));
-  const boxes = layout.some(f => f.label === "_subBoxCount")
-    ? Number(field(state, game, "_subBoxCount", 16)) : count;
+  const boxes = Number(field(state, game, "_subBoxCount", 16));
   const records = [];
   for (let i = 0; i < count; ++i) {
     const physical = i < boxes ? i : 2000 - (i - boxes);
-    const packed = BigInt(state[game].state[word(base + BigInt(physical >> 3))] || zero);
-    const member = packed >> BigInt((physical & 7) * 32) & 0xffffffffn;
-    if (member === 0n) throw new Error("Missing member");
-    const slot = keccak256(word(member) + word(BigInt(root)).slice(2));
-    records.push([member.toString(), state[game].state[slot] || zero]);
+    const packed = BigInt(state[game].state[word(base + BigInt(Math.floor(physical / 3)))] || zero);
+    const lane = packed >> BigInt((physical % 3) * 85) & ((1n << 85n) - 1n);
+    if ((lane & 0xffffffffn) === 0n) throw new Error("Missing member");
+    records.push([(lane & 0xffffffffn).toString(), lane.toString()]);
   }
   return sha(JSON.stringify(records));
 }

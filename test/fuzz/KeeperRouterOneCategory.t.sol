@@ -88,8 +88,6 @@ contract KeeperRouterOneCategory is DeployProtocol {
     // pins are now stale; corrected to the authoritative values below.)
     // -------------------------------------------------------------------------
 
-    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF; // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant OFF_LASTBOUGHT = 7; // uint24 lastAutoBoughtDay (bytes 7..9; Sub: u8 qty, u8 flags, u16 score, u24 amount)
     uint256 private constant SUBSCRIBERS_SLOT = GameSlots.SUBSCRIBERS; // _subscribers address[] (length here)
     uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED; // mintPacked_ mapping root (deity bit)
     uint256 private constant DEITY_SHIFT = BitPackingLib.HAS_DEITY_PASS_SHIFT;
@@ -577,7 +575,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
     function _subscribeLootbox(address who, uint8 q) internal {
         uint256 seat_who = _grantSeat(who);
         vm.prank(who);
-        game.subscribe(0, false, false, q, 0, seat_who); // self, lootbox mode, no reinvest
+        game.subscribe(0, false, q, seat_who); // self, lootbox mode, no reinvest
     }
 
     /// @dev Credit `who`'s afkingFunding bucket (Δ5: depositAfkingFunding replaces AfKing.depositFor).
@@ -598,21 +596,6 @@ contract KeeperRouterOneCategory is DeployProtocol {
         uint256 packed = uint256(vm.load(address(game), slot));
         packed |= (uint256(1) << DEITY_SHIFT);
         vm.store(address(game), slot, bytes32(packed));
-    }
-
-    // ---- Sub field reads (_subOf slot 52 + verified offsets) ----
-
-    function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
-        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT))))) >> (off * 8);
-        return p & ((uint256(1) << widthBits) - 1);
-    }
-
-    function _lastBoughtDayOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_LASTBOUGHT, 24));
-    }
-
-    function _lastOpenedDayOf(address who) internal view returns (uint32) {
-        return GameSlotKeys.afkingOpenedDay(address(game), game.walletIdOf(who));
     }
 
     // ---- gameover latch ----

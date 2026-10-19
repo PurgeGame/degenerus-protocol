@@ -537,17 +537,12 @@ contract WalletIdTruthHandler is Test {
     function g_subscribe(uint256 a, uint256 v) external {
         address p = _actor(a);
         uint256 seat = _seatHeldBy(p, v);
-        _call(8, p, GAME, bound(v, 0.01 ether, 1 ether), _subscribeData(0, false, 1, 0, seat), false);
+        _call(8, p, GAME, bound(v, 0.01 ether, 1 ether), _subscribeData(0, 1, seat), false);
     }
 
-    /// @dev `subscribe(id, drain, tickets, qty, fundingSourceId, seatId)` calldata (ticket mode).
-    function _subscribeData(uint32 id, bool drain, uint8 qty, uint32 src, uint256 seat)
-        internal
-        pure
-        returns (bytes memory)
-    {
-        return abi.encodeWithSignature(
-            "subscribe(uint32,bool,bool,uint8,uint32,uint256)", id, drain, true, qty, src, seat);
+    /// @dev `subscribe(id, tickets, qty, seatId)` calldata (ticket mode).
+    function _subscribeData(uint32 id, uint8 qty, uint256 seat) internal pure returns (bytes memory) {
+        return abi.encodeWithSignature("subscribe(uint32,bool,uint8,uint256)", id, true, qty, seat);
     }
 
     // =====================================================================================
@@ -1215,34 +1210,20 @@ contract WalletIdTruthHandler is Test {
     }
 
     /// @dev Subscribe (or cancel) for the account, burning a seat its payee holds (or a wrong
-    ///      one), self-funded, funded by the owner (same main wallet) or by a random account.
+    ///      one); the account always funds itself.
     function _acctSubscribe(uint32 id, address caller, uint256 p1, uint256 p2) internal {
-        (uint32 src, uint256 seat, bool sameMain) = _subscribeTerms(id, p1, p2);
+        uint256 seat = _subscribeSeat(id, p2);
         uint8 qty = p1 % 6 == 0 ? 0 : uint8(1 + p1 % 3);
-        bytes memory data = _subscribeData(id, p2 % 2 == 0, qty, src, seat);
+        bytes memory data = _subscribeData(id, qty, seat);
         uint256 value = qty == 0 ? 0 : bound(p2 >> 64, 0.01 ether, 0.5 ether);
-        _acctCall(49, caller, id, GAME, value, data, AUTH | (sameMain ? F_CR : 0));
+        _acctCall(49, caller, id, GAME, value, data, AUTH | F_CR);
     }
 
-    /// @dev The funding source (self, the smurf's owner, or a random account), the seat (one
-    ///      the payee holds, or any known seat) and whether the source shares the main wallet.
-    function _subscribeTerms(uint32 id, uint256 p1, uint256 p2)
-        internal
-        view
-        returns (uint32 src, uint256 seat, bool sameMain)
-    {
-        uint32 ownerId;
-        if (id != 0 && id < _tableLength()) {
-            uint256 el = _element(id);
-            ownerId = uint32((el >> 160) & LANE_MASK);
-            if (_seats.length != 0) {
-                seat = p2 % 4 == 3 ? _seats[(p2 >> 2) % _seats.length] : _seatHeldBy(_payeeOfElement(el), p2 >> 2);
-            }
+    /// @dev The seat a subscribe names: one the payee holds, or any known seat.
+    function _subscribeSeat(uint32 id, uint256 p2) internal view returns (uint256 seat) {
+        if (id != 0 && id < _tableLength() && _seats.length != 0) {
+            seat = p2 % 4 == 3 ? _seats[(p2 >> 2) % _seats.length] : _seatHeldBy(_payeeOfElement(_element(id)), p2 >> 2);
         }
-        uint256 fs = (p1 >> 8) % 6;
-        if (fs == 4) src = ownerId;
-        else if (fs == 5) src = _acctId(p1 >> 16);
-        sameMain = src == 0 || src == id || src == ownerId;
     }
 
     /// @dev A whale, lazy or deity pass bought for the account.

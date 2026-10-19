@@ -124,6 +124,13 @@ contract AccountLoansTest is RedemptionCloseTools {
         coinflip.processCoinflipPayouts(0, word, day);
     }
 
+    /// @dev Move to the day after the deployment endpoint and complete its subscriber pass, so a
+    ///      new run can start (the fixtures park the clock before the deploy day).
+    function _openSubscriptionDay() private {
+        vm.warp((uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) + 9) * 1 days + 82_621);
+        _finishSubscriptionWindow();
+    }
+
     function _child() private returns (uint32 id) {
         uint256 price = game.mintPrice();
         vm.prank(seller);
@@ -985,33 +992,38 @@ contract AccountLoansTest is RedemptionCloseTools {
         assertEq(_payee(root), address(sdgnrs));
     }
 
-    function test_SeizureLeavesExternalFundingAndRevokesConsent() public {
-        address funder = makeAddr("external-funder");
-        uint32 funderId = _giveWalletId(funder);
-        vm.prank(funder); game.setAfkingFundingApproval(0, root, true);
+    function test_SeizureClosesRunForRemoval() public {
+        _openSubscriptionDay();
         uint256 seat = _grantSeat(seller);
-        vm.prank(seller); game.subscribe{value: 2 ether}(root, false, true, 1, funderId, seat);
-        uint256 otherMoney = game.afkingFundingOf(funder);
+        vm.prank(seller); game.subscribe{value: 2 ether}(root, true, 1, seat);
+        // Keep the borrowing main below the automatic-repayment threshold so this tests seizure.
+        _seed(root, 400, 0, 0);
         uint24 due = _nextDue();
         _borrow(root, due);
-        assertEq(uint8(GameSlotKeys.subWord(address(game), root)), 1, "the run continues during the loan");
+        (uint256 lane, uint256 position1) = GameSlotKeys.subLane(address(game), root);
+        assertGt(position1, 0, "the run continues during the loan");
+        assertEq((lane >> 68) & 1, 0, "not pending removal during the loan");
         _seize(due);
-        assertEq(uint8(GameSlotKeys.subWord(address(game), root)), 0, "seizure stops the run");
-        assertEq(game.afkingFundingOf(funder), otherMoney);
-        assertFalse(game.afkingFundingApproved(funderId, root));
+        (lane, position1) = GameSlotKeys.subLane(address(game), root);
+        assertGt(position1, 0, "the closed run waits in the set for the next pass");
+        assertEq((lane >> 68) & 1, 1, "seizure marks the run for removal");
     }
 
     function test_ChildSweepDoesNotResumeSubscription() public {
         uint32 child = _child();
+        _openSubscriptionDay();
         uint256 seat = _grantSeat(seller);
-        vm.prank(seller); game.subscribe{value: 2 ether}(child, false, false, 1, root, seat);
+        vm.prank(seller); game.subscribe{value: 2 ether}(child, false, 1, seat);
         // Keep the borrowing main below the automatic-repayment threshold so this tests seizure.
         _seed(root, 0, 0, 0);
         _default(root);
-        assertEq(uint8(GameSlotKeys.subWord(address(game), child)), 0, "a main's seizure stops its smurf's run");
+        (uint256 lane,) = GameSlotKeys.subLane(address(game), child);
+        assertEq((lane >> 68) & 1, 1, "a main's seizure stops its smurf's run");
         uint32[] memory ids = new uint32[](1); ids[0] = child;
         game.sweepAccounts(ids);
-        vm.prank(address(sdgnrs)); vm.expectRevert(bytes4(keccak256("NotApproved()"))); game.subscribe(child, false, false, 1, 0, 0);
+        vm.prank(address(sdgnrs)); vm.expectRevert(bytes4(keccak256("NotApproved()"))); game.subscribe(child, false, 1, 0);
+        (lane,) = GameSlotKeys.subLane(address(game), child);
+        assertEq((lane >> 68) & 1, 1, "the sweep leaves the run closed");
     }
 
     function test_WholeFamilyTransfersWithoutPayingForChildren() public {

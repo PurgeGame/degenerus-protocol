@@ -179,7 +179,7 @@ contract SeatCapInvariant is DeployProtocol {
         _ok();
         assertEq(handler.gInsertions(), 5, "five non-exempt runs entered the set");
         assertEq(handler.seatCount(handler.wallets(0)), 0, "both of wallet 0's seats burned");
-        handler.subscribe(1 | (uint256(4) << 56)); // wallet 1 cancels (tombstone)
+        handler.subscribe(1 | (uint256(4) << 56)); // wallet 1 cancels (its entry leaves the set)
         handler.underfund(2); // wallet 2 loses its funding
         _ok();
         handler.fastForward(0); // the free tranche closes
@@ -192,7 +192,7 @@ contract SeatCapInvariant is DeployProtocol {
         _ok();
 
         for (uint256 d; d < 4; ++d) {
-            handler.driveDay(d); // reclaim wallet 1's tombstone, evict the unfunded
+            handler.driveDay(d); // evict the unfunded
             _ok();
         }
         assertLt(afkingSubToken.totalSupply() + game.subscriberSetLength(), 2000, "runs left the set");
@@ -204,12 +204,12 @@ contract SeatCapInvariant is DeployProtocol {
         assertGt(position, 0);
         handler.vaultSubscription(0); // VAULT paused through its operator
         _ok();
-        assertEq(_qtyOf(1), 0, "VAULT paused");
+        assertTrue(_vaultPaused(), "VAULT paused");
         for (uint256 d; d < 4; ++d) {
             handler.driveDay(10 + d);
             _ok();
             assertEq(_posOf(1), position, "paused VAULT is never reclaimed");
-            assertEq(_qtyOf(1), 0, "daily processing does not restart VAULT");
+            assertTrue(_vaultPaused(), "daily processing does not restart VAULT");
         }
         handler.vaultMint(0, 0); // refill only capacity freed by ordinary subscribers
         _ok();
@@ -221,7 +221,8 @@ contract SeatCapInvariant is DeployProtocol {
         uint256 members = game.subscriberSetLength();
         handler.vaultSubscription(1); // resume the existing entry without a burn
         _ok();
-        assertGt(_qtyOf(1), 0, "VAULT resumed");
+        assertFalse(_vaultPaused(), "VAULT resumed");
+        assertGt(_qtyOf(1), 0, "VAULT keeps a quantity");
         assertEq(_posOf(1), position, "resume reuses the retained position");
         assertEq(game.subscriberSetLength(), members, "resume adds no entry");
         assertEq(afkingSubToken.totalSupply(), liveSeats, "resume burns no seat");
@@ -276,10 +277,15 @@ contract SeatCapInvariant is DeployProtocol {
     }
 
     function _qtyOf(uint32 id) internal view returns (uint256) {
-        return uint8(uint256(vm.load(address(game), GameSlotKeys.byId(id, GameSlots.SUB_OF))));
+        return GameSlotKeys.subQuantity(address(game), id);
     }
 
-    function _posOf(uint32 id) internal view returns (uint256) {
-        return uint256(vm.load(address(game), GameSlotKeys.byId(id, GameSlots.SUB_OF))) >> 200;
+    function _vaultPaused() internal view returns (bool) {
+        uint256 packed = uint256(vm.load(address(game), bytes32(GameSlots.AFKING_PROTOCOL_FLAGS)));
+        return uint8(packed >> (8 * GameSlots.AFKING_PROTOCOL_FLAGS_OFFSET)) & 4 != 0;
+    }
+
+    function _posOf(uint32 id) internal view returns (uint256 position1) {
+        (, position1) = GameSlotKeys.subLane(address(game), id);
     }
 }

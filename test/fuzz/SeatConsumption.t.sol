@@ -9,8 +9,8 @@ import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 
 /// @title SeatFixture — shared fixture for the seat suites on a real protocol deploy.
 /// @notice Seat grants, subscriptions by account ID, smurfs, operator approvals, day driving,
-///         eviction, cap filling, and raw reads of the Game's subscriber set (`_subOf` and
-///         `_subscribers` roots from the compiled layout, validated against the views in setUp).
+///         eviction, cap filling, and raw reads of the Game's subscriber set (the packed `_subscribers`
+///         lanes and the `_subMeta` reverse lookup, validated against the views in setUp).
 abstract contract SeatFixture is DeployProtocol {
     error E();
     error NotApproved();
@@ -39,24 +39,25 @@ abstract contract SeatFixture is DeployProtocol {
 
     // ─────────────────────────── raw set reads ───────────────────────────
 
-    function _subWord(uint32 id) internal view returns (uint256) {
-        return uint256(vm.load(address(game), GameSlotKeys.byId(id, GameSlots.SUB_OF)));
+    /// @dev Account `id`'s 85-bit subscriber lane and set position + 1 (0 = not in the set).
+    function _laneOf(uint32 id) internal view returns (uint256 lane, uint256 position1) {
+        return GameSlotKeys.subLane(address(game), id);
     }
 
-    /// @dev The Sub's dailyQuantity (0 = no live run: never subscribed, cancelled or evicted).
+    /// @dev The member's daily quantity (0 = no run: never subscribed, cancelled or evicted).
     function _qty(uint32 id) internal view returns (uint256) {
-        return uint8(_subWord(id));
+        return GameSlotKeys.subQuantity(address(game), id);
     }
 
-    /// @dev The Sub's 1-indexed set position (0 = not in the set).
-    function _pos(uint32 id) internal view returns (uint256) {
-        return _subWord(id) >> 200;
+    /// @dev The 1-indexed set position (0 = not in the set).
+    function _pos(uint32 id) internal view returns (uint256 position1) {
+        (, position1) = _laneOf(id);
     }
 
-    function _setElement(uint256 index) internal view returns (uint256) {
-        return uint32(uint256(
-            vm.load(address(game), bytes32(uint256(keccak256(abi.encode(GameSlots.SUBSCRIBERS))) + index / 8))
-        ) >> ((index % 8) * 32));
+    /// @dev The wallet ID in physical set position `position` (boxes from 0, tickets descending from 2000).
+    function _setElement(uint256 position) internal view returns (uint256) {
+        bytes32 slot = bytes32(uint256(keccak256(abi.encode(GameSlots.SUBSCRIBERS))) + position / 3);
+        return uint32(uint256(vm.load(address(game), slot)) >> ((position % 3) * 85));
     }
 
     /// @dev Whether account `id` sits in the set; cross-checks the element.
@@ -66,6 +67,12 @@ abstract contract SeatFixture is DeployProtocol {
         uint256 el = _setElement(p - 1);
         require(el == id, "set element mismatch");
         return true;
+    }
+
+    /// @dev The Game's protocol subscription flags (bit 4 = Vault owner pause).
+    function _flags() internal view returns (uint8) {
+        return uint8(uint256(vm.load(address(game), bytes32(GameSlots.AFKING_PROTOCOL_FLAGS)))
+            >> (8 * GameSlots.AFKING_PROTOCOL_FLAGS_OFFSET));
     }
 
     /// @dev VAULT / SDGNRS entries currently in the set.
@@ -89,17 +96,19 @@ abstract contract SeatFixture is DeployProtocol {
         );
         require(game.walletIdOf(address(vault)) == VAULT_ID, "vault wallet ID");
         require(game.walletIdOf(address(sdgnrs)) == SDGNRS_ID, "sdgnrs wallet ID");
-        require(_inSet(VAULT_ID) && _inSet(SDGNRS_ID), "_subOf root");
-        require(_qty(VAULT_ID) == 1 && _qty(SDGNRS_ID) == 1, "Sub dailyQuantity lane");
+        require(_inSet(VAULT_ID) && _inSet(SDGNRS_ID), "_subMeta root");
+        require(_qty(VAULT_ID) == 1 && _qty(SDGNRS_ID) == 1, "lane quantity");
     }
 
+    /// @dev A live run: a member that is not pending removal.
     function _activeId(uint32 id) internal view returns (bool) {
-        return _qty(id) != 0;
+        (uint256 lane, uint256 position1) = _laneOf(id);
+        return position1 != 0 && lane & (uint256(1) << 68) == 0;
     }
 
     function _active(address who) internal view returns (bool) {
         uint32 id = game.walletIdOf(who);
-        return id != 0 && _qty(id) != 0;
+        return id != 0 && _activeId(id);
     }
 
     // ─────────────────────────── seats ───────────────────────────
@@ -159,12 +168,12 @@ abstract contract SeatFixture is DeployProtocol {
     function _subscribe(address caller, uint32 id, uint256 seat) internal {
         vm.deal(caller, caller.balance + SUB_FUND);
         vm.prank(caller);
-        game.subscribe{value: SUB_FUND}(id, false, false, 1, 0, seat);
+        game.subscribe{value: SUB_FUND}(id, false, 1, seat);
     }
 
     function _cancel(address caller, uint32 id) internal {
         vm.prank(caller);
-        game.subscribe(id, false, false, 0, 0, 0);
+        game.subscribe(id, false, 0, 0);
     }
 
     // ─────────────────────────── days ───────────────────────────
@@ -197,14 +206,14 @@ abstract contract SeatFixture is DeployProtocol {
         return true;
     }
 
-    /// @dev Drive days until account `id` has left the set (tombstone reclaim or eviction).
+    /// @dev Drive days until account `id` has left the set (expiry or seizure removal).
     function _driveUntilOut(uint32 id) internal {
         for (uint256 d; d < 8 && _pos(id) != 0; ++d) _driveDay();
         require(_pos(id) == 0, "fixture: entry left the set");
     }
 
     /// @dev Strip account `id`'s funding (afking and claimable) as `caller` and drive days until
-    ///      the process pass evicts it.
+    ///      the subscriber pass expires it.
     function _evict(address caller, uint32 id) internal {
         (address key,,) = game.resolveAccount(id, caller);
         for (uint256 d; d < 8 && _pos(id) != 0; ++d) {
@@ -220,7 +229,7 @@ abstract contract SeatFixture is DeployProtocol {
             _driveDay();
         }
         require(_pos(id) == 0, "fixture: the funding-kill evicted the sub");
-        require(_qty(id) == 0, "fixture: evicted Sub deleted");
+        require(_qty(id) == 0, "fixture: evicted lane deleted");
     }
 }
 
@@ -229,9 +238,9 @@ abstract contract SeatFixture is DeployProtocol {
 /// @notice A new run burns exactly one seat held by the subscriber's payee; a change, a cancel
 ///         and the exempt VAULT/SDGNRS subscriptions burn nothing; a vault mint is refused while
 ///         the free tranche is open and whenever live seats + set length would pass 2,000; an
-///         ended run frees exactly one vault mint once it leaves the set; transfers never read
-///         the Game. The accepted O1 path (VAULT cancel/reclaim/re-subscribe through a
-///         vault-approved operator) reaches `L + S == 2001` and no further.
+///         ended run frees exactly one vault mint the moment it leaves the set (a cancel removes
+///         it at once); transfers never read the Game. The Vault's quantity 0 is a pause that
+///         keeps its entry, so pause and resume cannot take the combined count past the cap.
 contract SeatConsumptionTest is SeatFixture {
     address internal op = makeAddr("seat-operator");
 
@@ -349,15 +358,15 @@ contract SeatConsumptionTest is SeatFixture {
             vm.deal(fresh, 1 ether);
             vm.prank(fresh);
             vm.expectRevert(AFKingSubscriptionToken.InvalidToken.selector);
-            game.subscribe{value: SUB_FUND}(0, false, false, 1, 0, bad[i]);
+            game.subscribe{value: SUB_FUND}(0, false, 1, bad[i]);
 
             vm.prank(registered);
             vm.expectRevert(AFKingSubscriptionToken.InvalidToken.selector);
-            game.subscribe{value: SUB_FUND}(0, false, false, 1, 0, bad[i]);
+            game.subscribe{value: SUB_FUND}(0, false, 1, bad[i]);
         }
         assertEq(game.walletIdOf(fresh), 0, "registration unwound");
         assertEq(game.afkingFundingOf(fresh), 0, "no funding credit (fresh)");
-        assertEq(_subWord(regId), 0, "no Sub");
+        assertEq(_pos(regId), 0, "no lane");
         assertEq(game.afkingFundingOf(registered), regFunding, "no funding credit (registered)");
         assertEq(_S(), s0, "no set entry");
         assertEq(_L(), l0, "no seat burned");
@@ -375,14 +384,14 @@ contract SeatConsumptionTest is SeatFixture {
 
         _expectNoBurn();
         vm.prank(p);
-        game.subscribe(0, true, true, 3, 0, 424242);
+        game.subscribe(0, true, 3, 424242);
 
         assertEq(_qty(id), 3, "run changed");
         assertEq(_L(), l0, "no seat burned");
         assertEq(_S(), s0, "no set change");
     }
 
-    function test_cancelBurnsNothingAndLeavesATombstone() public {
+    function test_cancelBurnsNothingAndRemovesAtOnce() public {
         (address p, uint256 seat) = _passBuyer("canceller");
         uint256 spare = _giveSeat(p);
         _subscribe(p, 0, seat);
@@ -392,56 +401,53 @@ contract SeatConsumptionTest is SeatFixture {
 
         _expectNoBurn();
         vm.prank(p);
-        game.subscribe(0, false, false, 0, 0, spare);
+        game.subscribe(0, false, 0, spare);
 
-        assertEq(_qty(id), 0, "tombstoned");
-        assertTrue(_pos(id) != 0, "tombstone still in the set");
-        assertEq(_S(), s0, "set length unchanged");
+        assertEq(_qty(id), 0, "no run");
+        assertEq(_pos(id), 0, "removed from the set at once");
+        assertEq(_S(), s0 - 1, "set length drops by one: no tombstone");
         assertEq(_L(), l0, "no seat burned");
         assertEq(afkingSubToken.ownerOf(spare), p, "named seat untouched");
     }
 
-    /// @notice Cancel then re-subscribe before the reclaim: the tombstone takes a new run, which
-    ///         burns another seat; the set length is unchanged. The first (burned) seat cannot
-    ///         be named again.
-    function test_resubscribeWhileTombstonedBurnsOneSeatSetUnchanged() public {
-        (address p, uint256 seat) = _passBuyer("tombstone-rerun");
+    /// @notice Cancel then re-subscribe the same day: the new run burns another seat and the set returns
+    ///         to its length. The first (burned) seat cannot be named again.
+    function test_resubscribeAfterCancelBurnsOneSeat() public {
+        (address p, uint256 seat) = _passBuyer("cancel-rerun");
         uint256 second = _giveSeat(p);
         _subscribe(p, 0, seat);
+        uint256 sLive = _S();
         _cancel(p, 0);
         uint32 id = game.walletIdOf(p);
-        uint256 pos = _pos(id);
+        assertEq(_S(), sLive - 1, "the cancel removed the entry");
         uint256 l0 = _L();
-        uint256 s0 = _S();
 
         vm.deal(p, p.balance + SUB_FUND);
         vm.prank(p);
         vm.expectRevert(AFKingSubscriptionToken.InvalidToken.selector);
-        game.subscribe{value: SUB_FUND}(0, false, false, 1, 0, seat);
+        game.subscribe{value: SUB_FUND}(0, false, 1, seat);
 
         _expectBurn(p, second);
         _subscribe(p, 0, second);
 
         assertEq(_qty(id), 1, "run restarted");
-        assertEq(_pos(id), pos, "same set position");
-        assertEq(_S(), s0, "set length unchanged");
+        assertEq(_S(), sLive, "set length back to the live count");
         assertEq(_L(), l0 - 1, "exactly one more seat burned");
     }
 
-    function test_resubscribeAfterReclaimBurnsOneSeatAndAddsToTheSet() public {
-        (address p, uint256 seat) = _passBuyer("reclaim-rerun");
+    function test_resubscribeAfterADayBurnsOneSeatAndAddsToTheSet() public {
+        (address p, uint256 seat) = _passBuyer("day-rerun");
         uint256 second = _giveSeat(p);
         _subscribe(p, 0, seat);
         _cancel(p, 0);
-        uint32 id = game.walletIdOf(p);
-        uint256 sTomb = _S();
-        _driveUntilOut(id);
-        assertEq(_S(), sTomb - 1, "the pass reclaimed the tombstone");
+        uint256 sCancelled = _S();
+        _driveDay();
+        assertEq(_S(), sCancelled, "the pass has nothing left to remove");
 
         uint256 l0 = _L();
         _expectBurn(p, second);
         _subscribe(p, 0, second);
-        assertEq(_S(), sTomb, "set + 1");
+        assertEq(_S(), sCancelled + 1, "set + 1");
         assertEq(_L(), l0 - 1, "one seat burned");
         assertTrue(_active(p));
     }
@@ -487,19 +493,22 @@ contract SeatConsumptionTest is SeatFixture {
         _approveVaultOperator();
         _expectNoBurn();
         vm.prank(op);
-        game.subscribe(VAULT_ID, true, false, 2, 0, 2);
+        game.subscribe(VAULT_ID, false, 2, 2);
         assertEq(_qty(VAULT_ID), 2, "vault run changed");
         assertEq(afkingSubToken.ownerOf(2), address(vault), "vault seat untouched");
         assertEq(_L(), 2);
     }
 
-    /// @notice A cancel of the VAULT run through the operator never calls consumeSeat.
-    function test_vaultCancelThroughOperatorNeverCallsTheToken() public {
+    /// @notice The Vault's quantity 0 through the operator is the owner's pause: it never calls
+    ///         consumeSeat, keeps the seat, the entry and the configured quantity, and sets the pause flag.
+    function test_vaultPauseThroughOperatorNeverCallsTheToken() public {
         _approveVaultOperator();
         _expectNoBurn();
         vm.prank(op);
-        game.subscribe(VAULT_ID, true, false, 0, 0, 2);
-        assertEq(_qty(VAULT_ID), 0, "vault run cancelled");
+        game.subscribe(VAULT_ID, false, 0, 2);
+        assertEq(_qty(VAULT_ID), 1, "the pause keeps the lane quantity");
+        assertTrue(_inSet(VAULT_ID), "and the entry");
+        assertTrue(_flags() & 4 != 0, "owner pause flag set");
         assertEq(afkingSubToken.ownerOf(2), address(vault), "vault seat untouched");
     }
 
@@ -507,14 +516,14 @@ contract SeatConsumptionTest is SeatFixture {
     function test_vaultResubscribeThroughOperatorNeverCallsTheToken() public {
         _approveVaultOperator();
         vm.prank(op);
-        game.subscribe(VAULT_ID, true, false, 0, 0, 0);
+        game.subscribe(VAULT_ID, false, 0, 0);
         _driveDay();
         assertTrue(_inSet(VAULT_ID), "zero-quantity Vault remains counted");
         uint256 s0 = _S();
 
         _expectNoBurn();
         vm.prank(op);
-        game.subscribe(VAULT_ID, true, false, 1, 0, 2);
+        game.subscribe(VAULT_ID, false, 1, 2);
         assertTrue(_inSet(VAULT_ID), "vault back in the set");
         assertEq(_S(), s0, "resume reuses the existing entry");
         assertEq(afkingSubToken.ownerOf(2), address(vault), "vault seat never burned");
@@ -587,7 +596,7 @@ contract SeatConsumptionTest is SeatFixture {
         _subscribe(a, 0, seatA);
         vm.deal(b, 10 ether);
         vm.prank(b);
-        game.subscribe{value: 1 ether}(0, false, false, 1, 0, seatB);
+        game.subscribe{value: 1 ether}(0, false, 1, seatB);
         uint32 idA = game.walletIdOf(a);
         uint32 idB = game.walletIdOf(b);
         _fillFreeTrancheTo(1000);
@@ -599,14 +608,9 @@ contract SeatConsumptionTest is SeatFixture {
         vault.afkingSeatMint(to, 1);
         vm.stopPrank();
 
-        // A cancel that is still a tombstone frees nothing.
+        // A cancel removes the entry at once: exactly one mint.
         _cancel(a, 0);
-        vm.prank(ContractAddresses.CREATOR);
-        vm.expectRevert(AFKingSubscriptionToken.SeatCapReached.selector);
-        vault.afkingSeatMint(to, 1);
-
-        // The process pass reclaims the tombstone: exactly one mint.
-        _driveUntilOut(idA);
+        assertTrue(_pos(idA) == 0, "A left the set");
         assertTrue(_pos(idB) != 0, "B still live");
         vm.startPrank(ContractAddresses.CREATOR);
         vault.afkingSeatMint(to, 1);
@@ -614,7 +618,7 @@ contract SeatConsumptionTest is SeatFixture {
         vault.afkingSeatMint(to, 1);
         vm.stopPrank();
 
-        // The funding-kill evicts B: exactly one more.
+        // The unfunded expiry removes B: exactly one more.
         _evict(b, idB);
         vm.startPrank(ContractAddresses.CREATOR);
         vault.afkingSeatMint(to, 1);
@@ -661,7 +665,7 @@ contract SeatConsumptionTest is SeatFixture {
         uint256 y = _giveSeat(p);
         vm.deal(p, 10 ether);
         vm.prank(p);
-        game.subscribe{value: 1 ether}(0, false, false, 1, 0, seat);
+        game.subscribe{value: 1 ether}(0, false, 1, seat);
         address buyer = makeAddr("seat-buyer");
         vm.startPrank(p);
         afkingSubToken.transferFrom(p, buyer, x);
@@ -696,13 +700,13 @@ contract SeatConsumptionTest is SeatFixture {
 
     // ═══════════════ F-game item 9 extras ═══════════════
 
-    function test_vaultCancelAndResumeKeepCombinedCapAtTwoThousand() public {
+    function test_vaultPauseAndResumeKeepCombinedCapAtTwoThousand() public {
         vm.prank(ContractAddresses.CREATOR);
         vault.gameSetOperatorApproval(op, true);
         _fillFreeTrancheTo(1000);
 
         vm.prank(op);
-        game.subscribe(VAULT_ID, true, false, 0, 0, 0);
+        game.subscribe(VAULT_ID, false, 0, 0);
         _driveDay();
         assertTrue(_inSet(VAULT_ID), "zero-quantity Vault remains counted");
         assertEq(_exemptEntries(), 2, "both protocol entries remain");
@@ -712,7 +716,7 @@ contract SeatConsumptionTest is SeatFixture {
         assertEq(_L() + _S(), 2000);
 
         vm.prank(op);
-        game.subscribe(VAULT_ID, true, false, 1, 0, 0);
+        game.subscribe(VAULT_ID, false, 1, 0);
         assertEq(_exemptEntries(), 2, "VAULT re-entered");
         assertEq(_L() + _S(), 2000, "resume cannot exceed the cap");
 
@@ -734,7 +738,7 @@ contract SeatConsumptionTest is SeatFixture {
         game.setOperatorApproval(SDGNRS_ID, op, true);
         vm.prank(op);
         vm.expectRevert(NotApproved.selector);
-        game.subscribe(SDGNRS_ID, true, false, 0, 0, 0);
+        game.subscribe(SDGNRS_ID, false, 0, 0);
         assertTrue(_inSet(SDGNRS_ID));
     }
 

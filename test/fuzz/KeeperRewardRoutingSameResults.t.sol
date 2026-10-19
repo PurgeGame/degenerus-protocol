@@ -44,8 +44,6 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     // the AfKing-standalone SUBOF_SLOT=65 / TICKET_QUEUE_SLOT=12 / TICKETS_OWED_PACKED_SLOT=13 were WRONG).
     // -------------------------------------------------------------------------
 
-    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF; // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant OFF_LASTBOUGHT = 7; // uint24 lastAutoBoughtDay (bytes 7..9 of the Sub slot)
     uint256 private constant SUBSCRIBERS_SLOT = GameSlots.SUBSCRIBERS; // _subscribers address[] (length here)
     uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED; // mintPacked_ mapping root (deity bit)
     uint256 private constant DEITY_SHIFT = BitPackingLib.HAS_DEITY_PASS_SHIFT;
@@ -501,13 +499,6 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     function _idOf(address who) internal returns (uint32 id) {
         id = game.walletIdOf(who);
         if (id == 0) id = _giveWalletId(who);
-    }
-
-    /// @dev Read `who`'s lastAutoBoughtDay (_subOf slot 52, uint24 bytes 11..13 of the packed Sub slot).
-    function _lastAutoBoughtDayOf(address who) internal view returns (uint32) {
-        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT)));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        return uint32(uint24(packed >> (OFF_LASTBOUGHT * 8)));
     }
 
     // ---- claimable seeding (with the tandem claimablePool credit so SOLVENCY-01 stays balanced) ----

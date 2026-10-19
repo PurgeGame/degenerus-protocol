@@ -125,7 +125,7 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
     function _subscribeLootbox(address who, uint8 q) internal {
         uint256 seat = _grantSeat(who);
         vm.prank(who);
-        game.subscribe(0, false, false, q, 0, seat);
+        game.subscribe(0, false, q, seat);
     }
 
     /// @dev Deliver one funded day to the live sub set and open the pending box.

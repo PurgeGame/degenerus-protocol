@@ -15,7 +15,7 @@ New and changed surface:
 - Storage: slot 0 byte 27 `degenesisClosed`, slot 15 `degenesisVaultBudget`, slot 16 `degenesisCredit`,
   slot 26 `degenesisActive`, appended `degenesisWord`, `degenesisDays` and `degenesisOrders`.
   `Pool.Degenesis` is sDGNRS pool index 4 (10% of the initial supply).
-- Credit accrual at the Mint, Whale, FoilPack and AFKing cover-buy spend sites; credit is 25% of
+- Credit accrual at the Mint, Whale and FoilPack spend sites; credit is 25% of
   qualifying ETH, claimable and prepaid spend while `block.timestamp < DEGENESIS_END_TS`, and
   the Vault and sDGNRS earn none.
 - RNG: `degenesisWord` is copied in `_recordDailyRng`; new tags are listed in

@@ -4,7 +4,7 @@ pragma solidity ^0.8.26;
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {activityScoreOf} from "../helpers/ActivityScoreOf.sol";
-import {GameSlots} from "../helpers/GameSlots.sol";
+import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 
 /// @title QuestStreakStallForgiveness
 /// @notice Regression coverage for unrolled quest days and AFKing deliveries across an
@@ -20,12 +20,10 @@ contract QuestStreakStallForgiveness is DeployProtocol {
 
     uint256 private constant GAME_HEADER_SLOT = 0;
     uint256 private constant OFF_DAILY_IDX = 3;
-    uint256 private constant SUB_OF_SLOT = GameSlots.SUB_OF;
-    uint256 private constant OFF_SUB_SCORE = 2;       // uint16 score              (bytes 2..3)
-    uint256 private constant OFF_SUB_LAST_AUTO = 7;   // uint24 lastAutoBoughtDay  (bytes 7..9)
-    uint256 private constant OFF_SUB_COVERED = 10;    // uint24 afkCoveredThroughDay (bytes 10..12)
-    uint256 private constant OFF_SUB_START = 13;      // uint24 afkingStartDay     (bytes 13..15)
-    uint256 private constant OFF_SUB_STREAK_BASE = 23; // uint16 subStreakLatch    (bytes 23..24)
+    // Member lane: score code 36-45, checkpoint day 46-67, checkpoint streak 69-84.
+    uint256 private constant LANE_SCORE_SHIFT = 36;
+    uint256 private constant LANE_DAY_SHIFT = 46;
+    uint256 private constant LANE_STREAK_SHIFT = 69;
 
     uint256 private constant MINT_PRICE = 0.5 ether;
 
@@ -333,67 +331,82 @@ contract QuestStreakStallForgiveness is DeployProtocol {
         assertEq(streak, 12, "prior bank cannot be reused past the day-15 anchor");
     }
 
-    function test_AfkingStageGapPreservesPreBuyScoreAndExactEarnedSpan() public {
+    function test_AfkingStageGapPreservesPreBuyScore() public {
         address player = _startAfkingPlayer("stage-gap", 10);
-        uint24 startDay = uint24(game.currentDayView());
         uint256 snapshot = vm.snapshotState();
 
         vm.warp(block.timestamp + 1 days);
         _driveUntilDelivered(player);
-        uint16 healthyScore = uint16(_subField(player, OFF_SUB_SCORE, 16));
-        uint24 healthyCovered = uint24(_subField(player, OFF_SUB_COVERED, 24));
-        uint24 healthyStart = uint24(_subField(player, OFF_SUB_START, 24));
-        assertEq(healthyCovered - healthyStart, 1, "healthy delivery earns one funded day");
+        uint256 healthyScore = _laneField(player, LANE_SCORE_SHIFT, 10);
 
         vm.revertToState(snapshot);
         vm.warp(block.timestamp + 3 days);
         _driveUntilDelivered(player);
-        uint16 gapScore = uint16(_subField(player, OFF_SUB_SCORE, 16));
-        uint24 gapCovered = uint24(_subField(player, OFF_SUB_COVERED, 24));
-        uint24 gapStart = uint24(_subField(player, OFF_SUB_START, 24));
+        uint256 gapScore = _laneField(player, LANE_SCORE_SHIFT, 10);
 
         assertEq(gapScore, healthyScore, "score freezes the preserved pre-buy streak, not a false zero");
-        assertEq(gapCovered - gapStart, 1, "phantom days do not inflate the earned span");
-        assertEq(gapStart, startDay + 2, "two unadvanced days shift the run base forward");
-        assertEq(_subField(player, OFF_SUB_STREAK_BASE, 16), 10, "streak base survives the gap");
+        assertGt(healthyScore, 0, "the frozen score carries the streak");
+    }
+
+    /// @dev A stall resume credits every calendar day through the pass that completes: the run's
+    ///      checkpoint streak then covers the gap, and nothing was credited before that pass ran.
+    function test_AfkingStageGapCreditsEveryDayThroughTheCompletedPass() public {
+        address player = _startAfkingPlayer("stage-span", 10);
+        uint24 startDay = uint24(game.currentDayView());
+        assertEq(_laneField(player, LANE_DAY_SHIFT, 22), startDay, "checkpointed at signup");
+        assertEq(_laneField(player, LANE_STREAK_SHIFT, 16), 10, "the manual streak is the checkpoint streak");
+
+        vm.warp(block.timestamp + 3 days);
+        assertEq(_endpoint(), startDay, "nothing is credited before a pass completes");
+        _driveUntilDelivered(player);
+        assertEq(_endpoint(), game.currentDayView(), "the pass completed the current day");
+        assertEq(_endpoint() - startDay, 3, "the resume credits the three elapsed days");
+
+        uint32[] memory ids = new uint32[](1);
+        ids[0] = game.walletIdOf(player);
+        game.claimAfkingFlip(ids);
+        assertEq(_laneField(player, LANE_DAY_SHIFT, 22), _endpoint(), "settled through the endpoint");
+        assertEq(_laneField(player, LANE_STREAK_SHIFT, 16), 13, "the elapsed days fold into the streak");
     }
 
     function test_AfkingActiveResubscribeWaitsForOrderedCatchup() public {
         address player = _startAfkingPlayer("resub-gap", 12);
-        uint24 startDay = uint24(_subField(player, OFF_SUB_START, 24));
         vm.warp(vm.getBlockTimestamp() + 3 days);
         vm.prank(player);
         vm.expectRevert(abi.encodeWithSignature("RngLocked()"));
-        game.subscribe(0, false, false, 1, 0, 0);
+        game.subscribe(0, false, 1, 0);
         _finishSubscriptionWindow();
-        uint256 covered = _subField(player, OFF_SUB_COVERED, 24);
-        assertEq(covered, game.currentDayView(), "due preparation delivered before updates reopen");
-        assertEq(_subField(player, OFF_SUB_START, 24), startDay + 2, "undelivered gap days earn no streak");
-        assertEq(covered - _subField(player, OFF_SUB_START, 24), 1, "only the actual delivery earns a day");
+        assertEq(_endpoint(), game.currentDayView(), "due preparation completed before updates reopen");
+        uint256 day = _laneField(player, LANE_DAY_SHIFT, 22);
+        uint256 streak = _laneField(player, LANE_STREAK_SHIFT, 16);
         vm.prank(player);
-        game.subscribe(0, false, false, 1, 0, 0);
-        assertEq(_subField(player, OFF_SUB_COVERED, 24), covered, "update cannot buy a processed day twice");
-        assertEq(_subField(player, OFF_SUB_STREAK_BASE, 16), 12, "active run base survives catchup");
+        game.subscribe(0, false, 2, 0);
+        assertEq(_laneField(player, LANE_DAY_SHIFT, 22), _endpoint(), "an update settles through the endpoint");
+        assertEq(
+            _laneField(player, LANE_STREAK_SHIFT, 16),
+            streak + (_endpoint() - day),
+            "the settled days fold into the checkpoint streak"
+        );
+        (uint256 lane,) = GameSlotKeys.subLane(address(game), game.walletIdOf(player));
+        assertEq(((lane >> 32) & 7) + 1, 2, "new quantity applies");
     }
 
     function test_AfkingUpdateCannotReframePinnedPreparationToWallDay() public {
         address player = _startAfkingPlayer("real-before-gap", 12);
-        uint256 start = _subField(player, OFF_SUB_START, 24);
+        uint256 start = _laneField(player, LANE_DAY_SHIFT, 22);
         vm.warp(vm.getBlockTimestamp() + 5 days);
         game.mineFlip(type(uint32).max);
         vm.prank(player);
         vm.expectRevert(abi.encodeWithSignature("RngLocked()"));
-        game.subscribe(0, false, true, 1, 0, 0);
-        assertEq(_subField(player, OFF_SUB_START, 24), start);
+        game.subscribe(0, true, 1, 0);
+        assertEq(_laneField(player, LANE_DAY_SHIFT, 22), start, "a rejected update changes nothing");
         _finishSubscriptionWindow();
-        assertEq(_subField(player, OFF_SUB_COVERED, 24), game.currentDayView());
-        assertEq(_subField(player, OFF_SUB_STREAK_BASE, 16), 12);
+        assertEq(_endpoint(), game.currentDayView());
+        assertEq(_laneField(player, LANE_STREAK_SHIFT, 16), 12, "the checkpoint streak is untouched");
     }
 
     function test_LiveAfkingActivityScoreDoesNotDropDuringPendingGap() public {
         address player = _startAfkingPlayer("live-gap", 11);
-        uint24 covered = uint24(_subField(player, OFF_SUB_COVERED, 24));
-        _setSubU24(player, OFF_SUB_START, covered - 1); // one already-earned funded day
 
         uint256 beforeScore = activityScoreOf(address(game), player);
         vm.warp(block.timestamp + 3 days);
@@ -456,16 +469,17 @@ contract QuestStreakStallForgiveness is DeployProtocol {
         vm.deal(address(this), 50 ether);
         game.depositAfkingFunding{value: 50 ether}(id);
         vm.prank(player);
-        game.subscribe(0, false, false, 1, 0, seat);
-        assertEq(_subField(player, OFF_SUB_COVERED, 24), today, "fixture cover buy grounds current day");
+        game.subscribe(0, false, 1, seat);
+        assertEq(_laneField(player, LANE_DAY_SHIFT, 22), today, "the run is checkpointed on the signup day");
     }
 
-    function _driveUntilDelivered(address player) private {
+    function _driveUntilDelivered(address) private {
         uint24 today = uint24(game.currentDayView());
-        for (uint256 i; i < 20 && _subField(player, OFF_SUB_LAST_AUTO, 24) != today; ++i) {
+        for (uint256 i; i < 40 && _endpoint() != today; ++i) {
+            _fulfillLatest(uint256(keccak256(abi.encode("drive", i))) | 1);
             game.mineFlip(0);
         }
-        assertEq(_subField(player, OFF_SUB_LAST_AUTO, 24), today, "subscriber stage delivered current day");
+        assertEq(_endpoint(), today, "subscriber pass completed the current day");
     }
 
     function _settleCurrentGameDay(uint256 word) private {
@@ -502,21 +516,13 @@ contract QuestStreakStallForgiveness is DeployProtocol {
         return (uint256(vm.load(address(quests), slot)) & (uint256(1) << uint8(day))) != 0;
     }
 
-    function _subSlot(address player) private view returns (bytes32) {
-        return keccak256(abi.encode(uint256(game.walletIdOf(player)), SUB_OF_SLOT));
+    function _laneField(address player, uint256 shift, uint256 width) private view returns (uint256) {
+        (uint256 lane,) = GameSlotKeys.subLane(address(game), game.walletIdOf(player));
+        return (lane >> shift) & ((uint256(1) << width) - 1);
     }
 
-    function _subField(address player, uint256 offset, uint256 width) private view returns (uint256) {
-        uint256 packed = uint256(vm.load(address(game), _subSlot(player)));
-        return (packed >> (offset * 8)) & ((uint256(1) << width) - 1);
-    }
-
-    function _setSubU24(address player, uint256 offset, uint24 value) private {
-        bytes32 slot = _subSlot(player);
-        uint256 packed = uint256(vm.load(address(game), slot));
-        uint256 shift = offset * 8;
-        packed = (packed & ~(uint256(type(uint24).max) << shift)) | (uint256(value) << shift);
-        vm.store(address(game), slot, bytes32(packed));
+    function _endpoint() private view returns (uint24) {
+        return uint24(uint256(vm.load(address(game), bytes32(GameSlots.AFKING_ENDPOINT_DAY))) >> (8 * GameSlots.AFKING_ENDPOINT_DAY_OFFSET));
     }
 
     function _setDailyIdx(uint24 value) private {

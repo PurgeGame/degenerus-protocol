@@ -46,25 +46,10 @@ contract CreditsGameExt is DegenerusGame {
     function x_setLevelDgnrs(uint24 lvl, uint256 allocation) external { _setLevelDgnrsAllocation(lvl, allocation); }
     function x_setFoilRecord(uint24 lvl, uint32 id, uint256 w) external { foilRecord[lvl & 3][id] = w; }
     function x_setFoilDraw(uint24 day, uint256 w) external { dailyFoilDraw[day & 1] = w; }
-    function x_setPendingFlip(uint32 id, uint24 owed) external { _subOf[id].pendingFlip = owed; }
 
     function x_setDeityBit(address a) external {
         _registerWallet(a, type(uint256).max);
         mintPacked_[_walletIdOf(a)] |= uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT;
-    }
-
-    /// @dev Give `id`'s live run a funded tenure of `span` days (both day markers set past the
-    ///      span so the next stamp skips the record).
-    function x_setTenure(uint32 id, uint24 span) external {
-        Sub storage s = _subOf[id];
-        uint24 covered = s.afkingStartDay + span;
-        s.afkCoveredThroughDay = covered;
-        s.lastAutoBoughtDay = covered;
-    }
-
-    function x_sub(uint32 id) external view returns (uint24 startDay, uint24 covered, uint8 qty) {
-        Sub storage s = _subOf[id];
-        return (s.afkingStartDay, s.afkCoveredThroughDay, s.dailyQuantity);
     }
 }
 
@@ -539,8 +524,16 @@ contract GameWalletIdCredits is DeployProtocol {
     // ---------------------------------------------------------------------
 
     function test_AfkingPendingFlipCreditsSubId() public {
-        (address player, uint32 id) = _wallet("afking_pending");
-        ext.x_setPendingFlip(id, 1_234);
+        _finishSubscriptionWindow();
+        (address player,) = _wallet("afking_pending");
+        uint256 seat = _grantSeat(player);
+        uint32 id = game.walletIdOf(player);
+        vm.deal(address(this), 5 ether);
+        game.depositAfkingFunding{value: 5 ether}(id);
+        vm.prank(player);
+        game.subscribe(0, false, 1, seat);
+        _completeDay(uint256(keccak256("afking_pending_day")) | 1);
+
         uint32[] memory subs = new uint32[](1);
         subs[0] = id;
         uint256 before = _lane(id);
@@ -555,14 +548,15 @@ contract GameWalletIdCredits is DeployProtocol {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter == address(game) && logs[i].topics[0] == AFKING_FLIP_CLAIMED) {
                 claimed = true;
-                assertEq(abi.decode(logs[i].data, (uint256)), 1_234, "owed");
+                assertEq(abi.decode(logs[i].data, (uint256)), 100, "owed: one credited day");
             }
         }
         assertTrue(claimed, "AfkingFlipClaimed emitted");
         (uint256 credited, uint256 others) = _credits(logs, id);
-        assertEq(credited, 1_234, "owed credited by the sub ID");
-        assertEq(others, 0, "no other ID credited");
-        assertEq(_lane(id) - before, 1_234, "stake lane moved");
+        assertEq(credited, 100, "owed credited by the sub ID");
+        // The unreferred sub's affiliate base (70) splits between the Vault and sDGNRS IDs.
+        assertEq(others, 2, "only the two protocol IDs are credited besides the sub");
+        assertEq(_lane(id) - before, 100, "stake lane moved");
     }
 
     function test_SubDrawCreditsWinnerElementId() public {
@@ -573,13 +567,11 @@ contract GameWalletIdCredits is DeployProtocol {
         uint32 pid = game.walletIdOf(p);
         game.depositAfkingFunding{value: 5 ether}(pid);
         vm.prank(p);
-        game.subscribe(0, false, false, 1, 0, seat);
+        game.subscribe(0, false, 1, seat);
         assertGt(pid, 0, "subscriber registered");
 
         bool checked;
         for (uint256 d = 1; d <= 12 && !checked; ++d) {
-            (uint24 startDay,,) = ext.x_sub(pid);
-            if (startDay != 0) ext.x_setTenure(pid, 30);
             vm.recordLogs();
             _completeDay(uint256(keccak256(abi.encode("sub_draw_day", d))) | 1);
             Vm.Log[] memory logs = vm.getRecordedLogs();

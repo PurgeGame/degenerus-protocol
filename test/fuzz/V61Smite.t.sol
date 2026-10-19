@@ -6,7 +6,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
-import {GameSlots} from "../helpers/GameSlots.sol";
+import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 
 /// @title V61Smite — TST-05 proof: deity-smite (the deity adds a curse stack to a smitee for 200 FLIP),
@@ -57,7 +57,6 @@ contract V61Smite is DeployProtocol {
     uint256 private constant CLAIMABLE_POOL_SLOT = GameSlots.CLAIMABLE_POOL;
     uint256 private constant CLAIMABLE_POOL_OFFBYTES = 16;
     uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED;
-    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF; // was 58
 
     uint256 private constant CURSE_COUNT_SHIFT = BitPackingLib.CURSE_COUNT_SHIFT; // (5 bits)
     uint256 private constant CURSE_COUNT_CAP = 20;
@@ -80,6 +79,7 @@ contract V61Smite is DeployProtocol {
         vm.deal(address(game), 5_000_000 ether);
         _seedDailyIdx(100);
         _finishSubscriptionWindow();
+        _seedEndpoint(uint24(game.currentDayView()));
     }
 
     // =========================================================================
@@ -352,6 +352,15 @@ contract V61Smite is DeployProtocol {
         _seedField(who, CURSE_COUNT_SHIFT, BitPackingLib.MASK_5, points);
     }
 
+    /// @dev Mark today's subscriber pass complete, which the fixture's seeded dailyIdx leaves undone: a
+    ///      new run starts only once the day's pass has.
+    function _seedEndpoint(uint24 day) internal {
+        uint256 shift = GameSlots.AFKING_ENDPOINT_DAY_OFFSET * 8;
+        bytes32 slot = bytes32(GameSlots.AFKING_ENDPOINT_DAY);
+        uint256 word = uint256(vm.load(address(game), slot));
+        vm.store(address(game), slot, bytes32((word & ~(uint256(0xFFFFFF) << shift)) | (uint256(day) << shift)));
+    }
+
     function _seedDailyIdx(uint256 day) internal {
         uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(0))));
         slot0 &= ~(uint256(0xFFFFFF) << 24);
@@ -363,13 +372,8 @@ contract V61Smite is DeployProtocol {
     // Reads
     // =========================================================================
 
-    function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
-        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT))))) >> (off * 8);
-        return p & ((uint256(1) << widthBits) - 1);
-    }
-
     function _dailyQtyOf(address who) internal view returns (uint8) {
-        return uint8(_subField(who, 0, 8));
+        return uint8(GameSlotKeys.subQuantity(address(game), game.walletIdOf(who)));
     }
 
     // =========================================================================
@@ -384,7 +388,7 @@ contract V61Smite is DeployProtocol {
     function _subscribeLootbox(address who, uint8 q) internal {
         uint256 seat = _grantSeat(who); // a new run burns one seat
         vm.prank(who);
-        game.subscribe(0, false, false, q, 0, seat);
+        game.subscribe(0, false, q, seat);
     }
 
     function _fundPool(address who, uint256 amount) internal {

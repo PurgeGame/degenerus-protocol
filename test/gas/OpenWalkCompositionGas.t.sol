@@ -22,9 +22,7 @@ contract OpenWalkCompositionGas is DeployProtocol {
         }
     }
 
-    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF; // mapping(uint32 => Sub)
-    uint256 private constant SUBSCRIBERS_SLOT = GameSlots.SUBSCRIBERS; // packed uint32[]
-    uint256 private constant OFF_LASTBOUGHT = 7;
+    uint256 private constant SUBSCRIBERS_SLOT = GameSlots.SUBSCRIBERS; // packed 85-bit lanes
     uint256 internal constant INTRINSIC_TX_GAS = 21_192;
     uint256 internal constant RING_1000_NEW_SUBS = 998;
     uint256 internal constant RING_500_NEW_SUBS = 500;
@@ -163,9 +161,8 @@ contract OpenWalkCompositionGas is DeployProtocol {
     }
 
     /// @dev Subscribe `n` fresh players as funded lootbox-mode subs (ported from
-    ///      V56AfkingGasMarginal._setupFundedSubs — GROUNDED: funded BEFORE subscribe so the D-12
-    ///      mandatory NEW-run cover-buy is funded, matching the shipped grounded-subscribe
-    ///      behavior the superseded KeeperOpenBoxWorstCaseGas fixture got wrong).
+    ///      V56AfkingGasMarginal._setupFundedSubs). Each is funded before it subscribes; its first
+    ///      purchase is the next day's pass.
     function _setupFundedSubs(uint256 n, string memory prefix, uint256 poolEach, bool isTicket)
         internal
         returns (address[] memory subs)
@@ -177,7 +174,7 @@ contract OpenWalkCompositionGas is DeployProtocol {
             uint256 seat = _grantSeat(who); // the AFKing Subscription Token is the subscribe credential (a new run burns one seat)
             _fundPool(who, poolEach);
             vm.prank(who);
-            game.subscribe(0, false, isTicket, 1, 0, seat);
+            game.subscribe(0, isTicket, 1, seat);
         }
     }
 
@@ -230,46 +227,17 @@ contract OpenWalkCompositionGas is DeployProtocol {
         }
     }
 
-    // ---- ID-keyed subscription reads ----
-
-    function _subField(uint32 id, uint256 off, uint256 widthBits) internal view returns (uint256) {
-        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(uint256(id), uint256(SUBOF_SLOT))))) >> (off * 8);
-        return p & ((uint256(1) << widthBits) - 1);
-    }
-
-    function _lastBoughtDayOf(uint32 id) internal view returns (uint32) {
-        return uint32(_subField(id, OFF_LASTBOUGHT, 24));
-    }
-
-    function _lastOpenedDayOf(uint32 id) internal view returns (uint32) {
-        return GameSlotKeys.afkingOpenedDay(address(game), id);
-    }
+    // ---- Subscription reads ----
 
     function _subscriberCount() internal view returns (uint256) {
         return uint256(vm.load(address(game), bytes32(uint256(SUBSCRIBERS_SLOT))));
     }
 
-    /// @dev Eight subscriber IDs occupy each array element word.
-    function _subscriberAt(uint256 i) internal view returns (uint32 id) {
-        bytes32 base = keccak256(abi.encode(uint256(SUBSCRIBERS_SLOT)));
-        uint256 word = uint256(vm.load(address(game), bytes32(uint256(base) + i / 8)));
-        id = uint32(word >> ((i % 8) * 32));
-        require(id != 0, "fixture: subscriber has an allocated ID");
-    }
-
-    /// @dev Walk the WHOLE live `_subscribers` set (not just a caller-known subset — the ring
-    ///      also carries the 2 permanent deploy subs) and count subs with a pending
-    ///      (un-opened) afking box. This verifies the measured ring was fully drained.
-    function _countPendingAfking() internal view returns (uint256 pending) {
-        uint256 len = _subscriberCount();
-        for (uint256 i; i < len; ++i) {
-            uint32 id = _subscriberAt(i);
-            if (_lastOpenedDayOf(id) < _lastBoughtDayOf(id)) {
-                unchecked {
-                    ++pending;
-                }
-            }
-        }
+    /// @dev Boxes stamped by preparation and not yet opened. This verifies the measured ring was
+    ///      fully drained.
+    function _countPendingAfking() internal view returns (uint256) {
+        uint256 packed = uint256(vm.load(address(game), bytes32(GameSlots.PENDING_BOX_COUNT)));
+        return uint16(packed >> (8 * GameSlots.PENDING_BOX_COUNT_OFFSET));
     }
 
     /// @dev Minimal uint -> decimal string for makeAddr label uniqueness.

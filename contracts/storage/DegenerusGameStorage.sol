@@ -2417,6 +2417,20 @@ abstract contract DegenerusGameStorage {
         balancesPacked[id] = packed - claimableAmount - (afkingAmount << 128);
     }
 
+    /// @dev `_debitClaimableAndAfking` from the caller's own load `packed` of `balancesPacked[id]`,
+    ///      with the same two guards; returns the stored word.
+    function _debitClaimableAndAfkingFrom(
+        uint32 id,
+        uint256 packed,
+        uint256 claimableAmount,
+        uint256 afkingAmount
+    ) internal returns (uint256 updated) {
+        if (uint128(packed) < claimableAmount) revert Insolvent();
+        if ((packed >> 128) < afkingAmount) revert Insolvent();
+        updated = packed - claimableAmount - (afkingAmount << 128);
+        balancesPacked[id] = updated;
+    }
+
     /// @notice Emitted when ETH is credited to a wallet's prepaid afking balance.
     event AfkingFunded(uint32 indexed walletId, uint256 amount);
 
@@ -4009,209 +4023,170 @@ abstract contract DegenerusGameStorage {
     // already carried inside `claimablePool` via the `afkingFunding` ledger
     // (declared above); no separate aggregate is introduced.
 
-    /// @notice Per-wallet AfKing subscription record: the per-buy box stamp, the in-slot per-sub
-    ///         accumulator and the wallet's position in the subscriber set.
-    /// @dev Layout (Solidity packs sequentially) — ONE 32-byte slot (232 bits used), so the whole
-    ///      record reads/writes as a single warm slot with no extra cold slot:
-    ///        config (16b):  dailyQuantity(8) + flags(8)
-    ///        per-sub stamp (40b): score(16) + amount(24, milli-ETH)
-    ///        markers (72b): lastAutoBoughtDay(24) + afkCoveredThroughDay(24) + afkingStartDay(24)
-    ///        accumulator (72b): affiliateBase(32) + pendingFlip(24) + subStreakLatch(16)
-    ///        set position (32b): 1-indexed position in `_subscribers` (0 = not in the set)
-    ///      There is NO per-day epoch: the box resolves at the LIVE level at open (no
-    ///      stored roll floor) and uses the active published session word. Every stamped box
-    ///      must finish before the next request. The frozen per-sub inputs are
-    ///      `score` (activity score) and `amount`
-    ///      (mp×qty spend). `fundingSource` lives in the sparse `_fundingSourceOf` map
-    ///      (absent ⇒ self, the common case stores nothing). `lastAutoBoughtDay`
-    ///      double-duties as the success-marker AND the frozen seed `day`.
-    ///      `amount` is stored in milli-ETH so it packs into uint24; the open unpacks it
-    ///      back to wei before the box seed / EV-cap payout math. The stamp freezes the
-    ///      box's SPEND and the seed `day`; the LEVEL and the EV-cap key read LIVE at
-    ///      open, so the player cannot time the level. The milli-ETH round-down only
-    ///      touches this recorded EV/seed input — the actual ETH/`claimablePool` debit
-    ///      consumes the full wei `ethValue` and is never rounded.
-    ///
-    ///      Compute-on-read streak: `afkingStartDay` + `subStreakLatch`'s `streakAtAfkingStart`
-    ///      (full uint16) frame the run; the effective afking quest streak is derived on read from
-    ///      `afkCoveredThroughDay` (no DegenerusQuests STATICCALL on the buy path) and handed
-    ///      back to the manual quest system on any sub-ending path (finalize).
-    ///
-    ///      In-slot accumulator (cheap per-buy; advanced by the per-buy accrue write into this
-    ///      already-warm slot, so no new cold slot):
-    ///        • `affiliateBase` — per-sub running unclaimed AFFILIATE balance, whole
-    ///          FLIP; drained and paid out by `DegenerusAffiliate.claim`, zeroed there
-    ///          so a re-claim finds 0.
-    ///        • `pendingFlip` — per-sub running CLAIMABLE FLIP balance, whole FLIP,
-    ///          accrued per delivered day (the slot-0 quest reward every mode + the
-    ///          ticket-mode 10%/15% buyer bonus). Paid out only by the player-pull
-    ///          `claimAfkingFlip`, zeroed there.
-    ///        • `subStreakLatch` — the full uint16 afking-run streak base (snapshot + in-run secondaries).
-    ///      `affiliateBase` is uint32 with a 100M-whole-FLIP saturating clamp and
-    ///      `pendingFlip` is uint24 with a ~16.7M (2^24-1) saturating clamp at the accrue
-    ///      write — each clamp binds before its field's type ceiling, and it can only ever
-    ///      UNDER-credit a pathological high-volume whale (off the solvency path). Every field
-    ///      is written on the subscribe / stage / cancel paths; the open only reads the slot.
-    ///      There are no settle-day markers: the running balances self-mark, the pull has
-    ///      no window, and the quest flush drains the counters so a double-fire finds 0.
-    ///      `afkCoveredThroughDay` is a delivered-day high-water mark, not a settle
-    ///      marker.
-    struct Sub {
-        // --- config (16 bits) ---
-        /// @dev 0 = paused / never-subscribed; minimum 1 when active.
-        uint8 dailyQuantity;
-        /// @dev bit 0 = externalFunding; bit 1 = drainGameCreditFirst; bit 2 = useTickets.
-        uint8 flags;
-        // --- per-sub stamp (40 bits) ---
-        /// @dev Stamp: the frozen activity score (the EV multiplier input at open).
-        ///      Genuinely per-sub (each subscriber's own activity score).
-        uint16 score;
-        /// @dev Stamp: spend in milli-ETH (0.001-ETH units; boons off, so amount ==
-        ///      spend, = mp × effectiveQty). Milli-ETH in a uint24 (16,777 ETH/buy of
-        ///      headroom — a single auto-buy never approaches it); packed via
-        ///      `_packEthToMilliEth` at the stamp write and unpacked via
-        ///      `_unpackMilliEthToWei` before the box seed / EV-cap payout math. The
-        ///      round-down is on this recorded EV/seed input only — the actual ETH debit
-        ///      still uses the full wei `ethValue`.
-        uint24 amount;
-        // --- markers (72 bits) ---
-        /// @dev Success-marker AND the frozen seed `day` (the same process day):
-        ///      day index of the last successful buy, written only after a successful
-        ///      afkingFunding debit. The open freezes this `day` in the seed.
-        ///      Box-pending needs no marker of its own: subscription changes stay locked
-        ///      until every stamp opens, and the opener walks the box section once in
-        ///      order, so a box is pending exactly while its stamp day is `_afkingResetDay`,
-        ///      `_pendingBoxCount` is nonzero and the opener has not passed its position.
-        ///      uint24 day index ~ 45,000 years of headroom.
-        uint24 lastAutoBoughtDay;
-        /// @dev Delivered-day high-water mark: monotone, advanced only on a day whose
-        ///      ETH debit actually fired (a skipped/un-debited day does not advance it).
-        ///      The afking quest streak is computed ON READ from this marker (no
-        ///      DegenerusQuests STATICCALL on the buy path): the effective streak is
-        ///      `streakAtAfkingStart + (afkCoveredThroughDay - afkingStartDay)` while the
-        ///      last funded day is no older than yesterday, else 0 (decay-on-read). Advanced
-        ///      in the same warm slot accrue write. uint24 day index.
-        uint24 afkCoveredThroughDay;
-        /// @dev Day the current afking run's streak snapshot was taken — the base day for the
-        ///      compute-on-read `afkCoveredThroughDay - afkingStartDay` span. Set at subscribe
-        ///      (the funded day-0) and re-based on a gap-resumed delivered day; cleared at
-        ///      finalize when streak control hands back to the manual quest system. uint24 day
-        ///      index, same width as the other day markers.
-        uint24 afkingStartDay;
-        // --- in-slot accumulator (72 bits) ---
-        /// @dev Per-sub running unclaimed affiliate balance, whole FLIP. Accrued a flat
-        ///      7% per buy (one warm in-slot `+=`); drained and paid out by
-        ///      `DegenerusAffiliate.claim`, zeroed there so a re-claim finds 0. uint32
-        ///      with a 100,000,000-whole-FLIP saturating clamp at the accrue write
-        ///      (uint32 holds ~4.29e9 > 100M, so the clamp binds first); the clamp can
-        ///      only ever under-credit, off the solvency path.
-        uint32 affiliateBase;
-        /// @dev Per-sub running CLAIMABLE FLIP balance, whole FLIP. Accrued per
-        ///      delivered day by the warm in-slot buy accrue: the slot-0 quest reward
-        ///      (every mode) plus the ticket-mode 10%/15% buyer bonus. Paid out only by the
-        ///      player-pull `claimAfkingFlip` (one creditFlip, zeroed there so a re-claim
-        ///      finds 0); the sub claims whenever, so there is no settle/claim-timing edge.
-        ///      uint24 with a ~16.7M (2^24-1) saturating clamp + under-credit-only
-        ///      behaviour, same in kind as `affiliateBase`.
-        uint24 pendingFlip;
-        /// @dev `streakAtAfkingStart` — the afking-run streak base (0..65535): the snapshot at run
-        ///      start plus the secondary/level completions the player makes during the run
-        ///      (bumped via recordAfkingSecondary). The compute-on-read effective streak adds the
-        ///      funded delivered days `(afkCoveredThroughDay - afkingStartDay)` to this base. Read
-        ///      per buy as a mask op, so `affiliateBase`/`pendingFlip` stay unmasked for the hot
-        ///      accrue.
-        uint16 subStreakLatch;
-        // --- set membership (32 bits) ---
-        /// @dev 1-indexed position in `_subscribers`; 0 = not in the set. Swap-pop rewrites the
-        ///      mover's record; delete clears it with the rest of the record.
-        uint32 setPosition;
+    /// @notice AfKing subscriber record: one 85-bit lane in the two-ended set `_subscribers`,
+    ///         three lanes per word (position `p` is lane `p % 3` of word `p / 3`).
+    /// @dev Lane layout (LSB -> MSB):
+    ///        [0..31]  wallet ID (0 = empty lane)
+    ///        [32..34] daily quantity minus 1 (quantity 1..8)
+    ///        [35]     mode: set = tickets, clear = lootboxes
+    ///        [36..45] activity-score code, frozen by preparation for a box member
+    ///        [46..67] checkpoint day
+    ///        [68]     removal pending: a seized run that the next preparation pass removes
+    ///        [69..84] checkpoint streak, saturating
+    ///      Rewards are derived, never stored. For each day after the checkpoint day through the
+    ///      endpoint `E` (`_afkingEndpoint`), a member earns 100 whole FLIP, plus 100 per ticket in
+    ///      ticket mode, and 70 per unit of affiliate base. Settlement pays both, moves the
+    ///      checkpoint day to `E` and folds the elapsed days into the checkpoint streak, so the
+    ///      live streak is `checkpoint streak + (E - checkpoint day)` and never depends on when
+    ///      anyone settled. A paused protocol seat's checkpoint day is parked at
+    ///      `SUB_PAUSED_DAY`, past every endpoint, so it earns nothing and its streak stands
+    ///      still until its resume sets the checkpoint day to the endpoint.
+    uint256 internal constant SUB_LANE_BITS = 85;
+    uint256 internal constant SUB_LANE_MASK = (uint256(1) << 85) - 1;
+    uint256 internal constant SUB_QTY_SHIFT = 32;
+    uint256 internal constant SUB_TICKETS_BIT = uint256(1) << 35;
+    uint256 internal constant SUB_SCORE_SHIFT = 36;
+    uint256 internal constant SUB_SCORE_MASK = 0x3ff;
+    uint256 internal constant SUB_DAY_SHIFT = 46;
+    uint256 internal constant SUB_DAY_MASK = (uint256(1) << 22) - 1;
+    uint256 internal constant SUB_PAUSED_DAY = SUB_DAY_MASK;
+    uint256 internal constant SUB_REMOVAL_BIT = uint256(1) << 68;
+    uint256 internal constant SUB_STREAK_SHIFT = 69;
+    uint256 internal constant SUB_STREAK_MAX = 0xffff;
+
+    /// @dev Largest daily quantity a subscription may hold.
+    uint256 internal constant SUB_MAX_QUANTITY = 8;
+
+    /// @dev Score code: exact through the seg-B knee (500), then steps of 64 points rounded down;
+    ///      code 961 is the 30,000-point effective cap.
+    function _encodeSubScore(uint256 score) internal pure returns (uint256) {
+        if (score <= 500) return score;
+        if (score >= 30_000) return 961;
+        return 500 + ((score - 500) >> 6);
     }
 
-    /// @dev `subStreakLatch` is the full uint16 — `streakAtAfkingStart` (0..65535). It carries the
-    ///      run's pre-run snapshot plus the secondary/level completions the player makes during
-    ///      the run (bumped via recordAfkingSecondary); the funded delivered days add on top of
-    ///      this base. Clamped at uint16 max, far past where the activity-score caps make it matter.
-    uint16 internal constant SUB_STREAK_MASK = 0xffff;
-
-    /// @dev Read the afking-run streak base (the full packed latch uint16).
-    function _streakBaseOf(Sub storage sub) internal view returns (uint16) {
-        return sub.subStreakLatch & SUB_STREAK_MASK;
+    function _decodeSubScore(uint256 code) internal pure returns (uint16) {
+        if (code <= 500) return uint16(code);
+        if (code >= 961) return 30_000;
+        return uint16(500 + ((code - 500) << 6));
     }
 
-    /// @dev Write the afking-run streak base, clamped to uint16 max so the live +1 bump
-    ///      saturates instead of wrapping the field at the ceiling.
-    function _setStreakBase(Sub storage sub, uint256 value) internal {
-        sub.subStreakLatch = value > type(uint16).max ? type(uint16).max : uint16(value);
+    function _subQuantity(uint256 lane) internal pure returns (uint256) {
+        return ((lane >> SUB_QTY_SHIFT) & 7) + 1;
     }
 
-    /// @dev Compute-on-read effective afking quest streak from the Sub slot — no DegenerusQuests
-    ///      STATICCALL. The run's streak base (`streakAtAfkingStart`: snapshot + in-run
-    ///      secondaries) plus the funded delivered days since the run's base day. A playable full
-    ///      day without a funded delivery decays to 0; calendar days inside a pending unadvanced
-    ///      gap are excluded because no subscriber could receive the daily delivery.
-    function _afkingStreak(Sub storage sub, uint24 currentDay) internal view returns (uint32) {
-        uint24 covered = sub.afkCoveredThroughDay;
-        if (currentDay == 0) return 0;
-        if (uint32(covered) + 1 < uint32(currentDay)) {
-            uint24 sealedDay = dailyIdx;
-            if (
-                uint32(currentDay) <= uint32(sealedDay) + 1 ||
-                covered < sealedDay ||
-                _recordedDailyWord(sealedDay + 1) != 0
-            ) return 0;
-        }
-        return uint32(_streakBaseOf(sub)) + uint32(covered - sub.afkingStartDay);
+    function _subDay(uint256 lane) internal pure returns (uint24) {
+        return uint24((lane >> SUB_DAY_SHIFT) & SUB_DAY_MASK);
     }
 
-    /// @dev The live (non-lapsed) afking streak for wallet `id` if it is mid-run; otherwise
-    ///      (false, 0). A genuinely lapsed run, a sub with no active run, and a non-subscriber all return
-    ///      (false, 0) so callers fall back to the manual streak — a lapsed-but-still-minting sub
-    ///      is never zeroed. No DegenerusQuests STATICCALL on the live-run path.
+    function _subCheckpointStreak(uint256 lane) internal pure returns (uint256) {
+        return (lane >> SUB_STREAK_SHIFT) & SUB_STREAK_MAX;
+    }
+
+    /// @dev Rewrite a lane's checkpoint day and streak, saturating the streak.
+    function _withSubCheckpoint(uint256 lane, uint256 day, uint256 streak) internal pure returns (uint256) {
+        if (streak > SUB_STREAK_MAX) streak = SUB_STREAK_MAX;
+        return (lane & ~((SUB_DAY_MASK << SUB_DAY_SHIFT) | (SUB_STREAK_MAX << SUB_STREAK_SHIFT)))
+            | (day << SUB_DAY_SHIFT) | (streak << SUB_STREAK_SHIFT);
+    }
+
+    /// @dev Last day whose subscriber pass completed: rewards accrue through it and no further,
+    ///      so a day is never credited before its purchase has run.
+    function _afkingEndpoint() internal view returns (uint24) {
+        return _afkingEndpointDay;
+    }
+
+    /// @dev Live streak of a lane at endpoint `endpoint`.
+    function _subStreakAt(uint256 lane, uint24 endpoint) internal pure returns (uint256 streak) {
+        streak = _subCheckpointStreak(lane);
+        uint24 day = _subDay(lane);
+        if (endpoint > day) streak += endpoint - day;
+    }
+
+    /// @dev Protocol subscription flags in `_afkingProtocolFlags`. The two BOUGHT bits record
+    ///      which protocol seats bought into the current box cohort. A protocol seat is paused
+    ///      while any of its pause bits is set: the Vault owner's pause (sticky, set and cleared
+    ///      only by the owner) or an unfunded pause (cleared by preparation on the first day the
+    ///      seat can pay again).
+    uint8 internal constant AFK_VAULT_BOUGHT = 1;
+    uint8 internal constant AFK_SDGNRS_BOUGHT = 2;
+    uint8 internal constant AFK_VAULT_OWNER_PAUSED = 4;
+    uint8 internal constant AFK_VAULT_UNFUNDED = 8;
+    uint8 internal constant AFK_SDGNRS_UNFUNDED = 16;
+
+    function _protocolPaused(uint32 id) internal view returns (bool) {
+        uint8 flags = _afkingProtocolFlags;
+        if (id == VAULT_WALLET_ID) return flags & (AFK_VAULT_OWNER_PAUSED | AFK_VAULT_UNFUNDED) != 0;
+        if (id == SDGNRS_WALLET_ID) return flags & AFK_SDGNRS_UNFUNDED != 0;
+        return false;
+    }
+
+    /// @dev A member's lane, or 0 when `id` is not in the set.
+    function _subLaneOf(uint32 id) internal view returns (uint256 lane, uint256 position1) {
+        position1 = _subPosition1(id);
+        if (position1 != 0) lane = _subLaneAt(position1 - 1);
+    }
+
+    /// @dev The live (non-removed) afking streak for wallet `id` if it is mid-run; otherwise
+    ///      (false, 0), so callers fall back to the manual streak. No DegenerusQuests STATICCALL.
     function _liveAfkingStreak(uint32 id) internal view returns (bool live, uint32 streak) {
-        // `afkingStartDay` is set at run start and cleared at finalize (every sub-ending path),
-        // and a non-subscriber's Sub slot is zero — so a non-zero start day alone identifies a
-        // live run, off the single Sub-slot SLOAD _afkingStreak needs anyway. A paused/lapsed run
-        // keeps a start day but _afkingStreak decays it to 0 below.
-        Sub storage sub = _subOf[id];
-        if (sub.afkingStartDay != 0) {
-            uint32 a = _afkingStreak(sub, _simulatedDayIndex());
-            if (a != 0) return (true, a);
-        }
-        return (false, 0);
+        (uint256 lane, uint256 position1) = _subLaneOf(id);
+        if (position1 == 0 || lane & SUB_REMOVAL_BIT != 0) return (false, 0);
+        // At most 2^16 - 1 + 2^22 days: always fits.
+        streak = uint32(_subStreakAt(lane, _afkingEndpoint()));
+        live = streak != 0;
     }
 
     /// @dev Single source of truth for a player's effective quest streak, so the activity score
-    ///      is one unified value everywhere it is read. A live afking sub reads the Sub-side
-    ///      compute-on-read (carrying the run's funded days + in-run secondaries); everyone else
-    ///      (and a lapsed run) reads the manual decay-aware streak.
+    ///      is one unified value everywhere it is read. A live afking sub reads its derived streak;
+    ///      everyone else (and a run pending removal) reads the manual decay-aware streak.
     function _effectiveQuestStreak(uint32 id) internal view returns (uint32) {
         // Most players are not afking subs, so learn the afking flag from the quest-streak read we
-        // make anyway: a non-afker returns here with no Sub-slot lookup. Only an afking player pays
-        // the extra Sub read for the compute-on-read (funded days + in-run secondaries); a lapsed
-        // run falls back to the manual streak just read. ID 0 has no quest state: (0, false).
+        // make anyway: a non-afker returns here with no subscriber lookup. ID 0 has no quest
+        // state: (0, false).
         (uint32 manualStreak, bool afking) = quests.effectiveBaseStreakAndAfking(id);
         if (!afking) return manualStreak;
         (bool live, uint32 a) = _liveAfkingStreak(id);
         return live ? a : manualStreak;
     }
 
-    /// @dev Per-subscriber record by wallet ID: the per-sub stamp, the day markers (incl.
-    ///      `afkingStartDay` / `afkCoveredThroughDay` for the compute-on-read streak), the in-slot
-    ///      accumulator (affiliateBase / pendingFlip / subStreakLatch) and the set position.
-    mapping(uint32 => Sub) internal _subOf;
+    /// @dev Reverse lookup by wallet ID, four 64-bit lanes per word (lane `id & 3` of key
+    ///      `id >> 2`): [0..10] set position + 1 (0 = not a member), [11..32] run-start day, the
+    ///      daily draw's age base. Only individual interactions read it; the daily passes walk
+    ///      `_subscribers` directly.
+    mapping(uint256 => uint256) internal _subMeta;
 
-    /// @dev Sparse funder ID keyed by subscriber ID — the account whose `afkingFunding` funds a sub.
-    ///      Absent ⇒
-    ///      self-funded (the common case, which stores NOTHING). Written at subscribe
-    ///      (set-if-nonzero / delete-if-self) and read once per process iteration to resolve the
-    ///      source (not needed at open — funding is already debited at process).
-    mapping(uint32 => uint32) internal _fundingSourceOf;
+    function _subMetaLane(uint32 id) internal view returns (uint256) {
+        return uint64(_subMeta[id >> 2] >> ((id & 3) * 64));
+    }
+
+    function _setSubMetaLane(uint32 id, uint256 lane) internal {
+        uint256 shift = (id & 3) * 64;
+        uint256 key = id >> 2;
+        _subMeta[key] = (_subMeta[key] & ~(uint256(type(uint64).max) << shift)) | (lane << shift);
+    }
+
+    function _subPosition1(uint32 id) internal view returns (uint256) {
+        return _subMetaLane(id) & 0x7ff;
+    }
+
+    function _subRunStart(uint32 id) internal view returns (uint24) {
+        return uint24((_subMetaLane(id) >> 11) & SUB_DAY_MASK);
+    }
+
+    function _setSubPosition1(uint32 id, uint256 position1) internal {
+        _setSubMetaLane(id, (_subMetaLane(id) & ~uint256(0x7ff)) | position1);
+    }
+
+    function _setSubRunStart(uint32 id, uint256 day) internal {
+        _setSubMetaLane(id, (_subMetaLane(id) & 0x7ff) | (day << 11));
+    }
 
     /// @dev Two-ended packed set: boxes at [0,B), tickets descending from 2000, at most
     ///      2000 members and one empty sentinel. The length word is logical membership,
-    ///      NOT the physical extent. Use _subscriberAt/_setSubscriberAt; never index/push/pop.
+    ///      NOT the physical extent. Use _subLaneAt/_setSubLaneAt; never index/push/pop.
     ///      Vault and sDGNRS remain at box positions 0 and 1; protocol ticket mode is forbidden.
-    uint32[] internal _subscribers;
+    uint256[] internal _subscribers;
 
     /// @dev Purchase cursor: bit 15 selects tickets, low bits are the section offset.
     ///      Packed with the opening cursor, reset day and cohort counters below.
@@ -4259,6 +4234,18 @@ abstract contract DegenerusGameStorage {
     /// @dev Box-side membership. Ticket count is _subscribers.length - _subBoxCount.
     ///      Subscription changes are locked from daily due through the last AFKing open.
     uint16 internal _subBoxCount;
+
+    /// @dev Spend per unit of the current box cohort in milli-ETH, written by the preparation
+    ///      pass that stamps it and read by its openings (ticket prices are 0.01-ETH multiples).
+    uint16 internal _afkingCohortPriceMilli;
+
+    /// @dev Protocol subscription flags (AFK_* above): which protocol seats bought into the
+    ///      current box cohort, and each protocol seat's pause bits.
+    uint8 internal _afkingProtocolFlags;
+
+    /// @dev The last day whose subscriber pass completed, written as the pass completes: the
+    ///      reward endpoint `_afkingEndpoint`.
+    uint24 internal _afkingEndpointDay;
 
     uint256 internal constant SUBSCRIBER_CAP = 2000;
     uint256 internal constant SUBSCRIBER_TICKET_PHASE = 1 << 15;
@@ -4684,25 +4671,31 @@ abstract contract DegenerusGameStorage {
         }
     }
 
-    /// @dev Read eight physical subscriber positions. Callers bound positions to [0,2000].
+    /// @dev The word holding positions `3k..3k+2`. Callers bound positions to [0,2000].
     function _subscriberWordAt(uint256 position) internal view returns (uint256 word) {
         assembly ("memory-safe") {
             mstore(0, _subscribers.slot)
-            word := sload(add(keccak256(0, 32), shr(3, position)))
+            word := sload(add(keccak256(0, 32), div(position, 3)))
         }
     }
 
-    function _subscriberAt(uint256 position) internal view returns (uint32) {
-        return uint32(_subscriberWordAt(position) >> ((position & 7) * 32));
+    function _subLaneAt(uint256 position) internal view returns (uint256) {
+        return (_subscriberWordAt(position) >> ((position % 3) * SUB_LANE_BITS)) & SUB_LANE_MASK;
     }
 
-    /// @dev Preserve the other seven IDs, including across the empty section gap.
-    function _setSubscriberAt(uint256 position, uint32 id) internal {
+    function _subscriberAt(uint256 position) internal view returns (uint32) {
+        return uint32(_subLaneAt(position));
+    }
+
+    /// @dev Preserve the word's other two lanes, including across the empty section gap.
+    function _setSubLaneAt(uint256 position, uint256 lane) internal {
+        uint256 shift = (position % 3) * SUB_LANE_BITS;
+        uint256 mask = SUB_LANE_MASK << shift;
+        lane <<= shift;
         assembly ("memory-safe") {
             mstore(0, _subscribers.slot)
-            let slot := add(keccak256(0, 32), shr(3, position))
-            let shift := shl(5, and(position, 7))
-            sstore(slot, or(and(sload(slot), not(shl(shift, 0xffffffff))), shl(shift, and(id, 0xffffffff))))
+            let slot := add(keccak256(0, 32), div(position, 3))
+            sstore(slot, or(and(sload(slot), not(mask)), lane))
         }
     }
 
@@ -4948,8 +4941,6 @@ abstract contract DegenerusGameStorage {
     ///      Mint statistics are stored separately by ID; only ordinary-wallet registration writes this.
     // Low 32 bits: current gameplay account. High 32: immutable wallet identity.
     mapping(address => uint64) internal walletIds;
-    /// @dev Explicit account-to-account funding consent, independent of external operator rights.
-    mapping(uint32 => mapping(uint32 => bool)) internal afkingFundingApprovals;
 
     /// @dev Smurf IDs by owning main ID, eight packed uint32 lanes per word (lane `i & 7` of word
     ///      `i >> 3`). Append-only at `createSmurf`; the main's lifetime `SMURF_COUNT` in
@@ -5034,11 +5025,6 @@ abstract contract DegenerusGameStorage {
         return parent == 0 ? ownerId : parent;
     }
 
-    function _afkingFundingAllowed(uint32 subscriberId, uint32 funderId) internal view returns (bool) {
-        if (_isAcquired(subscriberId) || _isAcquired(funderId)) return false;
-        return subscriberId == funderId || afkingFundingApprovals[funderId][subscriberId]
-            || _ownerWalletId(subscriberId) == _ownerWalletId(funderId);
-    }
 
     // =========================================================================
     // Degenesis Orders

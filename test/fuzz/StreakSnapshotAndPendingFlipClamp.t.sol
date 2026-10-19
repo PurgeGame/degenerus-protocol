@@ -2,28 +2,25 @@
 pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
-import {GameSlots} from "../helpers/GameSlots.sol";
+import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
+import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
+import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
-/// @title StreakSnapshotAndPendingFlipClampTest -- proves the v69 single-integer streak path and the
-///        narrowed `pendingFlip` saturating clamp against the post-PACK Sub accumulator.
+/// @title StreakSnapshotAndPendingFlipClampTest -- proves the single-integer streak path and the
+///        saturating 16-bit checkpoint streak of the compact subscriber lane.
 ///
 /// @notice Two properties, one fixture:
-///   1. The afking-run streak latch is uint16: a manual quest streak carried into an afking run is
-///      snapshotted EXACTLY into the latch, including values above 255 — the old uint8/255 truncation and
-///      the `finalizeAfking` floor-hack restore are gone. A streak <= 255 is byte-identical to before. The
-///      `_setStreakBase` clamp is KEPT, re-pinned to `type(uint16).max`, so the live `recordAfkingSecondary`
-///      +1 bump saturates at 65535 instead of wrapping 65536 -> 0.
-///   2. `pendingFlip` is uint24 with a saturating clamp at `type(uint24).max = 16_777_215` whole FLIP. The
-///      clamp `min(newOwed, type(uint24).max)` PRECEDES the `uint24(...)` cast, so the cast is lossless by
-///      construction: at/over the ceiling the field reads exactly 16_777_215, never a wrapped small value.
+///   1. A manual quest streak carried into an afking run is snapshotted EXACTLY into the lane's 16-bit
+///      checkpoint streak, including values above 255; the live streak is the checkpoint streak plus the
+///      days from the checkpoint to the endpoint, and the finalize hands back exactly that.
+///   2. The checkpoint streak SATURATES at `type(uint16).max`: a live `recordAfkingSecondary` bump and a
+///      settlement that folds elapsed days in never wrap it to a small value. Settlement pays the derived
+///      reward once, from the elapsed days, and a repeat claim finds nothing.
 ///
-/// @dev Reuses the afking-run drive ported from V56SecUnmanipulable, RE-POINTED to the AFKing-Coin-era Sub
-///   accumulator (affiliateBase u32 off16, pendingFlip u24 off20, subStreakLatch u16 off23 — DegenerusGameStorage.sol
-///   struct Sub, post `validThroughLevel` deletion; NOT the stale pre-PACK V56 offsets which read pendingFlip
-///   u32 off27 / subStreakLatch u8 off31). The manual quest streak is driven by writing `questPlayerState[player].streak`
-///   (uint16, slot 1 off9) directly, the same dormant value `beginAfking` snapshots; day anchors are left so
-///   the decay branch stays inert. Test-only: ZERO contracts/*.sol mutation.
+/// @dev The manual quest streak is driven by writing `questPlayerState[player].streak` (uint16, slot 1
+///   off9) directly, the same dormant value `beginAfking` snapshots; day anchors are left so the decay
+///   branch stays inert. Test-only: ZERO contracts/*.sol mutation.
 contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
 
     mapping(address => uint32) private _aidCache;
@@ -53,286 +50,221 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
     uint256 private constant OFF_QS_SYNCDAY = 6;
     uint256 private constant OFF_QS_STREAK = 9;
 
-    // -------------------------------------------------------------------------
-    // Game-resident slots + the AFKing-Coin-era Sub accumulator offsets (DegenerusGameStorage.sol struct Sub)
-    // -------------------------------------------------------------------------
-    /// @dev _subOf mapping root @ slot 52. The accumulator section is affiliateBase u32 off16,
-    ///      pendingFlip u24 off20, subStreakLatch u16 off23. The afking day markers:
-    ///      afkCoveredThroughDay u24 off10, afkingStartDay u24 off13.
-    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF;
-    uint256 private constant OFF_AFKCOVERED = 10;
-    uint256 private constant OFF_AFKINGSTART = 13;
-    uint256 private constant OFF_PENDINGFLIP = 20; // uint24 pendingFlip (bytes 20..22)
-    uint256 private constant OFF_STREAKLATCH = 23; // uint16 subStreakLatch (bytes 23..24)
-
     /// @dev recordAfkingSecondary is QUESTS-gated; the live +1 bump is driven by pranking as this caller.
     address private constant QUESTS_CALLER = ContractAddresses.QUESTS;
 
-    /// @dev The shipped ceilings: pendingFlip saturates at type(uint24).max; the streak latch clamp at
-    ///      type(uint16).max.
-    uint256 private constant PENDINGFLIP_CEILING = 16_777_215; // type(uint24).max
-    uint256 private constant STREAK_LATCH_CEILING = 65_535; // type(uint16).max
+    /// @dev The checkpoint streak saturates at type(uint16).max.
+    uint256 private constant STREAK_LATCH_CEILING = 65_535;
 
-    /// @dev QUEST_SLOT0_REWARD = 100 whole FLIP accrued to pendingFlip per delivered buy.
+    /// @dev QUEST_SLOT0_REWARD = 100 whole FLIP per credited day.
     uint256 private constant SLOT0_FLIP_PER_BUY = 100;
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
     uint256 private _lastFulfilledReqId;
     uint256 private _t; // explicit accumulating timestamp (the Foundry block.timestamp caching workaround)
     uint256 private _deliverNonce;
+    DegenerusGameLens private lens;
 
     function setUp() public {
         _deployProtocol();
         _t = block.timestamp + 1 days;
         vm.warp(_t);
         vm.deal(address(game), 5_000_000 ether);
+        lens = new DegenerusGameLens();
         _finishSubscriptionWindow();
     }
 
     // =========================================================================
-    // Task 1 — pre-streak >255 snapshot exactness + the <=255 regression-safety + the latch clamp
+    // Task 1 — pre-streak >255 snapshot exactness + the <=255 regression-safety + the saturation
     // =========================================================================
 
     /// @notice A manual quest streak ABOVE 255 carried into an afking run is snapshotted EXACTLY into the
-    ///         widened uint16 latch, the run reads the true >255 base, and finalize hands the manual streak
-    ///         back exactly. Fails-without: under the old uint8/255 path the latch would have truncated to 255
-    ///         and the finalize floor-hack would have restored 255 — both arms assert the TRUE value, so the
-    ///         old truncation regression would fail here.
+    ///         16-bit checkpoint streak, the run reads the true base plus its credited days, and finalize
+    ///         hands the streak back exactly.
     function test_PreStreakSnapshotExact_Above255() public {
         _assertSnapshotExact(makeAddr("snap_300"), 300);
         _assertSnapshotExact(makeAddr("snap_1000"), 1000);
-        // A value above the old uint8 ceiling but well under the uint16 ceiling — the widened latch holds it
-        // verbatim; the old path would have clamped this to 255.
         _assertSnapshotExact(makeAddr("snap_60000"), 60_000);
     }
 
-    /// @notice For a carried-in streak <= 255 the snapshot/restore is byte-identical to before — the clamp
-    ///         never bound for these, so the widening is regression-safe. Includes the old-ceiling boundary 255.
-    function test_PreStreakSnapshotByteIdentical_AtOrBelow255() public {
+    /// @notice For a carried-in streak <= 255 the snapshot/restore is exact too, including the old
+    ///         8-bit boundary 255.
+    function test_PreStreakSnapshotExact_AtOrBelow255() public {
         _assertSnapshotExact(makeAddr("snap_200"), 200);
-        _assertSnapshotExact(makeAddr("snap_255"), 255); // the old uint8 ceiling boundary — still exact
+        _assertSnapshotExact(makeAddr("snap_255"), 255);
         _assertSnapshotExact(makeAddr("snap_1"), 1);
     }
 
-    /// @notice The KEPT `_setStreakBase` clamp saturates at `type(uint16).max`. Driving the latch to the
-    ///         ceiling and then exercising the live `recordAfkingSecondary` +1 bump reads 65535 (saturated),
-    ///         never 0 (wrapped 65536 -> 0). The clamp guards the bump from wrapping the field at the ceiling.
-    function test_SetStreakBaseClampSaturatesAtUint16Max() public {
+    /// @notice The checkpoint streak saturates at `type(uint16).max`. Driving it to the ceiling and then
+    ///         exercising the live `recordAfkingSecondary` bump reads 65535 (saturated), never 0 (wrapped).
+    function test_SecondaryBumpClampSaturatesAtUint16Max() public {
         address p = makeAddr("clamp_p");
         _fundPool(p, 50 ether);
         _subscribeLootbox(p, 1);
-        // Ground a live run so afkingStartDay != 0 and recordAfkingSecondary is not a no-op.
-        _deliverDay(_singleton(p), 0xC1A11);
-        assertGt(_afkingStartOf(p), 0, "non-vacuity: a live afking run grounds the +1 bump path");
         uint32 pId = game.walletIdOf(p);
+        assertGt(_positionOf(p), 0, "non-vacuity: a live run grounds the bump path");
 
-        // Pin the latch AT the ceiling, then bump +1 through the live secondary path: the kept clamp
-        // saturates the write at 65535 (newOwed = 65536 > type(uint16).max -> 65535), never wrapping to 0.
-        _setStreakLatchSlot(p, STREAK_LATCH_CEILING);
-        assertEq(_streakLatch16Of(p), STREAK_LATCH_CEILING, "latch pinned at the uint16 ceiling");
-        vm.prank(QUESTS_CALLER);
-        game.recordAfkingSecondary(pId, 1); // +1 at the ceiling -> clamp saturates
-        assertEq(_streakLatch16Of(p), STREAK_LATCH_CEILING, "clamp: +1 at the ceiling stays 65535 (saturates, never wraps to 0)");
-        assertTrue(_streakLatch16Of(p) != 0, "clamp: the +1 bump did NOT wrap the latch to 0");
-
-        // One below the ceiling: the same +1 bump advances normally to the ceiling (the clamp only binds at
-        // the top), so the saturation is a true clamp, not a stuck value.
-        _setStreakLatchSlot(p, STREAK_LATCH_CEILING - 1);
+        _setCheckpointStreak(p, STREAK_LATCH_CEILING);
+        assertEq(_checkpointStreakOf(p), STREAK_LATCH_CEILING, "streak pinned at the uint16 ceiling");
         vm.prank(QUESTS_CALLER);
         game.recordAfkingSecondary(pId, 1);
-        assertEq(_streakLatch16Of(p), STREAK_LATCH_CEILING, "clamp: a +1 from one-below reaches exactly the ceiling");
+        assertEq(_checkpointStreakOf(p), STREAK_LATCH_CEILING, "+1 at the ceiling stays 65535 (saturates, never wraps to 0)");
 
-        // A value below 255 (the old uint8 ceiling) bumps cleanly into the >255 range — the widened latch
-        // carries it past the old truncation point, so the +1 path is not the only thing wider; the base is too.
-        _setStreakLatchSlot(p, 255);
+        _setCheckpointStreak(p, STREAK_LATCH_CEILING - 1);
         vm.prank(QUESTS_CALLER);
         game.recordAfkingSecondary(pId, 1);
-        assertEq(_streakLatch16Of(p), 256, "clamp/widen: a +1 from 255 reads 256 (the latch carries past the old uint8 ceiling)");
+        assertEq(_checkpointStreakOf(p), STREAK_LATCH_CEILING, "a +1 from one-below reaches exactly the ceiling");
 
-        // amount > 1 (the level-quest path, LEVEL_QUEST_STREAK_BONUS = 5): the full amount is added,
-        // then the same clamp binds at the ceiling. A +5 from a non-ceiling value advances by 5.
-        _setStreakLatchSlot(p, 250);
+        _setCheckpointStreak(p, 255);
+        vm.prank(QUESTS_CALLER);
+        game.recordAfkingSecondary(pId, 1);
+        assertEq(_checkpointStreakOf(p), 256, "a +1 from 255 reads 256 (past the old 8-bit ceiling)");
+
+        // amount > 1 (the level-quest path): the full amount is added, then the clamp binds at the ceiling.
+        _setCheckpointStreak(p, 250);
         vm.prank(QUESTS_CALLER);
         game.recordAfkingSecondary(pId, 5);
-        assertEq(_streakLatch16Of(p), 255, "amount: a +5 from 250 reaches 255 (full amount applied)");
+        assertEq(_checkpointStreakOf(p), 255, "a +5 from 250 reaches 255 (full amount applied)");
 
-        // A +5 that would overshoot the ceiling saturates to 65535, never wrapping past it.
-        _setStreakLatchSlot(p, STREAK_LATCH_CEILING - 3);
+        _setCheckpointStreak(p, STREAK_LATCH_CEILING - 3);
         vm.prank(QUESTS_CALLER);
         game.recordAfkingSecondary(pId, 5);
-        assertEq(_streakLatch16Of(p), STREAK_LATCH_CEILING, "amount: a +5 overshooting the ceiling saturates at 65535");
-        assertTrue(_streakLatch16Of(p) != 0, "amount: the +5 overshoot did NOT wrap the latch to 0");
+        assertEq(_checkpointStreakOf(p), STREAK_LATCH_CEILING, "a +5 overshooting the ceiling saturates at 65535");
+    }
+
+    /// @notice The bump moves only the streak: the checkpoint day, and so the owed rewards, stay put.
+    function test_SecondaryBumpAndFoilFloorKeepTheCheckpoint() public {
+        address p = makeAddr("floor_p");
+        _fundPool(p, 50 ether);
+        _subscribeLootbox(p, 1);
+        _deliverDay(_singleton(p), 0xF100);
+        uint32 pId = game.walletIdOf(p);
+        DegenerusGameLens.SubFull memory before = lens.subInfoFullById(address(game), pId);
+        assertEq(before.effectiveStreak, 1, "one credited day on a zero base");
+
+        vm.prank(QUESTS_CALLER);
+        game.recordAfkingSecondary(pId, 1);
+        DegenerusGameLens.SubFull memory bumped = lens.subInfoFullById(address(game), pId);
+        assertEq(bumped.effectiveStreak, 2, "the bump adds to the live streak");
+        assertEq(bumped.checkpointDay, before.checkpointDay, "the checkpoint day does not move");
+        assertEq(bumped.owedFlip, before.owedFlip, "nothing owed changes");
+
+        vm.prank(QUESTS_CALLER);
+        game.floorAfkingStreakBase(pId, 12);
+        DegenerusGameLens.SubFull memory floored = lens.subInfoFullById(address(game), pId);
+        assertEq(floored.effectiveStreak, 12, "the live streak is raised to the floor, like a manual player's");
+        assertEq(floored.checkpointDay, before.checkpointDay, "the checkpoint day does not move");
+        vm.prank(QUESTS_CALLER);
+        game.floorAfkingStreakBase(pId, 12);
+        assertEq(lens.subInfoFullById(address(game), pId).effectiveStreak, 12, "a floor already met changes nothing");
     }
 
     /// @dev Drive `who`'s manual quest streak to `streakValue`, begin an afking run, and assert (1) the
-    ///      run-start latch snapshot is EXACTLY `streakValue` (no uint8/255 truncation) and (2) the finalize
-    ///      hands back the earned run streak EXACTLY — the live `base + funded-delivered-days` read just before
-    ///      cancel, never a floor-hacked or truncated value. For a >255 base the earned streak stays >255,
-    ///      proving the carried-in value survives both the snapshot and the finalize past the old uint8 ceiling.
+    ///      checkpoint streak is EXACTLY `streakValue` (no truncation) and (2) the finalize hands back the
+    ///      derived live streak EXACTLY, never a floor-hacked or truncated value.
     function _assertSnapshotExact(address who, uint16 streakValue) internal {
         _setManualQuestStreak(who, streakValue);
         _fundPool(who, 50 ether);
 
-        // Subscribe grounds the run: beginAfking snapshots state.streak (uint16) and _setStreakBase writes it
-        // into the latch. The run base must equal the carried-in manual streak EXACTLY (>255 is NOT truncated
-        // to 255 as the old uint8 latch would have).
         _subscribeLootbox(who, 1);
         assertEq(
-            _streakLatch16Of(who),
+            _checkpointStreakOf(who),
             streakValue,
-            "run-start: the uint16 latch snapshots the carried-in manual streak EXACTLY (old uint8/255 path would read 255)"
+            "run-start: the checkpoint streak snapshots the carried-in manual streak EXACTLY"
         );
 
-        // Deliver a day so the run is live; the latch base is unchanged (the run advances the covered span,
-        // not the snapshot), so the mid-run base still reads the true >255 value.
+        // Deliver a day; the snapshot stays, and the live streak adds the credited day.
         _deliverDay(_singleton(who), uint256(keccak256(abi.encode("snap_dd", who))) | 1);
-        assertEq(_streakLatch16Of(who), streakValue, "mid-run: the latch base still reads the true carried-in streak");
+        assertEq(_checkpointStreakOf(who), streakValue, "mid-run: the checkpoint streak is unchanged until settlement");
+        uint256 earned = lens.subInfoFullById(address(game), game.walletIdOf(who)).effectiveStreak;
+        assertEq(earned, uint256(streakValue) + 1, "the live streak is the snapshot plus the credited day");
 
-        // The live earned run streak (base + funded delivered days) read while the run is live, no decay. For a
-        // >255 base this is itself >255 — the old uint8 latch could not have represented it at all.
-        uint256 earned = _liveAfkingStreakOf(who);
-        assertGe(earned, streakValue, "the earned run streak includes the carried-in base (>= the snapshot)");
-
-        // Finalize via explicit cancel: with a fresh delivered day (covered + 1 >= currentDay) the funding-kill
-        // decay guard keeps the earned streak, and the earned streak rides the carried-in snapshot. The manual
-        // state.streak is handed back EXACTLY the earned value — no floor-hack restore, no uint8 truncation.
+        // Finalize via explicit cancel: the manual streak is handed back EXACTLY the earned value.
         vm.prank(who);
-        game.subscribe(0, false, false, 0, 0, 0); // explicit cancel -> finalizeAfking
+        game.subscribe(0, false, 0, 0); // explicit cancel -> finalizeAfking
         assertEq(
             _manualStreakOf(who),
             earned,
-            "finalize: the manual quest streak is handed back EXACTLY the earned run streak (no floor-hack, no truncation)"
+            "finalize: the manual quest streak is handed back EXACTLY the earned run streak"
         );
     }
 
-    /// @dev The live afking compute-on-read streak `_streakBaseOf + (covered - afkingStartDay)` while the last
-    ///      covered day is no older than yesterday, else 0 (decay-on-read) — mirrors `_afkingStreak` off the
-    ///      post-PACK Sub slot so the finalize hand-back is checked against the same value the contract earns.
-    function _liveAfkingStreakOf(address who) internal view returns (uint256) {
-        uint256 covered = _afkCoveredOf(who);
-        uint256 today = game.currentDayView();
-        if (today == 0 || covered + 1 < today) return 0;
-        return _streakLatch16Of(who) + covered - _afkingStartOf(who);
-    }
-
-    function _afkCoveredOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_AFKCOVERED, 24));
-    }
-
     // =========================================================================
-    // Task 2 — the pendingFlip uint24 saturating clamp (clamps, never wraps)
+    // Task 2 — settlement from elapsed days: pays once, saturates, never wraps
     // =========================================================================
 
-    /// @notice `pendingFlip` saturates at exactly `type(uint24).max = 16_777_215`. Three cases:
-    ///         (a) one-below the ceiling, an accrue crossing it clamps to the ceiling; (b) AT the ceiling, an
-    ///         accrue stays at the ceiling; (c) over-ceiling, the read is the ceiling and explicitly NOT the
-    ///         wrap value `k = (ceiling + reward) mod 2^24`, so a wrap-to-small-value regression fails.
-    function test_PendingFlipSaturatesAtUint24Ceiling() public {
-        // (a) one-below: pre-load 16_777_214, accrue the slot-0 reward (100) which crosses the ceiling ->
-        //     clamps to exactly 16_777_215 (NOT 16_777_214 + 100 = 16_777_314, which exceeds uint24).
-        address a = makeAddr("clamp_below");
-        _armLiveSub(a);
-        _setPendingFlipSlot(a, PENDINGFLIP_CEILING - 1);
-        _deliverDay(_singleton(a), 0xC1AAA1); // on-chain accrue + clamp executes against the near-ceiling total
-        assertEq(_pendingFlip24Of(a), PENDINGFLIP_CEILING, "(a) one-below + accrue clamps to exactly the uint24 ceiling");
-
-        // (b) at-ceiling: pre-load 16_777_215, accrue -> stays at the ceiling (no wrap).
-        address b = makeAddr("clamp_at");
-        _armLiveSub(b);
-        _setPendingFlipSlot(b, PENDINGFLIP_CEILING);
-        _deliverDay(_singleton(b), 0xC1AAA2);
-        assertEq(_pendingFlip24Of(b), PENDINGFLIP_CEILING, "(b) at-ceiling + accrue stays at the ceiling (no wrap)");
-
-        // (c) over-ceiling: pick a pre-load so newOwed = ceiling + k for a known k. With the slot-0 reward of
-        //     100 whole FLIP, pre-loading `ceiling - 50` gives newOwed = ceiling + 50, so the wrap value would
-        //     be k = 49 (newOwed mod 2^24 = (ceiling + 50) - 2^24 = 49, since ceiling = 2^24 - 1). The field
-        //     must read the ceiling and explicitly NOT 49.
-        address c = makeAddr("clamp_over");
-        _armLiveSub(c);
-        uint256 preload = PENDINGFLIP_CEILING - 50;
-        _setPendingFlipSlot(c, preload);
-        _deliverDay(_singleton(c), 0xC1AAA3);
-        uint256 wrapValue = (preload + SLOT0_FLIP_PER_BUY) % (uint256(1) << 24); // (ceiling + 50) mod 2^24 = 49
-        assertEq(wrapValue, 49, "non-vacuity: the would-be wrap value is the small 49, not the ceiling");
-        assertEq(_pendingFlip24Of(c), PENDINGFLIP_CEILING, "(c) over-ceiling reads exactly the uint24 ceiling");
-        assertTrue(_pendingFlip24Of(c) != wrapValue, "(c) the field did NOT wrap to the small value k (clamp precedes the cast -> lossless)");
-    }
-
-    /// @notice A settle/claim of a pendingFlip pinned at the ceiling reads the clamped value back as a uint256,
-    ///         credits exactly 16_777_215 whole FLIP, and zeroes the field — the clamp did not corrupt
-    ///         the claimed amount, and `affiliateBase` is untouched.
-    function test_PendingFlipSettleRoundTripUnderClamp() public {
+    /// @notice Settlement pays exactly the elapsed days' reward once and a repeat claim finds nothing.
+    function test_SettlementPaysElapsedDaysOnce() public {
         address p = makeAddr("settle_p");
-        _armLiveSub(p);
-        uint256 affBefore = _affiliateBase32Of(p);
+        _fundPool(p, 50 ether);
+        _subscribeLootbox(p, 1);
+        _deliverDay(_singleton(p), 0xC1AAA1);
+        _deliverDay(_singleton(p), 0xC1AAA2);
+        DegenerusGameLens.SubFull memory owed = lens.subInfoFullById(address(game), game.walletIdOf(p));
+        assertEq(owed.owedFlip, 2 * SLOT0_FLIP_PER_BUY, "two elapsed days are owed");
 
-        // Pin pendingFlip at the ceiling, then drive the player-pull claim/settle path.
-        _setPendingFlipSlot(p, PENDINGFLIP_CEILING);
-        assertEq(_pendingFlip24Of(p), PENDINGFLIP_CEILING, "non-vacuity: pendingFlip pinned at the ceiling");
-
-        uint256 stakeBefore = coinflip.coinflipAmount(p);
-        game.claimAfkingFlip(_aids(_singleton(p))); // _settlePendingFlip: reads owed as uint256, zeroes the field, credits
-        uint256 stakeAfter = coinflip.coinflipAmount(p);
-
-        assertEq(stakeAfter - stakeBefore, PENDINGFLIP_CEILING, "settle credits exactly the clamped 16,777,215 whole FLIP");
-        assertEq(_pendingFlip24Of(p), 0, "settle zeroes pendingFlip (a re-claim finds 0)");
-        assertEq(_affiliateBase32Of(p), affBefore, "settle/clamp leaves affiliateBase untouched (its own clamp is out of scope)");
+        vm.recordLogs();
+        game.claimAfkingFlip(_aids(_singleton(p)));
+        assertEq(_flipClaimed(p), 2 * SLOT0_FLIP_PER_BUY, "settle pays exactly the elapsed days");
+        assertEq(lens.subInfoFullById(address(game), game.walletIdOf(p)).owedFlip, 0, "nothing left owed");
+        vm.recordLogs();
+        game.claimAfkingFlip(_aids(_singleton(p)));
+        assertEq(_flipClaimed(p), 0, "a re-claim finds 0");
     }
 
-    /// @dev Arm a funded, live sub for `who` (subscribe + deliver one day) so the on-chain accrue
-    ///      + clamp path runs against a pre-loaded near-ceiling pendingFlip.
-    function _armLiveSub(address who) internal {
-        _fundPool(who, 50 ether);
-        _subscribeLootbox(who, 1);
+    /// @notice Folding elapsed days into a checkpoint streak already at the ceiling saturates it, and the
+    ///         live streak read afterwards does not wrap.
+    function test_SettlementSaturatesCheckpointStreak() public {
+        address p = makeAddr("sat_p");
+        _fundPool(p, 50 ether);
+        _subscribeLootbox(p, 1);
+        _setCheckpointStreak(p, STREAK_LATCH_CEILING - 1);
+        _deliverDay(_singleton(p), 0xC1AAA3);
+        _deliverDay(_singleton(p), 0xC1AAA4);
+        _deliverDay(_singleton(p), 0xC1AAA5);
+        game.claimAfkingFlip(_aids(_singleton(p)));
+        assertEq(_checkpointStreakOf(p), STREAK_LATCH_CEILING, "three folded days saturate at 65535, never wrap");
+        assertGe(lens.subInfoFullById(address(game), game.walletIdOf(p)).effectiveStreak, STREAK_LATCH_CEILING);
     }
 
     // =========================================================================
-    // Sub-slot writers/readers (POST-PACK offsets) + manual-streak drive
+    // Lane writers/readers + manual-streak drive
     // =========================================================================
 
-    /// @dev Write the uint16 streak latch (off 26) directly, leaving the rest of the slot intact.
-    function _setStreakLatchSlot(address who, uint256 value) internal {
-        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT)));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        packed &= ~(uint256(0xFFFF) << (OFF_STREAKLATCH * 8));
-        packed |= (value & 0xFFFF) << (OFF_STREAKLATCH * 8);
-        vm.store(address(game), slot, bytes32(packed));
+    function _positionOf(address who) internal view returns (uint256 position1) {
+        (, position1) = GameSlotKeys.subLane(address(game), game.walletIdOf(who));
     }
 
-    /// @dev Write the uint24 pendingFlip (off 23) directly, leaving the rest of the slot intact.
-    function _setPendingFlipSlot(address who, uint256 value) internal {
-        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT)));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        packed &= ~(uint256(0xFFFFFF) << (OFF_PENDINGFLIP * 8));
-        packed |= (value & 0xFFFFFF) << (OFF_PENDINGFLIP * 8);
-        vm.store(address(game), slot, bytes32(packed));
+    function _checkpointStreakOf(address who) internal view returns (uint256) {
+        (uint256 lane,) = GameSlotKeys.subLane(address(game), game.walletIdOf(who));
+        return (lane >> 69) & 0xffff;
     }
 
-    function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
-        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT))))) >> (off * 8);
-        return p & ((uint256(1) << widthBits) - 1);
+    /// @dev Write the 16-bit checkpoint streak (lane bits 69-84) directly, leaving the rest of the word intact.
+    function _setCheckpointStreak(address who, uint256 value) internal {
+        (, uint256 position1) = GameSlotKeys.subLane(address(game), game.walletIdOf(who));
+        require(position1 != 0, "not a member");
+        uint256 position = position1 - 1;
+        bytes32 slot = bytes32(uint256(keccak256(abi.encode(GameSlots.SUBSCRIBERS))) + position / 3);
+        uint256 shift = (position % 3) * 85 + 69;
+        uint256 word = uint256(vm.load(address(game), slot));
+        word = (word & ~(uint256(0xffff) << shift)) | ((value & 0xffff) << shift);
+        vm.store(address(game), slot, bytes32(word));
     }
 
-    /// @dev The afking-run streak base — the FULL uint16 latch (off 26, width 16).
-    function _streakLatch16Of(address who) internal view returns (uint256) {
-        return _subField(who, OFF_STREAKLATCH, 16);
+    /// @dev Whole FLIP the AfkingFlipClaimed events recorded since the last vm.recordLogs() paid `who`.
+    function _flipClaimed(address who) internal returns (uint256 total) {
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bytes32 sig = keccak256("AfkingFlipClaimed(uint32,uint256)");
+        uint32 id = game.walletIdOf(who);
+        for (uint256 i; i < logs.length; i++) {
+            if (logs[i].emitter != address(game) || logs[i].topics.length < 2 || logs[i].topics[0] != sig) continue;
+            if (uint32(uint256(logs[i].topics[1])) != id) continue;
+            total += abi.decode(logs[i].data, (uint256));
+        }
     }
 
-    /// @dev pendingFlip — the uint24 accumulator (off 20, width 24), NOT the V56 width-32 reader.
-    function _pendingFlip24Of(address who) internal view returns (uint256) {
-        return _subField(who, OFF_PENDINGFLIP, 24);
-    }
-
-    function _affiliateBase32Of(address who) internal view returns (uint256) {
-        return _subField(who, 16, 32);
-    }
-
-    function _afkingStartOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_AFKINGSTART, 24));
-    }
-
-    /// @dev The manual quest streak handed back to `who` after finalize — the protocol's own quest-streak
-    ///      source (the dormant value the score reads for a non-afker).
+    /// @dev The manual quest streak handed back to `who` after finalize.
     function _manualStreakOf(address who) internal view returns (uint256 streak) {
         (streak, ) = quests.effectiveBaseStreakAndAfking(game.walletIdOf(who));
     }
@@ -352,9 +284,9 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
     // Afking-run drive helpers (ported from V56SecUnmanipulable, re-pointed to the post-PACK Sub offsets)
     // =========================================================================
 
-    /// @dev Deliver ONE funded day to `who`: a new-day STAGE buy (stamps the box + accrues pendingFlip +
-    ///      advances the covered high-water), settle clean, then open the pending box so the no-orphan guard
-    ///      does not skip the next day's buy. Each delivered day runs the on-chain accrue + uint24 clamp.
+    /// @dev Deliver ONE funded day to `who`: a new-day pass buy (stamps the box and
+    ///      moves the endpoint), settle clean, then open the pending box so the no-orphan guard
+    ///      does not skip the next day's buy. Each delivered day moves the endpoint one day.
     function _deliverDay(address[] memory who, uint256 vrfWord) internal {
         uint256 w = uint256(keccak256(abi.encode("dlv", vrfWord, _deliverNonce++))) | 1;
         _runStageNewDay(w);
@@ -406,7 +338,7 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
     function _subscribeLootbox(address who, uint8 q) internal {
         uint256 seat = _grantSeat(who); // the AFKing Subscription Token is the subscribe credential (a new run burns one seat)
         vm.prank(who);
-        game.subscribe(0, false, false, q, 0, seat); // self, lootbox mode, no reinvest
+        game.subscribe(0, false, q, seat); // self, lootbox mode, no reinvest
     }
 
     function _fundPool(address who, uint256 amount) internal {

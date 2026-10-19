@@ -20,8 +20,7 @@ abstract contract AffiliateIdFixture is DeployProtocol {
     uint256 internal constant EARNED_ROOT = 1;
     uint256 internal constant REFERRAL_ROOT = 2;
     uint256 internal constant LEVEL_SCORE_ROOT = 3;
-    /// @dev `Sub.affiliateBase` (uint32) starts at byte 19 of the `_subOf[id]` word.
-    uint256 internal constant SUB_AFF_BASE_SHIFT = 16 * 8;
+    uint256 internal constant SYNTHETIC_ENDPOINT = 10_000;
 
     bytes32 internal constant ROLL_TAG = keccak256("affiliate-payout-roll-v1");
     bytes32 internal constant LOCKED = bytes32(uint256(1));
@@ -298,12 +297,39 @@ abstract contract AffiliateIdFixture is DeployProtocol {
         affiliate.createAffiliateCode(code, kickback);
     }
 
-    /// @dev Writes a sub's accrued affiliate base, which `drainAffiliateBase` reads and zeroes.
-    function _seedBase(uint32 id, uint32 base) internal {
-        bytes32 slot = keccak256(abi.encode(uint256(id), GameSlots.SUB_OF));
-        uint256 w = uint256(vm.load(address(game), slot));
-        w = (w & ~(uint256(type(uint32).max) << SUB_AFF_BASE_SHIFT)) | (uint256(base) << SUB_AFF_BASE_SHIFT);
-        vm.store(address(game), slot, bytes32(w));
+    /// @dev Makes `id` a quantity-1 box member owed `base` of affiliate base: its checkpoint sits
+    ///      `base / 70` days (70 per unit per day) behind a raised endpoint, so `drainAffiliateBases`
+    ///      derives exactly `base`. An existing member keeps the rest of its lane.
+    function _seedBase(uint32 id, uint256 base) internal {
+        require(base != 0 && base % 70 == 0, "base is whole days of one unit");
+        bytes32 flagsWord = bytes32(GameSlots.AFKING_ENDPOINT_DAY);
+        uint256 packed = uint256(vm.load(address(game), flagsWord));
+        uint256 endpointShift = 8 * GameSlots.AFKING_ENDPOINT_DAY_OFFSET;
+        packed = (packed & ~(uint256(0xFFFFFF) << endpointShift)) | (SYNTHETIC_ENDPOINT << endpointShift);
+        vm.store(address(game), flagsWord, bytes32(packed));
+
+        uint256 day = SYNTHETIC_ENDPOINT - base / 70;
+        (uint256 lane, uint256 position1) = GameSlotKeys.subLane(address(game), id);
+        uint256 position;
+        if (position1 == 0) {
+            uint256 boxShift = 8 * GameSlots.SUB_BOX_COUNT_OFFSET;
+            position = uint16(packed >> boxShift);
+            packed = (packed & ~(uint256(0xFFFF) << boxShift)) | ((position + 1) << boxShift);
+            vm.store(address(game), flagsWord, bytes32(packed));
+            vm.store(address(game), bytes32(GameSlots.SUBSCRIBERS), bytes32(uint256(vm.load(address(game), bytes32(GameSlots.SUBSCRIBERS))) + 1));
+            bytes32 metaSlot = keccak256(abi.encode(uint256(id >> 2), GameSlots.SUB_META));
+            uint256 metaShift = (id & 3) * 64;
+            vm.store(address(game), metaSlot, bytes32(uint256(vm.load(address(game), metaSlot)) | ((position + 1) << metaShift)));
+            lane = id;
+        } else {
+            position = position1 - 1;
+        }
+        lane = (lane & ~(uint256(0x3FFFFF) << 46)) | (day << 46);
+        bytes32 wordSlot = bytes32(uint256(keccak256(abi.encode(GameSlots.SUBSCRIBERS))) + position / 3);
+        uint256 laneShift = (position % 3) * 85;
+        uint256 word = uint256(vm.load(address(game), wordSlot));
+        word = (word & ~(((uint256(1) << 85) - 1) << laneShift)) | (lane << laneShift);
+        vm.store(address(game), wordSlot, bytes32(word));
     }
 
     function _claim(address sub) internal {
@@ -340,6 +366,24 @@ abstract contract AffiliateIdFixture is DeployProtocol {
         found = new bytes[](n);
         n = 0;
         for (uint256 i; i < acc.length; ++i) if (_match(acc[i], from, to, sel)) found[n++] = _args(acc[i].data);
+    }
+
+    /// @dev The affiliate's FLIP credits in execution order, one (ID, amount) argument blob per
+    ///      credited leg: single credits as-is, paired credits split into their nonzero legs.
+    function _affiliateCredits(Vm.AccountAccess[] memory acc) internal view returns (bytes[] memory found) {
+        found = new bytes[](acc.length * 2);
+        uint256 n;
+        for (uint256 i; i < acc.length; ++i) {
+            if (_match(acc[i], address(affiliate), address(coinflip), coinflip.creditFlip.selector)) {
+                found[n++] = _args(acc[i].data);
+            } else if (_match(acc[i], address(affiliate), address(coinflip), coinflip.creditFlipPair.selector)) {
+                (uint32 id1, uint256 a1, uint32 id2, uint256 a2) =
+                    abi.decode(_args(acc[i].data), (uint32, uint256, uint32, uint256));
+                if (id1 != 0 && a1 != 0) found[n++] = abi.encode(id1, a1);
+                if (id2 != 0 && a2 != 0) found[n++] = abi.encode(id2, a2);
+            }
+        }
+        assembly ("memory-safe") { mstore(found, n) }
     }
 
     function _firstIndex(Vm.AccountAccess[] memory acc, address from, address to, bytes4 sel)
@@ -925,7 +969,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
 
     function test_BootstrapAfkingClaimPaysAllHops() public {
         uint32 sid = _giveWalletId(P_D);
-        _seedBase(sid, 1000);
+        _seedBase(sid, 1400);
         vm.recordLogs();
         vm.startStateDiffRecording();
         _claim(P_D);
@@ -934,14 +978,14 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         assertEq(_countRegistered(logs, OWN_D), 0);
         _assertBootstrapCode(CODE_D, OWN_D, KICK_D);
         uint32 did = _id(OWN_D);
-        bytes[] memory credits = _calls(acc, address(affiliate), address(coinflip), coinflip.creditFlip.selector);
+        bytes[] memory credits = _affiliateCredits(acc);
         assertEq(credits.length, 3);
-        _assertCredit(credits[0], did, 750);
-        _assertCredit(credits[1], 1, 200);
-        _assertCredit(credits[2], 2, 50);
-        assertEq(_staked(logs, did), 750, "owner credited by ID");
+        _assertCredit(credits[0], did, 1050);
+        _assertCredit(credits[1], 1, 280);
+        _assertCredit(credits[2], 2, 70);
+        assertEq(_staked(logs, did), 1050, "owner credited by ID");
 
-        _seedBase(sid, 1000);
+        _seedBase(sid, 1400);
         vm.startStateDiffRecording();
         _claim(P_D);
         acc = vm.stopAndReturnStateDiff();
@@ -1243,19 +1287,19 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
     function test_ClaimNoReferrerSplitsToProtocolIds() public {
         address s1 = makeAddr("clNone");
         address s2 = makeAddr("clLocked");
-        _seedBase(_giveWalletId(s1), 60);
+        _seedBase(_giveWalletId(s1), 70);
         _buy(s2, bytes32(0));
-        _seedBase(_id(s2), 41);
+        _seedBase(_id(s2), 140);
         uint32[] memory subs = new uint32[](2);
         subs[0] = _id(s1);
         subs[1] = _id(s2);
         vm.startStateDiffRecording();
         affiliate.claim(subs);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
-        bytes[] memory c = _calls(acc, address(affiliate), address(coinflip), coinflip.creditFlip.selector);
+        bytes[] memory c = _affiliateCredits(acc);
         assertEq(c.length, 2);
-        _assertCredit(c[0], 1, 51);
-        _assertCredit(c[1], 2, 50);
+        _assertCredit(c[0], 1, 105);
+        _assertCredit(c[1], 2, 105);
     }
 
     /// @dev sub -> CL_A (a) -> u1 (default) -> u2 (default, locked).
@@ -1273,16 +1317,16 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         (address a, address u1, address u2) = _claimChain();
         address s = makeAddr("clSub");
         _refer(s, bytes32("CL_A"));
-        _seedBase(_giveWalletId(s), 1000);
+        _seedBase(_giveWalletId(s), 1400);
         vm.startStateDiffRecording();
         _claim(s);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
-        bytes[] memory c = _calls(acc, address(affiliate), address(coinflip), coinflip.creditFlip.selector);
+        bytes[] memory c = _affiliateCredits(acc);
         assertEq(c.length, 3);
-        _assertCredit(c[0], _id(a), 750);
-        _assertCredit(c[1], _id(u1), 200);
-        _assertCredit(c[2], _id(u2), 50);
-        assertEq(affiliate.affiliateScore(game.level() + 1, _id(a)), 1000, "leaderboard by ID");
+        _assertCredit(c[0], _id(a), 1050);
+        _assertCredit(c[1], _id(u1), 280);
+        _assertCredit(c[2], _id(u2), 70);
+        assertEq(affiliate.affiliateScore(game.level() + 1, _id(a)), 1400, "leaderboard by ID");
     }
 
     function test_ClaimMutualReferralSkipsTheSubUpline() public {
@@ -1292,14 +1336,14 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         _refer(s, bytes32("MU_A"));
         _refer(a, _dflt(s));
         uint32 sid = _giveWalletId(s);
-        _seedBase(sid, 1000);
+        _seedBase(sid, 1400);
         vm.startStateDiffRecording();
         _claim(s);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
-        bytes[] memory c = _calls(acc, address(affiliate), address(coinflip), coinflip.creditFlip.selector);
+        bytes[] memory c = _affiliateCredits(acc);
         assertEq(c.length, 2, "upline1 (the sub) forfeits its cut");
-        _assertCredit(c[0], _id(a), 950);
-        _assertCredit(c[1], _id(a), 50);
+        _assertCredit(c[0], _id(a), 1330);
+        _assertCredit(c[1], _id(a), 70);
         for (uint256 i; i < c.length; ++i) {
             (uint32 id,) = abi.decode(c[i], (uint32, uint256));
             assertTrue(id != sid, "never paid back to the sub");
@@ -1307,46 +1351,56 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
     }
 
     function test_ClaimVaultAsSubAndUpline() public {
-        _seedBase(1, 1000);
+        _seedBase(1, 1400);
         vm.startStateDiffRecording();
         _claim(ContractAddresses.VAULT);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
-        bytes[] memory c = _calls(acc, address(affiliate), address(coinflip), coinflip.creditFlip.selector);
+        bytes[] memory c = _affiliateCredits(acc);
         assertEq(c.length, 2, "VAULT is upline1 of its own affiliate and forfeits");
-        _assertCredit(c[0], 2, 950);
-        _assertCredit(c[1], 2, 50);
+        _assertCredit(c[0], 2, 1330);
+        _assertCredit(c[1], 2, 70);
     }
 
-    function test_ClaimMixedBatchReverts() public {
-        _claimChain();
+    /// @dev A batch mixing subs of different affiliates settles each consecutive same-affiliate
+    ///      run through its own chain.
+    function test_ClaimMixedBatchSettlesEachRun() public {
+        (address a, address u1, address u2) = _claimChain();
         address s1 = makeAddr("mixA");
         address s2 = makeAddr("mixB");
         _refer(s1, bytes32("CL_A"));
-        _seedBase(_giveWalletId(s1), 100);
-        _seedBase(_giveWalletId(s2), 100);
+        _seedBase(_giveWalletId(s1), 1400);
+        _seedBase(_giveWalletId(s2), 1400);
         uint32[] memory subs = new uint32[](2);
         subs[0] = _id(s1);
         subs[1] = _id(s2);
-        vm.expectRevert(DegenerusAffiliate.Insufficient.selector);
+        vm.startStateDiffRecording();
         affiliate.claim(subs);
+        Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
+        bytes[] memory c = _affiliateCredits(acc);
+        assertEq(c.length, 5);
+        _assertCredit(c[0], _id(a), 1050);
+        _assertCredit(c[1], _id(u1), 280);
+        _assertCredit(c[2], _id(u2), 70);
+        _assertCredit(c[3], 1, 700);
+        _assertCredit(c[4], 2, 700);
     }
 
     function test_ClaimDuplicateSubDrainsOnce() public {
         (address a, address u1, address u2) = _claimChain();
         address s = makeAddr("dupSub");
         _refer(s, bytes32("CL_A"));
-        _seedBase(_giveWalletId(s), 1000);
+        _seedBase(_giveWalletId(s), 1400);
         uint32[] memory subs = new uint32[](2);
         subs[0] = _id(s);
         subs[1] = _id(s);
         vm.startStateDiffRecording();
         affiliate.claim(subs);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
-        bytes[] memory c = _calls(acc, address(affiliate), address(coinflip), coinflip.creditFlip.selector);
+        bytes[] memory c = _affiliateCredits(acc);
         assertEq(c.length, 3);
-        _assertCredit(c[0], _id(a), 750);
-        _assertCredit(c[1], _id(u1), 200);
-        _assertCredit(c[2], _id(u2), 50);
+        _assertCredit(c[0], _id(a), 1050);
+        _assertCredit(c[1], _id(u1), 280);
+        _assertCredit(c[2], _id(u2), 70);
     }
 
     // =====================================================================
@@ -1620,7 +1674,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
             vm.prank(address(game));
             affiliate.payAffiliate(amount, code, id, lvl, (r >> 72) & 1 == 0, uint16((r >> 80) % 300));
         } else if (op == 4) {
-            _seedBase(_giveWalletId(actor), uint32(amount));
+            _seedBase(_giveWalletId(actor), 70 * (1 + amount % 1000));
             _claim(actor);
         } else {
             _buy(actor, code);

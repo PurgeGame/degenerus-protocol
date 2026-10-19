@@ -5,13 +5,14 @@ import {SeatFixture} from "./SeatConsumption.t.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {AFKingSubscriptionToken} from "../../contracts/AFKingSubscriptionToken.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 
 /// @title AfKingSeatToken — integration tests for the AFKing seat ERC721 on a real deploy:
 ///        the pass-purchase seat latch (whale module -> mintPacked_ SEAT_CLAIMED, read back
 ///        through mintPackedFor; per account, a smurf's seat minted to its owner), immediate
 ///        buyer minting, the subscribe seat burn, the vault mint and restyle surface, the
-///        cancel tombstone and its reclaim, and the RNG freeze window. The token sits at the
+///        cancel removal, and the RNG freeze window. The token sits at the
 ///        predicted AFKING_SUB_TOKEN address; SDGNRS holds serial 1 and the vault serial 2.
 contract AfKingSeatToken is SeatFixture {
     function setUp() public {
@@ -64,7 +65,7 @@ contract AfKingSeatToken is SeatFixture {
         vm.deal(player, 1 ether);
         vm.prank(player);
         vm.expectRevert(AFKingSubscriptionToken.InvalidToken.selector);
-        game.subscribe{value: SUB_FUND}(0, false, false, 1, 0, 0);
+        game.subscribe{value: SUB_FUND}(0, false, 1, 0);
         assertEq(game.subscriberSetLength(), 2, "nothing entered the set");
     }
 
@@ -74,13 +75,13 @@ contract AfKingSeatToken is SeatFixture {
         _subscribe(player, 0, seat);
 
         uint32 id = game.walletIdOf(player);
-        uint256 w = _subWord(id);
+        (uint256 lane,) = _laneOf(id);
         assertTrue(_active(player), "sub active");
-        assertEq(uint8(w), 1, "daily quantity stored");
-        uint24 startDay = uint24(w >> 104);
-        uint24 coveredDay = uint24(w >> 80);
-        assertGt(startDay, 0, "activation day stamped");
-        assertGe(coveredDay, startDay, "funded-through >= activation day");
+        assertEq(_qty(id), 1, "daily quantity stored");
+        assertEq(uint24((lane >> 46) & ((uint256(1) << 22) - 1)), game.currentDayView(), "checkpointed today");
+        uint256 meta = uint256(vm.load(address(game), keccak256(abi.encode(uint256(id >> 2), GameSlots.SUB_META))))
+            >> ((id & 3) * 64);
+        assertEq(uint24((meta >> 11) & ((uint256(1) << 22) - 1)), game.currentDayView(), "run starts today");
         assertEq(game.subscriberSetLength(), 3, "set grew by one");
         assertEq(afkingSubToken.balanceOf(player), 0, "the seat was burned");
     }
@@ -270,26 +271,22 @@ contract AfKingSeatToken is SeatFixture {
     }
 
     // ──────────────────────────────────────────────────────────────────────
-    // Cancel tombstone and reclaim; re-subscribe
+    // Cancel removal; re-subscribe
     // ──────────────────────────────────────────────────────────────────────
 
-    /// @notice A cancel burns nothing and leaves a tombstone in the set; the next process pass
-    ///         reclaims it.
-    function testCancelTombstoneThenPassReclaims() public {
+    /// @notice A cancel burns nothing and removes the member from the set at once.
+    function testCancelRemovesAtOnce() public {
         address player = makeAddr("canceller");
         uint256 seat = _giveSeat(player);
         _subscribe(player, 0, seat);
         uint256 live = afkingSubToken.totalSupply();
 
         vm.prank(player);
-        game.subscribe(0, false, false, 0, 0, 0);
-        assertFalse(_active(player), "cancel tombstone reads inactive");
+        game.subscribe(0, false, 0, 0);
+        assertFalse(_active(player), "cancel reads inactive");
         assertEq(afkingSubToken.totalSupply(), live, "a cancel burns nothing");
-
-        // The inert set slot lingers until the next process pass reclaims it.
-        assertEq(game.subscriberSetLength(), 3, "tombstone still in the set");
-        _driveUntilOut(game.walletIdOf(player));
-        assertEq(game.subscriberSetLength(), 2, "tombstone reclaimed by the pass");
+        assertEq(game.subscriberSetLength(), 2, "no tombstone stays in the set");
+        assertEq(_pos(game.walletIdOf(player)), 0, "and no record");
     }
 
     /// @notice A re-subscribe after a cancel is a new run: it needs another seat (the first
@@ -299,13 +296,13 @@ contract AfKingSeatToken is SeatFixture {
         uint256 first = _giveSeat(player);
         _subscribe(player, 0, first);
         vm.prank(player);
-        game.subscribe(0, false, false, 0, 0, 0);
+        game.subscribe(0, false, 0, 0);
 
         // The burned seat is gone for good.
         vm.deal(player, 1 ether);
         vm.prank(player);
         vm.expectRevert(AFKingSubscriptionToken.InvalidToken.selector);
-        game.subscribe{value: SUB_FUND}(0, false, false, 1, 0, first);
+        game.subscribe{value: SUB_FUND}(0, false, 1, first);
 
         // A seat bought on the market starts the new run.
         address seller = makeAddr("seat-seller");
@@ -333,7 +330,7 @@ contract AfKingSeatToken is SeatFixture {
         _enterRngLock();
         vm.prank(player);
         vm.expectRevert(RngLocked.selector);
-        game.subscribe(0, false, false, 0, 0, 0);
+        game.subscribe(0, false, 0, 0);
         assertTrue(_active(player), "sub untouched across the freeze window");
 
         vm.prank(player);

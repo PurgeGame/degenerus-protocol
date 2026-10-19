@@ -17,7 +17,6 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///             first million earns a bounty — nothing nets a real chunk down to zero.
 ///         Organically stamped AFKing boxes from one daily cohort are the backlog.
 contract OpenBountyCarry is DeployProtocol {
-    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF;
     uint256 private constant SUBSCRIBERS_SLOT = GameSlots.SUBSCRIBERS;
     uint256 private constant PENDING_SHIFT = GameSlots.PENDING_BOX_COUNT_OFFSET * 8;
     uint256 private _lastFulfilledReqId;
@@ -199,7 +198,7 @@ contract OpenBountyCarry is DeployProtocol {
             vm.deal(address(this), poolEach);
             game.depositAfkingFunding{value: poolEach}(id);
             vm.prank(who);
-            game.subscribe(0, false, false, 1, 0, seat);
+            game.subscribe(0, false, 1, seat);
         }
     }
 

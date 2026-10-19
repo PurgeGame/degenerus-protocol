@@ -341,12 +341,12 @@ contract AnyInputHandler is Test {
         _call(21, address(game), 0, abi.encodeWithSignature("issueDeityBoon(uint32,uint32,uint8)", _id(dSeed), _idNZ(rSeed), slot));
     }
 
-    function g_subscribe(uint256 a, uint256 pSeed, bool drain, bool useTickets, uint8 qty, uint256 fSeed, uint256 value)
+    function g_subscribe(uint256 a, uint256 pSeed, bool useTickets, uint8 qty, uint256 sSeed, uint256 value)
         external
         act(a)
     {
         _call(22, address(game), _val(value), abi.encodeWithSignature(
-            "subscribe(uint32,bool,bool,uint8,uint32,uint256)", _id(pSeed), drain, useTickets, qty, _id(fSeed), _seatFor(currentActor, fSeed)));
+            "subscribe(uint32,bool,uint8,uint256)", _id(pSeed), useTickets, qty, _seatFor(currentActor, sSeed)));
     }
 
     function g_setOperatorApproval(uint256 a, uint256 oSeed, bool approved) external act(a) {

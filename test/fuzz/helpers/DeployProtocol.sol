@@ -357,11 +357,10 @@ abstract contract DeployProtocol is Test {
         quests = new DegenerusQuests();                // N+18 = nonce 23
         deityPass = new DegenerusDeityPass();          // N+19 = nonce 24
 
-        // v55.0: the standalone AfKing contract was DISSOLVED — its subscriber state + logic are
-        // game-resident (GameAfkingModule, deployed at N+11 above). VAULT/SDGNRS self-subscribe via
-        // the game-resident path: DegenerusVault.sol and sDGNRS.sol call subscribe(0, …, 0, 0)
-        // (self, self-funded, no seat: both are exempt) — both hit live GameAfkingModule
-        // code because GAME + the afking module are already deployed.
+        // The subscriber state + logic are game-resident (GameAfkingModule, deployed at N+11 above).
+        // VAULT/SDGNRS self-subscribe via the game-resident path: DegenerusVault.sol and sDGNRS.sol
+        // call subscribe with a lootbox quantity of 1 (self, no seat: both are exempt) — both hit live
+        // GameAfkingModule code because GAME + the afking module are already deployed.
 
         // Vault constructor calls COIN.vaultMintAllowance() + game.subscribe(...) (SUB-09)
         vault = new DegenerusVault();                  // N+20 = nonce 25

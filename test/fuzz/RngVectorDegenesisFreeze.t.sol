@@ -198,7 +198,7 @@ contract RngVectorDegenesisFreeze is DegenesisHarness {
         // Subscribing is refused while the daily window is open.
         vm.prank(buyers[1]);
         vm.expectRevert(ERR_RNG_LOCKED);
-        game.subscribe{value: 1 ether}(0, false, false, 1, 0, seat);
+        game.subscribe{value: 1 ether}(0, false, 1, seat);
         (, uint256 nudgeCost) = game.rngNudgeQuote();
         vm.prank(buyers[2]);
         vm.expectRevert(ERR_RNG_LOCKED);

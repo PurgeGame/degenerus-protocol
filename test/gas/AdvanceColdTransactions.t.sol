@@ -10,13 +10,6 @@ import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 contract ColdSubscriberSeeder is DegenerusGame, WalletSeed {
-    /// @dev The all-skip gas fixture also places the two permanent protocol
-    /// subscribers on their already-bought guard for the measured next day.
-    function prepareProtocolSkips() external {
-        uint24 nextDay = _simulatedDayIndex() + 1;
-        _subOf[_seedWallet(ContractAddresses.VAULT)].lastAutoBoughtDay = nextDay;
-        _subOf[_seedWallet(ContractAddresses.SDGNRS)].lastAutoBoughtDay = nextDay;
-    }
     /// @dev Run the engine's live human-box worker without consuming independent stamped AFKING boxes.
     function finishIndexedRead() external {
         require(!rngLockedFlag, "setup daily still locked");
@@ -68,11 +61,10 @@ abstract contract ColdSubscriberFixture is DeployProtocol {
     bytes32 internal constant ADVANCE_EVENT = keccak256("Advance(uint8,uint24)");
     bytes32 internal constant DELIVERED_EVENT = keccak256("AfkingDelivered(uint32,uint256)");
     bytes32 internal constant EXPIRED_EVENT = keccak256("SubscriptionExpired(uint32,uint8)");
-    bytes32 internal constant SKIPPED_EVENT = keccak256("PlayerSkipped(uint32,uint8)");
 
     function _mode() internal pure virtual returns (uint8);
 
-    function _split() internal pure virtual returns (bool) {
+    function _claimableLeg() internal pure virtual returns (bool) {
         return false;
     }
 
@@ -114,16 +106,9 @@ abstract contract ColdSubscriberFixture is DeployProtocol {
                 afkingSubToken.vaultMintSeats(player, 1);
                 seat = _seatOf(player);
             }
-            address source = _split() ? address(uint160(0xA5800000 + i)) : player;
-            uint32 playerId = game.walletIdOf(player);
-            uint32 sourceId = _split() ? _giveWalletId(source) : playerId;
-            game.depositAfkingFunding{value: 50 ether}(sourceId);
-            if (_split()) {
-                vm.prank(source);
-                game.setAfkingFundingApproval(sourceId, playerId, true);
-            }
+            game.depositAfkingFunding{value: 50 ether}(game.walletIdOf(player));
             vm.prank(player);
-            game.subscribe(0, _split(), mode == 1, 1, _split() ? sourceId : 0, seat);
+            game.subscribe(0, mode == 1, 1, seat);
         }
         if (mode != 3) {
             bytes memory live = address(game).code;
@@ -146,9 +131,8 @@ abstract contract ColdSubscriberFixture is DeployProtocol {
         ColdSubscriberSeeder(payable(address(game))).useMatureLevel();
         if (mode == 3) {
             ColdSubscriberSeeder(payable(address(game))).finishIndexedRead();
-            ColdSubscriberSeeder(payable(address(game))).prepareProtocolSkips();
         }
-        if (_split()) ColdSubscriberSeeder(payable(address(game))).seedSplitBalances(players);
+        if (_claimableLeg()) ColdSubscriberSeeder(payable(address(game))).seedSplitBalances(players);
         vm.etch(address(game), original);
         vm.warp(vm.getBlockTimestamp() + 1 days);
     }
@@ -260,12 +244,12 @@ abstract contract ColdSubscriberFixture is DeployProtocol {
     }
 }
 
-contract AdvanceColdSplitLootboxSubscriptions is ColdSubscriberFixture {
+contract AdvanceColdClaimableLootboxSubscriptions is ColdSubscriberFixture {
     function _mode() internal pure override returns (uint8) {
         return 2;
     }
 
-    function _split() internal pure override returns (bool) {
+    function _claimableLeg() internal pure override returns (bool) {
         return true;
     }
 
@@ -273,7 +257,7 @@ contract AdvanceColdSplitLootboxSubscriptions is ColdSubscriberFixture {
         return true;
     }
 
-    function test_ColdSplitLootboxesAndRngRequest() public {
+    function test_ColdClaimableLootboxesAndRngRequest() public {
         _check(DELIVERED_EVENT, 181, 181);
     }
 }

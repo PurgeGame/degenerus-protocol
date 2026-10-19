@@ -39,7 +39,9 @@ contract WriteTrimSeeder is DegenerusGameStorage {
 }
 
 /// @notice A loan seizure stops the seized account's AFKing run and, for a main, every smurf's,
-///         by walking the main's stored smurf list. The daily stage no longer polls acquisition.
+///         by walking the main's stored smurf list: each stopped run keeps its lane, marked for
+///         removal, until the next preparation pass removes it. The daily stage no longer polls
+///         acquisition.
 contract AfkingFamilyLiquidationTest is RedemptionCloseTools {
     address private seller;
     uint32 private root;
@@ -78,11 +80,17 @@ contract AfkingFamilyLiquidationTest is RedemptionCloseTools {
     function _sub(uint32 id, bool tickets) private {
         uint256 seat = _grantSeat(seller);
         vm.prank(seller);
-        game.subscribe{value: 2 ether}(id, false, tickets, 1, 0, seat);
+        game.subscribe{value: 2 ether}(id, tickets, 1, seat);
     }
 
-    function _quantity(uint32 id) private view returns (uint8) {
-        return lens.subInfoFullById(address(game), id).dailyQuantity;
+    /// @dev A live run: a member that is not pending removal.
+    function _active(uint32 id) private view returns (bool) {
+        return lens.subInfoFullById(address(game), id).active;
+    }
+
+    function _stopped(uint32 id) private view returns (bool) {
+        DegenerusGameLens.SubFull memory f = lens.subInfoFullById(address(game), id);
+        return f.member && f.removalPending && !f.active;
     }
 
     /// @dev Borrow against `id` and default at the next level.
@@ -113,32 +121,35 @@ contract AfkingFamilyLiquidationTest is RedemptionCloseTools {
         assertEq(lens.smurfsOf(address(game), made[0]).length, 0, "a smurf owns no list");
     }
 
-    function test_MainSaleCancelsOwnAndEverySmurfSubscription() public {
+    function test_MainSaleStopsOwnAndEverySmurfSubscription() public {
         _sub(root, false);
         // A borrowing main has at most five smurfs, so the walk fits one list word.
         uint32[] memory kids = new uint32[](5);
         for (uint256 i; i < kids.length; ++i) kids[i] = _child();
-        // Active box and ticket runs, one tombstone, one never subscribed.
+        // Active box and ticket runs, one cancelled (removed at once), one never subscribed.
         _sub(kids[0], false);
         _sub(kids[1], true);
         _sub(kids[3], false);
         _sub(kids[2], false);
         vm.prank(seller);
-        game.subscribe(kids[2], false, false, 0, 0, 0);
+        game.subscribe(kids[2], false, 0, 0);
         uint256 members = game.subscriberSetLength();
+        assertFalse(lens.subInfoFullById(address(game), kids[2]).member, "a cancel leaves no record");
 
         _sale(root);
 
-        assertEq(_quantity(root), 0, "main's own run cancelled");
-        for (uint256 i; i < kids.length; ++i) assertEq(_quantity(kids[i]), 0, "every smurf run cancelled");
-        assertEq(game.subscriberSetLength(), members, "tombstones stay for the stage to reclaim");
+        assertTrue(_stopped(root), "main's own run stopped");
+        assertTrue(_stopped(kids[0]) && _stopped(kids[1]) && _stopped(kids[3]), "every live smurf run stopped");
+        assertFalse(lens.subInfoFullById(address(game), kids[2]).member, "the cancelled smurf stays out");
+        assertFalse(lens.subInfoFullById(address(game), kids[4]).member, "the never-subscribed smurf stays out");
+        assertEq(game.subscriberSetLength(), members, "stopped lanes stay for the next preparation pass");
         // Acquired family members cannot restart.
         vm.prank(seller);
         vm.expectRevert(bytes4(keccak256("NotApproved()")));
-        game.subscribe(kids[0], false, false, 1, 0, 0);
+        game.subscribe(kids[0], false, 1, 0);
     }
 
-    function test_ChildSaleCancelsOnlyThatChild() public {
+    function test_ChildSaleStopsOnlyThatChild() public {
         _sub(root, false);
         uint32 a = _child();
         uint32 b = _child();
@@ -148,38 +159,34 @@ contract AfkingFamilyLiquidationTest is RedemptionCloseTools {
 
         _sale(a);
 
-        assertEq(_quantity(a), 0, "sold child's run cancelled");
-        assertEq(_quantity(b), 1, "sibling untouched");
-        assertEq(_quantity(root), 1, "owner untouched");
+        assertTrue(_stopped(a), "sold child's run stopped");
+        assertTrue(_active(b), "sibling untouched");
+        assertTrue(_active(root), "owner untouched");
 
-        // A later main sale walks past the already-cancelled child.
+        // A later main sale walks past the already-stopped child.
         _seed(root, 400);
         _sale(root);
-        assertEq(_quantity(b), 0);
-        assertEq(_quantity(root), 0);
+        assertTrue(_stopped(b));
+        assertTrue(_stopped(root));
     }
 
-    function test_ExternallyFundedOutsiderSurvivesSaleUntilStage() public {
+    function test_OutsiderWithItsOwnFundingSurvivesTheSale() public {
         address outsider = makeAddr("family-outsider");
-        uint32 outsiderId = _giveWalletId(outsider);
-        vm.prank(seller);
-        game.setAfkingFundingApproval(0, outsiderId, true);
-        vm.prank(seller);
-        game.depositAfkingFunding{value: 5 ether}(root);
         uint256 seat = _grantSeat(outsider);
+        vm.deal(outsider, 5 ether);
         vm.prank(outsider);
-        game.subscribe(0, false, false, 1, root, seat);
+        game.subscribe{value: 5 ether}(0, false, 1, seat);
+        uint32 outsiderId = game.walletIdOf(outsider);
+        _sub(root, false);
 
         _sale(root);
 
-        // The sale cannot find an outsider funded by the sold account; the stage's funder check
-        // cancels it before any further debit of the buyer-owned balance.
-        assertEq(_quantity(outsiderId), 1, "outsider run left for the stage");
-        assertFalse(game.afkingFundingApproved(root, outsiderId), "consent dead after sale");
+        assertTrue(_stopped(root));
+        assertTrue(_active(outsiderId), "an unrelated run is untouched by the sale");
     }
 }
 
-/// @notice The AFKing open pass reads Sub records but never writes them, and the stage's batched
+/// @notice The AFKing open pass reads subscriber lanes but never writes them, and the stage's batched
 ///         claimablePool release equals the per-account debits exactly.
 contract AfkingWriteTrimTest is DeployProtocol {
     uint256 private _lastFulfilledReqId;
@@ -195,18 +202,14 @@ contract AfkingWriteTrimTest is DeployProtocol {
         _finishSubscriptionWindow();
     }
 
-    function test_OpenPassSettlesEachStampOnceAndNeverWritesSubRecords() public {
-        address[] memory boxes = _subs(9, "wt_box_", false, false);
-        address[] memory tickets = _subs(3, "wt_tkt_", true, false);
+    function test_OpenPassSettlesEachStampOnceAndNeverWritesLanes() public {
+        address[] memory boxes = _subs(9, "wt_box_", false);
+        address[] memory tickets = _subs(3, "wt_tkt_", true);
         _toRequest(uint256(keccak256("wt_w1")) | 1);
 
-        uint24 stampDay = _resetDay();
         assertGe(_pendingCount(), boxes.length, "every box sub stamped");
         bytes32[] memory before = new bytes32[](boxes.length + tickets.length);
-        for (uint256 i; i < boxes.length; ++i) {
-            before[i] = _subWord(boxes[i]);
-            assertEq(uint24(uint256(before[i]) >> 56), stampDay, "stamped today");
-        }
+        for (uint256 i; i < boxes.length; ++i) before[i] = _subWord(boxes[i]);
         for (uint256 i; i < tickets.length; ++i) before[boxes.length + i] = _subWord(tickets[i]);
 
         // Answer the request and run the engine to the AFKing read consumer.
@@ -236,16 +239,16 @@ contract AfkingWriteTrimTest is DeployProtocol {
 
         _drainDay(uint256(keccak256("wt_c2")) | 1);
         assertEq(_pendingCount(), 0, "every stamp opened");
-        for (uint256 i; i < boxes.length; ++i) assertEq(_subWord(boxes[i]), before[i], "box Sub untouched by open");
+        for (uint256 i; i < boxes.length; ++i) assertEq(_subWord(boxes[i]), before[i], "box lane untouched by open");
         for (uint256 i; i < tickets.length; ++i) {
-            assertEq(_subWord(tickets[i]), before[boxes.length + i], "ticket Sub untouched by open");
+            assertEq(_subWord(tickets[i]), before[boxes.length + i], "ticket lane untouched by open");
         }
     }
 
     function test_StageReleasesClaimablePoolOncePerChunkExactly() public {
-        address[] memory a = _subs(6, "wt_pa_", false, false);
-        address[] memory b = _subs(4, "wt_pb_", true, false);
-        address[] memory c = _subs(4, "wt_pc_", false, true); // drain claimable first
+        address[] memory a = _subs(6, "wt_pa_", false);
+        address[] memory b = _subs(4, "wt_pb_", true);
+        address[] memory c = _subs(4, "wt_pc_", false); // funded from claimable first, then prepaid
         for (uint256 i; i < c.length; ++i) _seedClaimable(game.walletIdOf(c[i]), 3 ether);
 
         _drainDay(uint256(keccak256("wt_pre")) | 1);
@@ -270,7 +273,7 @@ contract AfkingWriteTrimTest is DeployProtocol {
 
     // ---- helpers ----
 
-    function _subs(uint256 n, string memory prefix, bool tickets, bool drainFirst)
+    function _subs(uint256 n, string memory prefix, bool tickets)
         private
         returns (address[] memory subs)
     {
@@ -284,7 +287,7 @@ contract AfkingWriteTrimTest is DeployProtocol {
             if (id == 0) id = _giveWalletId(who);
             game.depositAfkingFunding{value: 20 ether}(id);
             vm.prank(who);
-            game.subscribe(0, drainFirst, tickets, 1, 0, seat);
+            game.subscribe(0, tickets, 1, seat);
         }
     }
 
@@ -307,7 +310,8 @@ contract AfkingWriteTrimTest is DeployProtocol {
     }
 
     function _subWord(address who) private view returns (bytes32) {
-        return vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.SUB_OF)));
+        (uint256 lane,) = GameSlotKeys.subLane(address(game), game.walletIdOf(who));
+        return bytes32(lane);
     }
 
     function _cursorWord() private view returns (uint256) {

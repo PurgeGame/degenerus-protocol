@@ -422,7 +422,7 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
       const pending = layout.storage.find((entry) => entry.label === "ticketPending");
       expect(mint.slot).to.equal("9");
       expect(wallets.slot).to.equal("13");
-      expect(pending.slot).to.equal("70");
+      expect(pending.slot).to.equal("69");
       expect(layout.types[mint.type].label).to.equal("mapping(uint32 => uint256)");
       expect(layout.types[wallets.type].label).to.equal("uint256[]");
       expect(layout.types[pending.type].label).to.equal("mapping(uint32 => uint256)");

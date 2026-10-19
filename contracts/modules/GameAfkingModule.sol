@@ -40,16 +40,6 @@ import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
 import {IDegenerusGame, MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {IStETH} from "../interfaces/IStETH.sol";
 
-/// @title IQuestCompletionView
-/// @notice Minimal quest-view surface for the day-0 grounding check: the per-slot
-///         completion flags alone, skipping the full `playerQuestStates` tuple
-///         (streak / lastCompletedDay / progress) and its per-slot validity and
-///         native-unit conversion work.
-interface IQuestCompletionView {
-    /// @notice Quests' today-completion flags for wallet `id` ((false, false) for 0).
-    function questCompletionToday(uint32 id) external view returns (bool slot0, bool slot1);
-}
-
 /// @title ISeatToken
 /// @notice Minimal AFKing Subscription Token surface for subscribe: a new run burns one seat.
 interface ISeatToken {
@@ -65,30 +55,29 @@ interface ISeatToken {
  * @author Burnie Degenerus
  * @notice Delegate-called module owning the AfKing subscription logic. The bulk of that
  *         logic sits in this module's OWN EIP-170 budget; only the thin dispatch stubs
- *         (subscribe / claimAfkingFlip / drainAffiliateBase / decurse / smite /
+ *         (subscribe / claimAfkingFlip / drainAffiliateBases / decurse / smite /
  *         subscriberSetLength) occupy space in the DegenerusGame image.
  *
  * @dev DELEGATECALL CONTEXT: the module inherits `DegenerusGameStorage` (via
- *      `DegenerusGameMintStreakUtils`), so the subscriber set
- *      (`_subOf` by wallet ID, `_subscribers` of packed uint32 IDs), the cursors
- *      (`_subCursor`/`_subOpenCursor`), the `subsFullyProcessed` STAGE
- *      drain-completion flag, the `afkingFunding` ledger, `claimablePool`, `operatorApprovals`,
- *      and the activity-score helpers are all in-context plain SLOADs/SSTOREs.
- *      The account-resolution / pass-horizon / afking-snapshot / afking-funding
- *      reads are all in-context here. The Game
- *      reaches these via its delegatecall dispatch stubs; a direct call to this
- *      module address would have the wrong `msg.sender` for any Game-context
- *      invariant.
+ *      `DegenerusGameMintStreakUtils`), so the subscriber set (`_subscribers` of packed
+ *      85-bit lanes, `_subMeta` by wallet ID), the cursors (`_subCursor`/`_subOpenCursor`),
+ *      the `subsFullyProcessed` STAGE drain-completion flag, the `afkingFunding` ledger,
+ *      `claimablePool`, and the activity-score helpers are all in-context plain SLOADs/SSTOREs.
+ *      The Game reaches these via its delegatecall dispatch stubs; a direct call to this
+ *      module address would have the wrong `msg.sender` for any Game-context invariant.
  *
  * @dev Subscription preparation receives the engine's pinned logical day. Box
  *      consumption uses the active published session word. The Miner module
  *      owns global ordering, fixed gas accounting, and miner compensation.
  *
+ * @dev Rewards are derived from each member's checkpoint, never accumulated per day: the
+ *      daily pass buys and stamps, and settlement pays the player and the affiliate base for
+ *      every day from the checkpoint through the endpoint in one step (see the lane layout in
+ *      DegenerusGameStorage).
+ *
  * @custom:invariant stETH fallback pulls use an atomic self-call to pinned Lido
- *                   stETH; funded delivery retains strict CEI. The
- *                   two-tier funding-skip exemption keys on
- *                   the un-spoofable pinned `ContractAddresses.VAULT` / `SDGNRS`
- *                   identity (on `player`, never `src`) — no settable exemption.
+ *                   stETH; funded delivery retains strict CEI. The protocol-seat
+ *                   pause keys on the un-spoofable pinned VAULT / SDGNRS wallet IDs.
  * @custom:invariant No error-swallowing valve on the funded delivery path: the funded
  *                   process buy is revert-free by construction; a class-B solvency
  *                   underflow FAILS LOUD (the `claimablePool -=` propagates, it is never
@@ -111,7 +100,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ------------------------------------------------------------------*/
     // error RngLocked() — inherited from DegenerusGameStorage. Reverts a subscribe
     // (create / replace / cancel) from daily preparation being due through the last
-    // paid AFKing box opening. Membership and modes stay fixed across that whole window.
+    // paid AFKing box opening, and a new run before the day's subscriber pass completed.
     /// @notice Thrown when smite() targets an active afking subscriber, which is immune to
     ///         smite stacks.
     error SmiteeAfkingImmune();
@@ -119,99 +108,58 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///         points (5-stack ceiling) and cannot take on more smite stacks.
     error SmiteCeilingReached();
     // error NotApproved() — inherited from DegenerusGameStorage: a subscribe caller not
-    // authorized for the account, or an external funding source that does not authorize
-    // the subscriber.
-    /// @dev subscribe(_, 0) cancel where the caller has no active subscription
-    ///      (nothing to tombstone).
+    // authorized for the account.
+    /// @dev subscribe(_, 0) cancel where the account has no subscription.
     error NotSubscribed();
     /// @dev mineFlip() found all router categories empty — the clean no-work signal
     ///      (the unbounded-scan-free early-return on no pending work).
     error NoWork();
-    /// @dev subscribe (upsert) starting a NEW afking run that is not grounded on a real
-    ///      purchase — neither already bought today nor a funded in-tx cover-buy. An
-    ///      unfunded start reverts rather than beginning an inert, free-riding run.
-    error MustPurchaseToBeginAfking();
 
     /*------------------------------------------------------------------
                               Events
     ------------------------------------------------------------------*/
-    /// @dev Single canonical subscription-state stream — POST-WRITE full state.
-    ///      Cancel (subscribe(_, 0)) emits with dailyQuantity == 0.
-    ///      `fundingSource` is the external funding account's key (address(0) = self);
-    ///      indexed so a source can filter the log for every account it funds.
-    event SubscriptionUpdated(
-        uint32 indexed player,
-        uint8 dailyQuantity,
-        bool drainGameCreditFirst,
-        bool useTickets,
-        uint32 indexed fundingSource
-    );
-    /// @dev Per-player pre-check skip inside the process pass. `reason`:
-    ///        3 = InsufficientPool  (afkingFunding[src] < ethValue) — funding skip
-    ///      lastAutoBoughtDay is UNCHANGED on a skip.
-    event PlayerSkipped(uint32 indexed player, uint8 reason);
+    /// @dev Single canonical subscription-state stream — POST-WRITE state. A cancel, and the
+    ///      Vault owner's pause, emit dailyQuantity == 0.
+    event SubscriptionUpdated(uint32 indexed player, uint8 dailyQuantity, bool useTickets);
+    /// @dev A protocol seat entered (`paused`) or left a pause.
+    event SubscriptionPaused(uint32 indexed player, bool paused);
     /// @dev Subscription removed from the iterable set. `reason`:
-    ///        1 = AutoPause (funding-skip kill of a NORMAL sub)
-    ///        2 = CancelReclaim (in-pass reclaim of an externally-cancelled tombstone)
+    ///        1 = unfunded (its unsettled rewards are forfeited)
+    ///        2 = seized (its run was closed at the loan seizure)
     event SubscriptionExpired(uint32 indexed player, uint8 reason);
-    /// @notice A consented funding account paid the residual subscription cost in stETH.
-    /// @dev `source` is the funding account's key (the stETH leaves its payee). Any
-    ///      share-rounding excess remains in the source's prepaid balance.
-    event AfkingStethFunded(
-        uint32 indexed subscriber,
-        uint32 indexed source,
-        uint256 shortfall,
-        uint256 received
-    );
-
-    /// @notice Emitted for an afking subscribe-time cover-buy box. Same signature/topic as the
-    ///         mint + whale `LootBoxBuy` — one box-buy event across every path.
-    event LootBoxBuy(
-        uint32 indexed buyer,
-        uint48 indexed index,
-        uint32 position,
-        uint256 amount
-    );
+    /// @notice The subscriber's payee paid the residual subscription cost in stETH.
+    /// @dev Any share-rounding excess remains in the subscriber's prepaid balance.
+    event AfkingStethFunded(uint32 indexed subscriber, uint256 shortfall, uint256 received);
 
     /// @notice Emitted once per subscriber per delivered afking day — the authoritative
     ///         afking-buy delivery signal (covers VAULT / sDGNRS and every real afker).
-    ///         Carries the post-accrue accumulator balances so the in-slot accrual
-    ///         (slot-0 reward + ticket buyer-bonus into `pendingFlip`, flat 7% into
-    ///         `affiliateBase`, both saturating) is observable without a storage read.
-    /// @dev The hottest log in the protocol — up to 250 per advance chunk — so its four
-    ///      fields ride one word instead of four. Each was a full 32-byte slot for at most
-    ///      32 bits of payload; packed they cost 256 gas instead of 1,024.
-    ///      Packed layout (LSB -> MSB):
-    ///      - [0..127]   weiIn: delivery ETH-in, fresh afking leg + claimable leg (cover-buy
-    ///                   box reports 0; its spend rides LootBoxBuy). Bounded by ETH supply.
-    ///      - [128..151] day: the delivered afking day (funded-day high-water covered)
-    ///      - [152..175] pendingFlipAfter: claimable whole-FLIP balance after this accrue
-    ///      - [176..207] affiliateBaseAfter: unclaimed whole-FLIP affiliate base after it
-    ///      Widths are load-bearing: this word has no version field, so any change to a
-    ///      field's size must rename the event rather than shift bits under a live decoder.
+    /// @dev The hottest log in the protocol, so its fields ride one word. Packed layout
+    ///      (LSB -> MSB):
+    ///      - [0..127]   weiIn: delivery ETH-in, claimable leg + prepaid leg. Bounded by ETH supply.
+    ///      - [128..151] day: the delivered afking day
     ///      The claimable leg of `weiIn` is itemised by the ClaimableSpent emitted in the
     ///      same receipt, and only when the drain actually moves money.
     event AfkingDelivered(uint32 indexed player, uint256 packed);
 
-    /// @notice Emitted when the affiliate claim drains a sub's accrued `affiliateBase`
-    ///         to the upline tree — attributes afking-sourced affiliate income to the
-    ///         subscriber whose buys generated it. Zero drains (already drained /
-    ///         never accrued) do not emit.
+    /// @notice Emitted when settlement hands a sub's elapsed affiliate base to the affiliate
+    ///         claim — attributes afking-sourced affiliate income to the subscriber whose buys
+    ///         generated it. Zero bases do not emit.
     event AffiliateBaseDrained(uint32 indexed sub, uint256 base);
 
-    /// @notice Emitted when a sub's accrued `pendingFlip` is settled (player-pull
-    ///         claim or the finalize path) — the zeroing half of the balance
-    ///         `AfkingDelivered.pendingFlipAfter` reports accruing.
+    /// @notice Emitted when settlement pays a sub its own elapsed reward (whole FLIP).
     event AfkingFlipClaimed(uint32 indexed player, uint256 owed);
+
+    /// @notice The daily subscriber draw paid `winner` for a run `spanDays` old.
+    event SubDrawWon(uint32 indexed winner, uint24 day, uint24 spanDays, uint256 flipAmount);
 
     /*------------------------------------------------------------------
                               Constants
     ------------------------------------------------------------------*/
     /// @dev Afking-local ticket scaling multiplier. AFKING_TICKET_SCALE = 400 makes the
-    ///      cost formula unit-consistent: a ticket `amount = effectiveQty * 400`
+    ///      cost formula unit-consistent: a ticket `amount = quantity * 400`
     ///      entry-units, which the Game's mint recompute divides by `4 * 100`
     ///      (the inherited Storage `QTY_SCALE = 100`), so `cost` stays
-    ///      `mintPrice * effectiveQty` in both ticket and lootbox mode.
+    ///      `mintPrice * quantity` in both ticket and lootbox mode.
     ///      ⚠ LOAD-BEARING dual constant: this 400 is
     ///      NUMERICALLY EQUAL to the Game's `4 * QTY_SCALE` (= 4 × 100) but is a
     ///      DISTINCT named constant — it must NOT be collapsed with the inherited
@@ -219,26 +167,16 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     ///      vs the Game divisor base) that happen to compose to the same 400.
     uint256 internal constant AFKING_TICKET_SCALE = 400;
 
-    /// @dev drainGameCreditFirst bit within Sub.flags — when set the buy spends
-    ///      protocol-side claimable credit before tapping afkingFunding ETH.
-    uint8 internal constant FLAG_DRAIN_FIRST = 2;
-
-    /// @dev useTickets bit within Sub.flags — set = ticket mint mode, clear =
-    ///      lootbox mode.
-    uint8 internal constant FLAG_USE_TICKETS = 4;
-
-    /// @dev externalFunding bit within Sub.flags — set when an external funding account (an ID
-    ///      other than 0 and the subscriber's own) is registered in the sparse `_fundingSourceOf`
-    ///      map. Lets the common self-funded path resolve the source to the subscriber's own set
-    ///      element from the already-loaded flags byte and SKIP the per-sub
-    ///      `_fundingSourceOf` SLOAD (the map is read only for the rare operator-funded sub).
-    uint8 internal constant FLAG_EXTERNAL_FUNDING = 1;
-
     /// @dev Slot-0 quest completion reward — mirrors `DegenerusQuests.QUEST_SLOT0_REWARD`
-    ///      (a private constant not visible cross-contract). Each delivered afking buy accrues
-    ///      `QUEST_SLOT0_REWARD` (whole FLIP) into the sub's claimable `pendingFlip`, pulled
-    ///      via `claimAfkingFlip`. Only values the FLIP mint, off the solvency path.
+    ///      (a private constant not visible cross-contract). Every credited day earns it
+    ///      (whole FLIP). Only values the FLIP mint, off the solvency path.
     uint256 internal constant QUEST_SLOT0_REWARD = 100;
+
+    /// @dev Ticket-mode buyer bonus per ticket per day: 10% of the ticket's 1,000-FLIP value.
+    uint256 internal constant TICKET_BONUS_PER_UNIT = 100;
+
+    /// @dev Affiliate base per unit per day: 7% of the unit's 1,000-FLIP value.
+    uint256 internal constant AFFILIATE_BASE_PER_UNIT = 70;
 
     /// @dev Prize-pool routing splits for the batched afking buy, mirroring the canonical
     ///      `DegenerusGameMintModule.LOOTBOX_SPLIT_FUTURE_BPS` (9000) and
@@ -247,81 +185,48 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     uint256 internal constant AFKING_LOOTBOX_FUTURE_BPS = 9000;
     uint256 internal constant AFKING_TICKET_FUTURE_BPS = 1000;
 
+    /// @dev Daily subscriber draw: FLIP per day of run age, and its cap.
+    uint256 private constant SEAT_DRAW_FLIP_PER_DAY = 10;
+    uint256 private constant SEAT_DRAW_MAX_FLIP = 4000;
+
     /*------------------------------------------------------------------
                           Subscription entrypoint
     ------------------------------------------------------------------*/
-    event AfkingFundingApproval(uint32 indexed funderId, uint32 indexed subscriberId, bool approved);
-
-    function setAfkingFundingApproval(uint32 funderId, uint32 subscriberId, bool approved) external {
-        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
-        if (funderId == 0) funderId = _requireWalletId(msg.sender);
-        _requireAllocated(funderId);
-        _requireAllocated(subscriberId);
-        if (_isAcquired(funderId) || _isAcquired(subscriberId)) revert NotApproved();
-        if (_payee(_walletElement(funderId)) != msg.sender) revert NotApproved();
-        afkingFundingApprovals[funderId][subscriberId] = approved;
-        emit AfkingFundingApproval(funderId, subscriberId, approved);
-    }
-
-    /// @notice The SINGLE subscription entrypoint — create, replace, or cancel a
-    ///         daily subscription for account `id` (0 = caller). dailyQuantity >= 1 upserts
-    ///         (create-or-replace in place); dailyQuantity == 0 cancels (writes the
-    ///         tombstone sentinel, relocating no one). Every mutation flows
-    ///         through this one consent-gated path.
-    /// @dev Lock create/replace/cancel from the day boundary through preparation, RNG
-    ///      and all AFKing opens. Outside that window, mode changes may safely relocate IDs.
+    /// @notice The SINGLE subscription entrypoint — create, change, or cancel a daily
+    ///         subscription for account `id` (0 = caller). dailyQuantity 1..8 upserts;
+    ///         dailyQuantity == 0 cancels (the Vault's pauses instead).
+    /// @dev Lock create/change/cancel from the day boundary through preparation, RNG and all
+    ///      AFKing opens. Outside that window, mode changes may safely relocate IDs.
     /// @dev Authorization is checked ONCE here under the account rule (`_resolveAccount`:
     ///      the caller is the account's payee — its key or a smurf's owner — or an operator
     ///      approved for its ID). Authorization is NEVER re-checked at process-time.
-    /// @dev Seats: a NEW run (no live run — never subscribed, cancelled or evicted) burns seat
-    ///      `seatId` of the subscriber's payee through the token's Game-only `consumeSeat`,
-    ///      before the run is written. Changing a live run and a cancel burn nothing; the
-    ///      exempt VAULT / SDGNRS subscriptions (made in their own constructors, before the
-    ///      token exists) never call the token. Every non-exempt set entry burned a seat and
-    ///      the token caps live seats plus set entries, so the set needs no runtime cap. No
-    ///      pass requirement and no per-level validity horizon.
-    /// @dev msg.value > 0 credits the Game's afkingFunding ledger in-context
-    ///      (claimablePool moved in tandem — the solvency invariant), keyed on the
-    ///      resolved funding bucket (the external source for an externally funded sub, else
-    ///      the subscriber).
-    /// @dev Funding-source 4-protection:
-    ///        (1) prepaid consent at subscribe — auth + funding-source gate checked here;
-    ///        (2) default-self — `fundingSourceId` 0 or the subscriber's own ID self-funds from
-    ///            the subscriber's ledger, no gate; its stETH top-up pulls from the subscriber's
-    ///            payee;
-    ///        (3) no-escalation — the source is fixed at subscribe, not changeable per-draw to escalate;
-    ///        (4) later consent revocation does not stop prepaid draws; stETH pulls from an
-    ///            external source's payee require the consent to remain live on every attempt
-    ///            (a source sharing the subscriber's main wallet consents implicitly).
+    /// @dev A new run burns seat `seatId` of the subscriber's payee through the token's
+    ///      Game-only `consumeSeat`, before the run is written; it starts only after today's
+    ///      subscriber pass completed, checkpointed today, so its first purchase and first
+    ///      credited day are tomorrow. Changing a live run and a cancel burn nothing. The exempt
+    ///      VAULT / SDGNRS subscriptions (made in their own constructors, before the token
+    ///      exists) never call the token. Every non-exempt set entry burned a seat and the token
+    ///      caps live seats plus set entries.
+    /// @dev Every change to a live run settles it first, so a new quantity or mode earns from
+    ///      the change onward. A cancel settles both sides, hands the streak back to Quests and
+    ///      removes the member; the Vault's quantity 0 is a pause that keeps its seat and earns
+    ///      nothing until the owner sets a quantity again.
+    /// @dev msg.value > 0 credits the subscriber's prepaid afking ETH (claimablePool moved in
+    ///      tandem — the solvency invariant).
     /// @param id Subscriber account (0 = caller).
-    /// @param drainGameCreditFirst When true, the buy spends claimable credit first.
     /// @param useTickets Mint mode — true = tickets, false = lootboxes.
-    /// @param dailyQuantity Daily buy units, 1..255 (upsert); 0 cancels (tombstone).
-    /// @param fundingSourceId Account whose `afkingFunding` funds this sub; 0 (or the
-    ///        subscriber's own ID) = self. An external source must be allocated and must
-    ///        consent: it shares the subscriber's main wallet (equal payees: an owner and its
-    ///        smurfs, in any pairing) or its owner granted funding approval to the subscriber ID.
+    /// @param dailyQuantity Daily buy units, 1..8 (upsert); 0 cancels.
     /// @param seatId Seat serial burned when this call starts a new run (ignored otherwise).
     function subscribe(
         uint32 id,
-        bool drainGameCreditFirst,
         bool useTickets,
         uint8 dailyQuantity,
-        uint32 fundingSourceId,
         uint256 seatId
     ) external payable {
         // Closed from the liveness trigger onward, which subsumes post-gameOver: the
         // predicate stays true once death is declared (_unlockRng deliberately freezes
         // dailyIdx so the deadman never un-fires, and the phase flags it reads can no
-        // longer be cleared). The subscribe path delivers its cover buy
-        // in-transaction, which queues ticket entries, and the terminal drain spans
-        // several transactions with gameOver still unlatched. The rngLock does not span
-        // that whole window — the terminal sequence takes it only when the fallback word
-        // commits, leaving the drain's earlier transactions unlocked — so liveness, not
-        // the lock, is what keeps a subscribe from queueing entries into the terminal
-        // cohort. Accrued value stays recoverable — afkingFunding
-        // via claim, pendingFlip via claimAfkingFlip, affiliateBase via the affiliate
-        // claim path.
+        // longer be cleared). AFKing reward collection closes at the same boundary.
         if (_livenessTriggered()) revert GameOver();
 
         // Include the pre-first-miner-call window and post-unlock AFKing consumption.
@@ -337,312 +242,175 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         if (id != 0 && _isAcquired(subId)) revert NotApproved();
         // The permanent protocol entries stay at box positions 0 (Vault) and 1 (sDGNRS).
         // This also applies to an approved operator acting for the Vault's account.
-        bool exemptSub = subId == VAULT_WALLET_ID || subId == SDGNRS_WALLET_ID;
-        if (useTickets && exemptSub) revert E();
+        bool vault = subId == VAULT_WALLET_ID;
+        bool exemptSub = vault || subId == SDGNRS_WALLET_ID;
+        if (dailyQuantity > SUB_MAX_QUANTITY || (useTickets && exemptSub)) revert E();
 
-        // An external funding source (an ID other than 0 and the subscriber's own) must be
-        // allocated and must consent: the subscriber's own family (same main ID) consents
-        // implicitly, any other source must have granted the subscriber a funding approval
-        // (setAfkingFundingApproval). Prepaid draws retain this consent; stETH pulls from the
-        // source's payee re-check it live.
-        uint32 fundId = subId;
-        if (fundingSourceId != 0 && fundingSourceId != subId) {
-            _requireAllocated(fundingSourceId);
-            if (!_afkingFundingAllowed(subId, fundingSourceId)) revert NotApproved();
-            fundId = fundingSourceId;
-        }
+        if (msg.value > 0) _creditAfkingValue(subId, msg.value);
 
-        // msg.value > 0 credits the Game's afkingFunding ledger in-context (the Game
-        // holds the ETH; claimablePool increases by the same amount). It credits the
-        // SAME bucket the draws debit: the resolved funding source — the external
-        // source for an externally funded sub (its consent was checked just above),
-        // else the subscriber itself. So a deposit attached to subscribe always funds the
-        // bucket that actually pays for this sub's auto-buys — never misdirected to an
-        // unused bucket on an externally funded sub. Routed through _creditAfkingValue so the credit
-        // emits AfkingFunded like every other money-in path; the ledger is otherwise
-        // write-asymmetric here (debits log, credits do not) and off-chain consumers cannot
-        // attribute a funded subscribe made through a contract wallet.
-        if (msg.value > 0) {
-            _creditAfkingValue(fundId, msg.value);
-        }
+        uint24 today = _simulatedDayIndex();
+        uint256 position1 = _subPosition1(subId);
 
-        // Cancel branch — dailyQuantity == 0 writes the `dailyQuantity = 0` tombstone in
-        // place and relocates no one. The process stage reclaims ordinary tombstones;
-        // VAULT keeps its entry at quantity zero so cancellation never frees a seat-cap unit.
-        // Revert if the caller has no set entry. Any msg.value
-        // above was still credited to funding, so a cancel-with-ETH never strands the
-        // deposit (it stays game-side withdrawable).
         if (dailyQuantity == 0) {
-            Sub storage c = _subOf[subId];
-            if (c.setPosition == 0) revert NotSubscribed();
-            // Auto-claim BEFORE clearing: the next advance-driven reclaim deletes the
-            // slot (wiping both accumulators), so leaving them for a later pull would
-            // lose them in that race. Pay the sub its own pendingFlip (CEI: zero
-            // first), then settle the upline affiliate tree, THEN finalize + tombstone.
-            _settlePendingFlip(subId, c);
-            // Drain affiliateBase to the 75/20/5 upline tree (50/50 VAULT/DGNRS if no
-            // referrer). The affiliate consumes the base via the AFFILIATE-only
-            // drainAffiliateBase callback, so this must run while the slot still holds it.
-            uint32[] memory drainOne = new uint32[](1);
-            drainOne[0] = subId;
-            IDegenerusAffiliate(ContractAddresses.AFFILIATE).claim(drainOne);
-
-            // Hand the afking-computed streak back to the manual quest system, then tombstone.
-            // The run's seat was burned when it started; a later new run burns another.
-            _finalizeAfking(subId, c, _simulatedDayIndex());
-            c.dailyQuantity = 0;
-            // The sparse `_fundingSourceOf` map holds an entry iff FLAG_EXTERNAL_FUNDING
-            // is set (the upsert writes/clears both together), so the common self-funded
-            // cancel emits address(0) straight from the already-loaded flags — no map read.
-            emit SubscriptionUpdated(
-                subId,
-                0,
-                (c.flags & FLAG_DRAIN_FIRST) != 0,
-                (c.flags & FLAG_USE_TICKETS) != 0,
-                (c.flags & FLAG_EXTERNAL_FUNDING) != 0
-                    ? _fundingSourceOf[subId]
-                    : 0
-            );
+            if (position1 == 0) revert NotSubscribed();
+            // sDGNRS has no owner to resume it; its only pause is the unfunded one.
+            if (exemptSub && !vault) revert E();
+            if (vault) {
+                // The owner's pause: settle what it earned, then earn nothing while paused.
+                if (_afkingProtocolFlags & AFK_VAULT_OWNER_PAUSED == 0) {
+                    _pauseProtocolSeat(subId, position1, AFK_VAULT_OWNER_PAUSED);
+                }
+                emit SubscriptionUpdated(subId, 0, false);
+                return;
+            }
+            // Pay both sides before the record goes, then hand the streak back to Quests.
+            _settleBoth(subId);
+            uint256 cancelled = _subLaneAt(position1 - 1);
+            _finalizeAfking(subId, cancelled, today);
+            _removeFromSet(position1);
+            _setSubMetaLane(subId, 0);
+            emit SubscriptionUpdated(subId, 0, cancelled & SUB_TICKETS_BIT != 0);
             return;
         }
 
-        // UPSERT branch (dailyQuantity >= 1). Same-mode updates keep their position;
-        // _addToSet moves mode changes to the other section in this unlocked window.
-        Sub storage s = _subOf[subId];
-
-        // Captured BEFORE the dailyQuantity overwrite: a non-zero stored dailyQuantity means the
-        // sub is mid-afking-run (afkingActive set) — a re-subscribe CONTINUES that run; 0 means
-        // new / cancelled / evicted (afkingActive cleared by a prior finalize) — a fresh run.
-        bool wasActive = s.dailyQuantity != 0;
-        // The two protocol self-subscribers (VAULT / sDGNRS) self-subscribe at
-        // construction with no funds and BEFORE the AFKing Subscription Token exists in the
-        // deploy order (the token deploys last; its constructor mints both
-        // permanent construction seats — serial 1 to SDGNRS, serial 2 to the
-        // vault); they are exempt from the seat burn and the
-        // purchase-grounded gate below, keyed on the un-spoofable resolved
-        // subscriber identity. Every other sub must clear both.
-        if (wasActive) {
-            // Settle the prior run's pendingFlip before the overwrite below.
-            _settlePendingFlip(subId, s);
-        } else if (!exemptSub) {
-            // A new run burns one seat held by the subscriber's payee, before the run is
-            // written. The token makes no callback into the Game.
-            ISeatToken(ContractAddresses.AFKING_SUB_TOKEN).consumeSeat(_payee(_walletElement(subId)), seatId);
-        }
-
-        s.dailyQuantity = dailyQuantity;
-        if (drainGameCreditFirst) s.flags |= FLAG_DRAIN_FIRST;
-        else s.flags &= ~FLAG_DRAIN_FIRST;
-        if (useTickets) s.flags |= FLAG_USE_TICKETS;
-        else s.flags &= ~FLAG_USE_TICKETS;
-        // Sparse funder map: store an external source (its key beside its wallet ID); a
-        // self-funded subscribe clears it, so re-pointing an externally funded sub back to
-        // self does not strand a stale funder. Re-pointing the source IS a re-subscribe,
-        // which re-runs the consent gate.
-        if (fundId != subId) {
-            _fundingSourceOf[subId] = fundId;
-            s.flags |= FLAG_EXTERNAL_FUNDING;
+        uint256 config = ((uint256(dailyQuantity) - 1) << SUB_QTY_SHIFT) | (useTickets ? SUB_TICKETS_BIT : 0);
+        if (position1 == 0) {
+            // A NEW run. The protocol bootstrap runs in the Vault / sDGNRS constructors, before
+            // any subscriber pass; every other run starts once today's pass has completed.
+            if (!exemptSub) {
+                if (_afkingEndpoint() != today) revert RngLocked();
+                // A new run burns one seat held by the subscriber's payee, before the run is
+                // written. The token makes no callback into the Game.
+                ISeatToken(ContractAddresses.AFKING_SUB_TOKEN).consumeSeat(_payee(_walletElement(subId)), seatId);
+            }
+            // Snapshot the player's (gap-synced) manual quest streak and flip the afking flag
+            // (slot-0 completions become streak-neutral / reward-deferred until finalize hands
+            // the streak back). The protocol seats start from 0.
+            uint256 snap = quests.beginAfking(subId, today);
+            _insertMember(subId, _withSubCheckpoint(uint256(subId) | config, today, exemptSub ? 0 : snap), today);
         } else {
-            // A live self-funded run has already cleared this map at its start.
-            // Fresh/restarted runs must still clear it: process removal deletes
-            // the Sub (including its flag) but may leave an old sparse source.
-            if (!wasActive || (s.flags & FLAG_EXTERNAL_FUNDING) != 0) {
-                delete _fundingSourceOf[subId];
-            }
-            s.flags &= ~FLAG_EXTERNAL_FUNDING;
-        }
-        // The cover-buys below draw on the source just recorded (`srcWord`, the subscriber's
-        // own word when self-funded), so they need no map read.
-
-        // Afking-run start (new sub) OR a streak-refreshing cover-buy (active sub re-subscribe).
-        {
-            uint24 today = _simulatedDayIndex();
-            if (wasActive) {
-                // ACTIVE sub re-subscribe — subscribe doubles as a manual "keep my streak alive +
-                // buy something" action. Do a funded cover-buy for TODAY (advancing the funded
-                // high-water afkCoveredThroughDay), which CONTINUES the run's streak via
-                // _deliverAfkingBuy's own gap-freeze/accrue: a still-current run keeps its streak
-                // and gains today; a gapped run keeps its streak too (gap days earn nothing, same
-                // as the stage). No re-snapshot / no forfeit — the afking streak is never reset by
-                // a re-subscribe. Skipped (streak just persists + decays on read) when already
-                // bought today OR the cover-buy is unfunded. No stamped box can be pending here:
-                // subscribe is locked until every stamp opens.
-                if (s.lastAutoBoughtDay != uint24(today)) {
-                    uint256 mp = _mintPriceInContext();
-                    uint256 srcFunding = _afkingOf(fundId);
-                    (
-                        uint256 ethValue,
-                        uint256 buyAmount,
-                        bool isTicket,
-                        uint256 claimableUse
-                    ) = _resolveBuy(
-                            s,
-                            subId,
-                            mp,
-                            _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0,
-                            srcFunding
-                        );
-                    srcFunding = _tryFundAfkingSteth(subId, fundId, ethValue, srcFunding);
-                    if (srcFunding >= ethValue) {
-                        _deliverAfkingBuy(
-                            subId,
-                            s,
-                            today,
-                            mp,
-                            level,
-                            jackpotPhaseFlag ? level : level + 1,
-                            fundId,
-                            ethValue,
-                            claimableUse,
-                            buyAmount,
-                            isTicket,
-                            true
-                        );
-                    }
-                }
+            uint256 lane;
+            if (vault && _afkingProtocolFlags & AFK_VAULT_OWNER_PAUSED != 0) {
+                // The owner's resume; an unfunded pause still holds until the Vault can pay.
+                _resumeProtocolSeat(subId, position1, AFK_VAULT_OWNER_PAUSED, _afkingEndpoint());
             } else {
-                // NEW run. Snapshot the player's (gap-synced) manual quest streak and flip the
-                // afking flag (slot-0 completions become streak-neutral / reward-deferred — the
-                // Game-side compute-on-read owns the streak until finalize hands it back). The run
-                // is grounded on a FUNDED day-0 (a funded min-buy OR an already-complete manual
-                // slot-0 today) — the debit-gate that makes the streak unfarmable. An unfunded
-                // start reverts (MustPurchaseToBeginAfking); only VAULT / SDGNRS, which
-                // self-subscribe with no funds at construction, forfeit the snapshot (base 0)
-                // instead.
-                uint256 snap = quests.beginAfking(subId, today); // syncs + sets afkingActive
-                // Frame the run on today (the compute-on-read base; afkCovered == today keeps the
-                // day-0 delivery gap-free and guarantees
-                // afkCovered >= afkingStartDay so the streak span never underflows).
-                s.afkCoveredThroughDay = uint24(today);
-                s.afkingStartDay = uint24(today);
-
-                (bool done0, ) = IQuestCompletionView(address(quests)).questCompletionToday(subId);
-                if (done0) {
-                    _setStreakBase(s, snap); // funded (manual) day-0 — keep the snapshot
-                    s.lastAutoBoughtDay = uint24(today);
-                } else if (s.lastAutoBoughtDay == uint24(today)) {
-                    // Already bought today in a prior subscribe cycle this day — the cancel
-                    // tombstone retained the stamp across the unsub/re-subscribe. The run is
-                    // already purchase-grounded, so keep the snapshot and skip a second
-                    // cover-buy: the per-day flat slot-0 reward is not re-accrued. This
-                    // mirrors the active-sub re-subscribe guard above.
-                    _setStreakBase(s, snap);
-                } else {
-                    uint256 mp = _mintPriceInContext();
-                    uint256 srcFunding = _afkingOf(fundId);
-                    (
-                        uint256 ethValue,
-                        uint256 buyAmount,
-                        bool isTicket,
-                        uint256 claimableUse
-                    ) = _resolveBuy(
-                            s,
-                            subId,
-                            mp,
-                            _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0,
-                            srcFunding
-                        );
-                    srcFunding = _tryFundAfkingSteth(subId, fundId, ethValue, srcFunding);
-                    if (srcFunding >= ethValue) {
-                        _setStreakBase(s, snap); // funded day-0 — keep the snapshot
-                        _deliverAfkingBuy(
-                            subId,
-                            s,
-                            today,
-                            mp,
-                            level,
-                            jackpotPhaseFlag ? level : level + 1,
-                            fundId,
-                            ethValue,
-                            claimableUse,
-                            buyAmount,
-                            isTicket,
-                            true
-                        );
-                    } else if (exemptSub) {
-                        // VAULT / sDGNRS bootstrap: unfunded at construction — forfeit the
-                        // snapshot and start the run from base 0 without reverting.
-                        _setStreakBase(s, 0);
-                    } else {
-                        // A NEW run must be grounded on a real purchase: already bought
-                        // today (the done0 branch above) or a funded in-tx cover-buy (the
-                        // branch above). An unfunded start would free-ride the advance gate.
-                        revert MustPurchaseToBeginAfking();
-                    }
-                }
+                // Settle at the old rate; the new quantity and mode earn from here on.
+                _settleBoth(subId);
+            }
+            lane = _subLaneAt(position1 - 1);
+            uint256 updated = (lane & ~((uint256(7) << SUB_QTY_SHIFT) | SUB_TICKETS_BIT)) | config;
+            if ((lane & SUB_TICKETS_BIT != 0) == useTickets) {
+                if (updated != lane) _setSubLaneAt(position1 - 1, updated);
+            } else {
+                // A mode change moves the member to the other section, keeping its run.
+                uint24 runStart = _subRunStart(subId);
+                _removeFromSet(position1);
+                _insertMember(subId, updated, runStart);
             }
         }
-
-        _addToSet(s, subId);
-        emit SubscriptionUpdated(
-            subId,
-            dailyQuantity,
-            drainGameCreditFirst,
-            useTickets,
-            fundId == subId ? 0 : fundId
-        );
+        emit SubscriptionUpdated(subId, dailyQuantity, useTickets);
     }
 
-    /// @dev Keep the original claimable/prepaid split: top up its residual only,
-    ///      without resolving the purchase again against the new prepaid balance.
-    ///      A refused token top-up uses the ordinary insufficient-funding policy.
+    /// @dev Pause protocol seat `id` for `reason`: settle what it earned, then park its checkpoint
+    ///      day so it earns nothing and its streak stands still.
+    function _pauseProtocolSeat(uint32 id, uint256 position1, uint8 reason) private {
+        if (!_protocolPaused(id)) {
+            _settleBoth(id);
+            uint256 lane = _subLaneAt(position1 - 1);
+            _setSubLaneAt(position1 - 1, _withSubCheckpoint(lane, SUB_PAUSED_DAY, _subCheckpointStreak(lane)));
+        }
+        _afkingProtocolFlags |= reason;
+        emit SubscriptionPaused(id, true);
+    }
+
+    /// @dev Clear protocol seat `id`'s pause `reason`. Once no pause holds, its checkpoint day
+    ///      becomes `endpoint` — paused days are never credited — and its draw age restarts.
+    /// @return lane The seat's lane after the resume.
+    function _resumeProtocolSeat(uint32 id, uint256 position1, uint8 reason, uint24 endpoint)
+        private returns (uint256 lane)
+    {
+        _afkingProtocolFlags &= ~reason;
+        emit SubscriptionPaused(id, false);
+        lane = _subLaneAt(position1 - 1);
+        if (_protocolPaused(id)) return lane;
+        lane = _withSubCheckpoint(lane, endpoint, _subCheckpointStreak(lane));
+        _setSubLaneAt(position1 - 1, lane);
+        _setSubRunStart(id, endpoint);
+    }
+
+    /// @dev Settle `id` on both sides through the affiliate claim, whose base drain callback
+    ///      (`drainAffiliateBases`) runs the one settlement and pays the player its own share.
+    function _settleBoth(uint32 id) private {
+        uint32[] memory one = new uint32[](1);
+        one[0] = id;
+        IDegenerusAffiliate(ContractAddresses.AFFILIATE).claim(one);
+    }
+
+    /// @dev The one settlement: pay member `id` its own reward for every day after its checkpoint
+    ///      through `endpoint`, move the checkpoint to `endpoint` (folding those days into the
+    ///      checkpoint streak) and return the same days' affiliate base. A no-op while the
+    ///      endpoint is not past the checkpoint, which covers a paused protocol seat; the
+    ///      checkpoint never moves backward.
+    /// @param id The member's wallet ID.
+    /// @param position1 Its set position + 1.
+    /// @param endpoint The reward endpoint.
+    /// @return base Whole-FLIP affiliate base for the settled days.
+    function _settle(uint32 id, uint256 position1, uint24 endpoint) private returns (uint256 base) {
+        uint256 lane = _subLaneAt(position1 - 1);
+        uint24 day = _subDay(lane);
+        if (endpoint <= day) return 0;
+        uint256 elapsed;
+        uint256 owed;
+        uint256 quantity = _subQuantity(lane);
+        unchecked {
+            elapsed = endpoint - day;
+            _setSubLaneAt(position1 - 1, _withSubCheckpoint(lane, endpoint, _subCheckpointStreak(lane) + elapsed));
+            owed = elapsed * (lane & SUB_TICKETS_BIT != 0
+                ? QUEST_SLOT0_REWARD + TICKET_BONUS_PER_UNIT * quantity
+                : QUEST_SLOT0_REWARD);
+            base = elapsed * AFFILIATE_BASE_PER_UNIT * quantity;
+        }
+        emit AfkingFlipClaimed(id, owed);
+        coinflip.creditFlip(id, owed); // whole → base units
+        emit AffiliateBaseDrained(id, base);
+    }
+
+    /// @dev Keep the purchase's claimable/prepaid split: top up its prepaid residual only
+    ///      (the caller reaches it only while `funding < ethValue`). A refused token top-up uses the ordinary insufficient-funding policy.
     ///      Empty/OOG and known metering failures still propagate, so caller starvation
-    ///      cannot expire a funded subscription.
+    ///      cannot expire a funded subscription. Protocol custody is never pulled: sDGNRS
+    ///      preapproves GAME for redemptions whose stETH backing must remain segregated.
     /// @param subscriber The subscriber's wallet ID.
-    /// @param funding The funding account's wallet ID; equal to `subscriber` when self-funded.
     function _tryFundAfkingSteth(
         uint32 subscriber,
-        uint32 funding,
         uint256 ethValue,
-        uint256 srcFunding
+        uint256 funding
     ) private returns (uint256) {
-        if (srcFunding >= ethValue) return srcFunding;
-        (address source, bool allowed) = _stethSource(subscriber, funding);
-        if (!allowed) return srcFunding;
+        if (subscriber == VAULT_WALLET_ID || subscriber == SDGNRS_WALLET_ID) return funding;
         try IDegenerusGame(address(this)).pullAfkingSteth(
-            subscriber, source, ethValue - srcFunding
+            subscriber, _payee(_walletElement(subscriber)), ethValue - funding
         ) returns (uint256 received) {
-            return srcFunding + received;
+            return funding + received;
         } catch (bytes memory reason) {
             MineFlipGas.rethrowGasFailure(reason);
-            return srcFunding;
+            return funding;
         }
-    }
-
-    /// @dev The address a sub's stETH top-up is pulled from — the funding account's payee (the
-    ///      owner for a smurf account) — and whether the pull may run. Protocol custody is not a
-    ///      wallet funding allowance: sDGNRS preapproves GAME for redemptions whose stETH backing
-    ///      must remain segregated, so neither protocol sink is ever pulled. An external source
-    ///      must still consent live: the subscriber's own family (same main ID), or a funding
-    ///      approval for the subscriber. Never reverts.
-    /// @param subscriber The subscriber's wallet ID.
-    /// @param funding The funding account's wallet ID.
-    function _stethSource(uint32 subscriber, uint32 funding)
-        private view returns (address source, bool allowed)
-    {
-        source = _payee(_walletElement(funding));
-        allowed = source != ContractAddresses.SDGNRS && source != ContractAddresses.VAULT
-            && _afkingFundingAllowed(subscriber, funding);
     }
 
     /// @notice Atomic stETH funding operation, callable only by GAME itself.
     /// @dev Dependency failures and invalid receipts roll back the entire attempt.
-    ///      Zero is returned only after successful reads prove missing consent/funds.
+    ///      Zero is returned only after successful reads prove missing allowance/funds.
     /// @param subId The subscriber account ID.
-    /// @param source The funding account's payee, where the stETH comes from.
+    /// @param source The subscriber's payee, where the stETH comes from.
     function pullAfkingSteth(uint32 subId, address source, uint256 shortfall)
         external returns (uint256 received)
     {
         if (address(this) != ContractAddresses.GAME || msg.sender != address(this)) revert E();
-        // Recheck the subscriber's current funder ID and consent before pulling from its payee.
-        Sub storage sub = _subOf[subId];
-        uint32 sourceId = (sub.flags & FLAG_EXTERNAL_FUNDING) != 0
-            ? _fundingSourceOf[subId]
-            : subId;
-        (address expected, bool allowed) = _stethSource(subId, sourceId);
-        if (shortfall == 0 || sub.dailyQuantity == 0 || !allowed || source != expected) {
-            revert AfkingStethPullFailed();
-        }
+        if (
+            shortfall == 0 || _subPosition1(subId) == 0 || _isAcquired(subId)
+                || subId == VAULT_WALLET_ID || subId == SDGNRS_WALLET_ID
+                || source != _payee(_walletElement(subId))
+        ) revert AfkingStethPullFailed();
 
         IStETH token = IStETH(ContractAddresses.STETH_TOKEN);
         uint256 balanceBefore = token.balanceOf(address(this));
@@ -663,44 +431,39 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         ) revert AfkingStethPullFailed();
 
         if (
-            received > type(uint128).max - _afkingOf(sourceId) ||
+            received > type(uint128).max - _afkingOf(subId) ||
             received > type(uint128).max - claimablePool
         ) revert AfkingStethPullFailed();
 
-        _creditAfkingValue(sourceId, received);
-        emit AfkingStethFunded(subId, sourceId, shortfall, received);
+        _creditAfkingValue(subId, received);
+        emit AfkingStethFunded(subId, shortfall, received);
     }
 
     /*------------------------------------------------------------------
                           Two-ended packed subscriber set
     ------------------------------------------------------------------*/
-    /// @dev Insert or align an existing member with its requested mode. Existing members
-    ///      can move only from subscribe's unlocked window, with no active AFKing cursor.
-    function _addToSet(Sub storage s, uint32 id) internal {
-        uint256 position = s.setPosition;
-        bool tickets = (s.flags & FLAG_USE_TICKETS) != 0;
-        if (position != 0) {
-            if ((position > _subBoxCount) == tickets) return;
-            _removeFromSet(position);
-        }
+    /// @dev Insert a member into its mode's section with run-start day `runStart`. Members move
+    ///      only from subscribe's unlocked window, with no active AFKing cursor.
+    function _insertMember(uint32 id, uint256 lane, uint256 runStart) internal {
         uint256 count = _subscribers.length;
         if (count >= SUBSCRIBER_CAP) revert E();
         uint256 boxes = _subBoxCount;
         uint256 index;
-        if (tickets) {
+        if (lane & SUB_TICKETS_BIT != 0) {
             index = SUBSCRIBER_CAP - (count - boxes);
         } else {
             index = boxes;
             _subBoxCount = uint16(boxes + 1);
         }
-        _setSubscriberAt(index, id);
+        _setSubLaneAt(index, lane);
         _setSubscriberCount(count + 1);
-        s.setPosition = uint32(index + 1);
+        _setSubMetaLane(id, (index + 1) | (runStart << 11));
     }
 
     /// @dev Remove a physical 1-based position, replacing it with its own section's tail.
-    ///      The caller deletes the removed Sub, or immediately reinserts it on a mode switch.
-    ///      During preparation do not advance the cursor: the mover still needs processing.
+    ///      The caller clears the removed member's metadata, or immediately reinserts it on a
+    ///      mode switch. During preparation do not advance the cursor: the mover still needs
+    ///      processing.
     function _removeFromSet(uint256 position) internal {
         uint256 index = position - 1;
         uint256 count = _subscribers.length;
@@ -713,228 +476,114 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             last = SUBSCRIBER_CAP + 1 - (count - boxes);
         }
         if (index != last) {
-            uint32 mover = _subscriberAt(last);
-            _setSubscriberAt(index, mover);
-            _subOf[mover].setPosition = uint32(position);
+            uint256 mover = _subLaneAt(last);
+            _setSubLaneAt(index, mover);
+            _setSubPosition1(uint32(mover), position);
         }
-        _setSubscriberAt(last, 0);
+        _setSubLaneAt(last, 0);
         _setSubscriberCount(count - 1);
     }
 
     /*------------------------------------------------------------------
                   The _resolveBuy slice builder
     ------------------------------------------------------------------*/
-    /// @dev Per-player funding resolution for the process pass — effective
-    ///      quantity → cost → purchase mode + funding split, carrying the slice-builder
-    ///      validation invariants that make a funded buy revert-free BY CONSTRUCTION (the
-    ///      SOLE no-brick guarantor under the no-valve model). The five
-    ///      obligation-1 invariants:
-    ///        (1) effectiveQty = dailyQuantity ≥ 1 (the subscribe-time floor) → never the
-    ///            Game's totalCost==0 / dust / TICKET_MIN reverts;
-    ///        (2) cost = mintPrice * effectiveQty → the exact cost the Game recomputes;
+    /// @dev Per-member funding resolution for the process pass — quantity → cost → purchase
+    ///      mode + funding split, carrying the slice-builder validation invariants that make a
+    ///      funded buy revert-free BY CONSTRUCTION (the SOLE no-brick guarantor under the
+    ///      no-valve model):
+    ///        (1) quantity ≥ 1 (the lane stores quantity − 1) → never the Game's
+    ///            totalCost==0 / dust / TICKET_MIN reverts;
+    ///        (2) cost = mintPrice * quantity → the exact cost the Game recomputes;
     ///        (3) cost ≥ mintPrice ≥ 0.01 ETH (the priceForLevel floor) → a lootbox amount
     ///            always meets any min-spend floor; no skip/decline needed;
-    ///        (4) 1-wei claimable sentinel → leaves claimable > cost / basis > shortfall →
-    ///            never the Game's Claimable (claimable<=amount) nor the settle revert;
-    ///        (5) ethValue = cost - claimableUse with claimableUse ∈ [0, cost] → never the
-    ///            Game's downstream cost reverts.
+    ///        (4) 1-wei claimable sentinel → the claimable leg never takes the whole balance;
+    ///        (5) ethValue = cost - claimableUse with claimableUse ∈ [0, cost].
+    ///      Claimable always pays first; the subscriber's prepaid afking ETH covers the rest.
     ///      ⚠ Dual scale (LOAD-BEARING): the ticket entry-unit `amount`
     ///      uses `AFKING_TICKET_SCALE = 400`; the Game's `/ (4 * 100)` recompute uses the
-    ///      inherited Storage `QTY_SCALE = 100` — the two constants are NOT collapsed,
-    ///      so `cost` stays `mintPrice * effectiveQty`.
-    ///      ⚠ NO error-swallowing valve: a funded slice is revert-free
-    ///      by construction, with no pre-emptive decline and no reactive error-trap; there
-    ///      is no per-cycle eviction cap.
-    ///      In-context: `claimable` is the subscriber's swept-gated raw claimable balance by
-    ///      wallet ID (== afkingSnapshot's claimable / claimableWinningsOf, incl. the 1-wei
-    ///      sentinel), read as an in-context SLOAD; `srcFunding` is the caller-resolved
-    ///      afkingFunding of the source (the funder — self or operator-approved source). The
-    ///      GO_SWEPT gate arrives as the caller-read `swept` flag (written only by the one-time
-    ///      game-over sweep, so it is invariant within a tx — the STAGE reads it once per
-    ///      chunk, the subscribe cover-buys inline at the call). View — no state writes.
-    /// @return ethValue Fresh-ETH portion debited from the funder's afkingFunding (0 = pure claimable).
+    ///      inherited Storage `QTY_SCALE = 100` — the two constants are NOT collapsed.
+    ///      The caller passes `claimable` as 0 once the game-over sweep has run (GO_SWEPT,
+    ///      written only by that one-time sweep, so it is invariant within a tx).
+    /// @param claimable The subscriber's claimable balance, sentinel included.
+    /// @return ethValue Prepaid portion debited from the subscriber's afkingFunding.
     /// @return amount Ticket entry-units (isTicket) or lootbox spend in wei (!isTicket).
     /// @return isTicket True = buy `amount` ticket entry-units; false = buy an `amount`-wei lootbox.
-    /// @return claimableUse Claimable portion of `cost` (drainFirst / funding-shortfall); cost == ethValue + claimableUse.
-    function _resolveBuy(
-        Sub storage sub,
-        uint32 id,
-        uint256 mp,
-        bool swept,
-        uint256 srcFunding
-    )
-        internal
-        view
-        returns (
-            uint256 ethValue,
-            uint256 amount,
-            bool isTicket,
-            uint256 claimableUse
-        )
+    /// @return claimableUse Claimable portion of `cost`; cost == ethValue + claimableUse.
+    function _resolveBuy(uint256 lane, uint256 mp, uint256 claimable)
+        private
+        pure
+        returns (uint256 ethValue, uint256 amount, bool isTicket, uint256 claimableUse)
     {
-        bool drainFirst = (sub.flags & FLAG_DRAIN_FIRST) != 0;
-        // The player's claimable — the claimable leg of the funding split. Swept-gated to
-        // mirror afkingSnapshot / claimableWinningsOf exactly. The fresh-ETH leg draws from
-        // the caller-resolved `srcFunding` (afkingFunding[src], self or operator).
-        uint256 claimable = swept ? 0 : _claimableOf(id);
-
-        // Box size is the FROZEN dailyQuantity (set at subscribe, which reverts under
-        // rngLockedFlag). It is never scaled by live claimable, so the box amount — and the
-        // seed derived from it — cannot be steered after the day's word is knowable.
-        uint256 effectiveQty = sub.dailyQuantity;
-        uint256 cost = mp * effectiveQty;
-
-        // Mode routing. Ticket mode buys `effectiveQty` whole tickets (entry-units =
-        // effectiveQty * AFKING_TICKET_SCALE [= 400]); lootbox mode buys a `cost`-wei box.
-        isTicket = (sub.flags & FLAG_USE_TICKETS) != 0;
-        amount = isTicket ? effectiveQty * AFKING_TICKET_SCALE : cost;
-
-        // Funding split (USER model). Never spend the entire claimable balance — leave >= 1
-        // wei (the Game's Claimable branch needs claimable strictly > cost, and the claimable
-        // shortfall settle needs basis > shortfall), so the claimable leg caps at
-        // `spendableClaimable`. drainGameCreditFirst spends claimable first (up to cost);
-        // otherwise afkingFunding funds first and claimable covers only the remainder. Both
-        // legs are tapped when one alone is short.
+        uint256 quantity = _subQuantity(lane);
+        uint256 cost = mp * quantity;
+        isTicket = lane & SUB_TICKETS_BIT != 0;
+        amount = isTicket ? quantity * AFKING_TICKET_SCALE : cost;
         uint256 spendableClaimable = claimable > 0 ? claimable - 1 : 0;
-        if (drainFirst) {
-            claimableUse = spendableClaimable < cost ? spendableClaimable : cost;
-        } else {
-            uint256 fundingUse = srcFunding < cost ? srcFunding : cost;
-            uint256 need = cost - fundingUse;
-            claimableUse = need < spendableClaimable ? need : spendableClaimable;
-        }
+        claimableUse = spendableClaimable < cost ? spendableClaimable : cost;
         ethValue = cost - claimableUse;
     }
 
     /*------------------------------------------------------------------
-              Shared per-sub funded delivery + compute-on-read streak
+                         Shared per-sub funded delivery
     ------------------------------------------------------------------*/
-    /// @dev The shared per-sub funded delivery — used by both the process STAGE (after its
-    ///      pre-buy gates, `coverBuy == false`) and the subscribe-time grounding cover-buy
-    ///      (`coverBuy == true`). The slice is already confirmed funded by the caller
-    ///      (`afkingFunding[src] >= ethValue`), so this is revert-free by construction (no
-    ///      try/catch). Debits the fresh-ETH leg + the claimable leg (claimablePool in
-    ///      tandem — inline for the cover-buy, once per chunk for the STAGE; fail-loud on
-    ///      underflow — a debit can never exceed afkingFunding[src] ≤ the claimablePool
-    ///      reservation, so a revert means solvency is already violated and must propagate),
-    ///      materializes the buy per mode, accrues the day's affiliate base + the
-    ///      slot-0 pendingFlip reward, advances the compute-on-read streak markers (gap days
-    ///      earn nothing; the streak freezes across them, never resets), and sets the
-    ///      success marker. The frozen activity score reads the COMPUTE-ON-READ streak off the Sub
-    ///      slot — no DegenerusQuests STATICCALL on the hot path. boons OFF ⇒ amount == spend.
-    ///
-    ///      Lootbox materialization differs by mode: the daily STAGE writes a gas-light warm
-    ///      Sub-stamp box (the EV-cap RMW deferred to OPEN), whereas the cover-buy writes a full
-    ///      INDEXED box resolved off its sealed cohort's live word — a future word never knowable at
-    ///      subscribe — so a player-timed subscribe cannot select a pre-revealed seed (a
-    ///      `rngWordByDay`-keyed Sub-stamp box would break the RNG-freeze invariant here, since
-    ///      subscribe runs after the day's word is public). Pool routing also differs: the STAGE
-    ///      accrues the cost into the caller's batched per-chunk credit; the cover-buy (a single
-    ///      buy) routes inline here.
+    /// @dev The per-member funded delivery of the process STAGE. The slice is already
+    ///      confirmed funded by the caller, so this is revert-free by construction (no
+    ///      try/catch). Debits both legs from the subscriber's balance word in one write
+    ///      (claimablePool moves once per chunk at the caller; fail-loud on underflow),
+    ///      queues the tickets or freezes the box's activity score into the lane. Nothing
+    ///      else is written: rewards and the streak derive from the checkpoint.
     /// @param element The subscriber ID receiving the delivery.
-    /// @param sub The subscriber's record (storage ref — stamped/accrued here).
-    /// @param processDay The delivered day (the stamp's frozen seed day + the streak marker).
-    /// @param mp The in-context mint price.
-    /// @param currentLevel The hoisted level (the buy's target-level base).
+    /// @param position The member's physical set position.
+    /// @param lane The member's lane.
+    /// @param processDay The delivered day.
+    /// @param endpoint The reward endpoint while the pass runs: the streak earned strictly
+    ///        before this delivery.
+    /// @param currentLevel The hoisted level.
     /// @param ticketTargetLevel The resolved ticket mint target (jackpot phase ⇒
-    ///        currentLevel, else currentLevel + 1) — read once by the caller, since
-    ///        jackpotPhaseFlag is fixed across a pre-RNG stage chunk. Ticket mode only.
-    /// @param srcId Wallet ID of the funding bucket the fresh-ETH leg debits.
-    /// @param ethValue The fresh-ETH portion (0 = pure claimable).
-    /// @param claimableUse The drainFirst/funding-shortfall claimable portion of the cost.
-    /// @param amount Ticket entry-units (ticket mode) or lootbox spend in wei (lootbox mode).
-    /// @param isTicket Mode — true = queue tickets, false = a lootbox box.
-    /// @param coverBuy True = subscribe-time grounding buy (indexed box + inline pool routing);
-    ///        false = daily STAGE buy (Sub-stamp box + caller-batched pool routing).
+    ///        currentLevel, else currentLevel + 1).
+    /// @param balances The subscriber's balance word, as loaded after any stETH top-up.
     function _deliverAfkingBuy(
         uint32 element,
-        Sub storage sub,
+        uint256 position,
+        uint256 lane,
         uint24 processDay,
-        uint256 mp,
+        uint24 endpoint,
         uint24 currentLevel,
         uint24 ticketTargetLevel,
-        uint32 srcId,
+        uint256 balances,
         uint256 ethValue,
         uint256 claimableUse,
         uint256 amount,
-        bool isTicket,
-        bool coverBuy
+        bool isTicket
     ) private {
-        if (ethValue != 0) {
-            _debitAfking(srcId, ethValue);
-        }
-        // Reinvest/drainFirst claimable portion of the cost. The _resolveBuy 1-wei sentinel
-        // guarantees claimableUse <= claimable - 1, so this never underflows. claimableWinnings
-        // rides in claimablePool, so the pool moves in tandem (the solvency invariant).
+        balances = _debitClaimableAndAfkingFrom(element, balances, claimableUse, ethValue);
         if (claimableUse != 0) {
-            uint32 id = element;
-            _debitClaimable(id, claimableUse);
             // The drain is the one claimable debit with no event of its own, which forces a
             // reader to carry the balance forward from every prior credit. ClaimableSpent
-            // already has the shape for it, post-state included, and the slot is warm from
-            // the debit above — so the delta and its checkpoint both land here, on the only
-            // deliveries that move claimable. `weiIn` on AfkingDelivered still reports the
-            // full cost including this leg; the two are the same money seen twice, not two
-            // draws (`costWei` below carries that full cost, so the pairing is explicit).
+            // already has the shape for it, post-state included. `weiIn` on AfkingDelivered
+            // still reports the full cost including this leg; the two are the same money seen
+            // twice, not two draws.
             emit ClaimableSpent(
-                id,
+                element,
                 claimableUse,
-                _claimableOf(id),
+                uint128(balances),
                 MintPaymentKind.Internal,
                 ethValue + claimableUse
             );
         }
-        // Both legs draw the solvency-tracked claimablePool (afking-funded ETH and claimableWinnings
-        // both ride in it). The cover-buy applies the combined debit here as one checked RMW after
-        // the per-account writes above; the STAGE sums its chunk's costs and applies one checked
-        // debit at chunk end. Each leg was checked against its own account above, so the pool
-        // subtraction can only fail if solvency is already broken.
-        if (coverBuy && (ethValue != 0 || claimableUse != 0)) {
-            claimablePool -= uint128(ethValue + claimableUse);
-            // The subscribe-time cover-buy earns Degenesis credit like a normal buy; daily
-            // deliveries earn none.
-            _accrueDegenesisCredit(element, ethValue + claimableUse);
-        }
-
-        // Reframe the run before freezing any lootbox activity score. The returned value is the
-        // streak earned strictly before this delivery: gap days neither erase it nor
-        // inflate the funded-day span.
-        uint32 preBuyStreak = _advanceAfkingStreak(sub, processDay);
 
         if (isTicket) {
-            // Ticket minimal-write primitive: queue resolution-equivalent ticket entries and
-            // accrue the ticket buyer-bonus into the warm Sub slot. The affiliate flat-7% and the
-            // slot-0 reward are added by the mode-agnostic accrue below (not re-accrued here).
-            uint24 targetLevel = ticketTargetLevel;
-
             // The x00 century quantity bonus is a manual-mint mechanic; afking
-            // deliveries queue the paid quantity as-is.
-            _queueEntriesScaled(element, targetLevel, uint32(amount));
-
-            // 10%/15% ticket buyer-bonus → claimable pendingFlip (pulled via
-            // claimAfkingFlip). Uses the pre-bonus `amount`; whole FLIP with the ~16.7M (2^24-1) clamp.
-            uint256 coinCost = (amount * (PRICE_COIN_UNIT / 4)) / QTY_SCALE;
-            uint256 bonusBase = coinCost / 10; // flat 10%
-            if (amount >= 10 * 4 * QTY_SCALE) {
-                bonusBase += (amount * PRICE_COIN_UNIT) / (80 * QTY_SCALE); // +5% → 15% on ≥10 tickets
-            }
-            uint256 bonusWhole = bonusBase;
-            if (bonusWhole != 0) {
-                uint256 newOwed = uint256(sub.pendingFlip) + bonusWhole;
-                if (newOwed > type(uint24).max) newOwed = type(uint24).max;
-                sub.pendingFlip = uint24(newOwed);
-            }
+            // deliveries queue the paid quantity as-is. The target is at most level + 1, inside
+            // the mint ceiling, so it never routes far-future.
+            _queuePurchaseEntries(element, ticketTargetLevel, uint32(amount));
         } else {
-            // Lootbox box. The per-buy manual side-effects (handlePurchase, affiliate ×2, the
-            // per-buy creditFlip) are deferred to the in-slot accrue (affiliate pulled via
-            // drainAffiliateBase; the slot-0 reward into pendingFlip). The frozen score
-            // (the EV input at open, off the compute-on-read streak — no STATICCALL) is computed
-            // once for either box shape.
+            // Freeze the box's activity score: the EV input read at opening.
             uint256 activityScore = _playerActivityScoreCachedAt(
                 element,
-                preBuyStreak,
+                uint32(_subStreakAt(lane, endpoint)),
                 // Streak basis is the phase-correct active ticket level (== the level the manual mint
-                // streak is recorded against), NOT the EV-cap/resolver open level (currentLevel + 1):
+                // streak is recorded against), NOT the EV/resolver open level (currentLevel + 1):
                 // in jackpot phase those differ, and currentLevel + 1 would silently zero a streak
                 // whose lastCompleted == level - 1.
                 ticketTargetLevel,
@@ -942,157 +591,27 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 // advance), so pass it directly and skip the 3-arg wrapper's redundant `level` SLOAD.
                 currentLevel
             );
-            uint16 score = activityScore > type(uint16).max
-                ? type(uint16).max
-                : uint16(activityScore);
-            if (coverBuy) {
-                // Subscribe-time grounding box: a full INDEXED box on the live lootbox index,
-                // resolved off its sealed cohort's live word (a future word). Rides the human-box
-                // queue, so the signup cover never becomes an AFKing-cohort obligation.
-                _recordAfkingCoverBox(
-                    element,
-                    amount,
-                    score
-                );
-            } else {
-                // Daily STAGE Sub-stamp box: the warm Sub slot IS the box record (no cold
-                // ledger); the EV-cap RMW is deferred to OPEN, fed this frozen score, and
-                // the level + EV-cap key read LIVE at open. milli-ETH stamp (the EV/seed input
-                // only — the ETH debit used the full wei ethValue).
-                // This is the ONLY pending-box-creating shape (ticket buys queue entries and
-                // cover-buys ride the human-box queue). `_pendingBoxCount` is maintained by the
-                // STAGE loop, the only caller that reaches this branch: it batches one add per
-                // chunk off its box-accrual count, atomic with this stamp (same tx,
-                // revert-together).
-                sub.score = score;
-                sub.amount = uint24(_packEthToMilliEth(amount));
+            uint256 code = _encodeSubScore(activityScore);
+            if ((lane >> SUB_SCORE_SHIFT) & SUB_SCORE_MASK != code) {
+                _setSubLaneAt(position, (lane & ~(SUB_SCORE_MASK << SUB_SCORE_SHIFT)) | (code << SUB_SCORE_SHIFT));
             }
         }
 
-        // Mode-agnostic accrue — one warm in-slot write, zero cross-contract calls:
-        //   • affiliate base: flat 7% of the full wei spend (ethValue + claimableUse = the cost in
-        //     both modes; the dual-unit `amount` is entry-units in ticket mode), whole FLIP, 100M clamp;
-        //   • slot-0 quest reward: QUEST_SLOT0_REWARD (whole FLIP) into the claimable pendingFlip, ~16.7M (2^24-1) clamp;
-        // The compute-on-read streak markers were advanced before materialization so the frozen
-        // lootbox score observes the same real-miss decision as the persisted run framing.
-        {
-            uint256 base = ((_ethToFlip(ethValue + claimableUse, mp) * 7) / 100);
-            if (base != 0) {
-                uint256 newBase = uint256(sub.affiliateBase) + base;
-                if (newBase > 100_000_000) newBase = 100_000_000;
-                sub.affiliateBase = uint32(newBase);
-            }
-            {
-                uint256 newOwed = uint256(sub.pendingFlip) +
-                    (QUEST_SLOT0_REWARD);
-                if (newOwed > type(uint24).max) newOwed = type(uint24).max;
-                sub.pendingFlip = uint24(newOwed);
-            }
-        }
-
-        sub.lastAutoBoughtDay = uint24(processDay);
-
-        // The cover-buy is a single buy (not part of a STAGE chunk), so it credits the prize
-        // pools inline here — a box spend funds the box pool, a ticket spend the ticket pool. The
-        // STAGE path instead defers this to the caller's batched per-chunk `_routeAfkingPoolEth`.
-        if (coverBuy) {
-            uint256 cost = ethValue + claimableUse;
-            if (isTicket) _routeAfkingPoolEth(0, cost);
-            else _routeAfkingPoolEth(cost, 0);
-        }
-        // weiIn = afking auto-buy ETH-in (the fresh-ETH leg + the claimable leg), folded into
-        // AfkingDelivered so the delivery marker doubles as the ETH-in record with no extra log.
-        // The cover-buy box reports weiIn 0 — its spend is carried by LootBoxBuy — keeping the
-        // off-chain ETH-in total free of double counting.
-        uint256 weiIn = (isTicket || !coverBuy) ? ethValue + claimableUse : 0;
-        emit AfkingDelivered(
-            element,
-            uint128(weiIn) |
-                (uint256(processDay) << 128) |
-                (uint256(sub.pendingFlip) << 152) |
-                (uint256(sub.affiliateBase) << 176)
-        );
+        emit AfkingDelivered(element, uint128(ethValue + claimableUse) | (uint256(processDay) << 128));
     }
 
-    /// @dev Returns the pre-delivery streak and advances the run through `processDay`.
-    ///      Gap days (unadvanced days or protocol-side skips — a live funded sub is never
-    ///      the cause of its own gap, since underfunding kills the sub the same day) shift
-    ///      the base day forward so they add no earned span; the streak freezes across a
-    ///      gap and never resets while the sub is live.
-    function _advanceAfkingStreak(
-        Sub storage sub,
-        uint24 processDay
-    ) private returns (uint32 preBuyStreak) {
-        uint24 covered = sub.afkCoveredThroughDay;
-        preBuyStreak = uint32(_streakBaseOf(sub)) +
-            uint32(covered - sub.afkingStartDay);
-        // The run frame only moves forward. A day-0 cover-buy delivers with covered already
-        // framed to processDay, and an exempt VAULT/sDGNRS run re-framed unfunded on a later
-        // day can still receive the lagging pinned pass of an earlier day; neither advances
-        // it, so covered never drops below afkingStartDay. The shifted afkingStartDay lands
-        // at most at processDay - 1, never above the new covered day.
-        if (processDay > covered) {
-            if (uint32(processDay) > uint32(covered) + 1) {
-                sub.afkingStartDay += processDay - covered - 1;
-            }
-            sub.afkCoveredThroughDay = processDay;
-        }
-    }
-
-    /// @dev Append a subscribe-time grounding lootbox as its own cover entry in the live write
-    ///      buffer, mirroring the manual `_recordLootboxEntry` minus the boons-off legs (no boost,
-    ///      no distress tally, no mint-day record). The entry opens on that buffer's word, requested
-    ///      only after the append, and rolls from the LIVE open level. The entry freezes the
-    ///      score; its EV allowance is drawn at opening against the live level, like daily AFKing.
-    /// @param player The box recipient.
-    /// @param amount The lootbox spend in wei (boons off ⇒ no boost; amount == spend).
-    /// @param score The frozen activity score EV input.
-    function _recordAfkingCoverBox(
-        uint32 player,
-        uint256 amount,
-        uint16 score
-    ) private {
-        // The cover box is appended by the Lootbox module — one place owns the entry word
-        // encoding. Boons stay OFF for afking covers, so no boost is consumed here.
-        (bool ok, bytes memory data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(
-            abi.encodeWithSelector(
-                IDegenerusGameLootboxModule.recordCoverBox.selector,
-                player,
-                amount,
-                score,
-                false,
-                0
-            )
-        );
-        if (!ok) {
-            if (data.length == 0) revert EmptyRevert();
-            assembly ("memory-safe") {
-                revert(add(32, data), mload(data))
-            }
-        }
-    }
-
-    /// @dev Hand the afking-computed streak back to the manual quest system on a sub-ending path,
-    ///      BEFORE the Sub slot is deleted. Computes the run's earned streak (snapshot + funded
-    ///      delivered days) and anchors the handback at `currentDay - 1` (floored at the funded
-    ///      high-water): any covered-day lag on a live sub is protocol-caused (an unopened-box
-    ///      skip or an unadvanced day — underfunding kills the sub on its first short day), so
-    ///      the run's streak hands back intact and the manual decay owns it from `currentDay`
-    ///      forward. `quests.finalizeAfking` also folds in any manual completion day and is
-    ///      idempotent (a no-op if the player is not currently afking). Clears the
-    ///      Sub's afking framing.
+    /// @dev Hand the afking-computed streak back to the manual quest system on a run-ending path.
+    ///      Anchors the handback at `currentDay - 1` (floored at the endpoint): the run's streak
+    ///      hands back intact and the manual decay owns it from `currentDay` forward.
+    ///      `quests.finalizeAfking` also folds in any manual completion day and is idempotent (a
+    ///      no-op if the player is not currently afking).
     /// @param id The wallet ID of the subscriber whose run is ending.
-    /// @param sub The subscriber's record (storage ref — afking framing cleared here).
+    /// @param lane The subscriber's lane.
     /// @param currentDay The current day (the decay reference passed to DegenerusQuests).
-    function _finalizeAfking(
-        uint32 id,
-        Sub storage sub,
-        uint24 currentDay
-    ) private {
-        uint24 covered = sub.afkCoveredThroughDay;
-        uint256 earned = uint256(_streakBaseOf(sub)) +
-            (covered - sub.afkingStartDay);
-        uint24 anchor = covered;
+    function _finalizeAfking(uint32 id, uint256 lane, uint24 currentDay) private {
+        uint24 endpoint = _afkingEndpoint();
+        uint256 earned = _subStreakAt(lane, endpoint);
+        uint24 anchor = endpoint;
         if (currentDay != 0 && currentDay - 1 > anchor) anchor = currentDay - 1;
         quests.finalizeAfking(
             id,
@@ -1100,19 +619,16 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             anchor,
             currentDay
         );
-        sub.afkingStartDay = 0;
-        _setStreakBase(sub, 0);
     }
 
     /// @notice Stop the AFKing runs a loan seizure hands to its lender: the seized account's own
     ///         and, for a main, every smurf's. Reached only by AdvanceModule's `_seizeLoan`
     ///         delegatecall, after the ownership write.
     /// @dev Walks the main's append-only smurf list (`_smurfWords`, length = lifetime
-    ///      `SMURF_COUNT`). A smurf seized on its own earlier was cancelled by its own seizure
-    ///      and cannot re-subscribe, so it reads inactive here. Each cancel keeps the run's paid box
-    ///      stamp for the ordinary opener and leaves the tombstone for the stage to reclaim,
-    ///      the same shape the stage itself writes mid-pass. Unclaimed pendingFlip and
-    ///      affiliateBase are claimable permissionlessly until that reclaim deletes them.
+    ///      `SMURF_COUNT`). Each stopped run hands its streak back to Quests now and keeps its
+    ///      lane, marked for removal: a box it already paid still opens in order, and the next
+    ///      preparation pass removes it before buying. Until then its earned days stay
+    ///      settleable.
     /// @param id The seized account.
     /// @param mainSale True when `id` was an ordinary main (its smurfs transfer with it).
     function cancelLiquidatedSubscriptions(uint32 id, bool mainSale) external {
@@ -1129,29 +645,11 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     }
 
     function _cancelAcquiredSubscription(uint32 id) private {
-        Sub storage sub = _subOf[id];
-        if (sub.setPosition == 0 || sub.dailyQuantity == 0) return;
-        // Close the run like an expired one: settle its AFKing streak into Quests.
-        _finalizeAfking(id, sub, _simulatedDayIndex());
-        // Leave its paid box stamp reachable by the ordinary open worker.
-        sub.dailyQuantity = 0;
-        emit SubscriptionUpdated(id, 0, (sub.flags & FLAG_DRAIN_FIRST) != 0,
-            (sub.flags & FLAG_USE_TICKETS) != 0,
-            (sub.flags & FLAG_EXTERNAL_FUNDING) != 0 ? _fundingSourceOf[id] : 0);
-    }
-
-    /// @dev Settle a sub's accrued `pendingFlip` (the per-delivered-day slot-0 quest
-    ///      reward + the ticket buyer-bonus): zero it FIRST (CEI — before the external
-    ///      credit, so a re-entrant claim finds 0), then pay the whole-FLIP owed in ONE
-    ///      `creditFlip`. Always credits the sub, never the caller; no-op at owed == 0.
-    /// @param id The subscriber's wallet ID.
-    /// @param s The subscriber's record (storage ref — pendingFlip zeroed here).
-    function _settlePendingFlip(uint32 id, Sub storage s) private {
-        uint256 owed = uint256(s.pendingFlip); // whole FLIP
-        if (owed == 0) return;
-        s.pendingFlip = 0;
-        emit AfkingFlipClaimed(id, owed);
-        coinflip.creditFlip(id, owed); // whole → base units
+        (uint256 lane, uint256 position1) = _subLaneOf(id);
+        if (position1 == 0 || lane & SUB_REMOVAL_BIT != 0) return;
+        _finalizeAfking(id, lane, _simulatedDayIndex());
+        _setSubLaneAt(position1 - 1, lane | SUB_REMOVAL_BIT);
+        emit SubscriptionUpdated(id, 0, lane & SUB_TICKETS_BIT != 0);
     }
 
     /*------------------------------------------------------------------
@@ -1160,26 +658,16 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @notice Prepare the pinned day's subscriptions, boxes first and tickets second.
     /// @dev The previous read cohort completes before this pass. Public subscription changes
     ///      remain locked from daily due through the last AFKing open, so each member is visited
-    ///      once and no signup cover can pre-buy this day. Same-section removal reprocesses its
-    ///      unvisited tail mover. Each funded box stores amount/score/day in the packed Sub;
-    ///      tickets queue directly. Both debit before stamping the success marker. The daily
-    ///      commitment follows completion, and boxes consume that published word later.
-    /// @dev Stamp-only (lootbox mode): this pass writes NO cold box-ledger entry —
-    ///      the warm Sub stamp is the box record (no cold ledger). boons OFF ⇒ `amount` = spend.
-    /// @dev DOUBLE-DRAW GUARD: the lootbox path STAMPS only — the
-    ///      single EV-cap RMW happens at OPEN, fed the FROZEN `evMultiplierBps`
-    ///      derived from the stamped `score`. The ticket path queues the paid quantity
-    ///      directly (`_queueEntriesScaled`, no century bonus) and accrues its own
-    ///      10%/15% FLIP buyer bonus into the Sub slot; no MintModule buy runs.
-    /// @dev NO error-swallowing valve: a funded slice is
-    ///      revert-free by construction; there is no pre-emptive lootbox skip;
-    ///      rule-(1) unfunded eviction is a separate pre-buy decision
-    ///      (a NORMAL sub is auto-paused via swap-pop; VAULT/SDGNRS are EXEMPT by pinned
-    ///      identity); the chunk-end `claimablePool -=` FAILS LOUD (class B, must
-    ///      propagate). There is no per-cycle eviction cap.
-    /// @dev Acquired accounts: liquidation cancels the sold account's and its smurfs'
-    ///      subscriptions itself, so the pass checks acquisition only on an externally funded
-    ///      sub's funder (a sold funder's unrelated subscribers cannot be found at sale).
+    ///      once and no signup can join this day. Same-section removal reprocesses its
+    ///      unvisited tail mover. A funded box freezes its score into the lane; tickets queue
+    ///      directly. The cohort's unit price and which protocol seats bought live in the shared
+    ///      header. The daily commitment follows completion, and boxes consume that published
+    ///      word later.
+    /// @dev Funding: an ordinary member that cannot pay expires and forfeits what it has not
+    ///      settled. A protocol seat that cannot pay is settled and paused instead (no purchase,
+    ///      nothing earned), and resumes on the first day it can pay again.
+    /// @dev NO error-swallowing valve: a funded slice is revert-free by construction; the
+    ///      chunk-end `claimablePool -=` FAILS LOUD (class B, must propagate).
     /// @notice Stage the pinned daily subscription cohort before its request is sealed.
     function runSubscriberWork(uint24 processDay, uint256 gasAllowance)
         external returns (MineFlipGas.Result memory)
@@ -1196,8 +684,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         if (!_rngComplete() || rngLockedFlag || _rngRequestActive() || _livenessTriggered()) return result;
         uint256 processed;
         uint256 mp = _mintPriceInContext();
-        // Hoist the level read ONCE so the per-iter validity check is a pure
-        // stored-field compare (no SLOAD on the non-crossing path).
+        // Hoist the level read once.
         uint24 currentLevel = level;
         // Chunk-invariant global reads, hoisted once: the GO_SWEPT flag (written only by
         // the one-time game-over sweep, unreachable from this loop) and the ticket target
@@ -1208,7 +695,10 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         uint24 ticketTargetLevel = jackpotPhaseFlag
             ? currentLevel
             : currentLevel + 1;
-
+        // While this pass runs, rewards accrue through the last completed pass; a protocol seat
+        // resuming in this pass earns from this day on.
+        uint24 endpoint = _afkingEndpoint();
+        uint24 resumeDay = processDay - 1;
 
         // sDGNRS level-start whale purchase, attempted ONCE per level here at the start of
         // afking processing (out of the per-sub loop, so it adds NO per-sub cost). On the first
@@ -1224,9 +714,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // block never reverts the crank; those returns
         // latch too (they are unreachable through this gate and cost the level its buy, not
         // the crank its day). sDGNRS's ordinary daily box is untouched — the per-sub loop still
-        // stamps it (no Sub field is written here, no pending-box count). A real purchase's
-        // operation consumes first-progress permission; subsequent items use the remaining
-        // caller budget. The attempted-level latch makes even a no-buy probe resumable.
+        // stamps it. A real purchase's operation consumes first-progress permission; subsequent
+        // items use the remaining caller budget. The attempted-level latch makes even a no-buy
+        // probe resumable.
         if (!swept && currentLevel > _sdgnrsBonusLevel) {
             if (!MineFlipGas.canRun(meter, SUBSCRIBER_WHALE_GAS, SUBSCRIBER_TAIL_GAS)) return result;
             _sdgnrsBonusLevel = currentLevel;
@@ -1249,6 +739,11 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         }
 
         uint256 cursor = _subCursor;
+        if (cursor == 0) {
+            // The pass's first visit: price the new cohort and clear the protocol BOUGHT bits.
+            _afkingCohortPriceMilli = uint16(_packEthToMilliEth(mp));
+            _afkingProtocolFlags &= ~(AFK_VAULT_BOUGHT | AFK_SDGNRS_BOUGHT);
+        }
         uint256 boxStamps; // pending boxes stamped this chunk — one batched counter add at chunk end
         // Batched pool accounting: each funded buy debits its full cost from its funding
         // accounts and accrues that spend here by mode. At chunk end claimablePool releases the
@@ -1262,7 +757,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         while (true) {
             uint256 position = cursor < SUBSCRIBER_TICKET_PHASE
                 ? cursor : SUBSCRIBER_CAP - (cursor - SUBSCRIBER_TICKET_PHASE);
-            uint32 element = _subscriberAt(position);
+            uint256 lane = _subLaneAt(position);
+            uint32 element = uint32(lane);
             if (!MineFlipGas.canRun(meter, element == 0 ? 0 : SUBSCRIBER_ITEM_GAS, SUBSCRIBER_TAIL_GAS)) break;
             MineFlipGas.markProgress(meter);
             if (element == 0) {
@@ -1274,144 +770,94 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 result.done = true;
                 break;
             }
-            uint32 player = element;
-            uint32 id = element;
-            Sub storage sub = _subOf[id];
 
-            // Ordinary cancellations retain same-day markers until this reclaim.
-            // The section tail replaces the tombstone and is processed at this cursor.
-            if (sub.dailyQuantity == 0) {
-                // The vault's operator may set quantity to zero, but its exempt seat stays
-                // counted. Resuming reuses this entry instead of growing the capped set.
-                if (id == VAULT_WALLET_ID) {
-                    unchecked { ++cursor; ++processed; }
-                    continue;
-                }
-                delete _subOf[id];
+            // A seized run closed at its seizure; remove it before it buys again. The section
+            // tail replaces it and is processed at this cursor.
+            if (lane & SUB_REMOVAL_BIT != 0) {
                 _removeFromSet(position + 1);
-                emit SubscriptionExpired(player, 2);
-                unchecked {
-                    ++processed;
-
-                }
-                continue;
-            }
-
-            // Each retained member is visited once. Signup covers happen only after that
-            // day's processing and cannot pre-buy this pass or insert behind its cursor.
-
-            // No pass/validity gate: the run's seat was burned when it started, so the
-            // process pass never re-checks membership credentials.
-
-            // Resolve the once-per-iteration funding source. The common self-funded path
-            // is detected from the already-loaded `sub.flags` (FLAG_EXTERNAL_FUNDING clear
-            // ⇒ the source is the subscriber's own element) and skips the `_fundingSourceOf`
-            // SLOAD entirely; only the rare operator-funded sub (flag set) reads the sparse
-            // map holding its funder ID. Both the
-            // funding skip-gate read and the debit key on this same source ID. The
-            // VAULT/SDGNRS exemption below stays keyed on the un-spoofable `player`, never
-            // the source.
-            uint32 srcWord = (sub.flags & FLAG_EXTERNAL_FUNDING) != 0
-                ? _fundingSourceOf[id]
-                : element;
-            if (srcWord != id && _isAcquired(srcWord)) {
-                _cancelAcquiredSubscription(id);
-                // Reclaim the tombstone at the same cursor on the next bounded iteration.
+                _setSubMetaLane(element, 0);
+                emit SubscriptionExpired(element, 2);
                 unchecked { ++processed; }
                 continue;
             }
-            uint256 srcFunding = _afkingOf(srcWord);
 
-            // Funding resolution (cost + ethValue slice). The slice builder computes
-            // everything revert-free by construction off this same `srcFunding` (the
-            // fresh-ETH leg) and the player's claimable (the claimable leg).
-            (
-                uint256 ethValue,
-                uint256 amount,
-                bool isTicket,
-                uint256 claimableUse
-            ) = _resolveBuy(sub, id, mp, swept, srcFunding);
-
-            srcFunding = _tryFundAfkingSteth(element, srcWord, ethValue, srcFunding);
-
-            // Funding skip → two-tier skip-kill. A normal underfunded sub is cancelled via
-            // swap-pop (auto-pause WITHOUT advancing the cursor — the mover into this slot is
-            // processed this pass). VAULT and sDGNRS are exempt by the un-spoofable pinned
-            // ContractAddresses identity (kept on `player`, never `src`) — a funding skip is
-            // transient for them (no-op-and-retry, stays in the set). The exemption is the
-            // pinned-address branch only; there is no flag.
-            if (srcFunding < ethValue) {
-                if (
-                    player == VAULT_WALLET_ID ||
-                    player == SDGNRS_WALLET_ID
-                ) {
-                    emit PlayerSkipped(player, 3);
-                    unchecked {
-                        ++cursor;
-                        ++processed;
-
-                    }
-                    continue;
-                }
-                // Funding-kill of a NORMAL underfunded sub — finalize the afking streak (hands
-                // back intact, anchored at yesterday; the manual decay owns it from today), then
-                // delete the slot + swap-pop. A got-kicked
-                // sub forfeits both accumulators: deleting _subOf wipes pendingFlip /
-                // affiliateBase so nothing survives claimable out-of-set.
-                _finalizeAfking(id, sub, processDay);
-                delete _subOf[id];
-                _removeFromSet(position + 1);
-                emit SubscriptionExpired(player, 1);
-                unchecked {
-                    ++processed;
-
-                }
+            bool protocolSeat = element == VAULT_WALLET_ID || element == SDGNRS_WALLET_ID;
+            // The Vault owner's pause buys nothing until the owner resumes it.
+            if (protocolSeat && element == VAULT_WALLET_ID
+                && _afkingProtocolFlags & AFK_VAULT_OWNER_PAUSED != 0) {
+                unchecked { ++cursor; ++processed; }
                 continue;
             }
 
-            // BUY + DEBIT + ACCRUE + MARKER. The funded, well-formed slice is delivered
-            // revert-free by construction (no try/catch) by the shared `_deliverAfkingBuy`:
-            // debit `afkingFunding[src]` (claimablePool batched at chunk end, fail-loud),
-            // stamp the lootbox box / queue the tickets, accrue the day's affiliate + the
-            // pendingFlip reward, advance the compute-on-read streak markers (gap days earn
-            // nothing; the streak never resets in-run), and set the success marker.
-            // Admission reserves the complete item and accounting/checkpoint tail.
+            uint256 balances = balancesPacked[element];
+            (uint256 ethValue, uint256 amount, bool isTicket, uint256 claimableUse) =
+                _resolveBuy(lane, mp, swept ? 0 : uint128(balances));
+            uint256 funding = balances >> 128;
+            if (funding < ethValue) {
+                funding = _tryFundAfkingSteth(element, ethValue, funding);
+                // A stETH pull credits the prepaid half.
+                balances = balancesPacked[element];
+            }
+
+            if (funding < ethValue) {
+                if (protocolSeat) {
+                    // Settle what it earned, then pause: no purchase and nothing earned until
+                    // it can pay again.
+                    uint8 unfunded = element == VAULT_WALLET_ID ? AFK_VAULT_UNFUNDED : AFK_SDGNRS_UNFUNDED;
+                    if (_afkingProtocolFlags & unfunded == 0) _pauseProtocolSeat(element, position + 1, unfunded);
+                    unchecked { ++cursor; ++processed; }
+                    continue;
+                }
+                // An unfunded ordinary member expires: hand its streak back (anchored at
+                // yesterday; the manual decay owns it from today), then remove it. What it had
+                // not settled is forfeited.
+                _finalizeAfking(element, lane, processDay);
+                _removeFromSet(position + 1);
+                _setSubMetaLane(element, 0);
+                emit SubscriptionExpired(element, 1);
+                unchecked { ++processed; }
+                continue;
+            }
+
+            if (protocolSeat) {
+                uint8 unfunded = element == VAULT_WALLET_ID ? AFK_VAULT_UNFUNDED : AFK_SDGNRS_UNFUNDED;
+                // Funded again: resume, with this pass's endpoint as its checkpoint day.
+                if (_afkingProtocolFlags & unfunded != 0) {
+                    lane = _resumeProtocolSeat(element, position + 1, unfunded, resumeDay);
+                }
+                _afkingProtocolFlags |= element == VAULT_WALLET_ID ? AFK_VAULT_BOUGHT : AFK_SDGNRS_BOUGHT;
+            }
+
+            // BUY + DEBIT. The funded, well-formed slice is delivered revert-free by
+            // construction (no try/catch). Admission reserves the complete item and the
+            // accounting/checkpoint tail.
             _deliverAfkingBuy(
                 element,
-                sub,
+                position,
+                lane,
                 processDay,
-                mp,
+                endpoint,
                 currentLevel,
                 ticketTargetLevel,
-                srcWord,
+                balances,
                 ethValue,
                 claimableUse,
                 amount,
-                isTicket,
-                false
+                isTicket
             );
 
-            // Accrue the full buy cost (afking ethValue + claimableUse) for the
-            // batched pool credit below — a box buy funds the box pool, a ticket buy the ticket
-            // pool. The afking entry-unit `amount` is the box's wei spend only in lootbox mode,
-            // so the routing keys on `cost`, never `amount`.
+            // Accrue the full buy cost for the batched pool credit below — a box buy funds the
+            // box pool, a ticket buy the ticket pool. The entry-unit `amount` is the box's wei
+            // spend only in lootbox mode, so the routing keys on `cost`, never `amount`.
             uint256 cost = ethValue + claimableUse;
             if (isTicket) {
                 ticketEthAccrued += cost;
             } else {
                 boxEthAccrued += cost;
-                // Every non-ticket STAGE delivery is a Sub-stamp box (coverBuy=false here),
-                // i.e. one pending box — counted locally, committed once per chunk below.
-                unchecked {
-                    ++boxStamps;
-                }
+                unchecked { ++boxStamps; }
             }
 
-            unchecked {
-                ++cursor;
-                ++processed;
-
-            }
+            unchecked { ++cursor; ++processed; }
         }
 
         // Persist the advanced cursor (uint16) for the next chunk / call.
@@ -1432,6 +878,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         result.rewardBasis = processed;
         if (result.done) {
             subsFullyProcessed = true;
+            _afkingEndpointDay = processDay;
             result.progressed = true;
             MineFlipGas.markProgress(meter);
         }
@@ -1492,38 +939,28 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     }
 
     /// @dev Materialize ONE subscriber's stamped afking box (the freeze-critical open).
-    ///      The box uses the published active session word; the stamped day stays in its
-    ///      seed domain. The level and EV-cap key read live inside `resolveAfkingBox`;
-    ///      the per-sub inputs (amount, score) come from the Sub record, which the open only
-    ///      reads. Each stamp opens exactly once because the opener walks the box section in
-    ///      order and its cursor only moves forward. The box is materialized by
-    ///      delegatecalling the LootboxModule's `resolveAfkingBox`
-    ///      (the live-level twin of `resolveLootboxDirect`) with: the stamped spend (boons
-    ///      OFF ⇒ amount == spend), the frozen process `day` = `lastAutoBoughtDay`, the
-    ///      active session's word, and the frozen
-    ///      `activityScore = score`. The draw math and the single EV-cap RMW live in
-    ///      `resolveAfkingBox`; this leg is the thin dispatch shell.
-    ///      `resolveAfkingBox` is the one freeze-correct seam (the public
+    ///      The box uses the published active session word; the stamp day stays in its
+    ///      seed domain. The level reads live inside `resolveAfkingBox`. Each stamp opens
+    ///      exactly once because the opener walks the box section in order and its cursor
+    ///      only moves forward. `resolveAfkingBox` is the one freeze-correct seam (the public
     ///      `resolveLootboxDirect` derives its seed from the live day and would NOT freeze the
-    ///      seed `day`). No stored baseLevel/index — the live roll needs no floor.
+    ///      seed `day`).
     /// @param element The subscriber ID whose stamped box is materialized.
-    /// @param sub The subscriber's stamped record.
+    /// @param amount The box spend in wei: the cohort's unit price times the member's quantity.
+    /// @param day The cohort's stamp day.
     /// @param word The published active session word, read once by the caller.
-    function _openAfkingBox(uint32 element, Sub storage sub, uint256 word) private {
-        // boons OFF ⇒ the stamped spend IS the box amount (unpacked milli-ETH → wei). The
-        // active session word (passed in from the readiness check so it isn't re-read)
-        // remains retained until every pending box opens; the level and EV-cap read
-        // live in the callee. No index, no baseLevel.
+    /// @param score The member's frozen activity score.
+    function _openAfkingBox(uint32 element, uint256 amount, uint24 day, uint256 word, uint16 score) private {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_LOOTBOX_MODULE
             .delegatecall(
                 abi.encodeWithSelector(
                     IDegenerusGameLootboxModule.resolveAfkingBox.selector,
                     element,
-                    _unpackMilliEthToWei(uint64(sub.amount)), // milli-ETH → wei
-                    sub.lastAutoBoughtDay, // the frozen stamp day used in the seed domain
+                    amount,
+                    day,
                     word,
-                    uint16(sub.score)
+                    score
                 )
             );
         if (!ok) _revertDelegate(data);
@@ -1546,29 +983,38 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         uint256 initialCursor = cursor;
         uint256 initialPending = pending;
         // Preparation for this day stamped every paid box; the next preparation waits for
-        // pending to reach zero, so the reset day is still the stamp day here.
+        // pending to reach zero, so the reset day, the cohort price and the protocol BOUGHT
+        // bits still describe this cohort.
         uint24 stampDay = _afkingResetDay;
+        uint256 unitPrice = _unpackMilliEthToWei(_afkingCohortPriceMilli);
+        uint8 protocolFlags = _afkingProtocolFlags;
         uint256 word = _lootboxWord(_rngReadBuffer());
-        // Cache eight physical IDs at a time. Membership cannot change until pending is zero.
-        uint256 ids = _subscriberWordAt(cursor) >> ((cursor & 7) * 32);
+        // Cache three lanes at a time. Membership cannot change until pending is zero.
+        uint256 lanes = _subscriberWordAt(cursor) >> ((cursor % 3) * SUB_LANE_BITS);
         while (true) {
-            uint32 element = uint32(ids);
-            Sub storage sub = _subOf[element];
-            // Every ordinary survivor bought in preparation. Only permanent protocol members
-            // may remain without buying (Vault quantity zero or either member underfunded).
-            bool skip = (element == VAULT_WALLET_ID || element == SDGNRS_WALLET_ID)
-                && sub.lastAutoBoughtDay != stampDay;
+            uint256 lane = lanes & SUB_LANE_MASK;
+            uint32 element = uint32(lane);
+            // Every ordinary member left in the box section bought in preparation. Only the
+            // permanent protocol members may remain without buying (paused).
+            bool skip = (element == VAULT_WALLET_ID && protocolFlags & AFK_VAULT_BOUGHT == 0)
+                || (element == SDGNRS_WALLET_ID && protocolFlags & AFK_SDGNRS_BOUGHT == 0);
             if (!MineFlipGas.canRun(meter, skip ? AFKING_SKIP_GAS : AFKING_OPEN_GAS, AFKING_TAIL_GAS)) break;
             if (!skip) {
                 // The stamp/count invariant guarantees a positive count here.
                 unchecked { --pending; }
-                _openAfkingBox(element, sub, word);
+                _openAfkingBox(
+                    element,
+                    unitPrice * _subQuantity(lane),
+                    stampDay,
+                    word,
+                    _decodeSubScore((lane >> SUB_SCORE_SHIFT) & SUB_SCORE_MASK)
+                );
                 ++result.rewardBasis;
             }
             ++cursor;
             MineFlipGas.markProgress(meter);
             if (pending == 0) break;
-            ids = (cursor & 7) == 0 ? _subscriberWordAt(cursor) : ids >> 32;
+            lanes = cursor % 3 == 0 ? _subscriberWordAt(cursor) : lanes >> SUB_LANE_BITS;
         }
         if (cursor != initialCursor) {
             _subOpenCursor = uint16(cursor);
@@ -1634,106 +1080,130 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         return PriceLookupLib.priceForLevel(_activeTicketLevel());
     }
 
-    /// @dev ETH-denominated spend → FLIP base units at the buy-context ticket price —
-    ///      the VALUATION BASIS for the lootbox-branch affiliate routing (affiliate +
-    ///      quest rewards are FLIP flip-credit, never an ETH cut). A faithful
-    ///      copy of MintModule._ethToFlipValue; PRICE_COIN_UNIT (= 1000 FLIP in 18-decimal base units)
-    ///      is the inherited Storage constant already used at the bounty unit. Pure —
-    ///      no ETH moves, no state.
-    function _ethToFlip(
-        uint256 amountWei,
-        uint256 priceWei
-    ) private pure returns (uint256) {
-        if (amountWei == 0 || priceWei == 0) return 0;
-        return (amountWei * PRICE_COIN_UNIT) / priceWei;
+    /*------------------------------------------------------------------
+                              Daily subscriber draw
+    ------------------------------------------------------------------*/
+    /// @notice One member wins FLIP by the age of its run: 10 per day since its run started,
+    ///         capped at 4,000. Reached only by AdvanceModule's delegatecall when a day's word
+    ///         lands after that day's lock.
+    /// @dev The Vault (box position 0) is never drawn; sDGNRS (position 1) is. A seized run and
+    ///      a paused protocol seat sit out; a resumed protocol seat's age restarts at its resume.
+    /// @param day The day whose recorded word picks the winner.
+    function runSubDraw(uint24 day) external {
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
+        uint256 len = _subscribers.length;
+        uint256 word = _recordedDailyWord(day);
+        if (len < 2 || word == 0) return;
+        uint256 boxes = _subBoxCount;
+        uint256 idx = 1 + uint256(keccak256(abi.encodePacked("SEATDRAW", word))) % (len - 1);
+        uint256 lane = _subLaneAt(idx < boxes ? idx : SUBSCRIBER_CAP - (idx - boxes));
+        uint32 winner = uint32(lane);
+        if (lane & SUB_REMOVAL_BIT != 0 || _protocolPaused(winner)) return;
+        uint24 startDay = _subRunStart(winner);
+        uint24 endpoint = _afkingEndpoint();
+        if (endpoint <= startDay) return;
+        uint256 spanDays;
+        unchecked {
+            spanDays = endpoint - startDay;
+        }
+        uint256 prize = spanDays * SEAT_DRAW_FLIP_PER_DAY;
+        if (prize > SEAT_DRAW_MAX_FLIP) prize = SEAT_DRAW_MAX_FLIP;
+        coinflip.creditFlip(winner, prize);
+        emit SubDrawWon(winner, day, uint24(spanDays), prize);
     }
 
     /*------------------------------------------------------------------
-                                  FLIP claim
+                                  Claims
     ------------------------------------------------------------------*/
-    /// @notice Permissionless FLIP claim — pays each sub its accrued `pendingFlip` (the
-    ///         per-delivered-day slot-0 quest reward + the ticket buyer-bonus) in ONE
-    ///         `creditFlip` and zeroes it, so a re-claim finds 0. Always credits the sub, never
-    ///         the caller; callable anytime — the reward is already earned per delivered day,
-    ///         so there is no settle-timing or claim-timing edge to exploit. Off the solvency
-    ///         path: a FLIP flip-credit, never an ETH cut.
-    /// @param ids The subscriber accounts to pay (0 = caller; each credited its own accrued
-    ///        `pendingFlip`). An ID with nothing accrued, an unallocated one included, settles
-    ///        nothing.
+    /// @notice Permissionless AFKing claim — settles each listed sub on both sides: the sub
+    ///         its own reward and its affiliate base to the upline, for every day from its
+    ///         checkpoint through the last completed subscriber pass. Always credits the subs
+    ///         and their uplines, never the caller; a re-claim finds nothing. Closed from the
+    ///         liveness trigger onward.
+    /// @dev Routed through the affiliate claim, which resolves each run of consecutive subs
+    ///      sharing a direct affiliate once; ordering a batch by affiliate keeps it cheapest.
+    /// @param ids The subscriber accounts to settle (0 = caller). A non-member settles nothing.
     function claimAfkingFlip(uint32[] calldata ids) external {
+        if (_livenessTriggered()) revert GameOver();
         uint256 len = ids.length;
+        uint32[] memory subs = new uint32[](len);
         uint32 self = _walletIdOf(msg.sender);
         for (uint256 i; i < len; ) {
             uint32 id = ids[i];
-            if (id == 0) id = self;
-            Sub storage s = _subOf[id];
-            // Only an allocated account accrues, so the key read is in bounds.
-            if (s.pendingFlip != 0) _settlePendingFlip(id, s);
-            unchecked {
-                ++i;
+            subs[i] = id == 0 ? self : id;
+            unchecked { ++i; }
+        }
+        IDegenerusAffiliate(ContractAddresses.AFFILIATE).claim(subs);
+    }
+
+    /// @notice Affiliate-only settlement of up to eight subs of one run, the base drain the
+    ///         affiliate `claim` consumes: pays each sub its own reward and returns their summed
+    ///         affiliate base.
+    /// @dev Each settlement moves its sub's checkpoint before it pays, so a duplicate sub
+    ///      settles nothing the second time. Only `ContractAddresses.AFFILIATE` may drain, so a
+    ///      non-affiliate caller can never redirect a sub's base. Returns zeros from the liveness
+    ///      trigger onward. Runs in the Game's storage context; `msg.sender` is the original caller.
+    /// @param ids Up to eight subscriber IDs, 32 bits each from the low end, all sharing one direct
+    ///        affiliate. A zero lane and a non-member settle nothing.
+    /// @param uplines The run's two upline IDs packed low/high 32 bits (zero for no referrer).
+    /// @return sumB The settled whole-FLIP affiliate base.
+    /// @return skipU1 The part of `sumB` from subs that are themselves the first upline.
+    /// @return skipU2 The part of `sumB` from subs that are themselves the second upline.
+    function drainAffiliateBases(uint256 ids, uint256 uplines)
+        external returns (uint256 sumB, uint256 skipU1, uint256 skipU2)
+    {
+        if (msg.sender != ContractAddresses.AFFILIATE) revert NotApproved();
+        if (_livenessTriggered()) return (0, 0, 0);
+        uint24 endpoint = _afkingEndpoint();
+        for (; ids != 0; ids >>= 32) {
+            uint32 id = uint32(ids);
+            uint256 position1 = _subPosition1(id);
+            if (position1 == 0) continue;
+            uint256 base = _settle(id, position1, endpoint);
+            if (base != 0) {
+                sumB += base;
+                if (id == uint32(uplines)) skipU1 += base;
+                if (id == uint32(uplines >> 32)) skipU2 += base;
             }
         }
     }
 
-    /*------------------------------------------------------------------
-                            Affiliate base accessor
-    ------------------------------------------------------------------*/
-    /// @notice Affiliate-only atomic read-and-zero of a sub's accrued `affiliateBase` (the
-    ///         running unclaimed flat-7% affiliate balance, whole FLIP), which the affiliate
-    ///         `claim` consumes.
-    /// @dev The read-and-zero happen together at the storage owner, so a duplicate sub in the
-    ///      affiliate `claim` array drains 0 the second time — the key guard against
-    ///      double-credit. There is no separate read accessor, so the caller can never
-    ///      pre-load bases into a memory array. Only `ContractAddresses.AFFILIATE` may drain,
-    ///      so a non-affiliate caller can never redirect a sub's base to a wrong recipient.
-    ///      Runs in the Game's storage context; `msg.sender` is the original caller.
-    /// @param id The subscriber whose affiliate base is drained.
-    /// @return base The drained whole-FLIP affiliate base (0 if already drained / never accrued).
-    function drainAffiliateBase(uint32 id) external returns (uint256 base) {
-        if (msg.sender != ContractAddresses.AFFILIATE) revert NotApproved();
-        Sub storage s = _subOf[id];
-        base = s.affiliateBase;
-        if (base != 0) {
-            s.affiliateBase = 0;
-            emit AffiliateBaseDrained(id, base);
-        }
-    }
-
-    /// @notice QUESTS-only: record a secondary/level quest completion against an afking sub's
-    ///         streak base, so the run's compute-on-read activity score reflects the player's own
-    ///         quest effort (the primary rides the funded delivered days).
-    /// @dev No-op unless wallet `id` has a live afking run (`afkingStartDay != 0`); otherwise an
-    ///      `amount` bump to the Sub streak base, saturating at 65535. `amount` is 1 for a daily
-    ///      secondary completion and LEVEL_QUEST_STREAK_BONUS for a level-quest completion. Runs in
-    ///      the Game's storage context under delegatecall; `msg.sender` is the original caller
-    ///      (DegenerusQuests). ID 0 has no Sub record, so it returns before any write.
-    /// @param id Wallet ID of the afking subscriber whose secondary completion is being recorded.
-    /// @param amount The streak-base increment to apply.
+    /// @notice QUESTS-only: record a secondary/level quest completion against a live afking
+    ///         run's streak, so its activity score reflects the player's own quest effort (the
+    ///         primary rides the elapsed days).
+    /// @dev No-op for a non-member and a run pending removal. Adds `amount` to the checkpoint
+    ///      streak, saturating; the checkpoint day does not move, so nothing accrued changes.
+    ///      `amount` is 1 for a daily secondary completion and LEVEL_QUEST_STREAK_BONUS for a
+    ///      level-quest completion.
+    /// @param id Wallet ID of the afking subscriber whose completion is being recorded.
+    /// @param amount The streak increment to apply.
     function recordAfkingSecondary(uint32 id, uint16 amount) external {
         if (msg.sender != ContractAddresses.QUESTS) revert NotApproved();
-        Sub storage s = _subOf[id];
-        if (s.setPosition == 0) return;
-        if (s.afkingStartDay == 0) return;
-        _setStreakBase(s, uint256(_streakBaseOf(s)) + amount);
+        (uint256 lane, uint256 position1) = _subLaneOf(id);
+        if (position1 == 0 || lane & SUB_REMOVAL_BIT != 0) return;
+        _setSubLaneAt(position1 - 1, _withSubCheckpoint(lane, _subDay(lane), _subCheckpointStreak(lane) + amount));
     }
 
-    /// @notice QUESTS-only: floor a live afking sub's streak base to `floor`, so a foil-pack
-    ///         purchase's quest-streak guarantee reaches a mid-run afker (whose reward streak is
-    ///         the sub base plus funded delivered days, not the manual quest streak that the
-    ///         foil-pack streak floor raises). The funded days continue to add on top of the
-    ///         floored base.
-    /// @dev No-op unless wallet `id` has a live afking run (`afkingStartDay != 0`); otherwise raises
-    ///      the Sub streak base to `floor` if it is below. Runs in the Game's storage context
-    ///      under delegatecall; `msg.sender` is the original caller (DegenerusQuests). ID 0 has no
-    ///      Sub record, so it returns before any write.
-    /// @param id Wallet ID of the afking subscriber whose streak base is floored.
-    /// @param floor The minimum streak base to set.
+    /// @notice QUESTS-only: raise a live afking run's streak to at least `floor`, the same
+    ///         foil-pack quest-streak guarantee a manual player's streak receives.
+    /// @dev No-op for a non-member and a run pending removal. Raises the checkpoint streak by
+    ///      the shortfall of the live streak; the checkpoint day does not move, so nothing
+    ///      accrued changes.
+    /// @param id Wallet ID of the afking subscriber whose streak is floored.
+    /// @param floor The minimum live streak.
     function floorAfkingStreakBase(uint32 id, uint16 floor) external {
         if (msg.sender != ContractAddresses.QUESTS) revert NotApproved();
-        Sub storage s = _subOf[id];
-        if (s.setPosition == 0) return;
-        if (s.afkingStartDay == 0) return;
-        if (_streakBaseOf(s) < floor) _setStreakBase(s, floor);
+        (uint256 lane, uint256 position1) = _subLaneOf(id);
+        if (position1 == 0 || lane & SUB_REMOVAL_BIT != 0) return;
+        uint256 live = _subStreakAt(lane, _afkingEndpoint());
+        if (live >= floor) return;
+        _setSubLaneAt(position1 - 1, _withSubCheckpoint(lane, _subDay(lane), _subCheckpointStreak(lane) + floor - live));
+    }
+
+    /// @dev A member whose run is live (not pending removal): immune to curse and smite.
+    function _isLiveMember(uint32 id) private view returns (bool) {
+        (uint256 lane, uint256 position1) = _subLaneOf(id);
+        return position1 != 0 && lane & SUB_REMOVAL_BIT == 0;
     }
 
     /// @notice Emitted when a curse is cleared via the permissionless paid cure.
@@ -1769,7 +1239,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         );
         if (frozenUntilLevel >= level && (passType == 1 || passType == 3)) return;
         if ((packed >> BitPackingLib.CURSE_COUNT_SHIFT) & BitPackingLib.MASK_5 >= CURSE_COUNT_CAP) return;
-        if (_subOf[player].dailyQuantity != 0) return;
+        if (_isLiveMember(player)) return;
         _applyCurseStack(player);
     }
 
@@ -1803,7 +1273,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         ) revert Unauthorized();
         uint32 smitee = _creditAccountId(smiteeId);
         uint256 packed = mintPacked_[smitee];
-        if (_subOf[smitee].dailyQuantity != 0) {
+        if (_isLiveMember(smitee)) {
             revert SmiteeAfkingImmune(); // active-afker immunity
         }
         uint256 curse = (packed >> BitPackingLib.CURSE_COUNT_SHIFT) & BitPackingLib.MASK_5;

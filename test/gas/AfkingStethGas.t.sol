@@ -13,21 +13,15 @@ import {WalletSeed} from "../helpers/WalletSeed.sol";
 /// @dev Only input preparation and gross gas metering are test-only. The measured
 ///      worker, GAME self-call dispatcher, delivery and eviction are production code.
 contract AfkingStethGasHost is SubscriberNativeGasHost {
-    function addStethSubscriber(address player, address source, bool tickets) external {
+    function addStethSubscriber(address player, bool tickets) external {
         uint32 subId = _seedWallet(player);
         _seedSubscriber(subId, tickets);
-        Sub storage sub = _subOf[subId];
+        uint256 position = _subPosition1(subId) - 1;
         uint24 yesterday = _afkingResetDay - 1;
-        sub.dailyQuantity = 255;
-        sub.flags = (source == player ? 0 : 1) | (tickets ? 4 : 0);
-        if (source != player) _fundingSourceOf[_seedWallet(player)] = _seedWallet(source);
-        sub.lastAutoBoughtDay = yesterday;
-        sub.afkingStartDay = yesterday;
-        sub.afkCoveredThroughDay = yesterday;
+        uint256 lane = _subLaneAt(position) | (uint256(SUB_MAX_QUANTITY - 1) << SUB_QTY_SHIFT);
         // A mature run exercises the century-shield handback on eviction.
-        sub.subStreakLatch = 300;
-        sub.pendingFlip = 1_000;
-        sub.affiliateBase = 1_000;
+        _setSubLaneAt(position, _withSubCheckpoint(lane, yesterday, 300));
+        _setSubRunStart(subId, yesterday);
     }
 
     function creditSource(address source, uint256 prepaid, bool sentinel) external {
@@ -60,8 +54,6 @@ contract AfkingStethGasTest is DeployProtocol {
     AfkingStethGasHost private host;
     address private constant PLAYER = address(0xA11CE123);
     address private constant PLAYER_TWO = address(0xA11CE124);
-    address private constant FUNDER = address(0xF00D123);
-    address private constant FUNDER_TWO = address(0xF00D124);
     uint256 private constant WORK_GAS = 12_000_000;
 
     function setUp() public {
@@ -73,14 +65,8 @@ contract AfkingStethGasTest is DeployProtocol {
         host.prepare(false);
     }
 
-    function _authorize(address player, address source, bool finite) private {
-        if (source != player) {
-            uint32 playerId = _giveWalletId(player);
-            _giveWalletId(source);
-            vm.prank(source);
-            game.setAfkingFundingApproval(0, playerId, true);
-        }
-        vm.prank(source);
+    function _authorize(address player, bool finite) private {
+        vm.prank(player);
         mockStETH.approve(address(game), finite ? 100 ether : type(uint256).max);
     }
 
@@ -98,73 +84,62 @@ contract AfkingStethGasTest is DeployProtocol {
         assertEq(opened, tickets ? bought : bought - 1, "correct delivery mode");
     }
 
-    function _successCase(bool sponsored, bool finite, bool gameEmpty, bool sourceEmpty, bool tickets) private {
-        address source = sponsored ? FUNDER : PLAYER;
-        mockStETH.mint(source, 1_000 ether);
+    function _successCase(bool finite, bool gameEmpty, bool sourceEmpty, bool tickets) private {
+        mockStETH.mint(PLAYER, 1_000 ether);
         if (!gameEmpty) mockStETH.mint(address(game), 100 ether);
         mockStETH.rebase();
-        _authorize(PLAYER, source, finite);
-        host.addStethSubscriber(PLAYER, source, tickets);
+        _authorize(PLAYER, finite);
+        host.addStethSubscriber(PLAYER, tickets);
         uint256 initial = vm.snapshotState();
 
-        host.creditSource(source, 100 ether, !sourceEmpty);
+        host.creditSource(PLAYER, 100 ether, !sourceEmpty);
         uint256 baseline = _work();
         _assertDelivered(PLAYER, tickets);
         vm.revertToState(initial);
 
-        host.creditSource(source, 0, !sourceEmpty);
-        uint256 beforeShares = mockStETH.sharesOf(source);
+        host.creditSource(PLAYER, 0, !sourceEmpty);
+        uint256 beforeShares = mockStETH.sharesOf(PLAYER);
         uint256 fallbackGas = _work();
         _assertDelivered(PLAYER, tickets);
-        assertLt(mockStETH.sharesOf(source), beforeShares, "successful token pull");
+        assertLt(mockStETH.sharesOf(PLAYER), beforeShares, "successful token pull");
         assertEq(host.memberCount(), 1, "payer remains subscribed");
         emit log_named_uint("production_prepaid_worker_gross_gas", baseline);
         emit log_named_uint("production_steth_worker_gross_gas", fallbackGas);
         emit log_named_uint("production_steth_additional_gross_gas", fallbackGas - baseline);
     }
 
-    function test_GasColdSelfUnlimitedExistingBalances() public { _successCase(false, false, false, false, true); }
-    function test_GasColdSelfFiniteExistingBalances() public { _successCase(false, true, false, false, true); }
-    function test_GasColdSponsorUnlimitedExistingBalances() public { _successCase(true, false, false, false, true); }
-    function test_GasColdSponsorFiniteExistingBalances() public { _successCase(true, true, false, false, true); }
-    function test_GasColdSponsorFiniteFirstGameReceipt() public { _successCase(true, true, true, false, true); }
-    function test_GasColdSponsorFiniteEmptyPackedSource() public { _successCase(true, true, false, true, true); }
-    function test_GasColdSponsorFiniteBothEmpty() public { _successCase(true, true, true, true, true); }
-    function test_GasColdSelfFiniteBothEmpty() public { _successCase(false, true, true, true, true); }
-    function test_GasColdMaximumBoxSponsorFiniteBothEmpty() public { _successCase(true, true, true, true, false); }
+    function test_GasColdUnlimitedExistingBalances() public { _successCase(false, false, false, true); }
+    function test_GasColdFiniteExistingBalances() public { _successCase(true, false, false, true); }
+    function test_GasColdFiniteFirstGameReceipt() public { _successCase(true, true, false, true); }
+    function test_GasColdFiniteEmptyPackedSource() public { _successCase(true, false, true, true); }
+    function test_GasColdFiniteBothEmpty() public { _successCase(true, true, true, true); }
+    function test_GasColdMaximumBoxFiniteBothEmpty() public { _successCase(true, true, true, false); }
 
-    function _batch(uint256 count, bool fallbackEnabled, bool sharedSource) private returns (uint256 grossGas) {
+    function _batch(uint256 count, bool fallbackEnabled) private returns (uint256 grossGas) {
         mockStETH.mint(address(game), 100 ether);
-        mockStETH.mint(FUNDER, 1_000 ether);
-        host.creditSource(FUNDER, fallbackEnabled ? 0 : 100 ether, true);
-        if (!sharedSource && count == 2) {
-            mockStETH.mint(FUNDER_TWO, 1_000 ether);
-            host.creditSource(FUNDER_TWO, fallbackEnabled ? 0 : 100 ether, true);
-        }
-        _authorize(PLAYER, FUNDER, false);
-        host.addStethSubscriber(PLAYER, FUNDER, true);
-        if (count == 2) {
-            address secondSource = sharedSource ? FUNDER : FUNDER_TWO;
-            _authorize(PLAYER_TWO, secondSource, false);
-            host.addStethSubscriber(PLAYER_TWO, secondSource, true);
+        address[2] memory players = [PLAYER, PLAYER_TWO];
+        for (uint256 i; i < count; ++i) {
+            mockStETH.mint(players[i], 1_000 ether);
+            _authorize(players[i], false);
+            host.addStethSubscriber(players[i], true);
+            host.creditSource(players[i], fallbackEnabled ? 0 : 100 ether, true);
         }
         MineFlipGas.Result memory result;
         (result, grossGas) = host.measuredSubWork{gas: WORK_GAS}(WORK_GAS);
         assertTrue(result.progressed && result.done);
         assertEq(result.rewardBasis, count);
-        _assertDelivered(PLAYER, true);
-        if (count == 2) _assertDelivered(PLAYER_TWO, true);
+        for (uint256 i; i < count; ++i) _assertDelivered(players[i], true);
     }
 
-    function _warmMarginal(bool sharedSource) private {
+    function test_GasWarmSecondSubscriber() public {
         uint256 initial = vm.snapshotState();
-        uint256 baselineOne = _batch(1, false, sharedSource);
+        uint256 baselineOne = _batch(1, false);
         vm.revertToState(initial);
-        uint256 baselineTwo = _batch(2, false, sharedSource);
+        uint256 baselineTwo = _batch(2, false);
         vm.revertToState(initial);
-        uint256 fallbackOne = _batch(1, true, sharedSource);
+        uint256 fallbackOne = _batch(1, true);
         vm.revertToState(initial);
-        uint256 fallbackTwo = _batch(2, true, sharedSource);
+        uint256 fallbackTwo = _batch(2, true);
         uint256 baselineMarginal = baselineTwo - baselineOne;
         uint256 fallbackMarginal = fallbackTwo - fallbackOne;
         emit log_named_uint("production_second_prepaid_subscriber_gross_gas", baselineMarginal);
@@ -172,21 +147,18 @@ contract AfkingStethGasTest is DeployProtocol {
         emit log_named_uint("production_second_steth_additional_gross_gas", fallbackMarginal - baselineMarginal);
     }
 
-    function test_GasWarmSecondSubscriberSharedFunder() public { _warmMarginal(true); }
-    function test_GasWarmSecondSubscriberDistinctFunder() public { _warmMarginal(false); }
-
     function _failedFixture(bool followingSubscriber) private returns (AdversarialAfkingSteth faulty) {
-        mockStETH.mint(FUNDER, 1_000 ether);
+        mockStETH.mint(PLAYER, 1_000 ether);
         mockStETH.mint(address(game), 100 ether);
-        _authorize(PLAYER, FUNDER, true);
-        host.addStethSubscriber(PLAYER, FUNDER, true);
+        _authorize(PLAYER, true);
+        host.addStethSubscriber(PLAYER, true);
         // Activate production quest bookkeeping so failure measures real handback.
         uint24 yesterday = game.currentDayView() - 1;
         uint32 playerId = game.walletIdOf(PLAYER);
         vm.prank(address(game));
         quests.beginAfking(playerId, yesterday);
         if (followingSubscriber) {
-            host.addStethSubscriber(PLAYER_TWO, PLAYER_TWO, true);
+            host.addStethSubscriber(PLAYER_TWO, true);
             host.creditSource(PLAYER_TWO, 100 ether, true);
         }
         vm.etch(address(mockStETH), type(AdversarialAfkingSteth).runtimeCode);
@@ -196,15 +168,15 @@ contract AfkingStethGasTest is DeployProtocol {
     function test_PostTransferGasExhaustionRollsBackWithoutEviction() public {
         AdversarialAfkingSteth faulty = _failedFixture(true);
         faulty.configureFault(AdversarialAfkingSteth.Operation.BalanceAfter, AdversarialAfkingSteth.Fault.BurnGas);
-        uint256 sourceShares = mockStETH.sharesOf(FUNDER);
+        uint256 sourceShares = mockStETH.sharesOf(PLAYER);
         uint256 gameShares = mockStETH.sharesOf(address(game));
-        uint256 allowanceBefore = mockStETH.allowance(FUNDER, address(game));
+        uint256 allowanceBefore = mockStETH.allowance(PLAYER, address(game));
         vm.expectRevert(bytes4(keccak256("EmptyRevert()")));
         host.measuredSubWork{gas: WORK_GAS}(WORK_GAS);
         assertEq(host.memberCount(), 2, "failed execution cannot evict");
-        assertEq(mockStETH.sharesOf(FUNDER), sourceShares);
+        assertEq(mockStETH.sharesOf(PLAYER), sourceShares);
         assertEq(mockStETH.sharesOf(address(game)), gameShares);
-        assertEq(mockStETH.allowance(FUNDER, address(game)), allowanceBefore);
+        assertEq(mockStETH.allowance(PLAYER, address(game)), allowanceBefore);
         faulty.configureFault(AdversarialAfkingSteth.Operation.BalanceAfter, AdversarialAfkingSteth.Fault.None);
         (MineFlipGas.Result memory result,) = host.measuredSubWork{gas: WORK_GAS}(WORK_GAS);
         assertTrue(result.done);
@@ -221,19 +193,19 @@ contract AfkingStethGasTest is DeployProtocol {
     }
 
     function test_InsufficientAdmissionAllowanceDefersWithoutChargingOrEvicting() public {
-        mockStETH.mint(FUNDER, 1_000 ether);
-        _authorize(PLAYER, FUNDER, true);
-        host.addStethSubscriber(PLAYER, FUNDER, false);
-        uint256 sourceShares = mockStETH.sharesOf(FUNDER);
-        uint256 allowanceBefore = mockStETH.allowance(FUNDER, address(game));
+        mockStETH.mint(PLAYER, 1_000 ether);
+        _authorize(PLAYER, true);
+        host.addStethSubscriber(PLAYER, false);
+        uint256 sourceShares = mockStETH.sharesOf(PLAYER);
+        uint256 allowanceBefore = mockStETH.allowance(PLAYER, address(game));
         uint256 required = GasBounds.SUBSCRIBER_ITEM_GAS + GasBounds.SUBSCRIBER_TAIL_GAS + MineFlipGas.CHECK_RESERVE;
         (MineFlipGas.Result memory result,) = host.measuredSubWork{gas: WORK_GAS}(required - 1);
         assertFalse(result.progressed || result.done);
         assertEq(host.memberCount(), 1);
         assertEq(host.cursor(), 0);
-        assertEq(host.fundingOf(FUNDER), 0);
-        assertEq(mockStETH.sharesOf(FUNDER), sourceShares);
-        assertEq(mockStETH.allowance(FUNDER, address(game)), allowanceBefore);
+        assertEq(host.fundingOf(PLAYER), 0);
+        assertEq(mockStETH.sharesOf(PLAYER), sourceShares);
+        assertEq(mockStETH.allowance(PLAYER, address(game)), allowanceBefore);
         (uint24 bought,) = host.delivered(PLAYER);
         assertLt(bought, game.currentDayView());
         // A later miner with adequate budget admits and pays exactly this item.
@@ -242,9 +214,9 @@ contract AfkingStethGasTest is DeployProtocol {
     }
 
     function test_AdmissionBoundaryPaysAtMinimumAndDefersOneGasBelow() public {
-        mockStETH.mint(FUNDER, 1_000 ether);
-        _authorize(PLAYER, FUNDER, true);
-        host.addStethSubscriber(PLAYER, FUNDER, false);
+        mockStETH.mint(PLAYER, 1_000 ether);
+        _authorize(PLAYER, true);
+        host.addStethSubscriber(PLAYER, false);
         uint256 initial = vm.snapshotState();
         uint256 required = GasBounds.SUBSCRIBER_ITEM_GAS + GasBounds.SUBSCRIBER_TAIL_GAS + MineFlipGas.CHECK_RESERVE;
         // The meter also charges worker-entry checks before the item. Discover

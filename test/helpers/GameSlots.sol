@@ -66,14 +66,14 @@ library GameSlots {
     uint256 internal constant TICKET_BUFFER_LEVELS_OFFSET = 10;
     uint256 internal constant LOAN_SEIZE_CURSOR = 5;
     uint256 internal constant LOAN_SEIZE_CURSOR_OFFSET = 16;
-    uint256 internal constant LOANS = 80;
-    uint256 internal constant LOANS_DUE = 81;
-    uint256 internal constant LOANS_DUE_COUNT = 82;
+    uint256 internal constant LOANS = 78;
+    uint256 internal constant LOANS_DUE = 79;
+    uint256 internal constant LOANS_DUE_COUNT = 80;
     uint256 internal constant DAILY_TICKET_BUDGETS_PACKED = 6;
     uint256 internal constant BALANCES_PACKED = 7;
     uint256 internal constant LVL_TRAIT_ENTRY = 8;
     uint256 internal constant MINT_PACKED = 9;
-    uint256 internal constant WALLET_IDS = 77;
+    uint256 internal constant WALLET_IDS = 76;
     uint256 internal constant RNG_WORD_BY_DAY = 10;
     uint256 internal constant PRIZE_POOL_PENDING_PACKED = 11;
     uint256 internal constant TICKET_QUEUE = 12;
@@ -128,78 +128,83 @@ library GameSlots {
     uint256 internal constant PROTOCOL_BOON_POOLS = 45;
     uint256 internal constant PROTOCOL_BOON_ENTRIES = 46;
     uint256 internal constant BOON_PACKED = 47;
-    uint256 internal constant SUB_OF = 48;
-    uint256 internal constant FUNDING_SOURCE_OF = 49;
-    uint256 internal constant SUBSCRIBERS = 50;
-    uint256 internal constant SUB_CURSOR = 51;
-    uint256 internal constant SUB_OPEN_CURSOR = 51;
+    uint256 internal constant SUB_META = 48;
+    uint256 internal constant SUBSCRIBERS = 49;
+    uint256 internal constant SUB_CURSOR = 50;
+    uint256 internal constant SUB_OPEN_CURSOR = 50;
     uint256 internal constant SUB_OPEN_CURSOR_OFFSET = 2;
-    uint256 internal constant AFKING_RESET_DAY = 51;
+    uint256 internal constant AFKING_RESET_DAY = 50;
     uint256 internal constant AFKING_RESET_DAY_OFFSET = 4;
-    uint256 internal constant BOX_CURSOR = 51;
+    uint256 internal constant BOX_CURSOR = 50;
     uint256 internal constant BOX_CURSOR_OFFSET = 7;
-    uint256 internal constant BOX_READ_COUNT = 51;
+    uint256 internal constant BOX_READ_COUNT = 50;
     uint256 internal constant BOX_READ_COUNT_OFFSET = 13;
-    uint256 internal constant SDGNRS_BONUS_LEVEL = 51;
+    uint256 internal constant SDGNRS_BONUS_LEVEL = 50;
     uint256 internal constant SDGNRS_BONUS_LEVEL_OFFSET = 17;
-    uint256 internal constant PENDING_BOX_COUNT = 51;
+    uint256 internal constant PENDING_BOX_COUNT = 50;
     uint256 internal constant PENDING_BOX_COUNT_OFFSET = 20;
-    uint256 internal constant SUB_BOX_COUNT = 51;
+    uint256 internal constant SUB_BOX_COUNT = 50;
     uint256 internal constant SUB_BOX_COUNT_OFFSET = 22;
-    uint256 internal constant BOX_QUEUE = 52;
-    uint256 internal constant FOIL_RECORD = 53;
-    uint256 internal constant FOIL_MATCH_CLAIMED = 54;
-    uint256 internal constant DAILY_FOIL_DRAW = 55;
-    uint256 internal constant FOIL_QUEUE = 56;
-    uint256 internal constant FOIL_CURSOR = 57;
-    uint256 internal constant FOIL_GENERATION_DAY = 57;
+    uint256 internal constant AFKING_COHORT_PRICE_MILLI = 50;
+    uint256 internal constant AFKING_COHORT_PRICE_MILLI_OFFSET = 24;
+    uint256 internal constant AFKING_PROTOCOL_FLAGS = 50;
+    uint256 internal constant AFKING_PROTOCOL_FLAGS_OFFSET = 26;
+    uint256 internal constant AFKING_ENDPOINT_DAY = 50;
+    uint256 internal constant AFKING_ENDPOINT_DAY_OFFSET = 27;
+    uint256 internal constant BOX_QUEUE = 51;
+    uint256 internal constant FOIL_RECORD = 52;
+    uint256 internal constant FOIL_MATCH_CLAIMED = 53;
+    uint256 internal constant DAILY_FOIL_DRAW = 54;
+    uint256 internal constant FOIL_QUEUE = 55;
+    uint256 internal constant FOIL_CURSOR = 56;
+    uint256 internal constant FOIL_GENERATION_DAY = 56;
     uint256 internal constant FOIL_GENERATION_DAY_OFFSET = 4;
-    uint256 internal constant FOIL_FIRST_DRAW_DAY = 57;
+    uint256 internal constant FOIL_FIRST_DRAW_DAY = 56;
     uint256 internal constant FOIL_FIRST_DRAW_DAY_OFFSET = 7;
-    uint256 internal constant FOIL_WRITE_SLOT = 57;
+    uint256 internal constant FOIL_WRITE_SLOT = 56;
     uint256 internal constant FOIL_WRITE_SLOT_OFFSET = 10;
-    uint256 internal constant FOIL_WRITE_COUNT = 57;
+    uint256 internal constant FOIL_WRITE_COUNT = 56;
     uint256 internal constant FOIL_WRITE_COUNT_OFFSET = 11;
-    uint256 internal constant FOIL_READ_COUNT = 57;
+    uint256 internal constant FOIL_READ_COUNT = 56;
     uint256 internal constant FOIL_READ_COUNT_OFFSET = 15;
-    uint256 internal constant DEITY_RECIPIENT_BOON_COUNT = 58;
-    uint256 internal constant GOLDEN_TICKET = 59;
-    uint256 internal constant MIDDAY_RNG_CREDIT = 60;
-    uint256 internal constant CENTURY_PRIZE_POOLS = 61;
-    uint256 internal constant TICKET_SEATS = 62;
-    uint256 internal constant TICKET_GENERATION_START_BLOCK = 63;
-    uint256 internal constant DEAD_TALLY_POS = 64;
-    uint256 internal constant DEAD_TALLY_FOIL_DAY = 64;
+    uint256 internal constant DEITY_RECIPIENT_BOON_COUNT = 57;
+    uint256 internal constant GOLDEN_TICKET = 58;
+    uint256 internal constant MIDDAY_RNG_CREDIT = 59;
+    uint256 internal constant CENTURY_PRIZE_POOLS = 60;
+    uint256 internal constant TICKET_SEATS = 61;
+    uint256 internal constant TICKET_GENERATION_START_BLOCK = 62;
+    uint256 internal constant DEAD_TALLY_POS = 63;
+    uint256 internal constant DEAD_TALLY_FOIL_DAY = 63;
     uint256 internal constant DEAD_TALLY_FOIL_DAY_OFFSET = 4;
-    uint256 internal constant DEAD_TALLY_FOIL_IDX = 64;
+    uint256 internal constant DEAD_TALLY_FOIL_IDX = 63;
     uint256 internal constant DEAD_TALLY_FOIL_IDX_OFFSET = 7;
-    uint256 internal constant DEAD_TALLY_STAGE = 64;
+    uint256 internal constant DEAD_TALLY_STAGE = 63;
     uint256 internal constant DEAD_TALLY_STAGE_OFFSET = 11;
-    uint256 internal constant DEAD_TRAIT_COUNT = 64;
+    uint256 internal constant DEAD_TRAIT_COUNT = 63;
     uint256 internal constant DEAD_TRAIT_COUNT_OFFSET = 12;
-    uint256 internal constant DEAD_UNCREATED = 64;
+    uint256 internal constant DEAD_UNCREATED = 63;
     uint256 internal constant DEAD_UNCREATED_OFFSET = 14;
-    uint256 internal constant DEAD_CREATED = 64;
+    uint256 internal constant DEAD_CREATED = 63;
     uint256 internal constant DEAD_CREATED_OFFSET = 22;
-    uint256 internal constant DEAD_POT = 65;
-    uint256 internal constant DEAD_TOTAL = 65;
+    uint256 internal constant DEAD_POT = 64;
+    uint256 internal constant DEAD_TOTAL = 64;
     uint256 internal constant DEAD_TOTAL_OFFSET = 16;
-    uint256 internal constant DEAD_UNCREATED_LEFT = 65;
+    uint256 internal constant DEAD_UNCREATED_LEFT = 64;
     uint256 internal constant DEAD_UNCREATED_LEFT_OFFSET = 24;
-    uint256 internal constant DEAD_CLAIMED = 66;
-    uint256 internal constant DEC_BATTLE_QUEUE = 67;
-    uint256 internal constant TRAIT_BUCKET_LIVE = 68;
-    uint256 internal constant TICKET_PENDING = 70;
-    uint256 internal constant JACKPOT_WORK = 71;
-    uint256 internal constant FAR_FUTURE_OWED = 73;
-    uint256 internal constant DEC_PREVIOUS_STACK = 74;
-    uint256 internal constant DEC_PREVIOUS_COUNT = 74;
+    uint256 internal constant DEAD_CLAIMED = 65;
+    uint256 internal constant DEC_BATTLE_QUEUE = 66;
+    uint256 internal constant TRAIT_BUCKET_LIVE = 67;
+    uint256 internal constant TICKET_PENDING = 69;
+    uint256 internal constant JACKPOT_WORK = 70;
+    uint256 internal constant FAR_FUTURE_OWED = 72;
+    uint256 internal constant DEC_PREVIOUS_STACK = 73;
+    uint256 internal constant DEC_PREVIOUS_COUNT = 73;
     uint256 internal constant DEC_PREVIOUS_COUNT_OFFSET = 8;
-    uint256 internal constant DEC_JACKPOT_PLANS = 75;
-    uint256 internal constant DEC_GENERATED_OWNERS = 76;
-    uint256 internal constant DEGENESIS_WORD = 83;
-    uint256 internal constant DEGENESIS_DAYS = 84;
-    uint256 internal constant DEGENESIS_ORDERS = 85;
+    uint256 internal constant DEC_JACKPOT_PLANS = 74;
+    uint256 internal constant DEC_GENERATED_OWNERS = 75;
+    uint256 internal constant DEGENESIS_WORD = 81;
+    uint256 internal constant DEGENESIS_DAYS = 82;
+    uint256 internal constant DEGENESIS_ORDERS = 83;
 }
 
 /// @title CrapsSlots
@@ -242,30 +247,49 @@ library GameSlotKeys {
         return keccak256(abi.encode(uint256(id), GameSlots.BALANCES_PACKED));
     }
 
-    /// @dev The packed `_subOf[id]` record read straight from storage.
-    function subWord(address game, uint32 id) internal view returns (uint256) {
+    /// @dev `id`'s 85-bit subscriber lane and set position + 1 (0 = not a member), read
+    ///      straight from storage. Lane: id 0-31, quantity-1 32-34, tickets 35, score code
+    ///      36-45, checkpoint day 46-67, removal pending 68, checkpoint streak 69-84.
+    function subLane(address game, uint32 id) internal view returns (uint256 lane, uint256 position1) {
         Vm vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
-        return uint256(vm.load(game, keccak256(abi.encode(uint256(id), GameSlots.SUB_OF))));
+        uint256 meta = uint256(vm.load(game, keccak256(abi.encode(uint256(id >> 2), GameSlots.SUB_META))));
+        position1 = uint64(meta >> ((id & 3) * 64)) & 0x7ff;
+        if (position1 == 0) return (0, 0);
+        uint256 position = position1 - 1;
+        uint256 word = uint256(vm.load(game, bytes32(uint256(keccak256(abi.encode(GameSlots.SUBSCRIBERS))) + position / 3)));
+        lane = (word >> ((position % 3) * 85)) & ((uint256(1) << 85) - 1);
     }
 
-    /// @dev True while `id`'s stamped AFKing box is unopened. The record carries no open marker:
-    ///      the stamp is the open cohort's (`lastAutoBoughtDay == _afkingResetDay`), the count is
-    ///      nonzero, the sub sits in the box section and the opener cursor has not passed it.
+    /// @dev `id`'s daily quantity, 0 for a non-member.
+    function subQuantity(address game, uint32 id) internal view returns (uint256) {
+        (uint256 lane, uint256 position1) = subLane(game, id);
+        return position1 == 0 ? 0 : ((lane >> 32) & 7) + 1;
+    }
+
+    /// @dev True while `id` holds an unopened AFKing box of the current cohort: the count is
+    ///      nonzero, the sub sits in the box section, the opener cursor has not passed it, and a
+    ///      protocol seat bought into the cohort.
     function afkingBoxPending(address game, uint32 id) internal view returns (bool) {
         Vm vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
-        uint256 word = subWord(game, id);
-        uint256 position = uint32(word >> 200); // setPosition
-        if (position == 0 || uint24(word >> 56) != uint24(uint256(vm.load(game, bytes32(GameSlots.AFKING_RESET_DAY))) >> (8 * GameSlots.AFKING_RESET_DAY_OFFSET))) return false;
+        (, uint256 position) = subLane(game, id);
+        if (position == 0) return false;
         uint256 packed = uint256(vm.load(game, bytes32(GameSlots.PENDING_BOX_COUNT)));
         if (uint16(packed >> (8 * GameSlots.PENDING_BOX_COUNT_OFFSET)) == 0) return false;
         if (position > uint16(packed >> (8 * GameSlots.SUB_BOX_COUNT_OFFSET))) return false;
+        uint8 flags = uint8(packed >> (8 * GameSlots.AFKING_PROTOCOL_FLAGS_OFFSET));
+        if (id == 1 && flags & 1 == 0) return false;
+        if (id == 2 && flags & 2 == 0) return false;
         return position - 1 >= uint16(packed >> (8 * GameSlots.SUB_OPEN_CURSOR_OFFSET));
     }
 
-    /// @dev Day whose box `id` has opened: the stamp day, one earlier while its stamp is pending.
+    /// @dev Day whose box `id` has opened: the cohort's stamp day, one earlier while its box is
+    ///      pending; 0 for a non-member.
     function afkingOpenedDay(address game, uint32 id) internal view returns (uint32) {
-        uint32 bought = uint24(subWord(game, id) >> 56);
-        return afkingBoxPending(game, id) ? bought - 1 : bought;
+        Vm vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
+        (, uint256 position) = subLane(game, id);
+        if (position == 0) return 0;
+        uint32 stamp = uint24(uint256(vm.load(game, bytes32(GameSlots.AFKING_RESET_DAY))) >> (8 * GameSlots.AFKING_RESET_DAY_OFFSET));
+        return afkingBoxPending(game, id) ? stamp - 1 : stamp;
     }
 
     /// @dev Root of any `mapping(uint32 => ...)` at `root`, keyed by wallet ID.

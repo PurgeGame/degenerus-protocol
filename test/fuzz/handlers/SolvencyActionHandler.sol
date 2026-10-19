@@ -66,8 +66,8 @@ contract SolvencyActionHandler is Test {
     uint256 public ghost_claims; // successful claimWinnings cashouts
     uint256 public ghost_afkingDeposited; // ETH credited via depositAfkingFunding
     uint256 public ghost_foilBuys; // successful foil packs (short fresh leg -> claimable + afking tiers)
-    uint256 public ghost_stethBuys; // cover buys that actually pulled stETH into GAME
-    uint256 public ghost_stethFunded; // confirmed stETH receipts from those cover buys
+    uint256 public ghost_stethBuys; // daily passes in which AFKing deliveries pulled stETH into GAME
+    uint256 public ghost_stethFunded; // confirmed stETH receipts from those passes
 
     // --- Call counters (coverage visibility) ---
     uint256 public ghost_ticketViewViolations;
@@ -312,9 +312,10 @@ contract SolvencyActionHandler is Test {
         } catch {}
     }
 
-    /// @notice Exercise stETH fallback using only assets bought with the actor's existing ETH.
-    /// @dev A seat comes from the fixture or an actual pass purchase. Internally funded or already-paid
-    ///      subscriptions may skip the pull; count only measured GAME receipts as stETH successes.
+    /// @notice Subscribe with stETH as the funding fallback, using only assets bought with the actor's
+    ///         existing ETH. Signup buys nothing; the next daily pass pulls the shortfall (see `advance`).
+    /// @dev A seat comes from the fixture or an actual pass purchase. Members with claimable or prepaid
+    ///      funding spend that first and skip the pull.
     function subscribeSteth(uint256 actorSeed) external useActor(actorSeed) {
         calls_subscribeSteth++;
         if (game.gameOver() || game.rngLocked()) return;
@@ -334,16 +335,9 @@ contract SolvencyActionHandler is Test {
         vm.prank(currentActor);
         token.approve(address(game), type(uint256).max);
 
-        uint256 beforeBalance = token.balanceOf(address(game));
         uint256 seat = _heldSeat(currentActor);
         vm.prank(currentActor);
-        try game.subscribe(0, false, true, 1, 0, seat) {
-            uint256 afterBalance = token.balanceOf(address(game));
-            if (afterBalance > beforeBalance) {
-                ghost_stethBuys++;
-                ghost_stethFunded += afterBalance - beforeBalance;
-            }
-        } catch {}
+        try game.subscribe(0, true, 1, seat) {} catch {}
     }
 
     // =========================================================================
@@ -404,6 +398,7 @@ contract SolvencyActionHandler is Test {
             try game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false) {} catch {}
         }
 
+        uint256 stethBefore = IStETH(ContractAddresses.STETH_TOKEN).balanceOf(address(game));
         uint256 rounds = dayWarpsEnabled ? 8 : 3;
         for (uint256 i; i < rounds; i++) {
             vm.prank(currentActor);
@@ -415,6 +410,11 @@ contract SolvencyActionHandler is Test {
                     try vrf.fulfillRandomWords(reqId, uint256(keccak256(abi.encode(wordSeed, i))) | 1) {} catch {}
                 }
             }
+        }
+        uint256 stethAfter = IStETH(ContractAddresses.STETH_TOKEN).balanceOf(address(game));
+        if (stethAfter > stethBefore) {
+            ghost_stethBuys++;
+            ghost_stethFunded += stethAfter - stethBefore;
         }
     }
 

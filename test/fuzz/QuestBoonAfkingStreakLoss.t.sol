@@ -3,7 +3,7 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
-import {GameSlots} from "../helpers/GameSlots.sol";
+import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 
 /// @title QuestBoonAfkingStreakLossTest -- reproduces the activity-boon streak-award value-loss + orphaned
 ///        century-shield defect when the recipient has a LIVE afking run.
@@ -61,13 +61,6 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
     uint256 private constant OFF_QS_SHIELD = 25; // uint8 streakShield
     uint256 private constant OFF_QS_HIGHWATER = 26; // uint8 shieldCenturyHighWater
 
-    // -------------------------------------------------------------------------
-    // Game-resident _subOf accumulator (AFKing-Coin-era offsets, DegenerusGameStorage.sol struct Sub)
-    // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF;
-    uint256 private constant OFF_AFKINGSTART = 13; // uint24 afkingStartDay
-    uint256 private constant OFF_STREAKLATCH = 23; // uint16 subStreakLatch (the afking sub streak base)
-
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
     uint256 private _lastFulfilledReqId;
     uint256 private _t;
@@ -103,11 +96,11 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
         // its decay branch and leaves the value verbatim). The +10 bonus below crosses the 100 century.
         _setManualQuestStreak(p, 95);
         _fundPool(p, 50 ether);
-        _subscribeLootbox(p, 1); // beginAfking: afkingActive = true; snapshots state.streak (95) into the latch
-        // Deliver one funded day so the run is LIVE (afkingStartDay != 0) -- the precondition the boon hits via an
-        // afking auto-open, and the precondition recordAfkingSecondary requires to be non-vacuous.
+        _subscribeLootbox(p, 1); // beginAfking: afkingActive = true; snapshots state.streak (95) into the checkpoint streak
+        // Deliver one funded day so the run is LIVE (a credited day past the checkpoint) -- the precondition the
+        // boon hits via an afking auto-open, and the precondition recordAfkingSecondary requires to be non-vacuous.
         _deliverDay(0xB00FA1);
-        assertGt(_afkingStartOf(p), 0, "non-vacuity: a live afking run grounds the streak-bonus routing path");
+        assertGt(_endpoint(), _checkpointDayOf(p), "non-vacuity: a live afking run grounds the streak-bonus routing path");
         assertTrue(_afkingActiveOf(p), "non-vacuity: quest state marks the player mid afking-run");
 
         // Snapshot the protocol's pay-the-afker value (the afking sub streak base) BEFORE the bonus.
@@ -152,7 +145,7 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
         uint256 earnedExpected = _liveAfkingStreakOf(p);
         assertGe(earnedExpected, subBaseAfter, "non-vacuity: the earned streak rides the (bonus-inclusive) sub base");
         vm.prank(p);
-        game.subscribe(0, false, false, 0, 0, 0); // explicit cancel -> finalizeAfking
+        game.subscribe(0, false, 0, 0); // explicit cancel -> finalizeAfking
 
         // finalizeAfking writes the earned streak into the manual `state.streak` (slot off9). Read it DIRECTLY
         // (not via effectiveBaseStreakAndAfking, which would return the stale start-of-day baseStreak snapshot
@@ -182,28 +175,27 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
     // Reads
     // =========================================================================
 
-    /// @dev The afking sub streak base -- post-PACK uint16 subStreakLatch (off 30) in the Game _subOf slot.
+    /// @dev The afking sub streak base: the lane's checkpoint streak.
     function _streakLatch16Of(address who) internal view returns (uint256) {
-        return _subField(who, OFF_STREAKLATCH, 16);
+        (uint256 lane,) = GameSlotKeys.subLane(address(game), game.walletIdOf(who));
+        return (lane >> 69) & 0xffff;
     }
 
-    function _afkingStartOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_AFKINGSTART, 24));
+    function _checkpointDayOf(address who) internal view returns (uint256) {
+        (uint256 lane,) = GameSlotKeys.subLane(address(game), game.walletIdOf(who));
+        return (lane >> 46) & 0x3fffff;
     }
 
-    function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
-        uint256 pk = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT))))) >> (off * 8);
-        return pk & ((uint256(1) << widthBits) - 1);
+    function _endpoint() internal view returns (uint256) {
+        return (uint256(vm.load(address(game), bytes32(GameSlots.AFKING_ENDPOINT_DAY))) >> (GameSlots.AFKING_ENDPOINT_DAY_OFFSET * 8)) & 0xffffff;
     }
 
-    /// @dev The live afking compute-on-read streak (base + funded delivered days) while the last covered day is
-    ///      no older than yesterday -- mirrors GameAfkingModule._afkingStreak so the finalize hand-back is checked
-    ///      against the same value the contract earns.
+    /// @dev The live afking streak: checkpoint streak plus the credited days past the checkpoint,
+    ///      the value the finalize hand-back carries.
     function _liveAfkingStreakOf(address who) internal view returns (uint256) {
-        uint256 covered = _subField(who, 10, 24); // afkCoveredThroughDay u24 off10
-        uint256 today = game.currentDayView();
-        if (today == 0 || covered + 1 < today) return 0;
-        return _streakLatch16Of(who) + covered - _afkingStartOf(who);
+        uint256 day = _checkpointDayOf(who);
+        uint256 endpoint = _endpoint();
+        return _streakLatch16Of(who) + (endpoint > day ? endpoint - day : 0);
     }
 
     // ---- questPlayerState (DegenerusQuests slot 1) reads ----
@@ -302,7 +294,7 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
     function _subscribeLootbox(address who, uint8 q) internal {
         uint256 seat = _grantSeat(who); // the AFKing Subscription Token is the subscribe credential (a new run burns one seat)
         vm.prank(who);
-        game.subscribe(0, false, false, q, 0, seat); // self, lootbox mode, no reinvest
+        game.subscribe(0, false, q, seat); // self, lootbox mode, no reinvest
     }
 
     function _fundPool(address who, uint256 amount) internal {

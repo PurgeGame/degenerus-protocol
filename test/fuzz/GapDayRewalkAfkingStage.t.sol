@@ -24,12 +24,7 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
         }
     }
 
-    // forge inspect DegenerusGame storage: _subOf@52 (address => Sub, one packed slot); slot 0 packs
-    // purchaseStartDay u24 @0 · dailyIdx u24 @3 · ...
-    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF;
-    uint256 private constant OFF_DAILY = 0; // uint8  dailyQuantity
-    uint256 private constant OFF_AMOUNT = 4; // uint24 amount (milli-ETH)
-    uint256 private constant OFF_LASTBOUGHT = 7; // uint24 lastAutoBoughtDay
+    // slot 0 packs purchaseStartDay u24 @0 · dailyIdx u24 @3 · ...
     uint256 private constant AFKING_RESET_SLOT = GameSlots.AFKING_RESET_DAY; // uint24 _afkingResetDay
     uint256 private constant AFKING_RESET_OFF = 4;
 
@@ -73,7 +68,7 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
         vm.warp(_t);
         _requestDaily();
         uint24 R = game.currentDayView();
-        assertEq(_lastBought(atk), R, "day R: STAGE stamped the attacker");
+        assertTrue(GameSlotKeys.afkingBoxPending(address(game), _aid(atk)), "day R: STAGE stamped the attacker");
         assertEq(_afkingResetDay(), R, "day R: STAGE reset stamped R");
         assertTrue(game.rngLocked(), "day R: request outstanding");
         uint256 reqR = mockVRF.lastRequestId();
@@ -105,8 +100,7 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
         assertEq(game.rngWordForDay(W), 0, "W was staged before its word was known");
         assertTrue(game.rngLocked(), "fresh W request is outstanding");
         assertEq(_afkingResetDay(), W, "one wall-day STAGE ran for W");
-        assertEq(_lastBought(atk), W, "W stamps after R's box has completed");
-        assertEq(_lastBought(bystander), W, "bystander follows the same serialized order");
+        assertEq(_endpoint(), W, "the W pass completed after R's box has completed");
         uint256 reqW = mockVRF.lastRequestId();
         assertTrue(reqW != reqR, "fresh request id");
         mockVRF.fulfillRandomWords(reqW, WORD_FRESH);
@@ -126,7 +120,7 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
         uint256 seat = _grantSeat(atk);
         vm.prank(atk);
         vm.expectRevert(RngLocked.selector);
-        game.subscribe(0, false, false, 2, 0, seat);
+        game.subscribe(0, false, 2, seat);
 
         _advanceUntilUnlocked();
         Vm.Log[] memory sealLogs = vm.getRecordedLogs();
@@ -134,12 +128,11 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
         (uint256 delivW,) = _countAfkingLogs(sealLogs);
         assertEq(_dailyIdx(), W, "W sealed");
         assertEq(_afkingResetDay(), W, "W's stage was not repeated after publication");
-        assertEq(_lastBought(atk), W, "attacker was not stamped on any gap day");
-        assertEq(_lastBought(bystander), W, "bystander was not stamped on any gap day");
+        assertEq(_endpoint(), W, "the pass endpoint skipped the gap days");
         assertEq(delivW, 0, "no subscription purchases while sealing known words");
         assertEq(game.rngWordForDay(W + 1), 0, "no future daily word");
         _settleClean(WORD_FRESH);
-        assertEq(_lastOpened(atk), W, "W box completes through the ordered engine");
+        assertFalse(GameSlotKeys.afkingBoxPending(address(game), _aid(atk)), "W box completes through the ordered engine");
 
         // ---- Positive control: the next day runs the STAGE (uncommitted word) and the drawing. ----
         _t += 1 days;
@@ -151,7 +144,7 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
         _requestDaily();
         (uint256 delivN,) = _countAfkingLogs(vm.getRecordedLogs());
         assertEq(_afkingResetDay(), N, "N: STAGE reset");
-        assertEq(_lastBought(atk), N, "N: STAGE stamped the attacker after W completed");
+        assertTrue(GameSlotKeys.afkingBoxPending(address(game), _aid(atk)), "N: STAGE stamped the attacker after W completed");
         assertTrue(delivN != 0, "N: AfkingDelivered on the normal-day STAGE");
         assertTrue(game.rngLocked(), "N: request outstanding");
         // Pick a fulfil word whose seat draw lands on a player slot (ring: VAULT, sDGNRS, atk, bystander).
@@ -185,7 +178,7 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
         uint256 seat = _grantSeat(who);
         _fundPool(who, 200 ether);
         vm.prank(who);
-        game.subscribe(0, false, false, 1, 0, seat);
+        game.subscribe(0, false, 1, seat);
     }
 
     function _fundPool(address who, uint256 amount) internal {
@@ -277,20 +270,7 @@ contract GapDayRewalkAfkingStage is DeployProtocol {
         return uint24(uint256(vm.load(address(game), bytes32(uint256(0)))) >> 24);
     }
 
-    function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
-        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT))))) >> (off * 8);
-        return p & ((uint256(1) << widthBits) - 1);
-    }
-
-    function _dailyQty(address who) internal view returns (uint8) {
-        return uint8(_subField(who, OFF_DAILY, 8));
-    }
-
-    function _lastBought(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_LASTBOUGHT, 24));
-    }
-
-    function _lastOpened(address who) internal view returns (uint32) {
-        return GameSlotKeys.afkingOpenedDay(address(game), game.walletIdOf(who));
+    function _endpoint() internal view returns (uint24) {
+        return uint24(uint256(vm.load(address(game), bytes32(GameSlots.AFKING_ENDPOINT_DAY))) >> (GameSlots.AFKING_ENDPOINT_DAY_OFFSET * 8));
     }
 }

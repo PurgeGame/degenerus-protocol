@@ -27,7 +27,7 @@ contract RewardRngBoundaryFixture is DegenerusGame, WalletSeed {
         ticketsFullyProcessed = true;
         humanReadComplete = complete;
         _recordDailyRng(sealedDay, word);
-        _afkingResetDay = complete ? stampDay : sealedDay;
+        _afkingResetDay = stampDay;
         subsFullyProcessed = true;
         _clearSubscriberSet();
         for (uint256 i; i < cleanPrefix; ++i) {
@@ -37,10 +37,9 @@ contract RewardRngBoundaryFixture is DegenerusGame, WalletSeed {
         }
         uint32 subId = _seedWallet(player);
         _seedSubscriber(subId, false);
-        Sub storage sub = _subOf[subId];
-        sub.amount = 10;
-        sub.score = 1200;
-        sub.lastAutoBoughtDay = stampDay;
+        uint256 position = _subPosition1(subId) - 1;
+        _setSubLaneAt(position, _subLaneAt(position) | (_encodeSubScore(1140) << SUB_SCORE_SHIFT));
+        _afkingCohortPriceMilli = 10;
         _pendingBoxCount = 1;
         _subOpenCursor = uint16(cleanPrefix);
         _subCursor = 0;
@@ -86,7 +85,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
         vm.expectCall(
             ContractAddresses.GAME_LOOTBOX_MODULE,
             abi.encodeWithSelector(
-                IDegenerusGameLootboxModule.resolveAfkingBox.selector, game.walletIdOf(PLAYER), uint256(0.01 ether), day, SESSION_WORD, uint16(1200)
+                IDegenerusGameLootboxModule.resolveAfkingBox.selector, game.walletIdOf(PLAYER), uint256(0.01 ether), day, SESSION_WORD, uint16(1140)
             )
         );
     }
@@ -133,25 +132,11 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
 
         // The new-day router drains the final old-session consumer before requesting again.
         _expectStampedResolve(day);
-        vm.recordLogs();
         for (uint256 i; i < 64 && _pending() != 0; ++i) _keep();
         _finishRead();
         assertEq(mockVRF.lastRequestId(), requestId, "final-drain call did not request new entropy");
         assertEq(_pending(), 0);
-        if (_openedDay() != day) {
-            // This fixture has zero daily quantity. Once its pending box opens, a later
-            // stage in the same keeper call may reclaim that cancellation tombstone.
-            Vm.Log[] memory logs = vm.getRecordedLogs();
-            uint32 playerId = game.walletIdOf(PLAYER);
-            bool reclaimed;
-            for (uint256 i; i < logs.length; ++i) {
-                if (logs[i].emitter == address(game) && logs[i].topics.length > 1
-                    && logs[i].topics[0] == keccak256("SubscriptionExpired(uint32,uint8)")
-                    && uint32(uint256(logs[i].topics[1])) == playerId
-                    && abi.decode(logs[i].data, (uint8)) == 2) reclaimed = true;
-            }
-            assertTrue(reclaimed, "stamp opened or its completed tombstone was reclaimed");
-        }
+        assertEq(_openedDay(), day, "the stamped box opened");
         assertTrue(_humanComplete(), "the empty human queue completes after AFKing");
         assertTrue(game.rngComplete(), "final AFKing open notifies completion even with human queue already done");
     }

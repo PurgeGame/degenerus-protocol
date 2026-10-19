@@ -4,7 +4,7 @@ pragma solidity ^0.8.26;
 import {claimableBalance} from "../helpers/ClaimableBalance.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {activityScoreOf} from "../helpers/ActivityScoreOf.sol";
-import {GameSlots} from "../helpers/GameSlots.sol";
+import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 
 /// @title ActivityScorePointFloorTest -- proves the whole-point activity score's sole sub-point leg
@@ -34,17 +34,9 @@ contract ActivityScorePointFloorTest is DeployProtocol {
     uint256 private constant OFF_QS_STREAK = 9;
     uint256 private constant OFF_QS_BASESTREAK = 11;
 
-    /// @dev Game-resident slots + the AFKing-Coin-era Sub-slot accumulator offsets (DegenerusGameStorage.sol
-    ///      struct Sub, post `validThroughLevel` deletion): _subOf mapping root @ slot 52; mintPacked_ deity
-    ///      bit @ bit 184. The accumulator section is affiliateBase u32 off19, pendingFlip u24 off23,
-    ///      subStreakLatch u16 off26. The two afking day markers are afkCoveredThroughDay u24 off13,
-    ///      afkingStartDay u24 off16.
-    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF;
+    /// @dev Game-resident slots: mintPacked_ deity bit @ bit 184.
     uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED;
     uint256 private constant DEITY_SHIFT = BitPackingLib.HAS_DEITY_PASS_SHIFT;
-    uint256 private constant OFF_AFKCOVERED = 10;
-    uint256 private constant OFF_AFKINGSTART = 13;
-    uint256 private constant OFF_STREAKLATCH = 23;
 
     /// @dev A deity-passed player with no quest streak scores exactly 50 + 25 + 80 = 155 points (the deity
     ///      base plus the deity activity bonus), with zero affiliate/whale/curse contribution — so the quest
@@ -252,19 +244,25 @@ contract ActivityScorePointFloorTest is DeployProtocol {
     // Afking-run drive helpers (ported from V56SecUnmanipulable, re-pointed to the post-PACK Sub offsets)
     // =========================================================================
 
-    /// @dev The live afking compute-on-read streak the score reads for `player`: `_streakBaseOf + (covered -
-    ///      afkingStartDay)` while the last covered day is no older than yesterday, else 0 (decay-on-read).
-    ///      Mirrors `_afkingStreak` off the post-PACK Sub slot so the test reads the same value the score does.
+    /// @dev The live afking streak the score reads for `player`: the lane's checkpoint streak plus the
+    ///      credited days past its checkpoint, 0 for a non-member.
     function _liveAfkingStreakOf(address player) internal view returns (uint32) {
-        uint32 covered = _afkCoveredOf(player);
-        uint32 today = game.currentDayView();
-        if (today == 0 || covered + 1 < today) return 0;
-        return _streakBaseOf(player) + covered - _afkingStartOf(player);
+        (uint256 lane, uint256 position1) = GameSlotKeys.subLane(address(game), game.walletIdOf(player));
+        if (position1 == 0) return 0;
+        uint256 day = (lane >> 46) & 0x3fffff;
+        uint256 endpoint = (uint256(vm.load(address(game), bytes32(GameSlots.AFKING_ENDPOINT_DAY)))
+            >> (GameSlots.AFKING_ENDPOINT_DAY_OFFSET * 8)) & 0xffffff;
+        return uint32(((lane >> 69) & 0xffff) + (endpoint > day ? endpoint - day : 0));
     }
 
-    /// @dev Deliver ONE funded day to `who`: a new-day STAGE buy (stamps the box + accrues + advances the
-    ///      covered high-water), settle clean, then open the pending box so the no-orphan guard does not skip
-    ///      the next day's buy. Each delivered day advances the live afking streak by one.
+    function _isMember(address player) internal view returns (bool) {
+        (, uint256 position1) = GameSlotKeys.subLane(address(game), game.walletIdOf(player));
+        return position1 != 0;
+    }
+
+    /// @dev Deliver ONE funded day to `who`: a new-day STAGE buy (stamps the box and completes the pass,
+    ///      moving the endpoint), settle clean, then open the pending box. Each delivered day advances the
+    ///      live afking streak by one.
     function _deliverDay(address[] memory who, uint256 vrfWord) internal {
         uint256 w = uint256(keccak256(abi.encode("dlv", vrfWord, _deliverNonce++))) | 1;
         _runStageNewDay(w);
@@ -285,11 +283,10 @@ contract ActivityScorePointFloorTest is DeployProtocol {
             vm.prank(player);
             game.claimWinnings(0);
         }
-        uint32 covered = _afkCoveredOf(player);
         uint256 w = uint256(keccak256(abi.encode("skip", vrfWord, _deliverNonce++))) | 1;
         _runStageNewDay(w);
         _settleClean(uint256(keccak256(abi.encode("skipc", w))) | 1);
-        assertLe(_afkCoveredOf(player), covered, "non-vacuity: unfunded day was not delivered (eviction clears the marker)");
+        assertFalse(_isMember(player), "non-vacuity: the unfunded run expired at the pass");
     }
 
     function _runStageNewDay(uint256 vrfWord) internal {
@@ -339,7 +336,7 @@ contract ActivityScorePointFloorTest is DeployProtocol {
     function _subscribeLootbox(address who, uint8 q) internal {
         uint256 seat = _grantSeat(who); // a new run burns a seat the subscriber holds
         vm.prank(who);
-        game.subscribe(0, false, false, q, 0, seat); // self, lootbox mode, no reinvest
+        game.subscribe(0, false, q, seat); // self, lootbox mode, no reinvest
     }
 
     function _fundPool(address who, uint256 amount) internal {
@@ -358,25 +355,5 @@ contract ActivityScorePointFloorTest is DeployProtocol {
     function _singleton(address a) internal pure returns (address[] memory arr) {
         arr = new address[](1);
         arr[0] = a;
-    }
-
-    // ---- Sub-slot reads (the post-PACK offsets) ----
-
-    function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
-        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT))))) >> (off * 8);
-        return p & ((uint256(1) << widthBits) - 1);
-    }
-
-    function _afkCoveredOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_AFKCOVERED, 24));
-    }
-
-    function _afkingStartOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_AFKINGSTART, 24));
-    }
-
-    /// @dev The afking-run streak base — the FULL post-PACK uint16 latch (off 30, width 16).
-    function _streakBaseOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_STREAKLATCH, 16));
     }
 }

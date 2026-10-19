@@ -70,18 +70,27 @@ interface IDegenerusQuestsAffiliate {
 interface ICoinflipAffiliate {
     /// @notice Credit FLIP to a single wallet.
     function creditFlip(uint32 id, uint256 amount) external;
+
+    /// @notice Credit FLIP to two wallets (zero-ID and zero-amount legs are skipped).
+    function creditFlipPair(uint32 id1, uint256 amount1, uint32 id2, uint256 amount2) external;
 }
 
-/// @notice Game-side accessor for the afking affiliate-base PULL.
-/// @dev The atomic read-and-zero of a sub's accrued `affiliateBase` (the running unclaimed flat-7%
-///      affiliate balance, WHOLE FLIP) happens AT THE STORAGE OWNER (the Game / GameAfkingModule via
-///      delegatecall) — guardrail 1: the affiliate `claim` consumer can NEVER pre-load the
-///      bases into a memory array, so a duplicate sub in `subs[]` drains 0 the second time. The accessor
-///      is AFFILIATE-gated on the Game side (only `ContractAddresses.AFFILIATE` may drain).
+/// @notice Game-side accessor for the afking settlement.
+/// @dev Each sub's settlement (its own reward paid, its flat-7% affiliate base returned, WHOLE
+///      FLIP) happens AT THE STORAGE OWNER (the Game / GameAfkingModule via delegatecall), which
+///      settles a run's subs in order and moves each sub's checkpoint before the next: a duplicate
+///      sub in `subs[]` settles nothing the second time, and the returned sums are the settled
+///      amounts, never a pre-loaded view. An upline that IS a sub (the rare mutual-referral cycle)
+///      forfeits its cut of that sub's base into A's remainder; it is never paid back to the sub.
+///      The accessor is AFFILIATE-gated on the Game side (only
+///      `ContractAddresses.AFFILIATE`).
 interface IGameAfkingDrain {
-    /// @notice Atomic read-and-zero of a sub's accrued affiliate base (whole FLIP).
-    /// @return base The drained whole-FLIP affiliate base (0 if already drained / never accrued).
-    function drainAffiliateBase(uint32 id) external returns (uint256 base);
+    /// @notice Settle up to eight subs sharing one direct affiliate and return their summed
+    ///         affiliate base (whole FLIP), with the parts from subs that are themselves an upline.
+    /// @param ids Up to eight subscriber IDs, 32 bits each from the low end (zero lanes skipped).
+    /// @param uplines The run's two upline IDs packed low/high 32 bits (zero for no referrer).
+    function drainAffiliateBases(uint256 ids, uint256 uplines)
+        external returns (uint256 sumB, uint256 skipU1, uint256 skipU2);
 
     /// @notice Current game level (the claim-time level basis for the leaderboard write).
     /// @return Current jackpot level (starts at 0).
@@ -255,7 +264,7 @@ contract DegenerusAffiliate {
     IDegenerusGame internal constant game = IDegenerusGame(ContractAddresses.GAME);
     /// @notice Game-side afking accessor for the affiliate-base PULL drain + claim-time level (constant).
     /// @dev Same address as `game` (the GameAfkingModule runs in the Game's storage context via
-    ///      delegatecall); a distinct typed handle for the `drainAffiliateBase` / `level` calls the
+    ///      delegatecall); a distinct typed handle for the `drainAffiliateBases` / `level` calls the
     ///      flat-7% deterministic-split PULL consumes.
     IGameAfkingDrain internal constant afkingDrain = IGameAfkingDrain(ContractAddresses.GAME);
 
@@ -830,30 +839,56 @@ contract DegenerusAffiliate {
     // =====================================================================
 
     /**
-     * @notice Settle a batch of afking subs' accrued affiliate base to the upline chain.
-     * @dev Permissionless. Every sub in `subs` must resolve to the same direct affiliate `A` (mixed
-     *      batches revert), so the chain A / U1 / U2 is resolved once. Each sub's accrued `affiliateBase`
-     *      is drained atomically at the storage owner via `drainAffiliateBase` — a duplicate sub drains 0
-     *      the second time, so it can't be double-counted. The batch total `sumB` is split 75/20/5
+     * @notice Settle a batch of afking subs on both sides: each sub's own reward and its affiliate
+     *         base to the upline chain.
+     * @dev Permissionless. Consecutive subs resolving to the same direct affiliate `A` form one run,
+     *      whose chain A / U1 / U2 is resolved once; a batch ordered by affiliate is cheapest. Each
+     *      run is settled atomically at the storage owner via `drainAffiliateBases`, which pays each
+     *      sub its own reward and returns its affiliate base — a duplicate sub settles nothing the
+     *      second time, so it can't be double-counted. A run's total `sumB` is split 75/20/5
      *      (A 75% / U1 20% / U2 5%), floored with the remainder to A so the parts never exceed `sumB`.
      *      `skipU1`/`skipU2` reduce that upline's share for the rare case where the upline is itself
      *      the sub; the freed portion folds into A's remainder (A is never the sub — self-referral
      *      resolves to VAULT). No-referrer subs split 50/50 VAULT/sDGNRS.
      *      The split is fixed (no roll, no seed), so claiming on any day yields the same result.
      *      Recipients are paid directly via `creditFlip` by wallet ID (FLIP; no ETH/`claimablePool` touch).
-     * @param subs Afking subscribers to settle; all must share the same direct affiliate `A` (from subs[0]).
+     * @param subs Afking subscribers to settle, in any order.
      */
     function claim(uint32[] calldata subs) external {
-        if (subs.length == 0) return;
-
-        // Resolve the upline chain ONCE from subs[0]. `A != sub` is guaranteed by the referral layer
-        // (self-referral resolves to VAULT), so the 75% leg never skips to a buyer.
+        uint256 n = subs.length;
+        if (n == 0) return;
         (uint32 a, bytes32 routeCode, ) = _referrerOf(subs[0]);
-        bool noReferrer = a == VAULT_ID;
+        uint256 start;
+        for (uint256 i = 1; i <= n; ) {
+            uint32 r;
+            bytes32 code;
+            if (i < n) (r, code, ) = _referrerOf(subs[i]);
+            if (i == n || r != a) {
+                _claimRun(subs, start, i, a, routeCode);
+                start = i;
+                a = r;
+                routeCode = code;
+            }
+            unchecked { ++i; }
+        }
+    }
+
+    /// @dev Settle the run `subs[start..end)`, every sub resolving to direct affiliate `a` reached
+    ///      through `routeCode`.
+    function _claimRun(uint32[] calldata subs, uint256 start, uint256 end, uint32 a, bytes32 routeCode) private {
+        if (a == VAULT_ID) {
+            // No referrer: no upline and no leaderboard write. 50/50 VAULT/sDGNRS, remainder to
+            // VAULT (whole FLIP).
+            (uint256 baseSum, , ) = _drainSubs(subs, start, end, 0);
+            if (baseSum == 0) return;
+            uint256 sdgnrsShare = baseSum / 2;
+            coinflip.creditFlipPair(VAULT_ID, baseSum - sdgnrsShare, SDGNRS_ID, sdgnrsShare);
+            return;
+        }
         uint24 lvl = afkingDrain.level() + 1;
         uint256 earningsWord = affiliateCoinEarned[lvl][a];
         uint256 uplines;
-        if (!noReferrer) {
+        {
             uint256 cache = _routeCache(routeCode, earningsWord);
             uint32 u;
             (u, cache) = _payoutUpline(routeCode, a, false, cache);
@@ -863,16 +898,8 @@ contract DegenerusAffiliate {
             earningsWord = (earningsWord & EARNINGS_MASK) | (cache << 128);
         }
 
-        (uint256 sumB, uint256 skipU1, uint256 skipU2) = _drainSubs(subs, a, uplines);
-        if (sumB == 0) return; // nothing accrued / already drained — no-op (idempotent re-claim)
-
-        if (noReferrer) {
-            // No referrer: 50/50 VAULT/sDGNRS, remainder to VAULT (whole FLIP).
-            uint256 sdgnrsShare = sumB / 2;
-            coinflip.creditFlip(VAULT_ID, sumB - sdgnrsShare);
-            coinflip.creditFlip(SDGNRS_ID, sdgnrsShare);
-            return;
-        }
+        (uint256 sumB, uint256 skipU1, uint256 skipU2) = _drainSubs(subs, start, end, uplines);
+        if (sumB == 0) return; // nothing elapsed / already settled — no-op (idempotent re-claim)
 
         // 75/20/5 split, floored with the remainder to A so the parts never exceed sumB.
         uint256 u1Share = ((sumB - skipU1) * 20) / 100;
@@ -882,40 +909,29 @@ contract DegenerusAffiliate {
         // into; sumB already uses whole-token units).
         _recordEarnings(lvl, a, sumB, earningsWord);
 
-        // Pay the (at most 3) recipients directly. creditFlip is a pure ledger add (recordAmount=0).
-        coinflip.creditFlip(a, sumB - u1Share - u2Share);
-        if (u1Share != 0) coinflip.creditFlip(uint32(uplines), u1Share);
+        // Pay the (at most 3) recipients directly; each credit is a pure ledger add (recordAmount=0).
+        coinflip.creditFlipPair(a, sumB - u1Share - u2Share, uint32(uplines), u1Share);
         if (u2Share != 0) coinflip.creditFlip(uint32(uplines >> 32), u2Share);
     }
 
-    /// @dev Drain every sub's accrued base, checking each resolves to the direct affiliate `a`.
-    ///      An upline that IS the sub (the rare mutual-referral cycle) forfeits its cut of that
-    ///      sub's base into A's remainder; it is never paid back to the sub. `uplines` packs the
-    ///      two upline IDs (zero for a no-referrer batch); only a sub with a nonzero base, and so a
-    ///      nonzero ID, is compared.
-    function _drainSubs(uint32[] calldata subs, uint32 a, uint256 uplines)
+    /// @dev Settle `subs[start..end)` at the storage owner, eight packed IDs per call; a duplicate
+    ///      sub settles nothing the second time.
+    function _drainSubs(uint32[] calldata subs, uint256 start, uint256 end, uint256 uplines)
         private
         returns (uint256 sumB, uint256 skipU1, uint256 skipU2)
     {
-        uint256 n = subs.length;
-        for (uint256 i; i < n; ) {
-            uint32 subId = subs[i];
-            // SAME-AFFILIATE batch: every sub MUST resolve to the same direct affiliate (mixed reverts).
-            // subs[0] defines `a`, so only later entries need the check.
-            if (i != 0) {
-                (uint32 r, , ) = _referrerOf(subId);
-                if (r != a) revert Insufficient();
+        while (start < end) {
+            uint256 stop = end - start > 8 ? start + 8 : end;
+            uint256 ids;
+            for (uint256 i = start; i < stop; ) {
+                ids |= uint256(subs[i]) << ((i - start) * 32);
+                unchecked { ++i; }
             }
-
-            // Atomic read-and-zero at the storage owner: a duplicate sub drains 0 the second time.
-            uint256 b = afkingDrain.drainAffiliateBase(subId);
-            if (b != 0) {
-                sumB += b;
-                if (subId == uint32(uplines)) skipU1 += b;
-                if (subId == uint32(uplines >> 32)) skipU2 += b;
-            }
-
-            unchecked { ++i; }
+            (uint256 b, uint256 s1, uint256 s2) = afkingDrain.drainAffiliateBases(ids, uplines);
+            sumB += b;
+            skipU1 += s1;
+            skipU2 += s2;
+            start = stop;
         }
     }
 

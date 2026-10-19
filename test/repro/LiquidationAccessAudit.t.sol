@@ -17,6 +17,8 @@ contract LiquidationAuditHost is DegenerusGame {
         dailyIdx = day;
         purchaseStartDay = day;
         _afkingResetDay = day;
+        _afkingEndpointDay = day;
+        subsFullyProcessed = true;
         _recordDailyRng(day - 1, 123_456);
         _setRngComplete(true);
         _setRngRequestActive(false);
@@ -57,8 +59,8 @@ contract LiquidationAuditHost is DegenerusGame {
         require(abi.decode(result, (MineFlipGas.Result)).done, "preparation incomplete");
     }
 
-    function subState(uint32 id) external view returns (Sub memory) {
-        return _subOf[id];
+    function laneOf(uint32 id) external view returns (uint256 lane, uint256 position1) {
+        return _subLaneOf(id);
     }
 }
 
@@ -90,10 +92,10 @@ contract LiquidationAccessAuditTest is DeployProtocol {
         ids[0] = id;
     }
 
-    function _subscribe(address owner, uint32 id, uint32 source) private {
+    function _subscribe(address owner, uint32 id) private {
         uint256 seat = _grantSeat(owner);
         vm.prank(owner);
-        game.subscribe{value: 0.02 ether}(id, false, true, 1, source, seat);
+        game.subscribe{value: 0.02 ether}(id, true, 1, seat);
     }
 
     function _default(uint32 id) private {
@@ -109,13 +111,11 @@ contract LiquidationAccessAuditTest is DeployProtocol {
         host.prepareNextDay();
     }
 
-    /// @dev By design: a seized or funder-seized run's unclaimed rewards are claimable
-    ///      permissionlessly until the stage reclaims the tombstone, which deletes them.
+    /// @dev A seized run is removed by the next pass without being settled: its unclaimed
+    ///      rewards are forfeited, and nothing is left to claim.
     function _assertRewardsGoneAfterCleanup(uint32 id) private {
-        DegenerusGameStorage.Sub memory gone = host.subState(id);
-        assertEq(gone.setPosition, 0);
-        assertEq(gone.pendingFlip, 0, "reclaim deletes unclaimed FLIP");
-        assertEq(gone.affiliateBase, 0, "reclaim deletes unclaimed affiliate base");
+        (, uint256 position1) = host.laneOf(id);
+        assertEq(position1, 0, "the pass removed the run");
         vm.recordLogs();
         game.claimAfkingFlip(_one(id));
         affiliate.claim(_one(id));
@@ -123,15 +123,12 @@ contract LiquidationAccessAuditTest is DeployProtocol {
     }
 
     function test_SeizedSubscriptionRewardsClaimableUntilCleanup() public {
-        _subscribe(borrower, root, 0);
-        DegenerusGameStorage.Sub memory before = host.subState(root);
-        assertGt(before.pendingFlip, 0, "paid subscription earned FLIP");
-        assertGt(before.affiliateBase, 0, "paid subscription earned affiliate rewards");
+        _subscribe(borrower, root);
+        _cleanup(); // one completed pass after signup: one day owed
         _default(root);
-        DegenerusGameStorage.Sub memory cancelled = host.subState(root);
-        assertEq(cancelled.dailyQuantity, 0);
-        assertEq(cancelled.pendingFlip, before.pendingFlip, "seizure leaves rewards in tombstone");
-        assertEq(cancelled.affiliateBase, before.affiliateBase);
+        (uint256 lane, uint256 position1) = host.laneOf(root);
+        assertGt(position1, 0, "the closed run keeps its place until the next pass");
+        assertEq((lane >> 68) & 1, 1, "seizure marks the run for removal");
 
         // The lender can claim before cleanup, so this is a real claim that disappears.
         uint256 snapshot = vm.snapshotState();
@@ -144,25 +141,20 @@ contract LiquidationAccessAuditTest is DeployProtocol {
         _assertRewardsGoneAfterCleanup(root);
     }
 
-    function test_SponsoredSubscriberRewardsClaimableUntilFunderSeizureCleanup() public {
-        address subscriber = makeAddr("audit-sponsored");
+    function test_UnrelatedSubscriberKeepsItsRunWhenAnotherAccountIsSeized() public {
+        address subscriber = makeAddr("audit-bystander");
         vm.deal(subscriber, 1 ether);
         uint32 id = _giveWalletId(subscriber);
-        vm.prank(borrower);
-        game.setAfkingFundingApproval(root, id, true);
-        _subscribe(subscriber, id, root);
-        // This unrelated subscriber has ample own funding, but its selected source is sold.
+        _subscribe(subscriber, id);
         vm.prank(subscriber);
         game.depositAfkingFunding{value: 0.5 ether}(id);
-        DegenerusGameStorage.Sub memory before = host.subState(id);
-        assertGt(before.pendingFlip, 0);
-        assertGt(before.affiliateBase, 0);
         _default(root);
         assertEq(game.acquiredBuyer(id), 0, "subscriber itself was not seized");
         _cleanup();
-        assertEq(host.subState(id).setPosition, 0);
-        assertEq(game.afkingFundingOf(subscriber), 0.5 ether, "own prepaid ETH survives");
-        _assertRewardsGoneAfterCleanup(id);
+        (uint256 lane, uint256 position1) = host.laneOf(id);
+        assertGt(position1, 0, "its run survives the cleanup pass");
+        assertEq((lane >> 68) & 1, 0, "and is not marked for removal");
+        assertGt(game.afkingFundingOf(subscriber), 0, "own prepaid ETH survives");
     }
 
     function test_OldOperatorAndOwnerCannotSpendSeizedMainOrChild() public {
@@ -203,18 +195,13 @@ contract LiquidationAccessAuditTest is DeployProtocol {
         assertFalse(allowed, "old approval does not migrate to new main");
     }
 
-    function test_StaleFundingAndStethApprovalsCannotChargeFormerOwnerOrBuyer() public {
-        address subscriber = makeAddr("audit-steth-subscriber");
-        vm.deal(subscriber, 1 ether);
-        uint32 id = _giveWalletId(subscriber);
+    function test_SeizedRunCannotChargeFormerOwnerOrBuyerStethApproval() public {
         vm.startPrank(borrower);
-        game.setAfkingFundingApproval(root, id, true);
         mockStETH.approve(address(game), type(uint256).max);
         vm.stopPrank();
         mockStETH.mint(borrower, 2 ether);
-        _subscribe(subscriber, id, root);
+        _subscribe(borrower, root);
         _default(root);
-        assertFalse(game.afkingFundingApproved(root, id));
         uint256 formerOwnerBalance = mockStETH.balanceOf(borrower);
         uint256 buyerBalance = mockStETH.balanceOf(address(sdgnrs));
         _cleanup();

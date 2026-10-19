@@ -254,21 +254,23 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
       |                          RETURN STRUCTS                              |
       +======================================================================+*/
 
-    /// @notice The full afking Sub record (one game-storage slot) plus the unified
-    ///         effective quest streak the activity score reads.
+    /// @notice An afking subscriber's record, the rewards its next settlement pays, and the
+    ///         unified effective quest streak the activity score reads.
     struct SubFull {
-        bool active; // dailyQuantity != 0 (a live run)
-        uint8 dailyQuantity;
-        uint8 flags; // bit 1 = drainGameCreditFirst; bit 2 = useTickets
-        uint16 score; // frozen activity score stamp (box EV input)
-        uint24 amountMilliEth; // frozen spend stamp, milli-ETH
-        uint24 lastAutoBoughtDay;
-        uint24 afkCoveredThroughDay;
-        uint24 afkingStartDay;
-        uint32 affiliateBase; // unclaimed whole-FLIP affiliate accumulator
-        uint24 pendingFlip; // claimable whole-FLIP accumulator
-        uint16 subStreakLatch; // streakAtAfkingStart (run base)
-        uint32 effectiveStreak; // unified streak: live afking compute-on-read, else manual
+        bool member; // in the subscriber set
+        bool active; // a live run: a member not pending removal
+        bool removalPending; // seized; the next preparation pass removes it
+        bool paused; // a protocol seat that buys and earns nothing
+        bool useTickets;
+        uint8 dailyQuantity; // 0 for a non-member
+        uint16 score; // frozen activity score of its latest box (EV input)
+        uint24 checkpointDay; // rewards are settled through this day (parked while paused)
+        uint16 checkpointStreak; // streak at the checkpoint day
+        uint24 runStartDay; // daily-draw age base
+        uint24 endpoint; // last completed subscriber pass: rewards accrue through it
+        uint256 owedFlip; // whole FLIP the next settlement pays the sub (0 once collection closed)
+        uint256 owedAffiliateBase; // whole-FLIP affiliate base the next settlement hands upline
+        uint32 effectiveStreak; // unified streak: live afking streak, else manual
     }
 
     /// @notice Per-component activity score attribution. `total` is the game's own
@@ -358,79 +360,96 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
       |                        AFKING SUB RECORD                             |
       +======================================================================+*/
 
-    /// @notice The full Sub record for `player` — every field of the packed slot — plus the
-    ///         unified effective quest streak (the same value _effectiveQuestStreak feeds the
-    ///         score).
+    /// @notice The subscriber record for `player`, the rewards its next settlement pays, plus
+    ///         the unified effective quest streak (the same value _effectiveQuestStreak feeds
+    ///         the score).
     function subInfoFull(address game, address player) external view returns (SubFull memory s) {
         return subInfoFullById(game, _walletId(game, player));
     }
 
     function subInfoFullById(address game, uint32 id) public view returns (SubFull memory s) {
-        uint256 base;
-        assembly {
-            base := _subOf.slot
+        (uint256 lane, uint256 position1, uint256 meta) = _subLaneMirror(game, id);
+        s.endpoint = _afkingEndpointMirror(game);
+        s.effectiveStreak = _effectiveQuestStreakMirror(id, lane, position1, s.endpoint);
+        if (position1 == 0) return s;
+        s.member = true;
+        s.removalPending = lane & SUB_REMOVAL_BIT != 0;
+        s.active = !s.removalPending;
+        s.paused = _protocolPausedMirror(game, id);
+        s.useTickets = lane & SUB_TICKETS_BIT != 0;
+        s.dailyQuantity = uint8(_subQuantity(lane));
+        s.score = _decodeSubScore((lane >> SUB_SCORE_SHIFT) & SUB_SCORE_MASK);
+        s.checkpointDay = _subDay(lane);
+        s.checkpointStreak = uint16(_subCheckpointStreak(lane));
+        s.runStartDay = uint24((meta >> 11) & SUB_DAY_MASK);
+        // Mirrors the module's settlement, which pays nothing for a paused seat (its checkpoint
+        // day is parked past every endpoint) and nothing once reward collection closes at the
+        // liveness trigger.
+        if (s.endpoint > s.checkpointDay && !IDegenerusGameLensSource(game).livenessTriggered()) {
+            uint256 elapsed = s.endpoint - s.checkpointDay;
+            uint256 quantity = s.dailyQuantity;
+            s.owedFlip = elapsed * (s.useTickets ? 100 + 100 * quantity : 100);
+            s.owedAffiliateBase = elapsed * 70 * quantity;
         }
-        uint256 w = _sload(game, _mapSlot(uint256(id), base));
-        s.dailyQuantity = uint8(w);
-        s.active = s.dailyQuantity != 0;
-        s.flags = uint8(w >> 8);
-        s.score = uint16(w >> 16);
-        s.amountMilliEth = uint24(w >> 32);
-        s.lastAutoBoughtDay = uint24(w >> 56);
-        s.afkCoveredThroughDay = uint24(w >> 80);
-        s.afkingStartDay = uint24(w >> 104);
-        s.affiliateBase = uint32(w >> 128);
-        s.pendingFlip = uint24(w >> 160);
-        s.subStreakLatch = uint16(w >> 184);
-        s.effectiveStreak = _effectiveQuestStreakMirror(game, id, w);
     }
 
-    /// @dev Mirror of DegenerusGameStorage._effectiveQuestStreak, sourcing the Sub
-    ///      slot via extsload (`subWord`) instead of local storage: a live afking sub
-    ///      reads the Sub-side compute-on-read, everyone else the manual streak.
+    /// @dev A subscriber's lane, set position + 1 (0 = not a member) and reverse-lookup lane,
+    ///      via extsload.
+    function _subLaneMirror(address game, uint32 id)
+        private view returns (uint256 lane, uint256 position1, uint256 meta)
+    {
+        uint256 metaBase;
+        uint256 setSlot;
+        assembly {
+            metaBase := _subMeta.slot
+            setSlot := _subscribers.slot
+        }
+        meta = uint64(_sload(game, _mapSlot(uint256(id >> 2), metaBase)) >> ((id & 3) * 64));
+        position1 = meta & 0x7ff;
+        if (position1 == 0) return (0, 0, meta);
+        uint256 position = position1 - 1;
+        uint256 word = _sload(game, bytes32(uint256(keccak256(abi.encode(setSlot))) + position / 3));
+        lane = (word >> ((position % 3) * SUB_LANE_BITS)) & SUB_LANE_MASK;
+    }
+
+    /// @dev Mirror of DegenerusGameStorage._afkingEndpoint via extsload.
+    function _afkingEndpointMirror(address game) private view returns (uint24) {
+        uint256 slot;
+        uint256 off;
+        assembly {
+            slot := _afkingEndpointDay.slot
+            off := _afkingEndpointDay.offset
+        }
+        return uint24(_sload(game, bytes32(slot)) >> (off << 3));
+    }
+
+    /// @dev Mirror of DegenerusGameStorage._protocolPaused via extsload.
+    function _protocolPausedMirror(address game, uint32 id) private view returns (bool) {
+        if (id != VAULT_WALLET_ID && id != SDGNRS_WALLET_ID) return false;
+        uint256 slot;
+        uint256 off;
+        assembly {
+            slot := _afkingProtocolFlags.slot
+            off := _afkingProtocolFlags.offset
+        }
+        uint8 flags = uint8(_sload(game, bytes32(slot)) >> (off << 3));
+        if (id == VAULT_WALLET_ID) return flags & (AFK_VAULT_OWNER_PAUSED | AFK_VAULT_UNFUNDED) != 0;
+        return flags & AFK_SDGNRS_UNFUNDED != 0;
+    }
+
+    /// @dev Mirror of DegenerusGameStorage._effectiveQuestStreak over an extsload-sourced lane:
+    ///      a live afking run reads its derived streak, everyone else the manual streak.
     function _effectiveQuestStreakMirror(
-        address game,
         uint32 id,
-        uint256 subWord
+        uint256 lane,
+        uint256 position1,
+        uint24 endpoint
     ) private view returns (uint32) {
         (uint32 manualStreak, bool afking) = quests.effectiveBaseStreakAndAfking(id);
-        if (!afking) return manualStreak;
-        if (uint24(subWord >> 104) != 0) {
-            uint32 a = _afkingStreakMirror(game, subWord);
-            if (a != 0) return a;
-        }
-        return manualStreak;
-    }
-
-    /// @dev Mirror of DegenerusGameStorage._afkingStreak over an extsload-sourced Sub
-    ///      word: run base + funded delivered days, decayed to 0 once a playable full
-    ///      day passed without a funded delivery (days inside a pending unadvanced
-    ///      gap — the next day's word unsealed — do not decay).
-    function _afkingStreakMirror(address game, uint256 subWord) private view returns (uint32) {
-        uint24 covered = uint24(subWord >> 80); // afkCoveredThroughDay
-        uint24 currentDay = GameTimeLib.currentDayIndex();
-        if (currentDay == 0) return 0;
-        if (uint32(covered) + 1 < uint32(currentDay)) {
-            uint24 sealedDay = _dailyIdx(game);
-            if (
-                uint32(currentDay) <= uint32(sealedDay) + 1 ||
-                covered < sealedDay ||
-                _rngWordByDayOf(game, uint24(sealedDay + 1)) != 0
-            ) return 0;
-        }
-        return uint32(uint16(subWord >> 184)) + uint32(covered - uint24(subWord >> 104));
-    }
-
-    /// @dev _recordedDailyWord(day) via extsload (read-only periphery mirror of the sealed
-    ///      daily word — consumed here only as the afking decay gate's presence test,
-    ///      exactly the predicate _afkingStreak applies).
-    function _rngWordByDayOf(address game, uint24 day) private view returns (uint256) {
-        uint256 root;
-        uint256 tagsSlot;
-        assembly { root := rngWordByDay.slot tagsSlot := rngDayTags.slot }
-        uint256 tags = _sload(game, bytes32(tagsSlot));
-        if (day == 0 || uint24(tags >> ((day & 1) * 24)) != day) return 0;
-        return _sload(game, _mapSlot(uint256(day & 1), root));
+        if (!afking || position1 == 0 || lane & SUB_REMOVAL_BIT != 0) return manualStreak;
+        uint256 a = _subStreakAt(lane, endpoint);
+        if (a == 0) return manualStreak;
+        return a > type(uint32).max ? type(uint32).max : uint32(a);
     }
 
     /*+======================================================================+
@@ -532,13 +551,10 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         if (id == 0) return b;
 
         uint256 packedBase;
-        uint256 subBase;
         assembly {
             packedBase := mintPacked_.slot
-            subBase := _subOf.slot
         }
         uint256 packed = _sload(game, _mapSlot(uint256(id), packedBase));
-        uint256 subWord = _sload(game, _mapSlot(uint256(id), subBase));
         uint256 w = _levelWord(game);
         uint24 currLevel;
         {
@@ -549,7 +565,10 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
             currLevel = uint24(w >> (o << 3));
         }
 
-        b.questStreak = _effectiveQuestStreakMirror(game, id, subWord);
+        {
+            (uint256 lane, uint256 position1, ) = _subLaneMirror(game, id);
+            b.questStreak = _effectiveQuestStreakMirror(id, lane, position1, _afkingEndpointMirror(game));
+        }
         b.questStreakPoints = uint256(b.questStreak) / 2;
 
         b.deityPass = packed >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0;

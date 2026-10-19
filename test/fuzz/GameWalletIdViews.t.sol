@@ -67,16 +67,22 @@ contract ViewsGameExt is DegenerusGame {
         return _tqPositionAt(ticketQueue[_ticketQueueStorageKey(key)], k);
     }
 
-    function x_setSub(uint32 id, uint8 qty, uint24 startDay, uint24 covered, uint16 latch, uint32 setPos) external {
-        Sub storage s = _subOf[id];
-        s.dailyQuantity = qty;
-        s.afkingStartDay = startDay;
-        s.afkCoveredThroughDay = covered;
-        s.subStreakLatch = latch;
-        s.setPosition = setPos;
+    /// @dev Seed `id` as a box member: quantity `qty`, checkpoint day and streak, optionally
+    ///      pending removal.
+    function x_setSub(uint32 id, uint8 qty, uint24 checkpointDay, uint16 checkpointStreak, bool removal) external {
+        uint256 count = _subscribers.length;
+        uint256 position = _subBoxCount++;
+        uint256 lane = _withSubCheckpoint(uint256(id) | ((uint256(qty) - 1) << SUB_QTY_SHIFT), checkpointDay, checkpointStreak);
+        _setSubLaneAt(position, removal ? lane | SUB_REMOVAL_BIT : lane);
+        _setSubscriberCount(count + 1);
+        _setSubMetaLane(id, position + 1);
     }
 
-    function x_streakBase(uint32 id) external view returns (uint16) { return _streakBaseOf(_subOf[id]); }
+    function x_setEndpoint(uint24 day) external { _afkingEndpointDay = day; }
+    function x_streak(uint32 id) external view returns (uint256) {
+        (uint256 lane,) = _subLaneOf(id);
+        return _subStreakAt(lane, _afkingEndpoint());
+    }
     function x_today() external view returns (uint24) { return _simulatedDayIndex(); }
 }
 
@@ -559,8 +565,8 @@ contract GameWalletIdViews is DeployProtocol {
     function test_AfkingCallbacksKeyById() public {
         vm.warp(block.timestamp + 10 days);
         (, uint32 id) = _wallet("afk_callback");
-        uint24 today = ext.x_today();
-        ext.x_setSub(id, 1, today - 2, today - 1, 5, 7);
+        ext.x_setEndpoint(ext.x_today());
+        ext.x_setSub(id, 1, ext.x_today(), 5, false);
 
         vm.prank(makeAddr("not_quests"));
         vm.expectRevert(bytes4(keccak256("NotApproved()")));
@@ -571,17 +577,17 @@ contract GameWalletIdViews is DeployProtocol {
 
         vm.prank(ContractAddresses.QUESTS);
         game.recordAfkingSecondary(id, 3);
-        assertEq(ext.x_streakBase(id), 8, "secondary bumps the ID's base");
+        assertEq(ext.x_streak(id), 8, "secondary bumps the ID's base");
         vm.prank(ContractAddresses.QUESTS);
         game.floorAfkingStreakBase(id, 20);
-        assertEq(ext.x_streakBase(id), 20, "floor raises the ID's base");
+        assertEq(ext.x_streak(id), 20, "floor raises the ID's base");
         vm.prank(ContractAddresses.QUESTS);
         game.floorAfkingStreakBase(id, 10);
-        assertEq(ext.x_streakBase(id), 20, "floor never lowers");
+        assertEq(ext.x_streak(id), 20, "floor never lowers");
 
         // ID 0 and a non-live run: no write at all.
         (, uint32 idle) = _wallet("afk_not_live");
-        ext.x_setSub(idle, 1, 0, 0, 4, 9);
+        ext.x_setSub(idle, 1, ext.x_today(), 4, true);
         vm.record();
         vm.startPrank(ContractAddresses.QUESTS);
         game.recordAfkingSecondary(0, 3);
@@ -590,9 +596,8 @@ contract GameWalletIdViews is DeployProtocol {
         game.floorAfkingStreakBase(idle, 50);
         vm.stopPrank();
         (, bytes32[] memory writes) = vm.accesses(address(game));
-        assertEq(writes.length, 0, "no-op for ID 0 and a non-live run");
-        assertEq(ext.x_streakBase(idle), 4, "non-live base unchanged");
-        assertEq(uint256(vm.load(address(game), GameSlotKeys.byId(0, GameSlots.SUB_OF))), 0, "nothing under ID 0");
+        assertEq(writes.length, 0, "no-op for ID 0 and a run pending removal");
+        assertEq(ext.x_streak(idle), 4, "a run pending removal is unchanged");
     }
 
     // =====================================================================
@@ -958,7 +963,8 @@ contract GameWalletIdViews is DeployProtocol {
         DegenerusGameLens lens = new DegenerusGameLens();
         (address p, uint32 id) = _wallet("lens_player");
         uint24 today = ext.x_today();
-        ext.x_setSub(id, 1, today - 3, today - 1, 7, 3);
+        ext.x_setEndpoint(today);
+        ext.x_setSub(id, 1, today - 2, 7, false);
         // A stale affiliate cache level: both Game and Lens read the points by ID.
         bytes32 mintSlot = GameSlotKeys.mintPacked(p);
         uint256 word = uint256(vm.load(address(game), mintSlot));
@@ -977,8 +983,8 @@ contract GameWalletIdViews is DeployProtocol {
         );
 
         DegenerusGameLens.SubFull memory s = lens.subInfoFull(address(game), p);
-        assertEq(s.effectiveStreak, 9, "live run: base 7 + two funded days");
-        assertEq(s.subStreakLatch, 7, "Sub record read by the ID");
+        assertEq(s.effectiveStreak, 9, "live run: checkpoint streak 7 + two elapsed days");
+        assertEq(s.checkpointStreak, 7, "lane read by the ID");
         DegenerusGameLens.ActivityBreakdown memory b = lens.activityScoreBreakdown(address(game), p);
         (uint256 total, uint32 gameId) = game.playerActivityScore(p);
         assertEq(gameId, id, "Game returns the ID");

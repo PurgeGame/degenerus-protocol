@@ -96,8 +96,8 @@ timestamp compare (credit accrual) and slot-0 reads of `degenesisClosed`.
 
 **Credit.** While `block.timestamp < DEGENESIS_END_TS`, a qualifying spend earns `spend / 4`
 Degenesis credit on the buyer's wallet ID (`degenesisCredit`, view `degenesisCreditOf`): tickets
-(Mint `totalCost`), ordinary lootboxes, whale, lazy and deity passes (full charged price), foil premiums,
-and the AFKing subscribe-time cover buy (`ethValue + claimableUse`, to the subscriber). Only ETH,
+(Mint `totalCost`), ordinary lootboxes, whale, lazy and deity passes (full charged price) and foil
+premiums. Only ETH,
 claimable and prepaid parts qualify; FLIP-paid parts, reward grants, daily AFKing deliveries, Degenesis
 purchases and the Vault and sDGNRS bodies earn nothing. Credit is permission to spend, not payment, and
 expires unused when the window closes.

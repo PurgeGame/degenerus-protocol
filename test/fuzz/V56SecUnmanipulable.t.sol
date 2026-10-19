@@ -10,16 +10,18 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IGameAfkingModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
+import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 
 /// @title Subscription churn accounting and streak regressions
 /// @notice Claim/cancel/upsert receipts are measured from wallet, claimable and next-day stake
-///      deltas, including implicit payouts. Paid plus pending rewards reconcile to actual funded
+///      deltas, including implicit payouts. Paid plus owed rewards reconcile to actual funded
 ///      deliveries; each affiliate recipient is checked separately. Honest and churn controls
 ///      share a timeline, while random lootbox returns and later coinflip outcomes are outside
-///      the subscription-principal comparison. Other cases cover streak handback, no-orphan
-///      processing, the affiliate-only drain and claim idempotency.
-/// @dev Uses real funded subscriptions and production buy/open/claim/cancel paths. Storage
-///      probes read the current packed Sub layout. Only test fixtures grant membership seats.
+///      the subscription-principal comparison. Other cases cover streak handback, the
+///      affiliate-only drain, claim idempotency and expiry.
+/// @dev Uses real funded subscriptions and production buy/open/claim/cancel paths. Rewards derive
+///      from the checkpoint, so every state change settles both sides first; the lens mirrors the
+///      owed amounts. Only test fixtures grant membership seats.
 contract V56SecUnmanipulable is DeployProtocol {
 
     mapping(address => uint32) private _aidCache;
@@ -40,27 +42,12 @@ contract V56SecUnmanipulable is DeployProtocol {
         for (uint256 i; i < a.length; ++i) ids[i] = _aid(a[i]);
     }
 
-    // -------------------------------------------------------------------------
-    // Game-resident storage slots + the v56 Sub-slot offset block (V56AfkingGasMarginal:68-89)
-    // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF;            // _subOf mapping root (address => Sub, one packed slot) (was 58)
-
-    //   dailyQuantity u8 @0 · flags u8 @1 · score u16 @2 · amount u24 @4
-    //   lastAutoBoughtDay u24 @7 · afkCoveredThroughDay u24 @10 · afkingStartDay u24 @13
-    //   affiliateBase u32 @16 · pendingFlip u24 @20 · subStreakLatch u16 @23
-    uint256 private constant OFF_DAILY = 0;           // uint8  dailyQuantity        (byte 0)
-    uint256 private constant OFF_LASTBOUGHT = 7;      // uint24 lastAutoBoughtDay    (bytes 7..9)
-    uint256 private constant OFF_AFKCOVERED = 10;     // uint24 afkCoveredThroughDay (bytes 10..12)
-    uint256 private constant OFF_AFKINGSTART = 13;    // uint24 afkingStartDay       (bytes 13..15)
-    uint256 private constant OFF_AFFBASE = 16;        // uint32 affiliateBase        (bytes 16..19)
-    uint256 private constant OFF_PENDINGFLIP = 20;    // uint24 pendingFlip          (bytes 20..22)
-    uint256 private constant OFF_STREAKLATCH = 23;    // uint16 subStreakLatch       (bytes 23..24)
-
-    /// @dev QUEST_SLOT0_REWARD / 1 ether = 100 whole FLIP accrued to pendingFlip per delivered buy.
+    /// @dev Whole FLIP a one-unit box-mode member earns per credited day.
     uint256 private constant SLOT0_FLIP_PER_BUY = 100;
 
-    /// @dev SubscriptionExpired(player indexed, uint8 reason): reason 1 = AutoPause (funding-skip kill of
-    ///      a NORMAL sub), reason 2 = cancel-reclaim (the in-stage tombstone reclaim).
+    DegenerusGameLens private lens;
+
+    /// @dev SubscriptionExpired(player indexed, uint8 reason): reason 1 = unfunded, reason 2 = seized.
     bytes32 private constant SUB_EXPIRED_SIG = keccak256("SubscriptionExpired(uint32,uint8)");
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
@@ -72,6 +59,7 @@ contract V56SecUnmanipulable is DeployProtocol {
         _t = block.timestamp + 1 days;
         vm.warp(_t);
         vm.deal(address(game), 5_000_000 ether);
+        lens = new DegenerusGameLens();
         _finishSubscriptionWindow();
     }
 
@@ -79,8 +67,8 @@ contract V56SecUnmanipulable is DeployProtocol {
     // Repro 1 — affiliate re-claim churn (automatic payments conserve earned principal)
     // =========================================================================
 
-    /// @notice Compare actual paid-plus-pending obligations on one timeline. Cancellation pays
-    ///      both ledgers automatically; re-subscribing on that day must neither buy nor pay twice.
+    /// @notice Compare actual paid-plus-owed obligations on one timeline. Cancellation pays
+    ///      both sides; re-subscribing on that day must neither buy nor pay twice.
     function testAffiliateReClaimChurnEqualsHonestContinuous() public {
         ChurnLedger memory honest = _newChurnLedger("aff_honest");
         ChurnLedger memory churn = _newChurnLedger("aff_churn");
@@ -88,10 +76,10 @@ contract V56SecUnmanipulable is DeployProtocol {
         _observeChurnAction(churn, 0);
         for (uint256 d; d < 3; ++d) {
             _deliverLedgerDay(honest, churn, uint256(keccak256(abi.encode("aff", d))) | 1);
-            assertGt(_affiliateBaseOf(churn.player), 0, "cancel must drain an earned affiliate obligation");
+            assertGt(_owed(churn.player).owedAffiliateBase, 0, "cancel must settle an earned affiliate obligation");
             _observeChurnAction(churn, 2);
-            _observeChurnAction(churn, 1); // auto-paid pendingFlip cannot be claimed again
-            _observeChurnAction(churn, 3); // duplicate sub IDs cannot reclaim the auto-paid base
+            _observeChurnAction(churn, 1); // a cancelled member has nothing left to claim
+            _observeChurnAction(churn, 3); // duplicate sub IDs cannot reclaim the settled base
             if (d != 2) {
                 uint256 bought = churn.delivered;
                 _observeChurnAction(churn, 0);
@@ -110,33 +98,34 @@ contract V56SecUnmanipulable is DeployProtocol {
         assertEq(churn.affiliatePaid, honest.affiliatePaid, "churn preserves total earned affiliate principal");
     }
 
-    /// @notice The affiliateBase drain entrypoint is AFFILIATE-only: a non-AFFILIATE caller can never drain
-    ///         (and thus never redirect) a sub's running base. The read-and-zero lives at the Game storage
-    ///         owner so a churner can never route the base to a wrong recipient nor double-credit it.
-    ///         (`drainAffiliateBase` is reachable in production only through the DegenerusAffiliate `claim`
-    ///         path; a direct non-affiliate call reverts before touching the slot.)
+    /// @notice The base drain entrypoint is AFFILIATE-only: a non-AFFILIATE caller can never settle
+    ///         (and thus never redirect) a sub's owed base. (`drainAffiliateBases` is reachable in
+    ///         production only through the DegenerusAffiliate `claim` path; a direct non-affiliate
+    ///         call reverts before touching the lane.)
     function testAffiliateBaseDrainAffiliateOnly() public {
         address p = makeAddr("aff_gate");
         _grantSeat(p);
         _fundPool(p, 50 ether);
         _subscribeLootbox(p, 1);
         _deliverDay(_singleton(p), 0xA66A11);
-        uint32 baseBefore = _affiliateBaseOf(p);
-        assertGt(baseBefore, 0, "non-vacuity: base accrued");
+        uint256 owedBefore = _owed(p).owedAffiliateBase;
+        uint32 cpBefore = _checkpointDayOf(p);
+        assertGt(owedBefore, 0, "non-vacuity: base owed");
 
-        // A non-affiliate caller cannot reach the drain (it reverts before any storage write).
         uint32 subscriberId = game.walletIdOf(p);
         vm.prank(makeAddr("not_affiliate"));
         vm.expectRevert(bytes4(keccak256("NotApproved()")));
-        IGameAfkingModule(address(game)).drainAffiliateBase(subscriberId);
-        assertEq(_affiliateBaseOf(p), baseBefore, "rejected non-affiliate drain left the base intact");
+        IGameAfkingModule(address(game)).drainAffiliateBases(subscriberId, 0);
+        assertEq(_owed(p).owedAffiliateBase, owedBefore, "rejected non-affiliate drain left the base owed");
+        assertEq(_checkpointDayOf(p), cpBefore, "and the checkpoint unmoved");
     }
 
     // =========================================================================
     // Repro 2 — streak gap dodge (compute-on-read; advances only on delivered days)
     // =========================================================================
 
-    /// @notice A delayed RNG session cannot erase or manufacture funded streak days.
+    /// @notice A delayed RNG session cannot erase or manufacture funded streak days: the endpoint (and
+    ///         so the derived streak) moves only when a pass completes.
     function testStreakSurvivesDelayedSessionAndOrderedCatchup() public {
         address p = makeAddr("decay_p");
         _fundPool(p, 50 ether);
@@ -147,67 +136,57 @@ contract V56SecUnmanipulable is DeployProtocol {
         vm.warp(_t);
         for (uint256 i; i < 64 && !game.rngLocked(); ++i) game.mineFlip(0);
         assertTrue(game.rngLocked());
-        uint32 covered = _afkCoveredOf(p);
-        uint32 bought = _lastBoughtDayOf(p);
+        DegenerusGameLens.SubFull memory before = _owed(p);
         _t += 3 days;
         vm.warp(_t);
-        assertEq(_afkCoveredOf(p), covered, "wall time cannot earn funded days");
-        assertEq(_lastBoughtDayOf(p), bought, "paid stamp survives the delay");
+        DegenerusGameLens.SubFull memory waited = _owed(p);
+        assertEq(waited.endpoint, before.endpoint, "wall time cannot move the endpoint");
+        assertEq(waited.effectiveStreak, before.effectiveStreak, "wall time cannot earn funded days");
         vm.prank(p);
         vm.expectRevert(abi.encodeWithSignature("RngLocked()"));
-        game.subscribe(0, false, false, 0, 0, 0);
+        game.subscribe(0, false, 0, 0);
         _settleClean(0xDECA03);
         _finishSubscriptionWindow();
-        uint32 earned = _afkCoveredOf(p) - _afkingStartOf(p);
-        assertGt(earned, covered - _afkingStartOf(p), "catchup delivers missed logical days");
+        DegenerusGameLens.SubFull memory caught = _owed(p);
+        assertGt(caught.effectiveStreak, before.effectiveStreak, "catchup delivers the missed logical days");
         vm.recordLogs();
         vm.prank(p);
-        game.subscribe(0, false, false, 0, 0, 0);
-        assertEq(_lastFinalizeStreakFor(p), earned, "only delivered days are handed back");
+        game.subscribe(0, false, 0, 0);
+        assertEq(_lastFinalizeStreakFor(p), caught.effectiveStreak, "the derived streak is what is handed back");
     }
 
-    /// @notice Kill-then-resume re-bases the run: a funding-kill finalizes the old run (handing its streak
+    /// @notice Kill-then-resume re-bases the run: an unfunded expiry finalizes the old run (handing its streak
     ///         to the manual system, where the missed post-kill days decay it), and the post-gap re-subscribe
-    ///         starts a NEW run — `afkingStartDay` at the resume day, base = the (decayed) manual snapshot —
-    ///         so the post-gap window credits NO stale-span days. The per-window streak advances ONLY on the
-    ///         debit-DELIVERED days since the resume.
+    ///         starts a NEW run — run start at the resume day, checkpoint streak = the (decayed) manual
+    ///         snapshot — so the post-gap window credits NO stale-span days.
     function testGapResetOnResumeRebasesTheRun() public {
         address p = makeAddr("gapresume_p");
         _grantSeat(p);
         _fundPool(p, 50 ether);
         _subscribeLootbox(p, 1);
 
-        // First window: deliver several consecutive days; the run advances past its start day (the first
-        // delivery anchors the run; the subsequent consecutive deliveries grow covered past afkingStartDay).
         _deliverDay(_singleton(p), 0x6A9001);
         _deliverDay(_singleton(p), 0x6A9002);
         _deliverDay(_singleton(p), 0x6A9003);
-        uint32 startBefore = _afkingStartOf(p);
-        uint32 coveredFirst = _afkCoveredOf(p);
-        assertGt(coveredFirst, startBefore, "first window: the streak advanced past its start day");
+        uint32 startBefore = _owed(p).runStartDay;
+        uint256 streakFirst = _owed(p).effectiveStreak;
+        assertGt(streakFirst, 2, "first window: the streak advanced");
 
-        // Gap: DEFUND so the sub funding-kills out, then warp several days with NO delivery — a clear
-        // missed-funded-day gap that strands the run (the funding-kill finalize zeroes afkingStartDay).
+        // Gap: DEFUND so the sub expires, then several days with NO delivery.
         _drainAllFunding(p);
         _skipDaysNoDelivery(0x6A9004);
         _skipDaysNoDelivery(0x6A9005);
         _skipDaysNoDelivery(0x6A9006);
+        assertEq(_subscriberIndexOf(p), 0, "the unfunded run expired");
 
-        // RESUME: re-fund (grounds the re-sub's NEW-run cover-buy — D-12) + re-subscribe + deliver a
-        // fresh day after the gap. The funding-kill finalized the old run, so the re-sub starts a NEW run
-        // (afkingStartDay := the resume day; base := the manual snapshot, decayed to 0 across the gap).
         _fundPool(p, 50 ether);
-        if (_subscriberIndexOf(p) == 0) {
-            _subscribeLootbox(p, 1);
-        }
+        _subscribeLootbox(p, 1);
+        DegenerusGameLens.SubFull memory resumed = _owed(p);
+        assertGt(resumed.runStartDay, startBefore, "gap-resume: the run re-based to the resume day");
+        assertEq(resumed.checkpointStreak, 0, "gap-resume: the streak base reset to 0 (no stale-span credit)");
+        assertEq(resumed.owedFlip, 0, "nothing owed at signup");
         _deliverDay(_singleton(p), 0x6A9007);
-
-        uint32 startAfter = _afkingStartOf(p);
-        uint32 coveredAfter = _afkCoveredOf(p);
-        assertGt(startAfter, startBefore, "gap-resume: the run re-based (afkingStartDay advanced to the resume day)");
-        assertEq(_streakBaseOf(p), 0, "gap-resume: the streak base reset to 0 (no stale-span credit)");
-        // The post-resume effective streak counts ONLY delivered days since the resume (covered - start <= 1).
-        assertLe(coveredAfter - startAfter, 1, "post-resume window credits only the delivered day(s) since resume");
+        assertLe(_owed(p).effectiveStreak, 1, "post-resume window credits only the delivered day since resume");
     }
 
     // =========================================================================
@@ -228,15 +207,14 @@ contract V56SecUnmanipulable is DeployProtocol {
             uint8 act = uint8(actions >> (d * 4)) & 15;
             if (act & 1 != 0) _observeChurnAction(churn, 1);
             if (act & 2 != 0 && _dailyQtyOf(churn.player) != 0) _observeChurnAction(churn, 2);
-            if (act & 4 != 0) _observeChurnAction(churn, 0); // active upsert also auto-pays pendingFlip
+            if (act & 4 != 0) _observeChurnAction(churn, 0); // an active upsert settles both sides first
             if (act & 8 != 0) _observeChurnAction(churn, 3);
             _assertChurnLedger(honest);
             _assertChurnLedger(churn);
             if (_dailyQtyOf(churn.player) != 0) {
-                uint32 covered = _afkCoveredOf(churn.player);
-                uint32 start = _afkingStartOf(churn.player);
-                assertLe(start, covered, "run start cannot exceed delivered high-water");
-                assertLe(covered, game.currentDayView(), "streak cannot cover a future day");
+                DegenerusGameLens.SubFull memory f = _owed(churn.player);
+                assertLe(f.checkpointDay, f.endpoint, "checkpoint cannot pass the endpoint");
+                assertLe(f.endpoint, game.currentDayView(), "streak cannot cover a future day");
             }
         }
         _observeChurnAction(honest, 1);
@@ -289,8 +267,8 @@ contract V56SecUnmanipulable is DeployProtocol {
         return i == 0 ? ledger.player : i == 4 ? ledger.relayer : ledger.upline[i - 1];
     }
 
-    /// @dev 0 subscribe/upsert, 1 player claim, 2 cancel (both automatic claims), 3 affiliate
-    ///      claim with repeated IDs. Exact recipient deltas also reject payment to the relayer.
+    /// @dev 0 subscribe/upsert, 1 player claim, 2 cancel, 3 affiliate claim with repeated IDs; each
+    ///      settles both sides. Exact recipient deltas also reject payment to the relayer.
     function _observeChurnAction(ChurnLedger memory ledger, uint8 action) private {
         uint256[5] memory beforeAssets;
         for (uint256 i; i < 5; ++i) {
@@ -299,15 +277,15 @@ contract V56SecUnmanipulable is DeployProtocol {
         }
         uint256 fundingBefore = game.afkingFundingOf(ledger.player);
         uint256 price = game.mintPrice();
-        uint256 playerOwed = action == 3 ? 0 : uint256(_pendingFlipOf(ledger.player));
-        uint256 base = action == 2 || action == 3 ? _affiliateBaseOf(ledger.player) : 0;
-        // Upserting a tombstone has nothing pending; an active upsert pays under its old terms.
-        if (action == 0 && _dailyQtyOf(ledger.player) == 0) playerOwed = 0;
+        // Every action on a live run settles both sides first; a non-member has nothing owed.
+        DegenerusGameLens.SubFull memory owed = _owed(ledger.player);
+        uint256 playerOwed = owed.owedFlip;
+        uint256 base = owed.owedAffiliateBase;
         vm.recordLogs();
         if (action == 0 || action == 2) {
             uint256 seat = _grantSeat(ledger.player);
             vm.prank(ledger.player);
-            game.subscribe(0, false, false, action == 0 ? 1 : 0, 0, seat);
+            game.subscribe(0, false, action == 0 ? 1 : 0, seat);
         } else if (action == 1) {
             vm.prank(ledger.relayer);
             game.claimAfkingFlip(_aids(_pair(ledger.player, ledger.player)));
@@ -349,15 +327,16 @@ contract V56SecUnmanipulable is DeployProtocol {
         private
     {
         bytes32 delivered = keccak256("AfkingDelivered(uint32,uint256)");
-        bytes32 cover = keccak256("LootBoxBuy(uint32,uint48,uint32,uint256)");
+        bytes32 spent = keccak256("ClaimableSpent(uint32,uint256,uint256,uint8,uint256)");
+        uint256 claimableLeg;
         uint256 cost;
         uint256 count;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2
                 || uint32(uint256(logs[i].topics[1])) != game.walletIdOf(ledger.player)) continue;
-            if (logs[i].topics[0] == cover) {
-                (, uint256 coverWei) = abi.decode(logs[i].data, (uint32, uint256));
-                cost += coverWei;
+            if (logs[i].topics[0] == spent) {
+                (uint256 leg,,,) = abi.decode(logs[i].data, (uint256, uint256, uint8, uint256));
+                claimableLeg += leg;
             } else if (logs[i].topics[0] == delivered) {
                 uint256 packed = abi.decode(logs[i].data, (uint256));
                 uint256 day = uint24(packed >> 128);
@@ -367,8 +346,8 @@ contract V56SecUnmanipulable is DeployProtocol {
                 ++count;
             }
         }
-        assertEq(fundingBefore - game.afkingFundingOf(ledger.player), cost,
-            "delivery ledger is backed by actual ETH funding debits");
+        assertEq(fundingBefore - game.afkingFundingOf(ledger.player) + claimableLeg, cost,
+            "delivery ledger is backed by actual prepaid and claimable debits");
         assertEq(cost, count * price, "one-unit lootbox subscription buys exactly one priced unit per delivery");
         ledger.delivered += count;
         ledger.spent += cost;
@@ -376,67 +355,58 @@ contract V56SecUnmanipulable is DeployProtocol {
     }
 
     function _assertChurnLedger(ChurnLedger memory ledger) private view {
-        assertEq(ledger.playerPaid + uint256(_pendingFlipOf(ledger.player)),
-            ledger.delivered * SLOT0_FLIP_PER_BUY, "paid plus pending includes every automatic player payment");
-        assertEq(ledger.affiliatePaid + uint256(_affiliateBaseOf(ledger.player)),
-            ledger.affiliateEarned, "paid plus pending includes every automatic upline payment");
+        DegenerusGameLens.SubFull memory owed = _owed(ledger.player);
+        assertEq(ledger.playerPaid + owed.owedFlip,
+            ledger.delivered * SLOT0_FLIP_PER_BUY, "paid plus owed covers every delivered day's player reward");
+        assertEq(ledger.affiliatePaid + owed.owedAffiliateBase,
+            ledger.affiliateEarned, "paid plus owed covers every delivered day's upline reward");
     }
 
     // =========================================================================
-    // Repro 3 — pendingFlip double-claim CEI idempotency (pays EXACTLY once)
+    // Repro 3 — claim double-claim idempotency (pays EXACTLY once)
     // =========================================================================
 
-    /// @notice claimAfkingFlip pays the accrued pendingFlip EXACTLY ONCE. The CEI zero-before-credit
-    ///         (`s.pendingFlip = 0;` precedes `coinflip.creditFlip`, GameAfkingModule.sol:1277) means a
-    ///         double-call in one block credits the FLIP on the first call and ZERO on the second (the
-    ///         second sees owed == 0 and `creditFlip(_, 0)` early-returns). Observed via the recipient's
-    ///         next-day coinflip stake delta: it rises by exactly `owed` whole FLIP once, then not again.
-    function testDoubleClaimPaysExactlyOnceCEI() public {
+    /// @notice claimAfkingFlip pays the elapsed days EXACTLY ONCE. Settlement moves the checkpoint to
+    ///         the endpoint before anything is credited, so a second claim in the same block finds
+    ///         nothing; a cancel after a claim finds nothing either.
+    function testDoubleClaimPaysExactlyOnce() public {
         address p = makeAddr("dbl_p");
         _grantSeat(p);
         _fundPool(p, 50 ether);
-        _subscribeLootbox(p, 1); // join-day cover-buy accrues 100
-        _deliverDay(_singleton(p), 0xDB1C01); // next-day STAGE buy accrues another 100
+        _subscribeLootbox(p, 1); // signup buys and credits nothing
+        _deliverDay(_singleton(p), 0xDB1C01); // the next day's pass is the first credited day
+        assertEq(_owed(p).owedFlip, SLOT0_FLIP_PER_BUY, "non-vacuity: one delivered day owes 100 whole FLIP");
 
-        // The join-day cover-buy fires after that day's STAGE and the next day is a normal STAGE
-        // member, so subscribe + one delivered day = TWO paid buys = 200 whole FLIP.
-        uint256 owedWhole = _pendingFlipOf(p);
-        assertEq(owedWhole, 2 * SLOT0_FLIP_PER_BUY, "non-vacuity: cover-buy + one delivered STAGE buy = 200 whole FLIP");
-        uint256 expectedCredit = owedWhole;
-
-        // FIRST claim: credits owed whole FLIP to the recipient's flip stake and zeroes pendingFlip.
-        uint256 stakeBefore = coinflip.coinflipAmount(p);
+        vm.recordLogs();
         game.claimAfkingFlip(_aids(_singleton(p)));
-        uint256 stakeAfter1 = coinflip.coinflipAmount(p);
-        assertEq(_pendingFlipOf(p), 0, "CEI: pendingFlip zeroed before the credit (reads 0 after the first claim)");
-        assertEq(stakeAfter1 - stakeBefore, expectedCredit, "first claim credited exactly the accrued FLIP");
+        assertEq(_flipClaimed(p), SLOT0_FLIP_PER_BUY, "first claim credited exactly the elapsed day");
+        assertEq(_owed(p).owedFlip, 0, "nothing owed after the claim");
 
-        // SECOND claim in the same block: the CEI zero means owed == 0 -> creditFlip(_, 0) is a no-op.
+        vm.recordLogs();
         game.claimAfkingFlip(_aids(_singleton(p)));
-        assertEq(coinflip.coinflipAmount(p), stakeAfter1, "double-call: the SECOND claim credited 0 (pays exactly once)");
+        assertEq(_flipClaimed(p), 0, "double-call: the SECOND claim credited 0 (pays exactly once)");
 
-        // claim -> unsub -> claim variant: unsub does not re-arm pendingFlip; the post-unsub claim is a no-op.
-        _deliverDay(_singleton(p), 0xDB1C02); // re-accrue
-        assertEq(_pendingFlipOf(p), SLOT0_FLIP_PER_BUY, "re-accrued 100 for the claim->unsub->claim variant");
-        uint256 stakeBefore2 = coinflip.coinflipAmount(p);
-        game.claimAfkingFlip(_aids(_singleton(p))); // claim
-        uint256 stakeAfterClaim2 = coinflip.coinflipAmount(p);
-        assertEq(stakeAfterClaim2 - stakeBefore2, SLOT0_FLIP_PER_BUY, "claim credited the re-accrued FLIP once");
+        // claim -> cancel -> claim variant: the cancel finds nothing owed and the re-claim finds no member.
+        _deliverDay(_singleton(p), 0xDB1C02);
+        vm.recordLogs();
+        game.claimAfkingFlip(_aids(_singleton(p)));
+        assertEq(_flipClaimed(p), SLOT0_FLIP_PER_BUY, "claim credited the new day once");
+        vm.recordLogs();
         vm.prank(p);
-        game.subscribe(0, false, false, 0, 0, 0); // unsub (pendingFlip persists at 0)
-        game.claimAfkingFlip(_aids(_singleton(p))); // re-claim after unsub
-        assertEq(coinflip.coinflipAmount(p), stakeAfterClaim2, "claim->unsub->claim: the post-unsub re-claim credited 0 (idempotent)");
+        game.subscribe(0, false, 0, 0);
+        assertEq(_flipClaimed(p), 0, "the cancel settled nothing more");
+        vm.recordLogs();
+        game.claimAfkingFlip(_aids(_singleton(p)));
+        assertEq(_flipClaimed(p), 0, "claim->cancel->claim: the post-cancel re-claim credits 0");
     }
 
     // =========================================================================
-    // Repro 4 — the 4 finalize hooks each write the decay-applied streak BEFORE the slot delete/tombstone
+    // Repro 4 — the finalize hooks hand the streak back BEFORE the record is removed
     // =========================================================================
 
-    /// @notice Hook (A) explicit cancel `subscribe(_, 0)`: the finalize (`_finalizeAfking` at
-    ///         GameAfkingModule.sol:318) runs BEFORE `c.dailyQuantity = 0` (:319). After the cancel, a
-    ///         QuestStreakBonusAwarded(amount==0) finalize event was emitted AND the slot is tombstoned
-    ///         (dailyQuantity == 0) — the streak was handed back before the tombstone.
-    function testFinalizeHookA_ExplicitCancelBeforeTombstone() public {
+    /// @notice Hook (A) explicit cancel `subscribe(_, 0)`: the finalize runs, and the record is removed
+    ///         at once (no tombstone), after the streak was handed back.
+    function testFinalizeHookA_ExplicitCancelRemovesAfterFinalize() public {
         address p = makeAddr("hookA");
         _grantSeat(p);
         _fundPool(p, 50 ether);
@@ -445,12 +415,10 @@ contract V56SecUnmanipulable is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(p);
-        game.subscribe(0, false, false, 0, 0, 0); // explicit cancel
-        // The finalize ran (event present) and the slot is tombstoned in place.
-        _lastFinalizeStreakFor(p); // reverts if no finalize event fired before the tombstone
-        assertEq(_dailyQtyOf(p), 0, "hook A: the slot is tombstoned (dailyQuantity == 0) AFTER the finalize handed the streak back");
+        game.subscribe(0, false, 0, 0); // explicit cancel
+        _lastFinalizeStreakFor(p); // reverts if no finalize event fired
+        assertEq(_subscriberIndexOf(p), 0, "hook A: the record is gone after the finalize handed the streak back");
     }
-
 
     // Hook (C) pass-eviction crossing was DROPPED: the per-level validity horizon, the crossing
     // refresh/evict branch, and `_passHorizonOf` are all deleted — membership now ends only via cancel,
@@ -458,8 +426,8 @@ contract V56SecUnmanipulable is DeployProtocol {
     // is a non-event for an in-set sub. The property this hook stood for ("no eviction on a level crossing")
     // is proven directly by AfKingSubscription.t.sol's `testPasslessCoinHolderProcessedNoEviction`.
 
-    /// @notice Hook (D) funding-kill + the funding-kill BOUNDARY (Pitfall 4). A NORMAL underfunded sub is
-    ///         finalized (`_finalizeAfking` at :1010) BEFORE the tombstone + remove (:1011-1012). The
+    /// @notice Hook (D) unfunded expiry + its BOUNDARY. A NORMAL underfunded sub is finalized
+    ///         (`_finalizeAfking`) BEFORE it is removed. The
     ///         DegenerusQuests funding-kill guard keeps the streak when a valid mint landed no earlier than
     ///         yesterday (`lastValid + 1 >= currentDay`) and zeroes it when a full prior day was missed
     ///         (`lastValid <= currentDay - 2`). This asserts BOTH boundaries:
@@ -474,8 +442,7 @@ contract V56SecUnmanipulable is DeployProtocol {
         _deliverDay(_singleton(kept), 0xD0D0);
         _deliverDay(_singleton(kept), 0xD0D1);
         _deliverDay(_singleton(kept), 0xD0D2); // a multi-day run with a real earned streak
-        uint32 earnedSpan = _afkCoveredOf(kept) - _afkingStartOf(kept);
-        assertGt(earnedSpan, 0, "kept: a real earned streak built (non-vacuous)");
+        assertGt(_owed(kept).effectiveStreak, 0, "kept: a real earned streak built (non-vacuous)");
 
         // Defund, then kill on the VERY NEXT day (lastValid == covered == currentDay - 1): the finalize KEEPS
         // the streak (no full prior funded day was missed).
@@ -502,15 +469,14 @@ contract V56SecUnmanipulable is DeployProtocol {
         _skipDaysNoDelivery(0xD1D3); // funding-kill out
         _skipDaysNoDelivery(0xD1D4);
         _skipDaysNoDelivery(0xD1D5);
-        // Re-fund (grounds the re-sub's NEW-run cover-buy — D-12) before the post-gap re-subscribe; the
-        // re-sub re-bases to base 0 (a full funded day was missed), so the immediate cancel still finalizes 0.
+        // The re-sub re-bases to the decayed manual streak (a full funded day was missed), so the
+        // immediate cancel still finalizes 0.
         _fundPool(zeroed, 50 ether);
-        if (_subscriberIndexOf(zeroed) == 0) {
-            _subscribeLootbox(zeroed, 1);
-        }
+        assertEq(_subscriberIndexOf(zeroed), 0, "the unfunded run expired");
+        _subscribeLootbox(zeroed, 1);
         vm.recordLogs();
         vm.prank(zeroed);
-        game.subscribe(0, false, false, 0, 0, 0); // explicit cancel finalize on a post-gap day
+        game.subscribe(0, false, 0, 0); // explicit cancel finalize on a post-gap day
         uint24 zeroedStreak = _lastFinalizeStreakFor(zeroed);
         assertEq(zeroedStreak, 0, "hook D ZEROED: lastValid <= currentDay - 2 -> finalize zeroed the streak (decay)");
     }
@@ -525,22 +491,21 @@ contract V56SecUnmanipulable is DeployProtocol {
         vm.warp(_t);
         for (uint256 i; i < 64 && !game.rngLocked(); ++i) game.mineFlip(0);
         assertTrue(game.rngLocked());
-        uint32 bought = _lastBoughtDayOf(p);
-        assertLt(_lastOpenedDayOf(p), bought);
+        uint32 id = game.walletIdOf(p);
+        assertTrue(GameSlotKeys.afkingBoxPending(address(game), id), "the day's box is paid and pending");
         _drainAllFunding(p);
         _t += 1 days;
         vm.warp(_t);
-        assertEq(_lastBoughtDayOf(p), bought);
+        assertTrue(GameSlotKeys.afkingBoxPending(address(game), id), "the paid box survives the delay");
         vm.prank(p);
         vm.expectRevert(abi.encodeWithSignature("RngLocked()"));
-        game.subscribe(0, false, true, 1, 0, 0);
+        game.subscribe(0, true, 1, 0);
         vm.recordLogs();
         _settleClean(0x0F10);
         _finishSubscriptionWindow();
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bool opened;
         bool evicted;
-        uint32 id = game.walletIdOf(p);
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2
                 || uint32(uint256(logs[i].topics[1])) != id) continue;
@@ -562,7 +527,7 @@ contract V56SecUnmanipulable is DeployProtocol {
 
     /// @dev Deliver ONE funded day to `who`: a new-day STAGE buy (stamps each pending box + accrues), then
     ///      settle clean and OPEN every pending box before the next day's preparation.
-    ///      Each delivered day advances the covered high-water and accrues 100 pendingFlip per in-set sub.
+    ///      Each delivered day advances the endpoint and owes 100 whole FLIP per in-set box sub.
     ///      Uses a rich, distinct VRF word each call (a degenerate small word routes into a non-stamping
     ///      branch); the stage word and the clean word are kept distinct.
     function _deliverDay(address[] memory who, uint256 vrfWord) internal {
@@ -631,7 +596,23 @@ contract V56SecUnmanipulable is DeployProtocol {
     function _subscribeLootbox(address who, uint8 q) internal {
         uint256 seat = _grantSeat(who);
         vm.prank(who);
-        game.subscribe(0, false, false, q, 0, seat); // self, lootbox mode, no reinvest
+        game.subscribe(0, false, q, seat); // self, lootbox mode, no reinvest
+    }
+
+    function _owed(address who) internal view returns (DegenerusGameLens.SubFull memory) {
+        return lens.subInfoFullById(address(game), game.walletIdOf(who));
+    }
+
+    /// @dev Whole FLIP the AfkingFlipClaimed events recorded since the last vm.recordLogs() paid `who`.
+    function _flipClaimed(address who) internal returns (uint256 total) {
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bytes32 sig = keccak256("AfkingFlipClaimed(uint32,uint256)");
+        uint32 id = game.walletIdOf(who);
+        for (uint256 i; i < logs.length; i++) {
+            if (logs[i].emitter != address(game) || logs[i].topics.length < 2 || logs[i].topics[0] != sig) continue;
+            if (uint32(uint256(logs[i].topics[1])) != id) continue;
+            total += abi.decode(logs[i].data, (uint256));
+        }
     }
 
     function _fundPool(address who, uint256 amount) internal {
@@ -641,7 +622,7 @@ contract V56SecUnmanipulable is DeployProtocol {
     }
 
     /// @dev Withdraw the sub's whole afking funding so the next STAGE buy is unfunded — the funding-kill
-    ///      branch evicts the sub (finalize-then-tombstone), manufacturing a clean missed-funded-day gap.
+    ///      branch expires the sub (finalize-then-remove), manufacturing a clean missed-funded-day gap.
     function _drainAllFunding(address who) internal {
         uint256 bal = game.afkingFundingOf(who);
         if (bal == 0) return;
@@ -709,46 +690,19 @@ contract V56SecUnmanipulable is DeployProtocol {
         arr[1] = b;
     }
 
-    // ---- Sub-slot reads (_subOf slot 52 + the v56 offsets) ----
-
-    function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
-        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT))))) >> (off * 8);
-        return p & ((uint256(1) << widthBits) - 1);
-    }
+    // ---- Lane reads ----
 
     function _dailyQtyOf(address who) internal view returns (uint8) {
-        return uint8(_subField(who, OFF_DAILY, 8));
+        return uint8(GameSlotKeys.subQuantity(address(game), game.walletIdOf(who)));
     }
 
-    function _lastBoughtDayOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_LASTBOUGHT, 24));
+    /// @dev `who`'s set position + 1; 0 = not in the set.
+    function _subscriberIndexOf(address who) internal view returns (uint256 position1) {
+        (, position1) = GameSlotKeys.subLane(address(game), game.walletIdOf(who));
     }
 
-    function _lastOpenedDayOf(address who) internal view returns (uint32) {
-        return GameSlotKeys.afkingOpenedDay(address(game), game.walletIdOf(who));
-    }
-
-    function _afkCoveredOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_AFKCOVERED, 24));
-    }
-
-    function _afkingStartOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_AFKINGSTART, 24));
-    }
-
-    function _affiliateBaseOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_AFFBASE, 32));
-    }
-
-    function _pendingFlipOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_PENDINGFLIP, 24));
-    }
-
-    function _streakBaseOf(address who) internal view returns (uint16) {
-        return uint16(_subField(who, OFF_STREAKLATCH, 16));
-    }
-
-    function _subscriberIndexOf(address who) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.SUB_OF)))) >> 200; // Sub.setPosition (1-based)
+    function _checkpointDayOf(address who) internal view returns (uint32) {
+        (uint256 lane,) = GameSlotKeys.subLane(address(game), game.walletIdOf(who));
+        return uint32((lane >> 46) & ((uint256(1) << 22) - 1));
     }
 }

@@ -40,26 +40,8 @@ contract V56AfkingGasMarginal is DeployProtocol {
     // RE-DERIVED via `solc --storage-layout` on the working tree after the V62 lootbox repack — the
     // folded lootboxEth word + removed lootboxEthBase/Flip/Purchase/Distress shifted later slots down.
     uint256 private constant RNG_WORD_BY_DAY_SLOT = GameSlots.RNG_WORD_BY_DAY; // mapping(uint24 => uint256) — the afking box's DAY-keyed word + readiness gate
-    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF;           // _subOf mapping root (uint32 => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = GameSlots.SUBSCRIBERS;     // uint32[] _subscribers (slot holds the length)
+    uint256 private constant SUBSCRIBERS_SLOT = GameSlots.SUBSCRIBERS;     // packed 85-bit lanes (slot holds the length)
     uint256 private constant SUBCURSOR_SLOT = GameSlots.SUB_CURSOR;       // _subCursor (uint16 @ byte 0) + _subOpenCursor (uint16 @ byte 2) + _afkingResetDay (uint24 @ byte 4) + boxCursor (uint48 @ byte 7) + boxReadCount (uint32 @ byte 13)
-
-    // Sub packed-field byte offsets — RE-DERIVED via `forge inspect DegenerusGame storageLayout`. The
-    // AFKing Subscription Token credential (sub <=> coin) needs no stored pass horizon, so `validThroughLevel` (the old
-    // 3-byte crossing-refresh marker) is DELETED and every field after it shifts down 3 bytes. Single
-    // 256-bit Sub slot (28 used bytes, 4 free):
-    //   dailyQuantity u8 @0 · flags u8 @1 · score u16 @2 · amount u24 @4
-    //   lastAutoBoughtDay u24 @7 · afkCoveredThroughDay u24 @10 · afkingStartDay u24 @13
-    //   affiliateBase u32 @16 · pendingFlip u24 @20 · subStreakLatch u16 @23
-    uint256 private constant OFF_AMOUNT = 4;      // uint24 amount (milli-ETH)   (bytes 4..6)
-    uint256 private constant OFF_LASTBOUGHT = 7;  // uint24 lastAutoBoughtDay    (bytes 7..9)
-    /// @dev milli-ETH packing scale (DegenerusGameStorage.LR_ETH_SCALE) — sub.amount * this = box wei.
-    uint256 private constant MILLI_ETH_SCALE = 1e15;
-    uint256 private constant OFF_AFKCOVERED = 10;  // uint24 afkCoveredThroughDay (bytes 10..12)
-    uint256 private constant OFF_AFKINGSTART = 13; // uint24 afkingStartDay      (bytes 13..15)
-    uint256 private constant OFF_AFFBASE = 16;    // uint32 affiliateBase        (bytes 16..19)
-    uint256 private constant OFF_PENDINGFLIP = 20; // uint24 pendingFlip     (bytes 20..22)
-    uint256 private constant OFF_STREAKLATCH = 23; // uint16 subStreakLatch      (bytes 23..24)
 
     /// @dev The packed header slot 0 holds `purchaseStartDay` (uint24 @ byte 0) + `dailyIdx` (uint24 @ byte 3)
     ///      + `rngRequestTime` (uint48 @ byte 6) + `level` (uint24 @ byte 12) (RE-DERIVED via
@@ -476,8 +458,11 @@ contract V56AfkingGasMarginal is DeployProtocol {
         uint256 snap = vm.snapshotState();
         (uint256 gasN, uint256 ethSpins) = _forceEthSpinSession(N_HI, "r3eth_");
         vm.revertToState(snap);
-        (uint256 gasNm1,) = _forceEthSpinSession(N_LO, "r3eth_");
-        uint256 perBox = gasN - gasNm1;
+        (uint256 gasLo, uint256 spinsLo) = _forceEthSpinSession(12, "r3eth_");
+        assertEq(spinsLo, 12, "R3: every low-run box rolled the ETH-spin");
+        // One box's difference is smaller than the session's call-to-call variation, so the per-box
+        // cost is the mean over the 12 extra boxes.
+        uint256 perBox = (gasN - gasLo) / (N_HI - 12);
 
         emit log_named_uint("r3_forced_eth_spin_session_gas_n", gasN);
         emit log_named_uint("r3_forced_eth_spin_count", ethSpins);
@@ -511,10 +496,10 @@ contract V56AfkingGasMarginal is DeployProtocol {
             uint256 seat = _grantSeat(subs[i]);
             _fundPool(subs[i], 5 ether);
             vm.prank(subs[i]);
-            game.subscribe(0, false, false, 1, 0, seat);
+            game.subscribe(0, false, 1, seat);
         }
         _stampNewDay(word);
-        require(_readStampDay(subs) == day, "fixture: the forced boxes are stamped for the predicted day");
+        require(_simulatedDayIndex() == day && _pendingBoxes() >= m, "fixture: the forced boxes are stamped for the predicted day");
         vm.recordLogs();
         sessionGas = _sessionGas(word);
         VmSafe.Log[] memory logs = vm.getRecordedLogs();
@@ -522,8 +507,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics.length != 0 && logs[i].topics[0] == boxSpinSig) {
                 (uint64 betId, , , ) = abi.decode(logs[i].data, (uint64, uint256, uint256, uint256));
-                // Signup covers share this session with the daily AFKing cohort. Count
-                // only the forced stamp's spin ID, excluding the unrelated human boxes.
+                // Count only the forced stamp's spin ID, excluding the unrelated human boxes.
                 uint32 playerId = uint32(uint256(logs[i].topics[1]));
                 uint256 seed = uint256(keccak256(abi.encode(word, uint256(playerId), uint256(0x41666b696e67426f78), uint256(day))));
                 uint256 spinSeed = uint256(keccak256(abi.encode(seed, uint256(0x4574685370696e))));
@@ -531,7 +515,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
                 if (betId == expected) ++ethSpins;
             }
         }
-        for (uint256 i; i < m; ++i) require(_lastOpenedDayOf(subs[i]) == day, "fixture: each forced box opened");
+        for (uint256 i; i < m; ++i) require(!_isPending(subs[i]), "fixture: each forced box opened");
     }
 
     /// @dev Brute-force an injected stamp-day word so the afking box's roll lands on the ETH-spin (19).
@@ -603,7 +587,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         uint256 seat = _grantSeat(afk);
         _fundPool(afk, 5 ether); // fund BEFORE subscribe to ground the NEW-run cover-buy (D-12)
         vm.prank(afk);
-        game.subscribe(0, false, false, 1, 0, seat);
+        game.subscribe(0, false, 1, seat);
         _settleGame(0xA0F1 ^ 0xF00D);
         _finishIndexedReadConsumers();
 
@@ -617,8 +601,8 @@ contract V56AfkingGasMarginal is DeployProtocol {
         _stampNewDay(0xA0F1);
         address[] memory subject = new address[](1);
         subject[0] = afk;
-        _toAfkingStageWithPending(subject, _lastBoughtDayOf(afk), 0xA0F2);
-        require(_lastOpenedDayOf(afk) < _lastBoughtDayOf(afk), "fixture: afking box pending pre-open");
+        _toAfkingStageWithPending(subject, 0xA0F2);
+        require(_isPending(afk), "fixture: afking box pending pre-open");
         uint256 boxCursorBefore = _boxCursor();
         uint256 subOpenCursorBefore = _subOpenCursor();
 
@@ -630,7 +614,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         assertEq(_minerFirstAction(vm.getRecordedLogs()), 9, "LIVE-01(a): afking-first -- the call opened with the AFKing stage");
 
         // Afking-first: the afking box opened (no longer pending).
-        assertEq(_lastOpenedDayOf(afk), _lastBoughtDayOf(afk), "LIVE-01(a): afking-first -- the afking box opened by the engine");
+        assertFalse(_isPending(afk), "LIVE-01(a): afking-first -- the afking box opened by the engine");
         // The human leg ran with the REMAINING allowance: its cursor did not regress.
         assertGe(_boxCursor(), boxCursorBefore, "LIVE-01(a): the human cursor advanced with the remaining allowance");
         emit log_named_uint("live01a_sub_open_cursor_before", subOpenCursorBefore);
@@ -650,11 +634,9 @@ contract V56AfkingGasMarginal is DeployProtocol {
         address[] memory subs = _setupFundedSubs(n, "vd_", 5 ether, false);
         _stampNewDay(0xB0F1);
 
-        uint32 stampDay = _lastBoughtDayOf(subs[0]);
-        require(stampDay > 0, "fixture: subs stamped");
-        _toAfkingStageWithPending(subs, stampDay, 0xB0F2);
+        _toAfkingStageWithPending(subs, 0xB0F2);
         // Pre: every box pending.
-        for (uint256 i; i < n; ++i) require(_lastOpenedDayOf(subs[i]) < stampDay, "fixture: each afking box pending");
+        for (uint256 i; i < n; ++i) require(_isPending(subs[i]), "fixture: each afking box pending");
 
         // Drain in tiny bounded engine chunks. The AFKing stage drains the afking backlog first, then the
         // human-box stage the sealed cohort's human orders — a 1.5M allowance admits AFKing opens but can
@@ -664,14 +646,14 @@ contract V56AfkingGasMarginal is DeployProtocol {
         uint256 totalOpened;
         uint256 zeroStreak;
         for (uint256 c; c < 80; ++c) {
-            uint256 before = _openedCount(subs, stampDay);
+            uint256 before = _openedCount(subs);
             vm.prank(makeAddr(string(abi.encodePacked("vd_op_", _u(c)))));
             uint256 gb = gasleft();
             (bool ok,) = address(game).call{gas: 1_500_000}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             uint256 g = gb - gasleft();
             // LIVE-01(c): each bounded engine chunk stays under the EIP per-tx ceiling.
             assertLt(g, EIP7825_TX_GAS_CAP, "LIVE-01(c): each bounded mineFlip chunk stays < 16,777,216");
-            uint256 op = ok ? _openedCount(subs, stampDay) - before : 0;
+            uint256 op = ok ? _openedCount(subs) - before : 0;
             totalOpened += op;
             if (op == 0) {
                 if (++zeroStreak >= 3) break;
@@ -681,19 +663,17 @@ contract V56AfkingGasMarginal is DeployProtocol {
         }
         // Finish whatever the tiny chunks left — the drained-state assertions below need the
         // genuinely-dry state.
-        uint256 beforeFinish = _openedCount(subs, stampDay);
+        uint256 beforeFinish = _openedCount(subs);
         vm.startPrank(makeAddr("vd_finish"));
         _mineAll(64);
         vm.stopPrank();
-        totalOpened += _openedCount(subs, stampDay) - beforeFinish;
+        totalOpened += _openedCount(subs) - beforeFinish;
 
         // LIVE-01(b): the whole afking backlog DRAINED — every sub's box opened (no longer pending),
         // no stuck box; the afking cursor advanced through the set.
         uint256 openedCount;
         for (uint256 i; i < n; ++i) {
-            if (_lastOpenedDayOf(subs[i]) == stampDay) openedCount++;
-            // LIVE-01(d): the derived opened day is monotone — never exceeds the stamp day (no double-open / over-advance).
-            assertLe(_lastOpenedDayOf(subs[i]), stampDay, "LIVE-01(d): lastOpenedDay monotone, no double-open");
+            if (!_isPending(subs[i])) openedCount++;
         }
         assertEq(openedCount, n, "LIVE-01(b): repeated bounded mineFlip calls fully drained the afking backlog (no stuck box)");
 
@@ -701,7 +681,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         vm.prank(makeAddr("vd_reopen"));
         try game.mineFlip(0) {} catch {}
         for (uint256 i; i < n; ++i) {
-            assertEq(_lastOpenedDayOf(subs[i]), stampDay, "LIVE-01(d): re-running the engine on an already-drained backlog opens nothing (no double-open)");
+            assertFalse(_isPending(subs[i]), "LIVE-01(d): re-running the engine on an already-drained backlog opens nothing (no double-open)");
         }
         emit log_named_uint("live01_total_opened", totalOpened);
     }
@@ -719,29 +699,28 @@ contract V56AfkingGasMarginal is DeployProtocol {
         uint256 seat = _grantSeat(afk);
         _fundPool(afk, 5 ether); // fund BEFORE subscribe to ground the NEW-run cover-buy (D-12)
         vm.prank(afk);
-        game.subscribe(0, false, false, 1, 0, seat);
+        game.subscribe(0, false, 1, seat);
         _stampNewDay(0xE0F1);
         address[] memory subject = new address[](1);
         subject[0] = afk;
-        _toAfkingStageWithPending(subject, _lastBoughtDayOf(afk), 0xE0F2);
-        require(_lastOpenedDayOf(afk) < _lastBoughtDayOf(afk), "fixture: afking box pending");
+        _toAfkingStageWithPending(subject, 0xE0F2);
+        require(_isPending(afk), "fixture: afking box pending");
 
         // Call runAfkingWork DIRECTLY on the module address — it hits the MODULE's empty storage, not the
         // Game's (selector isolation: it reaches the Game only through mineFlip's delegatecall). Whether the
         // module-local call returns or refuses, it must open no Game box.
-        bytes32 subSlot = keccak256(abi.encode(uint256(game.walletIdOf(afk)), uint256(SUBOF_SLOT)));
-        bytes32 subBefore = vm.load(address(game), subSlot);
+        uint256 laneBefore = _laneOf(afk);
         try IGameAfkingModule(ContractAddresses.GAME_AFKING_MODULE).runAfkingWork(1_000_000) returns (MineFlipGas.Result memory direct) {
             assertEq(direct.rewardBasis, 0, "LIVE-01(e): direct runAfkingWork on the module opens nothing (selector-isolated)");
         } catch {}
         // The Game's afking box is UNTOUCHED by the direct module call (still pending, Sub word unchanged).
-        assertEq(vm.load(address(game), subSlot), subBefore, "LIVE-01(e): the Game's Sub record untouched by the direct module call");
-        assertTrue(_lastOpenedDayOf(afk) < _lastBoughtDayOf(afk), "LIVE-01(e): the Game's afking box untouched by the direct module call");
+        assertEq(_laneOf(afk), laneBefore, "LIVE-01(e): the Game's lane untouched by the direct module call");
+        assertTrue(_isPending(afk), "LIVE-01(e): the Game's afking box untouched by the direct module call");
 
         // And the canonical path (the engine) DOES open it — the non-vacuity control.
         vm.prank(makeAddr("vsel_op"));
         game.mineFlip(0);
-        assertEq(_lastOpenedDayOf(afk), _lastBoughtDayOf(afk), "LIVE-01(e) control: the engine's AFKing stage DOES open the afking box");
+        assertFalse(_isPending(afk), "LIVE-01(e) control: the engine's AFKing stage DOES open the afking box");
     }
 
     // =========================================================================
@@ -793,26 +772,14 @@ contract V56AfkingGasMarginal is DeployProtocol {
     // Internal helpers (new-design driving harness)
     // =========================================================================
 
-    /// @dev Test-only poke of a Sub's lastAutoBoughtDay (uint24 @ byte 11) — preserves all other Sub fields.
-    function _pokeLastBoughtDay(address who, uint32 day) internal {
-        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT)));
-        uint256 cur = uint256(vm.load(address(game), slot));
-        uint256 mask = (uint256(0xFFFFFF)) << (OFF_LASTBOUGHT * 8);
-        cur = (cur & ~mask) | ((uint256(day) << (OFF_LASTBOUGHT * 8)) & mask);
-        vm.store(address(game), slot, bytes32(cur));
-    }
-
     /// @dev Drive a new-day STAGE advance over N grounded subs that all FUNDING-KILL this cycle (their
-    ///      afkingFunding bucket drained to 0 after the grounded day-0 cover-buy, so the STAGE's fresh-ETH
-    ///      resolve finds srcFunding(0) < ethValue and each routes through _finalizeAfking + delete +
-    ///      swap-pop — SubscriptionExpired reason 1, the successor of the deleted pass-evict crossing; a
-    ///      sub's membership no longer ends on a level crossing, only cancel / funding-skip kill / the
-    ///      coin's seat lock). Returns the bracketed advance gas. Both runs from one clean baseline.
+    ///      afkingFunding bucket drained to 0 after signup, so the STAGE cannot fund the purchase and each
+    ///      routes through _finalizeAfking + swap-pop — SubscriptionExpired reason 1). Returns the
+    ///      bracketed advance gas. Both runs from one clean baseline.
     function _measureEvictStageGas(uint256 n, string memory prefix) internal returns (uint256 advGas) {
         _settleClean(uint256(keccak256(abi.encodePacked(prefix, "base"))) | 1);
-        // Under the D-11/D-12 gates an unfunded subscribe REVERTS, so the funding-killable subs are built
-        // GROUNDED (seat + funded -> subscribe passes both gates); the funding drain below (after the
-        // day-0 cover-buy consumes its slice) forces the next STAGE cycle's cover-buy unfunded.
+        // The funding-killable subs hold a seat and a funded bucket at signup; the drain below leaves
+        // them unable to pay the next day's purchase.
         address[] memory subs = new address[](n);
         for (uint256 i; i < n; ++i) {
             address who = makeAddr(string(abi.encodePacked(prefix, _u(i))));
@@ -820,14 +787,9 @@ contract V56AfkingGasMarginal is DeployProtocol {
             uint256 seat = _grantSeat(who);
             _fundPool(who, 5 ether);
             vm.prank(who);
-            game.subscribe(0, false, false, 1, 0, seat);
+            game.subscribe(0, false, 1, seat);
         }
-        // OPEN the grounded subscribe's pending boxes first — the no-orphan guard dominates the funding-kill
-        // branch, so a pending-box sub would be skipped, not killed. Then drain each sub's remaining
-        // afkingFunding bucket to 0 -> the next STAGE cycle's cover-buy is unfunded (funding-kill fires).
-        vm.startPrank(makeAddr(string(abi.encodePacked(prefix, "ev_open"))));
-        _mineAll(64);
-        vm.stopPrank();
+        // Drain each sub's afkingFunding bucket to 0 -> the next STAGE cycle cannot pay (funding-kill fires).
         for (uint256 i; i < n; ++i) {
             uint256 bal = game.afkingFundingOf(subs[i]);
             if (bal > 0) {
@@ -865,13 +827,8 @@ contract V56AfkingGasMarginal is DeployProtocol {
     {
         _settleClean(uint256(keccak256(abi.encodePacked(prefix, "base"))) | 1);
         address[] memory subs = _setupFundedSubs(n, prefix, 5 ether, isTicket);
-        // The grounded subscribe (D-12) stamps a box at subscribe time; OPEN those pending boxes so the
-        // no-orphan guard does not skip the measured STAGE buy (a pending-box sub is left untouched).
-        vm.startPrank(makeAddr(string(abi.encodePacked(prefix, "setup_open"))));
-        _mineAll(64);
-        vm.stopPrank();
-        uint32[] memory pre = new uint32[](n);
-        for (uint256 i; i < n; ++i) pre[i] = _lastBoughtDayOf(subs[i]);
+        uint32 endpointBefore = _endpoint();
+        uint256 pendingBefore = _pendingBoxes();
 
         _warpToBoundary(landOnSettleDay);
         require(game.advanceDue(), "fixture: advanceDue on the new day");
@@ -879,10 +836,9 @@ contract V56AfkingGasMarginal is DeployProtocol {
         game.mineFlip(0);
         advGas = gasBefore - gasleft();
 
-        // Non-vacuity: every measured sub got a NEW stamp this cycle (a real STAGE buy, not a skip).
-        for (uint256 i; i < n; ++i) {
-            require(_lastBoughtDayOf(subs[i]) > pre[i], "marginal non-vacuity: each funded sub newly stamped");
-        }
+        // Non-vacuity: the pass completed and every measured lootbox sub bought its box.
+        require(_endpoint() > endpointBefore, "marginal non-vacuity: the pass completed");
+        if (!isTicket) require(_pendingBoxes() >= pendingBefore + n, "marginal non-vacuity: each funded sub stamped a box");
     }
 
     /// @dev Warp forward whole days until the simulated day lands ON (settle) or OFF a settle boundary
@@ -915,17 +871,17 @@ contract V56AfkingGasMarginal is DeployProtocol {
         // is measured as that whole session's keeper gas; N and N-1 differ by exactly one open.
         uint256 word = uint256(keccak256(abi.encodePacked(prefix, "word"))) | 1;
         _stampNewDay(word);
-        uint32 stampDay = _readStampDay(subs);
-        require(stampDay == _simulatedDayIndex(), "fixture: subs stamped for the new day");
+        uint32 stampDay = _simulatedDayIndex();
+        require(_endpoint() == stampDay, "fixture: subs stamped for the new day");
         for (uint256 i; i < n; ++i) {
-            require(_lastOpenedDayOf(subs[i]) < stampDay, "marginal pre: each box queued");
+            require(_isPending(subs[i]), "marginal pre: each box queued");
         }
 
         openGas = _sessionGas(word);
         require(rngWordByDay(stampDay) != 0, "fixture: stamp-day word landed");
 
         for (uint256 i; i < n; ++i) {
-            require(_lastOpenedDayOf(subs[i]) == stampDay, "marginal non-vacuity: each box opened");
+            require(!_isPending(subs[i]), "marginal non-vacuity: each box opened");
         }
     }
 
@@ -949,7 +905,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
             _fundPool(who, poolEach);
             vm.prank(who);
             // self, mode = isTicket, qty 1, reinvest 0, self-funded
-            game.subscribe(0, false, isTicket, 1, 0, seat);
+            game.subscribe(0, isTicket, 1, seat);
         }
     }
 
@@ -969,11 +925,6 @@ contract V56AfkingGasMarginal is DeployProtocol {
         returns (address[] memory)
     {
         return _setupFundedSubs(n, prefix, poolEach, true);
-    }
-
-    /// @dev Read the (uniform) stamp day across the subs (each was stamped the same process day by the STAGE).
-    function _readStampDay(address[] memory subs) internal view returns (uint32) {
-        return _lastBoughtDayOf(subs[0]);
     }
 
     function _fundPool(address who, uint256 amount) internal {
@@ -1009,8 +960,8 @@ contract V56AfkingGasMarginal is DeployProtocol {
         require(game.rngComplete(), "fixture: the session completed");
     }
 
-    function _allPending(address[] memory subs, uint32 stampDay) internal view returns (bool) {
-        for (uint256 i; i < subs.length; ++i) if (_lastOpenedDayOf(subs[i]) >= stampDay) return false;
+    function _allPending(address[] memory subs) internal view returns (bool) {
+        for (uint256 i; i < subs.length; ++i) if (!_isPending(subs[i])) return false;
         return true;
     }
 
@@ -1019,14 +970,14 @@ contract V56AfkingGasMarginal is DeployProtocol {
     ///      chunks while the allowance covers the next declared bound, so the call that finishes the
     ///      daily work opens queue-head boxes with its spare gas: padding subs ahead of the subjects in
     ///      the ring absorb that, and a step reaching a subject is replayed with a smaller allowance.
-    function _toAfkingStageWithPending(address[] memory subjects, uint32 stampDay, uint256 vrfWord) internal {
+    function _toAfkingStageWithPending(address[] memory subjects, uint256 vrfWord) internal {
         _fulfillPending(vrfWord);
         for (uint256 i; i < 200 && game.rngConsumerStage() != 2; ++i) {
             uint256 snap = vm.snapshotState();
             bool stepped;
             for (uint256 g = 9_000_000; g >= 400_000 && !stepped; g -= 100_000) {
                 try game.mineFlip{gas: g}(0) {
-                    if (_allPending(subjects, stampDay)) stepped = true;
+                    if (_allPending(subjects)) stepped = true;
                     else require(vm.revertToState(snap), "snapshot");
                 } catch {
                     require(vm.revertToState(snap), "snapshot");
@@ -1035,7 +986,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
             require(stepped, "fixture: a bounded allowance stops at the AFKing stage");
         }
         require(game.rngConsumerStage() == 2, "fixture: the AFKing stage is open");
-        require(_allPending(subjects, stampDay), "fixture: every subject box pending at the AFKing stage");
+        require(_allPending(subjects), "fixture: every subject box pending at the AFKing stage");
     }
 
     uint256 internal constant AFKING_PADS = 100;
@@ -1085,39 +1036,29 @@ contract V56AfkingGasMarginal is DeployProtocol {
         }
     }
 
-    // ---- Sub-slot reads (_subOf at slot 52 + v56 offsets) ----
+    // ---- Subscriber reads ----
 
-    function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
-        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT))))) >> (off * 8);
-        return p & ((uint256(1) << widthBits) - 1);
+    /// @dev True while `who` holds an unopened box of the current cohort.
+    function _isPending(address who) internal view returns (bool) {
+        return GameSlotKeys.afkingBoxPending(address(game), game.walletIdOf(who));
     }
 
-    function _lastBoughtDayOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_LASTBOUGHT, 24)); // uint24
+    /// @dev The last day whose subscriber pass completed.
+    function _endpoint() internal view returns (uint32) {
+        uint256 p = uint256(vm.load(address(game), bytes32(GameSlots.AFKING_ENDPOINT_DAY)))
+            >> (8 * GameSlots.AFKING_ENDPOINT_DAY_OFFSET);
+        return uint32(p & 0xFFFFFF);
     }
 
-    function _lastOpenedDayOf(address who) internal view returns (uint32) {
-        return GameSlotKeys.afkingOpenedDay(address(game), game.walletIdOf(who));
+    /// @dev Boxes stamped by preparation and not yet opened.
+    function _pendingBoxes() internal view returns (uint256) {
+        uint256 packed = uint256(vm.load(address(game), bytes32(GameSlots.PENDING_BOX_COUNT)));
+        return uint16(packed >> (8 * GameSlots.PENDING_BOX_COUNT_OFFSET));
     }
 
-    function _afkCoveredOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_AFKCOVERED, 24)); // uint24
-    }
-
-    function _affiliateBaseOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_AFFBASE, 32)); // uint32
-    }
-
-    function _afkingStartOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_AFKINGSTART, 24)); // uint24
-    }
-
-    function _pendingFlipOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_PENDINGFLIP, 24)); // uint24
-    }
-
-    function _streakBaseOf(address who) internal view returns (uint16) {
-        return uint16(_subField(who, OFF_STREAKLATCH, 16)); // full uint16 streak counter
+    /// @dev `who`'s lane word in the subscriber set (0 when not a member).
+    function _laneOf(address who) internal view returns (uint256 lane) {
+        (lane,) = GameSlotKeys.subLane(address(game), game.walletIdOf(who));
     }
 
     function _subscriberCount() internal view returns (uint256) {
@@ -1171,8 +1112,8 @@ contract V56AfkingGasMarginal is DeployProtocol {
     }
 
     /// @dev How many of `subs` have opened their box for `stampDay`.
-    function _openedCount(address[] memory subs, uint32 stampDay) internal view returns (uint256 c) {
-        for (uint256 i; i < subs.length; ++i) if (_lastOpenedDayOf(subs[i]) == stampDay) ++c;
+    function _openedCount(address[] memory subs) internal view returns (uint256 c) {
+        for (uint256 i; i < subs.length; ++i) if (!_isPending(subs[i])) ++c;
     }
 
     /// @dev The first action of the single mineFlip recorded in `logs` (MinerWork.firstAction).
@@ -1299,11 +1240,8 @@ contract V56AfkingGasMarginal is DeployProtocol {
     {
         _settleClean(uint256(keccak256(abi.encodePacked(prefix, "base"))) | 1);
         address[] memory subs = _setupFundedSubs(n, prefix, 5 ether, isTicket);
-        vm.startPrank(makeAddr(string(abi.encodePacked(prefix, "setup_open"))));
-        _mineAll(64);
-        vm.stopPrank();
-        uint32[] memory pre = new uint32[](n);
-        for (uint256 i; i < n; ++i) pre[i] = _lastBoughtDayOf(subs[i]);
+        uint32 endpointBefore = _endpoint();
+        uint256 pendingBefore = _pendingBoxes();
 
         _warpToBoundary(false);
         require(game.advanceDue(), "fixture: advanceDue on the new day");
@@ -1312,9 +1250,8 @@ contract V56AfkingGasMarginal is DeployProtocol {
         game.mineFlip(0);
         advGas = gasBefore - gasleft();
 
-        for (uint256 i; i < n; ++i) {
-            require(_lastBoughtDayOf(subs[i]) > pre[i], "cold marginal non-vacuity: each funded sub newly stamped");
-        }
+        require(_endpoint() > endpointBefore, "cold marginal non-vacuity: the pass completed");
+        if (!isTicket) require(_pendingBoxes() >= pendingBefore + n, "cold marginal non-vacuity: each funded sub stamped a box");
     }
 
     /// @dev COLD variant of _measureEvictStageGas: identical funding-kill setup, vm.cool before the
@@ -1329,11 +1266,8 @@ contract V56AfkingGasMarginal is DeployProtocol {
             uint256 seat = _grantSeat(who);
             _fundPool(who, 5 ether);
             vm.prank(who);
-            game.subscribe(0, false, false, 1, 0, seat);
+            game.subscribe(0, false, 1, seat);
         }
-        vm.startPrank(makeAddr(string(abi.encodePacked(prefix, "ev_open"))));
-        _mineAll(64);
-        vm.stopPrank();
         for (uint256 i; i < n; ++i) {
             uint256 bal = game.afkingFundingOf(subs[i]);
             if (bal > 0) {
@@ -1367,7 +1301,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
             _nativeEvictionExpected[players[i]] = true;
             originalSubs[i] = _nativeSubWord(players[i]);
             assertTrue(originalSubs[i] != bytes32(0), "fixture: every ordinary subscriber has a live record");
-            assertEq(_lastOpenedDayOf(players[i]), _lastBoughtDayOf(players[i]), "fixture: no pending paid box");
+            assertFalse(_isPending(players[i]), "fixture: no pending paid box");
         }
 
         // Even before retaining the router's own boundary/return gas this is
@@ -1434,9 +1368,6 @@ contract V56AfkingGasMarginal is DeployProtocol {
     {
         _settleClean(uint256(keccak256(abi.encodePacked(prefix, "base"))) | 1);
         players = _setupFundedSubs(count, prefix, 5 ether, false);
-        vm.startPrank(makeAddr(string(abi.encodePacked(prefix, "ev_open"))));
-        _mineAll(64);
-        vm.stopPrank();
         for (uint256 i; i < count; ++i) {
             uint256 funding = game.afkingFundingOf(players[i]);
             if (funding != 0) {
@@ -1448,11 +1379,9 @@ contract V56AfkingGasMarginal is DeployProtocol {
         require(game.advanceDue(), "fixture: the new subscription day is due");
     }
 
-    /// @dev The player's Sub word without its set position (bits 200..231), which swap-pop
-    ///      rewrites when another member's eviction moves this record within the set.
+    /// @dev The player's lane: unchanged while it waits, zero once its expiry removed it.
     function _nativeSubWord(address player) private view returns (bytes32) {
-        uint256 word = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(player)), uint256(SUBOF_SLOT)))));
-        return bytes32(word & ~(uint256(type(uint32).max) << 200));
+        return bytes32(_laneOf(player));
     }
 
     function _assertNativeEvictionCheckpoint(address[] memory players, bytes32[] memory originalSubs) private view {
@@ -1519,16 +1448,16 @@ contract V56AfkingGasMarginal is DeployProtocol {
         _fundPool(newBuyer, 50 ether);
         vm.prank(newBuyer);
         vm.expectRevert(bytes4(keccak256("RngLocked()"))); // RngLocked() — GameAfkingModule:328, blocks create/replace/cancel under the lock
-        game.subscribe(0, false, false, 1, 0, seat);
+        game.subscribe(0, false, 1, seat);
 
         // THE ENTRY GATE, proven organically: drive the buffered-clamp consuming drain and
-        // assert the subscriber STAGE did not run in ANY locked call — zero PlayerSkipped
+        // assert the subscriber STAGE did not run in ANY locked call — zero AfkingDelivered
         // emissions (the walk visits nothing under the lock; the old code re-opened an all-skip
         // walk here). A ticket batch may legitimately interpose before the day seals, so keep
         // draining under the same lock until dailyIdx advances. The gate is why a completing
         // subscriber chunk and a buffered-word jackpot apply can never share one tx.
         uint32 idxBeforeConsume = _dailyIdx();
-        bytes32 skippedSig = keccak256("PlayerSkipped(uint32,uint8)");
+        bytes32 skippedSig = keccak256("AfkingDelivered(uint32,uint256)");
         uint256 consumeCalls;
         while (_dailyIdx() == idxBeforeConsume && consumeCalls < DRAIN_MAX_ITERATIONS) {
             vm.recordLogs();

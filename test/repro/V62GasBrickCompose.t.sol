@@ -51,7 +51,6 @@ contract V62GasBrickCompose is DeployProtocol {
     // (carried verbatim from V56AfkingGasMarginal so the probes are slot-faithful)
     // -------------------------------------------------------------------------
     uint256 private constant RNG_WORD_BY_DAY_SLOT = GameSlots.RNG_WORD_BY_DAY;
-    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF;       // post V62 lootbox repack: was 58
     uint256 private constant SUBSCRIBERS_SLOT = GameSlots.SUBSCRIBERS; // post V62 lootbox repack: was 60
 
     uint256 private constant HEADER_SLOT = 0;
@@ -193,20 +192,17 @@ contract V62GasBrickCompose is DeployProtocol {
             uint256 seat = _grantSeat(who);
             _fundPool(who, 5 ether);
             vm.prank(who);
-            game.subscribe(0, false, false, 1, 0, seat);
+            game.subscribe(0, false, 1, seat);
         }
 
-        // Open the grounded subscribe's pending boxes first — the no-orphan guard (AfkingModule:1164)
-        // would otherwise SKIP a pending-box sub (cheap, weight 1) instead of routing it to the heavy
-        // EVICT branch. Opening clears them so the forced funding-kill routes every sub through EVICT.
+        // Nothing is bought at signup, so no box is pending; the opener call is a no-op guard.
         vm.startPrank(makeAddr("v62_ev_open"));
         _mineAll(64);
         vm.stopPrank();
 
-        // Force the funding-kill on every sub: drain its afkingFunding bucket to 0 (after the grounded
-        // day-0 cover-buy consumed its slice) so the STAGE's fresh-ETH resolve finds srcFunding(0) <
-        // ethValue and each routes through EVICT (_finalizeAfking + delete + swap-pop), weight
-        // SUB_STAGE_EVICT_WEIGHT — the successor of the deleted pass-evict crossing (membership no longer
+        // Force the funding-kill on every sub: drain its afkingFunding bucket to 0 so the STAGE's
+        // funding resolve finds the bucket short and each routes through EVICT (_finalizeAfking +
+        // remove from the set), weight SUB_STAGE_EVICT_WEIGHT — the successor of the deleted pass-evict crossing (membership no longer
         // ends on a level crossing, only cancel / funding-skip kill / the coin's seat-exit hook).
         for (uint256 i; i < evictCount; ++i) {
             uint256 bal = game.afkingFundingOf(killSubs[i]);

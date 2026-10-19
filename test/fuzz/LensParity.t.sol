@@ -10,6 +10,7 @@ import {IDegenerusQuests} from "../../contracts/interfaces/IDegenerusQuests.sol"
 import {IDegenerusAffiliate} from "../../contracts/interfaces/IDegenerusAffiliate.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
+import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 
 /// @title LensParity — DegenerusGameLens slot-math + decode parity proof
 /// @notice The lens reads the game's storage through `extsload` with hand-derived
@@ -50,31 +51,38 @@ contract LensStorageHarness is DegenerusGameMintStreakUtils, WalletSeed {
 
     // -- setters: write through the compiler's layout ------------------------
 
+    /// @dev Write a member lane through the compiler's layout, in the box or ticket section,
+    ///      with run-start day `runStart`.
     function setSub(
         address p,
         uint8 dailyQuantity,
-        uint8 flags,
-        uint16 score,
-        uint24 amount,
-        uint24 lastAutoBoughtDay,
-        uint24 afkCoveredThroughDay,
-        uint24 afkingStartDay,
-        uint32 affiliateBase,
-        uint24 pendingFlip,
-        uint16 subStreakLatch
+        bool tickets,
+        uint16 scoreCode,
+        uint24 checkpointDay,
+        uint16 checkpointStreak,
+        bool removal,
+        uint24 runStart
     ) external {
-        Sub storage s = _subOf[_seedWallet(p)];
-        s.dailyQuantity = dailyQuantity;
-        s.flags = flags;
-        s.score = score;
-        s.amount = amount;
-        s.lastAutoBoughtDay = lastAutoBoughtDay;
-        s.afkCoveredThroughDay = afkCoveredThroughDay;
-        s.afkingStartDay = afkingStartDay;
-        s.affiliateBase = affiliateBase;
-        s.pendingFlip = pendingFlip;
-        s.subStreakLatch = subStreakLatch;
+        uint32 id = _seedWallet(p);
+        uint256 count = _subscribers.length;
+        uint256 position = tickets ? SUBSCRIBER_CAP - (count - _subBoxCount) : _subBoxCount++;
+        uint256 lane = uint256(id) | ((uint256(dailyQuantity) - 1) << SUB_QTY_SHIFT)
+            | (tickets ? SUB_TICKETS_BIT : 0) | (uint256(scoreCode) << SUB_SCORE_SHIFT)
+            | (removal ? SUB_REMOVAL_BIT : 0);
+        _setSubLaneAt(position, _withSubCheckpoint(lane, checkpointDay, checkpointStreak));
+        _setSubscriberCount(count + 1);
+        _setSubMetaLane(id, (position + 1) | (uint256(runStart) << 11));
     }
+
+    function setEndpoint(uint24 day) external { _afkingEndpointDay = day; }
+
+    /// @dev Register the protocol wallets at their constant IDs and set the pause flags.
+    function setProtocolFlags(uint8 flags) external {
+        _seedProtocolWallets();
+        _afkingProtocolFlags = flags;
+    }
+
+    function livenessTriggered() external view returns (bool) { return _livenessTriggered(); }
 
     function setMintPacked(address p, uint256 w) external {
         _registerWallet(p, type(uint256).max);
@@ -178,76 +186,93 @@ contract LensParityTest is Test {
     }
 
     // =========================================================================
-    // Sub record: slot + full 10-field decode + effective streak
+    // Member lane: slot + full decode + derived rewards + effective streak
     // =========================================================================
 
-    function testFuzz_subInfoFull_decodesWrittenRecord(
+    function testFuzz_subInfoFull_decodesWrittenLane(
         address p,
         uint8 dailyQuantity,
-        uint8 flags,
-        uint16 score,
-        uint24 amount,
-        uint24 lastAutoBoughtDay,
-        uint24 afkCoveredThroughDay,
-        uint24 afkingStartDay,
-        uint32 affiliateBase,
-        uint24 pendingFlip,
-        uint16 subStreakLatch
+        bool tickets,
+        uint16 scoreCode,
+        uint24 checkpointDay,
+        uint16 checkpointStreak,
+        bool removal,
+        uint24 runStart,
+        uint24 endpoint
     ) public {
         vm.assume(p != address(0));
-        harness.setSub(
-            p,
-            dailyQuantity,
-            flags,
-            score,
-            amount,
-            lastAutoBoughtDay,
-            afkCoveredThroughDay,
-            afkingStartDay,
-            affiliateBase,
-            pendingFlip,
-            subStreakLatch
-        );
-        _mockQuests(harness.seedId(p), 7, false); // non-afking: effectiveStreak = manual streak
+        dailyQuantity = uint8(bound(dailyQuantity, 1, 8));
+        scoreCode = uint16(bound(scoreCode, 0, 961));
+        checkpointDay = uint24(bound(checkpointDay, 0, 5000));
+        endpoint = uint24(bound(endpoint, 0, 6000));
+        runStart = uint24(bound(runStart, 0, 5000));
+        harness.setSub(p, dailyQuantity, tickets, scoreCode, checkpointDay, checkpointStreak, removal, runStart);
+        harness.setEndpoint(endpoint);
+        uint32 id = harness.seedId(p);
+        _mockQuests(id, 7, false); // non-afking: effectiveStreak = manual streak
 
         DegenerusGameLens.SubFull memory s = lens.subInfoFull(game, p);
-        assertEq(s.active, dailyQuantity != 0, "active");
+        assertTrue(s.member, "member");
+        assertEq(s.active, !removal, "active");
+        assertEq(s.removalPending, removal, "removalPending");
+        assertFalse(s.paused, "paused");
+        assertEq(s.useTickets, tickets, "useTickets");
         assertEq(s.dailyQuantity, dailyQuantity, "dailyQuantity");
-        assertEq(s.flags, flags, "flags");
-        assertEq(s.score, score, "score");
-        assertEq(s.amountMilliEth, amount, "amount");
-        assertEq(s.lastAutoBoughtDay, lastAutoBoughtDay, "lastAutoBoughtDay");
-        assertEq(s.afkCoveredThroughDay, afkCoveredThroughDay, "afkCoveredThroughDay");
-        assertEq(s.afkingStartDay, afkingStartDay, "afkingStartDay");
-        assertEq(s.affiliateBase, affiliateBase, "affiliateBase");
-        assertEq(s.pendingFlip, pendingFlip, "pendingFlip");
-        assertEq(s.subStreakLatch, subStreakLatch, "subStreakLatch");
+        assertEq(s.score, scoreCode <= 500 ? scoreCode : (scoreCode >= 961 ? 30_000 : 500 + ((uint256(scoreCode) - 500) << 6)), "score");
+        assertEq(s.checkpointDay, checkpointDay, "checkpointDay");
+        assertEq(s.checkpointStreak, checkpointStreak, "checkpointStreak");
+        assertEq(s.runStartDay, runStart, "runStartDay");
+        assertEq(s.endpoint, endpoint, "endpoint");
+        uint256 elapsed = endpoint > checkpointDay ? endpoint - checkpointDay : 0;
+        assertEq(s.owedFlip, elapsed * (tickets ? 100 + 100 * uint256(dailyQuantity) : 100), "owedFlip");
+        assertEq(s.owedAffiliateBase, elapsed * 70 * dailyQuantity, "owedAffiliateBase");
         assertEq(s.effectiveStreak, 7, "manual streak passthrough");
         assertEq(s.effectiveStreak, harness.nativeEffectiveStreak(p), "native parity");
     }
 
-    /// @notice The live-afking compute-on-read streak (decay branches included)
-    ///         matches the game-side _effectiveQuestStreak exactly.
-    function testFuzz_subInfoFull_effectiveStreak_afkingParity(
-        uint24 afkingStartDay,
-        uint24 afkCoveredThroughDay,
-        uint24 dailyIdx_,
-        uint16 subStreakLatch,
-        uint32 manualStreak,
-        uint48 warpTs,
-        bool sealNextWord
-    ) public {
-        // A live run: start day set, covered >= start (the run's own invariant).
-        afkingStartDay = uint24(bound(afkingStartDay, 1, 5000));
-        afkCoveredThroughDay = uint24(bound(afkCoveredThroughDay, afkingStartDay, 6000));
-        dailyIdx_ = uint24(bound(dailyIdx_, 0, 7000));
-        warpTs = uint48(bound(warpTs, 2 days, 8000 days));
-        vm.warp(warpTs);
+    function test_subInfoFull_nonMember() public {
+        harness.setEndpoint(9);
+        _mockQuests(harness.seedId(PLAYER), 4, false);
+        DegenerusGameLens.SubFull memory s = lens.subInfoFull(game, PLAYER);
+        assertFalse(s.member);
+        assertFalse(s.active);
+        assertEq(s.dailyQuantity, 0);
+        assertEq(s.owedFlip, 0);
+        assertEq(s.endpoint, 9, "endpoint is global");
+        assertEq(s.effectiveStreak, 4);
+    }
 
-        harness.setSub(PLAYER, 1, 0, 0, 0, 0, afkCoveredThroughDay, afkingStartDay, 0, 0, subStreakLatch);
-        harness.setSlot0(dailyIdx_, 3, false, false, false, 0, 0);
-        if (sealNextWord) harness.setRngWordByDay(dailyIdx_ + 1, 0xABCD);
-        _mockQuests(harness.seedId(PLAYER), manualStreak, true);
+    /// @notice A protocol seat's pause flags read as `paused`; its parked checkpoint day owes nothing.
+    function test_subInfoFull_pausedProtocolSeat() public {
+        harness.setProtocolFlags(8); // Vault unfunded pause
+        address vaultKey = ContractAddresses.VAULT;
+        harness.setSub(vaultKey, 1, false, 0, uint24((1 << 22) - 1), 5, false, 3);
+        harness.setEndpoint(50);
+        _mockQuests(1, 0, true);
+        DegenerusGameLens.SubFull memory s = lens.subInfoFull(game, vaultKey);
+        assertTrue(s.paused, "paused");
+        assertEq(s.owedFlip, 0, "a parked checkpoint owes nothing");
+        assertEq(s.owedAffiliateBase, 0);
+        assertEq(s.effectiveStreak, harness.nativeEffectiveStreak(vaultKey), "parity");
+    }
+
+    /// @notice The live-afking streak (checkpoint streak plus elapsed days, a run pending
+    ///         removal falling back to the manual streak) matches the game-side
+    ///         _effectiveQuestStreak exactly.
+    function testFuzz_subInfoFull_effectiveStreak_afkingParity(
+        uint24 checkpointDay,
+        uint24 endpoint,
+        uint16 checkpointStreak,
+        uint32 manualStreak,
+        bool removal,
+        bool afking
+    ) public {
+        checkpointDay = uint24(bound(checkpointDay, 0, 5000));
+        endpoint = uint24(bound(endpoint, 0, 6000));
+
+        harness.setSub(PLAYER, 1, false, 0, checkpointDay, checkpointStreak, removal, 0);
+        harness.setEndpoint(endpoint);
+        _mockQuests(harness.seedId(PLAYER), manualStreak, afking);
 
         assertEq(
             lens.subInfoFull(game, PLAYER).effectiveStreak,
@@ -424,5 +449,106 @@ contract LensParityTest is Test {
         assertEq(f.resolveDay, resolveDay, "resolveDay");
         assertEq(f.multBps, multBps, "multBps");
         assertEq(f.activityScore, score, "activityScore");
+    }
+}
+
+/// @title LensSettlementParity — the lens's owed figures are what settlement actually pays
+/// @notice Two real subscribers (a box member and a ticket member) run for several completed
+///         days on the deployed protocol; `owedFlip` / `owedAffiliateBase` read before the claim
+///         equal the AfkingFlipClaimed / AffiliateBaseDrained the claim then emits, and the lens
+///         shows the settled checkpoint afterwards.
+contract LensSettlementParity is DeployProtocol {
+    bytes32 private constant AFKING_FLIP_CLAIMED = keccak256("AfkingFlipClaimed(uint32,uint256)");
+    bytes32 private constant AFFILIATE_BASE_DRAINED = keccak256("AffiliateBaseDrained(uint32,uint256)");
+
+    DegenerusGameLens private lens;
+    uint256 private _lastFulfilledReqId;
+
+    function setUp() public {
+        _deployProtocol();
+        vm.warp(block.timestamp + 1 days);
+        lens = new DegenerusGameLens();
+        _finishSubscriptionWindow();
+    }
+
+    function _subscribe(string memory name, bool tickets, uint8 quantity) private returns (address who, uint32 id) {
+        who = makeAddr(name);
+        uint256 seat = _grantSeat(who);
+        id = game.walletIdOf(who);
+        vm.deal(address(this), 5 ether);
+        game.depositAfkingFunding{value: 5 ether}(id);
+        vm.prank(who);
+        game.subscribe(0, tickets, quantity, seat);
+    }
+
+    function _completeDay(uint256 vrfWord) private {
+        _finishReadConsumers();
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        uint256 before = mockVRF.lastRequestId();
+        for (uint256 i; i < 50 && mockVRF.lastRequestId() == before; ++i) game.mineFlip(0);
+        uint256 reqId = mockVRF.lastRequestId();
+        if (reqId != _lastFulfilledReqId && reqId > 0) {
+            mockVRF.fulfillRandomWords(reqId, vrfWord);
+            _lastFulfilledReqId = reqId;
+        }
+        for (uint256 i; i < 50; ++i) {
+            if (!game.rngLocked()) break;
+            game.mineFlip(0);
+        }
+        _finishReadConsumers();
+    }
+
+    function test_owedFiguresEqualWhatTheClaimSettles() public {
+        (address boxer, uint32 boxId) = _subscribe("lens_boxer", false, 3);
+        (address ticketer, uint32 ticketId) = _subscribe("lens_ticketer", true, 2);
+
+        DegenerusGameLens.SubFull memory fresh = lens.subInfoFull(address(game), boxer);
+        assertEq(fresh.owedFlip, 0, "nothing is owed before a pass completes");
+        assertEq(fresh.checkpointDay, fresh.endpoint, "checkpointed at signup");
+
+        for (uint256 d = 1; d <= 3; ++d) _completeDay(uint256(keccak256(abi.encode("lens_settle_day", d))) | 1);
+
+        DegenerusGameLens.SubFull memory box = lens.subInfoFull(address(game), boxer);
+        DegenerusGameLens.SubFull memory tix = lens.subInfoFull(address(game), ticketer);
+        assertEq(box.endpoint - box.checkpointDay, 3, "three completed days elapsed");
+        assertEq(box.owedFlip, 300, "box: 100 per day");
+        assertEq(box.owedAffiliateBase, 3 * 70 * 3, "box: 70 per unit per day");
+        assertEq(tix.owedFlip, 3 * (100 + 200), "tickets: 100 + 100 per ticket per day");
+        assertEq(tix.owedAffiliateBase, 3 * 70 * 2, "tickets: 70 per unit per day");
+        assertEq(box.effectiveStreak, box.checkpointStreak + 3, "live streak includes the elapsed days");
+
+        uint32[] memory subs = new uint32[](2);
+        subs[0] = boxId;
+        subs[1] = ticketId;
+        vm.recordLogs();
+        game.claimAfkingFlip(subs);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+
+        uint256 paidBox;
+        uint256 paidTix;
+        uint256 baseBox;
+        uint256 baseTix;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter != address(game)) continue;
+            uint32 who = uint32(uint256(logs[i].topics[1]));
+            if (logs[i].topics[0] == AFKING_FLIP_CLAIMED) {
+                if (who == boxId) paidBox = abi.decode(logs[i].data, (uint256));
+                else if (who == ticketId) paidTix = abi.decode(logs[i].data, (uint256));
+            } else if (logs[i].topics[0] == AFFILIATE_BASE_DRAINED) {
+                if (who == boxId) baseBox = abi.decode(logs[i].data, (uint256));
+                else if (who == ticketId) baseTix = abi.decode(logs[i].data, (uint256));
+            }
+        }
+        assertEq(paidBox, box.owedFlip, "box: claim paid the owed FLIP");
+        assertEq(paidTix, tix.owedFlip, "tickets: claim paid the owed FLIP");
+        assertEq(baseBox, box.owedAffiliateBase, "box: claim drained the owed base");
+        assertEq(baseTix, tix.owedAffiliateBase, "tickets: claim drained the owed base");
+
+        DegenerusGameLens.SubFull memory after_ = lens.subInfoFull(address(game), boxer);
+        assertEq(after_.owedFlip, 0, "settled");
+        assertEq(after_.owedAffiliateBase, 0, "settled");
+        assertEq(after_.checkpointDay, after_.endpoint, "checkpoint moved to the endpoint");
+        assertEq(after_.checkpointStreak, box.checkpointStreak + 3, "elapsed days folded into the checkpoint streak");
+        assertEq(after_.effectiveStreak, box.effectiveStreak, "settling never moves the live streak");
     }
 }

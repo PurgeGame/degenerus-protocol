@@ -155,7 +155,7 @@ contract DegenesisGasHost is DegenerusGame, BucketSeed {
         vrfSubscriptionId = 1;
     }
     /// @dev The seat draw's winner for the processed day becomes a fresh wallet with a live
-    ///      covered span, so the draw pays a FLIP credit into a never-touched stake slot.
+    ///      run span, so the draw pays a FLIP credit into a never-touched stake slot.
     function hostForceSeatDraw() external returns (uint32 winner) {
         while (_subscribers.length < 2) _seedSubscriber(_seedWallet(address(uint160(0x5EA70000 + _subscribers.length))), false);
         uint256 word = _recordedDailyWord(rngRequestDay);
@@ -164,12 +164,9 @@ contract DegenesisGasHost is DegenerusGame, BucketSeed {
         uint256 idx = 1 + uint256(keccak256(abi.encodePacked("SEATDRAW", word))) % (len - 1);
         uint256 position = idx < boxes ? idx : SUBSCRIBER_CAP - (idx - boxes);
         winner = _seedWallet(address(uint160(0x5EA7F000)));
-        _setSubscriberAt(position, winner);
-        Sub storage s = _subOf[winner];
-        s.setPosition = uint32(position + 1);
-        s.dailyQuantity = 1;
-        s.afkingStartDay = 1;
-        s.afkCoveredThroughDay = 200;
+        _setSubLaneAt(position, uint256(winner));
+        _setSubMetaLane(winner, (position + 1) | (uint256(1) << 11));
+        _afkingEndpointDay = 200;
     }
     function hostRequestOnly() external {
         _delegate(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("requestDailyRng(uint24)", _afkingResetDay));

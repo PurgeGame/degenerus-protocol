@@ -1172,7 +1172,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     }
 
     /// @dev Clamp a raw activity score into the cover call's uint16 — a bare cast would wrap
-    ///      a large score to a small one. Mirrors the afking cover's guard.
+    ///      a large score to a small one.
     function _clampScore(uint256 raw) private pure returns (uint16) {
         return raw > type(uint16).max ? type(uint16).max : uint16(raw);
     }

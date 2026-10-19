@@ -6,7 +6,7 @@ import {DegenerusVault} from "../../contracts/DegenerusVault.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 contract CompGameDouble {
-    function subscribe(uint32, bool, bool, uint8, uint32, uint256) external payable {}
+    function subscribe(uint32, bool, uint8, uint256) external payable {}
 }
 
 /// @dev Records what the vault asked of the table's comp door, in order, and can refuse.

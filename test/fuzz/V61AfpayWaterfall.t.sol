@@ -586,7 +586,7 @@ contract V61AfpayWaterfall is DeployProtocol {
     function _subscribeLootbox(address who, uint8 q) internal {
         uint256 seat = _grantSeat(who); // the AFKing Subscription Token is the subscribe credential (a new run burns one seat)
         vm.prank(who);
-        game.subscribe(0, false, false, q, 0, seat);
+        game.subscribe(0, false, q, seat);
     }
 
     function _fundPool(address who, uint256 amount) internal {

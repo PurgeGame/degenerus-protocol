@@ -235,12 +235,13 @@ contract LootboxEvAtOpenTest is DeployProtocol {
         assertEq(host.evUsed(id, key), 1 ether);
     }
 
-    function test_ManualAfkAndDirectShareOpeningBucketAcrossChunks() public {
+    function test_ManualAndDirectShareOpeningBucketAcrossChunksAfkExempt() public {
         host.grant(PLAYER, 6 ether, 30_000, false, 0);
         host.grant(PLAYER, 6 ether, 30_000, false, 0);
         host.sealAndPublish(17);
+        // A daily AFKing box opens outside the allowance.
         host.scoredSingle(id, 2 ether, 30_000, 23, true);
-        assertEq(host.evUsed(id, key), 2 ether);
+        assertEq(host.evUsed(id, key), 0);
         uint256 snap = vm.snapshotState();
         vm.recordLogs();
         host.work(25_000_000);

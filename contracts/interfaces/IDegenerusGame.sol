@@ -704,84 +704,83 @@ interface IDegenerusGame {
     /// @param randomWords Array of random words returned by VRF.
     function rawFulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) external;
 
-    /// @notice The SINGLE AfKing subscription entrypoint: create / replace (dailyQuantity >= 1)
+    /// @notice The SINGLE AfKing subscription entrypoint: create / change (dailyQuantity 1..8)
     ///         or cancel (dailyQuantity == 0) for account `id`.
     /// @dev Authorized (account rule), checked once here and never at process time.
-    ///      Seats: a NEW run (no live run: never subscribed, cancelled or evicted) burns seat
+    ///      Seats: a NEW run (no live run: never subscribed, cancelled or expired) burns seat
     ///      `seatId`, which must be held by the subscriber's payee (the owner for a smurf): Game
-    ///      calls `AFKING_SUB_TOKEN.consumeSeat(payee, seatId)` before it writes the run. Changing
-    ///      a live run, a cancel, and the exempt VAULT/SDGNRS subscriptions burn nothing and
-    ///      ignore `seatId`. There is no seat lock and no eviction forfeit.
-    ///      Funding: `fundingSourceId == 0` (or the subscriber's own ID) self-funds from the
-    ///      subscriber's own AFKing ledger; a stETH top-up pulls from the subscriber's payee.
-    ///      Any other `fundingSourceId` is an ID that must exist and must consent: it shares the
-    ///      subscriber's main wallet (equal payees: an owner and its smurfs) or approved the
-    ///      subscriber's key as an operator. Prepaid draws keep that consent, and each stETH
-    ///      pull from the source's payee re-checks it live.
-    ///      `msg.value` credits the funding bucket the draws debit (the source's when external,
-    ///      else the subscriber's).
+    ///      calls `AFKING_SUB_TOKEN.consumeSeat(payee, seatId)` before it writes the run. A new
+    ///      run starts only after today's subscriber pass completed; its first purchase and first
+    ///      credited day are tomorrow. Changing a live run, a cancel, and the exempt VAULT/SDGNRS
+    ///      subscriptions burn nothing and ignore `seatId`.
+    ///      Funding: each day's purchase spends the subscriber's claimable first (keeping 1 wei),
+    ///      then its prepaid AFKing ETH, then a stETH top-up pulled from its payee. `msg.value`
+    ///      credits the subscriber's prepaid AFKing ETH.
+    ///      Every change settles the run first; a cancel settles both sides and removes the run.
+    ///      The Vault's quantity 0 pauses it instead: it keeps its seat and earns nothing until a
+    ///      quantity is set again.
     /// @param id Subscriber account (0 = caller).
-    /// @param drainGameCreditFirst Spend game credit before fresh ETH.
-    /// @param useTickets Deliver tickets (true) or lootbox deposits (false).
-    /// @param dailyQuantity Daily delivery quantity; 0 cancels the subscription.
-    /// @param fundingSourceId Account funding the subscription (0 = self-funded).
+    /// @param useTickets Deliver tickets (true) or lootboxes (false).
+    /// @param dailyQuantity Daily delivery quantity, 1..8; 0 cancels the subscription.
     /// @param seatId Seat serial to burn when this call starts a new run (ignored otherwise).
-    /// @custom:reverts RngLocked During the RNG freeze window.
+    /// @custom:reverts RngLocked During the RNG freeze window, or for a new run before today's
+    ///                 subscriber pass completed.
     /// @custom:reverts GameOver Once the liveness trigger fires.
-    /// @custom:reverts NotApproved If the caller may not act for `id`, or the funding source does
-    ///                 not authorize the subscriber.
-    /// @custom:reverts E If `id` or `fundingSourceId` is unallocated.
+    /// @custom:reverts NotApproved If the caller may not act for `id`.
+    /// @custom:reverts E If `id` is unallocated, `dailyQuantity` exceeds 8, or a protocol seat
+    ///                 asks for tickets.
     /// @custom:reverts NotSubscribed On a cancel with no subscription.
     /// @custom:reverts InvalidToken (seat token) If a new run's `seatId` is not held by the payee.
     function subscribe(
         uint32 id,
-        bool drainGameCreditFirst,
         bool useTickets,
         uint8 dailyQuantity,
-        uint32 fundingSourceId,
         uint256 seatId
     ) external payable;
 
     /// @notice Length of the AFKing subscriber set: live subscriptions, the two exempt protocol
-    ///         subscriptions (VAULT, SDGNRS) and cancel/eviction tombstones awaiting the in-pass
-    ///         reclaim.
+    ///         subscriptions (VAULT, SDGNRS) and seized runs awaiting the in-pass removal.
     /// @dev The seat token's capped vault mint reads it: `liveSeats + n + subscriberSetLength()`
     ///      may not exceed 2,000. Every non-exempt entry burned a seat, so the set never exceeds
     ///      2,000 and needs no runtime cap.
     function subscriberSetLength() external view returns (uint256);
 
     /// @notice GAME-only atomic stETH pull; caller catches any failed funding attempt.
-    /// @dev Game self-call (caller and callee both live in the Game image). `subWord` is the
-    ///      sub's set element (key bits 0..159, wallet ID 160..191) and `source` the address the
-    ///      stETH comes from: the funding account's payee. The live consent re-check runs by ID.
-    function setAfkingFundingApproval(uint32 funderId, uint32 subscriberId, bool approved) external;
-    function pullAfkingSteth(uint32 subWord, address source, uint256 shortfall) external returns (uint256);
+    /// @dev Game self-call (caller and callee both live in the Game image). `subId` is the
+    ///      subscriber's wallet ID and `source` the address the stETH comes from: its payee.
+    function pullAfkingSteth(uint32 subId, address source, uint256 shortfall) external returns (uint256);
 
-    /// @notice Permissionless FLIP claim — pays each listed account its accrued pendingFlip in one
-    ///         creditFlip and zeroes it; always credits the account, never the caller.
-    /// @dev `ids[i] == 0` is the caller. An ID with nothing accrued, including an unallocated ID,
-    ///      settles nothing and does not revert.
-    /// @param ids Subscriber accounts to pay out.
+    /// @notice Permissionless AFKing claim — settles each listed account on both sides (its own
+    ///         reward and its affiliate base to the upline) for every day since its last
+    ///         settlement; always credits the accounts and uplines, never the caller.
+    /// @dev `ids[i] == 0` is the caller. A non-member settles nothing and does not revert.
+    ///      Reverts GameOver from the liveness trigger onward.
+    /// @param ids Subscriber accounts to settle.
     function claimAfkingFlip(uint32[] calldata ids) external;
 
-    /// @notice Affiliate-only atomic read-and-zero of a sub's accrued affiliateBase.
-    /// @param sub The subscriber whose affiliate base is drained.
-    /// @return base The drained whole-FLIP affiliate base (0 if already drained).
-    function drainAffiliateBase(uint32 sub) external returns (uint256 base);
+    /// @notice Affiliate-only settlement of up to eight subs sharing one direct affiliate: pays
+    ///         each sub its own reward and returns their summed affiliate base (whole FLIP). Each
+    ///         settlement moves its checkpoint first, so a duplicate sub settles nothing the second time.
+    /// @param ids Up to eight subscriber IDs, 32 bits each from the low end (zero lanes skipped).
+    /// @param uplines The run's two upline IDs packed low/high 32 bits (zero for no referrer).
+    /// @return sumB The settled affiliate base.
+    /// @return skipU1 The part of `sumB` from subs that are themselves the first upline.
+    /// @return skipU2 The part of `sumB` from subs that are themselves the second upline.
+    function drainAffiliateBases(uint256 ids, uint256 uplines)
+        external returns (uint256 sumB, uint256 skipU1, uint256 skipU2);
 
-    /// @notice QUESTS-only: bump an afking sub's streak base for a secondary/level completion.
+    /// @notice QUESTS-only: bump a live afking run's streak for a secondary/level completion.
     /// @dev Keyed by wallet ID (Quests holds only IDs). A no-op unless `id` has a live afking
     ///      sub; `id == 0` is a no-op. Never reverts for the authorized caller.
     /// @param id Wallet ID of the afking subscriber whose secondary completion is recorded.
-    /// @param amount The streak-base increment (1 for a daily secondary, more for a level quest).
+    /// @param amount The streak increment (1 for a daily secondary, more for a level quest).
     function recordAfkingSecondary(uint32 id, uint16 amount) external;
 
-    /// @notice QUESTS-only: floor an afking sub's streak base to `floor`, so a foil-pack
-    ///         purchase's quest-streak guarantee reaches a mid-run afker (whose reward streak
-    ///         is the sub base plus funded delivered days, not the manual quest streak).
+    /// @notice QUESTS-only: raise a live afking run's streak to at least `floor`, the same
+    ///         foil-pack quest-streak guarantee a manual player's streak receives.
     /// @dev Keyed by wallet ID. A no-op unless `id` has a live afking sub; `id == 0` is a no-op.
-    /// @param id Wallet ID of the afking subscriber whose streak base is floored.
-    /// @param floor The minimum streak base to set (no-op if the base is already at/above it).
+    /// @param id Wallet ID of the afking subscriber whose streak is floored.
+    /// @param floor The minimum live streak (no-op if the streak is already at/above it).
     function floorAfkingStreakBase(uint32 id, uint16 floor) external;
 
     /// @notice Permissionless paid cure: clear account `id`'s cashout/smite curse for 100 FLIP.

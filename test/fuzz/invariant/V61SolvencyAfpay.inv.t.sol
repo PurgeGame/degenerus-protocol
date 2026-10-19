@@ -190,8 +190,9 @@ contract V61SolvencyAfpay is DeployProtocol {
             "NON-VACUITY: SolvencyActionHandler pass/box/claim surfaces must succeed > 0 times (else the widened identity is vacuous)"
         );
         // Each leg separately. Measured over 1,028 default-profile runs: at least 5 pass buys, 4 box
-        // buys and a non-zero afking deposit per run; afking draws, smites, foil buys and stETH cover buys can
-        // be absent from one run (334, 49, 31, 304 runs had none); a paying claimWinnings is rare (22 runs:
+        // buys and a non-zero afking deposit per run; afking draws, smites and foil buys can be absent from
+        // one run (334, 49, 31 runs had none); AFKing stETH pulls need a day change, so only the day-warping
+        // variant requires them; a paying claimWinnings is rare (22 runs:
         // actors almost never hold claimable winnings at level 0), so it is required only once 512 runs have
         // accumulated (unique V61_ prefix).
         assertGe(solvencyHandler.ghost_passBuys(), 2, "NON-VACUITY: pass buys (almost) never succeeded");
@@ -210,7 +211,7 @@ contract V61SolvencyAfpay is DeployProtocol {
         assertGt(drawn, 0, "NON-VACUITY: no buy ever drew afking funding");
         assertGt(smites, 0, "NON-VACUITY: no smite ever succeeded");
         assertGt(foils, 0, "NON-VACUITY: no foil buy ever succeeded");
-        assertGt(steth, 0, "NON-VACUITY: no stETH-funded cover buy ever landed");
+        if (_dayWarps()) assertGt(steth, 0, "NON-VACUITY: no AFKing delivery ever pulled stETH");
         if (runs < 512) return;
         assertGt(claims, 0, "NON-VACUITY: no claimWinnings ever paid out");
     }
@@ -251,26 +252,30 @@ contract V61SolvencyAfpay is DeployProtocol {
         }
     }
 
-    /// @notice Pin non-vacuity for the new action: actor ETH becomes stETH, then funds a real cover buy.
+    /// @notice Pin non-vacuity for the stETH fallback: actor ETH becomes stETH, signup buys nothing, and the
+    ///         next daily pass pulls exactly the day's ticket cost to fund the delivery.
     function testScenarioStethFallbackPreservesIdentity() public {
         // setUp crossed a day boundary: finish the real miner/VRF sequence before
-        // subscribing. The other handler's actor leaves this cover buyer untouched.
+        // subscribing. The other handler's actor leaves this subscriber untouched.
         handler.advance(0, 1);
         address actor = solvencyHandler.actors(0);
         uint256 priceWei = _oneTicketCost();
         uint256 actorEthBefore = actor.balance;
         uint256 gameStethBefore = mockStETH.balanceOf(address(game));
-        uint256 poolBefore = game.claimablePoolView();
 
         solvencyHandler.subscribeSteth(0);
+        assertEq(mockStETH.balanceOf(address(game)), gameStethBefore, "signup pulls nothing");
 
-        assertEq(solvencyHandler.ghost_stethBuys(), 1, "a real stETH-funded cover buy must land");
-        assertEq(solvencyHandler.ghost_stethFunded(), priceWei, "only the subscription cost enters GAME");
-        assertEq(mockStETH.balanceOf(address(game)) - gameStethBefore, priceWei, "receipt backs the purchase");
+        // The next day's pass delivers; another actor satisfies the daily purchase gate.
+        vm.warp(block.timestamp + 1 days);
+        solvencyHandler.advance(1, 2);
+
+        assertEq(solvencyHandler.ghost_stethBuys(), 1, "a real stETH-funded delivery must land");
+        assertEq(solvencyHandler.ghost_stethFunded(), priceWei, "only the day's cost enters GAME");
+        assertEq(mockStETH.balanceOf(address(game)) - gameStethBefore, priceWei, "receipt backs the delivery");
         assertEq(actorEthBefore - actor.balance, priceWei + 1, "stETH was purchased with the actor's ETH");
         assertEq(mockStETH.balanceOf(actor), 1, "unspent stETH stays in the actor wallet");
         assertEq(game.afkingFundingOf(actor), 0, "exact daily funding is fully consumed");
-        assertEq(game.claimablePoolView(), poolBefore, "paired funding credit and purchase debit cancel");
         invariant_v61PoolEqualsSumOfHalves();
         invariant_v61PoolNeverExceedsBacking();
         invariant_queueViewsMatchPositionAccounting();

@@ -43,7 +43,6 @@ contract GameSlotHarness is DegenerusGameStorage {
     function s_dailyTicketBudgetsPacked() external pure returns (uint256 s, uint256 o) { assembly { s := dailyTicketBudgetsPacked.slot o := dailyTicketBudgetsPacked.offset } }
     function s_balancesPacked() external pure returns (uint256 s, uint256 o) { assembly { s := balancesPacked.slot o := balancesPacked.offset } }
     function s_lvlTraitEntry() external pure returns (uint256 s, uint256 o) { assembly { s := lvlTraitEntry.slot o := lvlTraitEntry.offset } }
-    function s_afkingFundingApprovals() external pure returns (uint256 s, uint256 o) { assembly { s := afkingFundingApprovals.slot o := afkingFundingApprovals.offset } }
     function s_walletIds() external pure returns (uint256 s) { assembly { s := walletIds.slot } }
     function s_loanSeizeCursor() external pure returns (uint256 s, uint256 o) { assembly { s := loanSeizeCursor.slot o := loanSeizeCursor.offset } }
     function s_loans() external pure returns (uint256 s) { assembly { s := _loans.slot } }
@@ -96,8 +95,10 @@ contract GameSlotHarness is DegenerusGameStorage {
     function s_protocolBoonPools() external pure returns (uint256 s, uint256 o) { assembly { s := protocolBoonPools.slot o := protocolBoonPools.offset } }
     function s_protocolBoonEntries() external pure returns (uint256 s, uint256 o) { assembly { s := protocolBoonEntries.slot o := protocolBoonEntries.offset } }
     function s_boonPacked() external pure returns (uint256 s, uint256 o) { assembly { s := boonPacked.slot o := boonPacked.offset } }
-    function s_subOf() external pure returns (uint256 s, uint256 o) { assembly { s := _subOf.slot o := _subOf.offset } }
-    function s_fundingSourceOf() external pure returns (uint256 s, uint256 o) { assembly { s := _fundingSourceOf.slot o := _fundingSourceOf.offset } }
+    function s_subMeta() external pure returns (uint256 s, uint256 o) { assembly { s := _subMeta.slot o := _subMeta.offset } }
+    function s_afkingCohortPriceMilli() external pure returns (uint256 s, uint256 o) { assembly { s := _afkingCohortPriceMilli.slot o := _afkingCohortPriceMilli.offset } }
+    function s_afkingProtocolFlags() external pure returns (uint256 s, uint256 o) { assembly { s := _afkingProtocolFlags.slot o := _afkingProtocolFlags.offset } }
+    function s_afkingEndpointDay() external pure returns (uint256 s, uint256 o) { assembly { s := _afkingEndpointDay.slot o := _afkingEndpointDay.offset } }
     function s_subscribers() external pure returns (uint256 s, uint256 o) { assembly { s := _subscribers.slot o := _subscribers.offset } }
     function s_subCursor() external pure returns (uint256 s, uint256 o) { assembly { s := _subCursor.slot o := _subCursor.offset } }
     function s_subOpenCursor() external pure returns (uint256 s, uint256 o) { assembly { s := _subOpenCursor.slot o := _subOpenCursor.offset } }
@@ -245,7 +246,6 @@ contract StorageSlotPinsTest is Test {
         assertEq(h.s_loans(), GameSlots.LOANS, "_loans.slot");
         assertEq(h.s_loansDue(), GameSlots.LOANS_DUE, "_loansDue.slot");
         assertEq(h.s_loansDueCount(), GameSlots.LOANS_DUE_COUNT, "_loansDueCount.slot");
-        (s, o) = h.s_afkingFundingApprovals(); assertEq(s, 78, "afkingFundingApprovals.slot"); assertEq(o, 0);
         (s, o) = h.s_mintPacked(); assertEq(s, GameSlots.MINT_PACKED, "mintPacked_.slot"); assertEq(o, 0, "mintPacked_.offset");
         (s, o) = h.s_rngWordByDay(); assertEq(s, GameSlots.RNG_WORD_BY_DAY, "rngWordByDay.slot"); assertEq(o, 0, "rngWordByDay.offset");
         (s, o) = h.s_prizePoolPendingPacked(); assertEq(s, GameSlots.PRIZE_POOL_PENDING_PACKED, "prizePoolPendingPacked.slot"); assertEq(o, 0, "prizePoolPendingPacked.offset");
@@ -293,8 +293,10 @@ contract StorageSlotPinsTest is Test {
         (s, o) = h.s_protocolBoonPools(); assertEq(s, GameSlots.PROTOCOL_BOON_POOLS, "protocolBoonPools.slot"); assertEq(o, 0, "protocolBoonPools.offset");
         (s, o) = h.s_protocolBoonEntries(); assertEq(s, GameSlots.PROTOCOL_BOON_ENTRIES, "protocolBoonEntries.slot"); assertEq(o, 0, "protocolBoonEntries.offset");
         (s, o) = h.s_boonPacked(); assertEq(s, GameSlots.BOON_PACKED, "boonPacked.slot"); assertEq(o, 0, "boonPacked.offset");
-        (s, o) = h.s_subOf(); assertEq(s, GameSlots.SUB_OF, "_subOf.slot"); assertEq(o, 0, "_subOf.offset");
-        (s, o) = h.s_fundingSourceOf(); assertEq(s, GameSlots.FUNDING_SOURCE_OF, "_fundingSourceOf.slot"); assertEq(o, 0, "_fundingSourceOf.offset");
+        (s, o) = h.s_subMeta(); assertEq(s, GameSlots.SUB_META, "_subMeta.slot"); assertEq(o, 0, "_subMeta.offset");
+        (s, o) = h.s_afkingCohortPriceMilli(); assertEq(s, GameSlots.AFKING_COHORT_PRICE_MILLI, "_afkingCohortPriceMilli.slot"); assertEq(o, GameSlots.AFKING_COHORT_PRICE_MILLI_OFFSET, "_afkingCohortPriceMilli.offset");
+        (s, o) = h.s_afkingProtocolFlags(); assertEq(s, GameSlots.AFKING_PROTOCOL_FLAGS, "_afkingProtocolFlags.slot"); assertEq(o, GameSlots.AFKING_PROTOCOL_FLAGS_OFFSET, "_afkingProtocolFlags.offset");
+        (s, o) = h.s_afkingEndpointDay(); assertEq(s, GameSlots.AFKING_ENDPOINT_DAY, "_afkingEndpointDay.slot"); assertEq(o, GameSlots.AFKING_ENDPOINT_DAY_OFFSET, "_afkingEndpointDay.offset");
         (s, o) = h.s_subscribers(); assertEq(s, GameSlots.SUBSCRIBERS, "_subscribers.slot"); assertEq(o, 0, "_subscribers.offset");
         (s, o) = h.s_subCursor(); assertEq(s, GameSlots.SUB_CURSOR, "_subCursor.slot"); assertEq(o, 0, "_subCursor.offset");
         (s, o) = h.s_subOpenCursor(); assertEq(s, GameSlots.SUB_OPEN_CURSOR, "_subOpenCursor.slot"); assertEq(o, GameSlots.SUB_OPEN_CURSOR_OFFSET, "_subOpenCursor.offset");

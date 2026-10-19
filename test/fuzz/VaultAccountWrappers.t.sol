@@ -142,9 +142,9 @@ contract VaultAccountWrappersTest is SeatFixture {
         assertEq(uint256(vm.load(address(game), slot)), 0, "revoked");
     }
 
-    /// @notice The constructor self-subscribes as account 0, self-funded, naming no seat.
+    /// @notice The constructor self-subscribes as account 0 in lootbox mode, naming no seat.
     function test_constructorSubscribesAsSelfWithNoSeat() public {
-        bytes memory data = abi.encodeCall(IDegenerusGame.subscribe, (uint32(0), true, false, uint8(1), uint32(0), uint256(0)));
+        bytes memory data = abi.encodeCall(IDegenerusGame.subscribe, (uint32(0), false, uint8(1), uint256(0)));
         _expectOnce(address(game), data, "");
         new DegenerusVault();
     }

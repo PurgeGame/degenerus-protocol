@@ -75,22 +75,9 @@ contract AutoOpenCursorRing is DeployProtocol {
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Game-resident storage slots + the post-PACK Sub-slot offset block
-    // (forge inspect DegenerusGame storage: _subOf@52, _subscribers@54, _subscriberIndex@55, cursors@56)
-    // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF;            // _subOf mapping root (address => Sub, one packed slot)
-    uint256 private constant SUBSCRIBERS_SLOT = GameSlots.SUBSCRIBERS;      // address[] _subscribers (length @ slot; elements @ keccak256(slot)+i)
+    // Game-resident storage slots
     uint256 private constant CURSOR_SLOT = GameSlots.SUB_CURSOR;           // packed: _subCursor u16 @byte0 · _subOpenCursor u16 @byte2 · _afkingResetDay u24 @byte4
     uint256 private constant OPEN_CURSOR_BYTE = 2;       // byte offset of _subOpenCursor within CURSOR_SLOT
-    uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED;        // mintPacked_ mapping root (deity bit @ 184)
-
-    //   dailyQuantity u8 @0 · flags u8 @1 · score u16 @2 · amount u24 @4
-    //   lastAutoBoughtDay u24 @7 · afkCoveredThroughDay u24 @10 · afkingStartDay u24 @13
-    //   affiliateBase u32 @16 · pendingFlip u24 @20 · subStreakLatch u16 @23
-    uint256 private constant OFF_LASTBOUGHT = 7;      // uint24 lastAutoBoughtDay (bytes 7..9)
-
-    uint256 private constant DEITY_SHIFT = BitPackingLib.HAS_DEITY_PASS_SHIFT;
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
     uint256 private _lastFulfilledReqId;
@@ -113,22 +100,22 @@ contract AutoOpenCursorRing is DeployProtocol {
         _fundPool(joiner, 80 ether);
         vm.prank(joiner);
         vm.expectRevert(bytes4(keccak256("RngLocked()")));
-        game.subscribe(0, false, false, 1, 0, seat);
+        game.subscribe(0, false, 1, seat);
         vm.prank(subs[0]);
         vm.expectRevert(bytes4(keccak256("RngLocked()")));
-        game.subscribe(0, false, true, 1, 0, 0);
+        game.subscribe(0, true, 1, 0);
         vm.prank(subs[0]);
         vm.expectRevert(bytes4(keccak256("RngLocked()")));
-        game.subscribe(0, false, false, 0, 0, 0);
+        game.subscribe(0, false, 0, 0);
         assertGe(_openAfkRing(), subs.length);
         for (uint256 i; i < subs.length; ++i) assertFalse(_isOpenable(subs[i]));
         assertEq(_openAfkRing(), 0, "completed cohort never replays");
         vm.prank(joiner);
-        game.subscribe(0, false, false, 1, 0, seat);
-        assertFalse(_isOpenable(joiner), "signup box is only in the human queue");
+        game.subscribe(0, false, 1, seat);
+        assertFalse(_isOpenable(joiner), "signup buys nothing");
         _stampSealedBoxOn(joiner);
         assertEq(_openCursor(), 0, "next day resets before its new cohort");
-        assertTrue(_isOpenable(joiner), "signup is an ordinary due sub the next day");
+        assertTrue(_isOpenable(joiner), "the signup buys from the next day on");
         assertGe(_openAfkRing(), subs.length + 1);
         assertFalse(_isOpenable(joiner));
     }
@@ -155,7 +142,7 @@ contract AutoOpenCursorRing is DeployProtocol {
             game.mineFlip(type(uint32).max);
             assertGt(_openCursor(), beforeCursor);
         }
-        for (uint256 i; i < subs.length; ++i) assertEq(_lastOpenedDayOf(subs[i]), _lastBoughtDayOf(subs[i]));
+        for (uint256 i; i < subs.length; ++i) assertFalse(_isOpenable(subs[i]));
         _finishReadConsumers();
         assertEq(_openAfkRing(), 0);
     }
@@ -168,13 +155,13 @@ contract AutoOpenCursorRing is DeployProtocol {
 
     /// @dev Create `n` seated, funded subs and stamp ONE sealed openable box on each: a new-day STAGE
     ///      buy that stamps the box + lands its stamp-day word, with NO subsequent open. Each sub ends up
-    ///      with a pending stamped box and _recordedDailyWord(lastAutoBoughtDay) != 0 (openable).
+    ///      with a pending stamped box and the cohort's word landed (openable).
     function _stampSealedOpenableSubs(uint256 n) internal returns (address[] memory subs) {
         subs = new address[](n);
         for (uint256 i; i < n; i++) {
             address p = makeAddr(string(abi.encodePacked("ring_sub_", vm.toString(i))));
             _grantSeat(p);          // the AFKing Subscription Token is the sole subscribe credential
-            _fundPool(p, 80 ether); // grounds the NEW-run cover-buy
+            _fundPool(p, 80 ether);
             _subscribeLootbox(p, 1);
             subs[i] = p;
         }
@@ -189,16 +176,6 @@ contract AutoOpenCursorRing is DeployProtocol {
     function _stampSealedBoxOn(address p) internal {
         _runStageNewDay(uint256(keccak256(abi.encode("ring_restamp", _deliverNonce++))) | 1);
         require(_isOpenable(p), "fixture: a fresh sealed openable box was stamped");
-    }
-
-    /// @dev Create a fresh seated/funded subscriber at the tail. Its inline cover
-    /// purchase is indexed separately, so its AFK Sub has no pending stamped box.
-    function _freshNonPendingSub(string memory tag) internal returns (address p) {
-        p = makeAddr(tag);
-        _grantSeat(p);
-        _fundPool(p, 80 ether);
-        _subscribeLootbox(p, 1);
-        require(_subscriberIndexOf(p) > 0, "fixture: the fresh sub joined the set");
     }
 
     /// @dev One call of the production AFK open worker (GameAfkingModule.runAfkingWork, the worker
@@ -272,7 +249,7 @@ contract AutoOpenCursorRing is DeployProtocol {
     function _subscribeLootbox(address who, uint8 q) internal {
         uint256 seat = _grantSeat(who);
         vm.prank(who);
-        game.subscribe(0, false, false, q, 0, seat); // self, lootbox mode, no reinvest
+        game.subscribe(0, false, q, seat); // self, lootbox mode, no reinvest
     }
 
     function _fundPool(address who, uint256 amount) internal {
@@ -280,21 +257,9 @@ contract AutoOpenCursorRing is DeployProtocol {
         game.depositAfkingFunding{value: amount}(_aid(who));
     }
 
-    function _grantDeityPass(address who) internal {
-        bytes32 slot = keccak256(abi.encode(game.walletIdOf(who), uint256(MINTPACKED_SLOT)));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        packed |= (uint256(1) << DEITY_SHIFT);
-        vm.store(address(game), slot, bytes32(packed));
-    }
-
     // =========================================================================
     // Storage reads / pokes — the subscriber set + the open cursor + the Sub markers
     // =========================================================================
-
-    /// @dev `_subscribers.length` (the dynamic-array length lives directly in its slot).
-    function _subscribersLength() internal view returns (uint256) {
-        return uint256(vm.load(address(game), bytes32(uint256(SUBSCRIBERS_SLOT))));
-    }
 
     /// @dev Read the current `_subOpenCursor` (byte 2..3 of the packed CURSOR_SLOT).
     function _openCursor() internal view returns (uint16) {
@@ -302,42 +267,11 @@ contract AutoOpenCursorRing is DeployProtocol {
         return uint16(packed >> (OPEN_CURSOR_BYTE * 8));
     }
 
-    /// @dev Poke `_subOpenCursor` to `idx` (the wedged mid-array index), preserving the other packed fields.
-    function _setOpenCursor(uint16 idx) internal {
-        uint256 packed = uint256(vm.load(address(game), bytes32(uint256(CURSOR_SLOT))));
-        packed &= ~(uint256(0xFFFF) << (OPEN_CURSOR_BYTE * 8));
-        packed |= uint256(idx) << (OPEN_CURSOR_BYTE * 8);
-        vm.store(address(game), bytes32(uint256(CURSOR_SLOT)), bytes32(packed));
-    }
-
-    function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
-        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT))))) >> (off * 8);
-        return p & ((uint256(1) << widthBits) - 1);
-    }
-
-    function _lastBoughtDayOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_LASTBOUGHT, 24));
-    }
-
-    function _lastOpenedDayOf(address who) internal view returns (uint32) {
-        return GameSlotKeys.afkingOpenedDay(address(game), game.walletIdOf(who));
-    }
-
-    function _subscriberIndexOf(address who) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.SUB_OF)))) >> 200; // Sub.setPosition (1-based)
-    }
-
-    /// @dev Openable under the entry-gate: pending box (stamped, unopened) AND the frozen
-    ///      stamp-day word has landed (_recordedDailyWord(lastAutoBoughtDay) != 0). Mirrors the _runAfkingWork predicate.
+    /// @dev Openable under the entry-gate: an unopened box of the current cohort and the cohort's
+    ///      stamp-day word has landed. Mirrors the _runAfkingWork predicate.
     function _isOpenable(address who) internal view returns (bool) {
-        uint32 bought = _lastBoughtDayOf(who);
-        if (_lastOpenedDayOf(who) >= bought) return false;
-        return game.rngWordForDay(uint24(bought)) != 0;
-    }
-
-    /// @dev Non-pending: no pending box (stamp opened) — a suffix-only scan landing
-    ///      here finds no work.
-    function _isNonPending(address who) internal view returns (bool) {
-        return _lastOpenedDayOf(who) >= _lastBoughtDayOf(who);
+        if (!GameSlotKeys.afkingBoxPending(address(game), game.walletIdOf(who))) return false;
+        uint24 stamp = uint24(uint256(vm.load(address(game), bytes32(GameSlots.AFKING_RESET_DAY))) >> (8 * GameSlots.AFKING_RESET_DAY_OFFSET));
+        return game.rngWordForDay(stamp) != 0;
     }
 }

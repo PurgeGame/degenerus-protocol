@@ -37,8 +37,8 @@ price tables and reward curves.
   catch-up mint for an unfinished century.
 - Degenesis is a seven-day launch sale (day indices 2 through 8; the main game starts on day 9)
   with no cap on aggregate ETH. It is not a return guarantee, and every reward below is random.
-  - **Eligibility.** A buyer first spends on normal assets (tickets, lootboxes, passes, foil
-    packs, and the AFKing subscribe-time cover buy). While the window is open each such ETH,
+  - **Eligibility.** A buyer first spends on normal assets (tickets, lootboxes, passes and foil
+    packs). While the window is open each such ETH,
     claimable or prepaid spend earns Degenesis credit equal to **25%** of the price paid; FLIP-paid
     spend, reward grants and Degenesis purchases earn none, and the Vault and sDGNRS earn none.
     Credit is permission to spend, not payment, and expires unused when the window closes. Buying a

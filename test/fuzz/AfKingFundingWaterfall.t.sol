@@ -1,57 +1,27 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
-// Permanently skipped historical cases were retired in the test review.
-// See docs/TEST_REVIEW.md for replacement suites and remaining coverage limits.
-
-import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
-import {GameSlots} from "../helpers/GameSlots.sol";
+import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
+import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 
-/// @title AfKingFundingWaterfall -- Proves the v55.0 game-resident afking per-player funding waterfall
-///        (SUB-05), the two-tier pinned-identity funding-skip kill (SUB-06), the OPEN-E shared funding
-///        source ETH-routing (OPENE-02/03 + LANDMINE A), and the pass-eviction-preserves-fundingSource
-///        property. The funding waterfall now debits the IN-CONTEXT `afkingFunding[src]` SLOAD
-///        (GameAfkingModule.sol:709, the `claimablePool -=` tandem at :710) — NOT a cross-contract
-///        staticcall. Feeds TST-02's "fuzz random FUNDED well-formed slice inputs" (CONTEXT D-351-04).
+/// @title AfKingFundingWaterfall -- the per-member funding waterfall of the daily subscriber pass and
+///        its two-tier unfunded handling.
 ///
-/// @notice Funding waterfall (SUB-05), inside the process STAGE per player (GameAfkingModule._resolveBuy
-///         :440-496):
-///   - drainGameCreditFirst == false -> DirectEth, ethValue = cost (pays afkingFunding ETH only).
-///   - drainGameCreditFirst == true:
-///       * claimable cred > cost          -> Claimable, ethValue = 0 (pays from claimable only).
-///       * 1 < cred <= cost               -> Combined,  ethValue = cost - (cred - 1) (afkingFunding tops up).
-///       * cred <= 1                      -> DirectEth, ethValue = cost.
-///   - afkingFunding[src] < ethValue       -> InsufficientPool funding skip (the kill / exempt branch).
+/// @notice Funding waterfall, per member at preparation (GameAfkingModule._resolveBuy):
+///   - the member's claimable pays first, keeping a 1-wei sentinel;
+///   - its OWN prepaid afking ETH covers the rest;
+///   - the stETH fallback from its own payee covers any remainder (see AfkingStethFunding).
+///   Nobody else's funds are ever drawn: a third party can only deposit into the member's own bucket.
 ///
-/// @notice Two-tier skip-kill (SUB-06), on the InsufficientPool funding skip (GameAfkingModule.sol:661-682):
-///   - a NORMAL sub is CANCELLED via swap-pop (dailyQuantity 0, SubscriptionExpired(player,1)),
-///     continuing WITHOUT advancing the cursor.
-///   - the VAULT and SDGNRS subs are EXEMPT -- they persist (no-op-and-retry, PlayerSkipped(player,3),
-///     stay in the set), keyed on the UN-SPOOFABLE pinned ContractAddresses.VAULT / SDGNRS identity.
-///   - NO settable exemption flag exists: the exemption is purely the pinned-address equality branch.
-///
-/// @notice OPEN-E four-protection re-attest (the per-day ETH draw routing surface):
-///   - Consent-gate-at-subscribe: a non-zero non-self fundingSource MUST be operator-approved by the
-///     source for the subscriber AT subscribe (GameAfkingModule.sol:259-265); no later re-check.
-///   - Default-self: subscribe with fundingSource = address(0) stores `_fundingSourceOf == address(0)`
-///     and the STAGE resolves `src = player` (self-pay) -- the ETH draw debits the subscriber's own
-///     afkingFunding bucket.
-///   - No-escalation: a revoke AFTER subscribe does NOT escalate; the STAGE keeps debiting S until S defunds.
-///   - Trust-the-sub: the sub is the consent unit (revoke is moot; stop = M cancels or S defunds).
-///
-/// @notice PASS-EVICTION-PRESERVES-FUNDINGSOURCE: at the EVICT branch the STAGE writes only
-///         `sub.dailyQuantity = 0; _removeFromSet(player)` -- the OTHER Sub fields are NOT deleted (only
-///         the cancel-tombstone RECLAIM path does `delete _subOf[player]`). A sub evicted at a level
-///         crossing leaves `_fundingSourceOf[player]` readable post-eviction.
-///
-/// @dev D-351-01 deltas applied: afKing.subscribe -> game.subscribe; afKing.autoBuy -> the mineFlip()
-///      STAGE; afKing.poolOf -> afkingFundingOf; afKing.depositFor -> depositAfkingFunding; the standalone
-///      afKing.setMode/setDrainGameCreditFirst setters (GONE) -> the flags are set via game.subscribe;
-///      the deleted standalone-contract source-grep -> repointed to GameAfkingModule.sol. RE-DERIVED
-///      every pinned slot via `forge inspect storage DegenerusGame`. Test-only: no contracts/*.sol mutated.
+/// @notice Unfunded handling (SubscriptionExpired / SubscriptionPaused):
+///   - an ordinary member that cannot pay is removed at once (SubscriptionExpired(player, 1)) and its
+///     unsettled rewards are forfeited;
+///   - the Vault and sDGNRS seats are never removed: they are settled and paused, and resume
+///     automatically on the first day they can pay again.
+///   - No settable exemption flag exists: the carve-out is the pinned wallet-ID equality.
 contract AfKingFundingWaterfall is DeployProtocol {
 
     mapping(address => uint32) private _aidCache;
@@ -66,299 +36,200 @@ contract AfKingFundingWaterfall is DeployProtocol {
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Game-resident storage slots (RE-DERIVED via `forge inspect storage DegenerusGame`).
-    // -------------------------------------------------------------------------
-    uint256 private constant SUBOF_SLOT = GameSlots.SUB_OF; // _subOf mapping root
-    uint256 private constant FUNDINGSOURCE_SLOT = GameSlots.FUNDING_SOURCE_OF; // _fundingSourceOf mapping root
-    uint256 private constant MINTPACKED_SLOT = GameSlots.MINT_PACKED; // mintPacked_ mapping root (deity bit)
-    uint256 private constant GAME_CLAIMABLE_SLOT = GameSlots.BALANCES_PACKED; // claimableWinnings mapping root
-
-    // Sub packed-field byte offsets (DegenerusGameStorage.sol:2341; the AFKing-Coin repack dropped
-    // validThroughLevel entirely — sub <=> coin is the sole credential now — shifting every field
-    // after it down 3 bytes).
-    uint256 private constant OFF_DAILY = 0; // uint8  dailyQuantity     (byte 0)
-    uint256 private constant OFF_LASTBOUGHT = 7; // uint24 lastAutoBoughtDay (bytes 7..9)
-
-    uint256 private constant DEITY_SHIFT = BitPackingLib.HAS_DEITY_PASS_SHIFT;
-
-    bytes32 private constant SKIPPED_SIG = keccak256("PlayerSkipped(uint32,uint8)");
     bytes32 private constant SUB_EXPIRED_SIG = keccak256("SubscriptionExpired(uint32,uint8)");
+    bytes32 private constant SUB_PAUSED_SIG = keccak256("SubscriptionPaused(uint32,bool)");
 
-    uint256 private constant DRAIN_MAX_ITERATIONS = 60;
-    uint256 private _lastFulfilledReqId;
-
-    /// @dev Per-player funding-SOURCE afkingFunding snapshot — the charged ETH slice = the source delta
-    ///      across the STAGE (the storage-stamp oracle, the GASOPT-04 successor to the deleted AutoBought).
-    mapping(address => uint256) private _srcFundBefore;
+    DegenerusGameLens private lens;
 
     function setUp() public {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
+        lens = new DegenerusGameLens();
         _finishSubscriptionWindow();
     }
 
+    // =========================================================================
+    // The waterfall
+    // =========================================================================
 
-    function test_BoxesHavePriorityOverEarlierTicketsSharingOneDaysFunding() public {
-        address funder = makeAddr("shared-priority-funder");
-        address ticket = makeAddr("shared-priority-ticket");
-        address box = makeAddr("shared-priority-box");
-        _fundPool(funder, 10 ether);
-        uint32 funderId = _aid(funder);
-        address[2] memory players = [ticket, box];
-        for (uint256 i; i < 2; ++i) {
-            uint32 playerId = _aid(players[i]);
-            uint256 seat = _grantSeat(players[i]);
-            vm.prank(funder);
-            game.setAfkingFundingApproval(0, playerId, true);
-            vm.prank(players[i]);
-            game.subscribe(0, false, i == 0, 1, funderId, seat);
-        }
+    /// @notice Claimable above the cost pays the whole day; the prepaid bucket is untouched.
+    function test_ClaimableAboveCostPaysAlone() public {
+        address p = _ticketSub("wf_claim_only");
         uint256 cost = game.mintPrice();
-        uint256 balance = game.afkingFundingOf(funder);
+        _setClaimable(p, cost + 5);
+        _fundPool(p, 1 ether);
+        _driveDay();
+        assertEq(_claimable(p), 5, "claimable paid the cost and kept the rest");
+        assertEq(game.afkingFundingOf(p), 1 ether, "prepaid untouched");
+        assertGt(_subscriberIndexOf(p), 0);
+    }
+
+    /// @notice Claimable below the cost pays what it can down to the 1-wei sentinel; prepaid covers the rest.
+    function test_ClaimableThenPrepaidResidual() public {
+        address p = _ticketSub("wf_mixed");
+        uint256 cost = game.mintPrice();
+        _setClaimable(p, cost / 4 + 1);
+        _fundPool(p, 1 ether);
+        _driveDay();
+        assertEq(_claimable(p), 1, "claimable drained to the sentinel");
+        assertEq(game.afkingFundingOf(p), 1 ether - (cost - cost / 4), "prepaid paid exactly the residual");
+        assertGt(_subscriberIndexOf(p), 0);
+    }
+
+    /// @notice With only the sentinel as claimable, the prepaid bucket pays the full cost.
+    function test_PrepaidAlonePaysFullCost() public {
+        address p = _ticketSub("wf_prepaid");
+        uint256 cost = game.mintPrice();
+        _fundPool(p, 1 ether);
+        _driveDay();
+        assertEq(_claimable(p), 1);
+        assertEq(game.afkingFundingOf(p), 1 ether - cost);
+    }
+
+    /// @notice A third party's deposit lands in the member's OWN bucket, and no other member's bucket pays.
+    function test_ThirdPartyDepositPaysOnlyTheDepositedMember() public {
+        address funded = _ticketSub("wf_dep_funded");
+        address other = _ticketSub("wf_dep_other");
+        address funder = makeAddr("wf_funder");
+        vm.deal(funder, 1 ether);
+        uint32 fundedId = _aid(funded);
         vm.prank(funder);
-        game.withdrawAfkingFunding(0, balance - cost);
-        _runStageOnce();
-        assertGt(_subscriberIndexOf(box), 0, "later box gets the shared funds first");
-        assertEq(_subscriberIndexOf(ticket), 0, "earlier ticket is now unfunded");
-        assertEq(game.afkingFundingOf(funder), 0, "exactly one day's purchase paid");
+        game.depositAfkingFunding{value: 1 ether}(fundedId);
+        assertEq(game.afkingFundingOf(funder), 0, "the funder holds no balance");
+        _driveDay();
+        assertGt(_subscriberIndexOf(funded), 0, "the funded member stays");
+        assertEq(_subscriberIndexOf(other), 0, "the unfunded member expired: no shared pool pays for it");
     }
 
     // =========================================================================
-    // Task 3c -- No settable exemption flag (grep-clean, complements the runtime tests)
+    // Unfunded handling
     // =========================================================================
 
-    /// @notice SUB-06 spoof-resistance: the exemption is the pinned-address equality branch ONLY. A
-    ///         source grep over the game-resident GameAfkingModule.sol finds zero settable-exemption
-    ///         symbols; the ONLY exemption surface is the pinned-address equality (present).
-    /// @dev    Δ: repointed from the deleted `contracts/AfKing.sol` to `contracts/modules/GameAfkingModule.sol`.
+    /// @notice An unfunded ordinary member is removed at once with reason 1, forfeiting what it had not
+    ///         settled, and does not stop the next funded member being delivered.
+    function test_UnfundedOrdinaryExpiresAndForfeits() public {
+        address bad = _ticketSub("wf_bad");
+        address good = _ticketSub("wf_good");
+        _fundPool(good, 1 ether);
+        uint256 setLen = game.subscriberSetLength();
+        uint32 badId = _aid(bad);
+        vm.recordLogs();
+        _driveDay();
+        assertEq(_countLogs(vm.getRecordedLogs(), SUB_EXPIRED_SIG, badId), 1, "SubscriptionExpired(player, 1)");
+        assertEq(_subscriberIndexOf(bad), 0, "removed at once: no tombstone");
+        assertEq(game.subscriberSetLength(), setLen - 1);
+        assertGt(_subscriberIndexOf(good), 0);
+        assertLt(game.afkingFundingOf(good), 1 ether, "the next funded member was delivered");
+        uint32[] memory ids = new uint32[](1);
+        ids[0] = badId;
+        vm.recordLogs();
+        game.claimAfkingFlip(ids);
+        assertEq(_countLogs(vm.getRecordedLogs(), keccak256("AfkingFlipClaimed(uint32,uint256)"), badId), 0, "nothing to claim: forfeited");
+    }
+
+    /// @notice The Vault and sDGNRS seats are never removed when unfunded: they are paused, keep their
+    ///         positions, and resume by themselves on the first day they can pay.
+    function test_ProtocolSeatsPauseWhenUnfundedAndAutoResume() public {
+        uint32 vaultId = _aid(address(vault));
+        uint32 sdgnrsId = _aid(address(sdgnrs));
+        assertTrue(_lens(vaultId).paused && _lens(sdgnrsId).paused, "unfunded seats start the game paused");
+        assertTrue(_lens(vaultId).member && _lens(sdgnrsId).member, "paused seats stay members");
+        assertEq(_position1(vaultId), 1, "Vault keeps box position 0");
+        assertEq(_position1(sdgnrsId), 2, "sDGNRS keeps box position 1");
+
+        vm.deal(address(this), 2 ether);
+        game.depositAfkingFunding{value: 1 ether}(vaultId);
+        game.depositAfkingFunding{value: 1 ether}(sdgnrsId);
+        vm.recordLogs();
+        _driveDay();
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        assertEq(_countLogs(logs, SUB_PAUSED_SIG, vaultId), 1, "the Vault resumed");
+        assertEq(_countLogs(logs, SUB_PAUSED_SIG, sdgnrsId), 1, "sDGNRS resumed");
+        assertFalse(_lens(vaultId).paused, "Vault auto-resumed");
+        assertFalse(_lens(sdgnrsId).paused, "sDGNRS auto-resumed");
+        assertEq(_lens(vaultId).owedFlip, 100, "the resume day is the first credited day");
+        assertTrue(GameSlotKeys.afkingBoxPending(address(game), vaultId) || _opened(vaultId), "the Vault bought");
+    }
+
+    // =========================================================================
+    // No settable exemption flag (grep-clean, complements the runtime tests)
+    // =========================================================================
+
+    /// @notice The protocol carve-out is the pinned wallet-ID equality ONLY: a source grep over the
+    ///         module finds zero settable-exemption symbols.
     function testNoSettableExemptionFlagSymbol() public view {
         string memory src = vm.readFile("contracts/modules/GameAfkingModule.sol");
         assertFalse(_contains(src, "isExempt"), "no isExempt symbol (no settable exemption flag)");
         assertFalse(_contains(src, "exemptFlag"), "no exemptFlag symbol");
         assertFalse(_contains(src, "skipKillExempt"), "no skipKillExempt symbol");
-        assertTrue(_contains(src, "ContractAddresses.VAULT"), "the pinned-VAULT exemption branch exists");
-        assertTrue(_contains(src, "ContractAddresses.SDGNRS"), "the pinned-SDGNRS exemption branch exists");
+        assertTrue(_contains(src, "VAULT_WALLET_ID"), "the pinned-VAULT carve-out exists");
+        assertTrue(_contains(src, "SDGNRS_WALLET_ID"), "the pinned-SDGNRS carve-out exists");
     }
-
 
     // =========================================================================
     // Internal helpers
     // =========================================================================
 
-    /// @dev Run the STAGE exactly ONCE on a fresh day via a SINGLE mineFlip() (no full settle) — the
-    ///      STAGE is strictly PRE-RNG so the funding waterfall / eviction completes before rngGate, and a
-    ///      single advance never reaches the level-transition charity call. Subs must be pre-registered.
-    function _runStageOnce() internal {
-        vm.warp(block.timestamp + 1 days);
-        game.mineFlip(0);
+    /// @dev Complete the next day: the subscriber pass, RNG and every consumer.
+    function _driveDay() internal {
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        _finishSubscriptionWindow();
     }
 
-    /// @dev Arm the charged-slice oracle for the single tracked sub, run the STAGE once, drain logs.
-    ///      (The waterfall tests track exactly one sub for the ethValue assertion; the kill tests use
-    ///      `_runStageOnce` + `_capture` directly.)
-    function _stageCapture(address tracked) internal {
-        _armSlice(tracked);
-        vm.recordLogs();
-        _runStageOnce();
-        _capture();
-    }
-
-    /// @dev Settle the game to a clean state (PATTERNS §"Settle-to-clean-state VRF drain").
-    function _settleGame(uint256 vrfWord) internal {
-        for (uint256 d; d < DRAIN_MAX_ITERATIONS; d++) {
-            if (!game.advanceDue() && !game.rngLocked()) break;
-            game.mineFlip(0);
-            uint256 reqId = mockVRF.lastRequestId();
-            if (reqId != _lastFulfilledReqId && reqId > 0) {
-                (, , bool fulfilled) = mockVRF.pendingRequests(reqId);
-                if (!fulfilled) {
-                    mockVRF.fulfillRandomWords(reqId, vrfWord);
-                    _lastFulfilledReqId = reqId;
-                }
-            }
-        }
-    }
-
-    /// @dev Set up a cross-account sub: source S approves M on the game, M self-subscribes with
-    ///      fundingSource = S (ticket mode, qty 1).
-    function _approvedSourceSub(string memory sLabel, string memory mLabel) internal returns (address s, address m) {
-        s = makeAddr(sLabel);
-        m = makeAddr(mLabel);
-        uint32 sId = _aid(s);
-        uint32 mId = _aid(m);
-        uint256 seat = _grantSeat(m);
-        vm.prank(s);
-        game.setAfkingFundingApproval(0, mId, true); // S approves M's key -> fundingSource = S honored at subscribe
-        vm.prank(m);
-        game.subscribe(0, false, true, 1, sId, seat); // ticket mode, qty 1, source = S
-    }
-
-    /// @dev Per-day cost for qty `q` = mintPrice * q. Ticket mode.
-    function _cost(uint256 q) internal view returns (uint256) {
-        return game.mintPrice() * q;
-    }
-
-    /// @dev Subscribe a fresh player in TICKET mode (so the box-open leg never sees it), qty 1, granted
-    ///      deity so it survives any crossing (the funding waterfall, not pass-gating, is the subject).
-    function _subscribeHealthy(string memory prefix, bool drainFirst) internal returns (address who) {
-        who = makeAddr(string(abi.encodePacked(prefix, "p")));
-        _grantDeityPass(who);
-        _aid(who);
+    /// @dev A fresh seated ticket-mode quantity-1 member, signed up on the completed day.
+    function _ticketSub(string memory label) internal returns (address who) {
+        who = makeAddr(label);
         uint256 seat = _grantSeat(who);
+        _aid(who);
         vm.prank(who);
-        game.subscribe(0, drainFirst, true, 1, 0, seat); // self, drainFirst, ticket mode, qty 1
+        game.subscribe(0, true, 1, seat);
     }
 
-    /// @dev Prep an existing SUB-09 sub (VAULT/SDGNRS) to REACH the funding waterfall: re-subscribe it in
-    ///      box + drain-first mode (the standalone setMode/setDrainGameCreditFirst setters are GONE —
-    ///      the flags are set via subscribe), sentinel claimable so DirectEth ethValue == cost. Bucket
-    ///      left empty by the caller.
-    function _prepExemptSub(address who) internal {
-        vm.prank(who);
-        game.subscribe(0, /*drainFirst*/ true, /*useTickets*/ false, 1, 0, 0); // exempt: no seat burned
-        _setClaimable(who, 1); // sentinel -> DirectEth
-    }
-
-    /// @dev Credit `who`'s afkingFunding bucket with `amount` ETH (Δ5: depositAfkingFunding).
     function _fundPool(address who, uint256 amount) internal {
-        if (amount == 0) return;
         vm.deal(address(this), amount);
         game.depositAfkingFunding{value: amount}(_aid(who));
     }
 
-    /// @dev Force `who`'s claimableWinnings to `amount` (RE-DERIVED slot 7) AND credit `claimablePool`
-    ///      (slot 1, offset 16, uint128) in TANDEM so the SOLVENCY-01 invariant
-    ///      `claimablePool == Σ claimableWinnings + Σ afkingFunding` holds — otherwise the contract's
-    ///      `claimablePool -=` on a claimable-funded buy underflows (a test-fixture artifact, not a
-    ///      contract bug). Mirrors the contract's own tandem credit.
+    function _claimable(address who) internal view returns (uint256) {
+        return uint128(uint256(vm.load(address(game), GameSlotKeys.balances(game.walletIdOf(who)))));
+    }
+
+    /// @dev Set `who`'s claimable and credit `claimablePool` in tandem so the pool still backs it.
     function _setClaimable(address who, uint256 amount) internal {
-        bytes32 cwSlot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(GAME_CLAIMABLE_SLOT)));
-        uint256 prev = uint256(vm.load(address(game), cwSlot));
-        vm.store(address(game), cwSlot, bytes32(amount));
-        // claimablePool += (amount - prev) in tandem (keep the master invariant balanced).
-        bytes32 s1 = bytes32(uint256(1));
+        bytes32 slot = GameSlotKeys.balances(_aid(who));
+        uint256 word = uint256(vm.load(address(game), slot));
+        uint256 prev = uint128(word);
+        vm.store(address(game), slot, bytes32((word & ~uint256(type(uint128).max)) | amount));
+        bytes32 s1 = bytes32(GameSlots.CLAIMABLE_POOL);
         uint256 p1 = uint256(vm.load(address(game), s1));
-        uint128 pool = uint128(p1 >> 128); // claimablePool at offset 16 (the high 128 bits of slot 1)
-        if (amount >= prev) {
-            pool += uint128(amount - prev);
-        } else {
-            uint128 dec = uint128(prev - amount);
-            pool = pool >= dec ? pool - dec : 0;
-        }
+        uint128 pool = uint128(p1 >> (GameSlots.CLAIMABLE_POOL_OFFSET * 8));
+        pool = amount >= prev ? pool + uint128(amount - prev) : pool - uint128(prev - amount);
         p1 = (p1 & ((uint256(1) << 128) - 1)) | (uint256(pool) << 128);
         vm.store(address(game), s1, bytes32(p1));
     }
 
-    /// @dev Grant `who` the permanent deity bit (RE-DERIVED slot 10) — an activity-score/bounty-tier
-    ///      flag, unrelated to the AFKing Subscription Token subscribe credential.
-    function _grantDeityPass(address who) internal {
-        bytes32 slot = keccak256(abi.encode(game.walletIdOf(who), uint256(MINTPACKED_SLOT)));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        packed |= (uint256(1) << DEITY_SHIFT);
-        vm.store(address(game), slot, bytes32(packed));
-    }
-
-    /// @dev SUPERSEDED (AFKing Subscription Token credential change): the level-crossing eviction branch this
-    ///      helper targeted (`validThroughLevel` + the refresh-or-evict check) is DELETED — a sub
-    ///      is never evicted by level changes anymore, only by cancel, funding-skip kill, or the
-    ///      coin's seat lock (an active sub's last coin cannot transfer; unsub first). Kept only so `testPassEvictionPreservesFundingSourceStorage` (already
-    ///      skipped, D-12 supersession) still compiles; it now just clears `lastAutoBoughtDay` and
-    ///      bumps `game.level` to 1 (uint24 at slot 0 bytes 14..16), which no longer forces any
-    ///      eviction.
-    function _forceCrossingDue(address who) internal {
-        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT)));
-        uint256 packed = uint256(vm.load(address(game), slot));
-        uint256 mask = uint256(0xFFFFFF) << (OFF_LASTBOUGHT * 8);
-        packed &= ~mask;
-        vm.store(address(game), slot, bytes32(packed));
-        uint256 slot0 = uint256(vm.load(address(game), bytes32(uint256(0))));
-        uint256 levelMask = uint256(0xFFFFFF) << (14 * 8);
-        if (uint24((slot0 & levelMask) >> (14 * 8)) == 0) {
-            slot0 = (slot0 & ~levelMask) | (uint256(1) << (14 * 8));
-            vm.store(address(game), bytes32(uint256(0)), bytes32(slot0));
-        }
-    }
-
-    // ---- Sub field reads + the source-delta charged-slice oracle ----
-
-    function _subField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
-        uint256 p = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(SUBOF_SLOT))))) >> (off * 8);
-        return p & ((uint256(1) << widthBits) - 1);
-    }
-
-    function _dailyQtyOf(address who) internal view returns (uint8) {
-        return uint8(_subField(who, OFF_DAILY, 8));
-    }
-
-    function _lastBoughtDayOf(address who) internal view returns (uint32) {
-        return uint32(_subField(who, OFF_LASTBOUGHT, 24));
+    function _position1(uint32 id) internal view returns (uint256 position1) {
+        (, position1) = GameSlotKeys.subLane(address(game), id);
     }
 
     function _subscriberIndexOf(address who) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.SUB_OF)))) >> 200; // Sub.setPosition (1-based)
+        return _position1(game.walletIdOf(who));
     }
 
-    function _fundingSourceOf(address who) internal view returns (address) {
-        uint32 id = uint32(uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(FUNDINGSOURCE_SLOT))))));
-        return id == 0 ? address(0) : _fixturePayee(id);
+    function _lens(uint32 id) internal view returns (DegenerusGameLens.SubFull memory) {
+        return lens.subInfoFullById(address(game), id);
     }
 
-    /// @dev The current process-day stamp of the fixture (so "bought this STAGE" is robust). The STAGE
-    ///      stamps lastAutoBoughtDay = the process day; a fresh buy advances it past the snapshot.
-    mapping(address => uint32) private _baselineBoughtDay;
-
-    /// @dev The ethValue charged for `who` this STAGE, re-expressed from the funding-SOURCE bucket delta.
-    ///      Returns type(uint256).max if `who` was NOT bought this STAGE. Captures the source baseline on
-    ///      first touch via `_srcFundBefore` populated in `_stageCapture` (see `_armSlice`).
-    function _chargedFor(address who) internal view returns (uint256) {
-        if (_lastBoughtDayOf(who) <= _baselineBoughtDay[who]) return type(uint256).max;
-        address src = _fundingSourceOf(who);
-        if (src == address(0)) src = who;
-        return _srcFundBefore[who] - game.afkingFundingOf(src);
+    /// @dev True once the member's box has been opened for the current cohort.
+    function _opened(uint32 id) internal view returns (bool) {
+        return !GameSlotKeys.afkingBoxPending(address(game), id) && GameSlotKeys.afkingOpenedDay(address(game), id) != 0;
     }
 
-    /// @dev Per-test arming of the charged-slice oracle: record each tracked sub's funding-source bucket
-    ///      + day baseline BEFORE the STAGE. Called explicitly by tests that read `_chargedFor`.
-    function _armSlice(address who) internal {
-        _baselineBoughtDay[who] = _lastBoughtDayOf(who);
-        address src = _fundingSourceOf(who);
-        if (src == address(0)) src = who;
-        _srcFundBefore[who] = game.afkingFundingOf(src);
-    }
-
-    // ---- Event drain ----
-
-    Vm.Log[] private _capturedLogs;
-
-    function _capture() internal {
-        _capturedLogs = vm.getRecordedLogs();
-    }
-
-    function _countSkipped(address who, uint8 reason) internal view returns (uint256 count) {
-        for (uint256 i; i < _capturedLogs.length; i++) {
-            Vm.Log memory L = _capturedLogs[i];
-            if (
-                L.emitter == address(game) &&
-                L.topics.length >= 2 &&
-                L.topics[0] == SKIPPED_SIG &&
-                uint32(uint256(L.topics[1])) == game.walletIdOf(who)
-            ) {
-                uint8 r = abi.decode(L.data, (uint8));
-                if (r == reason) count++;
-            }
-        }
-    }
-
-    function _countExpired(address who) internal view returns (uint256 count) {
-        for (uint256 i; i < _capturedLogs.length; i++) {
-            Vm.Log memory L = _capturedLogs[i];
-            if (
-                L.emitter == address(game) &&
-                L.topics.length >= 2 &&
-                L.topics[0] == SUB_EXPIRED_SIG &&
-                uint32(uint256(L.topics[1])) == game.walletIdOf(who)
-            ) count++;
+    /// @dev Count the Game's `logs` with topic 0 `sig` indexed on `id`.
+    function _countLogs(Vm.Log[] memory logs, bytes32 sig, uint32 id) internal view returns (uint256 count) {
+        for (uint256 i; i < logs.length; i++) {
+            if (logs[i].emitter != address(game) || logs[i].topics.length < 2 || logs[i].topics[0] != sig) continue;
+            if (uint32(uint256(logs[i].topics[1])) == id) count++;
         }
     }
 

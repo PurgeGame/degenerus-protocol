@@ -190,20 +190,22 @@ contract SeatCapHandler is Test {
 
     // ═════════════════════════ raw Game reads ═════════════════════════
 
-    function _subWord(uint32 id) internal view returns (uint256) {
-        return uint256(vm.load(address(game), GameSlotKeys.byId(id, GameSlots.SUB_OF)));
-    }
-
     function _qty(uint32 id) internal view returns (uint256) {
-        return id == 0 ? 0 : uint8(_subWord(id));
+        return id == 0 ? 0 : GameSlotKeys.subQuantity(address(game), id);
     }
 
-    function _pos(uint32 id) internal view returns (uint256) {
-        return id == 0 ? 0 : _subWord(id) >> 200;
+    function _vaultPaused() internal view returns (bool) {
+        uint256 packed = uint256(vm.load(address(game), bytes32(GameSlots.AFKING_PROTOCOL_FLAGS)));
+        return uint8(packed >> (8 * GameSlots.AFKING_PROTOCOL_FLAGS_OFFSET)) & 4 != 0;
+    }
+
+    function _pos(uint32 id) internal view returns (uint256 position1) {
+        if (id == 0) return 0;
+        (, position1) = GameSlotKeys.subLane(address(game), id);
     }
 
     function _setElement(uint256 index) internal view returns (uint256) {
-        return uint32(uint256(vm.load(address(game), bytes32(uint256(keccak256(abi.encode(GameSlots.SUBSCRIBERS))) + index / 8))) >> (32 * (index % 8)));
+        return uint32(uint256(vm.load(address(game), bytes32(uint256(keccak256(abi.encode(GameSlots.SUBSCRIBERS))) + index / 3))) >> (85 * (index % 3)));
     }
 
     /// @dev Whether account `id` (key `key`) is in the set, cross-checking the element word.
@@ -437,8 +439,8 @@ contract SeatCapHandler is Test {
         gFree += k;
     }
 
-    /// @notice New run, change, cancel or tombstone re-run of a wallet or smurf, by its key,
-    ///         its owner or an approved operator.
+    /// @notice New run, change or cancel of a wallet or smurf, by its key, its owner or an
+    ///         approved operator.
     function subscribe(uint256 seed) external {
         ++calls[A_SUB];
         Acct memory a = (seed >> 56) % 5 == 0 ? _pick(seed) : _pickUseful(seed);
@@ -469,7 +471,7 @@ contract SeatCapHandler is Test {
         uint256 fund = 0.02 ether + (seed >> 88) % 5 * 0.01 ether;
         _fund(a.caller, fund);
         vm.prank(a.caller);
-        try game.subscribe{value: fund}(a.callId, false, (seed >> 96) & 1 == 1, 1, 0, seat) {
+        try game.subscribe{value: fund}(a.callId, (seed >> 96) & 1 == 1, 1, seat) {
             if (!valid) {
                 _violate("a new run started without a payee seat");
                 return;
@@ -489,8 +491,8 @@ contract SeatCapHandler is Test {
             if (!wasInSet) {
                 if (s1 != s0 + 1) _violate("a new run outside the set did not add one entry");
                 ++gInsertions;
-            } else if (s1 != s0) {
-                _violate("a tombstone re-run changed the set length");
+            } else {
+                _violate("a new run found its account already in the set");
             }
             if (_qty(id) == 0 || _pos(id) == 0) _violate("new run not live in the set");
         } catch (bytes memory r) {
@@ -502,7 +504,8 @@ contract SeatCapHandler is Test {
         }
     }
 
-    /// @dev A change (`qty > 0`) or a cancel (`qty == 0`) of a live run: never burns.
+    /// @dev A change (`qty > 0`) or a cancel (`qty == 0`) of a live run: never burns. A cancel
+    ///      removes the entry; a change keeps it.
     function _change(Acct memory a, uint256 seat, uint8 qty) internal {
         uint256 s0 = game.subscriberSetLength();
         uint256 l0 = token.totalSupply();
@@ -510,7 +513,7 @@ contract SeatCapHandler is Test {
         uint256 fund = qty == 0 ? 0 : 0.01 ether;
         _fund(a.caller, fund);
         vm.prank(a.caller);
-        try game.subscribe{value: fund}(a.callId, true, false, qty, 0, seat) {
+        try game.subscribe{value: fund}(a.callId, false, qty, seat) {
             ++oks[A_SUB];
             if (token.totalSupply() != l0) _violate("a change or cancel burned a seat");
             if (seatOwner != address(0)) {
@@ -520,7 +523,9 @@ contract SeatCapHandler is Test {
                     _violate("a change or cancel burned the named seat");
                 }
             }
-            if (game.subscriberSetLength() != s0) _violate("a change or cancel changed the set length");
+            if (game.subscriberSetLength() != (qty == 0 ? s0 - 1 : s0)) {
+                _violate("a change kept, or a cancel removed, other than its own entry");
+            }
             if (_qty(a.id) != qty) _violate("dailyQuantity not written");
         } catch (bytes memory r) {
             _noteRevert(A_SUB, r);
@@ -554,7 +559,7 @@ contract SeatCapHandler is Test {
     ///         Naming a seat never burns it; pausing never releases the counted entry.
     function vaultSubscription(uint256 seed) external {
         ++calls[A_VAULTSUB];
-        bool live = _qty(VAULT_ID) != 0;
+        bool live = !_vaultPaused();
         uint256 position = _pos(VAULT_ID);
         uint256 s0 = game.subscriberSetLength();
         uint256 l0 = token.totalSupply();
@@ -562,7 +567,7 @@ contract SeatCapHandler is Test {
         uint256 seat = (seed >> 8) % 2 == 0 ? 2 : 1 + (seed >> 16) % (gNext + 5);
         uint8 qty = live ? ((seed % 3 == 0) ? 0 : uint8(1 + (seed >> 24) % 3)) : 1;
         vm.prank(vaultOp);
-        try game.subscribe(VAULT_ID, true, false, qty, 0, seat) {
+        try game.subscribe(VAULT_ID, false, qty, seat) {
             ++oks[A_VAULTSUB];
             if (token.totalSupply() != l0) _violate("an exempt subscription burned a seat");
             if (owner2 != address(0)) {
@@ -575,7 +580,9 @@ contract SeatCapHandler is Test {
             if (game.subscriberSetLength() != s0 || _pos(VAULT_ID) != position) {
                 _violate("a VAULT change, pause or resume moved its set entry");
             }
-            if (_qty(VAULT_ID) != qty) _violate("VAULT quantity was not updated");
+            if (qty == 0 ? !_vaultPaused() : (_vaultPaused() || _qty(VAULT_ID) != qty)) {
+                _violate("VAULT quantity or pause was not updated");
+            }
         } catch (bytes memory r) {
             _noteRevert(A_VAULTSUB, r);
         }
@@ -620,8 +627,7 @@ contract SeatCapHandler is Test {
         _checkLive();
     }
 
-    /// @notice Advance a day and crank until no work: process passes evict the unfunded and
-    ///         reclaim tombstones.
+    /// @notice Advance a day and crank until no work: process passes evict the unfunded.
     function driveDay(uint256) external {
         ++calls[A_DAY];
         vm.warp(block.timestamp + 1 days);

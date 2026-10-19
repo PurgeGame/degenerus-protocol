@@ -182,7 +182,7 @@ contract StethLossLiveness is RedemptionFixture {
         vm.prank(subscriber);
         game.depositAfkingFunding{value: 2 ether}(subscriberId);
         vm.prank(subscriber);
-        game.subscribe(0, false, true, 1, 0, seat);
+        game.subscribe(0, true, 1, seat);
 
         // A pending sDGNRS redemption batch: alice burns, the batch stays open.
         redemptionBatch = _openBatchId();
