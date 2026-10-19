@@ -165,6 +165,7 @@ contract JackpotVariablePricingTest is CrapsPins {
                 assertEq(r.multiplierBps, multiples[i % 4]);
                 assertEq(r.totalPool, main + high);
                 assertEq(7 * (uint256(r.bankroll) + uint256(r.bountyUnits) * 100) + r.potRemainder, main);
+                assertEq(table.jackpotTerms(slot).played * 5, uint256(r.bankroll) * 2, "the jackpot round is two fifths");
                 assertEq(2 * table.jackpotTerms(slot).highExtra, high);
                 assertEq(r.awardTarget, 5);
                 assertEq(r.drawnCount, 5);
@@ -247,8 +248,9 @@ contract JackpotVariablePricingTest is CrapsPins {
         assertEq(r.subsidyMultiplierBps, 100000);
         assertEq(r.multiplierBps, 1000000);
         assertEq(r.drawnUnits, 500);
-        uint256 maxBank = (uint256(type(uint24).max) / 60) * 300;
-        assertEq(r.bankroll, maxBank, "existing engine cap remains in force");
+        assertEq(r.bankroll, 41_943_000, "the cap: the largest bankroll whose round fits a leg");
+        assertEq(uint256(r.bankroll) * 2 / 5, 16_777_200, "its round");
+        assertLe(uint256(r.bankroll) * 2 / 5, type(uint24).max);
         uint256 main = r.totalPool - 99 * 10000 * 100;
         assertEq(main, 501 * (uint256(r.bankroll) + uint256(r.bountyUnits) * 100) + r.potRemainder);
         assertGt(r.potRemainder, main / 2, "capped capital remains in the pot");

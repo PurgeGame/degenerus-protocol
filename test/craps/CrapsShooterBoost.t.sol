@@ -702,7 +702,7 @@ contract CrapsShooterBoostTest is CrapsPins {
         }
         assertGt(matchingPairs, 40, "the sweep never repeated a tier, so it proves nothing");
 
-        // Nothing else is on the schedule — the event window included — and depth is five rounds.
+        // Nothing else is on the schedule — the event window included — and depth is two and a half rounds.
         for (uint256 w = 0; w < 80; ++w) {
             _setDailyWord(day, uint256(keccak256(abi.encode("goalweight", w))));
             for (uint256 p = 0; p < craps.BONUS_PERIODS_PER_DAY(); ++p) {
@@ -711,7 +711,7 @@ contract CrapsShooterBoostTest is CrapsPins {
                 uint256 mult = uint256(goal) / uint256(bank);
                 assertEq(mult, craps.SCHED_GOAL(), "a scheduled window is not goal 5x");
                 uint256 round = craps.roundOf(uint64(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + p + 1));
-                assertEq(uint256(bank) / round, craps.SCHED_BANK_MULT(), "a scheduled window is not five deep");
+                assertEq(round * 5, uint256(bank) * 2, "a scheduled window is not two and a half deep");
             }
         }
     }

@@ -23,7 +23,7 @@ contract ProtocolCrapsTable is CrapsViews {
         w.bound = uint48(slot);
         w.bankroll = uint128(bankrollFlip);
         w.goal = uint128(bankrollFlip * _SCHED_GOAL);
-        w.played = bankrollFlip / _SCHED_BANK_MULT;
+        w.played = _schedRound(bankrollFlip);
         w.tier = 1;
         _setSlotIndex(slot, 1);
         (bool ok,) = address(this).call(

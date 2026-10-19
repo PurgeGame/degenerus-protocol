@@ -31,10 +31,10 @@ contract ProgHarness is CrapsViews {
         w.stakeUnits = stakeUnits;
         w.bound = uint48(slot);
         // A REAL SCHEDULED SHAPE, because the fold pays the field the moment it completes it —
-        // 3,000 FLIP five rounds deep chasing 5x.
+        // 3,000 FLIP two and a half rounds deep chasing 5x.
         w.bankroll = 3000;
         w.goal = 15_000;
-        w.played = 600;
+        w.played = 1200;
         // This fold-only fixture bypasses armWindow. Enroll its real field before
         // its first score so finalization has the same obligation as an armed field.
         if (uint32(_battles[key] >> _BG_RESOLVED_SHIFT) == 0 && uint32(_battles[key]) != 0) {
@@ -86,7 +86,7 @@ contract ProgHarness is CrapsViews {
         w.bound = uint48(slot);
         w.key = keccak256(abi.encode("prog", slot, bankrollFlip, peakFlip, standing));
         w.bankroll = uint128(bankrollFlip * 1);
-        w.played = (bankrollFlip / SCHED_BANK_MULT) * 1;
+        w.played = _schedRound(bankrollFlip);
         w.goal = uint128(bankrollFlip * SCHED_GOAL * 1);
 
         Settlement memory st;
@@ -866,9 +866,8 @@ contract CrapsProgressiveTest is CrapsPins {
                 // posted stack, and the depth is against the whole ten-chip round.
                 uint256 round = craps.roundOf(uint64(uint256(d) * craps.BONUS_SLOTS_PER_DAY() + p + 1));
                 assertGt(round, 0, "a scheduled window plays a zero round");
-                assertEq(uint256(bank) % round, 0, "a scheduled bankroll is not a whole number of rounds");
                 assertEq(uint256(goal) % uint256(bank), 0, "a scheduled goal is not a whole multiple of its bankroll");
-                assertEq(uint256(bank) / round, craps.SCHED_BANK_MULT(), "a scheduled depth is not five rounds");
+                assertEq(round * 5, uint256(bank) * 2, "a scheduled depth is not two and a half rounds");
                 uint256 mult = uint256(goal) / uint256(bank);
                 assertEq(mult, craps.SCHED_GOAL(), "a scheduled target is not 5x");
                 // EVERY CUTOFF LANDS ON A WHOLE FLIP. The award compares whole-FLIP figures, so a

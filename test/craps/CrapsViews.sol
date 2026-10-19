@@ -98,7 +98,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
     uint256 public constant ESC_HANDS = _ESC_HANDS;
     uint256 public constant ESC_FAST_FROM = _ESC_FAST_FROM;
     uint256 public constant ESC_CAP = _ESC_CAP;
-    uint256 public constant SCHED_BANK_MULT = _SCHED_BANK_MULT;
+    function schedRound(uint256 bank) external pure returns (uint256) { return _schedRound(bank); }
     uint256 public constant SCHED_GOAL = _SCHED_GOAL;
     uint256 public constant DICE_RUN_RECORD_FLOOR = _DICE_RUN_RECORD_FLOOR;
     bytes32 public constant CRAPS_SEED_DOMAIN = _CRAPS_SEED_DOMAIN;

@@ -119,13 +119,19 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     uint256 internal constant _BONUS_SLOTS_PER_DAY = 8;
 
     /// @notice THE SCHEDULED FORMAT, and the whole of it. Every protocol-scheduled Dice Run runs
-    ///         a bankroll FIVE rounds deep and chases FIVE times that bankroll. A high-water run
-    ///         ranks on how far it got rather than how fast it arrived, so drawing another target
-    ///         only creates another set of downstream rules without changing the product. A
-    ///         CUSTOM battle still names its own depth and target — these are the schedule's,
-    ///         never a test of eligibility.
-    uint256 internal constant _SCHED_BANK_MULT = 5;
+    ///         a bankroll two and a half rounds deep (the round is two fifths of it) and chases
+    ///         FIVE times that bankroll. The shallower depth shortens the average run at roughly
+    ///         unchanged return. A high-water run ranks on how far it got rather than how fast it
+    ///         arrived, so drawing another target only creates another set of downstream rules
+    ///         without changing the product. A CUSTOM battle still names its own depth and target
+    ///         — these are the schedule's, never a test of eligibility.
     uint256 internal constant _SCHED_GOAL = 5;
+
+    /// @dev The scheduled round for `bank`: exact for every tier bankroll and every jackpot
+    ///      bankroll, all multiples of 300.
+    function _schedRound(uint256 bank) internal pure returns (uint256) {
+        return bank * 2 / 5;
+    }
 
     /// @notice THE DICE RUN RECORD FLOOR, in score basis points: a 100x high point against the
     ///         run's own starting bankroll. Below it a scheduled winner never reads the shared

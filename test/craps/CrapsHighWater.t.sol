@@ -98,7 +98,7 @@ contract WaterHarness is CrapsViews {
         w.bound = uint48(slot);
         w.bankroll = uint128(bankrollFlip * 1);
         w.goal = uint128(bankrollFlip * SCHED_GOAL * 1);
-        w.played = (bankrollFlip / _SCHED_BANK_MULT) * 1;
+        w.played = _schedRound(bankrollFlip);
         // Synthetic scheduled fields must enter the real completion registry.
         _setSlotIndex(slot, 1);
         (bool registered,) = address(this).call(
@@ -558,8 +558,9 @@ contract CrapsCustomBoundaryTest is CrapsPins {
         return 3 | (uint32(2) << 3) | (uint32(2) << 9);
     }
 
-    /// @dev A CUSTOM battle on numbers the SCHEDULE also draws: five rounds deep, and the target
-    ///      the caller names. This is the shape the boundary has to hold apart.
+    /// @dev A CUSTOM battle on the schedule's own round and the target the caller names. A custom
+    ///      battle takes whole depths, so it can no longer copy the schedule's two and a half; the
+    ///      boundary still has to hold the two apart.
     function _copycat(uint16 goalMult, uint48 index, uint256 salt) internal returns (uint64 slot) {
         slot = _openBattle(craps, PLAYED, 5, goalMult, 3);
         vm.prank(alice);

@@ -315,7 +315,7 @@ contract CrapsBattle is CrapsBattleStorage {
                     if (r.word != 0) {
                         w.bankroll = r.bankroll;
                         w.goal = uint128(uint256(r.bankroll) * _SCHED_GOAL);
-                        w.played = uint256(r.bankroll) / _SCHED_BANK_MULT;
+                        w.played = _schedRound(r.bankroll);
                         w.postedStake = w.played / _BONUS_CHIPS * _MAX_PICKED_CHIPS;
                         w.stakeUnits = r.bountyUnits;
                         w.drawn = r.drawnCount;
@@ -993,7 +993,7 @@ contract CrapsBattle is CrapsBattleStorage {
                 uint256 bank = (uint256(0x119407080258) >> ((w.tier - 1) * 16)) & 0xffff;
                 w.bankroll = uint128(bank);
                 w.goal = uint128(bank * _SCHED_GOAL);
-                w.played = bank / _SCHED_BANK_MULT;
+                w.played = _schedRound(bank);
             }
         }
         return _finishWindowTerms(day, period, w,
@@ -1879,7 +1879,7 @@ contract CrapsBattle is CrapsBattleStorage {
         uint256 bank = (uint256(0x119407080258) >> (pick * 16)) & 0xffff;
         uint256 bounty = (uint256(0xdac09c405dc057803e802580190012c00c8) >> ((pick * 3 + ((roll >> 8) % 3)) * 16)) & 0xffff;
         return (uint128(bank), uint128(bank * _SCHED_GOAL),
-            bank / _SCHED_BANK_MULT, bounty / 100, pick + 1);
+            _schedRound(bank), bounty / 100, pick + 1);
     }
 
     /// @dev The match key: one slot and the exact numeric terms every entrant shares. The round

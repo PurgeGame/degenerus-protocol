@@ -709,12 +709,12 @@ contract CrapsSystemEconTest is CrapsPins {
     // H. THE SCHEDULE HAS ONE FORMAT.
     // ════════════════════════════════════════════════════════════════════════
 
-    /// @dev Every advertised scheduled window is five rounds deep and chases exactly 5x.
+    /// @dev Every advertised scheduled window is two and a half rounds deep and chases exactly 5x.
     function test_H0_everyWindowUsesTheFixedFormat() public {
         vm.warp(_dayStart() + 1 days);
         uint256 goalFive;
         uint256 otherGoals;
-        uint256 depthFive;
+        uint256 depthScheduled;
         uint256 otherDepths;
         uint256 windows;
         for (uint256 d = 0; d < 200; ++d) {
@@ -726,10 +726,10 @@ contract CrapsSystemEconTest is CrapsPins {
                 (uint128 bankroll, uint128 goal, uint256 boardStake,,,) = craps.bonusTermsFor(day, p);
                 ++windows;
                 uint256 gm = goal / bankroll;
-                uint256 dep = bankroll / ((boardStake * 10) / 7);
+                uint256 round = (boardStake * 10) / 7;
                 if (gm == 5) ++goalFive;
                 else ++otherGoals;
-                if (dep == 5) ++depthFive;
+                if (round * 5 == uint256(bankroll) * 2) ++depthScheduled;
                 else ++otherDepths;
             }
             vm.warp(_dayStart() + 1 days);
@@ -737,9 +737,9 @@ contract CrapsSystemEconTest is CrapsPins {
         emit log_named_uint("windows seen", windows);
         emit log_named_uint("goal 5x    ", goalFive);
         emit log_named_uint("other goals", otherGoals);
-        emit log_named_uint("depth 5    ", depthFive);
+        emit log_named_uint("depth 2.5  ", depthScheduled);
         emit log_named_uint("other depth", otherDepths);
         assertEq(goalFive, windows, "the main schedule offered a non-5x goal");
-        assertEq(depthFive, windows, "the main schedule offered a non-5x depth");
+        assertEq(depthScheduled, windows, "the main schedule offered another depth");
     }
 }

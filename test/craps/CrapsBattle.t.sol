@@ -3194,9 +3194,9 @@ contract CrapsBattleTest is CrapsPins {
                 uint256 baseFlip = (stackFlip / 7) * 10;
                 assertGt(baseFlip, 0, "the chip rounded away to nothing");
 
-                // THE DEPTH IS THE FORMAT NOW, not a draw: five bases, every window, every day.
-                assertEq(bankFlip % baseFlip, 0, "the bankroll is not a whole number of bases");
-                assertEq(bankFlip / baseFlip, craps.SCHED_BANK_MULT(), "a scheduled bankroll is not five deep");
+                // THE DEPTH IS THE FORMAT, not a draw: two and a half bases, every window, every day.
+                assertEq(baseFlip * 5, bankFlip * 2, "a scheduled bankroll is not two and a half deep");
+                assertEq(baseFlip, craps.schedRound(bankFlip));
 
                 // The target is the one scheduled multiple of the bankroll.
                 assertEq(uint256(goal) % uint256(bank), 0, "the target is not a multiple of the bankroll");

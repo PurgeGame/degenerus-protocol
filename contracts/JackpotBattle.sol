@@ -341,7 +341,8 @@ contract JackpotBattle is CrapsBattleStorage {
         if (totalUnits != 0) {
             uint256 perUnit = mainPool / totalUnits;
             bankroll = perUnit / 2 / _JACKPOT_BANKROLL_UNIT * _JACKPOT_BANKROLL_UNIT;
-            uint256 maxBank = (uint256(type(uint24).max) / 10 / 6) * 6 * 50;
+            // The largest bankroll unit multiple whose scheduled round fits one uint24 leg.
+            uint256 maxBank = (uint256(type(uint24).max) * 5 / 2 / _JACKPOT_BANKROLL_UNIT) * _JACKPOT_BANKROLL_UNIT;
             if (bankroll > maxBank) bankroll = maxBank;
             bounty = (perUnit - bankroll) / _BATTLE_STAKE_UNIT;
             if (bounty > bankroll / _BATTLE_STAKE_UNIT) bounty = bankroll / _BATTLE_STAKE_UNIT;
@@ -937,7 +938,7 @@ contract JackpotBattle is CrapsBattleStorage {
         uint256 bank = (uint256(0x119407080258) >> (pick * 16)) & 0xffff;
         uint256 bounty = (uint256(0xdac09c405dc057803e802580190012c00c8) >> ((pick * 3 + ((roll >> 8) % 3)) * 16)) & 0xffff;
         return (uint128(bank), uint128(bank * _SCHED_GOAL),
-            bank / _SCHED_BANK_MULT, bounty / 100, pick + 1);
+            _schedRound(bank), bounty / 100, pick + 1);
     }
 
     function _currentBonusSlot() internal view returns (uint24 day, uint256 period, uint256 slot) {
@@ -1079,7 +1080,7 @@ contract JackpotBattle is CrapsBattleStorage {
                 uint256 bank = (uint256(0x119407080258) >> ((w.tier - 1) * 16)) & 0xffff;
                 w.bankroll = uint128(bank);
                 w.goal = uint128(bank * _SCHED_GOAL);
-                w.played = bank / _SCHED_BANK_MULT;
+                w.played = _schedRound(bank);
             }
         }
         return _finishWindowTerms(day, period, w,
