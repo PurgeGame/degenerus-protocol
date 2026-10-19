@@ -573,8 +573,7 @@ future-pool keep roll; the BAF awards themselves pay from the staged reservation
 the exact pool snapshots and ordering; altering a pool size must not reroll winners.
 
 At the final transition close after each x00 level, sDGNRS recycles a random 25–75% of all
-live burns since the previous century close, immediately before the Coinflip
-century seed. A tagged hash of the committed transition word and completed level
+live burns since the previous century close. A tagged hash of the committed transition word and completed level
 selects one of the 51 whole percentages; the event records it, and retries cannot
 reroll a completed century. Its post-refill supply checkpoint captures both
 redemption burns and automatic self-award burns without per-burn accounting writes. New inventory

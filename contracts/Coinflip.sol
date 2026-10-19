@@ -114,22 +114,20 @@ contract Coinflip {
     /// @param day The target flip day being credited.
     /// @param amount The stake actually added (new total minus previous total), whole FLIP.
     /// @param newTotal The stored total stake for that day, whole FLIP; for VAULT and sDGNRS on a
-    ///        seed-window day the day's stake is this plus the window's amountPerDay.
+    ///        seeded day the day's stake is this plus the seed's amountPerDay.
     event CoinflipStakeUpdated(
         uint32 indexed id,
         uint24 indexed day,
         uint256 amount,
         uint256 newTotal
     );
-    /// @notice Emitted when a seed window opens for VAULT and sDGNRS: the deploy window
-    ///         (century 0) and each x00 level's. A window replaces the previous one.
-    /// @param century The century index (level / 100) the window belongs to.
+    /// @notice Emitted once at deploy: VAULT and sDGNRS each hold the seed stake on days
+    ///         [firstDay, firstDay + dayCount).
     /// @param firstDay First flip day carrying the seed stake.
     /// @param dayCount Number of consecutive days seeded.
-    /// @param amountPerDay Seed stake each recipient holds on every window day, on top of the
+    /// @param amountPerDay Seed stake each recipient holds on every seeded day, on top of the
     ///        day's stored stake; no CoinflipStakeUpdated reports it.
     event SeedWindowArmed(
-        uint24 indexed century,
         uint24 indexed firstDay,
         uint24 dayCount,
         uint256 amountPerDay
@@ -285,9 +283,6 @@ contract Coinflip {
     ///      VAULT and sDGNRS. All initial FLIP must survive a coinflip before minting.
     uint256 private constant SEED_FLIP_DAILY = 200_000;
     uint24 private constant SEED_FLIP_DAYS = 20;
-    /// @dev Levels between seed windows. The deploy window covers the first, and every
-    ///      x00 level re-arms one for VAULT and sDGNRS on the same terms.
-    uint24 private constant SEED_CENTURY_LEVELS = 100;
     /// @dev The Game's constant wallet IDs for the two seed recipients.
     uint32 private constant VAULT_WALLET_ID = 1;
     uint32 private constant SDGNRS_WALLET_ID = 2;
@@ -344,20 +339,11 @@ contract Coinflip {
     ///      path's claim walk already loads, so the per-deposit gate costs one
     ///      warm read.
     uint24 internal bafDrawDay;
-    /// @dev Highest century (level / SEED_CENTURY_LEVELS) whose seed window has been armed.
-    ///      Appended into this slot's free bytes, so every later slot keeps its index.
-    uint24 internal lastSeededCentury;
-    /// @dev The DICE RUN category's claim clock, stamped on every hit. Appended into
-    ///      the same slot's remaining free bytes, so every later slot keeps its index.
-    ///      It accrues the claim share exactly as the other four clocks do, and — since
+    /// @dev The DICE RUN category's claim clock, stamped on every hit. It accrues the claim share exactly as the other four clocks do, and — since
     ///      this kind claims on ANY strict improvement rather than on a fifth — the
     ///      reset it performs is also what prices a second hit on the same day at the
     ///      5% floor of an already-reduced pool.
     uint24 internal recordDayDiceRun;
-    /// @dev First day of the active seed window: VAULT and sDGNRS each hold SEED_FLIP_DAILY of
-    ///      unstored stake on days [seedWindowStart, seedWindowStart + SEED_FLIP_DAYS). One window
-    ///      suffices: both claim cursors pass a window before the next one arms.
-    uint24 internal seedWindowStart;
 
     // BAF weighted draw. Book-kept only for the armed day (the x0 level's last
     // purchase day stakes it): every direct self-funded deposit staking that day
@@ -391,9 +377,9 @@ contract Coinflip {
     mapping(uint256 => uint256) internal bafDrawEntry;
 
     /// @notice Seeds the initial FLIP emission as flip stakes: 200k per day for days 1-20,
-    ///         each to VAULT and sDGNRS, by opening the deploy seed window. The claim walk
-    ///         reads the seed from the window rather than a stake lane, so the seeds stay off
-    ///         the BAF weighted draw and the flip record.
+    ///         each to VAULT and sDGNRS. The claim walk adds the seed to those days' stored
+    ///         stake rather than writing a stake lane, so the seeds stay off the BAF weighted
+    ///         draw and the flip record.
     ///         Nothing mints up front — each day's seed only becomes claimable FLIP if it
     ///         survives that day's flip.
     constructor() {
@@ -408,8 +394,7 @@ contract Coinflip {
         recordDayBuy = recordStartDay;
         recordDayDiceRun = recordStartDay;
 
-        seedWindowStart = 1;
-        emit SeedWindowArmed(0, 1, SEED_FLIP_DAYS, SEED_FLIP_DAILY);
+        emit SeedWindowArmed(1, SEED_FLIP_DAYS, SEED_FLIP_DAILY);
 
         // Register this contract's ENS reverse name (best-effort; skipped when the
         // registrar is unset — local/test/testnet builds). The setName(string)
@@ -820,7 +805,7 @@ contract Coinflip {
         uint24 processed = start;
 
         uint32 remaining = COIN_CLAIM_DAYS;
-        (bool seeded, uint24 seedStart) = _seedWindow(id);
+        bool seeded = _seeded(id);
 
         // Results at or before `latest` cannot change during this walk. Cache one
         // 32-day word; the sentinel is above every uint24 day's possible word key.
@@ -860,7 +845,7 @@ contract Coinflip {
             uint256 storedStake = uint32(cachedStakes >> stakeShift);
             uint256 stake = storedStake;
             if (seeded) {
-                stake += _seedStake(cursor, seedStart);
+                stake += _seedStake(cursor);
             }
             if (rebuyActive && carry != 0) {
                 stake += carry;
@@ -1269,35 +1254,6 @@ contract Coinflip {
             candidate
         );
         return paid;
-    }
-
-    /// @notice Arm this century's seed window: SEED_FLIP_DAILY per day for
-    ///         SEED_FLIP_DAYS days to VAULT and to sDGNRS, on the same terms as the deploy program.
-    /// @dev GAME only, called from the advance as an x00 level's transition closes and the next
-    ///      purchase phase opens. It has no revert path by design: a revert here would brick the
-    ///      daily crank at a level boundary, so a call with nothing due simply writes nothing. It
-    ///      arms the LOWEST unarmed century, so a boundary the game passed without arming is
-    ///      picked up by the next one rather than lost.
-    ///
-    ///      Takes the level from the caller rather than reading `purchaseInfo` back, which
-    ///      would re-enter a mid-advance game. No RNG-lock gate is needed: the window starts
-    ///      at `_targetFlipDay()`, strictly later than the day any pending word resolves.
-    ///
-    ///      Arming stores the window's first day and writes no stake lane: the claim walk adds
-    ///      the seed to whatever a window day's lane holds, so a stake sDGNRS has already rolled
-    ///      forward onto that day is kept.
-    /// @param lvl The level whose jackpot phase just ended.
-    function armCenturySeed(uint24 lvl) external {
-        if (msg.sender != ContractAddresses.GAME) revert OnlyDegenerusGame();
-
-        uint24 century = lastSeededCentury + 1;
-        if (uint256(lvl) < uint256(century) * SEED_CENTURY_LEVELS) return;
-        lastSeededCentury = century;
-
-        uint24 firstDay = _targetFlipDay();
-        seedWindowStart = firstDay;
-
-        emit SeedWindowArmed(century, firstDay, SEED_FLIP_DAYS, SEED_FLIP_DAILY);
     }
 
     /// @notice Add FLIP to the shared record pool.
@@ -1792,9 +1748,9 @@ contract Coinflip {
     function coinflipAmountById(uint32 id) public view returns (uint256 amount) {
         uint24 targetDay = _targetFlipDay();
         amount = _flipStake(targetDay, id);
-        (bool seeded, uint24 seedStart) = _seedWindow(id);
+        bool seeded = _seeded(id);
         if (seeded) {
-            amount += _seedStake(targetDay, seedStart);
+            amount += _seedStake(targetDay);
         }
     }
 
@@ -1944,7 +1900,7 @@ contract Coinflip {
         unchecked {
             cursor = startDay + 1;
         }
-        (bool seeded, uint24 seedStart) = _seedWindow(id);
+        bool seeded = _seeded(id);
         while (remaining != 0 && cursor <= latestDay) {
             (uint16 rewardPercent, bool win) = _dayResult(cursor);
             // Skip unresolved days (both fields zero) instead of breaking,
@@ -1956,7 +1912,7 @@ contract Coinflip {
 
             uint256 stake = _flipStake(cursor, id);
             if (seeded) {
-                stake += _seedStake(cursor, seedStart);
+                stake += _seedStake(cursor);
             }
             if (rebuyActive && carry != 0) {
                 stake += carry;
@@ -2011,18 +1967,16 @@ contract Coinflip {
         return uint256(uint32(coinflipStakePacked[day >> 3][id] >> ((day & 7) << 5)));
     }
 
-    /// @dev Whether wallet `id` is a seed recipient (VAULT or sDGNRS), and the active seed window's
-    ///      first day when it is. Read once per walk, ahead of its day loop.
-    function _seedWindow(uint32 id) private view returns (bool seeded, uint24 start) {
-        seeded = id == VAULT_WALLET_ID || id == SDGNRS_WALLET_ID;
-        if (seeded) start = seedWindowStart;
+    /// @dev Whether wallet `id` is a seed recipient (VAULT or sDGNRS).
+    function _seeded(uint32 id) private pure returns (bool) {
+        return id == VAULT_WALLET_ID || id == SDGNRS_WALLET_ID;
     }
 
-    /// @dev A seed recipient's unstored stake on `day`: SEED_FLIP_DAILY inside the window opening
-    ///      at `start`, else 0. A day before `start` wraps far past the window.
-    function _seedStake(uint24 day, uint24 start) private pure returns (uint256) {
+    /// @dev A seed recipient's unstored stake on `day`: SEED_FLIP_DAILY on days 1..SEED_FLIP_DAYS,
+    ///      else 0 (day 0 wraps far past the window).
+    function _seedStake(uint24 day) private pure returns (uint256) {
         unchecked {
-            return uint256(day) - start < SEED_FLIP_DAYS ? SEED_FLIP_DAILY : 0;
+            return uint256(day) - 1 < SEED_FLIP_DAYS ? SEED_FLIP_DAILY : 0;
         }
     }
 

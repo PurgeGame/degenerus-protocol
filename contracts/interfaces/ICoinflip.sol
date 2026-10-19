@@ -276,13 +276,6 @@ interface ICoinflip {
     ///      converted notionally at that level's ticket price — no ETH moves.
     function fundRecordPool(uint256 amount) external;
 
-    /// @notice Arm the x00 seed window if one is due (GAME only, silent when not due).
-    /// @dev Stores the window's first day and writes no stake lane: VAULT and sDGNRS each hold the
-    ///      seed on every window day on top of that day's stored stake. SeedWindowArmed is the only
-    ///      event; no per-day CoinflipStakeUpdated is emitted for the seed.
-    /// @param lvl The level whose jackpot phase just ended.
-    function armCenturySeed(uint24 lvl) external;
-
     /// @notice Settle-then-read sDGNRS's redeemable coinflip backing (claimableStored + carry).
     /// @dev sDGNRS-only. Settles all resolved days first so the two summed components are disjoint
     ///      and current; sDGNRS holds no wallet balance — its entire FLIP backing lives in these two.
@@ -320,7 +313,7 @@ interface ICoinflip {
     /// @notice Get player's current coinflip stake for the next day's flip.
     /// @dev Returns the stake amount deposited for the upcoming flip day. Stakes are whole FLIP
     ///      (stored as uint32 units), returned without scaling. For VAULT and sDGNRS it includes
-    ///      the seed when that day lies in the active seed window.
+    ///      the seed on days 1-20.
     /// @param player The player to check.
     /// @return The stake amount in whole FLIP for the next flip.
     function coinflipAmount(address player) external view returns (uint256);

@@ -98,24 +98,8 @@
   {
     "bytes": "3",
     "encoding": "inplace",
-    "label": "lastSeededCentury",
-    "offset": 19,
-    "slot": 4,
-    "typeLabel": "uint24"
-  },
-  {
-    "bytes": "3",
-    "encoding": "inplace",
     "label": "recordDayDiceRun",
-    "offset": 22,
-    "slot": 4,
-    "typeLabel": "uint24"
-  },
-  {
-    "bytes": "3",
-    "encoding": "inplace",
-    "label": "seedWindowStart",
-    "offset": 25,
+    "offset": 19,
     "slot": 4,
     "typeLabel": "uint24"
   },

@@ -96,11 +96,10 @@ describe("Deploy Pipeline", function () {
       const vaultAddr = await f.vault.getAddress();
       const sdgnrsAddr = await f.sdgnrs.getAddress();
       // The deploy seed is one window, not stake lanes: the constructor announces it with a
-      // single SeedWindowArmed (century 0, days 1-20, 200k per day) and emits no
+      // single SeedWindowArmed (days 1-20, 200k per day) and emits no
       // CoinflipStakeUpdated for either recipient.
       const armed = await f.coinflip.queryFilter(f.coinflip.filters.SeedWindowArmed());
       expect(armed.length).to.equal(1);
-      expect(armed[0].args.century).to.equal(0n);
       expect(armed[0].args.firstDay).to.equal(1n);
       expect(armed[0].args.dayCount).to.equal(20n);
       expect(armed[0].args.amountPerDay).to.equal(seed);

@@ -9,14 +9,13 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 /// @title CoinflipSeedWindowGas — cost of the VAULT / sDGNRS seed program
 /// @notice Every measured call is the first protocol call of its test, so it starts on a cold
 ///         EIP-2929 access list with setUp's writes committed. Figures are logged; the ceilings
-///         pin the seed window's single-word arm and the walk reading the seed instead of a lane.
+///         pin the walks reading the seed instead of a lane.
 ///         The outer self-call keeps the measured protocol call nested under --isolate, so
 ///         lastCallGas reports execution gas without adding transaction intrinsic gas.
 contract CoinflipSeedWindowGas is DeployProtocol {
     address internal constant GAME = ContractAddresses.GAME;
     address internal constant VAULT = ContractAddresses.VAULT;
 
-    uint256 internal constant ARM_GAS_CEIL = 15_000;
     uint256 internal constant VAULT_WALK_GAS_CEIL = 180_000;
     uint256 internal constant SEEDED_DAY_RESOLVE_GAS_CEIL = 43_000;
 
@@ -47,14 +46,6 @@ contract CoinflipSeedWindowGas is DeployProtocol {
         (bool ok, bytes memory result) = address(coinflip).call(data);
         used = vm.lastCallGas().gasTotalUsed;
         if (!ok) assembly ("memory-safe") { revert(add(result, 32), mload(result)) }
-    }
-
-    /// @dev The x00 arm, cold, at a day past the deploy window.
-    function test_ArmCenturySeedCold() public {
-        _warpToDay(60);
-        uint256 used = this.measureSeedCall(GAME, abi.encodeCall(coinflip.armCenturySeed, (100)));
-        emit log_named_uint("armCenturySeed_cold_gas", used);
-        assertLt(used, ARM_GAS_CEIL, "arming a window is one packed-slot write");
     }
 
     /// @dev The vault's first claim: the walk crosses the 19 resolved deploy-window days.

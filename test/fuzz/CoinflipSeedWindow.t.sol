@@ -4,39 +4,16 @@ pragma solidity ^0.8.26;
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Coinflip} from "../../contracts/Coinflip.sol";
-import {CoinflipStakeSetter} from "../helpers/CoinflipStakeSetter.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
-/// @dev The stored-seed rule, as a reference: writes the active window's seed into both
-///      recipients' stake lanes (stake = lane + SEED_FLIP_DAILY on every window day) and parks the
-///      window start where no reachable day falls inside it, so the production walk then reads
-///      the seed from the lanes alone. Etched over the protocol's Coinflip for one call.
-contract StoredSeedReference is CoinflipStakeSetter {
-    function materializeSeedWindow() external {
-        uint24 start = seedWindowStart;
-        for (uint24 i; i < 20; ++i) {
-            uint24 d = start + i;
-            _setFlipStake(d, 1, _flipStake(d, 1) + 200_000);
-            _setFlipStake(d, 2, _flipStake(d, 2) + 200_000);
-        }
-        seedWindowStart = type(uint24).max;
-    }
-}
-
-/// @title CoinflipSeedWindow — the VAULT / sDGNRS seed program as one stored window start
-/// @notice The seed is never written to a stake lane: Coinflip keeps the active window's first
-///         day and the walks add SEED_FLIP_DAILY to a recipient's stake on each window day.
-///         - REF-01 differential: every observable of VAULT and sDGNRS (settled claimable, carry,
-///           cursor, auto-rebuy state, minted FLIP, WWXRP loss prizes, the vault's BAF bracket
-///           credit, previews, salvage and redemption backing) matches the stored-seed rule, run
-///           side by side over wins, losses, credits on seeded days, partial claims, the vault on
-///           and off auto-rebuy, two century windows and claim-window expiry.
+/// @title CoinflipSeedWindow — the VAULT / sDGNRS deploy seed as a fixed day window
+/// @notice The seed is never written to a stake lane: the walks add SEED_FLIP_DAILY to a
+///         recipient's stake on each of days 1..20 and on no other day.
 ///         - REF-02 arithmetic: a vault claim and sDGNRS's settled backing equal the payout sum
 ///           computed by hand from stake = lane + seed.
 ///         - VIEW-01/02 coinflipAmount and the preview walk carry the seed for the recipients on
-///           window days only.
-///         - ARM-01/02 arming writes only the window word, keeps the seeds off the BAF draw and
-///           the flip record; the deploy window covers days 1..20 with no lane written.
+///           window days only; no later day, including past x00 levels, is seeded.
+///         - ARM-01 the deploy window covers days 1..20 with no lane written and is announced once.
 contract CoinflipSeedWindowTest is DeployProtocol {
     address internal constant GAME = ContractAddresses.GAME;
     address internal constant COIN = ContractAddresses.COIN;
@@ -45,16 +22,10 @@ contract CoinflipSeedWindowTest is DeployProtocol {
 
     uint256 internal constant SEED = 200_000;
     uint24 internal constant SEED_DAYS = 20;
-    uint256 internal constant FIELDS = 19;
     bytes32 internal constant STAKE_SIG = keccak256("CoinflipStakeUpdated(uint32,uint24,uint256,uint256)");
-    bytes32 internal constant ARMED_SIG = keccak256("SeedWindowArmed(uint24,uint24,uint24,uint256)");
+    bytes32 internal constant ARMED_SIG = keccak256("SeedWindowArmed(uint24,uint24,uint256)");
 
     address internal stranger;
-
-    struct Trace {
-        uint256[] v;
-        uint256 n;
-    }
 
     function setUp() public {
         _deployProtocol();
@@ -74,20 +45,6 @@ contract CoinflipSeedWindowTest is DeployProtocol {
         word = win ? word | 1 : word & ~uint256(1);
         vm.prank(GAME);
         coinflip.processCoinflipPayouts(0, word, d);
-    }
-
-    /// @dev Production arm; the reference path then moves the window's seed into the lanes.
-    function _arm(uint24 lvl, bool stored) internal {
-        vm.prank(GAME);
-        coinflip.armCenturySeed(lvl);
-        if (stored) _materialize();
-    }
-
-    function _materialize() internal {
-        bytes memory code = address(coinflip).code;
-        vm.etch(address(coinflip), type(StoredSeedReference).runtimeCode);
-        StoredSeedReference(address(coinflip)).materializeSeedWindow();
-        vm.etch(address(coinflip), code);
     }
 
     function _creditVault(uint256 amount) internal {
@@ -119,10 +76,6 @@ contract CoinflipSeedWindowTest is DeployProtocol {
         return uint256(vm.load(address(coinflip), bytes32(uint256(4))));
     }
 
-    function _windowStart() internal view returns (uint24) {
-        return uint24(_slot4() >> 200);
-    }
-
     /// @dev The vault's raw BAF word for bracket 10 (level 0 records to bracket 10).
     function _bafWord(address p) internal view returns (uint256) {
         bytes32 inner = keccak256(abi.encode(uint256(10), uint256(0)));
@@ -144,183 +97,6 @@ contract CoinflipSeedWindowTest is DeployProtocol {
     function _payout(uint256 stake, uint24 day) internal view returns (uint256) {
         (uint16 r,) = coinflip.getCoinflipDayResult(day);
         return stake + (stake * uint256(r)) / 100;
-    }
-
-    /// @dev Every VAULT / sDGNRS observable the two seed representations must agree on.
-    function _observe(Trace memory t) internal view {
-        uint256 n = t.n;
-        uint256[] memory v = t.v;
-        v[n++] = coinflip.coinflipAmount(VAULT);
-        v[n++] = coinflip.coinflipAmount(SDGNRS);
-        v[n++] = coinflip.previewClaimCoinflips(VAULT);
-        v[n++] = coinflip.previewClaimCoinflips(SDGNRS);
-        v[n++] = coinflip.previewFlipBacking(VAULT);
-        v[n++] = coinflip.previewFlipBacking(SDGNRS);
-        v[n++] = uint256(vm.load(address(coinflip), _stateSlot(VAULT)));
-        v[n++] = uint256(vm.load(address(coinflip), bytes32(uint256(_stateSlot(VAULT)) + 1)));
-        v[n++] = uint256(vm.load(address(coinflip), _stateSlot(SDGNRS)));
-        v[n++] = uint256(vm.load(address(coinflip), bytes32(uint256(_stateSlot(SDGNRS)) + 1)));
-        v[n++] = coin.vaultMintAllowance();
-        v[n++] = coin.totalSupply();
-        v[n++] = wwxrp.claimable(game.walletIdOf(VAULT));
-        v[n++] = wwxrp.claimable(game.walletIdOf(SDGNRS));
-        v[n++] = _bafWord(VAULT);
-        v[n++] = (_slot4() >> 24) & 0xFF; // sdgnrsAutoRebuyArmed
-        v[n++] = _slot4() & 0xFFFFFF; // flipsClaimableDay
-        v[n++] = (_slot4() >> 152) & 0xFFFFFF; // lastSeededCentury
-        v[n++] = coin.balanceOf(stranger);
-        t.n = n;
-    }
-
-    function _newTrace() internal pure returns (Trace memory t) {
-        t.v = new uint256[](FIELDS * 400);
-    }
-
-    function _assertSameTrace(Trace memory a, Trace memory b) internal pure {
-        assertEq(a.n, b.n, "both runs observe the same number of steps");
-        for (uint256 i; i < a.n; ++i) {
-            if (a.v[i] != b.v[i]) {
-                revert(
-                    string.concat(
-                        "seed representations diverge at step ",
-                        vm.toString(i / FIELDS),
-                        " field ",
-                        vm.toString(i % FIELDS),
-                        ": window ",
-                        vm.toString(a.v[i]),
-                        " stored ",
-                        vm.toString(b.v[i])
-                    )
-                );
-            }
-        }
-    }
-
-    // =====================================================================
-    //                    REF-01 — differential reference
-    // =====================================================================
-
-    /// @dev Runs `scenario` once on production (the window) and once with the seed stored in the
-    ///      lanes, from the same snapshot, and compares every observation.
-    function _differential(uint256 bits, uint8 scenario) internal returns (Trace memory window) {
-        uint256 snap = vm.snapshotState();
-        window = _run(bits, scenario, false);
-        vm.revertToState(snap);
-        Trace memory stored = _run(bits, scenario, true);
-        _assertSameTrace(window, stored);
-    }
-
-    function _run(uint256 bits, uint8 scenario, bool stored) internal returns (Trace memory t) {
-        t = _newTrace();
-        if (stored) _materialize();
-        _observe(t);
-        if (scenario == 0) _windowsAndRebuy(t, bits, stored);
-        else _lateVaultAndExpiry(t, bits, stored);
-    }
-
-    /// @dev Deploy window with credits on seeded days and partial vault claims; a century window
-    ///      the vault rides on auto-rebuy (carry claims, a take-profit change, the exit walk
-    ///      inside the window); a second century window on default terms; sDGNRS redemption and
-    ///      salvage reads throughout.
-    function _windowsAndRebuy(Trace memory t, uint256 bits, bool stored) internal {
-        for (uint24 d = 1; d <= 95; ++d) {
-            _warpToDay(d);
-            uint256 r = uint256(keccak256(abi.encode(bits, d)));
-            // Credits stake tomorrow, a seeded day for most of the run.
-            if (r & 2 != 0) _creditVault(1_000 + ((r >> 8) % 90_000));
-            if (r & 4 != 0) _creditSdgnrs(500 + ((r >> 72) % 40_000));
-            _resolve(d, r & 1 != 0);
-
-            if (d % 4 == 0 && d < 40) _vaultClaim((r >> 136) % 400_000);
-            if (d == 10 || d == 62 || d == 75) {
-                // Anyone may settle the vault; day 62 passes the first century window before
-                // the second arms.
-                vm.prank(stranger);
-                coinflip.depositCoinflip(1, 0);
-            }
-            if (d == 13 || d == 47 || d == 82) {
-                vm.prank(SDGNRS);
-                uint256 backing = coinflip.redeemableFlipBacking();
-                vm.prank(SDGNRS);
-                coinflip.withdrawRedeemedFlip(backing / 4);
-            }
-            if (d == 17 || d == 52) {
-                uint256 salvage = coinflip.previewFlipBacking(VAULT);
-                vm.prank(COIN);
-                coinflip.consumeFlipBacking(VAULT, salvage / 3);
-            }
-            if (d == 40) {
-                vm.prank(VAULT);
-                coinflip.setCoinflipAutoRebuy(0, true, 150_000 + ((r >> 200) % 300_000));
-                // The century arm rides the day's transition close; a credit already sits on day 41.
-                _arm(100, stored);
-            }
-            if (d == 44 || d == 49) {
-                vm.prank(VAULT);
-                coinflip.claimCoinflipCarry(0, (r >> 140) % 250_000);
-            }
-            if (d == 46) {
-                vm.prank(VAULT);
-                coinflip.setCoinflipAutoRebuyTakeProfit(0, 0);
-            }
-            if (d == 56) {
-                // Leaves auto-rebuy mid-window: the exit walk crosses window days.
-                vm.prank(VAULT);
-                coinflip.setCoinflipAutoRebuy(0, false, 0);
-            }
-            if (d == 70) _arm(200, stored);
-            if (d == 93) _vaultClaim(type(uint256).max);
-            _observe(t);
-        }
-    }
-
-    /// @dev The vault's first claim lands after the 730-day claim window has expired part of
-    ///      the deploy window; sDGNRS settles every resolved day. A century window follows and
-    ///      the vault claims it only once it has ended.
-    function _lateVaultAndExpiry(Trace memory t, uint256 bits, bool stored) internal {
-        for (uint24 d = 1; d <= 5; ++d) {
-            _warpToDay(d);
-            uint256 r = uint256(keccak256(abi.encode(bits, d)));
-            if (r & 2 != 0) _creditVault(2_500);
-            _resolve(d, r & 1 != 0);
-            _observe(t);
-        }
-        // Days 6..740 resolve in recovery-sized runs at 100% reward.
-        for (uint24 start = 6; start < 741; start += 31) {
-            uint24 end = start + 31 > 741 ? 741 : start + 31;
-            _warpToDay(end - 1);
-            vm.prank(GAME);
-            coinflip.processCoinflipGap(uint256(keccak256(abi.encode(bits, "gap", start))), start, end);
-            _observe(t);
-        }
-        _warpToDay(740);
-        _vaultClaim(type(uint256).max);
-        _observe(t);
-        _arm(150, stored);
-        _observe(t);
-        for (uint24 d = 741; d <= 765; ++d) {
-            _warpToDay(d);
-            uint256 r = uint256(keccak256(abi.encode(bits, d)));
-            if (r & 2 != 0) _creditVault(7_000);
-            if (r & 4 != 0) _creditSdgnrs(3_000);
-            _resolve(d, r & 1 != 0);
-            _observe(t);
-        }
-        _vaultClaim(type(uint256).max);
-        _observe(t);
-    }
-
-    /// forge-config: default.fuzz.runs = 24
-    function testFuzz_WindowMatchesStoredSeedAcrossWindowsAndRebuy(uint256 bits) public {
-        Trace memory t = _differential(bits, 0);
-        assertGt(t.n, FIELDS * 90, "non-vacuous: the run observed every day");
-        assertGt(coin.vaultMintAllowance(), 0, "non-vacuous: the vault minted surviving seed");
-        assertGt(_bafWord(VAULT) & type(uint192).max, 0, "non-vacuous: the vault recorded BAF credit");
-    }
-
-    /// forge-config: default.fuzz.runs = 12
-    function testFuzz_WindowMatchesStoredSeedThroughExpiry(uint256 bits) public {
-        _differential(bits, 1);
     }
 
     // =====================================================================
@@ -404,16 +180,11 @@ contract CoinflipSeedWindowTest is DeployProtocol {
         assertEq(coinflip.coinflipAmount(VAULT), 1_234 + SEED, "seed joins the stored stake");
         assertEq(coinflip.coinflipAmount(alice), 1_234);
 
-        // Century window armed on wall day 60: days 61..80.
-        _warpToDay(60);
-        vm.prank(GAME);
-        coinflip.armCenturySeed(100);
-        for (uint24 w = 59; w <= 81; ++w) {
+        // Nothing seeds again on any later day.
+        for (uint24 w = 22; w <= 400; ++w) {
             _warpToDay(w);
-            uint256 expected = w + 1 >= 61 && w + 1 <= 80 ? SEED : 0;
-            assertEq(coinflip.coinflipAmount(VAULT), expected, "vault seed on century-window days");
-            assertEq(coinflip.coinflipAmount(SDGNRS), expected, "sDGNRS seed on century-window days");
-            assertEq(coinflip.coinflipAmount(alice), 0);
+            assertEq(coinflip.coinflipAmount(VAULT), 0, "vault carries no seed past the deploy window");
+            assertEq(coinflip.coinflipAmount(SDGNRS), 0, "sDGNRS carries no seed past the deploy window");
         }
     }
 
@@ -438,79 +209,24 @@ contract CoinflipSeedWindowTest is DeployProtocol {
         assertEq(coinflip.redeemableFlipBacking(), expected, "settlement equals the preview");
         assertEq(_vaultClaim(type(uint256).max), expected, "claim equals the preview");
 
-        // Century window 31..50 armed on wall day 30; days 21..55 all win at 100%.
+        // Days 21..55 all win at 100% and carry no seed.
         _warpToDay(30);
-        vm.prank(GAME);
-        coinflip.armCenturySeed(100);
         for (uint24 d = 21; d <= 55; ++d) {
             _setResult(d, 100);
         }
         _setFlipsClaimableDay(55);
         _warpToDay(55);
-        uint256 window = uint256(SEED_DAYS) * 2 * SEED;
-        assertEq(coinflip.previewClaimCoinflips(VAULT), window, "only days 31..50 carry the seed");
-        assertEq(coinflip.previewClaimCoinflips(SDGNRS), expected + window, "on top of its settled backing");
+        assertEq(coinflip.previewClaimCoinflips(VAULT), 0, "no seed after day 20");
+        assertEq(coinflip.previewClaimCoinflips(SDGNRS), expected, "sDGNRS adds nothing to its settled backing");
         assertEq(coinflip.previewClaimCoinflips(alice), 0);
-        assertEq(_vaultClaim(type(uint256).max), window);
+        assertEq(_vaultClaim(type(uint256).max), 0);
     }
 
     // =====================================================================
-    //                    ARM-01 / ARM-02 — the window itself
+    //                    ARM-01 — the deploy window
     // =====================================================================
-
-    function test_ArmWritesOnlyTheWindowWord() public {
-        _warpToDay(60);
-        vm.prank(GAME);
-        coinflip.armBafDraw(61);
-        uint256 lanesBefore;
-        for (uint24 d = 56; d <= 88; ++d) lanesBefore += _rawStake(d, VAULT) + _rawStake(d, SDGNRS);
-
-        vm.recordLogs();
-        vm.record();
-        vm.prank(GAME);
-        coinflip.armCenturySeed(100);
-        (, bytes32[] memory writes) = vm.accesses(address(coinflip));
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-
-        assertGt(writes.length, 0, "the arm writes");
-        for (uint256 i; i < writes.length; ++i) {
-            assertEq(writes[i], bytes32(uint256(4)), "only the packed window word is written");
-        }
-        uint256 armed;
-        for (uint256 i; i < logs.length; ++i) {
-            assertTrue(logs[i].topics[0] != STAKE_SIG, "no per-day stake event");
-            if (logs[i].topics[0] == ARMED_SIG) {
-                ++armed;
-                assertEq(uint256(logs[i].topics[1]), 1, "century 1");
-                assertEq(uint256(logs[i].topics[2]), 61, "first day = tomorrow");
-                (uint24 dayCount, uint256 perDay) = abi.decode(logs[i].data, (uint24, uint256));
-                assertEq(dayCount, SEED_DAYS);
-                assertEq(perDay, SEED);
-            }
-        }
-        assertEq(armed, 1, "one SeedWindowArmed");
-        assertEq(_windowStart(), 61, "window start stored");
-        assertEq((_slot4() >> 152) & 0xFFFFFF, 1, "century counter advanced");
-
-        uint256 lanesAfter;
-        for (uint24 d = 56; d <= 88; ++d) lanesAfter += _rawStake(d, VAULT) + _rawStake(d, SDGNRS);
-        assertEq(lanesAfter, lanesBefore, "no stake lane moved");
-        (uint24 drawDay,, uint32 entries) = coinflip.bafDrawInfo();
-        assertEq(drawDay, 61);
-        assertEq(entries, 0, "seeds never enter the BAF weighted draw");
-        assertEq(coinflip.biggestFlipEver(), 0, "seeds never touch the flip record");
-
-        // A repeat inside the century changes nothing and announces nothing.
-        uint256 word = _slot4();
-        vm.recordLogs();
-        vm.prank(GAME);
-        coinflip.armCenturySeed(150);
-        assertEq(_slot4(), word, "a repeat arm is a silent no-op");
-        assertEq(vm.getRecordedLogs().length, 0, "and emits nothing");
-    }
 
     function test_DeployOpensWindowOneThroughTwentyWithoutLaneWrites() public {
-        assertEq(_windowStart(), 1, "the protocol's window starts at day 1");
         for (uint24 d; d <= 24; ++d) {
             assertEq(_rawStake(d, VAULT), 0, "no vault lane written at deploy");
             assertEq(_rawStake(d, SDGNRS), 0, "no sDGNRS lane written at deploy");
@@ -525,8 +241,7 @@ contract CoinflipSeedWindowTest is DeployProtocol {
             assertTrue(logs[i].topics[0] != STAKE_SIG, "deploy emits no stake event");
             if (logs[i].topics[0] == ARMED_SIG) {
                 ++armed;
-                assertEq(uint256(logs[i].topics[1]), 0, "century 0");
-                assertEq(uint256(logs[i].topics[2]), 1, "first day 1");
+                assertEq(uint256(logs[i].topics[1]), 1, "first day 1");
                 (uint24 dayCount, uint256 perDay) = abi.decode(logs[i].data, (uint24, uint256));
                 assertEq(dayCount, SEED_DAYS);
                 assertEq(perDay, SEED);

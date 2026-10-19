@@ -18,8 +18,8 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///           STAGE_JACKPOT_PHASE_ENDED (9) — the coin+tickets leg + _endPhase, at its ticket-board
 ///             winner cap (96 doubled to 192 at 40 ETH of value, 5b25fded0) and no battle work of
 ///             its own, then
-///           STAGE_TRANSITION_DONE (3)     — the checkpoint that reopens the purchase phase and
-///             hosts `coinflip.armCenturySeed`, a separately admitted stage after the phase end.
+///           STAGE_TRANSITION_DONE (3)     — the checkpoint that reopens the purchase phase, a
+///             separately admitted stage after the phase end.
 ///         The engine composes admitted checkpoints into a call, so the stages are read from the
 ///         ordered log stream; every call takes a realistic allowance and must succeed. No
 ///         whole-call ceiling is asserted (owner rule): the largest call is logged.
@@ -150,7 +150,7 @@ abstract contract BoundaryGasFixture is AdvanceStageStream {
     bytes32 internal constant BATTLE_ENTRY_SIG =
         keccak256("JackpotBattleEntry(uint64,uint256,uint32,uint256,uint32)");
     bytes32 internal constant SEED_ARMED_SIG =
-        keccak256("SeedWindowArmed(uint24,uint24,uint24,uint256)");
+        keccak256("SeedWindowArmed(uint24,uint24,uint256)");
     bytes32 internal constant ADVANCE_SIG = keccak256("Advance(uint8,uint24)");
 
     uint8 internal constant STAGE_JACKPOT_PHASE_ENDED = 9;
@@ -163,8 +163,7 @@ abstract contract BoundaryGasFixture is AdvanceStageStream {
     uint24 internal constant LVL = 100;
     uint256 internal wwxrpBefore;
 
-    /// @dev Day 400 puts the seed window's 20 target lanes far past the deploy program, so every
-    ///      slot the century arm writes is virgin — the cold, worst-case shape.
+    /// @dev Day 400 sits far past the deploy seed window.
     function _warpToDay(uint24 targetDay, uint256 intoDay) internal {
         vm.warp(
             (uint256(targetDay - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) *
@@ -267,18 +266,17 @@ contract Lvl100PhaseEndAdvanceGas is BoundaryGasFixture {
         assertEq(lastStage, STAGE_JACKPOT_PHASE_ENDED, "the phase-end stage ran");
         assertEq(ticketWins, TICKET_LEG_WINNERS, "the main-board ticket leg paid the full 192-winner cap");
         assertEq(battleEntries, 0, "the phase-end coin+tickets stage runs no battle work");
-        // The century arm rides the transition close, not the phase-end stage.
-        assertFalse(seedArmed, "the century arm does NOT ride the phase-end stage");
+        assertFalse(seedArmed, "the phase-end stage announces no seed window");
         // The transition close is its own later stage (it may share a call with the phase end
         // when the allowance admits both checkpoints).
         (uint256 closeUsed,,, bool closeArmed) = _measure();
         emit log_named_uint("LVL100_TRANSITION_CLOSE_STAGE_GAS", closeUsed);
         assertEq(lastStage, STAGE_TRANSITION_DONE, "the close runs from its own stage after the phase end");
-        assertTrue(closeArmed, "the century arm rides the transition close");
+        assertFalse(closeArmed, "the transition close announces no seed window");
     }
 }
 
-/// @notice STAGE_TRANSITION_DONE — the tx that reopens the purchase phase and arms the century seed.
+/// @notice STAGE_TRANSITION_DONE — the tx that reopens the purchase phase.
 contract Lvl100TransitionDoneGas is BoundaryGasFixture {
     function setUp() public {
         _deployProtocol();
@@ -296,7 +294,7 @@ contract Lvl100TransitionDoneGas is BoundaryGasFixture {
         TQ.retireCompleted(address(game), LVL);
     }
 
-    function test_TransitionDoneAdvance_WithCenturyArm() public {
+    function test_TransitionDoneAdvance() public {
         // One call at a realistic 10M allowance must close the transition: the close is one
         // admitted checkpoint (TRANSITION_CLOSE).
         vm.recordLogs();
@@ -314,10 +312,10 @@ contract Lvl100TransitionDoneGas is BoundaryGasFixture {
             wwxrp.totalSupply() - wwxrpBefore
         );
 
-        // Non-vacuity: the purchase phase reopened AND the century window armed, in this one tx.
+        // Non-vacuity: the purchase phase reopened in this one tx, with no seed window opened.
         (, bool jackpotPhase_, , , ) = game.purchaseInfo();
         assertFalse(jackpotPhase_, "the transition completed and the purchase phase reopened");
-        assertTrue(seedArmed, "the century seed window armed on the transition close");
-        assertEq(wwxrp.totalSupply(), wwxrpBefore, "century arming no longer mints WWXRP");
+        assertFalse(seedArmed, "the x00 transition opens no seed window");
+        assertEq(wwxrp.totalSupply(), wwxrpBefore, "the x00 transition mints no WWXRP");
     }
 }

@@ -57,8 +57,7 @@ contract FlipEmissionSeeds is DeployProtocol {
     // =====================================================================
 
     function test_SeedStakesPlacedForDays1Through20_NothingMinted() public {
-        // The window start (Coinflip slot 4, byte 25) is day 1; no stake lane is written.
-        assertEq(uint24(uint256(vm.load(address(coinflip), bytes32(uint256(4)))) >> 200), 1, "window opens on day 1");
+        // The window is days 1..20 by construction; no stake lane is written.
         for (uint24 d = 1; d <= SEED_DAYS + 1; ++d) {
             assertEq(_stakeOf(d, VAULT), 0, "no vault lane written");
             assertEq(_stakeOf(d, SDGNRS), 0, "no sdgnrs lane written");

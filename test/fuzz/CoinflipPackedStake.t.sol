@@ -364,33 +364,28 @@ contract CoinflipPackedStake is DeployProtocol {
         assertEq(coinflip.coinflipAmount(SDGNRS), SEED);
     }
 
-    function test_CenturySeedRidesOnTopOfTheLaneWithoutWritingIt() public {
-        _warpToDay(40);
+    function test_SeedRidesOnTopOfTheLaneWithoutWritingIt() public {
         uint24 first = _targetDay();
-        // sDGNRS already holds a stake on the window's first day.
+        assertLe(first, 20, "non-vacuous: the target day is inside the deploy window");
+        // sDGNRS already holds a stake on a window day.
         _credit(SDGNRS, 5_000);
-        vm.recordLogs();
-        vm.prank(GAME);
-        coinflip.armCenturySeed(100);
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        for (uint256 i; i < logs.length; ++i) {
-            assertTrue(logs[i].topics[0] != STAKE_SIG, "arming emits no stake event");
-        }
         assertEq(_rawStake(first, SDGNRS), 5_000, "the lane keeps its stored stake only");
-        for (uint24 i; i < 20; ++i) {
-            assertEq(_rawStake(first + i, VAULT), 0, "no vault lane written");
-        }
+        assertEq(_rawStake(first, VAULT), 0, "no vault lane written");
         assertEq(coinflip.coinflipAmount(SDGNRS), 5_000 + SEED, "the seed adds to the lane");
         assertEq(coinflip.coinflipAmount(VAULT), SEED);
 
-        // A lane at the cap never stalls the arm: arming writes no lane, and the seed rides on top
-        // of the clamped lane.
+        // A lane at the cap clamps; the seed rides on top of the clamped lane.
         _credit(SDGNRS, type(uint128).max);
         assertEq(_rawStake(first, SDGNRS), CAP);
-        vm.prank(GAME);
-        coinflip.armCenturySeed(200);
-        assertEq(_rawStake(first, SDGNRS), CAP, "the stored lane stays at its cap, nothing spilled");
         assertEq(coinflip.coinflipAmount(SDGNRS), CAP + SEED, "the seed is held outside the lane");
+    }
+
+    function test_NoSeedOutsideTheDeployWindow() public {
+        _warpToDay(40);
+        assertGt(_targetDay(), 20);
+        _credit(SDGNRS, 5_000);
+        assertEq(coinflip.coinflipAmount(SDGNRS), 5_000, "no seed past day 20");
+        assertEq(coinflip.coinflipAmount(VAULT), 0);
     }
 
     function test_SdgnrsBackingMatchesTheWholeTransfer() public {

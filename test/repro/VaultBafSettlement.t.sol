@@ -207,10 +207,9 @@ abstract contract VaultBafRig is DeployProtocol {
     }
 
     /// @dev The vault's seed stake for `day` in whole FLIP. Coinflip adds it on read for a seed
-    ///      recipient (window start: slot 4, byte 25), so a mirrored claimer stores it in its lane.
-    function _seedUnits(uint24 day) internal view returns (uint256) {
-        uint256 start = (uint256(vm.load(address(coinflip), bytes32(uint256(4)))) >> 200) & 0xFFFFFF;
-        return start != 0 && day >= start && day < start + 20 ? 200_000 : 0;
+    ///      recipient on days 1..20, so a mirrored claimer stores it in its lane.
+    function _seedUnits(uint24 day) internal pure returns (uint256) {
+        return day >= 1 && day <= 20 ? 200_000 : 0;
     }
 
     function _addSeed(uint24 day) internal {

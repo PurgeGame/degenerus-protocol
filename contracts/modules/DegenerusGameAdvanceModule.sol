@@ -259,10 +259,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
             _unlockRng(day);
             purchaseStartDay = day;
             jackpotPhaseFlag = false;
-            if (lvl % 100 == 0) {
-                dgnrs.recycleCentury(lvl, word);
-                coinflip.armCenturySeed(lvl);
-            }
+            if (lvl % 100 == 0) dgnrs.recycleCentury(lvl, word);
             result.progressed = true;
             MineFlipGas.markProgress(meter);
             result.done = true;

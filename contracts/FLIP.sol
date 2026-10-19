@@ -37,8 +37,7 @@ pragma solidity 0.8.34;
  *      - Quest integration: Daily quest rolls, streak tracking, slot rewards
  *      - Vault escrow: virtual FLIP reserve, minted only on ContractAddresses.VAULT withdrawal
  *      - Emission: no direct seeds — Coinflip stakes 200k/day for 20 days each to VAULT
- *        and sDGNRS at deploy, and again over a 20-day window armed once per x00 level,
- *        so all FLIP survives a coinflip before minting
+ *        and sDGNRS at deploy, so all FLIP survives a coinflip before minting
  *
  * @dev CRITICAL INVARIANTS:
  *      - totalSupply + vaultAllowance = supplyIncUncirculated

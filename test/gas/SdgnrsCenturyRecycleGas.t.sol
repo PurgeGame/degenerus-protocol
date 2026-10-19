@@ -65,8 +65,7 @@ abstract contract SdgnrsRecycleGasFixture is BoundaryGasFixture {
         TQ.retireCompleted(address(game), LVL);
     }
 
-    /// @dev Per-chunk: the century close (transition close + refill + 20-day seed + 32 deity
-    ///      grants) is one daily-phase checkpoint; cold, in isolation, it stays inside the 10M
+    /// @dev Per-chunk: the century close (transition close + refill + 32 deity grants) is one daily-phase checkpoint; cold, in isolation, it stays inside the 10M
     ///      realistic chunk limit. Its declared admission bound is logged beside the measurement.
     function _checkColdCloseChunk() internal {
         bytes memory realCode = address(game).code;
@@ -147,7 +146,7 @@ abstract contract SdgnrsRecycleGasFixture is BoundaryGasFixture {
         uint256 beforeGas = gasleft();
         game.mineFlip{gas: 10_000_000}(0);
         uint256 used = beforeGas - gasleft() + 21_192;
-        emit log_named_uint("century refill + seed + 32 deity grants, cold gas including intrinsic", used);
+        emit log_named_uint("century refill + 32 deity grants, cold gas including intrinsic", used);
         bool recycled;
         bool seeded;
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -164,7 +163,7 @@ abstract contract SdgnrsRecycleGasFixture is BoundaryGasFixture {
             if (logs[i].topics[0] == SEED_ARMED_SIG) seeded = true;
         }
         assertTrue(recycled, "nonzero recycle executed in measured transaction");
-        assertTrue(seeded, "20-day century seed executed in same transaction");
+        assertFalse(seeded, "no century seed at the close");
         assertEq(sdgnrs.totalSupply(), expectedSupply);
         assertEq(sdgnrs.centurySupplyCheckpoint(), expectedSupply);
         assertEq(sdgnrs.lastRecycledCentury(), 1);
