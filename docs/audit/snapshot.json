@@ -1,8 +1,8 @@
 {
   "date": "2026-10-19",
   "status": "working-tree source identity; verification status is recorded separately",
-  "base_commit": "d38800f1b5e75071671dfa275d20a852b82b6796",
-  "source_file_count": 85,
+  "base_commit": "08d37087767c66cbdfc984068ddcc01be46d9eb0",
+  "source_file_count": 87,
   "source_files": [
     "contracts/AFKingSubscriptionToken.sol",
     "contracts/Coinflip.sol",
@@ -44,6 +44,7 @@
     "contracts/interfaces/IStETH.sol",
     "contracts/interfaces/IVRFCoordinator.sol",
     "contracts/interfaces/IVaultCoin.sol",
+    "contracts/interfaces/IVaultPlayerActions.sol",
     "contracts/interfaces/IsDGNRS.sol",
     "contracts/libraries/ActivityCurveLib.sol",
     "contracts/libraries/BitPackingLib.sol",
@@ -64,6 +65,7 @@
     "contracts/libraries/PriceLookupLib.sol",
     "contracts/libraries/SigFigLib.sol",
     "contracts/libraries/TicketEntropy.sol",
+    "contracts/libraries/VaultPlayerActions.sol",
     "contracts/libraries/WalletTableLib.sol",
     "contracts/modules/DegenerusGameAdvanceModule.sol",
     "contracts/modules/DegenerusGameBingoModule.sol",
