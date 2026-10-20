@@ -454,7 +454,7 @@ describe("AffiliateHardening", function () {
         expect(await affiliate.totalAffiliateScore(2)).to.equal(beforeL2);
       });
 
-      it("accrues at successive levels and retires exact history beyond the two live lanes", async function () {
+      it("accrues at successive levels and retires history beyond the live lanes and level ring", async function () {
         const { affiliate, game, coin, alice, bob, aliceCode } =
           await loadFixture(deployWithAffiliateSetup);
 
@@ -466,10 +466,13 @@ describe("AffiliateHardening", function () {
           );
         }
 
+        // Level totals live in a four-bank ring tagged with the exact level: level 5 reuses
+        // level 1's bank, so level 1 reads empty while level 2 keeps its total.
         for (const lvl of [1, 2, 5]) {
           const score = await affiliate.affiliateScore(lvl, await game.walletIdOf(alice.address));
           expect(score).to.equal(lvl == 5 ? computeScaledAmount(flip(4000000), BigInt(lvl), true) : 0n);
-          expect(await affiliate.totalAffiliateScore(lvl)).to.equal(computeScaledAmount(flip(4000000), BigInt(lvl), true));
+          expect(await affiliate.totalAffiliateScore(lvl)).to.equal(
+            lvl == 1 ? 0n : computeScaledAmount(flip(4000000), BigInt(lvl), true));
         }
       });
     });

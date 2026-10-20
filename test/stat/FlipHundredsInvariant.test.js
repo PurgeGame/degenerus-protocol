@@ -10,7 +10,6 @@ import path from "node:path";
 
 const SRC = (rel) => path.resolve(process.cwd(), rel);
 const JACKPOT = SRC("contracts/modules/DegenerusGameJackpotDrawModule.sol");
-const JACKPOT_CORE = SRC("contracts/modules/DegenerusGameJackpotModule.sol");
 const LOOTBOX = SRC("contracts/modules/DegenerusGameLootboxModule.sol");
 const DEGENESIS = SRC("contracts/modules/DegenerusGameDegenesisModule.sol");
 const DEGENERETTE = SRC("contracts/modules/DegenerusGameDegeneretteModule.sol");
@@ -116,8 +115,8 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
 
 
   describe("§3b big-leg truncate carries no RNG", function () {
-    it("[02a] site 3 `_payGoldenTicket` truncates `flipCredit` to a whole unit", function () {
-      const body = bodyOf(JACKPOT_CORE, "function _payGoldenTicket(");
+    it("[02a] site 3 `payGoldenTicket` truncates `flipCredit` to a whole unit", function () {
+      const body = bodyOf(JACKPOT, "function payGoldenTicket(");
       expect(
         /flipCredit\s*=\s*\(\s*flipCredit\s*\/\s*FlipRoundLib\.FLIP_ROUND_UNIT\s*\)\s*\*\s*FlipRoundLib\.FLIP_ROUND_UNIT\s*;/.test(
           body

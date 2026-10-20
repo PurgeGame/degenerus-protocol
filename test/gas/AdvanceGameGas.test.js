@@ -407,7 +407,12 @@ describe("AdvanceGame Gas Benchmarks", function () {
       const eventsL = await getAdvanceEvents(txL, advanceModule);
       recordGas(`Game Over Loan Settlement (stage=${eventsL.length > 0 ? eventsL[0].args.stage : "?"})`, receiptL);
 
-      // Step 1c: mineFlip -> VRF request (realistic allowance; terminal work is checkpointed)
+      // Step 1c: mineFlip -> arm the terminal request (swap latch, request day and clock)
+      const { tx: txA, receipt: receiptA } = await mine(game, deployer);
+      const eventsA = await getAdvanceEvents(txA, advanceModule);
+      recordGas(`Game Over Request Arming (stage=${eventsA.length > 0 ? eventsA[0].args.stage : "?"})`, receiptA);
+
+      // Step 1d: mineFlip -> VRF request (realistic allowance; terminal work is checkpointed)
       const { tx: tx1, receipt: receipt1 } = await mine(game, deployer);
       const events1 = await getAdvanceEvents(tx1, advanceModule);
       const stage1 = events1.length > 0 ? events1[0].args.stage : "?";

@@ -475,6 +475,12 @@ contract DecimatorJackpotIntegrationTest is Test {
         assertEq(funding + cash + passCost + unpaid, budget, "complete daily ETH conservation");
     }
 
+    /// @dev The table's saved board (mapping root 14), decoded as the lens decodes it.
+    function _savedBoard(uint32 walletId) private view returns (uint32 chips) {
+        (chips,) = CrapsPreferenceLib.decode(uint256(vm.load(ContractAddresses.CRAPS,
+            keccak256(abi.encode(uint256(walletId), uint256(14))))));
+    }
+
     function test_RealPreferredBoardCannotChangeWhileGeneratedWorkIsPending() public {
         vm.etch(ContractAddresses.CRAPS, type(CrapsBattle).runtimeCode);
         CrapsBattle c = CrapsBattle(ContractAddresses.CRAPS);
@@ -487,12 +493,12 @@ contract DecimatorJackpotIntegrationTest is Test {
         vm.prank(address(0xa100));
         vm.expectRevert(bytes4(keccak256("BetLocked()")));
         c.setPreferredBoard(0, 2);
-        assertEq(c.preferredBoardOf(h.walletIdOf(address(0xa100))), 3);
+        assertEq(_savedBoard(h.walletIdOf(address(0xa100))), 3);
         _daily(WORD, 3_000_000);
         _settle(1_000_000);
         vm.prank(address(0xa100));
         c.setPreferredBoard(0, 2);
-        assertEq(c.preferredBoardOf(h.walletIdOf(address(0xa100))), 2);
+        assertEq(_savedBoard(h.walletIdOf(address(0xa100))), 2);
     }
 
     function test_OneOriginalGetsFinalCapacityOnlyAfterGeneratedPlan() public {
