@@ -291,7 +291,9 @@ contract MineFlipRequestGasTest is DeployProtocol {
             (uint128 tokens, uint96 payout,, uint96 flipEscrow,,) = sdgnrs.redemptionBatches(1);
             assertEq(tokens, burned);
             assertGt(flipEscrow, 0, "coinflip backing withdrawn");
-            assertEq(address(sdgnrs).balance + mockStETH.balanceOf(address(sdgnrs)), payout, "whole reserve funded");
+            // ETH custody plus the Game-held reserve fund the whole maximum; stETH never moves at close.
+            assertEq(address(sdgnrs).balance + game.redemptionReserve(), payout, "whole reserve funded");
+            assertEq(mockStETH.balanceOf(address(sdgnrs)), 0, "close moves no stETH");
             // Plus the 1-wei registration sentinel, which the redemption pull never takes.
             assertEq(game.claimableWinningsOf(address(sdgnrs)), 10_000 ether + 1 - payout, "claimable debited");
             uint256 state = uint256(vm.load(address(coinflip), keccak256(abi.encode(uint32(2), uint256(2)))));

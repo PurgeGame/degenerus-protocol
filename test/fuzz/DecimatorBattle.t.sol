@@ -290,14 +290,16 @@ contract DecimatorBattleTest is Test {
         assertEq(h.reserved(), 3 ether);
     }
 
-    function test_RoundsCannotOverlapAndHistoricalEntriesRemain() public {
+    /// @dev Windows open only at level transitions, which wait for the queue to drain, so one
+    ///      round owns the entry bank at a time. A seal that still meets a queued round hands its
+    ///      pool back; the next window then reuses the bank and the earlier round reads empty.
+    function test_RoundsCannotOverlapAndTheEntryBankIsReused() public {
         _probe();
         _populate(h, LVL, 4);
         h.seal(LVL, 3 ether, 11);
-        h.open(15);
-        _populate(h, 15, 3);
         // With the session's own word and the window shut, the only thing refusing this seal is
         // the round still queued: production hands the whole pool back and leaves it unsealed.
+        h.forceCount(15, 3);
         assertEq(h.sealRaw(15, 4 ether, h.activeWord()), 4 ether, "an overlapping seal returns the whole pool");
         assertEq(h.roundOf(15).phase, 0, "the overlapping round stays unsealed");
         assertEq(uint24(h.queue()), LVL);
@@ -306,11 +308,15 @@ contract DecimatorBattleTest is Test {
         assertEq(h.activeWord(), 11);
         _drain(h);
         assertEq(h.roundOf(LVL).phase, 3);
+        assertEq(h.entryOf(LVL, 1).stack, 2000, "a settled round keeps its entries until the next window");
+        h.forceCount(15, 0);
+        h.open(15);
+        _populate(h, 15, 3);
         h.seal(15, 4 ether, 22);
         _drain(h);
         assertEq(h.roundOf(15).phase, 3);
-        assertEq(h.entryOf(LVL, 1).stack, 2000);
         assertEq(h.entryOf(15, 1).stack, 2000);
+        assertEq(h.entryOf(LVL, 1).stack, 0, "the next window's bank retires the earlier round");
     }
 
     function test_BatchesHaveIdenticalRealDiceAndPayouts() public {
