@@ -126,8 +126,8 @@ library MineFlipGas {
         if (meter.bounded && gasleft() < meter.floor) revert WorkGasBound();
     }
 
-    /// @dev Metering failures must never be swallowed by a semantic fallback. The Game
-    ///      re-raises an empty module revert (a module call out of gas) as EmptyRevert().
+    /// @dev Only for delegatecalls into trusted protocol modules, never external calls.
+    ///      The Game re-raises an empty module revert as EmptyRevert().
     function rethrowGasFailure(bytes memory reason) internal pure {
         if (reason.length == 0) revert InsufficientExecutionGas();
         bytes4 selector;
