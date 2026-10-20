@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+
+import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
 import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {RecyclingState} from "../helpers/RecyclingState.sol";
@@ -145,7 +147,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         // not — leaves nothing for this proof to measure.
         uint16 goal = uint16(crapsBattle.MIN_BATTLE_GOAL_MULT());
         vm.prank(ContractAddresses.OWNER_GOVERNANCE);
-        uint64 slot = crapsBattle.createBattle(
+        uint64 slot = JackpotBattle(address(crapsBattle)).createBattle(
             600, 10, goal, 0, uint40(block.timestamp + 1), false
         , 0);
         vm.prank(PLAYER);
@@ -155,7 +157,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         assertEq(crapsBattle.betOf(betId).slot, slot, "the slip bound to the wrong slot");
 
         vm.warp(block.timestamp + 1);
-        uint48 index = crapsBattle.closeBattle(slot);
+        uint48 index = JackpotBattle(address(crapsBattle)).closeBattle(slot);
 
         uint256 paid;
         for (uint256 nonce = 1; nonce <= 64; ++nonce) {
@@ -193,7 +195,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
     function test_theVaultForwardsThePackedCrapsBoard() public {
         uint16 goal = uint16(crapsBattle.MIN_BATTLE_GOAL_MULT());
         vm.prank(ContractAddresses.OWNER_GOVERNANCE);
-        uint64 slot = crapsBattle.createBattle(
+        uint64 slot = JackpotBattle(address(crapsBattle)).createBattle(
             600, 1, goal, 0, uint40(block.timestamp + 1), false, 0
         );
 

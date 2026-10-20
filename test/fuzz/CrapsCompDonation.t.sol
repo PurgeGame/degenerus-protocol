@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+
+import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
 import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
@@ -25,7 +27,7 @@ contract CrapsCompDonationTest is DeployProtocol {
     function setUp() public {
         _deployProtocol();
         vm.prank(ContractAddresses.OWNER_GOVERNANCE);
-        slot = crapsBattle.createBattle(300, 4, 5, 2, uint40(block.timestamp + 1 hours), false, 0);
+        slot = JackpotBattle(address(crapsBattle)).createBattle(300, 4, 5, 2, uint40(block.timestamp + 1 hours), false, 0);
         index = slot - crapsBattle.CUSTOM_SLOT_BASE();
         vm.prank(ContractAddresses.GAME);
         coin.mintForGame(player, 2_000);
@@ -131,7 +133,7 @@ contract CrapsCompDonationTest is DeployProtocol {
         uint256 lane = coin.crapsCompAllowance();
         uint256 playerBalance = coin.balanceOf(player);
         vm.prank(player);
-        crapsBattle.donate(true, index, 1);
+        JackpotBattle(address(crapsBattle)).donate(true, index, 1);
         assertEq(coin.crapsCompAllowance(), lane);
         assertEq(coin.balanceOf(player), playerBalance - 100);
         assertEq(crapsBattle.battleOf(key).seed, 100);

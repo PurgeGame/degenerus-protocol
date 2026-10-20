@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {CrapsLensReader} from "../../contracts/CrapsLens.sol";
+
 import {JackpotTableHarness} from "./JackpotBattle.t.sol";
 import {CrapsPins} from "./CrapsPins.sol";
 import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
@@ -16,7 +18,7 @@ contract JackpotVariableHarness is JackpotTableHarness {
     function roundBase(uint64 slot) external pure returns (bytes32) {
         uint256 root;
         assembly ("memory-safe") { root := _jackpotRounds.slot }
-        return keccak256(abi.encode(uint256(slot), root));
+        return keccak256(abi.encode(uint256(slot & 511), root));
     }
 }
 
@@ -65,7 +67,7 @@ contract JackpotVariablePricingTest is CrapsPins {
         vm.prank(ContractAddresses.GAME);
         table.openBonusDay();
         table.clearDayBodies(day);
-        assertEq(cold.jackpotEntryPrice(), price);
+        assertEq(CrapsLensReader.jackpotEntryPrice(address(cold)), price);
     }
 
     function _lock(uint256 baseline) private {
@@ -76,7 +78,7 @@ contract JackpotVariablePricingTest is CrapsPins {
     }
 
     function _round() private view returns (CrapsBattleStorage.JackpotRound memory r) {
-        (r,,) = cold.jackpotBattleOf(slot);
+        (r,,) = CrapsLensReader.jackpotBattleOf(address(cold), slot);
     }
 
     function _start(uint256 word, uint32 chips) private {
@@ -152,7 +154,7 @@ contract JackpotVariablePricingTest is CrapsPins {
             assertEq(r.drawWord, 0);
             uint256 added = 50_000 * price / 8000;
             assertEq(r.added, added);
-            assertEq(cold.highRollerReserve(), added / 20);
+            assertEq(CrapsLensReader.highRollerReserve(address(cold)), added / 20);
             uint256 snap = vm.snapshotState();
             for (uint256 i; i < 16; ++i) {
                 if (i != 0) { assertTrue(vm.revertToState(snap)); snap = vm.snapshotState(); }
@@ -169,8 +171,8 @@ contract JackpotVariablePricingTest is CrapsPins {
                 assertEq(2 * table.jackpotTerms(slot).highExtra, high);
                 assertEq(r.awardTarget, 5);
                 assertEq(r.drawnCount, 5);
-                assertEq(cold.highRollerReserve(), added / 20);
-                assertEq(cold.jackpotEntryPriceOf(slot), price, "bounty must not replace fee quote");
+                assertEq(CrapsLensReader.highRollerReserve(address(cold)), added / 20);
+                assertEq(CrapsLensReader.jackpotEntryPriceOf(address(cold), slot), price, "bounty must not replace fee quote");
                 weightedMain += main * priceWeights[p] * subsidyWeights[i / 4] * multipleWeights[i % 4];
             }
         }
@@ -295,7 +297,7 @@ contract JackpotVariablePricingTest is CrapsPins {
         _open(10000, 100);
         vm.prank(ALICE); table.enterBonusBattle(5, 0, 100);
         _setDailyWord(day, 0);
-        assertEq(cold.jackpotEntryPriceOf(slot), 10000);
+        assertEq(CrapsLensReader.jackpotEntryPriceOf(address(cold), slot), 10000);
         _lock(150_000);
         CrapsBattleStorage.JackpotRound memory r = _round();
         assertEq(r.paidUnits, 100, "retired word must not erase frozen high multiple");
@@ -309,7 +311,7 @@ contract JackpotVariablePricingTest is CrapsPins {
         _start(123, 0);
         r = _round();
         assertEq(uint256(vm.load(address(table), base)), 123);
-        assertEq(uint208(uint256(vm.load(address(table), bytes32(uint256(base) + 3)))), 5);
+        assertEq(uint208(uint256(vm.load(address(table), bytes32(uint256(base) + 3)))), (uint256(1) << 207) | 5);
         uint256 terms = uint256(vm.load(address(table), bytes32(uint256(base) + 4)));
         assertEq(uint32(terms >> 192), r.subsidyMultiplierBps);
         assertEq(uint8(terms >> 224), 1, "started bit");
@@ -320,7 +322,7 @@ contract JackpotVariablePricingTest is CrapsPins {
         cold.lockJackpotBattle(day + 1, 999 ether, 99);
         vm.stopPrank();
         assertEq(keccak256(abi.encode(_round())), frozen);
-        assertEq(cold.jackpotEntryPriceOf(slot), 10000);
+        assertEq(CrapsLensReader.jackpotEntryPriceOf(address(cold), slot), 10000);
     }
 
     function testFuzz_TargetIsFixedAtLockFromUnscaledBaseline(uint96 raw, uint8 pick) public {
@@ -344,14 +346,19 @@ contract JackpotVariablePricingTest is CrapsPins {
         assertEq(_round().entryPrice, 8000);
         assertEq(_round().added, 50000);
         assertEq(_round().awardTarget, 5);
-        assertEq(cold.highRollerReserve(), 2500);
-        assertEq(cold.jackpotEntryPriceOf(slot), 8000);
+        assertEq(CrapsLensReader.highRollerReserve(address(cold)), 2500);
+        assertEq(CrapsLensReader.jackpotEntryPriceOf(address(cold), slot), 8000);
+    }
+
+    function readPrice(uint64 which, bool current) external view returns (uint256) {
+        return current ? CrapsLensReader.jackpotEntryPrice(address(cold))
+            : CrapsLensReader.jackpotEntryPriceOf(address(cold), which);
     }
 
     function test_UnopenedPriceIsNotAnActualEightThousandQuote() public {
-        vm.expectRevert(bytes4(keccak256("RngNotReady()"))); cold.jackpotEntryPrice();
-        vm.expectRevert(bytes4(keccak256("RngNotReady()"))); cold.jackpotEntryPriceOf(slot);
-        vm.expectRevert(JackpotBattle.BadJackpotField.selector); cold.jackpotEntryPriceOf(slot - 1);
+        vm.expectRevert(bytes4(keccak256("RngNotReady()"))); this.readPrice(0, true);
+        vm.expectRevert(bytes4(keccak256("RngNotReady()"))); this.readPrice(slot, false);
+        vm.expectRevert(JackpotBattle.BadJackpotField.selector); this.readPrice(slot - 1, false);
     }
 
     function test_LockClosesAllControlsBeforeEitherHiddenResult() public {

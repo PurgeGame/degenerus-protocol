@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {CrapsLensReader} from "../../contracts/CrapsLens.sol";
+
 import {CrapsPins} from "./CrapsPins.sol";
 import {CrapsViews} from "./CrapsViews.sol";
 import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
@@ -59,7 +61,7 @@ contract DegenesisJackpotPaidField is CrapsPins {
         game.setRngLocked(true);
         vm.prank(ContractAddresses.GAME);
         assertTrue(api.lockJackpotBattle(day + 1, 400_000 ether / 500, 2), "the window day locks a round");
-        (r,,) = cold.jackpotBattleOf(slot);
+        (r,,) = CrapsLensReader.jackpotBattleOf(address(cold), slot);
 
         vm.startPrank(ContractAddresses.GAME);
         uint256 cursor;
@@ -87,7 +89,7 @@ contract DegenesisJackpotPaidField is CrapsPins {
         assertEq(remaining, 0, "nothing owed to the ticket draw");
         (,, bool started, bool complete) = api.jackpotProgress();
         assertTrue(started && complete, "the paid field played to completion");
-        (CrapsBattleStorage.JackpotRound memory after_,,) = cold.jackpotBattleOf(slot);
+        (CrapsBattleStorage.JackpotRound memory after_,,) = CrapsLensReader.jackpotBattleOf(address(cold), slot);
         assertEq(after_.drawnCount, 0, "no seat came from the draw");
         assertGt(coinflip.totalCredited(), credited0, "the paid field paid out");
     }

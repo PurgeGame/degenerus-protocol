@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {CrapsLensReader} from "../../../contracts/CrapsLens.sol";
+
 import "forge-std/Test.sol";
 import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {FLIP} from "../../../contracts/FLIP.sol";
@@ -533,7 +535,7 @@ contract DegenesisRngFreezeHandler is Test {
 
     function _onLocked(Vm.Log memory l) internal {
         uint64 slot = uint64(uint256(l.topics[1]));
-        (CrapsBattleStorage.JackpotRound memory r,,) = JackpotBattle(address(craps)).jackpotBattleOf(slot);
+        (CrapsBattleStorage.JackpotRound memory r,,) = CrapsLensReader.jackpotBattleOf(address(craps), slot);
         ++ghost_battleLocks;
         if (slot / 8 < GameTimeLib.MAIN_LAUNCH_DAY && r.awardTarget != 0) ++ghost_battleAwardsDuringSale;
         battleLive = true;
@@ -587,7 +589,7 @@ contract DegenesisRngFreezeHandler is Test {
 
     function _checkBattle() internal {
         if (!battleLive) return;
-        (CrapsBattleStorage.JackpotRound memory r,,) = JackpotBattle(address(craps)).jackpotBattleOf(battleSlot);
+        (CrapsBattleStorage.JackpotRound memory r,,) = CrapsLensReader.jackpotBattleOf(address(craps), battleSlot);
         if (r.started) {
             battleLive = false;
             return;

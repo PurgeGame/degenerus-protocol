@@ -72,7 +72,7 @@ contract BoostHarness is CrapsViews {
     function settlementForSeat(uint64 slot, uint256 seat) external view returns (Settlement memory result, uint256 id) {
         Window memory w = _slotWindow(slot);
         uint256 daySlot = uint256(slot) / 8 * 8;
-        uint256 dayN = uint32(_dayTickets[daySlot]);
+        uint256 dayN = uint32(_loadDayTickets(daySlot));
         uint256 ownN = w.entrants - dayN;
         id = seat <= ownN ? (uint256(slot) << 64) | seat : (daySlot << 64) | (seat - ownN);
         w.seat = uint64(seat);
@@ -80,7 +80,7 @@ contract BoostHarness is CrapsViews {
     }
 
     function longestOf(uint64 slot) external view returns (uint256) {
-        return (_highField[bytes32(uint256(slot))] >> _HF_HOTTEST_SHIFT) & _HF_HOTTEST_MASK;
+        return (_loadHighField(bytes32(uint256(slot))) >> _HF_HOTTEST_SHIFT) & _HF_HOTTEST_MASK;
     }
 
     function bookDay(uint24 day, uint256 staked) external {

@@ -95,3 +95,4 @@ contracts/sDGNRS.sol
 contracts/storage/CrapsBattleStorage.sol
 contracts/storage/DegenerusGameStorage.sol
 contracts/libraries/AffiliateEarningsLib.sol
+contracts/CrapsLens.sol

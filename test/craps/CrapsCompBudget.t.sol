@@ -12,11 +12,11 @@ import {CrapsPins, MockFlip} from "./CrapsPins.sol";
 
 contract CompHarness is CrapsViews {
     function seedToCeiling(bytes32 key) external {
-        _battles[key] = (_battles[key] & ~(_BG_SEED_MASK << _BG_SEED_SHIFT)) | (_BG_SEED_MASK << _BG_SEED_SHIFT);
+        _storeBattle(key, (_battles[key] & ~(_BG_SEED_MASK << _BG_SEED_SHIFT)) | (_BG_SEED_MASK << _BG_SEED_SHIFT));
     }
 
     function highSeatsOf(bytes32 key) external view returns (uint256) {
-        return uint32(_highField[key]);
+        return uint32(_loadHighField(key));
     }
 
     function windowOf(uint64 slot) external view returns (uint256 bankroll, uint256 highMult, uint256 stakeUnits) {
@@ -25,7 +25,7 @@ contract CompHarness is CrapsViews {
     }
 
     function fieldOf(bytes32 key) external view returns (uint256 entrants, uint256 resolved) {
-        uint256 g = _battles[key];
+        uint256 g = _loadBattle(key);
         return (g & _MASK32, (g >> _BG_RESOLVED_SHIFT) & _MASK32);
     }
 }

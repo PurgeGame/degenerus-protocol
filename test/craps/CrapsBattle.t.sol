@@ -170,7 +170,7 @@ contract BattleHarness is CrapsViews {
     function boostUnitsAt(uint64 slot) external view returns (uint256) {
         Window memory w = _slotWindow(slot);
         unchecked {
-            uint256 g = _battles[w.key];
+            uint256 g = _loadBattle(w.key);
             return _boostUnits(w, _wordAt(_indexOf(slot))) + ((g >> _BG_SEED_SHIFT) & _BG_SEED_MASK);
         }
     }

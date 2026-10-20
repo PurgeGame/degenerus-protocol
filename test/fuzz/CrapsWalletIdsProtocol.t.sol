@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {CrapsLensReader} from "../../contracts/CrapsLens.sol";
+
 import {Vm, VmSafe} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
@@ -16,7 +18,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///      score, and a one-seat high-roller reserve draw on a chosen word.
 contract ProtocolCrapsTable is CrapsViews {
     function standField(bytes32 key, uint64 slot, uint32 id, uint256 score, uint256 bankrollFlip) external {
-        _battles[key] = 1;
+        _storeBattle(key, 1);
         _appendBet((uint256(slot) << 64) | 1, uint256(id));
         Window memory w;
         w.key = key;
@@ -42,13 +44,15 @@ contract ProtocolCrapsTable is CrapsViews {
     }
 
     function standReserve(uint64 slot, uint256 word, uint32 id, uint256 reserve) external {
-        JackpotRound storage r = _jackpotRounds[slot];
+        JackpotRound storage r = _jackpotRounds[slot & 511];
+        r.day = uint24(slot >> 3);
+        r.requestDay = uint24(slot >> 3) + 1;
         r.drawWord = word;
         r.started = true;
         r.paidCount = 1;
         _appendBet((uint256(slot) << 64) | 1, uint256(id) | _BET_HIGH_BIT);
         _setBonusCursor(slot, 1);
-        _highRollerReserve = reserve;
+        _highRollerReserve = reserve + 1;
         (bool ok, bytes memory ret) = address(this).call(abi.encodeWithSignature("settleHighRollerReserve(uint64)", slot));
         if (!ok) {
             assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
@@ -138,7 +142,7 @@ contract CrapsWalletIdsProtocolTest is DeployProtocol {
         _mint(alice, 10_000);
         uint16 goal = uint16(crapsBattle.MIN_BATTLE_GOAL_MULT());
         vm.prank(ContractAddresses.OWNER_GOVERNANCE);
-        uint64 slot = crapsBattle.createBattle(600, 10, goal, 0, uint40(block.timestamp + 1 hours), true, 0);
+        uint64 slot = JackpotBattle(address(crapsBattle)).createBattle(600, 10, goal, 0, uint40(block.timestamp + 1 hours), true, 0);
         assertEq(game.walletIdOf(alice), 0, "fixture: fresh wallet");
         vm.recordLogs();
         vm.startStateDiffRecording();
@@ -223,7 +227,7 @@ contract CrapsWalletIdsProtocolTest is DeployProtocol {
         vm.recordLogs();
         t.standReserve(slot, word, id, reserve);
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        CrapsBattleStorage.HighRollerDraw memory d = JackpotBattle(address(t)).highRollerDrawOf(slot);
+        CrapsBattleStorage.HighRollerDraw memory d = CrapsLensReader.highRollerDrawOf(address(t), slot);
         assertTrue(d.won && d.resolved);
         assertEq(d.nominee, id, "the nominee is the wallet ID");
         uint256 i = _logIndex(logs, address(t), CrapsBattleStorage.HighRollerReserveDrawn.selector);
@@ -246,7 +250,7 @@ contract CrapsWalletIdsGasTest is DeployProtocol {
         day = crapsBattle.currentDayIndex();
         uint16 goal = uint16(crapsBattle.MIN_BATTLE_GOAL_MULT());
         vm.prank(ContractAddresses.OWNER_GOVERNANCE);
-        slot = crapsBattle.createBattle(600, 10, goal, 0, uint40(block.timestamp + 1 hours), true, 0);
+        slot = JackpotBattle(address(crapsBattle)).createBattle(600, 10, goal, 0, uint40(block.timestamp + 1 hours), true, 0);
         vm.prank(ContractAddresses.CRAPS);
         coin.creditCrapsComps(1e12);
     }
@@ -289,10 +293,10 @@ contract CrapsWalletIdsGasTest is DeployProtocol {
         crapsBattle.creditPasses(kId, 21, 0);
         vm.stopPrank();
         vm.prank(u);
-        crapsBattle.convertNormalToHigh(0, 1);
+        JackpotBattle(address(crapsBattle)).convertNormalToHigh(0, 1);
         _gas("convertNormalToHigh uncached");
         vm.prank(k);
-        crapsBattle.convertNormalToHigh(0, 1);
+        JackpotBattle(address(crapsBattle)).convertNormalToHigh(0, 1);
         _gas("convertNormalToHigh cached");
     }
 
@@ -310,10 +314,10 @@ contract CrapsWalletIdsGasTest is DeployProtocol {
         crapsBattle.creditPasses(kId, 0, 1);
         vm.stopPrank();
         vm.prank(u);
-        crapsBattle.upgradeReservedDay(0, day + 1);
+        JackpotBattle(address(crapsBattle)).upgradeReservedDay(0, day + 1);
         _gas("upgradeReservedDay uncached");
         vm.prank(k);
-        crapsBattle.upgradeReservedDay(0, day + 1);
+        JackpotBattle(address(crapsBattle)).upgradeReservedDay(0, day + 1);
         _gas("upgradeReservedDay cached");
     }
 
@@ -341,7 +345,7 @@ contract CrapsWalletIdsGasTest is DeployProtocol {
             crapsBattle.enterBattle(slot, BOARD, 1);
         }
         vm.warp(block.timestamp + 1 hours);
-        uint48 index = crapsBattle.closeBattle(slot);
+        uint48 index = JackpotBattle(address(crapsBattle)).closeBattle(slot);
         RecyclingState.seedWord(address(game), index, bytes32(uint256(keccak256("gas-settle-word"))));
         crapsBattle.settleSlot(slot, 0);
         _gas("settle a six-seat custom field");

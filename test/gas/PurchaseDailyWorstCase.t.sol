@@ -182,8 +182,8 @@ abstract contract FreshWordLeg is AdvanceStageStream {
     function _armFreshWord(uint256 word, uint24 day) internal {
         // Booked table: 1M FLIP of action per day over the window, half of it high action.
         for (uint24 i = 1; i <= 7; ++i) {
-            bytes32 slot = keccak256(abi.encode(uint256(day - i), CRAPS_DAY_STAKED_SLOT));
-            vm.store(address(crapsBattle), slot, bytes32((uint256(500_000 ether) << 128) | uint256(1_000_000 ether)));
+            bytes32 slot = keccak256(abi.encode(uint256((day - i) & 63), CRAPS_DAY_STAKED_SLOT));
+            vm.store(address(crapsBattle), slot, bytes32((uint256(day - i) << 232) | (uint256(500_000) << 112) | uint256(1_000_000)));
         }
         // Yesterday resolved: flipsClaimableDay = day-1, sDGNRS settled to it.
         vm.prank(address(game));

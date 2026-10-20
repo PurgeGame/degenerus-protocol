@@ -98,7 +98,7 @@
   {
     "bytes": "32",
     "encoding": "mapping",
-    "label": "_highBudget",
+    "label": "_battleDays",
     "offset": 0,
     "slot": 12,
     "typeLabel": "mapping(uint24 => uint256)"
@@ -169,11 +169,11 @@
   },
   {
     "bytes": "32",
-    "encoding": "mapping",
-    "label": "_highRollerDraws",
+    "encoding": "inplace",
+    "label": "_rngSlotCursor",
     "offset": 0,
     "slot": 20,
-    "typeLabel": "mapping(uint64 => struct CrapsBattleStorage.HighRollerDraw)"
+    "typeLabel": "uint64[2]"
   },
   {
     "bytes": "32",
@@ -190,13 +190,5 @@
     "offset": 0,
     "slot": 22,
     "typeLabel": "mapping(uint48 => uint64[])"
-  },
-  {
-    "bytes": "32",
-    "encoding": "inplace",
-    "label": "_rngSlotCursor",
-    "offset": 0,
-    "slot": 23,
-    "typeLabel": "uint64[2]"
   }
 ]

@@ -12,18 +12,20 @@ contract HottestHarness is CrapsViews {
     function prime(uint64 slot, uint32 own, uint32 day, uint32 drawn, uint256 heat, uint256 lane) external {
         bytes32 key = bytes32(uint256(slot));
         uint256 total = uint256(own) + day + drawn;
-        _battles[key] = total | (total << _BG_RESOLVED_SHIFT);
-        _dayTickets[uint256(slot) / 8 * 8] = day;
-        _jackpotRounds[slot].drawnCount = drawn;
-        _highField[key] = lane | (heat << _HF_HOTTEST_SHIFT);
+        _storeBattle(key, total | (total << _BG_RESOLVED_SHIFT));
+        _storeDayTickets(uint256(slot) / 8 * 8, day);
+        _jackpotRounds[slot & 511].day = uint24(slot >> 3);
+        _jackpotRounds[slot & 511].requestDay = uint24(slot >> 3) + 1;
+        _jackpotRounds[slot & 511].drawnCount = drawn;
+        _storeHighField(key, lane | (heat << _HF_HOTTEST_SHIFT));
     }
     function pay(uint64 slot, uint256 winnerId, uint256 pot, uint256 boost, uint256 word) external {
         IReadCohortLifecycle(address(this)).payBattlePot(slot, bytes32(uint256(slot)), winnerId, pot, boost, word);
     }
     function heat(uint64 slot) external view returns (uint256) {
-        return (_highField[bytes32(uint256(slot))] >> _HF_HOTTEST_SHIFT) & _HF_HOTTEST_MASK;
+        return (_loadHighField(bytes32(uint256(slot))) >> _HF_HOTTEST_SHIFT) & _HF_HOTTEST_MASK;
     }
-    function sideboard(uint64 slot) external view returns (uint256) { return _highField[bytes32(uint256(slot))]; }
+    function sideboard(uint64 slot) external view returns (uint256) { return _loadHighField(bytes32(uint256(slot))); }
 }
 
 contract CrapsHottestShooterTest is CrapsPins {

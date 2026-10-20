@@ -23,6 +23,24 @@ interface ICrapsWalletIdView {
 ///         contract, which is what lets the assertions that grade them stay untouched.
 /// @dev Test-only. It is never deployed to a live chain, so its size is nobody's constraint.
 contract CrapsViews is CrapsSeedViews, CrapsBattle {
+    function runDailyBattleWork(uint256) external returns (MineFlipGas.Result memory) { _delegateJackpot(); }
+
+    function runCrapsMaintenance(uint256) external returns (MineFlipGas.Result memory) {
+        _delegateJackpot();
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
     /// @dev Legacy score helper for harnesses. Production receives this score from the engine
     ///      in Settlement.rank and has no reason to compute it again.
     function _compositeOf(Settlement memory s) internal pure returns (uint256) {
@@ -196,7 +214,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
     }
 
     function rngCohortComplete(uint48 index) external view returns (bool) {
-        return index < 2 && _rngSlotCursor[index] == _rngSlots[index].length;
+        return index < 2 && _rngCursor(index) == _rngSlots[index].length;
     }
 
     // ── Table / RNG ─────────────────────────────────────────────────────────
@@ -399,18 +417,18 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
     ///      whole-day figure everywhere the old assertions look — a whole-day high ticket bumps
     ///      all seven counters alike, and only an upgrade can make them differ.
     function dayTicketsOf(uint24 day) external view returns (uint64) {
-        uint256 t = _dayTickets[uint256(day) * BONUS_SLOTS_PER_DAY];
+        uint256 t = _loadDayTickets(uint256(day) * BONUS_SLOTS_PER_DAY);
         return uint64(uint32(t)) | (uint64(uint32(t >> _DT_HIGH_SHIFT)) << 32);
     }
 
     /// @dev The stored ticket word, raw: total low, seven per-period high counts above.
     function dayTicketsWordOf(uint24 day) external view returns (uint256) {
-        return _dayTickets[uint256(day) * BONUS_SLOTS_PER_DAY];
+        return _loadDayTickets(uint256(day) * BONUS_SLOTS_PER_DAY);
     }
 
     /// @dev One period's high-ticket count.
     function dayHighTicketsOf(uint24 day, uint256 period) external view returns (uint256) {
-        return (_dayTickets[uint256(day) * BONUS_SLOTS_PER_DAY] >> (_DT_HIGH_SHIFT * (period + 1)))
+        return (_loadDayTickets(uint256(day) * BONUS_SLOTS_PER_DAY) >> (_DT_HIGH_SHIFT * (period + 1)))
             & _MASK32;
     }
 
@@ -444,7 +462,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
 
     function windowReservedOf(uint64 slot) external view returns (uint256 count, uint256 high) {
         bytes32 key = bytes32(uint256(slot));
-        return (_battles[key] & _MASK32, uint32(_highField[key]));
+        return (_loadBattle(key) & _MASK32, uint32(_loadHighField(key)));
     }
 
     function DAY_SEATED() external pure returns (uint256) {
@@ -456,7 +474,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
     ///      Bit 65 is period zero's flag, which every whole-day high ticket sets.
     function daySeatIsHigh(uint24 day, address player) external view returns (bool) {
         uint256 daySlot = uint256(day) * BONUS_SLOTS_PER_DAY;
-        uint64 n = uint32(_dayTickets[daySlot]);
+        uint64 n = uint32(_loadDayTickets(daySlot));
         uint32 id = _idOf(player);
         for (uint64 i = 1; i <= n; ++i) {
             uint256 w = _loadBet((daySlot << 64) | i);
@@ -503,7 +521,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
         view
         returns (uint32 entrants, uint256 best, uint64 winnerSeat, bool bankrollRider, bool done)
     {
-        uint256 f = _highField[key];
+        uint256 f = _loadHighField(key);
         entrants = uint32(f);
         best = (f >> _HF_SCORE_SHIFT) & _SC_BEST_MASK;
         winnerSeat = uint64((f >> _HF_WINNER_SHIFT) & _MASK32);
@@ -512,15 +530,15 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
     }
 
     function highStakedOf(uint24 day) external view returns (uint256) {
-        return _dayStaked[day] >> _DAY_HIGH_SHIFT;
+        return _loadDayStaked(day) >> _DAY_HIGH_SHIFT;
     }
 
     function highActionRateOf(uint24 day) external view returns (uint256) {
-        return ((_dayStaked[day] >> _DAY_HIGH_SHIFT) * _BOOST_ACTION_BPS) / _BPS_DENOMINATOR;
+        return ((_loadDayStaked(day) >> _DAY_HIGH_SHIFT) * _BOOST_ACTION_BPS) / _BPS_DENOMINATOR;
     }
 
     function highBudgetOf(uint24 day) external view returns (uint256) {
-        return _highBudget[day];
+        return _loadHighBudget(day);
     }
 
     function drawBudgetsFor(uint24 day) external view returns (uint256 mainBudget, uint256 highBudget) {
@@ -613,7 +631,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
             // preview that left them out would under-quote the one seat they belong to. A
             // CONTESTED lane is paid to one of its seats when the field finishes, not returned by
             // a run, so it is no part of what this quotes.
-            if (header & _BET_HIGH_BIT != 0 && uint32(_highField[w.key]) == 1) {
+            if (header & _BET_HIGH_BIT != 0 && uint32(_loadHighField(w.key)) == 1) {
                 uint256 lane = _laneBoost(w, word);
                 paid += _ride(s.paid, (scale - 1) * w.stakeUnits * _BATTLE_STAKE_UNIT + lane, w.bankroll);
             }
@@ -711,8 +729,8 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
         if (slot >= open) revert BonusStillRunning();
         if (_slotIndexOf(slot) != 0) revert BonusPeriodSpent();
         Window memory w = _slotWindow(slot);
-        if (_battles[w.key] == 0) revert BonusPeriodSpent();
-        if (_boostBudget[uint24(slot / _BONUS_SLOTS_PER_DAY)] == 0) revert BonusPeriodSpent();
+        if (_loadBattle(w.key) == 0) revert BonusPeriodSpent();
+        if (_loadBudget(uint24(slot / _BONUS_SLOTS_PER_DAY)) == 0) revert BonusPeriodSpent();
         index = _armSlot(slot, w);
     }
 
@@ -726,7 +744,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
     }
 
     function boostWeightOf(uint24 day) external view returns (uint256) {
-        return _boostBudget[day] >> _BUDGET_W_SHIFT;
+        return _loadBudget(day) >> _BUDGET_W_SHIFT;
     }
 
     function highBoostUnitsOf(uint64 slot, uint256 word) external view returns (uint256) {
@@ -767,7 +785,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
         // A day ticket sits after the window's own seats: own count plus its day-local seat.
         if ((betId >> 64) != slot) {
             unchecked {
-                uint256 dayN = uint32(_dayTickets[(slot / _BONUS_SLOTS_PER_DAY) * _BONUS_SLOTS_PER_DAY]);
+                uint256 dayN = uint32(_loadDayTickets((slot / _BONUS_SLOTS_PER_DAY) * _BONUS_SLOTS_PER_DAY));
                 w.seat = uint64(w.entrants - dayN) + uint64(betId);
             }
         }
@@ -782,7 +800,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
             uint256 scale = hi ? w.highMult : 1;
             paid = s.paid * scale;
             paid += _boonBonus((header >> _BET_BOON_SHIFT) & _BET_BOON_MASK, paid);
-            if (hi && uint32(_highField[w.key]) == 1) {
+            if (hi && uint32(_loadHighField(w.key)) == 1) {
                 uint256 lane = _roundBoost(_highBoostUnits(w, word)) * _BATTLE_STAKE_UNIT;
                 paid += _ride(s.paid, (scale - 1) * w.stakeUnits * _BATTLE_STAKE_UNIT + lane, w.bankroll);
             }
@@ -796,7 +814,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
         if (slot >= _CUSTOM_SLOT_BASE) return (0, 0);
         unchecked {
             uint256 d = (uint256(slot) / _BONUS_SLOTS_PER_DAY) * _BONUS_SLOTS_PER_DAY;
-            return (d << 64, uint32(_dayTickets[d]));
+            return (d << 64, uint32(_loadDayTickets(d)));
         }
     }
 
@@ -813,7 +831,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
 
     // ── Day action and budget ───────────────────────────────────────────────
     function dayStaked(uint24 day) external view returns (uint256) {
-        return uint128(_dayStaked[day]);
+        return (_loadDayStaked(day) & _BUDGET_MASK);
     }
 
     /// @dev The live progressive pool, for the conservation invariants.
@@ -836,7 +854,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
     }
 
     function boostBudgetOf(uint24 day) external view returns (uint256) {
-        return _boostBudget[day] & _BUDGET_MASK;
+        return _loadBudget(day) & _BUDGET_MASK;
     }
 
     // ── Readers production no longer carries ────────────────────────────────
@@ -945,7 +963,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
         uint256 target = w.bound;
         uint48 stored = _slotIndexOf(target);
         if (stored != 0) index = stored - 1;
-        uint256 g = _battles[w.key];
+        uint256 g = _loadBattle(w.key);
         // The MOST this window can pay on top of the stakes, plus whatever has been donated onto
         // it. The rung itself is the settling table's, so `boostOf` is where the drawn figure
         // shows up and `_bonusBoostBand` is the spread it was drawn from.
@@ -1024,7 +1042,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
     ///         never has — it is a linear rate on what the seats put up.
     function _dayActionRate(uint24 day) internal view returns (uint256) {
         unchecked {
-            return (uint256(uint128(_dayStaked[day])) * _BOOST_ACTION_BPS) / _BPS_DENOMINATOR;
+            return (uint256((_loadDayStaked(day) & _BUDGET_MASK)) * _BOOST_ACTION_BPS) / _BPS_DENOMINATOR;
         }
     }
 
@@ -1081,7 +1099,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
         // reserved slot it lives at names no window — so there is no single field whose finish
         // this could report and it stays false. Read those seven through their own slots.
         if (slot >= _CUSTOM_SLOT_BASE || slot % _BONUS_SLOTS_PER_DAY != 0) {
-            uint256 board = _battles[_slotWindow(slot).key];
+            uint256 board = _loadBattle(_slotWindow(slot).key);
             uint256 field = board & _MASK32;
             bet.battleClaimed = field != 0 && ((board >> _BG_RESOLVED_SHIFT) & _MASK32) == field;
         }
@@ -1098,7 +1116,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
     /// @notice One battle's scoreboard, decoded. The winning stop and hand count mean something
     ///         once `finalized`.
     function _battleOf(bytes32 key) internal view returns (Battle memory info) {
-        uint256 g = _battles[key];
+        uint256 g = _loadBattle(key);
         info.entrants = uint32(g);
         info.resolved = uint32(g >> _BG_RESOLVED_SHIFT);
         info.winnerId = uint64(uint32(g >> _BG_WINNER_SHIFT));
@@ -1144,5 +1162,37 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
         // Every window is a lottery, so a ceiling is the honest single number; `_bonusBoostBand`
         // gives the spread and `boostOf` the figure once the table's word lands.
         boostQuote = _boostBase(w) * _BOOST_MAX_MULT;
+    }
+    function _shareOf(Window memory w, bool high) internal view override returns (uint256) {
+        if (w.bound >= _CUSTOM_SLOT_BASE || _isJackpotSlot(w.bound)) return 0;
+        unchecked {
+            uint256 slot = uint256(w.bound);
+            uint24 day = uint24(slot / _BONUS_SLOTS_PER_DAY);
+            uint256 packed = _loadBudget(day);
+            uint256 budget;
+            uint256 weight;
+            if (packed != 0) {
+                weight = packed >> _BUDGET_W_SHIFT;
+                budget = high ? _loadHighBudget(day) : packed & _BUDGET_MASK;
+            } else {
+                uint256 word = _dailyWordAt(day);
+                if (word == 0) return 0;
+                weight = _routineWeight(word);
+                (uint256 m, uint256 h) = _drawBudgets(day);
+                // The HIGH budget is whole and unsplit. The main one is quoted at the ladder half
+                // it will be stored as, through the same helper the opening uses.
+                if (high) budget = h;
+                else (budget,) = _splitMainBudget(m);
+            }
+            // `slot % _BONUS_SLOTS_PER_DAY` names the period plus one — zero is the gap between
+            // days — so the period this window shares on is one below it.
+            return _windowShare(budget, weight, w.tier);
+        }
+    }
+    function preferredBoardOf(uint32 walletId) external view returns (uint32 chips) {
+        (chips,) = CrapsPreferenceLib.decode(_passCreditsById[walletId]);
+    }
+    function progressivePool() external view returns (uint256) {
+        return _progressive;
     }
 }

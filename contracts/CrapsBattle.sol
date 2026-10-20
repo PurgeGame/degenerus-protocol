@@ -129,7 +129,7 @@ contract CrapsBattle is CrapsBattleStorage {
     /// @dev Pinned cold lifecycle module; both contracts inherit the same append-only layout.
     fallback() external { _delegateJackpot(); }
 
-    function _delegateJackpot() private {
+    function _delegateJackpot() internal {
         address target = ContractAddresses.JACKPOT_BATTLE;
         assembly ("memory-safe") {
             calldatacopy(0, 0, calldatasize())
@@ -145,16 +145,14 @@ contract CrapsBattle is CrapsBattleStorage {
         return _resolveSlotRange(slot, allowance, _RESOLVE_MAX_SEATS);
     }
 
-    function runDailyBattleWork(uint256) external returns (MineFlipGas.Result memory) { _delegateJackpot(); }
-
     function _isJackpotSlot(uint256 slot) internal pure returns (bool) {
         return slot < _CUSTOM_SLOT_BASE && slot % _BONUS_SLOTS_PER_DAY >= _BONUS_PERIODS_PER_DAY;
     }
 
     function _slotWord(uint256 slot) internal view returns (uint256) {
         if (_isJackpotSlot(slot)) {
-            JackpotRound storage r = _jackpotRounds[slot];
-            return r.started ? r.drawWord : 0;
+            JackpotRound storage r = _jackpotRounds[slot & 511];
+            return _roundExists(slot) && r.started ? r.drawWord : 0;
         }
         uint48 index = _slotIndexOf(slot);
         // The subtraction is evaluated only for a nonzero stored index.
@@ -193,6 +191,9 @@ contract CrapsBattle is CrapsBattleStorage {
         _bonus = first;
         _minerSlot = uint64(_daySlotOf(first));
         _firstWindowDay = uint24(first);
+        _highRollerReserve = 1;
+        _rngSlotCursor = [uint64(1), 1];
+        _fundedCustomSlots = [uint64(1), 1, 1, 1];
 
         // TWENTY SEED DAYS EACH, banked to the two protocol bodies. The day lane seats both of
         // them every day and spends a banked pass before it burns anything, so this is twenty days
@@ -237,7 +238,7 @@ contract CrapsBattle is CrapsBattleStorage {
         private
         returns (uint256 betId)
     {
-        if (w.bound >= _CUSTOM_SLOT_BASE && _battles[w.key] == 0) {
+        if (w.bound >= _CUSTOM_SLOT_BASE && _loadBattle(w.key) == 0) {
             IReadCohortLifecycle(address(this)).admitCustom(w.bound);
         }
         uint8 boonMask;
@@ -267,7 +268,7 @@ contract CrapsBattle is CrapsBattleStorage {
             betId = (uint256(w.bound) << 64) | _enterBattle(w.key, w.stakeUnits);
             // The sideboard is touched ONLY by a field that actually takes a high seat, so an
             // ordinary battle never pays for a lane it does not run.
-            if (high) ++_highField[w.key];
+            if (high) _storeHighField(w.key, _loadHighField(w.key) + 1);
         }
         // Settlement never writes this word. Before the slot closes, `amendSlip` may replace its
         // chip slice; the owner and the stakes flag remain fixed.
@@ -310,12 +311,12 @@ contract CrapsBattle is CrapsBattleStorage {
                 // `_slotOf(day, period)` is `day * _BONUS_SLOTS_PER_DAY + period + 1`, so the
                 // remainder names the period and zero is the reserved gap between days.
                 uint256 p = slot % _BONUS_SLOTS_PER_DAY;
-                if (p == 0 || (p > _BONUS_PERIODS_PER_DAY && _jackpotRounds[slot].requestDay == 0)) revert NoSuchBattle();
+                if (p == 0 || (p > _BONUS_PERIODS_PER_DAY && !_roundExists(slot))) revert NoSuchBattle();
                 w = _windowTerms(uint24(slot / _BONUS_SLOTS_PER_DAY), p == 7 ? 5 : p - 1);
                 if (p == 7) { w.bound = uint48(slot); w.key = bytes32(slot); }
                 if (_isJackpotSlot(slot)) {
-                    JackpotRound storage r = _jackpotRounds[slot];
-                    if (r.started) {
+                    JackpotRound storage r = _jackpotRounds[slot & 511];
+                    if (_roundExists(slot) && r.started) {
                         w.bankroll = r.bankroll;
                         w.goal = uint128(uint256(r.bankroll) * _SCHED_GOAL);
                         w.played = _schedRound(r.bankroll);
@@ -337,7 +338,7 @@ contract CrapsBattle is CrapsBattleStorage {
                 if (w.bound != slot) revert NoSuchBattle();
             }
         }
-        w.entrants = uint32(_battles[w.key]);
+        w.entrants = uint32(_loadBattle(w.key));
     }
 
     /// @dev A ticket's ten leg counts, packed into the thirty-bit chip word, with their sum.
@@ -379,12 +380,6 @@ contract CrapsBattle is CrapsBattleStorage {
         _upToSeven(chips);
         (, uint256 word) = _door(id, false);
         if (!_rememberBoard(word, chips)) revert BetLocked();
-    }
-
-    /// @notice A wallet's saved board in the paid-entry encoding, by Game wallet ID; unset and
-    ///         explicit random return zero.
-    function preferredBoardOf(uint32 walletId) external view returns (uint32 chips) {
-        (chips,) = CrapsPreferenceLib.decode(_passCreditsById[walletId]);
     }
 
     /// @dev Every player door's prologue: the account it acts for. `id == 0` is the caller,
@@ -522,7 +517,7 @@ contract CrapsBattle is CrapsBattleStorage {
             for (uint256 p = 0; p < _BONUS_PERIODS_PER_DAY; ++p) {
                 Window memory w = _windowTermsOn(today, p, word);
                 // The day has to be OPEN: its windows are what the ticket plays.
-                if (_battles[w.key] == 0) revert BonusPeriodSpent();
+                if (_loadBattle(w.key) == 0) revert BonusPeriodSpent();
                 // The shared day-seat word already rejected every existing window seat.
                 cost += (uint256(w.bankroll) + w.stakeUnits * _BATTLE_STAKE_UNIT) * multiple;
             }
@@ -552,8 +547,8 @@ contract CrapsBattle is CrapsBattleStorage {
         uint256 boonMask
     ) private {
         unchecked {
-            uint256 t = _dayTickets[daySlot] + 1 + (high ? _DT_ALL_HIGH : 0);
-            _dayTickets[daySlot] = t;
+            uint256 t = _loadDayTickets(daySlot) + 1 + (high ? _DT_ALL_HIGH : 0);
+            _storeDayTickets(daySlot, t);
             uint256 seat = t & _MASK32;
             _storeDaySeat(daySlot, id, seat);
             _writeSlip(
@@ -568,12 +563,12 @@ contract CrapsBattle is CrapsBattleStorage {
     /// @param stakeUnits The bounty this battle posts, echoed in only by the first entrant.
     /// @return n This entrant's index within its own field, 1-based — the low half of its bet id.
     function _enterBattle(bytes32 key, uint256 stakeUnits) private returns (uint256 n) {
-        uint256 g = _battles[key];
+        uint256 g = _loadBattle(key);
         unchecked {
             g = g == 0 ? 1 | (stakeUnits << _BG_STAKE_SHIFT) : g + 1;
             n = g & _MASK32;
         }
-        _battles[key] = g;
+        _storeBattle(key, g);
     }
 
     // ---------------------------------------------------------------------------------------
@@ -585,7 +580,7 @@ contract CrapsBattle is CrapsBattleStorage {
         MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
         if (!MineFlipGas.canRun(meter, _SEAT_GAS_MAX, _SETTLE_TAIL_GAS + _CREDIT_GAS_MAX)) return result;
         Window memory w = _slotWindow(slot);
-        uint256 board = _battles[w.key];
+        uint256 board = _loadBattle(w.key);
         if (uint32(board >> _BG_RESOLVED_SHIFT) == uint32(board) && board != 0) {
             result.done = true;
             return result;
@@ -658,9 +653,9 @@ contract CrapsBattle is CrapsBattleStorage {
         if (_scheduledExpired(cur)) return true;
         uint24 day = uint24(uint256(cur) / _BONUS_SLOTS_PER_DAY);
         uint256 period = cur % _BONUS_SLOTS_PER_DAY;
-        if (period == 0) return _boostBudget[day] != 0 || day < _currentDayIndex();
+        if (period == 0) return _loadBudget(day) != 0 || day < _currentDayIndex();
         if (period > _BONUS_PERIODS_PER_DAY) return true;
-        uint256 board = _battles[bytes32(uint256(cur))];
+        uint256 board = _loadBattle(bytes32(uint256(cur)));
         if (_slotIndexOf(cur) == 0) {
             (,, uint256 open) = _currentBonusSlot();
             return cur < open && !_isJackpotSlot(cur);
@@ -669,15 +664,8 @@ contract CrapsBattle is CrapsBattleStorage {
         return entrants == 0 || uint32(board >> _BG_RESOLVED_SHIFT) == entrants;
     }
 
-    function runCrapsMaintenance(uint256) external returns (MineFlipGas.Result memory) {
-        _delegateJackpot();
-    }
-
-
-
     /// @dev Refund one lapsed day in dense reservation order. The complete comp flush and
     /// cursor writeback are reserved before each refund, including an empty-slot scan.
-
 
     /// @notice GAME-only: bank a rolled pass award as credits and nothing else — no reservation
     ///         attempt, no external call, no way to revert past the saturation the credit lane
@@ -698,17 +686,6 @@ contract CrapsBattle is CrapsBattleStorage {
     function _bankPasses(uint32 id, uint256 normal, uint256 high) private {
         if (normal != 0) _credit(id, normal == 0, normal);
         if (high != 0) _credit(id, high != 0, high);
-    }
-
-    /// @notice The Craps progressive's live balance, in whole FLIP — one pool, shared by every
-    ///         scheduled window.
-    /// @dev The SECOND reader production keeps, and for the same kind of reason as the first: it
-    ///      is the one figure of the whole system that is not a pure function of published inputs.
-    ///      Reconstructing it means replaying every day's funding and every finalized field's
-    ///      funding and awards from genesis, so a client that only wants to show what is
-    ///      on the table would otherwise have to index the entire history to do it.
-    function progressivePool() external view returns (uint256) {
-        return _progressive;
     }
 
     /// @notice Read a raw storage slot. Periphery escape hatch for lens/viewer contracts, the
@@ -737,8 +714,6 @@ contract CrapsBattle is CrapsBattleStorage {
             return(out, add(64, size))
         }
     }
-
-
 
     /// @notice Open a custom battle: a race on terms of your own, on its own slot, settling on a
     ///         table nobody can know until it shuts. The whole definition is vetted ONCE, here,
@@ -783,17 +758,7 @@ contract CrapsBattle is CrapsBattleStorage {
     ///      nobody could know it while joining. Custom slots carry no in-order rule — a window
     ///      lane needs slot order to BE table order so a settler can walk a day in sequence, but
     ///      a custom battle is resolved through its own slot alone.
-    function closeBattle(uint64 slot) external returns (uint48 index) {
-        (Window memory w, uint256 c) = _customTerms(slot);
-        unchecked {
-            if (block.timestamp < ((c >> _CB_CLOSE_SHIFT) & _CB_CLOSE_MASK)) revert BonusStillRunning();
-        }
-        if (_slotIndexOf(slot) != 0) revert BonusPeriodSpent();
-        // A battle nobody joined is not shut, it never happened — and binding it would strand a
-        // table index on nothing.
-        if (_battles[w.key] == 0) revert BonusPeriodSpent();
-        index = _armSlot(slot, w);
-    }
+    function closeBattle(uint64 slot) external returns (uint48 index) { _delegateJackpot(); }
 
     /// @dev Decode a custom battle into the same `Window` representation used by bonus slots, so
     ///      entry, settlement and payment share one path.
@@ -856,10 +821,10 @@ contract CrapsBattle is CrapsBattleStorage {
         // rest, and the window being settled names which flag applies.
         bool hi = _highOn(header, betId, uint256(w.bound));
         if (w.bound < _CUSTOM_SLOT_BASE) {
-            uint256 f = _highField[w.key];
+            uint256 f = _loadHighField(w.key);
             if (s.hottestHand > ((f >> _HF_HOTTEST_SHIFT) & _HF_HOTTEST_MASK)) {
-                _highField[w.key] = (f & ~(_HF_HOTTEST_MASK << _HF_HOTTEST_SHIFT))
-                    | (s.hottestHand << _HF_HOTTEST_SHIFT);
+                _storeHighField(w.key, (f & ~(_HF_HOTTEST_MASK << _HF_HOTTEST_SHIFT))
+                    | (s.hottestHand << _HF_HOTTEST_SHIFT));
             }
         }
 
@@ -909,7 +874,7 @@ contract CrapsBattle is CrapsBattleStorage {
             // A contested lane pays one winner when the field closes; its individual high seats
             // have no rider payment to announce. A one-seat lane really does ride this run, and
             // still emits zero when the run busts because that zero is its final disposition.
-            if (hi && uint32(_highField[w.key]) == 1) {
+            if (hi && uint32(_loadHighField(w.key)) == 1) {
                 emit CrapsHighRollerPaid(betId, w.key, result.id, ride, true);
             }
 
@@ -920,15 +885,17 @@ contract CrapsBattle is CrapsBattleStorage {
     /// @dev Capital sharing a seat's common reference run. Jackpot high extras are fee-funded;
     ///      all other fields retain their original integer-copy scaling.
     function _runCapital(Window memory w, uint256 header, bool high) internal pure returns (uint256) {
-        if (high && w.highExtra != 0) return uint256(w.bankroll) + w.highExtra;
-        uint256 units = header >> _AWARD_UNITS_SHIFT;
-        if (units == 0) units = high ? w.highMult : 1;
-        return uint256(w.bankroll) * units;
+        unchecked {
+            if (high && w.highExtra != 0) return uint256(w.bankroll) + w.highExtra;
+            uint256 units = header >> _AWARD_UNITS_SHIFT;
+            if (units == 0) units = high ? w.highMult : 1;
+            return uint256(w.bankroll) * units;
+        }
     }
 
     /// @dev The extra bounty posted by one high seat, separate from its one main-pot bounty.
     function _highBounty(Window memory w) internal pure returns (uint256) {
-        return w.highExtra != 0 ? w.highExtra : (w.highMult - 1) * w.stakeUnits * _BATTLE_STAKE_UNIT;
+        unchecked { return w.highExtra != 0 ? w.highExtra : (w.highMult - 1) * w.stakeUnits * _BATTLE_STAKE_UNIT; }
     }
 
     /// @dev The entire settlement of `betId`, decided the moment its table's word landed. Shared
@@ -950,7 +917,6 @@ contract CrapsBattle is CrapsBattleStorage {
     /// @dev One bonus window, resolved from the day's word. Every field is a pure function of
     ///      (day, period), so a front end and this contract always agree without a call.
 
-
     /// @dev The slot a day's shared field lives at — remainder ZERO, the one `_slotWindow`
     ///      refuses and no window ever takes.
     function _daySlotOf(uint256 day) private pure returns (uint256) {
@@ -965,7 +931,7 @@ contract CrapsBattle is CrapsBattleStorage {
         if (slot >= _CUSTOM_SLOT_BASE || slot % _BONUS_SLOTS_PER_DAY == 7) return (0, 0);
         unchecked {
             uint256 d = _daySlotOf(slot / _BONUS_SLOTS_PER_DAY);
-            return (d << 64, uint32(_dayTickets[d]));
+            return (d << 64, uint32(_loadDayTickets(d)));
         }
     }
 
@@ -980,7 +946,7 @@ contract CrapsBattle is CrapsBattleStorage {
     /// @dev Decode retained RNG or the compact terms saved when this window opened.
     function _windowTerms(uint24 day, uint256 period) internal view returns (Window memory w) {
         uint256 slot = _slotOf(day, period);
-        uint256 state = _battles[bytes32(slot)];
+        uint256 state = _loadBattle(bytes32(slot));
         uint256 frozen = state >> _BG_TERM_TIER_SHIFT;
         if (frozen & _BG_TERMS_FROZEN == 0) {
             uint256 word = _dailyWordAt(day);
@@ -1268,7 +1234,7 @@ contract CrapsBattle is CrapsBattleStorage {
         bytes32 key = bytes32(slot);
         _claimScheduledSeat(slot, id);
         uint256 betId = (slot << 64) | _enterBattle(key, 0);
-        if (high) ++_highField[key];
+        if (high) _storeHighField(key, _loadHighField(key) + 1);
         // `CrapsSlipPlaced` is the whole record: its bet id names the day, the period and the seat.
         _writeSlip(
             betId,
@@ -1393,7 +1359,7 @@ contract CrapsBattle is CrapsBattleStorage {
         }
         _storeBet(betId, header | (newMask << _BET_HIGH_SHIFT));
         unchecked {
-            _dayTickets[daySlot] += counters;
+            _storeDayTickets(daySlot, _loadDayTickets(daySlot) + (counters));
         }
         emit CrapsDayWindowsUpgraded(id, day, uint8(newMask), burned);
     }
@@ -1520,10 +1486,9 @@ contract CrapsBattle is CrapsBattleStorage {
             // `_bonus` guard set above, so however many times the day is arbed, opened or
             // advanced, it funds once.
             (uint256 mainBudget, uint256 contribution) = _splitMainBudget(rawMain);
-            _boostBudget[today] = mainBudget | (_routineWeight(word) << _BUDGET_W_SHIFT);
+            _storeBudget(today, mainBudget | (highBudget << 112) | (_routineWeight(word) << _BUDGET_W_SHIFT));
             // A day that banked no high action has no high budget, and writing a zero would cost
             // a slot to say so.
-            if (highBudget != 0) _highBudget[today] = highBudget;
             uint256 pool = _progressive + contribution;
             _progressive = pool;
             emit CrapsProgressiveFunded(today, contribution, pool);
@@ -1548,7 +1513,7 @@ contract CrapsBattle is CrapsBattleStorage {
         // donations. Seats reserved ahead of the word are already counted in this field — the key
         // is the slot, so they joined it as ordinary entrants — and the stake echo lands beside them.
         uint256 frozen = w.tier | (w.highMult == CrapsPriceLib.HIGH_TAIL ? _BG_TERM_HIGH_TAIL : 0) | _BG_TERMS_FROZEN;
-        _battles[w.key] |= (w.stakeUnits << _BG_STAKE_SHIFT) | (frozen << _BG_TERM_TIER_SHIFT);
+        _storeBattle(w.key, _loadBattle(w.key) | ((w.stakeUnits << _BG_STAKE_SHIFT) | (frozen << _BG_TERM_TIER_SHIFT)));
 
         unchecked {
             cost = uint256(w.bankroll) + w.stakeUnits * _BATTLE_STAKE_UNIT;
@@ -1580,10 +1545,10 @@ contract CrapsBattle is CrapsBattleStorage {
             // `slot % _BONUS_SLOTS_PER_DAY` exactly. A custom battle is not on the day clock and
             // carries no day field at all.
             if (slot < _CUSTOM_SLOT_BASE) {
-                uint256 tickets = _dayTickets[_daySlotOf(uint256(slot) / _BONUS_SLOTS_PER_DAY)];
-                if (uint32(tickets) != 0) _battles[w.key] += uint32(tickets);
+                uint256 tickets = _loadDayTickets(_daySlotOf(uint256(slot) / _BONUS_SLOTS_PER_DAY));
+                if (uint32(tickets) != 0) _storeBattle(w.key, _loadBattle(w.key) + (uint32(tickets)));
                 uint256 dayHigh = (tickets >> (_DT_HIGH_SHIFT * (uint256(slot) % _BONUS_SLOTS_PER_DAY))) & _MASK32;
-                if (dayHigh != 0) _highField[w.key] += dayHigh;
+                if (dayHigh != 0) _storeHighField(w.key, _loadHighField(w.key) + (dayHigh));
             }
         }
         // The shut window joins the write buffer's RNG round like any other consumer: the next
@@ -1615,7 +1580,7 @@ contract CrapsBattle is CrapsBattleStorage {
             }
             w = _slotWindow(slot);
             // A window nobody opened is not a battle yet.
-            if (_battles[w.key] == 0) revert BonusPeriodSpent();
+            if (_loadBattle(w.key) == 0) revert BonusPeriodSpent();
         }
         // Shut is shut: a battle whose table has been taken takes no more of anything, whatever
         // some clock says.
@@ -1713,37 +1678,7 @@ contract CrapsBattle is CrapsBattleStorage {
     /// @param index    The custom battle's number, or the window's period.
     /// @param granules What to add, in `_BATTLE_STAKE_UNIT` granules.
     /// @return amount The amount added, in whole FLIP, also charged to the donor or comp lane.
-    function donate(bool custom, uint256 index, uint24 granules) external returns (uint256 amount) {
-        uint256 slot;
-        unchecked {
-            if (custom) {
-                slot = _CUSTOM_SLOT_BASE + index;
-            } else {
-                if (index >= _BONUS_PERIODS_PER_DAY) revert BonusPeriodSpent();
-                uint24 today = _currentDayIndex();
-                slot = _slotOf(today, index);
-            }
-        }
-        Window memory w = _joinableSlot(slot);
-        uint256 g = _battles[w.key];
-        if (granules == 0 || g == 0) revert SeedAboveMax();
-        uint256 seed;
-        unchecked {
-            seed = ((g >> _BG_SEED_SHIFT) & _BG_SEED_MASK) + granules;
-            amount = uint256(granules) * _BATTLE_STAKE_UNIT;
-        }
-        if (seed > _BG_SEED_MASK) revert SeedAboveMax();
-        if (msg.sender == ContractAddresses.VAULT) {
-            _burnForCraps(
-                uint256(uint160(ContractAddresses.VAULT)) | (uint256(_VAULT_ID) << _ACCOUNT_ID_SHIFT),
-                _tag(amount, _CRAPS_FLAG_COMP)
-            );
-        } else {
-            _burnCoin(msg.sender, amount);
-        }
-        _battles[w.key] = (g & ~(_BG_SEED_MASK << _BG_SEED_SHIFT)) | (seed << _BG_SEED_SHIFT);
-        emit CrapsBonusDonated(w.key, msg.sender, amount, seed * _BATTLE_STAKE_UNIT);
-    }
+    function donate(bool custom, uint256 index, uint24 granules) external returns (uint256 amount) { _delegateJackpot(); }
 
     /// @dev Seat the house and the vault on the DAY lane: one ticket each, playing every window
     ///      of the day, at the sum of what those windows cost. They take whatever seats are next:
@@ -1836,12 +1771,10 @@ contract CrapsBattle is CrapsBattleStorage {
     function _currentBonusSlot() internal view returns (uint24 day, uint256 period, uint256 slot) {
         day = _currentDayIndex();
         uint256 elapsed = (block.timestamp - 82_620) % 1 days;
-        if (elapsed < 20 minutes) period = 0;
-        else if (elapsed < 6 hours + 3 minutes) period = 1;
-        else if (elapsed < 12 hours + 3 minutes) period = 2;
-        else if (elapsed < 18 hours + 3 minutes) period = 3;
-        else if (elapsed < 1 days - 20 minutes) period = 4;
-        else period = 5;
+        if (elapsed >= 1 days - 20 minutes) period = 5;
+        else if (elapsed >= 20 minutes) {
+            unchecked { period = 1 + (elapsed - 3 minutes) / 6 hours; }
+        }
         slot = _slotOf(day, period);
     }
 
@@ -1868,9 +1801,9 @@ contract CrapsBattle is CrapsBattleStorage {
     }
 
     /// @dev Split the ordinary allocation by tier weight. The jackpot has its own Added funding.
-    function _windowShare(uint256 budget, uint256 weight, uint256 period, uint256 tier) private pure returns (uint256) {
-        if (period == _BONUS_PERIODS_PER_DAY - 1 || weight == 0) return 0;
-        return budget * (1 << (tier - 1)) / weight;
+    function _windowShare(uint256 budget, uint256 weight, uint256 tier) internal pure returns (uint256) {
+        if (weight == 0) return 0;
+        unchecked { return budget * (1 << (tier - 1)) / weight; }
     }
 
     function _bonusPreset(uint256 roll, uint256 period) internal pure
@@ -1922,7 +1855,6 @@ contract CrapsBattle is CrapsBattleStorage {
     ///      nothing because its payment is zero — which is also why a boon can never turn a bust
     ///      into a credit and move a settlement's credit accounting.
     function _boonBonus(uint256 mask, uint256 basePaid) internal pure returns (uint256) {
-        if (basePaid == 0) return 0;
         uint256 bps;
         if (mask == 1) bps = 500;
         else if (mask == 2) bps = 1000;
@@ -1934,10 +1866,8 @@ contract CrapsBattle is CrapsBattleStorage {
         }
     }
 
-    /// @dev Keep the full integer price above an explicit flag byte. Reject out-of-range
-    ///      amounts and unknown action bits before shifting, including on discounted paths.
+    /// @dev Every caller supplies a bounded whole-token price and fixed five-bit action flags.
     function _tag(uint256 cost, uint256 flags) internal pure returns (uint256) {
-        if (cost > type(uint248).max || flags & ~uint256(0x1F) != 0) revert BadBurnTag();
         return (cost << 8) | flags;
     }
 
@@ -1959,7 +1889,7 @@ contract CrapsBattle is CrapsBattleStorage {
         returns (bool finalized)
     {
         bytes32 key = w.key;
-        uint256 g = _battles[key];
+        uint256 g = _loadBattle(key);
         unchecked {
             g += 1 << _BG_RESOLVED_SHIFT;
             // Greater displaces outright. Dead level — same rank, same ending bankroll, same
@@ -1980,7 +1910,7 @@ contract CrapsBattle is CrapsBattleStorage {
             // no scoreboard, so committing the word here costs the same single write it always
             // did — and it means a finished field is already marked finished by the time the
             // first external credit is made, rather than while one is in flight.
-            _battles[key] = g;
+            _storeBattle(key, g);
             if (((g >> _BG_RESOLVED_SHIFT) & _MASK32) == entrants) {
                 // AND IT PAYS, here, in the same transaction that finished it. Everything a
                 // payment needs was just computed to finalize the field — the winner, the boost,
@@ -2052,7 +1982,7 @@ contract CrapsBattle is CrapsBattleStorage {
         private
         returns (uint256 ride, uint256 extra)
     {
-        uint256 f = _highField[w.key];
+        uint256 f = _loadHighField(w.key);
         unchecked {
             uint256 best = (f >> _HF_SCORE_SHIFT) & _SC_BEST_MASK;
             uint64 lead = uint64((f >> _HF_WINNER_SHIFT) & _MASK32);
@@ -2079,7 +2009,7 @@ contract CrapsBattle is CrapsBattleStorage {
                 // resolve cursor is what keeps a later call from re-walking the seat.
                 f |= _HF_DONE_BIT;
             }
-            _highField[w.key] = f;
+            _storeHighField(w.key, f);
         }
     }
 
@@ -2108,37 +2038,16 @@ contract CrapsBattle is CrapsBattleStorage {
         return _shareOf(w, true);
     }
 
-    /// @dev One window's slice of its OWN day's budget. A day that has not opened yet has nothing
-    ///      banked, so the schedule quotes what it WOULD draw — a pure function of days already
-    ///      settled, so a day about to open quotes exactly what it will get.
-    ///
-    ///      A CUSTOM battle puts up no house money at all. Its pot is the bounties its entrants
-    ///      posted plus whatever anyone donated onto it — the protocol's purse backs the windows
-    ///      it schedules itself, not a table someone else opened.
-    function _shareOf(Window memory w, bool high) private view returns (uint256) {
+    /// @dev Opening stores this budget before quoting or settling any scheduled window.
+    ///      Custom and jackpot fields receive no schedule boost.
+    function _shareOf(Window memory w, bool high) internal view virtual returns (uint256) {
         if (w.bound >= _CUSTOM_SLOT_BASE || _isJackpotSlot(w.bound)) return 0;
         unchecked {
             uint256 slot = uint256(w.bound);
             uint24 day = uint24(slot / _BONUS_SLOTS_PER_DAY);
-            uint256 packed = _boostBudget[day];
-            uint256 budget;
-            uint256 weight;
-            if (packed != 0) {
-                weight = packed >> _BUDGET_W_SHIFT;
-                budget = high ? _highBudget[day] : packed & _BUDGET_MASK;
-            } else {
-                uint256 word = _dailyWordAt(day);
-                if (word == 0) return 0;
-                weight = _routineWeight(word);
-                (uint256 m, uint256 h) = _drawBudgets(day);
-                // The HIGH budget is whole and unsplit. The main one is quoted at the ladder half
-                // it will be stored as, through the same helper the opening uses.
-                if (high) budget = h;
-                else (budget,) = _splitMainBudget(m);
-            }
-            // `slot % _BONUS_SLOTS_PER_DAY` names the period plus one — zero is the gap between
-            // days — so the period this window shares on is one below it.
-            return _windowShare(budget, weight, (slot % _BONUS_SLOTS_PER_DAY) - 1, w.tier);
+            uint256 packed = _loadBudget(day);
+            uint256 budget = (high ? packed >> 112 : packed) & _BUDGET_MASK;
+            return _windowShare(budget, packed >> _BUDGET_W_SHIFT, w.tier);
         }
     }
 
@@ -2146,7 +2055,7 @@ contract CrapsBattle is CrapsBattleStorage {
     ///      sizes a later bonus, and no real table can approach a uint256.
     function _bookDay(uint24 day, uint256 staked, uint256 high) internal {
         unchecked {
-            _dayStaked[day] += staked + (high << _DAY_HIGH_SHIFT);
+            _storeDayStaked(day, _loadDayStaked(day) + (staked + (high << _DAY_HIGH_SHIFT)));
         }
     }
 
@@ -2166,12 +2075,12 @@ contract CrapsBattle is CrapsBattleStorage {
             for (uint256 i = 1; i <= _BOOST_ACTION_WINDOW_DAYS; ++i) {
                 if (day < i) break;
                 uint24 d = day - uint24(i);
-                uint256 action = _dayStaked[d];
+                uint256 action = _loadDayStaked(d);
                 uint256 high = action >> _DAY_HIGH_SHIFT;
                 // The two lanes are rated the same and NEVER share an amount: what a high seat put
                 // up is in the high half and taken back out of the total, so no wei of action can
                 // feed both components.
-                er += ((uint256(uint128(action)) - high) * _BOOST_ACTION_BPS) / _BPS_DENOMINATOR;
+                er += (((action & _BUDGET_MASK) - high) * _BOOST_ACTION_BPS) / _BPS_DENOMINATOR;
                 eh += (high * _BOOST_ACTION_BPS) / _BPS_DENOMINATOR;
             }
             // AVERAGED OVER THE WINDOW, NEVER SUMMED. A budget is drawn EVERY day, off a window
@@ -2254,11 +2163,5 @@ contract CrapsBattle is CrapsBattleStorage {
             return ((units + _BOOST_ROUND_STEP / 2) / _BOOST_ROUND_STEP) * _BOOST_ROUND_STEP;
         }
     }
-
-
-
-    /// @dev The progressive's award accounting. The caller supplies the already-qualified share;
-    ///      all pool debits and pass/liquid splits live here.
-
 
 }

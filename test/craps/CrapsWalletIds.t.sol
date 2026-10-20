@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {CrapsLensReader} from "../../contracts/CrapsLens.sol";
+
 import {Vm, VmSafe} from "forge-std/Vm.sol";
 import {CrapsPins, MockGame, MockFlip, MockQuests, MockCoinflip} from "./CrapsPins.sol";
 import {CrapsViews} from "./CrapsViews.sol";
@@ -41,7 +43,7 @@ contract WalletIdTable is CrapsViews {
     /// @dev A one-seat scheduled field owned by wallet `id`, finalized at `score` through the
     ///      shipped fold and payout.
     function standField(bytes32 key, uint64 slot, uint32 id, uint256 score, uint256 bankrollFlip) external {
-        _battles[key] = 1;
+        _storeBattle(key, 1);
         _appendBet((uint256(slot) << 64) | 1, uint256(id));
         Window memory w;
         w.key = key;
@@ -414,8 +416,8 @@ contract CrapsWalletIdsTest is CrapsPins {
         vm.recordLogs();
         WalletIdTable fresh = WalletIdTable(vm.deployCode("CrapsWalletIds.t.sol:WalletIdTable"));
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        assertEq(fresh.idWord(2), 20, "sDGNRS ID word: twenty normal passes");
-        assertEq(fresh.idWord(1), 20, "Vault ID word: twenty normal passes");
+        assertEq(fresh.idWord(2), 20 | CrapsPreferenceLib.RETAINED, "sDGNRS ID word: twenty normal passes");
+        assertEq(fresh.idWord(1), 20 | CrapsPreferenceLib.RETAINED, "Vault ID word: twenty normal passes");
         uint256 seen;
         for (uint256 i; i < logs.length; ++i) {
             if (_t0(logs[i]) != CrapsBattleStorage.CrapsPassesCredited.selector) continue;
@@ -543,7 +545,7 @@ contract CrapsWalletIdsTest is CrapsPins {
             ++n;
         }
         assertEq(n, 2);
-        (CrapsBattleStorage.JackpotRound memory r,,) = JackpotBattle(address(c)).jackpotBattleOf(uint64(_daySlot(day) + 6));
+        (CrapsBattleStorage.JackpotRound memory r,,) = CrapsLensReader.jackpotBattleOf(address(c), uint64(_daySlot(day) + 6));
         assertEq(r.drawnCount, 2, "the zero-ID and malformed entries were forfeited");
     }
 
@@ -789,7 +791,7 @@ contract CrapsWalletIdsTest is CrapsPins {
         game.setRngLocked(true);
         vm.prank(ContractAddresses.GAME);
         JackpotBattle(address(c)).lockJackpotBattle(day + 1, 50_000 ether / 500, 2);
-        uint256 reserve = JackpotBattle(address(c)).highRollerReserve();
+        uint256 reserve = CrapsLensReader.highRollerReserve(address(c));
         assertGt(reserve, 0);
 
         uint256[] memory field = new uint256[](2);
@@ -811,7 +813,7 @@ contract CrapsWalletIdsTest is CrapsPins {
             _finishJackpot(slot);
             Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
             Vm.Log[] memory logs = vm.getRecordedLogs();
-            CrapsBattleStorage.HighRollerDraw memory d = JackpotBattle(address(c)).highRollerDrawOf(slot);
+            CrapsBattleStorage.HighRollerDraw memory d = CrapsLensReader.highRollerDrawOf(address(c), slot);
             assertTrue(d.resolved);
             assertEq(d.eligible, 2, "alice and carol only: ID 2 never enters");
             assertTrue(d.nominee == aId || d.nominee == cId, "the nominee is a wallet ID");

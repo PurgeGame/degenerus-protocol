@@ -78,7 +78,7 @@ contract WaterHarness is CrapsViews {
     /// @dev The raw scoreboard word, so a fixture can stand a field up at the exact shape it
     ///      wants to grade the finalization on.
     function writeBattleWord(bytes32 key, uint256 word) external {
-        _battles[key] = word;
+        _storeBattle(key, word);
     }
 
     /// @dev A bet header, so the synthesized winner is a registered wallet carrying a real standing.

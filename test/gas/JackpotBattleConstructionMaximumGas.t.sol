@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {CrapsLensReader} from "../../contracts/CrapsLens.sol";
+
 import {BattlePaidMinerProbe, BattleConstructionGameSeed,
     BattleConstructionTableSeed} from "./JackpotBattleConstructionGas.t.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
@@ -22,13 +24,13 @@ contract BattleMaximumTableSeed is BattleConstructionTableSeed {
         uint256 daySlot = uint256(day) * _BONUS_SLOTS_PER_DAY;
         bytes32 key = bytes32(daySlot + _BONUS_PERIODS_PER_DAY);
         if (mode == 1) { // Ordinary paid seats, no high extras.
-            _dayTickets[daySlot] = 50;
-            _highField[key] = 0;
+            _storeDayTickets(daySlot, 50);
+            _storeHighField(key, 0);
         } else if (mode == 2) { // Detached, free-only jackpot after a skipped paid day.
-            _boostBudget[day] = 0;
+            _storeBudget(day, 0);
         } else if (mode == 3) { // Sole high seat takes the alternative fee-booking branch.
-            _dayTickets[daySlot] = 50;
-            _highField[key] = 1;
+            _storeDayTickets(daySlot, 50);
+            _storeHighField(key, 1);
         }
     }
 
@@ -175,7 +177,7 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         assertTrue(progressed);
         (CrapsBattleStorage.JackpotRound memory r,, uint64 settled) =
-            JackpotBattle(address(crapsBattle)).jackpotBattleOf(activeSlot);
+            CrapsLensReader.jackpotBattleOf(address(crapsBattle), activeSlot);
         assertEq(r.drawnCount, c.target < 50 ? c.target : 50);
         assertEq(r.drawnUnits, r.drawnCount);
         assertEq(r.started, c.target <= 50);
@@ -249,7 +251,7 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol {
             assertTrue(ok);
             assertLt(used, 10_000_000);
             (CrapsBattleStorage.JackpotRound memory r,, uint64 settled) =
-                JackpotBattle(address(crapsBattle)).jackpotBattleOf(activeSlot);
+                CrapsLensReader.jackpotBattleOf(address(crapsBattle), activeSlot);
             assertEq(r.drawnCount, 150);
             assertEq(r.started, true);
             assertEq(settled, 0, "must stop at construction checkpoint");
@@ -280,7 +282,7 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol {
         (bool refused,) = _mine(low);
         assertFalse(refused);
         (CrapsBattleStorage.JackpotRound memory beforeRound,,) =
-            JackpotBattle(address(crapsBattle)).jackpotBattleOf(activeSlot);
+            CrapsLensReader.jackpotBattleOf(address(crapsBattle), activeSlot);
         assertEq(beforeRound.drawWord, 0);
         assertEq(beforeRound.drawnCount, 0);
         assertEq(coinflip.coinflipAmount(MINER), 0);
@@ -288,7 +290,7 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol {
         (bool accepted, uint256 used) = _mine(high);
         assertTrue(accepted);
         (CrapsBattleStorage.JackpotRound memory afterRound,,) =
-            JackpotBattle(address(crapsBattle)).jackpotBattleOf(activeSlot);
+            CrapsLensReader.jackpotBattleOf(address(crapsBattle), activeSlot);
         assertEq(afterRound.drawnCount, 50);
         assertEq(afterRound.started, false, "checkpoint must leave the partial field unsealed");
         assertGt(afterRound.drawCursor, 0);
@@ -362,14 +364,14 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol {
                 assertLt(used, GasBounds.JACKPOT_BATTLE_DRAW);
             }
             (CrapsBattleStorage.JackpotRound memory r,,) =
-                JackpotBattle(address(crapsBattle)).jackpotBattleOf(activeSlot);
+                CrapsLensReader.jackpotBattleOf(address(crapsBattle), activeSlot);
             assertEq(r.drawnCount, c.target);
             assertEq(r.started, true);
             assertTrue(vm.revertToState(pristine));
         }
     }
     function _round() private view returns (CrapsBattleStorage.JackpotRound memory r) {
-        (r,,) = JackpotBattle(address(crapsBattle)).jackpotBattleOf(activeSlot);
+        (r,,) = CrapsLensReader.jackpotBattleOf(address(crapsBattle), activeSlot);
     }
 
     function _entryHash(bytes32 previous, Vm.Log[] memory logs) private pure returns (bytes32 digest) {
@@ -384,7 +386,7 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol {
 
     function _roundHash() private view returns (bytes32) {
         (CrapsBattleStorage.JackpotRound memory r, uint256 board, uint64 settled) =
-            JackpotBattle(address(crapsBattle)).jackpotBattleOf(activeSlot);
+            CrapsLensReader.jackpotBattleOf(address(crapsBattle), activeSlot);
         assertEq(settled, 0, "field construction must leave simulation for the next call");
         return keccak256(abi.encode(r, board, settled, vm.load(address(coin), bytes32(uint256(1)))));
     }

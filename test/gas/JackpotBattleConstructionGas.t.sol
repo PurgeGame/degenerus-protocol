@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {CrapsLensReader} from "../../contracts/CrapsLens.sol";
+
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
@@ -94,15 +96,15 @@ contract BattleConstructionTableSeed is CrapsBattleStorage {
     /// append iteration. Own/day/high seats make every nonempty seal accounting branch live.
     function seedPaidField(uint24 day) external {
         _bonus = uint256(day) + 1;
-        _boostBudget[day] = 1;
+        _storeBudget(day, 1);
         uint256 daySlot = uint256(day) * _BONUS_SLOTS_PER_DAY;
         uint64 slot = uint64(daySlot + _BONUS_PERIODS_PER_DAY);
-        _dayTickets[daySlot] = 50 + 25 * _DT_ALL_HIGH;
+        _storeDayTickets(daySlot, 50 + 25 * _DT_ALL_HIGH);
         // Opened events already carry their advertised fee and high-lane terms at lock.
-        _battles[bytes32(uint256(slot))] = 50
+        _storeBattle(bytes32(uint256(slot)), 50
             | ((_JACKPOT_PRICE / _BATTLE_STAKE_UNIT) << _BG_STAKE_SHIFT)
-            | (_BG_TERMS_FROZEN << _BG_TERM_TIER_SHIFT);
-        _highField[bytes32(uint256(slot))] = 25;
+            | (_BG_TERMS_FROZEN << _BG_TERM_TIER_SHIFT));
+        _storeHighField(bytes32(uint256(slot)), 25);
         for (uint256 i = 1; i <= 50; ++i) {
             _appendBet((uint256(slot) << 64) | i, uint160(0x310000 + i));
             _appendBet((daySlot << 64) | i, uint160(0x320000 + i));
@@ -168,7 +170,7 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
         vm.prank(address(game));
         JackpotBattle(address(crapsBattle)).lockJackpotBattle(day, pool, CEILING);
         (slot,,,) = JackpotBattle(address(crapsBattle)).jackpotProgress();
-        (CrapsBattleStorage.JackpotRound memory round,,) = JackpotBattle(address(crapsBattle)).jackpotBattleOf(slot);
+        (CrapsBattleStorage.JackpotRound memory round,,) = CrapsLensReader.jackpotBattleOf(address(crapsBattle), slot);
         assertEq(round.added, added);
         assertEq(round.paidCount, 100);
         assertGt(round.paidUnits, round.paidCount, "high-seat seal branch must be present");
@@ -221,12 +223,12 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
         }
         assertEq(n, 50);
         (CrapsBattleStorage.JackpotRound memory round, uint256 board,) =
-            JackpotBattle(address(crapsBattle)).jackpotBattleOf(slot);
+            CrapsLensReader.jackpotBattleOf(address(crapsBattle), slot);
         assertEq(round.drawnCount, 50);
         assertEq(round.drawnUnits, 50);
         assertEq(uint32(board), 150);
         assertTrue(round.started);
-        assertEq(round.started, true);
+        assertGt(round.drawWord, 0);
         assertGt(round.potRemainder, 0, "fresh remainder slot must exercise its write");
         assertGt(coin.crapsCompAllowance(), priorComps, "real FLIP comps sink must execute");
     }
@@ -236,7 +238,7 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
         uint256 word;
         for (uint256 i; i < 10; ++i) {
             _worker();
-            (CrapsBattleStorage.JackpotRound memory round,,) = JackpotBattle(address(crapsBattle)).jackpotBattleOf(slot);
+            (CrapsBattleStorage.JackpotRound memory round,,) = CrapsLensReader.jackpotBattleOf(address(crapsBattle), slot);
             if (i == 0) word = round.drawWord;
             assertEq(round.drawWord, word);
             assertEq(round.drawnCount, (i + 1) * 50);
@@ -255,7 +257,7 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
         assertFalse(result.done, "construction remains separate from simulation");
         bytes32 transcript = keccak256(abi.encode(vm.getRecordedLogs()));
         (CrapsBattleStorage.JackpotRound memory round, uint256 board, uint64 resolved) =
-            JackpotBattle(address(crapsBattle)).jackpotBattleOf(slot);
+            CrapsLensReader.jackpotBattleOf(address(crapsBattle), slot);
         assertEq(round.drawnCount, 500, "one invocation must reuse the list across ten chunks");
         assertEq(round.started, true, "the final chunk seals the field");
         assertEq(resolved, 0);
@@ -270,7 +272,7 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
             );
             assertTrue(result.progressed);
             assertFalse(result.done);
-            (round, board, resolved) = JackpotBattle(address(crapsBattle)).jackpotBattleOf(slot);
+            (round, board, resolved) = CrapsLensReader.jackpotBattleOf(address(crapsBattle), slot);
             assertEq(round.drawnCount, (i + 1) * 50, "reference rebuilds the list once per chunk");
         }
         assertEq(keccak256(abi.encode(vm.getRecordedLogs())), transcript, "identical ordered award and seal events");
@@ -315,7 +317,7 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
         );
         assertFalse(result.progressed, "insufficient actual gas must defer before prepare");
         vm.etch(address(game), gameCode);
-        (CrapsBattleStorage.JackpotRound memory round,,) = JackpotBattle(address(crapsBattle)).jackpotBattleOf(slot);
+        (CrapsBattleStorage.JackpotRound memory round,,) = CrapsLensReader.jackpotBattleOf(address(crapsBattle), slot);
         assertEq(round.drawWord, 0, "deferral must not initialize a draw");
         assertEq(round.drawnCount, 0);
         assertEq(round.started, false, "deferral must not seal a field");
@@ -327,13 +329,13 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
         (bool ok,) = address(game).call{gas: 100_000}(
             abi.encodeCall(game.mineFlip, (type(uint32).max)));
         assertFalse(ok, "an unfunded construction must roll back");
-        (round,,) = JackpotBattle(address(crapsBattle)).jackpotBattleOf(slot);
+        (round,,) = CrapsLensReader.jackpotBattleOf(address(crapsBattle), slot);
         assertEq(round.drawnCount, 0);
 
         _cool();
         vm.prank(MINER);
         game.mineFlip{gas: GasBounds.JACKPOT_BATTLE_DRAW}(type(uint32).max);
-        (round,,) = JackpotBattle(address(crapsBattle)).jackpotBattleOf(slot);
+        (round,,) = CrapsLensReader.jackpotBattleOf(address(crapsBattle), slot);
         assertGt(round.drawWord, 0, "funded first chunk initialized the draw");
         assertEq(round.drawnCount, 50, "one canonical award group despite extreme estimates");
         assertEq(round.started, false, "remaining groups must precede the field seal");
@@ -351,9 +353,9 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
         emit log_named_uint("cold complete mineFlip battle construction incl intrinsic", used);
         assertLt(used, 10_000_000);
         (CrapsBattleStorage.JackpotRound memory round,, uint64 resolved) =
-            JackpotBattle(address(crapsBattle)).jackpotBattleOf(slot);
+            CrapsLensReader.jackpotBattleOf(address(crapsBattle), slot);
         assertEq(round.drawnCount, 150);
-        assertEq(round.started, true);
+        assertGt(round.drawWord, 0);
         assertEq(resolved, 0, "construction call must stop before simulations");
         assertGt(coinflip.coinflipAmount(MINER), beforeReward, "real miner compensation must be included");
     }

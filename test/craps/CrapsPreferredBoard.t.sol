@@ -132,7 +132,7 @@ contract CrapsPreferredBoardTest is CrapsPins {
 
     function test_CreditsConversionSpendingAndCapsPreservePreference() public {
         _save(alice, BOARD);
-        uint256 saved = _word(alice);
+        uint256 saved = _word(alice) | CrapsPreferenceLib.RETAINED;
         // 21 normals per high credit, plus one spare so a normal reservation still has one to spend.
         vm.prank(ContractAddresses.GAME); c.creditPasses(aliceId, 22, 0);
         vm.prank(alice); c.convertNormalToHigh(0, 1);
@@ -153,7 +153,7 @@ contract CrapsPreferredBoardTest is CrapsPins {
 
     function test_DeliverySnapshotsAndNeverInitializes() public {
         _save(alice, BOARD);
-        uint256 saved = _word(alice);
+        uint256 saved = _word(alice) | CrapsPreferenceLib.RETAINED;
         vm.prank(ContractAddresses.GAME); uint24 day = c.deliverPasses(aliceId, 2, 0);
         assertEq(_dayChips(day, alice), BOARD);
         assertEq(_word(alice), saved | 1);
@@ -162,7 +162,7 @@ contract CrapsPreferredBoardTest is CrapsPins {
         vm.prank(ContractAddresses.GAME); c.deliverPasses(bobId, 1, 0);
         assertEq(_word(bob), 0, "award initialized preference");
         vm.prank(ContractAddresses.GAME); c.deliverPasses(bobId, 2, 0);
-        assertEq(_word(bob), 2, "bank-only award initialized preference");
+        assertEq(_word(bob), 2 | CrapsPreferenceLib.RETAINED, "bank-only award initialized preference");
     }
 
     function test_AutoSaveBatchExplicitZeroAndLockedSkip() public {
@@ -198,7 +198,7 @@ contract CrapsPreferredBoardTest is CrapsPins {
         uint24 day = c.currentDayIndex() + 1;
         vm.prank(ContractAddresses.VAULT); c.vaultComp(uint256(bobId) | (uint256(2) << 160) | (uint256(day) << 176) | (uint256(2) << 200));
         assertEq(_dayChips(day, bob), BOARD); assertEq(_dayChips(day + 1, bob), BOARD);
-        uint256 saved = _word(bob);
+        uint256 saved = _word(bob) | CrapsPreferenceLib.RETAINED;
         vm.prank(ContractAddresses.VAULT); c.vaultComp(uint256(bobId) | (uint256(4) << 160) | (uint256(2) << 200));
         assertEq(_word(bob), saved | 2);
         _save(bob, 0); assertEq(_dayChips(day, bob), BOARD);
@@ -305,7 +305,7 @@ contract CrapsPreferredBoardTest is CrapsPins {
         assertEq(_dayChips(c.currentDayIndex(), ContractAddresses.VAULT), BOARD);
         assertEq(c.preferredBoardOf(game.walletIdOf(ContractAddresses.VAULT)), BOARD);
         assertEq(_word(ContractAddresses.VAULT) & type(uint64).max, 0);
-        assertEq(_word(ContractAddresses.SDGNRS), INIT);
+        assertEq(_word(ContractAddresses.SDGNRS), INIT | CrapsPreferenceLib.RETAINED);
     }
     function test_BoardAndPassesShareOneIdWord() public {
         _save(alice, BOARD);

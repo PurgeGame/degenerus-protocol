@@ -18,13 +18,8 @@ interface IGameCrapsWorkStage {
     function registerWallet(address owner, bool allocate) external returns (uint32);
 }
 
-/// @dev Shared layout for the table and its pinned jackpot lifecycle delegate. Append-only.
+/// @dev Shared layout for the table and its pinned jackpot lifecycle delegate.
 abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
-    /// @notice A craps price reached the burn lane with a dirty low byte, where the action flags
-    ///         ride. Unreachable by construction — every price is a whole-FLIP multiple — and a
-    ///         hard stop rather than a silent mis-tag if that ever stops being true.
-    error BadBurnTag();
-
     /// @notice A custom battle was opened on terms it may not have. ONE error for the whole
     ///         definition — round, bankroll depth, goal band, bounty ceiling and granule field,
     ///         close time and high-roller multiple — rather than one per field.
@@ -54,7 +49,6 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///         the real-entrant bit and the tier above it, and the day's opener forfeits the
     ///         excess instead of reverting.
     error SeedAboveMax();
-
 
     /// @notice A board's packed word sets bits outside the ten three-bit legs, or names more
     ///         than seven chips.
@@ -147,14 +141,13 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///         the action they booked. It is a RATE ON THE HANDLE and not an estimate of burn —
     ///         the table does not measure what it kept, and this figure has never claimed to.
     ///
-    ///         WHY TWELVE. Measured post-boost on the shipped resolver at five million runs a
-    ///         cell, the weakest scheduled cell still leaves the table 13.72% of the bankroll it
+    ///         WHY TWELVE. Measured post-boost on 30 confirmed boards at five million paired runs a
+    ///         board, the weakest scheduled board leaves the table 16.1% of the bankroll it
     ///         was bought with — a run that goes broke has its remainder deleted, and that
-    ///         deletion is what pays for the subsidy. Twelve sits under the worst cell, so the
-    ///         linear term cannot outrun the engine's own take anywhere on the schedule.
+    ///         deletion is what pays for the subsidy. Twelve sits below that measured minimum.
     ///
     ///         A WHOLE-RUN FIGURE, NOT A PER-BET EDGE — the two are nothing alike here. A slip
-    ///         re-bets its whole bankroll hand after hand chasing five times it out of five
+    ///         re-bets its whole bankroll hand after hand chasing five times it at 2.5
     ///         rounds of depth, so what decides the loss is almost never the edge on any leg; it
     ///         is that the run busts first.
     uint256 internal constant _BOOST_ACTION_BPS = 1200;
@@ -385,18 +378,17 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     /// @dev One high ticket in EVERY period's counter — what a whole-day high entry adds.
     uint256 internal constant _DT_ALL_HIGH = 0x0000000000000001000000010000000100000001000000010000000100000000;
 
-    /// @dev A day's action book is one word: total bankroll in the low 128 bits and the high-lane
-    ///      part in the high 128. Even a maximally populated field at the protocol's term ceilings
-    ///      is comfortably below either half; packing makes a seven-day budget draw seven cold
-    ///      reads instead of fourteen.
-    uint256 internal constant _DAY_HIGH_SHIFT = 128;
+    /// @dev A day's action book holds total and high bankroll in two 112-bit lanes plus its day tag.
+    ///      Both lanes fit the maximum scheduled field. A seven-day budget draw takes seven
+    ///      cold reads instead of fourteen.
+    uint256 internal constant _DAY_HIGH_SHIFT = 112;
 
-    /// @dev A day's budget word carries the day's total ROUTINE WEIGHT in its top byte. The
+    /// @dev A day's budget word holds main112, high112, routine weight8 and exact day24. The
     ///      weight is a pure function of the day's word, but recomputing it means six keccaks,
     ///      and every settle reads a window's share — so it is summed once, when the day opens,
     ///      and rides home beside the figure it divides.
-    uint256 internal constant _BUDGET_MASK = (1 << 248) - 1;
-    uint256 internal constant _BUDGET_W_SHIFT = 248;
+    uint256 internal constant _BUDGET_MASK = (1 << 112) - 1;
+    uint256 internal constant _BUDGET_W_SHIFT = 224;
 
     /// @dev Where the bet id sits in `CrapsSlipPlaced`, clear of the chips' 30 bits.
     uint256 internal constant _EV_BET_SHIFT = 32;
@@ -559,9 +551,9 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
         word = _loadBetUnchecked(id, false);
         uint256 slot = id >> 64;
         if (word != 0 && slot < _CUSTOM_SLOT_BASE && slot & 7 >= _BONUS_PERIODS_PER_DAY) {
-            JackpotRound storage r = _jackpotRounds[slot];
-            uint256 dayCount = slot & 7 == 7 ? 0 : uint32(_dayTickets[slot & ~uint256(7)]);
-            if (r.requestDay != 0 && uint256(uint64(id)) + dayCount > r.paidCount) {
+            JackpotRound storage r = _jackpotRounds[slot & 511];
+            uint256 dayCount = slot & 7 == 7 ? 0 : uint32(_loadDayTickets(slot & ~uint256(7)));
+            if (_roundExists(slot) && uint256(uint64(id)) + dayCount > r.paidCount) {
                 word |= uint256(1) << _AWARD_UNITS_SHIFT;
             }
         }
@@ -598,13 +590,18 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     }
 
     function _loadDaySeat(uint256 daySlot, uint32 id) internal view returns (uint256 word) {
-        word = _daySeated[daySlot & 511][id];
-        if (word >> 40 != daySlot >> 3) return 0;
+        uint256 day = daySlot >> 3;
+        word = uint64(_daySeated[(day & 63) >> 2][id] >> ((day & 3) * 64));
+        if (word >> 40 != day) return 0;
         return word & _DAY_SEAT_VALUE_MASK;
     }
 
     function _storeDaySeat(uint256 daySlot, uint32 id, uint256 word) internal {
-        _daySeated[daySlot & 511][id] = (word & _DAY_SEAT_VALUE_MASK) | ((daySlot >> 3) << 40);
+        uint256 day = daySlot >> 3;
+        uint256 key = (day & 63) >> 2;
+        uint256 shift = (day & 3) * 64;
+        uint256 lane = (word & _DAY_SEAT_VALUE_MASK) | (day << 40);
+        _daySeated[key][id] = (_daySeated[key][id] & ~(uint256(type(uint64).max) << shift)) | (lane << shift);
     }
 
     /// @notice Custom battles opened so far. The next takes slot `_CUSTOM_SLOT_BASE + this + 1`.
@@ -620,25 +617,25 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     /// @dev Opened bonus day plus one; zero means no day has been opened yet.
     uint256 internal _bonus;
 
-    /// @dev Bits 0..47: table index + 1 (zero = open); bits 48..111: settlement cursor.
-    ///      A closed field reuses its binding word as seats settle. No day identifier is recycled.
+    /// @dev Index48, settlement cursor64, reserve draw112 and exact scheduled day24.
+    ///      Scheduled days recycle modulo 64; custom fields retain their complete key.
     mapping(uint256 => uint256) internal _slotState;
 
     function _slotIndexOf(uint256 slot) internal view returns (uint48) {
-        return uint48(_slotState[slot]);
+        return uint48(_loadSlotState(slot));
     }
 
     function _bonusCursorOf(uint256 slot) internal view returns (uint64) {
-        return uint64(_slotState[slot] >> 48);
+        return uint64(_loadSlotState(slot) >> 48);
     }
 
     function _setSlotIndex(uint256 slot, uint48 index) internal {
-        _slotState[slot] = (_slotState[slot] & ~uint256(type(uint48).max)) | index;
+        _storeSlotState(slot, (_loadSlotState(slot) & ~uint256(type(uint48).max)) | index);
     }
 
     function _setBonusCursor(uint256 slot, uint64 cursor) internal {
-        _slotState[slot] = (_slotState[slot] & ~(uint256(type(uint64).max) << 48))
-            | (uint256(cursor) << 48);
+        _storeSlotState(slot, (_loadSlotState(slot) & ~(uint256(type(uint64).max) << 48))
+            | (uint256(cursor) << 48));
     }
 
     /// @dev Scheduled window slots have remainders 1..6 within their eight-slot day.
@@ -662,8 +659,8 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     mapping(uint256 => uint256) internal _dayTickets;
 
     /// @dev The holder's day-ticket seat in bits 0..31, scheduled window membership in
-    ///      bits 33..38, and the exact day at bits 40..63. Keys use daySlot modulo 512;
-    ///      _loadDaySeat authenticates and strips the day before checking membership.
+    ///      bits 33..38, and the exact day at bits 40..63 of each lane. Four lanes share
+    ///      a word keyed by (day & 63) >> 2; _loadDaySeat authenticates the selected lane.
     ///      Keyed by wallet ID. Day-ticket gates ask NONZERO — one ticket per wallet per day, and a bar on any single window of that
     ///      day, since the ticket already sits in all of them — but storing the seat is what lets
     ///      an upgrade name the account's own ticket as `(daySlot << 64) | seat` without a walk.
@@ -675,8 +672,8 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///         anyone who clears its terms, and the bonus windows are the protocol's own door.
     mapping(address => bool) internal _battleCreator;
 
-    /// @dev Per protocol day, the total BANKROLL in bits 0..127 and its high-roller part in bits
-    ///      128..255. The total sizes later bonuses without depending on how the dice ran; the
+    /// @dev Per protocol day, total BANKROLL in bits 0..111, its high-roller part in bits
+    ///      112..223, and exact day at 232..255. The total sizes later bonuses; the
     ///      high part is split out because the lanes recycle at different rates. Bounties and
     ///      boost never enter. One packed write per settle batch, never one per seat.
     mapping(uint24 => uint256) internal _dayStaked;
@@ -691,10 +688,8 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      on entry or on settlement.
     mapping(bytes32 => uint256) internal _highField;
 
-    /// @dev A day's high-roller boost budget, fixed when the day opens beside the main one. It has
-    ///      no floor: the high lane pays out of what high rollers actually burned and out of
-    ///      nothing else, so a day that saw none simply has none to give.
-    mapping(uint24 => uint256) internal _highBudget;
+    /// @dev Exact day plus initialized-period flags authenticate the full-width scoreboards.
+    mapping(uint24 => uint256) internal _battleDays;
 
     /// @dev A custom battle's whole definition, one word per slot — see the layout above. The
     ///      terms are fixed for the FIELD at creation rather than restated by each entrant, which
@@ -754,7 +749,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      Passes commit before opening RNG, so this is a comparison to the expected cost,
     ///      not a guaranteed discount or premium against every realized day's terms.
     /// @dev Paid-craps burn encoding: the low byte holds flags and bits 8..255 hold
-    ///      the whole-FLIP amount. `_tag` validates both before shifting the amount.
+    ///      the bounded whole-FLIP amount. Callers supply the action constants below.
     uint256 internal constant _CRAPS_FLAG_JOIN = 0x1;
     uint256 internal constant _CRAPS_FLAG_PASS = 0x2;
     uint256 internal constant _CRAPS_FLAG_NORMAL = 0x4;
@@ -1075,6 +1070,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
         uint32 entryPrice;
         uint32 subsidyMultiplierBps;
         bool started;
+        uint24 day;
     }
     mapping(uint256 => JackpotRound) internal _jackpotRounds;
     uint64 internal _activeJackpotSlot;
@@ -1090,9 +1086,9 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
         bool resolved;
         bool won;
     }
-    // Append-only: both delegate contracts inherit these exact slots.
+    /// @dev Economic reserve plus one; zero position in either FIFO is stored as one.
     uint256 internal _highRollerReserve;
-    mapping(uint64 => HighRollerDraw) internal _highRollerDraws;
+    uint64[2] internal _rngSlotCursor;
     uint256 internal constant _HIGH_RESERVE_DIVISOR = 20; // 5% of unrolled gross Added
     uint256 internal constant _HIGH_RESERVE_CHANCE = 10; // one field-wide chance in ten
     uint256 internal constant HIGH_RESERVE_DRAW_TAG = uint256(keccak256("CrapsHighReserveDraw"));
@@ -1122,8 +1118,123 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     );
     uint64[4] internal _fundedCustomSlots;
     mapping(uint48 => uint64[]) internal _rngSlots;
-    /// @dev Next field in each physical FIFO; length minus cursor is its pending count.
-    uint64[2] internal _rngSlotCursor;
+
+    uint256 internal constant _RING_VALUE_MASK = (uint256(1) << 232) - 1;
+    uint208 internal constant _ROUND_PREPARED = uint208(1) << 207;
+
+    function _loadDayWord(mapping(uint24 => uint256) storage book, uint256 day) private view returns (uint256) {
+        uint256 word = book[uint24(day & 63)];
+        return word >> 232 == day ? word & _RING_VALUE_MASK : 0;
+    }
+
+    function _storeDayWord(mapping(uint24 => uint256) storage book, uint256 day, uint256 value) private {
+        book[uint24(day & 63)] = value | (day << 232);
+    }
+
+    function _loadBattle(bytes32 key) internal view returns (uint256) {
+        uint256 slot = uint256(key);
+        if (slot < _CUSTOM_SLOT_BASE) {
+            if (_loadDayWord(_battleDays, slot >> 3) & (1 << (slot & 7)) == 0) return 0;
+            key = bytes32(slot & 511);
+        }
+        return _battles[key];
+    }
+
+    function _storeBattle(bytes32 key, uint256 value) internal {
+        uint256 slot = uint256(key);
+        if (slot < _CUSTOM_SLOT_BASE) {
+            uint256 day = slot >> 3;
+            _storeDayWord(_battleDays, day, _loadDayWord(_battleDays, day) | (1 << (slot & 7)));
+            key = bytes32(slot & 511);
+        }
+        _battles[key] = value;
+    }
+
+    function _loadSlotState(uint256 slot) internal view returns (uint256 word) {
+        word = _slotState[slot < _CUSTOM_SLOT_BASE ? slot & 511 : slot];
+        if (slot < _CUSTOM_SLOT_BASE) return word >> 232 == slot >> 3 ? word & _RING_VALUE_MASK : 0;
+    }
+
+    function _storeSlotState(uint256 slot, uint256 value) internal {
+        if (slot < _CUSTOM_SLOT_BASE) {
+            value |= (slot >> 3) << 232;
+            slot &= 511;
+        }
+        _slotState[slot] = value;
+    }
+
+    function _loadHighField(bytes32 key) internal view returns (uint256 word) {
+        uint256 slot = uint256(key);
+        word = _highField[slot < _CUSTOM_SLOT_BASE ? bytes32(slot & 511) : key];
+        if (slot < _CUSTOM_SLOT_BASE) return word >> 232 == slot >> 3 ? word & _RING_VALUE_MASK : 0;
+    }
+
+    function _storeHighField(bytes32 key, uint256 value) internal {
+        uint256 slot = uint256(key);
+        if (slot < _CUSTOM_SLOT_BASE) {
+            value |= (slot >> 3) << 232;
+            key = bytes32(slot & 511);
+        }
+        _highField[key] = value;
+    }
+
+    function _loadDayTickets(uint256 daySlot) internal view returns (uint256) {
+        uint256 word = _dayTickets[(daySlot >> 3) & 63];
+        return word >> 232 == daySlot >> 3 ? word & _RING_VALUE_MASK : 0;
+    }
+
+    function _storeDayTickets(uint256 daySlot, uint256 value) internal {
+        _dayTickets[(daySlot >> 3) & 63] = value | ((daySlot >> 3) << 232);
+    }
+
+    function _loadDayStaked(uint256 day) internal view returns (uint256) {
+        return _loadDayWord(_dayStaked, day);
+    }
+
+    function _storeDayStaked(uint256 day, uint256 value) internal {
+        _storeDayWord(_dayStaked, day, value);
+    }
+
+    function _loadBudget(uint256 day) internal view returns (uint256) {
+        return _loadDayWord(_boostBudget, day);
+    }
+
+    function _storeBudget(uint256 day, uint256 value) internal {
+        _storeDayWord(_boostBudget, day, value);
+    }
+
+    function _loadHighBudget(uint256 day) internal view returns (uint256) {
+        return (_loadBudget(day) >> 112) & _BUDGET_MASK;
+    }
+
+    function _storeHighBudget(uint256 day, uint256 value) internal {
+        _storeBudget(day, (_loadBudget(day) & ~(_BUDGET_MASK << 112)) | (value << 112));
+    }
+
+    function _loadHighDraw(uint64 slot) internal view returns (HighRollerDraw memory draw) {
+        uint256 word = _loadSlotState(slot) >> 112;
+        draw.nominee = uint32(word);
+        draw.eligible = uint32(word >> 32);
+        draw.cursor = uint32(word >> 64);
+        draw.resolved = uint8(word >> 96) != 0;
+        draw.won = uint8(word >> 104) != 0;
+    }
+
+    function _storeHighDraw(uint64 slot, HighRollerDraw memory draw) internal {
+        uint256 word = uint256(draw.nominee) | (uint256(draw.eligible) << 32) | (uint256(draw.cursor) << 64)
+            | (uint256(draw.resolved ? 1 : 0) << 96) | (uint256(draw.won ? 1 : 0) << 104);
+        _storeSlotState(slot, (_loadSlotState(slot) & ((uint256(1) << 112) - 1)) | (word << 112));
+    }
+
+    function _roundExists(uint256 slot) internal view returns (bool) {
+        JackpotRound storage r = _jackpotRounds[slot & 511];
+        return r.day == slot >> 3 && r.requestDay != 0;
+    }
+
+    /// @dev Cursor zero is stored as one; every reset retains the allocated word.
+    function _rngCursor(uint48 index) internal view returns (uint64) {
+        unchecked { return _rngSlotCursor[index] - 1; }
+    }
 
     /// @dev `who`'s ID-keyed pass/preference word with its wallet ID added in memory. The ID comes
     ///      from the Game: `allocate` registers a new wallet (a paying action); otherwise an
