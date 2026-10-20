@@ -40,7 +40,7 @@ contract PreJackpotMintSeeder is DegenerusGame, WalletSeed {
         prizePoolFrozen = false;
         ticketWriteSlot = parity;
         _afkingResetDay = day;
-        levelPrizePool[129] = 50 ether;
+        _setLevelPrizePool(129, 50 ether);
         _setPrizePools(51 ether, 20 ether);
         currentPrizePool = 0;
         rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((42) & 1) << 12);
@@ -71,7 +71,7 @@ contract PreJackpotMintSeeder is DegenerusGame, WalletSeed {
     }
 
     function generationBound(uint24 lvl) external view returns (uint256) {
-        return ticketGenerationStartBlock[lvl];
+        return uint24(ticketGenerationStartBlock) == lvl ? ticketGenerationStartBlock >> 24 : 0;
     }
 
     function activatedLevel() external view returns (uint24) {

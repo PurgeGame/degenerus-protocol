@@ -33,7 +33,7 @@ contract JackpotCommitmentSeeder is DegenerusGame, WalletSeed {
         rngWordCurrent = RNG_WORD_WAITING;
         vrfRequestId = 0;
         dailyTicketBudgetsPacked = 0;
-        levelPrizePool[6] = 30_000 ether; // 500 awards, requiring four real draw calls.
+        _setLevelPrizePool(6, 30_000 ether); // 500 awards, requiring four real draw calls.
         _setPrizePools(uint128(50 ether), uint128(300 ether));
         currentPrizePool = 200 ether;
         _recordDailyRng(day - 1, 123456);
@@ -48,6 +48,7 @@ contract JackpotCommitmentSeeder is DegenerusGame, WalletSeed {
         // its ordinary queue sink stopped enforcing the request lock.
         _seedHalfPasses(attacker, 4);
         claimablePool = 12 ether;
+        decEntriesLevel = 5;
         decBattleRounds[5].poolWei = 12 ether;
         decBattleRounds[5].phase = 2;
         decBattleRounds[5].count = 1;

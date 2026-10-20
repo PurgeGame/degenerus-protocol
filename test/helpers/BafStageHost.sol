@@ -70,7 +70,7 @@ contract BafStageHost is DegenerusGame, BucketSeed {
     function seedPools(uint128 nextPool, uint128 futurePool, uint128 current, uint24 prevLvl, uint256 prevPool) external {
         _setPrizePools(nextPool, futurePool);
         currentPrizePool = current;
-        levelPrizePool[prevLvl] = prevPool;
+        _setLevelPrizePool(prevLvl, prevPool);
     }
 
     /// @dev The daily commitment freeze the request opens: fresh contributions route to the

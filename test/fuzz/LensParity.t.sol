@@ -117,10 +117,13 @@ contract LensStorageHarness is DegenerusGameMintStreakUtils, WalletSeed {
     }
 
     function setLevelDgnrs(uint24 lvl, uint128 allocation, uint128 claimed) external {
-        levelDgnrsPacked[lvl] = uint256(allocation) | (uint256(claimed) << 128);
+        level = lvl;
+        levelDgnrsPacked = uint256(allocation) | (uint256(claimed) << 128) | (uint256(1) << 255);
     }
 
     function setDecEntry(uint24 lvl, uint64 id, address owner, uint64 stackFlip, uint32 chips) external {
+        decEntriesLevel = lvl;
+        if (id > decBattleRounds[lvl].count) decBattleRounds[lvl].count = uint40(id);
         decBattlePlayers[_seedWallet(owner)] = (uint256(lvl) << 64) | id;
         _storeDecEntry(lvl, uint64(id),
             (uint256(stackFlip) << 62) | (uint256(chips) << 32) | uint256(_walletIdOf(owner)));
@@ -362,6 +365,7 @@ contract LensParityTest is Test {
     }
 
     function testFuzz_levelDgnrsInfo(uint24 lvl, uint128 allocation, uint128 claimed) public {
+        claimed &= uint128((uint256(1) << 127) - 1);
         harness.setLevelDgnrs(lvl, allocation, claimed);
         (uint128 a, uint128 c) = lens.levelDgnrsInfo(game, lvl);
         assertEq(a, allocation, "allocation");
@@ -369,7 +373,7 @@ contract LensParityTest is Test {
     }
 
     function testFuzz_decBurnOf(uint24 lvl, uint64 id, address p, uint64 stackFlip, uint32 chips) public {
-        id = uint64(bound(id, 1, type(uint64).max));
+        id = uint64(bound(id, 1, type(uint40).max));
         vm.assume(p != address(0));
         chips = uint32(bound(chips, 0, 0x3FFFFFFF));
         harness.setDecEntry(lvl, id, p, stackFlip, chips);
@@ -378,11 +382,11 @@ contract LensParityTest is Test {
         assertEq(e.entryId, id); assertEq(e.owner, p); assertEq(e.stack, stack); assertEq(e.chips, chips);
         (address o, uint256 s, uint32 c) = lens.decEntryAt(game, lvl, id);
         assertEq(o, p); assertEq(s, stack); assertEq(c, chips);
-        // The wallet slot names only its latest event; the earlier entry still reads by id.
+        // Retired rounds cannot read the shared entry bank.
         harness.setDecEntry(lvl ^ 1, 1, p, 1, 0);
         assertEq(lens.decBurnOf(game, lvl, p).entryId, 0);
         (o,,) = lens.decEntryAt(game, lvl, id);
-        assertEq(o, p);
+        assertEq(o, address(0));
     }
 
     function testFuzz_decRound(uint24 lvl, DegenerusGameLens.DecBattleRound memory r) public {

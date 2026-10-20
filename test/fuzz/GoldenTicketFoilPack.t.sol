@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {DegenerusGameJackpotDrawModule} from "../../contracts/modules/DegenerusGameJackpotDrawModule.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {
@@ -283,6 +284,7 @@ contract GoldenTicketFoilPack is Test {
         // The grand delegatecalls the real jackpot module in the Game's context.
         DegenerusGameJackpotModule jm = new DegenerusGameJackpotModule();
         vm.etch(ContractAddresses.GAME_JACKPOT_MODULE, address(jm).code);
+        vm.etch(ContractAddresses.GAME_JACKPOT_DRAW_MODULE, address(new DegenerusGameJackpotDrawModule()).code);
 
         CoinflipRecorder fr = new CoinflipRecorder();
         vm.etch(ContractAddresses.COINFLIP, address(fr).code);

@@ -225,10 +225,6 @@ contract DegenerusGameRngModule is DegenerusGameRngUtils {
         return true;
     }
 
-    function _markTicketGenerationStart(uint24 lvl) private {
-        if (ticketGenerationStartBlock[lvl] == 0) ticketGenerationStartBlock[lvl] = block.number;
-    }
-
     function _activateNextTickets() private returns (bool activated) {
         // The sole caller checked liveness before any relevant state could change.
         uint24 nextLvl = level + 2;

@@ -25,7 +25,7 @@ contract StallCreditSeeder is DegenerusGame {
         level = 1;
         purchaseStartDay = day - age;
         dailyIdx = day - 1;
-        levelPrizePool[1] = 10 ether;
+        _setLevelPrizePool(1, 10 ether);
         _setPrizePools(9 ether, 0);
         currentPrizePool = 0;
         ticketsFullyProcessed = true;

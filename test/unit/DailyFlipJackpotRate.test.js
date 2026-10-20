@@ -40,7 +40,7 @@ describe("Daily FLIP jackpot rate", function () {
 
     expect(body, "`_calcDailyCoinBudget` body not found").to.not.equal(null);
     expect(body).to.match(
-      /return\s*\(\s*levelPrizePool\s*\[\s*lvl\s*-\s*1\s*\]\s*\*\s*PRICE_COIN_UNIT\s*\)\s*\/\s*\(\s*priceWei\s*\*\s*400\s*\)\s*;/
+      /return\s*\(\s*_levelPrizePool\s*\(\s*lvl\s*-\s*1\s*\)\s*\*\s*PRICE_COIN_UNIT\s*\)\s*\/\s*\(\s*priceWei\s*\*\s*400\s*\)\s*;/
     );
     expect(body).not.to.match(/priceWei\s*\*\s*200/);
   });

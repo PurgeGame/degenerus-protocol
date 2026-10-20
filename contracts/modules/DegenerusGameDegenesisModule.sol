@@ -31,6 +31,8 @@ interface IDegenesisPasses {
  *      the credit window's timestamp compare and slot-0 reads of degenesisClosed.
  */
 contract DegenerusGameDegenesisModule is DegenerusGameStorage {
+    event DegenesisAfkingExcessClaimable(uint256 amount);
+
     /// @notice Emitted when a Degenesis order joins its day's cohort.
     /// @param buyer The account the order is for.
     /// @param degenesisDay The cohort, Degenesis day 1..7.
@@ -314,6 +316,14 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
         }
         emit DegenesisCohortClosed(closed, (active >> GA_PAID_SHIFT) & GA_FIELD_MASK);
         if (closed == DEGENESIS_DAYS) {
+            uint256 packed = balancesPacked[SDGNRS_WALLET_ID];
+            uint256 afking = packed >> 128;
+            if (afking > SDGNRS_AFKING_TARGET) {
+                uint256 excess = afking - SDGNRS_AFKING_TARGET;
+                balancesPacked[SDGNRS_WALLET_ID] =
+                    (SDGNRS_AFKING_TARGET << 128) | (uint128(packed) + excess);
+                emit DegenesisAfkingExcessClaimable(excess);
+            }
             emit DegenesisInventoryBurned(
                 dgnrs.transferFromPool(IsDGNRS.Pool.Degenesis, ContractAddresses.SDGNRS, type(uint256).max)
             );

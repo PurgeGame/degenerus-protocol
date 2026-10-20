@@ -19,7 +19,7 @@ contract RetiredStampSeeder is DegenerusGame, BucketSeed {
         level = 10;
         purchaseStartDay = day - 31; // the deadline passed yesterday
         dailyIdx = day - 1; // caught up: the deadline starts the ending today
-        levelPrizePool[10] = 1000 ether;
+        _setLevelPrizePool(10, 1000 ether);
         ticketsFullyProcessed = true;
         subsFullyProcessed = true;
         _afkingResetDay = day;

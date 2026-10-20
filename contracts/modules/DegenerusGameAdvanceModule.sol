@@ -31,8 +31,6 @@ import {IDegenerusGame, MintPaymentKind} from "../interfaces/IDegenerusGame.sol"
 import {IDegenerusJackpots} from "../interfaces/IDegenerusJackpots.sol";
 import {IDegenerusGameJackpotModule, IDegenerusGameFoilPackModule, IDegenerusGameBoonModule, IDegenerusGameGameOverModule,
     IGameAfkingModule, IDegenerusGameDegenesisModule} from "../interfaces/IDegenerusGameModules.sol";
-import {IDeityPassSeize} from "../interfaces/ILiquidation.sol";
-import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {GameTimeLib} from "../libraries/GameTimeLib.sol";
 import {IStETH} from "../interfaces/IStETH.sol";
 import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
@@ -40,6 +38,8 @@ import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {DegenerusGameRngUtils} from "./DegenerusGameRngUtils.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
+
+interface IGameOverLoanSeizure { function seizeLoan(uint32 id, uint32 lender) external; }
 
 interface ICrapsBonusDay { function openBonusDay() external; }
 interface ICrapsPassCredit { function creditPasses(uint32 id, uint32 normal, uint32 high) external; }
@@ -333,7 +333,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
                 // reserves are drawn and paid afterwards in groups (STAGE_JACKPOT_BAF_AWARDS).
                 if (!MineFlipGas.canRun(meter, GasBounds.POOL_CONSOLIDATION, GasBounds.DAILY_PHASE_TAIL)) return result;
                 uint256 achieved = _getNextPrizePool();
-                levelPrizePool[purchaseLevel] = achieved;
+                _setLevelPrizePool(purchaseLevel, achieved);
                 if (purchaseLevel % 100 == 0) centuryPrizePools.push(uint128(achieved));
                 // A seal with unpaid winners arms the mining settlement stage; the bit rides the
                 // slot-0 write this transition makes anyway, and only the stage clears it.
@@ -479,7 +479,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         if (fromAfking > packed >> 128) return false;
         balancesPacked[id] = packed - fromClaim - (fromAfking << 128);
         _creditClaimableLogged(uint32(uint8(loan >> LOAN_LENDER_SHIFT)), owed);
-        delete _loans[id];
+        _loans[id] = LOAN_RETAINED;
         if (fromClaim != 0) emit ClaimableSpent(id, fromClaim, claimable - fromClaim, MintPaymentKind.Internal, owed);
         if (fromAfking != 0) emit AfkingSpent(id, fromAfking);
         emit LoanRepaid(id, _payee(element), owed);
@@ -490,47 +490,13 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
     ///      for a main, the family's AFKing stop, and the deity pass following its account. A
     ///      smurf already seized on its own keeps its lender and its pass.
     function _seizeLoan(uint32 id, uint32 lender) private {
-        uint256 element = _walletElement(id);
-        address seller = _payee(element);
-        bool main = uint32(element >> 160) == 0;
-        if (main) {
-            dgnrs.burnForLiquidation(seller);
-            walletIds[seller] &= uint64(type(uint32).max) << 32;
-        }
-        uint256 slot = _walletSlot(id);
-        uint256 acquired = (element & (type(uint256).max << 192)) | (uint256(lender) << 160) | uint160(seller);
-        assembly ("memory-safe") { sstore(slot, acquired) }
-        (bool ok, bytes memory data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(
-            abi.encodeWithSelector(IGameAfkingModule.cancelLiquidatedSubscriptions.selector, id, main)
+        (bool ok, bytes memory data) = ContractAddresses.GAME_GAMEOVER_MODULE.delegatecall(
+            abi.encodeWithSelector(IGameOverLoanSeizure.seizeLoan.selector, id, lender)
         );
         if (!ok) _revertDelegate(data);
-        address to = lender == VAULT_WALLET_ID ? ContractAddresses.VAULT : ContractAddresses.SDGNRS;
-        _seizeDeityPass(id, to);
-        if (main) {
-            uint256 smurfs = uint16(mintPacked_[id] >> BitPackingLib.SMURF_COUNT_SHIFT);
-            mapping(uint256 => uint256) storage words = _smurfWords[id];
-            uint256 word;
-            for (uint256 k; k < smurfs; ++k) {
-                if (k & 7 == 0) word = words[k >> 3];
-                uint32 smurf = uint32(word >> ((k & 7) * 32));
-                if (uint160(_walletElement(smurf)) == 0) _seizeDeityPass(smurf, to);
-            }
-        }
-        delete _loans[id];
-        emit LoanSeized(id, lender);
     }
 
-    /// @dev A deity account's pass (token = symbol) moves with it. The symbol registry is
-    ///      keyed by symbol, so the rare deity seizure scans its 32 entries.
-    function _seizeDeityPass(uint32 id, address to) private {
-        if (mintPacked_[id] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 == 0) return;
-        for (uint8 symbol; symbol < 32; ++symbol) {
-            if (deityBySymbol[symbol] == id) {
-                IDeityPassSeize(ContractAddresses.DEITY_PASS).seize(symbol, to);
-                return;
-            }
-        }
-    }
+
 
     function _phaseAllowance(MineFlipGas.Meter memory meter) private view returns (uint256) {
         return MineFlipGas.child(meter, GasBounds.DAILY_PHASE_TAIL);
@@ -597,8 +563,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         uint24 battleDay = uint24(lvlAndQuestDay >> 24);
         if (battleDay != 0) {
             uint24 poolLevel = jackpotPhaseFlag && level != 0 ? level - 1 : level;
-            if (IJackpotBattle(ContractAddresses.CRAPS).lockJackpotBattle(battleDay, levelPrizePool[poolLevel], level)) {
-                dailyTicketBudgetsPacked |= _JACKPOT_BATTLE_PENDING;
+            if (IJackpotBattle(ContractAddresses.CRAPS).lockJackpotBattle(battleDay, _levelPrizePool(poolLevel), level)) {
+                dailyTicketBudgetsPacked |= _JACKPOT_BATTLE_PENDING | DAILY_TICKET_BUDGET_RETAINED;
             }
         }
 
@@ -654,6 +620,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
             if ((mod10 == 4 && mod100 != 94) || mod100 == 99) {
                 _setDecWindowOpen(true);
                 decBattleRounds[lvl + 1].openedDay = _simulatedDayIndex();
+                decEntriesLevel = lvl + 1;
                 // Arm the opening-day quest and protocol auto-entry.
                 _setDecDayOneActive(true);
             } else if (_decWindowOpen() && ((mod10 == 5 && mod100 != 95) || mod100 == 0)) {
@@ -714,10 +681,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         // prize pool, converted notionally at that level's ticket price — pure FLIP
         // supply, no ETH moves. Read before the x00 overwrite below, so a century
         // level funds off its achieved pool rather than the reset artifact.
-        uint256 recordFundFlip = (levelPrizePool[lvl] * PRICE_COIN_UNIT) / (PriceLookupLib.priceForLevel(lvl) * 500);
+        uint256 recordFundFlip = (_levelPrizePool(lvl) * PRICE_COIN_UNIT) / (PriceLookupLib.priceForLevel(lvl) * 500);
         if (recordFundFlip != 0) coinflip.fundRecordPool(recordFundFlip);
         if (lvl % 100 == 0) {
-            levelPrizePool[lvl] = (_getFuturePrizePool() * 40) / 100;
+            _setLevelPrizePool(lvl, (_getFuturePrizePool() * 40) / 100);
         }
         jackpotCounter = 0;
         // A turbo has no second jackpot settlement. Its bonus is owed on the next
@@ -789,7 +756,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
             uint256 bps = _nextToFutureBps(purchaseAge, purchaseLevel);
             if (purchaseLevel % 10 == 9) bps += NEXT_TO_FUTURE_BPS_X9_BONUS;
 
-            uint256 lastPool = levelPrizePool[purchaseLevel - 1];
+            uint256 lastPool = _levelPrizePool(purchaseLevel - 1);
 
             // Ratio adjust: ±4% based on future/next ratio (target 2:1)
             uint256 ratioPct = (p.future * 100) / p.next;
@@ -1027,10 +994,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         if (!ok) _revertDelegate(data);
     }
 
-    function _markTicketGenerationStart(uint24 lvl) private {
-        if (ticketGenerationStartBlock[lvl] == 0) ticketGenerationStartBlock[lvl] = block.number;
-    }
-
     function _activateNextTickets() private returns (bool activated) {
         uint24 nextLvl = level + 2;
         if (
@@ -1158,65 +1121,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
     }
 
 
-    /// @dev Ceiling on any declared snap exponent: 2^8 = 256x is the deepest
-    ///      division a thanos level can apply.
-    uint8 private constant SNAP_SHIFT_MAX = 8;
-
-    /// @dev Floor on a thanos declaration: after division, the target level's
-    ///      projected entries (current purchase-target pool at the target level's
-    ///      price) must still reach 10M whole tickets (40M entries). Keeps any
-    ///      non-zero shift undeclarable until demand genuinely reaches runaway scale.
-    uint256 private constant SNAP_FLOOR_ENTRIES = 40_000_000;
-
-    /// @notice Declare a future level a thanos level: every entry drained for
-    ///         targetLevel onward divides by 2^shift. A pure prospective price
-    ///         increase — declarations land at least 3 levels ahead, strictly
-    ///         before the target's first materialization (its frozen pool and write
-    ///         buffer first mint after the last-purchase seal of target - 1, while
-    ///         level == target - 2), so no materialized ticket is touched and one
-    ///         level's entries always share one exponent. Already-queued
-    ///         raw entries for covered levels divide with everyone else's at
-    ///         drain; the uniform division cancels in the pot-share fraction, so
-    ///         a raw entry's replacement cost and expected pot share are both
-    ///         unchanged by any declaration.
-    /// @dev Runs in the Game's storage context via the facade stub. Access: vault owner
-    ///      only (DGVE governance executor). Bounds: 3-level notice; shift capped at
-    ///      SNAP_SHIFT_MAX (raising and lowering both allowed — fairness needs only that
-    ///      each level's exponent is fixed before its first ticket materializes); a
-    ///      non-zero shift must leave the target level's projected entries at or above
-    ///      SNAP_FLOOR_ENTRIES, so snapping is undeclarable below runaway scale; a pending
-    ///      declaration locks once its 3-level window opens and clears when its level commits.
-    /// @custom:reverts OnlyVault If caller is not the vault owner.
-    /// @custom:reverts ThanosBounds If any declaration bound is violated.
-    function setThanosLevel(uint24 targetLevel, uint8 shift) external {
-        if (address(this) != ContractAddresses.GAME) revert E();
-        if (!IVaultOwnerCheck(ContractAddresses.VAULT).isVaultOwner(msg.sender)) revert OnlyVault();
-        uint24 lvl = level;
-        if (
-            targetLevel < lvl + 3 ||
-            shift > SNAP_SHIFT_MAX ||
-            // A pending declaration whose materialization window has opened is
-            // immutable until its level commits and folds it into snapShift.
-            (snapLevel != 0 && lvl + 3 > snapLevel)
-        ) revert ThanosBounds();
-        if (shift != 0) {
-            // Projected entries for the target at the PREVIOUS level's final pool
-            // target — settled history whose _endPhase (including the x00
-            // futurePool*0.4 rewrite) has already run, so the floor's basis can
-            // never decrease after the declaration. levelPrizePool[level] would
-            // be live: an x00's value shrinks to 40% of futurePool at its phase end,
-            // letting a jackpot-phase declaration overstate the floor.
-            uint256 projected = (levelPrizePool[lvl == 0 ? 0 : lvl - 1] << 2) /
-                PriceLookupLib.priceForLevel(targetLevel);
-            if ((projected >> shift) < SNAP_FLOOR_ENTRIES) revert ThanosBounds();
-        }
-        snapLevel = targetLevel;
-        snapPendingShift = shift;
-        emit ThanosLevelSet(targetLevel, shift);
+    function setThanosLevel(uint24, uint8) external {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_GAMEOVER_MODULE.delegatecall(msg.data);
+        if (!ok) _revertDelegate(data);
     }
-}
-
-/// @dev Vault interface for the pinned governance owner check behind setThanosLevel.
-interface IVaultOwnerCheck {
-    function isVaultOwner(address account) external view returns (bool);
 }

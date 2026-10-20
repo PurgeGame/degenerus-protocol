@@ -93,7 +93,7 @@ contract TerminalCohortSeeder is DegenerusGame, BucketSeed {
         purchaseStartDay = day - 121;
         dailyIdx = day;
         level = lvl;
-        levelPrizePool[lvl] = type(uint256).max;
+        _setLevelPrizePool(lvl, type(uint256).max);
         jackpotPhaseFlag = false;
         lastPurchaseDay = false;
         rngLockedFlag = true;

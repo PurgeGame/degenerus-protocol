@@ -25,8 +25,8 @@ contract ConsolidationLevelSeeder is DegenerusGame {
         _afkingResetDay = day;
         currentPrizePool = 0;
         _setPrizePools(nextPool, futurePool);
-        levelPrizePool[lvl - 2] = (uint256(nextPool) * 8) / 10;
-        levelPrizePool[lvl - 1] = (uint256(nextPool) * 9) / 10;
+        _setLevelPrizePool(lvl - 2, (uint256(nextPool) * 8) / 10);
+        _setLevelPrizePool(lvl - 1, (uint256(nextPool) * 9) / 10);
         yieldAccumulator = 18.25 ether + uint256(nextPool) / 400;
         if (decEntrants != 0) {
             _setDecWindowOpen(true);

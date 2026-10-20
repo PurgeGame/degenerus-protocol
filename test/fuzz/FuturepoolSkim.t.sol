@@ -47,7 +47,7 @@ contract SkimTransitionSeeder is DegenerusGame {
         _setPrizePools(100 ether, 200 ether);
         currentPrizePool = 0;
         yieldAccumulator = 0;
-        levelPrizePool[incomingLevel - 1] = 100 ether;
+        _setLevelPrizePool(incomingLevel - 1, 100 ether);
     }
 }
 

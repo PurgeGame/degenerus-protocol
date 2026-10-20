@@ -50,26 +50,12 @@ interface ICrapsPassCredit {
  *      reads/writes operate on the game contract's storage.
  */
 contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
-    /// @notice Register both protocol deities and batch their first 100 perpetual tickets.
-    /// @dev One creator transaction at level zero after deployment; registration rejects a repeated grant.
-    function initProtocolDeity() external {
-        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
-        if (msg.sender != ContractAddresses.CREATOR || level != 0) revert E();
-        // The Game constructor registered the protocol wallets as IDs 1-3.
-        _registerDeity(VAULT_WALLET_ID, VAULT_DEITY_SYMBOL);
-        _registerDeity(SDGNRS_WALLET_ID, SDGNRS_DEITY_SYMBOL);
-        _latchConstructionSeat(VAULT_WALLET_ID);
-        _latchConstructionSeat(SDGNRS_WALLET_ID);
-        emit EntriesQueuedRange(VAULT_WALLET_ID, 1, 100, 1, DEITY_PERPETUAL_ENTRIES);
-        emit EntriesQueuedRange(SDGNRS_WALLET_ID, 1, 100, 1, DEITY_PERPETUAL_ENTRIES);
-        uint24 mintCeiling = _mintCeiling();
-        uint24 writeSlotBit = ticketWriteSlot ? TICKET_SLOT_BIT : 0;
-        for (uint24 lvl = 1; lvl <= 100; ++lvl) {
-            uint24 key = lvl > mintCeiling ? _tqFarFutureKey(lvl) : lvl | writeSlotBit;
-            _queueGenesisDeities(key);
-        }
-    }
 
+    /// @notice Forward the protocol-deity initializer to the boon module.
+    function initProtocolDeity() external {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_BOON_MODULE.delegatecall(msg.data);
+        if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
+    }
 
     // -------------------------------------------------------------------------
     // Errors
@@ -370,7 +356,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         rest = passLevel <= 4 ? WHALE_PASS_EARLY_PRICE : WHALE_PASS_STANDARD_PRICE;
         first = rest;
         if (hasValidBoon) {
-            first = (rest * (10_000 - _whaleTierToBps(uint8(s0 >> BP_WHALE_TIER_SHIFT)))) / 10_000;
+            first = (rest * (10_000 - _whaleTierToBps(uint8(s0 >> BP_WHALE_TIER_SHIFT) & 3))) / 10_000;
         }
     }
 
@@ -399,7 +385,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     ) private {
         if (hasValidBoon) {
             // Clear whale fields (consumed)
-            boonPacked[buyerId].slot0 = s0 & BP_WHALE_CLEAR;
+            boonPacked[buyerId].slot0 = (s0 & BP_WHALE_CLEAR) | BP_SLOT0_RETAINED;
         }
         _settleShortfall(buyerId, totalPrice - freshPaid, true);
         // Whale-pass ETH-in (any funding source): the full price routes to the pools; the
@@ -996,28 +982,6 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         IDegenerusDeityPassMint(ContractAddresses.DEITY_PASS).mint(_payee(_walletElement(buyerId)), symbolId);
     }
 
-    /// @dev Credit both genesis wallets for one level under their protocol wallet IDs. Packed
-    ///      queue lanes commit once; balances use independent lanes. Existing purchases and
-    ///      partial queue tails are preserved.
-    function _queueGenesisDeities(uint24 key) private {
-        uint256 lanes;
-        uint256 count;
-        for (uint256 i; i < 2; ++i) {
-            uint32 id = i == 0 ? VAULT_WALLET_ID : SDGNRS_WALLET_ID;
-            uint80 packed = _entryPacked(key, id);
-            if (packed == 0) {
-                packed = uint80(id) << OWNER_IDX_SHIFT;
-                lanes |= uint256(id) << (count * 32);
-                ++count;
-            }
-            uint32 owed = _addOwed(uint32(packed >> 8), DEITY_PERPETUAL_ENTRIES,
-                key & TICKET_FAR_FUTURE_BIT != 0);
-            _setEntryOwed(key, id,
-                (packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(uint8(packed)));
-        }
-        if (count != 0) _tqAppendLanes(key, lanes, count);
-    }
-
     /// @dev Compute the total ETH cost of a 10-level lazy pass starting at startLevel.
     ///      Cost equals the sum of per-level ticket prices (one whole ticket, 4 entries, per level).
     function _lazyPassCost(
@@ -1284,16 +1248,6 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     ///      write to `mintPacked_[who]` can clobber it. Each account consumes its one
     ///      chance exactly once, and every pass purchase after the first pays only the
     ///      bit test — no external call on the repeat path.
-    /// @dev Genesis: both protocol wallets already hold the construction seats (serials 1 and 2,
-    ///      minted by the AFKing Subscription Token constructor), so latch their game-side
-    ///      SEAT_CLAIMED bit here. `_grantSeatCoin` is then a pure bit test for either — no second
-    ///      free-tranche seat, and no seat-token call on the sDGNRS automatic purchase's crank path.
-    ///      A bit-OR on the word `_registerDeity` just wrote (warm), mirrored to the indexer.
-    function _latchConstructionSeat(uint32 who) private {
-        uint256 packed = mintPacked_[who] | (uint256(1) << BitPackingLib.SEAT_CLAIMED_SHIFT);
-        mintPacked_[who] = packed;
-        emit MintRecorded(who, packed);
-    }
 
     function _grantSeatCoin(uint32 who) private {
         uint256 packed = mintPacked_[who];

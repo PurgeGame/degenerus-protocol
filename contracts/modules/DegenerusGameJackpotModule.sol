@@ -45,9 +45,8 @@ import {IDegenerusGameWhaleModule, IDegenerusGameJackpotDrawModule, IDegenerusGa
 
 /// @dev Minimal WWXRP surface for the golden-ticket consolation mint. The delegatecall
 ///      context makes msg.sender the Game, which is a whitelisted WWXRP minter.
-interface IWwxrpMintPrize {
-    /// @notice Mint WWXRP to a recipient (WWXRP, authorized minters only).
-    function creditPrize(uint32 to, uint256 amount) external;
+interface IGoldenTicketPayout {
+    function payGoldenTicket(uint32 winner, uint24 lvl, uint8 route, uint8 golds, bool grand) external;
 }
 
 /**
@@ -165,7 +164,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     /// @dev Small-lootbox threshold for the jackpot lootbox portion split.
 
     /// @dev Golden-ticket consolation when the armed ticket's resolving main board shows 0 golds: 100 WWXRP.
-    uint256 private constant GOLDEN_TICKET_WWXRP = 100;
 
     /// @dev Golden-ticket routes, stamped on GoldenTicketWin. BOARD is the armed
     ///      cross-day board resolution; FOIL is a foil pack holding two or more
@@ -380,7 +378,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
             (uint256 entries,) = _budgetToEntries(ticketBudget, lvl + 1);
             _setCurrentPrizePool(current - ticketBudget);
             _addNextPrizePool(ticketBudget);
-            dailyTicketBudgetsPacked = entries << 8;
+            dailyTicketBudgetsPacked = (entries << 8) | DAILY_TICKET_BUDGET_RETAINED;
             if (counter == 0) dailyTicketBudgetsPacked |= _priceEarlyBirdTickets(lvl + 1) << 144;
         } else {
             _emitDailyWinningTraits(dailyIdx + 1, traits, lvl, word);
@@ -395,7 +393,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
             }
             if (ticketBudget != 0) {
                 (uint256 entries,) = _budgetToEntries(ticketBudget / 2, lvl);
-                if (entries >= ENTRIES_PER_TICKET) dailyTicketBudgetsPacked = entries << 208;
+                if (entries >= ENTRIES_PER_TICKET) dailyTicketBudgetsPacked = (entries << 208) | DAILY_TICKET_BUDGET_RETAINED;
             }
         }
         _startJackpotWork(uint128(budget), traits, lvl, kind, 0, finalDay, false);
@@ -684,7 +682,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
                 else {
                     unchecked { ++jackpotCounter; }
                     dailyJackpotCoinTicketsPending = false;
-                    dailyTicketBudgetsPacked = 0;
+                    dailyTicketBudgetsPacked = DAILY_TICKET_BUDGET_RETAINED;
                 }
                 _retireJackpotWork();
                 result.progressed = true;
@@ -1195,93 +1193,10 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     ///      the rest of the headline (the three prize pools plus the yield accumulator —
     ///      claimable is player money already owed and is excluded) 75% in half-passes at
     ///      HALF_WHALE_PASS_PRICE and 25% in flip credit at the level's ticket rate.
-    function _payGoldenTicket(
-        uint32 winner,
-        uint24 lvl,
-        uint8 route,
-        uint8 golds,
-        bool grand
-    ) private {
-        uint256 ethAward;
-        uint256 halfPasses;
-        uint256 flipValueWei;
-        uint256 wwxrpAward;
-        (uint128 nextBal, uint128 futBal) = _getPrizePools();
-
-        if (golds == 0) {
-            wwxrpAward = GOLDEN_TICKET_WWXRP;
-        } else if (golds == 1) {
-            halfPasses = 2; // one whole whale pass
-        } else if (golds == 2) {
-            ethAward = futBal / 50; // 2% of futurePrizePool
-            halfPasses = ethAward / HALF_WHALE_PASS_PRICE; // equal value, rounded down
-        } else if (golds == 3) {
-            ethAward = futBal / 20; // 5% of futurePrizePool
-            halfPasses = ethAward / HALF_WHALE_PASS_PRICE;
-        } else if (!grand) {
-            ethAward = futBal / 10; // 10% of futurePrizePool
-            halfPasses = (2 * ethAward) / HALF_WHALE_PASS_PRICE; // double the ETH leg
-            flipValueWei = futBal / 20; // 5% of futurePrizePool as flip credit
-        } else {
-            // Grand: 25% of futurePrizePool in ETH; the rest of the headline owed
-            // 75% in half-passes / 25% in flip credit. The headline counts the
-            // three prize pools plus the segregated yield accumulator — all frozen to the
-            // advance path for the VRF window this runs in (in-window purchases land in the
-            // pending accumulators). Claimable is player money already owed, and the pending
-            // accumulators move with in-window purchases, so neither may size a VRF-derived award.
-            ethAward = futBal / 4;
-            uint256 headline = _getCurrentPrizePool() +
-                nextBal +
-                futBal +
-                yieldAccumulator;
-            uint256 remainder = headline - ethAward;
-            uint256 passValue = (remainder * 3) / 4;
-            halfPasses = passValue / HALF_WHALE_PASS_PRICE;
-            flipValueWei = remainder - passValue;
-        }
-
-        if (ethAward != 0) {
-            _setPrizePools(nextBal, uint128(futBal - ethAward));
-            _creditClaimable(winner, ethAward);
-            claimablePool += uint128(ethAward);
-        }
-        if (halfPasses != 0) {
-            _addHalfPasses(winner, halfPasses);
-        }
-        uint256 flipCredit;
-        if (flipValueWei != 0) {
-            flipCredit =
-                (flipValueWei * PRICE_COIN_UNIT) /
-                PriceLookupLib.priceForLevel(lvl + 1);
-            // Truncate to a whole 100-FLIP multiple. This leg is 5% of futurePrizePool on
-            // the 4-gold rung and a quarter of the grand's non-ETH remainder, so the
-            // discarded tail is under 1% at any pool worth winning and the path needs no
-            // VRF seed threaded into it to pay a round number. The event carries the
-            // truncated figure, which is what the winner receives.
-            flipCredit =
-                (flipCredit / FlipRoundLib.FLIP_ROUND_UNIT) *
-                FlipRoundLib.FLIP_ROUND_UNIT;
-            if (flipCredit != 0) {
-                coinflip.creditFlip(winner, flipCredit);
-            }
-        }
-        if (wwxrpAward != 0) {
-            IWwxrpMintPrize(ContractAddresses.WWXRP).creditPrize(
-                winner,
-                wwxrpAward
-            );
-        }
-        emit GoldenTicketWin(
-            winner,
-            lvl,
-            route,
-            golds,
-            grand,
-            ethAward,
-            halfPasses,
-            flipCredit,
-            wwxrpAward
-        );
+    function _payGoldenTicket(uint32 winner, uint24 lvl, uint8 route, uint8 golds, bool grand) private {
+        _delegateJackpotDraw(abi.encodeWithSelector(
+            IGoldenTicketPayout.payGoldenTicket.selector, winner, lvl, route, golds, grand
+        ));
     }
 
     /// @dev Rolls a board off one VRF word: fully random base traits (6 bits per quadrant),
@@ -1404,7 +1319,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     /// @notice Level 1's trait-matched FLIP draw over level-1 ticket holders.
     /// @dev Runs in level 1's purchase-day advance, after emitDailyWinningTraits rolled and
     ///      recorded the day's main board. Awards 0.25% of
-    ///      the previous level's recorded prize pool (`levelPrizePool[lvl - 1]`, the ratchet
+    ///      the previous level's recorded prize pool (`_levelPrizePool(lvl - 1)`, the ratchet
     ///      target before any century floor), converted to FLIP at the current level's ticket
     ///      price, as up to COIN_DRAW_SHARES equal whole-unit shares to trait-matched ticket
     ///      holders in [minLevel, maxLevel], which must be minted levels.
@@ -1462,7 +1377,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
         emit DailyWinningTraits(questDay, mainTraitsPacked);
     }
 
-    /// @dev Calculate 0.25% of the previous level's recorded prize pool (`levelPrizePool[lvl - 1]`,
+    /// @dev Calculate 0.25% of the previous level's recorded prize pool (`_levelPrizePool(lvl - 1)`,
     ///      the ratchet target before any century floor), converted to FLIP at the current
     ///      level's ticket price.
     /// @param lvl Level keying the prize pool snapshot (purchase level on the
@@ -1474,7 +1389,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     ) private view returns (uint256) {
         uint256 priceWei = PriceLookupLib.priceForLevel(currLevel);
         if (priceWei == 0) return 0;
-        return (levelPrizePool[lvl - 1] * PRICE_COIN_UNIT) / (priceWei * 400);
+        return (_levelPrizePool(lvl - 1) * PRICE_COIN_UNIT) / (priceWei * 400);
     }
 
     /// @dev Current-pool daily jackpot share for non-final days: random 6%-14%

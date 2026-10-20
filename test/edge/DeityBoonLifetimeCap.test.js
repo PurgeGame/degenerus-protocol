@@ -16,7 +16,7 @@ import {
  *
  * issueDeityBoon enforces DEITY_RECIPIENT_BOON_CAP (= 10) boons per (deity,
  * recipient) pair over the game's lifetime, tracked in
- * deityRecipientBoonCount[deity][recipient]. Once a deity has issued 10 boons to
+ * the deity ordinal's four-bit lane in deityRecipientBoonCount[recipient]. Once a deity has issued 10 boons to
  * a recipient, further issuance from that deity to that recipient reverts
  * RecipientBoonCapReached. A different deity, or a different recipient, has its
  * own independent count. The pre-existing one-boon-per-recipient-per-day gate

@@ -352,3 +352,4 @@ NOT-RNG	PARAM	word	_flipStakePageReusable	Coinflip.sol	Packed stake/affiliate st
 NOT-RNG	PARAM	word	add	libraries/AffiliateEarningsLib.sol	Packed stake/affiliate storage; contains no RNG word.
 NOT-RNG	PARAM	word	bonusScore	libraries/AffiliateEarningsLib.sol	Packed stake/affiliate storage; contains no RNG word.
 NOT-RNG	PARAM	word	score	libraries/AffiliateEarningsLib.sol	Packed stake/affiliate storage; contains no RNG word.
+NOT-RNG	ARG	PriceLookupLib.priceForLevel	afkingSnapshot	DegenerusGameLens.sol	The packed levelWord is slot0 state, not entropy; the view extracts active ticket level for the current price.

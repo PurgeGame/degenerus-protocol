@@ -32,6 +32,10 @@ import {IDegenerusGame, MintPaymentKind} from "../interfaces/IDegenerusGame.sol"
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {DegenerusGameRngUtils} from "./DegenerusGameRngUtils.sol";
 import {IDegenerusGameTicketModule, IDegenerusGameDegenesisModule} from "../interfaces/IDegenerusGameModules.sol";
+import {IDeityPassSeize} from "../interfaces/ILiquidation.sol";
+import {BitPackingLib} from "../libraries/BitPackingLib.sol";
+import {IGameAfkingModule} from "../interfaces/IDegenerusGameModules.sol";
+import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {
     IVRFCoordinator,
@@ -77,6 +81,100 @@ interface IFlipTombstone {
  * @dev Executed via delegatecall from DegenerusGame. Inherits storage layout.
  */
 contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
+    event LoanSeized(uint32 indexed accountId, uint32 indexed lenderId);
+
+    function seizeLoan(uint32 id, uint32 lender) external {
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
+        uint256 element = _walletElement(id);
+        address seller = _payee(element);
+        bool main = uint32(element >> 160) == 0;
+        if (main) {
+            dgnrs.burnForLiquidation(seller);
+            walletIds[seller] &= uint64(type(uint32).max) << 32;
+        }
+        uint256 slot = _walletSlot(id);
+        uint256 acquired = (element & (type(uint256).max << 192)) | (uint256(lender) << 160) | uint160(seller);
+        assembly ("memory-safe") { sstore(slot, acquired) }
+        (bool ok, bytes memory data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(
+            abi.encodeWithSelector(IGameAfkingModule.cancelLiquidatedSubscriptions.selector, id, main)
+        );
+        if (!ok) { assembly ("memory-safe") { revert(add(data, 32), mload(data)) } }
+        address to = lender == VAULT_WALLET_ID ? ContractAddresses.VAULT : ContractAddresses.SDGNRS;
+        _seizeDeityPass(id, to);
+        if (main) {
+            uint256 smurfs = uint16(mintPacked_[id] >> BitPackingLib.SMURF_COUNT_SHIFT);
+            mapping(uint256 => uint256) storage words = _smurfWords[id];
+            uint256 word;
+            for (uint256 k; k < smurfs; ++k) {
+                if (k & 7 == 0) word = words[k >> 3];
+                uint32 smurf = uint32(word >> ((k & 7) * 32));
+                if (uint160(_walletElement(smurf)) == 0) _seizeDeityPass(smurf, to);
+            }
+        }
+        _loans[id] = LOAN_RETAINED;
+        emit LoanSeized(id, lender);
+    }
+
+    function _seizeDeityPass(uint32 id, address to) private {
+        if (mintPacked_[id] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 == 0) return;
+        for (uint8 symbol; symbol < 32; ++symbol) {
+            if (deityBySymbol[symbol] == id) {
+                IDeityPassSeize(ContractAddresses.DEITY_PASS).seize(symbol, to);
+                return;
+            }
+        }
+    }
+
+    uint8 private constant SNAP_SHIFT_MAX = 8;
+    uint256 private constant SNAP_FLOOR_ENTRIES = 40_000_000;
+
+    /// @notice Declare a future level a thanos level: every entry drained for
+    ///         targetLevel onward divides by 2^shift. A pure prospective price
+    ///         increase — declarations land at least 3 levels ahead, strictly
+    ///         before the target's first materialization (its frozen pool and write
+    ///         buffer first mint after the last-purchase seal of target - 1, while
+    ///         level == target - 2), so no materialized ticket is touched and one
+    ///         level's entries always share one exponent. Already-queued
+    ///         raw entries for covered levels divide with everyone else's at
+    ///         drain; the uniform division cancels in the pot-share fraction, so
+    ///         a raw entry's replacement cost and expected pot share are both
+    ///         unchanged by any declaration.
+    /// @dev Runs in the Game's storage context via the facade stub. Access: vault owner
+    ///      only (DGVE governance executor). Bounds: 3-level notice; shift capped at
+    ///      SNAP_SHIFT_MAX (raising and lowering both allowed — fairness needs only that
+    ///      each level's exponent is fixed before its first ticket materializes); a
+    ///      non-zero shift must leave the target level's projected entries at or above
+    ///      SNAP_FLOOR_ENTRIES, so snapping is undeclarable below runaway scale; a pending
+    ///      declaration locks once its 3-level window opens and clears when its level commits.
+    /// @custom:reverts OnlyVault If caller is not the vault owner.
+    /// @custom:reverts ThanosBounds If any declaration bound is violated.
+    function setThanosLevel(uint24 targetLevel, uint8 shift) external {
+        if (address(this) != ContractAddresses.GAME) revert E();
+        if (!IVaultOwnerCheck(ContractAddresses.VAULT).isVaultOwner(msg.sender)) revert OnlyVault();
+        uint24 lvl = level;
+        if (
+            targetLevel < lvl + 3 ||
+            shift > SNAP_SHIFT_MAX ||
+            // A pending declaration whose materialization window has opened is
+            // immutable until its level commits and folds it into snapShift.
+            (snapLevel != 0 && lvl + 3 > snapLevel)
+        ) revert ThanosBounds();
+        if (shift != 0) {
+            // Projected entries for the target at the PREVIOUS level's final pool
+            // target — settled history whose _endPhase (including the x00
+            // futurePool*0.4 rewrite) has already run, so the floor's basis can
+            // never decrease after the declaration. _levelPrizePool(level) would
+            // be live: an x00's value shrinks to 40% of futurePool at its phase end,
+            // letting a jackpot-phase declaration overstate the floor.
+            uint256 projected = (_levelPrizePool(lvl == 0 ? 0 : lvl - 1) << 2) /
+                PriceLookupLib.priceForLevel(targetLevel);
+            if ((projected >> shift) < SNAP_FLOOR_ENTRIES) revert ThanosBounds();
+        }
+        snapLevel = targetLevel;
+        snapPendingShift = shift;
+        emit ThanosLevelSet(targetLevel, shift);
+    }
+
     uint8 private constant STAGE_GAMEOVER = 0;
     uint8 private constant STAGE_TICKETS_WORKING = 5;
 
@@ -226,7 +324,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             // leaves the reservation and joins the distributable total.
             if (jackpotWork.kind == 7) claimablePool -= jackpotWork.paid;
             _retireJackpotWork();
-            dailyTicketBudgetsPacked = 0;
+            dailyTicketBudgetsPacked = DAILY_TICKET_BUDGET_RETAINED;
             dailyJackpotCoinTicketsPending = false;
             work.progressed = true;
             MineFlipGas.markProgress(meter);
@@ -845,7 +943,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         // No calls or bucket mutations occur during this scan. Only a buffer stamped with
         // this level holds created tickets; any other stamp (unprepared or retired) counts
         // none, so the ending always completes and the pot divides over the queued weight.
-        uint256 live = _ticketBufferLevel(lvl) == lvl ? traitBucketLive[lvl & 1] : 0;
+        uint256 live = _traitBitmap(lvl);
         uint256 base = _traitBufferBase(lvl);
         for (uint256 t; t < 256; ) {
             if (live & (uint256(1) << t) != 0) {
@@ -1110,4 +1208,8 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             })
         );
     }
+}
+
+interface IVaultOwnerCheck {
+    function isVaultOwner(address account) external view returns (bool);
 }

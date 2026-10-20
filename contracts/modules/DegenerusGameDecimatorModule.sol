@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {CrapsPreferenceLib} from "../libraries/CrapsPreferenceLib.sol";
+
 import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol";
 
 /*
@@ -34,7 +36,7 @@ import {Craps} from "../Craps.sol";
 import {DecimatorJackpotTerms} from "../interfaces/IDegenerusGameModules.sol";
 
 interface IDecimatorBoardPreference {
-    function preferredBoardOf(uint32 walletId) external view returns (uint32 chips);
+    function extsload(bytes32 slot) external view returns (bytes32 value);
 }
 
 /// @dev Pinned stateless engine. The pure ABI ensures a STATICCALL from the Game context.
@@ -314,7 +316,10 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         uint256 index = uint256(keccak256(abi.encode(GEN_DRAW_TAG, word, lvl, id, q, trait))) % effectiveLen;
         uint32 owner = index < len ? _bucketIdAtUnchecked(lvl, trait, index) : deity;
         // Every lane and deity holds a nonzero wallet ID; Craps validates boards when saving them.
-        uint32 chips = IDecimatorBoardPreference(ContractAddresses.CRAPS).preferredBoardOf(owner);
+        bytes32 preferenceSlot = keccak256(abi.encode(owner, CrapsPreferenceLib.PASS_SLOT));
+        (uint32 chips,) = CrapsPreferenceLib.decode(uint256(
+            IDecimatorBoardPreference(ContractAddresses.CRAPS).extsload(preferenceSlot)
+        ));
         // A generated entry is not a wallet: its survival salt is a 160-bit hash of its own id.
         Craps.SlipResult memory run = _settleRun(
             chips, uint256(keccak256(abi.encode(BOARD_TAG, word, lvl, id))),

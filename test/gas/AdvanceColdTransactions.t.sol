@@ -41,7 +41,7 @@ contract ColdSubscriberSeeder is DegenerusGame, WalletSeed {
 
     function useMatureLevel() external {
         level = 110;
-        levelPrizePool[110] = 1000 ether;
+        _setLevelPrizePool(110, 1000 ether);
     }
 
     function seedSplitBalances(address[] calldata players) external {

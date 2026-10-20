@@ -66,6 +66,12 @@ library GameSlots {
     uint256 internal constant TICKET_BUFFER_LEVELS_OFFSET = 10;
     uint256 internal constant LOAN_SEIZE_CURSOR = 5;
     uint256 internal constant LOAN_SEIZE_CURSOR_OFFSET = 16;
+    uint256 internal constant TRAIT_BUCKET_STALE = 5;
+    uint256 internal constant TRAIT_BUCKET_STALE_OFFSET = 23;
+    uint256 internal constant DEC_ENTRIES_LEVEL = 5;
+    uint256 internal constant DEC_ENTRIES_LEVEL_OFFSET = 24;
+    uint256 internal constant FOIL_SLOT_RETAINED = 56;
+    uint256 internal constant FOIL_SLOT_RETAINED_OFFSET = 19;
     uint256 internal constant LOANS = 78;
     uint256 internal constant LOANS_DUE = 79;
     uint256 internal constant LOANS_DUE_COUNT = 80;

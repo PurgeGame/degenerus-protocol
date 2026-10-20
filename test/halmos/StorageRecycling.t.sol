@@ -7,6 +7,7 @@ contract RecyclingSymbolicHarness is DegenerusGameStorage {
     function header(uint24 lvl, uint32 count, uint224 tail) external {
         _setTicketBufferLevel(lvl);
         traitBucketLive[lvl & 1] |= uint256(1) << 7;
+        traitBucketStale &= ~uint8(1 << (lvl & 1));
         uint256 mask = (uint256(1) << ((uint256(count) & 7) * 32)) - 1;
         lvlTraitEntry[lvl & 1][7] = uint256(count) | ((uint256(tail) & mask) << 32);
     }
@@ -16,6 +17,7 @@ contract RecyclingSymbolicHarness is DegenerusGameStorage {
     function seedStale(uint256 payload) external {
         _setTicketBufferLevel(1);
         traitBucketLive[1] = uint256(1) << 7;
+        traitBucketStale &= ~uint8(2);
         lvlTraitEntry[1][7] = payload;
         uint256 elem = _traitBufferBase(1) + 7;
         assembly ("memory-safe") { mstore(0, elem) sstore(keccak256(0, 32), payload) }
@@ -28,8 +30,9 @@ contract RecyclingSymbolicHarness is DegenerusGameStorage {
         uint256 elem = _traitBufferBase(lvl) + 7;
         assembly ("memory-safe") { mstore(0, elem) word := sload(keccak256(0, 32)) }
     }
+    function logicalBits(uint24 lvl) external view returns (uint256) { return _traitBitmap(lvl); }
     function bits(uint8 parity) external view returns (uint256) { return traitBucketLive[parity]; }
-    function seedBits(uint256 even, uint256 odd) external { traitBucketLive[0] = even; traitBucketLive[1] = odd; }
+    function seedBits(uint256 even, uint256 odd) external { traitBucketLive[0] = even; traitBucketLive[1] = odd; traitBucketStale = 0; }
     function invalidate(uint24 lvl) external { traitBucketLive[lvl & 1] &= ~(uint256(1) << 7); }
     function stamp(uint24 lvl) external { _setTicketBufferLevel(lvl); }
     function stamped(uint24 lvl) external view returns (uint24) { return _ticketBufferLevel(lvl); }
@@ -119,22 +122,23 @@ contract StorageRecyclingSymbolicTest is Test {
         vm.assume(n > 0 && n <= 8);
         h.seedStale(oldWord);
         (uint256 f, uint256 d) = h.appendStaleRun(owner, n);
-        uint256 fresh = 1 + (oldWord == 0 ? 1 : 0) + (n == 8 && oldWord == 0 ? 1 : 0);
+        uint256 fresh = (oldWord == 0 ? 1 : 0) + (n == 8 && oldWord == 0 ? 1 : 0);
         assertEq(f, fresh, "classify header before logical reset; bitmap and completed word priced too");
-        assertEq(f + d, 2 + (n == 8 ? 1 : 0));
+        assertEq(f + d, 3 + (n == 8 ? 1 : 0), "header, retained bitmap and stale flag, plus a completed word");
     }
     function check_stale_lanes_prices_original_slots(uint256 oldWord, uint256 lanes, uint8 n) public {
         vm.assume(n > 0 && n <= 8);
         h.seedStale(oldWord);
         (uint256 f, uint256 d) = h.appendStaleLanes(lanes & _mask(n), n);
-        uint256 fresh = 1 + (oldWord == 0 ? 1 : 0) + (n == 8 && oldWord == 0 ? 1 : 0);
+        uint256 fresh = (oldWord == 0 ? 1 : 0) + (n == 8 && oldWord == 0 ? 1 : 0);
         assertEq(f, fresh);
-        assertEq(f + d, 2 + (n == 8 ? 1 : 0));
+        assertEq(f + d, 3 + (n == 8 ? 1 : 0), "header, retained bitmap and stale flag, plus a completed word");
     }
-    function check_bitmap_reset_preserves_other_parity(uint256 even, uint256 odd, uint24 lvl) public {
+    function check_bitmap_retirement_preserves_physical_words(uint256 even, uint256 odd, uint24 lvl) public {
         vm.assume(lvl > 0);
         h.seedBits(even, odd); h.stamp(lvl);
-        assertEq(h.bits(uint8(lvl & 1)), 0);
+        assertEq(h.bits(uint8(lvl & 1)), lvl & 1 == 0 ? even : odd);
+        assertEq(h.logicalBits(lvl), 0);
         assertEq(h.bits(uint8((lvl & 1) ^ 1)), lvl & 1 == 0 ? odd : even);
     }
     function check_same_level_preserves_bitmap(uint256 even, uint256 odd, uint24 lvl) public {
@@ -157,7 +161,9 @@ contract StorageRecyclingSymbolicTest is Test {
         uint256 shift = 80 + uint256(lvl & 1) * 24;
         uint256 mask = uint256(type(uint24).max) << shift;
         h.stamp(lvl);
-        assertEq(h.packed5(), (prior & ~mask) | (uint256(lvl) << shift));
+        uint256 expected = (prior & ~mask) | (uint256(lvl) << shift);
+        if (uint24(prior >> shift) != lvl) expected |= uint256(1) << (184 + (lvl & 1));
+        assertEq(h.packed5(), expected);
         assertEq(h.stamped(lvl), lvl);
         assertEq(h.stamped(lvl ^ 1), uint24(prior >> (80 + uint256((lvl ^ 1) & 1) * 24)));
     }

@@ -73,15 +73,15 @@ contract AffiliateDgnrsClaim is DeployProtocol {
     /// @dev Set levelDgnrsPacked[lvl] allocation half (low 128) via vm.store, preserving the
     ///      claimed half (high 128).
     function _setAllocation(uint24 lvl, uint256 value) internal {
-        bytes32 slot = _mappingSlot(SLOT_LEVEL_DGNRS_PACKED, lvl);
+        bytes32 slot = bytes32(SLOT_LEVEL_DGNRS_PACKED);
         uint256 w = uint256(vm.load(address(game), slot));
-        uint256 packed = (w & (uint256(type(uint128).max) << 128)) | uint128(value);
+        uint256 packed = (w & (uint256(type(uint128).max) << 128)) | uint128(value) | (uint256(1) << 255);
         vm.store(address(game), slot, bytes32(packed));
     }
 
     /// @dev Read levelDgnrsClaimed[lvl] = high 128 bits of the packed slot.
     function _getClaimed(uint24 lvl) internal view returns (uint256) {
-        return uint256(vm.load(address(game), _mappingSlot(SLOT_LEVEL_DGNRS_PACKED, lvl))) >> 128;
+        return (uint256(vm.load(address(game), bytes32(SLOT_LEVEL_DGNRS_PACKED))) >> 128) & ((uint256(1) << 127) - 1);
     }
 
     /// @dev Set game.level = lvl in packed slot 0.

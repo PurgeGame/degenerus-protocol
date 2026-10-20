@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {GamePoolSlots} from "../helpers/GamePoolSlots.sol";
+
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
@@ -10,7 +12,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///      change cannot silently corrupt what these assertions read.
 contract CenturyTargetHarness is DegenerusGameStorage {
     function setLevelPool(uint24 lvl, uint256 pool) external {
-        levelPrizePool[lvl] = pool;
+        _setLevelPrizePool(lvl, pool);
     }
 
     function pushCentury(uint128 pool) external {
@@ -80,10 +82,7 @@ contract CenturyPoolDoublingTest is DeployProtocol {
     }
 
     function _setLevelPrizePool(uint24 lvl, uint256 pool) internal {
-        bytes32 slot = keccak256(
-            abi.encode(uint256(lvl), LEVEL_PRIZE_POOL_SLOT)
-        );
-        vm.store(address(game), slot, bytes32(pool));
+        GamePoolSlots.write(address(game), lvl, pool);
     }
 
     /// @dev Seed the real game's century history with one completed century. A dynamic

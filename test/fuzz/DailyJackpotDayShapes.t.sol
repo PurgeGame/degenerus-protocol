@@ -29,7 +29,7 @@ contract DayShapeHarness is GoldenTicketHarness {
     function coinTicketsPending() external view returns (bool) { return dailyJackpotCoinTicketsPending; }
     function setJackpotFlags(uint8 v) external { jackpotFlags = v; }
     function battlePending() external view returns (bool) { return _jackpotBattlePending(); }
-    function setLevelPrizePool(uint24 lvl, uint256 v) external { levelPrizePool[lvl] = v; }
+    function setLevelPrizePool(uint24 lvl, uint256 v) external { _setLevelPrizePool(lvl, v); }
 }
 
 /// @dev Adds the far-future entry registration the daily jackpot battle draws from, so the day's
@@ -392,7 +392,7 @@ contract DailyJackpotDayShapes is Test {
         assertGt(ticketWins, 0, "the day's own ticket leg still pays");
     }
 
-    /// @dev Without a coin budget (levelPrizePool[LVL - 1] left at setUp's default zero) the ETH
+    /// @dev Without a coin budget (_levelPrizePool(LVL - 1) left at setUp's default zero) the ETH
     ///      stage queues the coin+tickets stage and leaves the battle latch alone, as it always does.
     function test_phase1DoesNotLatchBattleWhenCoinBudgetIsZero() public {
         uint256 word = _board(0xB0D9E7);

@@ -471,12 +471,13 @@ position. Signature-based `parseLog` cannot identify this event. Cross-level wal
 requires enumerating level keys; there is no wallet-only wildcard inside a composite topic.
 Named `TraitsGenerated` still covers per-entry and foil generation paths.
 
-`ticketGenerationStartBlock[level]` at slot 70 is readable through `extsload` at
-`keccak256(abi.encode(uint256(level), uint256(70)))`. Deployment initializes level 1 (level 0 never holds tickets);
-level L+1 is stamped at L's first fresh mid-day request after meeting its goal, or when L's last purchase day latches
-(the seal or a same-day turbo latch), whichever opens generation first. Later latches preserve
-the original bound. This inclusive lower bound can precede actual generation; it is not a first-reveal
-timestamp. Retries preserve it, and older levels retain their bounds.
+`ticketGenerationStartBlock` at slot62 holds the latest window: the level in its low24 bits,
+then the inclusive first block above it. Read the slot directly with `extsload(bytes32(uint256(62)))`
+and require the level tag to match. `TicketGenerationStarted(level, blockNumber)` preserves historical
+bounds. Deployment marks level1 (level0 never holds tickets); level L+1 is stamped at L's first fresh
+mid-day request after meeting its goal, or when L's last purchase day latches, whichever opens
+generation first. Repeated marks preserve the first block. The bound can precede actual generation;
+it is not a first-reveal timestamp.
 
 ## Recent settlement boundaries
 

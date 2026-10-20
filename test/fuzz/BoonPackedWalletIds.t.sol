@@ -37,6 +37,7 @@ contract BoonGameExt is DegenerusGame {
     function x_grantDeity(address a) external {
         _registerWallet(a, type(uint256).max);
         mintPacked_[_walletIdOf(a)] |= uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT;
+        _pushDeityId(_walletIdOf(a));
     }
 
     function x_openDecWindow() external {
@@ -209,6 +210,42 @@ contract BoonPackedWalletIds is DeployProtocol {
             _assertIdZeroEmpty();
         }
         assertTrue(wrote, "fixture: a box roll stored a boon");
+    }
+
+    function test_DeityRecipientCountsKeepIndependentCappedOrdinals() public {
+        address first;
+        address last;
+        for (uint256 i; i < 30; ++i) {
+            (address deity,) = _wallet(string(abi.encodePacked("ordinal_", vm.toString(i))));
+            ext.x_grantDeity(deity);
+            if (i == 0) first = deity;
+            if (i == 29) last = deity;
+        }
+        (, uint32 rid) = _wallet("ordinal_recipient");
+        uint32 firstId = game.walletIdOf(first);
+        uint32 lastId = game.walletIdOf(last);
+        bytes32 firstMeta = keccak256(abi.encode(firstId, GameSlots.DEITY_BOON_PACKED));
+        bytes32 lastMeta = keccak256(abi.encode(lastId, GameSlots.DEITY_BOON_PACKED));
+        assertEq(uint256(vm.load(address(game), firstMeta)) >> 32, 2);
+        assertEq(uint256(vm.load(address(game), lastMeta)) >> 32, 31);
+        for (uint256 i; i < 10; ++i) {
+            uint24 day = uint24(_today());
+            RecyclingState.seedDailyWord(address(game), day - 1, uint256(keccak256(abi.encode(i))));
+            vm.prank(last);
+            game.issueDeityBoon(lastId, rid, 0);
+            vm.warp(block.timestamp + 1 days);
+        }
+        uint24 today = uint24(_today());
+        RecyclingState.seedDailyWord(address(game), today - 1, 123);
+        vm.prank(last);
+        vm.expectRevert(DegenerusGameBoonModule.RecipientBoonCapReached.selector);
+        game.issueDeityBoon(lastId, rid, 0);
+        vm.prank(first);
+        game.issueDeityBoon(firstId, rid, 0);
+        uint256 counts = uint256(vm.load(address(game), keccak256(abi.encode(rid, GameSlots.DEITY_RECIPIENT_BOON_COUNT))));
+        assertEq(counts, (uint256(10) << 124) | (uint256(1) << 8), "cap does not carry into another ordinal");
+        assertEq(uint256(vm.load(address(game), firstMeta)) >> 32, 2, "daily metadata preserves first ordinal");
+        assertEq(uint256(vm.load(address(game), lastMeta)) >> 32, 31, "daily metadata preserves last ordinal");
     }
 
     function test_DeityGiftWritesRecipientId() public {
@@ -530,7 +567,8 @@ contract BoonPackedWalletIds is DeployProtocol {
         assertEq(5 ether - plainOverpay, 2.4 ether, "boonless intro price");
         assertEq(5 ether - boostedOverpay, 2.16 ether, "the ID's whale boon priced the pass");
         (uint256 s0,) = _boon(id);
-        assertEq(s0 >> WHALE_TIER, 0, "whale lane cleared");
+        assertEq((s0 >> WHALE_TIER) & 3, 0, "whale lane cleared");
+        assertEq(s0 >> 255, 1, "slot-zero sentinel retained");
         _assertIdZeroEmpty();
     }
 

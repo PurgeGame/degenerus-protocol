@@ -12,7 +12,7 @@ import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 ///      storage layout rather than pinning slots keeps this honest if the layout moves.
 contract GrowthRatchetHarness is DegenerusGameStorage {
     function setLevelPool(uint24 lvl, uint256 value) external {
-        levelPrizePool[lvl] = value;
+        _setLevelPrizePool(lvl, value);
     }
 
     function pushCentury(uint128 value) external {
@@ -248,7 +248,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
     // Century + genesis skips
     // =====================================================================
 
-    /// _endPhase overwrites levelPrizePool[x00], but the game serves every century term
+    /// _endPhase overwrites _levelPrizePool(x00), but the game serves every century term
     /// from the pushed achieved pool instead, so the three boundary rounds are ordinary
     /// rounds and take bets like any other.
     function testCenturyRoundsAcceptBets() public {
@@ -319,14 +319,14 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
     // =====================================================================
 
     /// The reason boundary rounds are scoreable at all: a century level's term comes from
-    /// the pushed achieved pool, so _endPhase rewriting levelPrizePool[x00] to 40% of futurePool
+    /// the pushed achieved pool, so _endPhase rewriting _levelPrizePool(x00) to 40% of futurePool
     /// cannot move it. Without this, the same round answers one way during the century's
     /// jackpot phase and the other way after — paying both sides and minting FLIP.
     function testCenturyTermIgnoresTheEndPhaseOverwrite() public {
         GrowthRatchetHarness h = new GrowthRatchetHarness();
         h.pushCentury(900 ether); // level 100's achieved pool, snapshotted at transition
 
-        // Pre-overwrite: levelPrizePool[100] still holds the achieved value.
+        // Pre-overwrite: _levelPrizePool(100) still holds the achieved value.
         h.setLevelPool(100, 900 ether);
         assertEq(h.ratchet(100), 900 ether, "century term must read the pushed pool");
 

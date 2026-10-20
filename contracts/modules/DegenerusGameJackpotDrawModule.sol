@@ -24,6 +24,108 @@ interface IJackpotBattleMeter {
 /// @notice Frozen daily FLIP draws and the separately metered jackpot-battle field.
 /// @dev Delegate-called by JackpotModule; uses the same GAME storage and session.
 contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGameJackpotDrawUtils {
+    uint256 private constant GOLDEN_TICKET_WWXRP = 100;
+    event GoldenTicketWin(
+        uint32 indexed walletId,
+        uint24 indexed level,
+        uint8 route,
+        uint8 goldCount,
+        bool grand,
+        uint256 ethAmount,
+        uint256 halfPassCount,
+        uint256 flipCredit,
+        uint256 wwxrpAmount
+    );
+
+    function payGoldenTicket(
+        uint32 winner,
+        uint24 lvl,
+        uint8 route,
+        uint8 golds,
+        bool grand
+    ) external {
+        uint256 ethAward;
+        uint256 halfPasses;
+        uint256 flipValueWei;
+        uint256 wwxrpAward;
+        (uint128 nextBal, uint128 futBal) = _getPrizePools();
+
+        if (golds == 0) {
+            wwxrpAward = GOLDEN_TICKET_WWXRP;
+        } else if (golds == 1) {
+            halfPasses = 2; // one whole whale pass
+        } else if (golds == 2) {
+            ethAward = futBal / 50; // 2% of futurePrizePool
+            halfPasses = ethAward / HALF_WHALE_PASS_PRICE; // equal value, rounded down
+        } else if (golds == 3) {
+            ethAward = futBal / 20; // 5% of futurePrizePool
+            halfPasses = ethAward / HALF_WHALE_PASS_PRICE;
+        } else if (!grand) {
+            ethAward = futBal / 10; // 10% of futurePrizePool
+            halfPasses = (2 * ethAward) / HALF_WHALE_PASS_PRICE; // double the ETH leg
+            flipValueWei = futBal / 20; // 5% of futurePrizePool as flip credit
+        } else {
+            // Grand: 25% of futurePrizePool in ETH; the rest of the headline owed
+            // 75% in half-passes / 25% in flip credit. The headline counts the
+            // three prize pools plus the segregated yield accumulator — all frozen to the
+            // advance path for the VRF window this runs in (in-window purchases land in the
+            // pending accumulators). Claimable is player money already owed, and the pending
+            // accumulators move with in-window purchases, so neither may size a VRF-derived award.
+            ethAward = futBal / 4;
+            uint256 headline = _getCurrentPrizePool() +
+                nextBal +
+                futBal +
+                yieldAccumulator;
+            uint256 remainder = headline - ethAward;
+            uint256 passValue = (remainder * 3) / 4;
+            halfPasses = passValue / HALF_WHALE_PASS_PRICE;
+            flipValueWei = remainder - passValue;
+        }
+
+        if (ethAward != 0) {
+            _setPrizePools(nextBal, uint128(futBal - ethAward));
+            _creditClaimable(winner, ethAward);
+            claimablePool += uint128(ethAward);
+        }
+        if (halfPasses != 0) {
+            _addHalfPasses(winner, halfPasses);
+        }
+        uint256 flipCredit;
+        if (flipValueWei != 0) {
+            flipCredit =
+                (flipValueWei * PRICE_COIN_UNIT) /
+                PriceLookupLib.priceForLevel(lvl + 1);
+            // Truncate to a whole 100-FLIP multiple. This leg is 5% of futurePrizePool on
+            // the 4-gold rung and a quarter of the grand's non-ETH remainder, so the
+            // discarded tail is under 1% at any pool worth winning and the path needs no
+            // VRF seed threaded into it to pay a round number. The event carries the
+            // truncated figure, which is what the winner receives.
+            flipCredit =
+                (flipCredit / FlipRoundLib.FLIP_ROUND_UNIT) *
+                FlipRoundLib.FLIP_ROUND_UNIT;
+            if (flipCredit != 0) {
+                coinflip.creditFlip(winner, flipCredit);
+            }
+        }
+        if (wwxrpAward != 0) {
+            IWwxrpMintPrize(ContractAddresses.WWXRP).creditPrize(
+                winner,
+                wwxrpAward
+            );
+        }
+        emit GoldenTicketWin(
+            winner,
+            lvl,
+            route,
+            golds,
+            grand,
+            ethAward,
+            halfPasses,
+            flipCredit,
+            wwxrpAward
+        );
+    }
+
     IDegenerusJackpots private constant jackpots = IDegenerusJackpots(ContractAddresses.JACKPOTS);
     uint8 private constant WHALE_PASS_SRC_BAF_DIRECT = 2;
     uint8 private constant WHALE_PASS_SRC_AWARD_TICKETS = 3;
@@ -685,4 +787,9 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
 
         return entropy;
     }
+}
+
+interface IWwxrpMintPrize {
+    /// @notice Mint WWXRP to a recipient (WWXRP, authorized minters only).
+    function creditPrize(uint32 to, uint256 amount) external;
 }

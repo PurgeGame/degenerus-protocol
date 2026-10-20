@@ -155,6 +155,10 @@ async function measureLevelOneAdvance(prevPoolEth, expectedAwards) {
     traitLive |= 1n << BigInt(t);
   }
   await setSlot(gameAddr, traitLiveSlot, traitLive);
+  const staleField = gameLayout.find((entry) => entry.label === "traitBucketStale");
+  const staleSlot = BigInt(staleField.slot);
+  await setSlot(gameAddr, staleSlot,
+    (await getSlot(gameAddr, staleSlot)) & ~(1n << (BigInt(staleField.offset) * 8n + 1n)));
   for (let lvl = 2n; lvl <= 100n; ++lvl) {
     const owners = Array.from({ length: FF_HOLDERS }, (_, i) => holder(0xb00000000n + lvl * 0x100n + BigInt(i + 1)));
     owners.forEach((owner) => fieldOwners.add(owner.toLowerCase()));
@@ -163,7 +167,7 @@ async function measureLevelOneAdvance(prevPoolEth, expectedAwards) {
     await setSlot(gameAddr, mapSlot(lvl | FF_BIT, queueRoot), BigInt(FF_HOLDERS) | (lvl << 32n));
   }
   const recordedPool = ethers.parseEther(prevPoolEth);
-  await setSlot(gameAddr, mapSlot(0n, poolRoot), recordedPool);
+  await setSlot(gameAddr, mapSlot(0n, poolRoot), (1n << 128n) | recordedPool);
   await (await game.connect(alice).purchase(0, 200n, 0n, ethers.ZeroHash, 0, false, {
     value: ethers.parseEther("2"),
   })).wait();

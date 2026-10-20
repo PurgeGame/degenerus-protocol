@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {GamePoolSlots} from "../../helpers/GamePoolSlots.sol";
+
 import {RecyclingState} from "../../helpers/RecyclingState.sol";
 
 import "forge-std/Test.sol";
@@ -649,7 +651,7 @@ contract AdvanceLivenessHandler is Test {
     function _seedNextPool(uint256 extra) internal {
         if (game.gameOver()) return;
         uint24 lvl = _level();
-        uint256 target = uint256(vm.load(address(game), keccak256(abi.encode(uint256(lvl), LEVEL_PRIZE_POOL_SLOT))));
+        uint256 target = GamePoolSlots.read(address(game), lvl);
         uint256 want = target + 1 ether + extra;
         uint256 packed = uint256(vm.load(address(game), bytes32(PRIZE_POOLS_SLOT)));
         uint256 cur = packed & type(uint128).max;

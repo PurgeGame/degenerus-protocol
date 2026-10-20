@@ -6,6 +6,7 @@ import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage
 contract IdEntryPackingHarness is DegenerusGameStorage {
     function bet(uint48 buffer, uint256 p, uint256 word) external { _storeDegeneretteBet(buffer, p, word); }
     function bet(uint48 buffer, uint256 p) external view returns (uint256) { return _loadDegeneretteBet(buffer, p); }
+    function round(uint24 lvl, uint40 count) external { decEntriesLevel = lvl; decBattleRounds[lvl].count = count; }
     function entry(uint24 lvl, uint64 id, uint256 word) external { _storeDecEntry(lvl, id, word); }
     function entry(uint24 lvl, uint64 id) external view returns (uint256) { return _loadDecEntry(lvl, id); }
 }
@@ -28,12 +29,15 @@ contract IdEntryPackingTest is Test {
         assertEq(h.bet(0, p ^ 1), sibling);
 
         uint256 entry = uint256(id) | (uint256(fields) << 32);
+        h.round(7, uint40((p | 1) + 1));
         h.entry(7, (p ^ 1) + 1, sibling);
-        h.entry(8, p + 1, sibling);
         h.entry(7, p + 1, entry);
         assertEq(h.entry(7, p + 1), entry);
         assertEq(h.entry(7, (p ^ 1) + 1), sibling);
-        assertEq(h.entry(8, p + 1), sibling);
         assertEq(h.entry(7, 0), 0, "zero id cannot alias the first pair");
+        h.round(8, uint40((p | 1) + 1));
+        h.entry(8, p + 1, sibling);
+        assertEq(h.entry(8, p + 1), sibling);
+        assertEq(h.entry(7, p + 1), 0, "retired round is unreadable");
     }
 }

@@ -371,18 +371,18 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         uint24 day = _simulatedDayIndex();
         uint24 deityDay = uint24(s0 >> BP_DEITY_LOOTBOX_DAY_SHIFT);
         if (deityDay != 0 && deityDay != day) {
-            bp.slot0 = s0 & BP_LOOTBOX_CLEAR;
+            bp.slot0 = (s0 & BP_LOOTBOX_CLEAR) | BP_SLOT0_RETAINED;
             return 0;
         }
         uint24 stampDay = uint24(s0 >> BP_LOOTBOX_DAY_SHIFT);
         if (stampDay != 0 && day > stampDay + BOX_BOOST_EXPIRY_DAYS) {
-            bp.slot0 = s0 & BP_LOOTBOX_CLEAR;
+            bp.slot0 = (s0 & BP_LOOTBOX_CLEAR) | BP_SLOT0_RETAINED;
             return 0;
         }
 
         uint16 boostBps = _lootboxTierToBps(tier);
         extra = _boostAmount(amount, boostBps);
-        bp.slot0 = s0 & BP_LOOTBOX_CLEAR;
+        bp.slot0 = (s0 & BP_LOOTBOX_CLEAR) | BP_SLOT0_RETAINED;
         emit BoostUsed(id, day, amount, amount + extra, boostBps);
     }
 

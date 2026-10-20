@@ -9,7 +9,7 @@ import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 ///      restored production runtime; this overlay only changes levelPrizePool in test storage.
 contract PurchaseStartDaySeeder is DegenerusGame {
     function setLevelTarget(uint24 lvl, uint256 target) external {
-        levelPrizePool[lvl] = target;
+        _setLevelPrizePool(lvl, target);
     }
 }
 

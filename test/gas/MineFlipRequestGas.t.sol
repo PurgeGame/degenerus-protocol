@@ -45,7 +45,7 @@ contract RequestGameSeeder is DegenerusGame {
             _setTicketRedemptionOpen(true);
         }
         _setPrizePools(1000 ether, 1000 ether);
-        levelPrizePool[13] = 100 ether;
+        _setLevelPrizePool(13, 100 ether);
         vrfCoordinator = IVRFCoordinator(ContractAddresses.VRF_COORDINATOR);
         vrfSubscriptionId = 1;
     }

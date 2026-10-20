@@ -27,8 +27,8 @@ contract DecimatorPurchaseSeeder is BucketSeed {
         _afkingResetDay = day;
         _setRngComplete(true);
         _setPrizePools(500 ether, 100 ether);
-        levelPrizePool[3] = 350 ether;
-        levelPrizePool[4] = 400 ether;
+        _setLevelPrizePool(3, 350 ether);
+        _setLevelPrizePool(4, 400 ether);
         _setDecWindowOpen(true);
         decBattleRounds[5].openedDay = day;
         for (uint256 trait; trait < 256; ++trait) _seedBucket(5, uint8(trait), address(0xA100), 1);

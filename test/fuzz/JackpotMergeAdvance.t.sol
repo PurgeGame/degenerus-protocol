@@ -37,8 +37,8 @@ contract JackpotMergeSeeder is DegenerusGame, WalletSeed {
         dailyTicketBudgetsPacked = 0;
         dailyJackpotCoinTicketsPending = false;
         jackpotCounter = 0;
-        levelPrizePool[5] = 1_000 ether;
-        levelPrizePool[6] = 1_000 ether;
+        _setLevelPrizePool(5, 1_000 ether);
+        _setLevelPrizePool(6, 1_000 ether);
         _setPrizePools(uint128(50 ether), uint128(300 ether));
         currentPrizePool = uint128(200 ether);
         _recordDailyRng(day - 1, 123456);
@@ -52,14 +52,14 @@ contract JackpotMergeSeeder is DegenerusGame, WalletSeed {
         }
     }
     function shrinkPools(uint256 amount) external {
-        levelPrizePool[5] = amount;
-        levelPrizePool[6] = amount;
+        _setLevelPrizePool(5, amount);
+        _setLevelPrizePool(6, amount);
     }
     /// @dev More holders on every level, all distinct wallets on one low byte, so each draw chunk's
     ///      dedupe takes its exact scan.
     function widen(uint256 holders, uint256 pool) external {
-        levelPrizePool[5] = pool;
-        levelPrizePool[6] = pool;
+        _setLevelPrizePool(5, pool);
+        _setLevelPrizePool(6, pool);
         for (uint24 lv = 9; lv < 107; ++lv) {
             for (uint256 i; i < holders; ++i) {
                 address player = address(uint160((0x2000000 + uint256(lv) * 256 + i) << 8));

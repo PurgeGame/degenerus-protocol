@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {GamePoolSlots} from "../helpers/GamePoolSlots.sol";
+
 import {Vm} from "forge-std/Vm.sol";
 import {TicketQueueStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
 
@@ -185,7 +187,7 @@ contract TurboBafTicketFloor is DeployProtocol {
             require(!game.gameOver(), "harness: gameOver before level 10");
             if (_level() >= 10 && !game.jackpotPhase()) return;
             if (!game.jackpotPhase()) {
-                // Seed just over the ratcheting target (target(L+1) = levelPrizePool[L])
+                // Seed just over the ratcheting target (target(L+1) = _levelPrizePool(L))
                 // so every level arms turbo while the pools stay small enough that BAF
                 // winner slices remain below the whale-pass threshold (ticket rolls).
                 _seedNextPrizePool(_levelPrizePool(_level()) + 25 ether);
@@ -278,15 +280,10 @@ contract TurboBafTicketFloor is DeployProtocol {
         }
     }
 
-    /// @dev levelPrizePool[lvl] — the mapping sits at slot 23. levelPrizePool[L] is the
+    /// @dev _levelPrizePool(lvl) — the mapping sits at slot 23. _levelPrizePool(L) is the
     ///      target the NEXT level's pool must exceed; 0 until first recorded.
     function _levelPrizePool(uint24 lvl) internal view returns (uint256) {
-        uint256 v = uint256(
-            vm.load(
-                address(game),
-                keccak256(abi.encode(uint256(lvl), GameSlots.LEVEL_PRIZE_POOL))
-            )
-        );
+        uint256 v = GamePoolSlots.read(address(game), lvl);
         return v < 50 ether ? 50 ether : v;
     }
 

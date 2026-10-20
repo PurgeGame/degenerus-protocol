@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {GamePoolSlots} from "../helpers/GamePoolSlots.sol";
+
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 
@@ -12,7 +14,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///         the constructor's perpetual vault/sDGNRS entries). Proves, in order:
 ///         1. level 100 carries NO century floor (snapshot still zero): its target is the
 ///            plain ratchet, and the transition snapshots the achieved pool;
-///         2. after the century jackpot ends, _endPhase resets levelPrizePool[100] to the
+///         2. after the century jackpot ends, _endPhase resets _levelPrizePool(100) to the
 ///            reachable x01 base while the century snapshot survives untouched;
 ///         3. at level 199's purchase phase the effective target is the curved floor
 ///            (2x the level-100 snapshot), not the plain ratchet;
@@ -99,10 +101,7 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
     }
 
     function _levelPrizePool(uint24 lvl) internal view returns (uint256) {
-        bytes32 slot = keccak256(
-            abi.encode(uint256(lvl), LEVEL_PRIZE_POOL_SLOT)
-        );
-        return uint256(vm.load(address(game), slot));
+        return GamePoolSlots.read(address(game), lvl);
     }
 
     /// @dev A century level's recorded achieved pool, read through the same public view the
@@ -171,10 +170,10 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
 
         // Fund the first century big so the level-200 floor sits far above later
         // ratchets: the century pool spills into futurePool at consolidation, and
-        // _endPhase reseeds levelPrizePool[100] from 40% of futurePool, so the floor only
+        // _endPhase reseeds _levelPrizePool(100) from 40% of futurePool, so the floor only
         // towers over the post-reset ratchet when the century pool dwarfs that spill.
         // (The jackpot may run compressed — a target met this early legitimately
-        // compresses the jackpot days, so _endPhase can reset levelPrizePool[100]
+        // compresses the jackpot days, so _endPhase can reset _levelPrizePool(100)
         // within the same drive. The snapshot is the durable observable.)
         _seedNextPool(10_000 ether);
         for (uint256 i = 0; i < 10 && game.level() < 100; i++) {
@@ -202,7 +201,7 @@ contract CenturyDrivenTransitionTest is DeployProtocol {
         assertLt(sdgnrs.centurySupplyCheckpoint(), 1e24, "actual first-century burns keep supply below genesis");
         assertTrue(
             _levelPrizePool(100) != achieved,
-            "endPhase must reset levelPrizePool[100] to the x01 restart base"
+            "endPhase must reset _levelPrizePool(100) to the x01 restart base"
         );
         assertEq(
             _centurySnapshot(100),
