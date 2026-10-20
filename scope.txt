@@ -50,6 +50,7 @@ contracts/interfaces/IVaultPlayerActions.sol
 contracts/interfaces/IsDGNRS.sol
 contracts/libraries/ActivityCurveLib.sol
 contracts/libraries/BitPackingLib.sol
+contracts/libraries/BoundedCall.sol
 contracts/libraries/CrapsPreferenceLib.sol
 contracts/libraries/CrapsPriceLib.sol
 contracts/libraries/DecimatorSamplingLib.sol

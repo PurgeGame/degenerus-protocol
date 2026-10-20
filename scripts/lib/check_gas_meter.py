@@ -26,6 +26,7 @@ REVIEWED = {
     ("libraries/MineFlipGas.sol", "canRunAfterFirst"): [
         "if (required > remaining(meter) || gasleft() < required) return false;"],
     ("libraries/MineFlipGas.sol", "forwardable"): ["if (meter.mustProgress) return gasleft();"],
+    ("libraries/BoundedCall.sol", "_requireGas"): ["uint256 available = gasleft();"],
     ("modules/DegenerusGameMinerModule.sol", "mineFlip"): [
         "uint256 rewardStart = gasleft();",
         "MineFlipGas.Meter memory meter = MineFlipGas.start(MineFlipGas.budget(gasleft(), gasMultiplierBps, true));",
