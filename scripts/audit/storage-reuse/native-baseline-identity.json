@@ -1,0 +1,39 @@
+{
+  "source_head": "fb2540c55f7013572f22e5c3846bf5f9266279fb",
+  "solc": "solc, the solidity compiler commandline interface\nVersion: 0.8.34+commit.80d5c536.Linux.g++\n",
+  "settings": {
+    "optimizer": {
+      "enabled": true,
+      "runs": 1000
+    },
+    "viaIR": true,
+    "evmVersion": "osaka",
+    "remappings": [
+      "@openzeppelin/=node_modules/@openzeppelin/"
+    ],
+    "outputSelection": {
+      "contracts/Coinflip.sol": {
+        "Coinflip": [
+          "evm.deployedBytecode.object",
+          "storageLayout",
+          "metadata"
+        ]
+      },
+      "contracts/DegenerusAffiliate.sol": {
+        "DegenerusAffiliate": [
+          "evm.deployedBytecode.object",
+          "storageLayout",
+          "metadata"
+        ]
+      },
+      "contracts/DegenerusJackpots.sol": {
+        "DegenerusJackpots": [
+          "evm.deployedBytecode.object",
+          "storageLayout",
+          "metadata"
+        ]
+      }
+    }
+  },
+  "input_sha256": "67607ad690bbcb92ea52a847caab506798127c4da4148e44147c15ad23cbabd6"
+}

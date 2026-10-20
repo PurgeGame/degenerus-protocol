@@ -23,6 +23,12 @@ contract FSMEmptyDependencies {
     uint256 public battleLocks;
     uint256 public charityPicks;
     uint256 public burns;
+    uint256 public vaultSettles;
+
+    function depositCoinflip(uint32 id, uint256 amount) external {
+        require(id == 1 && amount == 0, "only the Vault banking checkpoint");
+        ++vaultSettles;
+    }
 
     function requestRandomWords(VRFRandomWordsRequest calldata) external returns (uint256) {
         return ++requests;
@@ -311,12 +317,17 @@ contract GameFSMProductionTransitionTest is Test {
         assert(machine.sealedDay() == initialDay);
         assert(FSMEmptyDependencies(ContractAddresses.VRF_COORDINATOR).requests() == 1);
         machine.recordDeliveredWord(42);
-        // One mineFlip composes the delivered day's checkpoints (60d31f775): publish, tickets, the gap
-        // and word application, the battle, the purchase daily and its seal, then the read consumers.
-        // The jackpot legs' witnesses record the state each checkpoint saw.
+        // A due Vault backstop is its own checkpoint after applying the delivered word.
+        // Its continuation then composes battle, purchase daily/seal and read consumers.
         _mustCall(abi.encodeCall(DegenerusGameMinerModule.mineFlip, (uint32(0))));
         FSMEmptyDependencies deps = FSMEmptyDependencies(ContractAddresses.COINFLIP);
         uint24 afterGap = gap == 0 ? uint24(initialDay) : day - 1;
+        if (day >= 45) {
+            assert(deps.vaultSettles() == 1);
+            assert(deps.battles() == 0);
+            assert(machine.sealedDay() == afterGap);
+            _mustCall(abi.encodeCall(DegenerusGameMinerModule.mineFlip, (uint32(0))));
+        } else assert(deps.vaultSettles() == 0);
         assert(afterGap >= initialDay);
         assert(machine.wordAt(day) == 42);
         assert(deps.settlements() == uint256(gap) + 1);

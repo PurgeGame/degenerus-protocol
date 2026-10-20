@@ -87,7 +87,7 @@ Production changes since the earlier freeze (32 contract files):
 - Fewer storage writes: the pending prize-pool word is folded but not zeroed at unfreeze,
   `jackpotWork` is retired by clearing its kind, BAF board lanes and settled redemption entries
   stay in place behind their bounds and cursors, and redundant RNG session-flag resets are gone.
-- Coinflip claims walk one 730-day window that ends at the latest resolved day; older days
+- Coinflip claims walk one 90-day window that ends at the latest resolved day; older days
   forfeit. The separate first-claim window and the 1,460-day exit walk are gone, so an
   auto-rebuy backlog can no longer leave a claim acting on carry behind public results. The
   rolled carry clamps to `uint128` and banked balances saturate.

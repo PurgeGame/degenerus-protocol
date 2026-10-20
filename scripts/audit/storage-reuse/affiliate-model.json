@@ -1,0 +1,133 @@
+{
+  "scope": "Python codec/accounting model and storage-only Glamsterdam estimates; no EVM/security proof",
+  "score_cap": 34359738367,
+  "history_cap": 500000,
+  "packed_bits": 255,
+  "model_sha256": "90c8ec5e9df0b69c29e8f3f129288d8f5915c7cd72d9706a5a5547bcf341e09a",
+  "pricing_model_sha256": "76b1505f5bdd086102904b960fed89a108cae6cc4e73da28f3edac280a77a087",
+  "source_sha256": {
+    "contracts/DegenerusAffiliate.sol": "18582bf31c92305b775cf27cc9b6ee42affc38712107e37d00407e66664ed693",
+    "contracts/libraries/AffiliateEarningsLib.sol": "2dd6edacd35876c7434b5b54214813601292378a3f0ebdae90d71537bda4f9b2",
+    "contracts/libraries/PriceLookupLib.sol": "d91eac8bac3fb36eb2c0ec04ab7f347af89b378e338b2146925e509a08f011aa",
+    "contracts/modules/DegenerusGameBingoModule.sol": "12e8ba05dd82d9741db09a0889a792255c7f4a44624c331656527fca85052d39",
+    "contracts/modules/DegenerusGameMintStreakUtils.sol": "8516f2db973ee729cad05fd61425e0510d457f7dbdb53101ffcc21246b8252ec"
+  },
+  "regressions": {
+    "cases": [
+      "roll_gap_0",
+      "roll_gap_1",
+      "roll_gap_2",
+      "roll_gap_3",
+      "roll_gap_4",
+      "roll_gap_5",
+      "roll_gap_6",
+      "roll_gap_7",
+      "roll_gap_8",
+      "roll_gap_10000",
+      "zero_does_not_roll_or_allocate",
+      "cap_huge_input_exact_denominator_and_tie",
+      "uint24_last_level_preserves_cache",
+      "zero_and_backward_targets_are_noops"
+    ],
+    "cases_passed": 14,
+    "bonus_clipping_boundary_cases": 9315
+  },
+  "differential": {
+    "credit_operations": 14400,
+    "score_and_bonus_comparisons": 345600,
+    "accounts_per_seed": 6,
+    "seeds": 24
+  },
+  "gas_workloads": [
+    {
+      "credited_levels": 1,
+      "credits_per_level": 1,
+      "current_storage_gas": 110120,
+      "packed_storage_gas": 110120,
+      "savings": 0,
+      "current_creations": 1,
+      "packed_creations": 1
+    },
+    {
+      "credited_levels": 1,
+      "credits_per_level": 10,
+      "current_storage_gas": 219920,
+      "packed_storage_gas": 219920,
+      "savings": 0,
+      "current_creations": 1,
+      "packed_creations": 1
+    },
+    {
+      "credited_levels": 7,
+      "credits_per_level": 1,
+      "current_storage_gas": 770840,
+      "packed_storage_gas": 183320,
+      "savings": 587520,
+      "current_creations": 7,
+      "packed_creations": 1
+    },
+    {
+      "credited_levels": 7,
+      "credits_per_level": 10,
+      "current_storage_gas": 1539440,
+      "packed_storage_gas": 951920,
+      "savings": 587520,
+      "current_creations": 7,
+      "packed_creations": 1
+    },
+    {
+      "credited_levels": 100,
+      "credits_per_level": 1,
+      "current_storage_gas": 11012000,
+      "packed_storage_gas": 1317920,
+      "savings": 9694080,
+      "current_creations": 100,
+      "packed_creations": 1
+    },
+    {
+      "credited_levels": 100,
+      "credits_per_level": 10,
+      "current_storage_gas": 21992000,
+      "packed_storage_gas": 12297920,
+      "savings": 9694080,
+      "current_creations": 100,
+      "packed_creations": 1
+    },
+    {
+      "credited_levels": 1000,
+      "credits_per_level": 1,
+      "current_storage_gas": 110120000,
+      "packed_storage_gas": 12297920,
+      "savings": 97822080,
+      "current_creations": 1000,
+      "packed_creations": 1
+    },
+    {
+      "credited_levels": 1000,
+      "credits_per_level": 10,
+      "current_storage_gas": 219920000,
+      "packed_storage_gas": 122097920,
+      "savings": 97822080,
+      "current_creations": 1000,
+      "packed_creations": 1
+    },
+    {
+      "credited_levels": 10000,
+      "credits_per_level": 1,
+      "current_storage_gas": 1101200000,
+      "packed_storage_gas": 122097920,
+      "savings": 979102080,
+      "current_creations": 10000,
+      "packed_creations": 1
+    },
+    {
+      "credited_levels": 10000,
+      "credits_per_level": 10,
+      "current_storage_gas": 2199200000,
+      "packed_storage_gas": 1220097920,
+      "savings": 979102080,
+      "current_creations": 10000,
+      "packed_creations": 1
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {CoinflipStorage} from "../helpers/CoinflipStorage.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Coinflip} from "../../contracts/Coinflip.sol";
@@ -31,8 +32,7 @@ contract LinkDonationWalletIdsTest is DeployProtocol {
     }
 
     function _lane(uint24 day, uint32 id) internal view returns (uint256) {
-        bytes32 slot = keccak256(abi.encode(uint256(id), keccak256(abi.encode(uint256(day >> 3), uint256(0)))));
-        return uint32(uint256(vm.load(address(coinflip), slot)) >> ((uint256(day) & 7) * 32));
+        return CoinflipStorage.read(address(coinflip), id, day);
     }
 
 

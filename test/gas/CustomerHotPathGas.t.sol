@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {CoinflipStorage} from "../helpers/CoinflipStorage.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
@@ -193,9 +194,7 @@ contract CustomerHotPathGasTest is DeployProtocol {
             bytes32 slot = keccak256(abi.encode(d >> 5, uint256(1)));
             uint256 word = uint256(vm.load(address(coinflip), slot));
             vm.store(address(coinflip), slot, bytes32(word | ((d % 3 == 0 ? uint256(1) : 100) << ((d & 31) * 8))));
-            slot = keccak256(abi.encode(uint256(game.walletIdOf(PLAYER)), keccak256(abi.encode(d >> 3, uint256(0)))));
-            word = uint256(vm.load(address(coinflip), slot));
-            vm.store(address(coinflip), slot, bytes32(word | (uint256(1000) << ((d & 7) * 32))));
+            CoinflipStorage.set(address(coinflip), game.walletIdOf(PLAYER), uint24(d), 1000);
         }
         vm.warp((uint256(last - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621);
     }
@@ -285,19 +284,24 @@ contract CustomerHotPathGasTest is DeployProtocol {
         bytes32 resultSlot = keccak256(abi.encode(uint256(1), uint256(1)));
         uint256 results = uint256(vm.load(address(coinflip), resultSlot));
         vm.store(address(coinflip), resultSlot, bytes32(results & ~(uint256(255) << 8))); // gap day 33
-        bytes32 stakeSlot = keccak256(abi.encode(uint256(game.walletIdOf(PLAYER)), keccak256(abi.encode(uint256(4), uint256(0)))));
+        uint32 id = game.walletIdOf(PLAYER);
+        bytes32 stakeSlot = CoinflipStorage.ringSlot(id, uint24(32) / 7);
+        bytes32 futureSlot = CoinflipStorage.ringSlot(id, 35 / 7);
         uint256 stakes = uint256(vm.load(address(coinflip), stakeSlot));
-        vm.store(address(coinflip), stakeSlot, bytes32(stakes | (uint256(777) << 96))); // future day 35
+        CoinflipStorage.set(address(coinflip), id, 35, 777);
+        uint256 future = uint256(vm.load(address(coinflip), futureSlot));
         vm.startStateDiffRecording();
         vm.prank(PLAYER); coinflip.claimCoinflips(0, type(uint256).max);
         Vm.AccountAccess[] memory calls = vm.stopAndReturnStateDiff();
         uint256 writes;
         for (uint256 i; i < calls.length; ++i) for (uint256 j; j < calls[i].storageAccesses.length; ++j) {
             Vm.StorageAccess memory a = calls[i].storageAccesses[j];
-            if (a.account == address(coinflip) && a.slot == stakeSlot && a.isWrite) ++writes;
+            if (a.account == address(coinflip) && (a.slot == stakeSlot || a.slot == futureSlot) && a.isWrite) ++writes;
         }
-        assertEq(writes, 1, "one flush for the whole stake word");
-        assertEq(uint256(vm.load(address(coinflip), stakeSlot)), (uint256(1000) << 32) | (uint256(777) << 96));
+        assertEq(writes, 0, "claims retain all stake pages");
+        assertEq(uint256(vm.load(address(coinflip), stakeSlot)), stakes);
+        assertEq(uint256(vm.load(address(coinflip), futureSlot)), future);
+        assertEq(CoinflipStorage.read(address(coinflip), id, 35), 777);
         uint256 balance = coin.balanceOf(PLAYER);
         vm.prank(PLAYER); coinflip.claimCoinflips(0, type(uint256).max);
         assertEq(coin.balanceOf(PLAYER), balance, "no replay payout");

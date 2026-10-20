@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {CoinflipStorage} from "../helpers/CoinflipStorage.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Coinflip} from "../../contracts/Coinflip.sol";
@@ -63,9 +64,7 @@ contract CoinflipSeedWindowTest is DeployProtocol {
     }
 
     function _rawStake(uint24 day, address p) internal view returns (uint256) {
-        bytes32 inner = keccak256(abi.encode(uint256(day >> 3), uint256(0)));
-        uint256 w = uint256(vm.load(address(coinflip), keccak256(abi.encode(uint256(game.walletIdOf(p)), uint256(inner)))));
-        return uint256(uint32(w >> ((uint256(day) & 7) * 32)));
+        return CoinflipStorage.read(address(coinflip), game.walletIdOf(p), day);
     }
 
     function _stateSlot(address p) internal view returns (bytes32) {
@@ -78,8 +77,8 @@ contract CoinflipSeedWindowTest is DeployProtocol {
 
     /// @dev The vault's raw BAF word for bracket 10 (level 0 records to bracket 10).
     function _bafWord(address p) internal view returns (uint256) {
-        bytes32 inner = keccak256(abi.encode(uint256(10), uint256(0)));
-        return uint256(vm.load(address(jackpots), keccak256(abi.encode(uint256(game.walletIdOf(p)), uint256(inner)))));
+        bytes32 slot = bytes32(uint256(keccak256(abi.encode(uint256(game.walletIdOf(p)), uint256(0)))) + 1);
+        return uint256(vm.load(address(jackpots), slot));
     }
 
     function _setResult(uint24 day, uint8 b) internal {
@@ -144,10 +143,10 @@ contract CoinflipSeedWindowTest is DeployProtocol {
         assertEq(coinflip.previewClaimCoinflips(VAULT), vaultExpected, "preview pays lane + seed per winning day");
         assertEq(_vaultClaim(type(uint256).max), vaultExpected, "claim pays lane + seed per winning day");
         assertEq(coin.vaultMintAllowance() - allowance0, vaultExpected, "minted into the vault allowance");
-        assertEq(_bafWord(VAULT) & type(uint192).max, vaultExpected, "every winning payout is BAF credit");
+        assertEq(_bafWord(VAULT) & type(uint168).max, vaultExpected, "every winning payout is BAF credit");
         assertEq(wwxrp.claimable(game.walletIdOf(VAULT)) - wwxrpVault0, vaultLosses * 1, "one loss prize per staked losing day");
         assertEq(_vaultClaim(type(uint256).max), 0, "the cursor consumed each seed once");
-        assertEq(_rawStake(3, VAULT) + _rawStake(10, VAULT) + _rawStake(22, VAULT), 0, "stored lanes cleared");
+        assertEq(_rawStake(3, VAULT) + _rawStake(10, VAULT) + _rawStake(22, VAULT), 3 * 12_345, "retained lanes cannot be claimed twice");
 
         (bool enabled, uint256 stop, uint256 carry,) = coinflip.coinflipAutoRebuyInfo(SDGNRS);
         assertTrue(enabled, "sDGNRS auto-rebuy armed at epoch 20");

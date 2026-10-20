@@ -408,7 +408,18 @@ settles the vault's coinflip position through that day's applied result
 (`depositCoinflip(VAULT, 0)`), so the vault's bracket score holds every winning flip the bracket
 counts, as for a player who claims at the close of that day. The BAF day's own flip settles after
 the next request and scores the next bracket. On an x0 purchase day every leg that can seal keeps
-`BAF_VAULT_SETTLE` (one full 730-day claim walk) in its tail.
+`BAF_VAULT_SETTLE` (one full 90-day claim walk) in its tail. A separate daily-phase checkpoint
+settles the Vault every 45 resolved days before any phase can unlock, using the Game’s own successful-settle
+stamp. Both routes bank winnings through the same zero-deposit helper; RNG application and terminal
+resolution acquire no new Vault dependency.
+
+Coinflip retains 15 seven-day pages per wallet, with absolute page tags and a tagged overflow fallback
+for a collision with live stakes. Claims read these pages and advance the existing cursor. Stakes and
+rolling carry older than 90 resolved days forfeit; stored banked winnings do not. BAF uses two tagged
+score records per wallet, alternating brackets, preserving the closing and next bracket simultaneously.
+Affiliate earnings use one retained word: two 35-bit exact scores, five clipped bonus-history lanes,
+a level tag and the immutable upline cache. Scores cap at 34,359,738,367 per level; actual commissions
+remain unchanged. See [storage reuse](STORAGE-REUSE.md) for layouts and reader migration.
 
 The global wallet registry is append-only: each wallet gets one permanent, one-based
 uint32 ID. IDs are never reassigned. Queue words pack eight IDs; trait buckets pack

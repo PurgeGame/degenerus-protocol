@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {CoinflipStorage} from "../helpers/CoinflipStorage.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Coinflip} from "../../contracts/Coinflip.sol";
@@ -20,12 +21,12 @@ contract CoinflipCodecHarness is CoinflipStakeSetter {
     }
 
     function word(uint24 key, uint32 p) external view returns (uint256) {
-        return coinflipStakePacked[key][p];
+        return _flipStakePage(key, p);
     }
 }
 
-/// @title CoinflipPackedStake — eight whole-FLIP uint32 lanes per stake word
-/// @notice Pins the stake codec (key = day >> 3, lane = (day & 7) * 32, whole FLIP) and the
+/// @title CoinflipPackedStake — seven whole-FLIP uint32 lanes per tagged stake word
+/// @notice Pins the stake codec (page = day / 7, lane = (day % 7) * 32, whole FLIP) and the
 ///         accounting rules every stake-writing route follows: whole-FLIP flooring once per
 ///         addition, saturation at the per-player-day cap for automatic credits, a dedicated
 ///         revert for manual deposits over the cap, and CoinflipStakeUpdated reporting the
@@ -68,12 +69,9 @@ contract CoinflipPackedStake is DeployProtocol {
         return GameTimeLib.currentDayIndex() + 1;
     }
 
-    /// @dev Raw lane read against the production contract: slot 0, key day >> 3, 32-bit lanes.
+    /// @dev Raw lane read against the production contract: slot 0, wallet ring of tagged seven-day pages.
     function _rawStake(uint24 day, address p) internal view returns (uint256) {
-        bytes32 inner = keccak256(abi.encode(uint256(day >> 3), uint256(0)));
-        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(p)), uint256(inner)));
-        uint256 w = uint256(vm.load(address(coinflip), slot));
-        return uint256(uint32(w >> ((uint256(day) & 7) * 32))) * UNIT;
+        return CoinflipStorage.read(address(coinflip), game.walletIdOf(p), day);
     }
 
     function _whole(uint256 x) internal pure returns (uint256) {
@@ -111,32 +109,23 @@ contract CoinflipPackedStake is DeployProtocol {
     //                           1. CODEC
     // =====================================================================
 
-    function test_EightLanesPerWordWithSlotBoundaries() public {
+    function test_SevenLanesPerWordWithSlotBoundaries() public {
         uint32 p = 0xA11CE;
-        // Days 16..31 span two words (keys 2 and 3): every lane holds its own value.
-        for (uint24 d = 16; d < 32; ++d) {
-            codec.setStake(d, p, uint256(d) * UNIT);
+        for (uint24 d = 14; d < 28; ++d) codec.setStake(d, p, d);
+        for (uint24 d = 14; d < 28; ++d) assertEq(codec.stake(d, p), d);
+        uint256 expected2 = uint256(3) << 224;
+        uint256 expected3 = uint256(4) << 224;
+        for (uint256 i; i < 7; ++i) {
+            expected2 |= (14 + i) << (i * 32);
+            expected3 |= (21 + i) << (i * 32);
         }
-        for (uint24 d = 16; d < 32; ++d) {
-            assertEq(codec.stake(d, p), uint256(d) * UNIT, "lane holds its own day");
-        }
-        uint256 expected2;
-        uint256 expected3;
-        for (uint256 i; i < 8; ++i) {
-            expected2 |= (16 + i) << (i * 32);
-            expected3 |= (24 + i) << (i * 32);
-        }
-        assertEq(codec.word(2, p), expected2, "word 2 packs days 16..23 low to high");
-        assertEq(codec.word(3, p), expected3, "word 3 packs days 24..31 low to high");
-        assertEq(codec.stake(15, p), 0, "day 15 (word 1) untouched");
-        assertEq(codec.stake(32, p), 0, "day 32 (word 4) untouched");
-
-        // Zeroing one lane preserves its seven siblings.
+        assertEq(codec.word(2, p), expected2);
+        assertEq(codec.word(3, p), expected3);
+        assertEq(codec.stake(13, p), 0);
+        assertEq(codec.stake(28, p), 0);
         codec.setStake(19, p, 0);
-        assertEq(codec.stake(19, p), 0);
-        for (uint24 d = 16; d < 24; ++d) {
-            if (d != 19) assertEq(codec.stake(d, p), uint256(d) * UNIT, "sibling lane survives a clear");
-        }
+        for (uint24 d = 14; d < 21; ++d) assertEq(codec.stake(d, p), d == 19 ? 0 : d);
+        assertEq(uint24(codec.word(2, p) >> 224), 3, "tag retained");
     }
 
     function test_WritePreservesWholeFlipAndSaturates() public {
@@ -173,8 +162,10 @@ contract CoinflipPackedStake is DeployProtocol {
         assertEq(codec.stake(otherDay, pid), expectedOtherDay, "another day of the same player is untouched");
         assertEq(codec.stake(day, otherPlayer), expectedOtherPlayer, "the same day of another player is untouched");
         // Every lane except the written one is unchanged.
-        for (uint24 i; i < 8; ++i) {
-            uint24 sibling = (day & ~uint24(7)) | i;
+        for (uint24 i; i < 7; ++i) {
+            uint256 siblingWide = uint256(day / 7) * 7 + i;
+            if (siblingWide > type(uint24).max) continue;
+            uint24 sibling = uint24(siblingWide);
             if (sibling == day) continue;
             if (sibling == otherDay) continue;
             assertEq(codec.stake(sibling, pid), 0, "sibling lane stays zero");
@@ -421,7 +412,7 @@ contract CoinflipPackedStake is DeployProtocol {
     //                 5. Preview/claim agree on packed stakes
     // =====================================================================
 
-    function test_PreviewMatchesClaimAndClearedLanesCannotReplay() public {
+    function test_PreviewMatchesClaimAndRetainedLanesCannotReplay() public {
         _mint(player, 1_000);
         vm.prank(player);
         coinflip.depositCoinflip(0, 1_000);
@@ -432,7 +423,7 @@ contract CoinflipPackedStake is DeployProtocol {
         assertEq(coinflip.previewClaimCoinflips(player), payout);
         vm.prank(player);
         assertEq(coinflip.claimCoinflips(0, type(uint256).max), payout, "claim pays the preview");
-        assertEq(_rawStake(3, player), 0, "the lane is cleared");
+        assertEq(_rawStake(3, player), stakeDay3, "stake word retained; cursor prevents replay");
         vm.prank(player);
         assertEq(coinflip.claimCoinflips(0, type(uint256).max), 0, "no replay");
     }

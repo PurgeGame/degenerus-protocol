@@ -82,11 +82,12 @@ async function payAffiliateAsGame(
   ]);
   const gameSigner = await hreEthers.getSigner(gameAddr);
   const senderId = await giveWalletId(game, sender);
-  const tx = await affiliate
-    .connect(gameSigner)
-    .payAffiliate(amount, code, senderId, lvl, isFreshEth, lootboxActivityScore);
-  await hreEthers.provider.send("hardhat_stopImpersonatingAccount", [gameAddr]);
-  return tx;
+  try {
+    return await affiliate.connect(gameSigner)
+      .payAffiliate(amount, code, senderId, lvl, isFreshEth, lootboxActivityScore);
+  } finally {
+    await hreEthers.provider.send("hardhat_stopImpersonatingAccount", [gameAddr]);
+  }
 }
 
 /**
@@ -431,28 +432,29 @@ describe("AffiliateHardening", function () {
         expect(scoreL2).to.be.gt(0n);
       });
 
-      it("cap at level 1 does not affect level 0 earnings", async function () {
-        const { affiliate, game, coin, alice, bob, aliceCode } =
-          await loadFixture(deployWithAffiliateSetup);
-
-        // Fill cap at level 1
-        await payAffiliateAsGame(
-          hre.ethers, game, affiliate,
-          flip(4000000), aliceCode, bob.address, 1, true, 0
-        );
-
-        // Earn at level 0 independently
-        await payAffiliateAsGame(
-          hre.ethers, game, affiliate,
-          flip(1000000), aliceCode, bob.address, 0, true, 0
-        );
-
-        const scoreL0 = await affiliate.affiliateScore(0, await game.walletIdOf(alice.address));
-        const expectedL0 = computeScaledAmount(flip(1000000), 0n, true);
-        expect(scoreL0).to.equal(expectedL0);
+      it("ignores zero and old score targets while still paying commissions", async function () {
+        const { affiliate, game, coinflip, alice, bob, aliceCode } = await loadFixture(deployWithAffiliateSetup);
+        await payAffiliateAsGame(hre.ethers, game, affiliate, flip(4000000), aliceCode, bob.address, 1, true, 0);
+        await payAffiliateAsGame(hre.ethers, game, affiliate, flip(4000000), aliceCode, bob.address, 2, true, 0);
+        const beforeL1 = await affiliate.totalAffiliateScore(1);
+        const beforeL2 = await affiliate.totalAffiliateScore(2);
+        for (const level of [0, 1]) {
+          const tx = await payAffiliateAsGame(hre.ethers, game, affiliate, flip(1000000), aliceCode,
+            bob.address, level, true, 0);
+          const credits = await getEvents(tx, coinflip, "CoinflipStakeUpdated");
+          expect(credits.length).to.be.greaterThan(0);
+          expect(credits.reduce((sum, event) => sum + event.args.amount, 0n)).to.be.gt(0n);
+        }
+        const id = await game.walletIdOf(alice.address);
+        expect(await affiliate.affiliateScore(0, id)).to.equal(0n);
+        expect(await affiliate.affiliateScore(1, id)).to.equal(flip(1000000));
+        expect(await affiliate.affiliateScore(2, id)).to.equal(flip(1000000));
+        expect(await affiliate.totalAffiliateScore(0)).to.equal(0n);
+        expect(await affiliate.totalAffiliateScore(1)).to.equal(beforeL1);
+        expect(await affiliate.totalAffiliateScore(2)).to.equal(beforeL2);
       });
 
-      it("accrues independently at multiple levels", async function () {
+      it("accrues at successive levels and retires exact history beyond the two live lanes", async function () {
         const { affiliate, game, coin, alice, bob, aliceCode } =
           await loadFixture(deployWithAffiliateSetup);
 
@@ -466,7 +468,8 @@ describe("AffiliateHardening", function () {
 
         for (const lvl of [1, 2, 5]) {
           const score = await affiliate.affiliateScore(lvl, await game.walletIdOf(alice.address));
-          expect(score).to.equal(computeScaledAmount(flip(4000000), BigInt(lvl), true));
+          expect(score).to.equal(lvl == 5 ? computeScaledAmount(flip(4000000), BigInt(lvl), true) : 0n);
+          expect(await affiliate.totalAffiliateScore(lvl)).to.equal(computeScaledAmount(flip(4000000), BigInt(lvl), true));
         }
       });
     });

@@ -131,14 +131,18 @@ contract DegenerusJackpots is IDegenerusJackpots {
       |  Data structures for BAF leaderboard tracking.                       |
       +======================================================================+*/
 
+    /// @notice A closing bracket must finish before its player record can be reused.
+
     /// @notice Per-player BAF state for a bracket level.
-    /// @dev Packed into single slot: total (192) + epoch (64) = 256 bits.
-    ///      A total whose epoch is stale (bracket already resolved) reads as zero.
+    /// @dev One reusable word: total (168) + epoch (64) + bracket (24). Both tags
+    ///      must match; the closing and next brackets occupy alternating homes.
     struct BafPlayer {
-        /// @notice Accumulated winning-flip payout credit (saturates at uint192.max).
-        uint192 total;
+        /// @notice Winning payout credit; the reachable lifetime bound is below 2^155.
+        uint168 total;
         /// @notice Bracket epoch the total belongs to.
         uint64 epoch;
+        /// @notice Absolute bracket tag; zero is an unused word.
+        uint24 bracket;
     }
 
     /// @notice Per-level BAF bracket state.
@@ -204,8 +208,8 @@ contract DegenerusJackpots is IDegenerusJackpots {
       |  Per-player BAF totals and top-4 leaderboard per level.              |
       +======================================================================+*/
 
-    /// @notice Accumulated winning-flip payout credit + owning epoch per wallet ID per BAF bracket.
-    mapping(uint24 => mapping(uint32 => BafPlayer)) internal bafPlayer;
+    /// @notice Two tagged score words per wallet ID, indexed by (bracket / 10) & 1.
+    mapping(uint32 => BafPlayer[2]) internal bafPlayer;
 
     /// @notice Top-4 coinflip bettors for BAF per level, sorted by score descending. Two 128-bit
     ///         entries per word: entry i lives in word i >> 1 at bit (i & 1) * 128, laid out as
@@ -272,12 +276,15 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @custom:access Restricted to COINFLIP via onlyCoin modifier.
     function recordBafFlip(uint32 id, uint24 lvl, uint256 amount) external override onlyCoin {
         uint64 currentEpoch = bafLevel[lvl].epoch;
-        BafPlayer memory ps = bafPlayer[lvl][id];
-        // A stale epoch means the bracket already resolved: restart the total from zero.
-        uint256 total = ps.epoch == currentEpoch ? ps.total : 0;
-        unchecked { total += amount; }
-        if (total > type(uint192).max) total = type(uint192).max;
-        bafPlayer[lvl][id] = BafPlayer({total: uint192(total), epoch: currentEpoch});
+        uint256 index = (lvl / 10) & 1;
+        BafPlayer memory ps = bafPlayer[id][index];
+        // Coinflip derives the bracket from Game's level. Game completes the
+        // closing bracket before advancing into the next decade, so that bracket
+        // and the next one occupy opposite slots throughout payout.
+        uint256 total = ps.bracket == lvl && ps.epoch == currentEpoch ? ps.total : 0;
+        uint256 room = type(uint168).max - total;
+        total += amount > room ? room : amount;
+        bafPlayer[id][index] = BafPlayer({total: uint168(total), epoch: currentEpoch, bracket: lvl});
 
         // VAULT accrues a score (above) but stays off the leaderboard: it can never win the
         // top-bettor slices, while still ranking in the score-ranked ticket slices it holds.
@@ -453,9 +460,9 @@ contract DegenerusJackpots is IDegenerusJackpots {
     ///      `resolveAccount` (authorization is not required). Pays only when the bracket
     ///      is marked skipped and the score
     ///      belongs to the bracket's live epoch (a resolved bracket bumped its
-    ///      epoch, so its scores read stale and pay nothing). Deleting the
-    ///      score slot is the claim flag — no separate mapping. The delete can
-    ///      never affect a jackpot resolution: skipped is terminal, so a
+    ///      epoch, so its scores read stale and pay nothing). Zeroing only the
+    ///      total is the claim flag, retaining both tags for reuse. Old consolation
+    ///      expires when that parity home is reused. A claim can never affect a resolution: skipped is terminal, so a
     ///      claimable bracket can never resolve later. VAULT's consolation
     ///      (it accrues bracket score from its daily flips) escrows into its
     ///      WWXRP mint allowance via the token's vault routing.
@@ -467,11 +474,12 @@ contract DegenerusJackpots is IDegenerusJackpots {
         BafLevel memory lv = bafLevel[lvl];
         if (!lv.skipped) revert NothingToClaim();
         if (id == 0) id = degenerusGame.walletIdOf(msg.sender);
-        BafPlayer memory ps = bafPlayer[lvl][id];
-        if (ps.epoch != lv.epoch) revert NothingToClaim();
+        BafPlayer memory ps = bafPlayer[id][(lvl / 10) & 1];
+        if (ps.bracket != lvl || ps.epoch != lv.epoch) revert NothingToClaim();
         uint256 amount = _bafConsolationAmount(ps.total);
         if (amount == 0) revert NothingToClaim();
-        delete bafPlayer[lvl][id];
+        // Tags stay nonzero: a later bracket overwrites an existing word.
+        bafPlayer[id][(lvl / 10) & 1].total = 0;
         emit BafConsolationClaimed(id, lvl, ps.total, amount);
         wwxrp.creditPrize(id, amount);
     }
@@ -479,7 +487,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @notice Claimable WWXRP consolation for a player at a bracket level, before WWXRP's
     ///         gameMintScale (the mint at claim is scaled).
     /// @return Zero unless the bracket is skipped and the player holds an
-    ///         unclaimed live-epoch score.
+    ///         unclaimed score with matching bracket and epoch tags.
     function bafConsolationOf(address player, uint24 lvl) external view returns (uint256) {
         return bafConsolationOfId(degenerusGame.walletIdOf(player), lvl);
     }
@@ -488,8 +496,8 @@ contract DegenerusJackpots is IDegenerusJackpots {
     function bafConsolationOfId(uint32 playerId, uint24 lvl) public view returns (uint256) {
         BafLevel memory lv = bafLevel[lvl];
         if (!lv.skipped) return 0;
-        BafPlayer memory ps = bafPlayer[lvl][playerId];
-        if (ps.epoch != lv.epoch) return 0;
+        BafPlayer memory ps = bafPlayer[playerId][(lvl / 10) & 1];
+        if (ps.bracket != lvl || ps.epoch != lv.epoch) return 0;
         return _bafConsolationAmount(ps.total);
     }
 
@@ -512,8 +520,8 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @param currentEpoch The bracket's current epoch (read once per resolution by callers).
     /// @return Accumulated winning-flip payout credit (0 if the stored epoch is stale).
     function _bafScore(uint32 id, uint24 lvl, uint64 currentEpoch) private view returns (uint256) {
-        BafPlayer memory ps = bafPlayer[lvl][id];
-        if (ps.epoch != currentEpoch) return 0;
+        BafPlayer memory ps = bafPlayer[id][(lvl / 10) & 1];
+        if (ps.bracket != lvl || ps.epoch != currentEpoch) return 0;
         return ps.total;
     }
 

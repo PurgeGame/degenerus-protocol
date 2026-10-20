@@ -117,7 +117,7 @@ def source_identity():
     # Include the complete source tree, imported Solidity libraries, and build/pin inputs.
     # The manifest is captured AFTER patchForFoundry, so its addresses match compilation.
     paths = set()
-    for directory in ("contracts", "test", "lib", "node_modules"):
+    for directory in ("contracts", "test", "lib", "node_modules", "scripts/audit/fixtures"):
         paths.update(p for p in captured_files(directory) if p.suffix == ".sol")
     # Gas/reference tests deploy checked-in bytecode read through vm.readFile.
     # These blobs affect execution even though solc never imports them.

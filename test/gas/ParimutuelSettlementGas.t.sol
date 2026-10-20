@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {CoinflipStorage} from "../helpers/CoinflipStorage.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {console} from "forge-std/console.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
@@ -25,7 +26,7 @@ contract ParimutuelSettlementGasTest is DeployProtocol {
     bytes32 private constant MINER_WORK = keccak256("MinerWork(address,uint8,uint256,uint256)");
     uint256 private constant STAKE = 1_000;
     uint256 private constant SETTLEMENT_SLOT = 4; // DegenerusParimutuel.growthSettlement
-    uint256 private constant STAKE_ROOT = 0; // Coinflip.coinflipStakePacked
+    uint256 private constant STAKE_ROOT = 0; // Coinflip.coinflipStakeRing
     uint256 private constant PENDING_BIT = GameSlots.RNG_FLAGS_AND_NUDGES_OFFSET * 8 + 11;
     uint256 private constant CHUNK = 100; // workload spans multiple 32-recipient flushes
     uint256 private constant ALLOWANCE = 8_500_000;
@@ -98,10 +99,7 @@ contract ParimutuelSettlementGasTest is DeployProtocol {
     }
 
     function _stake(uint32 id) private view returns (uint256) {
-        uint24 day = GameTimeLib.currentDayIndex() + 1;
-        bytes32 outer = keccak256(abi.encode(uint256(day >> 3), STAKE_ROOT));
-        uint256 w = uint256(vm.load(address(coinflip), keccak256(abi.encode(uint256(id), outer))));
-        return uint32(w >> ((uint256(day) & 7) << 5));
+        return CoinflipStorage.read(address(coinflip), id, GameTimeLib.currentDayIndex() + 1);
     }
 
     /// @dev One cold runGrowthWork call with a tagged first-unit budget; reports its gas and result.

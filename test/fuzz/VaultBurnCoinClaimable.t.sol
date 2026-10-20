@@ -23,7 +23,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///
 ///      State is seeded with `vm.store` against Coinflip's real layout — no contracts/*.sol
 ///      behaviour is mocked. `playerState` is mapping slot 2 (declaration order:
-///      coinflipStakePacked=0, coinflipDayResultPacked=1, playerState=2) and `claimableStored` is
+///      coinflipStakeRing=0, coinflipDayResultPacked=1, playerState=2) and `claimableStored` is
 ///      the low 128 bits of the struct's first slot.
 contract VaultBurnCoinClaimableTest is DeployProtocol {
     /// @dev Coinflip.playerState mapping base slot.

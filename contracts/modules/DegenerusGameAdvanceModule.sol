@@ -91,6 +91,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
     uint8 private constant STAGE_JACKPOT_BAF_AWARDS = 19;
     uint8 private constant STAGE_TERMINAL_LOANS = 20;
     uint8 private constant STAGE_DEGENESIS_DAY = 21;
+    uint8 private constant STAGE_VAULT_FLIPS_SETTLED = 22;
     uint16 private constant NEXT_TO_FUTURE_BPS_FAST = 3000;
     uint16 private constant NEXT_TO_FUTURE_BPS_MIN = 1500;
     uint16 private constant NEXT_TO_FUTURE_BPS_DEADLINE = 4500;
@@ -234,6 +235,19 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         uint256 word = _recordedDailyWord(day);
         if (day == 0 || word == 0) revert RngNotReady();
         if (!MineFlipGas.canRun(meter, 100_000, 150_000)) return result;
+        // Daily apply has atomically stored the final Coinflip result/frontier. Run the
+        // backstop before EVERY branch, including Degenesis/transition unlocks. It is its
+        // own resumable checkpoint, never a new RNG-apply or terminal dependency.
+        uint24 stamp = vaultFlipSettledDay;
+        if (day > stamp && uint256(day) - stamp >= 45) {
+            if (!MineFlipGas.canRun(meter, GasBounds.BAF_VAULT_SETTLE, GasBounds.DAILY_PHASE_TAIL)) return result;
+            _settleVaultFlips(day);
+            result.progressed = true;
+            MineFlipGas.markProgress(meter);
+            MineFlipGas.finish(meter);
+            emit Advance(STAGE_VAULT_FLIPS_SETTLED, level);
+            return result;
+        }
         uint24 lvl = level;
         bool inJackpot = jackpotPhaseFlag;
         bool lastPurchase = !inJackpot && lastPurchaseDay;
@@ -958,6 +972,14 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         emit PoolsSettled(lvl, day, psd, p.next, p.future, p.current, p.yield, claimablePool, p.claimable);
     }
 
+    /// @dev Zero deposit banks mintable winnings exactly once. All callers have an applied
+    ///      final-day result, so the 90-day walk reaches `day` (or was already settled).
+    ///      Reload/modify only this packed field after the call; never flush a cached slot 5.
+    function _settleVaultFlips(uint24 day) private {
+        coinflip.depositCoinflip(VAULT_WALLET_ID, 0);
+        if (day > vaultFlipSettledDay) vaultFlipSettledDay = day;
+    }
+
     function _sealPurchaseDay(uint24 purchaseLevel, uint24 day, uint24 wallDay, uint24 psd) private {
         // No Degenesis day latches, however late it is cranked.
         if (day >= GameTimeLib.MAIN_LAUNCH_DAY && day == wallDay && day >= psd
@@ -986,7 +1008,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
                 // tomorrow's request and scores the next bracket, as for any player. The
                 // Game is not authorized for the vault's account, so this is a zero-amount
                 // gift: it only settles the vault's own claims.
-                coinflip.depositCoinflip(VAULT_WALLET_ID, 0);
+                _settleVaultFlips(day);
             }
             if (bafLevel_ && day - psd <= 1) {
                 jackpotFlags = JACKPOT_TURBO;

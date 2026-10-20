@@ -7,17 +7,22 @@ import {Coinflip} from "../../contracts/Coinflip.sol";
 abstract contract CoinflipStakeSetter is Coinflip {
     uint256 private constant _STAKE_LANE_MAX = type(uint32).max;
 
-    /// @dev Masked write of `day`'s stake lane, preserving the seven sibling days; the amount
-    ///      clamps at the lane width so it cannot spill into a sibling day.
-    /// @return stored The whole-FLIP value the lane now holds.
+    /// @dev Arbitrary-order fixture writes preserve both pages on a ring collision. This
+    ///      deliberately does not recycle history; production credit/reuse has separate tests.
     function _setFlipStake(uint24 day, uint32 id, uint256 amount) internal returns (uint256 stored) {
-        uint256 units = amount;
-        if (units > _STAKE_LANE_MAX) units = _STAKE_LANE_MAX;
-        uint256 shift = (day & 7) << 5;
-        uint24 key = day >> 3;
-        uint256 w = coinflipStakePacked[key][id];
-        w = (w & ~(_STAKE_LANE_MAX << shift)) | (units << shift);
-        coinflipStakePacked[key][id] = w;
-        stored = units;
+        stored = amount > _STAKE_LANE_MAX ? _STAKE_LANE_MAX : amount;
+        uint24 page = day / 7;
+        uint256 index = page % 15;
+        uint256 word = coinflipStakeRing[id][index];
+        bool spill = word != 0 && uint24(word >> 224) != page + 1;
+        if (spill) {
+            coinflipStakeRing[id][index] = (word & type(uint248).max) | (uint256(0x80 | (page & 0x7f)) << 248);
+            word = coinflipStakeOverflow[id][page];
+        }
+        if (uint24(word >> 224) != page + 1) word = uint256(page + 1) << 224;
+        uint256 shift = (day % 7) * 32;
+        word = (word & ~(_STAKE_LANE_MAX << shift)) | (stored << shift);
+        if (spill) coinflipStakeOverflow[id][page] = word;
+        else coinflipStakeRing[id][index] = word;
     }
 }

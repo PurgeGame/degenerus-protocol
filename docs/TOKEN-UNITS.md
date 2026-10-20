@@ -26,8 +26,10 @@ Existing explicit rules remain:
 - Where the existing award mechanic applies, amounts above 1,000 FLIP are rounded
   stochastically to multiples of 100 FLIP. Smaller awards keep their integer amount.
 - RNG-nudge prices floor each recurrence: 100, 150, 225, 337, 505, 757, 1,135, …
-- Coinflip keeps eight uint32 daily stake lanes per player/word. The per-day cap is
+- Coinflip keeps seven uint32 daily stake lanes and a page tag per reused word. The per-day cap is
   4,294,967,295 FLIP. Manual deposits above it revert; automatic credits saturate.
+- Affiliate leaderboard/DGNRS scores cap at 34,359,738,367 FLIP per wallet ID per
+  level. Commission and kickback payouts do not inherit this score cap.
 - The one-shot FLIP tombstone allowance is still economically 10^18 FLIP; its raw
   value is now `10^18`, rather than the former `10^36`.
 

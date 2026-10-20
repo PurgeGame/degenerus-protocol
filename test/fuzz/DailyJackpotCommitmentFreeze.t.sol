@@ -320,7 +320,7 @@ contract DailyJackpotCommitmentFreezeTest is DeployProtocol {
                     laterLeg = true;
                     sealedNow = true;
                 } else {
-                    assertTrue(stage == 18 || stage == 16 || stage == 5, "unexpected daily path");
+                    assertTrue(stage == 18 || stage == 16 || stage == 5 || stage == 22, "unexpected daily path");
                     assertEq(phase, 0, "other work cannot intervene in priced payout legs");
                 }
             }

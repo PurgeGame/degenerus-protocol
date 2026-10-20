@@ -10,11 +10,11 @@ pragma solidity 0.8.34;
 library MineFlipGasBounds {
     // Dispatch reads/arithmetic; the enclosing worker reserves its own checkpoint tail.
     uint256 internal constant ENGINE_BOUNDARY = 100_000;
-    // Return and one fresh caller credit; native single-credit call: 130.7k.
+    // Return and one caller credit; native R90 fresh/spill transactions: 130.7k/148.1k.
     uint256 internal constant ENGINE_RETURN = 200_000;
     // Cold 29-day gap: 683.6k including state gas.
     uint256 internal constant DAILY_GAP = 850_000;
-    // Cold century day with 730-day vault history: 5.954M including 25 fresh slots.
+    // Prior cold-century envelope: 5.954M including 25 fresh slots; revalidate R90 callers.
     uint256 internal constant DAILY_APPLY = 7_200_000;
     // Cold midday: 530.7k plus 97.9k coordinator execution-floor padding, then margin.
     uint256 internal constant RNG_MIDDAY_REQUEST = 800_000;
@@ -34,7 +34,8 @@ library MineFlipGasBounds {
     uint256 internal constant POOL_CONSOLIDATION = 1_650_000;
     // Phase cursor, caller frame and return reserve.
     uint256 internal constant DAILY_PHASE_TAIL = 150_000;
-    // Full 730-day vault claim window with auto-rebuy and loss mint: 2.868M.
+    // Conservative prior full-walk envelope, retained for the 90-day Vault checkpoint
+    // and x0 seal including the Game stamp. Final R90 Glamsterdam calibration is required.
     uint256 internal constant BAF_VAULT_SETTLE = 3_500_000;
     // Forced all-gold grand prize with distinct traits and fresh buffer: 2.263M.
     uint256 internal constant FOIL_PACK = 3_000_000;
@@ -103,8 +104,9 @@ library MineFlipGasBounds {
     uint256 internal constant DEGENESIS_FLIP_PASS_GAS = 175_000;
     // Cold first sDGNRS award to a fresh two-link payee: <=165.8k; fallback 147.3k.
     uint256 internal constant DEGENESIS_DGNRS_GAS = 200_000;
-    // Fresh distinct creditFlipBatch recipient: cold marginal <=113.4k including state gas.
-    uint256 internal constant DEGENESIS_FLUSH_PER_CREDIT = 140_000;
+    // R90 live-collision recipient: native cold marginal 129,647, state gas included.
+    // 160k retains >23% margin; the ordinary fresh recipient is cheaper.
+    uint256 internal constant DEGENESIS_FLUSH_PER_CREDIT = 160_000;
     // Flush frame, seventh close with the burn, one decode and return: <=100.9k.
     uint256 internal constant DEGENESIS_TAIL_GAS = 125_000;
     // Degenesis day-close branch with a fresh seat-draw credit: <=177.2k including state gas.
@@ -172,8 +174,9 @@ library MineFlipGasBounds {
     uint256 internal constant BAF_AWARD_TAIL = 120_000;
     // Conservative seat frame 369.7k plus full dice engine 823.0k, with margin.
     uint256 internal constant CRAPS_SEAT_GAS_MAX = 1_650_000;
-    // Fresh distinct creditFlipBatch recipient: cold marginal 113.7k, state included.
-    uint256 internal constant CRAPS_CREDIT_GAS_MAX = 140_000;
+    // R90 live-collision recipient: native cold marginal 129,647, state gas included.
+    // Shared by Craps, jackpot-battle and growth flush admission; >23% margin.
+    uint256 internal constant CRAPS_CREDIT_GAS_MAX = 160_000;
     // Craps settlement checkpoint, flush frame and return reserve.
     uint256 internal constant CRAPS_SETTLE_TAIL_GAS = 200_000;
     // Craps work checkpoint and return reserve.

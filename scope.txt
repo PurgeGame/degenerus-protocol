@@ -94,3 +94,4 @@ contracts/modules/GameAfkingModule.sol
 contracts/sDGNRS.sol
 contracts/storage/CrapsBattleStorage.sol
 contracts/storage/DegenerusGameStorage.sol
+contracts/libraries/AffiliateEarningsLib.sol

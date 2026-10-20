@@ -347,3 +347,11 @@ NOT-RNG	ARG	BitPackingLib.setPacked	raiseSmurfBaseAllowance	modules/DegenerusGam
 CONSUMER-SEALED	ARG	EntropyLib.hash4	_degenesisOutcome	modules/DegenerusGameDegenesisModule.sol	seed = hash4(DEGENESIS_ORDER_DOMAIN, bound daily word, day << 32 | index, wallet ID): the word is the daily word of the request day the cohort was priced for, copied only after prepareDegenesis froze the cohort volume, budget and order list (orders close with the sale day); the index and wallet ID are fixed at the append, and the outcome is pure in state so it is computed before any order pays
 CONSUMER-SEALED	ARG	EntropyLib.hash2	_degenesisOutcome	modules/DegenerusGameDegenesisModule.sol	extractors off the order seed: DEGENESIS_CATEGORY_TAG (FLIP / sDGNRS / WWXRP band), DEGENESIS_SIZE_TAG (ladder roll and sDGNRS multiple), DEGENESIS_PASS_TAG (pass or coin side), FLIP_ROUND_TAG (collapse rounding) and BOX_PASS_ROUND_TAG (fractional pass round); no actor input after the seal
 CONSUMER-SEALED	ARG	FlipRoundLib.roundFlipToHundreds	_degenesisOutcome	modules/DegenerusGameDegenesisModule.sol	EV-preserving round-up keyed to the order's own committed seed (FLIP_ROUND_TAG)
+
+# Retained storage codecs: packed accounting fields, no entropy.
+NOT-RNG	ARG	AffiliateEarningsLib.bonusScore	affiliateBonusPointsBest	DegenerusAffiliate.sol	Packed stake/affiliate storage; contains no RNG word.
+NOT-RNG	PARAM	beforeWord	_recordEarnings	DegenerusAffiliate.sol	Packed stake/affiliate storage; contains no RNG word.
+NOT-RNG	PARAM	word	_flipStakePageReusable	Coinflip.sol	Packed stake/affiliate storage; contains no RNG word.
+NOT-RNG	PARAM	word	add	libraries/AffiliateEarningsLib.sol	Packed stake/affiliate storage; contains no RNG word.
+NOT-RNG	PARAM	word	bonusScore	libraries/AffiliateEarningsLib.sol	Packed stake/affiliate storage; contains no RNG word.
+NOT-RNG	PARAM	word	score	libraries/AffiliateEarningsLib.sol	Packed stake/affiliate storage; contains no RNG word.

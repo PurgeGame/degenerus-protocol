@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {CoinflipStorage} from "../helpers/CoinflipStorage.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @title CoinflipDeepClaimWorstCaseGas — cold worst case of one full coinflip claim walk
-/// @notice Every claim walk is bounded by the one claim window, COIN_CLAIM_DAYS = 730, auto-rebuy
+/// @notice Every claim walk is bounded by the one claim window, COIN_CLAIM_DAYS = 90, auto-rebuy
 ///         included, and always settles through flipsClaimableDay in one call. A walk that could
 ///         not fit a transaction would brick the account's winnings, so this pins the cold worst
 ///         case of a full window under 10M and the EIP-7825 per-tx cap (2^24 = 16,777,216):
@@ -15,15 +16,15 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///
 /// @dev The worst case is the heaviest per-iteration branch repeated over the whole window:
 ///      every day RESOLVED (no cheap unresolved skip), every day carrying a stored stake (so
-///      the lane-clearing write fires), all wins but one (the win branch runs the take-profit
+///      every tagged page is read), all wins but one (the win branch runs the take-profit
 ///      division and the BAF credit accumulation), and a single loss on the last day so the
 ///      end-of-walk WWXRP loss prize fires beside recordBafFlip and mintForGame. Take-profit 1
 ///      divides each whole-FLIP payout evenly, so the rolling carry stays 0. The window's first
-///      day sits in lane 31 of its result word and lane 7 of its stake word, so the walk crosses
-///      the most words a window can: 24 result words and 93 stake words.
+///      day sits in lane 31 of its result word and lane 6 of its stake word, so the walk crosses
+///      the most words a window can: 4 result words and 14 stake words.
 ///
 ///      State is installed directly (vm.store) against the authoritative slots
-///      (forge inspect storageLayout): coinflipStakePacked slot 0, coinflipDayResultPacked
+///      (forge inspect storageLayout): coinflipStakeRing slot 0, coinflipDayResultPacked
 ///      slot 1, playerState slot 2, flipsClaimableDay slot 4 byte-offset 0. The install is
 ///      read back through the contract's getters and, after the measured call, the exact
 ///      minted payout proves every day of the window was walked. setUp commits all of it, so
@@ -34,13 +35,13 @@ contract CoinflipDeepClaimWorstCaseGas is DeployProtocol {
     // The owner's hard ceiling for an indivisible unit.
     uint256 internal constant GAS_TARGET = 10_000_000;
 
-    uint24 internal constant WINDOW = 730; // COIN_CLAIM_DAYS
+    uint24 internal constant WINDOW = 90; // COIN_CLAIM_DAYS
     uint256 internal constant STAKE = 1000;
     uint8 internal constant WIN_BYTE = 156; // max win reward%
     uint8 internal constant LOSS_BYTE = 1; // resolved-loss sentinel
     uint128 internal constant TAKE_PROFIT = 1; // divides each payout evenly -> carry stays 0
-    // First window day 767 = 23 * 32 + 31: lane 31 of result word 23, lane 7 of stake word 95.
-    uint24 internal constant COLD_LATEST = 1496;
+    // First window day 1343: result lane 31 and stake lane 6 maximize the touched words.
+    uint24 internal constant COLD_LATEST = 1432;
     uint24 internal constant FIRST_DAY = COLD_LATEST - WINDOW + 1;
     uint256 internal constant SUPPLIED_GAS = 12_000_000;
 
@@ -83,11 +84,7 @@ contract CoinflipDeepClaimWorstCaseGas is DeployProtocol {
         vm.store(address(coinflip), slot, bytes32(w));
     }
 
-    /// @dev coinflipStakePacked slot 0: 8 days/slot, 32-bit whole-FLIP lanes, keyed by day>>3 then wallet ID.
-    function _stakeSlotByKey(uint24 key, address p) internal view returns (bytes32) {
-        bytes32 inner = keccak256(abi.encode(uint256(key), uint256(0)));
-        return keccak256(abi.encode(uint256(game.walletIdOf(p)), uint256(inner)));
-    }
+
 
     /// @dev A win (WIN_BYTE) on every day in [0, n], then `lossDay` as a resolved loss.
     function _installResults(uint24 n, uint24 lossDay) internal {
@@ -103,13 +100,9 @@ contract CoinflipDeepClaimWorstCaseGas is DeployProtocol {
 
     /// @dev A stake on every day in [0, n] for `p`. Whole-slot writes for speed.
     function _installStakes(address p, uint24 n) internal {
-        uint256 stakeWord;
-        for (uint256 i = 0; i < 8; ++i) {
-            stakeWord |= STAKE << (i * 32);
-        }
-        for (uint24 k = 0; k <= (n >> 3); ++k) {
-            vm.store(address(coinflip), _stakeSlotByKey(k, p), bytes32(stakeWord));
-        }
+        uint32 id = game.walletIdOf(p);
+        uint24 first = n >= WINDOW ? n - WINDOW + 1 : 0;
+        for (uint256 day = first; day <= n; ++day) CoinflipStorage.set(address(coinflip), id, uint24(day), STAKE);
     }
 
     /// @dev playerState slot 2. word0: claimableStored(0) | lastClaim<<128 |
@@ -181,13 +174,13 @@ contract CoinflipDeepClaimWorstCaseGas is DeployProtocol {
         exec = vm.lastCallGas().gasTotalUsed - (isolated ? _intrinsic(data) : 0);
     }
 
-    /// @dev Every day of the window was walked: 729 win payouts minted, the last day lost, the
+    /// @dev Every day of the window was walked: 89 win payouts minted, the last day lost, the
     ///      cursor at the frontier, and rebuy off (the exit disables it; the others never had it).
     function _assertWholeWindow(address p) internal view {
         assertEq(
             coin.balanceOf(p),
             uint256(WINDOW - 1) * _winPayout(),
-            "settled & minted exactly 729 win payouts (proves all 730 days walked)"
+            "settled & minted exactly 89 win payouts (proves all 90 days walked)"
         );
         bytes32 base = keccak256(abi.encode(game.walletIdOf(p), uint256(2)));
         assertEq(uint24(uint256(vm.load(address(coinflip), base)) >> 128), COLD_LATEST, "cursor at the frontier");
@@ -199,7 +192,7 @@ contract CoinflipDeepClaimWorstCaseGas is DeployProtocol {
         uint256 txGas = exec + _intrinsic(data);
         emit log_named_uint(string.concat(label, "_exec_gas"), exec);
         emit log_named_uint(string.concat(label, "_tx_gas_incl_intrinsic"), txGas);
-        assertLt(txGas, GAS_TARGET, "a full 730-day walk stays under 10M");
+        assertLt(txGas, GAS_TARGET, "a full 90-day walk stays under 10M");
         assertLt(txGas, EIP7825_TX_GAS_CAP, "and under the EIP-7825 per-tx cap");
     }
 
@@ -207,21 +200,21 @@ contract CoinflipDeepClaimWorstCaseGas is DeployProtocol {
     //                               tests
     // ----------------------------------------------------------------------
 
-    function test_Claim730DaysRebuyOffCold() public {
+    function test_Claim90DaysRebuyOffCold() public {
         uint256 exec = _call(regularPlayer, _claimData());
         _assertWholeWindow(regularPlayer);
-        _report("claim_730_rebuy_off", exec, _claimData());
+        _report("claim_90_rebuy_off", exec, _claimData());
     }
 
-    function test_Exit730DaysRebuyOnTakeProfitCold() public {
+    function test_Exit90DaysRebuyOnTakeProfitCold() public {
         uint256 exec = _call(rebuyPlayer, _exitData());
         _assertWholeWindow(rebuyPlayer);
-        _report("exit_730_rebuy_on_tp1", exec, _exitData());
+        _report("exit_90_rebuy_on_tp1", exec, _exitData());
     }
 
-    function test_FirstClaim730DaysCold() public {
+    function test_FirstClaim90DaysCold() public {
         uint256 exec = _call(firstPlayer, _claimData());
         _assertWholeWindow(firstPlayer);
-        _report("first_claim_730", exec, _claimData());
+        _report("first_claim_90", exec, _claimData());
     }
 }

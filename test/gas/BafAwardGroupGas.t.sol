@@ -26,6 +26,7 @@ import {WalletSeed} from "../helpers/WalletSeed.sol";
 contract BafGroupGasHost is DegenerusGame, WalletSeed {
     function seedBafStage(uint256 word, uint128 pool, uint32 positions, uint16 cursor, uint128 reserved) external {
         uint24 day = _simulatedDayIndex();
+        vaultFlipSettledDay = day; // This fixture begins after the earlier daily backstop checkpoint.
         level = 100;
         jackpotPhaseFlag = true;
         lastPurchaseDay = false;

@@ -1,0 +1,36 @@
+source	line	function	credit_call
+contracts/CrapsBattle.sol	647	_settleBatch	ICoinflipStake(ContractAddresses.COINFLIP).creditFlipBatch(ids, amounts);
+contracts/DegenerusAdmin.sol	1370	onTokenTransfer	coinflipReward.creditFlip(donorId, credit);
+contracts/DegenerusAffiliate.sol	632	payAffiliate	if (credit != 0) coinflip.creditFlip(winner, credit);
+contracts/DegenerusAffiliate.sol	883	_claimRun	coinflip.creditFlipPair(VAULT_ID, baseSum - sdgnrsShare, SDGNRS_ID, sdgnrsShare);
+contracts/DegenerusAffiliate.sol	915	_claimRun	coinflip.creditFlipPair(a, sumB - u1Share - u2Share, uint32(uplines), u1Share);
+contracts/DegenerusAffiliate.sol	916	_claimRun	if (u2Share != 0) coinflip.creditFlip(uint32(uplines >> 32), u2Share);
+contracts/DegenerusParimutuel.sol	317	runGrowthWork	coinflip.creditFlipBatch(ids, amounts);
+contracts/DegenerusParimutuel.sol	324	runGrowthWork	coinflip.creditFlipBatch(ids, amounts);
+contracts/DegenerusQuests.sol	942	handleDecimator	coinflip.creditFlip(id, reward);
+contracts/DegenerusQuests.sol	1006	recordCrapsAction	if (reward != 0) coinflip.creditFlip(id, reward);
+contracts/DegenerusQuests.sol	1113	_handleFoilPackQuest	coinflip.creditFlip(id, reward);
+contracts/DegenerusQuests.sol	1461	handleDegenerette	coinflip.creditFlip(id, reward);
+contracts/DegenerusQuests.sol	2747	_handleLevelQuestProgress	coinflip.creditFlip(id, 800);
+contracts/DegenerusQuests.sol	2858	recordGrowthBet	coinflip.creditFlip(id, reward);
+contracts/JackpotBattle.sol	582	_creditFlip	ICoinflipStake(ContractAddresses.COINFLIP).creditFlip(id, amount);
+contracts/WWXRP.sol	925	claim	coinflip.creditFlip(winner, prize);
+contracts/WWXRP.sol	1214	resolveIncinerator	if (flipAward != 0) coinflip.creditFlip(winnerId, flipAward);
+contracts/modules/DegenerusGameBingoModule.sol	192	claimBingo	coinflip.creditFlip(playerId, BINGO_FLIP);
+contracts/modules/DegenerusGameBingoModule.sol	265	claimAffiliateDgnrs	coinflip.creditFlip(playerId, bonus);
+contracts/modules/DegenerusGameDegeneretteModule.sol	914	_resolveBet	coinflip.creditFlip(
+contracts/modules/DegenerusGameDegenesisModule.sol	403	runDegenesisWork	coinflip.creditFlipBatch(ids, amounts);
+contracts/modules/DegenerusGameFoilPackModule.sol	442	_buyFoilPack	if (kickback != 0) coinflip.creditFlip(buyerId, kickback);
+contracts/modules/DegenerusGameFoilPackModule.sol	846	_foilSpin	if (flipOut != 0) coinflip.creditFlip(id, flipOut);
+contracts/modules/DegenerusGameFoilPackModule.sol	1075	_settleGoldenTicket	coinflip.creditFlip(id, flipCredit);
+contracts/modules/DegenerusGameJackpotDrawModule.sol	122	_awardDailyCoinToTraitWinners	coinflip.creditFlipBatch(players, amounts);
+contracts/modules/DegenerusGameJackpotModule.sol	1265	_payGoldenTicket	coinflip.creditFlip(winner, flipCredit);
+contracts/modules/DegenerusGameLootboxModule.sol	679	_flushBoxAcc	if (acc.flip != 0) coinflip.creditFlip(id, acc.flip);
+contracts/modules/DegenerusGameMinerModule.sol	284	mineFlip	coinflip.creditFlip(minerId, reward);
+contracts/modules/DegenerusGameMintModule.sol	505	_redeemFlipFor	coinflip.creditFlip(buyerId, questReward);
+contracts/modules/DegenerusGameMintModule.sol	1114	_purchaseForWithCached	coinflip.creditFlipPair(
+contracts/modules/DegenerusGameWhaleModule.sol	547	_deliverWhalePass	if (kickback != 0) coinflip.creditFlip(buyerId, kickback);
+contracts/modules/DegenerusGameWhaleModule.sol	752	purchaseLazyPass	if (kickback != 0) coinflip.creditFlip(buyerId, kickback);
+contracts/modules/GameAfkingModule.sol	374	_settle	coinflip.creditFlip(id, owed); // whole → base units
+contracts/modules/GameAfkingModule.sol	1111	runSubDraw	coinflip.creditFlip(winner, prize);
+contracts/sDGNRS.sol	1207	_claimRedemptionFor	coinflip.creditFlip(walletId, flipPaid);

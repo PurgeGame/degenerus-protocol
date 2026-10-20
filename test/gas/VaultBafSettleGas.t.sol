@@ -15,17 +15,17 @@ import {VmSafe} from "forge-std/Vm.sol";
 /// @title VaultBafSettleGas — cold cost of the vault settlement the x0 seal runs.
 ///
 /// @notice The seal settles the vault through `depositCoinflip(1, 0)`: one claim walk over
-///         the days since its last settlement, at most COIN_CLAIM_DAYS (730), always through the
+///         the days since its last settlement, at most COIN_CLAIM_DAYS (90), always through the
 ///         latest resolved day. Its gas is the BAF_VAULT_SETTLE reserve that every seal-capable
 ///         purchase leg keeps in its tail on an x0 purchase day.
 ///         - Settle call, cold, every walked day staked and resolved (one loss, so the WWXRP
 ///           loss mint fires too), auto-rebuy with a carry-keeping stop and auto-rebuy off: a
-///           typical 10-level gap (70 days) and the full 730-day window, whose first day opens
+///           typical 10-level gap (70 days) and the full 90-day window, whose first day opens
 ///           a fresh result and stake word so the walk crosses the most words a window can.
 ///           Each stays under BAF_VAULT_SETTLE, and the Glamsterdam re-pricing is logged.
 ///         - The real sealing chunk, cold: the runDailyPhase call that finishes the latch day's
 ///           purchase legs and seals, in a turbo game (short gap) and in a slow game whose
-///           vault walks the full 730-day window, each beside a pre-settled control. Each chunk
+///           vault walks the full 90-day window, each beside a pre-settled control. Each chunk
 ///           stays at or under 10M.
 
 /// @dev Writes the vault's coinflip history through Coinflip's own lane helpers.
@@ -90,9 +90,9 @@ contract VaultSettleHost is DegenerusGame {
 // -------------------------------------------------------------------------
 
 abstract contract VaultSettleCallGas is DeployProtocol {
-    /// @dev The full window's first day, 792 - 729 = 63, is lane 31 of a result word and lane 7
+    /// @dev The full window's first day, 1432 - 89 = 1343, is lane 31 of a result word and lane 6
     ///      of a stake word.
-    uint24 internal constant LATEST = 792;
+    uint24 internal constant LATEST = 1432;
 
     function _gap() internal pure virtual returns (uint24);
     function _rebuy() internal pure virtual returns (bool);
@@ -152,13 +152,13 @@ contract VaultSettleCallGas70Plain is VaultSettleCallGas {
     function _rebuy() internal pure override returns (bool) { return false; }
 }
 
-contract VaultSettleCallGas730Rebuy is VaultSettleCallGas {
-    function _gap() internal pure override returns (uint24) { return 730; }
+contract VaultSettleCallGas90Rebuy is VaultSettleCallGas {
+    function _gap() internal pure override returns (uint24) { return 90; }
     function _rebuy() internal pure override returns (bool) { return true; }
 }
 
-contract VaultSettleCallGas730Plain is VaultSettleCallGas {
-    function _gap() internal pure override returns (uint24) { return 730; }
+contract VaultSettleCallGas90Plain is VaultSettleCallGas {
+    function _gap() internal pure override returns (uint24) { return 90; }
     function _rebuy() internal pure override returns (bool) { return false; }
 }
 
@@ -174,7 +174,7 @@ abstract contract VaultSealChunkGas is VaultBafRig {
     uint24 internal settledAt;
 
     /// @dev Slow game: level 0 idles 240 days and each of levels 1-18 holds 27 purchase days,
-    ///      so the level-20 seal falls after day 730 and the vault can carry a full-window
+    ///      so the level-20 seal falls after day 90 and the vault can carry a full-window
     ///      backlog. Automatic craps funding can settle the vault along the way, so seed its
     ///      worst-case claim backlog immediately before the measured seal to keep the
     ///      full-window gas measurement deterministic.
@@ -244,7 +244,7 @@ abstract contract VaultSealChunkGas is VaultBafRig {
             require(latchDay > 731, "harness: the slow game reaches a full-window backlog");
             bytes memory original = address(coinflip).code;
             vm.etch(address(coinflip), type(VaultSettleSeeder).runtimeCode);
-            VaultSettleSeeder(address(coinflip)).seedVaultHistory(latchDay, 730, _rebuy());
+            VaultSettleSeeder(address(coinflip)).seedVaultHistory(latchDay, 90, _rebuy());
             vm.etch(address(coinflip), original);
             if (_presettle()) {
                 vm.prank(POKER);

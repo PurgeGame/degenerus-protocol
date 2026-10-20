@@ -306,8 +306,8 @@ library CenturyBafScores {
     /// @dev As `seedCandidates`, for a schedule whose minted-level rounds are 0..`traitRounds` - 1
     ///      and far-future queues `depth` times as deep (see `CenturyConsolidationSeeder.seedRounds`).
     function seedCandidatesR(address jackpots, address game, uint256 traitRounds, uint256 depth) internal {
-        uint256 epochBits = uint256(uint64(levelWord(jackpots))) << 192;
-        bytes32 bracket = keccak256(abi.encode(LVL, uint256(0)));
+        uint256 epochBits = (uint256(uint64(levelWord(jackpots))) << 168) | (LVL << 232);
+        bytes32 bracket = bytes32(0); // score root; LVL=100 uses parity home 0
         for (uint256 r; r < traitRounds; ++r) {
             uint256 first = 0xC3700000 + r * 4096 + 1;
             for (uint256 k; k < 2048; ++k) _score(jackpots, game, bracket, first + k, epochBits);
@@ -452,6 +452,7 @@ contract CenturyNativeGasHost is DegenerusGame, WalletSeed {
     function applyOnly() external {
         _native(ContractAddresses.GAME_ADVANCE_MODULE, abi.encodeWithSignature("applyDailyWord()"));
     }
+    function vaultStamp() external view returns (uint24) { return vaultFlipSettledDay; }
     function dailyOnly() external returns (MineFlipGas.Result memory) {
         return dailyWith(9_000_000);
     }
@@ -497,7 +498,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
     uint256 internal constant WORD = 0x0ee7fcb287531227df7efcfddb3f0151121ee9e59765e743a190d8e26ee417fd;
     /// @dev The history variants' vault walk: one full claim window, the seeded backlog plus the
     ///      century day the apply resolves.
-    uint24 internal constant VAULT_HISTORY_DAYS = 730;
+    uint24 internal constant VAULT_HISTORY_DAYS = 90;
     bytes32 internal constant ETH_SIG = BafSchedule.ETH_SIG;
     bytes32 internal constant TICKET_SIG = BafSchedule.TICKET_SIG;
     bytes32 internal constant WHALE_SIG = BafSchedule.WHALE_SIG;
@@ -724,7 +725,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
     }
 
     /// @dev The fresh word applies alone: the day's RNG record (redemption stays pending), the
-    ///      craps day it opens and, in the history variants, the vault's 730-day claim.
+    ///      craps day it opens and, in the history variants, the vault's 90-day claim.
     function _checkWordApply(bool measureComposition) private {
         uint8 historyMode = _vaultHistoryMode();
         if (historyMode != 0) {
@@ -760,7 +761,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
             uint24 cursor = uint24(uint256(vm.load(address(coinflip), stateSlot)) >> 128);
             emit log_named_uint("vault_claim_cursor_after", cursor);
             uint24 latest = _centuryDay();
-            assertEq(cursor, historyMode == 1 ? latest : latest - VAULT_HISTORY_DAYS, "730-day settlement must commit or roll back");
+            assertEq(cursor, historyMode == 1 ? latest : latest - VAULT_HISTORY_DAYS, "90-day settlement must commit or roll back");
         }
     }
 
@@ -807,6 +808,12 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
     }
 
     function _driveNativeBattle() private {
+        uint24 stamp = CenturyNativeGasHost(payable(address(game))).vaultStamp();
+        if (uint256(_centuryDay()) - stamp >= 45) {
+            (uint8 checkpoint, uint256 gasUsed,) = _nativePhaseTx();
+            assertEq(checkpoint, 22, "Vault backstop precedes the battle");
+            assertLe(gasUsed, GasBounds.BAF_VAULT_SETTLE, "Vault checkpoint fits its reserve");
+        }
         IJackpotBattle battle = IJackpotBattle(address(crapsBattle));
         (,,, bool complete) = battle.jackpotProgress();
         uint256 steps;
@@ -1229,8 +1236,8 @@ contract AdvanceCenturyDiverseDestinations is CenturyConsolidationFixture {
     }
 }
 
-/// @dev The vault's full-window walk: century day 792, so the window's first day (63) is lane 31
-///      of a result word and lane 7 of a stake word and the walk crosses the most words it can.
+/// @dev The vault's full 90-day walk at century day 792 (first day 703), crossing
+///      four result words and fourteen tagged seven-day stake pages.
 contract AdvanceCenturyVaultHistorySuccessful is AdvanceCenturyDiverseDestinations {
     function _vaultHistoryMode() internal pure override returns (uint8) {
         return 1;

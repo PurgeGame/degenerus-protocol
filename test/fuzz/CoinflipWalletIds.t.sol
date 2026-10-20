@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {CoinflipStorage} from "../helpers/CoinflipStorage.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {stdError} from "forge-std/StdError.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -97,11 +98,11 @@ contract CoinflipWalletIdsTest is DeployProtocol {
     }
 
     function _stakeSlot(uint24 key, uint32 id) internal pure returns (bytes32) {
-        return keccak256(abi.encode(uint256(id), keccak256(abi.encode(uint256(key), STAKE_ROOT))));
+        return CoinflipStorage.ringSlot(id, key);
     }
 
     function _lane(uint24 day, uint32 id) internal view returns (uint256) {
-        return uint32(uint256(vm.load(address(coinflip), _stakeSlot(day >> 3, id))) >> ((uint256(day) & 7) * 32));
+        return CoinflipStorage.read(address(coinflip), id, day);
     }
 
     function _drawEntryRaw(uint24 day, uint32 index) internal view returns (uint256) {
@@ -111,8 +112,9 @@ contract CoinflipWalletIdsTest is DeployProtocol {
     }
 
     function _bafTotal(uint24 lvl, uint32 id) internal view returns (uint256) {
-        bytes32 slot = keccak256(abi.encode(uint256(id), keccak256(abi.encode(uint256(lvl), BAF_PLAYER_ROOT))));
-        return uint192(uint256(vm.load(address(jackpots), slot)));
+        bytes32 slot = bytes32(uint256(keccak256(abi.encode(uint256(id), BAF_PLAYER_ROOT))) + ((lvl / 10) & 1));
+        uint256 word = uint256(vm.load(address(jackpots), slot));
+        return uint24(word >> 232) == lvl ? uint168(word) : 0;
     }
 
     /// @dev WalletRegistered events from the Game in `logs`: count, last ID and last owner.
@@ -135,10 +137,11 @@ contract CoinflipWalletIdsTest is DeployProtocol {
 
     /// @dev No write in `writes` hits the stake ledger under wallet key 0 for any day key up to `maxDay`.
     function _assertNoKeyZeroWrite(bytes32[] memory writes, uint24 maxDay) internal pure {
-        for (uint24 k; k <= (maxDay >> 3) + 1; ++k) {
+        for (uint24 k; k <= (maxDay / 7) + 1; ++k) {
             bytes32 zeroSlot = _stakeSlot(k, 0);
             for (uint256 i; i < writes.length; ++i) {
-                assertTrue(writes[i] != zeroSlot, "stake ledger written under wallet key 0");
+                assertTrue(writes[i] != zeroSlot, "stake ring written under wallet key 0");
+                assertTrue(writes[i] != CoinflipStorage.overflowSlot(0, k), "stake overflow written under wallet key 0");
             }
         }
     }

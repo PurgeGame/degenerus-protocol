@@ -103,6 +103,10 @@ contract PhaseEndSeeder is DegenerusGame, BucketSeed {
     ///      legs reach their caps.
     function _seedJackpotDay(uint24 lvl, uint24 day) private {
         level = lvl;
+        // These fixtures enter after the day's preceding checkpoints: either its ETH
+        // jackpot leg or _endPhase has already run. A due Vault backstop necessarily
+        // ran first. Keep the measured call on the requested phase-end/close stage.
+        vaultFlipSettledDay = day;
         purchaseStartDay = day - 10;
         dailyIdx = day - 1;
         jackpotPhaseFlag = true;

@@ -152,7 +152,7 @@ abstract contract AffiliateIdFixture is DeployProtocol {
     }
 
     function _earnSlot(uint24 lvl, uint32 id) internal pure returns (bytes32) {
-        return keccak256(abi.encode(uint256(id), keccak256(abi.encode(uint256(lvl), EARNED_ROOT))));
+        return keccak256(abi.encode(uint256(id), EARNED_ROOT));
     }
 
     function _codeWord(bytes32 code) internal view returns (uint256) {
@@ -544,12 +544,12 @@ abstract contract AffiliateIdFixture is DeployProtocol {
 
     function _assertCacheTruth(uint24 lvl, uint32 id) internal view {
         uint256 w = _earnWord(lvl, id);
-        if ((w >> 192) & 1 != 0) {
-            assertEq(uint32(w >> 128), affiliate.getReferrerId(_keyOf(id)), "earnings upline1 cache");
+        if ((w >> 253) & 1 != 0) {
+            assertEq(uint32(w >> 189), affiliate.getReferrerId(_keyOf(id)), "earnings upline1 cache");
         }
-        if ((w >> 193) & 1 != 0) {
-            assertTrue((w >> 192) & 1 != 0, "upline2 cached only behind upline1");
-            assertEq(uint32(w >> 160), affiliate.getReferrerId(_keyOf(uint32(w >> 128))), "earnings upline2 cache");
+        if ((w >> 254) & 1 != 0) {
+            assertTrue((w >> 253) & 1 != 0, "upline2 cached only behind upline1");
+            assertEq(uint32(w >> 221), affiliate.getReferrerId(_keyOf(uint32(w >> 189))), "earnings upline2 cache");
         }
     }
 
@@ -618,7 +618,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         uint32 oid = _id(o);
         _payCombined(bytes32(0), b, _senderFor(code, 0, 60_000_000), 4, 4000);
         assertEq(uint32(_codeWord(code)), oid, "root 0: _affiliateCode");
-        assertEq(_earnWord(4, oid) & type(uint128).max, affiliate.affiliateScore(4, oid), "root 1: affiliateCoinEarned");
+        assertEq(_earnWord(4, oid) & ((uint256(1) << 35) - 1), affiliate.affiliateScore(4, oid), "root 1: affiliateCoinEarned");
         assertEq(affiliate.affiliateScore(4, oid), 800);
         assertEq(_refWord(b), uint256(code), "root 2: playerReferralCode");
         uint256 lw = _levelWord(4);
@@ -782,7 +782,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
             (uint32 w,,) = _payCombined(bytes32(0), buyer, sid, 2 + cls, 4000);
             assertEq(w, winners[cls], "winner by class");
         }
-        _payCombined(route, fresh, 2_000_000, 1, 4000);
+        _payCombined(route, fresh, 2_000_000, 5, 4000);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         (bytes32[] memory reads,) = vm.accesses(address(affiliate));
         bytes32[4] memory forbidden =
@@ -955,8 +955,8 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         assertGt(credit, 0);
         assertEq(_staked(logs, cid), credit);
         uint256 ew = _earnWord(1, pcid);
-        assertEq(uint32(ew >> 128), cid, "upline1 cached by ID");
-        assertEq((ew >> 192) & 1, 1);
+        assertEq(uint32(ew >> 189), cid, "upline1 cached by ID");
+        assertEq((ew >> 253) & 1, 1);
 
         vm.startStateDiffRecording();
         _buy(x, bytes32(0));
@@ -1089,8 +1089,8 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         assertEq(w, _id(u1));
         assertEq(_extsloads(acc), 0, "ID-keyed first hop");
         uint256 ew = _earnWord(lvl, oid);
-        assertEq(uint32(ew >> 128), _id(u1));
-        assertEq((ew >> 192) & 3, 1, "upline1 valid");
+        assertEq(uint32(ew >> 189), _id(u1));
+        assertEq((ew >> 253) & 3, 1, "upline1 valid");
 
         vm.startStateDiffRecording();
         (w,,) = _payCombined(bytes32(0), buyer, _senderFor(code, 1, s1 + 1), lvl, 4000);
@@ -1105,8 +1105,8 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         assertEq(w, _id(u2));
         assertEq(_extsloads(acc), 0, "ID-keyed second hop");
         ew = _earnWord(lvl, oid);
-        assertEq(uint32(ew >> 160), _id(u2));
-        assertEq((ew >> 192) & 3, 3, "both valid");
+        assertEq(uint32(ew >> 221), _id(u2));
+        assertEq((ew >> 253) & 3, 3, "both valid");
 
         vm.startStateDiffRecording();
         (w,,) = _payCombined(bytes32(0), buyer, _senderFor(code, 2, s3 + 1), lvl, 4000);
@@ -1514,7 +1514,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         bytes32[3] memory codes = [bytes32("V_O1"), _dflt(o2), bytes32("V_O3")];
         for (uint256 step; step < 36; ++step) {
             uint256 k = step % 3;
-            uint24 lvl = uint24(1 + ((step * 7) % 6));
+            uint24 lvl = uint24(1 + step / 6); // Production levels advance monotonically.
             uint256 fresh = 300_000 + step * 13_331;
             uint256 recycled = (step % 4) * 77_777;
             uint256 lbFresh = (step % 5) * 90_001;
@@ -1538,7 +1538,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
             assertEq(lid, _expLeader[lvl] == address(0) ? 0 : _id(_expLeader[lvl]), "leader");
             assertEq(uint256(lscore), _expLeaderScore[lvl], "leader score");
             for (uint256 k; k < 3; ++k) {
-                assertEq(affiliate.affiliateScore(lvl, _id(owners[k])), _expScore[lvl][owners[k]], "score");
+                assertEq(affiliate.affiliateScore(lvl, _id(owners[k])), lvl >= 5 && lvl <= 6 ? _expScore[lvl][owners[k]] : 0, "retained exact score");
             }
         }
         for (uint24 curr; curr <= 9; ++curr) {
@@ -1655,7 +1655,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         address actor = actors[r % actors.length];
         uint256 op = (r >> 8) % 6;
         bytes32 code = pool[(r >> 16) % n];
-        uint24 lvl = uint24(1 + ((r >> 32) % 5));
+        uint24 lvl = game.level() + 1; // Mixed real purchases/AFKing claims share the Game's level.
         uint256 amount = 1000 + ((r >> 40) % 100_000);
         if (op == 0) {
             vm.prank(actor);

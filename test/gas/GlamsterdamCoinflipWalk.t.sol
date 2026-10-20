@@ -5,21 +5,21 @@ import {VmSafe} from "forge-std/Vm.sol";
 import {CoinflipDeepClaimWorstCaseGas} from "./CoinflipDeepClaimWorstCaseGas.t.sol";
 import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
 
-/// @notice Re-prices the worst-case 730-day coinflip claim walks under the Glamsterdam
+/// @notice Re-prices the worst-case 90-day coinflip claim walks under the Glamsterdam
 ///         schedule (EIP-8037 / EIP-8038) from their recorded storage and account accesses;
 ///         see GlamsterdamReprice for the schedule delta. Execution gas must stay under 10M,
 ///         and so must execution plus state gas, as if no reservoir were supplied.
 contract GlamsterdamCoinflipWalk is CoinflipDeepClaimWorstCaseGas {
-    function test_glamsterdam_claim730_rebuyOff() public {
-        _reprice(regularPlayer, _claimData(), "claim730_rebuyOff");
+    function test_glamsterdam_claim90_rebuyOff() public {
+        _reprice(regularPlayer, _claimData(), "claim90_rebuyOff");
     }
 
-    function test_glamsterdam_exit730_rebuyOnTakeProfit() public {
-        _reprice(rebuyPlayer, _exitData(), "exit730_rebuyOn_tp1");
+    function test_glamsterdam_exit90_rebuyOnTakeProfit() public {
+        _reprice(rebuyPlayer, _exitData(), "exit90_rebuyOn_tp1");
     }
 
-    function test_glamsterdam_firstClaim730() public {
-        _reprice(firstPlayer, _claimData(), "firstClaim730");
+    function test_glamsterdam_firstClaim90() public {
+        _reprice(firstPlayer, _claimData(), "firstClaim90");
     }
 
     function _reprice(address p, bytes memory data, string memory label) internal {
@@ -43,7 +43,7 @@ contract GlamsterdamCoinflipWalk is CoinflipDeepClaimWorstCaseGas {
         emit log_named_uint("glamsterdam_exec_gas", r.glamsterdamExec);
         emit log_named_uint("glamsterdam_state_gas", r.stateGas);
         emit log_named_uint("glamsterdam_total_if_no_reservoir", r.glamsterdamExec + r.stateGas);
-        assertLt(r.glamsterdamExec, GAS_TARGET, "730-day walk execution under Glamsterdam stays under 10M");
+        assertLt(r.glamsterdamExec, GAS_TARGET, "90-day walk execution under Glamsterdam stays under 10M");
         assertLt(r.glamsterdamExec + r.stateGas, GAS_TARGET, "and with its state gas");
     }
 }

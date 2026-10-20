@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {AffiliateStorage} from "../../helpers/AffiliateStorage.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGameMintStreakUtils} from "../../../contracts/modules/DegenerusGameMintStreakUtils.sol";
@@ -43,11 +44,9 @@ abstract contract ActivityAffiliateCacheFixture is Test {
     }
 
     function _seedEarnings(uint24 lvl, uint32 id, uint256 earned) internal {
-        // Root1 is the private affiliateCoinEarned mapping (level => wallet ID => word); verify
-        // its public view immediately so storage-layout drift cannot silently weaken this fixture.
-        bytes32 root = keccak256(abi.encode(lvl, uint256(1)));
-        vm.store(address(affiliate), keccak256(abi.encode(uint256(id), root)), bytes32(earned));
-        assertEq(affiliate.affiliateScore(lvl, id), earned);
+        AffiliateStorage.set(address(affiliate), id, lvl, earned);
+        // Exact views cover the two live levels; older bonus values are intentionally clipped.
+
     }
 
     function _stale(uint256 packed, uint24 lvl) internal pure returns (uint256) {

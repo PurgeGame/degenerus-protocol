@@ -277,7 +277,7 @@ contract Coinflip {
     uint256 private constant BIGGEST_DICE_RUN_MIN = 1_000_000;
     /// @dev Domain tag for the BAF weighted-draw winner roll.
     bytes32 private constant BAF_DRAW_TAG = "COINFLIP_BAF_DRAW_WINNER";
-    uint16 private constant COIN_CLAIM_DAYS = 730;
+    uint16 private constant COIN_CLAIM_DAYS = 90;
     uint24 private constant MAX_BAF_BRACKET = (type(uint24).max / 10) * 10;
     /// @dev Initial-emission seed stakes: 200k FLIP per day for days 1-20, each to
     ///      VAULT and sDGNRS. All initial FLIP must survive a coinflip before minting.
@@ -300,11 +300,10 @@ contract Coinflip {
         uint128 autoRebuyCarry;
     }
 
-    // Daily coinflip storage. coinflipStakePacked banks 8 days per slot (key =
-    // day>>3, then wallet ID; 32-bit whole-FLIP lanes; every addition floors to whole
-    // FLIP and saturates at STAKE_LANE_MAX); coinflipDayResultPacked banks 32 days per
-    // slot (key = day>>5, 8-bit lanes, 3-state). Access via the helpers.
-    mapping(uint24 => mapping(uint32 => uint256)) internal coinflipStakePacked;
+    // R90: seven uint32 amounts, uint24 absolute page+1 and uint8 overflow hint.
+    // Fifteen lazily allocated words per ID; live collisions use the absolute overflow
+    // root appended at slot 9. Claims never clear stake words. Slot 0 stays the stake root.
+    mapping(uint32 => uint256[15]) internal coinflipStakeRing;
     mapping(uint24 => uint256) internal coinflipDayResultPacked;
     mapping(uint32 => PlayerCoinflipState) internal playerState;
 
@@ -375,6 +374,9 @@ contract Coinflip {
     ///      Never zero for a recorded entry — MIN is
     ///      100 FLIP, so every weight is at least 100.
     mapping(uint256 => uint256) internal bafDrawEntry;
+
+    /// @dev Absolute page overflow; appended at slot 9 so every prior root/offset stays fixed.
+    mapping(uint32 => mapping(uint24 => uint256)) internal coinflipStakeOverflow;
 
     /// @notice Seeds the initial FLIP emission as flip stakes: 200k per day for days 1-20,
     ///         each to VAULT and sDGNRS. The claim walk adds the seed to those days' stored
@@ -798,9 +800,10 @@ contract Coinflip {
             }
         }
 
-        uint24 cursor;
+        // Widen the loop cursor so the final supported uint24 day cannot wrap to zero.
+        uint256 cursor;
         unchecked {
-            cursor = start + 1;
+            cursor = uint256(start) + 1;
         }
         uint24 processed = start;
 
@@ -811,16 +814,12 @@ contract Coinflip {
         // 32-day word; the sentinel is above every uint24 day's possible word key.
         uint24 cachedResultKey = type(uint24).max;
         uint256 cachedResults;
-        // Eight stake days share a word. Clear resolved lanes in memory and flush
-        // once per word, preserving unresolved and out-of-window siblings. The
-        // only external call inside this loop is getLastBafResolvedDay (STATICCALL,
-        // reading the jackpot's own clock); no stake writer can run between load
-        // and flush. Flush the final word before any mutable external call below.
+        // Cache a tagged seven-day page. Stake words are read-only during settlement;
+        // lastClaim consumes each resolved day without zeroing reusable storage.
         uint24 cachedStakeKey = type(uint24).max;
         uint256 cachedStakes;
-        bool stakesChanged;
         while (remaining != 0 && cursor <= latest) {
-            uint24 resultKey = cursor >> 5;
+            uint24 resultKey = uint24(cursor >> 5);
             if (resultKey != cachedResultKey) {
                 cachedResults = coinflipDayResultPacked[resultKey];
                 cachedResultKey = resultKey;
@@ -834,28 +833,18 @@ contract Coinflip {
                 continue;
             }
 
-            uint24 stakeKey = cursor >> 3;
+            uint24 stakeKey = uint24(cursor / 7);
             if (stakeKey != cachedStakeKey) {
-                if (stakesChanged) coinflipStakePacked[cachedStakeKey][id] = cachedStakes;
-                cachedStakes = coinflipStakePacked[stakeKey][id];
+                cachedStakes = _flipStakePage(stakeKey, id);
                 cachedStakeKey = stakeKey;
-                stakesChanged = false;
             }
-            uint256 stakeShift = (cursor & 7) << 5;
-            uint256 storedStake = uint32(cachedStakes >> stakeShift);
+            uint256 storedStake = uint32(cachedStakes >> ((cursor % 7) * 32));
             uint256 stake = storedStake;
             if (seeded) {
-                stake += _seedStake(cursor);
+                stake += _seedStake(uint24(cursor));
             }
             if (rebuyActive && carry != 0) {
                 stake += carry;
-            }
-
-            if (storedStake != 0) {
-                // Clear stake whether win or loss (loss = forfeit principal). A seed is never
-                // stored: the cursor passing its day consumes it.
-                cachedStakes &= ~(STAKE_LANE_MAX << stakeShift);
-                stakesChanged = true;
             }
 
             if (stake != 0) {
@@ -903,14 +892,12 @@ contract Coinflip {
                 }
             }
 
-            processed = cursor;
+            processed = uint24(cursor);
             unchecked {
                 ++cursor;
                 --remaining;
             }
         }
-
-        if (stakesChanged) coinflipStakePacked[cachedStakeKey][id] = cachedStakes;
 
         // sDGNRS gets no BAF score: skip the recordBafFlip call entirely for it (the
         // daily coinflip resolution auto-claims sDGNRS through this walk).
@@ -1033,18 +1020,57 @@ contract Coinflip {
         uint24 day,
         uint256 amount,
         bool revertAtCap
-    ) private returns (uint256 newStake) {
-        uint24 key = day >> 3;
-        uint256 shift = (day & 7) << 5;
-        uint256 packed = coinflipStakePacked[key][id];
-        uint256 prevStake = uint32(packed >> shift);
-        uint256 requested = prevStake + amount;
-        if (revertAtCap && requested > STAKE_LANE_MAX) revert StakeAboveDailyCap();
-        newStake = requested > STAKE_LANE_MAX ? STAKE_LANE_MAX : requested;
-        if (newStake != prevStake) {
-            coinflipStakePacked[key][id] = (packed & ~(STAKE_LANE_MAX << shift)) | (newStake << shift);
+    ) internal returns (uint256 newStake) {
+        if (amount == 0) return 0;
+        uint24 page = day / 7;
+        uint256 index = page % 15;
+        uint256 word = coinflipStakeRing[id][index];
+        bool spill;
+        uint256 flagged;
+        if (uint24(word >> 224) != page + 1) {
+            uint256 marker = 0x80 | (page & 0x7f);
+            uint256 existing;
+            if (word >> 248 == marker) existing = coinflipStakeOverflow[id][page];
+            if (uint24(existing >> 224) == page + 1) {
+                word = existing;
+                spill = true;
+            } else {
+                if (word != 0 && !_flipStakePageReusable(id, word)) {
+                    spill = true;
+                    flagged = (word & type(uint248).max) | (marker << 248);
+                }
+                word = uint256(page + 1) << 224;
+            }
         }
-        emit CoinflipStakeUpdated(id, day, newStake - prevStake, newStake);
+        uint256 shift = (day % 7) * 32;
+        uint256 previous = uint32(word >> shift);
+        uint256 room = STAKE_LANE_MAX - previous;
+        if (revertAtCap && amount > room) revert StakeAboveDailyCap();
+        newStake = previous + (amount > room ? room : amount);
+        if (newStake != previous) {
+            word = (word & ~(STAKE_LANE_MAX << shift)) | (newStake << shift);
+            if (spill) coinflipStakeOverflow[id][page] = word;
+            else coinflipStakeRing[id][index] = word;
+            if (flagged != 0) coinflipStakeRing[id][index] = flagged;
+        }
+        emit CoinflipStakeUpdated(id, day, newStake - previous, newStake);
+    }
+    /// @dev At most seven in-memory lane steps. Read the economic cursor only when
+    ///      resolution alone does not prove death. A credit never forces settlement.
+    function _flipStakePageReusable(uint32 id, uint256 word) private view returns (bool) {
+        uint256 amounts = uint224(word);
+        if (amounts == 0) return true;
+        uint256 last;
+        // Every nonzero page is created with page + 1 >= 1; hint/lane writes
+        // preserve that tag. The uint24 tag times seven fits easily in uint256.
+        unchecked { last = (uint256(uint24(word >> 224)) - 1) * 7; }
+        while (amounts >> 32 != 0) {
+            amounts >>= 32;
+            ++last;
+        }
+        uint256 resolved = flipsClaimableDay;
+        if (resolved >= COIN_CLAIM_DAYS && last <= resolved - COIN_CLAIM_DAYS) return true;
+        return last <= playerState[id].lastClaim;
     }
 
     /// @dev Append wallet `id`'s weighted interval to the armed day's draw book.
@@ -1598,8 +1624,9 @@ contract Coinflip {
       +======================================================================+*/
 
     /// @notice Credit flip to wallet `id` through the authorized protocol/game creditor lane.
-    /// @dev Keyed by wallet ID alone: writes the ID-keyed stake lane and never reads the
-    ///      ID-keyed claim state. The credit floors to whole FLIP on its own (two sub-FLIP
+    /// @dev Keyed by wallet ID alone: writes the ID-keyed stake lane without reading the
+    ///      claim state on an ordinary matching-page append. Reuse first checks the
+    ///      resolved frontier and reads the claim cursor only if needed. The credit floors to whole FLIP on its own (two sub-FLIP
     ///      credits add nothing) and saturates at the daily cap; CoinflipStakeUpdated reports the
     ///      accepted amount. A zero ID or amount is a no-op.
     /// @param id The wallet ID receiving the flip credit (0 = no wallet: skipped).
@@ -1896,13 +1923,15 @@ contract Coinflip {
         }
 
         uint16 remaining = COIN_CLAIM_DAYS;
-        uint24 cursor;
+        uint256 cursor;
         unchecked {
-            cursor = startDay + 1;
+            cursor = uint256(startDay) + 1;
         }
         bool seeded = _seeded(id);
+        uint24 cachedPage = type(uint24).max;
+        uint256 cachedStakes;
         while (remaining != 0 && cursor <= latestDay) {
-            (uint16 rewardPercent, bool win) = _dayResult(cursor);
+            (uint16 rewardPercent, bool win) = _dayResult(uint24(cursor));
             // Skip unresolved days (both fields zero) instead of breaking,
             // to handle gaps from testnet day-advance or missed resolution.
             if (rewardPercent == 0 && !win) {
@@ -1910,9 +1939,14 @@ contract Coinflip {
                 continue;
             }
 
-            uint256 stake = _flipStake(cursor, id);
+            uint24 page = uint24(cursor / 7);
+            if (page != cachedPage) {
+                cachedStakes = _flipStakePage(page, id);
+                cachedPage = page;
+            }
+            uint256 stake = uint32(cachedStakes >> ((cursor % 7) * 32));
             if (seeded) {
-                stake += _seedStake(cursor);
+                stake += _seedStake(uint24(cursor));
             }
             if (rebuyActive && carry != 0) {
                 stake += carry;
@@ -1960,11 +1994,16 @@ contract Coinflip {
       |                    INTERNAL HELPER FUNCTIONS                         |
       +======================================================================+*/
 
-    /// @dev Wallet `id`'s stake for `day` in whole FLIP: 8 days per slot (key = day >> 3),
-    ///      with 32-bit lanes. Ordinary callers read fresh; the claim walk caches
-    ///      its words locally and flushes before any mutable external call.
+    /// @dev Exact tags distinguish generations. Readers ignore the credit-only hint.
+    function _flipStakePage(uint24 page, uint32 id) internal view returns (uint256 word) {
+        word = coinflipStakeRing[id][page % 15];
+        if (uint24(word >> 224) != page + 1) word = coinflipStakeOverflow[id][page];
+        if (uint24(word >> 224) != page + 1) return 0;
+    }
+
+    /// @dev Fresh day read for views and callers outside the cached settlement walk.
     function _flipStake(uint24 day, uint32 id) internal view returns (uint256) {
-        return uint256(uint32(coinflipStakePacked[day >> 3][id] >> ((day & 7) << 5)));
+        return uint32(_flipStakePage(day / 7, id) >> ((day % 7) * 32));
     }
 
     /// @dev Whether wallet `id` is a seed recipient (VAULT or sDGNRS).

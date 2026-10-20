@@ -1,5 +1,15 @@
 # Build and verification
 
+The storage-reuse implementation changes Coinflip to a 90-day retained-page ring, BAF to two
+player records and affiliate history to one word. The older 730-day measurements below describe
+the previous implementation; they do not certify this revision. See [storage reuse](STORAGE-REUSE.md)
+and `scripts/audit/storage-reuse/` for the current validation status. Native Glamsterdam
+evidence includes 59 successful simulated calls; see `GAS-CALIBRATION.md` for scope and limits.
+Phase 1 uses production build/size, layout, source-gate and focused-test checks for the
+authorized local commits: all pass, with 36 focused tests in campaign
+`20261020T051617.144095Z-ede4fbc6`. The full battery is deferred until after phase 2, before any push;
+partial broad runs are not a complete release result.
+
 Run checks against the exact revision supplied for review. The repository contains
 source, tests and reproduction tooling; generated logs and analyzer reports stay in
 local output directories or CI artifacts.

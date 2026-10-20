@@ -65,7 +65,7 @@ contract AffiliateIdentityTest is DeployProtocol {
         (winnerId,,) = affiliate.payAffiliateCombined(code, buyerId, 5, 10000, 0, 0, 0, 0);
     }
     function _earningsSlot(uint24 lvl, address owner) private view returns (bytes32) {
-        return keccak256(abi.encode(uint256(_id(owner)), keccak256(abi.encode(lvl, uint256(1)))));
+        return keccak256(abi.encode(uint256(_id(owner)), uint256(1)));
     }
     function _earningsWord(uint24 lvl, address owner) private view returns (uint256) {
         return uint256(vm.load(address(affiliate), _earningsSlot(lvl, owner)));
@@ -166,14 +166,14 @@ contract AffiliateIdentityTest is DeployProtocol {
 
     function test_LateReferralAndSecondHopAreNotFrozenByEarlierPayouts() public {
         assertEq(_pay(A, 1, 0), VAULT_ID);
-        assertEq((_earningsWord(5, a) >> 192) & 3, 0);
+        assertEq((_earningsWord(5, a) >> 253) & 3, 0);
         vm.prank(a); affiliate.referPlayer(B);
         assertEq(_pay(A, 1, 100), _id(b));
         assertEq(_pay(A, 2, 200), VAULT_ID);
-        assertEq((_earningsWord(5, a) >> 192) & 3, 1, "unset second hop cached a fallback");
+        assertEq((_earningsWord(5, a) >> 253) & 3, 1, "unset second hop cached a fallback");
         vm.prank(b); affiliate.referPlayer(C);
         assertEq(_pay(A, 2, 300), _id(c));
-        assertEq((_earningsWord(5, a) >> 192) & 3, 3);
+        assertEq((_earningsWord(5, a) >> 253) & 3, 3);
         assertEq(_pay(A, 1, 400), _id(b));
         assertEq(_pay(A, 2, 500), _id(c));
         (address owner, uint32 ownerId, uint8 kickback) = affiliate.affiliateCode(A);
@@ -183,7 +183,7 @@ contract AffiliateIdentityTest is DeployProtocol {
     function test_VaultReferralIsPermanentAndCacheable() public {
         vm.prank(a); affiliate.referPlayer(bytes32("VAULT"));
         assertEq(_pay(A, 1, 0), VAULT_ID);
-        assertEq((_earningsWord(5, a) >> 192) & 1, 1);
+        assertEq((_earningsWord(5, a) >> 253) & 1, 1);
         vm.expectRevert(bytes4(keccak256("Insufficient()")));
         vm.prank(a); affiliate.referPlayer(B);
         uint32 aId = _id(a);
@@ -211,25 +211,25 @@ contract AffiliateIdentityTest is DeployProtocol {
         bytes32 code = bytes32(uint256(uint160(a)));
         assertEq(_pay(code, 2, 0), _id(c));
         uint256 first = _earningsWord(5, a);
-        assertEq(uint128(first), 2000);
-        assertEq(uint32(first >> 128), _id(b));
-        assertEq(uint32(first >> 160), _id(c));
-        assertEq(first >> 192, 3);
+        assertEq((first & ((uint256(1) << 35) - 1)), 2000);
+        assertEq(uint32(first >> 189), _id(b));
+        assertEq(uint32(first >> 221), _id(c));
+        assertEq(first >> 253, 3);
         assertEq(_codeWord(code), 0, "default route wrote a code word");
         assertEq(_pay(code, 0, 100), _id(a));
-        assertEq(_earningsWord(5, a) >> 128, first >> 128, "direct hit erased cache");
+        assertEq(_earningsWord(5, a) >> 189, first >> 189, "direct hit erased cache");
         assertEq(affiliate.affiliateScore(5, _id(a)), 4000);
         assertEq(affiliate.totalAffiliateScore(5), 4000);
         // Bonus points must ignore the high cache bits.
         uint256 bonus = affiliate.affiliateBonusPointsBest(6, _id(a));
-        vm.store(address(affiliate), _earningsSlot(5, a), bytes32(uint256(4000)));
+        vm.store(address(affiliate), _earningsSlot(5, a), bytes32(uint256(4000) | (uint256(5) << 165)));
         assertEq(affiliate.affiliateBonusPointsBest(6, _id(a)), bonus);
-        vm.store(address(affiliate), _earningsSlot(5, a), bytes32(_earningsWord(5, a) | (first & ~uint256(type(uint128).max))));
+        vm.store(address(affiliate), _earningsSlot(5, a), bytes32(_earningsWord(5, a) | (first & ~((uint256(1) << 189) - 1))));
         (address buyer, uint32 buyerId) = _buyer(code, 2, 200);
         vm.prank(address(game));
         (uint32 winner,,) = affiliate.payAffiliateCombined(code, buyerId, 6, 10000, 0, 0, 0, 0);
         assertEq(winner, _id(c));
-        assertEq(_earningsWord(6, a) >> 128, first >> 128);
+        assertEq(_earningsWord(6, a) >> 189, first >> 189);
         assertEq(affiliate.affiliateScore(6, _id(a)), 2000);
         assertEq(_codeWord(code), 0);
     }
@@ -251,18 +251,26 @@ contract AffiliateIdentityTest is DeployProtocol {
         assertEq(affiliate.affiliateScore(5, _id(a)), 2000);
     }
 
-    function test_EarningsWidthBoundaryRevertsWithoutCorruptingCache() public {
+    function test_EarningsCapPreservesCacheAndUncappedPayout() public {
         vm.prank(a); affiliate.referPlayer(B);
         assertEq(_pay(A, 1, 0), _id(b));
-        uint256 cache = _earningsWord(5, a) & ~uint256(type(uint128).max);
-        vm.store(address(affiliate), _earningsSlot(5, a), bytes32(cache | (uint256(type(uint128).max) - 2000)));
+        uint256 cap = (uint256(1) << 35) - 1;
+        uint256 metadata = _earningsWord(5, a) & ~cap;
+        vm.store(address(affiliate), _earningsSlot(5, a), bytes32(metadata | (cap - 700)));
+        uint256 totalBefore = affiliate.totalAffiliateScore(5);
         assertEq(_pay(A, 0, 100), _id(a));
-        assertEq(affiliate.affiliateScore(5, _id(a)), type(uint128).max);
+        assertEq(affiliate.affiliateScore(5, _id(a)), cap);
+        assertEq(affiliate.totalAffiliateScore(5) - totalBefore, 700, "only accepted score enters denominator");
         uint256 beforeWord = _earningsWord(5, a);
-        (address buyer, uint32 buyerId) = _buyer(A, 1, 200);
-        vm.expectRevert(bytes4(keccak256("EarningsOverflow()")));
-        vm.prank(address(game)); affiliate.payAffiliateCombined(A, buyerId, 5, 10000, 0, 0, 0, 0);
+        uint256 denominator = affiliate.totalAffiliateScore(5);
+        (, uint32 buyerId) = _buyer(A, 1, 200);
+        vm.prank(address(game));
+        (uint32 winner, uint256 credit, uint256 kickback) = affiliate.payAffiliateCombined(A, buyerId, 5, 10000, 0, 0, 0, 0);
+        assertEq(winner, _id(b));
+        assertEq(credit, 1760, "full commission after the existing 12% kickback");
+        assertEq(kickback, 240, "score cap must not reduce kickback");
         assertEq(_earningsWord(5, a), beforeWord);
+        assertEq(affiliate.totalAffiliateScore(5), denominator, "accepted zero cannot dilute DGNRS");
     }
 
     function test_RawIdentityRootsAndZeroUnallocatedBounds() public {

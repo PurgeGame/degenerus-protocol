@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {CoinflipStorage} from "../helpers/CoinflipStorage.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -66,7 +67,7 @@ contract PariSettleMockCoin {
 }
 
 /// @dev Storage roots of DegenerusParimutuel (scripts/layout/golden/DegenerusParimutuel.json)
-///      and Coinflip.coinflipStakePacked (scripts/layout/golden/Coinflip.json). Every reader
+///      and Coinflip.coinflipStakeRing (scripts/layout/golden/Coinflip.json). Every reader
 ///      below is self-checking: a wrong root reads zero where a test expects a written value.
 abstract contract PariSettlementSlots {
     uint256 internal constant COUNTS_ROOT = 0;
@@ -117,11 +118,9 @@ abstract contract PariSettlementSlots {
         paid = uint64(w >> 24);
     }
 
-    /// @dev Wallet `id`'s Coinflip stake lane on `day` (8 day lanes per word, keyed day >> 3).
+    /// @dev Wallet `id`'s Coinflip stake lane on `day` (seven lanes per tagged page).
     function _stakeOn(uint24 day, uint32 id) internal view returns (uint256) {
-        bytes32 outer = keccak256(abi.encode(uint256(day >> 3), STAKE_ROOT));
-        uint256 w = uint256(VM.load(ContractAddresses.COINFLIP, keccak256(abi.encode(uint256(id), outer))));
-        return uint32(w >> ((uint256(day) & 7) << 5));
+        return CoinflipStorage.read(ContractAddresses.COINFLIP, id, day);
     }
 
     function _isPaidRun(Vm.Log memory lg) internal pure returns (bool) {
@@ -1325,7 +1324,9 @@ contract ParimutuelSettlementProtocolTest is PariSettlementProtocolBase {
         vm.resumeGasMetering();
         uint256 paid;
         uint256 calls;
-        while (_pending() && calls++ < 10) paid += _keeperChunkCall(paid);
+        // The 160k spill-safe credit reserve admits 24 winners per 4.4M call;
+        // 250 winners therefore need eleven chunks, plus room for final closure.
+        while (_pending() && calls++ < 12) paid += _keeperChunkCall(paid);
         assertEq(paid, 250);
         assertFalse(_pending());
         assertGt(calls, 1, "large round spans transactions");

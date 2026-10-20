@@ -59,6 +59,9 @@ contract PurchaseDailySeeder is DegenerusGame, BucketSeed {
         level = s.lvl;
         purchaseStartDay = day - 10;
         dailyIdx = day - 1;
+        // Isolate the purchase/battle legs with the prior day's Vault checkpoint
+        // complete. VaultFlipBackstop separately covers a due stage-22 checkpoint.
+        vaultFlipSettledDay = day - 1;
         jackpotPhaseFlag = false;
         lastPurchaseDay = false;
         jackpotFlags = 0;
@@ -383,6 +386,8 @@ abstract contract PurchaseDailyFixture is AdvanceStageStream {
         vm.warp((uint256(targetDay - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_620 + intoDay);
     }
 
+    function _purchaseFixtureDay() internal pure virtual returns (uint24) { return 400; }
+
     function _seed(PurchaseDailySeeder.Shape memory s) internal {
         _deployProtocol();
         uint8[4] memory mainT = JackpotBucketLib.getRandomTraits(s.word);
@@ -392,7 +397,7 @@ abstract contract PurchaseDailyFixture is AdvanceStageStream {
             JackpotBucketLib.getRandomTraits(EntropyLib.hash2(s.word, uint256(keccak256("decoy-ahead-board"))));
 
         bytes memory realCode = address(game).code;
-        _warpToDay(400, 3 hours);
+        _warpToDay(_purchaseFixtureDay(), 3 hours);
         vm.etch(address(game), type(PurchaseDailySeeder).runtimeCode);
         PurchaseDailySeeder(payable(address(game))).seedPurchaseDaily(s, mainT, decoyT);
         vm.etch(address(game), realCode);

@@ -101,7 +101,7 @@ contract BafBoardPackingTest is Test {
 
     function _refRecord(uint24 lvl, uint32 id, uint256 amount) private {
         uint256 total = refTotal[lvl][id] + amount;
-        if (total > type(uint192).max) total = type(uint192).max;
+        if (total > type(uint168).max) total = type(uint168).max;
         refTotal[lvl][id] = total;
         if (id != VAULT_ID) _refUpdate(lvl, id, total);
     }
@@ -121,7 +121,7 @@ contract BafBoardPackingTest is Test {
     }
 
     function _playerWord(uint24 lvl, uint32 id) private view returns (uint256) {
-        bytes32 slot = keccak256(abi.encode(uint256(id), keccak256(abi.encode(uint256(lvl), BAF_PLAYER_ROOT))));
+        bytes32 slot = bytes32(uint256(keccak256(abi.encode(uint256(id), BAF_PLAYER_ROOT))) + ((lvl / 10) & 1));
         return uint256(vm.load(address(jp), slot));
     }
 
@@ -175,8 +175,9 @@ contract BafBoardPackingTest is Test {
             _refRecord(lvl, id, amount);
 
             uint256 word = _playerWord(lvl, id);
-            assertEq(uint192(word), refTotal[lvl][id], "per-wallet total keyed by ID");
-            assertEq(word >> 192, 0, "epoch 0");
+            assertEq(uint168(word), refTotal[lvl][id], "per-wallet total keyed by ID");
+            assertEq(uint64(word >> 168), 0, "epoch 0");
+            assertEq(uint24(word >> 232), lvl, "absolute bracket tag");
             _assertMatches(lvl, r);
         }
 
@@ -202,8 +203,9 @@ contract BafBoardPackingTest is Test {
             vm.prank(ContractAddresses.COINFLIP);
             jp.recordBafFlip(5, lvl, 9);
             uint256 word = _playerWord(lvl, 5);
-            assertEq(uint192(word), 9, "a stale epoch restarts the total");
-            assertEq(word >> 192, 1);
+            assertEq(uint168(word), 9, "a stale epoch restarts the total");
+            assertEq(uint64(word >> 168), 1);
+            assertEq(uint24(word >> 232), lvl);
             assertEq(jp.bafHeadWinner(lvl, seed, 0), 5);
             // Stale lanes past the new length never surface.
             if (len > 1) assertEq(jp.bafHeadWinner(lvl, seed, 2), 0, "only the live lane is drawable");

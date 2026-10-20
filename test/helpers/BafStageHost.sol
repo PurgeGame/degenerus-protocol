@@ -55,6 +55,9 @@ contract BafStageHost is DegenerusGame, BucketSeed {
         dailyIdx = day - 1;
         purchaseStartDay = day - 3;
         rngRequestDay = day;
+        // These fixtures start at consolidation/award work, after the day's
+        // preceding Vault checkpoint. Backstop scheduling has separate tests.
+        vaultFlipSettledDay = day;
         _recordDailyRng(day, word);
         rngRequestTime = uint48(block.timestamp);
         _setRngRequestActive(false);

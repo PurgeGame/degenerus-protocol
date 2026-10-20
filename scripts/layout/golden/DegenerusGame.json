@@ -240,6 +240,14 @@
     "typeLabel": "uint32"
   },
   {
+    "bytes": "3",
+    "encoding": "inplace",
+    "label": "vaultFlipSettledDay",
+    "offset": 20,
+    "slot": 5,
+    "typeLabel": "uint24"
+  },
+  {
     "bytes": "32",
     "encoding": "inplace",
     "label": "dailyTicketBudgetsPacked",

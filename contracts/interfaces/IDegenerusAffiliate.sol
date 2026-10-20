@@ -117,8 +117,9 @@ interface IDegenerusAffiliate {
     /// @return score Their score in FLIP base units (0 decimals).
     function affiliateTop(uint24 lvl) external view returns (uint32 id, uint96 score);
 
-    /// @notice Get an affiliate's base earnings score for a level.
-    /// @dev Uses direct affiliate earnings only (excludes uplines and quest bonuses).
+    /// @notice Exact score (capped at 2^35-1 FLIP) for the latest credited level or its predecessor.
+    /// @dev Direct affiliate earnings only (excludes uplines and quest bonuses).
+    ///      Retired levels return zero; AffiliateEarningsRecorded supplies historical reporting.
     /// @param lvl The game level to query.
     /// @param id Wallet ID of the affiliate to query (0 returns 0).
     /// @return score The base affiliate score (0 decimals).

@@ -652,6 +652,9 @@ abstract contract DegenerusGameStorage {
     /// @dev Next index of `_loansDue[level]` to seize while `LOANS_DUE_PENDING` is set;
     ///      slot-5 bytes 16..19.
     uint32 internal loanSeizeCursor;
+    /// @dev Last resolved day the Game successfully settled the Vault through. A lower
+    ///      bound on its actual Coinflip cursor; slot-5 bytes 20..22, preserving later roots.
+    uint24 internal vaultFlipSettledDay;
 
     /// @dev Packed daily jackpot ticket data, handed from one advance stage to the next.
     ///      Layout: [reserved (8 bits @ 0)] [dailyEntries (64 bits @ 8)] [battlePending (1 bit @ 72)]

@@ -5,7 +5,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @title CoinflipCarryHindsight — a dormant auto-rebuy account gets no look-ahead on its carry
-/// @notice Every claim walk settles through flipsClaimableDay in one call: the 730-day claim
+/// @notice Every claim walk settles through flipsClaimableDay in one call: the 90-day claim
 ///         window bounds auto-rebuy walks too, so days older than the window forfeit instead of
 ///         staying queued behind the cursor. A carry therefore never moves while a resolved
 ///         day it rides is still unapplied. Each route below pairs a dormant account with a
@@ -15,7 +15,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///         2. EXIT         — setCoinflipAutoRebuy(false) after a two-window dormancy.
 ///         3. TAKE-PROFIT  — the setter with T = 1 and with T = the run-peak payout of a known
 ///                           win run, self-funded and credit-staked.
-///         4. FORFEIT      — a backlog longer than 730 days drops the days before the window
+///         4. FORFEIT      — a backlog longer than 90 days drops the days before the window
 ///                           and the carry that would have ridden them, and the preview
 ///                           agrees with the settle.
 /// @dev The real deployed protocol (DeployProtocol). Days resolve through the GAME's own
@@ -27,7 +27,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 contract CoinflipCarryHindsight is DeployProtocol {
     address internal constant GAME = ContractAddresses.GAME;
     uint24 internal constant ARM_DAY = 2;
-    uint24 internal constant WINDOW = 730; // Coinflip.COIN_CLAIM_DAYS
+    uint24 internal constant WINDOW = 90; // Coinflip.COIN_CLAIM_DAYS
     uint256 internal constant STAKE = 100_000; // whole FLIP
 
     address internal dormant;
@@ -127,15 +127,15 @@ contract CoinflipCarryHindsight is DeployProtocol {
 
     // ------------------------------------------------------------------ 1. carry claim
 
-    /// Self-funded write-up path: armed on 2, deposit on 731 (729 days dormant), the stake rides
-    /// 732 (WIN), 733 LOSS, claimCoinflipCarry on 733. The deposit's walk already reaches 731,
-    /// and the claim walks 732..733 first, so the loss zeroes the carry for both accounts.
+    /// Self-funded write-up path: armed on 2, deposit on 91 (89 days dormant), the stake rides
+    /// 92 (WIN), 93 LOSS, claimCoinflipCarry on 93. The deposit's walk already reaches 91,
+    /// and the claim walks 92..93 first, so the loss zeroes the carry for both accounts.
     function test_DormantCarryClaimGetsNothingAroundSettledLoss() public {
-        _resolveRange(ARM_DAY + 1, 366);
+        _resolveRange(ARM_DAY + 1, 46);
         vm.prank(control);
         coinflip.depositCoinflip(0, 0);
         _assertCurrent(controlId, "control current mid-way");
-        _resolveRange(367, 731);
+        _resolveRange(47, 91);
 
         _fund(dormant, STAKE);
         _fund(control, STAKE);
@@ -143,28 +143,28 @@ contract CoinflipCarryHindsight is DeployProtocol {
         coinflip.depositCoinflip(0, STAKE);
         vm.prank(control);
         coinflip.depositCoinflip(0, STAKE);
-        _assertCurrent(dormantId, "one deposit walk settles the whole 729-day backlog");
+        _assertCurrent(dormantId, "one deposit walk settles the whole 89-day backlog");
         _assertCurrent(controlId, "control current");
         assertEq(coinflip.coinflipAmountById(dormantId), coinflip.coinflipAmountById(controlId), "equal stakes");
 
-        _resolveDay(732, true);
-        _resolveDay(733, false);
+        _resolveDay(92, true);
+        _resolveDay(93, false);
 
         vm.prank(dormant);
         uint256 d = coinflip.claimCoinflipCarry(0, type(uint256).max);
         vm.prank(control);
         uint256 c = coinflip.claimCoinflipCarry(0, type(uint256).max);
-        _assertCurrent(dormantId, "the carry claim settled through 733 first");
-        assertEq(d, 0, "dormant: the known 733 loss zeroed the carry");
-        assertEq(c, 0, "control: the known 733 loss zeroed the carry");
+        _assertCurrent(dormantId, "the carry claim settled through 93 first");
+        assertEq(d, 0, "dormant: the known 93 loss zeroed the carry");
+        assertEq(c, 0, "control: the known 93 loss zeroed the carry");
         assertEq(_carryOf(dormantId), 0);
         assertEq(coin.balanceOf(dormant), coin.balanceOf(control), "dormant ends where the control does");
     }
 
-    /// The other branch: 733 WINS. The dormant account cannot walk part-way and pick its moment;
+    /// The other branch: 93 WINS. The dormant account cannot walk part-way and pick its moment;
     /// one claim settles both days and pays the same compounded carry the control gets.
     function test_DormantKnownWinPaysExactlyTheControl() public {
-        _resolveRange(ARM_DAY + 1, 731);
+        _resolveRange(ARM_DAY + 1, 91);
         vm.prank(control);
         coinflip.depositCoinflip(0, 0);
         _fund(dormant, STAKE);
@@ -173,13 +173,13 @@ contract CoinflipCarryHindsight is DeployProtocol {
         coinflip.depositCoinflip(0, STAKE);
         vm.prank(control);
         coinflip.depositCoinflip(0, STAKE);
-        _resolveDay(732, true);
-        _resolveDay(733, true);
+        _resolveDay(92, true);
+        _resolveDay(93, true);
 
         vm.prank(dormant);
         coinflip.claimCoinflips(0, 0);
-        _assertCurrent(dormantId, "a settle-only call walks through 733, not to a chosen day");
-        uint256 expected = _roll(_payout(_roll(_payout(STAKE, 732)), 733));
+        _assertCurrent(dormantId, "a settle-only call walks through 93, not to a chosen day");
+        uint256 expected = _roll(_payout(_roll(_payout(STAKE, 92)), 93));
         vm.prank(dormant);
         uint256 d = coinflip.claimCoinflipCarry(0, type(uint256).max);
         vm.prank(control);
@@ -188,40 +188,40 @@ contract CoinflipCarryHindsight is DeployProtocol {
         assertEq(c, d, "and exactly what the control gets");
     }
 
-    /// Credit route on the window boundary: a credit on 732 (730 days after the cursor) rides
-    /// 733 (WIN), 734 LOSS. The walk clamps to 734 - 730 and settles through 734.
+    /// Credit route on the window boundary: a credit on 92 (90 days after the cursor) rides
+    /// 93 (WIN), 94 LOSS. The walk clamps to 94 - 90 and settles through 94.
     function test_CreditRouteAtWindowBoundaryGetsNothing() public {
-        _resolveRange(ARM_DAY + 1, 732);
+        _resolveRange(ARM_DAY + 1, 92);
         vm.prank(control);
         coinflip.depositCoinflip(0, 0);
         _credit(dormantId);
         _credit(controlId);
         assertEq(_lastClaim(dormantId), ARM_DAY, "the credit did not walk the account");
-        _resolveDay(733, true);
-        _resolveDay(734, false);
+        _resolveDay(93, true);
+        _resolveDay(94, false);
 
         vm.prank(dormant);
         uint256 d = coinflip.claimCoinflipCarry(0, type(uint256).max);
         vm.prank(control);
         uint256 c = coinflip.claimCoinflipCarry(0, type(uint256).max);
-        _assertCurrent(dormantId, "one walk reaches 734");
-        assertEq(d, 0, "dormant: carry lost on 734");
-        assertEq(c, 0, "control: carry lost on 734");
+        _assertCurrent(dormantId, "one walk reaches 94");
+        assertEq(d, 0, "dormant: carry lost on 94");
+        assertEq(c, 0, "control: carry lost on 94");
         assertEq(coin.balanceOf(dormant), 0);
     }
 
     // ------------------------------------------------------------------ 2. rebuy exit
 
-    /// Two windows of dormancy: a credit on 1461 rides 1462 (WIN), 1463 LOSS; the exit settles
-    /// through 1463 before releasing anything, so it mints 0 and turns rebuy off.
+    /// Two windows of dormancy: a credit on 181 rides 182 (WIN), 183 LOSS; the exit settles
+    /// through 183 before releasing anything, so it mints 0 and turns rebuy off.
     function test_ExitAfterTwoWindowsReleasesNothingAroundSettledLoss() public {
-        _resolveRange(ARM_DAY + 1, 1461);
+        _resolveRange(ARM_DAY + 1, 181);
         vm.prank(control);
         coinflip.depositCoinflip(0, 0);
         _credit(dormantId);
         _credit(controlId);
-        _resolveDay(1462, true);
-        _resolveDay(1463, false);
+        _resolveDay(182, true);
+        _resolveDay(183, false);
 
         vm.prank(dormant);
         coinflip.setCoinflipAutoRebuy(0, false, 0);
@@ -229,93 +229,93 @@ contract CoinflipCarryHindsight is DeployProtocol {
         coinflip.setCoinflipAutoRebuy(0, false, 0);
         (bool dEnabled, , , ) = coinflip.coinflipAutoRebuyInfoById(dormantId);
         assertFalse(dEnabled, "rebuy off");
-        _assertCurrent(dormantId, "the exit walk settled through 1463");
-        assertEq(coin.balanceOf(dormant), 0, "dormant exit: the 1463 loss zeroed the carry");
+        _assertCurrent(dormantId, "the exit walk settled through 183");
+        assertEq(coin.balanceOf(dormant), 0, "dormant exit: the 183 loss zeroed the carry");
         assertEq(coin.balanceOf(control), 0, "control exit: same");
     }
 
     // ------------------------------------------------------------------ 3. take-profit
 
-    /// Credit on 367 rides 368 (WIN), 369 LOSS. Setting take-profit 1 settles 368/369 under the
+    /// Credit on 47 rides 48 (WIN), 49 LOSS. Setting take-profit 1 settles 48/49 under the
     /// old value first, so the known win is never re-split into the bank.
     function test_TakeProfitOneCannotResplitKnownWin() public {
-        _resolveRange(ARM_DAY + 1, 367);
+        _resolveRange(ARM_DAY + 1, 47);
         _credit(dormantId);
         _credit(controlId);
         vm.prank(control);
         coinflip.depositCoinflip(0, 0);
-        _resolveDay(368, true);
-        _resolveDay(369, false);
+        _resolveDay(48, true);
+        _resolveDay(49, false);
 
         vm.prank(dormant);
         coinflip.setCoinflipAutoRebuyTakeProfit(0, 1);
         vm.prank(control);
         coinflip.setCoinflipAutoRebuyTakeProfit(0, 1);
-        _assertCurrent(dormantId, "the setter settled 368/369 under the old value");
+        _assertCurrent(dormantId, "the setter settled 48/49 under the old value");
 
         vm.prank(dormant);
         uint256 d = coinflip.claimCoinflips(0, type(uint256).max);
         vm.prank(control);
         uint256 c = coinflip.claimCoinflips(0, type(uint256).max);
-        assertEq(d, 0, "dormant: the 368 win rode into the 369 loss");
+        assertEq(d, 0, "dormant: the 48 win rode into the 49 loss");
         assertEq(c, 0, "control: same");
     }
 
-    /// Run-peak route, self-funded with 730 days of dormancy: the stake rides 733; 733/734/735
-    /// WIN, 736 LOSS, all public. A threshold equal to the 735 payout cannot bank the known
-    /// peak: the setter settles 733..736 under take-profit 0 first.
+    /// Run-peak route, self-funded with 90 days of dormancy: the stake rides 93; 93/94/95
+    /// WIN, 96 LOSS, all public. A threshold equal to the 95 payout cannot bank the known
+    /// peak: the setter settles 93..96 under take-profit 0 first.
     function test_RunPeakTakeProfitSelfFundedGetsNothing() public {
-        _resolveRange(ARM_DAY + 1, 367);
+        _resolveRange(ARM_DAY + 1, 47);
         vm.prank(control);
         coinflip.depositCoinflip(0, 0);
-        _resolveRange(368, 732);
+        _resolveRange(48, 92);
         _fund(dormant, STAKE);
         _fund(control, STAKE);
         vm.prank(dormant);
         coinflip.depositCoinflip(0, STAKE);
         vm.prank(control);
         coinflip.depositCoinflip(0, STAKE);
-        _assertCurrent(dormantId, "the deposit walk settled the 730-day backlog");
+        _assertCurrent(dormantId, "the deposit walk settled the 90-day backlog");
 
-        _resolveDay(733, true);
-        _resolveDay(734, true);
-        _resolveDay(735, true);
-        _resolveDay(736, false);
-        uint256 p735 = _payout(_roll(_payout(_roll(_payout(STAKE, 733)), 734)), 735);
+        _resolveDay(93, true);
+        _resolveDay(94, true);
+        _resolveDay(95, true);
+        _resolveDay(96, false);
+        uint256 p95 = _payout(_roll(_payout(_roll(_payout(STAKE, 93)), 94)), 95);
 
         vm.prank(dormant);
-        coinflip.setCoinflipAutoRebuyTakeProfit(0, p735);
+        coinflip.setCoinflipAutoRebuyTakeProfit(0, p95);
         vm.prank(control);
-        coinflip.setCoinflipAutoRebuyTakeProfit(0, p735);
-        _assertCurrent(dormantId, "the threshold is stored only after 736 settles");
+        coinflip.setCoinflipAutoRebuyTakeProfit(0, p95);
+        _assertCurrent(dormantId, "the threshold is stored only after 96 settles");
 
         vm.prank(dormant);
         uint256 d = coinflip.claimCoinflips(0, type(uint256).max);
         vm.prank(control);
         uint256 c = coinflip.claimCoinflips(0, type(uint256).max);
-        assertEq(d, 0, "dormant: the run rode into the known 736 loss");
+        assertEq(d, 0, "dormant: the run rode into the known 96 loss");
         assertEq(c, 0, "control: same");
         assertEq(_carryOf(dormantId), 0);
     }
 
-    /// Run-peak route, credit-staked: a credit on 368 rides 369; 369/370 WIN, 371 LOSS; the
-    /// threshold is the 370 payout.
+    /// Run-peak route, credit-staked: a credit on 48 rides 49; 49/50 WIN, 51 LOSS; the
+    /// threshold is the 50 payout.
     function test_RunPeakTakeProfitCreditGetsNothing() public {
-        _resolveRange(ARM_DAY + 1, 368);
+        _resolveRange(ARM_DAY + 1, 48);
         _credit(dormantId);
         _credit(controlId);
         vm.prank(control);
         coinflip.depositCoinflip(0, 0);
-        _resolveDay(369, true);
-        _resolveDay(370, true);
-        _resolveDay(371, false);
-        uint256 p370 = _payout(_roll(_payout(STAKE, 369)), 370);
+        _resolveDay(49, true);
+        _resolveDay(50, true);
+        _resolveDay(51, false);
+        uint256 p50 = _payout(_roll(_payout(STAKE, 49)), 50);
 
         vm.prank(dormant);
-        coinflip.setCoinflipAutoRebuyTakeProfit(0, p370);
+        coinflip.setCoinflipAutoRebuyTakeProfit(0, p50);
         vm.prank(control);
-        coinflip.setCoinflipAutoRebuyTakeProfit(0, p370);
-        _assertCurrent(dormantId, "the setter settled through 371");
+        coinflip.setCoinflipAutoRebuyTakeProfit(0, p50);
+        _assertCurrent(dormantId, "the setter settled through 51");
         vm.prank(dormant);
         uint256 d = coinflip.claimCoinflips(0, type(uint256).max);
         vm.prank(control);
@@ -354,8 +354,8 @@ contract CoinflipCarryHindsight is DeployProtocol {
         assertEq(preview, outside, "preview == settle");
     }
 
-    /// A carry stored at lastClaim 3 rides every later day. With a 730-day backlog it rides the
-    /// whole forced-win run and banks above the take-profit; with 731 days its first day has
+    /// A carry stored at lastClaim 3 rides every later day. With a 90-day backlog it rides the
+    /// whole forced-win run and banks above the take-profit; with 91 days its first day has
     /// left the window, so the carry is dropped and nothing is banked.
     function test_CarryOlderThanWindowIsDropped() public {
         // A win pays 1000 * (100 + r) FLIP; 999 leaves a nonzero remainder to roll.
@@ -376,7 +376,7 @@ contract CoinflipCarryHindsight is DeployProtocol {
         uint256 preview = coinflip.previewFlipBackingById(dormantId);
         vm.prank(dormant);
         uint256 inside = coinflip.claimCoinflips(0, type(uint256).max);
-        assertGt(inside, 0, "730-day backlog: the carry rode the run and banked");
+        assertGt(inside, 0, "90-day backlog: the carry rode the run and banked");
         assertEq(preview, inside + _carryOf(dormantId), "preview == settle");
         vm.revertToState(snap);
 
@@ -385,7 +385,7 @@ contract CoinflipCarryHindsight is DeployProtocol {
         vm.prank(dormant);
         uint256 outside = coinflip.claimCoinflips(0, type(uint256).max);
         _assertCurrent(dormantId, "one walk reaches the frontier");
-        assertEq(outside, 0, "731-day backlog: the carry is dropped, nothing banks");
+        assertEq(outside, 0, "91-day backlog: the carry is dropped, nothing banks");
         assertEq(_carryOf(dormantId), 0, "carry cleared");
         assertEq(preview, 0, "preview == settle");
         (bool enabled, , , ) = coinflip.coinflipAutoRebuyInfoById(dormantId);

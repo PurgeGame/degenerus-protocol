@@ -92,7 +92,7 @@ contract WalletIdTruthHandler is Test {
     uint256 internal constant CR_BOARD_MASK = uint256(0xFFFFF) << 64;
     uint256 internal constant CR_INITIALIZED = uint256(1) << 84;
     uint256 internal constant AFF_CODE = 0; // DegenerusAffiliate._affiliateCode
-    uint256 internal constant AFF_EARNED = 1; // affiliateCoinEarned[lvl][ownerId]
+    uint256 internal constant AFF_EARNED = 1; // affiliateCoinEarned[ownerId]
     uint256 internal constant AFF_REFERRAL = 2; // playerReferralCode
     uint256 internal constant AFF_LEVEL_SCORE = 3; // _levelScore
     uint256 internal constant SD_BATCH_PLAYERS = 9; // sDGNRS._batchPlayers (uint256[][2] at 9, 10)
@@ -1596,12 +1596,12 @@ contract WalletIdTruthHandler is Test {
         uint256 len = _tableLength();
         uint256 maxLvl = uint256(game.level()) + 2;
         for (uint256 lvl; lvl <= maxLvl; ++lvl) {
-            bytes32 inner = keccak256(abi.encode(lvl, AFF_EARNED));
+
             for (uint32 id = 1; id < len; ++id) {
-                uint256 w = uint256(vm.load(AFFILIATE, keccak256(abi.encode(uint256(id), inner))));
-                uint256 cache = w >> 128;
+                uint256 w = uint256(vm.load(AFFILIATE, keccak256(abi.encode(uint256(id), AFF_EARNED))));
+                uint256 cache = w >> 189;
                 if (cache == 0) continue;
-                if (cache >> 66 != 0) _fail("AFFEARN", "earnings word spills past bit 194", _keyOf(id), cache >> 66, 0);
+                if (cache >> 66 != 0) _fail("AFFEARN", "earnings word spills past bit 255", _keyOf(id), cache >> 66, 0);
                 _checkUplines("AFFEARN", id, cache);
             }
             uint32 leader = uint32(uint256(vm.load(AFFILIATE, keccak256(abi.encode(lvl, AFF_LEVEL_SCORE)))) >> 224);

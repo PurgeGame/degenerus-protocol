@@ -54,6 +54,10 @@ contract BafTranscriptHost is DegenerusGame, WalletSeed {
         return _jackpotBattlePending();
     }
 
+    function btVaultCheckpointDue() external view returns (bool) {
+        return rngRequestDay > vaultFlipSettledDay && uint256(rngRequestDay) - vaultFlipSettledDay >= 45;
+    }
+
     function btWork()
         external
         view
@@ -402,6 +406,14 @@ abstract contract BafTranscriptFixture is DeployProtocol {
             assertLt(reads, 32, "ticket prerequisites stalled");
         }
         host.btApply{gas: 30_000_000}();
+        if (host.btVaultCheckpointDue()) {
+            vm.recordLogs();
+            MineFlipGas.Result memory checkpoint = host.btDaily{gas: 30_000_000}(9_000_000);
+            assertTrue(checkpoint.progressed);
+            assertFalse(checkpoint.done);
+            assertEq(_lastStage(vm.getRecordedLogs()), 22, "Vault checkpoint precedes battle and consolidation");
+            assertFalse(host.btVaultCheckpointDue(), "checkpoint cannot repeat");
+        }
         for (uint256 steps; host.btBattlePending(); ++steps) {
             assertLt(steps, 64, "the jackpot battle stalled");
             vm.recordLogs();
@@ -802,11 +814,11 @@ abstract contract BafTranscriptFixture is DeployProtocol {
         }
     }
 
-    /// @dev `bafPlayer[lvl][a]` total when it belongs to the bracket's live epoch, else zero.
+    /// @dev `bafPlayer[a][(lvl / 10) & 1]` total when it belongs to the bracket's live epoch, else zero.
     function _scoreOf(uint32 a, uint64 epoch) internal view returns (uint256) {
-        bytes32 inner = keccak256(abi.encode(uint256(lvl), BAF_PLAYER_SLOT));
-        uint256 v = uint256(vm.load(address(jackpots), keccak256(abi.encode(uint256(a), inner))));
-        return uint64(v >> 192) == epoch ? uint192(v) : 0;
+        bytes32 slot = bytes32(uint256(keccak256(abi.encode(uint256(a), BAF_PLAYER_SLOT))) + ((lvl / 10) & 1));
+        uint256 v = uint256(vm.load(address(jackpots), slot));
+        return uint24(v >> 232) == lvl && uint64(v >> 168) == epoch ? uint168(v) : 0;
     }
 
     /// @dev One award's logs: a large award (at least a twentieth of the pool) half ETH and half
@@ -1278,18 +1290,18 @@ abstract contract CenturyBafTranscript is BafTranscriptFixture {
         // Far-future rounds sample lanes whose positions move when earlier awards add lanes:
         // score every lane owner of 102..199 (below the board, so the board is unchanged).
         uint256 epoch = uint64(uint256(vm.load(address(jackpots), keccak256(abi.encode(uint256(100), BAF_LEVEL_SLOT)))));
-        bytes32 inner = keccak256(abi.encode(uint256(100), BAF_PLAYER_SLOT));
+        uint256 tags = (epoch << 168) | (uint256(100) << 232);
         address probe = address(0xBAF5C0E);
         uint32 probeId = host.btSeedWallet(probe);
         vm.prank(ContractAddresses.COINFLIP);
         jackpots.recordBafFlip(probeId, 100, 7 ether);
-        assertEq(uint256(vm.load(address(jackpots), keccak256(abi.encode(uint256(probeId), inner)))), 7 ether | (epoch << 192),
+        assertEq(uint256(vm.load(address(jackpots), keccak256(abi.encode(uint256(probeId), BAF_PLAYER_SLOT)))), 7 ether | tags,
             "bafPlayer slot layout");
         for (uint24 l = 102; l <= 199; ++l) {
             address[] memory owners = host.btFarOwners(l);
             for (uint256 i; i < owners.length; ++i) {
                 uint256 score = (1 + uint256(uint160(owners[i])) % 997) * 1 ether;
-                vm.store(address(jackpots), keccak256(abi.encode(uint256(host.btIdOf(owners[i])), inner)), bytes32(score | (epoch << 192)));
+                vm.store(address(jackpots), keccak256(abi.encode(uint256(host.btIdOf(owners[i])), BAF_PLAYER_SLOT)), bytes32(score | tags));
             }
         }
     }

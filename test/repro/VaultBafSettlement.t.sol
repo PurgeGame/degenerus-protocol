@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {CoinflipStorage} from "../helpers/CoinflipStorage.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -168,16 +169,14 @@ abstract contract VaultBafRig is DeployProtocol {
     // Jackpots: bafPlayer slot 0, bafLevel slot 2)
     // ---------------------------------------------------------------------
 
-    function _stakeSlot(uint24 key, address p) internal view returns (bytes32) {
-        return keccak256(abi.encode(uint256(game.walletIdOf(p)), keccak256(abi.encode(uint256(key), uint256(0)))));
-    }
+
 
     function _stateSlot(address p) internal view returns (bytes32) {
         return keccak256(abi.encode(game.walletIdOf(p), uint256(2)));
     }
 
     function _scoreSlot(address p, uint24 lvl) internal view returns (bytes32) {
-        return keccak256(abi.encode(uint256(game.walletIdOf(p)), keccak256(abi.encode(uint256(lvl), uint256(0)))));
+        return bytes32(uint256(keccak256(abi.encode(uint256(game.walletIdOf(p)), uint256(0)))) + ((lvl / 10) & 1));
     }
 
     /// @dev The claimer takes the vault's whole coinflip position: state words and every stake
@@ -185,25 +184,16 @@ abstract contract VaultBafRig is DeployProtocol {
     function _mirrorVault(uint24 throughDay) internal {
         bytes32 v = _stateSlot(VAULT);
         bytes32 r = _stateSlot(REF);
-        uint256 stateA = uint256(vm.load(address(coinflip), v));
-        vm.store(address(coinflip), r, bytes32(stateA));
+        vm.store(address(coinflip), r, vm.load(address(coinflip), v));
         vm.store(address(coinflip), bytes32(uint256(r) + 1), vm.load(address(coinflip), bytes32(uint256(v) + 1)));
-        for (uint24 k; k <= throughDay >> 3; ++k) {
-            vm.store(address(coinflip), _stakeSlot(k, REF), vm.load(address(coinflip), _stakeSlot(k, VAULT)));
-            for (uint24 d = k << 3; d < (k << 3) + 8; ++d) _addSeed(d);
-        }
+        for (uint256 day; day <= throughDay; ++day) _mirrorLane(uint24(day));
         assertEq(_lastClaim(REF), _lastClaim(VAULT), "mirror: claim cursor");
     }
 
     /// @dev One day's lane, masked so the claimer's other days are untouched.
     function _mirrorLane(uint24 day) internal {
-        uint256 shift = uint256(day & 7) << 5;
-        uint256 mask = uint256(type(uint32).max) << shift;
-        bytes32 rs = _stakeSlot(day >> 3, REF);
-        uint256 v = uint256(vm.load(address(coinflip), _stakeSlot(day >> 3, VAULT)));
-        uint256 r = uint256(vm.load(address(coinflip), rs));
-        vm.store(address(coinflip), rs, bytes32((r & ~mask) | (v & mask)));
-        _addSeed(day);
+        uint256 amount = CoinflipStorage.read(address(coinflip), game.walletIdOf(VAULT), day) + _seedUnits(day);
+        CoinflipStorage.set(address(coinflip), game.walletIdOf(REF), day, amount);
     }
 
     /// @dev The vault's seed stake for `day` in whole FLIP. Coinflip adds it on read for a seed
@@ -213,13 +203,9 @@ abstract contract VaultBafRig is DeployProtocol {
     }
 
     function _addSeed(uint24 day) internal {
+        uint32 id = game.walletIdOf(REF);
         uint256 seed = _seedUnits(day);
-        if (seed == 0) return;
-        bytes32 rs = _stakeSlot(day >> 3, REF);
-        uint256 shift = uint256(day & 7) << 5;
-        uint256 r = uint256(vm.load(address(coinflip), rs));
-        uint256 lane = ((r >> shift) & type(uint32).max) + seed;
-        vm.store(address(coinflip), rs, bytes32((r & ~(uint256(type(uint32).max) << shift)) | (lane << shift)));
+        if (seed != 0) CoinflipStorage.set(address(coinflip), id, day, CoinflipStorage.read(address(coinflip), id, day) + seed);
     }
 
     function _mirrorScore(uint24 lvl) internal {
@@ -227,10 +213,8 @@ abstract contract VaultBafRig is DeployProtocol {
     }
 
     function _stake(address p, uint24 day) internal view returns (uint256) {
-        uint256 w = uint256(vm.load(address(coinflip), _stakeSlot(day >> 3, p)));
-        uint256 units = uint256(uint32(w >> ((uint256(day) & 7) << 5)));
-        if (p == VAULT) units += _seedUnits(day);
-        return units;
+        uint256 units = CoinflipStorage.read(address(coinflip), game.walletIdOf(p), day);
+        return units + (p == VAULT ? _seedUnits(day) : 0);
     }
 
     function _lastClaim(address p) internal view returns (uint24) {
@@ -240,8 +224,8 @@ abstract contract VaultBafRig is DeployProtocol {
     /// @dev The bracket score as the draw reads it: zero once the stored epoch is stale.
     function _score(address p, uint24 lvl) internal view returns (uint256) {
         uint256 w = uint256(vm.load(address(jackpots), _scoreSlot(p, lvl)));
-        if (uint64(w >> 192) != _bafEpoch(lvl)) return 0;
-        return uint192(w);
+        if (uint24(w >> 232) != lvl || uint64(w >> 168) != _bafEpoch(lvl)) return 0;
+        return uint168(w);
     }
 
     function _bafWord(uint24 lvl) internal view returns (uint256) {

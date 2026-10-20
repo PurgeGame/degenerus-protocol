@@ -24,6 +24,7 @@ pragma solidity 0.8.34;
  * Provided AS IS, without warranty of any kind. Full text: TERMS.md
  */
 
+import {AffiliateEarningsLib} from "./libraries/AffiliateEarningsLib.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
 import {WalletTableLib} from "./libraries/WalletTableLib.sol";
 
@@ -172,9 +173,6 @@ contract DegenerusAffiliate {
     /// @notice Thrown when kickback percentage exceeds the maximum allowed (25%).
     error InvalidKickback();
 
-    /// @notice Per-affiliate whole-token earnings exceed the packed amount field.
-    error EarningsOverflow();
-
     // =====================================================================
     //                              TYPES
     // =====================================================================
@@ -229,8 +227,8 @@ contract DegenerusAffiliate {
     ///      [224:256) leader wallet ID.
     uint256 private constant TOTAL_SCORE_MASK = type(uint128).max;
     uint256 private constant TOP_SHIFT = 128;
-    /// @dev Earnings word: amount [0:128), upline IDs [128:160)/[160:192), valid bits 192/193.
-    uint256 private constant EARNINGS_MASK = type(uint128).max;
+    /// @dev Upline cache is 66 bits at offset 189 in the reusable earnings word.
+    uint256 private constant EARNINGS_PAYLOAD_MASK = (uint256(1) << 189) - 1;
     uint256 private constant UPLINE1_VALID = uint256(1) << 64;
     uint256 private constant UPLINE2_VALID = uint256(1) << 65;
 
@@ -276,12 +274,11 @@ contract DegenerusAffiliate {
     /// @dev codes are permanent once created; owner cannot be changed.
     mapping(bytes32 => AffiliateCodeInfo) private _affiliateCode;
 
-    /// @notice Per-level earnings and immutable upline cache, keyed by affiliate wallet ID.
-    /// @dev Used for leaderboard calculations and activity score bonus points.
-    ///      Low 128 bits are whole FLIP; high bits cache two permanent wallet IDs and validity.
-    ///      Direct affiliate earnings only; upline rewards are excluded for gas.
-    ///      Kickback does not reduce the tracked score.
-    mapping(uint24 => mapping(uint32 => uint256)) private affiliateCoinEarned;
+    /// @notice One retained word per affiliate: two capped exact scores, five bonus
+    ///      history inputs, a uint24 latest level and the permanent 66-bit upline cache.
+    ///      Direct earnings only; kickback does not reduce score, and the score cap
+    ///      never limits the actual commission, quest or AFKing payout.
+    mapping(uint32 => uint256) private affiliateCoinEarned;
 
     /// @notice Player's referral word: 0 = not yet set, REF_CODE_LOCKED = permanently locked,
     ///         bit32 + low32 owner ID = resolved default referral, otherwise a custom code.
@@ -708,12 +705,13 @@ contract DegenerusAffiliate {
     ) private returns (uint32 winnerId, uint256 winnerCredit) {
         uint32 ownerId = uint32(ref);
         bool noReferrer = ref & NO_REFERRER != 0;
-        uint256 earningsWord = affiliateCoinEarned[lvl][ownerId];
+        uint256 beforeWord = affiliateCoinEarned[ownerId];
+        uint256 earningsWord = beforeWord;
         if (shareBase != 0) {
             (winnerId, earningsWord) = _purchaseWinner(routeCode, ownerId, senderId, noReferrer, earningsWord);
         }
         // Cache fills share the existing earnings write. Commit before the quest call.
-        _recordEarnings(lvl, ownerId, scaled, earningsWord);
+        _recordEarnings(lvl, ownerId, scaled, earningsWord, beforeWord);
         if (shareBase != 0) {
             if (noReferrer) {
                 winnerCredit = shareBase;
@@ -886,7 +884,7 @@ contract DegenerusAffiliate {
             return;
         }
         uint24 lvl = afkingDrain.level() + 1;
-        uint256 earningsWord = affiliateCoinEarned[lvl][a];
+        uint256 earningsWord = affiliateCoinEarned[a];
         uint256 uplines;
         {
             uint256 cache = _routeCache(routeCode, earningsWord);
@@ -895,7 +893,7 @@ contract DegenerusAffiliate {
             uplines = u;
             (u, cache) = _payoutUpline(routeCode, a, true, cache);
             uplines |= uint256(u) << 32;
-            earningsWord = (earningsWord & EARNINGS_MASK) | (cache << 128);
+            earningsWord = (earningsWord & EARNINGS_PAYLOAD_MASK) | (cache << 189);
         }
 
         (uint256 sumB, uint256 skipU1, uint256 skipU2) = _drainSubs(subs, start, end, uplines);
@@ -907,7 +905,11 @@ contract DegenerusAffiliate {
 
         // Leaderboard credit to A at the next level (level() + 1, the level the subs' tickets buy
         // into; sumB already uses whole-token units).
-        _recordEarnings(lvl, a, sumB, earningsWord);
+        // The Game drain can call other contracts. Reload the score payload afterwards;
+        // only immutable, already-validated cache fields may be merged from the old word.
+        uint256 beforeWord = affiliateCoinEarned[a];
+        earningsWord = beforeWord | (earningsWord & ~EARNINGS_PAYLOAD_MASK);
+        _recordEarnings(lvl, a, sumB, earningsWord, beforeWord);
 
         // Pay the (at most 3) recipients directly; each credit is a pure ledger add (recordAmount=0).
         coinflip.creditFlipPair(a, sumB - u1Share - u2Share, uint32(uplines), u1Share);
@@ -955,18 +957,20 @@ contract DegenerusAffiliate {
 
     /**
      * @notice Get an affiliate's base earnings score for a level.
-     * @dev Uses direct affiliate earnings only (excludes uplines and quest bonuses).
+     * @dev Exact capped scores are retained for the latest credited level and its predecessor.
+     *      Older exact history is available through AffiliateEarningsRecorded events.
+     *      Direct earnings only (excludes uplines and quest bonuses); cap is 2^35 - 1 FLIP.
      * @param lvl The game level to query.
      * @param id Wallet ID of the affiliate to query (0 returns 0).
      * @return score The base affiliate score (0 decimals).
      */
     function affiliateScore(uint24 lvl, uint32 id) external view returns (uint256 score) {
-        return affiliateCoinEarned[lvl][id] & EARNINGS_MASK;
+        return AffiliateEarningsLib.score(affiliateCoinEarned[id], lvl);
     }
 
     /**
      * @notice Get the total affiliate score across all affiliates for a level.
-     * @dev Sum of all affiliateCoinEarned for this level. Used as the exact
+     * @dev Sum of accepted capped scores for this level, retained after individual history retires. Used as the exact
      *      denominator for score-proportional DGNRS claim distribution.
      * @param lvl The game level to query.
      * @return total The total affiliate score (0 decimals).
@@ -995,12 +999,13 @@ contract DegenerusAffiliate {
         // PRICE_COIN_UNIT and fresh-rate scale factors (normalized out below). Bounded
         // far below overflow: score is capped by real FLIP accrual, price ≤ 0.24 ether.
         uint256 sumProduct;
+        uint256 earningsWord = affiliateCoinEarned[id];
         unchecked {
             for (uint8 offset = 1; offset <= 5; ) {
                 if (currLevel <= offset) break;
                 uint24 lvl = currLevel - offset;
                 sumProduct +=
-                    (affiliateCoinEarned[lvl][id] & EARNINGS_MASK) *
+                    AffiliateEarningsLib.bonusScore(earningsWord, lvl) *
                     PriceLookupLib.priceForLevel(lvl);
                 // Points hit the AFFILIATE_BONUS_MAX cap at 25 ETH of weighted
                 // volume; further reads cannot change the result.
@@ -1033,12 +1038,12 @@ contract DegenerusAffiliate {
     }
 
     /// @dev Only this helper writes earnings. Metadata never enters score math or events.
-    function _recordEarnings(uint24 lvl, uint32 ownerId, uint256 amount, uint256 word) private {
-        uint256 total = (word & EARNINGS_MASK) + amount;
-        if (total > EARNINGS_MASK) revert EarningsOverflow();
-        affiliateCoinEarned[lvl][ownerId] = (word & ~EARNINGS_MASK) | total;
+    function _recordEarnings(uint24 lvl, uint32 ownerId, uint256 amount, uint256 word, uint256 beforeWord) private {
+        (uint256 updated, uint256 total, uint256 accepted) = AffiliateEarningsLib.add(word, lvl, amount);
+        if (updated != beforeWord) affiliateCoinEarned[ownerId] = updated;
         emit AffiliateEarningsRecorded(ownerId, uint256(lvl) | (total << AFF_EARN_TOTAL_SHIFT));
-        _recordScore(ownerId, total, amount, lvl);
+        // The denominator must sum capped scores. Actual commissions still use `amount`.
+        if (accepted != 0) _recordScore(ownerId, total, accepted, lvl);
     }
 
     /// @dev Roll the purchase winner on the (day, buyer ID, route code) entropy: VAULT/SDGNRS
@@ -1056,14 +1061,14 @@ contract DegenerusAffiliate {
         if (roll < 15) return (ownerId, word);
         uint256 cache = _routeCache(code, word);
         (winner, cache) = _payoutUpline(code, ownerId, roll == 19, cache);
-        updatedWord = (word & EARNINGS_MASK) | (cache << 128);
+        updatedWord = (word & EARNINGS_PAYLOAD_MASK) | (cache << 189);
     }
 
     /// @dev Both caches belong to the same owner and contain only immutable IDs. A valid
     ///      field is identical in both copies; an invalid field is zero, so OR merges them.
     ///      Default codes have no code info, so they skip its read.
     function _routeCache(bytes32 code, uint256 word) private view returns (uint256 cache) {
-        cache = word >> 128;
+        cache = word >> 189;
         if (uint256(code) >= DEFAULT_WORD_END) {
             AffiliateCodeInfo storage info = _affiliateCode[code];
             cache |= uint256(info.upline1) | (uint256(info.upline2) << 32)

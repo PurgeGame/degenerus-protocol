@@ -42,6 +42,9 @@ contract BattleConstructionGameSeed is DegenerusGameStorage, WalletSeed {
         level = ceiling - 1;
         purchaseStartDay = day - 1;
         dailyIdx = day - 1;
+        // This fixture isolates battle construction after the Vault's daily
+        // checkpoint; a due backstop has its own integration and gas tests.
+        vaultFlipSettledDay = day;
         rngRequestDay = day;
         rngRequestTime = uint48(block.timestamp);
         rngWordCurrent = word;

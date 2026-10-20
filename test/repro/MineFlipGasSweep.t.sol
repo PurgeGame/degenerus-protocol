@@ -9,7 +9,7 @@ import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage
 import {VaultBafRig} from "./VaultBafSettlement.t.sol";
 
 /// @dev The vault's coinflip claim backlog, written through Coinflip's lane helpers, so the
-///      x0 seal's vault settlement walks a full 730-day window.
+///      x0 seal's vault settlement walks a full 90-day window.
 contract SweepVaultSeeder is CoinflipStakeSetter {
     function seedVaultHistory(uint24 latest, uint24 gap, bool rebuy) external {
         PlayerCoinflipState storage s = playerState[degenerusGame.walletIdOf(ContractAddresses.VAULT)];
@@ -88,7 +88,7 @@ abstract contract MineFlipGasSweepBase is VaultBafRig {
     function _holdFor(uint24 lvl) internal view override returns (uint256) {
         if (!_slow()) return super._holdFor(lvl);
         // Level 0 idles 240 days and levels 1-18 hold 27 purchase days each, so the level-20
-        // seal falls after day 730 and the vault can carry a full-window backlog.
+        // seal falls after day 90 and the vault can carry a full-window backlog.
         return lvl == 0 ? 240 : (lvl < 19 ? 27 : 0);
     }
 
@@ -136,7 +136,7 @@ abstract contract MineFlipGasSweepBase is VaultBafRig {
             bytes memory original = address(coinflip).code;
             vm.etch(address(coinflip), type(SweepVaultSeeder).runtimeCode);
             require(latchDay > 731, "harness: the slow game reaches a full-window backlog");
-            SweepVaultSeeder(address(coinflip)).seedVaultHistory(latchDay, 730, true);
+            SweepVaultSeeder(address(coinflip)).seedVaultHistory(latchDay, 90, true);
             vm.etch(address(coinflip), original);
         }
         assertEq(_action(), uint8(DegenerusGameStorage.MinerAction.DailyPhase));
@@ -289,7 +289,7 @@ contract MineFlipGasSweepTurbo is MineFlipGasSweepBase {
     function _slow() internal pure override returns (bool) { return false; }
 }
 
-/// @dev Slow game with the vault on auto-rebuy and a 730-day claim backlog on the DailyPhase
+/// @dev Slow game with the vault on auto-rebuy and a 90-day claim backlog on the DailyPhase
 ///      sweep: the seal's vault settlement is at its declared worst case.
 contract MineFlipGasSweepSlowRebuy is MineFlipGasSweepBase {
     function _slow() internal pure override returns (bool) { return true; }

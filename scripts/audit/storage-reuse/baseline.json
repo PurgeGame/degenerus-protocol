@@ -1,0 +1,43 @@
+{
+  "source_head": "fb2540c55f7013572f22e5c3846bf5f9266279fb",
+  "branch": "main",
+  "owner": "Codex /root, implementation session authorized 2026-10-19",
+  "source_sha256": {
+    "contracts/Coinflip.sol": "4f5dfe7c770fe301746719a46334d99919f4ac96df5c7ee8b5b773c719d7f4af",
+    "contracts/DegenerusJackpots.sol": "af3d6179f3eb0b21f67ec93337667f29aeb62109f253fcbb82ac73766298b0c7",
+    "contracts/DegenerusAffiliate.sol": "18403c7be3c0633eb3a8980b24a690ca0dad74bfb7b0cd97eb9b7978fc0702fb",
+    "contracts/modules/DegenerusGameAdvanceModule.sol": "1cd563851e03418d6300c67c787471e39ba26c27ce479368a9134a981836b50b",
+    "contracts/storage/DegenerusGameStorage.sol": "7d19cdc607bdd9a182bb4da5732f1200d8ec2ae29179b50640083afab581c543",
+    "contracts/libraries/MineFlipGasBounds.sol": "9c918c19cda175f88e0d14c34fda14df377f74585694971c4542bdc65132c7c0",
+    "foundry.toml": "eb07bf9181b5fcb97d9df72ecd92ea122cb5524ee5b58ed6f378f1eb5a46ecbc"
+  },
+  "model_sha256": {
+    "scripts/audit/model-coinflip-reuse.py": "c43785f148c40533ef79579b91aef0c63f4261d929869344f70971536764712f",
+    "scripts/audit/model-coinflip-reuse-lifetime.py": "76b1505f5bdd086102904b960fed89a108cae6cc4e73da28f3edac280a77a087",
+    "scripts/audit/model-affiliate-storage-reuse.py": "630192f966d5a7c661d56662777b81edf6e75307b0cc8331c1d349c39b63ce28",
+    "scripts/audit/model-coinflip-credit-bound.py": "9dad50083334b6ca08075eccffcbb4df4cc2d07909f2b5c24c1637048486cdb2"
+  },
+  "build": {
+    "solc": "0.8.34",
+    "via_ir": true,
+    "optimizer_runs": 1000,
+    "evm": "osaka"
+  },
+  "release_gates": {
+    "native_glamsterdam": "pending",
+    "commit_approval": "not granted",
+    "push": "not authorized"
+  },
+  "existing_artifacts": {
+    "forge-out-production/Coinflip.sol/Coinflip.json": {
+      "runtime_bytes": 21517,
+      "runtime_sha256": "1ca0d208c47db0234e6e998b537f7cddff9f9756c5581979d379b666c84503e2",
+      "note": "Existing artifact; source identity must be revalidated before treating as baseline"
+    },
+    "forge-out/Coinflip.sol/Coinflip.json": {
+      "runtime_bytes": 21517,
+      "runtime_sha256": "1c0859f4d8d2ddaf5cde35a29b08356da5c0be137bd1d3f9f5f6090d9b1c2996",
+      "note": "Existing artifact; source identity must be revalidated before treating as baseline"
+    }
+  }
+}

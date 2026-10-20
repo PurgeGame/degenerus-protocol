@@ -168,6 +168,12 @@ contract JackpotMergeAdvanceTest is DeployProtocol {
             }
         }
         assertTrue(applied, "the word applied");
+        // The day-400 fixture has never banked the Vault. Its new daily checkpoint
+        // must complete under the held lock before any battle step is attempted.
+        (stages,) = _minimalStep();
+        assertEq(stages.length, 1, "Vault checkpoint stands alone at the smallest allowance");
+        assertEq(stages[0], 22, "Vault checkpoint precedes the battle");
+        assertTrue(game.rngLocked(), "Vault settlement leaves the daily lock held");
         (,,started,) = api.jackpotProgress(); assertFalse(started);
     }
     function _drain(bool phase, bool delay) private {

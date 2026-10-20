@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {CoinflipStorage} from "../helpers/CoinflipStorage.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
@@ -95,9 +96,7 @@ contract GameWalletIdCredits is DeployProtocol {
 
     /// @dev Raw Coinflip stake lane of `id` for the deposit target day (Coinflip slot 0 root).
     function _lane(uint32 id) private view returns (uint256) {
-        uint24 day = GameTimeLib.currentDayIndex() + 1;
-        bytes32 slot = keccak256(abi.encode(uint256(id), keccak256(abi.encode(uint256(day >> 3), uint256(0)))));
-        return uint32(uint256(vm.load(address(coinflip), slot)) >> ((day & 7) << 5));
+        return CoinflipStorage.read(address(coinflip), id, GameTimeLib.currentDayIndex() + 1);
     }
 
     /// @dev Sum of `CoinflipStakeUpdated` amounts for `id`, and the count of credits to other IDs.

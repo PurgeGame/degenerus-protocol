@@ -223,3 +223,4 @@ INIT	_afkingEndpointDay	DegenerusGame.sol	constructor sets the deploy day as the
 OWNER	_afkingEndpointDay	modules/GameAfkingModule.sol	runSubscriberWork advances it to the process day when the pass completes; sole runtime writer
 OWNER	_afkingProtocolFlags	modules/GameAfkingModule.sol	AFKing lifecycle sets/clears the protocol-seat BOUGHT and pause bits (preparation, Vault owner pause/resume)
 HELPER	_subMeta	storage/DegenerusGameStorage.sol	Reverse-lookup lane helpers; AFKing owns insertion, moves and removal
+OWNER	vaultFlipSettledDay	modules/DegenerusGameAdvanceModule.sol	_settleVaultFlips stamps only after a successful zero-deposit settle; shared by the daily 45-day checkpoint and x0 seal, never the RNG or terminal path

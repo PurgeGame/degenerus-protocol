@@ -1,0 +1,131 @@
+{
+  "scope": "storage model only; native full-call gas and protocol integration remain required",
+  "window_days": 90,
+  "ring_pages": 15,
+  "model_sha256": "9dad50083334b6ca08075eccffcbb4df4cc2d07909f2b5c24c1637048486cdb2",
+  "lifetime_model_sha256": "76b1505f5bdd086102904b960fed89a108cae6cc4e73da28f3edac280a77a087",
+  "regressions": {
+    "zero_credit_cases": [
+      "R90_P15:empty_account",
+      "R90_P15:matching_page",
+      "R90_P15:saturated_lane",
+      "R90_P15:expired_occupant",
+      "D90_M4_F15:empty_account",
+      "D90_M4_F15:matching_page",
+      "D90_M4_F15:saturated_lane",
+      "D90_M4_F15:expired_occupant",
+      "R90_P15:live_collision_before_spill",
+      "R90_P15:existing_overflow",
+      "R90_P15:stale_matching_hint",
+      "D90_M4_F15:existing_third_tier"
+    ],
+    "zero_credit_cases_passed": 12,
+    "recovery_preserves_overflow_home": "pass",
+    "hint_wrap_preserves_old_page": "pass",
+    "ninety_day_boundary_alignments_passed": 7
+  },
+  "layouts": {
+    "R90_P15": {
+      "differential_operations": 98719,
+      "freeze_stress_operations": 80061,
+      "post_gameover": {
+        "claims every 14 days": {
+          "credit_revert_on_day": null,
+          "worst_single_credit_gas": 126520,
+          "creations": 387
+        },
+        "never claims": {
+          "credit_revert_on_day": null,
+          "worst_single_credit_gas": 126520,
+          "creations": 400
+        }
+      }
+    },
+    "D90_M4_F15": {
+      "differential_operations": 98719,
+      "freeze_stress_operations": 80061,
+      "post_gameover": {
+        "claims every 14 days": {
+          "credit_revert_on_day": null,
+          "worst_single_credit_gas": 128820,
+          "creations": 387
+        },
+        "never claims": {
+          "credit_revert_on_day": null,
+          "worst_single_credit_gas": 128820,
+          "creations": 400
+        }
+      }
+    }
+  },
+  "ninety_day_workloads": {
+    "claims every 1-14 days": {
+      "current": {
+        "protocol_credit_storage_gas_30y": 267642480,
+        "player_claim_storage_gas_30y": 39552816,
+        "credit_creations_30y": 1369
+      },
+      "R90_P15": {
+        "protocol_credit_storage_gas_30y": 135213800,
+        "player_claim_storage_gas_30y": 27921920,
+        "credit_creations_30y": 15
+      },
+      "D90_M4_F15": {
+        "protocol_credit_storage_gas_30y": 137259780,
+        "player_claim_storage_gas_30y": 27921920,
+        "credit_creations_30y": 4
+      }
+    },
+    "claims every 1-14 days, 1 in 10 gaps 21-60 days": {
+      "current": {
+        "protocol_credit_storage_gas_30y": 267642480,
+        "player_claim_storage_gas_30y": 28590792,
+        "credit_creations_30y": 1369
+      },
+      "R90_P15": {
+        "protocol_credit_storage_gas_30y": 135213800,
+        "player_claim_storage_gas_30y": 18838220,
+        "credit_creations_30y": 15
+      },
+      "D90_M4_F15": {
+        "protocol_credit_storage_gas_30y": 146927080,
+        "player_claim_storage_gas_30y": 19101320,
+        "credit_creations_30y": 19
+      }
+    },
+    "claims every 7 days": {
+      "current": {
+        "protocol_credit_storage_gas_30y": 267642480,
+        "player_claim_storage_gas_30y": 39951632,
+        "credit_creations_30y": 1369
+      },
+      "R90_P15": {
+        "protocol_credit_storage_gas_30y": 135213800,
+        "player_claim_storage_gas_30y": 29031920,
+        "credit_creations_30y": 15
+      },
+      "D90_M4_F15": {
+        "protocol_credit_storage_gas_30y": 137259780,
+        "player_claim_storage_gas_30y": 29031920,
+        "credit_creations_30y": 4
+      }
+    },
+    "never claims": {
+      "current": {
+        "protocol_credit_storage_gas_30y": 267642480,
+        "player_claim_storage_gas_30y": 0,
+        "credit_creations_30y": 1369
+      },
+      "R90_P15": {
+        "protocol_credit_storage_gas_30y": 135213800,
+        "player_claim_storage_gas_30y": 0,
+        "credit_creations_30y": 15
+      },
+      "D90_M4_F15": {
+        "protocol_credit_storage_gas_30y": 168084580,
+        "player_claim_storage_gas_30y": 0,
+        "credit_creations_30y": 19
+      }
+    }
+  }
+}

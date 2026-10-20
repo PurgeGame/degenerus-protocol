@@ -17,7 +17,9 @@ contract CoinflipSeedWindowGas is DeployProtocol {
     address internal constant VAULT = ContractAddresses.VAULT;
 
     uint256 internal constant VAULT_WALK_GAS_CEIL = 180_000;
-    uint256 internal constant SEEDED_DAY_RESOLVE_GAS_CEIL = 43_000;
+    // Retained tagged pages add a lookup check even when only the virtual seed pays.
+    // R90 measured 43,671 on this Osaka fixture; native pricing is checked separately.
+    uint256 internal constant SEEDED_DAY_RESOLVE_GAS_CEIL = 44_500;
 
     function setUp() public {
         _deployProtocol();

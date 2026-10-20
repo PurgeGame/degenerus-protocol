@@ -50,6 +50,9 @@ contract JackpotBattleStageSeeder is DegenerusGame, BucketSeed {
         level = s.lvl;
         purchaseStartDay = day - 10;
         dailyIdx = day - 1;
+        // The pending ticket leg follows earlier daily checkpoints, including
+        // any due Vault settlement. Keep this fixture on the ticket/phase-end leg.
+        vaultFlipSettledDay = day;
         jackpotPhaseFlag = true;
         lastPurchaseDay = false;
         jackpotFlags = 0;

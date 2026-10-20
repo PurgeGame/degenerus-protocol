@@ -58,6 +58,11 @@ def verification_files(build_inputs):
         "scripts/deep-invariant-matrix.py", "scripts/test-deep-invariant-matrix.py",
         "scripts/check-owner-actions.js", "scripts/check-owner-governance-layout.js",
         "scripts/owner-governance.js", "scripts/lib/ownerProposal.js", "scripts/lib/ownerDirect.js",
+        "scripts/audit/fixtures/CoinflipReuseReference.sol", "scripts/audit/fixtures/CoinflipRingPrototype.sol",
+        "scripts/audit/model-coinflip-reuse.py", "scripts/audit/model-coinflip-reuse-lifetime.py",
+        "scripts/audit/model-coinflip-credit-bound.py", "scripts/audit/model-affiliate-storage-reuse.py",
+        "scripts/audit/benchmark-storage-reuse.py",
+        "scripts/audit/mutate-storage-reuse.py",
     ) if (ROOT / p).is_file())
     paths.update(p.relative_to(ROOT).as_posix() for p in (ROOT / "test").rglob("*")
                  if p.is_file() and p.suffix in {".sol", ".js", ".py"})

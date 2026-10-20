@@ -117,6 +117,18 @@ and comp allowance are separate ledgers. A credit is not necessarily a liquid to
 immediately withdrawable ETH. stETH yield/asset behavior is an external dependency; the
 buffer is not a guarantee against arbitrary losses.
 
+Coinflip settles only the last **90 resolved days**. Older unclaimed stakes and stale
+auto-rebuy carry forfeit; already banked claimable winnings do not expire. The Game
+banks the Vault's pending winnings every 45 resolved days as well as at the x0 purchase
+seal. Skipped-bracket BAF consolation expires when that player's two alternating score
+records are reused.
+
+Affiliate leaderboard and proportional DGNRS scores cap at **34,359,738,367 whole
+FLIP per wallet ID per level**. The allocation denominator counts only accepted score.
+Commissions, kickbacks, quest rewards and AFKing payouts keep their uncapped inputs.
+Current scores remain exact; exact retired history is available from events, while
+clipped history preserves the existing activity-bonus calculation.
+
 Game EV depends on the product, activity, timing, prices and other participants. Do not
 extend a claim about ticket-ETH routing into a claim of zero house edge for every side-game.
 Craps uses distinct bankroll and bounty components: bounty does not earn the comp subsidy.
