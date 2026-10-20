@@ -243,9 +243,15 @@ contract RedemptionForwardBatchesTest is RedemptionFixture {
     }
 
     function test_StethHeavyBackingClosesAndSettlesEndToEnd() public {
-        // Nearly all of sDGNRS custody as stETH.
+        // sDGNRS's backing sits as Game claimable while the Game holds nearly all of its funds as
+        // stETH: the close sends what ETH it can and the protected reserve funds the rest.
+        vm.deal(address(sdgnrs), 9_999 ether);
+        vm.prank(address(sdgnrs));
+        game.creditRedemptionDirect{value: 9_999 ether}(2, 9_999 ether);
         vm.deal(address(sdgnrs), 1 ether);
-        _giveSteth(9_999 ether);
+        uint256 gameEth = address(game).balance;
+        vm.deal(address(game), 1 ether);
+        mockStETH.mint(address(game), gameEth - 1 ether);
         uint256 amount = sdgnrs.totalSupply() / 1000;
         (uint32 id,) = _state();
         _burn(alice, amount);
@@ -256,7 +262,7 @@ contract RedemptionForwardBatchesTest is RedemptionFixture {
         assertGt(ethBase, 0);
         assertGt(roll, 0, "resolved");
         (bool found, uint256 direct,) = _claimedLegs(vm.getRecordedLogs(), alice, id);
-        assertTrue(found, "settled from stETH-heavy custody");
+        assertTrue(found, "settled from stETH-heavy Game backing");
         assertEq(direct, (ethBase * roll / 100) / 2);
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
     }

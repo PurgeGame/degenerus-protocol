@@ -91,20 +91,24 @@ contract RedemptionStethFallbackTest is RedemptionFixture {
     /// @dev Thin Game backing and a large token donation: every live claim is still paid at the
     ///      top roll, because pricing counts only what the legs can spend.
     function test_LargeTokenDonationCannotDropALiveClaim() public {
-        _fundGameBacking(0, 10 ether);
+        // Under stETH-inclusive pricing this 1% burn would carry a 1.776 ETH maximum against
+        // 1.5 ETH of payable backing, so a top roll could not be paid.
+        _fundGameBacking(0, 1.5 ether);
         mockStETH.mint(address(sdgnrs), 100 ether);
         uint32 id = _openBatchId();
-        _burn(alice, sdgnrs.totalSupply() / 10);
+        _burn(alice, sdgnrs.totalSupply() / 100);
         _fundedClose();
-        assertEq(_claimBase(alice, id), 1 ether, "priced from Game backing only");
-        assertEq(game.redemptionReserve(), 1.75 ether, "the whole maximum is isolated");
+        uint256 base = _claimBase(alice, id);
+        assertApproxEqAbs(base, 0.015 ether, 1e9, "priced from Game backing only");
+        uint256 max = base * 175 / 100;
+        assertEq(game.redemptionReserve(), max, "the whole maximum is isolated");
         uint256 future = game.futurePrizePoolView();
         settlementWord = _wordForRoll(175);
         vm.mockCall(address(game), abi.encodeWithSignature("rngConsumerStage()"), abi.encode(uint8(1)));
         assertTrue(_work(9_000_000));
         assertEq(_claimTokens(alice, id), 0, "claim settled");
-        assertApproxEqAbs(game.claimableWinningsOf(alice), 1.75 ether / 2, 1, "direct half paid");
-        assertEq(game.futurePrizePoolView() - future, 1.75 ether / 2, "lootbox half paid");
+        assertApproxEqAbs(game.claimableWinningsOf(alice), max / 2, 1, "direct half paid");
+        assertApproxEqAbs(game.futurePrizePoolView() - future, max - max / 2, 1, "lootbox half paid");
         assertEq(game.redemptionReserve(), 0);
         assertEq(mockStETH.balanceOf(address(sdgnrs)), 100 ether, "token donation remains backing");
         _solvent();
