@@ -69,6 +69,7 @@ def groups():
         "integration-gas": {p for p in files if p.parts[1] in {
             "craps", "differential", "economics", "gas", "mutation", "invariant", "governance"}},
         "repro-symbolic": {p for p in files if p.parts[1] in {"repro", "halmos"}},
+        "census": {p for p in files if p.parts[1] == "census" and p.name.endswith(".t.sol")},
     }
     chunk = max(1, (len(fuzz) + 3) // 4)
     for i in range(4):
