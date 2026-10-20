@@ -97,7 +97,7 @@ describe("WhaleBoonDeityLapse", function () {
     const [slot0] = await game.boonPacked(await game.walletIdOf(player));
     const whaleDay = (slot0 >> BP_WHALE_DAY_SHIFT) & 0xffffffn;
     const deityWhaleDay = (slot0 >> BP_DEITY_WHALE_DAY_SHIFT) & 0xffffffn;
-    const tier = (slot0 >> BP_WHALE_TIER_SHIFT) & 0xffn;
+    const tier = (slot0 >> BP_WHALE_TIER_SHIFT) & 3n;
     return { whaleDay, deityWhaleDay, tier };
   }
 

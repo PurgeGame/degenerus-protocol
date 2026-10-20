@@ -1302,7 +1302,7 @@ contract WalletIdTruthHandler is Test {
         } else {
             uint32 open = _openBatch();
             uint32 batch = open > (p2 % 3) ? open - uint32(p2 % 3) : 0;
-            string memory sig = action == 63 ? "claimRedemption(uint32,uint32)" : "claimParkedRedemption(uint32,uint32)";
+            string memory sig = "claimRedemption(uint32,uint32)";
             _acctCall(action, caller, id, SDGNRS, 0, abi.encodeWithSignature(sig, id, batch), SD_AUTH | F_NP | F_CR);
         }
     }
@@ -1834,7 +1834,7 @@ contract WalletIdTruthHandler is Test {
         _names[61] = "ac_wxEnter";
         _names[62] = "ac_bafConsolation";
         _names[63] = "ac_sdClaim";
-        _names[64] = "ac_sdClaimParked";
+        _names[64] = "ac_sdClaimRepeat";
         _names[65] = "ac_crSetBoard";
         _names[66] = "ac_crBonusBattle";
         _names[67] = "ac_crBonusDay";

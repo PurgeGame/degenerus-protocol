@@ -26,6 +26,7 @@ import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol
  * Provided AS IS, without warranty of any kind. Full text: TERMS.md
  */
 
+import {BoundedCall} from "../libraries/BoundedCall.sol";
 import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 
 import {IDegenerusGame, MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
@@ -457,31 +458,24 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             rngWordCurrent = RNG_WORD_WAITING;
             work.progressed = true;
             MineFlipGas.markProgress(meter);
+            return false;
         }
-        // Forward actual gas; obsolete fixed stipends cannot trap a funded request.
-        try vrfCoordinator.requestRandomWords(VRFRandomWordsRequest({
-            keyHash: vrfKeyHash, subId: vrfSubscriptionId,
-            requestConfirmations: VRF_REQUEST_CONFIRMATIONS,
-            callbackGasLimit: VRF_CALLBACK_GAS_LIMIT, numWords: 1, extraArgs: hex""
-        })) returns (uint256 id) {
-            _swapRngBuffers();
-            vrfRequestId = id;
-            _setRngRequestActive(true);
-            rngWordCurrent = RNG_WORD_WAITING;
-            // A refusal retry retains the first admitted attempt's identity and
-            // timeout. Coordinator acceptance does not restart that deadline.
-            rngLockedFlag = true;
-            _setDecDayOneActive(false);
-            if (jackpotPhaseFlag && _isFinalJackpotDay(jackpotCounter, jackpotFlags)) _setTicketRedemptionOpen(false);
-            requested = true;
-            work.progressed = true;
-            MineFlipGas.markProgress(meter);
-        } catch (bytes memory reason) {
-            MineFlipGas.rethrowGasFailure(reason);
-            // Native mining bubbles a repeated refusal when nothing else advanced.
-            // Compatibility request helpers retain their best-effort boolean result.
-            work.refusal = reason;
+        (bool ok, uint256 id) = _boundedVrfRequest(VRF_REQUEST_CONFIRMATIONS);
+        if (!ok) {
+            work.refusal = abi.encodeWithSelector(ExternalRequestRefused.selector);
+            return false;
         }
+        _swapRngBuffers();
+        vrfRequestId = id;
+        _setRngRequestActive(true);
+        rngWordCurrent = RNG_WORD_WAITING;
+        // Acceptance retains the separately committed timeout origin.
+        rngLockedFlag = true;
+        _setDecDayOneActive(false);
+        if (jackpotPhaseFlag && _isFinalJackpotDay(jackpotCounter, jackpotFlags)) _setTicketRedemptionOpen(false);
+        requested = true;
+        work.progressed = true;
+        MineFlipGas.markProgress(meter);
     }
 
     /// @dev Latch the deterministic ending. Revokes callback authority and discards late
@@ -595,13 +589,12 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         bool dead = _lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK) != 0;
         uint24 lvl = level;
 
-        uint256 totalFunds = address(this).balance + steth.balanceOf(address(this));
+        uint256 totalFunds = address(this).balance + _boundedStethBalance();
 
         // Compute available funds FIRST (before any side effects)
         // Deity pass refunds have not happened yet, so claimablePool is pre-refund.
-        // sDGNRS redemption reserves are moved into sDGNRS custody when a batch closes, so
-        // they are never part of totalFunds here — subtracting pendingRedemptionEthValue would
-        // double-count them.
+        // The Game-held redemption reserve is already in claimablePool; value sent to
+        // sDGNRS custody has left both the Game's balance and this liability.
         uint256 reserved = uint256(claimablePool);
         uint256 preRefundAvailable = totalFunds > reserved ? totalFunds - reserved : 0;
 
@@ -708,8 +701,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         );
 
         // Recalculate available after refunds (claimablePool may have grown).
-        // sDGNRS redemption reserves sit in sDGNRS custody from their batch close, so they are
-        // not part of totalFunds here — only claimablePool is reserved.
+        // claimablePool includes the Game-held redemption reserve exactly once.
         uint256 postRefundReserved = uint256(claimablePool);
         uint256 available = totalFunds > postRefundReserved ? totalFunds - postRefundReserved : 0;
 
@@ -785,13 +777,11 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         _goWrite(GO_SWEPT_SHIFT, GO_SWEPT_MASK, 1);
         charityGameOver.onFinalSweep(); // stamp GNRUS with the sweep time (anchors its recovery gates)
 
+        _releaseRedemptionReserve();
         uint256 owedV  = _takeSinkBalance(VAULT_WALLET_ID);
         uint256 owedSD = _takeSinkBalance(SDGNRS_WALLET_ID);
         uint256 owedG  = _takeSinkBalance(GNRUS_WALLET_ID);
         claimablePool = 0;
-
-        // Shutdown VRF subscription (fire-and-forget; failure must not block sweep)
-        try admin.shutdownVrf() {} catch (bytes memory reason) { MineFlipGas.rethrowGasFailure(reason); }
 
         uint256 ethBal = address(this).balance;
         uint256 stBal = steth.balanceOf(address(this));
@@ -799,7 +789,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
 
         emit FinalSwept(totalFunds);
 
-        if (totalFunds == 0) return;
+        if (totalFunds == 0) { _shutdownVrf(); return; }
 
         // Protocol balances are fully backed apart from the three unbacked 1-wei sentinels, so
         // totalFunds >= owedV + owedSD + owedG - 3. A game holding exactly its obligations, or an
@@ -820,6 +810,12 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         stBal = _sendStethFirst(ContractAddresses.VAULT,  owedV  + thirdShare, stBal);
         stBal = _sendStethFirst(ContractAddresses.SDGNRS, owedSD + thirdShare, stBal);
         _sendStethFirst(ContractAddresses.GNRUS,          owedG  + gnrusExtra, stBal);
+        _shutdownVrf();
+    }
+
+    function _shutdownVrf() private {
+        BoundedCall.call(ContractAddresses.ADMIN, 0, 800_000,
+            abi.encodeWithSelector(IDegenerusAdminShutdown.shutdownVrf.selector), 0);
     }
 
     /// @dev Zero a sink's packed balance — claimable (low half) and prepaid afking (high half),

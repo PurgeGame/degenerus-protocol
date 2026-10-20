@@ -51,12 +51,6 @@ interface ICrapsPassCredit {
  */
 contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
 
-    /// @notice Forward the protocol-deity initializer to the boon module.
-    function initProtocolDeity() external {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_BOON_MODULE.delegatecall(msg.data);
-        if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
-    }
-
     // -------------------------------------------------------------------------
     // Errors
     // -------------------------------------------------------------------------

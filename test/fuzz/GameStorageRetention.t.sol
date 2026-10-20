@@ -135,13 +135,27 @@ contract DegenesisExcessRetentionTest is DeployProtocol {
         assertEq(afterAfking, uint256(afking) - excess);
         assertEq(pool, uint256(claimable) + afking, "reclassification leaves pool total unchanged");
         uint256 events;
+        uint256 spentEvents;
+        uint256 creditEvents;
         for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter == address(game) && logs[i].topics[0] == keccak256("AfkingSpent(uint32,uint256)")) {
+                ++spentEvents;
+                assertEq(uint256(logs[i].topics[1]), 2);
+                assertEq(abi.decode(logs[i].data, (uint256)), excess);
+            }
+            if (logs[i].emitter == address(game) && logs[i].topics[0] == keccak256("PlayerCredited(uint32,uint256)")) {
+                ++creditEvents;
+                assertEq(uint256(logs[i].topics[1]), 2);
+                assertEq(abi.decode(logs[i].data, (uint256)), excess);
+            }
             if (logs[i].emitter == address(game) && logs[i].topics[0] == EXCESS_EVENT) {
                 ++events;
                 assertEq(abi.decode(logs[i].data, (uint256)), excess);
             }
         }
         assertEq(events, excess == 0 ? 0 : 1);
+        assertEq(spentEvents, events);
+        assertEq(creditEvents, events);
         h.closeSeventh();
         (uint128 twiceClaimable, uint128 twiceAfking, uint128 twicePool) = h.balances();
         assertEq(twiceClaimable, afterClaimable);

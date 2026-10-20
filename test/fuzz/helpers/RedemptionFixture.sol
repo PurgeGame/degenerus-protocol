@@ -168,7 +168,7 @@ abstract contract RedemptionFixture is DeployProtocol {
     function _money() internal view returns (uint256) {
         uint256 claimable = game.claimableWinningsOf(address(sdgnrs));
         uint256 gross = address(sdgnrs).balance + mockStETH.balanceOf(address(sdgnrs))
-            + (claimable > 1 ? claimable - 1 : 0);
+            + (claimable > 1 ? claimable - 1 : 0) + game.redemptionReserve();
         uint256 reserved = sdgnrs.pendingRedemptionEthValue();
         return gross > reserved ? gross - reserved : 0;
     }

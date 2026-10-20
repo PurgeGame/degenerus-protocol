@@ -177,7 +177,9 @@ contract AdversarialAfkingSteth is MockStETH {
         Oversized,
         Zero,
         Lie,
-        Underdeliver
+        Underdeliver,
+        SpoofMeter,
+        EmptyRevert
     }
 
     Operation public faultOperation;
@@ -236,6 +238,8 @@ contract AdversarialAfkingSteth is MockStETH {
     function _fault(Operation op) private view {
         if (op != faultOperation) return;
         if (fault == Fault.RevertCall) revert("stETH unavailable");
+        if (fault == Fault.SpoofMeter) revert MineFlipGas.InsufficientExecutionGas();
+        if (fault == Fault.EmptyRevert) assembly ("memory-safe") { revert(0, 0) }
         if (fault == Fault.Malformed) {
             assembly ("memory-safe") {
                 mstore(0, 1)

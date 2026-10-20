@@ -2,7 +2,6 @@
 pragma solidity 0.8.34;
 
 import {IDegenerusGameAdvanceModule} from "../interfaces/IDegenerusGameModules.sol";
-import {VRFRandomWordsRequest} from "../interfaces/IVRFCoordinator.sol";
 import {DegenerusGameRngUtils} from "./DegenerusGameRngUtils.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 
@@ -18,7 +17,6 @@ contract DegenerusGameRngModule is DegenerusGameRngUtils {
 
     event Advance(uint8 stage, uint24 lvl);
     uint8 private constant STAGE_RNG_REQUESTED = 1;
-    uint32 private constant VRF_CALLBACK_GAS_LIMIT = 300_000;
     uint16 private constant VRF_REQUEST_CONFIRMATIONS = 6;
     uint16 private constant VRF_MIDDAY_CONFIRMATIONS = 4;
     uint48 private constant RNG_RETRY_TIMEOUT = 20 hours;
@@ -104,7 +102,8 @@ contract DegenerusGameRngModule is DegenerusGameRngUtils {
         bool crapsWork = (lootboxRngPacked >> (LR_CRAPS_PENDING_SHIFT + _rngWriteBuffer())) & 1 != 0;
 
         // LINK balance check
-        (uint96 linkBal,,,,) = vrfCoordinator.getSubscription(vrfSubscriptionId);
+        (bool readable, uint256 linkBal) = _vrfLinkBalance();
+        if (!readable) revert ExternalRequestRefused();
         if (linkBal < (crapsWork ? MIN_LINK_FOR_CRAPS_RNG : MIN_LINK_FOR_LOOTBOX_RNG)) {
             revert InsufficientLink();
         }
@@ -244,16 +243,11 @@ contract DegenerusGameRngModule is DegenerusGameRngUtils {
     }
 
     function _requestVrfWord(uint16 confirmations) private returns (uint256 id) {
-        id = vrfCoordinator.requestRandomWords(
-            VRFRandomWordsRequest({
-                keyHash: vrfKeyHash,
-                subId: vrfSubscriptionId,
-                requestConfirmations: confirmations,
-                callbackGasLimit: VRF_CALLBACK_GAS_LIMIT,
-                numWords: 1,
-                extraArgs: hex""
-            })
-        );
+        bool ok;
+        (ok, id) = _boundedVrfRequest(confirmations);
+        // Roll back the request's own swaps, credit charge and redemption close.
+        // The miner catches this trusted worker refusal without discarding its prefix.
+        if (!ok) revert ExternalRequestRefused();
     }
 
     /// @dev Daily and mid-day fresh requests only, never a retry: the sealed cohort and the

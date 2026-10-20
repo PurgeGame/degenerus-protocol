@@ -3,6 +3,8 @@ pragma solidity 0.8.34;
 
 import {AutomaticRedemptionSettlementTest} from "../fuzz/AutomaticRedemptionSettlement.t.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
+import {Vm} from "forge-std/Vm.sol";
+import {RedemptionReserveHarness} from "../repro/RedemptionReserve.t.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 
@@ -22,18 +24,17 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
 
     /// @dev Redemption amounts can span the full available backing.
     /// The full custom order stays bounded by twenty boxes even at aggregate ETH scale.
-    function testFuzz_ColdLargeLootboxFitsOrderBound(uint256 seed, uint128 size, bool stethOnly) public {
+    function testFuzz_ColdLargeLootboxFitsOrderBound(uint256 seed, uint128 size, bool reserveOnly) public {
         uint256 amount = bound(size, 20 ether, 120_000_000 ether);
-        if (stethOnly) {
-            vm.deal(address(sdgnrs), 0);
-            mockStETH.mint(address(sdgnrs), amount);
+        if (reserveOnly) {
+            _reserveFunding(amount, 0);
         } else vm.deal(address(sdgnrs), amount);
         uint256 word = uint256(keccak256(abi.encode(seed))) | 2;
         uint32 aliceId = game.walletIdOf(alice);
         _coolSettlementState();
         uint256 before = gasleft();
         vm.prank(address(sdgnrs));
-        game.resolveRedemptionLootbox{value: stethOnly ? 0 : amount}(aliceId, amount, word, 3000, 1);
+        game.resolveRedemptionLootbox{value: reserveOnly ? 0 : amount}(aliceId, amount, word, 30_000, 1);
         uint256 used = before - gasleft() + 21_000;
         assertLe(used, GasBounds.HUMAN_ENTRY_GAS + 20 * GasBounds.HUMAN_BOX_GAS);
     }
@@ -42,25 +43,66 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
         // The retired 160 ETH cap no longer limits a beneficiary.
         vm.deal(address(sdgnrs), bound(backingSeed, 10_000 ether, 120_000_000 ether));
         uint32 day = _openBatchId();
-        _burn(alice, sdgnrs.totalSupply() * 16 / 1000);
+        _burnAtMaximumActivity(sdgnrs.totalSupply() * 16 / 1000);
         uint16 roll = uint16(21 + uint256(rollSeed) % 155);
         _resolve(day, roll, word > 1 ? word : 99);
         if (fundingMode % 3 != 0) {
             uint256 reserve = sdgnrs.pendingRedemptionEthValue();
             uint256 ethPart = fundingMode % 3 == 1 ? 0 : reserve / 7;
-            vm.deal(address(sdgnrs), ethPart);
-            mockStETH.mint(address(sdgnrs), reserve - ethPart);
+            _reserveFunding(reserve, ethPart);
         }
         uint256 rolled = _claimBase(alice, day) * roll / 100;
         uint256 chunks = _boxes(rolled - rolled / 2);
+        uint256 beneficiaryBefore = game.claimableWinningsOf(alice);
         _coolSettlementState();
+        vm.recordLogs();
         vm.prank(address(game));
         uint256 beforeGas = gasleft();
         bool done = sdgnrs.runRedemptionWork(settlementWord, 9_000_000).done;
         uint256 used = beforeGas - gasleft() + 21_000;
         assertTrue(done);
+        _assertPaid(day, rolled, beneficiaryBefore, false);
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
         assertLe(used, _declared(chunks), "whole beneficiary fits admission bound");
+    }
+
+    function _burnAtMaximumActivity(uint256 amount) private {
+        vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScore.selector, alice),
+            abi.encode(uint256(30_000), game.walletIdOf(alice)));
+        _burn(alice, amount);
+        vm.clearMockedCalls();
+    }
+
+    /// @dev Switch the funding split without changing the priced batch. The seeded Game
+    /// reserve is fully backed and removed from ordinary claimable through the real helper.
+    function _reserveFunding(uint256 amount, uint256 ethPart) private {
+        uint256 reserve = amount - ethPart;
+        vm.deal(address(sdgnrs), reserve);
+        vm.prank(address(sdgnrs));
+        game.creditRedemptionDirect{value: reserve}(2, reserve);
+        bytes memory code = address(game).code;
+        vm.etch(address(game), type(RedemptionReserveHarness).runtimeCode);
+        RedemptionReserveHarness(address(game)).reserveFromOrdinary(reserve);
+        vm.etch(address(game), code);
+        vm.deal(address(sdgnrs), ethPart);
+    }
+
+    function _assertPaid(uint32 batch, uint256 rolled, uint256 beforeCredit, bool withEscrow) private {
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        (bool found, uint256 direct,) = _claimedLegs(logs, alice, batch);
+        assertTrue(found, "claim must emit its committed payout");
+        assertEq(direct, rolled / 2);
+        assertGe(game.claimableWinningsOf(alice), beforeCredit + direct, "beneficiary receives fixed-budget credit");
+        if (withEscrow) {
+            bool flipPaid;
+            for (uint256 i; i < logs.length; ++i) {
+                if (logs[i].emitter == address(sdgnrs) && logs[i].topics[0] == CLAIMED_TOPIC) {
+                    (,,,uint256 flip) = abi.decode(logs[i].data, (uint16,uint256,uint256,uint256));
+                    flipPaid = flip != 0;
+                }
+            }
+            assertTrue(flipPaid, "winning escrow executes creditFlip");
+        }
     }
 
     function _boxes(uint256 lootbox) private pure returns (uint256 count) {
@@ -80,7 +122,12 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
         if (withEscrow) {
             _seedFlipBacking(1_000_000);
         }
-        _burn(alice, base * supply / 10_000 ether);
+        _burnAtMaximumActivity(base * supply / 10_000 ether);
+        if (withEscrow) {
+            while (_synthReward(((word % (type(uint256).max / 155 / 256)) * 155 + roll - 21) * 256 + 2, day) == 0) {
+                ++word;
+            }
+        }
         _resolve(day, roll, word);
         if (withEscrow) {
             (,,,uint96 escrow,,) = sdgnrs.redemptionBatches(day);
@@ -91,14 +138,16 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
         if (fundingMode != 0) {
             uint256 reserve = sdgnrs.pendingRedemptionEthValue();
             uint256 ethPart = fundingMode == 1 ? 0 : reserve / 7;
-            vm.deal(address(sdgnrs), ethPart);
-            mockStETH.mint(address(sdgnrs), reserve - ethPart);
+            _reserveFunding(reserve, ethPart);
         }
+        uint256 beneficiaryBefore = game.claimableWinningsOf(alice);
         _coolSettlementState();
+        vm.recordLogs();
         vm.prank(address(game));
         uint256 beforeGas = gasleft();
         assertTrue(sdgnrs.runRedemptionWork(settlementWord, 9_000_000).done);
         used = beforeGas - gasleft() + 21_000;
+        _assertPaid(day, rolled, beneficiaryBefore, withEscrow);
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
     }
 
@@ -126,7 +175,10 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
                 }
             }
             emit log_named_uint(string.concat("REDEEM cold max, boxes=", vm.toString(expect[s])), worst);
-            emit log_named_uint(string.concat("REDEEM declared, boxes=", vm.toString(expect[s])), _declared(expect[s]));
+            uint256 fixedBudget = _declared(expect[s]) - GasBounds.REDEMPTION_TAIL_GAS;
+            assertLt(worst, fixedBudget, "whole-worker cost is below even the self-call budget");
+            emit log_named_uint(string.concat("REDEEM fixed budget, boxes=", vm.toString(expect[s])), fixedBudget);
+            emit log_named_uint(string.concat("REDEEM conservative headroom, boxes=", vm.toString(expect[s])), fixedBudget - worst);
         }
         // The admitted self-call keeps its whole bound after EIP-150 retention.
         uint256 head = GasBounds.REDEMPTION_BASE_GAS + GasBounds.HUMAN_ENTRY_GAS + 20 * GasBounds.HUMAN_BOX_GAS;
@@ -184,8 +236,8 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
         uint32 day = _openBatchId();
         address[] memory players = _queueBurners(3, sdgnrs.totalSupply() * 16 / 1000);
         _resolve(day, 175, 99);
-        // A 4M call completes its mandatory first beneficiary, then defers the remaining orders.
-        emit log_named_uint("cold_two_maximum_router_gas", _coldRouterGasWith(4_000_000));
+        // A 7M call admits its mandatory first beneficiary, then defers the remaining orders.
+        emit log_named_uint("cold_two_maximum_router_gas", _coldRouterGasWith(7_000_000));
         (uint128 base,) = sdgnrs.pendingRedemptions(game.walletIdOf(players[2]), day);
         assertGt(base, 0, "next beneficiary remains whole");
         assertTrue(sdgnrs.redemptionSettlementPending());

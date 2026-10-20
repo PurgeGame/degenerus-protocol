@@ -635,6 +635,7 @@ contract DegenesisSettleCreditOneGas is DegenesisSettleGas {
     ///      the flush frame, the close, the burn and the return, plus the order's own work,
     ///      which stands for the refused next order's decode a partial chunk spends.
     function test_TailCoversFlushFrameCloseAndBurn() public {
+        host.hostSdgnrsBalances(3 ether + 1, 15 ether);
         Measured memory one = _run(type(uint128).max);
         Measured memory refused = _run(0);
         uint256 tailOsaka = one.osaka - refused.osaka - FRESH_SLOT_OSAKA;

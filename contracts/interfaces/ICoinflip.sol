@@ -293,6 +293,9 @@ interface ICoinflip {
     /// @custom:reverts OnlysDGNRS If caller is not the sDGNRS contract.
     function withdrawRedeemedFlip(uint256 base) external returns (uint256 removed);
 
+    /// @notice Restore a refused redemption principal to settled sDGNRS backing.
+    function returnRedeemedFlip(uint256 amount) external;
+
     /*+======================================================================+
       |                          VIEW FUNCTIONS                              |
       +======================================================================+*/

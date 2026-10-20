@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {SelectorFaultProxy} from "./GameExternalIsolation.t.sol";
+import {IStETH} from "../../contracts/interfaces/IStETH.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {AfkingStethHost, AdversarialAfkingSteth} from "./helpers/AfkingStethFixture.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
@@ -210,7 +212,7 @@ contract AfkingStethFundingTest is DeployProtocol {
         afkingModule.pullAfkingSteth(uint32(1), PLAYER, 1);
     }
 
-    function testFuzz_TokenRefusalExpiresButGasFailureRollsBack(uint8 operationSeed, uint8 faultSeed) public {
+    function testFuzz_TokenFailureRollsBackPullAndExpiresUnfundedMember(uint8 operationSeed, uint8 faultSeed) public {
         _adversarial();
         _add(PLAYER, true, 1, 0, 1);
         _add(NEXT, true, 1, host.price(), 0);
@@ -222,32 +224,66 @@ contract AfkingStethFundingTest is DeployProtocol {
         uint256 beforeSource = badToken.sharesOf(PLAYER);
         uint256 beforeGame = badToken.sharesOf(address(game));
         uint256 poolBefore = game.claimablePoolView();
-        bool executionFailure = fault_ == AdversarialAfkingSteth.Fault.Malformed
-            || fault_ == AdversarialAfkingSteth.Fault.BurnGas;
-        if (executionFailure) {
-            vm.expectRevert();
-            host.subWork{gas: WORK_GAS}(WORK_GAS);
-            assertGt(host.stateOf(PLAYER).position1, 0, "execution failure preserves membership");
-            assertEq(game.claimablePoolView(), poolBefore);
-            assertEq(host.entries(NEXT), 0, "following subscriber is untouched");
-        } else {
-            _work();
-            _assertEvicted(PLAYER);
-            assertGt(host.entries(NEXT), 0, "token refusal cannot block the next funded subscriber");
-            assertEq(game.claimablePoolView(), poolBefore - host.price());
-        }
+        _work();
+        _assertEvicted(PLAYER);
+        assertGt(host.entries(NEXT), 0, "token failure cannot block the next funded subscriber");
+        assertEq(game.claimablePoolView(), poolBefore - host.price());
         assertEq(badToken.sharesOf(PLAYER), beforeSource, "failed pull rolls source shares back");
         assertEq(badToken.sharesOf(address(game)), beforeGame, "failed pull rolls receipt back");
         assertEq(badToken.allowance(PLAYER, address(game)), 1 ether, "failed pull rolls allowance back");
         assertEq(badToken.transferCalls(), 0, "failed post-transfer read rolls token state back");
         assertEq(game.afkingFundingOf(PLAYER), 0);
         assertEq(host.claimableOf(PLAYER), 1);
-        if (executionFailure) {
-            badToken.configureFault(op, AdversarialAfkingSteth.Fault.None);
+
+    }
+
+    function test_EveryFundingSelectorRefusesAllExternalFailuresWithoutBlockingNextMember() public {
+        bytes4[6] memory selectors = [IStETH.balanceOf.selector, IStETH.getSharesByPooledEth.selector,
+            IStETH.getPooledEthByShares.selector, IStETH.sharesOf.selector, IStETH.allowance.selector,
+            IStETH.transferSharesFrom.selector];
+        address implementation = address(0xF004);
+        vm.etch(implementation, address(mockStETH).code);
+        for (uint256 i; i < selectors.length; ++i) for (uint8 mode = 1; mode <= 5; ++mode) {
+            uint256 snap = vm.snapshotState();
+            _add(PLAYER, true, 1, 0, 1);
+            _add(NEXT, true, 1, host.price(), 0);
+            mockStETH.mint(PLAYER, 1 ether); _authorize(PLAYER, 1 ether);
+            vm.etch(address(mockStETH), address(new SelectorFaultProxy(implementation, selectors[i], mode)).code);
             _work();
-            assertGt(host.entries(PLAYER), 0, "retry pays the original subscriber");
             assertGt(host.entries(NEXT), 0);
+            if (mode == 4) assertGt(host.entries(PLAYER), 0, "valid oversized prefix funds normally");
+            else {
+                _assertEvicted(PLAYER);
+                // Restore normal reads to inspect the rolled-back dependency state.
+                vm.etch(address(mockStETH), implementation.code);
+                assertEq(mockStETH.sharesOf(PLAYER), 1 ether);
+                assertEq(mockStETH.allowance(PLAYER, address(game)), 1 ether);
+            }
+            vm.revertToState(snap);
         }
+    }
+
+    function test_PostTransferEmptyAndSpoofedMeteringFailuresRollbackThenExpire() public {
+        for (uint8 m = 8; m <= 9; ++m) {
+            uint256 snap = vm.snapshotState();
+            _adversarial(); _add(PLAYER, true, 1, 0, 1);
+            badToken.mint(PLAYER, 1 ether); _authorize(PLAYER, 1 ether);
+            badToken.configureFault(AdversarialAfkingSteth.Operation.BalanceAfter,
+                AdversarialAfkingSteth.Fault(m));
+            _work(); _assertEvicted(PLAYER);
+            assertEq(badToken.sharesOf(PLAYER), 1 ether);
+            assertEq(badToken.transferCalls(), 0);
+            vm.revertToState(snap);
+        }
+    }
+
+    function test_OuterPullUnderfundingCannotExpireMember() public {
+        _add(PLAYER, false, 1, 0, 1);
+        mockStETH.mint(PLAYER, 1 ether); _authorize(PLAYER, 1 ether);
+        vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
+        host.subWork{gas: 900_000}(MineFlipGas.budget(900_000, 10_000, true));
+        assertGt(host.memberOf(PLAYER), 0);
+        assertEq(mockStETH.sharesOf(PLAYER), 1 ether);
     }
 
     function testFuzz_InvalidTransferReceiptsRollBack(uint8 faultSeed) public {

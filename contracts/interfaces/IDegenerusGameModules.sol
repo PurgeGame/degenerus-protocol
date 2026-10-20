@@ -67,13 +67,13 @@ interface IDegenerusGameRngModule {
 /// @title IDegenerusGameAdvanceModule
 /// @notice Interface for the game advancement module handling VRF and game progression
 interface IDegenerusGameAdvanceModule {
+    function stakeExcessEth(uint256 amount) external;
     function prepareRequestBoundary(uint24 day) external;
     function applyDailyWord() external;
     function applyDailyGap() external;
     function runDailyPhase(uint256 allowance) external returns (MineFlipGas.Result memory);
     function runTerminalPhase(uint256 allowance) external returns (MineFlipGas.Result memory);
     function runLoanSeizureWork(uint256 allowance) external returns (MineFlipGas.Result memory);
-    function setThanosLevel(uint24 targetLevel, uint8 shift) external;
 }
 
 /// @title IDegenerusGameGameOverModule
@@ -81,6 +81,8 @@ interface IDegenerusGameAdvanceModule {
 ///         plus the cold VRF admin surface (deploy wiring + emergency rotation)
 ///         hosted here for the advance module's EIP-170 headroom.
 interface IDegenerusGameGameOverModule {
+    function setThanosLevel(uint24 targetLevel, uint8 shift) external;
+    function seizeLoan(uint32 id, uint32 lender) external;
     function runGameOverAdvance(uint24 day, uint24 level, uint256 allowance)
         external returns (bool shouldReturn, uint8 stage, bool unlock, bool progressed);
 
@@ -115,6 +117,7 @@ interface IDegenerusGameGameOverModule {
 /// @title IDegenerusGameJackpotModule
 /// @notice Interface for managing various jackpot distributions
 interface IDegenerusGameJackpotDrawModule {
+    function payGoldenTicket(uint32 winner, uint24 lvl, uint8 route, uint8 golds, bool grand) external;
     function awardDailyFlipJackpot(uint24 minLevel, uint24 maxLevel, uint32 traits, uint256 budget, uint256 word) external;
     function runPurchaseJackpotBattle(uint24 lvl, uint256 word, uint256 allowance)
         external returns (MineFlipGas.Result memory);
@@ -208,8 +211,6 @@ interface IDegenerusGameDecimatorModule {
 /// @title IDegenerusGameWhaleModule
 /// @notice Interface for whale-tier purchases and premium passes
 interface IDegenerusGameWhaleModule {
-    /// @notice One-time creator-gated registration and ticket batch for both protocol deities.
-    function initProtocolDeity() external;
 
     /// @notice Purchases a whale pass for the buyer
     /// @param buyerId Address receiving the pass
@@ -438,6 +439,9 @@ interface IDegenerusGameLootboxModule {
 /// @title IDegenerusGameBoonModule
 /// @notice Interface for boon consumption
 interface IDegenerusGameBoonModule {
+    /// @notice One-time creator-gated registration and ticket batch for both protocol deities.
+    function initProtocolDeity() external;
+
     /// @notice Draw boons for every box in one opened entry, in a single call
     /// @param id Box owner's wallet ID (boon and quest state key)
     /// @param perBoxBudget Boon budget of a single box, in wei of ETH-equivalent value

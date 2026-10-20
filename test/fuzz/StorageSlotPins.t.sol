@@ -151,6 +151,9 @@ contract GameSlotHarness is DegenerusGameStorage {
     function s_degenesisWord() external pure returns (uint256 s, uint256 o) { assembly { s := degenesisWord.slot o := degenesisWord.offset } }
     function s_degenesisDays() external pure returns (uint256 s, uint256 o) { assembly { s := degenesisDays.slot o := degenesisDays.offset } }
     function s_degenesisOrders() external pure returns (uint256 s, uint256 o) { assembly { s := degenesisOrders.slot o := degenesisOrders.offset } }
+    function s_redemptionReserveStored() external pure returns (uint256 s, uint256 o) {
+        assembly ("memory-safe") { s := _redemptionReserveStored.slot o := _redemptionReserveStored.offset }
+    }
 }
 
 /// @dev Reads Craps `.slot`s off the audited Craps storage, plus the LootboxCraps Game-slot pins.
@@ -351,6 +354,7 @@ contract StorageSlotPinsTest is Test {
         (s, o) = h.s_decGeneratedOwners(); assertEq(s, GameSlots.DEC_GENERATED_OWNERS, "decGeneratedOwners.slot"); assertEq(o, 0, "decGeneratedOwners.offset");
         (s, o) = h.s_degenesisWord(); assertEq(s, GameSlots.DEGENESIS_WORD, "degenesisWord.slot"); assertEq(o, 0, "degenesisWord.offset");
         (s, o) = h.s_degenesisDays(); assertEq(s, GameSlots.DEGENESIS_DAYS, "degenesisDays.slot"); assertEq(o, 0, "degenesisDays.offset");
+        (s, o) = h.s_redemptionReserveStored(); assertEq(s, GameSlots.REDEMPTION_RESERVE_STORED); assertEq(o, 0);
         (s, o) = h.s_degenesisOrders(); assertEq(s, GameSlots.DEGENESIS_ORDERS, "degenesisOrders.slot"); assertEq(o, 0, "degenesisOrders.offset");
     }
 }

@@ -5,7 +5,7 @@ import {RedemptionCloseHarness} from "./helpers/RedemptionCloseTools.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 
-/// @notice Exercises _closeRedemptionBatch funding and real ETH/stETH claim forwarding.
+/// @notice Game-held stETH backs protected reserves; live claims use ETH and reserved ledger value.
 contract RedemptionStethFallbackTest is RedemptionFixture {
     function _fundGameBacking(uint256 liquid) internal {
         vm.deal(address(sdgnrs), 0);
@@ -24,7 +24,8 @@ contract RedemptionStethFallbackTest is RedemptionFixture {
         vm.etch(address(game), code);
     }
     function _solvent() internal view {
-        assertGe(address(sdgnrs).balance + mockStETH.balanceOf(address(sdgnrs)), sdgnrs.pendingRedemptionEthValue());
+        assertGe(address(sdgnrs).balance + mockStETH.balanceOf(address(sdgnrs)) + game.redemptionReserve(),
+            sdgnrs.pendingRedemptionEthValue());
     }
     function _case(uint256 liquid) internal {
         _fundGameBacking(liquid);
@@ -37,9 +38,11 @@ contract RedemptionStethFallbackTest is RedemptionFixture {
         uint256 reserved = sdgnrs.pendingRedemptionEthValue();
         assertEq(reserved, 17.5 ether);
         assertEq(game.claimableWinningsOf(address(sdgnrs)), claimable - reserved);
-        assertEq(game.claimablePoolView(), pool - reserved);
-        assertEq(address(sdgnrs).balance, liquid < reserved ? liquid : reserved);
-        assertEq(mockStETH.balanceOf(address(sdgnrs)), reserved - address(sdgnrs).balance);
+        uint256 sent = liquid < reserved ? liquid : reserved;
+        assertEq(game.claimablePoolView(), pool - sent);
+        assertEq(address(sdgnrs).balance, sent);
+        assertEq(mockStETH.balanceOf(address(sdgnrs)), 0);
+        assertEq(game.redemptionReserve(), reserved - sent);
         _solvent();
         settlementWord = _wordForRoll(175);
         vm.mockCall(address(game), abi.encodeWithSignature("rngConsumerStage()"), abi.encode(uint8(1)));
@@ -47,31 +50,22 @@ contract RedemptionStethFallbackTest is RedemptionFixture {
         uint256 future = game.futurePrizePoolView();
         assertTrue(_work(9_000_000));
         assertEq(_claimTokens(alice, id), 0, "real claim settled, not parked");
-        assertEq(address(game).balance + mockStETH.balanceOf(address(game)) - gameBefore, reserved);
+        assertEq(address(game).balance + mockStETH.balanceOf(address(game)) - gameBefore, sent);
         assertApproxEqAbs(game.claimableWinningsOf(alice), reserved / 2, 1);
         assertEq(game.futurePrizePoolView() - future, reserved / 2);
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
+        assertEq(game.redemptionReserve(), 0);
         _solvent();
     }
     function test_EthReserveFundingAndClaim() public { _case(1000 ether); }
     function test_StethReserveFundingAndClaim() public { _case(0); }
     function test_MixedReserveFundingAndClaim() public { _case(3 ether); }
     function testFuzz_CloseAndClaimFundingMix(uint256 seed) public { _case(bound(seed, 0, 1000 ether)); }
-    function test_FailedReserveTransferRollsBackEntireClose() public {
-        _fundGameBacking(0);
-        uint32 id = _openBatchId();
-        _burn(alice, sdgnrs.totalSupply() / 100);
-        bytes memory code = address(game).code;
-        vm.etch(address(game), type(RedemptionCloseHarness).runtimeCode);
+    function test_StethTransferFailureCannotBlockReserveCloseOrSettlement() public {
         vm.mockCall(address(mockStETH), abi.encodeWithSelector(mockStETH.transfer.selector), abi.encode(false));
-        vm.expectRevert(bytes4(keccak256("TransferFailed()"))); RedemptionCloseHarness(address(game)).close();
-        vm.etch(address(game), code);
-        assertEq(_openBatchId(), id);
-        assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
-        assertEq(game.claimableWinningsOf(address(sdgnrs)), 1000 ether + 1);
-        assertGt(_escrow(), 0);
+        _case(0);
     }
-    function test_DonationPricedOnceAndCustodyAvoidsUnneededPull() public {
+    function test_TokenDonationPricedOnceAndGameReserveFundsClaim() public {
         _fundGameBacking(1000 ether);
         mockStETH.mint(address(sdgnrs), 100 ether);
         uint256 n = sdgnrs.totalSupply() / 100;
@@ -79,7 +73,15 @@ contract RedemptionStethFallbackTest is RedemptionFixture {
         uint256 credit = game.claimableWinningsOf(address(sdgnrs));
         _fundedClose();
         assertEq(_claimBase(alice, 1), 11 ether);
-        assertEq(game.claimableWinningsOf(address(sdgnrs)), credit);
+        uint256 beneficiaryBefore = game.claimableWinningsOf(alice);
+        settlementWord = _wordForRoll(175);
+        vm.mockCall(address(game), abi.encodeWithSignature("rngConsumerStage()"), abi.encode(uint8(1)));
+        assertTrue(_work(9_000_000));
+        assertGe(game.claimableWinningsOf(alice), beneficiaryBefore + 19.25 ether / 2,
+            "token donation cannot make a funded live claim drop");
+        assertEq(game.claimableWinningsOf(address(sdgnrs)), credit - 19.25 ether);
+        assertEq(mockStETH.balanceOf(address(sdgnrs)), 100 ether, "token donation remains backing");
+        assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
         _solvent();
     }
     function test_NonGameReceiveReverts() public {

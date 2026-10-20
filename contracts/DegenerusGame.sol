@@ -336,8 +336,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
     }
 
     /// @notice Atomic stETH funding operation, callable only by GAME itself.
-    /// @dev Token failures, malformed return data and invalid receipts propagate
-    ///      through the AFKing worker, rolling back the attempt without evicting a subscriber.
+    /// @dev Token failures and invalid receipts roll back this atomic attempt;
+    ///      the worker then applies the ordinary insufficient-funding policy.
     function pullAfkingSteth(uint32, address, uint256) external returns (uint256) {
         if (msg.sender != address(this)) revert OnlySelf();
         (bool ok, bytes memory data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(msg.data);
@@ -633,14 +633,14 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
 
     /// @notice Declare a future level a thanos level: every entry drained for
     ///         targetLevel onward divides by 2^shift.
-    /// @dev Thin delegatecall dispatch stub into DegenerusGameAdvanceModule, which holds the
+    /// @dev Thin delegatecall dispatch stub into DegenerusGameGameOverModule, which holds the
     ///      bounds, the vault-owner check and the declaration body. Signature:
     ///      setThanosLevel(uint24 targetLevel, uint8 shift); identical selector, calldata
     ///      forwards as-is.
     /// @custom:reverts OnlyVault If caller is not the vault owner.
     /// @custom:reverts ThanosBounds If any declaration bound is violated.
     function setThanosLevel(uint24, uint8) external {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_ADVANCE_MODULE.delegatecall(msg.data);
+        (bool ok, bytes memory data) = ContractAddresses.GAME_GAMEOVER_MODULE.delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
 
@@ -1173,6 +1173,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
     ///        claim also settles the whole afking half.
     function _claimWinningsInternal(uint32 id, address payee, bool stethFirst, uint256 maxClaim) private {
         if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) revert AlreadySwept();
+        if (gameOver && id == SDGNRS_WALLET_ID) _releaseRedemptionReserve();
         // One packed load: claimable is the low half, afking the high half. The read reuse
         // below and the debit both ride this single SLOAD (no external call intervenes). An
         // address with no wallet ID reads the always-empty ID-0 word and reverts below.
@@ -1339,8 +1340,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
       +======================================================================+*/
 
     /// @notice Resolve redemption lootboxes for an sDGNRS gambling burn claim.
-    /// @dev Called by sDGNRS while it settles a live redemption (the miner's batch settlement or
-    ///      a parked claim). Thin delegatecall dispatch stub into
+    /// @dev Called by sDGNRS during the miner's live redemption settlement. Delegatecall stub into
     ///      DegenerusGameLootboxModule's resolveRedemptionLootbox body (auth, funding-mix pull,
     ///      pool credit, and the one-order box resolution all live there). The signature matches
     ///      the module function exactly (identical selector), so the calldata + msg.value forward
@@ -2121,6 +2121,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
     }
 
 
+
+    /// @notice Game-held value reserved for sDGNRS redemption settlement.
+    function redemptionReserve() external view returns (uint256) {
+        if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) return 0;
+        return _redemptionReserve();
+    }
 
     /// @notice Get a player's deferred whale-pass claims.
     /// @param player Player address to query.

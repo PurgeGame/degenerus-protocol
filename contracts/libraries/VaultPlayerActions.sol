@@ -90,8 +90,7 @@ library VaultPlayerActions {
         }
         if (target == ContractAddresses.SDGNRS) {
             return selector == IsDGNRS.burn.selector || selector == IsDGNRS.burnWrapped.selector
-                || selector == IsDGNRS.claimRedemption.selector
-                || selector == IsDGNRS.claimParkedRedemption.selector;
+                || selector == IsDGNRS.claimRedemption.selector;
         }
         if (target == ContractAddresses.DGNRS) {
             return selector == DGNRS.burn.selector

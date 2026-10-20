@@ -38,6 +38,7 @@ import {
 } from "../interfaces/IDegenerusGameModules.sol";
 import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
 import {IDegenerusGame, MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
+import {BoundedCall} from "../libraries/BoundedCall.sol";
 import {IStETH} from "../interfaces/IStETH.sol";
 
 /// @title ISeatToken
@@ -377,8 +378,8 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
 
     /// @dev Keep the purchase's claimable/prepaid split: top up its prepaid residual only
     ///      (the caller reaches it only while `funding < ethValue`). A refused token top-up uses the ordinary insufficient-funding policy.
-    ///      Empty/OOG and known metering failures still propagate, so caller starvation
-    ///      cannot expire a funded subscription. Protocol custody is never pulled: sDGNRS
+    ///      The fixed outer budget covers every inner call and the receipt/credit tail;
+    ///      caller starvation fails admission before the atomic attempt. Protocol custody is never pulled: sDGNRS
     ///      preapproves GAME for redemptions whose stETH backing must remain segregated.
     /// @param subscriber The subscriber's wallet ID.
     function _tryFundAfkingSteth(
@@ -387,14 +388,9 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         uint256 funding
     ) private returns (uint256) {
         if (subscriber == VAULT_WALLET_ID || subscriber == SDGNRS_WALLET_ID) return funding;
-        try IDegenerusGame(address(this)).pullAfkingSteth(
-            subscriber, _payee(_walletElement(subscriber)), ethValue - funding
-        ) returns (uint256 received) {
-            return funding + received;
-        } catch (bytes memory reason) {
-            MineFlipGas.rethrowGasFailure(reason);
-            return funding;
-        }
+        (bool ok, bytes memory result) = BoundedCall.call(address(this), 0, 1_000_000,
+            abi.encodeWithSelector(IDegenerusGame.pullAfkingSteth.selector, subscriber, _payee(_walletElement(subscriber)), ethValue - funding), 32);
+        return ok ? funding + abi.decode(result, (uint256)) : funding;
     }
 
     /// @notice Atomic stETH funding operation, callable only by GAME itself.
@@ -412,15 +408,22 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 || source != _payee(_walletElement(subId))
         ) revert AfkingStethPullFailed();
 
-        IStETH token = IStETH(ContractAddresses.STETH_TOKEN);
-        uint256 balanceBefore = token.balanceOf(address(this));
-        uint256 shares = token.getSharesByPooledEth(shortfall);
+        uint256 balanceBefore = _stethFundingWord(abi.encodeWithSelector(IStETH.balanceOf.selector, address(this)));
+        uint256 shares = _stethFundingWord(abi.encodeWithSelector(IStETH.getSharesByPooledEth.selector, shortfall));
         // Lido floors both conversions; include the one rounding share if needed.
-        if (token.getPooledEthByShares(shares) < shortfall) ++shares;
-        uint256 quote = token.getPooledEthByShares(shares);
-        if (token.sharesOf(source) < shares || token.allowance(source, address(this)) < quote) return 0;
-        uint256 transferred = token.transferSharesFrom(source, address(this), shares);
-        uint256 afterBalance = token.balanceOf(address(this));
+        if (_stethFundingWord(abi.encodeWithSelector(IStETH.getPooledEthByShares.selector, shares)) < shortfall) ++shares;
+        uint256 quote = _stethFundingWord(abi.encodeWithSelector(IStETH.getPooledEthByShares.selector, shares));
+        if (_stethFundingWord(abi.encodeWithSelector(IStETH.sharesOf.selector, source)) < shares) return 0;
+        // Unlimited allowances are valid; this word is only compared, never added or multiplied.
+        (bool allowanceOk, uint256 allowance) = BoundedCall.staticWord(ContractAddresses.STETH_TOKEN,
+            EXTERNAL_READ_GAS, abi.encodeWithSelector(IStETH.allowance.selector, source, address(this)));
+        if (!allowanceOk) revert AfkingStethPullFailed();
+        if (allowance < quote) return 0;
+        (bool ok, bytes memory result) = BoundedCall.call(ContractAddresses.STETH_TOKEN, 0, 200_000,
+            abi.encodeWithSelector(IStETH.transferSharesFrom.selector, source, address(this), shares), 32);
+        if (!ok) revert AfkingStethPullFailed();
+        uint256 transferred = abi.decode(result, (uint256));
+        uint256 afterBalance = _stethFundingWord(abi.encodeWithSelector(IStETH.balanceOf.selector, address(this)));
         if (afterBalance < balanceBefore) revert AfkingStethPullFailed();
         received = afterBalance - balanceBefore;
 
@@ -437,6 +440,12 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
 
         _creditAfkingValue(subId, received);
         emit AfkingStethFunded(subId, shortfall, received);
+    }
+
+    function _stethFundingWord(bytes memory input) private view returns (uint256 value) {
+        bool ok;
+        (ok, value) = BoundedCall.staticWord(ContractAddresses.STETH_TOKEN, EXTERNAL_READ_GAS, input);
+        if (!ok || value > type(uint128).max) revert AfkingStethPullFailed();
     }
 
     /*------------------------------------------------------------------

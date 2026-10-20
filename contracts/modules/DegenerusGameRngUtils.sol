@@ -15,19 +15,24 @@ abstract contract DegenerusGameRngUtils is DegenerusGameStorage {
     /// @notice Finalized daily word and the nudges applied to its raw input.
     event DailyRngApplied(uint24 day, uint256 rawWord, uint256 nudges, uint256 finalWord);
 
-    /// @dev Close the live request's batch and move only available ETH into custody.
-    ///      Any remainder stays in sDGNRS's Game claimable for its live settlement legs.
+    /// @dev Isolate the whole priced pull from ordinary spending. Only settlement legs may
+    ///      consume the unsent reserve; it remains inside claimablePool until paid or recycled.
     function _closeRedemptionBatch() internal {
         address sdgnrs = ContractAddresses.SDGNRS;
+        if (IsDGNRS(sdgnrs).redemptionSettlementPending()) return;
+        _releaseRedemptionReserve();
         uint256 claimable = _claimableOf(SDGNRS_WALLET_ID);
         uint256 pull = IsDGNRS(sdgnrs).closeRedemptionBatch(claimable);
-        if (pull > address(this).balance) pull = address(this).balance;
         if (pull == 0) return;
-        (bool sent,) = BoundedCall.call(sdgnrs, pull, 30_000, "", 0);
-        if (!sent) return;
         _debitClaimable(SDGNRS_WALLET_ID, pull);
-        claimablePool -= uint128(pull);
+        _setRedemptionReserve(pull);
         emit ClaimableSpent(SDGNRS_WALLET_ID, pull, claimable - pull, MintPaymentKind.Internal, pull);
+        uint256 ethAmount = pull < address(this).balance ? pull : address(this).balance;
+        if (ethAmount == 0) return;
+        (bool sent,) = BoundedCall.call(sdgnrs, ethAmount, 30_000, "", 0);
+        if (!sent) return;
+        _setRedemptionReserve(pull - ethAmount);
+        claimablePool -= uint128(ethAmount);
     }
 
     function _swapTicketSlot() internal {

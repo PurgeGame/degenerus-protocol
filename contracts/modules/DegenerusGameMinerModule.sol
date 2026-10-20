@@ -65,6 +65,7 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
         bool lockedAtStart = rngLockedFlag;
         MineFlipGas.Meter memory meter = MineFlipGas.start(MineFlipGas.budget(gasleft(), gasMultiplierBps, true));
         bool moved;
+        bool requestRefused;
         uint256 unpaidAttemptGas;
 
         // There are fewer than 32 category transitions. Workers own all unbounded queues.
@@ -211,11 +212,19 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
             if (externalWorker) (ok, result) = target.call{gas: forwarded}(callData);
             else (ok, result) = target.delegatecall{gas: forwarded}(callData);
             if (!ok) {
+                unpaidAttemptGas = MineFlipGas.consumed(beforeCall, gasleft());
+                // Underfunding never becomes an external-refusal or partial-success outcome.
+                if (result.length == 4 && bytes4(result) == MineFlipGas.InsufficientExecutionGas.selector) _revertWork(result);
+                // Only our request worker emits this selector; external revert bytes are discarded.
+                if ((request || action == MinerAction.Terminal) && result.length == 4
+                    && bytes4(result) == ExternalRequestRefused.selector) {
+                    requestRefused = true;
+                    break;
+                }
                 // A declined next step must not undo an already committed prefix.
                 // Accounting/invariant errors still bubble, including WorkGasBound.
                 if (!moved || !(_checkpointRefusal(result)
                     || (action == MinerAction.RequestMidday && _middayRefusal(result)))) _revertWork(result);
-                unpaidAttemptGas = MineFlipGas.consumed(beforeCall, gasleft());
                 break;
             }
 
@@ -250,7 +259,10 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
         }
 
         // The only remaining zero-progress exit is a failed engine admission check.
-        if (!moved) revert MineFlipGas.InsufficientExecutionGas();
+        if (!moved) {
+            if (requestRefused) return;
+            revert MineFlipGas.InsufficientExecutionGas();
+        }
         // This top-level meter starts with all available gas; worker allowance checks
         // retain the actual bounds. No successful call can overspend this initial amount.
         uint256 used = MineFlipGas.consumed(rewardStart, gasleft());

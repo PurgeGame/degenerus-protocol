@@ -1134,5 +1134,13 @@
     "offset": 0,
     "slot": 83,
     "typeLabel": "mapping(uint256 => uint256)"
+  },
+  {
+    "bytes": "16",
+    "encoding": "inplace",
+    "label": "_redemptionReserveStored",
+    "offset": 0,
+    "slot": 84,
+    "typeLabel": "uint128"
   }
 ]

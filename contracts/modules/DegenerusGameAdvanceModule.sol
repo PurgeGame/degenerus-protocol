@@ -29,17 +29,16 @@ import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol
 import {IJackpotBattle} from "../interfaces/IJackpotBattle.sol";
 import {IDegenerusGame, MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {IDegenerusJackpots} from "../interfaces/IDegenerusJackpots.sol";
-import {IDegenerusGameJackpotModule, IDegenerusGameFoilPackModule, IDegenerusGameBoonModule, IDegenerusGameGameOverModule,
+import {IDegenerusGameAdvanceModule, IDegenerusGameJackpotModule, IDegenerusGameFoilPackModule, IDegenerusGameBoonModule, IDegenerusGameGameOverModule,
     IGameAfkingModule, IDegenerusGameDegenesisModule} from "../interfaces/IDegenerusGameModules.sol";
 import {GameTimeLib} from "../libraries/GameTimeLib.sol";
+import {BoundedCall} from "../libraries/BoundedCall.sol";
 import {IStETH} from "../interfaces/IStETH.sol";
 import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
 import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {DegenerusGameRngUtils} from "./DegenerusGameRngUtils.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
-
-interface IGameOverLoanSeizure { function seizeLoan(uint32 id, uint32 lender) external; }
 
 interface ICrapsBonusDay { function openBonusDay() external; }
 interface ICrapsPassCredit { function creditPasses(uint32 id, uint32 normal, uint32 high) external; }
@@ -51,6 +50,7 @@ interface IWwxrpIncinerator { function resolveIncinerator(uint24 bracket, uint25
 ///      follow day sealing. Fresh RNG commitment belongs to the RNG module.
 contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
     error RngNotReady();
+    error StEthStakeRefused();
 
     IStETH internal constant steth = IStETH(ContractAddresses.STETH_TOKEN);
     IGNRUSResolve private constant charityResolve = IGNRUSResolve(ContractAddresses.GNRUS);
@@ -491,7 +491,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
     ///      smurf already seized on its own keeps its lender and its pass.
     function _seizeLoan(uint32 id, uint32 lender) private {
         (bool ok, bytes memory data) = ContractAddresses.GAME_GAMEOVER_MODULE.delegatecall(
-            abi.encodeWithSelector(IGameOverLoanSeizure.seizeLoan.selector, id, lender)
+            abi.encodeWithSelector(IDegenerusGameGameOverModule.seizeLoan.selector, id, lender)
         );
         if (!ok) _revertDelegate(data);
     }
@@ -1055,11 +1055,21 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         uint256 reserve = claimablePool;
         if (ethBal <= reserve) return;
         uint256 stakeable = ethBal - reserve;
-        try steth.submit{value: stakeable}(address(0)) returns (uint256) {}
-        catch (bytes memory reason) {
-            MineFlipGas.rethrowGasFailure(reason);
+        (bool ok, bytes memory reason) = ContractAddresses.GAME_ADVANCE_MODULE.delegatecall(
+            abi.encodeWithSelector(IDegenerusGameAdvanceModule.stakeExcessEth.selector, stakeable));
+        if (!ok) {
+            // This trusted frame rolls back value sent with an invalid receipt.
+            if (reason.length != 4 || bytes4(reason) != StEthStakeRefused.selector) _revertDelegate(reason);
             emit StEthStakeFailed(stakeable);
         }
+    }
+
+    /// @dev Private dispatch surface: no Game facade; only the transition delegates here.
+    function stakeExcessEth(uint256 amount) external {
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
+        (bool ok, bytes memory receipt) = BoundedCall.call(ContractAddresses.STETH_TOKEN, amount, 200_000,
+            abi.encodeWithSelector(IStETH.submit.selector, address(0)), 32);
+        if (!ok || abi.decode(receipt, (uint256)) == 0) revert StEthStakeRefused();
     }
 
     function _growthOver(uint256 prevR, uint256 currR, uint256 nextR) internal pure returns (bool) {
@@ -1096,7 +1106,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         // daily, jackpot coin+tickets, phase transition). Emit the daily pool
         // snapshot here, after
         // _unfreezePool folds the pending accumulators back into the live pools, so the indexer
-        // mirrors the settled end-of-day pools and a solvency total (ETH + stETH) from logs alone.
+        // mirrors the settled pools and observed backing; an unreadable stETH balance counts as zero.
         // Game-over also seals here but emits its own terminal snapshot in the drain, so skip it.
         if (!gameOver) {
             // One packed SLOAD for next|future (via-IR does not coalesce the two tuple getters).
@@ -1106,7 +1116,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
                 futureP,
                 _getCurrentPrizePool(),
                 claimablePool,
-                address(this).balance + steth.balanceOf(address(this)),
+                address(this).balance + _boundedStethBalance(),
                 yieldAccumulator,
                 day
             );
@@ -1120,9 +1130,4 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         _tryCompleteRng();
     }
 
-
-    function setThanosLevel(uint24, uint8) external {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_GAMEOVER_MODULE.delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
-    }
 }

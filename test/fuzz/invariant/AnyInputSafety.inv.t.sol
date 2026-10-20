@@ -505,7 +505,7 @@ contract AnyInputSafety is DeployProtocol {
     }
 
     function _selectors() internal pure returns (bytes4[] memory s) {
-        s = new bytes4[](115);
+        s = new bytes4[](114);
         uint256 i;
         s[i++] = AnyInputHandler.cf_deposit.selector;
         s[i++] = AnyInputHandler.cf_claim.selector;
@@ -552,7 +552,6 @@ contract AnyInputSafety is DeployProtocol {
         s[i++] = AnyInputHandler.s_burn.selector;
         s[i++] = AnyInputHandler.s_burnWrapped.selector;
         s[i++] = AnyInputHandler.s_claimRedemption.selector;
-        s[i++] = AnyInputHandler.s_claimParkedRedemption.selector;
         s[i++] = AnyInputHandler.v_burnEth.selector;
         s[i++] = AnyInputHandler.v_burnCoin.selector;
         s[i++] = AnyInputHandler.gn_burn.selector;
@@ -609,7 +608,7 @@ contract AnyInputSafety is DeployProtocol {
         for (uint256 w; w < 2; ++w) s[i++] = AnyInputHandler.prog_driveDayAligned.selector;
         s[i++] = AnyInputHandler.prog_deadman.selector;
         s[i++] = AnyInputHandler.gd_buyDegenesisBox.selector;
-        require(i == 115, "selector table size");
+        require(i == 114, "selector table size");
     }
 
     // =====================================================================================

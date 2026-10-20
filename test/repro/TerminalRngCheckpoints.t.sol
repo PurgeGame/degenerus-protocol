@@ -96,7 +96,9 @@ contract TerminalRngCheckpointsTest is Test {
 
     function test_TerminalApplicationStaysPinnedAcrossMidnightAndDoesNotRepeat() public {
         assertTrue(_advance(priorDay, 4_000_000));
-        assertEq(vrf.calls(), 1, "the terminal request went out");
+        assertEq(vrf.calls(), 0, "arming never calls the coordinator");
+        assertTrue(_advance(priorDay, 4_000_000));
+        assertEq(vrf.calls(), 1, "the later terminal request went out");
         (uint24 day, uint48 at,,) = h.identity();
         assertEq(day, priorDay + 1, "a sealed normal day cannot supply the terminal identity");
         h.deliver(0xC0FFEE);
@@ -126,21 +128,25 @@ contract TerminalRngCheckpointsTest is Test {
         (,,, bool progressed) = h.runGameOverAdvance{gas: 4_000_000}(
             priorDay, 10, MineFlipGas.budget(4_000_000, type(uint32).max, true));
         assertTrue(progressed);
+        assertEq(vrf.calls(), 0);
+        assertTrue(_advance(priorDay, 4_000_000));
         assertEq(vrf.calls(), 1);
     }
 
-    function test_CoordinatorGasFailureDoesNotArmRefusalTimer() public {
+    function test_CoordinatorGasFailureCannotUndoArmedTimer() public {
         vrf.setMode(2);
-        vm.expectRevert(bytes4(keccak256("InsufficientExecutionGas()")));
-        h.runGameOverAdvance{gas: 4_000_000}(
-            priorDay, 10, MineFlipGas.budget(4_000_000, type(uint32).max, true));
-        (uint24 day, uint48 at, bool active,) = h.identity();
-        assertEq(day, 0);
-        assertEq(at, 0);
-        assertFalse(active);
-        vrf.setMode(0);
         assertTrue(_advance(priorDay, 4_000_000));
-        assertEq(vrf.calls(), 1, "same request remains retryable");
+        (uint24 day, uint48 at, bool active,) = h.identity();
+        assertEq(day, priorDay + 1);
+        assertGt(at, 0);
+        assertFalse(active);
+        vm.expectRevert(bytes4(keccak256("ExternalRequestRefused()")));
+        _advance(priorDay, 4_000_000);
+        (uint24 againDay, uint48 againAt,,) = h.identity();
+        assertEq(againDay, day);
+        assertEq(againAt, at);
+        vm.warp(uint256(at) + 14 days + 1);
+        assertTrue(h.dead());
     }
 
     function test_SemanticRefusalRetainsFirstTimerAndEventuallyExpires() public {
@@ -151,8 +157,8 @@ contract TerminalRngCheckpointsTest is Test {
         (uint24 day, uint48 at,,) = h.identity();
         assertEq(day, priorDay + 1);
         vm.warp(vm.getBlockTimestamp() + 1 days);
-        // A repeated refusal with nothing else advanced bubbles the coordinator's error.
-        vm.expectRevert(TerminalCoordinatorFixture.Refused.selector);
+        // The internal worker reports a trusted refusal; the miner handles it without reward.
+        vm.expectRevert(bytes4(keccak256("ExternalRequestRefused()")));
         _advance(priorDay + 1, 4_000_000);
         (uint24 againDay, uint48 againAt,,) = h.identity();
         assertEq(againDay, day);

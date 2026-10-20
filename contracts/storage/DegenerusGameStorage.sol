@@ -27,7 +27,9 @@ import {GoldSixLib} from "../libraries/GoldSixLib.sol";
  */
 
 import {ContractAddresses} from "../ContractAddresses.sol";
-import {IVRFCoordinator} from "../interfaces/IVRFCoordinator.sol";
+import {BoundedCall} from "../libraries/BoundedCall.sol";
+import {IStETH} from "../interfaces/IStETH.sol";
+import {IVRFCoordinator, VRFRandomWordsRequest} from "../interfaces/IVRFCoordinator.sol";
 import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
 import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
 import {IDegenerusCoin} from "../interfaces/IDegenerusCoin.sol";
@@ -1133,6 +1135,35 @@ abstract contract DegenerusGameStorage {
         return _minerMiddayEligible(caller) ? MinerAction.RequestMidday : MinerAction.Idle;
     }
 
+    error ExternalRequestRefused();
+    uint256 internal constant EXTERNAL_READ_GAS = 50_000;
+    uint256 internal constant VRF_REQUEST_GAS = 500_000;
+
+    /// @dev Only the first, static uint96 field is used; no dynamic tuple is decoded.
+    function _vrfLinkBalance() internal view returns (bool ok, uint256 balance) {
+        (ok, balance) = BoundedCall.staticWord(address(vrfCoordinator), EXTERNAL_READ_GAS,
+            abi.encodeWithSelector(IVRFCoordinator.getSubscription.selector, vrfSubscriptionId));
+        ok = ok && balance <= type(uint96).max;
+    }
+
+    /// @dev Impossible reported balances are refused before they can overflow fund arithmetic.
+    function _boundedStethBalance() internal view returns (uint256 balance) {
+        (bool ok, uint256 value) = BoundedCall.staticWord(ContractAddresses.STETH_TOKEN, EXTERNAL_READ_GAS,
+            abi.encodeWithSelector(IStETH.balanceOf.selector, address(this)));
+        if (ok && value <= type(uint128).max) balance = value;
+    }
+
+    function _boundedVrfRequest(uint16 confirmations) internal returns (bool ok, uint256 id) {
+        bytes memory result;
+        (ok, result) = BoundedCall.call(address(vrfCoordinator), 0, VRF_REQUEST_GAS,
+            abi.encodeWithSelector(IVRFCoordinator.requestRandomWords.selector, VRFRandomWordsRequest({
+                keyHash: vrfKeyHash, subId: vrfSubscriptionId, requestConfirmations: confirmations,
+                callbackGasLimit: 300_000, numWords: 1, extraArgs: hex""
+            })), 32);
+        if (ok) id = abi.decode(result, (uint256));
+        ok = ok && id != 0;
+    }
+
     uint96 internal constant MIN_LINK_FOR_LOOTBOX_RNG = 40 ether;
     uint96 internal constant MIN_LINK_FOR_CRAPS_RNG = 10 ether;
 
@@ -1162,8 +1193,8 @@ abstract contract DegenerusGameStorage {
         if (_recordedDailyWord(_simulatedDayIndex()) == 0) return false;
         // No coordinator is wired before VRF setup, so nothing can be requested yet.
         if (address(vrfCoordinator) == address(0)) return false;
-        (uint96 linkBal,,,,) = vrfCoordinator.getSubscription(vrfSubscriptionId);
-        if (linkBal < (crapsWork ? MIN_LINK_FOR_CRAPS_RNG : MIN_LINK_FOR_LOOTBOX_RNG)) return false;
+        (bool ok, uint256 linkBal) = _vrfLinkBalance();
+        if (!ok || linkBal < (crapsWork ? MIN_LINK_FOR_CRAPS_RNG : MIN_LINK_FOR_LOOTBOX_RNG)) return false;
         if (!needsCredit) return true;
         (bool covered,,,) = _middayCreditCharge(caller);
         return covered;
@@ -2408,6 +2439,23 @@ abstract contract DegenerusGameStorage {
         if (id == 0) revert E();
         balancesPacked[id] += weiAmount;
         emit PlayerCredited(id, weiAmount);
+    }
+
+    /// @dev Game-held redemption value remains inside claimablePool, outside wallet balances.
+    function _redemptionReserve() internal view returns (uint256) {
+        uint256 stored = _redemptionReserveStored;
+        return stored == 0 ? 0 : stored - 1;
+    }
+
+    function _setRedemptionReserve(uint256 amount) internal {
+        // The reserve is drawn from a uint128 claimable balance excluding its sentinel.
+        _redemptionReserveStored = uint128(amount + 1);
+    }
+
+    function _releaseRedemptionReserve() internal {
+        uint256 amount = _redemptionReserve();
+        _setRedemptionReserve(0);
+        _creditClaimableLogged(SDGNRS_WALLET_ID, amount);
     }
 
     /// @dev Debit claimable (the low half). Guard low >= amount so the subtraction never borrows
@@ -5089,6 +5137,8 @@ abstract contract DegenerusGameStorage {
     ///      at bit 85 * (index % 3): [0:32] wallet ID, [32:70] amount in DEGENESIS_UNIT,
     ///      [70:85] seconds into its day, capped at DEGENESIS_BONUS_WINDOW.
     mapping(uint256 => uint256) internal degenesisOrders;
+    /// @dev Dedicated redemption reserve, amount + 1; releasing it never clears this home.
+    uint128 internal _redemptionReserveStored = 1;
 
     uint256 internal constant DEGENESIS_DAYS = 7;
     uint256 internal constant DEGENESIS_UNIT = 0.0001 ether;

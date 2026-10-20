@@ -456,10 +456,6 @@ contract AnyInputHandler is Test {
         _call(44, SDGNRS_, 0, abi.encodeWithSignature("claimRedemption(uint32,uint32)", _id(pSeed), batchId));
     }
 
-    function s_claimParkedRedemption(uint256 a, uint256 pSeed, uint32 batchId) external act(a) {
-        _call(45, SDGNRS_, 0, abi.encodeWithSignature("claimParkedRedemption(uint32,uint32)", _id(pSeed), batchId));
-    }
-
     function v_burnEth(uint256 a, uint256 amount) external act(a) {
         _call(46, VAULT_, 0, abi.encodeWithSignature("burnEth(uint256)", amount));
     }
@@ -962,7 +958,7 @@ contract AnyInputHandler is Test {
             "g_buyDegenesisBox", "g_claimWinningsStethFirst", "f_transfer", "f_transferFrom",
             "f_approve", "f_decimatorBurn", "d_transfer", "d_transferFrom",
             "d_approve", "d_burn", "s_burn", "s_burnWrapped",
-            "s_claimRedemption", "s_claimParkedRedemption", "v_burnEth", "v_burnCoin",
+            "s_claimRedemption", "unused_45", "v_burnEth", "v_burnCoin",
             "gn_burn", "gn_vote", "pm_placeBet", "g_repay",
             "unused_52", "af_createAffiliateCode", "af_referPlayer", "af_claim",
             "wx_enter", "wx_claim", "cr_setPreferredBoard", "cr_enterBattle",

@@ -91,14 +91,6 @@ interface IsDGNRS {
     /// @custom:reverts E (Game) If `id` is unallocated.
     function claimRedemption(uint32 id, uint32 batchId) external;
 
-    /// @notice Claim account `id`'s parked redemption in batch `batchId`.
-    /// @dev Authorized and paid exactly as `claimRedemption`.
-    /// @param id Claimant account (0 = caller).
-    /// @param batchId Redemption batch to claim.
-    /// @custom:reverts Unauthorized If the caller may not act for `id`.
-    /// @custom:reverts E (Game) If `id` is unallocated.
-    function claimParkedRedemption(uint32 id, uint32 batchId) external;
-
     /// @notice Transfer sDGNRS from the wrapper to a recipient (DGNRS wrapper only)
     /// @param to Recipient address
     /// @param amount Amount to transfer

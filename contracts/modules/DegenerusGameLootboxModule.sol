@@ -868,11 +868,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint48 private constant REDEMPTION_INDEX_TAG = uint48(1) << 47;
 
     /// @notice Resolve redemption lootboxes for an sDGNRS gambling burn claim.
-    /// @dev Forwarded ETH and sDGNRS's Game claimable fund one box order. The ledger
+    /// @dev Forwarded ETH and the protected redemption reserve fund one box order. The ledger
     ///      remainder leaves claimablePool when the value enters the prize pool. The order
     ///      resolves at the live level using the burn's activity snapshot and batch entropy.
     /// @param id The claim's beneficiary wallet ID
-    /// @param amount Total lootbox value to resolve (msg.value ETH plus Game claimable)
+    /// @param amount Total lootbox value to resolve (msg.value ETH plus reserved Game backing)
     /// @param rngWord RNG entropy for lootbox resolution
     /// @param activityScore Snapshotted activity score (whole points) from burn submission
     /// @param batchId The redemption batch the claim belongs to (seed and event tag)
@@ -884,7 +884,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
         if (msg.value > amount) revert MsgValueExceedsAmount();
         uint256 ledgerPortion = amount - msg.value;
         if (ledgerPortion != 0) {
-            _debitClaimable(SDGNRS_WALLET_ID, ledgerPortion);
+            _setRedemptionReserve(_redemptionReserve() - ledgerPortion);
             claimablePool -= uint128(ledgerPortion);
         }
 
@@ -916,16 +916,16 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     }
 
     /// @notice Credit the direct half of an sDGNRS redemption claim to `id`'s claimable winnings.
-    /// @dev Forwarded ETH increases the pool; the remainder moves sDGNRS's existing
-    ///      claimable to the beneficiary without changing the pool total.
+    /// @dev Forwarded ETH increases the pool; the remainder moves protected redemption
+    ///      backing to the beneficiary without changing the pool total.
     /// @param id Claimant wallet ID credited.
-    /// @param amount Total direct-half value (msg.value ETH plus Game claimable).
+    /// @param amount Total direct-half value (msg.value ETH plus reserved Game backing).
     function creditRedemptionDirect(uint32 id, uint256 amount) external payable {
         if (msg.sender != ContractAddresses.SDGNRS) revert OnlySDGNRS();
         if (msg.value > amount) revert MsgValueExceedsAmount();
         if (amount == 0) return;
         uint256 ledgerPortion = amount - msg.value;
-        if (ledgerPortion != 0) _debitClaimable(SDGNRS_WALLET_ID, ledgerPortion);
+        if (ledgerPortion != 0) _setRedemptionReserve(_redemptionReserve() - ledgerPortion);
         _creditClaimableLogged(id, amount);
         claimablePool += uint128(msg.value);
     }

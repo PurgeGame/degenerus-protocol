@@ -165,31 +165,27 @@ contract AfkingStethGasTest is DeployProtocol {
         faulty = AdversarialAfkingSteth(payable(address(mockStETH)));
     }
 
-    function test_PostTransferGasExhaustionRollsBackWithoutEviction() public {
+    function test_PostTransferGasExhaustionRollsBackAndContinues() public {
         AdversarialAfkingSteth faulty = _failedFixture(true);
         faulty.configureFault(AdversarialAfkingSteth.Operation.BalanceAfter, AdversarialAfkingSteth.Fault.BurnGas);
         uint256 sourceShares = mockStETH.sharesOf(PLAYER);
         uint256 gameShares = mockStETH.sharesOf(address(game));
         uint256 allowanceBefore = mockStETH.allowance(PLAYER, address(game));
-        vm.expectRevert(bytes4(keccak256("EmptyRevert()")));
-        host.measuredSubWork{gas: WORK_GAS}(WORK_GAS);
-        assertEq(host.memberCount(), 2, "failed execution cannot evict");
+        (MineFlipGas.Result memory result,) = host.measuredSubWork{gas: WORK_GAS}(WORK_GAS);
+        assertTrue(result.done);
+        assertEq(host.memberCount(), 1, "unfunded member expires");
+        _assertDelivered(PLAYER_TWO, true);
         assertEq(mockStETH.sharesOf(PLAYER), sourceShares);
         assertEq(mockStETH.sharesOf(address(game)), gameShares);
         assertEq(mockStETH.allowance(PLAYER, address(game)), allowanceBefore);
-        faulty.configureFault(AdversarialAfkingSteth.Operation.BalanceAfter, AdversarialAfkingSteth.Fault.None);
-        (MineFlipGas.Result memory result,) = host.measuredSubWork{gas: WORK_GAS}(WORK_GAS);
-        assertTrue(result.done);
-        _assertDelivered(PLAYER, true);
-        _assertDelivered(PLAYER_TWO, true);
+
     }
 
-    function test_TransferGasExhaustionPreservesSubscription() public {
+    function test_TransferGasExhaustionExpiresUnfundedSubscription() public {
         AdversarialAfkingSteth faulty = _failedFixture(false);
         faulty.configureFault(AdversarialAfkingSteth.Operation.Transfer, AdversarialAfkingSteth.Fault.BurnGas);
-        vm.expectRevert(bytes4(keccak256("EmptyRevert()")));
         host.measuredSubWork{gas: WORK_GAS}(WORK_GAS);
-        assertEq(host.memberCount(), 1);
+        assertEq(host.memberCount(), 0);
     }
 
     function test_InsufficientAdmissionAllowanceDefersWithoutChargingOrEvicting() public {

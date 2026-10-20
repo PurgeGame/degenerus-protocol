@@ -43,12 +43,6 @@ import {JackpotBucketLib} from "../libraries/JackpotBucketLib.sol";
 import {TicketWorkPlan} from "../libraries/JackpotTicketPlan.sol";
 import {IDegenerusGameWhaleModule, IDegenerusGameJackpotDrawModule, IDegenerusGameTicketModule, IDegenerusGameDecimatorModule, DecimatorJackpotTerms} from "../interfaces/IDegenerusGameModules.sol";
 
-/// @dev Minimal WWXRP surface for the golden-ticket consolation mint. The delegatecall
-///      context makes msg.sender the Game, which is a whitelisted WWXRP minter.
-interface IGoldenTicketPayout {
-    function payGoldenTicket(uint32 winner, uint24 lvl, uint8 route, uint8 golds, bool grand) external;
-}
-
 /**
  * @title DegenerusGameJackpotModule
  * @author Burnie Degenerus
@@ -790,7 +784,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     ///      the surplus split is deterministic and consumes no entropy.
     ///      23% each to sDGNRS, vault, and charity (GNRUS) claimable, 23% yield accumulator (~8% buffer).
     function distributeYieldSurplus(uint256) external {
-        uint256 stBal = steth.balanceOf(address(this));
+        uint256 stBal = _boundedStethBalance();
         uint256 totalBal = address(this).balance + stBal;
         (uint128 nextPool, uint128 futurePool) = _getPrizePools();
         uint128 claimablePoolCached = claimablePool;
@@ -1195,7 +1189,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     ///      HALF_WHALE_PASS_PRICE and 25% in flip credit at the level's ticket rate.
     function _payGoldenTicket(uint32 winner, uint24 lvl, uint8 route, uint8 golds, bool grand) private {
         _delegateJackpotDraw(abi.encodeWithSelector(
-            IGoldenTicketPayout.payGoldenTicket.selector, winner, lvl, route, golds, grand
+            IDegenerusGameJackpotDrawModule.payGoldenTicket.selector, winner, lvl, route, golds, grand
         ));
     }
 

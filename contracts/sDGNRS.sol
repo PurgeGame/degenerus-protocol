@@ -52,6 +52,8 @@ interface IDegenerusGamePlayer {
     function claimWinnings(uint32 id) external;
     /// @notice View claimable ETH winnings for a player.
     function claimableWinningsOf(address player) external view returns (uint256);
+
+    function redemptionReserve() external view returns (uint256);
     /// @notice Current ordered RNG consumer stage (1 = redemption settlement).
     function rngConsumerStage() external view returns (uint8);
     /// @notice Check if game is over.
@@ -90,6 +92,7 @@ interface ICoinflipPlayer {
     /// @notice Credit a FLIP flip stake to wallet `id` (sDGNRS is an authorized flip creditor;
     ///         0 is a no-op).
     function creditFlip(uint32 id, uint256 amount) external;
+    function returnRedeemedFlip(uint256 amount) external;
 }
 
 /// @notice Interface for DGNRS wrapper contract used by sDGNRS.
@@ -405,11 +408,11 @@ contract sDGNRS {
     ///      live close (every request waits for stage 1), so earlier claims reserve nothing.
     ///      The batch's tokens left
     ///      supply at their burns; here they only leave the escrow count. The batch's MAX (175%)
-    ///      payout, capped at free backing, is reserved, and `pull` is the part of the reserve that custody does not already
+    ///      payout, capped at free backing, is reserved, and `pull` is the part of the reserve that ETH custody does not already
     ///      hold, capped at the Game claimable. A close while another batch still settles keeps the
     ///      batch open (unreachable: requests wait for settlement).
     /// @param gameClaimable sDGNRS's claimable balance on the Game (1 wei of it is dust).
-    /// @return pull ETH value the Game moves from sDGNRS's claimable into this contract.
+    /// @return pull Value isolated from ordinary Game claimable; available ETH moves into custody.
     function closeRedemptionBatch(uint256 gameClaimable) external onlyGame returns (uint256 pull) {
         uint32 id = _openBatch;
         RedemptionBatch storage batch = _redemptionBatches[id & 1];
@@ -422,12 +425,7 @@ contract sDGNRS {
         (, uint256 stethBalance) = BoundedCall.staticWord(
             address(steth), 50_000, abi.encodeWithSelector(IStETH.balanceOf.selector, address(this))
         );
-        uint256 custody = address(this).balance;
-        uint256 gross = custody + claimable;
-        // ETH and its ledger fit uint96; reject a token balance that cannot share that bound.
-        if (stethBalance > type(uint96).max - gross) stethBalance = 0;
-        custody += stethBalance;
-        gross += stethBalance;
+        (, uint256 gross) = _redemptionBacking(claimable, stethBalance);
         uint256 reserved = _pendingRedemptionEthValue;
         uint256 money = gross > reserved ? gross - reserved : 0;
         uint256 ethBase = ((money * tokens) / holderBase / 1e9) * 1e9;
@@ -454,9 +452,10 @@ contract sDGNRS {
             _openBatch = id + 1;
         }
 
-        // The batch maximum is bounded by free backing at close, including this claimable.
-        if (reserved > custody) {
-            pull = reserved - custody;
+        // Live claims spend ETH or the Game reserve; token custody contributes only to price.
+        uint256 custodyEth = address(this).balance;
+        if (reserved > custodyEth) {
+            pull = reserved - custodyEth;
             if (pull > claimable) pull = claimable;
         }
         emit RedemptionBatchClosed(id, tokens, ethBase, flipEscrow);
@@ -578,7 +577,11 @@ contract sDGNRS {
                 address(this), 0, nextMax,
                 abi.encodeWithSelector(this.settleRedemptionHead.selector, entry, id, word), 0
             );
-            if (!paid) _pendingRedemptionEthValue -= uint96(rolled);
+            if (!paid) {
+                _pendingRedemptionEthValue -= uint96(rolled);
+                uint256 flipShare = (uint256(batch.flipEscrow) * claimTokens) / batchTokens;
+                if (flipShare != 0) coinflip.returnRedeemedFlip(flipShare);
+            }
         }
         if (cursor != initialCursor) { result.progressed = true; MineFlipGas.markProgress(meter); }
         result.done = cursor == total;
@@ -1078,12 +1081,13 @@ contract sDGNRS {
         // Keep it in place; this contract's ETH receiver accepts only Game deposits.
         if (to == address(this)) return (0, 0);
         uint256 ethBal = address(this).balance;
-        uint256 stethBal = steth.balanceOf(address(this));
-        if ((value > ethBal || value + _pendingRedemptionEthValue > ethBal + stethBal) && _claimableWinnings() != 0) {
+        (uint256 custody,) = _redemptionBacking(0, steth.balanceOf(address(this)));
+        if ((value > ethBal || value + _pendingRedemptionEthValue > custody) && _claimableWinnings() != 0) {
             game.claimWinnings(0);
             ethBal = address(this).balance;
-            stethBal = steth.balanceOf(address(this));
+            (custody,) = _redemptionBacking(0, steth.balanceOf(address(this)));
         }
+        uint256 stethBal = custody - ethBal;
 
         if (value <= ethBal) {
             ethOut = value;
@@ -1187,7 +1191,7 @@ contract sDGNRS {
             _redemptionAmounts((uint256(batch.ethPayout) * tokens) / batch.tokens, isTerminal);
 
         // Release the rolled share from the reserve (both direct and lootbox portions leave
-        // sDGNRS). The MAX − rolled over-pull stays in this contract as free backing. Checked:
+        // sDGNRS). The MAX − rolled over-pull stays in custody or the Game reserve as free backing. Checked:
         // resolution left at least the batch's rolled total, which bounds every claim's share.
         _pendingRedemptionEthValue = uint96(_pendingRedemptionEthValue - totalRolledEth);
 
@@ -1212,12 +1216,12 @@ contract sDGNRS {
         if (isTerminal) {
             // 100% direct push to the payee (account authorization enforced by callers; the
             // untrusted .call comes after the slot delete above — CEI).
-            _payEth(payee, ethDirect);
+            _payGameOverValue(payee, ethDirect);
             return;
         }
 
-        // Live legs forward custody ETH and spend any remainder from this contract's Game
-        // claimable. Batch close leaves that ledger backing in place when the Game lacks ETH.
+        // Live legs forward custody ETH and spend the remainder from the protected Game
+        // reserve. Ordinary loans and purchases cannot consume this backing.
         if (lootboxEth != 0) {
             uint16 actScore = uint16(entry >> BATCH_PLAYER_SCORE_SHIFT) - 1;
             // Burns commit before the word that settles their batch exists: the batch closes
@@ -1381,45 +1385,30 @@ contract sDGNRS {
         walletId = id;
     }
 
-    /// @dev ETH + stETH + Game claimable net of every outstanding redemption reserve, floored at 0.
+    /// @dev ETH + admitted stETH + Game backing, capped to the packed batch value range.
+    function _redemptionBacking(uint256 gameBacking, uint256 stethBalance)
+        private view returns (uint256 custody, uint256 gross)
+    {
+        custody = address(this).balance;
+        gross = custody + gameBacking;
+        if (gross > type(uint96).max || stethBalance > type(uint96).max - gross) stethBalance = 0;
+        custody += stethBalance;
+        gross += stethBalance;
+        if (gross > type(uint96).max) gross = type(uint96).max;
+    }
+
+    /// @dev Admitted backing net of every outstanding redemption reserve, floored at 0.
     function _liveMoney() private view returns (uint256) {
-        uint256 gross = address(this).balance + steth.balanceOf(address(this)) + _claimableWinnings();
+        (, uint256 gross) = _redemptionBacking(_claimableWinnings(), steth.balanceOf(address(this)));
         uint256 reserved = _pendingRedemptionEthValue;
         return gross > reserved ? gross - reserved : 0;
     }
 
-    /// @dev Pay the redemption from this contract's balance: ETH first, falling back to stETH if the
-    ///      ETH balance is insufficient. No game.claimWinnings pull — the batch close topped this
-    ///      contract's ETH + stETH custody up to every outstanding reserve, so the backing is
-    ///      already in this contract's balance.
-    function _payEth(address player, uint256 amount) private {
-        // Acquired-account self-payouts release the reserve without moving custody.
-        if (amount == 0 || player == address(this)) return;
-        uint256 ethBal = address(this).balance;
-
-        if (amount <= ethBal) {
-            (bool success, ) = player.call{value: amount}("");
-            if (!success) revert TransferFailed();
-        } else {
-            uint256 ethOut = ethBal;
-            uint256 stethOut = amount - ethOut;
-            // stETH first, untrusted ETH .call LAST (CEI): otherwise a reentrant burn()/claim in the
-            // player's ETH hook sees the in-flight stETH (no longer reserved — claimRedemption already
-            // decremented pendingRedemptionEthValue) as free backing and over-reserves, breaking solvency.
-            if (!steth.transfer(player, stethOut)) revert TransferFailed();
-            if (ethOut > 0) {
-                (bool success, ) = player.call{value: ethOut}("");
-                if (!success) revert TransferFailed();
-            }
-        }
-    }
-
-    /// @dev Get claimable game winnings, accounting for dust (returns 0 if stored <= 1)
-    /// @return claimable Claimable winnings minus 1 wei dust
+    /// @dev Game backing is ordinary claimable minus its sentinel plus the protected reserve.
+    /// @return claimable Total Game-held backing available to holders and reserved claims
     function _claimableWinnings() private view returns (uint256 claimable) {
         uint256 stored = game.claimableWinningsOf(address(this));
-        if (stored <= 1) return 0;
-        return stored - 1;
+        return (stored > 1 ? stored - 1 : 0) + game.redemptionReserve();
     }
 
     /// @dev Convert Pool enum to array index

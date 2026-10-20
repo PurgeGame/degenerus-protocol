@@ -322,6 +322,8 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
                 uint256 excess = afking - SDGNRS_AFKING_TARGET;
                 balancesPacked[SDGNRS_WALLET_ID] =
                     (SDGNRS_AFKING_TARGET << 128) | (uint128(packed) + excess);
+                emit AfkingSpent(SDGNRS_WALLET_ID, excess);
+                emit PlayerCredited(SDGNRS_WALLET_ID, excess);
                 emit DegenesisAfkingExcessClaimable(excess);
             }
             emit DegenesisInventoryBurned(

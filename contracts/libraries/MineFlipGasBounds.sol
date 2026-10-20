@@ -8,32 +8,32 @@ pragma solidity 0.8.34;
 ///      Continuations use caller calibration; first mandatory progress bypasses estimates.
 ///      Revalidate after operation, compiler or gas-schedule changes.
 library MineFlipGasBounds {
-    // Dispatch reads/arithmetic; the enclosing worker reserves its own checkpoint tail.
-    uint256 internal constant ENGINE_BOUNDARY = 100_000;
+    // Dispatch plus optional 50k LINK read + 794 EIP-150 + 10k frame and enclosing tail.
+    uint256 internal constant ENGINE_BOUNDARY = 200_000;
     // Return and one caller credit; native R90 fresh/spill transactions: 130.7k/148.1k.
     uint256 internal constant ENGINE_RETURN = 200_000;
     // Cold 29-day gap: 683.6k including state gas.
     uint256 internal constant DAILY_GAP = 850_000;
     // Prior cold-century envelope: 5.954M including 25 fresh slots; revalidate R90 callers.
     uint256 internal constant DAILY_APPLY = 7_200_000;
-    // Cold midday: 530.7k plus 97.9k coordinator execution-floor padding, then margin.
-    uint256 internal constant RNG_MIDDAY_REQUEST = 800_000;
-    // Cold daily request: 2.632M plus 97.9k coordinator execution-floor padding.
+    // Cold midday 530.7k + request 500k + 7,937 EIP-150 + 10k frame + 60,794 LINK read.
+    uint256 internal constant RNG_MIDDAY_REQUEST = 1_400_000;
+    // Cold daily request 2.632M + request 500k + 7,937 EIP-150 + 10k frame, with margin.
     // Redemption close is additional; post-fulfillment work has separate checkpoints.
-    uint256 internal constant RNG_DAILY_REQUEST = 3_400_000;
+    uint256 internal constant RNG_DAILY_REQUEST = 4_000_000;
     // Nonempty close plus mixed ETH/stETH pull: 443.5k, including proxy and
     // 10k balance / 40k transfer execution padding. No historical coinflip walk here.
     uint256 internal constant RNG_REDEMPTION_CLOSE = 550_000;
-    // Conservative external-request envelope; terminal requests never close redemption.
+    // Terminal request 500k + 7,937 EIP-150 + 10k frame, plus cold cohort setup; no redemption close.
     uint256 internal constant RNG_TERMINAL_REQUEST = 2_500_000;
-    // Cold century close, 32 deity renewals, stake, unlock, recycle and seed: 4.762M.
-    uint256 internal constant TRANSITION_CLOSE = 5_800_000;
+    // Cold century close 4.762M + stake 248,175 + balance 60,794 and rollback frame.
+    uint256 internal constant TRANSITION_CLOSE = 6_200_000;
     // Cold level-one draw with 51 fresh slots: 6.240M.
     uint256 internal constant LEVEL_ONE_DRAW = 7_500_000;
     // Cold losing x00 flip, incinerator search, seals and yield/keep roll: 1.368M.
     uint256 internal constant POOL_CONSOLIDATION = 1_650_000;
-    // Phase cursor, caller frame and return reserve.
-    uint256 internal constant DAILY_PHASE_TAIL = 150_000;
+    // Prior 150k phase tail + bounded balance 60,794 and allocation/frame margin.
+    uint256 internal constant DAILY_PHASE_TAIL = 250_000;
     // Conservative prior full-walk envelope, retained for the 90-day Vault checkpoint
     // and x0 seal including the Game stamp. Final R90 Glamsterdam calibration is required.
     uint256 internal constant BAF_VAULT_SETTLE = 3_500_000;
@@ -41,8 +41,8 @@ library MineFlipGasBounds {
     uint256 internal constant FOIL_PACK = 3_000_000;
     // One full 50-entry field checkpoint, cold initialization or final seal: 3.870M.
     uint256 internal constant JACKPOT_BATTLE_DRAW = 4_700_000;
-    // Cold terminal setup: 1.282M including new-slot state gas.
-    uint256 internal constant TERMINAL_SETUP = 1_600_000;
+    // Cold terminal setup 1.282M + bounded balance 60,794, including new-slot state gas.
+    uint256 internal constant TERMINAL_SETUP = 1_700_000;
     // Terminal checkpoint and return reserve.
     uint256 internal constant TERMINAL_TAIL = 250_000;
     // Record body; the fresh tally cursor is covered by TALLY_TAIL.
@@ -51,8 +51,8 @@ library MineFlipGasBounds {
     uint256 internal constant TERMINAL_TALLY_FINAL = 2_300_000;
     // Fresh cursor (110.1k) plus 80k frame, with margin.
     uint256 internal constant TERMINAL_TALLY_TAIL = 250_000;
-    // Cold final sweep: 547.3k.
-    uint256 internal constant TERMINAL_FINAL_SWEEP = 700_000;
+    // Cold sweep 547.3k + shutdown 800k + 12,698 EIP-150 + 10k frame, with margin.
+    uint256 internal constant TERMINAL_FINAL_SWEEP = 1_700_000;
     // Sweep return reserve.
     uint256 internal constant TERMINAL_SWEEP_TAIL = 80_000;
     // Eight changed seats, a fresh seat word, cursor/release writes and return: <=209.8k.
@@ -75,8 +75,8 @@ library MineFlipGasBounds {
     uint256 internal constant TICKET_FOIL_CALL_MAX = FOIL_PACK + 200_000;
     // Delegatecall and worker dispatch reserve.
     uint256 internal constant TICKET_CALL_OVERHEAD = 35_000;
-    // Cold stETH-funded subscriber delivery: 472.3k. Dependency failure reverts.
-    uint256 internal constant SUBSCRIBER_ITEM_GAS = 600_000;
+    // Prior cold delivery 472.3k + atomic 1M pull + 15,873 EIP-150 + 10k frame, with margin.
+    uint256 internal constant SUBSCRIBER_ITEM_GAS = 1_700_000;
     // Cold sDGNRS 1,000-pass purchase 2.378M plus the AFKing top-up 20.2k.
     uint256 internal constant SUBSCRIBER_WHALE_GAS = 2_800_000;
     // Subscriber cursor, flush and return reserve, including fresh state.
@@ -107,7 +107,7 @@ library MineFlipGasBounds {
     // R90 live-collision recipient: native cold marginal 129,647, state gas included.
     // 160k retains >23% margin; the ordinary fresh recipient is cheaper.
     uint256 internal constant DEGENESIS_FLUSH_PER_CREDIT = 160_000;
-    // Flush frame, seventh close with the burn, one decode and return: <=100.9k.
+    // Flush frame, seventh close with AFKing excess/events and burn, decode/return: <=118.1k.
     uint256 internal constant DEGENESIS_TAIL_GAS = 125_000;
     // Degenesis day-close branch with a fresh seat-draw credit: <=177.2k including state gas.
     uint256 internal constant DEGENESIS_DAY_CLOSE = 215_000;

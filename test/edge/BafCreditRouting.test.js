@@ -60,7 +60,7 @@ import {
  *     slot 0: bafPlayer mapping
  *     slot 1: bafTop mapping
  *     slot 2: bafLevel mapping
- *     slot 3: lastBafResolvedDay (uint24, offset 0)
+ *     slot 3: lastBafResolvedDay (uint24, offset 0), bafTopLevels (uint96, offset 3)
  */
 describe("BafCreditRouting", function () {
   this.timeout(180_000);
@@ -112,9 +112,11 @@ describe("BafCreditRouting", function () {
     ]);
   }
 
-  /** Set lastBafResolvedDay (uint32 at slot 5 of DegenerusJackpots). */
+  /** Set lastBafResolvedDay (uint24 at slot 3), preserving the packed board tags. */
   async function setLastBafResolvedDay(jackpotsAddr, day) {
-    const value = "0x" + BigInt(day).toString(16).padStart(64, "0");
+    const before = BigInt(await hre.ethers.provider.getStorage(jackpotsAddr, LAST_BAF_RESOLVED_DAY_SLOT));
+    const mask = (1n << 24n) - 1n;
+    const value = "0x" + ((before & ~mask) | (BigInt(day) & mask)).toString(16).padStart(64, "0");
     await hre.network.provider.send("hardhat_setStorageAt", [
       jackpotsAddr,
       LAST_BAF_RESOLVED_DAY_SLOT,

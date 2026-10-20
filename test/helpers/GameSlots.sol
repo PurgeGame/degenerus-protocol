@@ -211,6 +211,7 @@ library GameSlots {
     uint256 internal constant DEGENESIS_WORD = 81;
     uint256 internal constant DEGENESIS_DAYS = 82;
     uint256 internal constant DEGENESIS_ORDERS = 83;
+    uint256 internal constant REDEMPTION_RESERVE_STORED = 84;
 }
 
 /// @title CrapsSlots

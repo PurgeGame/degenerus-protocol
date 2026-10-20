@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {RedemptionReserveHarness} from "./RedemptionReserve.t.sol";
 import {RedemptionFixture} from "../fuzz/helpers/RedemptionFixture.sol";
 import {RedemptionCloseHarness} from "../fuzz/helpers/RedemptionCloseTools.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
@@ -65,6 +66,13 @@ contract RedemptionIsolationTest is RedemptionFixture {
         game.creditRedemptionDirect{value: amount}(2, amount);
     }
 
+    function _reserveLedger(uint256 amount) private {
+        bytes memory code = address(game).code;
+        vm.etch(address(game), type(RedemptionReserveHarness).runtimeCode);
+        RedemptionReserveHarness(address(game)).reserveFromOrdinary(amount);
+        vm.etch(address(game), code);
+    }
+
     function _pool() private view returns (uint256) {
         return uint256(vm.load(address(game), bytes32(uint256(1)))) >> 128;
     }
@@ -85,7 +93,7 @@ contract RedemptionIsolationTest is RedemptionFixture {
         uint256 beforeSteth = mockStETH.balanceOf(address(sdgnrs));
         _closeFunded();
         assertEq(address(sdgnrs).balance, 0.1 ether);
-        assertEq(game.claimableWinningsOf(address(sdgnrs)), beforeClaimable - 0.1 ether);
+        assertEq(game.claimableWinningsOf(address(sdgnrs)) + game.redemptionReserve(), beforeClaimable - 0.1 ether);
         assertEq(_pool(), beforePool - 0.1 ether);
         assertEq(mockStETH.balanceOf(address(sdgnrs)), beforeSteth);
         assertTrue(sdgnrs.redemptionSettlementPending());
@@ -97,6 +105,7 @@ contract RedemptionIsolationTest is RedemptionFixture {
         uint256 beforeAlice = game.claimableWinningsOf(alice);
         uint256 beforePool = _pool();
         uint32 aliceId = game.walletIdOf(alice);
+        _reserveLedger(8 ether);
         vm.deal(address(sdgnrs), 2 ether);
         vm.prank(address(sdgnrs));
         game.creditRedemptionDirect{value: 2 ether}(aliceId, 10 ether);
@@ -109,6 +118,7 @@ contract RedemptionIsolationTest is RedemptionFixture {
         _fundLedger(100 ether);
         uint256 beforeClaimable = game.claimableWinningsOf(address(sdgnrs));
         uint256 beforePool = _pool();
+        _reserveLedger(8 ether);
         vm.deal(address(sdgnrs), 2 ether);
         vm.prank(address(sdgnrs));
         game.creditRedemptionDirect{value: 2 ether}(2, 10 ether);
@@ -137,7 +147,7 @@ contract RedemptionIsolationTest is RedemptionFixture {
         uint256 beforeClaimable = game.claimableWinningsOf(address(sdgnrs));
         vm.etch(ContractAddresses.STETH_TOKEN, address(new RedemptionHostileBalance(0)).code);
         _closeFunded();
-        assertEq(game.claimableWinningsOf(address(sdgnrs)), beforeClaimable);
+        assertEq(game.claimableWinningsOf(address(sdgnrs)) + game.redemptionReserve(), beforeClaimable);
         settlementWord = _wordForRoll(100);
         vm.mockCall(address(game), abi.encodeWithSelector(game.rngConsumerStage.selector), abi.encode(uint8(1)));
         uint256 beforeAlice = game.claimableWinningsOf(alice);
@@ -198,12 +208,14 @@ contract RedemptionIsolationTest is RedemptionFixture {
         uint256 beforePool = _pool();
         uint256 snap = vm.snapshotState();
         for (uint256 mode; mode < 6; ++mode) {
+            vm.mockCall(address(sdgnrs), abi.encodeWithSelector(sdgnrs.redemptionSettlementPending.selector), abi.encode(false));
             vm.mockCall(address(sdgnrs), abi.encodeWithSelector(sdgnrs.closeRedemptionBatch.selector), abi.encode(uint256(1 ether)));
             vm.etch(address(sdgnrs), address(new RedemptionHostileEth(mode)).code);
             _closeFunded();
             bool success = mode == 2 || mode == 3 || mode == 5;
             uint256 moved = success ? 1 ether : 0;
-            assertEq(game.claimableWinningsOf(address(sdgnrs)), beforeClaimable - moved);
+            assertEq(game.claimableWinningsOf(address(sdgnrs)), beforeClaimable - 1 ether);
+            assertEq(game.redemptionReserve(), 1 ether - moved);
             assertEq(_pool(), beforePool - moved);
             assertEq(address(sdgnrs).balance, moved);
             assertTrue(vm.revertToState(snap));

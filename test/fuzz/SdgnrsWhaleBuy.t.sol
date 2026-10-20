@@ -569,7 +569,7 @@ contract SdgnrsWhaleBuy is DeployProtocol {
         uint256 s0 = uint256(vm.load(address(game), _boonSlot0(player)));
         whaleDay = uint24(s0 >> BP_WHALE_DAY_SHIFT);
         deityWhaleDay = uint24(s0 >> 224);
-        tier = uint8(s0 >> BP_WHALE_TIER_SHIFT);
+        tier = uint8(s0 >> BP_WHALE_TIER_SHIFT) & 3;
     }
 
     function _claimableOf(address who) internal view returns (uint256) {
