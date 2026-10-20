@@ -97,7 +97,7 @@ contract JackpotStoredBoardTest is Test {
         (uint8 counter, bool pending, uint256 budgets) = h.completion();
         assertEq(counter, 1);
         assertFalse(pending);
-        assertEq(budgets, 0);
+        assertEq(budgets & ~(uint256(1) << 73), 0, "live budget fields cleared; bit 73 retains the word");
         r = h.runDailyJackpotTickets(WORD, 1_000_000);
         assertTrue(r.done);
         assertFalse(r.progressed);

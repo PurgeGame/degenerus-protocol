@@ -11,6 +11,7 @@ contract DegradeDecimatorSealHarness is DegenerusGameDecimatorModule {
         level = lvl - 1;
         decBattleRounds[lvl].count = count;
         decBattleRounds[lvl].openedDay = _simulatedDayIndex();
+        decEntriesLevel = lvl;
     }
 
     function publish(uint256 word) external {

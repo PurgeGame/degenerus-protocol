@@ -277,6 +277,8 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         // The one terminal swap takes the write cohort bought before the freeze, then the terminal
         // request goes out: from here the terminal draw's cohort is fixed.
         uint256 before = mockVRF.lastRequestId();
+        game.mineFlip(0); // swap and arm
+        assertEq(mockVRF.lastRequestId(), before, "arming sends no request");
         game.mineFlip(0);
         uint256 requestId = mockVRF.lastRequestId();
         assertGt(requestId, before, "terminal request sent after the swap");
@@ -324,6 +326,8 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
 
         _decideEnding();
         // No RNG boundary existed, so terminal entry must first swap write->read, then request VRF.
+        game.mineFlip(0); // swap and arm
+        assertFalse(game.rngLocked(), "arming sends no request");
         game.mineFlip(0);
         assertTrue(game.rngLocked(), "terminal VRF request opened after cohort snapshot");
         assertFalse(game.gameOver(), "waiting for terminal word");
@@ -369,6 +373,8 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         vm.deal(address(game), 100 ether);
 
         _decideEnding();
+        game.mineFlip(0); // swap and arm
+        assertFalse(game.rngLocked(), "arming sends no request");
         game.mineFlip(0);
         assertTrue(game.rngLocked(), "terminal request opened");
         seeder = _installSeeder();
@@ -496,6 +502,8 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
 
         // Terminal request, word application and payout, one transaction each.
         uint256 before = mockVRF.lastRequestId();
+        game.mineFlip(0); // arm
+        assertEq(mockVRF.lastRequestId(), before, "arming sends no request");
         game.mineFlip(0);
         uint256 requestId = mockVRF.lastRequestId();
         assertGt(requestId, before, "terminal request sent");
@@ -515,10 +523,10 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         vm.deal(address(game), 100 ether);
         _decideEnding();
         vm.mockCallRevert(address(mockVRF), bytes4(keccak256("requestRandomWords((bytes32,uint256,uint16,uint32,uint32,bytes))")), abi.encodeWithSignature("Error(string)", "refused"));
-        game.mineFlip(0);
+        game.mineFlip(0); // arms the terminal request; the coordinator is called on the next call
         uint256 state = uint256(game.extsload(bytes32(0)));
         uint256 stamp = (state >> 48) & type(uint48).max;
-        assertGt(stamp, 1, "first attempt arms a real refusal timer");
+        assertGt(stamp, 1, "arming starts the refusal timer");
         assertEq((state >> 254) & 1, 0, "failed request has no callback authority");
         assertEq((state >> 255) & 1, 0, "terminal session remains unpublished");
         assertEq(uint256(game.extsload(bytes32(uint256(4)))), 1, "nonzero idle ID is retained");
@@ -526,9 +534,11 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         assertEq(RecyclingState.currentWord(address(game)), 0, "idle ID cannot authorize a terminal callback");
         for (uint256 i; i < 3; ++i) {
             vm.warp(vm.getBlockTimestamp() + 1 hours);
-            vm.expectRevert(abi.encodeWithSignature("Error(string)", "refused"));
+            // A refused request with nothing else to do returns without progress or reward.
             game.mineFlip(0);
-            assertEq((uint256(game.extsload(bytes32(0))) >> 48) & type(uint48).max, stamp, "refusal cannot reset the timeout");
+            state = uint256(game.extsload(bytes32(0)));
+            assertEq((state >> 48) & type(uint48).max, stamp, "refusal cannot reset the timeout");
+            assertEq((state >> 254) & 1, 0, "refused request has no callback authority");
         }
         vm.warp(stamp + 14 days);
         seeder = _installSeeder();

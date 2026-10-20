@@ -172,7 +172,7 @@ contract TicketRecyclingProgressTest is DeployProtocol {
         vm.etch(address(game), realCode);
         // The already committed old foil cohort drains first, on its own word.
         // Each keeper call completes one bounded step before the ending requests RNG.
-        for (uint256 i; i < 4 && mockVRF.lastRequestId() == 0; ++i) game.mineFlip(0);
+        for (uint256 i; i < 5 && mockVRF.lastRequestId() == 0; ++i) game.mineFlip(0); // decision, loans, foil work, arming, request
         uint256 request = mockVRF.lastRequestId();
         assertGt(request, 0, "ending requests its own entropy after committed foil work");
         mockVRF.fulfillRandomWords(request, uint256(keccak256("terminal recycling word")) | 1);

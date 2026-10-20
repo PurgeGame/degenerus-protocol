@@ -117,11 +117,13 @@ contract TerminalDrainPostSwapStarvationTest is DeployProtocol {
         uint256 req0 = mockVRF.lastRequestId();
         game.mineFlip(0); // decision: VRF alive, so the loan book settles first
         game.mineFlip(0); // the (empty) loan book
-        game.mineFlip(0); // the one terminal swap + terminal request
+        game.mineFlip(0); // the one terminal swap + arming
         (uint256 rl, uint256 wl, uint256 sw) = _queues();
         assertEq(sw, 1, "swap latch set");
         assertEq(rl, owners, "the cohort moved to the read side");
         assertEq(wl, 0, "write side empty");
+        assertEq(mockVRF.lastRequestId(), req0, "arming sends no request");
+        game.mineFlip(0); // terminal request
         uint256 req = mockVRF.lastRequestId();
         assertGt(req, req0, "terminal request sent");
 

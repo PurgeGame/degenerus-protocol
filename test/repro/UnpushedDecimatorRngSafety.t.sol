@@ -39,6 +39,7 @@ contract UnpushedDecimatorSessionSeeder is DegenerusGameStorage {
         claimablePool = pool;
         _setDecWindowOpen(true);
         decBattleRounds[lvl].openedDay = dailyIdx;
+        decEntriesLevel = lvl;
     }
 
     function closeWindow() external { _setDecWindowOpen(false); }

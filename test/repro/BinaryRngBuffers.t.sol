@@ -141,7 +141,9 @@ contract BinaryRngBuffersTest is DeployProtocol {
         uint256 credit = game.middayRngCredits(buyer);
         uint256 id = mockVRF.lastRequestId();
         vm.mockCallRevert(address(mockVRF), abi.encodeWithSelector(IVRFCoordinator.requestRandomWords.selector), "coordinator unavailable");
-        vm.prank(buyer); vm.expectRevert(bytes("coordinator unavailable")); game.mineFlip(0);
+        // A refused request rolls back its own preparation; with nothing else done the call
+        // returns without progress or reward.
+        vm.prank(buyer); game.mineFlip(0);
         assertEq(game.extsload(bytes32(0)), state, "failed request changed buffer or completion");
         assertEq(game.extsload(bytes32(GameSlots.LOOTBOX_RNG_PACKED)), cursor, "failed request changed pending commitments");
         assertEq(game.middayRngCredits(buyer), credit);
