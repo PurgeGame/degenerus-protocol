@@ -1,0 +1,123 @@
+[
+  {
+    "type": "function",
+    "name": "jackpotBattleOf",
+    "inputs": [
+      {
+        "name": "slot",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "round",
+        "type": "tuple",
+        "internalType": "struct CrapsBattleStorage.JackpotRound",
+        "components": [
+          {
+            "name": "drawWord",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "added",
+            "type": "uint128",
+            "internalType": "uint128"
+          },
+          {
+            "name": "totalPool",
+            "type": "uint128",
+            "internalType": "uint128"
+          },
+          {
+            "name": "potRemainder",
+            "type": "uint128",
+            "internalType": "uint128"
+          },
+          {
+            "name": "paidUnits",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "bankroll",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "bountyUnits",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "drawCursor",
+            "type": "uint208",
+            "internalType": "uint208"
+          },
+          {
+            "name": "level",
+            "type": "uint24",
+            "internalType": "uint24"
+          },
+          {
+            "name": "requestDay",
+            "type": "uint24",
+            "internalType": "uint24"
+          },
+          {
+            "name": "multiplierBps",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "paidCount",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "drawnCount",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "drawnUnits",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "awardTarget",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "entryPrice",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "subsidyMultiplierBps",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "started",
+            "type": "bool",
+            "internalType": "bool"
+          }
+        ]
+      },
+      {
+        "name": "board",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "cursor",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  }
+]

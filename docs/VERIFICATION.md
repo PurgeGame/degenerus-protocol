@@ -10,6 +10,13 @@ authorized local commits: all pass, with 36 focused tests in campaign
 `20261020T051617.144095Z-ede4fbc6`. The full battery is deferred until after phase 2, before any push;
 partial broad runs are not a complete release result.
 
+The four ordered Phase 2 changes (boon/pass sentinels, sDGNRS queue counts, five-slot
+jackpot records) pass the production build/size check, root and nested layout checks,
+source gates, full Solidity typecheck and 164 distinct focused tests after fixture
+corrections. See `scripts/audit/storage-reuse-phase2/validation.json` for campaigns,
+source hashes and remaining release obligations. No Phase 2 native gas benchmark
+or full release battery is claimed.
+
 Run checks against the exact revision supplied for review. The repository contains
 source, tests and reproduction tooling; generated logs and analyzer reports stay in
 local output directories or CI artifacts.

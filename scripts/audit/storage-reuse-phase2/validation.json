@@ -1,0 +1,37 @@
+{
+  "baseline": "dfe5fb03f",
+  "status": "four ordered Phase 2 changes implemented; quick checks pass; uncommitted; full battery pending",
+  "production_source_sha256": {
+    "contracts/modules/DegenerusGameBoonModule.sol": "2fc74d8eec800acb804477ae0f1270a8e1962894062673fda60e4e9df9dd021f",
+    "contracts/modules/DegenerusGameWhaleModule.sol": "a709297479a43b09fd9c66b9c3abcb72c6e57615acdf1f4908908ab974d35905",
+    "contracts/storage/DegenerusGameStorage.sol": "f6f6c2ee2ddb7b3a68f1b82f42abc105141755bf1a1c064282d1561243284c36",
+    "contracts/libraries/CrapsPreferenceLib.sol": "1f85283e1d355f594a6d1393081fc0975f62d1cc93cddfe76ab80a409934fd0d",
+    "contracts/storage/CrapsBattleStorage.sol": "4649f8369860a43716db83902444d4d985ec40df885f8000058bf9add24c7b3a",
+    "contracts/CrapsBattle.sol": "7971849a3ddaa1717e2f773af3ef4723d5b9af664d7b76d11670656739c897a3",
+    "contracts/JackpotBattle.sol": "b07860b4e8775c5e3a7d86d8007b818408a9c829b1f9254f543c173e0cb3ae9c",
+    "contracts/sDGNRS.sol": "d1016d45aa36f4b32a646fc5f975ae7b6488e44c1f1353ce2280b7c285f7f072"
+  },
+  "build_and_deployment_sizes": "passed",
+  "nested_layout": "passed: 5 jackpot slots; sDGNRS counts slot 7 offset 24; roots unchanged",
+  "solidity_typecheck": {
+    "input_sources": 818,
+    "compiled_source_units": 846,
+    "errors": 0
+  },
+  "native_phase2_benchmarks": "not run; gas estimates use Phase 1 Glamsterdam schedule",
+  "full_battery": "deferred until after phase 2 and required before any push",
+  "source_gates": "all make check-* source gates and interface coverage passed",
+  "root_layout_oracle": "passed; only sDGNRS golden changed (new counts and queue type)",
+  "recursive_game_layout": "17 delegate modules match",
+  "focused_tests": {
+    "distinct_passing": 164,
+    "remaining_failures": 0,
+    "campaigns": [
+      "20261020T052335.867433Z-48d045ef",
+      "20261020T052747.800114Z-fd18deaa"
+    ],
+    "final_boon_rerun": ".audit-test-logs/storage-reuse-phase2/final-boon.log",
+    "scope": "Same production sources in both campaigns. Reruns update sentinel/expiry expectations and Foundry caller/timestamp fixtures only. Counts deduplicate imported suites."
+  },
+  "final_boon_test_sha256": "a64013231eed30b3d40cce58134c44a7405d50f2ddf1f2989edeb0255803f8c8"
+}

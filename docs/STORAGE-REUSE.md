@@ -100,3 +100,35 @@ size checks, full repository suites and the independent accounting/codec compari
 
 See `.planning/STORAGE-REUSE-PLAN.md` for the design invariants and implementation work packages,
 and `scripts/audit/storage-reuse/` for pinned baseline and verification evidence.
+
+## Phase 2: retained boons, passes and redemption queues; packed rounds
+
+Implemented after Phase 1 commits `c4c1effe5` / `dfe5fb03f`; verification is recorded
+separately in `scripts/audit/storage-reuse-phase2/`. These remain new-deployment changes.
+
+- Boon slot 1 retains bit 24 after awards, consumption and expiry. The public getter
+  includes that bit; it conveys no live boon. All lane positions are unchanged and
+  the box expiry gate ignores the sentinel. Slot 0 keeps its existing behavior.
+- The pass/preference word retains bit 117 after its first credit. Balances and
+  board encoding are unchanged. Bits 85..116 carry a wallet ID only in memory;
+  `_paidDoor` truncates that ID before constructing its separate fee/account word.
+- sDGNRS stores queue counts in slot 7, bytes 24..31, even parity first. Roots 9/10
+  now map word index to two packed 128-bit entries: `keccak256(abi.encode(index/2,
+  9+parity))`. Entries retain amount80/ID32/activity16. A finished batch resets only
+  its count, retaining data for overwrite. Locators and cursors prevent stale claims;
+  terminal manual claims still clear their lane. Other storage offsets are unchanged.
+- Jackpot rounds occupy five words at the existing mapping root 17. `drawWord` is
+  frozen during preparation; `started` becomes true only when the draw seals.
+  The table and high-reserve draws use the identical frozen entropy after sealing.
+  `jackpotBattleOf` returns the reordered/narrowed struct and an explicit `started`
+  field: ABI consumers must regenerate this tuple before the new deployment.
+
+Under the Glamsterdam schedule used in Phase 1, avoiding a creation saves 97,920
+state gas gross. A retained boon/pass word saves 86,304 per separate-transaction
+clear/recreate cycle if the foregone 11,616 clearing refund would have been fully
+realized, before added instructions. Saved-board accounts already retain their pass
+word, so the new bit adds no avoided creation there. Queue counts remove their own
+length-slot creations; accounting in the shared word still follows its existing
+lifecycle. Jackpot packing removes at most three nonzero slot creations per round,
+or 293,760 state gas gross. These are operation-level bounds, not measured annual
+savings or native Phase 2 benchmarks; actual savings depend on the fields written.

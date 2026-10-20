@@ -63,6 +63,11 @@ def verification_files(build_inputs):
         "scripts/audit/model-coinflip-credit-bound.py", "scripts/audit/model-affiliate-storage-reuse.py",
         "scripts/audit/benchmark-storage-reuse.py",
         "scripts/audit/mutate-storage-reuse.py",
+        "scripts/check-storage-reuse-phase2-layout.py",
+        "scripts/audit/storage-reuse-phase2/REVIEW.md",
+        "scripts/audit/storage-reuse-phase2/validation.json",
+        "scripts/audit/storage-reuse-phase2/production-sizes.json",
+        "scripts/audit/storage-reuse-phase2/jackpotBattleOf.abi.json",
     ) if (ROOT / p).is_file())
     paths.update(p.relative_to(ROOT).as_posix() for p in (ROOT / "test").rglob("*")
                  if p.is_file() and p.suffix in {".sol", ".js", ".py"})
