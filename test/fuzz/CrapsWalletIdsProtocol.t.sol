@@ -43,7 +43,8 @@ contract ProtocolCrapsTable is CrapsViews {
 
     function standReserve(uint64 slot, uint256 word, uint32 id, uint256 reserve) external {
         JackpotRound storage r = _jackpotRounds[slot];
-        r.word = word;
+        r.drawWord = word;
+        r.started = true;
         r.paidCount = 1;
         _appendBet((uint256(slot) << 64) | 1, uint256(id) | _BET_HIGH_BIT);
         _setBonusCursor(slot, 1);

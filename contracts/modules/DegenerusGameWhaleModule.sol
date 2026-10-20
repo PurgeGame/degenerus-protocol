@@ -634,13 +634,13 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             uint24 currentDay = _simulatedDayIndex();
             uint24 deityDay = uint24(s1 >> BP_DEITY_LAZY_PASS_DAY_SHIFT);
             if (deityDay != 0 && deityDay != currentDay) {
-                bpLazy.slot1 = s1 & BP_LAZY_PASS_CLEAR;
+                bpLazy.slot1 = (s1 & BP_LAZY_PASS_CLEAR) | BP_SLOT1_RETAINED;
                 boonDay = 0;
                 boonDiscountBps = 0;
             } else if (currentDay <= boonDay + 4) {
                 hasValidBoon = true;
             } else {
-                bpLazy.slot1 = s1 & BP_LAZY_PASS_CLEAR;
+                bpLazy.slot1 = (s1 & BP_LAZY_PASS_CLEAR) | BP_SLOT1_RETAINED;
                 boonDay = 0;
                 boonDiscountBps = 0;
             }
@@ -706,7 +706,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         }
         if (hasValidBoon) {
             // Clear lazy pass fields (consumed)
-            bpLazy.slot1 = s1 & BP_LAZY_PASS_CLEAR;
+            bpLazy.slot1 = (s1 & BP_LAZY_PASS_CLEAR) | BP_SLOT1_RETAINED;
         }
         // The pass is priced: register the buyer (the eligibility read above writes nothing back).
         buyerId = _registerCallerAccount(buyerId == 0 ? _walletIdOf(msg.sender) : buyerId, totalPrice);
@@ -871,7 +871,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                 totalPrice = (basePrice * (10_000 - discountBps)) / 10_000;
             }
             // Consume boon regardless of expiry — clear deity pass fields
-            bpDeity.slot1 = s1Deity & BP_DEITY_PASS_CLEAR;
+            bpDeity.slot1 = (s1Deity & BP_DEITY_PASS_CLEAR) | BP_SLOT1_RETAINED;
         }
         // The pass is priced: register the buyer (the eligibility read above writes nothing back).
         buyerId = _registerCallerAccount(buyerId == 0 ? _walletIdOf(msg.sender) : buyerId, totalPrice);

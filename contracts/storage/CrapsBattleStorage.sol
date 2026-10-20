@@ -1053,26 +1053,28 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      slot is the first skipped position; all days older than today minus 30 are skipped.
     event CrapsScheduledExpired(uint64 indexed slot);
 
+    /// @dev Five words. Whole-FLIP amounts fit uint128: even a uint128-max prize pool,
+    ///      minimum ticket price and maximum encoded fee imply added < 2^89 and pool < 2^99.
+    ///      The Game's packed draw cursor uses bits 0..201; bankroll is capped at 41,943,000.
     struct JackpotRound {
-        uint256 word;
-        uint256 added;
-        uint256 totalPool;
-        uint256 potRemainder;
-        uint128 bankroll;
+        uint256 drawWord; // slot 0: frozen once, also the settlement entropy after started
+        uint128 added; // slot 1
+        uint128 totalPool;
+        uint128 potRemainder; // slot 2
         uint64 paidUnits;
+        uint32 bankroll;
         uint32 bountyUnits;
-        uint32 multiplierBps;
+        uint208 drawCursor; // slot 3
+        uint24 level;
+        uint24 requestDay;
+        uint32 multiplierBps; // slot 4
         uint32 paidCount;
         uint32 drawnCount;
         uint32 drawnUnits;
-        uint24 level;
-        uint24 requestDay;
         uint32 awardTarget;
-        // Fill slot 5's spare bytes; drawWord/drawCursor retain slots 6/7.
         uint32 entryPrice;
         uint32 subsidyMultiplierBps;
-        uint256 drawWord;
-        uint256 drawCursor;
+        bool started;
     }
     mapping(uint256 => JackpotRound) internal _jackpotRounds;
     uint64 internal _activeJackpotSlot;
@@ -1150,7 +1152,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
             // SATURATES silently. The clamp exists only so an impossible overflow could not spill
             // into the lane packed above this one. `CrapsPassesCredited` reports what banked.
             if (sum > _PASS_MAX) sum = _PASS_MAX;
-            _passCreditsById[id] = (word & ~(_PASS_MAX << shift)) | (sum << shift);
+            _passCreditsById[id] = (word & ~(_PASS_MAX << shift)) | (sum << shift) | CrapsPreferenceLib.RETAINED;
             got = sum - held;
             emit CrapsPassesCredited(id, high, got);
         }

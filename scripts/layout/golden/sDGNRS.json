@@ -80,6 +80,14 @@
     "typeLabel": "uint32"
   },
   {
+    "bytes": "8",
+    "encoding": "inplace",
+    "label": "_batchPlayerCounts",
+    "offset": 24,
+    "slot": 7,
+    "typeLabel": "uint64"
+  },
+  {
     "bytes": "16",
     "encoding": "inplace",
     "label": "centurySupplyCheckpoint",
@@ -117,7 +125,7 @@
     "label": "_batchPlayers",
     "offset": 0,
     "slot": 9,
-    "typeLabel": "uint128[][2]"
+    "typeLabel": "mapping(uint256 => uint256)[2]"
   },
   {
     "bytes": "32",

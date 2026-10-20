@@ -152,7 +152,10 @@ contract CrapsBattle is CrapsBattleStorage {
     }
 
     function _slotWord(uint256 slot) internal view returns (uint256) {
-        if (_isJackpotSlot(slot)) return _jackpotRounds[slot].word;
+        if (_isJackpotSlot(slot)) {
+            JackpotRound storage r = _jackpotRounds[slot];
+            return r.started ? r.drawWord : 0;
+        }
         uint48 index = _slotIndexOf(slot);
         // The subtraction is evaluated only for a nonzero stored index.
         unchecked { return index == 0 ? 0 : _wordAt(index - 1); }
@@ -312,7 +315,7 @@ contract CrapsBattle is CrapsBattleStorage {
                 if (p == 7) { w.bound = uint48(slot); w.key = bytes32(slot); }
                 if (_isJackpotSlot(slot)) {
                     JackpotRound storage r = _jackpotRounds[slot];
-                    if (r.word != 0) {
+                    if (r.started) {
                         w.bankroll = r.bankroll;
                         w.goal = uint128(uint256(r.bankroll) * _SCHED_GOAL);
                         w.played = _schedRound(r.bankroll);
@@ -414,7 +417,7 @@ contract CrapsBattle is CrapsBattleStorage {
     function _paidDoor(uint32 id) private returns (uint256 word, uint256 account) {
         address payee;
         (payee, word) = _door(id, true);
-        account = uint256(uint160(payee)) | ((word >> CrapsPreferenceLib.ID_SHIFT) << _ACCOUNT_ID_SHIFT);
+        account = uint256(uint160(payee)) | (uint256(uint32(word >> CrapsPreferenceLib.ID_SHIFT)) << _ACCOUNT_ID_SHIFT);
         if (_newcomer(uint32(word >> CrapsPreferenceLib.ID_SHIFT))) account |= _ACCOUNT_NEWCOMER;
     }
 

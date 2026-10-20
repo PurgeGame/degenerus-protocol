@@ -23,6 +23,16 @@ contract CrapsNewcomerTest is CrapsPins {
         );
     }
 
+    function test_RetainedPassWordCannotSetNewcomerFee() public {
+        game.setMintHistory(player, uint256(3) << 24);
+        vm.prank(ContractAddresses.GAME);
+        table.creditPasses(_idFor(player), 1, 0);
+        uint64 slot = _openBattle(table, 300, 2, 5, 3);
+        vm.prank(player);
+        table.enterBattle(slot, uint32(0), 1);
+        assertEq(flip.burned(player), 900, "pass sentinel is not the newcomer flag");
+    }
+
     function test_recentMintAndLifetimeBoundaries() public {
         assertEq(table.entryPrice(player, 8_000), 8_400);
         game.setMintHistory(player, uint256(2) << 24 | 8);

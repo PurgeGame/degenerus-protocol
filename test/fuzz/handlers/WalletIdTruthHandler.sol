@@ -95,7 +95,7 @@ contract WalletIdTruthHandler is Test {
     uint256 internal constant AFF_EARNED = 1; // affiliateCoinEarned[ownerId]
     uint256 internal constant AFF_REFERRAL = 2; // playerReferralCode
     uint256 internal constant AFF_LEVEL_SCORE = 3; // _levelScore
-    uint256 internal constant SD_BATCH_PLAYERS = 9; // sDGNRS._batchPlayers (uint256[][2] at 9, 10)
+    uint256 internal constant SD_BATCH_PLAYERS = 9; // sDGNRS._batchPlayers (packed-word mappings at 9, 10)
     uint256 internal constant SD_DAY_VALUE = 11; // sDGNRS._redemptionDayValue
     uint256 internal constant SD_ID_SHIFT = 152;
     uint256 internal constant PM_COUNTS = 0; // DegenerusParimutuel.growthCounts
@@ -1675,16 +1675,15 @@ contract WalletIdTruthHandler is Test {
         }
     }
 
-    /// @dev sDGNRS batch beneficiaries: `address | id << 160`, the ID canonical for the address.
+    /// @dev sDGNRS packed queue entries: token amount80, wallet ID32, activity16.
     function _checkSdgnrsBatches() internal view {
         for (uint256 p; p < 2; ++p) {
             uint256 root = SD_BATCH_PLAYERS + p;
-            uint256 n = uint256(vm.load(SDGNRS, bytes32(root)));
-            uint256 base = uint256(keccak256(abi.encode(root)));
+            uint256 n = uint32(uint256(vm.load(SDGNRS, bytes32(uint256(7)))) >> (192 + p * 32));
             if (n > 256) n = 256;
             for (uint256 i; i < n; ++i) {
-                uint128 entry = uint128(uint256(vm.load(SDGNRS, bytes32(base + i / 2))) >> (128 * (i % 2)));
-                if (entry == 0) continue; // settled or parked entries are cleared before recycling
+                uint128 entry = uint128(uint256(vm.load(SDGNRS, keccak256(abi.encode(i / 2, root)))) >> (128 * (i % 2)));
+                if (entry == 0) continue; // terminal manual claim cleared this lane
                 uint32 id = uint32(entry >> 80);
                 if (!_registered(id)) _fail("SDGNRS", "queue recipient is unallocated", address(0), id, i);
             }

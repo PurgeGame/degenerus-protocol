@@ -200,7 +200,7 @@ contract JackpotMergeAdvanceTest is DeployProtocol {
         }
         assertLt(count, 400, "battle stalled");
         (CrapsBattleStorage.JackpotRound memory r,,) = reader.jackpotBattleOf(slot);
-        assertGt(r.word, 0, "the field sealed with its word");
+        assertEq(r.started, true, "the field sealed with its word");
         emit log_named_uint("largest jackpot battle call (incl intrinsic under isolate)", maxGas);
         emit log_named_uint("battle calls", count);
         for (uint256 i; i < 60 && game.rngLocked() && mockVRF.lastRequestId() == requestId; ++i) _step(SETTLE_GAS);

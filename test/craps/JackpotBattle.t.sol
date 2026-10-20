@@ -263,7 +263,7 @@ contract JackpotBattleTest is CrapsPins {
         vm.prank(ContractAddresses.GAME);
         api.appendJackpotBattle(field, 50, false);
         assertEq(_round().drawnCount, 50);
-        assertEq(_round().word, 0);
+        assertEq(_round().started, false);
         vm.prank(ContractAddresses.GAME);
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
         cold.runDailyBattleWork(gasleft());
@@ -271,7 +271,7 @@ contract JackpotBattleTest is CrapsPins {
         vm.prank(ContractAddresses.GAME);
         api.appendJackpotBattle(field, 100, true);
         assertEq(_round().drawnCount, 100);
-        assertEq(_round().word, 123);
+        assertTrue(_round().started); assertEq(_round().drawWord, 123);
         assertGe(_round().bankroll, 300);
         _finish();
     }
@@ -464,7 +464,7 @@ contract JackpotBattleTest is CrapsPins {
         vm.prank(ContractAddresses.GAME);
         api.appendJackpotBattle(f, 3, true);
         assertEq(_round().drawnCount, 1);
-        assertEq(_round().word, 123);
+        assertTrue(_round().started); assertEq(_round().drawWord, 123);
         _finish();
     }
 
@@ -532,7 +532,7 @@ contract JackpotBattleTest is CrapsPins {
         vm.expectRevert(JackpotBattle.BadJackpotField.selector);
         api.appendJackpotBattle(f, 0, true);
         vm.stopPrank();
-        assertEq(_round().word, 99); assertEq(_round().drawnCount, 1);
+        assertTrue(_round().started); assertEq(_round().drawWord, 99); assertEq(_round().drawnCount, 1);
         _finish();
     }
 

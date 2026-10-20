@@ -225,8 +225,8 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
         assertEq(round.drawnCount, 50);
         assertEq(round.drawnUnits, 50);
         assertEq(uint32(board), 150);
-        assertEq(round.word, round.drawWord);
-        assertGt(round.word, 0);
+        assertTrue(round.started);
+        assertEq(round.started, true);
         assertGt(round.potRemainder, 0, "fresh remainder slot must exercise its write");
         assertGt(coin.crapsCompAllowance(), priorComps, "real FLIP comps sink must execute");
     }
@@ -240,7 +240,7 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
             if (i == 0) word = round.drawWord;
             assertEq(round.drawWord, word);
             assertEq(round.drawnCount, (i + 1) * 50);
-            assertEq(round.word == 0, i < 9);
+            assertEq(!round.started, i < 9);
         }
     }
 
@@ -257,7 +257,7 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
         (CrapsBattleStorage.JackpotRound memory round, uint256 board, uint64 resolved) =
             JackpotBattle(address(crapsBattle)).jackpotBattleOf(slot);
         assertEq(round.drawnCount, 500, "one invocation must reuse the list across ten chunks");
-        assertGt(round.word, 0, "the final chunk seals the field");
+        assertEq(round.started, true, "the final chunk seals the field");
         assertEq(resolved, 0);
         bytes32 state = keccak256(abi.encode(round, board, resolved));
         uint256 comps = coin.crapsCompAllowance();
@@ -318,7 +318,7 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
         (CrapsBattleStorage.JackpotRound memory round,,) = JackpotBattle(address(crapsBattle)).jackpotBattleOf(slot);
         assertEq(round.drawWord, 0, "deferral must not initialize a draw");
         assertEq(round.drawnCount, 0);
-        assertEq(round.word, 0, "deferral must not seal a field");
+        assertEq(round.started, false, "deferral must not seal a field");
         assertEq(coin.crapsCompAllowance(), comps);
         assertEq(coinflip.coinflipAmount(MINER), 0, "no-work deferral cannot pay a miner");
 
@@ -336,7 +336,7 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
         (round,,) = JackpotBattle(address(crapsBattle)).jackpotBattleOf(slot);
         assertGt(round.drawWord, 0, "funded first chunk initialized the draw");
         assertEq(round.drawnCount, 50, "one canonical award group despite extreme estimates");
-        assertEq(round.word, 0, "remaining groups must precede the field seal");
+        assertEq(round.started, false, "remaining groups must precede the field seal");
     }
 
     function test_ColdProductionMineFlipConstructionSealAndMinerPaymentWithin10M() public {
@@ -353,7 +353,7 @@ contract JackpotBattleConstructionGasTest is DeployProtocol {
         (CrapsBattleStorage.JackpotRound memory round,, uint64 resolved) =
             JackpotBattle(address(crapsBattle)).jackpotBattleOf(slot);
         assertEq(round.drawnCount, 150);
-        assertGt(round.word, 0);
+        assertEq(round.started, true);
         assertEq(resolved, 0, "construction call must stop before simulations");
         assertGt(coinflip.coinflipAmount(MINER), beforeReward, "real miner compensation must be included");
     }

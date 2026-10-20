@@ -328,8 +328,8 @@ contract WalletIdTruthInvariant is DeployProtocol {
         assertEq(rw, (uint256(1) << 32) | game.walletIdOf(ref), "referral stores only the ID");
         uint256 vaultCode = uint256(vm.load(address(affiliate), keccak256(abi.encode(bytes32("VAULT"), uint256(0)))));
         assertEq(uint32(vaultCode), 1, "VAULT code owner ID");
-        uint256 batch = uint256(vm.load(address(sdgnrs), keccak256(abi.encode(uint256(9)))))
-            | uint256(vm.load(address(sdgnrs), keccak256(abi.encode(uint256(10)))));
+        uint256 batch = uint256(vm.load(address(sdgnrs), keccak256(abi.encode(uint256(0), uint256(9)))))
+            | uint256(vm.load(address(sdgnrs), keccak256(abi.encode(uint256(0), uint256(10)))));
         assertEq(uint32(batch >> 80), id, "sDGNRS batch beneficiary ID");
         handler.ingest();
         handler.checkAll();

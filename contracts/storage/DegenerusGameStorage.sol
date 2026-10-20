@@ -3755,10 +3755,11 @@ abstract contract DegenerusGameStorage {
     ///   [224-247] deityWhaleDay        uint24   Deity-source day for whale boon
     ///   [248-255] whaleTier            uint8    0=none, 1=10%, 2=20%, 3=35%
     ///
-    /// Slot 1 (bits 0-23 and 72-255 used; bits 24-71 free):
+    /// Slot 1 (bit 24 keeps the allocated word nonzero; bits 25-71 free):
     ///   [0-23]    craps                uint24   Craps stake-boon lane (the LOW lane, so the
     ///                                           consumption hot path masks without shifting)
-    ///   [24-71]   (free)                        Activity awards are credited to player
+    ///   [24]      retained             bool     Sticky storage-reuse sentinel
+    ///   [25-71]   (free)                        Activity awards are credited to player
     ///                                           stats on award and hold no boon state
     ///   [72-79]   deityPassTier        uint8    0=none, 1=10%, 2=20%, 3=35%
     ///   [80-103]  deityPassDay         uint24   Day deity pass boon was awarded
@@ -3792,6 +3793,7 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Packed boon state by wallet ID; nothing is ever written under ID 0, so its lanes
     ///      read empty. Public getter returns (uint256 slot0, uint256 slot1); bit layout above.
+    ///      Slot1 bit 24 records allocation, not a live boon; readers must ignore it.
     ///      UI readers combine with currentDayView() to compute per-category expiry. WWXRP.enter
     ///      reads slot1's WWXRP lane by raw slot `keccak256(id, slot) + 1` (its
     ///      GAME_BOON_PACKED_SLOT / GAME_WWXRP_LANE_SHIFT / GAME_LANE_TIER_MASK mirror this
@@ -3815,7 +3817,8 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant BP_DEITY_WHALE_DAY_SHIFT = 224;
     uint256 internal constant BP_WHALE_TIER_SHIFT = 248;
 
-    // ---- Slot 1 shifts (the craps lane owns bits 0-23; bits 24-71 are free) ----
+    // ---- Slot 1 shifts (the craps lane owns bits 0-23; bit 24 retains the word) ----
+    uint256 internal constant BP_SLOT1_RETAINED = 1 << 24;
     uint256 internal constant BP_DEITY_PASS_TIER_SHIFT = 72;
     uint256 internal constant BP_DEITY_PASS_DAY_SHIFT = 80;
     uint256 internal constant BP_DEITY_DEITY_PASS_DAY_SHIFT = 104;

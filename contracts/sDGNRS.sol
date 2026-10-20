@@ -342,7 +342,7 @@ contract sDGNRS {
     {
         (uint256 index, bool live) = _liveClaimIndex(walletId, batchId);
         uint128 entry;
-        if (live) entry = _batchPlayers[batchId & 1][index];
+        if (live) entry = _batchPlayer(batchId & 1, index);
         if (entry == 0) entry = _parkedRedemptions[walletId][batchId].entry;
         tokens = uint80(entry);
         activityScore = uint16(entry >> BATCH_PLAYER_SCORE_SHIFT);
@@ -363,8 +363,8 @@ contract sDGNRS {
     function _takeClaim(uint32 walletId, uint32 batchId) private returns (uint128 entry) {
         (uint256 index, bool live) = _liveClaimIndex(walletId, batchId);
         if (live) {
-            entry = _batchPlayers[batchId & 1][index];
-            if (entry != 0) delete _batchPlayers[batchId & 1][index];
+            entry = _batchPlayer(batchId & 1, index);
+            if (entry != 0) _setBatchPlayer(batchId & 1, index, 0);
         }
         if (entry == 0) {
             entry = _parkedRedemptions[walletId][batchId].entry;
@@ -380,6 +380,8 @@ contract sDGNRS {
     uint32 private _settlingBatch;
     /// @dev Next index into the settling batch's player list.
     uint32 private _redemptionCursor;
+    /// @dev Two uint32 queue counts, even then odd, fill the remaining eight bytes of slot 7.
+    uint64 private _batchPlayerCounts;
 
     /// @dev A closed batch has unsettled claims: RNG consumer stage 1, which every later request
     ///      waits for. A batch only closes non-empty, so a settling id always has claims left.
@@ -536,12 +538,11 @@ contract sDGNRS {
 
         uint256 batchTokens = batch.tokens;
         uint256 payout = batch.ethPayout;
-        uint128[] storage players = _batchPlayers[id & 1];
-        uint256 total = players.length;
+        uint256 total = _batchPlayerCount(id & 1);
         uint256 cursor = _redemptionCursor;
         uint256 initialCursor = cursor;
         while (cursor < total) {
-            uint128 entry = players[cursor];
+            uint128 entry = _batchPlayer(id & 1, cursor);
             uint32 walletId = uint32(entry >> BATCH_PLAYER_ID_SHIFT);
             uint256 claimTokens = uint80(entry);
             if (claimTokens == 0) {
@@ -597,8 +598,7 @@ contract sDGNRS {
         }
         _settlingBatch = 0;
         _redemptionCursor = 0;
-        uint128[] storage players = _batchPlayers[id & 1];
-        assembly ("memory-safe") { sstore(players.slot, 0) }
+        _setBatchPlayerCount(id & 1, 0);
     }
 
     /// @dev Self-call target of the miner drain, so a refused claim rolls back alone. The queue
@@ -643,7 +643,30 @@ contract sDGNRS {
 
     /// @dev Two claims per slot, by batch parity: raw token amount (80 bits),
     ///      wallet ID (32 bits), first activity score + 1 (16 bits). No address in settlement.
-    uint128[][2] private _batchPlayers;
+    mapping(uint256 => uint256)[2] private _batchPlayers;
+
+    function _batchPlayerCount(uint256 parity) private view returns (uint256) {
+        return uint32(_batchPlayerCounts >> (parity << 5));
+    }
+
+    function _setBatchPlayerCount(uint256 parity, uint256 count) private {
+        uint256 shift = parity << 5;
+        _batchPlayerCounts = uint64((uint256(_batchPlayerCounts) & ~(uint256(type(uint32).max) << shift))
+            | (count << shift));
+    }
+
+    function _batchPlayer(uint256 parity, uint256 index) private view returns (uint128) {
+        return uint128(_batchPlayers[parity][index >> 1] >> ((index & 1) << 7));
+    }
+
+    /// @dev Whole lanes are replaced on reuse. Only terminal manual claims clear a lane;
+    ///      live settlement retires entries with the cursor and retains every data word.
+    function _setBatchPlayer(uint256 parity, uint256 index, uint128 entry) private {
+        uint256 shift = (index & 1) << 7;
+        uint256 word = _batchPlayers[parity][index >> 1];
+        _batchPlayers[parity][index >> 1] = (word & ~(uint256(type(uint128).max) << shift))
+            | (uint256(entry) << shift);
+    }
 
     /// @dev Refused claims survive buffer reuse; each retains its exact committed session word.
     mapping(uint32 => mapping(uint32 => ParkedRedemption)) private _parkedRedemptions;
@@ -1342,12 +1365,13 @@ contract sDGNRS {
         uint256 parity = id & 1;
         uint256 locations = _claimLocations[walletId];
         uint64 lane = uint64(locations >> (parity * 64));
-        uint128[] storage players = _batchPlayers[parity];
         uint80 units = uint80(amount);
         if (uint32(lane) != id) {
-            uint256 index = players.length;
-            players.push(uint128(units) | (uint128(walletId) << BATCH_PLAYER_ID_SHIFT)
+            uint256 index = _batchPlayerCount(parity);
+            _setBatchPlayer(parity, index, uint128(units) | (uint128(walletId) << BATCH_PLAYER_ID_SHIFT)
                 | (uint128(uint16(score) + 1) << BATCH_PLAYER_SCORE_SHIFT));
+            // One entry per nonzero uint32 wallet ID: the count cannot exceed uint32.max.
+            _setBatchPlayerCount(parity, index + 1);
             uint256 locator = uint256(id) | (index << 32);
             _claimLocations[walletId] = uint128(
                 (locations & ~(uint256(type(uint64).max) << (parity * 64))) | (locator << (parity * 64))
@@ -1355,7 +1379,8 @@ contract sDGNRS {
         } else {
             // Only the amount changes: position and first activity snapshot stay fixed.
             // The entire supply in units fits in 80 bits, so this addition cannot carry into ID.
-            players[uint32(lane >> 32)] += uint128(units);
+            uint256 index = uint32(lane >> 32);
+            _setBatchPlayer(parity, index, _batchPlayer(parity, index) + uint128(units));
         }
 
         emit RedemptionSubmitted(walletId, amount, id);

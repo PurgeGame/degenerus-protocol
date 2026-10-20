@@ -70,7 +70,7 @@ contract WwxrpBoonLaneSkipTest is DeployProtocol {
         vm.prank(alice);
         wwxrp.enter(0, 25);
         (, uint256 s1) = IGameBoonView(address(game)).boonPacked(aliceId);
-        assertEq(s1, others, "WWXRP lane not cleared or another lane touched");
+        assertEq(s1, others | (1 << 24), "WWXRP lane not cleared or another lane touched");
     }
 
     /// @dev An expired WWXRP boon has a nonzero tier, so the consume still runs and clears it,
@@ -83,7 +83,7 @@ contract WwxrpBoonLaneSkipTest is DeployProtocol {
         vm.prank(alice);
         wwxrp.enter(0, 25);
         (, uint256 s1) = IGameBoonView(address(game)).boonPacked(aliceId);
-        assertEq(s1, 0, "expired WWXRP lane not cleared");
+        assertEq(s1, 1 << 24, "expired WWXRP lane not cleared");
     }
 
     /// @dev A deity-issued WWXRP boon is live only on its stamp day: that day it pays tier x 400;
@@ -96,7 +96,7 @@ contract WwxrpBoonLaneSkipTest is DeployProtocol {
         vm.prank(alice);
         wwxrp.enter(0, 25);
         (, uint256 s1) = IGameBoonView(address(game)).boonPacked(aliceId);
-        assertEq(s1, 0, "same-day deity lane not spent");
+        assertEq(s1, 1 << 24, "same-day deity lane not spent");
 
         _write(aliceId, 0, _lane(3, true, d) << WWXRP_LANE_SHIFT);
         vm.warp(vm.getBlockTimestamp() + 1 days);
@@ -109,7 +109,7 @@ contract WwxrpBoonLaneSkipTest is DeployProtocol {
             assertTrue(logs[i].topics[0] != BOON_CONSUMED_SIG, "stale deity lane paid");
         }
         (, s1) = IGameBoonView(address(game)).boonPacked(aliceId);
-        assertEq(s1, 0, "stale deity lane not cleared");
+        assertEq(s1, 1 << 24, "stale deity lane not cleared");
     }
 
     /// @dev Any boon state at all. The dispatch happens iff the WWXRP tier is nonzero; when it
@@ -156,7 +156,7 @@ contract WwxrpBoonLaneSkipTest is DeployProtocol {
             }
         } else {
             (, uint256 g1) = IGameBoonView(address(game)).boonPacked(aliceId);
-            assertEq(g1, s1 & ~(uint256(0xFFFFFF) << WWXRP_LANE_SHIFT), "consume touched another lane");
+            assertEq(g1, (s1 & ~(uint256(0xFFFFFF) << WWXRP_LANE_SHIFT)) | (1 << 24), "consume touched another lane");
         }
     }
 

@@ -145,7 +145,7 @@ contract WwxrpTrustedMintersTest is DeployProtocol {
         assertEq(wwxrp.consumeBoon(playerId), 1200, "tier 3 pays +12%");
         uint256 s1 = _slot1(player);
         assertEq((s1 >> WWXRP_LANE_SHIFT) & LANE_MASK, 0, "WWXRP lane spent");
-        assertEq(s1, othersBefore, "craps/ETH/FLIP lanes untouched");
+        assertEq(s1, othersBefore | (1 << 24), "craps/ETH/FLIP lanes untouched");
         assertEq(uint256(vm.load(address(game), _slot0Key(player))), s0, "slot0 boons untouched");
 
         vm.prank(futureGame);

@@ -178,7 +178,7 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol {
             JackpotBattle(address(crapsBattle)).jackpotBattleOf(activeSlot);
         assertEq(r.drawnCount, c.target < 50 ? c.target : 50);
         assertEq(r.drawnUnits, r.drawnCount);
-        assertEq(r.word != 0, c.target <= 50);
+        assertEq(r.started, c.target <= 50);
         assertEq(settled, 0);
         if (c.prefix) {
             uint32[] memory winners = new uint32[](r.drawnCount);
@@ -251,7 +251,7 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol {
             (CrapsBattleStorage.JackpotRound memory r,, uint64 settled) =
                 JackpotBattle(address(crapsBattle)).jackpotBattleOf(activeSlot);
             assertEq(r.drawnCount, 150);
-            assertGt(r.word, 0);
+            assertEq(r.started, true);
             assertEq(settled, 0, "must stop at construction checkpoint");
             assertGt(coinflip.coinflipAmount(MINER), 0, "include actual miner reward");
             emit log_named_uint("production_word", words[i]);
@@ -290,7 +290,7 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol {
         (CrapsBattleStorage.JackpotRound memory afterRound,,) =
             JackpotBattle(address(crapsBattle)).jackpotBattleOf(activeSlot);
         assertEq(afterRound.drawnCount, 50);
-        assertEq(afterRound.word, 0, "checkpoint must leave the partial field unsealed");
+        assertEq(afterRound.started, false, "checkpoint must leave the partial field unsealed");
         assertGt(afterRound.drawCursor, 0);
         emit log_named_uint("minimum_successful_supplied_gas", high);
         emit log_named_uint("boundary_transaction_gas_used", used);
@@ -364,7 +364,7 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol {
             (CrapsBattleStorage.JackpotRound memory r,,) =
                 JackpotBattle(address(crapsBattle)).jackpotBattleOf(activeSlot);
             assertEq(r.drawnCount, c.target);
-            assertGt(r.word, 0);
+            assertEq(r.started, true);
             assertTrue(vm.revertToState(pristine));
         }
     }
@@ -412,11 +412,11 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol {
             field = _entryHash(field, vm.getRecordedLogs());
             totalGas += used;
             assertLt(++calls, 20, "field must finish across checkpoints");
-            if (_round().word == 0) {
+            if (!_round().started) {
                 assertGt(_round().drawnCount, prior, "each unfinished call must commit entrants");
                 assertEq((_round().drawnCount - prior) % 50, 0, "only complete groups may persist");
             }
-        } while (_round().word == 0);
+        } while (!_round().started);
         state = _roundHash();
     }
 
@@ -470,7 +470,7 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol {
         (bool ok,) = _mine(4_100_000);
         assertTrue(ok);
         assertEq(_round().drawnCount, 50);
-        assertEq(_round().word, 0);
+        assertEq(_round().started, false);
         address locked = address(0x10000000);
         _giveWalletId(locked);
         vm.prank(locked);
@@ -480,7 +480,7 @@ contract JackpotBattleConstructionMaximumGasTest is DeployProtocol {
         (ok,) = _mine(12_000_000);
         assertTrue(ok);
         assertEq(_round().drawnCount, 150);
-        assertGt(_round().word, 0);
+        assertEq(_round().started, true);
         _roundHash();
     }
 

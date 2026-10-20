@@ -171,11 +171,11 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         uint8 tier = uint8(lane & BP_LANE_TIER_MASK);
         if (tier == 0) return 0;
         if (!_boonLaneLive(lane, uint24(_simulatedDayIndex()))) {
-            bp.slot1 = s1 & ~BP_LANE_MASK;
+            bp.slot1 = (s1 & ~BP_LANE_MASK) | BP_SLOT1_RETAINED;
             return 0;
         }
         boonBps = _coinflipTierToBps(tier);
-        bp.slot1 = s1 & ~BP_LANE_MASK;
+        bp.slot1 = (s1 & ~BP_LANE_MASK) | BP_SLOT1_RETAINED;
         emit BoonConsumed(id, 6, boonBps);
     }
 
@@ -187,7 +187,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         uint256 lane = (s1 >> BP_WWXRP_LANE_SHIFT) & BP_LANE_MASK;
         uint8 tier = uint8(lane & BP_LANE_TIER_MASK);
         if (tier == 0) return 0;
-        bp.slot1 = s1 & ~(BP_LANE_MASK << BP_WWXRP_LANE_SHIFT);
+        bp.slot1 = (s1 & ~(BP_LANE_MASK << BP_WWXRP_LANE_SHIFT)) | BP_SLOT1_RETAINED;
         if (!_boonLaneLive(lane, uint24(_simulatedDayIndex()))) return 0;
         boonBps = uint16(tier) * 400;
         emit BoonConsumed(id, 7, boonBps);
@@ -270,11 +270,11 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         uint8 tier = uint8(lane & BP_LANE_TIER_MASK);
         if (tier == 0) return 0;
         if (!_boonLaneLive(lane, uint24(_simulatedDayIndex()))) {
-            bp.slot1 = s1 & ~(BP_LANE_MASK << shift);
+            bp.slot1 = (s1 & ~(BP_LANE_MASK << shift)) | BP_SLOT1_RETAINED;
             return 0;
         }
         boostBps = _degeneretteTierToBps(tier);
-        bp.slot1 = s1 & ~(BP_LANE_MASK << shift);
+        bp.slot1 = (s1 & ~(BP_LANE_MASK << shift)) | BP_SLOT1_RETAINED;
         emit BoonConsumed(id, 4, boostBps);
     }
 
@@ -459,7 +459,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
 
         // Write back only changed slots
         if (changed0) bp.slot0 = s0;
-        if (changed1) bp.slot1 = s1;
+        if (changed1) bp.slot1 = s1 | BP_SLOT1_RETAINED;
 
         return (whaleDayLocal != 0 ||
             lazyPassDayLocal != 0 ||
@@ -748,7 +748,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         // Expiry cleanup runs ONCE for the entry, not once per box: it is a property of the
         // player's held boons, which no draw below changes in a way that would re-arm it.
         BoonPacked storage bp = boonPacked[id];
-        if (bp.slot0 != 0 || bp.slot1 != 0) checkAndClearExpiredBoon(id);
+        if (bp.slot0 != 0 || (bp.slot1 & ~BP_SLOT1_RETAINED) != 0) checkAndClearExpiredBoon(id);
 
         // Pool stats are constant across the entry — same player, same level — so the exact
         // closed form is evaluated once rather than walking the static value table per box.
@@ -1022,7 +1022,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
                 // Set deityDeityPassDay
                 uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
                 s1 = (s1 & ~(uint256(BP_MASK_24) << BP_DEITY_DEITY_PASS_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_DEITY_PASS_DAY_SHIFT);
-                bp.slot1 = s1;
+                bp.slot1 = s1 | BP_SLOT1_RETAINED;
             }
             if (!isDeity) {
                 uint16 bps = tier == DEITY_PASS_BOON_TIER_35 ? 3500 : (tier == DEITY_PASS_BOON_TIER_20 ? 2000 : 1000);
@@ -1069,7 +1069,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
                 uint256 fresh = (stamp << BP_LANE_DAY_SHIFT) |
                     (isDeity ? BP_LANE_DEITY_BIT : 0) |
                     newTier;
-                bp.slot1 = (s1 & ~(BP_LANE_MASK << laneShift)) | (fresh << laneShift);
+                bp.slot1 = ((s1 & ~(BP_LANE_MASK << laneShift)) | (fresh << laneShift)) | BP_SLOT1_RETAINED;
             }
             if (!isDeity) {
                 // The value field is the rolled boonType itself (32-40): unlike bps —
@@ -1096,10 +1096,10 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
             if (newTier > heldTier) {
                 uint256 stamp = (isDeity ? uint256(uint24(day)) : uint256(uint24(currentDay))) &
                     BP_LANE_DAY_MASK;
-                bp.slot1 = (s1 & ~BP_LANE_MASK) |
+                bp.slot1 = ((s1 & ~BP_LANE_MASK) |
                     (stamp << BP_LANE_DAY_SHIFT) |
                     (isDeity ? BP_LANE_DEITY_BIT : 0) |
-                    newTier;
+                    newTier) | BP_SLOT1_RETAINED;
             }
             // The value field is the rolled boonType (41-43), which names the tier directly.
             if (!isDeity) emit LootBoxReward(id, 14, originalAmount, boonType);
@@ -1124,7 +1124,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
                 // deityLazyPassDay = isDeity ? day : 0
                 uint24 deityDayVal = isDeity ? uint24(day) : uint24(0);
                 s1 = (s1 & ~(uint256(BP_MASK_24) << BP_DEITY_LAZY_PASS_DAY_SHIFT)) | (uint256(deityDayVal) << BP_DEITY_LAZY_PASS_DAY_SHIFT);
-                bp.slot1 = s1;
+                bp.slot1 = s1 | BP_SLOT1_RETAINED;
             }
             if (!isDeity) emit LootBoxReward(id, 11, originalAmount, bps);
         }

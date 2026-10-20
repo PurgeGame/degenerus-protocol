@@ -223,12 +223,12 @@ contract CrapsBoonLane is Test {
         gameModule.writeSlot1(PLAYER, wwxrpLane | (_lane(1, false, d) << 184));
         assertEq(gameModule.consumeDegeneretteBoon(PLAYER, 0), 400);
         assertTrue(gameModule.checkAndClearExpiredBoon(PLAYER), "WWXRP lane lost after ETH consume");
-        assertEq(gameModule.slot1Of(PLAYER), wwxrpLane);
+        assertEq(gameModule.slot1Of(PLAYER), wwxrpLane | (1 << 24));
 
         // The WWXRP caller spends it once at tier x 400.
         vm.prank(ContractAddresses.WWXRP);
         assertEq(gameModule.consumeCoinflipBoon(PLAYER), 1200, "WWXRP caller missed its lane");
-        assertEq(gameModule.slot1Of(PLAYER), 0, "WWXRP lane not spent");
+        assertEq(gameModule.slot1Of(PLAYER), 1 << 24, "WWXRP lane not spent");
         assertFalse(gameModule.checkAndClearExpiredBoon(PLAYER), "spent WWXRP lane still live");
     }
 
@@ -237,7 +237,7 @@ contract CrapsBoonLane is Test {
     function testFuzz_WwxrpCallerTouchesOnlyItsOwnLane(uint256 s0, uint256 s1, uint8 tier) public {
         vm.etch(ContractAddresses.GAME, type(CrapsBoonModuleHarness).runtimeCode);
         CrapsBoonModuleHarness gameModule = CrapsBoonModuleHarness(ContractAddresses.GAME);
-        uint256 others = s1 & ((uint256(1) << 232) - 1);
+        uint256 others = (s1 & ((uint256(1) << 232) - 1)) | (1 << 24);
         tier = uint8(bound(tier, 0, 3));
         uint256 wwxrpLane = _lane(tier, false, gameModule.today()) << 232;
         gameModule.writeSlot0(PLAYER, s0);
@@ -268,6 +268,6 @@ contract CrapsBoonLane is Test {
 
         assertEq(gameModule.consumeDegeneretteBoon(PLAYER, 0), 400);
         assertEq(gameModule.consumeDegeneretteBoon(PLAYER, 1), 800);
-        assertEq(gameModule.slot1Of(PLAYER), wwxrpLane, "ETH/FLIP consume disturbed the WWXRP lane");
+        assertEq(gameModule.slot1Of(PLAYER), wwxrpLane | (1 << 24), "ETH/FLIP consume disturbed the WWXRP lane");
     }
 }

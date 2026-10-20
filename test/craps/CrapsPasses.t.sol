@@ -65,6 +65,26 @@ contract CrapsPassesTest is CrapsPins {
     ///      could mint their own would be minting free entries into the protocol's own windows.
     ///      The caller is a pinned immutable contract; the vault comps through `vaultComp`, never
     ///      through delivery.
+    function test_PassCreditConsumeRecreditKeepsWordNonzero() public {
+        uint32 id = _idFor(alice);
+        bytes32 key = keccak256(abi.encode(id, craps.passCreditsByIdSlot()));
+        vm.prank(ContractAddresses.GAME);
+        craps.creditPasses(id, 1, 0);
+        // The board has never been saved; only the pass and retained bit are present.
+        assertEq(uint256(vm.load(address(craps), key)), (1 << 117) | 1);
+        uint24 tomorrow = _today() + 1;
+        vm.prank(alice);
+        craps.applyCrapsPasses(tomorrow, 1, false, 0);
+        assertEq(uint256(vm.load(address(craps), key)) & type(uint64).max, 0);
+        assertTrue(uint256(vm.load(address(craps), key)) & (1 << 117) != 0);
+        vm.prank(ContractAddresses.GAME);
+        craps.creditPasses(id, 2, 3);
+        (uint256 normal, uint256 high) = craps.passCreditsOf(alice);
+        assertEq(normal, 2);
+        assertEq(high, 3);
+        assertTrue(uint256(vm.load(address(craps), key)) & (1 << 117) != 0);
+    }
+
     function test_onlyTheGameMayDeliverPasses() public {
         uint32 aliceId = _idFor(alice);
         vm.prank(alice);

@@ -230,7 +230,7 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
             }
             (CrapsBattleStorage.JackpotRound memory afterRound,,) = reader.jackpotBattleOf(slot);
             if (afterRound.drawnCount > beforeRound.drawnCount) ++result.draws;
-            if (afterRound.drawnCount != 0 && afterRound.word == 0) {
+            if (afterRound.drawnCount != 0 && !afterRound.started) {
                 // Field groups are 50 entries (984b8e7d8; was 150).
                 assertEq(afterRound.drawnCount % 50, 0, "partial draw must retain its cursor");
                 (,, uint64 settledCursor) = reader.jackpotBattleOf(slot);

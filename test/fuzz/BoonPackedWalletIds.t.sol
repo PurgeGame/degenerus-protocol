@@ -162,6 +162,31 @@ contract BoonPackedWalletIds is DeployProtocol {
     // (a) Producers write boonPacked[id]
     // ---------------------------------------------------------------------
 
+    function test_Slot1SurvivesAwardExpiryAndReaward() public {
+        (, uint32 id) = _wallet("retained_boon");
+        for (uint256 cycle; cycle < 2; ++cycle) {
+            bool awarded;
+            for (uint256 k; k < 128 && !awarded; ++k) {
+                ext.x_delegate(ContractAddresses.GAME_BOON_MODULE, abi.encodeCall(
+                    DegenerusGameBoonModule.rollBoxBoons,
+                    (id, 100 ether, 4, 1 ether, game.level() + 1,
+                        uint256(keccak256(abi.encode("retained", cycle, k))), 0)
+                ));
+                (, uint256 s1) = _boon(id);
+                if (s1 & ~(uint256(1) << 24) != 0) {
+                    assertEq(s1 & (1 << 24), 1 << 24, "award retains slot1");
+                    awarded = true;
+                }
+            }
+            assertTrue(awarded, "fixture awarded slot1 boon");
+            vm.warp(vm.getBlockTimestamp() + 5 days);
+            ext.x_delegate(ContractAddresses.GAME_BOON_MODULE,
+                abi.encodeCall(DegenerusGameBoonModule.checkAndClearExpiredBoon, (id)));
+            (, uint256 retained) = _boon(id);
+            assertEq(retained, 1 << 24, "expiry leaves only allocation sentinel");
+        }
+    }
+
     function test_BoxRollSingleTierWritesById() public {
         (address player, uint32 id) = _wallet("roll_single");
         uint24 lvl = game.level() + 1;

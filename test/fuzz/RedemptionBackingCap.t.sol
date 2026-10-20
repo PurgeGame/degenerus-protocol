@@ -16,8 +16,8 @@ contract RedemptionBackingCapTest is RedemptionFixture {
         assertEq(id, 1);
         _burn(alice, 1e18 + 1);
         _burn(bob, 2e18 + 3);
-        // Compiler layout: uint128[][2] _batchPlayers at root 9; odd buffer at root 10.
-        bytes32 data = keccak256(abi.encode(uint256(10)));
+        // Compiler layout: packed-word mappings at roots 9/10; logical counts are in slot 7.
+        bytes32 data = keccak256(abi.encode(uint256(0), uint256(10)));
         uint256 packed = uint256(vm.load(address(sdgnrs), data));
         uint128 first = uint128(packed);
         uint128 second = uint128(packed >> 128);
@@ -25,11 +25,37 @@ contract RedemptionBackingCapTest is RedemptionFixture {
         assertEq(uint80(second), 2e18 + 3);
         assertEq(uint32(first >> 80), game.walletIdOf(alice));
         assertEq(uint32(second >> 80), game.walletIdOf(bob));
-        assertEq(uint256(vm.load(address(sdgnrs), bytes32(uint256(data) + 1))), 0);
+        assertEq(uint256(vm.load(address(sdgnrs), keccak256(abi.encode(uint256(1), uint256(10))))), 0);
         _burn(alice, 3e18 + 5);
         uint256 afterPacked = uint256(vm.load(address(sdgnrs), data));
         assertEq(uint128(afterPacked >> 128), second, "neighbor lane remains intact");
         assertEq(uint80(afterPacked), 4e18 + 6);
+    }
+
+    function test_QueueCountsCoexistAndReusedLaneReplacesOldOwner() public {
+        _burn(alice, 1e18);
+        uint32 first = _resolveLive(100);
+        _burn(bob, 2e18);
+        uint256 packed = uint256(vm.load(address(sdgnrs), bytes32(uint256(7))));
+        assertEq(uint32(packed >> 192), 1, "even count");
+        assertEq(uint32(packed >> 224), 1, "odd count");
+        assertTrue(_work(9_000_000));
+        packed = uint256(vm.load(address(sdgnrs), bytes32(uint256(7))));
+        assertEq(uint32(packed >> 192), 1, "finishing odd preserves open even");
+        assertEq(uint32(packed >> 224), 0, "finished count retires");
+        assertEq(uint128(packed), 2e18, "open escrow survives");
+        uint32 second = _resolveLive(100);
+        assertEq(second, first + 1);
+        assertTrue(_work(9_000_000));
+        _burn(carol, 3e18);
+        bytes32 key = keccak256(abi.encode(uint256(0), uint256(10)));
+        uint256 entry = uint256(vm.load(address(sdgnrs), key));
+        assertEq(uint80(entry), 3e18);
+        assertEq(uint32(entry >> 80), game.walletIdOf(carol), "replaces previous beneficiary");
+        assertEq(_claimTokens(alice, first), 0, "stale locator cannot read new owner");
+        assertEq(_claimTokens(carol, first + 2), 3e18);
+        assertEq(uint256(vm.load(address(sdgnrs), bytes32(uint256(9)))), 0, "no array length");
+        assertEq(uint256(vm.load(address(sdgnrs), bytes32(uint256(10)))), 0, "no array length");
     }
 
     function test_LiveVeryLargeCappedClaimSettlesWithinAdmission() public {

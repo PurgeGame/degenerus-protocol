@@ -232,6 +232,34 @@ contract JackpotVariablePricingTest is CrapsPins {
         }
     }
 
+    function test_PackedAmountsCoverMaximumProductionInputs() public pure {
+        uint256 maxFee = uint256(0x3FFFF) * 100;
+        uint256 added = uint256(type(uint128).max) * 1000 / (0.01 ether * 200) * maxFee / 8000;
+        uint256 total = (uint256(type(uint64).max) * maxFee + added * 10) * 100;
+        assertLt(added, uint256(1) << 89);
+        assertLt(total, uint256(1) << 99);
+        assertEq(uint128(added), added);
+        assertEq(uint128(total), total);
+    }
+
+    function test_FullPackedCursorSurvivesResumeAndSeal() public {
+        _open(10000, 100);
+        _lock(150_000);
+        uint256 cursor = (uint256(1) << 202) - 1;
+        vm.startPrank(ContractAddresses.GAME);
+        cold.prepareJackpotBattle(2, 123);
+        cold.appendJackpotBattle(new uint256[](0), cursor, false);
+        (uint256 word, uint256 resumed,) = cold.prepareJackpotBattle(99, 456);
+        assertEq(word, 123);
+        assertEq(resumed, cursor);
+        assertFalse(_round().started);
+        cold.appendJackpotBattle(new uint256[](0), cursor, true);
+        vm.stopPrank();
+        assertTrue(_round().started);
+        assertEq(_round().drawWord, 123);
+        assertEq(_round().drawCursor, cursor);
+    }
+
     function test_MegaTailPreservesCapsAndRemainderAtMaximumAwards() public {
         uint256[16] memory words = _words();
         _open(10000, 100);
@@ -274,15 +302,18 @@ contract JackpotVariablePricingTest is CrapsPins {
         assertEq(r.added, 187500);
         assertEq(r.awardTarget, 15);
         bytes32 base = table.roundBase(slot);
-        uint256 packed = uint256(vm.load(address(table), bytes32(uint256(base) + 5)));
-        assertEq(uint32(packed >> 144), 15);
-        assertEq(uint32(packed >> 176), 10000);
-        assertEq(uint32(packed >> 208), 0);
+        uint256 packed = uint256(vm.load(address(table), bytes32(uint256(base) + 4)));
+        assertEq(uint32(packed >> 128), 15);
+        assertEq(uint32(packed >> 160), 10000);
+        assertEq(uint32(packed >> 192), 0);
         _start(123, 0);
         r = _round();
-        assertEq(uint256(vm.load(address(table), bytes32(uint256(base) + 6))), 123);
-        assertEq(uint256(vm.load(address(table), bytes32(uint256(base) + 7))), 5);
-        assertEq(uint32(uint256(vm.load(address(table), bytes32(uint256(base) + 5))) >> 208), r.subsidyMultiplierBps);
+        assertEq(uint256(vm.load(address(table), base)), 123);
+        assertEq(uint208(uint256(vm.load(address(table), bytes32(uint256(base) + 3)))), 5);
+        uint256 terms = uint256(vm.load(address(table), bytes32(uint256(base) + 4)));
+        assertEq(uint32(terms >> 192), r.subsidyMultiplierBps);
+        assertEq(uint8(terms >> 224), 1, "started bit");
+        assertEq(uint256(vm.load(address(table), bytes32(uint256(base) + 5))), 0, "no sixth word");
         bytes32 frozen = keccak256(abi.encode(r));
         vm.startPrank(ContractAddresses.GAME);
         cold.prepareJackpotBattle(99, 456);

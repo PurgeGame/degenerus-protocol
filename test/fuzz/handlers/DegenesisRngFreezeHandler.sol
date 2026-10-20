@@ -588,7 +588,7 @@ contract DegenesisRngFreezeHandler is Test {
     function _checkBattle() internal {
         if (!battleLive) return;
         (CrapsBattleStorage.JackpotRound memory r,,) = JackpotBattle(address(craps)).jackpotBattleOf(battleSlot);
-        if (r.word != 0) {
+        if (r.started) {
             battleLive = false;
             return;
         }
