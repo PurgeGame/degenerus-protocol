@@ -1,8 +1,8 @@
 {
   "date": "2026-10-20",
   "status": "working-tree source identity; verification status is recorded separately",
-  "base_commit": "619b687afdd69e046e0ac231281e3ddf378312b3",
-  "source_file_count": 90,
+  "base_commit": "c4c1effe5d458572aa42e1d1c51ba42f7ca09958",
+  "source_file_count": 91,
   "source_files": [
     "contracts/AFKingSubscriptionToken.sol",
     "contracts/Coinflip.sol",
@@ -49,6 +49,7 @@
     "contracts/interfaces/IVaultPlayerActions.sol",
     "contracts/interfaces/IsDGNRS.sol",
     "contracts/libraries/ActivityCurveLib.sol",
+    "contracts/libraries/AffiliateEarningsLib.sol",
     "contracts/libraries/BitPackingLib.sol",
     "contracts/libraries/CrapsPreferenceLib.sol",
     "contracts/libraries/CrapsPriceLib.sol",
