@@ -570,13 +570,14 @@ describe("DGNRS", function () {
         params: [gameAddr],
       });
 
-      // previewBurnValue reports one wei figure paid as ETH and/or stETH; the deposited
-      // stETH is part of the base, so the preview must be positive here with claimableEth
-      // still unfunded.
-      const [valuePreview] = await sdgnrs.previewBurnValue(sdgnrsAmount);
-      expect(valuePreview).to.be.gt(0n);
+      // Live redemption legs pay only ETH and the Game reserve, so the live price leaves
+      // stETH custody out until game over: with Game backing still unfunded it is zero.
+      const [unfundedPreview] = await sdgnrs.previewBurnValue(sdgnrsAmount);
+      expect(unfundedPreview).to.equal(0n);
 
       await fundGameClaimableForSdgnrs(gameAddr, sdgnrsAddr, eth("100"));
+      const [valuePreview] = await sdgnrs.previewBurnValue(sdgnrsAmount);
+      expect(valuePreview).to.be.gt(0n);
 
       // A live burn records raw tokens; stETH stays in custody until settlement.
       const stethBefore = await mockStETH.balanceOf(alice.address);
