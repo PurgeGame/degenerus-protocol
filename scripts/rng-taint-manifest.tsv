@@ -74,10 +74,7 @@ NOT-RNG	PARAM	winnerWord	_payProgressive	JackpotBattle.sol	Packed winning-seat h
 NOT-RNG	PARAM	winnerWord	_payProgressiveShare	JackpotBattle.sol	Packed winning-seat header (owner and standing), fixed by the resolved field; not a VRF word.
 CONSUMER-SEALED	PARAM	word	_payout	JackpotBattle.sol	reached once from _scoreBattle when the field completes; word = settling index word; winner/boost/lane from the closed scoreboard and frozen headers; pool reads are magnitudes
 CONSUMER-SEALED	PARAM	word	_prepare	JackpotBattle.sol	Only reached through GAME-only prepare/start after request locked the field; nonzero battle word and level latched on first preparation, resumed calls keep that snapshot; multiplier cannot be rerolled
-PURE-DERIVE	PARAM	word	_routineWeight	JackpotBattle.sol	Pure daily/window-term helper on the committed day word and fixed period/domain; no post-commit selecting input.
 PURE-DERIVE	PARAM	entropy	_subsidyMultiplier	JackpotBattle.sol	Pure decoder of the future battle word hashed with the locked slot and fixed subsidy domain; no post-commit selecting input.
-PURE-DERIVE	ARG	CrapsPriceLib.tier	_tierPick	JackpotBattle.sol	Pure daily/window-term helper on the committed day word and fixed period/domain; no post-commit selecting input.
-PURE-DERIVE	PARAM	word	_tierPick	JackpotBattle.sol	Pure daily/window-term helper on the committed day word and fixed period/domain; no post-commit selecting input.
 PURE-DERIVE	PARAM	word	_windowTermsOn	JackpotBattle.sol	Pure daily/window-term helper on the committed day word and fixed period/domain; no post-commit selecting input.
 CONSUMER-SEALED	PARAM	word	finalizeBattle	JackpotBattle.sol	Only the pinned table invokes finalization; the slot was sealed before the active read word, and canonical resolved seats determine standing.
 CONSUMER-SEALED	PARAM	word	prepareJackpotBattle	JackpotBattle.sol	GAME-only via table delegate after paid-entry lock; forwards the committed battle word to _prepare and returns its frozen word, collection cursor and remaining target

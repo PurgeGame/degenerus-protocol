@@ -41,7 +41,7 @@ While `Game.rngLocked()` is true, the setter rejects initialization and changes 
 
 ## Storage
 
-`CrapsBattle._passCredits[player]` remains at mapping base slot 15. Its packed word is:
+`CrapsBattle._passCreditsById[walletId]` uses mapping base slot 14. Its packed word is:
 
 | Bits | Value |
 | --- | --- |
@@ -49,11 +49,13 @@ While `Game.rngLocked()` is true, the setter rejects initialization and changes 
 | 32–63 | High passes |
 | 64–83 | Ten two-bit chip counts |
 | 84 | Permanent initialized sentinel |
-| 85–255 | Reserved |
+| 85–116 | Reserved in storage; helpers carry a temporary wallet ID here in memory |
+| 117 | Retained storage sentinel |
+| 118–255 | Reserved |
 
 The sentinel is set on the first successful manual or automatic save, including zero. Clearing the board or spending the final pass preserves it. Awards and comp tickets do not initialize it. All balance and preference writes preserve the other fields.
 
-The **20-bit storage encoding differs from the 30-bit API encoding**. Use `preferredBoardOf` for UI reads. Raw readers use `extsload(keccak256(abi.encode(player, uint256(15))))` and extract each two-bit count. Do not pass that compact field directly to a paid-entry API.
+The **20-bit storage encoding differs from the 30-bit API encoding**. Use the lens's `preferredBoardOf` for UI reads. Raw readers use `extsload(keccak256(abi.encode(walletId, uint256(14))))` and decode the word with `CrapsPreferenceLib.decode`, which expands each two-bit count to the API encoding. Do not pass the compact field directly to a paid-entry API.
 
 ## Automatic entries
 

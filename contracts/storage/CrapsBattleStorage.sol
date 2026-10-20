@@ -1207,10 +1207,6 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
         return (_loadBudget(day) >> 112) & _BUDGET_MASK;
     }
 
-    function _storeHighBudget(uint256 day, uint256 value) internal {
-        _storeBudget(day, (_loadBudget(day) & ~(_BUDGET_MASK << 112)) | (value << 112));
-    }
-
     function _loadHighDraw(uint64 slot) internal view returns (HighRollerDraw memory draw) {
         uint256 word = _loadSlotState(slot) >> 112;
         draw.nominee = uint32(word);

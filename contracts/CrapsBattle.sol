@@ -1530,33 +1530,6 @@ contract CrapsBattle is CrapsBattleStorage {
         );
     }
 
-    /// @dev The arm itself — shared by the scheduled cursor, which has already proven a window's
-    ///      preconditions on its own walk, and by `closeBattle` for custom battles.
-    function _armSlot(uint64 slot, Window memory w) internal returns (uint48 index) {
-        unchecked {
-            index = _writeBuffer();
-            _setSlotIndex(slot, index + 1);
-            // The day field joins the window HERE rather than at the ticket sale, so selling a day
-            // ticket never touches seven scoreboards. Both counts are already frozen — tickets
-            // stop when the day's first window stops taking bets, and THIS period's high count
-            // stops moving at this window's own entry close, before anything can be shut.
-            // One read carries all the counts; the window folds in the total and the high count
-            // that belongs to its own period — counter `p + 1` of the word, which is
-            // `slot % _BONUS_SLOTS_PER_DAY` exactly. A custom battle is not on the day clock and
-            // carries no day field at all.
-            if (slot < _CUSTOM_SLOT_BASE) {
-                uint256 tickets = _loadDayTickets(_daySlotOf(uint256(slot) / _BONUS_SLOTS_PER_DAY));
-                if (uint32(tickets) != 0) _storeBattle(w.key, _loadBattle(w.key) + (uint32(tickets)));
-                uint256 dayHigh = (tickets >> (_DT_HIGH_SHIFT * (uint256(slot) % _BONUS_SLOTS_PER_DAY))) & _MASK32;
-                if (dayHigh != 0) _storeHighField(w.key, _loadHighField(w.key) + (dayHigh));
-            }
-        }
-        // The shut window joins the write buffer's RNG round like any other consumer: the next
-        // request, daily or mid-day, settles it. Its pending bit counts as work for that request.
-        IReadCohortLifecycle(address(this)).registerRngSlot(index, slot, w.key);
-        emit CrapsBonusArmed(w.key, uint48(slot), index);
-    }
-
     /// @dev The window a player may still join: one of today's, opened, not yet shut, and not in
     ///      a period that has already run out.
     /// @dev THE joinability test: a battle you can still bet into. Every door that takes money on

@@ -96,6 +96,8 @@ contract JackpotBattle is CrapsBattleStorage {
         if (_slotIndexOf(slot) != 0) revert BonusPeriodSpent();
         bytes32 key = _rngBattleKey(uint64(slot));
         uint256 g = _loadBattle(key);
+        if (slot < _CUSTOM_SLOT_BASE && !_isJackpotSlot(slot)
+            && g >> 255 == 0 && _dailyWordAt(_currentDayIndex()) == 0) revert RngNotReady();
         if (slot < _CUSTOM_SLOT_BASE && g == 0) revert BonusPeriodSpent();
         if (granules == 0 || g == 0) revert SeedAboveMax();
         uint256 seed;
@@ -381,11 +383,11 @@ contract JackpotBattle is CrapsBattleStorage {
             uint32 playerId = uint32(entry);
             // A malformed or empty entry forfeits its award rather than halting the advance.
             if (entry >> JackpotBattleFieldLib.UNITS_SHIFT != 1 || playerId == 0) continue;
+            uint256 id = (uint256(slot) << 64) | (ownN + ++drawn);
+            ++units;
             (uint32 chips,) = CrapsPreferenceLib.decode(
                 entry >> (JackpotBattleFieldLib.BOARD_SHIFT - CrapsPreferenceLib.SHIFT));
-            uint256 id = (uint256(slot) << 64) | (ownN + ++drawn);
             _appendBet(id, uint256(playerId) | (uint256(chips) << _BET_CHIPS_SHIFT));
-            ++units;
             emit JackpotBattleEntry(slot, id, playerId, 1, chips);
         }
         r.drawnCount = uint32(drawn);
@@ -635,43 +637,6 @@ contract JackpotBattle is CrapsBattleStorage {
         }
     }
 
-    function _drawBudgets(uint24 day) internal view returns (uint256 mainBudget, uint256 highBudget) {
-        unchecked {
-            uint256 er;
-            uint256 eh;
-            for (uint256 i = 1; i <= _BOOST_ACTION_WINDOW_DAYS; ++i) {
-                if (day < i) break;
-                uint24 d = day - uint24(i);
-                uint256 action = _loadDayStaked(d);
-                uint256 high = action >> _DAY_HIGH_SHIFT;
-                // The two lanes are rated the same and NEVER share an amount: what a high seat put
-                // up is in the high half and taken back out of the total, so no wei of action can
-                // feed both components.
-                er += (((action & _BUDGET_MASK) - high) * _BOOST_ACTION_BPS) / _BPS_DENOMINATOR;
-                eh += (high * _BOOST_ACTION_BPS) / _BPS_DENOMINATOR;
-            }
-            // AVERAGED OVER THE WINDOW, NEVER SUMMED. A budget is drawn EVERY day, off a window
-            // that overlaps the six before it — so handing one day the whole week's figure would
-            // let every unit of action fund seven budgets and put emission at seven times what
-            // the rule intends. The divisor is the window itself, so widening the window changes
-            // how smooth the figure is and nothing about its level.
-            er /= _BOOST_ACTION_WINDOW_DAYS;
-            eh /= _BOOST_ACTION_WINDOW_DAYS;
-
-            // THE HIGH LANE'S COMPONENT SPLITS TWO WAYS: two parts in five to the main boost and
-            // the other three to the lane that earned them. Floored on the main side, which puts
-            // the one-wei split remainder with the high lane.
-            uint256 fromHigh = (eh * _HIGH_MAIN_NUM) / _HIGH_MAIN_DEN;
-            highBudget = eh - fromHigh;
-            // The base rides the MAIN lane alone. Subsidising a high lane nobody played would
-            // print house money against action that was never put through it.
-            //
-            // RAW, and the only place the raw figure exists. Both callers split it through
-            // `_splitMainBudget` before anything reads it as a ladder.
-            mainBudget = _BASE_MAIN_BUDGET + er + fromHigh;
-        }
-    }
-
     function _highBase(Window memory w) internal view returns (uint256) {
         return _shareOf(w, true);
     }
@@ -871,14 +836,6 @@ contract JackpotBattle is CrapsBattleStorage {
         }
     }
 
-    function _routineWeight(uint256 word) internal pure returns (uint256 total) {
-        unchecked {
-            for (uint256 p = 0; p + 1 < _BONUS_PERIODS_PER_DAY; ++p) {
-                total += 1 << _tierPick(word, p);
-            }
-        }
-    }
-
     function _seatId(uint256 slot, uint64 seat, uint64 ownN, uint256 dayBase, uint64 dayN)
         private pure returns (uint256)
     {
@@ -900,17 +857,6 @@ contract JackpotBattle is CrapsBattleStorage {
             uint256 budget = (high ? packed >> 112 : packed) & _BUDGET_MASK;
             return _windowShare(budget, packed >> _BUDGET_W_SHIFT, w.tier);
         }
-    }
-
-    function _splitMainBudget(uint256 rawMain) internal pure returns (uint256 ladder, uint256 progressive) {
-        unchecked {
-            ladder = rawMain / 2;
-            progressive = rawMain - ladder;
-        }
-    }
-
-    function _tierPick(uint256 word, uint256 period) internal pure returns (uint256) {
-        return CrapsPriceLib.tier(_bonusRoll(word, period), period == 0 || period == _BONUS_PERIODS_PER_DAY - 2);
     }
 
     function _windowShare(uint256 budget, uint256 weight, uint256 tier) private pure returns (uint256) {
@@ -1127,9 +1073,5 @@ contract JackpotBattle is CrapsBattleStorage {
         uint256 childAllowance = MineFlipGas.child(meter, _WORK_TAIL_GAS + 30_000);
         result = IReadCohortLifecycle(address(this)).resolveRngSlot(slot, childAllowance);
         MineFlipGas.finish(meter);
-    }
-
-    function preferredBoardOf(uint32 walletId) external view returns (uint32 chips) {
-        (chips,) = CrapsPreferenceLib.decode(_passCreditsById[walletId]);
     }
 }

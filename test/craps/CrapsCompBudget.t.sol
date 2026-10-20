@@ -6,6 +6,7 @@ import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol
 import {Vm} from "forge-std/Vm.sol";
 import {Craps} from "../../contracts/Craps.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
+import {LootboxCraps} from "../../contracts/LootboxCraps.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {CrapsViews} from "./CrapsViews.sol";
 import {CrapsPins, MockFlip} from "./CrapsPins.sol";
@@ -393,6 +394,49 @@ contract CrapsCompBudgetTest is CrapsPins {
         assertEq(amount, 10 * GRANULE);
         assertEq(flip.burned(alice), burned + amount);
         assertEq(flip.compLane(), before);
+    }
+
+    function test_aReservedWindowDonationWaitsForTheDaysWord() public {
+        _warpToDayStart();
+        uint24 day = craps.currentDayIndex() + 1;
+        _ahead(alice, false, day, 1, 1);
+        bytes32 key = bytes32(uint256(_slotAt(day, 1)));
+        (uint256 entrants,) = craps.fieldOf(key);
+        assertEq(entrants, 1);
+
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        assertEq(craps.currentDayIndex(), day);
+        uint256 burned = flip.burned(bob);
+        vm.prank(bob);
+        vm.expectRevert(LootboxCraps.RngNotReady.selector);
+        craps.donate(false, 1, 10);
+        assertEq(flip.burned(bob), burned);
+        assertEq(craps.battleOf(key).seed, 0);
+
+        _setDailyWord(day, _wordFor(10));
+        vm.prank(ContractAddresses.GAME);
+        craps.openBonusDay();
+        vm.prank(bob);
+        uint256 amount = craps.donate(false, 1, 10);
+        assertEq(amount, 10 * GRANULE);
+        assertEq(flip.burned(bob), burned + amount);
+        assertEq(craps.battleOf(key).seed, amount);
+    }
+
+    function test_anEmptyUnopenedWindowReportsMissingWordBeforeMissingField() public {
+        _warpToDayStart();
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        uint24 day = craps.currentDayIndex();
+        uint256 burned = flip.burned(bob);
+        vm.prank(bob);
+        vm.expectRevert(LootboxCraps.RngNotReady.selector);
+        craps.donate(false, 1, 10);
+        assertEq(flip.burned(bob), burned);
+
+        _setDailyWord(day, _wordFor(10));
+        vm.prank(bob);
+        vm.expectRevert(CrapsBattleStorage.BonusPeriodSpent.selector);
+        craps.donate(false, 1, 10);
     }
 
     function test_aCompedWindowSeatIsThePaidSeatWithAnotherOwner() public {
