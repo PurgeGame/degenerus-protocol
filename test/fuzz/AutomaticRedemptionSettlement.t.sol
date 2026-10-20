@@ -104,123 +104,55 @@ contract AutomaticRedemptionSettlementTest is RedemptionFixture {
         assertEq(game.claimableWinningsOf(bob), bobCredit, "a drained cohort pays nothing twice");
     }
 
-    /// @dev A dependency refusing one claim must not hold the cohort (and every later RNG
-    ///      request): the claim parks with its word and settles later, once, for its player.
-    function test_RefusedSettlementParksClaimAndCohortCompletes() public {
+    /// @dev Refused claims cannot hold the cohort and leave no reserve or event behind.
+    function test_RefusedSettlementDropsClaimsAndReleasesBacking() public {
         uint32 day = _openBatchId();
         _burn(alice, sdgnrs.totalSupply() / 1000);
         _burn(bob, sdgnrs.totalSupply() / 1000);
         _resolve(day, 100, 99);
-        uint256 reserved = sdgnrs.pendingRedemptionEthValue();
-        // Strip custody so the live legs must pull stETH that is not there.
-        uint256 eth = address(sdgnrs).balance;
-        uint256 st = mockStETH.balanceOf(address(sdgnrs));
-        vm.deal(address(sdgnrs), 0);
-        vm.prank(address(sdgnrs));
-        mockStETH.transfer(address(0xDEAD), st);
-
+        uint256 custody = address(sdgnrs).balance;
+        vm.mockCallRevert(address(sdgnrs), abi.encodeWithSelector(sdgnrs.settleRedemptionHead.selector), hex"12345678");
         vm.recordLogs();
         vm.prank(address(game));
-        assertTrue(_process(9_000_000), "refused claims do not hold the cohort");
+        assertTrue(_process(9_000_000));
         assertFalse(sdgnrs.redemptionSettlementPending());
-        assertEq(sdgnrs.pendingRedemptionEthValue(), reserved, "parked reservations stay segregated");
-        uint256 parked;
+        assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
+        assertEq(address(sdgnrs).balance, custody);
+        assertEq(_claimTokens(alice, day), 0);
+        assertEq(_claimTokens(bob, day), 0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].emitter == address(sdgnrs)
-                && logs[i].topics[0] == keccak256("RedemptionParked(uint32,uint32,bytes)")) ++parked;
-        }
-        assertEq(parked, 2);
-        (uint128 a,) = sdgnrs.pendingRedemptions(game.walletIdOf(alice), day);
-        assertGt(a, 0, "parked claim keeps its record");
-
-        // Custody restored: only the player (or an approved operator) settles, exactly once.
-        vm.deal(address(sdgnrs), eth);
-        vm.prank(address(0xDEAD));
-        mockStETH.transfer(address(sdgnrs), st);
-        uint32 aliceId = game.walletIdOf(alice);
-        vm.expectRevert(sDGNRS.Unauthorized.selector);
-        vm.prank(bob);
-        sdgnrs.claimParkedRedemption(aliceId, day);
-        uint256 before = game.claimableWinningsOf(alice);
-        vm.prank(alice);
-        sdgnrs.claimParkedRedemption(0, day);
-        assertGt(game.claimableWinningsOf(alice), before, "parked claim pays its direct half");
-        (a,) = sdgnrs.pendingRedemptions(game.walletIdOf(alice), day);
-        assertEq(a, 0);
-        vm.expectRevert(sDGNRS.NoClaim.selector);
-        vm.prank(alice);
-        sdgnrs.claimParkedRedemption(0, day);
+        for (uint256 i; i < logs.length; ++i) assertTrue(logs[i].emitter != address(sdgnrs));
     }
 
-    /// @dev The Game re-raises an out-of-gas module call as EmptyRevert(). Settlement must treat
-    ///      it as caller-withheld gas and revert, never as a refusal that parks the claim.
-    function test_OutOfGasGameModuleCallRevertsInsteadOfParking() public {
-        uint32 day = _openBatchId();
+    /// @dev A metering-selector revert cannot impersonate caller underfunding.
+    function test_SpoofedGameMeteringErrorDropsClaim() public {
         _burn(alice, sdgnrs.totalSupply() / 1000);
-        _resolve(day, 100, 99);
-        vm.mockCallRevert(address(game), abi.encodeWithSelector(DegenerusGame.resolveRedemptionLootbox.selector),
+        uint32 day = _resolveLive(100);
+        vm.mockCallRevert(address(game), abi.encodeWithSelector(game.resolveRedemptionLootbox.selector),
             abi.encodeWithSignature("EmptyRevert()"));
-        vm.expectRevert(abi.encodeWithSignature("EmptyRevert()"));
-        vm.prank(address(game));
-        _process(9_000_000);
+        assertTrue(_work(9_000_000));
+        assertEq(_claimTokens(alice, day), 0);
+        assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
     }
 
-    /// @dev A nested box sub-call (here the boon draw inside the redemption order's boxes) that
-    ///      refuses with revert data reaches sDGNRS with that data, so the claim parks with its
-    ///      word and the cursor moves on; the cohort completes.
-    function test_NestedBoxSubcallRefusalParksClaim() public {
-        uint32 day = _openBatchId();
+    /// @dev A refusing nested dependency rolls back only its claim.
+    function test_NestedBoxSubcallRefusalDropsClaim() public {
         _burn(alice, sdgnrs.totalSupply() / 1000);
-        _burn(bob, sdgnrs.totalSupply() / 1000);
-        _resolve(day, 100, 99);
-        bytes memory original = ContractAddresses.GAME_BOON_MODULE.code;
+        uint32 day = _resolveLive(100);
         vm.etch(ContractAddresses.GAME_BOON_MODULE, type(RedemptionRefusingBoonModule).runtimeCode);
-
-        // One claim's step: the refused head parks and the cursor moves to the next claim.
-        uint32 cursorBefore = _cursor();
-        uint256 step = _oneClaimAllowance();
-        vm.recordLogs();
-        _work(step);
-        assertEq(_cursor(), cursorBefore + 1, "cursor advanced past the parked claim");
-        assertTrue(sdgnrs.redemptionSettlementPending(), "the next claim is still queued");
-        vm.prank(address(game));
-        assertTrue(_process(9_000_000), "the refused claims do not hold the cohort");
-        assertFalse(sdgnrs.redemptionSettlementPending());
-        bytes memory reason;
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].emitter == address(sdgnrs)
-                && logs[i].topics[0] == keccak256("RedemptionParked(uint32,uint32,bytes)")) {
-                reason = abi.decode(logs[i].data, (bytes));
-            }
-        }
-        assertEq(reason, abi.encodeWithSelector(RedemptionRefusingBoonModule.BoonRefused.selector, 7),
-            "the sub-call's own reason reaches sDGNRS");
-        (uint128 a,) = sdgnrs.pendingRedemptions(game.walletIdOf(alice), day);
-        assertGt(a, 0, "parked claim keeps its record");
-
-        vm.etch(ContractAddresses.GAME_BOON_MODULE, original);
-        vm.prank(alice);
-        sdgnrs.claimParkedRedemption(0, day);
-        (a,) = sdgnrs.pendingRedemptions(game.walletIdOf(alice), day);
-        assertEq(a, 0, "the parked claim settles once the dependency answers");
+        assertTrue(_work(9_000_000));
+        assertEq(_claimTokens(alice, day), 0);
+        assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
     }
 
-    /// @dev A nested box sub-call that runs out of gas returns no data: the Lootbox module
-    ///      re-raises it as EmptyRevert(), and settlement reverts instead of parking, so a caller
-    ///      cannot starve a sub-call to skip a claim.
-    function test_NestedBoxSubcallOutOfGasRevertsInsteadOfParking() public {
-        uint32 day = _openBatchId();
+    /// @dev Exhaustion after the full fixed budget is a claim failure.
+    function test_NestedBoxSubcallExhaustionDropsClaim() public {
         _burn(alice, sdgnrs.totalSupply() / 1000);
-        _resolve(day, 100, 99);
-        uint32 cursorBefore = _cursor();
+        uint32 day = _resolveLive(100);
         vm.etch(ContractAddresses.GAME_BOON_MODULE, type(RedemptionGasBurningBoonModule).runtimeCode);
-        vm.expectRevert(abi.encodeWithSignature("EmptyRevert()"));
-        vm.prank(address(game));
-        _process(9_000_000);
-        assertEq(_cursor(), cursorBefore, "nothing settled or parked");
-        assertTrue(sdgnrs.redemptionSettlementPending());
+        assertTrue(_work(9_000_000));
+        assertEq(_claimTokens(alice, day), 0);
+        assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
     }
 
     function _logDigest(bytes32 digest, Vm.Log[] memory logs) internal view returns (bytes32) {
@@ -278,25 +210,7 @@ contract AutomaticRedemptionSettlementTest is RedemptionFixture {
         assertEq(_transcriptOf(digest), automatic, "per-claim calls use the frozen cohort word");
         assertTrue(vm.revertToState(snapshot));
 
-        // Withhold custody so both live settlements are refused and park with their word.
-        uint256 eth = address(sdgnrs).balance;
-        uint256 st = mockStETH.balanceOf(address(sdgnrs));
-        vm.deal(address(sdgnrs), 0);
-        vm.prank(address(sdgnrs));
-        mockStETH.transfer(address(0xDEAD), st);
-        vm.prank(address(game));
-        assertTrue(_process(9_000_000));
-        (uint128 parked,) = sdgnrs.pendingRedemptions(game.walletIdOf(alice), day);
-        assertGt(parked, 0, "harness: the refused claim parked");
-        vm.deal(address(sdgnrs), eth);
-        vm.prank(address(0xDEAD));
-        mockStETH.transfer(address(sdgnrs), st);
-        vm.recordLogs();
-        vm.prank(alice);
-        sdgnrs.claimParkedRedemption(0, day);
-        vm.prank(bob);
-        sdgnrs.claimParkedRedemption(0, day);
-        assertEq(_claimTranscript(), automatic, "parked claims use the frozen cohort word");
+
     }
 
     function test_LiveSettlementDoesNotPushEthToRecipient() public {

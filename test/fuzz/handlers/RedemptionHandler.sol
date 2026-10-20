@@ -131,8 +131,6 @@ contract RedemptionHandler is Test {
             vm.prank(actor);
             try sdgnrs.claimRedemption(0, id) {} catch {}
         } else {
-            vm.prank(actor);
-            try sdgnrs.claimParkedRedemption(0, id) {} catch {}
             try game.mineFlip(0) {} catch {}
         }
         _recordClaims(vm.getRecordedLogs());

@@ -30,5 +30,13 @@
     "offset": 0,
     "slot": 3,
     "typeLabel": "uint24"
+  },
+  {
+    "bytes": "12",
+    "encoding": "inplace",
+    "label": "bafTopLevels",
+    "offset": 3,
+    "slot": 3,
+    "typeLabel": "uint96"
   }
 ]

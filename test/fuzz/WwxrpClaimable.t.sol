@@ -101,12 +101,12 @@ contract WwxrpClaimableTest is DeployProtocol {
         vm.prank(ContractAddresses.VAULT); OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.vaultMintTo, (alice, type(uint256).max)), 0);
         _credit(aliceId, type(uint256).max - 5);
         _credit(aliceId, 10);
-        assertEq(wwxrp.claimable(aliceId), type(uint256).max);
+        assertEq(wwxrp.claimable(aliceId), type(uint256).max - 1);
         vm.prank(alice); assertEq(wwxrp.withdraw(0, 0), 0);
-        assertEq(wwxrp.claimable(aliceId), type(uint256).max);
+        assertEq(wwxrp.claimable(aliceId), type(uint256).max - 1);
         vm.prank(address(game)); wwxrp.burnForGame(alice, 10);
         vm.prank(alice); assertEq(wwxrp.withdraw(0, 0), 10);
-        assertEq(wwxrp.claimable(aliceId), type(uint256).max - 10);
+        assertEq(wwxrp.claimable(aliceId), type(uint256).max - 11);
         assertEq(wwxrp.totalSupply(), type(uint256).max);
     }
 

@@ -309,13 +309,13 @@ abstract contract BafBracketFixture is DeployProtocol {
 
     /// @dev The armed final purchase day's direct-deposit book (head slot 1's draw).
     function _armDepositDraw() internal {
-        for (uint256 i; i < DEPOSITORS; ++i) {
-            BafDrawSeed.entry(address(coinflip), DRAW_DAY, uint32(i), host.seedWallet(_depositor(i)), uint96((i + 1) * 100));
-        }
         vm.store(address(coinflip), keccak256(abi.encode(uint256(DRAW_DAY), uint256(5))),
             bytes32((DEPOSITORS << 96) | (DEPOSITORS * 100)));
         vm.prank(address(game));
         coinflip.armBafDraw(DRAW_DAY);
+        for (uint256 i; i < DEPOSITORS; ++i) {
+            BafDrawSeed.entry(address(coinflip), DRAW_DAY, uint32(i), host.seedWallet(_depositor(i)), uint96((i + 1) * 100));
+        }
         (, uint96 weight, uint32 drawn) = coinflip.bafDrawInfo();
         assertEq(drawn, DEPOSITORS, "draw layout");
         assertEq(weight, DEPOSITORS * 100, "draw weight");
@@ -542,7 +542,7 @@ abstract contract BafBracketFixture is DeployProtocol {
         epoch = uint64(packed);
         topLen = uint8(packed >> 64);
         skipped = uint8(packed >> 72) != 0;
-        uint256 base = uint256(keccak256(abi.encode(uint256(lvl), uint256(1))));
+        uint256 base = uint256(keccak256(abi.encode(uint256((lvl / 10) & 3), uint256(1))));
         for (uint256 i; i < 2; ++i) topBits |= uint256(vm.load(address(jackpots), bytes32(base + i)));
     }
 }

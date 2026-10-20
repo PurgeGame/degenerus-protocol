@@ -103,30 +103,15 @@ contract RedemptionStorageReuseTest is RedemptionFixture {
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
     }
 
-    function test_ParkedPrefixRemainsClaimableOnceBeforeQueueFinishes() public {
+    function test_DroppedPrefixStaysConsumedWhenRemainderBecomesTerminal() public {
         uint32 batchId = _seedThreeClaims();
-        // Force a semantic refusal by temporarily removing the settlement custody.
-        uint256 eth = address(sdgnrs).balance;
-        uint256 steth = mockStETH.balanceOf(address(sdgnrs));
-        vm.deal(address(sdgnrs), 0);
-        vm.prank(address(sdgnrs));
-        mockStETH.transfer(address(0xDEAD), steth);
+        vm.mockCallRevert(address(game), abi.encodeWithSelector(game.resolveRedemptionLootbox.selector), hex"12345678");
         assertFalse(_work(_oneClaimBudget()));
         assertEq(_cursor(), 1);
-        assertGt(_claimTokens(alice, batchId), 0, "lookup falls back to the parked claim");
-        vm.deal(address(sdgnrs), eth);
-        vm.prank(address(0xDEAD));
-        mockStETH.transfer(address(sdgnrs), steth);
+        assertEq(_claimTokens(alice, batchId), 0);
+        vm.clearMockedCalls();
         _terminalize();
-        uint256 before = _received(alice);
-        vm.prank(alice);
-        sdgnrs.claimRedemption(0, batchId);
-        assertGt(_received(alice), before);
-        assertEq(_claimTokens(alice, batchId), 0, "stale FIFO entry cannot reappear");
         _assertNoTerminalClaim(alice, batchId);
-        vm.expectRevert(sDGNRS.NoClaim.selector);
-        vm.prank(alice);
-        sdgnrs.claimParkedRedemption(0, batchId);
         assertGt(_claimTokens(bob, batchId), 0);
     }
 }

@@ -994,7 +994,7 @@ abstract contract BafTranscriptFixture is DeployProtocol {
 
     function _bracket() internal view returns (Bracket memory b) {
         b.levelWord = uint256(vm.load(address(jackpots), keccak256(abi.encode(uint256(lvl), BAF_LEVEL_SLOT))));
-        uint256 topBase = uint256(keccak256(abi.encode(uint256(lvl), BAF_TOP_SLOT)));
+        uint256 topBase = uint256(keccak256(abi.encode(uint256((lvl / 10) & 3), BAF_TOP_SLOT)));
         for (uint256 i; i < 2; ++i) b.top[i] = vm.load(address(jackpots), bytes32(topBase + i));
         b.resolvedDay = jackpots.getLastBafResolvedDay();
     }
@@ -1221,13 +1221,13 @@ abstract contract BafTranscriptFixture is DeployProtocol {
     /// @dev Arm the final-day weighted depositor draw over `count` packed intervals.
     function _armDepositDraw(address[] memory depositors) internal {
         uint256 count = depositors.length;
-        for (uint256 i; i < count; ++i) {
-            BafDrawSeed.entry(address(coinflip), DAY, uint32(i), _giveWalletId(depositors[i]), uint96((i + 1) * 100));
-        }
         vm.store(address(coinflip), keccak256(abi.encode(uint256(DAY), uint256(5))),
             bytes32((count << 96) | (count * 100)));
         vm.prank(address(game));
         coinflip.armBafDraw(DAY);
+        for (uint256 i; i < count; ++i) {
+            BafDrawSeed.entry(address(coinflip), DAY, uint32(i), _giveWalletId(depositors[i]), uint96((i + 1) * 100));
+        }
         (, uint96 weight, uint32 drawn) = coinflip.bafDrawInfo();
         assertEq(drawn, count, "draw layout");
         assertEq(weight, count * 100, "draw weight");

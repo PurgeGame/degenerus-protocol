@@ -50,7 +50,7 @@
   {
     "bytes": "32",
     "encoding": "mapping",
-    "label": "redemptionBatches",
+    "label": "_redemptionBatches",
     "offset": 0,
     "slot": 6,
     "typeLabel": "mapping(uint32 => struct sDGNRS.RedemptionBatch)"
@@ -126,13 +126,5 @@
     "offset": 0,
     "slot": 9,
     "typeLabel": "mapping(uint256 => uint256)[2]"
-  },
-  {
-    "bytes": "32",
-    "encoding": "mapping",
-    "label": "_parkedRedemptions",
-    "offset": 0,
-    "slot": 11,
-    "typeLabel": "mapping(uint32 => mapping(uint32 => struct sDGNRS.ParkedRedemption))"
   }
 ]

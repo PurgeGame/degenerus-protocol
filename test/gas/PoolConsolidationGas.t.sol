@@ -109,7 +109,7 @@ abstract contract PoolConsolidationFixture is FreshWordLeg {
             MineFlipGas.Result memory r = host.dailyWith{gas: 12_000_000}(9_000_000);
             assertTrue(r.progressed, "the daily phase progresses");
             uint8 stage = _stageOf(vm.getRecordedLogs());
-            if (stage == STAGE_PURCHASE_BATTLE) continue;
+            if (stage == STAGE_PURCHASE_BATTLE || stage == 22) continue;
             assertEq(stage, STAGE_ENTERED_JACKPOT, "consolidation follows the battle");
             vm.revertToState(snap);
             break;
@@ -124,8 +124,8 @@ abstract contract PoolConsolidationFixture is FreshWordLeg {
         uint256 total = uint256(count) * 1 ether;
         vm.store(
             address(wwxrp),
-            keccak256(abi.encode(uint256(bracket), INCIN_HEADER_SLOT)),
-            bytes32(total | (uint256(count) << 192))
+            keccak256(abi.encode(uint256(0), INCIN_HEADER_SLOT)),
+            bytes32(total | (uint256(count) << 192) | (uint256(bracket) << 224))
         );
         uint256 roll = uint256(
             keccak256(abi.encodePacked(bytes32("WWXRP_INCIN_WINNER"), address(wwxrp), bracket, rngWord))
@@ -148,8 +148,8 @@ abstract contract PoolConsolidationFixture is FreshWordLeg {
         assertEq(cum, (uint256(lo) + 1) * 1 ether, "incinerator entry layout");
     }
 
-    function _storeIncinEntry(uint24 bracket, uint32 index) private {
-        bytes32 base = keccak256(abi.encode((uint256(bracket) << 32) | index, INCIN_ENTRY_SLOT));
+    function _storeIncinEntry(uint24, uint32 index) private {
+        bytes32 base = keccak256(abi.encode(uint256(index), INCIN_ENTRY_SLOT));
         vm.store(address(wwxrp), base, bytes32(((uint256(0x1C1E0000) + index) << 192) | ((uint256(index) + 1) * 1 ether)));
     }
 

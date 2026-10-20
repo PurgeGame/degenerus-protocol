@@ -43,7 +43,7 @@ contract RedemptionBackingCapTest is RedemptionFixture {
         packed = uint256(vm.load(address(sdgnrs), bytes32(uint256(7))));
         assertEq(uint32(packed >> 192), 1, "finishing odd preserves open even");
         assertEq(uint32(packed >> 224), 0, "finished count retires");
-        assertEq(uint128(packed), 2e18, "open escrow survives");
+        assertEq(uint128(packed), 2e18 + 1, "encoded open escrow survives");
         uint32 second = _resolveLive(100);
         assertEq(second, first + 1);
         assertTrue(_work(9_000_000));
@@ -168,37 +168,26 @@ contract RedemptionBackingCapTest is RedemptionFixture {
         paid = _received(player) - before;
     }
 
-    function test_CappedParkedClaimSurvivesBothBufferReuses() public {
+    function test_DroppedCappedClaimStaysRetiredAcrossBothBufferReuses() public {
         _giveRemainingPools(alice);
         uint256 amount = sdgnrs.totalSupply() * 60 / 100;
-        uint256 backing = _money();
         _burn(alice, amount);
         uint32 first = _resolveLive(175);
-        vm.mockCallRevert(address(game), abi.encodeWithSelector(game.resolveRedemptionLootbox.selector),
-            abi.encodeWithSignature("Refused()"));
+        vm.mockCallRevert(address(game), abi.encodeWithSelector(game.resolveRedemptionLootbox.selector), hex"12345678");
         assertTrue(_work(9_000_000));
-        assertEq(sdgnrs.pendingRedemptionEthValue(), backing);
-        assertEq(_claimTokens(alice, first), amount);
+        assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
+        assertEq(_claimTokens(alice, first), 0);
         vm.clearMockedCalls();
-        // Pay later batches from fresh backing; the old claim's full cap remains segregated.
-        vm.deal(address(sdgnrs), address(sdgnrs).balance + 100 ether);
         for (uint256 i; i < 2; ++i) {
             _burn(alice, _minimumLiveBurn());
             uint32 next = _resolveLive(100);
             assertEq(next, first + i + 1);
             assertTrue(_work(9_000_000));
-            assertEq(_claimTokens(alice, next), 0);
-            assertEq(_claimTokens(alice, first), amount, "parked entry survived parity reuse");
-            assertEq(sdgnrs.pendingRedemptionEthValue(), backing);
+            assertEq(_claimTokens(alice, first), 0);
+            assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
         }
-        _terminalize();
-        uint256 before = _received(alice);
-        vm.prank(alice); sdgnrs.claimParkedRedemption(0, first);
-        assertEq(_received(alice) - before, backing);
-        assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
-        assertEq(_claimTokens(alice, first), 0);
-        vm.expectRevert(sDGNRS.NoClaim.selector);
-        vm.prank(alice); sdgnrs.claimParkedRedemption(0, first);
+        (uint80 tokens, uint96 payout, uint96 base, uint96 flip, uint16 roll, uint16 reward) = sdgnrs.redemptionBatches(first);
+        assertEq(uint256(tokens) | payout | base | flip | roll | reward, 0);
     }
 
     function testFuzz_CapAcrossBurnFractionsAndRolls(uint256 amountSeed, uint16 rollSeed) public {

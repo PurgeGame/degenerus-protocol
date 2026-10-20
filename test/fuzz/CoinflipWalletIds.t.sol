@@ -107,7 +107,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
 
     function _drawEntryRaw(uint24 day, uint32 index) internal view returns (uint256) {
         return uint128(uint256(vm.load(
-            address(coinflip), keccak256(abi.encode((uint256(day) << 32) | (index >> 1), BAF_DRAW_ENTRY_ROOT))
+            address(coinflip), keccak256(abi.encode(uint256(index >> 1), BAF_DRAW_ENTRY_ROOT))
         )) >> ((index & 1) * 128));
     }
 
@@ -801,7 +801,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         assertGt(_bafTotal(bracket, 1), 0, "vault scores under ID 1");
         assertEq(_bafTotal(bracket, 2), 0, "sDGNRS never scores");
         assertEq(jackpots.bafHeadWinner(bracket, 0, 0), id);
-        bytes32 base = keccak256(abi.encode(uint256(bracket), BAF_TOP_ROOT));
+        bytes32 base = keccak256(abi.encode(uint256((bracket / 10) & 3), BAF_TOP_ROOT));
         uint256 w0 = uint256(vm.load(address(jackpots), base));
         uint256 w1 = uint256(vm.load(address(jackpots), bytes32(uint256(base) + 1)));
         uint256 lv = uint256(vm.load(address(jackpots), keccak256(abi.encode(uint256(bracket), BAF_LEVEL_ROOT))));

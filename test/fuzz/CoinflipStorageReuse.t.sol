@@ -15,7 +15,7 @@ contract CoinflipReuseHarness is Coinflip {
         flipsClaimableDay = day;
     }
     function configure(uint32 id, uint24 cursor, uint128 bank, uint128 carry, bool rebuy, uint128 stop) external {
-        playerState[id] = PlayerCoinflipState(bank, cursor, 0, rebuy, stop, carry);
+        playerState[id] = PlayerCoinflipState(bank, cursor, 0, rebuy, stop == 0, true, stop == 0 ? 1 : stop, carry);
     }
     function settle(uint32 id) external returns (uint256 mintable) {
         PlayerCoinflipState storage p = playerState[id];

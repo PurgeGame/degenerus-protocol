@@ -341,7 +341,7 @@ abstract contract DegenesisStallRequestGas is DegenesisGasBase {
             }
         }
         vm.store(address(affiliate), keccak256(abi.encode(uint24(1), uint256(3))),
-            bytes32((uint256(winnerId) << 224) | (uint256(1) << 128) | 1));
+            bytes32((uint256(1) << 232) | (uint256(winnerId) << 163) | (uint256(1) << 128) | 1));
     }
 
     function test_StallRequestSplitsAllSeven() public {

@@ -290,12 +290,15 @@ contract Coinflip {
         IDegenerusQuests(ContractAddresses.QUESTS);
 
     // Player coinflip state: two slots. Slot A holds the claim bank, cursor, auto-rebuy
-    // flags; slot B holds the take-profit stop and rolling carry. The mapping key is the ID.
+    // flags; slot B holds the take-profit stop and rolling carry. Unlimited stores stop1
+    // with its own flag, retaining word B when carry empties. The mapping key is the ID.
     struct PlayerCoinflipState {
         uint128 claimableStored;
         uint24 lastClaim;
         uint24 autoRebuyStartDay;
         bool autoRebuyEnabled;
+        bool autoRebuyUnlimited;
+        bool initialized;
         uint128 autoRebuyStop;
         uint128 autoRebuyCarry;
     }
@@ -370,7 +373,7 @@ contract Coinflip {
     /// @dev Two 128-bit intervals per word, with each lane containing:
     ///      bits [0..95]   cumulative weight endpoint (exclusive, whole FLIP)
     ///      bits [96..127] depositor wallet ID
-    ///      Key: (day << 32) | (index >> 1), shift: (index & 1) * 128.
+    ///      Key: index >> 1, authenticated by bafDrawDay; shift: (index & 1) * 128.
     ///      Never zero for a recorded entry — MIN is
     ///      100 FLIP, so every weight is at least 100.
     mapping(uint256 => uint256) internal bafDrawEntry;
@@ -759,11 +762,12 @@ contract Coinflip {
         PlayerCoinflipState storage state
     ) internal returns (uint256 mintable) {
         IDegenerusGame game = degenerusGame;
+        if (id != 0) state.initialized = true;
         uint24 latest = flipsClaimableDay;
         uint24 start = state.lastClaim;
 
         bool rebuyActive = state.autoRebuyEnabled;
-        uint256 takeProfit = rebuyActive ? state.autoRebuyStop : 0;
+        uint256 takeProfit = rebuyActive && !state.autoRebuyUnlimited ? state.autoRebuyStop : 0;
         uint256 carry;
         uint256 winningBafCredit;
         uint24 bafResolvedDay;
@@ -1087,10 +1091,10 @@ contract Coinflip {
         uint256 header = bafDrawHeader[day];
         uint256 newTotal = (header & type(uint96).max) + weight;
         uint32 index = uint32(header >> 96);
-        uint256 key = (uint256(day) << 32) | (index >> 1);
+        uint256 key = index >> 1;
         uint256 shift = (index & 1) * 128;
         uint256 entry = (uint256(id) << 96) | newTotal;
-        bafDrawEntry[key] = (bafDrawEntry[key] & ~(uint256(type(uint128).max) << shift)) | (entry << shift);
+        bafDrawEntry[key] = shift == 0 ? entry : uint128(bafDrawEntry[key]) | (entry << shift);
         bafDrawHeader[day] = (uint256(index + 1) << 96) | newTotal;
         emit BafDrawEntered(day, id, index, weight, uint96(newTotal));
     }
@@ -1409,7 +1413,8 @@ contract Coinflip {
             if (takeProfit > type(uint128).max) revert TakeProfitTooLarge();
             if (state.autoRebuyEnabled) revert AutoRebuyAlreadyEnabled();
             mintable = _claimCoinflipsInternal(id, state);
-            state.autoRebuyStop = uint128(takeProfit);
+            state.autoRebuyStop = takeProfit == 0 ? 1 : uint128(takeProfit);
+            state.autoRebuyUnlimited = takeProfit == 0;
             state.autoRebuyEnabled = true;
             state.autoRebuyStartDay = state.lastClaim;
             emit CoinflipAutoRebuyStopSet(id, takeProfit);
@@ -1449,7 +1454,8 @@ contract Coinflip {
         if (takeProfit > type(uint128).max) revert TakeProfitTooLarge();
 
         uint256 mintable = _claimCoinflipsInternal(id, state);
-        state.autoRebuyStop = uint128(takeProfit);
+        state.autoRebuyStop = takeProfit == 0 ? 1 : uint128(takeProfit);
+        state.autoRebuyUnlimited = takeProfit == 0;
         emit CoinflipAutoRebuyStopSet(id, takeProfit);
 
         if (mintable != 0) {
@@ -1609,6 +1615,8 @@ contract Coinflip {
             // (0 take-profit): every later flip credit rolls win-after-win until a loss.
             if (epoch >= SEED_FLIP_DAYS) {
                 sdgnrsAutoRebuyArmed = true;
+                sdgnrsState.autoRebuyStop = 1;
+                sdgnrsState.autoRebuyUnlimited = true;
                 sdgnrsState.autoRebuyEnabled = true;
                 sdgnrsState.autoRebuyStartDay = sdgnrsState.lastClaim;
                 emit CoinflipAutoRebuyToggled(SDGNRS_WALLET_ID, true);
@@ -1807,7 +1815,7 @@ contract Coinflip {
     {
         PlayerCoinflipState storage state = playerState[id];
         enabled = state.autoRebuyEnabled;
-        stop = state.autoRebuyStop;
+        stop = state.autoRebuyUnlimited ? 0 : state.autoRebuyStop;
         carry = state.autoRebuyCarry;
         startDay = state.autoRebuyStartDay;
     }
@@ -1859,7 +1867,8 @@ contract Coinflip {
 
     /// @dev Two cumulative-weight/account intervals share each physical word.
     function _bafDrawEntry(uint24 day, uint32 index) private view returns (uint256) {
-        return uint128(bafDrawEntry[(uint256(day) << 32) | (index >> 1)] >> ((index & 1) * 128));
+        if (day != bafDrawDay || index >= uint32(bafDrawHeader[day] >> 96)) return 0;
+        return uint128(bafDrawEntry[index >> 1] >> ((index & 1) * 128));
     }
 
     /// @notice A recorded draw entry's depositor wallet ID and cumulative endpoint (whole FLIP).
@@ -1907,7 +1916,7 @@ contract Coinflip {
         }
         if (startDay >= latestDay || id == 0) return (mintable, endCarry);
 
-        uint256 takeProfit = rebuyActive ? state.autoRebuyStop : 0;
+        uint256 takeProfit = rebuyActive && !state.autoRebuyUnlimited ? state.autoRebuyStop : 0;
 
         uint24 minClaimableDay;
         unchecked {

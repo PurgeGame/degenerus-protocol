@@ -355,4 +355,24 @@ contract CoinflipCarryClaim is DeployProtocol {
         vm.expectRevert(Coinflip.AutoRebuyNotEnabled.selector);
         coinflip.claimCoinflipCarry(0, 1);
     }
+    function testUnlimitedRebuyRetainsBothWordsAcrossWinLossAndStopOne() public {
+        _enterRebuyWithStake();
+        uint32 id = game.walletIdOf(player);
+        bytes32 base = keccak256(abi.encode(uint256(id), uint256(2)));
+        _resolveDay(3, true);
+        vm.prank(player); coinflip.depositCoinflip(0, 0);
+        _resolveDay(4, false);
+        vm.prank(player); coinflip.depositCoinflip(0, 0);
+        (bool enabled, uint256 stop, uint256 carry,) = coinflip.coinflipAutoRebuyInfoById(id);
+        assertTrue(enabled); assertEq(stop, 0); assertEq(carry, 0);
+        assertGt(uint256(vm.load(address(coinflip), base)), 0);
+        assertEq(uint256(vm.load(address(coinflip), bytes32(uint256(base) + 1))), 1);
+        vm.prank(player); coinflip.setCoinflipAutoRebuyTakeProfit(0, 1);
+        (, stop,,) = coinflip.coinflipAutoRebuyInfoById(id);
+        assertEq(stop, 1, "real stop one remains distinct");
+        vm.prank(player); coinflip.setCoinflipAutoRebuyTakeProfit(0, type(uint128).max);
+        (, stop,,) = coinflip.coinflipAutoRebuyInfoById(id);
+        assertEq(stop, type(uint128).max, "full stop range preserved");
+    }
+
 }

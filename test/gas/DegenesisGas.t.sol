@@ -874,7 +874,7 @@ contract DegenesisDayCloseGas is DegenesisGasBase {
 contract DegenesisCharitySeeder is GNRUS {
     function seed(uint24 lvl) external {
         currentLevel = lvl;
-        for (uint8 i; i < 20; ++i) slotApproveWeight[lvl][i] = i + 1;
+        for (uint8 i; i < 20; ++i) _slotApproveWeight[i] = (uint256(lvl) << 232) | (i + 1);
     }
 }
 
@@ -924,7 +924,7 @@ abstract contract DegenesisDayNineRequestGas is DegenesisGasBase {
         }
         // Affiliate _levelScore (slot 3), level 1: leader id/score in the upper 128 bits.
         vm.store(address(affiliate), keccak256(abi.encode(uint24(1), uint256(3))),
-            bytes32((uint256(winnerId) << 224) | (uint256(1) << 128) | 1));
+            bytes32((uint256(1) << 232) | (uint256(winnerId) << 163) | (uint256(1) << 128) | 1));
         (uint32 top,) = affiliate.affiliateTop(1);
         require(top == winnerId, "fixture: affiliate winner");
     }

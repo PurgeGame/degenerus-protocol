@@ -51,5 +51,10 @@ fields = {x["label"]: (int(x["slot"]), x["offset"], sd["types"][x["type"]]["labe
           for x in sd["storage"]}
 assert fields["_batchPlayerCounts"] == (7, 24, "uint64")
 assert fields["_batchPlayers"] == (9, 0, "mapping(uint256 => uint256)[2]")
-assert fields["_parkedRedemptions"][0] == 11
-print("Phase 2 layout: tagged five-word jackpot records, packed queue counts, pinned Craps roots")
+assert fields["_redemptionBatches"][0] == 6
+assert "_parkedRedemptions" not in fields
+root = next(x for x in sd["storage"] if x["label"] == "_redemptionBatches")
+record = sd["types"][sd["types"][root["type"]]["value"]]
+assert int(record["numberOfBytes"]) == 64
+assert [(m["label"], int(m["slot"]), m["offset"]) for m in record["members"]][-1] == ("id", 1, 28)
+print("Phase 2 layout: tagged five-word jackpot records, packed queue counts, pinned Craps roots, unchanged sDGNRS roots")

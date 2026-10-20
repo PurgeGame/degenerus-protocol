@@ -1604,7 +1604,8 @@ contract WalletIdTruthHandler is Test {
                 if (cache >> 66 != 0) _fail("AFFEARN", "earnings word spills past bit 255", _keyOf(id), cache >> 66, 0);
                 _checkUplines("AFFEARN", id, cache);
             }
-            uint32 leader = uint32(uint256(vm.load(AFFILIATE, keccak256(abi.encode(lvl, AFF_LEVEL_SCORE)))) >> 224);
+            uint256 scoreWord = uint256(vm.load(AFFILIATE, keccak256(abi.encode(lvl & 3, AFF_LEVEL_SCORE))));
+            uint32 leader = uint24(scoreWord >> 232) == lvl ? uint32(scoreWord >> 163) : 0;
             if (leader != 0 && !_registered(leader)) _fail("AFFLEAD", "level leader is not a registered ID", address(0), leader, lvl);
         }
     }
@@ -1705,17 +1706,15 @@ contract WalletIdTruthHandler is Test {
 
     /// @dev Jackpots BAF board lanes (`score96 | id << 96`, two per word) hold registered IDs.
     function _checkBafBoard() internal view {
-        uint256 maxLvl = uint256(game.level()) + 2;
-        for (uint256 lvl; lvl <= maxLvl; ++lvl) {
-            uint256 base = uint256(keccak256(abi.encode(lvl, JP_BAF_TOP)));
-            for (uint256 wI; wI < 2; ++wI) {
-                uint256 word = uint256(vm.load(JACKPOTS, bytes32(base + wI)));
-                for (uint256 half; half < 2; ++half) {
-                    uint256 entry = (word >> (half * 128)) & type(uint128).max;
-                    if (entry == 0) continue;
-                    uint32 id = uint32(entry >> 96);
-                    if (!_registered(id)) _fail("BAF", "board lane ID not registered", address(0), id, lvl);
-                }
+        uint256 tags = uint256(vm.load(JACKPOTS, bytes32(uint256(3)))) >> 24;
+        for (uint256 bank; bank < 4; ++bank) {
+            uint24 lvl = uint24(tags >> (bank * 24));
+            uint256 count = uint8(uint256(vm.load(JACKPOTS, keccak256(abi.encode(uint256(lvl), uint256(2))))) >> 64);
+            uint256 base = uint256(keccak256(abi.encode(bank, JP_BAF_TOP)));
+            for (uint256 i; i < count; ++i) {
+                uint256 word = uint256(vm.load(JACKPOTS, bytes32(base + (i >> 1))));
+                uint32 id = uint32(word >> ((i & 1) * 128 + 96));
+                if (!_registered(id)) _fail("BAF", "board lane ID not registered", address(0), id, lvl);
             }
         }
     }

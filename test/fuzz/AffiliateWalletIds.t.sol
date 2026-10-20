@@ -177,7 +177,8 @@ abstract contract AffiliateIdFixture is DeployProtocol {
     }
 
     function _levelWord(uint24 lvl) internal view returns (uint256) {
-        return uint256(vm.load(address(affiliate), keccak256(abi.encode(uint256(lvl), LEVEL_SCORE_ROOT))));
+        uint256 word = uint256(vm.load(address(affiliate), keccak256(abi.encode(uint256(lvl & 3), LEVEL_SCORE_ROOT))));
+        return uint24(word >> 232) == lvl ? word : 0;
     }
 
     function _id(address a) internal view returns (uint32) {
@@ -554,7 +555,7 @@ abstract contract AffiliateIdFixture is DeployProtocol {
     }
 
     function _assertLeaderTruth(uint24 lvl) internal view {
-        uint32 lid = uint32(_levelWord(lvl) >> 224);
+        uint32 lid = uint32(_levelWord(lvl) >> 163);
         if (lid == 0) return;
         assertLt(lid, _nextId(), "leader is allocated");
         assertEq(_id(_keyOf(lid)), lid, "leader ID is canonical");
@@ -624,8 +625,8 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         uint256 lw = _levelWord(4);
         (uint32 lid, uint96 lscore) = affiliate.affiliateTop(4);
         assertEq(lw & type(uint128).max, affiliate.totalAffiliateScore(4), "root 3: total [0:128)");
-        assertEq(uint96(lw >> 128), lscore, "root 3: leader score [128:224)");
-        assertEq(uint32(lw >> 224), lid, "root 3: leader ID [224:256)");
+        assertEq((lw >> 128) & ((uint256(1) << 35) - 1), lscore, "root 3: leader score [128:163)");
+        assertEq(uint32(lw >> 163), lid, "root 3: leader ID [163:195)");
         assertEq(lid, oid);
         (address bootstrapOwner,,) = affiliate.affiliateCode(CODE_A);
 
@@ -1533,10 +1534,11 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
             );
         }
         for (uint24 lvl = 1; lvl <= 7; ++lvl) {
-            assertEq(affiliate.totalAffiliateScore(lvl), _expTotal[lvl], "total");
+            bool retained = lvl >= 3 && lvl <= 6;
+            assertEq(affiliate.totalAffiliateScore(lvl), retained ? _expTotal[lvl] : 0, "retained total");
             (uint32 lid, uint96 lscore) = affiliate.affiliateTop(lvl);
-            assertEq(lid, _expLeader[lvl] == address(0) ? 0 : _id(_expLeader[lvl]), "leader");
-            assertEq(uint256(lscore), _expLeaderScore[lvl], "leader score");
+            assertEq(lid, !retained || _expLeader[lvl] == address(0) ? 0 : _id(_expLeader[lvl]), "retained leader");
+            assertEq(uint256(lscore), retained ? _expLeaderScore[lvl] : 0, "retained leader score");
             for (uint256 k; k < 3; ++k) {
                 assertEq(affiliate.affiliateScore(lvl, _id(owners[k])), lvl >= 5 && lvl <= 6 ? _expScore[lvl][owners[k]] : 0, "retained exact score");
             }
