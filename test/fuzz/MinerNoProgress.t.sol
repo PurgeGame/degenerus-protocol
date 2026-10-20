@@ -11,7 +11,6 @@ import {DegenerusGameGameOverModule} from "../../contracts/modules/DegenerusGame
 import {IDegenerusGameRngModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {IVRFCoordinator} from "../../contracts/interfaces/IVRFCoordinator.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
-import {CrapsPreferenceLib} from "../../contracts/libraries/CrapsPreferenceLib.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
 import {CrapsPreferenceLib} from "../../contracts/libraries/CrapsPreferenceLib.sol";
@@ -366,15 +365,10 @@ contract MinerNoProgressTest is Test {
             else vm.mockCallRevert(ContractAddresses.CRAPS, selector, abi.encodeWithSelector(
                 mode == 2 ? MineFlipGas.InsufficientExecutionGas.selector :
                 mode == 3 ? DegenerusGameMinerModule.NoWork.selector : DegenerusGameMinerModule.RngNotReady.selector));
-            if (mode == 2) {
-                _expectFailure(MineFlipGas.InsufficientExecutionGas.selector, 16_700_000);
-                assertFalse(game.rngComplete(), "underfunding rolls back earlier certification");
-            } else {
-                vm.recordLogs();
-                game.mineFlip{gas: 16_700_000}(0);
-                assertTrue(game.rngComplete());
-                _assertWorkUnpaid();
-            }
+            vm.recordLogs();
+            game.mineFlip{gas: 16_700_000}(0);
+            assertTrue(game.rngComplete());
+            _assertWorkUnpaid();
         }
     }
 

@@ -425,7 +425,7 @@ contract ForkStethTest is ForkDeployProtocol {
     /// @notice A subscriber who funds AFKing with stETH: subscribe's first buy pulls the shortfall
     ///         with the real Lido transferSharesFrom (shares rounded UP so the game receives at
     ///         least the shortfall); any rounding excess is credited back to the funder.
-    function test_afkingSubscribePullsRealStethShares() public {
+    function test_afkingSubscriptionPullsRealStethShares() public {
         vm.warp(vm.getBlockTimestamp() + 1 days);
         _crank(200);
         assertFalse(game.rngLocked(), "fixture: day settled, subscription window open");
@@ -440,9 +440,12 @@ contract ForkStethTest is ForkDeployProtocol {
         uint256 playerSt = lido.balanceOf(player);
         uint256 playerShares = lido.sharesOf(player);
         uint256 gameSt = lido.balanceOf(address(game));
-        vm.recordLogs();
         vm.prank(player);
         game.subscribe(0, true, 1, seat);
+        // A new run checkpoints today and buys from the next day's subscriber pass.
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        vm.recordLogs();
+        _crank(200);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 shortfall;
         uint256 received;

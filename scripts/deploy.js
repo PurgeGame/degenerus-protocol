@@ -241,6 +241,7 @@ async function main() {
       ...Object.values(KEY_TO_CONTRACT),
       "DegenerusVaultShare", // DGVF/DGVE, deployed from the vault constructor
       "DegenerusGameLens", // deployment-decoupled periphery, deployed separately
+      "CrapsLens", // craps view periphery, deployed separately
       "DeityBoonViewer",
     ]);
     let abiCount = 0;

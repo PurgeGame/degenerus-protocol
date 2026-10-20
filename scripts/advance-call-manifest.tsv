@@ -47,7 +47,7 @@ OFF-CRANK	IStETH.balanceOf	_payoutWithStethFallback	modules/DegenerusGamePayoutU
 OFF-CRANK	lowlevel:call	_payoutWithStethFallback	modules/DegenerusGamePayoutUtils.sol	BARE		ETH-first claim payout, claimWinnings player path (untrusted recipient call runs last)
 OFF-CRANK	lowlevel:delegatecall	purchaseDeityPass	DegenerusGame.sol	BARE		player deity pass purchase
 OFF-CRANK	delegatecall:IDegenerusGameMinerModule.playerActivityScoreCachedById	_activityScoreCached	DegenerusGame.sol	BARE		Score refresh for FLIP decimatorBurn and WWXRP draw entry (player paths); cache misses dispatch to the Miner module; unreachable from required settlement work
-OFF-CRANK	lowlevel:delegatecall	setThanosLevel	DegenerusGame.sol	BARE		vault-owner thanos declaration stub into the advance module; player/configuration path, unreachable from required settlement work
+OFF-CRANK	lowlevel:delegatecall	setThanosLevel	DegenerusGame.sol	BARE		vault-owner thanos declaration stub into the GameOver module; player/configuration path, unreachable from required settlement work
 OFF-CRANK	IVaultOwnerCheck.isVaultOwner	setThanosLevel	modules/DegenerusGameGameOverModule.sol	BARE		vault-owner access check on the thanos declaration; configuration-only path, unreachable from required settlement work
 OFF-CRANK	delegatecall:IDegenerusGameMintModule.purchase	_purchaseFor	DegenerusGame.sol	BARE		player ticket purchase entry (purchase / purchaseFor)
 OFF-CRANK	lowlevel:delegatecall	purchaseLazyPass	DegenerusGame.sol	BARE		player lazy pass purchase

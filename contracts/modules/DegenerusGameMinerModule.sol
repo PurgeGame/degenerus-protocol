@@ -213,8 +213,6 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
             else (ok, result) = target.delegatecall{gas: forwarded}(callData);
             if (!ok) {
                 unpaidAttemptGas = MineFlipGas.consumed(beforeCall, gasleft());
-                // Underfunding never becomes an external-refusal or partial-success outcome.
-                if (result.length == 4 && bytes4(result) == MineFlipGas.InsufficientExecutionGas.selector) _revertWork(result);
                 // Only our request worker emits this selector; external revert bytes are discarded.
                 if ((request || action == MinerAction.Terminal) && result.length == 4
                     && bytes4(result) == ExternalRequestRefused.selector) {

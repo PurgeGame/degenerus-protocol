@@ -400,9 +400,10 @@ contract TerminalLoanSettlementTest is TerminalLoanBase {
         vm.recordLogs();
         assertTrue(_mine(30_000_000)); // decision only
 
-        // An 800k call admits only a few loans after the engine's reserves; the rest resume
-        // from the stored index.
+        // 800k calls admit only a few loans after the engine's reserves; the rest resume
+        // from the stored index. The first call may only walk the empty levels ahead of 5.
         assertTrue(_mine(800_000));
+        for (uint256 k; k < 4 && _loanIndex() == 0; ++k) assertTrue(_mine(800_000));
         uint256 step = _loanStep();
         uint256 index = _loanIndex();
         assertEq(step, 4, "still on level 5");

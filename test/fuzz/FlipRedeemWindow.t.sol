@@ -25,8 +25,8 @@ contract FlipRedeemWindowTest is DeployProtocol {
     uint256 private constant WINDOW_OPEN_SHIFT = 249; // bit 9 of the uint16 at bytes 30..31: _ticketRedemptionOpen()
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = GameSlots.PRIZE_POOLS_PACKED; // [future:128][next:128]
 
-    // _setLevelPrizePool(0, BOOTSTRAP_PRIZE_POOL (DegenerusGame constructor).
-    uint128 private constant BOOTSTRAP_PRIZE_POOL = 50 ether);
+    // Level-0 prize pool = BOOTSTRAP_PRIZE_POOL (DegenerusGame constructor).
+    uint128 private constant BOOTSTRAP_PRIZE_POOL = 50 ether;
     // One whole ticket = 4 * TICKET_SCALE = 400 purchase units; 4000 = 10 tickets, safely above
     // the 0.0025 ETH min buy-in so a redeem that clears the gate also clears the purchase floor.
     uint256 private constant REDEEM_QTY = 4000;

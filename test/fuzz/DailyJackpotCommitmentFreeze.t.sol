@@ -124,8 +124,9 @@ contract DailyJackpotCommitmentFreezeTest is DeployProtocol {
         return (uint128(packed), packed >> 128);
     }
 
+    /// @dev Live budget fields only; bit 73 is the retained-word sentinel.
     function _budgets() private view returns (uint256) {
-        return uint256(vm.load(address(game), bytes32(uint256(6))));
+        return uint256(vm.load(address(game), bytes32(uint256(6)))) & ~(uint256(1) << 73);
     }
 
     function _packed() private view returns (uint256) {

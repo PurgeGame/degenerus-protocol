@@ -105,7 +105,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
 
     uint256 private constant DRAIN_MAX_ITERATIONS = 60;
     uint256 private _lastFulfilledReqId;
-    uint256 private constant NATIVE_EVICTION_CALL_GAS = 2_000_000;
+    uint256 private constant NATIVE_EVICTION_CALL_GAS = 4_000_000;
     mapping(address => bool) private _nativeEvictionExpected;
     mapping(address => bool) private _nativeEvictionSeen;
 

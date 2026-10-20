@@ -350,9 +350,13 @@ contract WalletIdTruthInvariant is DeployProtocol {
 
 
     function test_oracleDetectsAnUnallocatedRedemptionRecipient() public {
+        // Queue 0: one packed count at slot 7 bits 192..223, lanes at keccak(index / 2, 9).
         uint256 root = 9;
-        vm.store(address(sdgnrs), bytes32(root), bytes32(uint256(1)));
-        vm.store(address(sdgnrs), keccak256(abi.encode(root)), bytes32(uint256(1e12) | (uint256(type(uint32).max) << 80)));
+        bytes32 counts = bytes32(uint256(7));
+        uint256 w = uint256(vm.load(address(sdgnrs), counts));
+        vm.store(address(sdgnrs), counts, bytes32((w & ~(uint256(type(uint32).max) << 192)) | (uint256(1) << 192)));
+        vm.store(address(sdgnrs), keccak256(abi.encode(uint256(0), root)),
+            bytes32(uint256(1e12) | (uint256(type(uint32).max) << 80)));
         _expectBreach("SDGNRS");
     }
 

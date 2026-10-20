@@ -251,33 +251,29 @@ contract StorageFoundationTest is Test {
         assertEq(uint256(f), 3 ether, "a clamped next must not disturb future");
     }
 
-    /// @dev Pin the post-v62 consolidated tail pack `levelDgnrsPacked` to its compiled slot (GameSlots) with the
-    ///      documented alloc[0:128) / claimed[128:256) split. Writing a sentinel directly into
-    ///      the keccak256(abi.encode(lvl, slot)) mapping element and reading both halves back through
-    ///      the contract's own `_getLevelDgnrs` getter proves the field still lives at its slot under
-    ///      the new layout — a future tail re-pack that moved it would break this assertion rather
-    ///      than silently masking a slot-hardcoded harness that pokes the wrong field.
+    /// @dev Pin `levelDgnrsPacked` to its compiled slot (GameSlots): one retained current-level word,
+    ///      allocation [0:128), claimed [128:255) and the retained bit 255. Writing a sentinel straight
+    ///      into the slot and reading it back through the contract's own `_getLevelDgnrs` proves the
+    ///      field and its split; a level other than the current one reads as empty, and the retained
+    ///      bit never leaks into the claimed half.
     function testLevelDgnrsPackedTailSlot() public {
         uint24 lvl = 50;
-        uint256 LEVEL_DGNRS_PACKED_SLOT = GameSlots.LEVEL_DGNRS_PACKED;
-        uint256 allocSentinel = 0x0000000000000000000000000000000123456789ABCDEF0123456789ABCDEF01;
-        uint256 claimedSentinel = 0x00000000000000000000000000000002FEDCBA9876543210FEDCBA9876543210;
-        uint256 packed = (claimedSentinel << 128) | uint256(uint128(allocSentinel));
+        uint256 levelWord = uint256(vm.load(address(harness), bytes32(GameSlots.LEVEL)));
+        uint256 levelMask = uint256(type(uint24).max) << (GameSlots.LEVEL_OFFSET * 8);
+        vm.store(address(harness), bytes32(GameSlots.LEVEL),
+            bytes32((levelWord & ~levelMask) | (uint256(lvl) << (GameSlots.LEVEL_OFFSET * 8))));
 
-        bytes32 elemSlot = keccak256(abi.encode(uint256(lvl), LEVEL_DGNRS_PACKED_SLOT));
-        vm.store(address(harness), elemSlot, bytes32(packed));
+        uint256 allocSentinel = 0x123456789ABCDEF0123456789ABCDEF01;
+        uint256 claimedSentinel = 0x2FEDCBA9876543210FEDCBA9876543210;
+        uint256 packed = (uint256(1) << 255) | (claimedSentinel << 128) | allocSentinel;
+        vm.store(address(harness), bytes32(GameSlots.LEVEL_DGNRS_PACKED), bytes32(packed));
 
         (uint256 allocation, uint256 claimed) = harness.exposed_getLevelDgnrs(lvl);
-        assertEq(
-            allocation,
-            uint256(uint128(allocSentinel)),
-            "levelDgnrsPacked allocation half not at its slot low 128"
-        );
-        assertEq(
-            claimed,
-            uint256(uint128(claimedSentinel)),
-            "levelDgnrsPacked claimed half not at its slot high 128"
-        );
+        assertEq(allocation, allocSentinel, "levelDgnrsPacked allocation not at its slot low 128");
+        assertEq(claimed, claimedSentinel, "levelDgnrsPacked claimed not at bits 128..254");
+
+        (allocation, claimed) = harness.exposed_getLevelDgnrs(lvl - 1);
+        assertEq(allocation | claimed, 0, "a past level reads as empty");
     }
 
     // =====================================================================

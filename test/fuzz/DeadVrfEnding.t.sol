@@ -748,7 +748,7 @@ contract DeadVrfEndingTest is DeployProtocol {
 
         // Realistic-allowance reference (owner rule: the engine spends whatever it is given, so
         // the reference batch is a 10M call, not an unbounded one): one call's cost, then the
-        // cost of the call that swaps and sends the terminal request.
+        // call that swaps and arms, then the cost of the call that sends the terminal request.
         uint256 g0 = gasleft();
         game.mineFlip{gas: 10_000_000}(0);
         uint256 batchGas = g0 - gasleft();
@@ -762,7 +762,11 @@ contract DeadVrfEndingTest is DeployProtocol {
             requestGas = g0 - gasleft();
             (,, swapped) = _terminalQueues();
         }
-        assertEq(swapped, 1, "full-gas reference reaches the terminal request attempt");
+        assertEq(swapped, 1, "full-gas reference reaches the terminal arming");
+        assertEq(mockVRF.lastRequestId(), req0, "the swap call arms without sending the request");
+        g0 = gasleft();
+        game.mineFlip{gas: 10_000_000}(0);
+        requestGas = g0 - gasleft();
         if (refusing) assertEq(mockVRF.lastRequestId(), req0, "refused request installs no ID");
         else assertGt(mockVRF.lastRequestId(), req0, "the terminal request went out");
         vm.revertToState(snap);

@@ -6,7 +6,7 @@ import { keccak256 } from "ethers";
 import { DEPLOY_ORDER, KEY_TO_CONTRACT } from "./lib/predictAddresses.js";
 
 const out = process.argv[2] || process.env.FOUNDRY_OUT || "forge-out";
-const names = [...new Set([...DEPLOY_ORDER.map(k => KEY_TO_CONTRACT[k]), "DegenerusVaultShare"])];
+const names = [...new Set([...DEPLOY_ORDER.map(k => KEY_TO_CONTRACT[k]), "DegenerusVaultShare", "DegenerusGameLens", "CrapsLens"])];
 const sourceHashes = new Map();
 const rows = [];
 for (const name of names) {

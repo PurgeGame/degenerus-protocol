@@ -673,30 +673,6 @@
   },
   {
     "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle._armSlot",
-    "kind": "external",
-    "expression": "IReadCohortLifecycle(address(this)).registerRngSlot(index, slot, w.key)",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle._armSlot",
-    "kind": "recipient-helper",
-    "expression": "_writeBuffer()",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle._boostBase",
-    "kind": "recipient-helper",
-    "expression": "_shareOf(w, false)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/CrapsBattle.sol",
     "scope": "CrapsBattle._burnCoin",
     "kind": "external",
     "expression": "IFlipCoin(ContractAddresses.COIN).burnCoin(from, amount)",
@@ -769,30 +745,6 @@
   },
   {
     "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle._foldHigh",
-    "kind": "recipient-helper",
-    "expression": "_laneBoost(w, word)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle._highBase",
-    "kind": "recipient-helper",
-    "expression": "_shareOf(w, true)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle._highBoostUnits",
-    "kind": "recipient-helper",
-    "expression": "_highBase(w)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/CrapsBattle.sol",
     "scope": "CrapsBattle._joinableSlot",
     "kind": "external",
     "expression": "IGameCraps(_GAME).rngLocked()",
@@ -817,14 +769,6 @@
   },
   {
     "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle._laneBoost",
-    "kind": "recipient-helper",
-    "expression": "_highBoostUnits(w, word)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/CrapsBattle.sol",
     "scope": "CrapsBattle._newcomer",
     "kind": "external",
     "expression": "IGameCraps(_GAME).level()",
@@ -838,14 +782,6 @@
     "expression": "IGameCraps(_GAME).mintPackedOfId(id)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle._openWindow",
-    "kind": "recipient-helper",
-    "expression": "_boostBase(w)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/CrapsBattle.sol",
@@ -916,14 +852,6 @@
     "scope": "CrapsBattle._reserveWindow",
     "kind": "recipient-helper",
     "expression": "_reservableDay(day)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle._resolve",
-    "kind": "recipient-helper",
-    "expression": "_foldHigh(w, s.rank, seat, word, header, s.paid)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
@@ -1030,14 +958,6 @@
     "expression": "ICrapsEngine(ContractAddresses.CRAPS_ENGINE).settleBattle( betId, header, w.played / 10, w.bankroll, w.goal, w.bound, (uint256(w.entrants) << 64) | w.seat, word)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle._shareOf",
-    "kind": "recipient-helper",
-    "expression": "_dailyWordAt(day)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/CrapsBattle.sol",
@@ -1171,9 +1091,9 @@
     "path": "contracts/CrapsBattle.sol",
     "scope": "CrapsBattle.closeBattle",
     "kind": "recipient-helper",
-    "expression": "_armSlot(slot, w)",
+    "expression": "_delegateJackpot()",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "PROTOCOL: player door forwards to the pinned JackpotBattle delegate (lane-C byte move)."
   },
   {
     "path": "contracts/CrapsBattle.sol",
@@ -1211,25 +1131,9 @@
     "path": "contracts/CrapsBattle.sol",
     "scope": "CrapsBattle.donate",
     "kind": "recipient-helper",
-    "expression": "_burnCoin(msg.sender, amount)",
+    "expression": "_delegateJackpot()",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle.donate",
-    "kind": "recipient-helper",
-    "expression": "_burnForCraps( uint256(uint160(ContractAddresses.VAULT)) | (uint256(_VAULT_ID) << _ACCOUNT_ID_SHIFT), _tag(amount, _CRAPS_FLAG_COMP) )",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle.donate",
-    "kind": "recipient-helper",
-    "expression": "_joinableSlot(slot)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "PROTOCOL: player door forwards to the pinned JackpotBattle delegate (lane-C byte move)."
   },
   {
     "path": "contracts/CrapsBattle.sol",
@@ -1339,14 +1243,6 @@
     "path": "contracts/CrapsBattle.sol",
     "scope": "CrapsBattle.openBonusDay",
     "kind": "recipient-helper",
-    "expression": "_openWindow(today, p, word)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle.openBonusDay",
-    "kind": "recipient-helper",
     "expression": "_seatDayLane(_daySlotOf(today), cost)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
@@ -1356,22 +1252,6 @@
     "scope": "CrapsBattle.resolveRngSlot",
     "kind": "recipient-helper",
     "expression": "_resolveSlotRange(slot, allowance, _RESOLVE_MAX_SEATS)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle.runCrapsMaintenance",
-    "kind": "recipient-helper",
-    "expression": "_delegateJackpot()",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle.runDailyBattleWork",
-    "kind": "recipient-helper",
-    "expression": "_delegateJackpot()",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
@@ -1502,6 +1382,206 @@
     "expression": "_upgradeDayWindows(account, arg, count, true)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+  },
+  {
+    "path": "contracts/CrapsLens.sol",
+    "scope": "CrapsLens.highRollerDrawOf",
+    "kind": "recipient-helper",
+    "expression": "CrapsLensReader.highRollerDrawOf(ContractAddresses.CRAPS, slot)",
+    "count": 1,
+    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
+  },
+  {
+    "path": "contracts/CrapsLens.sol",
+    "scope": "CrapsLens.highRollerReserve",
+    "kind": "recipient-helper",
+    "expression": "CrapsLensReader.highRollerReserve(ContractAddresses.CRAPS)",
+    "count": 1,
+    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
+  },
+  {
+    "path": "contracts/CrapsLens.sol",
+    "scope": "CrapsLens.jackpotBattleOf",
+    "kind": "recipient-helper",
+    "expression": "CrapsLensReader.jackpotBattleOf(ContractAddresses.CRAPS, slot)",
+    "count": 1,
+    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
+  },
+  {
+    "path": "contracts/CrapsLens.sol",
+    "scope": "CrapsLens.jackpotEntryPrice",
+    "kind": "recipient-helper",
+    "expression": "CrapsLensReader.jackpotEntryPrice(ContractAddresses.CRAPS)",
+    "count": 1,
+    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
+  },
+  {
+    "path": "contracts/CrapsLens.sol",
+    "scope": "CrapsLens.jackpotEntryPriceOf",
+    "kind": "recipient-helper",
+    "expression": "CrapsLensReader.jackpotEntryPriceOf(ContractAddresses.CRAPS, slot)",
+    "count": 1,
+    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
+  },
+  {
+    "path": "contracts/CrapsLens.sol",
+    "scope": "CrapsLens.preferredBoardOf",
+    "kind": "recipient-helper",
+    "expression": "CrapsLensReader.mapped(ContractAddresses.CRAPS, 14, walletId)",
+    "count": 1,
+    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
+  },
+  {
+    "path": "contracts/CrapsLens.sol",
+    "scope": "CrapsLens.progressivePool",
+    "kind": "recipient-helper",
+    "expression": "CrapsLensReader.read(ContractAddresses.CRAPS, 15)",
+    "count": 1,
+    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
+  },
+  {
+    "path": "contracts/CrapsLens.sol",
+    "scope": "CrapsLensReader.battleKey",
+    "kind": "recipient-helper",
+    "expression": "mapped(table, 13, slot)",
+    "count": 1,
+    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
+  },
+  {
+    "path": "contracts/CrapsLens.sol",
+    "scope": "CrapsLensReader.boardOf",
+    "kind": "recipient-helper",
+    "expression": "battleKey(table, slot)",
+    "count": 1,
+    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
+  },
+  {
+    "path": "contracts/CrapsLens.sol",
+    "scope": "CrapsLensReader.boardOf",
+    "kind": "recipient-helper",
+    "expression": "mapped(table, 2, battleKey(table, slot))",
+    "count": 1,
+    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
+  },
+  {
+    "path": "contracts/CrapsLens.sol",
+    "scope": "CrapsLensReader.boardOf",
+    "kind": "recipient-helper",
+    "expression": "mapped(table, 2, slot & 511)",
+    "count": 1,
+    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
+  },
+  {
+    "path": "contracts/CrapsLens.sol",
+    "scope": "CrapsLensReader.boardOf",
+    "kind": "recipient-helper",
+    "expression": "tagged(table, 12, slot >> 3, false)",
+    "count": 1,
+    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
+  },
+  {
+    "path": "contracts/CrapsLens.sol",
+    "scope": "CrapsLensReader.highRollerDrawOf",
+    "kind": "recipient-helper",
+    "expression": "tagged(table, 5, slot, true)",
+    "count": 1,
+    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
+  },
+  {
+    "path": "contracts/CrapsLens.sol",
+    "scope": "CrapsLensReader.highRollerReserve",
+    "kind": "recipient-helper",
+    "expression": "read(table, 19)",
+    "count": 1,
+    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
+  },
+  {
+    "path": "contracts/CrapsLens.sol",
+    "scope": "CrapsLensReader.jackpotBattleOf",
+    "kind": "external",
+    "expression": "ICrapsStorageReader(table).extsload(positions)",
+    "count": 1,
+    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
+  },
+  {
+    "path": "contracts/CrapsLens.sol",
+    "scope": "CrapsLensReader.jackpotBattleOf",
+    "kind": "recipient-helper",
+    "expression": "boardOf(table, slot)",
+    "count": 1,
+    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
+  },
+  {
+    "path": "contracts/CrapsLens.sol",
+    "scope": "CrapsLensReader.jackpotBattleOf",
+    "kind": "recipient-helper",
+    "expression": "mapped(table, 5, slot)",
+    "count": 1,
+    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
+  },
+  {
+    "path": "contracts/CrapsLens.sol",
+    "scope": "CrapsLensReader.jackpotBattleOf",
+    "kind": "recipient-helper",
+    "expression": "tagged(table, 5, slot, true)",
+    "count": 1,
+    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
+  },
+  {
+    "path": "contracts/CrapsLens.sol",
+    "scope": "CrapsLensReader.jackpotEntryPrice",
+    "kind": "recipient-helper",
+    "expression": "jackpotEntryPriceOf(table, uint64((bonus - 1) * 8 + 6))",
+    "count": 1,
+    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
+  },
+  {
+    "path": "contracts/CrapsLens.sol",
+    "scope": "CrapsLensReader.jackpotEntryPrice",
+    "kind": "recipient-helper",
+    "expression": "read(table, 4)",
+    "count": 1,
+    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
+  },
+  {
+    "path": "contracts/CrapsLens.sol",
+    "scope": "CrapsLensReader.jackpotEntryPriceOf",
+    "kind": "recipient-helper",
+    "expression": "boardOf(table, slot)",
+    "count": 1,
+    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
+  },
+  {
+    "path": "contracts/CrapsLens.sol",
+    "scope": "CrapsLensReader.jackpotEntryPriceOf",
+    "kind": "recipient-helper",
+    "expression": "read(table, base + 4)",
+    "count": 1,
+    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
+  },
+  {
+    "path": "contracts/CrapsLens.sol",
+    "scope": "CrapsLensReader.mapped",
+    "kind": "recipient-helper",
+    "expression": "read(table, uint256(keccak256(abi.encode(key, root))))",
+    "count": 1,
+    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
+  },
+  {
+    "path": "contracts/CrapsLens.sol",
+    "scope": "CrapsLensReader.read",
+    "kind": "external",
+    "expression": "ICrapsStorageReader(table).extsload(bytes32(slot))",
+    "count": 1,
+    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
+  },
+  {
+    "path": "contracts/CrapsLens.sol",
+    "scope": "CrapsLensReader.tagged",
+    "kind": "recipient-helper",
+    "expression": "mapped(table, root, slot & (periods ? 511 : 63))",
+    "count": 1,
+    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
   },
   {
     "path": "contracts/DGNRS.sol",
@@ -2875,7 +2955,7 @@
     "path": "contracts/DegenerusGame.sol",
     "scope": "DegenerusGame.initProtocolDeity",
     "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_WHALE_MODULE.delegatecall(msg.data)",
+    "expression": "ContractAddresses.GAME_BOON_MODULE.delegatecall(msg.data)",
     "count": 1,
     "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
   },
@@ -3187,7 +3267,7 @@
     "path": "contracts/DegenerusGame.sol",
     "scope": "DegenerusGame.setThanosLevel",
     "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_ADVANCE_MODULE.delegatecall(msg.data)",
+    "expression": "ContractAddresses.GAME_GAMEOVER_MODULE.delegatecall(msg.data)",
     "count": 1,
     "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
   },
@@ -3577,6 +3657,38 @@
   },
   {
     "path": "contracts/DegenerusGameLens.sol",
+    "scope": "DegenerusGameLens.afkingSnapshot",
+    "kind": "recipient-helper",
+    "expression": "_levelWord(game)",
+    "count": 1,
+    "review": "OFF_CHAIN: Lens view reads Game storage through extsload; off-chain view surface, never called by protocol or chain work."
+  },
+  {
+    "path": "contracts/DegenerusGameLens.sol",
+    "scope": "DegenerusGameLens.afkingSnapshot",
+    "kind": "recipient-helper",
+    "expression": "_sload(game, _mapSlot(_walletId(game, players[i]), root))",
+    "count": 1,
+    "review": "OFF_CHAIN: Lens view reads Game storage through extsload; off-chain view surface, never called by protocol or chain work."
+  },
+  {
+    "path": "contracts/DegenerusGameLens.sol",
+    "scope": "DegenerusGameLens.afkingSnapshot",
+    "kind": "recipient-helper",
+    "expression": "_sload(game, bytes32(root))",
+    "count": 1,
+    "review": "OFF_CHAIN: Lens view reads Game storage through extsload; off-chain view surface, never called by protocol or chain work."
+  },
+  {
+    "path": "contracts/DegenerusGameLens.sol",
+    "scope": "DegenerusGameLens.afkingSnapshot",
+    "kind": "recipient-helper",
+    "expression": "_walletId(game, players[i])",
+    "count": 1,
+    "review": "OFF_CHAIN: Lens view reads Game storage through extsload; off-chain view surface, never called by protocol or chain work."
+  },
+  {
+    "path": "contracts/DegenerusGameLens.sol",
     "scope": "DegenerusGameLens.decBattleRoundOf",
     "kind": "recipient-helper",
     "expression": "_sload(game, bytes32(slot + 1))",
@@ -3635,9 +3747,17 @@
     "path": "contracts/DegenerusGameLens.sol",
     "scope": "DegenerusGameLens.decEntryAt",
     "kind": "recipient-helper",
-    "expression": "_sload(game, _mapSlot((uint256(lvl) << 64) | (p >> 1), root))",
+    "expression": "_sload(game, _mapSlot(p >> 1, root))",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "OFF_CHAIN: Lens view reads Game storage through extsload; off-chain view surface, never called by protocol or chain work."
+  },
+  {
+    "path": "contracts/DegenerusGameLens.sol",
+    "scope": "DegenerusGameLens.decEntryAt",
+    "kind": "recipient-helper",
+    "expression": "_sload(game, bytes32(root))",
+    "count": 1,
+    "review": "OFF_CHAIN: Lens view reads Game storage through extsload; off-chain view surface, never called by protocol or chain work."
   },
   {
     "path": "contracts/DegenerusGameLens.sol",
@@ -3646,6 +3766,14 @@
     "expression": "_walletAddress(game, uint32(entry))",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+  },
+  {
+    "path": "contracts/DegenerusGameLens.sol",
+    "scope": "DegenerusGameLens.decEntryAt",
+    "kind": "recipient-helper",
+    "expression": "decBattleRoundOf(game, lvl)",
+    "count": 1,
+    "review": "OFF_CHAIN: Lens view reads Game storage through extsload; off-chain view surface, never called by protocol or chain work."
   },
   {
     "path": "contracts/DegenerusGameLens.sol",
@@ -3859,9 +3987,17 @@
     "path": "contracts/DegenerusGameLens.sol",
     "scope": "DegenerusGameLens.levelDgnrsInfo",
     "kind": "recipient-helper",
-    "expression": "_sload(game, _mapSlot(uint256(lvl), base))",
+    "expression": "_levelWord(game)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "OFF_CHAIN: Lens view reads Game storage through extsload; off-chain view surface, never called by protocol or chain work."
+  },
+  {
+    "path": "contracts/DegenerusGameLens.sol",
+    "scope": "DegenerusGameLens.levelDgnrsInfo",
+    "kind": "recipient-helper",
+    "expression": "_sload(game, bytes32(base))",
+    "count": 1,
+    "review": "OFF_CHAIN: Lens view reads Game storage through extsload; off-chain view surface, never called by protocol or chain work."
   },
   {
     "path": "contracts/DegenerusGameLens.sol",
@@ -5819,9 +5955,9 @@
     "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle._append",
     "kind": "recipient-helper",
-    "expression": "_bookFees(slot, r, totalUnits * bankroll, mainPool, uint32(_highField[key]))",
+    "expression": "_bookFees(slot, r, totalUnits * bankroll, mainPool, uint32(_loadHighField(key)))",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "TRANSITIVE_BASELINE: existing helper route; only the high-field read moved to the lane-C ring accessor."
   },
   {
     "path": "contracts/JackpotBattle.sol",
@@ -5857,22 +5993,6 @@
   },
   {
     "path": "contracts/JackpotBattle.sol",
-    "scope": "JackpotBattle._boostBase",
-    "kind": "recipient-helper",
-    "expression": "_shareOf(w, false)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/JackpotBattle.sol",
-    "scope": "JackpotBattle._boostUnits",
-    "kind": "recipient-helper",
-    "expression": "_boostBase(w)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle._completeRngSlot",
     "kind": "external",
     "expression": "IGameCrapsPending(ContractAddresses.GAME).setCrapsRngPending(index, false)",
@@ -5894,22 +6014,6 @@
     "expression": "ICoinflipStake(ContractAddresses.COINFLIP).creditFlip(id, amount)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/JackpotBattle.sol",
-    "scope": "JackpotBattle._highBase",
-    "kind": "recipient-helper",
-    "expression": "_shareOf(w, true)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/JackpotBattle.sol",
-    "scope": "JackpotBattle._highBoostUnits",
-    "kind": "recipient-helper",
-    "expression": "_highBase(w)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/JackpotBattle.sol",
@@ -6001,14 +6105,6 @@
   },
   {
     "path": "contracts/JackpotBattle.sol",
-    "scope": "JackpotBattle._laneBoost",
-    "kind": "recipient-helper",
-    "expression": "_highBoostUnits(w, word)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle._payProgressive",
     "kind": "recipient-helper",
     "expression": "_payProgressiveShare(w.key, winnerId, winnerWord, peakFlip, score, bps)",
@@ -6027,14 +6123,6 @@
     "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle._payout",
     "kind": "recipient-helper",
-    "expression": "_boostUnits(w, word)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/JackpotBattle.sol",
-    "scope": "JackpotBattle._payout",
-    "kind": "recipient-helper",
     "expression": "_creditComps(earned)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
@@ -6044,14 +6132,6 @@
     "scope": "JackpotBattle._payout",
     "kind": "recipient-helper",
     "expression": "_creditFlip(hWinner, lanePot)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/JackpotBattle.sol",
-    "scope": "JackpotBattle._payout",
-    "kind": "recipient-helper",
-    "expression": "_laneBoost(w, word)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
@@ -6105,14 +6185,6 @@
   },
   {
     "path": "contracts/JackpotBattle.sol",
-    "scope": "JackpotBattle._shareOf",
-    "kind": "recipient-helper",
-    "expression": "_dailyWordAt(day)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle._sweepLapsedDay",
     "kind": "recipient-helper",
     "expression": "_creditComps(comps)",
@@ -6137,6 +6209,22 @@
   },
   {
     "path": "contracts/JackpotBattle.sol",
+    "scope": "JackpotBattle.closeBattle",
+    "kind": "external",
+    "expression": "IReadCohortLifecycle(address(this)).registerRngSlot(index, slot, key)",
+    "count": 1,
+    "review": "MOVED: verbatim lane-C code move (reviewed checkpoint); same target, calldata and reachability as the removed CrapsBattle donate/closeBattle site."
+  },
+  {
+    "path": "contracts/JackpotBattle.sol",
+    "scope": "JackpotBattle.closeBattle",
+    "kind": "recipient-helper",
+    "expression": "_writeBuffer()",
+    "count": 1,
+    "review": "MOVED: verbatim lane-C code move (reviewed checkpoint); same target, calldata and reachability as the removed CrapsBattle donate/closeBattle site."
+  },
+  {
+    "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle.convertNormalToHigh",
     "kind": "recipient-helper",
     "expression": "_accountId(id)",
@@ -6158,6 +6246,38 @@
     "expression": "IVaultOwnership(ContractAddresses.VAULT).isVaultOwner(msg.sender)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+  },
+  {
+    "path": "contracts/JackpotBattle.sol",
+    "scope": "JackpotBattle.donate",
+    "kind": "external",
+    "expression": "IFlipCoin(ContractAddresses.COIN).burnCoin(msg.sender, amount)",
+    "count": 1,
+    "review": "MOVED: verbatim lane-C code move (reviewed checkpoint); same target, calldata and reachability as the removed CrapsBattle donate/closeBattle site."
+  },
+  {
+    "path": "contracts/JackpotBattle.sol",
+    "scope": "JackpotBattle.donate",
+    "kind": "external",
+    "expression": "IFlipCoin(ContractAddresses.COIN).burnCoinForCraps( ContractAddresses.VAULT, _VAULT_ID, (amount << 8) | _CRAPS_FLAG_COMP )",
+    "count": 1,
+    "review": "MOVED: verbatim lane-C code move (reviewed checkpoint); same target, calldata and reachability as the removed CrapsBattle donate/closeBattle site."
+  },
+  {
+    "path": "contracts/JackpotBattle.sol",
+    "scope": "JackpotBattle.donate",
+    "kind": "external",
+    "expression": "IGameCraps(_GAME).rngLocked()",
+    "count": 1,
+    "review": "MOVED: verbatim lane-C code move (reviewed checkpoint); same target, calldata and reachability as the removed CrapsBattle donate/closeBattle site."
+  },
+  {
+    "path": "contracts/JackpotBattle.sol",
+    "scope": "JackpotBattle.donate",
+    "kind": "recipient-helper",
+    "expression": "_dailyWordAt(_currentDayIndex())",
+    "count": 1,
+    "review": "PROTOCOL_VIEW: donation readiness reads the recorded day word; no value decision, player door only."
   },
   {
     "path": "contracts/JackpotBattle.sol",
@@ -6634,10 +6754,10 @@
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule._autoStakeExcessEth",
-    "kind": "external",
-    "expression": "steth.submit{value: stakeable}(address(0))",
+    "kind": "opcode-or-value",
+    "expression": "ContractAddresses.GAME_ADVANCE_MODULE.delegatecall( abi.encodeWithSelector(IDegenerusGameAdvanceModule.stakeExcessEth.selector, stakeable))",
     "count": 1,
-    "review": "EXTERNAL_SERVICE: pinned Lido/Chainlink dependency; chain reachability and isolation are tracked in external-call-census.md."
+    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
@@ -6793,43 +6913,11 @@
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
-    "scope": "DegenerusGameAdvanceModule._seizeDeityPass",
-    "kind": "external",
-    "expression": "IDeityPassSeize(ContractAddresses.DEITY_PASS).seize(symbol, to)",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
-    "scope": "DegenerusGameAdvanceModule._seizeLoan",
-    "kind": "external",
-    "expression": "dgnrs.burnForLiquidation(seller)",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule._seizeLoan",
     "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_AFKING_MODULE.delegatecall( abi.encodeWithSelector(IGameAfkingModule.cancelLiquidatedSubscriptions.selector, id, main) )",
+    "expression": "ContractAddresses.GAME_GAMEOVER_MODULE.delegatecall( abi.encodeWithSelector(IDegenerusGameGameOverModule.seizeLoan.selector, id, lender) )",
     "count": 1,
     "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
-    "scope": "DegenerusGameAdvanceModule._seizeLoan",
-    "kind": "recipient-helper",
-    "expression": "_seizeDeityPass(id, to)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
-    "scope": "DegenerusGameAdvanceModule._seizeLoan",
-    "kind": "recipient-helper",
-    "expression": "_seizeDeityPass(smurf, to)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
@@ -6874,18 +6962,18 @@
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule._unlockRng",
-    "kind": "external",
-    "expression": "steth.balanceOf(address(this))",
-    "count": 1,
-    "review": "EXTERNAL_SERVICE: pinned Lido/Chainlink dependency; chain reachability and isolation are tracked in external-call-census.md."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
-    "scope": "DegenerusGameAdvanceModule._unlockRng",
     "kind": "opcode-or-value",
     "expression": "ContractAddresses.GAME_AFKING_MODULE.delegatecall( abi.encodeWithSelector(IGameAfkingModule.runSubDraw.selector, day) )",
     "count": 1,
     "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
+    "scope": "DegenerusGameAdvanceModule._unlockRng",
+    "kind": "recipient-helper",
+    "expression": "_boundedStethBalance()",
+    "count": 1,
+    "review": "ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
@@ -6963,9 +7051,9 @@
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule.prepareRequestBoundary",
     "kind": "external",
-    "expression": "IJackpotBattle(ContractAddresses.CRAPS).lockJackpotBattle(battleDay, levelPrizePool[poolLevel], level)",
+    "expression": "IJackpotBattle(ContractAddresses.CRAPS).lockJackpotBattle(battleDay, _levelPrizePool(poolLevel), level)",
     "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+    "review": "BASELINE: pinned craps lock retained from the call census; only the pool argument now uses the lane-G storage accessor."
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
@@ -7217,11 +7305,11 @@
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
-    "scope": "DegenerusGameAdvanceModule.setThanosLevel",
-    "kind": "external",
-    "expression": "IVaultOwnerCheck(ContractAddresses.VAULT).isVaultOwner(msg.sender)",
+    "scope": "DegenerusGameAdvanceModule.stakeExcessEth",
+    "kind": "bounded-wrapper",
+    "expression": "BoundedCall.call(ContractAddresses.STETH_TOKEN, amount, 200_000, abi.encodeWithSelector(IStETH.submit.selector, address(0)), 32)",
     "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+    "review": "ISOLATED: F0 fixed 200k stETH submit inside a trusted rollback frame; refusal or zero shares reverts the frame and keeps the ETH."
   },
   {
     "path": "contracts/modules/DegenerusGameBingoModule.sol",
@@ -7321,11 +7409,35 @@
   },
   {
     "path": "contracts/modules/DegenerusGameBoonModule.sol",
+    "scope": "DegenerusGameBoonModule._registerDeity",
+    "kind": "external",
+    "expression": "IGenesisDeityPassMint(ContractAddresses.DEITY_PASS).mint(_payee(_walletElement(buyerId)), symbolId)",
+    "count": 1,
+    "review": "MOVED: verbatim lane-G code move (reviewed checkpoint); same target, calldata and reachability as the removed Whale initProtocolDeity/_registerDeity site."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameBoonModule.sol",
     "scope": "DegenerusGameBoonModule._rollBoxBoonLane",
     "kind": "recipient-helper",
     "expression": "_deliverBoon( id, _boonFromRoll((roll * BOON_WEIGHT_TOTAL) / totalChance), currentDay, originalAmount )",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameBoonModule.sol",
+    "scope": "DegenerusGameBoonModule.initProtocolDeity",
+    "kind": "recipient-helper",
+    "expression": "_registerDeity(SDGNRS_WALLET_ID, SDGNRS_DEITY_SYMBOL)",
+    "count": 1,
+    "review": "MOVED: verbatim lane-G code move (reviewed checkpoint); same target, calldata and reachability as the removed Whale initProtocolDeity/_registerDeity site."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameBoonModule.sol",
+    "scope": "DegenerusGameBoonModule.initProtocolDeity",
+    "kind": "recipient-helper",
+    "expression": "_registerDeity(VAULT_WALLET_ID, VAULT_DEITY_SYMBOL)",
+    "count": 1,
+    "review": "MOVED: verbatim lane-G code move (reviewed checkpoint); same target, calldata and reachability as the removed Whale initProtocolDeity/_registerDeity site."
   },
   {
     "path": "contracts/modules/DegenerusGameBoonModule.sol",
@@ -7419,9 +7531,9 @@
     "path": "contracts/modules/DegenerusGameDecimatorModule.sol",
     "scope": "DegenerusGameDecimatorModule._runGenerated",
     "kind": "external",
-    "expression": "IDecimatorBoardPreference(ContractAddresses.CRAPS).preferredBoardOf(owner)",
+    "expression": "IDecimatorBoardPreference(ContractAddresses.CRAPS).extsload(preferenceSlot)",
     "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+    "review": "PROTOCOL_VIEW: Decimator reads the pinned table saved board through extsload (lane-G replacement of the craps getter); view only."
   },
   {
     "path": "contracts/modules/DegenerusGameDecimatorModule.sol",
@@ -8035,14 +8147,6 @@
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
     "scope": "DegenerusGameGameOverModule._handleFinalSweep",
     "kind": "external",
-    "expression": "admin.shutdownVrf()",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameGameOverModule.sol",
-    "scope": "DegenerusGameGameOverModule._handleFinalSweep",
-    "kind": "external",
     "expression": "charityGameOver.onFinalSweep()",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
@@ -8078,6 +8182,14 @@
     "expression": "_sendStethFirst(ContractAddresses.VAULT, owedV + thirdShare, stBal)",
     "count": 1,
     "review": "CHAIN: existing terminal protocol-sink payout; isolation conversion owned by lane G and reconciled at integration."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameGameOverModule.sol",
+    "scope": "DegenerusGameGameOverModule._handleFinalSweep",
+    "kind": "recipient-helper",
+    "expression": "_shutdownVrf()",
+    "count": 2,
+    "review": "ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
   },
   {
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
@@ -8154,18 +8266,18 @@
   {
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
     "scope": "DegenerusGameGameOverModule._handleGameOverDrain",
-    "kind": "external",
-    "expression": "steth.balanceOf(address(this))",
-    "count": 1,
-    "review": "EXTERNAL_SERVICE: pinned Lido/Chainlink dependency; chain reachability and isolation are tracked in external-call-census.md."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameGameOverModule.sol",
-    "scope": "DegenerusGameGameOverModule._handleGameOverDrain",
     "kind": "opcode-or-value",
     "expression": "ContractAddresses.GAME_DEGENESIS_MODULE.delegatecall( abi.encodeWithSelector(IDegenerusGameDegenesisModule.splitDegenesis.selector) )",
     "count": 1,
     "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameGameOverModule.sol",
+    "scope": "DegenerusGameGameOverModule._handleGameOverDrain",
+    "kind": "recipient-helper",
+    "expression": "_boundedStethBalance()",
+    "count": 1,
+    "review": "ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
   },
   {
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
@@ -8178,10 +8290,10 @@
   {
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
     "scope": "DegenerusGameGameOverModule._requestTerminalRng",
-    "kind": "external",
-    "expression": "vrfCoordinator.requestRandomWords(VRFRandomWordsRequest({ keyHash: vrfKeyHash, subId: vrfSubscriptionId, requestConfirmations: VRF_REQUEST_CONFIRMATIONS, callbackGasLimit: VRF_CALLBACK_GAS_LIMIT, numWords: 1, extraArgs: hex\"\" }))",
+    "kind": "recipient-helper",
+    "expression": "_boundedVrfRequest(VRF_REQUEST_CONFIRMATIONS)",
     "count": 1,
-    "review": "EXTERNAL_SERVICE: pinned Lido/Chainlink dependency; chain reachability and isolation are tracked in external-call-census.md."
+    "review": "ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
   },
   {
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
@@ -8209,6 +8321,14 @@
   },
   {
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
+    "scope": "DegenerusGameGameOverModule._seizeDeityPass",
+    "kind": "external",
+    "expression": "IDeityPassSeize(ContractAddresses.DEITY_PASS).seize(symbol, to)",
+    "count": 1,
+    "review": "MOVED: verbatim lane-G code move (reviewed checkpoint); same target, calldata and reachability as the removed Advance _seizeLoan/_seizeDeityPass site."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameGameOverModule.sol",
     "scope": "DegenerusGameGameOverModule._sendStethFirst",
     "kind": "external",
     "expression": "steth.transfer(to, amount)",
@@ -8233,6 +8353,14 @@
   },
   {
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
+    "scope": "DegenerusGameGameOverModule._shutdownVrf",
+    "kind": "bounded-wrapper",
+    "expression": "BoundedCall.call(ContractAddresses.ADMIN, 0, 800_000, abi.encodeWithSelector(IDegenerusAdminShutdown.shutdownVrf.selector), 0)",
+    "count": 1,
+    "review": "ISOLATED: F0 fixed 800k best-effort Admin shutdown after GO_SWEPT and every terminal transfer; failure ignored."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameGameOverModule.sol",
     "scope": "DegenerusGameGameOverModule._terminalDrainBatch",
     "kind": "opcode-or-value",
     "expression": "ContractAddresses.GAME_TICKET_MODULE.delegatecall( abi.encodeWithSelector(IDegenerusGameTicketModule.runTicketWork.selector, drainLevel | TICKET_SLOT_BIT, allowance) )",
@@ -8246,6 +8374,46 @@
     "expression": "_runGameOverAdvance(day, lvl, allowance)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameGameOverModule.sol",
+    "scope": "DegenerusGameGameOverModule.seizeLoan",
+    "kind": "external",
+    "expression": "dgnrs.burnForLiquidation(seller)",
+    "count": 1,
+    "review": "MOVED: verbatim lane-G code move (reviewed checkpoint); same target, calldata and reachability as the removed Advance _seizeLoan/_seizeDeityPass site."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameGameOverModule.sol",
+    "scope": "DegenerusGameGameOverModule.seizeLoan",
+    "kind": "opcode-or-value",
+    "expression": "ContractAddresses.GAME_AFKING_MODULE.delegatecall( abi.encodeWithSelector(IGameAfkingModule.cancelLiquidatedSubscriptions.selector, id, main) )",
+    "count": 1,
+    "review": "MOVED: verbatim lane-G code move (reviewed checkpoint); same target, calldata and reachability as the removed Advance _seizeLoan/_seizeDeityPass site."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameGameOverModule.sol",
+    "scope": "DegenerusGameGameOverModule.seizeLoan",
+    "kind": "recipient-helper",
+    "expression": "_seizeDeityPass(id, to)",
+    "count": 1,
+    "review": "MOVED: verbatim lane-G code move (reviewed checkpoint); same target, calldata and reachability as the removed Advance _seizeLoan/_seizeDeityPass site."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameGameOverModule.sol",
+    "scope": "DegenerusGameGameOverModule.seizeLoan",
+    "kind": "recipient-helper",
+    "expression": "_seizeDeityPass(smurf, to)",
+    "count": 1,
+    "review": "MOVED: verbatim lane-G code move (reviewed checkpoint); same target, calldata and reachability as the removed Advance _seizeLoan/_seizeDeityPass site."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameGameOverModule.sol",
+    "scope": "DegenerusGameGameOverModule.setThanosLevel",
+    "kind": "external",
+    "expression": "IVaultOwnerCheck(ContractAddresses.VAULT).isVaultOwner(msg.sender)",
+    "count": 1,
+    "review": "MOVED: verbatim lane-G code move (reviewed checkpoint); same target, calldata and reachability as the removed Advance setThanosLevel site."
   },
   {
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
@@ -8337,6 +8505,22 @@
   },
   {
     "path": "contracts/modules/DegenerusGameJackpotDrawModule.sol",
+    "scope": "DegenerusGameJackpotDrawModule.payGoldenTicket",
+    "kind": "external",
+    "expression": "IWwxrpMintPrize(ContractAddresses.WWXRP).creditPrize( winner, wwxrpAward )",
+    "count": 1,
+    "review": "MOVED: verbatim lane-G code move (reviewed checkpoint); same target, calldata and reachability as the removed Jackpot _payGoldenTicket site."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameJackpotDrawModule.sol",
+    "scope": "DegenerusGameJackpotDrawModule.payGoldenTicket",
+    "kind": "external",
+    "expression": "coinflip.creditFlip(winner, flipCredit)",
+    "count": 1,
+    "review": "MOVED: verbatim lane-G code move (reviewed checkpoint); same target, calldata and reachability as the removed Jackpot _payGoldenTicket site."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameJackpotDrawModule.sol",
     "scope": "DegenerusGameJackpotDrawModule.runBafAwards",
     "kind": "external",
     "expression": "jackpots.bafHeadWinner(lvl, word, slot)",
@@ -8410,18 +8594,10 @@
   {
     "path": "contracts/modules/DegenerusGameJackpotModule.sol",
     "scope": "DegenerusGameJackpotModule._payGoldenTicket",
-    "kind": "external",
-    "expression": "IWwxrpMintPrize(ContractAddresses.WWXRP).creditPrize( winner, wwxrpAward )",
+    "kind": "recipient-helper",
+    "expression": "_delegateJackpotDraw(abi.encodeWithSelector( IDegenerusGameJackpotDrawModule.payGoldenTicket.selector, winner, lvl, route, golds, grand ))",
     "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameJackpotModule.sol",
-    "scope": "DegenerusGameJackpotModule._payGoldenTicket",
-    "kind": "external",
-    "expression": "coinflip.creditFlip(winner, flipCredit)",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+    "review": "PROTOCOL: own JackpotDraw module delegation for the moved golden-ticket payout; alignment gate tracks the selector."
   },
   {
     "path": "contracts/modules/DegenerusGameJackpotModule.sol",
@@ -8514,10 +8690,10 @@
   {
     "path": "contracts/modules/DegenerusGameJackpotModule.sol",
     "scope": "DegenerusGameJackpotModule.distributeYieldSurplus",
-    "kind": "external",
-    "expression": "steth.balanceOf(address(this))",
+    "kind": "recipient-helper",
+    "expression": "_boundedStethBalance()",
     "count": 1,
-    "review": "EXTERNAL_SERVICE: pinned Lido/Chainlink dependency; chain reachability and isolation are tracked in external-call-census.md."
+    "review": "ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
   },
   {
     "path": "contracts/modules/DegenerusGameJackpotModule.sol",
@@ -9362,14 +9538,6 @@
   {
     "path": "contracts/modules/DegenerusGameRngModule.sol",
     "scope": "DegenerusGameRngModule._requestLootboxRng",
-    "kind": "external",
-    "expression": "vrfCoordinator.getSubscription(vrfSubscriptionId)",
-    "count": 1,
-    "review": "EXTERNAL_SERVICE: pinned Lido/Chainlink dependency; chain reachability and isolation are tracked in external-call-census.md."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameRngModule.sol",
-    "scope": "DegenerusGameRngModule._requestLootboxRng",
     "kind": "recipient-helper",
     "expression": "_livenessTriggered()",
     "count": 1,
@@ -9409,11 +9577,19 @@
   },
   {
     "path": "contracts/modules/DegenerusGameRngModule.sol",
-    "scope": "DegenerusGameRngModule._requestVrfWord",
-    "kind": "external",
-    "expression": "vrfCoordinator.requestRandomWords( VRFRandomWordsRequest({ keyHash: vrfKeyHash, subId: vrfSubscriptionId, requestConfirmations: confirmations, callbackGasLimit: VRF_CALLBACK_GAS_LIMIT, numWords: 1, extraArgs: hex\"\" }) )",
+    "scope": "DegenerusGameRngModule._requestLootboxRng",
+    "kind": "recipient-helper",
+    "expression": "_vrfLinkBalance()",
     "count": 1,
-    "review": "EXTERNAL_SERVICE: pinned Lido/Chainlink dependency; chain reachability and isolation are tracked in external-call-census.md."
+    "review": "ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameRngModule.sol",
+    "scope": "DegenerusGameRngModule._requestVrfWord",
+    "kind": "recipient-helper",
+    "expression": "_boundedVrfRequest(confirmations)",
+    "count": 1,
+    "review": "ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
   },
   {
     "path": "contracts/modules/DegenerusGameRngModule.sol",
@@ -9729,22 +9905,6 @@
   },
   {
     "path": "contracts/modules/DegenerusGameWhaleModule.sol",
-    "scope": "DegenerusGameWhaleModule.initProtocolDeity",
-    "kind": "recipient-helper",
-    "expression": "_registerDeity(SDGNRS_WALLET_ID, SDGNRS_DEITY_SYMBOL)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameWhaleModule.sol",
-    "scope": "DegenerusGameWhaleModule.initProtocolDeity",
-    "kind": "recipient-helper",
-    "expression": "_registerDeity(VAULT_WALLET_ID, VAULT_DEITY_SYMBOL)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameWhaleModule.sol",
     "scope": "DegenerusGameWhaleModule.purchaseDeityPass",
     "kind": "external",
     "expression": "ICrapsPassCredit(ContractAddresses.CRAPS).creditPasses( buyerId, earlyDeity ? 0 : 1, earlyDeity ? 1 : 0 )",
@@ -10049,11 +10209,19 @@
   },
   {
     "path": "contracts/modules/GameAfkingModule.sol",
-    "scope": "GameAfkingModule._tryFundAfkingSteth",
-    "kind": "external",
-    "expression": "IDegenerusGame(address(this)).pullAfkingSteth( subscriber, _payee(_walletElement(subscriber)), ethValue - funding )",
+    "scope": "GameAfkingModule._stethFundingWord",
+    "kind": "bounded-wrapper",
+    "expression": "BoundedCall.staticWord(ContractAddresses.STETH_TOKEN, EXTERNAL_READ_GAS, input)",
     "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+    "review": "ISOLATED: F0 fixed stETH read/transfer inside the atomic AFKing frame; failure reverts that frame only."
+  },
+  {
+    "path": "contracts/modules/GameAfkingModule.sol",
+    "scope": "GameAfkingModule._tryFundAfkingSteth",
+    "kind": "bounded-wrapper",
+    "expression": "BoundedCall.call(address(this), 0, 1_000_000, abi.encodeWithSelector(IDegenerusGame.pullAfkingSteth.selector, subscriber, _payee(_walletElement(subscriber)), ethValue - funding), 32)",
+    "count": 1,
+    "review": "ISOLATED: F0 fixed 1M atomic self-call covering every inner bounded read/transfer; failure applies the ordinary unfunded policy."
   },
   {
     "path": "contracts/modules/GameAfkingModule.sol",
@@ -10114,50 +10282,50 @@
   {
     "path": "contracts/modules/GameAfkingModule.sol",
     "scope": "GameAfkingModule.pullAfkingSteth",
-    "kind": "external",
-    "expression": "token.allowance(source, address(this))",
+    "kind": "bounded-wrapper",
+    "expression": "BoundedCall.call(ContractAddresses.STETH_TOKEN, 0, 200_000, abi.encodeWithSelector(IStETH.transferSharesFrom.selector, source, address(this), shares), 32)",
     "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+    "review": "ISOLATED: F0 fixed stETH read/transfer inside the atomic AFKing frame; failure reverts that frame only."
   },
   {
     "path": "contracts/modules/GameAfkingModule.sol",
     "scope": "GameAfkingModule.pullAfkingSteth",
-    "kind": "external",
-    "expression": "token.balanceOf(address(this))",
+    "kind": "bounded-wrapper",
+    "expression": "BoundedCall.staticWord(ContractAddresses.STETH_TOKEN, EXTERNAL_READ_GAS, abi.encodeWithSelector(IStETH.allowance.selector, source, address(this)))",
+    "count": 1,
+    "review": "ISOLATED: F0 fixed stETH read/transfer inside the atomic AFKing frame; failure reverts that frame only."
+  },
+  {
+    "path": "contracts/modules/GameAfkingModule.sol",
+    "scope": "GameAfkingModule.pullAfkingSteth",
+    "kind": "recipient-helper",
+    "expression": "_stethFundingWord(abi.encodeWithSelector(IStETH.balanceOf.selector, address(this)))",
     "count": 2,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+    "review": "ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
   },
   {
     "path": "contracts/modules/GameAfkingModule.sol",
     "scope": "GameAfkingModule.pullAfkingSteth",
-    "kind": "external",
-    "expression": "token.getPooledEthByShares(shares)",
+    "kind": "recipient-helper",
+    "expression": "_stethFundingWord(abi.encodeWithSelector(IStETH.getPooledEthByShares.selector, shares))",
     "count": 2,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+    "review": "ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
   },
   {
     "path": "contracts/modules/GameAfkingModule.sol",
     "scope": "GameAfkingModule.pullAfkingSteth",
-    "kind": "external",
-    "expression": "token.getSharesByPooledEth(shortfall)",
+    "kind": "recipient-helper",
+    "expression": "_stethFundingWord(abi.encodeWithSelector(IStETH.getSharesByPooledEth.selector, shortfall))",
     "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+    "review": "ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
   },
   {
     "path": "contracts/modules/GameAfkingModule.sol",
     "scope": "GameAfkingModule.pullAfkingSteth",
-    "kind": "external",
-    "expression": "token.sharesOf(source)",
+    "kind": "recipient-helper",
+    "expression": "_stethFundingWord(abi.encodeWithSelector(IStETH.sharesOf.selector, source))",
     "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/modules/GameAfkingModule.sol",
-    "scope": "GameAfkingModule.pullAfkingSteth",
-    "kind": "external",
-    "expression": "token.transferSharesFrom(source, address(this), shares)",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+    "review": "ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
   },
   {
     "path": "contracts/modules/GameAfkingModule.sol",
@@ -10737,6 +10905,22 @@
   },
   {
     "path": "contracts/storage/DegenerusGameStorage.sol",
+    "scope": "DegenerusGameStorage._boundedStethBalance",
+    "kind": "bounded-wrapper",
+    "expression": "BoundedCall.staticWord(ContractAddresses.STETH_TOKEN, EXTERNAL_READ_GAS, abi.encodeWithSelector(IStETH.balanceOf.selector, address(this)))",
+    "count": 1,
+    "review": "ISOLATED: F0 fixed balance read; failure or an impossible value counts as zero, which only under-counts."
+  },
+  {
+    "path": "contracts/storage/DegenerusGameStorage.sol",
+    "scope": "DegenerusGameStorage._boundedVrfRequest",
+    "kind": "bounded-wrapper",
+    "expression": "BoundedCall.call(address(vrfCoordinator), 0, VRF_REQUEST_GAS, abi.encodeWithSelector(IVRFCoordinator.requestRandomWords.selector, VRFRandomWordsRequest({ keyHash: vrfKeyHash, subId: vrfSubscriptionId, requestConfirmations: confirmations, callbackGasLimit: 300_000, numWords: 1, extraArgs: hex\"\" })), 32)",
+    "count": 1,
+    "review": "ISOLATED: F0 fixed request budget, 32-byte id prefix; failure or zero id is a refusal that keeps arming and prefix work."
+  },
+  {
+    "path": "contracts/storage/DegenerusGameStorage.sol",
     "scope": "DegenerusGameStorage._effectiveQuestStreak",
     "kind": "external",
     "expression": "quests.effectiveBaseStreakAndAfking(id)",
@@ -10770,18 +10954,18 @@
   {
     "path": "contracts/storage/DegenerusGameStorage.sol",
     "scope": "DegenerusGameStorage._minerMiddayEligible",
-    "kind": "external",
-    "expression": "vrfCoordinator.getSubscription(vrfSubscriptionId)",
+    "kind": "recipient-helper",
+    "expression": "_middayCreditCharge(caller)",
     "count": 1,
-    "review": "EXTERNAL_SERVICE: pinned Lido/Chainlink dependency; chain reachability and isolation are tracked in external-call-census.md."
+    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/storage/DegenerusGameStorage.sol",
     "scope": "DegenerusGameStorage._minerMiddayEligible",
     "kind": "recipient-helper",
-    "expression": "_middayCreditCharge(caller)",
+    "expression": "_vrfLinkBalance()",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
   },
   {
     "path": "contracts/storage/DegenerusGameStorage.sol",
@@ -10846,5 +11030,13 @@
     "expression": "_rngConsumersComplete()",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+  },
+  {
+    "path": "contracts/storage/DegenerusGameStorage.sol",
+    "scope": "DegenerusGameStorage._vrfLinkBalance",
+    "kind": "bounded-wrapper",
+    "expression": "BoundedCall.staticWord(address(vrfCoordinator), EXTERNAL_READ_GAS, abi.encodeWithSelector(IVRFCoordinator.getSubscription.selector, vrfSubscriptionId))",
+    "count": 1,
+    "review": "ISOLATED: F0 fixed subscription read of the static balance word only; failure means not eligible or refused."
   }
 ]
