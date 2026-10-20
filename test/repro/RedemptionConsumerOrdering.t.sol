@@ -20,7 +20,8 @@ contract RedemptionConsumerOrderingTest is RedemptionCloseTools {
         _request();
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 0xB007);
         _complete();
-        mockStETH.mint(address(sdgnrs), 160_000 ether);
+        // Live legs pay from ETH custody and the Game reserve; stETH custody prices only the ending.
+        vm.deal(address(sdgnrs), address(sdgnrs).balance + 160_000 ether);
         address[3] memory owners = [ALICE, BOB, CAROL];
         for (uint256 i; i < owners.length; ++i) {
             _unwrapFromVault(owners[i], 2_000_000_000e12);

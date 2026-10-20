@@ -91,7 +91,8 @@ contract ForcedRedemptionSessionWordTest is RedemptionCloseTools {
         _request();
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 0xB007);
         _complete();
-        mockStETH.mint(address(sdgnrs), 2000 ether);
+        // Live legs pay from ETH custody and the Game reserve; stETH custody prices only the ending.
+        vm.deal(address(sdgnrs), address(sdgnrs).balance + 2000 ether);
         uint256[] memory boxes = new uint256[](OWNERS);
         uint16[] memory scores = new uint16[](OWNERS);
         uint32 burnDay;
@@ -163,10 +164,10 @@ contract ForcedRedemptionSessionWordTest is RedemptionCloseTools {
             uint256 reserved = sdgnrs.pendingRedemptionEthValue();
             for (uint256 i = head + 1; i < OWNERS; ++i) {
                 address owner = _owner(i);
-                uint256 beforeSteth = mockStETH.balanceOf(owner);
+                uint256 beforeValue = owner.balance + mockStETH.balanceOf(owner);
                 vm.prank(owner);
                 sdgnrs.claimRedemption(0, burnDay);
-                assertGt(mockStETH.balanceOf(owner), beforeSteth, "late terminal withdrawal paid");
+                assertGt(owner.balance + mockStETH.balanceOf(owner), beforeValue, "late terminal withdrawal paid");
                 (uint128 base,) = sdgnrs.pendingRedemptions(game.walletIdOf(owner), burnDay);
                 assertEq(base, 0, "late entitlement consumed once");
             }

@@ -16,7 +16,7 @@ contract StorageRecyclingGuardKillsTest is StorageRecyclingSymbolicTest {
         check_append_preserves_tail_and_completes_word(3, type(uint32).max - 1, type(uint224).max, 0);
     }
     function test_HeaderCountTailRoundtrip() public { check_header_count_tail_roundtrip(3, 7, type(uint224).max); }
-    function test_BitmapResetAndParity() public { check_bitmap_reset_preserves_other_parity(type(uint256).max, 9, 3); }
+    function test_BitmapRetirementAndParity() public { check_bitmap_retirement_preserves_physical_words(type(uint256).max, 9, 3); }
     function test_SameLevelBitmap() public { check_same_level_preserves_bitmap(22, 33, 3); }
     function test_FutureLevelEquality() public { check_full_level_equality(3, 7); }
     function test_BitmapReadGate() public { check_unset_bitmap_hides_header(3, 9); }

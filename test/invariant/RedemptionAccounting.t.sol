@@ -28,11 +28,17 @@ contract RedemptionAccounting is RedemptionFixture {
         assertEq(handler.successfulBurns(), 1, "campaign starts with an admitted redemption");
         assertEq(handler.getBatchCount(), 1, "seeded batch is tracked");
     }
+    /// @dev Batch records live in a two-slot parity ring: only the open batch and the one
+    ///      before it are retained; an earlier id reads as empty once its slot is reused.
+    function _retained(uint32 id) internal view returns (bool) {
+        (uint32 open,,,) = sdgnrs.redemptionBatchState();
+        return id + 1 >= open;
+    }
     function invariant_INV_01_WriteOnceRoll() public view {
         for (uint256 i; i < handler.getBatchCount(); ++i) {
             uint32 id = handler.batches(i);
             uint16 first = handler.firstRoll(id);
-            if (first != 0) assertEq(_rollOf(id), first);
+            if (first != 0 && _retained(id)) assertEq(_rollOf(id), first);
         }
         assertEq(handler.ghost_rollOutOfBounds(), 0);
     }
@@ -61,6 +67,14 @@ contract RedemptionAccounting is RedemptionFixture {
         uint256 pendingOpen;
         for (uint256 i; i < handler.getBatchCount(); ++i) {
             uint32 id = handler.batches(i);
+            if (!_retained(id)) {
+                // A retired batch finished settling before its slot was reused: nothing remains.
+                for (uint256 a; a < handler.getActorCount(); ++a) {
+                    (uint128 left,) = sdgnrs.pendingRedemptions(game.walletIdOf(handler.getActor(a)), id);
+                    assertEq(left, 0, "retired batch leaves no claim");
+                }
+                continue;
+            }
             (uint128 total,,,,,) = sdgnrs.redemptionBatches(id);
             uint256 recorded;
             for (uint256 a; a < handler.getActorCount(); ++a) {
@@ -87,7 +101,8 @@ contract RedemptionAccounting is RedemptionFixture {
         if (settling != 0) assertEq(settling + 1, open);
     }
     function invariant_balanceCoversPendingRedemptionEth() public view {
-        assertGe(address(sdgnrs).balance + mockStETH.balanceOf(address(sdgnrs)), sdgnrs.pendingRedemptionEthValue());
+        assertGe(address(sdgnrs).balance + mockStETH.balanceOf(address(sdgnrs)) + game.redemptionReserve(),
+            sdgnrs.pendingRedemptionEthValue());
     }
     /// @dev Non-vacuity: setUp seeds one admitted burn, so the campaign itself must burn, resolve and claim.
     ///      A single run can legitimately miss a leg (game over can latch first), so successes are

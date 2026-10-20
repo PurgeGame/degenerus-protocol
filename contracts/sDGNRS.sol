@@ -1070,7 +1070,13 @@ contract sDGNRS {
     ///      stETH loss that leaves custody below the reserve prices at nothing instead of
     ///      panicking every burn after game over.
     function _gameOverValue(uint256 amount) private view returns (uint256) {
-        return (_liveMoney(true) * amount) / (uint256(_totalSupply) + _escrowedSupply - 1);
+        return _holderValue(amount, true);
+    }
+
+    /// @dev `amount`'s share of backing net of reserves over the holder base; token custody
+    ///      counts only when claims can pay in it.
+    function _holderValue(uint256 amount, bool withSteth) private view returns (uint256) {
+        return (_liveMoney(withSteth) * amount) / (uint256(_totalSupply) + _escrowedSupply - 1);
     }
 
     /// @dev Pay `value` of game-over backing to `to`: ETH first, stETH for the rest. sDGNRS's game
@@ -1277,7 +1283,7 @@ contract sDGNRS {
         if (amount == 0 || amount > supply) return (0, 0);
 
         bool over = game.gameOver();
-        ethOut = (_liveMoney(over) * amount) / supply;
+        ethOut = _holderValue(amount, over);
 
         // GameOver burns pay no FLIP. sDGNRS's full FLIP backing is its seed-reserve claimable +
         // the auto-rebuy carry (incoming FLIP rides tomorrow's stake and settles into these);
@@ -1323,7 +1329,8 @@ contract sDGNRS {
     function _submitGamblingClaimFrom(address beneficiary, address burnFrom, uint256 amount) private {
         uint256 bal = balanceOf[burnFrom];
         if (amount == 0 || amount > bal) revert Insufficient();
-        if (_gameOverValue(amount) < MIN_REDEMPTION_VALUE) revert BurnTooSmall();
+        // Measured at the live price the batch close will use.
+        if (_holderValue(amount, false) < MIN_REDEMPTION_VALUE) revert BurnTooSmall();
 
         uint32 id = _openBatch;
         RedemptionBatch storage batch = _redemptionBatches[id & 1];

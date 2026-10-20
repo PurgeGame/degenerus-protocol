@@ -10523,9 +10523,17 @@
     "path": "contracts/sDGNRS.sol",
     "scope": "sDGNRS._gameOverValue",
     "kind": "recipient-helper",
-    "expression": "_liveMoney(true)",
+    "expression": "_holderValue(amount, true)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing backing read; stETH custody now counts only after game over (live legs cannot pay it)."
+    "review": "TRANSITIVE_BASELINE: existing backing read routed through _holderValue; stETH custody counts only after game over (live legs cannot pay it)."
+  },
+  {
+    "path": "contracts/sDGNRS.sol",
+    "scope": "sDGNRS._holderValue",
+    "kind": "recipient-helper",
+    "expression": "_liveMoney(withSteth)",
+    "count": 1,
+    "review": "TRANSITIVE_BASELINE: existing backing read routed through _holderValue; stETH custody counts only after game over (live legs cannot pay it)."
   },
   {
     "path": "contracts/sDGNRS.sol",
@@ -10627,9 +10635,9 @@
     "path": "contracts/sDGNRS.sol",
     "scope": "sDGNRS._submitGamblingClaimFrom",
     "kind": "recipient-helper",
-    "expression": "_gameOverValue(amount)",
+    "expression": "_holderValue(amount, false)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "TRANSITIVE_BASELINE: existing backing read routed through _holderValue; stETH custody counts only after game over (live legs cannot pay it)."
   },
   {
     "path": "contracts/sDGNRS.sol",
@@ -10843,9 +10851,9 @@
     "path": "contracts/sDGNRS.sol",
     "scope": "sDGNRS.previewBurnValue",
     "kind": "recipient-helper",
-    "expression": "_liveMoney(over)",
+    "expression": "_holderValue(amount, over)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing backing read; stETH custody now counts only after game over (live legs cannot pay it)."
+    "review": "TRANSITIVE_BASELINE: existing backing read routed through _holderValue; stETH custody counts only after game over (live legs cannot pay it)."
   },
   {
     "path": "contracts/sDGNRS.sol",

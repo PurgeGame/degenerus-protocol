@@ -156,10 +156,12 @@ contract RedemptionLootboxPayableForward is RedemptionCloseTools {
         vm.store(address(game), base, bytes32(s0));
     }
 
+    uint256 private seedEthUsed;
+
     /// @dev Drive a full burn → resolve → custody-shape cycle and return the claim's rolled
     ///      halves. After this, sDGNRS holds seedEth liquid ETH (strictly 0 < seedEth <
-    ///      lootboxEth) with stETH covering the exact remainder, so the lootbox leg forwards a
-    ///      REAL msg.value and pulls the rest as stETH — the mainnet funded state.
+    ///      lootboxEth) with the Game reserve covering the exact remainder, so the lootbox leg
+    ///      forwards a REAL msg.value and spends the rest from the reserve.
     function _burnResolveAndShapeCustody()
         internal
         returns (uint32 dayD, uint256 ethDirect, uint256 lootboxEth)
@@ -180,18 +182,19 @@ contract RedemptionLootboxPayableForward is RedemptionCloseTools {
         ethDirect = totalRolledEth / 2;
         lootboxEth = totalRolledEth - ethDirect;
 
-        // Liquid ETH strictly between 0 and the lootbox half; stETH covers the remainder of the
-        // full reservation. msg.value on the lootbox leg is then seedEth (> 0).
+        // Liquid ETH strictly between 0 and the lootbox half; the Game's protected redemption
+        // reserve covers the remainder of the full reservation (an ETH-short close). msg.value
+        // on the lootbox leg is then seedEth (> 0).
         uint256 seedEth = lootboxEth / 4;
         assertGt(seedEth, 0, "precondition: seedEth must be > 0");
         uint256 pendingNow = sdgnrs.pendingRedemptionEthValue();
         vm.deal(address(sdgnrs), seedEth);
-        mockStETH.mint(address(sdgnrs), pendingNow - seedEth);
-
-        // The claim's value must arrive from sDGNRS custody alone, not a game-side reserve.
-        vm.deal(address(game), 0);
+        seedEthUsed = seedEth;
+        uint256 reserve = pendingNow - seedEth;
+        vm.store(address(game), bytes32(GameSlots.REDEMPTION_RESERVE_STORED), bytes32(reserve + 1));
+        vm.deal(address(game), reserve);
         _setGameClaimableSdgnrs(0);
-        _setGameClaimablePool(0);
+        _setGameClaimablePool(uint128(reserve));
 
         // Land the new day's word (the lootbox leg itself keys to the cohort's pinned session word).
         _primeCurrentDayRng();
@@ -214,18 +217,16 @@ contract RedemptionLootboxPayableForward is RedemptionCloseTools {
         (uint128 owed,) = sdgnrs.pendingRedemptions(game.walletIdOf(player), dayD);
         assertEq(uint256(owed), 0, "the claim settled rather than parking");
 
-        // Direct half lands as a game-claimable credit; the full rolled value reaches the game
-        // (seed ETH as msg.value across both legs, the remainder as stETH pulls).
+        // Direct half lands as a game-claimable credit; the seed ETH rides the legs as msg.value
+        // and the Game reserve funds the rest of the rolled value.
         assertEq(
             claimableBalance(game, player),
             ethDirect,
             "direct half must credit the claimant's game claimable"
         );
-        assertEq(
-            address(game).balance + mockStETH.balanceOf(address(game)) - gameValueBefore,
-            ethDirect + lootboxEth,
-            "full rolled value must arrive at the game"
-        );
+        assertEq(address(game).balance + mockStETH.balanceOf(address(game)) - gameValueBefore,
+            seedEthUsed, "only the seed ETH moves");
+        assertEq(game.redemptionReserve(), 0, "the reserve funds the rest of the rolled value");
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0, "reservation must be fully released");
     }
 
@@ -247,11 +248,9 @@ contract RedemptionLootboxPayableForward is RedemptionCloseTools {
             ethDirect,
             "direct half must credit the claimant's game claimable"
         );
-        assertEq(
-            address(game).balance + mockStETH.balanceOf(address(game)) - gameValueBefore,
-            ethDirect + lootboxEth,
-            "full rolled value must arrive at the game"
-        );
+        assertEq(address(game).balance + mockStETH.balanceOf(address(game)) - gameValueBefore,
+            seedEthUsed, "only the seed ETH moves");
+        assertEq(game.redemptionReserve(), 0, "the reserve funds the rest of the rolled value");
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0, "reservation must be fully released");
     }
 }

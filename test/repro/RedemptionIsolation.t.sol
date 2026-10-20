@@ -238,13 +238,12 @@ contract RedemptionIsolationTest is RedemptionFixture {
         assertEq(address(sdgnrs).balance, 0);
     }
 
-    function testCustodyReadUnderfundingCannotPriceAZeroBalance() public {
+    /// @dev Live pricing counts only what live legs can pay, so the close reads no token custody.
+    function testCloseReadsNoTokenCustody() public {
         _burn(alice, sdgnrs.totalSupply() / 1000);
-        vm.prank(address(game));
-        (bool ok, bytes memory reason) = address(sdgnrs).call{gas: 50_000}(abi.encodeWithSelector(sdgnrs.closeRedemptionBatch.selector, uint256(0)));
-        assertFalse(ok);
-        assertEq(reason, abi.encodeWithSelector(MineFlipGas.InsufficientExecutionGas.selector));
-        assertFalse(sdgnrs.redemptionSettlementPending());
+        vm.expectCall(address(mockStETH), abi.encodeWithSelector(mockStETH.balanceOf.selector, address(sdgnrs)), 0);
+        _closeFunded();
+        assertTrue(sdgnrs.redemptionSettlementPending());
     }
 
 }

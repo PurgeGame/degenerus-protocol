@@ -143,19 +143,20 @@ contract RedemptionHandler is Test {
         }
         _trackSupply(supply); _observeRolls();
     }
-    /// @notice Vary the funding medium without changing total custody or reserve coverage.
+    /// @notice Vary the Game's funding medium (ETH or stETH) without changing its total backing.
+    ///         A stETH-heavy Game sends little ETH at close; the protected reserve funds the rest.
     function action_toggleStethFallback(uint256 seed) external {
         if (address(mockSteth) == address(0)) return;
         stethFallbackMode = seed % 2 == 0;
         if (stethFallbackMode) {
-            uint256 eth = address(sdgnrs).balance;
-            vm.deal(address(sdgnrs), 0);
-            mockSteth.mint(address(sdgnrs), eth);
+            uint256 eth = address(game).balance;
+            vm.deal(address(game), 0);
+            mockSteth.mint(address(game), eth);
         } else {
-            uint256 st = mockSteth.balanceOf(address(sdgnrs));
-            vm.prank(address(sdgnrs));
+            uint256 st = mockSteth.balanceOf(address(game));
+            vm.prank(address(game));
             mockSteth.transfer(address(0xDEAD), st);
-            vm.deal(address(sdgnrs), address(sdgnrs).balance + st);
+            vm.deal(address(game), address(game).balance + st);
         }
     }
     function _answer(uint256 word) private {

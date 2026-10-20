@@ -147,7 +147,8 @@ contract V62RedemptionReentrancy is RedemptionCloseTools {
     /// @dev The reserve identity under audit (SOLVENCY-01): the contract's own backing (ETH + stETH)
     ///      must cover the segregated reservation tracker.
     function _reserveIdentityHolds() internal view returns (bool) {
-        uint256 backing = address(sdgnrs).balance + mockStETH.balanceOf(address(sdgnrs));
+        uint256 backing = address(sdgnrs).balance + mockStETH.balanceOf(address(sdgnrs))
+            + game.redemptionReserve();
         return backing >= sdgnrs.pendingRedemptionEthValue();
     }
 
@@ -184,21 +185,20 @@ contract V62RedemptionReentrancy is RedemptionCloseTools {
         uint256 ethDirect = totalRolledEth / 2;
         uint256 lootboxEth = totalRolledEth - ethDirect;
 
-        // ---- 3. Custody shaping: liquid ETH strictly between 0 and the rolled amount with stETH
-        //         covering the exact remainder (no headroom), so BOTH game legs exercise the
-        //         msg.value + stETH-remainder funding mix. ----
+        // ---- 3. Custody shaping: liquid ETH strictly between 0 and the rolled amount with the
+        //         Game's protected redemption reserve covering the exact remainder (no headroom),
+        //         so BOTH game legs exercise the msg.value + reserve funding mix. ----
         uint256 seedEth = ethDirect / 4;
         assertGt(seedEth, 0, "precondition: seedEth must be > 0");
         uint256 pendingNow = sdgnrs.pendingRedemptionEthValue();
         vm.deal(address(sdgnrs), seedEth);
-        mockStETH.mint(address(sdgnrs), pendingNow - seedEth);
-        assertTrue(_reserveIdentityHolds(), "precondition: reserve identity holds right before claim");
-
-        // Deplete the GAME's liquid ETH and claimable[SDGNRS]: the claim must settle with the
-        // value arriving from sDGNRS custody alone (stETH pulls), not from any game-side reserve.
-        vm.deal(address(game), 0);
+        uint256 reserve = pendingNow - seedEth;
+        vm.store(address(game), bytes32(GameSlots.REDEMPTION_RESERVE_STORED), bytes32(reserve + 1));
+        // Ordinary claimable[SDGNRS] is empty: only the reserve, inside claimablePool, backs the claim.
+        vm.deal(address(game), reserve);
         _setGameClaimableSdgnrs(0);
-        _setGameClaimablePool(0);
+        _setGameClaimablePool(uint128(reserve));
+        assertTrue(_reserveIdentityHolds(), "precondition: reserve identity holds right before claim");
 
         // Arm the attacker exactly as the pre-fix exploit would — the hook must never fire.
         attacker.arm(BURN_AMOUNT / 4, 64);
@@ -227,8 +227,8 @@ contract V62RedemptionReentrancy is RedemptionCloseTools {
             "V62-03 L1: live settlement pushed stETH at the claimant"
         );
 
-        // The direct half landed as a game-claimable credit; the full rolled value moved to the
-        // GAME (seedEth as msg.value, the remainder as stETH pulls across the two legs).
+        // The direct half landed as a game-claimable credit; seedEth rode the legs as msg.value
+        // and the Game reserve funded the rest of the rolled value.
         assertEq(
             game.claimableWinningsOf(address(attacker)),
             ethDirect + 1,
@@ -236,9 +236,11 @@ contract V62RedemptionReentrancy is RedemptionCloseTools {
         );
         assertEq(
             address(game).balance + mockStETH.balanceOf(address(game)) - gameValueBefore,
-            ethDirect + lootboxEth,
-            "V62-03 L1: full rolled value must arrive at the game"
+            seedEth,
+            "V62-03 L1: only the seed ETH moves to the game"
         );
+        assertEq(game.redemptionReserve(), reserve - (ethDirect + lootboxEth - seedEth),
+            "V62-03 L1: the reserve funds the rest of the rolled value");
 
         // Reservation fully released and the reserve identity holds.
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0, "V62-03 L1: reservation not fully released");

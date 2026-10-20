@@ -4,8 +4,9 @@ import {RedemptionFixture} from "./helpers/RedemptionFixture.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 
 contract RedemptionMinimumValueTest is RedemptionFixture {
-    function test_OneMillionthTokenCanMeetValueMinimum() public {
-        uint256 amount = 1e6;
+    function test_OneTokenCanMeetValueMinimum() public {
+        // One whole token (12 decimals): its 0.01 ETH target backing fits the uint96 batch range.
+        uint256 amount = 1e12;
         (uint256 gross, ) = sdgnrs.previewBurnValue(sdgnrs.totalSupply());
         uint256 target = 0.01 ether * sdgnrs.totalSupply() / amount;
         vm.deal(address(sdgnrs), address(sdgnrs).balance + target - gross);
@@ -16,7 +17,8 @@ contract RedemptionMinimumValueTest is RedemptionFixture {
         assertEq(escrow, amount);
     }
     function test_OneWeiBelowValueMinimumRejectsWithoutBurn() public {
-        uint256 amount = 1e6;
+        // One whole token (12 decimals): its 0.01 ETH target backing fits the uint96 batch range.
+        uint256 amount = 1e12;
         (uint256 gross, ) = sdgnrs.previewBurnValue(sdgnrs.totalSupply());
         uint256 target = 0.01 ether * sdgnrs.totalSupply() / amount;
         vm.deal(address(sdgnrs), address(sdgnrs).balance + target - gross - 1);

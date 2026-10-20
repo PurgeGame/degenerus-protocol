@@ -133,17 +133,15 @@ contract RedemptionReserveTest is RedemptionFixture {
         uint256 poolAfter = abi.decode(_callHarness(abi.encodeCall(RedemptionReserveHarness.pools, ())), (uint256));
         assertEq(poolAfter, poolBefore, "ledger settlement conserves aggregate Game pools");
     }
-    function testCloseDuringSettlementPreservesReserveAndBackingPreview() public {
+    /// @dev Requests need the read certificate, which settlement must finish first, so no close
+    ///      meets a settling batch; while one settles its reserve counts once in the preview.
+    function testSettlingReserveCountsOnceInBackingPreview() public {
         _fundOrdinary(100 ether);
         _burn(alice, sdgnrs.totalSupply() / 100);
         vm.deal(address(game), 0);
         _closeFundedReserve();
-        uint256 reserve = game.redemptionReserve();
-        uint256 ordinary = game.claimableWinningsOf(address(sdgnrs));
+        assertGt(game.redemptionReserve(), 0, "an ETH-short close keeps the reserve in the Game");
         assertTrue(sdgnrs.redemptionSettlementPending());
-        _closeFundedReserve();
-        assertEq(game.redemptionReserve(), reserve, "active batch keeps its reserve");
-        assertEq(game.claimableWinningsOf(address(sdgnrs)), ordinary);
         (uint256 preview,) = sdgnrs.previewBurnValue(sdgnrs.totalSupply());
         assertEq(preview, 100 ether - sdgnrs.pendingRedemptionEthValue(), "preview includes unsent backing exactly once");
     }
@@ -218,9 +216,17 @@ contract RedemptionReserveTest is RedemptionFixture {
         sdgnrs.claimRedemption(0, 1);
         assertEq(alice.balance - before, expected, "malformed token amount cannot block available ETH payout");
     }
-    function testDroppedClaimRestoresFlipPrincipalAndEthBacking() public { _checkDrop(false); }
-    function testGasExhaustedClaimRestoresFlipWithinTailBudget() public { _checkDrop(true); }
-    function _checkDrop(bool exhaustGas) private {
+    function testDroppedClaimRestoresFlipPrincipalAndEthBacking() public { _checkDrop(false, true); }
+    function testGasExhaustedClaimRestoresFlipWithinTailBudget() public { _checkDrop(true, true); }
+    function testDroppedClaimAfterLostFlipKeepsPrincipalForfeited() public { _checkDrop(false, false); }
+    /// @dev A roll-100 word whose batch-1 synthetic flip wins or loses as asked.
+    function _wordForFlip(bool won) private pure returns (uint256 word) {
+        for (uint256 k;; ++k) {
+            word = ((uint256(100 - 21) + 155 * k) << 8) | 2;
+            if ((_synthReward(word, 1) != 0) == won) return word;
+        }
+    }
+    function _checkDrop(bool exhaustGas, bool won) private {
         _fundOrdinary(100 ether);
         _seedFlipBacking(1_000_000);
         _burn(alice, sdgnrs.totalSupply() / 100);
@@ -228,7 +234,9 @@ contract RedemptionReserveTest is RedemptionFixture {
         _closeFundedReserve();
         (,,, uint96 escrow,,) = sdgnrs.redemptionBatches(1);
         assertGt(escrow, 0);
-        _start(100);
+        settlementWord = _wordForFlip(won);
+        vm.mockCall(address(game), abi.encodeWithSelector(game.rngConsumerStage.selector), abi.encode(uint8(1)));
+        assertFalse(_work(RESOLVE_ONLY_ALLOWANCE));
         vm.prank(address(sdgnrs));
         uint256 before = coinflip.redeemableFlipBacking();
         uint256 reserve = game.redemptionReserve();
@@ -237,7 +245,8 @@ contract RedemptionReserveTest is RedemptionFixture {
         assertTrue(_work(9_000_000));
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
         vm.prank(address(sdgnrs));
-        assertEq(coinflip.redeemableFlipBacking(), before + escrow, "drop restores FLIP principal");
+        if (won) assertEq(coinflip.redeemableFlipBacking(), before + escrow, "drop after a won flip restores FLIP principal");
+        else assertEq(coinflip.redeemableFlipBacking(), before, "a lost flip forfeits the principal, paid or dropped");
         assertEq(game.redemptionReserve(), reserve);
         vm.clearMockedCalls();
         uint256 ordinary = game.claimableWinningsOf(address(sdgnrs));

@@ -164,10 +164,11 @@ abstract contract RedemptionFixture is DeployProtocol {
         return (synth & 1) == 1 ? FlipRoundLib.coinflipRewardPercent(0, synth, uint24(id)) : 0;
     }
 
-    /// @dev sDGNRS's live money: ETH + stETH + Game claimable (less 1 wei dust) − reserves.
+    /// @dev sDGNRS's money: ETH + Game claimable (less 1 wei dust) + Game reserve − reserves, plus
+    ///      stETH custody once the game is over (live legs cannot pay it).
     function _money() internal view returns (uint256) {
         uint256 claimable = game.claimableWinningsOf(address(sdgnrs));
-        uint256 gross = address(sdgnrs).balance + mockStETH.balanceOf(address(sdgnrs))
+        uint256 gross = address(sdgnrs).balance + (game.gameOver() ? mockStETH.balanceOf(address(sdgnrs)) : 0)
             + (claimable > 1 ? claimable - 1 : 0) + game.redemptionReserve();
         uint256 reserved = sdgnrs.pendingRedemptionEthValue();
         return gross > reserved ? gross - reserved : 0;
