@@ -30,7 +30,9 @@ contract BucketAppendRunTest is Test {
             (uint256 fresh, uint256 dirty) = h.append(owners[i], sizes[i]);
             uint256 completed = ((len & 7) + sizes[i]) / 8;
             assertEq(fresh, (len == 0 ? 1 : 0) + (i == 0 ? 1 : 0) + completed, "zero backing writes");
-            assertEq(dirty, len == 0 ? 0 : 1, "nonzero header writes");
+            // The first append to a newly stamped level clears its stale flag (one nonzero write);
+            // later appends rewrite the live header.
+            assertEq(dirty, 1, "nonzero writes: stale flag first, header after");
             len += sizes[i];
             assertEq(h.length(), len);
         }
