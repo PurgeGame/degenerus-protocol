@@ -175,7 +175,7 @@ contract DegenesisDailyEngine is DegenesisFixture {
 
     // ------------------------------------------------------------------ check 19: day-9 request
 
-    /// @notice At the day-9 request the next pool exceeds levelPrizePool[0] (50 ETH): it latches
+    /// @notice At the day-9 request the next pool exceeds _levelPrizePool(0) (50 ETH): it latches
     ///         lastPurchaseDay with JACKPOT_TURBO, the level becomes 1 at that request, and level
     ///         1's jackpot phase enters and ends within day 9, leaving the turbo bonus owed.
     function test_Day9Request_AboveTarget_TurboLevelOneJackpotInOneDay() public {

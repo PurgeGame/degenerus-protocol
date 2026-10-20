@@ -15,6 +15,7 @@ import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
 import {Craps} from "../../contracts/Craps.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 import {DegenerusGameWhaleModule} from "../../contracts/modules/DegenerusGameWhaleModule.sol";
+import {CrapsPreferenceLib} from "../../contracts/libraries/CrapsPreferenceLib.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
 
 contract DecimatorJackpotEngineProbe {
@@ -30,9 +31,20 @@ contract DecimatorJackpotEngineProbe {
 }
 
 contract DecimatorJackpotPreferenceProbe {
-    mapping(uint32 => uint32) public preferredBoardOf;
     function set(address owner, uint32 chips) external {
-        preferredBoardOf[DecimatorJackpotHarness(ContractAddresses.GAME).registerWallet(owner, true)] = chips;
+        uint32 id = DecimatorJackpotHarness(ContractAddresses.GAME).registerWallet(owner, true);
+        bytes32 slot = keccak256(abi.encode(id, CrapsPreferenceLib.PASS_SLOT));
+        uint256 word = (CrapsPreferenceLib.compress(chips) << 64) | CrapsPreferenceLib.INITIALIZED;
+        assembly ("memory-safe") { sstore(slot, word) }
+    }
+    function extsload(bytes32 slot) external view returns (uint256 word) {
+        assembly ("memory-safe") { word := sload(slot) }
+    }
+    function preferredBoardOf(uint32 id) external view returns (uint32 chips) {
+        bytes32 slot = keccak256(abi.encode(id, CrapsPreferenceLib.PASS_SLOT));
+        uint256 word;
+        assembly ("memory-safe") { word := sload(slot) }
+        (chips,) = CrapsPreferenceLib.decode(word);
     }
 }
 
@@ -60,6 +72,7 @@ contract DecimatorJackpotHarness is DegenerusGameDecimatorModule, WalletSeed {
         jackpotWork.budget = ethBudget;
         jackpotWork.traits = uint32(0xc0804000);
         for (uint8 q; q < 4; ++q) deityBySymbol[q * 8] = _seedWallet(address(uint160(0xa100 + q)));
+        decEntriesLevel = lvl;
         DecBattleRound storage r = decBattleRounds[lvl];
         r.count = n;
         r.totalCreditedStack = uint64(n) * 2000;
@@ -391,7 +404,7 @@ contract DecimatorJackpotIntegrationTest is Test {
     function test_NoNonSoloCohortCannotGenerateFromSoloExcess() public {
         h.prepare(LVL, 40, 140 ether, 1000 ether, 6, false);
         for (uint8 q; q < 3; ++q) h.setDeity(q, address(0));
-        vm.mockCallRevert(ContractAddresses.CRAPS, abi.encodeWithSignature("preferredBoardOf(uint32)"), hex"12345678");
+        vm.mockCallRevert(ContractAddresses.CRAPS, abi.encodeWithSignature("extsload(bytes32)"), hex"12345678");
         _daily(6, 2_000_000);
         assertEq(h.plan(LVL).generatedEntries, 0);
         assertEq(h.plan(LVL).weights, 0);
@@ -574,7 +587,7 @@ contract DecimatorJackpotIntegrationTest is Test {
         h.prepare(LVL, 100, 10 ether, 100 ether, WORD, false);
         h.daily(LVL, WORD, 1_000_000);
         uint16 beforeCursor = h.plan(LVL).cursor;
-        vm.mockCallRevert(ContractAddresses.CRAPS, abi.encodeWithSignature("preferredBoardOf(uint32)"), hex"12345678");
+        vm.mockCallRevert(ContractAddresses.CRAPS, abi.encodeWithSignature("extsload(bytes32)"), hex"12345678");
         vm.expectRevert(bytes4(0x12345678));
         h.daily(LVL, WORD, 3_000_000);
         assertEq(h.plan(LVL).cursor, beforeCursor);

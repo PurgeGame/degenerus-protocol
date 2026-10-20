@@ -49,8 +49,8 @@ contract QuestRetryDoubleRoll is DeployProtocol {
     // ==================== Tests ====================
 
     function _generationStart(uint24 lvl) private view returns (uint256) {
-        // Append-only mapping slot, independently pinned by the layout oracle.
-        return uint256(game.extsload(keccak256(abi.encode(uint256(lvl), GameSlots.TICKET_GENERATION_START_BLOCK))));
+        uint256 word = uint256(game.extsload(bytes32(GameSlots.TICKET_GENERATION_START_BLOCK)));
+        return uint24(word) == lvl ? word >> 24 : 0;
     }
 
     function test_generationWindowBootstrapAndUnopenedLevel() public view {

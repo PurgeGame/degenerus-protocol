@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {GamePoolSlots} from "../helpers/GamePoolSlots.sol";
+
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
@@ -166,7 +168,7 @@ contract AccountRuleBafSettle is DeployProtocol {
     }
 
     function _levelPrizePool(uint24 lvl) private view returns (uint256) {
-        uint256 v = uint256(vm.load(address(game), keccak256(abi.encode(uint256(lvl), GameSlots.LEVEL_PRIZE_POOL))));
+        uint256 v = GamePoolSlots.read(address(game), lvl);
         return v < 50 ether ? 50 ether : v;
     }
 

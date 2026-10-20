@@ -47,7 +47,7 @@ contract WhaleBoonExpiry is DeployProtocol {
     uint256 constant BP_WHALE_DAY_SHIFT       = 200; // uint24 whaleDay
     uint256 constant BP_DEITY_WHALE_DAY_SHIFT = 224; // uint24 deityWhaleDay
     uint256 constant BP_WHALE_TIER_SHIFT      = 248; // uint8  whaleTier
-    // Whale lane occupies bits 200..255 -- the full top 56 bits of slot0.
+    // Whale lane occupies bits 200..249 -- the 50-bit lane of slot0.
     uint256 constant BP_WHALE_CLEAR = ~(uint256(type(uint56).max) << BP_WHALE_DAY_SHIFT);
 
 
@@ -104,10 +104,10 @@ contract WhaleBoonExpiry is DeployProtocol {
         uint256 s0 = uint256(vm.load(address(game), slot));
         whaleDay = uint24(s0 >> BP_WHALE_DAY_SHIFT);
         deityWhaleDay = uint24(s0 >> BP_DEITY_WHALE_DAY_SHIFT);
-        tier = uint8(s0 >> BP_WHALE_TIER_SHIFT);
+        tier = uint8(s0 >> BP_WHALE_TIER_SHIFT) & 3;
     }
 
-    /// @dev True iff the entire whale lane (bits 200..255 of slot0) reads zero.
+    /// @dev True iff the entire whale lane (bits 200..249 of slot0) reads zero.
     function _whaleLaneIsZero(address player) internal view returns (bool) {
         (uint24 whaleDay, uint24 deityWhaleDay, uint8 tier) = _readWhaleLane(player);
         return whaleDay == 0 && deityWhaleDay == 0 && tier == 0;
@@ -162,7 +162,7 @@ contract WhaleBoonExpiry is DeployProtocol {
 
     /// @notice Case 1: whaleDay = currentDay - 5 (one day past the 4-day window), no deity
     ///         day. The fix's `currentDay > whaleDayLocal + 4` branch must fire and the whole
-    ///         whale lane (bits 200..255) must read 0 after the sweep.
+    ///         whale lane (bits 200..249) must read 0 after the sweep.
     function test_lapsedLootboxWhaleBoonClears() public {
         address player = makeAddr("whaleLapsed");
         vm.deal(player, 100 ether);
@@ -177,7 +177,7 @@ contract WhaleBoonExpiry is DeployProtocol {
 
         _triggerSweep(player, 1);
 
-        assertTrue(_whaleLaneIsZero(player), "lapsed whale lane (bits 200..255) must read 0 after the sweep");
+        assertTrue(_whaleLaneIsZero(player), "lapsed whale lane (bits 200..249) must read 0 after the sweep");
     }
 
     /// @notice Case 2: whaleDay = currentDay - 2 (still inside the 4-day window), no deity

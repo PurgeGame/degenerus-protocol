@@ -69,6 +69,27 @@ interface IDegenerusGameLensSource {
 ///      be called — they would read this contract's empty storage; the lens carries
 ///      explicit mirrors that source the same fields via extsload instead.
 contract DegenerusGameLens is DegenerusGameMintStreakUtils {
+    /// @notice Current price, RNG lock, claimables and prepaid funding for a batch of wallets.
+    function afkingSnapshot(address game, address[] calldata players) external view returns (
+        uint256 mintPriceWei, bool rngLocked_, uint256[] memory claimables, uint256[] memory afkingFundings
+    ) {
+        uint256 levelWord = _levelWord(game);
+        mintPriceWei = PriceLookupLib.priceForLevel(_activeTicketLevelMirror(levelWord));
+        uint256 offset;
+        uint256 root;
+        assembly { offset := rngLockedFlag.offset root := gameOverStatePacked.slot }
+        rngLocked_ = uint8(levelWord >> (offset * 8)) != 0;
+        bool swept = (_sload(game, bytes32(root)) >> GO_SWEPT_SHIFT) & GO_SWEPT_MASK != 0;
+        assembly { root := balancesPacked.slot }
+        claimables = new uint256[](players.length);
+        afkingFundings = new uint256[](players.length);
+        for (uint256 i; i < players.length; ++i) {
+            uint256 packed = _sload(game, _mapSlot(_walletId(game, players[i]), root));
+            claimables[i] = swept ? 0 : uint128(packed);
+            afkingFundings[i] = packed >> 128;
+        }
+    }
+
     struct LoanQuote {
         uint32 accountId;
         uint32 lenderId;
@@ -404,7 +425,8 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
             metaBase := _subMeta.slot
             setSlot := _subscribers.slot
         }
-        meta = uint64(_sload(game, _mapSlot(uint256(id >> 2), metaBase)) >> ((id & 3) * 64));
+        meta = uint64(_sload(game, _mapSlot(uint256(id >> 2), metaBase)) >> ((id & 3) * 64))
+            & ((uint256(1) << 63) - 1);
         position1 = meta & 0x7ff;
         if (position1 == 0) return (0, 0, meta);
         uint256 position = position1 - 1;
@@ -623,18 +645,19 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
       +======================================================================+*/
 
     /// @notice The level's per-affiliate DGNRS claim pool: the segregated allocation
-    ///         and the amount already claimed against it (levelDgnrsPacked[lvl]).
+    ///         and the amount already claimed against it. Other levels return zero.
     function levelDgnrsInfo(
         address game,
         uint24 lvl
     ) external view returns (uint128 allocation, uint128 claimed) {
+        uint256 offset;
+        assembly { offset := level.offset }
+        if (uint24(_levelWord(game) >> (offset * 8)) != lvl) return (0, 0);
         uint256 base;
-        assembly {
-            base := levelDgnrsPacked.slot
-        }
-        uint256 w = _sload(game, _mapSlot(uint256(lvl), base));
-        allocation = uint128(w);
-        claimed = uint128(w >> 128);
+        assembly { base := levelDgnrsPacked.slot }
+        uint256 word = _sload(game, bytes32(base));
+        allocation = uint128(word);
+        claimed = uint128((word >> 128) & DGNRS_CLAIMED_MASK);
     }
 
     /*+======================================================================+
@@ -663,10 +686,13 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         public view returns (address owner, uint256 stack, uint32 chips)
     {
         uint256 root;
+        uint256 offset;
+        assembly { root := decEntriesLevel.slot offset := decEntriesLevel.offset }
+        if (uint24(_sload(game, bytes32(root)) >> (offset * 8)) != lvl
+            || id == 0 || id > decBattleRoundOf(game, lvl).count) return (address(0), 0, 0);
         assembly { root := decBattleEntries.slot }
-        if (id == 0) return (address(0), 0, 0);
         uint256 p = uint256(id) - 1;
-        uint256 lane = _sload(game, _mapSlot((uint256(lvl) << 64) | (p >> 1), root));
+        uint256 lane = _sload(game, _mapSlot(p >> 1, root));
         uint256 entry = uint128(lane >> ((p & 1) * 128));
         return (_walletAddress(game, uint32(entry)), (entry >> 62), uint32((entry >> 32) & 0x3FFFFFFF));
     }
@@ -799,8 +825,13 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
             stampSlot := ticketBufferLevels.slot
             stampOffset := ticketBufferLevels.offset
         }
-        uint24 occupyingLevel = uint24(_sload(game, stampSlot) >> (stampOffset * 8 + (lvl & 1) * 24));
-        if (occupyingLevel != lvl) return (false, 0, 0, 0);
+        uint256 stamps = _sload(game, stampSlot);
+        uint24 occupyingLevel = uint24(stamps >> (stampOffset * 8 + (lvl & 1) * 24));
+        uint256 staleOffset;
+        assembly { staleOffset := traitBucketStale.offset }
+        if (occupyingLevel != lvl || stamps & (uint256(1) << (staleOffset * 8 + (lvl & 1))) != 0) {
+            return (false, 0, 0, 0);
+        }
         uint256 bitmapBase;
         assembly { bitmapBase := traitBucketLive.slot }
         if (_sload(game, bytes32(bitmapBase + (lvl & 1))) & (uint256(1) << trait) == 0) return (false, 0, 0, 0);
@@ -899,7 +930,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         uint256 base;
         assembly { base := _loans.slot }
         uint256 loan = _sload(game, _mapSlot(uint256(id), base));
-        if (loan == 0) return info;
+        if (uint96(loan) == 0) return info;
         info.principal = uint96(loan);
         info.lenderId = uint8(loan >> LOAN_LENDER_SHIFT);
         info.startLevel = uint24(loan >> LOAN_START_SHIFT);
@@ -939,7 +970,8 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         if (occupying != lvl) return 0;
         assembly { base := farFutureOwed.slot }
         uint256 root = uint256(_mapSlot(uint256(id), base));
-        return (_sload(game, bytes32(root + (position >> 3))) >> ((position & 7) << 5)) & 0xffffffff;
+        uint256 lane = (_sload(game, bytes32(root + (position >> 3))) >> ((position & 7) << 5)) & 0xffffffff;
+        return lane & 0x80000000 == 0 ? 0 : lane;
     }
 
     /// @dev Account-level borrow gates: allocated, not acquired, no open loan, and a main's
@@ -955,7 +987,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
             return false;
         }
         assembly { base := _loans.slot }
-        if (_sload(game, _mapSlot(uint256(id), base)) != 0) return false;
+        if (uint96(_sload(game, _mapSlot(uint256(id), base))) != 0) return false;
         if (parent != 0) return true;
         assembly { base := mintPacked_.slot }
         return uint16(_sload(game, _mapSlot(uint256(id), base)) >> BitPackingLib.SMURF_COUNT_SHIFT) <= LOAN_MAX_SMURFS;

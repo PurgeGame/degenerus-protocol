@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 // Permanently skipped historical cases were retired in the test review.
 // See docs/TEST_REVIEW.md for replacement suites and remaining coverage limits.
 
+import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 import {TicketQueueStorage} from "./helpers/TicketQueueStorage.sol";
 
@@ -356,7 +357,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
 
         // Batched read.
         (uint256 mintPriceWei, bool rngLocked_, uint256[] memory claimables, uint256[] memory afkingFundings) =
-            game.afkingSnapshot(players);
+            (new DegenerusGameLens()).afkingSnapshot(address(game), players);
 
         // Field 1: mintPriceWei == mintPrice().
         assertEq(mintPriceWei, game.mintPrice(), "afkingSnapshot.mintPriceWei == mintPrice()");

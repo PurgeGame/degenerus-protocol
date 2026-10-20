@@ -19,7 +19,7 @@ contract MissingWordSeeder is DegenerusGame, BucketSeed {
         level = 10;
         purchaseStartDay = day - 31;
         dailyIdx = day - 1;
-        levelPrizePool[10] = 1000 ether;
+        _setLevelPrizePool(10, 1000 ether);
         ticketsFullyProcessed = true;
         subsFullyProcessed = true;
         _afkingResetDay = day;

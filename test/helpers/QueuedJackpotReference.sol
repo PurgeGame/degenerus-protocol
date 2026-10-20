@@ -1416,7 +1416,7 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
     /// @notice Level 1's trait-matched FLIP draw over level-1 ticket holders.
     /// @dev Runs in level 1's purchase-day advance, after emitDailyWinningTraits rolled and
     ///      recorded the day's main board, which it re-rolls from the same word. Awards 0.25% of
-    ///      the previous level's recorded prize pool (`levelPrizePool[lvl - 1]`, the ratchet
+    ///      the previous level's recorded prize pool (`_levelPrizePool(lvl - 1)`, the ratchet
     ///      target before any century floor), converted to FLIP at the current level's ticket
     ///      price, as up to COIN_DRAW_SHARES equal whole-unit shares to trait-matched ticket
     ///      holders in [minLevel, maxLevel], which must be minted levels.
@@ -1473,7 +1473,7 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
         emit DailyWinningTraits(questDay, mainTraitsPacked);
     }
 
-    /// @dev Calculate 0.25% of the previous level's recorded prize pool (`levelPrizePool[lvl - 1]`,
+    /// @dev Calculate 0.25% of the previous level's recorded prize pool (`_levelPrizePool(lvl - 1)`,
     ///      the ratchet target before any century floor), converted to FLIP at the current
     ///      level's ticket price.
     /// @param lvl Level keying the prize pool snapshot (purchase level on the
@@ -1485,7 +1485,7 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
     ) private view returns (uint256) {
         uint256 priceWei = PriceLookupLib.priceForLevel(currLevel);
         if (priceWei == 0) return 0;
-        return (levelPrizePool[lvl - 1] * PRICE_COIN_UNIT) / (priceWei * 400);
+        return (_levelPrizePool(lvl - 1) * PRICE_COIN_UNIT) / (priceWei * 400);
     }
 
     /// @dev Current-pool daily jackpot share for non-final days: random 6%-14%

@@ -356,7 +356,7 @@ contract DegenerusGameMintModule is
         uint32 ownerId = _requireWalletId(msg.sender);
         uint256 mintWord = _smurfMain(ownerId);
         // An open loan fixes the family its seizure walks.
-        if (address(uint160(_walletElement(ownerId))) != msg.sender || _loans[ownerId] != 0) revert E();
+        if (address(uint160(_walletElement(ownerId))) != msg.sender || uint96(_loans[ownerId]) != 0) revert E();
         uint256 score = _playerActivityScore(ownerId, _effectiveQuestStreak(ownerId));
         uint16 created = uint16(mintWord >> BitPackingLib.SMURF_COUNT_SHIFT);
         if (created == type(uint16).max || created >= uint256(uint16(mintWord >> BitPackingLib.SMURF_BASE_SHIFT)) + score / SMURF_SCORE_PER_CREATION) {
@@ -552,7 +552,7 @@ contract DegenerusGameMintModule is
         uint256 element = _walletElement(id);
         address borrower = _payee(element);
         if (borrower != msg.sender) revert NotApproved();
-        if (id <= GNRUS_WALLET_ID || _isAcquired(id) || _loans[id] != 0) revert E();
+        if (id <= GNRUS_WALLET_ID || _isAcquired(id) || uint96(_loans[id]) != 0) revert E();
         if (gameOver || _livenessTriggered()) revert E();
         uint256 family = 1;
         if (uint32(element >> 160) == 0) {
@@ -593,7 +593,7 @@ contract DegenerusGameMintModule is
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (id == 0) id = _walletIdOf(msg.sender);
         uint256 loan = _loans[id];
-        if (loan == 0) revert E();
+        if (uint96(loan) == 0) revert E();
         if (_payee(_walletElement(id)) != msg.sender) revert NotApproved();
         uint24 due = uint24(loan >> LOAN_DUE_SHIFT);
         uint24 lvl = level;
@@ -609,7 +609,7 @@ contract DegenerusGameMintModule is
             uint256 indexMask = uint256(type(uint32).max) << LOAN_INDEX_SHIFT;
             _loans[moved] = (_loans[moved] & ~indexMask) | (index << LOAN_INDEX_SHIFT);
         }
-        delete _loans[id];
+        _loans[id] = LOAN_RETAINED;
 
         // The claimable leg leaves the 1-wei sentinel, as every claimable draw does.
         if (owed > fresh && _claimableOf(id) <= owed - fresh) revert Insolvent();

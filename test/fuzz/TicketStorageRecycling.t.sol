@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.33;
 
+import {GameSlots} from "../helpers/GameSlots.sol";
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {TicketLevelPrep} from "../helpers/TicketLevelPrep.sol";
@@ -41,6 +42,7 @@ contract TicketRecyclingHarness is TicketLevelPrep, WalletSeed {
     function seedHuge(uint24 lvl, uint8 trait, uint256 n) external {
         lvlTraitEntry[lvl & 1][trait] = n;
         traitBucketLive[lvl & 1] |= uint256(1) << trait;
+        traitBucketStale &= ~uint8(1 << (lvl & 1));
     }
 }
 
@@ -124,7 +126,10 @@ contract TicketStorageRecyclingTest is Test {
         vm.record();
         assertTrue(h.prepare(3));
         (, bytes32[] memory writes) = vm.accesses(address(h));
-        assertEq(writes.length, 2, "only the fixed parity stamp and bitmap are written");
+        assertLe(writes.length, 2, "retirement has constant packed-slot work");
+        for (uint256 i; i < writes.length; ++i) {
+            assertEq(writes[i], bytes32(GameSlots.TICKET_BUFFER_LEVELS), "retirement leaves bitmap and payload retained");
+        }
         assertEq(h.count(3, 7), 0);
     }
 }

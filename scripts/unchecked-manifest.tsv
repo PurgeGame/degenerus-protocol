@@ -18,7 +18,6 @@ NO-OVERFLOW-OP	DegenerusGame.sol	claimAffiliateDgnrs	1	++i	Loop counter bounded 
 NO-OVERFLOW-OP	DegenerusGame.sol	_currentNudgeCost	1	--reversals	`--reversals` runs only inside `while (reversals != 0)` at :2251, so the operand is >= 1 at every decrement.
 NO-OVERFLOW-OP	DegenerusGame.sol	entriesOwedView	1	return _entriesOwedTotal(lvl, _walletIdOf(player))	Calls the shared pending-total accessor with the player's wallet ID (zero for an unregistered address); no arithmetic in this wrapper.
 BOUNDED	DegenerusGame.sol	getWinnings	1	return stored - 1	`stored <= 1` returns early at :2778, so `stored - 1` runs only for stored >= 2.
-NO-OVERFLOW-OP	DegenerusGame.sol	afkingSnapshot	1	++i	Loop counter bounded by `i < n` with n = players.length (:2808); array length bound.
 NO-OVERFLOW-OP	DegenerusGame.sol	sampleTraitEntries	1	++i	Loop counter bounded by `i < take` where take = min(len,4) at :2866; at most 4 iterations.
 NO-OVERFLOW-OP	DegenerusGame.sol	sampleFarFutureTickets	1	++packs	packs < 4 at every increment (loop condition); indexes tickets[packs] and tickets[packs + 4] of an 8-slot array.
 NO-OVERFLOW-OP	DegenerusGame.sol	sampleFarFutureTickets	2	++attempt	Loop counter bounded by attempt < 12.

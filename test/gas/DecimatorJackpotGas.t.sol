@@ -283,7 +283,7 @@ contract DecimatorJackpotGasTest is Test {
         DecimatorJackpotTerms memory terms;
         terms.word = word;
         vm.cool(address(h)); vm.cool(ContractAddresses.CRAPS);
-        vm.mockCallRevert(ContractAddresses.CRAPS, abi.encodeWithSignature("preferredBoardOf(uint32)"), hex"12345678");
+        vm.mockCallRevert(ContractAddresses.CRAPS, abi.encodeWithSignature("extsload(bytes32)"), hex"12345678");
         vm.recordLogs();
         (uint256 used, MineFlipGas.Result memory r) = workMeter.run(h, terms, 150_000);
         assertEq(vm.getRecordedLogs().length, 0, "natural strata do not emit generated receipts");

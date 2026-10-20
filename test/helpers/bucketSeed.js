@@ -1,7 +1,7 @@
 // Test-side seeding and decoding of the packed trait buckets via hardhat_setStorageAt.
 //
 // Trait headers hold a uint32 count and seven uint32 tail lanes. Full data words have eight lanes.
-// The full buffer level and per-parity bitmap gate validity; lanes hold wallet IDs, the position in the `wallets` table (id 0 is the dummy; elements carry the address in bits 0..159).
+// The full buffer level, stale flag and per-parity bitmap gate validity; lanes hold wallet IDs, the position in the `wallets` table (id 0 is the dummy; elements carry the address in bits 0..159).
 // Every storage root is read from the checked-in layout oracle (scripts/layout/golden/DegenerusGame.json),
 // which the layout gate verifies against production, so a layout shift cannot leave a stale literal here.
 import hre from "hardhat";
@@ -27,6 +27,7 @@ const FAR_FUTURE_OWED_SLOT = rootOf("farFutureOwed");
 const TRAIT_BITMAP_SLOT = rootOf("traitBucketLive");
 const BUFFER_LEVELS_SLOT = rootOf("ticketBufferLevels");
 const BUFFER_LEVELS_SHIFT = BigInt(layoutEntry("ticketBufferLevels").offset) * 8n;
+const TRAIT_STALE_SHIFT = BigInt(layoutEntry("traitBucketStale").offset) * 8n;
 const queueStorageKey = (key) => { const lvl = BigInt(key) & 0x3fffffn; return (BigInt(key) & 0xc00000n) | (lvl === 0n ? 0n : (lvl - 1n) % 100n + 1n); };
 const ownerStorageKey = (lvl) => BigInt(lvl);
 const LANE_MASK = 0xffffffffn;
@@ -80,9 +81,11 @@ async function seedTraitBucket(addr, lvl, trait, holders, opts = {}) {
   const stamps = await getStorage(addr, BUFFER_LEVELS_SLOT);
   const bitmapSlot = (opts.traitBitmapSlot ?? TRAIT_BITMAP_SLOT) + (BigInt(lvl) & 1n);
   const sameLevel = ((stamps >> stampShift) & 0xffffffn) === BigInt(lvl);
-  const bits = sameLevel ? await getStorage(addr, bitmapSlot) : 0n;
+  const staleBit = 1n << (TRAIT_STALE_SHIFT + (BigInt(lvl) & 1n));
+  const bits = sameLevel && !(stamps & staleBit) ? await getStorage(addr, bitmapSlot) : 0n;
   await setStorage(addr, bitmapSlot, bits | (1n << BigInt(trait)));
-  await setStorage(addr, BUFFER_LEVELS_SLOT, (stamps & ~(0xffffffn << stampShift)) | (BigInt(lvl) << stampShift));
+  await setStorage(addr, BUFFER_LEVELS_SLOT,
+    (stamps & ~(0xffffffn << stampShift) & ~staleBit) | (BigInt(lvl) << stampShift));
   const lenSlot = bucketLengthSlot(lvl, trait, traitSlot);
   const fullWords = Math.floor(lanes.length / 8);
   let tail = 0n;
@@ -197,10 +200,12 @@ async function readTraitBucket(addr, lvl, trait, opts = {}) {
   const traitSlot = opts.traitSlot ?? TRAIT_SLOT;
   const ownerSlot = opts.ownerSlot ?? OWNER_SLOT;
   const lenSlot = bucketLengthSlot(lvl, trait, traitSlot);
-  const stamp = ((await getStorage(addr, BUFFER_LEVELS_SLOT)) >> (BUFFER_LEVELS_SHIFT + (BigInt(lvl) & 1n) * 24n)) & 0xffffffn;
+  const stamps = await getStorage(addr, BUFFER_LEVELS_SLOT);
+  const stamp = (stamps >> (BUFFER_LEVELS_SHIFT + (BigInt(lvl) & 1n) * 24n)) & 0xffffffn;
+  const stale = stamps & (1n << (TRAIT_STALE_SHIFT + (BigInt(lvl) & 1n)));
   const header = await getStorage(addr, lenSlot);
   const bits = await getStorage(addr, (opts.traitBitmapSlot ?? TRAIT_BITMAP_SLOT) + (BigInt(lvl) & 1n));
-  const len = stamp !== BigInt(lvl) || !(bits & (1n << BigInt(trait))) ? 0 : Number(header & LANE_MASK);
+  const len = stamp !== BigInt(lvl) || stale || !(bits & (1n << BigInt(trait))) ? 0 : Number(header & LANE_MASK);
   const base = dataBase(lenSlot);
   const ownersData = dataBase(ownerLengthSlot(lvl, ownerSlot));
   const out = [];

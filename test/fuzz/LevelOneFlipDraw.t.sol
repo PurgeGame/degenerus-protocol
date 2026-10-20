@@ -17,11 +17,11 @@ contract FlipDrawHarness is DegenerusGameJackpotModule, BucketSeed {
     /// @dev Mirror of `_calcDailyCoinBudget` solved for the pool at storage level 0 (0.01 ETH):
     ///      budget = pool * 1000 / (0.01 * 400) = pool * 250.
     function seedBudgetFor(uint24 lvl, uint256 coinBudget) external {
-        levelPrizePool[lvl - 1] = (coinBudget * PriceLookupLib.priceForLevel(level) * 400) / PRICE_COIN_UNIT;
+        _setLevelPrizePool(lvl - 1, (coinBudget * PriceLookupLib.priceForLevel(level) * 400) / PRICE_COIN_UNIT);
     }
 
     function coinBudgetOf(uint24 lvl) external view returns (uint256) {
-        return (levelPrizePool[lvl - 1] * PRICE_COIN_UNIT) / (PriceLookupLib.priceForLevel(level) * 400);
+        return (_levelPrizePool(lvl - 1) * PRICE_COIN_UNIT) / (PriceLookupLib.priceForLevel(level) * 400);
     }
 
     /// @dev Every trait byte gets `count` distinct holders, so every pull resolves a winner.

@@ -62,7 +62,7 @@ contract SdgnrsTransitionSeeder is DegenerusGameStorage, WalletSeed {
         ticketsFullyProcessed = true;
         subsFullyProcessed = true;
         _afkingResetDay = day;
-        levelPrizePool[99] = 1000 ether;
+        _setLevelPrizePool(99, 1000 ether);
     }
 }
 

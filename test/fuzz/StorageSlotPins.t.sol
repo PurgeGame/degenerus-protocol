@@ -37,6 +37,9 @@ contract GameSlotHarness is DegenerusGameStorage {
     function s_rngWordCurrent() external pure returns (uint256 s, uint256 o) { assembly { s := rngWordCurrent.slot o := rngWordCurrent.offset } }
     function s_vrfRequestId() external pure returns (uint256 s, uint256 o) { assembly { s := vrfRequestId.slot o := vrfRequestId.offset } }
     function s_rngRequestDay() external pure returns (uint256 s, uint256 o) { assembly { s := rngRequestDay.slot o := rngRequestDay.offset } }
+    function s_traitBucketStale() external pure returns (uint256 s, uint256 o) { assembly { s := traitBucketStale.slot o := traitBucketStale.offset } }
+    function s_decEntriesLevel() external pure returns (uint256 s, uint256 o) { assembly { s := decEntriesLevel.slot o := decEntriesLevel.offset } }
+    function s_foilSlotRetained() external pure returns (uint256 s, uint256 o) { assembly { s := foilSlotRetained.slot o := foilSlotRetained.offset } }
     function s_rngGapApplied() external pure returns (uint256 s, uint256 o) { assembly { s := rngGapApplied.slot o := rngGapApplied.offset } }
     function s_lastVrfProcessedTimestamp() external pure returns (uint256 s, uint256 o) { assembly { s := lastVrfProcessedTimestamp.slot o := lastVrfProcessedTimestamp.offset } }
     function s_ticketBufferLevels() external pure returns (uint256 s, uint256 o) { assembly { s := ticketBufferLevels.slot o := ticketBufferLevels.offset } }
@@ -265,6 +268,9 @@ contract StorageSlotPinsTest is Test {
         (s, o) = h.s_gameOverStatePacked(); assertEq(s, GameSlots.GAME_OVER_STATE_PACKED, "gameOverStatePacked.slot"); assertEq(o, 0, "gameOverStatePacked.offset");
         (s, o) = h.s_degeneretteQueue(); assertEq(s, GameSlots.DEGENERETTE_QUEUE, "degeneretteQueue.slot"); assertEq(o, 0, "degeneretteQueue.offset");
         (s, o) = h.s_operatorApprovals(); assertEq(s, GameSlots.OPERATOR_APPROVALS, "operatorApprovals.slot"); assertEq(o, 0, "operatorApprovals.offset");
+        (s, o) = h.s_traitBucketStale(); assertEq(s, GameSlots.TRAIT_BUCKET_STALE, "traitBucketStale.slot"); assertEq(o, GameSlots.TRAIT_BUCKET_STALE_OFFSET, "traitBucketStale.offset");
+        (s, o) = h.s_decEntriesLevel(); assertEq(s, GameSlots.DEC_ENTRIES_LEVEL, "decEntriesLevel.slot"); assertEq(o, GameSlots.DEC_ENTRIES_LEVEL_OFFSET, "decEntriesLevel.offset");
+        (s, o) = h.s_foilSlotRetained(); assertEq(s, GameSlots.FOIL_SLOT_RETAINED, "foilSlotRetained.slot"); assertEq(o, GameSlots.FOIL_SLOT_RETAINED_OFFSET, "foilSlotRetained.offset");
         (s, o) = h.s_levelPrizePool(); assertEq(s, GameSlots.LEVEL_PRIZE_POOL, "levelPrizePool.slot"); assertEq(o, 0, "levelPrizePool.offset");
         (s, o) = h.s_playerClaimWord(); assertEq(s, GameSlots.PLAYER_CLAIM_WORD, "playerClaimWord.slot"); assertEq(o, 0, "playerClaimWord.offset");
         (s, o) = h.s_levelDgnrsPacked(); assertEq(s, GameSlots.LEVEL_DGNRS_PACKED, "levelDgnrsPacked.slot"); assertEq(o, 0, "levelDgnrsPacked.offset");

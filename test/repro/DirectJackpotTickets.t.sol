@@ -322,6 +322,7 @@ contract DirectRoundGasHarness is DegenerusGameTicketModule, WalletSeed {
     function prepare(uint24 lvl, uint256 owners) external {
         _setTicketBufferLevel(lvl);
         traitBucketLive[lvl & 1] = type(uint256).max;
+        traitBucketStale &= ~uint8(1 << (lvl & 1));
         _seedWallet(address(1));
         for (uint256 i; i < owners; ++i) (uint80(_seedWallet(address(uint160(0x10000 + i + 1)))) << OWNER_IDX_SHIFT);
         uint256 base = _traitBufferBase(lvl);

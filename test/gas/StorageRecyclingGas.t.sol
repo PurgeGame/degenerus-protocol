@@ -37,7 +37,7 @@ contract RecyclingGasHarness is TicketLevelPrep {
         uint256 slot = _betSlot(_rngWriteBuffer(), 0);
         assembly ("memory-safe") { backing := sload(slot) }
     }
-    function huge() external { lvlTraitEntry[1][7] = 1_000_000; traitBucketLive[1] |= uint256(1) << 7; }
+    function huge() external { lvlTraitEntry[1][7] = 1_000_000; traitBucketLive[1] |= uint256(1) << 7; traitBucketStale &= ~uint8(2); }
 }
 
 /// @dev Run with FOUNDRY_ISOLATE=true: setup, reset and append are separate cold calls.

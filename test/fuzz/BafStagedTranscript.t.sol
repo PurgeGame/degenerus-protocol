@@ -139,7 +139,7 @@ contract BafTranscriptHost is DegenerusGame, WalletSeed {
         }
         h = keccak256(abi.encode(next, future, pendingNext, pendingFuture, prizePoolFrozen, currentPrizePool,
             yieldAccumulator, claimablePool));
-        h = keccak256(abi.encode(h, levelPrizePool[lvl], levelPrizePool[lvl - 1], r0, r1, centuryPrizePools.length));
+        h = keccak256(abi.encode(h, _levelPrizePool(lvl), _levelPrizePool(lvl - 1), r0, r1, centuryPrizePools.length));
         h = keccak256(abi.encode(h, level, jackpotPhaseFlag, lastPurchaseDay, jackpotCounter, jackpotFlags,
             dailyTicketBudgetsPacked, rngLockedFlag));
     }
@@ -201,8 +201,8 @@ contract PlainBafSeeder is DegenerusGame, BucketSeed {
         _afkingResetDay = day;
         currentPrizePool = 0;
         _setPrizePools(nextPool, futurePool);
-        levelPrizePool[lvl - 2] = (uint256(nextPool) * 8) / 10;
-        levelPrizePool[lvl - 1] = (uint256(nextPool) * 9) / 10;
+        _setLevelPrizePool(lvl - 2, (uint256(nextPool) * 8) / 10);
+        _setLevelPrizePool(lvl - 1, (uint256(nextPool) * 9) / 10);
         yieldAccumulator = 10 ether;
         // The synthetic jump skips the bootstrap far-future cohorts; retire their physical
         // headers before binding the seeded population, as the century seeder does.

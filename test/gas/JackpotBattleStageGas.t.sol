@@ -37,7 +37,7 @@ contract JackpotBattleStageSeeder is DegenerusGame, BucketSeed {
         uint24 lvl;
         uint256 word;
         uint8 counter; // jackpotCounter on entry: JACKPOT_DAYS - 1 is the final (phase-ending) day
-        uint256 prevPool; // levelPrizePool[lvl - 1]
+        uint256 prevPool; // _levelPrizePool(lvl - 1)
         uint256 ticketHolders; // distinct holders per main-trait bucket at lvl (ticket leg)
         uint256 ffHolders; // distinct holders per far-future queue at lvl+2..lvl+100
         uint160 base;
@@ -77,8 +77,8 @@ contract JackpotBattleStageSeeder is DegenerusGame, BucketSeed {
         // dailyEntries = 4000 (bits 8..71): 1000 whole tickets worth 40 ETH, so the cap doubles
         // to 192 winners and saturates.
         dailyTicketBudgetsPacked = uint256(4000) << 8;
-        levelPrizePool[s.lvl] = 1000 ether;
-        levelPrizePool[s.lvl - 1] = s.prevPool;
+        _setLevelPrizePool(s.lvl, 1000 ether);
+        _setLevelPrizePool(s.lvl - 1, s.prevPool);
         _setPrizePools(uint128(50 ether), uint128(300 ether));
         currentPrizePool = uint128(200 ether);
 
@@ -459,8 +459,8 @@ contract JackpotPhaseSeeder is DegenerusGame {
         dailyJackpotCoinTicketsPending = false;
         dailyTicketBudgetsPacked = 0;
         _afkingResetDay = day;
-        levelPrizePool[lvl] = 1000 ether;
-        levelPrizePool[lvl - 1] = 1000 ether;
+        _setLevelPrizePool(lvl, 1000 ether);
+        _setLevelPrizePool(lvl - 1, 1000 ether);
         // Small pools: each day's own ticket leg then queues only a handful of mint entries
         // at lvl+1, so the write-budgeted STAGE_TICKETS_WORKING drain the next day's request
         // triggers for them finishes in one chunk instead of stretching this sequence check

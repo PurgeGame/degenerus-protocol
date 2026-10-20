@@ -25,8 +25,8 @@ contract FlipRedeemWindowTest is DeployProtocol {
     uint256 private constant WINDOW_OPEN_SHIFT = 249; // bit 9 of the uint16 at bytes 30..31: _ticketRedemptionOpen()
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = GameSlots.PRIZE_POOLS_PACKED; // [future:128][next:128]
 
-    // levelPrizePool[0] = BOOTSTRAP_PRIZE_POOL (DegenerusGame constructor).
-    uint128 private constant BOOTSTRAP_PRIZE_POOL = 50 ether;
+    // _setLevelPrizePool(0, BOOTSTRAP_PRIZE_POOL (DegenerusGame constructor).
+    uint128 private constant BOOTSTRAP_PRIZE_POOL = 50 ether);
     // One whole ticket = 4 * TICKET_SCALE = 400 purchase units; 4000 = 10 tickets, safely above
     // the 0.0025 ETH min buy-in so a redeem that clears the gate also clears the purchase floor.
     uint256 private constant REDEEM_QTY = 4000;
@@ -93,7 +93,7 @@ contract FlipRedeemWindowTest is DeployProtocol {
     /// @notice Open/stalled purchase phase (target unmet, no jackpot, RNG unlocked): redeem reverts
     ///         and the window stays shut.
     function testStalledPurchasePhaseBlocksRedeem() public {
-        _setNextPool(BOOTSTRAP_PRIZE_POOL - 1); // strictly below levelPrizePool[0]
+        _setNextPool(BOOTSTRAP_PRIZE_POOL - 1); // strictly below _levelPrizePool(0)
         assertFalse(_windowOpen(), "window must start closed");
         assertFalse(_redeem(), "redeem must revert in an open/stalled purchase phase");
         assertFalse(_windowOpen(), "window must stay closed after a blocked redeem");
@@ -113,7 +113,7 @@ contract FlipRedeemWindowTest is DeployProtocol {
 
     /// @notice Prize target met in the purchase phase: the window opens and latches.
     function testTargetMetOpensWindow() public {
-        _setNextPool(BOOTSTRAP_PRIZE_POOL + 10 ether); // >= levelPrizePool[0]
+        _setNextPool(BOOTSTRAP_PRIZE_POOL + 10 ether); // >= _levelPrizePool(0)
         assertTrue(_redeem(), "redeem should succeed once the prize target is met");
         assertTrue(_windowOpen(), "window must latch open after a target-met redeem");
     }

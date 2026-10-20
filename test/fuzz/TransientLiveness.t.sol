@@ -31,7 +31,7 @@ contract TransientLivenessHarness is DegenerusGameStorage {
     }
 
     function setPools(uint256 target, uint256 next) external {
-        levelPrizePool[level] = target;
+        _setLevelPrizePool(level, target);
         _setPrizePools(uint128(next), 0);
     }
 
@@ -168,7 +168,7 @@ contract TransientLivenessSeeder is DegenerusGame {
         level = 1;
         purchaseStartDay = day - age;
         dailyIdx = day - 1;
-        levelPrizePool[1] = 10 ether;
+        _setLevelPrizePool(1, 10 ether);
         _setPrizePools(9 ether, 0);
         currentPrizePool = 0;
         ticketsFullyProcessed = true;

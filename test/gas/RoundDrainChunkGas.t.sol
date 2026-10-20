@@ -153,6 +153,7 @@ contract ChunkHarness is MintBucketSeed {
     function seedHeaderTails(uint24 lvl) external {
         _setTicketBufferLevel(lvl);
         traitBucketLive[lvl & 1] = type(uint256).max;
+        traitBucketStale &= ~uint8(1 << (lvl & 1));
         uint256 base = _traitBufferBase(lvl);
         uint256 tail = 0x00000001000000010000000100000001000000010000000100000001;
         for (uint256 trait; trait < 256; ++trait) {

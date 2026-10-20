@@ -248,6 +248,22 @@
     "typeLabel": "uint24"
   },
   {
+    "bytes": "1",
+    "encoding": "inplace",
+    "label": "traitBucketStale",
+    "offset": 23,
+    "slot": 5,
+    "typeLabel": "uint8"
+  },
+  {
+    "bytes": "3",
+    "encoding": "inplace",
+    "label": "decEntriesLevel",
+    "offset": 24,
+    "slot": 5,
+    "typeLabel": "uint24"
+  },
+  {
     "bytes": "32",
     "encoding": "inplace",
     "label": "dailyTicketBudgetsPacked",
@@ -441,11 +457,11 @@
   },
   {
     "bytes": "32",
-    "encoding": "mapping",
+    "encoding": "inplace",
     "label": "levelDgnrsPacked",
     "offset": 0,
     "slot": 22,
-    "typeLabel": "mapping(uint24 => uint256)"
+    "typeLabel": "uint256"
   },
   {
     "bytes": "32",
@@ -525,7 +541,7 @@
     "label": "deityBoonPacked",
     "offset": 0,
     "slot": 32,
-    "typeLabel": "mapping(uint32 => uint32)"
+    "typeLabel": "mapping(uint32 => uint64)"
   },
   {
     "bytes": "32",
@@ -840,12 +856,20 @@
     "typeLabel": "uint32"
   },
   {
+    "bytes": "1",
+    "encoding": "inplace",
+    "label": "foilSlotRetained",
+    "offset": 19,
+    "slot": 56,
+    "typeLabel": "bool"
+  },
+  {
     "bytes": "32",
     "encoding": "mapping",
     "label": "deityRecipientBoonCount",
     "offset": 0,
     "slot": 57,
-    "typeLabel": "mapping(uint32 => mapping(uint32 => uint8))"
+    "typeLabel": "mapping(uint32 => uint128)"
   },
   {
     "bytes": "32",
@@ -881,11 +905,11 @@
   },
   {
     "bytes": "32",
-    "encoding": "mapping",
+    "encoding": "inplace",
     "label": "ticketGenerationStartBlock",
     "offset": 0,
     "slot": 62,
-    "typeLabel": "mapping(uint256 => uint256)"
+    "typeLabel": "uint256"
   },
   {
     "bytes": "4",

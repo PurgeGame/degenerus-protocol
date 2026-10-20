@@ -208,9 +208,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
         purchaseStartDay = currentDay;
         dailyIdx = currentDay;
         _afkingEndpointDay = currentDay;
-        levelPrizePool[0] = BOOTSTRAP_PRIZE_POOL;
+        _setLevelPrizePool(0, BOOTSTRAP_PRIZE_POOL);
+        foilSlotRetained = true;
         // Level 1 is the first level with tickets (every sink targets level + 1 or later).
-        ticketGenerationStartBlock[1] = block.number;
+        _markTicketGenerationStart(1);
         // Protocol wallets take IDs 1-3 before any public door can register a wallet.
         _registerWallet(ContractAddresses.VAULT, 0);
         _registerWallet(ContractAddresses.SDGNRS, 0);
@@ -232,7 +233,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
     /// @notice Register both protocol deities and their perpetual tickets in one batch.
     /// @dev Caller and one-time guards live in the module; identical selector forwards unchanged.
     function initProtocolDeity() external {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_WHALE_MODULE.delegatecall(msg.data);
+        (bool ok, bytes memory data) = ContractAddresses.GAME_BOON_MODULE.delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
 
@@ -955,7 +956,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
         )
     {
         day = _simulatedDayIndex();
-        uint32 boonPacked = deityBoonPacked[deityId];
+        uint32 boonPacked = uint32(deityBoonPacked[deityId]);
         usedMask = uint24(boonPacked) == day ? uint8(boonPacked >> 24) : 0;
         decimatorOpen = _decWindowOpen();
         deityPassAvailable = _deityCount() < 32; // DEITY_PASS_MAX_TOTAL (see LootboxModule)
@@ -1875,14 +1876,14 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
     ///      it needs would otherwise be its own staticcall.
     ///
     ///      The three terms are RATCHET ENTRIES, not the live next/current/future prize
-    ///      pools — each is 0 until its level transitions and its banked value forever
-    ///      after. A round's benchmark is the ratio ratchetRound / ratchetPrev and its
+    ///      pools. An ordinary entry is zero before its transition or after its
+    ///      four-slot history retires; settled outcomes remain in Parimutuel. A round's benchmark is the ratio ratchetRound / ratchetPrev and its
     ///      subject is ratchetNext / ratchetRound; the market cross-multiplies the two, so
     ///      every term stays unsigned and a level that achieves less than its predecessor
     ///      is simply a ratio below 1.
     ///
     ///      Century levels are read through _growthRatchet rather than levelPrizePool,
-    ///      because _endPhase overwrites levelPrizePool[x00] with 40% of futurePool once the
+    ///      because _endPhase overwrites _levelPrizePool(x00) with 40% of futurePool once the
     ///      century's jackpot phase ends. Serving the pushed achieved pool instead keeps
     ///      each term write-once: a boundary round scores the growth the game actually
     ///      delivered, and its answer can never change after it first settles.
@@ -2119,31 +2120,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
         return _claimableOf(_walletIdOf(player));
     }
 
-    /// @notice Batched afking read — mintPrice + rngLock + per-player claimable in ONE call.
-    /// @dev Collapses the afking's per-player claimableWinningsOf STATICCALLs into one
-    ///      batched call. Values are byte-identical to the single-value accessors (same
-    ///      priceForLevel / rngLockedFlag / swept-gate).
-    /// @param players The chunk of players to snapshot.
-    /// @return mintPriceWei Current mint price (== mintPrice()).
-    /// @return rngLocked_ Whether RNG is currently locked (== rngLocked()).
-    /// @return claimables Per-player claimable winnings (== claimableWinningsOf(players[i])).
-    /// @return afkingFundings Per-player prepaid afking ETH (== afkingFundingOf(players[i])).
-    function afkingSnapshot(address[] calldata players) external view returns (uint256 mintPriceWei, bool rngLocked_, uint256[] memory claimables, uint256[] memory afkingFundings) {
-        mintPriceWei = PriceLookupLib.priceForLevel(_activeTicketLevel());
-        rngLocked_ = rngLockedFlag;
-        bool swept = _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0;
-        uint256 n = players.length;
-        claimables = new uint256[](n);
-        afkingFundings = new uint256[](n);
-        for (uint256 i; i < n; ) {
-            uint32 id = _walletIdOf(players[i]);
-            claimables[i] = swept ? 0 : _claimableOf(id);
-            afkingFundings[i] = _afkingOf(id); // raw — mirrors afkingFundingOf
-            unchecked {
-                ++i;
-            }
-        }
-    }
+
 
     /// @notice Get a player's deferred whale-pass claims.
     /// @param player Player address to query.
@@ -2211,8 +2188,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
             uint24 buffer = nextLevel ? 1 : 0;
             uint256 headerSlot = _traitBufferBase(buffer) + traitSel;
             assembly ("memory-safe") {
-                if and(sload(add(traitBucketLive.slot, buffer)), shl(traitSel, 1)) {
-                    header := sload(headerSlot)
+                if iszero(and(sload(traitBucketStale.slot),
+                    shl(add(mul(traitBucketStale.offset, 8), buffer), 1))) {
+                    if and(sload(add(traitBucketLive.slot, buffer)), shl(traitSel, 1)) {
+                        header := sload(headerSlot)
+                    }
                 }
             }
             len = uint32(header);

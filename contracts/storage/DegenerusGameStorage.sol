@@ -655,19 +655,24 @@ abstract contract DegenerusGameStorage {
     /// @dev Last resolved day the Game successfully settled the Vault through. A lower
     ///      bound on its actual Coinflip cursor; slot-5 bytes 20..22, preserving later roots.
     uint24 internal vaultFlipSettledDay;
+    /// @dev Bits 0/1 invalidate the retained even/odd trait bitmap until its first append.
+    uint8 internal traitBucketStale;
+    /// @dev Exact round occupying the reusable Decimator entry words.
+    uint24 internal decEntriesLevel;
 
     /// @dev Packed daily jackpot ticket data, handed from one advance stage to the next.
     ///      Layout: [reserved (8 bits @ 0)] [dailyEntries (64 bits @ 8)] [battlePending (1 bit @ 72)]
-    ///              [unused (71 bits @ 73)] [earlyBirdEntries (64 bits @ 144)]
+    ///              [retained (1 bit @ 73)] [unused (70 bits @ 74)] [earlyBirdEntries (64 bits @ 144)]
     ///              [purchaseEntries (48 bits @ 208)]
     ///      Jackpot phase: set by the ETH stage; on the early-bird day the early-bird stage
     ///      consumes the earlyBird field and clears it; the battle stage clears battlePending; the
-    ///      coin+tickets stage consumes dailyEntries and zeroes the word. Purchase phase: the
+    ///      coin+tickets stage consumes dailyEntries and retains the sentinel. Purchase phase: the
     ///      daily prices its ticket leg into the top field and the purchase ticket stage consumes
     ///      and clears it after the purchase battle stage consumes battlePending. Both phases use
     ///      the same battle bit and keep the RNG lock until their final stage. Every predicate
     ///      masks its own field.
     uint256 internal dailyTicketBudgetsPacked;
+    uint256 internal constant DAILY_TICKET_BUDGET_RETAINED = 1 << 73;
 
     // =========================================================================
     // Token State and Jackpot Mechanics
@@ -1836,6 +1841,7 @@ abstract contract DegenerusGameStorage {
                     mstore(32, farFutureOwed.slot)
                     lane := and(shr(shl(5, and(position, 7)),
                         sload(add(keccak256(0, 64), shr(3, position)))), 0xffffffff)
+                    if iszero(and(lane, 0x80000000)) { lane := 0 }
                 }
             }
         }
@@ -1887,7 +1893,7 @@ abstract contract DegenerusGameStorage {
         if (key & TICKET_FAR_FUTURE_BIT != 0) {
             uint24 lvl = key & 0x3fffff;
             if (lvl == 0 || uint8(packed) != 0) revert E();
-            uint256 lane;
+            uint256 lane = 0x40000000;
             if (packed != 0) {
                 lane = 0x80000000 | _saturateFarFutureOwed(uint32(packed >> 8))
                     | ((uint256(packed) >> 10) & 0x40000000);
@@ -2008,6 +2014,7 @@ abstract contract DegenerusGameStorage {
     ///      2^32 occurrences per trait; reaching it needs over 536 million word writes.
     ///      Returns physical writes classified by the slot value before each store.
     ///      Caller has prepared lvl and provides the nonzero wallet ID.
+    /// @custom:storage-write traitBucketLive
     function _bucketAppendRun(
         uint256 levelSlot,
         uint8 traitId,
@@ -2016,18 +2023,27 @@ abstract contract DegenerusGameStorage {
         uint24 lvl
     ) internal returns (uint256 fresh, uint256 dirty) {
         assembly ("memory-safe") {
-            let bitmapSlot := add(traitBucketLive.slot, and(lvl, 1))
-            let bits := sload(bitmapSlot)
+            let parity := and(lvl, 1)
+            let bitmapSlot := add(traitBucketLive.slot, parity)
+            let physicalBits := sload(bitmapSlot)
+            let bits := physicalBits
+            let staleMask := shl(add(mul(traitBucketStale.offset, 8), parity), 1)
+            let stamps := sload(traitBucketStale.slot)
+            if and(stamps, staleMask) {
+                bits := 0
+                sstore(traitBucketStale.slot, and(stamps, not(staleMask)))
+                dirty := add(dirty, 1)
+            }
             let bit := shl(traitId, 1)
             let elem := add(levelSlot, traitId)
             let header := sload(elem)
             switch iszero(header)
             case 1 { fresh := 1 }
-            default { dirty := 1 }
+            default { dirty := add(dirty, 1) }
             if iszero(and(bits, bit)) {
                 header := 0
                 sstore(bitmapSlot, or(bits, bit))
-                switch iszero(bits)
+                switch iszero(physicalBits)
                 case 1 { fresh := add(fresh, 1) }
                 default { dirty := add(dirty, 1) }
             }
@@ -2076,18 +2092,27 @@ abstract contract DegenerusGameStorage {
         uint24 lvl
     ) internal returns (uint256 fresh, uint256 dirty) {
         assembly ("memory-safe") {
-            let bitmapSlot := add(traitBucketLive.slot, and(lvl, 1))
-            let bits := sload(bitmapSlot)
+            let parity := and(lvl, 1)
+            let bitmapSlot := add(traitBucketLive.slot, parity)
+            let physicalBits := sload(bitmapSlot)
+            let bits := physicalBits
+            let staleMask := shl(add(mul(traitBucketStale.offset, 8), parity), 1)
+            let stamps := sload(traitBucketStale.slot)
+            if and(stamps, staleMask) {
+                bits := 0
+                sstore(traitBucketStale.slot, and(stamps, not(staleMask)))
+                dirty := add(dirty, 1)
+            }
             let bit := shl(traitId, 1)
             let elem := add(levelSlot, traitId)
             let header := sload(elem)
             switch iszero(header)
             case 1 { fresh := 1 }
-            default { dirty := 1 }
+            default { dirty := add(dirty, 1) }
             if iszero(and(bits, bit)) {
                 header := 0
                 sstore(bitmapSlot, or(bits, bit))
-                switch iszero(bits)
+                switch iszero(physicalBits)
                 case 1 { fresh := add(fresh, 1) }
                 default { dirty := add(dirty, 1) }
             }
@@ -2252,7 +2277,7 @@ abstract contract DegenerusGameStorage {
     function _prizePoolTarget(
         uint24 purchaseLvl
     ) internal view returns (uint256 target) {
-        target = levelPrizePool[purchaseLvl - 1];
+        target = _levelPrizePool(purchaseLvl - 1);
         if (purchaseLvl % 100 == 0) {
             uint256 completed = centuryPrizePools.length;
             uint256 snap = completed == 0
@@ -2692,8 +2717,17 @@ abstract contract DegenerusGameStorage {
     // Affiliate DGNRS Claims
     // =========================================================================
 
-    /// @dev Per-level prize pool snapshot used for affiliate DGNRS weighting.
+    /// @dev Four retained prize snapshots: uint128 amount below a level+1 tag.
     mapping(uint24 => uint256) internal levelPrizePool;
+
+    function _levelPrizePool(uint24 lvl) internal view returns (uint256) {
+        uint256 word = levelPrizePool[lvl & 3];
+        return word >> 128 == uint256(lvl) + 1 ? uint128(word) : 0;
+    }
+
+    function _setLevelPrizePool(uint24 lvl, uint256 amount) internal {
+        levelPrizePool[lvl & 3] = (uint256(lvl) + 1) << 128 | uint128(amount);
+    }
 
     /// @dev One reusable claim word per wallet. Bits 0..24 and 25..49 hold
     ///      bingo level+1 stamps for even/odd ticket buffers (zero = never claimed).
@@ -2720,38 +2754,26 @@ abstract contract DegenerusGameStorage {
             | (uint256(lvl) << 50);
     }
 
-    /// @dev Segregated DGNRS allocation + cumulative claimed per level, packed into one
-    ///      slot: bits [0:128) = allocation (2.5% of affiliate pool, snapshot at transition),
-    ///      bits [128:256) = cumulative claimed. Both are DGNRS base units, bounded by the
-    ///      sDGNRS supply (~1e24) << uint128 (3.4e38). Claims draw against the fixed
-    ///      allocation, not the live pool, eliminating first-mover advantage.
-    mapping(uint24 => uint256) internal levelDgnrsPacked;
+    /// @dev Current level allocation (low 128), claimed (next 127), and retained bit 255.
+    ///      Both values are bounded by the sDGNRS supply, far below 2^127.
+    uint256 internal levelDgnrsPacked;
+    uint256 internal constant DGNRS_CLAIMED_MASK = (uint256(1) << 127) - 1;
 
-    /// @dev Unpack a level's (allocation, claimed) from the packed slot.
-    function _getLevelDgnrs(uint24 lvl)
-        internal
-        view
-        returns (uint256 allocation, uint256 claimed)
-    {
-        uint256 w = levelDgnrsPacked[lvl];
-        allocation = uint128(w);
-        claimed = w >> 128;
+    function _getLevelDgnrs(uint24 lvl) internal view returns (uint256 allocation, uint256 claimed) {
+        if (lvl != level) return (0, 0);
+        uint256 word = levelDgnrsPacked;
+        return (uint128(word), (word >> 128) & DGNRS_CLAIMED_MASK);
     }
 
-    /// @dev Set a level's allocation half, preserving the claimed half.
-    function _setLevelDgnrsAllocation(uint24 lvl, uint256 allocation) internal {
-        uint256 w = levelDgnrsPacked[lvl];
-        levelDgnrsPacked[lvl] =
-            (w & (uint256(type(uint128).max) << 128)) |
-            uint128(allocation);
+    /// @dev The level bump replaces both accounting halves before assigning the new level.
+    function _setLevelDgnrsAllocation(uint24, uint256 allocation) internal {
+        levelDgnrsPacked = uint128(allocation) | (uint256(1) << 255);
     }
 
-    /// @dev Add to a level's claimed half, preserving the allocation half. claimed is
-    ///      monotone toward allocation (<= uint128), so the high half never overflows.
-    function _addLevelDgnrsClaimed(uint24 lvl, uint256 add) internal {
-        uint256 w = levelDgnrsPacked[lvl];
-        uint256 newClaimed = (w >> 128) + add;
-        levelDgnrsPacked[lvl] = uint128(w) | (newClaimed << 128);
+    function _addLevelDgnrsClaimed(uint24, uint256 add) internal {
+        uint256 word = levelDgnrsPacked;
+        uint256 claimed = ((word >> 128) & DGNRS_CLAIMED_MASK) + add;
+        levelDgnrsPacked = uint128(word) | (claimed << 128) | (uint256(1) << 255);
     }
 
     // =========================================================================
@@ -2791,6 +2813,7 @@ abstract contract DegenerusGameStorage {
     }
 
     /// @dev Append one deity ID in the next lane and bump the count.
+    /// @custom:storage-write deityBoonPacked
     function _pushDeityId(uint32 id) internal {
         assembly ("memory-safe") {
             let count := sload(deityPassIds.slot)
@@ -2799,6 +2822,10 @@ abstract contract DegenerusGameStorage {
             let shift := shl(5, and(count, 7))
             sstore(slot, or(and(sload(slot), not(shl(shift, 0xffffffff))), shl(shift, id)))
             sstore(deityPassIds.slot, add(count, 1))
+            mstore(0, id)
+            mstore(32, deityBoonPacked.slot)
+            slot := keccak256(0, 64)
+            sstore(slot, or(and(sload(slot), 0xffffffff), shl(32, count)))
         }
     }
 
@@ -3466,7 +3493,8 @@ abstract contract DegenerusGameStorage {
     ///      used slots for that day (bit i = slot i used). A stale day reads its mask
     ///      as irrelevant because every reader gates on the day matching; the day-roll
     ///      write re-stamps the day with a fresh (zero) mask in one store.
-    mapping(uint32 => uint32) internal deityBoonPacked;
+    ///      Bits 32..36 retain the immutable deity registration ordinal.
+    mapping(uint32 => uint64) internal deityBoonPacked;
 
     /// @dev Day when recipient last received a deity boon (prevents double-receipt
     ///      on the same day, regardless of which deity issues it).
@@ -3573,7 +3601,7 @@ abstract contract DegenerusGameStorage {
     }
 
     /// @dev Four mapping roots replace the four retired bucket-system roots without moving
-    ///      unrelated storage. Two entries share key (level << 64) | ((id - 1) >> 1), IDs starting
+    ///      unrelated storage. Two entries share key (id - 1) >> 1, IDs starting
     ///      at one. Each 128-bit lane packs wallet ID32, board30 and stack66, low to high.
     ///      Resolution and lens readers consume this same compact lane directly.
     ///      A wallet's slot, reused
@@ -3753,7 +3781,9 @@ abstract contract DegenerusGameStorage {
     ///   [176-199] deityDecimatorDay    uint24   Deity-source day for decimator
     ///   [200-223] whaleDay             uint24   Day whale boon was awarded
     ///   [224-247] deityWhaleDay        uint24   Deity-source day for whale boon
-    ///   [248-255] whaleTier            uint8    0=none, 1=10%, 2=20%, 3=35%
+    ///   [248-249] whaleTier            uint2    0=none, 1=10%, 2=20%, 3=35%
+    ///   [250-254] (free)
+    ///   [255]     retained             bool     Sticky storage-reuse sentinel
     ///
     /// Slot 1 (bit 24 keeps the allocated word nonzero; bits 25-71 free):
     ///   [0-23]    craps                uint24   Craps stake-boon lane (the LOW lane, so the
@@ -3793,13 +3823,15 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Packed boon state by wallet ID; nothing is ever written under ID 0, so its lanes
     ///      read empty. Public getter returns (uint256 slot0, uint256 slot1); bit layout above.
-    ///      Slot1 bit 24 records allocation, not a live boon; readers must ignore it.
+    ///      Slot0 bit 255 and slot1 bit 24 record allocation, not live boons.
     ///      UI readers combine with currentDayView() to compute per-category expiry. WWXRP.enter
     ///      reads slot1's WWXRP lane by raw slot `keccak256(id, slot) + 1` (its
     ///      GAME_BOON_PACKED_SLOT / GAME_WWXRP_LANE_SHIFT / GAME_LANE_TIER_MASK mirror this
     ///      mapping's slot, BP_WWXRP_LANE_SHIFT and BP_LANE_TIER_MASK): moving any of them
     ///      must move those too (pinned by test/fuzz/WwxrpBoonLaneSkip.t.sol).
     mapping(uint32 => BoonPacked) public boonPacked;
+
+    uint256 internal constant BP_SLOT0_RETAINED = 1 << 255;
 
     // ---- Slot 0 shifts ----
     uint256 internal constant BP_COINFLIP_DAY_SHIFT = 0;
@@ -3875,8 +3907,8 @@ abstract contract DegenerusGameStorage {
     // Decimator: bits 168-199 (decimatorTier[8] + deityDecimatorDay[24])
     uint256 internal constant BP_DECIMATOR_CLEAR =
         ~(uint256((1 << 32) - 1) << 168);
-    // Whale: bits 200-255 (whaleDay[24] + deityWhaleDay[24] + whaleTier[8])
-    uint256 internal constant BP_WHALE_CLEAR = ~(uint256((1 << 56) - 1) << 200);
+    // Whale: bits 200-249; bit 255 retains the word.
+    uint256 internal constant BP_WHALE_CLEAR = ~(uint256((1 << 50) - 1) << 200);
 
     // ---- Clear masks for boon categories (slot 1) ----
     // Deity pass: bits 72-127 (deityPassTier[8] + deityPassDay[24] + deityDeityPassDay[24])
@@ -4158,18 +4190,20 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Reverse lookup by wallet ID, four 64-bit lanes per word (lane `id & 3` of key
     ///      `id >> 2`): [0..10] set position + 1 (0 = not a member), [11..32] run-start day, the
-    ///      daily draw's age base. Only individual interactions read it; the daily passes walk
+    ///      daily draw's age base; bit 63 retains an allocated lane. Only individual interactions
+    ///      read it; the daily passes walk
     ///      `_subscribers` directly.
     mapping(uint256 => uint256) internal _subMeta;
 
     function _subMetaLane(uint32 id) internal view returns (uint256) {
-        return uint64(_subMeta[id >> 2] >> ((id & 3) * 64));
+        return uint64(_subMeta[id >> 2] >> ((id & 3) * 64)) & ((uint256(1) << 63) - 1);
     }
 
     function _setSubMetaLane(uint32 id, uint256 lane) internal {
         uint256 shift = (id & 3) * 64;
         uint256 key = id >> 2;
-        _subMeta[key] = (_subMeta[key] & ~(uint256(type(uint64).max) << shift)) | (lane << shift);
+        _subMeta[key] = (_subMeta[key] & ~(uint256(type(uint64).max) << shift))
+            | ((lane | (uint256(1) << 63)) << shift);
     }
 
     function _subPosition1(uint32 id) internal view returns (uint256) {
@@ -4303,11 +4337,12 @@ abstract contract DegenerusGameStorage {
     ///      writes its count into this slot, which `_foilWriteKey` already loaded.
     uint32 internal foilWriteCount;
     uint32 internal foilReadCount;
+    /// @dev Keeps the cohort cursor word allocated when both queues are empty.
+    bool internal foilSlotRetained;
 
-    /// @dev Lifetime count of deity boons issued from a given deity to a given
-    ///      recipient, keyed [deity][recipient]. Capped at DEITY_RECIPIENT_BOON_CAP
-    ///      in issueDeityBoon.
-    mapping(uint32 => mapping(uint32 => uint8)) internal deityRecipientBoonCount;
+    /// @dev Lifetime gift counts per recipient: one four-bit lane per deity ordinal.
+    ///      Each lane caps at ten and remains nonzero after its first gift.
+    mapping(uint32 => uint128) internal deityRecipientBoonCount;
 
     /// @dev 75/25 next/future split for the foil leg (forked from the 90/10
     ///      ticket split's PURCHASE_TO_FUTURE_BPS = 1000).
@@ -4545,20 +4580,17 @@ abstract contract DegenerusGameStorage {
     ///      long-lived seat can never pin the cursor. Cleared at queue release.
     uint256 internal ticketSeats;
 
-    /// @dev Inclusive lower block bound for a level's first generation window. Level 1
-    ///      starts at deployment (level 0 never holds tickets); level L+1 starts when level
-    ///      L first requests fresh mid-day RNG after meeting its goal, or its last purchase day latches, before
-    ///      any drain can execute for that window. Written once per
-    ///      level OUTSIDE charged drain steps. Permanent rather than a recycling ring:
-    ///      old levels remain claimable in Bingo and must retain their discovery bound.
-    ///      The uint256 mapping key uses the same 32-byte ABI encoding as a uint24 level.
-    ///      Read via extsload(keccak256(abi.encode(uint256(lvl), this mapping's slot))).
-    ///      Off-chain metadata; on-chain writers only preserve an already-set bound. It gates
-    ///      no generation or payout. An unreached level reads 0, which means "window not open", NOT
-    ///      "scan from genesis". The bound covers TRAIT GENERATION only; it does not
-    ///      bound EntryOwnerRegistered, which far-future queueing can emit up to 99
-    ///      levels ahead of the level whose window this stamps.
-    mapping(uint256 => uint256) internal ticketGenerationStartBlock;
+    /// @dev Latest generation window: level in low 24 bits, first block above it.
+    ///      Repeated marks preserve the first block; historical bounds are emitted.
+    ///      Level 1 starts at deployment. This is discovery metadata, not a payout gate.
+    uint256 internal ticketGenerationStartBlock;
+    event TicketGenerationStarted(uint24 indexed level, uint256 blockNumber);
+
+    function _markTicketGenerationStart(uint24 lvl) internal {
+        if (uint24(ticketGenerationStartBlock) == lvl) return;
+        ticketGenerationStartBlock = (block.number << 24) | lvl;
+        emit TicketGenerationStarted(lvl, block.number);
+    }
 
     // =========================================================================
     // Deterministic (VRF-dead) ending — GameOverModule _tallyDeadVrf / claimDeadVrf
@@ -4629,18 +4661,23 @@ abstract contract DegenerusGameStorage {
     }
 
     function _loadDecEntry(uint24 lvl, uint64 id) internal view returns (uint256) {
-        if (id == 0) return 0;
+        if (lvl != decEntriesLevel || id == 0 || id > decBattleRounds[lvl].count) return 0;
         uint256 p = uint256(id) - 1;
-        return uint128(decBattleEntries[(uint256(lvl) << 64) | (p >> 1)] >> ((p & 1) * 128));
+        return uint128(decBattleEntries[p >> 1] >> ((p & 1) * 128));
     }
 
     function _storeDecEntry(uint24 lvl, uint64 id, uint256 word) internal {
-        if (id == 0) revert E();
+        if (id == 0) return;
         uint256 p = uint256(id) - 1;
-        uint256 key = (uint256(lvl) << 64) | (p >> 1);
-        uint256 shift = (p & 1) * 128;
+        uint256 key = p >> 1;
         uint256 lane = uint128(word);
-        decBattleEntries[key] = (decBattleEntries[key] & ~(uint256(type(uint128).max) << shift)) | (lane << shift);
+        if (p & 1 == 0 && id == decBattleRounds[lvl].count) {
+            decBattleEntries[key] = lane;
+        } else {
+            uint256 shift = (p & 1) * 128;
+            decBattleEntries[key] = (decBattleEntries[key] & ~(uint256(type(uint128).max) << shift))
+                | (lane << shift);
+        }
     }
 
     /// @dev The shared session payload is usable by lootbox consumers only after fulfillment.
@@ -4763,9 +4800,14 @@ abstract contract DegenerusGameStorage {
 
     function _setTicketBufferLevel(uint24 lvl) internal {
         uint256 shift = (lvl & 1) * 24;
-        if (uint24(uint256(ticketBufferLevels) >> shift) != lvl) traitBucketLive[lvl & 1] = 0;
+        if (uint24(uint256(ticketBufferLevels) >> shift) != lvl) traitBucketStale |= uint8(1 << (lvl & 1));
         ticketBufferLevels = uint48((uint256(ticketBufferLevels) & ~(uint256(type(uint24).max) << shift))
             | (uint256(lvl) << shift));
+    }
+
+    function _traitBitmap(uint24 lvl) internal view returns (uint256) {
+        if (_ticketBufferLevel(lvl) != lvl || traitBucketStale & (1 << (lvl & 1)) != 0) return 0;
+        return traitBucketLive[lvl & 1];
     }
 
     function _ticketLevelRetired(uint24 lvl) internal view returns (bool) {
@@ -4791,7 +4833,7 @@ abstract contract DegenerusGameStorage {
     function _goldSixTaken(uint24 lvl) internal view returns (bool) {
         uint24 storedLevel = _ticketBufferLevel(lvl);
         if (storedLevel > lvl) revert E();
-        return storedLevel == lvl && traitBucketLive[lvl & 1] & (uint256(1) << GoldSixLib.TRAIT) != 0;
+        return storedLevel == lvl && _traitBitmap(lvl) & (uint256(1) << GoldSixLib.TRAIT) != 0;
     }
 
     function _bucketLength(uint24 lvl, uint256 trait) internal view returns (uint256) {
@@ -4805,7 +4847,9 @@ abstract contract DegenerusGameStorage {
         assembly ("memory-safe") {
             let parity := and(lvl, 1)
             let shift := add(mul(ticketBufferLevels.offset, 8), mul(parity, 24))
-            if eq(and(shr(shift, sload(ticketBufferLevels.slot)), 0xffffff), lvl) {
+            let stamps := sload(ticketBufferLevels.slot)
+            if and(eq(and(shr(shift, stamps), 0xffffff), lvl),
+                iszero(and(stamps, shl(add(mul(traitBucketStale.offset, 8), parity), 1)))) {
                 if and(sload(add(traitBucketLive.slot, parity)), shl(trait, 1)) {
                     count := and(sload(elem), 0xffffffff)
                 }
@@ -4859,7 +4903,7 @@ abstract contract DegenerusGameStorage {
                     ? uint256(centuryPrizePools[idx])
                     : 0;
         }
-        return levelPrizePool[lvl];
+        return _levelPrizePool(lvl);
     }
 
     /// @dev One resumable jackpot leg. The existing session lock freezes its word
@@ -4977,6 +5021,7 @@ abstract contract DegenerusGameStorage {
     /// @dev A loan taken more than this many days into a level pays half its principal as tickets.
     uint256 internal constant LOAN_TICKET_AFTER_DAYS = 20;
 
+    uint256 internal constant LOAN_RETAINED = 1 << 255;
     uint256 internal constant LOAN_LENDER_SHIFT = 96;
     uint256 internal constant LOAN_START_SHIFT = 104;
     uint256 internal constant LOAN_DUE_SHIFT = 128;

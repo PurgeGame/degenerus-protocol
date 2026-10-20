@@ -90,7 +90,7 @@ contract ReviewDeadlineSeeder is DegenerusGame {
         level = 1;
         purchaseStartDay = day - age;
         dailyIdx = day - 1;
-        levelPrizePool[1] = 10 ether;
+        _setLevelPrizePool(1, 10 ether);
         _setPrizePools(9 ether, 0);
         currentPrizePool = 0;
         ticketsFullyProcessed = true;
@@ -205,7 +205,7 @@ contract ReviewClaimSeeder is DegenerusGame, WalletSeed {
         level = 1;
         purchaseStartDay = day - 31;
         dailyIdx = day - 1;
-        levelPrizePool[1] = 10 ether;
+        _setLevelPrizePool(1, 10 ether);
         _setPrizePools(9 ether, 0);
         rngRequestTime = 0;
         ticketsFullyProcessed = true;
@@ -216,6 +216,7 @@ contract ReviewClaimSeeder is DegenerusGame, WalletSeed {
     /// @dev A ranked decimator round at `lvl` whose lone winner is `player`, at the head of the
     ///      queue, so mineFlip's leg pays it directly.
     function seedDecRound(uint24 lvl, address player, uint96 poolWei) external {
+        decEntriesLevel = lvl;
         decBattleRounds[lvl].poolWei = poolWei;
         decBattleRounds[lvl].phase = 2;
         decBattleRounds[lvl].count = 2;
@@ -505,7 +506,7 @@ contract ReviewFoilHarness is DegenerusGameFoilPackModule, WalletSeed {
         purchaseStartDay = day - (liveTrigger ? 31 : 5);
         dailyIdx = day - 1;
         rngRequestTime = 0;
-        levelPrizePool[5] = 10 ether;
+        _setLevelPrizePool(5, 10 ether);
         _setPrizePools(9 ether, 0);
         _lrWrite(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK, latchLvl ? 2 : 0);
     }

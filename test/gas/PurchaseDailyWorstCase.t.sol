@@ -40,7 +40,7 @@ contract PurchaseDailySeeder is DegenerusGame, BucketSeed {
             // jackpot battle's award draw)
         uint128 nextPool; // nextPrizePool (> prevPool latches last-purchase; + BAF arm at x0)
         uint128 futurePool; // futurePrizePool: the drip sizes the ETH and ticket legs
-        uint256 prevPool; // levelPrizePool[purchaseLevel-1]: the latch target and a fresh request's Added
+        uint256 prevPool; // _levelPrizePool(purchaseLevel-1): the latch target and a fresh request's Added
         uint256 traitHolders; // distinct holders per board bucket at purchaseLevel (level-1 trait draw)
     }
 
@@ -84,7 +84,7 @@ contract PurchaseDailySeeder is DegenerusGame, BucketSeed {
         _setRngComplete(false);
         dailyJackpotCoinTicketsPending = false;
         dailyTicketBudgetsPacked = 0;
-        levelPrizePool[s.lvl] = s.prevPool;
+        _setLevelPrizePool(s.lvl, s.prevPool);
         currentPrizePool = uint128(100 ether);
         _setPrizePools(s.nextPool, s.futurePool);
 

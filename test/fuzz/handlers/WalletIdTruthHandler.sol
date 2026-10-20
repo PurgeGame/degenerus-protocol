@@ -1694,8 +1694,10 @@ contract WalletIdTruthHandler is Test {
     function _checkDecimator() internal view {
         for (uint256 i; i < _dec.length; ++i) {
             DecEntry memory e = _dec[i];
+            uint24 occupied = uint24(uint256(vm.load(GAME, bytes32(GameSlots.DEC_ENTRIES_LEVEL))) >> (8 * GameSlots.DEC_ENTRIES_LEVEL_OFFSET));
+            if (e.lvl != occupied) continue;
             uint256 p = uint256(e.entryId) - 1;
-            uint256 key = (uint256(e.lvl) << 64) | (p >> 1);
+            uint256 key = p >> 1;
             uint128 lane = uint128(uint256(vm.load(GAME, keccak256(abi.encode(key, GameSlots.DEC_BATTLE_ENTRIES)))) >> ((p & 1) * 128));
             uint256 w = lane;
             if (w == 0) continue;

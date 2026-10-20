@@ -36,6 +36,7 @@ contract DeadTallyCheckpointHarness is DegenerusGameGameOverModule, BucketSeed {
     {
         _setTicketBufferLevel(lvl);
         traitBucketLive[lvl & 1] = live;
+        traitBucketStale &= ~uint8(1 << (lvl & 1));
         uint256 base = _traitBufferBase(lvl);
         for (uint256 t; t < 256; ++t) {
             // Include live zero-count buckets and nonzero dead backing words.

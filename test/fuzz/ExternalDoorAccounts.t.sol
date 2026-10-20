@@ -148,7 +148,7 @@ contract ExternalDoorAccountsTest is DeployProtocol {
         uint256 latest = uint256(vm.load(address(game), GameSlotKeys.byId(id, GameSlots.DEC_BATTLE_PLAYERS)));
         if (uint24(latest >> 64) != lvl) return 0;
         uint256 p = uint64(latest) - 1;
-        bytes32 entrySlot = keccak256(abi.encode((uint256(lvl) << 64) | (p >> 1), GameSlots.DEC_BATTLE_ENTRIES));
+        bytes32 entrySlot = keccak256(abi.encode(p >> 1, GameSlots.DEC_BATTLE_ENTRIES));
         return uint32(uint256(vm.load(address(game), entrySlot)) >> ((p & 1) * 128));
     }
 

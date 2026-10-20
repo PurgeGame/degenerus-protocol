@@ -371,8 +371,8 @@ contract CenturyConsolidationSeeder is DegenerusGame, BucketSeed {
         _setDecWindowOpen(true);
         currentPrizePool = 0;
         _setPrizePools(nextPool, futurePool);
-        levelPrizePool[98] = (uint256(nextPool) * 8) / 10;
-        levelPrizePool[99] = (uint256(nextPool) * 9) / 10;
+        _setLevelPrizePool(98, (uint256(nextPool) * 8) / 10);
+        _setLevelPrizePool(99, (uint256(nextPool) * 9) / 10);
         // Seed + 23 ETH surplus share + the 1% insurance skim of nextPool reaches the x00
         // dump, whose 40% must move the 17 ETH (+ a quarter of the skim) the pinned
         // BAF pools were tuned for.

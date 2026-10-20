@@ -117,8 +117,8 @@ contract PhaseEndSeeder is DegenerusGame, BucketSeed {
         rngLockedFlag = true;
         rngRequestTime = uint48(block.timestamp);
 
-        levelPrizePool[lvl] = 1000 ether; // _endPhase record-pool fund (non-zero)
-        levelPrizePool[lvl - 1] = 100_000 ether;
+        _setLevelPrizePool(lvl, 1000 ether); // _endPhase record-pool fund (non-zero)
+        _setLevelPrizePool(lvl - 1, 100_000 ether);
         _setPrizePools(uint128(50 ether), uint128(300 ether));
         currentPrizePool = uint128(200 ether);
     }
