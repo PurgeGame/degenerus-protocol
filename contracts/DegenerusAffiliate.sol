@@ -223,8 +223,8 @@ contract DegenerusAffiliate {
         (25 ether * uint256(REWARD_SCALE_FRESH_L4P_BPS) * PRICE_COIN_UNIT) /
             BPS_DENOMINATOR;
     bytes32 private constant AFFILIATE_ROLL_TAG = keccak256("affiliate-payout-roll-v1");
-    /// @dev `_levelScore` word: bits [0:128) level total, [128:224) leader score,
-    ///      [224:256) leader wallet ID.
+    /// @dev `_levelScore` word: bits [0:128) level total, [128:163) leader score,
+    ///      [163:195) leader wallet ID, [232:256) exact level.
     uint256 private constant TOTAL_SCORE_MASK = type(uint128).max;
     uint256 private constant TOP_SHIFT = 128;
     /// @dev Upline cache is 66 bits at offset 189 in the reusable earnings word.
@@ -951,8 +951,8 @@ contract DegenerusAffiliate {
      * @return score Their score in FLIP base units (0 decimals).
      */
     function affiliateTop(uint24 lvl) external view returns (uint32 id, uint96 score) {
-        uint256 lead = _levelScore[lvl] >> TOP_SHIFT;
-        return (uint32(lead >> 96), uint96(lead));
+        uint256 lead = _readLevelScore(lvl) >> TOP_SHIFT;
+        return (uint32(lead >> 35), uint96(lead & ((uint256(1) << 35) - 1)));
     }
 
     /**
@@ -970,13 +970,13 @@ contract DegenerusAffiliate {
 
     /**
      * @notice Get the total affiliate score across all affiliates for a level.
-     * @dev Sum of accepted capped scores for this level, retained after individual history retires. Used as the exact
-     *      denominator for score-proportional DGNRS claim distribution.
+     * @dev Sum of accepted capped scores for a retained level; zero once its tagged bank is reused.
+     *      Used as the exact denominator for current-level score-proportional DGNRS claims.
      * @param lvl The game level to query.
      * @return total The total affiliate score (0 decimals).
      */
     function totalAffiliateScore(uint24 lvl) external view returns (uint256 total) {
-        return _levelScore[lvl] & TOTAL_SCORE_MASK;
+        return _readLevelScore(lvl) & TOTAL_SCORE_MASK;
     }
 
     /**
@@ -1196,16 +1196,21 @@ contract DegenerusAffiliate {
      * @param lvl The game level.
      */
     function _recordScore(uint32 id, uint256 total, uint256 added, uint24 lvl) private {
-        uint256 packed = _levelScore[lvl];
+        uint256 packed = _readLevelScore(lvl);
         uint256 sum = (packed & TOTAL_SCORE_MASK) + added;
         if (sum > TOTAL_SCORE_MASK) sum = TOTAL_SCORE_MASK;
-        uint256 lead = packed >> TOP_SHIFT;
+        uint256 lead = uint104(packed >> TOP_SHIFT);
         uint96 score = _score96(total);
-        if (score > uint96(lead)) {
-            lead = uint256(score) | (uint256(id) << 96);
+        if (score > (lead & ((uint256(1) << 35) - 1))) {
+            lead = uint256(score) | (uint256(id) << 35);
             emit AffiliateTopUpdated(lvl, id, score);
         }
-        _levelScore[lvl] = sum | (lead << TOP_SHIFT);
+        _levelScore[lvl & 3] = sum | (lead << TOP_SHIFT) | (uint256(lvl) << 232);
+    }
+
+    function _readLevelScore(uint24 lvl) private view returns (uint256) {
+        uint256 packed = _levelScore[lvl & 3];
+        return uint24(packed >> 232) == lvl ? packed : 0;
     }
 
     /// @dev Reduce affiliate payout for high-activity lootbox buyers.

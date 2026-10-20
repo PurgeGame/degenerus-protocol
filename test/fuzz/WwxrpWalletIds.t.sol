@@ -76,8 +76,8 @@ contract WwxrpWalletIdsTest is DeployProtocol {
         return keccak256(abi.encode(key, DRAW_ENTRY_ROOT));
     }
 
-    function _incinSlot(uint24 bracket, uint32 index) internal pure returns (bytes32) {
-        return keccak256(abi.encode((uint256(bracket) << 32) | index, INCIN_ENTRY_ROOT));
+    function _incinSlot(uint24, uint32 index) internal pure returns (bytes32) {
+        return keccak256(abi.encode(uint256(index), INCIN_ENTRY_ROOT));
     }
 
     /// @dev `boonPacked[id].slot1` (the lane word WWXRP reads raw).

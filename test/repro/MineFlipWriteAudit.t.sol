@@ -11,8 +11,8 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 contract BafRetainedPayloadAudit is DegenerusJackpots {
     function finalizeClearingPayload(uint24 lvl) external onlyGame {
         BafLevel memory current = bafLevel[lvl];
-        if (current.topLen != 0) delete bafTop[lvl][0];
-        if (current.topLen > 2) delete bafTop[lvl][1];
+        if (current.topLen != 0) delete bafTop[(lvl / 10) & 3][0];
+        if (current.topLen > 2) delete bafTop[(lvl / 10) & 3][1];
         unchecked {
             bafLevel[lvl] = BafLevel({epoch: current.epoch + 1, topLen: 0, skipped: false});
         }
@@ -20,11 +20,11 @@ contract BafRetainedPayloadAudit is DegenerusJackpots {
 
     function visibleBoard(uint24 lvl) external view returns (uint128[4] memory entries, uint8 len) {
         len = bafLevel[lvl].topLen;
-        for (uint256 i; i < len; ++i) entries[i] = uint128(bafTop[lvl][i >> 1] >> ((i & 1) * 128));
+        for (uint256 i; i < len; ++i) entries[i] = uint128(bafTop[(lvl / 10) & 3][i >> 1] >> ((i & 1) * 128));
     }
 
     function payload(uint24 lvl) external view returns (uint256, uint256) {
-        return (bafTop[lvl][0], bafTop[lvl][1]);
+        return (bafTop[(lvl / 10) & 3][0], bafTop[(lvl / 10) & 3][1]);
     }
 }
 

@@ -3,7 +3,7 @@ pragma solidity 0.8.34;
 
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
-import {IStETH} from "../interfaces/IStETH.sol";
+import {BoundedCall} from "../libraries/BoundedCall.sol";
 import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 
@@ -15,28 +15,19 @@ abstract contract DegenerusGameRngUtils is DegenerusGameStorage {
     /// @notice Finalized daily word and the nudges applied to its raw input.
     event DailyRngApplied(uint24 day, uint256 rawWord, uint256 nudges, uint256 finalWord);
 
-    /// @dev Close sDGNRS's open redemption batch with the live request (daily or mid-day) that
-    ///      commits the next word, and move the part of its reserve that sDGNRS custody does not
-    ///      already hold out of sDGNRS's game claimable. The close prices the batch and never
-    ///      reverts; the move is bounded by that claimable, so the debit cannot fail. ETH goes
-    ///      first; any ETH shortfall is sent as stETH. The ending's request closes nothing.
+    /// @dev Close the live request's batch and move only available ETH into custody.
+    ///      Any remainder stays in sDGNRS's Game claimable for its live settlement legs.
     function _closeRedemptionBatch() internal {
         address sdgnrs = ContractAddresses.SDGNRS;
         uint256 claimable = _claimableOf(SDGNRS_WALLET_ID);
         uint256 pull = IsDGNRS(sdgnrs).closeRedemptionBatch(claimable);
+        if (pull > address(this).balance) pull = address(this).balance;
         if (pull == 0) return;
+        (bool sent,) = BoundedCall.call(sdgnrs, pull, 30_000, "", 0);
+        if (!sent) return;
         _debitClaimable(SDGNRS_WALLET_ID, pull);
         claimablePool -= uint128(pull);
         emit ClaimableSpent(SDGNRS_WALLET_ID, pull, claimable - pull, MintPaymentKind.Internal, pull);
-        uint256 ethOut = address(this).balance;
-        if (ethOut > pull) ethOut = pull;
-        if (ethOut != 0) {
-            (bool ok,) = payable(sdgnrs).call{value: ethOut}("");
-            if (!ok) revert TransferFailed();
-        }
-        if (pull != ethOut) {
-            if (!IStETH(ContractAddresses.STETH_TOKEN).transfer(sdgnrs, pull - ethOut)) revert TransferFailed();
-        }
     }
 
     function _swapTicketSlot() internal {

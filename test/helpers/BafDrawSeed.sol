@@ -13,7 +13,7 @@ library BafDrawSeed {
 
     function entry(address coinflip, uint24 day, uint32 index, uint32 id, uint96 cumulative) internal {
         require(id != 0 && cumulative != 0, "draw seed requires a nonempty interval");
-        bytes32 slot = keccak256(abi.encode((uint256(day) << 32) | (index >> 1), uint256(8)));
+        bytes32 slot = keccak256(abi.encode(uint256(index >> 1), uint256(8)));
         uint256 shift = (index & 1) * 128;
         uint256 previous = uint256(VM.load(coinflip, slot));
         uint256 packed = (uint256(id) << 96) | cumulative;

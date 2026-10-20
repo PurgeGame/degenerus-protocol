@@ -868,23 +868,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint48 private constant REDEMPTION_INDEX_TAG = uint48(1) << 47;
 
     /// @notice Resolve redemption lootboxes for an sDGNRS gambling burn claim.
-    /// @dev Delegatecall target of the Game's resolveRedemptionLootbox stub, so msg.sender
-    ///      (sDGNRS), msg.value, and address(this) (the Game) are all the caller's. The owed value
-    ///      arrives as forwarded ETH (msg.value) plus a stETH top-up for any remainder: msg.value
-    ///      covers 0..amount and the rest is pulled via transferFrom (sDGNRS pre-approves GAME for
-    ///      max). This lets a partial- or zero-ETH sDGNRS (mid-game depletion) still settle — an
-    ///      ETH-only forward would revert and strand the whole claim. Both media credit
-    ///      futurePrizePool and count toward the game's claimablePool backing identically. No
-    ///      claimableWinnings[SDGNRS] debit occurs — the batch close already moved the reserve
-    ///      into sDGNRS custody, so debiting claimable here would double-spend it. The whole leg
-    ///      resolves now as ONE box order through the sweep's own core: N = min(ceil(amount /
-    ///      1 ETH), 20) boxes of amount / N each (whole gwei), at the live level, with
-    ///      the snapshotted score and the EV-cap draw taken here, as the redemption leg always did.
-    ///      Per-box seeds come from the redemption entropy, which sDGNRS mixes with the claim's
-    ///      beneficiary ID; the order's boon index and event tag are the tagged batch id. The
-    ///      pool takes the whole amount, so the size rounding dust stays protocol value.
+    /// @dev Forwarded ETH and sDGNRS's Game claimable fund one box order. The ledger
+    ///      remainder leaves claimablePool when the value enters the prize pool. The order
+    ///      resolves at the live level using the burn's activity snapshot and batch entropy.
     /// @param id The claim's beneficiary wallet ID
-    /// @param amount Total lootbox value to resolve (msg.value ETH + the stETH remainder pulled here)
+    /// @param amount Total lootbox value to resolve (msg.value ETH plus Game claimable)
     /// @param rngWord RNG entropy for lootbox resolution
     /// @param activityScore Snapshotted activity score (whole points) from burn submission
     /// @param batchId The redemption batch the claim belongs to (seed and event tag)
@@ -893,20 +881,13 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ) external payable {
         if (msg.sender != ContractAddresses.SDGNRS) revert OnlySDGNRS();
         if (amount == 0) return;
-        // Forwarded ETH (msg.value) funds the leg; any remainder is pulled as stETH so a
-        // partial-ETH sDGNRS can still settle. msg.value must not exceed the leg amount.
         if (msg.value > amount) revert MsgValueExceedsAmount();
-        uint256 stethPortion;
-        unchecked {
-            stethPortion = amount - msg.value;
-        }
-        if (stethPortion != 0) {
-            if (!steth.transferFrom(msg.sender, address(this), stethPortion)) revert TransferFailed();
+        uint256 ledgerPortion = amount - msg.value;
+        if (ledgerPortion != 0) {
+            _debitClaimable(SDGNRS_WALLET_ID, ledgerPortion);
+            claimablePool -= uint128(ledgerPortion);
         }
 
-        // Credit the whole arrived value to the future prize pool (respects freeze state). The
-        // reserve left the Game at batch close, so there is no claimable debit here — only a
-        // real-value-in credit. The boxes below are award sizes drawn against it.
         if (prizePoolFrozen) {
             (uint128 pNext, uint128 pFuture) = _getPendingPools();
             _setPendingPools(pNext, pFuture + uint128(amount));
@@ -935,27 +916,18 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     }
 
     /// @notice Credit the direct half of an sDGNRS redemption claim to `id`'s claimable winnings.
-    /// @dev Delegatecall target of the Game's creditRedemptionDirect stub, so msg.sender (sDGNRS),
-    ///      msg.value, and address(this) (the Game) are all the caller's. The value arrives with the
-    ///      same funding mix as resolveRedemptionLootbox — msg.value covers 0..amount and the rest is
-    ///      pulled as stETH (sDGNRS pre-approves GAME for max) — so a mid-game ETH-depleted sDGNRS
-    ///      still settles. The credit rides the claimable reserve (claimablePool in tandem); the
-    ///      arriving value backs it and the id withdraws via the access-gated claimWinnings.
+    /// @dev Forwarded ETH increases the pool; the remainder moves sDGNRS's existing
+    ///      claimable to the beneficiary without changing the pool total.
     /// @param id Claimant wallet ID credited.
-    /// @param amount Total direct-half value (msg.value ETH + the stETH remainder pulled here).
+    /// @param amount Total direct-half value (msg.value ETH plus Game claimable).
     function creditRedemptionDirect(uint32 id, uint256 amount) external payable {
         if (msg.sender != ContractAddresses.SDGNRS) revert OnlySDGNRS();
         if (msg.value > amount) revert MsgValueExceedsAmount();
         if (amount == 0) return;
-        uint256 stethPortion;
-        unchecked {
-            stethPortion = amount - msg.value;
-        }
-        if (stethPortion != 0) {
-            if (!steth.transferFrom(msg.sender, address(this), stethPortion)) revert TransferFailed();
-        }
+        uint256 ledgerPortion = amount - msg.value;
+        if (ledgerPortion != 0) _debitClaimable(SDGNRS_WALLET_ID, ledgerPortion);
         _creditClaimableLogged(id, amount);
-        claimablePool += uint128(amount);
+        claimablePool += uint128(msg.value);
     }
 
     /// @notice Resolve an AfKing-subscription box at the LIVE level from a caller-passed

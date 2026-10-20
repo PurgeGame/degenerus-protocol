@@ -311,10 +311,6 @@ contract StethLossLiveness is RedemptionFixture {
             catch (bytes memory reason) {
                 assertTrue(bytes4(reason) != PANIC, "a redemption claim PANICKED after an stETH loss");
                 emit log_named_bytes("redemption claim reverted", reason);
-                if (bytes4(reason) != TRANSFER_FAILED) {
-                    vm.prank(alice);
-                    sdgnrs.claimParkedRedemption(0, redemptionBatch);
-                }
             }
             assertEq(_claimTokens(alice, redemptionBatch), 0, "the redemption claim did not settle");
         }

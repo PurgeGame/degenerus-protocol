@@ -191,7 +191,7 @@ contract BafDrawGas is DeployProtocol {
         for (uint32 i; i < n; ++i) {
             cum += 100 + (uint256(keccak256(abi.encode(day, i))) % 1000);
             uint32 p = uint32(i + 1);
-            uint256 key = (uint256(day) << 32) | (i >> 1);
+            uint256 key = i >> 1;
             bytes32 slot = keccak256(abi.encode(key, ENTRY_SLOT));
             uint256 shift = (i & 1) * 128;
             uint256 old = uint256(vm.load(address(coinflip), slot));

@@ -298,10 +298,10 @@ contract VaultPlayerActionsTest is SeatFixture {
         assertEq(game.afkingFundingOf(stranger), 1 ether);
     }
 
-    function test_parkedClaimRevertBubblesUnchanged() public {
+    function test_unresolvedRedemptionRevertBubblesUnchanged() public {
         vm.prank(owner);
-        vm.expectRevert(bytes4(keccak256("NoClaim()")));
-        abi.decode(OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (address(sdgnrs), abi.encodeCall(sdgnrs.claimParkedRedemption, (0, 100)), 0)), 0), (bytes));
+        vm.expectRevert(bytes4(keccak256("NotResolved()")));
+        abi.decode(OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (address(sdgnrs), abi.encodeCall(sdgnrs.claimRedemption, (0, 100)), 0)), 0), (bytes));
     }
 
     function test_vaultNeverBorrowsAndManualBoonRestrictionStillApplies() public {

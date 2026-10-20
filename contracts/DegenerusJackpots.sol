@@ -221,6 +221,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
 
     /// @notice Day index of the most recent BAF resolution or skip (any bracket).
     uint24 internal lastBafResolvedDay;
+    uint96 private bafTopLevels;
 
     constructor() {
         // Register this contract's ENS reverse name (best-effort; skipped when the
@@ -545,8 +546,12 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @param stake New total stake for the wallet.
     function _updateBafTop(uint24 lvl, uint32 id, uint256 stake) private {
         uint96 score = _score96(stake);
-        uint256[2] storage board = bafTop[lvl];
-        uint8 len = bafLevel[lvl].topLen;
+        uint256 bank = (lvl / 10) & 3;
+        uint256 shift = bank * 24;
+        uint256[2] storage board = bafTop[uint24(bank)];
+        uint8 len;
+        if (uint24(bafTopLevels >> shift) == lvl) len = bafLevel[lvl].topLen;
+        else bafTopLevels = uint96((uint256(bafTopLevels) & ~(uint256(type(uint24).max) << shift)) | (uint256(lvl) << shift));
         uint256 entry = uint256(score) | (uint256(id) << 96);
 
         // Check if the wallet is already on the leaderboard
@@ -580,6 +585,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
 
         // Case 2: Board not full - insert in sorted position
         if (len < 4) {
+            if ((len & 1) == 0) board[len >> 1] = entry;
             uint8 insert = len;
             while (insert > 0) {
                 uint256 above = _topEntry(board, insert - 1);
@@ -626,9 +632,11 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @return id Wallet ID at the position (0 if empty).
     /// @return score The wallet's score.
     function _bafTop(uint24 lvl, uint8 idx) private view returns (uint32 id, uint96 score) {
+        uint256 bank = (lvl / 10) & 3;
+        if (uint24(bafTopLevels >> (bank * 24)) != lvl) return (0, 0);
         uint8 len = bafLevel[lvl].topLen;
         if (idx >= len) return (0, 0);
-        uint256 entry = _topEntry(bafTop[lvl], idx);
+        uint256 entry = _topEntry(bafTop[uint24(bank)], idx);
         return (uint32(entry >> 96), uint96(entry));
     }
 

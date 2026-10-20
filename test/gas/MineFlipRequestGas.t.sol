@@ -114,7 +114,7 @@ contract RequestFlipSeeder is CoinflipStakeSetter {
 contract RequestCharitySeeder is GNRUS {
     function seed(uint24 lvl) external {
         currentLevel = lvl;
-        for (uint8 i; i < 20; ++i) slotApproveWeight[lvl][i] = i + 1;
+        for (uint8 i; i < 20; ++i) _slotApproveWeight[i] = (uint256(lvl) << 232) | (i + 1);
     }
 }
 
@@ -228,8 +228,8 @@ contract MineFlipRequestGasTest is DeployProtocol {
             }
             // A funded affiliate winner with a fresh sDGNRS balance.
             // _levelScore is slot 3, with leader score/id in the upper 128 bits.
-            vm.store(address(affiliate), keccak256(abi.encode(uint24(14), uint256(3))),
-                bytes32((uint256(burnerId) << 224) | (uint256(1) << 128) | 1));
+            vm.store(address(affiliate), keccak256(abi.encode(uint24(14 & 3), uint256(3))),
+                bytes32((uint256(14) << 232) | (uint256(burnerId) << 163) | (uint256(1) << 128) | 1));
             (uint32 top,) = affiliate.affiliateTop(14);
             assertEq(top, burnerId, "native affiliate fixture");
         }

@@ -117,7 +117,7 @@ contract DegenerusOwnerGovernance {
         uint256 amount = positions[msg.sender].amount;
         if (amount == 0) revert NoPosition();
         _clear(msg.sender);
-        delete positions[msg.sender];
+        positions[msg.sender].amount = 0;
         totalEscrowed -= amount;
         if (!dgve.transfer(msg.sender, amount)) revert TransferFailed();
         emit Withdrawn(msg.sender, amount);

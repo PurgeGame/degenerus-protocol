@@ -551,10 +551,14 @@ contract BafAwardTailProbeGas is BafAwardGroupFixture {
     }
 
     function _seedHead() internal override {
-        bytes32 board = keccak256(abi.encode(uint256(100), uint256(1)));
-        for (uint256 i; i < 4; ++i) {
-            vm.store(address(jackpots), bytes32(uint256(board) + i), bytes32(uint256(1_000_000 + i) << 160));
+        bytes32 board = keccak256(abi.encode(uint256(2), uint256(1)));
+        for (uint256 i; i < 2; ++i) {
+            uint256 low = uint256(1_000_000 + i * 2) << 96;
+            uint256 high = uint256(1_000_001 + i * 2) << 96;
+            vm.store(address(jackpots), bytes32(uint256(board) + i), bytes32(low | (high << 128)));
         }
+        uint256 tags = uint256(vm.load(address(jackpots), bytes32(uint256(3))));
+        vm.store(address(jackpots), bytes32(uint256(3)), bytes32((tags & ~(uint256(type(uint24).max) << 72)) | (uint256(100) << 72)));
         bytes32 levelSlot = keccak256(abi.encode(uint256(100), uint256(2)));
         vm.store(address(jackpots), levelSlot, bytes32(uint256(vm.load(address(jackpots), levelSlot)) | (uint256(4) << 64)));
     }

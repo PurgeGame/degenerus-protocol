@@ -82,10 +82,10 @@
   {
     "bytes": "32",
     "encoding": "mapping",
-    "label": "slotApproveWeight",
+    "label": "_slotApproveWeight",
     "offset": 0,
     "slot": 25,
-    "typeLabel": "mapping(uint24 => mapping(uint8 => uint256))"
+    "typeLabel": "mapping(uint8 => uint256)"
   },
   {
     "bytes": "20",

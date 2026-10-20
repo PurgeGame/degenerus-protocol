@@ -42,10 +42,10 @@
   {
     "bytes": "32",
     "encoding": "mapping",
-    "label": "dayClaimed",
+    "label": "_dayClaimed",
     "offset": 0,
     "slot": 5,
-    "typeLabel": "mapping(uint24 => bool)"
+    "typeLabel": "mapping(uint24 => uint256)"
   },
   {
     "bytes": "32",
@@ -82,7 +82,7 @@
   {
     "bytes": "32",
     "encoding": "mapping",
-    "label": "claimable",
+    "label": "_claimable",
     "offset": 0,
     "slot": 10,
     "typeLabel": "mapping(uint32 => uint256)"

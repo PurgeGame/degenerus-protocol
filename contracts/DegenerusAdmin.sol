@@ -26,7 +26,7 @@ pragma solidity 0.8.34;
 
 import {IDegenerusGame} from "./interfaces/IDegenerusGame.sol";
 
-import {MineFlipGas} from "./libraries/MineFlipGas.sol";
+import {BoundedCall} from "./libraries/BoundedCall.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
 
 /**
@@ -1229,18 +1229,20 @@ contract DegenerusAdmin {
         subscriptionId = 0;
         address target = ContractAddresses.VAULT;
 
-        try IVRFCoordinatorV2_5Owner(coordinator).cancelSubscription(subId, target) {
-            emit SubscriptionCancelled(subId, target);
-        } catch (bytes memory reason) { MineFlipGas.rethrowGasFailure(reason); }
+        (bool cancelled,) = BoundedCall.call(
+            coordinator, 0, 300_000,
+            abi.encodeWithSelector(IVRFCoordinatorV2_5Owner.cancelSubscription.selector, subId, target), 0
+        );
+        if (cancelled) emit SubscriptionCancelled(subId, target);
 
-        uint256 bal = linkToken.balanceOf(address(this));
-        if (bal != 0) {
-            try linkToken.transfer(target, bal) returns (bool ok) {
-                if (ok) {
-                    emit SubscriptionShutdown(subId, target, bal);
-                    return;
-                }
-            } catch (bytes memory reason) { MineFlipGas.rethrowGasFailure(reason); }
+        (, uint256 bal) = BoundedCall.staticWord(
+            address(linkToken), 50_000, abi.encodeWithSelector(ILinkTokenLike.balanceOf.selector, address(this))
+        );
+        if (bal != 0 && BoundedCall.callBool(
+            address(linkToken), 150_000, abi.encodeWithSelector(ILinkTokenLike.transfer.selector, target, bal)
+        )) {
+            emit SubscriptionShutdown(subId, target, bal);
+            return;
         }
 
         emit SubscriptionShutdown(subId, target, 0);
@@ -1394,28 +1396,23 @@ contract DegenerusAdmin {
     ) private view returns (uint256) {
         if (feed == address(0) || amount == 0) return 0;
 
-        try IAggregatorV3(feed).latestRoundData() returns (
-            uint80 roundId,
-            int256 answer,
-            uint256,
-            uint256 updatedAt,
-            uint80 answeredInRound
-        ) {
-            if (answer <= 0 || updatedAt == 0 || answeredInRound < roundId)
-                return 0;
-            if (updatedAt > block.timestamp) return 0;
-            unchecked {
-                if (block.timestamp - updatedAt > LINK_ETH_MAX_STALE) return 0;
-            }
-
-            uint256 a = uint256(answer);
-            if (a > LINK_ETH_MAX_PRICE) a = LINK_ETH_MAX_PRICE;
-            if (amount > type(uint256).max / a) return 0;
-            unchecked {
-                return (amount * a) / 1 ether;
-            }
-        } catch {
-            return 0;
+        (bool ok, bytes memory data) = BoundedCall.staticcall(
+            feed, 50_000, abi.encodeWithSelector(IAggregatorV3.latestRoundData.selector), 160
+        );
+        if (!ok) return 0;
+        (uint256 roundId, int256 answer,, uint256 updatedAt, uint256 answeredInRound) =
+            abi.decode(data, (uint256, int256, uint256, uint256, uint256));
+        if (roundId > type(uint80).max || answeredInRound > type(uint80).max) return 0;
+        if (answer <= 0 || updatedAt == 0 || answeredInRound < roundId) return 0;
+        if (updatedAt > block.timestamp) return 0;
+        unchecked {
+            if (block.timestamp - updatedAt > LINK_ETH_MAX_STALE) return 0;
+        }
+        uint256 a = uint256(answer);
+        if (a > LINK_ETH_MAX_PRICE) a = LINK_ETH_MAX_PRICE;
+        if (amount > type(uint256).max / a) return 0;
+        unchecked {
+            return (amount * a) / 1 ether;
         }
     }
 

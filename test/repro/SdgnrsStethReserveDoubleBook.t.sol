@@ -2,7 +2,7 @@
 pragma solidity 0.8.34;
 import {RedemptionFixture} from "../fuzz/helpers/RedemptionFixture.sol";
 
-/// @notice stETH custody covers every outstanding reserve, including parked older batches.
+/// @notice stETH custody covers every outstanding reserve, while a batch remains unsettled.
 contract SdgnrsStethReserveDoubleBook is RedemptionFixture {
     function _pair(bool reverse) internal {
         vm.deal(address(sdgnrs), 0);
@@ -24,7 +24,7 @@ contract SdgnrsStethReserveDoubleBook is RedemptionFixture {
     }
     function test_bothClaimantsPaid_claimOrderXY() public { _pair(false); }
     function test_bothClaimantsPaid_claimOrderYX() public { _pair(true); }
-    function test_ParkedReserveIsExcludedFromNextBatchBacking() public {
+    function test_DroppedReserveReturnsToNextBatchBacking() public {
         vm.deal(address(sdgnrs), 0);
         mockStETH.mint(address(sdgnrs), 10_000 ether);
         uint256 n = sdgnrs.totalSupply() / 1000;
@@ -32,18 +32,14 @@ contract SdgnrsStethReserveDoubleBook is RedemptionFixture {
         uint32 first = _resolveLive(175);
         vm.mockCallRevert(address(game), abi.encodeWithSelector(game.resolveRedemptionLootbox.selector), hex"12345678");
         assertTrue(_work(9_000_000));
-        uint256 reserved = sdgnrs.pendingRedemptionEthValue();
-        assertGt(reserved, 0);
+        assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
+        assertEq(_claimTokens(alice, first), 0);
         vm.clearMockedCalls();
-        uint256 holderBase = sdgnrs.totalSupply();
-        uint256 expected = ((10_000 ether - reserved) * n / holderBase / 1 gwei) * 1 gwei;
+        uint256 expected = (10_000 ether * n / sdgnrs.totalSupply() / 1 gwei) * 1 gwei;
         _burn(bob, n);
         uint32 second = _resolveLive(175);
         assertEq(_claimBase(bob, second), expected);
-        assertGe(mockStETH.balanceOf(address(sdgnrs)), sdgnrs.pendingRedemptionEthValue());
         assertTrue(_work(9_000_000));
-        assertEq(sdgnrs.pendingRedemptionEthValue(), reserved);
-        vm.prank(alice); sdgnrs.claimParkedRedemption(0, first);
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
     }
 }

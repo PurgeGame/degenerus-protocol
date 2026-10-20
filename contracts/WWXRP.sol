@@ -445,7 +445,11 @@ contract WWXRP {
     mapping(uint256 => uint256) private _drawEntry;
 
     /// @notice True once a day's draw prize has been claimed
-    mapping(uint24 => bool) public dayClaimed;
+    mapping(uint24 => uint256) private _dayClaimed;
+
+    function dayClaimed(uint24 day) public view returns (bool) {
+        return (_dayClaimed[day >> 8] & (uint256(1) << (day & 255))) != 0;
+    }
 
     /*+======================================================================+
       |                    CENTURY BAF-INCINERATOR STATE                       |
@@ -461,7 +465,7 @@ contract WWXRP {
     ///      bracket total (~6.3e57 whole tokens at a 3x activity ceiling) is safe for
     ///      any reachable supply, and entry endpoints share it.
 
-    /// @dev Header per bracket (level x00):
+    /// @dev Reused header at key zero, exact bracket24 at bits224..247:
     ///      bits [0..191]   total effective score (last cumulative endpoint,
     ///                      whole tokens units)
     ///      bits [192..223] entry count
@@ -476,7 +480,7 @@ contract WWXRP {
         uint32 id;
     }
 
-    /// @dev Entry per (bracket, index). Key: (bracket << 32) | index. The
+    /// @dev Entry by index, authenticated by the bracket header and count. The
     ///      resolve binary search reads one slot per probe.
     mapping(uint256 => IncinEntry) private _incinEntry;
 
@@ -506,7 +510,13 @@ contract WWXRP {
 
     /// @notice Earned WWXRP awaiting withdrawal or gameplay consumption, keyed by account ID.
     /// @dev Unminted rewards are outside ERC20 totalSupply and never shared between subaccounts.
-    mapping(uint32 => uint256) public claimable;
+    /// @dev Balance plus one; untouched zero is also empty. Economic cap is uint256.max-1.
+    mapping(uint32 => uint256) private _claimable;
+
+    function claimable(uint32 id) public view returns (uint256) {
+        uint256 stored = _claimable[id];
+        return stored == 0 ? 0 : stored - 1;
+    }
 
     /*+======================================================================+
       |                       ERC20 FUNCTIONS                                |
@@ -617,11 +627,11 @@ contract WWXRP {
     function creditPrize(uint32 id, uint256 amount) external {
         amount = _scaledPrize(amount);
         if (id == 0 || amount == 0) return;
-        uint256 prior = claimable[id];
-        uint256 room = type(uint256).max - prior;
+        uint256 prior = claimable(id);
+        uint256 room = type(uint256).max - 1 - prior;
         if (amount > room) amount = room;
         if (amount == 0) return;
-        claimable[id] = prior + amount;
+        _claimable[id] = prior + amount + 1;
         emit PrizeCredited(id, amount, prior + amount);
     }
 
@@ -660,12 +670,12 @@ contract WWXRP {
     }
 
     function _withdrawPrize(uint32 id, address payee, uint256 amount) private returns (uint256 withdrawn) {
-        uint256 balance = claimable[id];
+        uint256 balance = claimable(id);
         withdrawn = amount == 0 || amount > balance ? balance : amount;
         uint256 room = type(uint256).max - totalSupply;
         if (withdrawn > room) withdrawn = room;
         if (withdrawn == 0) return 0;
-        claimable[id] = balance - withdrawn;
+        _claimable[id] = balance - withdrawn + 1;
         _mint(payee, withdrawn);
         emit PrizeWithdrawn(id, payee, withdrawn);
     }
@@ -673,10 +683,10 @@ contract WWXRP {
     /// @dev Consume this account's rewards first, returning only the held-token shortfall.
     ///      Unminted consumption never touches ERC20 balances or totalSupply.
     function _consumePrize(uint32 id, uint256 amount) private returns (uint256 shortfall) {
-        uint256 balance = claimable[id];
+        uint256 balance = claimable(id);
         uint256 used = amount < balance ? amount : balance;
         if (used != 0) {
-            claimable[id] = balance - used;
+            _claimable[id] = balance - used + 1;
             emit PrizeConsumed(id, used, balance - used);
         }
         return amount - used;
@@ -905,7 +915,7 @@ contract WWXRP {
         (bool big, uint8 bucket, uint256 roll, uint256 total, uint32 count) = _outcome(day);
         // _outcome reverts NoPrize/WordUnavailable; empty bucket is a dud.
         if (total == 0) revert EmptyWinningBucket();
-        if (dayClaimed[day]) revert AlreadyClaimed();
+        if (dayClaimed(day)) revert AlreadyClaimed();
         // A reused bank may retain a longer previous day's tail. Its entries
         // are not members of this draw, even if their cumulative interval fits.
         if (entryIndex >= count) revert EntryMissing();
@@ -919,7 +929,7 @@ contract WWXRP {
                 type(uint96).max;
         if (roll < cumStart || roll >= cumEnd) revert NotWinningEntry();
 
-        dayClaimed[day] = true;
+        _dayClaimed[day >> 8] |= uint256(1) << (day & 255);
         uint32 winner = uint32(entry >> 96);
         uint256 prize = big ? BIG_PRIZE : SMALL_PRIZE;
         coinflip.creditFlip(winner, prize);
@@ -1027,11 +1037,11 @@ contract WWXRP {
             bool claimed
         )
     {
-        if (!_drawClaimOpen(day)) return (false, false, false, 0, 0, 0, dayClaimed[day]);
+        if (!_drawClaimOpen(day)) return (false, false, false, 0, 0, 0, dayClaimed(day));
         uint256 word = game.rngWordForDay(day + 1);
-        if (word == 0) return (false, false, false, 0, 0, 0, dayClaimed[day]);
+        if (word == 0) return (false, false, false, 0, 0, 0, dayClaimed(day));
         wordAvailable = true;
-        claimed = dayClaimed[day];
+        claimed = dayClaimed(day);
         big = _drawHash(DOM_BIG, day, word) % BIG_GATE == 0;
         bool small = !big &&
             _drawHash(DOM_SMALL, day, word) % SMALL_GATE == 0;
@@ -1126,9 +1136,9 @@ contract WWXRP {
         uint256 amount,
         uint256 effective
     ) private {
-        uint256 header = _incinHeader[bracket];
+        uint256 header = _incineratorHeader(bracket);
         uint256 total = header & type(uint192).max;
-        uint256 count = header >> 192;
+        uint256 count = uint32(header >> 192);
 
         uint256 newTotal = total + effective;
         if (count >= type(uint32).max) revert ScoreOverflow();
@@ -1137,8 +1147,10 @@ contract WWXRP {
         // zero-width intervals and carry no winner weight.
         if (newTotal > type(uint192).max) newTotal = type(uint192).max;
 
-        _incinHeader[bracket] = newTotal | ((count + 1) << 192);
-        _incinEntry[_incinEntryKey(bracket, uint32(count))] = IncinEntry({cum: uint192(newTotal), id: id});
+        _incinHeader[0] = newTotal | ((count + 1) << 192) | (uint256(bracket) << 224);
+        IncinEntry storage entry = _incinEntry[count];
+        uint256 packed = newTotal | (uint256(id) << 192);
+        assembly ("memory-safe") { sstore(entry.slot, packed) }
 
         emit IncineratorEntered(
             bracket,
@@ -1172,7 +1184,7 @@ contract WWXRP {
     ) external returns (uint32 winnerId) {
         if (msg.sender != MINTER_GAME) revert OnlyMinter();
 
-        uint256 header = _incinHeader[bracket];
+        uint256 header = _incineratorHeader(bracket);
         uint256 total = header & type(uint192).max;
         if (total == 0) return 0;
 
@@ -1192,13 +1204,13 @@ contract WWXRP {
         uint32 hi = uint32(header >> 192) - 1;
         while (lo < hi) {
             uint32 mid = lo + (hi - lo) / 2;
-            if (_incinEntry[_incinEntryKey(bracket, mid)].cum > roll) {
+            if (_incinEntry[mid].cum > roll) {
                 hi = mid;
             } else {
                 lo = mid + 1;
             }
         }
-        winnerId = _incinEntry[_incinEntryKey(bracket, lo)].id;
+        winnerId = _incinEntry[lo].id;
 
         // Pay only against a book that actually lost. The skip gate reads the low bit of the
         // transition's own word, which is the armed day's word on every ordinary path — but a
@@ -1223,7 +1235,7 @@ contract WWXRP {
     function incineratorInfo(
         uint24 bracket
     ) external view returns (uint256 totalScore, uint32 entryCount) {
-        uint256 header = _incinHeader[bracket];
+        uint256 header = _incineratorHeader(bracket);
         totalScore = header & type(uint192).max;
         entryCount = uint32(header >> 192);
     }
@@ -1234,16 +1246,15 @@ contract WWXRP {
         uint24 bracket,
         uint32 index
     ) external view returns (uint32 id, uint256 cumulativeScore) {
-        IncinEntry memory e = _incinEntry[_incinEntryKey(bracket, index)];
+        if (index >= uint32(_incineratorHeader(bracket) >> 192)) return (0, 0);
+        IncinEntry memory e = _incinEntry[index];
         id = e.id;
         cumulativeScore = e.cum;
     }
 
-    function _incinEntryKey(
-        uint24 bracket,
-        uint32 index
-    ) private pure returns (uint256) {
-        return (uint256(bracket) << 32) | index;
+    function _incineratorHeader(uint24 bracket) private view returns (uint256) {
+        uint256 header = _incinHeader[0];
+        return uint24(header >> 224) == bracket ? header : 0;
     }
 
     /*+======================================================================+

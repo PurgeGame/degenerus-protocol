@@ -325,12 +325,12 @@ library CenturyBafScores {
             IDegenerusJackpots(jackpots).recordBafFlip(id, uint24(LVL), (i + 1) * 1_000_000 ether);
         }
         uint256 depositorId = _register(game, address(0xD3F0517));
-        for (uint256 i; i < 4096; ++i) {
-            BafDrawSeed.entry(coinflip, day, uint32(i), uint32(depositorId), uint96((i + 1) * 100));
-        }
         VM.store(coinflip, keccak256(abi.encode(uint256(day), uint256(5))), bytes32((uint256(4096) << 96) | 409_600));
         VM.prank(game);
         ICoinflip(coinflip).armBafDraw(day);
+        for (uint256 i; i < 4096; ++i) {
+            BafDrawSeed.entry(coinflip, day, uint32(i), uint32(depositorId), uint96((i + 1) * 100));
+        }
     }
 
     function _register(address game, address wallet) private returns (uint32 id) {

@@ -245,10 +245,13 @@ contract GNRUS {
     ///      stale value is unobservable, and a later re-queue overwrites it (nonzero→nonzero SSTORE).
     mapping(uint8 => address) private pendingEdit;
 
-    /// @notice Per-(level, slot) accumulator for approve weight cast via vote(). Old-level entries persist deliberately.
-    /// @dev Old-level entries are never wiped — clearing 20 cold SSTOREs per level would burn gas for no
-    ///      functional benefit, and indexers gain free historical query as a side-benefit.
-    mapping(uint24 => mapping(uint8 => uint256)) public slotApproveWeight;
+    /// @dev One current-level weight per slot: weight232, exact level24.
+    mapping(uint8 => uint256) internal _slotApproveWeight;
+
+    function slotApproveWeight(uint24 level, uint8 slot) public view returns (uint256) {
+        uint256 word = _slotApproveWeight[slot];
+        return uint24(word >> 232) == level ? uint232(word) : 0;
+    }
 
     /// @notice Recipient that won the most recent paid level. Used by vote() to block consecutive wins.
     /// @dev Written by pickCharity() ONLY when the level distributed (paid branch). Skipped levels leave
@@ -696,7 +699,7 @@ contract GNRUS {
         if (voterId == 0) voterId = IDegenerusGame(ContractAddresses.GAME).registerWalletIdentity(voter);
         uint256 shift = (voterId % 5) * 48;
         _voterWord[voterId / 5] = (_voterWord[voterId / 5] & ~(uint256(type(uint48).max) << shift)) | ((word | bit) << shift);
-        slotApproveWeight[level][slot] += weight;
+        _slotApproveWeight[slot] = (uint256(level) << 232) | (slotApproveWeight(level, slot) + weight);
 
         // 6. Emit
         emit Voted(level, slot, voterId, weight);
@@ -746,7 +749,7 @@ contract GNRUS {
         uint32 mask = 1;
         for (uint8 i; i < MAX_ACTIVE_SLOTS;) {
             if ((bitmap & mask) != 0) {
-                uint256 w = slotApproveWeight[level][i];
+                uint256 w = slotApproveWeight(level, i);
                 if (w > bestWeight) {
                     bestWeight = w;
                     bestSlot = i;

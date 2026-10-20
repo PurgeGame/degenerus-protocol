@@ -48,7 +48,7 @@ contract AffiliateLeaderPacking is DeployProtocol {
     }
 
     function _slot(uint256 base) internal pure returns (bytes32) {
-        return keccak256(abi.encode(uint256(LVL), base));
+        return keccak256(abi.encode(uint256(LVL & 3), base));
     }
 
     function _assertViews(uint32 leader, uint256 leaderScore, uint256 total) internal view {
@@ -107,8 +107,9 @@ contract AffiliateLeaderPacking is DeployProtocol {
         uint256 s1 = affiliate.affiliateScore(LVL, ids[1]);
         uint256 word = uint256(vm.load(address(affiliate), _slot(SLOT_TOTAL)));
         assertEq(word & type(uint128).max, s0 + s1, "total");
-        assertEq((word >> 128) & type(uint96).max, s0, "leader score");
-        assertEq(word >> 224, ids[0], "leader ID");
+        assertEq((word >> 128) & ((uint256(1) << 35) - 1), s0, "leader score");
+        assertEq(uint32(word >> 163), ids[0], "leader ID");
+        assertEq(word >> 232, LVL, "level tag");
     }
 
     function test_TotalSaturates() public {

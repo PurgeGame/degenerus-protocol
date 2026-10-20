@@ -111,7 +111,7 @@ contract BafBoardPackingTest is Test {
     // =====================================================================
 
     function _boardWords(uint24 lvl) private view returns (bytes32 base, uint256 w0, uint256 w1) {
-        base = keccak256(abi.encode(uint256(lvl), BAF_TOP_ROOT));
+        base = keccak256(abi.encode(uint256((lvl / 10) & 3), BAF_TOP_ROOT));
         w0 = uint256(vm.load(address(jp), base));
         w1 = uint256(vm.load(address(jp), bytes32(uint256(base) + 1)));
     }

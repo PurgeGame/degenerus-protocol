@@ -535,4 +535,19 @@ contract OwnerGovernanceTest is OwnerGovernanceFixture {
         if (expected) gov.execute(p, _data(7));
         else { vm.expectRevert(Gov.NoMajority.selector); gov.execute(p, _data(7)); }
     }
+    function testWithdrawalRetainsInactivePositionAndRedepositReplacesDelegate() public {
+        vm.roll(10);
+        vm.prank(A); gov.deposit(100, B);
+        vm.prank(A); gov.withdraw();
+        (uint128 amount, uint32 proposalId, uint40 assigned, uint40 deposited, address delegate) = gov.positions(A);
+        assertEq(amount, 0); assertEq(proposalId, 0); assertEq(assigned, 0);
+        assertEq(deposited, 10); assertEq(delegate, B);
+        vm.prank(B); vm.expectRevert(Gov.NoPosition.selector); gov.clearVote(A);
+        vm.roll(11);
+        vm.prank(A); gov.deposit(50, C);
+        (amount, proposalId, assigned, deposited, delegate) = gov.positions(A);
+        assertEq(amount, 50); assertEq(proposalId, 0); assertEq(assigned, 0);
+        assertEq(deposited, 11); assertEq(delegate, C);
+    }
+
 }

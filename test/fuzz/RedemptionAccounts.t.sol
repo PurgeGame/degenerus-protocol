@@ -12,7 +12,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title RedemptionAccounts -- sDGNRS redemption claims by account ID, and the protocol self pulls
-/// @notice `claimRedemption(id, batch)` / `claimParkedRedemption(id, batch)`: `id == 0` is the caller
+/// @notice `claimRedemption(id, batch)`: `id == 0` is the caller
 ///         (no Game `resolveAccount` call); any other ID must authorize the caller (the key, a
 ///         smurf's owner or an approved operator), else `Unauthorized`; an unallocated ID reverts
 ///         Game `E`. The claim is deleted under the account's ID and paid to its payee (terminal ETH
@@ -63,18 +63,6 @@ contract RedemptionAccountsTest is RedemptionFixture {
             vm.prank(address(0xDEAD));
             mockStETH.transfer(address(sdgnrs), st);
         }
-    }
-
-    /// @dev Burn for alice, resolve at roll 100 and settle with custody stripped, so alice's claim
-    ///      parks with its word. Custody is restored afterwards.
-    function _parkAliceClaim() internal returns (uint32 batchId) {
-        _burn(alice, sdgnrs.totalSupply() / 1000);
-        batchId = _resolveLive(100);
-        (uint256 eth, uint256 st) = _stripCustody();
-        vm.prank(address(game));
-        assertTrue(sdgnrs.runRedemptionWork(settlementWord, 9_000_000).done, "harness: the cohort completes");
-        _restoreCustody(eth, st);
-        assertGt(_claimTokens(alice, batchId), 0, "harness: alice's claim parked");
     }
 
     function _claimedFor(Vm.Log[] memory logs, address player) internal view returns (uint256 n) {
@@ -206,76 +194,16 @@ contract RedemptionAccountsTest is RedemptionFixture {
         assertEq(_claimTokens(alice, id), 0);
     }
 
-    // =====================================================================
-    //                       14. claimParkedRedemption
-    // =====================================================================
-
-    /// @notice Live: P settles A's parked claim; the lootbox leg resolves for A's key and ID and the
-    ///         direct half is credited to A's ID. P receives nothing; the claim settles once.
-    function test_ParkedClaim_Live_ByOperator_CreditsAccount() public {
-        uint32 batchId = _parkAliceClaim();
-        uint256 before = game.claimableWinningsOf(alice);
-
-        vm.expectCall(address(game), abi.encodeCall(DegenerusGame.resolveAccount, (aliceId, operator)), 1);
-        vm.expectCall(
-            address(game), abi.encodeWithSelector(DegenerusGame.resolveRedemptionLootbox.selector, aliceId), 1
-        );
-        vm.expectCall(address(game), abi.encodeWithSelector(DegenerusGame.creditRedemptionDirect.selector, aliceId), 1);
-        vm.recordLogs();
-        vm.prank(operator);
-        sdgnrs.claimParkedRedemption(aliceId, batchId);
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-
-        assertGt(game.claimableWinningsOf(alice), before, "the direct half credited to A's ID");
-        assertEq(game.claimableWinningsOf(operator), 0);
-        assertEq(_received(operator), 0, "nothing to the operator");
-        assertEq(_claimTokens(alice, batchId), 0, "A's claim settled");
-        assertEq(_claimedFor(logs, alice), 1, "RedemptionClaimed names A");
-        vm.expectRevert(sDGNRS.NoClaim.selector);
-        vm.prank(alice);
-        sdgnrs.claimParkedRedemption(0, batchId);
-    }
-
-    /// @notice After game over P's parked claim for A takes the terminal shape: the rolled amount is
-    ///         pushed to A (the payee).
-    function test_ParkedClaim_AfterGameOver_ByOperator_PaysAccountPayee() public {
-        uint32 batchId = _parkAliceClaim();
-        uint256 expected = _claimBase(alice, batchId);
+    function test_DroppedClaimCannotBeRecoveredByOperatorAfterGameOver() public {
+        _burn(alice, sdgnrs.totalSupply() / 1000);
+        uint32 batchId = _resolveLive(100);
+        vm.mockCallRevert(address(game), abi.encodeWithSelector(game.resolveRedemptionLootbox.selector), hex"12345678");
+        assertTrue(_work(9_000_000));
+        vm.clearMockedCalls();
         _latchGameOver();
-        uint256 before = _received(alice);
-
-        vm.prank(operator);
-        sdgnrs.claimParkedRedemption(aliceId, batchId);
-
-        assertEq(_received(alice) - before, expected, "the payee received the rolled amount");
-        assertEq(_received(operator), 0, "nothing to the operator");
-        assertEq(_claimTokens(alice, batchId), 0);
-    }
-
-    /// @notice claimParkedRedemption checks the account before the parked word: X on an empty slot
-    ///         gets Unauthorized, an unallocated ID E, an authorized caller NoClaim; a smurf has no
-    ///         parked claim.
-    function test_ParkedClaim_ErrorPrecedence() public {
-        uint32 smurfId = _createSmurf(alice);
-        uint32 batchId = _parkAliceClaim();
-        uint32 empty = batchId + 7;
-
-        vm.expectRevert(sDGNRS.Unauthorized.selector);
-        vm.prank(stranger);
-        sdgnrs.claimParkedRedemption(aliceId, empty);
-        vm.expectRevert(sDGNRS.Unauthorized.selector);
-        vm.prank(stranger);
-        sdgnrs.claimParkedRedemption(aliceId, batchId);
-        vm.expectRevert(abi.encodeWithSignature("E()"));
-        vm.prank(stranger);
-        sdgnrs.claimParkedRedemption(_walletCount(), batchId);
         vm.expectRevert(sDGNRS.NoClaim.selector);
         vm.prank(operator);
-        sdgnrs.claimParkedRedemption(aliceId, empty);
-        vm.expectRevert(sDGNRS.NoClaim.selector);
-        vm.prank(alice);
-        sdgnrs.claimParkedRedemption(smurfId, batchId);
-        assertGt(_claimTokens(alice, batchId), 0, "A's parked claim intact");
+        sdgnrs.claimRedemption(aliceId, batchId);
     }
 
     // =====================================================================
