@@ -2443,8 +2443,7 @@ abstract contract DegenerusGameStorage {
 
     /// @dev Game-held redemption value remains inside claimablePool, outside wallet balances.
     function _redemptionReserve() internal view returns (uint256) {
-        uint256 stored = _redemptionReserveStored;
-        return stored == 0 ? 0 : stored - 1;
+        return _redemptionReserveStored - 1;
     }
 
     function _setRedemptionReserve(uint256 amount) internal {
@@ -2454,6 +2453,7 @@ abstract contract DegenerusGameStorage {
 
     function _releaseRedemptionReserve() internal {
         uint256 amount = _redemptionReserve();
+        if (amount == 0) return;
         _setRedemptionReserve(0);
         _creditClaimableLogged(SDGNRS_WALLET_ID, amount);
     }

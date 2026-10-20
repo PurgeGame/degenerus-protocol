@@ -9704,14 +9704,6 @@
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
   {
-    "path": "contracts/modules/DegenerusGameRngUtils.sol",
-    "scope": "DegenerusGameRngUtils._closeRedemptionBatch",
-    "kind": "external",
-    "expression": "IsDGNRS(sdgnrs).redemptionSettlementPending()",
-    "count": 1,
-    "review": "PROTOCOL_VIEW: close cannot release a reserve while its batch still settles."
-  },
-  {
     "path": "contracts/modules/DegenerusGameTicketModule.sol",
     "scope": "DegenerusGameTicketModule._runTicketWork",
     "kind": "opcode-or-value",
@@ -10531,9 +10523,9 @@
     "path": "contracts/sDGNRS.sol",
     "scope": "sDGNRS._gameOverValue",
     "kind": "recipient-helper",
-    "expression": "_liveMoney()",
+    "expression": "_liveMoney(true)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "TRANSITIVE_BASELINE: existing backing read; stETH custody now counts only after game over (live legs cannot pay it)."
   },
   {
     "path": "contracts/sDGNRS.sol",
@@ -10762,14 +10754,6 @@
   {
     "path": "contracts/sDGNRS.sol",
     "scope": "sDGNRS.closeRedemptionBatch",
-    "kind": "bounded-wrapper",
-    "expression": "BoundedCall.staticWord( address(steth), 50_000, abi.encodeWithSelector(IStETH.balanceOf.selector, address(this)) )",
-    "count": 1,
-    "review": "ISOLATED: F0 fixed budget, unconditional gas admission and capped return copy; site defines refusal/drop/zero."
-  },
-  {
-    "path": "contracts/sDGNRS.sol",
-    "scope": "sDGNRS.closeRedemptionBatch",
     "kind": "external",
     "expression": "coinflip.redeemableFlipBacking()",
     "count": 1,
@@ -10859,9 +10843,9 @@
     "path": "contracts/sDGNRS.sol",
     "scope": "sDGNRS.previewBurnValue",
     "kind": "recipient-helper",
-    "expression": "_liveMoney()",
+    "expression": "_liveMoney(over)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "TRANSITIVE_BASELINE: existing backing read; stETH custody now counts only after game over (live legs cannot pay it)."
   },
   {
     "path": "contracts/sDGNRS.sol",

@@ -19,7 +19,7 @@ abstract contract DegenerusGameRngUtils is DegenerusGameStorage {
     ///      consume the unsent reserve; it remains inside claimablePool until paid or recycled.
     function _closeRedemptionBatch() internal {
         address sdgnrs = ContractAddresses.SDGNRS;
-        if (IsDGNRS(sdgnrs).redemptionSettlementPending()) return;
+        // Requests need the read certificate, so the previous batch has finished settling.
         _releaseRedemptionReserve();
         uint256 claimable = _claimableOf(SDGNRS_WALLET_ID);
         uint256 pull = IsDGNRS(sdgnrs).closeRedemptionBatch(claimable);

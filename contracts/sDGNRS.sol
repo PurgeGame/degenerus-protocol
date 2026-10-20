@@ -422,10 +422,8 @@ contract sDGNRS {
         uint256 escrowed = _escrowedSupply - 1;
         uint256 holderBase = _totalSupply + escrowed;
         uint256 claimable = gameClaimable > 1 ? gameClaimable - 1 : 0;
-        (, uint256 stethBalance) = BoundedCall.staticWord(
-            address(steth), 50_000, abi.encodeWithSelector(IStETH.balanceOf.selector, address(this))
-        );
-        (, uint256 gross) = _redemptionBacking(claimable, stethBalance);
+        // Live legs pay only ETH and the Game reserve, so token custody waits for the ending.
+        (, uint256 gross) = _redemptionBacking(claimable, 0);
         uint256 reserved = _pendingRedemptionEthValue;
         uint256 money = gross > reserved ? gross - reserved : 0;
         uint256 ethBase = ((money * tokens) / holderBase / 1e9) * 1e9;
@@ -452,7 +450,7 @@ contract sDGNRS {
             _openBatch = id + 1;
         }
 
-        // Live claims spend ETH or the Game reserve; token custody contributes only to price.
+        // The maximum fits ETH custody plus Game backing, so the pull is never capped.
         uint256 custodyEth = address(this).balance;
         if (reserved > custodyEth) {
             pull = reserved - custodyEth;
@@ -579,8 +577,11 @@ contract sDGNRS {
             );
             if (!paid) {
                 _pendingRedemptionEthValue -= uint96(rolled);
-                uint256 flipShare = (uint256(batch.flipEscrow) * claimTokens) / batchTokens;
-                if (flipShare != 0) coinflip.returnRedeemedFlip(flipShare);
+                // A lost synthetic flip already forfeited the principal, paid or not.
+                if (batch.flipReward != 0) {
+                    uint256 flipShare = (uint256(batch.flipEscrow) * claimTokens) / batchTokens;
+                    if (flipShare != 0) coinflip.returnRedeemedFlip(flipShare);
+                }
             }
         }
         if (cursor != initialCursor) { result.progressed = true; MineFlipGas.markProgress(meter); }
@@ -1069,7 +1070,7 @@ contract sDGNRS {
     ///      stETH loss that leaves custody below the reserve prices at nothing instead of
     ///      panicking every burn after game over.
     function _gameOverValue(uint256 amount) private view returns (uint256) {
-        return (_liveMoney() * amount) / (uint256(_totalSupply) + _escrowedSupply - 1);
+        return (_liveMoney(true) * amount) / (uint256(_totalSupply) + _escrowedSupply - 1);
     }
 
     /// @dev Pay `value` of game-over backing to `to`: ETH first, stETH for the rest. sDGNRS's game
@@ -1261,10 +1262,10 @@ contract sDGNRS {
     // =====================================================================
 
     /// @notice Preview the value and FLIP output for burning sDGNRS
-    /// @dev The live price: the proportional share of ETH + stETH + claimable, net of
+    /// @dev The live price: the proportional share of ETH + Game backing, net of
     ///      pendingRedemptionEthValue (owed to closed batches), over the holder base (supply plus
-    ///      the open batch's escrow). A live burn is priced when its batch closes, so this is an
-    ///      estimate before the batch-wide upside cap. After game over
+    ///      the open batch's escrow); stETH custody counts only after game over. A live burn is
+    ///      priced when its batch closes, so this is an estimate before the batch-wide upside cap. After game over
     ///      it is exactly the deterministic burn's value. The value is paid as ETH, stETH, or a mix
     ///      chosen at pay time — the two are at par protocol-wide, so it is reported as one
     ///      wei-denominated figure. GameOver burns pay no FLIP.
@@ -1275,7 +1276,8 @@ contract sDGNRS {
         uint256 supply = uint256(_totalSupply) + _escrowedSupply - 1;
         if (amount == 0 || amount > supply) return (0, 0);
 
-        ethOut = (_liveMoney() * amount) / supply;
+        bool over = game.gameOver();
+        ethOut = (_liveMoney(over) * amount) / supply;
 
         // GameOver burns pay no FLIP. sDGNRS's full FLIP backing is its seed-reserve claimable +
         // the auto-rebuy carry (incoming FLIP rides tomorrow's stake and settles into these);
@@ -1283,7 +1285,7 @@ contract sDGNRS {
         // No reserve term: a batch close removes its escrowed slice from this backing, so these
         // live reads are already net of closed batches. Best-effort (the carry/claimable can
         // momentarily lag a stalled advance or an in-flight stake).
-        if (!game.gameOver()) {
+        if (!over) {
             uint256 claimableFlip = coinflip.previewClaimCoinflips(address(this));
             (, , uint256 carry, ) = coinflip.coinflipAutoRebuyInfo(address(this));
             uint256 totalFlip = claimableFlip + carry;
@@ -1397,9 +1399,11 @@ contract sDGNRS {
         if (gross > type(uint96).max) gross = type(uint96).max;
     }
 
-    /// @dev Admitted backing net of every outstanding redemption reserve, floored at 0.
-    function _liveMoney() private view returns (uint256) {
-        (, uint256 gross) = _redemptionBacking(_claimableWinnings(), steth.balanceOf(address(this)));
+    /// @dev Admitted backing net of every outstanding redemption reserve, floored at 0. Token
+    ///      custody counts only once claims can pay in it (after game over).
+    function _liveMoney(bool withSteth) private view returns (uint256) {
+        (, uint256 gross) = _redemptionBacking(_claimableWinnings(),
+            withSteth ? steth.balanceOf(address(this)) : 0);
         uint256 reserved = _pendingRedemptionEthValue;
         return gross > reserved ? gross - reserved : 0;
     }

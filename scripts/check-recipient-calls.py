@@ -20,6 +20,11 @@ ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / 'scripts/recipient-call-manifest.json'
 
 
+def pointer_key(type_identifier):
+    # A view or pure helper can be assigned to a less restricted internal pointer.
+    return re.sub(r'(_internal)_(pure|view|nonpayable|payable)(?=\$)', r'\1', type_identifier)
+
+
 def normalize_expression(code):
     # Preserve literal bytes while ignoring comments and formatting outside literals.
     literals = r"\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'"
@@ -89,12 +94,12 @@ def discover(root=ROOT):
             return {ref}
         # Internal function values may be assigned, passed or returned. Use a
         # conservative type-compatible set so indirect payout calls cannot escape.
-        typ = expression.get('typeDescriptions', {}).get('typeIdentifier', '')
+        typ = pointer_key(expression.get('typeDescriptions', {}).get('typeIdentifier', ''))
         return references_by_type.get(typ, set()) if '_internal' in typ else set()
 
     for _, _, _, _, node in nodes:
         ref = node.get('referencedDeclaration')
-        typ = node.get('typeDescriptions', {}).get('typeIdentifier', '')
+        typ = pointer_key(node.get('typeDescriptions', {}).get('typeIdentifier', ''))
         if ref in declarations and typ:
             references_by_type.setdefault(typ, set()).add(ref)
 

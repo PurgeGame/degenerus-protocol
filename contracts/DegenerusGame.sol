@@ -1446,9 +1446,9 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
 
         uint256 ethBal = address(this).balance;
         if (ethBal < amount) revert Insolvent();
-        // Vault and DGNRS claimable can be settled in stETH, so exclude from ETH reserve
+        // Vault and sDGNRS claimable (including its redemption reserve) can be settled in stETH
         uint256 stethSettleable = _claimableOf(VAULT_WALLET_ID) +
-            _claimableOf(SDGNRS_WALLET_ID);
+            _claimableOf(SDGNRS_WALLET_ID) + _redemptionReserve();
         uint256 reserve = claimablePool > stethSettleable
             ? claimablePool - stethSettleable
             : 0;
@@ -2124,7 +2124,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
 
     /// @notice Game-held value reserved for sDGNRS redemption settlement.
     function redemptionReserve() external view returns (uint256) {
-        if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) return 0;
         return _redemptionReserve();
     }
 

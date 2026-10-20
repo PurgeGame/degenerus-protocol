@@ -97,6 +97,25 @@ contract Child is Base {
             self.assertTrue(any(k[1] == 'Base.relay' and k[2] == 'recipient-helper' for k in sites))
             self.assertTrue(any(k[3] == 'fn(to)' and k[2] == 'recipient-helper' for k in sites))
 
+    def test_view_helper_through_a_wider_pointer_is_transitive(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / 'contracts').mkdir()
+            (root / 'node_modules').mkdir()
+            source = '''pragma solidity >=0.8.26 <0.9.0;
+interface Oracle { function price() external view returns (uint); }
+contract Calls {
+ Oracle oracle;
+ function read() internal view returns (uint) { return oracle.price(); }
+ function run() external returns (uint) {
+  function() internal returns (uint) p = read;
+  return p();
+ }
+}'''
+            (root / 'contracts/Calls.sol').write_text(source)
+            sites = gate.discover(root)
+            self.assertTrue(any(k[3] == 'p()' and k[2] == 'recipient-helper' for k in sites))
+
     def test_overloaded_callers_are_distinct_sites(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

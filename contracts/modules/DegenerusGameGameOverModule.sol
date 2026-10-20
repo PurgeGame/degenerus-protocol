@@ -182,10 +182,6 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     /// @notice stETH token contract for liquid staking rewards
     IStETH private constant steth = IStETH(ContractAddresses.STETH_TOKEN);
 
-    /// @notice Admin contract for VRF shutdown
-    IDegenerusAdminShutdown private constant admin =
-        IDegenerusAdminShutdown(ContractAddresses.ADMIN);
-
     /// @notice GNRUS contract for gameover cleanup
     IGNRUSGameOver private constant charityGameOver =
         IGNRUSGameOver(ContractAddresses.GNRUS);

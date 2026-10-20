@@ -7,15 +7,16 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @notice Game-held stETH backs protected reserves; live claims use ETH and reserved ledger value.
 contract RedemptionStethFallbackTest is RedemptionFixture {
-    function _fundGameBacking(uint256 liquid) internal {
+    function _fundGameBacking(uint256 liquid) internal { _fundGameBacking(liquid, 1000 ether); }
+    function _fundGameBacking(uint256 liquid, uint256 credit) internal {
         vm.deal(address(sdgnrs), 0);
         vm.deal(address(game), liquid);
-        mockStETH.mint(address(game), 1000 ether - liquid);
+        mockStETH.mint(address(game), credit - liquid);
         bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(address(sdgnrs))), GameSlots.BALANCES_PACKED));
         uint256 packed = uint256(vm.load(address(game), slot));
-        vm.store(address(game), slot, bytes32((packed & (type(uint256).max << 128)) | uint128(1000 ether + 1)));
+        vm.store(address(game), slot, bytes32((packed & (type(uint256).max << 128)) | uint128(credit + 1)));
         uint256 pools = uint256(vm.load(address(game), bytes32(uint256(1))));
-        vm.store(address(game), bytes32(uint256(1)), bytes32((pools & type(uint128).max) | (uint256(1000 ether + 1) << 128)));
+        vm.store(address(game), bytes32(uint256(1)), bytes32((pools & type(uint128).max) | (uint256(credit + 1) << 128)));
     }
     function _fundedClose() internal {
         bytes memory code = address(game).code;
@@ -65,23 +66,47 @@ contract RedemptionStethFallbackTest is RedemptionFixture {
         vm.mockCall(address(mockStETH), abi.encodeWithSelector(mockStETH.transfer.selector), abi.encode(false));
         _case(0);
     }
-    function test_TokenDonationPricedOnceAndGameReserveFundsClaim() public {
+    /// @dev Live legs pay only ETH and the Game reserve, so a token donation waits for the ending.
+    function test_TokenDonationWaitsForTheEndingAndGameReserveFundsClaim() public {
         _fundGameBacking(1000 ether);
         mockStETH.mint(address(sdgnrs), 100 ether);
         uint256 n = sdgnrs.totalSupply() / 100;
+        (uint256 preview,) = sdgnrs.previewBurnValue(n);
+        assertEq(preview, 10 ether, "live preview ignores token custody");
         _burn(alice, n);
         uint256 credit = game.claimableWinningsOf(address(sdgnrs));
         _fundedClose();
-        assertEq(_claimBase(alice, 1), 11 ether);
+        assertEq(_claimBase(alice, 1), 10 ether);
         uint256 beneficiaryBefore = game.claimableWinningsOf(alice);
         settlementWord = _wordForRoll(175);
         vm.mockCall(address(game), abi.encodeWithSignature("rngConsumerStage()"), abi.encode(uint8(1)));
         assertTrue(_work(9_000_000));
-        assertGe(game.claimableWinningsOf(alice), beneficiaryBefore + 19.25 ether / 2,
+        assertGe(game.claimableWinningsOf(alice), beneficiaryBefore + 17.5 ether / 2,
             "token donation cannot make a funded live claim drop");
-        assertEq(game.claimableWinningsOf(address(sdgnrs)), credit - 19.25 ether);
+        assertEq(game.claimableWinningsOf(address(sdgnrs)), credit - 17.5 ether);
         assertEq(mockStETH.balanceOf(address(sdgnrs)), 100 ether, "token donation remains backing");
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
+        _solvent();
+    }
+    /// @dev Thin Game backing and a large token donation: every live claim is still paid at the
+    ///      top roll, because pricing counts only what the legs can spend.
+    function test_LargeTokenDonationCannotDropALiveClaim() public {
+        _fundGameBacking(0, 10 ether);
+        mockStETH.mint(address(sdgnrs), 100 ether);
+        uint32 id = _openBatchId();
+        _burn(alice, sdgnrs.totalSupply() / 10);
+        _fundedClose();
+        assertEq(_claimBase(alice, id), 1 ether, "priced from Game backing only");
+        assertEq(game.redemptionReserve(), 1.75 ether, "the whole maximum is isolated");
+        uint256 future = game.futurePrizePoolView();
+        settlementWord = _wordForRoll(175);
+        vm.mockCall(address(game), abi.encodeWithSignature("rngConsumerStage()"), abi.encode(uint8(1)));
+        assertTrue(_work(9_000_000));
+        assertEq(_claimTokens(alice, id), 0, "claim settled");
+        assertApproxEqAbs(game.claimableWinningsOf(alice), 1.75 ether / 2, 1, "direct half paid");
+        assertEq(game.futurePrizePoolView() - future, 1.75 ether / 2, "lootbox half paid");
+        assertEq(game.redemptionReserve(), 0);
+        assertEq(mockStETH.balanceOf(address(sdgnrs)), 100 ether, "token donation remains backing");
         _solvent();
     }
     function test_NonGameReceiveReverts() public {
