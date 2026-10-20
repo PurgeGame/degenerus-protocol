@@ -113,6 +113,8 @@ async function measureLevelOneAdvance(prevPoolEth, expectedAwards) {
   const gameAddr = await game.getAddress();
   const crapsAddr = fixture.predicted.get("CRAPS");
   const battle = await ethers.getContractAt("JackpotBattle", crapsAddr);
+  const lens = await (await ethers.getContractFactory("CrapsLens")).deploy();
+  await lens.waitForDeployment();
   const poolRoot = storageRootOf("levelPrizePool");
   const bucketRoot = storageRootOf("lvlTraitEntry");
   const ownerRoot = storageRootOf("wallets");
@@ -182,7 +184,7 @@ async function measureLevelOneAdvance(prevPoolEth, expectedAwards) {
   const requestDay = await game.currentDayView();
   const locked = await battle.jackpotProgress();
   const baseline = recordedPool * 1000n / (ethers.parseEther("0.01") * 200n);
-  const price = await battle.jackpotEntryPriceOf(locked.slot);
+  const price = await lens.jackpotEntryPriceOf(locked.slot);
   const expectedAdded = baseline * price / 8000n;
   expect(locked.added).to.equal(expectedAdded);
   expect(locked.started).to.equal(false);
@@ -202,7 +204,7 @@ async function measureLevelOneAdvance(prevPoolEth, expectedAwards) {
   const progress = await battle.jackpotProgress();
   expect(progress.started).to.equal(true);
   expect(progress.complete, "all actual battle work must finish").to.equal(true);
-  const final = await battle.jackpotBattleOf(progress.slot);
+  const final = await lens.jackpotBattleOf(progress.slot);
   expect(final.round.paidCount, "this witness is explicitly an awarded-only field").to.equal(0n);
   expect(final.round.awardTarget).to.equal(BigInt(expectedAwards));
   expect(final.round.drawnUnits).to.equal(BigInt(expectedAwards));

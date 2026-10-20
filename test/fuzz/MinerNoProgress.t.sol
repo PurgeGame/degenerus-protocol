@@ -13,6 +13,7 @@ import {IVRFCoordinator} from "../../contracts/interfaces/IVRFCoordinator.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
+import {CrapsPreferenceLib} from "../../contracts/libraries/CrapsPreferenceLib.sol";
 
 contract MinerProgressHarness is DegenerusGameMinerModule {
     function seed(MinerAction action) external {
@@ -112,13 +113,13 @@ contract MinerRefusingCoordinator {
 contract MinerMaintenanceTable is CrapsBattle {
     function seedHead(uint24 day, uint8 remainder, uint32 entrants, bool opened) external {
         _minerSlot = uint64(uint256(day) * _BONUS_SLOTS_PER_DAY + remainder);
-        if (opened) _boostBudget[day] = 1;
+        if (opened) _storeBudget(day, 1);
         if (remainder == 0) {
-            _dayTickets[_minerSlot] = entrants;
+            _storeDayTickets(_minerSlot, entrants);
             for (uint256 i = 1; i <= entrants; ++i) {
                 _appendBet((uint256(_minerSlot) << 64) | i, 0xA000 + i);
             }
-        } else _battles[bytes32(uint256(_minerSlot))] = entrants;
+        } else _storeBattle(bytes32(uint256(_minerSlot)), entrants);
     }
     function head() external view returns (uint64) { return _minerSlot; }
     function binding(uint64 slot) external view returns (uint48) { return _slotIndexOf(slot); }
@@ -423,7 +424,7 @@ contract MinerNoProgressTest is Test {
             _expectFailure(DegenerusGameMinerModule.NoWork.selector, 16_700_000);
             // Direct idle maintenance reports no progress, even without an eligible clock step.
             vm.prank(address(game));
-            MineFlipGas.Result memory idle = table.runCrapsMaintenance(3_000_000);
+            MineFlipGas.Result memory idle = JackpotBattle(address(table)).runCrapsMaintenance(3_000_000);
             assertFalse(idle.progressed);
             assertTrue(idle.done);
             vm.warp(start + closes[p]);
@@ -445,7 +446,7 @@ contract MinerNoProgressTest is Test {
         assertFalse(table.minerMaintenancePending());
         _expectFailure(DegenerusGameMinerModule.NoWork.selector, 16_700_000);
         vm.prank(address(game));
-        assertFalse(table.runCrapsMaintenance(3_000_000).progressed);
+        assertFalse(JackpotBattle(address(table)).runCrapsMaintenance(3_000_000).progressed);
         table.seedHead(DAY + 1, 0, 0, false);
         vm.warp(start + 2 days);
         game.seed(DegenerusGameStorage.MinerAction.Idle);
@@ -488,7 +489,7 @@ contract MinerNoProgressTest is Test {
             if (j == 0) assertGt(calls, 1, "small gas commits a useful partial prefix");
             assertEq(table.cursor(head), 80);
             assertEq(table.head(), head + 8);
-            for (uint256 i = 1; i <= 80; ++i) assertEq(table.credits(uint32(0xA000 + i)), 1);
+            for (uint256 i = 1; i <= 80; ++i) assertEq(table.credits(uint32(0xA000 + i)), CrapsPreferenceLib.RETAINED | 1);
             _expectFailure(DegenerusGameMinerModule.NoWork.selector, 16_700_000);
             vm.revertToState(snap);
         }

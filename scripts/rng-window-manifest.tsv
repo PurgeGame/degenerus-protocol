@@ -84,7 +84,6 @@ CLASS	IDENTIFIER	FUNCTION	FILE	MODE
 # count, not the mutable neighboring lifecycle bits; packing fuzz proves isolation.
 CONSUMER-SEALED	_dailyWordAt	_enterToday	CrapsBattle.sol	READ
 GATE	_dailyWordAt	_reserveRun	CrapsBattle.sol	READ	Future-day existence check (word != 0 -> DayNotReservable) per reserved day; tags read once, no value decision.
-CONSUMER-SEALED	_dailyWordAt	_shareOf	CrapsBattle.sol	READ
 CONSUMER-SEALED	_wordAt	_slotWord	CrapsBattle.sol	READ
 CONSUMER-SEALED	_dailyWordAt	_windowTerms	CrapsBattle.sol	READ
 CONSUMER-SEALED	_dailyWordAt	openBonusDay	CrapsBattle.sol	READ
@@ -100,7 +99,7 @@ ACCESSOR	rngFlagsAndNudges	_decActiveWordOf	DegenerusGameLens.sol	READ
 ACCESSOR	rngWordCurrent	_decActiveWordOf	DegenerusGameLens.sol	READ
 CONSUMER-SEALED	_wordAt	_keepRngCohort	JackpotBattle.sol	READ	registered slot index is closed before the word exists; exact field key and bounded cursor; pending count discharges only after payout
 CONSUMER-SEALED	_wordAt	_keepScheduled	JackpotBattle.sol	READ
-CONSUMER-SEALED	_dailyWordAt	_shareOf	JackpotBattle.sol	READ
+GATE	_dailyWordAt	donate	JackpotBattle.sol	READ	Unfrozen scheduled donations require the day word; readiness only, no value decision.
 CONSUMER-SEALED	_dailyWordAt	_windowTerms	JackpotBattle.sol	READ
 ACCESSOR	_dailyWordAt	_dailyWordAt	LootboxCraps.sol	READ
 ACCESSOR	_wordAt	_wordAt	LootboxCraps.sol	READ

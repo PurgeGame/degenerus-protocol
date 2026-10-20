@@ -37,7 +37,7 @@ contract ProgHarness is CrapsViews {
         w.played = 1200;
         // This fold-only fixture bypasses armWindow. Enroll its real field before
         // its first score so finalization has the same obligation as an armed field.
-        if (uint32(_battles[key] >> _BG_RESOLVED_SHIFT) == 0 && uint32(_battles[key]) != 0) {
+        if (uint32(_loadBattle(key) >> _BG_RESOLVED_SHIFT) == 0 && uint32(_loadBattle(key)) != 0) {
             _setSlotIndex(w.bound, 1);
             IReadCohortLifecycle(address(this)).registerRngSlot(0, w.bound, key);
         }
@@ -117,11 +117,11 @@ contract ProgHarness is CrapsViews {
     ///      composite and a 32-bit seat above it — is only really graded against the bits
     ///      themselves.
     function battleWordOf(bytes32 key) external view returns (uint256) {
-        return _battles[key];
+        return _loadBattle(key);
     }
 
     function writeBattleWord(bytes32 key, uint256 word) external {
-        _battles[key] = word;
+        _storeBattle(key, word);
     }
 
 
@@ -164,12 +164,12 @@ contract ProgHarness is CrapsViews {
 
     /// @dev The composite the fold is currently holding, whether or not the field has finished.
     function leaderBestOf(bytes32 key) external view returns (uint256) {
-        return (_battles[key] >> _BG_BEST_SHIFT) & _SC_BEST_MASK;
+        return (_loadBattle(key) >> _BG_BEST_SHIFT) & _SC_BEST_MASK;
     }
 
     /// @dev The high point the fold is currently holding, in whole FLIP.
     function leaderPeakOf(bytes32 key) external view returns (uint256) {
-        return ((_battles[key] >> _BG_BEST_SHIFT) >> _SC_PRIMARY_SHIFT) & _SC_PRIMARY_MASK;
+        return ((_loadBattle(key) >> _BG_BEST_SHIFT) >> _SC_PRIMARY_SHIFT) & _SC_PRIMARY_MASK;
     }
 }
 

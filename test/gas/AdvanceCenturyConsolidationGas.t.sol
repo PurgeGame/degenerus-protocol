@@ -662,8 +662,8 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
 
     function _armCenturyWord(uint256 word, uint24 day) private {
         for (uint24 i = 1; i <= 7; ++i) {
-            vm.store(address(crapsBattle), keccak256(abi.encode(uint256(day - i), CRAPS_DAY_STAKED_SLOT)),
-                bytes32((uint256(500_000 ether) << 128) | uint256(1_000_000 ether)));
+            vm.store(address(crapsBattle), keccak256(abi.encode(uint256((day - i) & 63), CRAPS_DAY_STAKED_SLOT)),
+                bytes32((uint256(day - i) << 232) | (uint256(500_000) << 112) | uint256(1_000_000)));
         }
         vm.prank(address(game));
         coinflip.processCoinflipPayouts(0, uint256(keccak256("yesterday")) | 1, day - 1);

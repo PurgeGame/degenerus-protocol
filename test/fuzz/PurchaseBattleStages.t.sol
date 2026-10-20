@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {CrapsLensReader} from "../../contracts/CrapsLens.sol";
+
 import {Vm} from "forge-std/Vm.sol";
 import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
 import {IJackpotBattle} from "../../contracts/interfaces/IJackpotBattle.sol";
@@ -52,7 +54,7 @@ abstract contract PurchaseBattleStagesBase is PurchaseDailyFixture, FreshWordLeg
         (,,, bool complete) = battle.jackpotProgress();
         assertTrue(complete, "the battle completed");
         (CrapsBattleStorage.JackpotRound memory round, uint256 board, uint64 cursor) =
-            JackpotBattle(address(crapsBattle)).jackpotBattleOf(slot);
+            CrapsLensReader.jackpotBattleOf(address(crapsBattle), slot);
         digest = keccak256(abi.encode(digest, round, board, cursor));
     }
 
@@ -198,7 +200,7 @@ contract PurchaseZeroPoolBattleFloorTest is PurchaseBattleStagesBase {
 
     function test_ZeroPoolLocksTheFloorBattleThenSeals() public {
         (uint64 slot, uint256 added,,) = battle.jackpotProgress();
-        assertEq(added, 150_000 * battle.jackpotEntryPriceOf(slot) / 8_000, "scaled level-one floor");
+        assertEq(added, 150_000 * CrapsLensReader.jackpotEntryPriceOf(address(battle), slot) / 8_000, "scaled level-one floor");
         _apply();
         (, uint256 entries) = _battle();
         assertEq(entries, 15, "one award per 10,000 of Added");

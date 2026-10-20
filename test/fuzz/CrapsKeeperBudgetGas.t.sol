@@ -37,7 +37,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         }
         assertTrue(game.rngComplete());
         OwnerTargetCall.call(address(crapsBattle), abi.encodeCall(crapsBattle.setBattleCreator, (address(this), true)), 0);
-        slot = crapsBattle.createBattle(300, 25, 1000, 75, uint40(vm.getBlockTimestamp() + 60), true, 255);
+        slot = JackpotBattle(address(crapsBattle)).createBattle(300, 25, 1000, 75, uint40(vm.getBlockTimestamp() + 60), true, 255);
         uint32 board = 1 | uint32(1) << 3 | uint32(1) << 6 | uint32(1) << 9
             | uint32(1) << 12 | uint32(1) << 15 | uint32(1) << 18;
         for (uint256 i; i < FIELD; ++i) {
@@ -46,7 +46,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
             vm.prank(player); crapsBattle.enterBattle(slot, board, i == 0 ? 255 : 1);
         }
         vm.warp(vm.getBlockTimestamp() + 60);
-        index = crapsBattle.closeBattle(slot);
+        index = JackpotBattle(address(crapsBattle)).closeBattle(slot);
         uint256 prior = mockVRF.lastRequestId();
         for (uint256 i; i < 100 && mockVRF.lastRequestId() == prior; ++i) game.mineFlip{gas: 15_000_000}(0);
         assertGt(mockVRF.lastRequestId(), prior, "real request seals the custom field");
@@ -214,7 +214,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
     function _requestSingleSeatField() private returns (uint256 request, uint64 nextSlot) {
         assertTrue(game.rngComplete());
         vm.fee(1 gwei);
-        nextSlot = crapsBattle.createBattle(300, 25, 1000, 75,
+        nextSlot = JackpotBattle(address(crapsBattle)).createBattle(300, 25, 1000, 75,
             uint40(vm.getBlockTimestamp() + 60), true, 255);
         address player = address(0xD00DCAFE);
         vm.prank(address(game)); coin.mintForGame(player, 100_000_000 ether);
@@ -222,7 +222,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
             | uint32(1) << 12 | uint32(1) << 15 | uint32(1) << 18;
         vm.prank(player); crapsBattle.enterBattle(nextSlot, board, 1);
         vm.warp(vm.getBlockTimestamp() + 60);
-        crapsBattle.closeBattle(nextSlot);
+        JackpotBattle(address(crapsBattle)).closeBattle(nextSlot);
         uint256 prior = mockVRF.lastRequestId();
         for (uint256 i; i < 100 && mockVRF.lastRequestId() == prior; ++i) game.mineFlip{gas: 15_000_000}(0);
         request = mockVRF.lastRequestId();

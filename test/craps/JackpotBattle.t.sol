@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {CrapsLensReader} from "../../contracts/CrapsLens.sol";
+
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {JackpotBattleFieldLib} from "../../contracts/libraries/JackpotBattleFieldLib.sol";
 import {CrapsPreferenceStore} from "./CrapsPreferenceStore.sol";
@@ -92,13 +94,13 @@ contract BattleRef is Craps {
 contract JackpotTableHarness is CrapsViews {
     function clearDayBodies(uint24 day) external {
         uint256 d = uint256(day) * 8;
-        _dayTickets[d] = 0;
+        _storeDayTickets(d, 0);
         _storeDaySeat(d, 2, 0);
         _storeDaySeat(d, 1, 0);
     }
     function jackpotTerms(uint64 slot) external view returns (Window memory) { return _slotWindow(slot); }
     /// @dev Unopen a day, so the next lock detaches its battle to remainder seven of that day.
-    function clearBoostBudget(uint24 day) external { _boostBudget[day] = 0; }
+    function clearBoostBudget(uint24 day) external { _storeBudget(day, 0); }
 }
 
 contract JackpotBattleTest is CrapsPins {
@@ -179,7 +181,7 @@ contract JackpotBattleTest is CrapsPins {
         return _finish(0);
     }
     function _round() internal view returns (CrapsBattleStorage.JackpotRound memory r) {
-        (r,,) = cold.jackpotBattleOf(slot);
+        (r,,) = CrapsLensReader.jackpotBattleOf(address(cold), slot);
     }
 
     function test_RunDailyBattleWorkUsesParentAllowanceAndFinishesLockedDailyField() public {
@@ -412,7 +414,7 @@ contract JackpotBattleTest is CrapsPins {
         uint64 firstSlot = uint64(uint256(first) * 8 + 6);
         (uint64 locked,,,) = fapi.jackpotProgress();
         assertEq(locked, firstSlot, "the round is not the first window day's battle");
-        (CrapsBattleStorage.JackpotRound memory r,,) = JackpotBattle(address(fresh)).jackpotBattleOf(firstSlot);
+        (CrapsBattleStorage.JackpotRound memory r,,) = CrapsLensReader.jackpotBattleOf(address(fresh), firstSlot);
         assertGt(r.added, 0, "the paid field lost its subsidy");
         assertEq(r.awardTarget, 0, "a Degenesis battle carries awarded seats");
 

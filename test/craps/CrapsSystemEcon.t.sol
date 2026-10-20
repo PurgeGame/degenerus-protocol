@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {CrapsLensReader} from "../../contracts/CrapsLens.sol";
+
 import {CrapsViews} from "./CrapsViews.sol";
 import {CrapsPins} from "./CrapsPins.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -294,7 +296,7 @@ contract CrapsSystemEconTest is CrapsPins {
         // bounty, never action. Replayed here off the same round the contract sealed, since
         // nothing else exposes that split.
         if (period == 5) {
-            (CrapsBattleStorage.JackpotRound memory round,,) = JackpotBattle(address(craps)).jackpotBattleOf(slot);
+            (CrapsBattleStorage.JackpotRound memory round,,) = CrapsLensReader.jackpotBattleOf(address(craps), slot);
             uint256 price = round.entryPrice;
             uint256 totalUnits = uint256(round.paidCount) + uint256(round.drawnUnits);
             uint256 highPool = (uint256(round.paidUnits) - round.paidCount) * price * round.multiplierBps / 10_000;

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {CrapsLensReader} from "../../contracts/CrapsLens.sol";
+
 import {CrapsPins} from "./CrapsPins.sol";
 import {CrapsViews} from "./CrapsViews.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
@@ -11,13 +13,41 @@ import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 
 contract CrapsReuseHarness is CrapsViews {
+    function ringWrite(uint24 day) external {
+        uint256 slot = uint256(day) * 8 + 6;
+        bytes32 key = bytes32(slot);
+        _storeBattle(key, _loadBattle(key) + 9);
+        _setSlotIndex(slot, 2);
+        _storeHighField(key, _loadHighField(key) + 5);
+        _storeDayTickets(uint256(day) * 8, _loadDayTickets(uint256(day) * 8) + 7);
+        _storeDayStaked(day, _loadDayStaked(day) + 11);
+        _storeBudget(day, 13 | (uint256(17) << 112) | (uint256(5) << 224));
+    }
+    function ringRead(uint24 day) external view returns (uint256[6] memory v) {
+        uint256 slot = uint256(day) * 8 + 6;
+        v[0] = _loadBattle(bytes32(slot));
+        v[1] = _loadSlotState(slot);
+        v[2] = _loadHighField(bytes32(slot));
+        v[3] = _loadDayTickets(uint256(day) * 8);
+        v[4] = _loadDayStaked(day);
+        v[5] = _loadBudget(day);
+    }
+    function boardAt(uint256 slot) external view returns (uint256) { return _loadBattle(bytes32(slot)); }
+    function putSeat(uint24 day, uint32 owner, uint256 word) external { _storeDaySeat(uint256(day) * 8, owner, word); }
+    function getSeat(uint24 day, uint32 owner) external view returns (uint256) { return _loadDaySeat(uint256(day) * 8, owner); }
+    function putDraw(uint64 slot, HighRollerDraw memory draw) external { _storeHighDraw(slot, draw); }
+    function putCursor(uint64 slot, uint64 cursor) external { _setBonusCursor(slot, cursor); }
+    function rawState(uint64 slot) external view returns (uint256) { return _slotState[slot & 511]; }
+    function rawSentinels() external view returns (uint256, uint64, uint64, uint64[4] memory) {
+        return (_highRollerReserve, _rngSlotCursor[0], _rngSlotCursor[1], _fundedCustomSlots);
+    }
     function rawBet(uint256 id) external view returns (uint256) { return _bets[_betStorageKey(id)]; }
     function physicalKey(uint256 id) external pure returns (uint256) { return _betStorageKey(id); }
-    function pending(uint48 index) external view returns (uint256) { return _rngSlots[index].length - _rngSlotCursor[index]; }
+    function pending(uint48 index) external view returns (uint256) { return _rngSlots[index].length - _rngCursor(index); }
     function put(uint256 id, uint256 word) external {
         uint256 slot = id >> 64;
         require(slot & 7 == 0, "day fixture");
-        _dayTickets[slot] = uint64(id);
+        _storeDayTickets(slot, uint64(id));
         _appendBet(id, word);
     }
     function resolveOne(uint64 slot) external returns (MineFlipGas.Result memory) {
@@ -221,7 +251,7 @@ contract CrapsStorageReuseTest is CrapsPins {
         JackpotBattle api = JackpotBattle(address(table));
         vm.prank(ContractAddresses.GAME); api.lockJackpotBattle(day + 1, 1 ether, 2);
         (uint64 slot,,,) = api.jackpotProgress();
-        uint256 reserve = api.highRollerReserve();
+        uint256 reserve = CrapsLensReader.highRollerReserve(address(api));
         _warp(day + 34); _buy(bob, day + 64, 1);
         uint256 newWord = table.betWordOf(_id(day + 64, 1));
         uint256[] memory field = new uint256[](1);
@@ -234,7 +264,7 @@ contract CrapsStorageReuseTest is CrapsPins {
         vm.stopPrank();
         assertTrue(r.done);
         vm.prank(address(table)); api.settleHighRollerReserve(slot);
-        assertEq(api.highRollerReserve(), reserve);
+        assertEq(CrapsLensReader.highRollerReserve(address(api)), reserve);
         assertEq(coinflip.totalCredited(), 0);
         assertEq(table.betWordOf(_id(day + 64, 1)), newWord);
         (,, bool started, bool complete) = api.jackpotProgress();
@@ -275,5 +305,148 @@ contract CrapsStorageReuseTest is CrapsPins {
         assertEq(table.betWordOf(_id(day + 64, 2)), 0);
         assertEq(table.betWordOf(_id(day + 64, 3)), 0);
     }
+
+    function _mapped(uint256 root, uint256 key) private pure returns (bytes32) {
+        return keccak256(abi.encode(key, root));
+    }
+
+    function testFuzz_AllRingsRejectOldTagsAndReplacePoisonedWords(uint24 oldDay) public {
+        oldDay = uint24(bound(oldDay, 1, type(uint24).max - 64));
+        uint24 fresh = oldDay + 64;
+        uint256 physical = (uint256(oldDay) * 8 + 6) & 511;
+        uint256 poison = (uint256(oldDay) << 232) | ((uint256(1) << 232) - 1);
+        vm.store(address(table), _mapped(2, physical), bytes32(type(uint256).max));
+        vm.store(address(table), _mapped(2, physical - 1), bytes32(type(uint256).max));
+        vm.store(address(table), _mapped(12, oldDay & 63), bytes32(poison));
+        vm.store(address(table), _mapped(5, physical), bytes32(poison));
+        vm.store(address(table), _mapped(11, physical), bytes32(poison));
+        for (uint256 root = 6; root <= 10; ++root) {
+            if (root == 7 || root == 8) continue;
+            vm.store(address(table), _mapped(root, oldDay & 63), bytes32(poison));
+        }
+        uint256[6] memory beforeWrite = table.ringRead(fresh);
+        for (uint256 i; i < 6; ++i) assertEq(beforeWrite[i], 0, "mismatched tag exposed stale state");
+        table.ringWrite(fresh);
+        uint256[6] memory got = table.ringRead(fresh);
+        uint256[6] memory expected = [uint256(9), 2, 5, 7, 11, 13 | (uint256(17) << 112) | (uint256(5) << 224)];
+        for (uint256 i; i < 6; ++i) assertEq(got[i], expected[i], "stale state survived replacement");
+        got = table.ringRead(oldDay);
+        for (uint256 i; i < 6; ++i) assertEq(got[i], 0, "old logical day reads replacement");
+        assertEq(table.boardAt(uint256(fresh) * 8 + 5), 0, "initialized sibling resurrected old board");
+        assertEq(uint256(vm.load(address(table), _mapped(12, oldDay & 63))), (uint256(fresh) << 232) | 64);
+        assertEq(table.rawState(uint64(uint256(fresh) * 8 + 6)), (uint256(fresh) << 232) | 2, "padding survived");
+    }
+
+    function testFuzz_FourSeatLanesPreserveNeighborsAndReplaceWholeStaleLane(uint24 day, uint32 owner) public {
+        day = uint24(bound(day, 4, type(uint24).max - 68)) & ~uint24(3);
+        uint256 outer = uint256(keccak256(abi.encode(uint256(day & 63) >> 2, uint256(7))));
+        bytes32 at = keccak256(abi.encode(owner, outer));
+        vm.store(address(table), at, bytes32(type(uint256).max));
+        for (uint24 i; i < 4; ++i) table.putSeat(day + i, owner, 11 + i | (uint256(3) << 33));
+        uint256 beforeWrite = uint256(vm.load(address(table), at));
+        for (uint24 i; i < 4; ++i) {
+            assertEq(table.getSeat(day + i, owner), 11 + i | (uint256(3) << 33));
+            assertEq(table.getSeat(day + i + 64, owner), 0);
+        }
+        table.putSeat(day + 65, owner, 23);
+        uint256 afterWrite = uint256(vm.load(address(table), at));
+        uint256 mask = uint256(type(uint64).max) << 64;
+        assertEq(afterWrite & ~mask, beforeWrite & ~mask, "neighbor overwritten");
+        assertEq(uint64(afterWrite >> 64), 23 | (uint256(day + 65) << 40), "padding survived");
+        assertEq(table.getSeat(day + 1, owner), 0);
+        assertEq(table.getSeat(day + 65, owner), 23);
+    }
+
+    function test_HighDrawSharesCursorWordAndWrapClearsAllDrawFlags() public {
+        uint24 day = _today();
+        uint64 slot = uint64(uint256(day) * 8 + 6);
+        table.ringWrite(day);
+        table.putCursor(slot, 19);
+        CrapsBattleStorage.HighRollerDraw memory draw = CrapsBattleStorage.HighRollerDraw(21, 22, 23, true, true);
+        table.putDraw(slot, draw);
+        table.putCursor(slot, 20);
+        assertEq(table.bonusCursorOf(slot), 20);
+        assertEq(keccak256(abi.encode(CrapsLensReader.highRollerDrawOf(address(table), slot))), keccak256(abi.encode(draw)));
+        uint64 fresh = slot + 512;
+        table.ringWrite(day + 64);
+        draw = CrapsLensReader.highRollerDrawOf(address(table), fresh);
+        assertEq(keccak256(abi.encode(draw)), keccak256(abi.encode(CrapsBattleStorage.HighRollerDraw(0, 0, 0, false, false))));
+        assertEq(table.bonusCursorOf(fresh), 0);
+        assertEq(table.rawState(fresh), (uint256(day + 64) << 232) | 2);
+    }
+
+    function test_JackpotWrapReplacesPoisonedCountsButHidesRetainedEntropyUntilPrepare() public {
+        uint24 day = _today();
+        JackpotBattle api = JackpotBattle(address(table));
+        vm.prank(ContractAddresses.GAME); api.lockJackpotBattle(day + 1, 1 ether, 2);
+        (uint64 oldSlot,,,) = api.jackpotProgress();
+        assertEq(oldSlot & 7, 7);
+        uint256 base = uint256(_mapped(17, oldSlot & 511));
+        for (uint256 i; i < 5; ++i) vm.store(address(table), bytes32(base + i), bytes32(type(uint256).max));
+        _warp(day + 64);
+        vm.prank(ContractAddresses.GAME); api.lockJackpotBattle(day + 65, 1 ether, 2);
+        (uint64 fresh,,,) = api.jackpotProgress();
+        assertEq(fresh, oldSlot + 512);
+        (CrapsBattleStorage.JackpotRound memory r,,) = CrapsLensReader.jackpotBattleOf(address(table), fresh);
+        assertEq(r.day, day + 64);
+        assertEq(r.requestDay, day + 65);
+        assertEq(r.drawWord, 0);
+        assertEq(r.drawCursor, 0);
+        assertEq(r.paidCount, 0);
+        assertEq(r.paidUnits, 0);
+        assertEq(r.drawnCount, 0);
+        assertEq(r.drawnUnits, 0);
+        assertEq(r.totalPool, 0);
+        assertEq(r.potRemainder, 0);
+        assertEq(r.bankroll, 0);
+        assertEq(r.bountyUnits, 0);
+        assertEq(r.multiplierBps, 0);
+        assertEq(r.subsidyMultiplierBps, 0);
+        assertEq(r.level, 0);
+        assertFalse(r.started);
+        assertEq(uint256(vm.load(address(table), bytes32(base))), type(uint256).max, "entropy cleared");
+        assertEq(uint256(vm.load(address(table), bytes32(base + 2))), uint256(1) << 192, "bankroll sentinel");
+        vm.prank(ContractAddresses.GAME);
+        (uint256 word, uint256 cursor,) = api.prepareJackpotBattle(2, WORD);
+        assertEq(word, WORD);
+        assertEq(cursor, 0);
+        (r,,) = CrapsLensReader.jackpotBattleOf(address(table), oldSlot);
+        assertEq(r.requestDay, 0, "old round reads new request");
+    }
+
+    function test_SentinelsAreNonzeroAtConstruction() public view {
+        (uint256 reserve, uint64 a, uint64 b, uint64[4] memory slots) = table.rawSentinels();
+        assertEq(reserve, 1);
+        assertEq(a, 1); assertEq(b, 1);
+        for (uint256 i; i < 4; ++i) assertEq(slots[i], 1);
+        assertEq(CrapsLensReader.highRollerReserve(address(table)), 0);
+    }
+
+    function _checkFamily(uint256 family) private {
+        uint24 oldDay = 100;
+        uint24 fresh = oldDay + 64;
+        uint256 physical = (uint256(oldDay) * 8 + 6) & 511;
+        uint256 poison = (uint256(oldDay) << 232) | ((uint256(1) << 232) - 1);
+        uint256[6] memory roots = [uint256(2), 5, 11, 6, 9, 10];
+        uint256 key = family < 3 ? physical : oldDay & 63;
+        vm.store(address(table), _mapped(roots[family], key), bytes32(poison));
+        if (family == 0) vm.store(address(table), _mapped(12, oldDay & 63), bytes32(poison));
+        uint256[6] memory got = table.ringRead(fresh);
+        assertEq(got[family], 0, "tag check");
+        table.ringWrite(fresh);
+        got = table.ringRead(fresh);
+        uint256[6] memory expected = [uint256(9), 2, 5, 7, 11, 13 | (uint256(17) << 112) | (uint256(5) << 224)];
+        assertEq(got[family], expected[family], "reset");
+        uint256 encoded = expected[family] | (family == 0 ? 0 : uint256(fresh) << 232);
+        assertEq(uint256(vm.load(address(table), _mapped(roots[family], key))), encoded, "whole-word overwrite");
+        got = table.ringRead(oldDay);
+        assertEq(got[family], 0, "old tag");
+    }
+    function test_MutationFamily_Scoreboard() public { _checkFamily(0); }
+    function test_MutationFamily_SlotStateAndHighDraw() public { _checkFamily(1); }
+    function test_MutationFamily_HighField() public { _checkFamily(2); }
+    function test_MutationFamily_DayTickets() public { _checkFamily(3); }
+    function test_MutationFamily_DayAction() public { _checkFamily(4); }
+    function test_MutationFamily_MergedBudgets() public { _checkFamily(5); }
 
 }

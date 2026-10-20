@@ -121,18 +121,18 @@ contract RequestCharitySeeder is GNRUS {
 contract RequestMaintenanceSeeder is CrapsBattle {
     function seedHead(uint24 day, uint8 period, uint32 entrants) external {
         _minerSlot = uint64(uint256(day) * _BONUS_SLOTS_PER_DAY + period);
-        _boostBudget[day] = 1;
-        _battles[bytes32(uint256(_minerSlot))] = entrants;
+        _storeBudget(day, 1);
+        _storeBattle(bytes32(uint256(_minerSlot)), entrants);
     }
     function binding(uint64 slot) external view returns (uint48) { return _slotIndexOf(slot); }
     function seedPaidJackpot(uint24 day) external {
         _bonus = uint256(day) + 1;
-        _boostBudget[day] = 1;
+        _storeBudget(day, 1);
         uint256 key = uint256(day) * _BONUS_SLOTS_PER_DAY + _BONUS_PERIODS_PER_DAY;
-        _battles[bytes32(key)] = 3 | ((_JACKPOT_PRICE / _BATTLE_STAKE_UNIT) << _BG_STAKE_SHIFT);
-        _dayTickets[uint256(day) * _BONUS_SLOTS_PER_DAY] = 1 | (uint256(1) << (_DT_HIGH_SHIFT * _BONUS_PERIODS_PER_DAY));
+        _storeBattle(bytes32(key), 3 | ((_JACKPOT_PRICE / _BATTLE_STAKE_UNIT) << _BG_STAKE_SHIFT));
+        _storeDayTickets(uint256(day) * _BONUS_SLOTS_PER_DAY, 1 | (uint256(1) << (_DT_HIGH_SHIFT * _BONUS_PERIODS_PER_DAY)));
     }
-    function frozenPaidCount() external view returns (uint256) { return _jackpotRounds[_activeJackpotSlot].paidCount; }
+    function frozenPaidCount() external view returns (uint256) { return _jackpotRounds[(_activeJackpotSlot) & 511].paidCount; }
 }
 
 contract MineFlipRequestGasTest is DeployProtocol {

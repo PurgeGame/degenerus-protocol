@@ -170,7 +170,7 @@ abstract contract DeployProtocol is Test {
     function _quietCrapsTable() internal {
         for (uint256 i = 0; i < 64; ++i) {
             vm.prank(address(game));
-            if (!crapsBattle.runCrapsMaintenance(gasleft() / 2).progressed) return;
+            if (!JackpotBattle(address(crapsBattle)).runCrapsMaintenance(gasleft() / 2).progressed) return;
         }
     }
 

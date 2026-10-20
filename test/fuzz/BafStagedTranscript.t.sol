@@ -1204,8 +1204,8 @@ abstract contract BafTranscriptFixture is DeployProtocol {
     ///      request and its VRF answer (the century fixture's arming without its gas seeding).
     function _armWord(uint256 w) internal {
         for (uint24 i = 1; i <= 7; ++i) {
-            vm.store(address(crapsBattle), keccak256(abi.encode(uint256(DAY - i), CRAPS_DAY_STAKED_SLOT)),
-                bytes32((uint256(500_000 ether) << 128) | uint256(1_000_000 ether)));
+            vm.store(address(crapsBattle), keccak256(abi.encode(uint256((DAY - i) & 63), CRAPS_DAY_STAKED_SLOT)),
+                bytes32((uint256(DAY - i) << 232) | (uint256(500_000) << 112) | uint256(1_000_000)));
         }
         vm.prank(address(game));
         coinflip.processCoinflipPayouts(0, uint256(keccak256("yesterday")) | 1, DAY - 1);

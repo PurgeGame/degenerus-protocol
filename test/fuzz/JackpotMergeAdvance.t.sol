@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {CrapsLensReader} from "../../contracts/CrapsLens.sol";
+
 import {Vm} from "forge-std/Vm.sol";
 import {TicketQueueStorage as TQ} from "./helpers/TicketQueueStorage.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
@@ -199,7 +201,7 @@ contract JackpotMergeAdvanceTest is DeployProtocol {
             if (!complete && active == slot) for (uint256 k; k < stages.length; ++k) assertEq(stages[k], battleStage);
         }
         assertLt(count, 400, "battle stalled");
-        (CrapsBattleStorage.JackpotRound memory r,,) = reader.jackpotBattleOf(slot);
+        (CrapsBattleStorage.JackpotRound memory r,,) = CrapsLensReader.jackpotBattleOf(address(reader), slot);
         assertEq(r.started, true, "the field sealed with its word");
         emit log_named_uint("largest jackpot battle call (incl intrinsic under isolate)", maxGas);
         emit log_named_uint("battle calls", count);
@@ -231,9 +233,9 @@ contract JackpotMergeAdvanceTest is DeployProtocol {
         vm.etch(address(game), code);
         _requestAndApply();
         (, uint256 added,,) = api.jackpotProgress();
-        assertEq(added, 50_000 * reader.jackpotEntryPriceOf(slot) / 8_000, "scaled level-6 floor");
+        assertEq(added, 50_000 * CrapsLensReader.jackpotEntryPriceOf(address(reader), slot) / 8_000, "scaled level-6 floor");
         _drain(false,false);
-        (CrapsBattleStorage.JackpotRound memory r,,) = reader.jackpotBattleOf(slot);
+        (CrapsBattleStorage.JackpotRound memory r,,) = CrapsLensReader.jackpotBattleOf(address(reader), slot);
         assertEq(r.awardTarget, 5);
         assertEq(r.drawnUnits, 5);
     }
@@ -251,7 +253,7 @@ contract JackpotMergeAdvanceTest is DeployProtocol {
         for (uint256 i; i < 400; ++i) {
             (,, bool started, bool complete) = api.jackpotProgress();
             if (complete) break;
-            (CrapsBattleStorage.JackpotRound memory beforeRound,,) = reader.jackpotBattleOf(slot);
+            (CrapsBattleStorage.JackpotRound memory beforeRound,,) = CrapsLensReader.jackpotBattleOf(address(reader), slot);
             (uint8[] memory stages, uint256 gasUsed) = _step(started ? SETTLE_GAS : DRAW_GAS);
             assertEq(stages[0], 17);
             if (started) {
@@ -261,9 +263,9 @@ contract JackpotMergeAdvanceTest is DeployProtocol {
             }
             if (gasUsed > maxDraw) maxDraw = gasUsed;
             ++draws;
-            (,,uint64 cursor) = reader.jackpotBattleOf(slot);
+            (,,uint64 cursor) = CrapsLensReader.jackpotBattleOf(address(reader), slot);
             (,,bool sealedNow,) = api.jackpotProgress();
-            (CrapsBattleStorage.JackpotRound memory afterRound,,) = reader.jackpotBattleOf(slot);
+            (CrapsBattleStorage.JackpotRound memory afterRound,,) = CrapsLensReader.jackpotBattleOf(address(reader), slot);
             uint256 appended = afterRound.drawnUnits - beforeRound.drawnUnits;
             assertGt(appended, 0, "every draw transaction appends awards");
             assertLe(afterRound.drawnUnits, afterRound.awardTarget, "draw cannot overfill its target");
@@ -290,7 +292,7 @@ contract JackpotMergeAdvanceTest is DeployProtocol {
     }
     function test_FullDrawChunksAndSettleCallsStayUnderTenMillion() public {
         (, uint256 draws, uint256 settles, uint64 sealCursor) = _driveChunks(30_000 ether);
-        (CrapsBattleStorage.JackpotRound memory r,,) = reader.jackpotBattleOf(slot);
+        (CrapsBattleStorage.JackpotRound memory r,,) = CrapsLensReader.jackpotBattleOf(address(reader), slot);
         assertEq(r.drawnUnits, 500, "award cap");
         assertGt(draws, 0, "the field was drawn");
         assertLe(draws, 10, "500 awards finish within ten 50-entry checkpoints");
@@ -318,21 +320,21 @@ contract JackpotMergeAdvanceTest is DeployProtocol {
             _step(DRAW_GAS);
         }
         (,, bool started,) = api.jackpotProgress();
-        (,,uint64 cursor) = reader.jackpotBattleOf(slot);
+        (,,uint64 cursor) = CrapsLensReader.jackpotBattleOf(address(reader), slot);
         assertTrue(started, "the draw calls seal within ten checkpoints");
         assertEq(cursor, 0, "the sealing call settles nothing");
         uint256 snap = vm.snapshotState();
         _step(SETTLE_GAS);
-        (,,uint64 first) = reader.jackpotBattleOf(slot);
+        (,,uint64 first) = CrapsLensReader.jackpotBattleOf(address(reader), slot);
         assertGt(first, 0, "the first metered call settles");
         assertTrue(vm.revertToState(snap));
         _step(SETTLE_GAS);
-        (,,cursor) = reader.jackpotBattleOf(slot);
+        (,,cursor) = CrapsLensReader.jackpotBattleOf(address(reader), slot);
         assertEq(cursor, first, "the settled prefix depends only on the allowance");
     }
     function test_FullSealingChunkLeavesNoSettleBudget() public {
         (, uint256 draws,, uint64 sealCursor) = _driveChunks(17_900 ether);
-        (CrapsBattleStorage.JackpotRound memory r,,) = reader.jackpotBattleOf(slot);
+        (CrapsBattleStorage.JackpotRound memory r,,) = CrapsLensReader.jackpotBattleOf(address(reader), slot);
         assertGe(r.drawnUnits, 439, "sealing chunk of at least 139 entries");
         assertLe(r.drawnUnits, 450);
         assertGt(draws, 0);

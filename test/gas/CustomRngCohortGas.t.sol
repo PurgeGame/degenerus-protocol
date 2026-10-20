@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+
+import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
 import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
@@ -30,7 +32,7 @@ contract CustomRngCohortGasTest is DeployProtocol {
         assertFalse(game.rngLocked());
         _finishReadConsumers();
         OwnerTargetCall.call(address(crapsBattle), abi.encodeCall(crapsBattle.setBattleCreator, (address(this), true)), 0);
-        uint64 slot = crapsBattle.createBattle(300, 25, 1000, 75,
+        uint64 slot = JackpotBattle(address(crapsBattle)).createBattle(300, 25, 1000, 75,
             uint40(vm.getBlockTimestamp() + 60), true, 255);
         for (uint256 i; i < SEATS; ++i) {
             address player = address(uint160(0xC0570000 + i));
@@ -44,7 +46,7 @@ contract CustomRngCohortGasTest is DeployProtocol {
         // write buffer and makes no request of its own; the ordinary mid-day request, for which a
         // closed window on the write buffer is work that waives the pending-value gates, seals it.
         uint256 requestBefore = mockVRF.lastRequestId();
-        uint48 buffer = crapsBattle.closeBattle(slot);
+        uint48 buffer = JackpotBattle(address(crapsBattle)).closeBattle(slot);
         assertEq(mockVRF.lastRequestId(), requestBefore, "the close makes no request of its own");
         assertEq(buffer, RecyclingState.writeBuffer(address(game)), "the shut field binds the write buffer");
         game.mineFlip(0);

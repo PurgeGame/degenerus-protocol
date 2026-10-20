@@ -8,14 +8,14 @@ Future day tickets and window reservations can cover tomorrow through 30 days ah
 
 Scheduled day D can settle, or receive its unopened-day pass refund, through D+30. Starting D+31, remaining work is skipped without payment or refund, including unfinished jackpot fields. Payments already made stand. This deadline also applies after a prolonged RNG outage. Custom battles keep their existing lifecycle.
 
-Scheduled bets and each wallet's day-seat record reuse 64 day banks. Public bet IDs and event identities retain the actual day. Once a bank is overwritten, old bet/seat data is unavailable; use events for history. Per-day budgets, boards and jackpot accounting keep their logical keys.
+Scheduled bets, boards, cursors, reserve draws, high fields, day counters, budgets and jackpot rounds reuse 64 day banks. Each wallet's day-seat record packs four tagged days per word. Public bet IDs and events retain the actual day. A mismatched day reads empty; use events for overwritten history. Custom battles retain their full keys.
 
 ## UI interface
 
 ```solidity
-function setPreferredBoard(uint32 chips) external;
-function preferredBoardOf(address player) external view returns (uint32 chips);
-event CrapsPreferredBoardSet(address indexed player, uint32 chips);
+function setPreferredBoard(uint32 targetId, uint32 chips) external; // CRAPS
+function preferredBoardOf(uint32 walletId) external view returns (uint32 chips); // CrapsLens
+event CrapsPreferredBoardSet(uint32 indexed walletId, uint32 chips);
 ```
 
 Use the same canonical encoding as paid entries: three bits per leg, from least significant upward:
@@ -41,7 +41,7 @@ While `Game.rngLocked()` is true, the setter rejects initialization and changes 
 
 ## Storage
 
-`CrapsBattle._passCredits[player]` remains at mapping base slot 15. Its packed word is:
+`CrapsBattle._passCreditsById[walletId]` uses mapping base slot 14. Its packed word is:
 
 | Bits | Value |
 | --- | --- |
@@ -49,11 +49,13 @@ While `Game.rngLocked()` is true, the setter rejects initialization and changes 
 | 32–63 | High passes |
 | 64–83 | Ten two-bit chip counts |
 | 84 | Permanent initialized sentinel |
-| 85–255 | Reserved |
+| 85–116 | Reserved in storage; helpers carry a temporary wallet ID here in memory |
+| 117 | Retained storage sentinel |
+| 118–255 | Reserved |
 
 The sentinel is set on the first successful manual or automatic save, including zero. Clearing the board or spending the final pass preserves it. Awards and comp tickets do not initialize it. All balance and preference writes preserve the other fields.
 
-The **20-bit storage encoding differs from the 30-bit API encoding**. Use `preferredBoardOf` for UI reads. Raw readers use `extsload(keccak256(abi.encode(player, uint256(15))))` and extract each two-bit count. Do not pass that compact field directly to a paid-entry API.
+The **20-bit storage encoding differs from the 30-bit API encoding**. Use the lens's `preferredBoardOf` for UI reads. Raw readers use `extsload(keccak256(abi.encode(walletId, uint256(14))))` and decode the word with `CrapsPreferenceLib.decode`, which expands each two-bit count to the API encoding. Do not pass the compact field directly to a paid-entry API.
 
 ## Automatic entries
 
@@ -188,24 +190,27 @@ Once the field completes, the day continues with its usual stages. Advance clien
 
 ### Reads and events
 
-Call these at the **CRAPS address**; the table delegates their selectors to `JackpotBattle`:
+`jackpotProgress` and lifecycle calls remain at the **CRAPS address**, delegated to `JackpotBattle`. Read the cold views from a separately deployed **CrapsLens**. The lens reads the pinned CRAPS address through `extsload`; it needs no constructor arguments:
 
 ```solidity
 function jackpotEntryPrice() external view returns (uint256);
 function jackpotEntryPriceOf(uint64 slot) external view returns (uint256);
-function jackpotProgress() external view returns (uint64 slot, uint256 added, bool started, bool complete);
+function jackpotProgress() external view returns (uint64 slot, uint256 added, bool started, bool complete); // CRAPS
 function jackpotBattleOf(uint64 slot) external view returns (JackpotRound memory round, uint256 board, uint64 cursor);
+function highRollerReserve() external view returns (uint256);
+function highRollerDrawOf(uint64 slot) external view returns (HighRollerDraw memory);
+function progressivePool() external view returns (uint256);
 
 event JackpotBattleLocked(uint64 indexed slot, uint24 requestDay, uint256 added, uint256 paidEntries);
-event JackpotBattleEntry(uint64 indexed slot, uint256 indexed betId, address indexed player, uint256 units, uint32 chips);
+event JackpotBattleEntry(uint64 indexed slot, uint256 indexed betId, uint32 indexed playerId, uint256 units, uint32 chips);
 event JackpotBattleStarted(uint64 indexed slot, uint24 level, uint256 drawnEntries, uint256 drawnUnits, uint256 word);
 event JackpotSubsidyRolled(uint64 indexed slot, uint32 multiplierBps, uint256 mainSubsidy);
 ```
 
 - `JackpotBattleEntry.chips` is the canonical 30-bit board the award plays. An indexer can replay a run after the wallet changes its preference.
 - `JackpotRound.added` is the scaled gross allocation before either lottery. `entryPrice` is the frozen fee; `subsidyMultiplierBps` is zero until preparation, then 2,500 / 10,000 / 50,000 / 100,000. `multiplierBps` retains the existing event meaning. `awardTarget` is already populated at lock.
-- `entryPrice` and `subsidyMultiplierBps` occupy slot 5 offsets 22 and 26 after `awardTarget`; all previous member offsets and the eight-word size remain unchanged. ABI tuple consumers must include the two new members before `drawWord` and `drawCursor`.
-- `jackpotEntryPrice()` quotes the currently advertised event. `jackpotEntryPriceOf(slot)` also serves a locked or historical event after its fee field in the scoreboard becomes a bounty. An unopened event reverts with `RngNotReady`, rather than returning an apparent actual 8,000 quote.
+- `JackpotRound` occupies five storage words. `entryPrice` and `subsidyMultiplierBps` are at word 4 offsets 20 and 24; `started` is at offset 28 and the exact `uint24 day` at offset 29. The ABI tuple appends `day` after `started`. The lens hides retained entropy until preparation, strips the internal prepared flag from `drawCursor`, and reports a pre-start bankroll as zero. Overwritten rounds return an empty record.
+- `jackpotEntryPrice()` quotes the currently advertised event. `jackpotEntryPriceOf(slot)` also serves a retained locked event after its fee field in the scoreboard becomes a bounty. An unopened event reverts with `RngNotReady`, rather than returning an apparent actual 8,000 quote.
 - `JackpotSubsidyRolled` reports the main subsidy after its own multiplier and before the event multiplier. It is emitted once. Before fulfillment, clients should show odds and an estimated baseline, not a realized subsidy.
 - Settlement and payment use the table's ordinary events: `CrapsBetSettled`, `CrapsBattleFinalized`, `CrapsBattlePaid`, `CrapsHighRollerPaid`, `CrapsProgressivePaid` and `CrapsProtocolAwardSplit`. Record claims appear as `BigRecordUpdated` and the trophy events.
 - `CrapsSlipPlaced` records the board of each paid ticket.

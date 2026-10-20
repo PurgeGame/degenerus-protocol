@@ -20,6 +20,7 @@ expected = [
     ("drawnCount", 4, 8, "uint32"), ("drawnUnits", 4, 12, "uint32"),
     ("awardTarget", 4, 16, "uint32"), ("entryPrice", 4, 20, "uint32"),
     ("subsidyMultiplierBps", 4, 24, "uint32"), ("started", 4, 28, "bool"),
+    ("day", 4, 29, "uint24"),
 ]
 for name in ("CrapsBattle", "JackpotBattle"):
     data = layout(name)
@@ -31,6 +32,19 @@ for name in ("CrapsBattle", "JackpotBattle"):
     assert actual == expected, (name, actual)
     assert int(record["numberOfBytes"]) == 160, name
     assert int(root["slot"]) == 17, (name, root)
+    roots = {x["label"]: (int(x["slot"]), x["offset"]) for x in data["storage"]}
+    expected_roots = {
+        "_bets": (0, 0), "_customBattleCount": (1, 0), "_battles": (2, 0),
+        "_bonusSeated": (3, 0), "_bonus": (4, 0), "_slotState": (5, 0),
+        "_dayTickets": (6, 0), "_daySeated": (7, 0), "_battleCreator": (8, 0),
+        "_dayStaked": (9, 0), "_boostBudget": (10, 0), "_highField": (11, 0),
+        "_battleDays": (12, 0), "_customBattle": (13, 0), "_passCreditsById": (14, 0),
+        "_progressive": (15, 0), "_minerSlot": (16, 0), "_jackpotRounds": (17, 0),
+        "_activeJackpotSlot": (18, 0), "_firstWindowDay": (18, 8),
+        "_highRollerReserve": (19, 0), "_rngSlotCursor": (20, 0),
+        "_fundedCustomSlots": (21, 0), "_rngSlots": (22, 0),
+    }
+    assert roots == expected_roots, (name, roots)
 
 sd = layout("sDGNRS")
 fields = {x["label"]: (int(x["slot"]), x["offset"], sd["types"][x["type"]]["label"])
@@ -38,4 +52,4 @@ fields = {x["label"]: (int(x["slot"]), x["offset"], sd["types"][x["type"]]["labe
 assert fields["_batchPlayerCounts"] == (7, 24, "uint64")
 assert fields["_batchPlayers"] == (9, 0, "mapping(uint256 => uint256)[2]")
 assert fields["_parkedRedemptions"][0] == 11
-print("Phase 2 layout: five-word jackpot records, packed queue counts, unchanged mapping roots")
+print("Phase 2 layout: tagged five-word jackpot records, packed queue counts, pinned Craps roots")

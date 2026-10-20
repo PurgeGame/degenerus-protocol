@@ -13,7 +13,7 @@ import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
 contract LapseArmHarness is CrapsViews {
     function fieldOf(bytes32 key) external view returns (uint256 entrants, uint256 resolved) {
-        uint256 g = _battles[key];
+        uint256 g = _loadBattle(key);
         return (g & _MASK32, (g >> _BG_RESOLVED_SHIFT) & _MASK32);
     }
 

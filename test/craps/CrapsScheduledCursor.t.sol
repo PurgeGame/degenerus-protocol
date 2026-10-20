@@ -13,7 +13,7 @@ contract CursorHarness is CrapsViews {
     function termsDigest(uint256 slot) external view returns (bytes32) { return keccak256(abi.encode(_slotWindow(slot))); }
     function rngTermsDigest(uint24 day, uint256 period, uint256 word) external view returns (bytes32) {
         Window memory w = _windowTermsOn(day, period, word);
-        w.entrants = uint32(_battles[w.key]);
+        w.entrants = uint32(_loadBattle(w.key));
         return keccak256(abi.encode(w));
     }
     function _daySlotOfPub(uint24 day) public pure returns (uint256) {
@@ -72,6 +72,19 @@ contract CrapsScheduledCursorTest is CrapsPins {
         vm.warp(vm.getBlockTimestamp() + 2 days);
         _setDailyWord(day + 2, word ^ 0xBEEF);
         for (uint256 p; p < 6; ++p) assertEq(craps.termsDigest(uint256(day) * craps.BONUS_SLOTS_PER_DAY() + p + 1), expected[p]);
+    }
+
+    function testFuzz_SchedulePeriodMatchesEveryClockBoundary(uint32 offset) public {
+        uint256 elapsed = bound(offset, 0, 1 days - 1);
+        uint256 start = block.timestamp - ((block.timestamp - 82_620) % 1 days);
+        vm.warp(start + elapsed);
+        (, uint256 actual,) = craps.currentBonusSlot();
+        uint256 expected = elapsed < 20 minutes ? 0
+            : elapsed < 6 hours + 3 minutes ? 1
+            : elapsed < 12 hours + 3 minutes ? 2
+            : elapsed < 18 hours + 3 minutes ? 3
+            : elapsed < 1 days - 20 minutes ? 4 : 5;
+        assertEq(actual, expected);
     }
 
     function test_MinerMaintenancePendingTracksOnlyActionableHead() public {

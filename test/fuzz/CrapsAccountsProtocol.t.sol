@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
+
 import {Vm, VmSafe} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
@@ -63,7 +65,7 @@ contract CrapsAccountsProtocolTest is DeployProtocol {
 
         uint16 goal = uint16(crapsBattle.MIN_BATTLE_GOAL_MULT());
         vm.prank(ContractAddresses.OWNER_GOVERNANCE);
-        slot = crapsBattle.createBattle(600, 10, goal, 0, uint40(block.timestamp + 1 hours), true, 0);
+        slot = JackpotBattle(address(crapsBattle)).createBattle(600, 10, goal, 0, uint40(block.timestamp + 1 hours), true, 0);
         vm.prank(ContractAddresses.CRAPS);
         coin.creditCrapsComps(1e12);
     }
@@ -202,10 +204,10 @@ contract CrapsAccountsProtocolTest is DeployProtocol {
             crapsBattle.buyFutureCrapsDays(smurfId, tomorrow, 1, false, BOARD);
             vm.prank(who);
             vm.expectRevert(CrapsBattleStorage.NotApproved.selector);
-            crapsBattle.convertNormalToHigh(smurfId, 1);
+            JackpotBattle(address(crapsBattle)).convertNormalToHigh(smurfId, 1);
             vm.prank(who);
             vm.expectRevert(CrapsBattleStorage.NotApproved.selector);
-            crapsBattle.upgradeReservedDay(smurfId, tomorrow);
+            JackpotBattle(address(crapsBattle)).upgradeReservedDay(smurfId, tomorrow);
         }
         uint32 unallocated = _unallocated();
         vm.prank(owner);
@@ -216,7 +218,7 @@ contract CrapsAccountsProtocolTest is DeployProtocol {
         crapsBattle.applyCrapsPasses(unallocated, tomorrow, 1, false, BOARD);
         vm.prank(owner);
         vm.expectRevert(GAME_E);
-        crapsBattle.convertNormalToHigh(unallocated, 1);
+        JackpotBattle(address(crapsBattle)).convertNormalToHigh(unallocated, 1);
     }
 
     /// @dev The newcomer rate reads the ACCOUNT key's real mint word: a smurf's own history
@@ -296,9 +298,9 @@ contract CrapsAccountsProtocolTest is DeployProtocol {
         uint256 ownerIdWord = _idWord(ownerId);
 
         vm.prank(owner);
-        crapsBattle.convertNormalToHigh(smurfId, 1);
+        JackpotBattle(address(crapsBattle)).convertNormalToHigh(smurfId, 1);
         vm.prank(owner);
-        crapsBattle.upgradeReservedDay(smurfId, tomorrow);
+        JackpotBattle(address(crapsBattle)).upgradeReservedDay(smurfId, tomorrow);
         uint256 w = _idWord(smurfId);
         assertEq(uint32(w >> 32), uint32(smurfBefore >> 32), "the converted high was spent on the upgrade");
         assertEq(uint32(w), uint32(smurfBefore) + 1, "the day's normal pass banked back to the smurf");

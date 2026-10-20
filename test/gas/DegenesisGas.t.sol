@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {CrapsLensReader} from "../../contracts/CrapsLens.sol";
+
 import {VmSafe} from "forge-std/Vm.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DegenesisDeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
@@ -1007,18 +1009,18 @@ contract DegenesisBattleTableSeed is CrapsBattleStorage {
     ///      nonempty seal accounting branch runs; `paid` false leaves the field empty.
     function seedPaidField(uint24 day, bool paid) external {
         _bonus = uint256(day) + 1;
-        _boostBudget[day] = 1;
+        _storeBudget(day, 1);
         uint256 daySlot = uint256(day) * _BONUS_SLOTS_PER_DAY;
         uint64 slot = uint64(daySlot + _BONUS_PERIODS_PER_DAY);
         if (!paid) {
-            _battles[bytes32(uint256(slot))] = (_JACKPOT_PRICE / _BATTLE_STAKE_UNIT) << _BG_STAKE_SHIFT;
+            _storeBattle(bytes32(uint256(slot)), (_JACKPOT_PRICE / _BATTLE_STAKE_UNIT) << _BG_STAKE_SHIFT);
             return;
         }
-        _dayTickets[daySlot] = 50 + 25 * _DT_ALL_HIGH;
-        _battles[bytes32(uint256(slot))] = 50
+        _storeDayTickets(daySlot, 50 + 25 * _DT_ALL_HIGH);
+        _storeBattle(bytes32(uint256(slot)), 50
             | ((_JACKPOT_PRICE / _BATTLE_STAKE_UNIT) << _BG_STAKE_SHIFT)
-            | (_BG_TERMS_FROZEN << _BG_TERM_TIER_SHIFT);
-        _highField[bytes32(uint256(slot))] = 25;
+            | (_BG_TERMS_FROZEN << _BG_TERM_TIER_SHIFT));
+        _storeHighField(bytes32(uint256(slot)), 25);
         for (uint256 i = 1; i <= 50; ++i) {
             _appendBet((uint256(slot) << 64) | i, uint160(0x310000 + i));
             _appendBet((daySlot << 64) | i, uint160(0x320000 + i));
@@ -1073,7 +1075,7 @@ abstract contract DegenesisBattleShortcutGas is DegenesisGasBase {
 
     function _currentRound() private view returns (CrapsBattleStorage.JackpotRound memory round) {
         (uint64 slot,,,) = JackpotBattle(address(crapsBattle)).jackpotProgress();
-        (round,,) = JackpotBattle(address(crapsBattle)).jackpotBattleOf(slot);
+        (round,,) = CrapsLensReader.jackpotBattleOf(address(crapsBattle), slot);
     }
 
     function test_ShortcutSealWithinDrawBound() public {

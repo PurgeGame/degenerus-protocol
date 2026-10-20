@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {CrapsLensReader} from "../../contracts/CrapsLens.sol";
+
 import {Vm} from "forge-std/Vm.sol";
 import {TicketQueueStorage as TQ} from "./helpers/TicketQueueStorage.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -161,7 +163,7 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
         // The locked field settles only inside the Game's own jackpot-battle stage.
         vm.prank(ATTACKER);
         vm.expectRevert(CrapsBattleStorage.OnlyGame.selector);
-        crapsBattle.runDailyBattleWork(10_000_000);
+        JackpotBattle(address(crapsBattle)).runDailyBattleWork(10_000_000);
         assertEq(crapsBattle.preferredBoardOf(game.walletIdOf(ATTACKER)), BOARD);
     }
 
@@ -194,7 +196,7 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
             assertTrue(game.rngLocked(), "battle work escaped the request lock");
             assertTrue(game.advanceDue(), "scheduled keeper cannot reach pending battle");
             if (perturb) _perturb();
-            (CrapsBattleStorage.JackpotRound memory beforeRound,,) = reader.jackpotBattleOf(slot);
+            (CrapsBattleStorage.JackpotRound memory beforeRound,,) = CrapsLensReader.jackpotBattleOf(address(reader), slot);
             vm.recordLogs();
             // Calibrate continuation estimates to force one 50-entry draw group,
             // independent of the first group's actual cost. Settlement can batch normally.
@@ -228,19 +230,19 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
                 }
                 if (topic == RESERVE) ++result.reserveEvents;
             }
-            (CrapsBattleStorage.JackpotRound memory afterRound,,) = reader.jackpotBattleOf(slot);
+            (CrapsBattleStorage.JackpotRound memory afterRound,,) = CrapsLensReader.jackpotBattleOf(address(reader), slot);
             if (afterRound.drawnCount > beforeRound.drawnCount) ++result.draws;
             if (afterRound.drawnCount != 0 && !afterRound.started) {
                 // Field groups are 50 entries (984b8e7d8; was 150).
                 assertEq(afterRound.drawnCount % 50, 0, "partial draw must retain its cursor");
-                (,, uint64 settledCursor) = reader.jackpotBattleOf(slot);
+                (,, uint64 settledCursor) = CrapsLensReader.jackpotBattleOf(address(reader), slot);
                 assertEq(settledCursor, 0, "paid seats settled before the field froze");
             }
         }
         (,,, bool complete) = api.jackpotProgress();
         assertTrue(complete, "battle stalled despite scheduled keeper and functional VRF");
-        (CrapsBattleStorage.JackpotRound memory round, uint256 board, uint64 cursor) = reader.jackpotBattleOf(slot);
-        CrapsBattleStorage.HighRollerDraw memory reserve = reader.highRollerDrawOf(slot);
+        (CrapsBattleStorage.JackpotRound memory round, uint256 board, uint64 cursor) = CrapsLensReader.jackpotBattleOf(address(reader), slot);
+        CrapsBattleStorage.HighRollerDraw memory reserve = CrapsLensReader.highRollerDrawOf(address(reader), slot);
         assertEq(result.entries, 500, "empty/short draws cannot prove the freeze");
         // 500 entries in 50-entry groups (984b8e7d8; was four 150-entry chunks): nine probed gaps.
         assertEq(result.draws, 10, "must probe nine gaps between actual field chunks");
@@ -249,7 +251,7 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
         assertEq(result.reserveEvents, 1);
         assertTrue(reserve.resolved);
         assertGt(reserve.eligible, 0, "reserve draw must have a real high entrant");
-        result.finalState = keccak256(abi.encode(round, board, cursor, reserve, reader.highRollerReserve()));
+        result.finalState = keccak256(abi.encode(round, board, cursor, reserve, CrapsLensReader.highRollerReserve(address(reader))));
         for (uint256 i; i < 40 && game.rngLocked(); ++i) game.mineFlip(0);
         assertFalse(game.rngLocked(), "completed daily chain did not unlock");
     }
@@ -269,7 +271,7 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
         Result memory attacked = _run(word, true);
         assertEq(attacked.transcript, baseline.transcript, "public mutation changed exact field/boards or payouts");
         assertEq(attacked.finalState, baseline.finalState, "public mutation changed battle or reserve state");
-        assertEq(reader.highRollerDrawOf(slot).won, reserveWin);
+        assertEq(CrapsLensReader.highRollerDrawOf(address(reader), slot).won, reserveWin);
     }
 
     function test_RequestThroughFourChunksFreezesFieldAndReserveWin() public { _compare(true); }
