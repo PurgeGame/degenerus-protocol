@@ -333,8 +333,12 @@ abstract contract DegenesisStallRequestGas is DegenesisGasBase {
         DegenesisCharitySeeder(payable(address(gnrus))).seed(0);
         vm.etch(address(gnrus), original);
         for (uint8 i; i < 20; ++i) {
+            vm.prank(ContractAddresses.OWNER_GOVERNANCE);
             gnrus.setCharity(i, address(uint160(0xC000 + i)));
-            if (i >= 3) gnrus.setCharity(i, address(uint160(0xE000 + i)));
+            if (i >= 3) {
+                vm.prank(ContractAddresses.OWNER_GOVERNANCE);
+                gnrus.setCharity(i, address(uint160(0xE000 + i)));
+            }
         }
         vm.store(address(affiliate), keccak256(abi.encode(uint24(1), uint256(3))),
             bytes32((uint256(winnerId) << 224) | (uint256(1) << 128) | 1));

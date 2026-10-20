@@ -48,8 +48,8 @@ import {ContractAddresses} from "./ContractAddresses.sol";
  *   - No post-deployment setup needed
  *
  * OWNERSHIP MODEL:
- *   - Owner is anyone holding >50.1% of DGVE supply (vault governance token)
- *   - No single-address owner; ownership is transferable via DGVE market
+ *   - Owner caller is the pinned executor, approved by >50.1% of live DGVE supply
+ *   - DGVE holders escrow approval, optionally through revocable voting delegates
  *
  * VRF SUBSCRIPTION LIFECYCLE:
  *   1. Created atomically during constructor call
@@ -59,7 +59,7 @@ import {ContractAddresses} from "./ContractAddresses.sol";
  *   5. Shutdown after GAME-over with LINK refund
  *
  * GOVERNANCE:
- *   - Admin path: DGVE holder proposes after 20h VRF stall
+ *   - Admin path: DGVE-approved executor proposes after 44h VRF stall
  *   - Community path: 0.5%+ sDGNRS holder proposes after 7d VRF stall
  *   - Approval voting with decaying threshold (50% → 5% over 7 days)
  *   - Changeable votes, approval voting across proposals
@@ -220,7 +220,7 @@ interface IAggregatorV3 {
 
 /// @dev Vault interface for ownership check.
 interface IDegenerusVaultOwner {
-    /// @notice Checks DGVE-majority vault ownership, as implemented by DegenerusVault.
+    /// @notice Checks the pinned DGVE governance executor, as implemented by DegenerusVault.
     function isVaultOwner(address account) external view returns (bool);
 }
 
@@ -270,13 +270,14 @@ contract DegenerusAdmin {
     // CUSTOM ERRORS
     // =========================================================================
 
-    /// @notice Thrown when the caller is not the DGVE-majority vault owner.
+    /// @notice Thrown when the caller is not the DGVE governance executor.
     error NotOwner();
     /// @notice Thrown when the caller is not the address a function is restricted to
     ///         (the game contract, the vault owner, or the LINK token, depending on the call).
     error NotAuthorized();
     /// @notice Thrown when a proposed coordinator or key hash is the zero value.
     error ZeroAddress();
+    error InvalidRecipient();
     /// @notice Thrown when a coordinator-swap or feed-swap proposal is filed before its
     ///         path's minimum stall duration has elapsed.
     error NotStalled();
@@ -486,7 +487,7 @@ contract DegenerusAdmin {
     mapping(uint32 => uint256) private _activeProposalId;
 
     function activeProposalId(address proposer) external view returns (uint256) {
-        return _activeProposalId[_governanceId(proposer)];
+        return _activeProposalId[proposer == ContractAddresses.OWNER_GOVERNANCE ? 1 : _governanceId(proposer)];
     }
 
     /// @dev Epoch cutoff: proposals with id < validFromId were superseded by an executed swap and can
@@ -536,7 +537,7 @@ contract DegenerusAdmin {
     mapping(uint32 => uint256) private _activeFeedProposalId;
 
     function activeFeedProposalId(address proposer) external view returns (uint256) {
-        return _activeFeedProposalId[_governanceId(proposer)];
+        return _activeFeedProposalId[proposer == ContractAddresses.OWNER_GOVERNANCE ? 1 : _governanceId(proposer)];
     }
 
     /// @dev Epoch cutoff: feed proposals with id < feedValidFromId were superseded by an executed
@@ -719,7 +720,7 @@ contract DegenerusAdmin {
 
     /// @notice Propose a LINK/ETH price feed swap.
     /// @dev Two paths:
-    ///      - Admin path: DGVE >50.1% holder, requires 2d+ feed unhealthy
+    ///      - Admin path: DGVE governance executor, requires 2d+ feed unhealthy
     ///      - Community path: 0.5%+ voting sDGNRS, requires 7d+ feed unhealthy
     /// @param newFeed Address of the proposed price feed (zero to disable).
     /// @return proposalId The ID of the created proposal.
@@ -753,13 +754,13 @@ contract DegenerusAdmin {
         }
 
         // Active-proposal limit. The Admin path is capped to ONE active proposal GLOBALLY, keyed on a
-        // fixed sentinel (the vault address, which never proposes for itself): vault ownership is a
-        // single >50.1% DGVE position, so shuttling that majority stake through fresh addresses cannot
-        // mint multiple simultaneous admin proposals. The Community path keeps its own per-address
+        // reserved owner sentinel (wallet ID 1). All owner approvals execute through the pinned
+        // governance contract and share this slot. The Community path keeps its own per-address
         // slot. A slot pointing at a superseded proposal (id < feedValidFromId) no longer blocks: the
         // proposer may file afresh against the current feed state.
-        uint32 proposerId = _registerGovernanceCaller();
-        uint32 limitKey = path == ProposalPath.Admin ? 1 : proposerId;
+        // Owner bookkeeping uses reserved treasury ID 1, never a gameplay/voting identity.
+        uint32 proposerId = path == ProposalPath.Admin ? 1 : _registerGovernanceCaller();
+        uint32 limitKey = proposerId;
         uint256 existing = _activeFeedProposalId[limitKey];
         if (existing >= feedValidFromId && existing != 0) {
             FeedProposal storage ep = feedProposals[existing];
@@ -887,11 +888,12 @@ contract DegenerusAdmin {
     // LIQUIDITY MANAGEMENT
     // =========================================================================
 
-    /// @notice Exchange the owner's msg.value 1:1 for game-held stETH, sent to the caller.
+    /// @notice Exchange supplied ETH 1:1 for game-held stETH, paid to the approved recipient.
     /// @dev Forwards msg.value; the game keeps the ETH and transfers the same nominal stETH.
-    function swapGameEthForStEth() external payable onlyOwner {
+    function swapGameEthForStEth(address recipient) external payable onlyOwner {
         if (msg.value == 0) revert InvalidAmount();
-        gameAdmin.adminSwapEthForStEth{value: msg.value}(msg.sender, msg.value);
+        if (recipient == address(0) || recipient == ContractAddresses.OWNER_GOVERNANCE) revert InvalidRecipient();
+        gameAdmin.adminSwapEthForStEth{value: msg.value}(recipient, msg.value);
     }
 
     // =========================================================================
@@ -906,7 +908,7 @@ contract DegenerusAdmin {
 
     /// @notice Propose an emergency VRF coordinator swap.
     /// @dev Two paths:
-    ///      - Admin path: DGVE >50.1% holder, requires 20h+ VRF stall
+    ///      - Admin path: DGVE governance executor, requires 20h+ VRF stall
     ///      - Community path: 0.5%+ voting sDGNRS, requires 7d+ VRF stall
     /// @param newCoordinator Address of the proposed VRF coordinator.
     /// @param newKeyHash Key hash for the proposed coordinator.
@@ -922,7 +924,8 @@ contract DegenerusAdmin {
 
         // 1-per-address active proposal limit. A slot pointing at a superseded proposal
         // (id < validFromId) no longer blocks: the proposer may file afresh.
-        uint32 proposerId = _registerGovernanceCaller();
+        bool ownerPath = vault.isVaultOwner(msg.sender);
+        uint32 proposerId = ownerPath ? 1 : _registerGovernanceCaller();
         uint256 existing = _activeProposalId[proposerId];
         if (existing >= validFromId && existing != 0) {
             Proposal storage ep = proposals[existing];
@@ -936,7 +939,7 @@ contract DegenerusAdmin {
 
         uint256 circ = sDGNRS.votingSupply();
         ProposalPath path;
-        if (vault.isVaultOwner(msg.sender)) {
+        if (ownerPath) {
             if (stall < ADMIN_STALL_THRESHOLD) revert NotStalled();
             path = ProposalPath.Admin;
         } else {

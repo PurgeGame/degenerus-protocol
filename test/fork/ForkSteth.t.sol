@@ -82,7 +82,7 @@ contract ForkStethTest is ForkDeployProtocol {
     }
 
     function _adminStake(uint256 amount) private {
-        vm.prank(_vaultOwner());
+        vm.prank(ContractAddresses.OWNER_GOVERNANCE);
         game.adminStakeEthForStEth(amount);
         ++lidoSubmits;
     }
@@ -159,7 +159,7 @@ contract ForkStethTest is ForkDeployProtocol {
 
         // The guard still binds against the real balance: the player-claim reserve cannot be staked.
         uint256 over = _stakeable() + 1;
-        vm.prank(_vaultOwner());
+        vm.prank(ContractAddresses.OWNER_GOVERNANCE);
         vm.expectRevert(bytes4(keccak256("Insolvent()")));
         game.adminStakeEthForStEth(over);
     }
@@ -171,13 +171,13 @@ contract ForkStethTest is ForkDeployProtocol {
         _runningGame();
         uint256 amount = lido.balanceOf(address(game)) / 3;
         assertGt(amount, 1 ether, "fixture: game holds stETH");
-        address owner = _vaultOwner();
-        vm.deal(owner, owner.balance + amount);
+        address owner = ContractAddresses.CREATOR;
+        vm.deal(ContractAddresses.OWNER_GOVERNANCE, amount);
         uint256 ownerSt = lido.balanceOf(owner);
         uint256 gameSt = lido.balanceOf(address(game));
         uint256 backing0 = _backing();
-        vm.prank(owner);
-        admin.swapGameEthForStEth{value: amount}();
+        vm.prank(ContractAddresses.OWNER_GOVERNANCE);
+        admin.swapGameEthForStEth{value: amount}(owner);
         uint256 got = lido.balanceOf(owner) - ownerSt;
         uint256 gave = gameSt - lido.balanceOf(address(game));
         emit log_named_uint("swap: recipient shortfall (wei)", amount - got);
@@ -188,9 +188,9 @@ contract ForkStethTest is ForkDeployProtocol {
 
         // Swapping the game's ENTIRE stETH balance (balanceOf-reported) still succeeds.
         uint256 all = lido.balanceOf(address(game));
-        vm.deal(owner, owner.balance + all);
-        vm.prank(owner);
-        admin.swapGameEthForStEth{value: all}();
+        vm.deal(ContractAddresses.OWNER_GOVERNANCE, all);
+        vm.prank(ContractAddresses.OWNER_GOVERNANCE);
+        admin.swapGameEthForStEth{value: all}(owner);
         assertLe(lido.balanceOf(address(game)), STETH_ROUNDING, "only rounding dust left");
     }
 

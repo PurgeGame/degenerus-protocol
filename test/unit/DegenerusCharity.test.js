@@ -1,3 +1,4 @@
+import { ownerAction } from "../helpers/deployFixture.js";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
 import { expect } from "chai";
 import hre from "hardhat";
@@ -31,7 +32,7 @@ const BPS_DENOM = 10_000n;
 async function distributeGNRUS(charity, deployer, recipientAddr, gameAddress, voter, slot = 5) {
   const level = await charity.currentLevel();
   // 1. Vault-owner sets recipient into empty slot (instant-apply branch).
-  await charity.connect(deployer).setCharity(slot, recipientAddr);
+  await ownerAction(charity.connect(deployer), "setCharity", [slot, recipientAddr]);
   // 2. Voter casts a vote so bestWeight > 0 → distribution path fires (not LevelSkipped).
   await charity.connect(voter).vote(slot);
   // 3. Game impersonates and resolves.

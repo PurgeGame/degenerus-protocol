@@ -31,8 +31,8 @@ contract DailyRngStallRecovery is DeployProtocol {
 
     address private buyer = address(0xB4A1);
     address private keeper = address(0xC4A9);
-    /// @dev The daily retry is the vault owner's (the >50.1% DGVE holder; the deployer here).
-    address private owner = ContractAddresses.CREATOR;
+    /// @dev This target-level retry harness isolates the pinned governance owner role.
+    address private owner = ContractAddresses.OWNER_GOVERNANCE;
 
     uint256 private simTime;
 

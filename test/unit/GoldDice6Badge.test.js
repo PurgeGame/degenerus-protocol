@@ -1,3 +1,4 @@
+import { ownerAction } from "../helpers/deployFixture.js";
 import { expect } from "chai";
 import hre from "hardhat";
 import { readFileSync } from "fs";
@@ -135,9 +136,8 @@ describe("Gold Dice 6 badge inversion", function () {
 
     /** Set outline + non-crypto ink, then read a token's internal SVG. */
     async function svgWith(deityPass, deployer, outline, ink, tokenId) {
-      await deityPass
-        .connect(deployer)
-        .setRenderColors(outline, "#d9d9d9", ink);
+      await ownerAction(deityPass
+        .connect(deployer), "setRenderColors", [outline, "#d9d9d9", ink]);
       return decode(await deityPass.tokenURI(tokenId)).svg;
     }
 
@@ -195,23 +195,23 @@ describe("Gold Dice 6 badge inversion", function () {
 
     it("external renderer owns the output; empty and reverting fall back", async function () {
       const { deityPass, deployer } = await goldPassFixture();
-      await deityPass.connect(deployer).setRenderColors(GOLD, "#d9d9d9", GOLD);
+      await ownerAction(deityPass.connect(deployer), "setRenderColors", [GOLD, "#d9d9d9", GOLD]);
 
       const ok = await (await hre.ethers.getContractFactory("DeityPassRendererOk")).deploy();
       const empty = await (await hre.ethers.getContractFactory("DeityPassRendererEmpty")).deploy();
       const rev = await (await hre.ethers.getContractFactory("DeityPassRendererRevert")).deploy();
 
-      await deityPass.connect(deployer).setRenderer(await ok.getAddress());
+      await ownerAction(deityPass.connect(deployer), "setRenderer", [await ok.getAddress()]);
       const external = decode(await deityPass.tokenURI(DICE6)).svg;
       expect(external).to.equal("<svg id='external-deity'/>");
       expect(external).to.not.include(PIP_STYLE, "external output is never recolored");
 
       for (const r of [empty, rev]) {
-        await deityPass.connect(deployer).setRenderer(await r.getAddress());
+        await ownerAction(deityPass.connect(deployer), "setRenderer", [await r.getAddress()]);
         expectInverted(decode(await deityPass.tokenURI(DICE6)).svg);
       }
 
-      await deityPass.connect(deployer).setRenderer(hre.ethers.ZeroAddress);
+      await ownerAction(deityPass.connect(deployer), "setRenderer", [hre.ethers.ZeroAddress]);
       expectInverted(decode(await deityPass.tokenURI(DICE6)).svg);
     });
   });
@@ -278,17 +278,17 @@ describe("Gold Dice 6 badge inversion", function () {
       const empty = await (await hre.ethers.getContractFactory("SeatRendererEmpty")).deploy();
       const rev = await (await hre.ethers.getContractFactory("SeatRendererRevert")).deploy();
 
-      await seat.connect(deployer).setRenderer(await ok.getAddress());
+      await ownerAction(seat.connect(deployer), "setRenderer", [await ok.getAddress()]);
       const external = decode(await seat.tokenURI(id)).svg;
       expect(external).to.equal("<svg id='external-seat'/>");
       expect(external).to.not.include(PIP_STYLE, "external output is never recolored");
 
       for (const r of [empty, rev]) {
-        await seat.connect(deployer).setRenderer(await r.getAddress());
+        await ownerAction(seat.connect(deployer), "setRenderer", [await r.getAddress()]);
         expectInverted(decode(await seat.tokenURI(id)).svg);
       }
 
-      await seat.connect(deployer).setRenderer(hre.ethers.ZeroAddress);
+      await ownerAction(seat.connect(deployer), "setRenderer", [hre.ethers.ZeroAddress]);
       expectInverted(decode(await seat.tokenURI(id)).svg);
     });
   });

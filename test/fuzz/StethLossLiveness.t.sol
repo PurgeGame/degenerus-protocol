@@ -203,8 +203,7 @@ contract StethLossLiveness is RedemptionFixture {
     }
 
     function _vaultOwner() private view returns (address) {
-        if (vault.isVaultOwner(address(this))) return address(this);
-        return ContractAddresses.CREATOR;
+        return ContractAddresses.OWNER_GOVERNANCE;
     }
 
     uint32 private constant SDGNRS_ID = 2;

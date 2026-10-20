@@ -1,3 +1,4 @@
+import { ownerAction } from "../helpers/deployFixture.js";
 import { expect } from "chai";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
 import {
@@ -344,10 +345,10 @@ describe("AccessControl", function () {
       expect(receipt.status).to.equal(1);
     });
 
-    it("Icons32Data.finalize: succeeds when called by deployer (CREATOR)", async function () {
+    it("Icons32Data.finalize: succeeds through an approved governance action", async function () {
       const { icons32, deployer } = await loadFixture(deployFullProtocol);
 
-      const tx = await icons32.connect(deployer).finalize();
+      const tx = await ownerAction(icons32.connect(deployer), "finalize");
       const receipt = await tx.wait();
       expect(receipt.status).to.equal(1);
     });
@@ -355,7 +356,7 @@ describe("AccessControl", function () {
     it("Icons32Data.setPaths: reverts with AlreadyFinalized after finalize()", async function () {
       const { icons32, deployer } = await loadFixture(deployFullProtocol);
 
-      await icons32.connect(deployer).finalize();
+      await ownerAction(icons32.connect(deployer), "finalize");
 
       await expect(
         icons32.connect(deployer).setPaths(0, ["M0 0"])
@@ -367,7 +368,7 @@ describe("AccessControl", function () {
       const { admin, alice } = await loadFixture(deployFullProtocol);
 
       await expect(
-        admin.connect(alice).swapGameEthForStEth({ value: eth("1") })
+        admin.connect(alice).swapGameEthForStEth(await (admin.connect(alice)).runner.getAddress(), { value: eth("1") })
       ).to.be.revertedWithCustomError(admin, "NotOwner");
     });
   });

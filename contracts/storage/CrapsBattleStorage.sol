@@ -69,7 +69,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     /// @notice Opening a custom battle takes the vault owner's grant. Joining one does not.
     error NotBattleCreator();
 
-    /// @notice Only the vault's majority holder may move the battle-creator roll.
+    /// @notice Only the DGVE governance executor may change battle-creator permissions.
     error NotVaultOwner();
 
     /// @notice Only the pinned game may open the bonus day. It rides the daily advance, which is

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {Vm} from "forge-std/Vm.sol";
 import {ForkDeployProtocol} from "./ForkDeployProtocol.sol";
@@ -207,7 +208,7 @@ contract ForkVrfTest is ForkDeployProtocol {
         vm.warp(vm.getBlockTimestamp() + 20 hours);
         vm.recordLogs();
         vm.prank(_vaultOwner());
-        admin.retryGameRng();
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
         Request[] memory retried = _decodeRequests(vm.getRecordedLogs());
         assertEq(retried.length, 1, "one retry request");
         assertTrue(retried[0].id != first.id);
@@ -362,13 +363,13 @@ contract ForkVrfTest is ForkDeployProtocol {
         // Recovery: refused while the retired request is pending, then cancel + forward.
         vm.prank(_vaultOwner());
         vm.expectRevert(bytes4(keccak256("PendingRequestExists()")));
-        admin.retrySubCancel(ForkPins.VRF_COORDINATOR, subId);
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retrySubCancel, (ForkPins.VRF_COORDINATOR, subId)), 0);
         // The retired request is answered late (the game ignores it: a different request id).
         uint48 processed = game.lastVrfProcessed();
         _fulfillOn(subId, stalled.id, 0xDEAD);
         assertEq(game.lastVrfProcessed(), processed, "late answer on the retired subscription ignored");
         vm.prank(_vaultOwner());
-        admin.retrySubCancel(ForkPins.VRF_COORDINATOR, subId);
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retrySubCancel, (ForkPins.VRF_COORDINATOR, subId)), 0);
         (newBal,,,,) = coordinator.getSubscription(newSub);
         assertEq(newBal, 50 ether, "the retired LINK funds the live subscription");
         assertEq(link.balanceOf(address(admin)), 0);
@@ -459,7 +460,7 @@ contract ForkVrfTest is ForkDeployProtocol {
         uint256 vaultLink = link.balanceOf(ContractAddresses.VAULT);
         vm.prank(_vaultOwner());
         vm.expectRevert(bytes4(keccak256("PendingRequestExists()")));
-        admin.retrySubCancel(ForkPins.VRF_COORDINATOR, subId);
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retrySubCancel, (ForkPins.VRF_COORDINATOR, subId)), 0);
 
         // Should the coordinator ever answer, the retired subscription becomes cancellable.
         for (uint256 i; i < all.length; ++i) {
@@ -467,7 +468,7 @@ contract ForkVrfTest is ForkDeployProtocol {
         }
         assertFalse(coordinator.pendingRequestExists(subId));
         vm.prank(_vaultOwner());
-        admin.retrySubCancel(ForkPins.VRF_COORDINATOR, subId);
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retrySubCancel, (ForkPins.VRF_COORDINATOR, subId)), 0);
         assertEq(link.balanceOf(ContractAddresses.VAULT) - vaultLink, 60 ether, "recovered to the vault");
     }
 }

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 import {TicketQueueStorage as RingStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
 
 import {BoundaryGasFixture, PhaseEndSeeder} from "../gas/Lvl100PhaseEndAdvanceGas.t.sol";
@@ -172,7 +173,7 @@ contract SdgnrsCenturyTransitionTest is BoundaryGasFixture {
         assertEq(sdgnrs.lastRecycledCentury(), 0, "request is too early to refill");
         uint256 req = mockVRF.lastRequestId();
         vm.warp(block.timestamp + 20 hours + 2);
-        admin.retryGameRng(); // the vault owner's retry (this test contract holds the DGVE majority)
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0); // the vault owner's retry (this test contract holds the DGVE majority)
         assertGt(mockVRF.lastRequestId(), req, "real VRF retry fired");
         assertEq(game.level(), 100);
         assertEq(sdgnrs.lastRecycledCentury(), 0, "retry cannot mint");

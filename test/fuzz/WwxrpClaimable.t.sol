@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -70,7 +71,7 @@ contract WwxrpClaimableTest is DeployProtocol {
 
     function test_DrawSpendsClaimableBeforeHeldAndRollsBackOnShortfall() public {
         _credit(aliceId, 50);
-        vm.prank(ContractAddresses.VAULT); wwxrp.vaultMintTo(alice, 30);
+        vm.prank(ContractAddresses.VAULT); OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.vaultMintTo, (alice, 30)), 0);
         uint256 supply = wwxrp.totalSupply();
         vm.prank(alice); wwxrp.enter(0, 25);
         assertEq(wwxrp.claimable(aliceId), 25);
@@ -87,9 +88,9 @@ contract WwxrpClaimableTest is DeployProtocol {
 
     function test_ScaleFreezesAtCreditAndWithdrawalDoesNotRescale() public {
         vm.mockCall(ContractAddresses.VAULT, abi.encodeWithSignature("isVaultOwner(address)", alice), abi.encode(true));
-        vm.prank(alice); wwxrp.setGameMintScale(3);
+        vm.prank(alice); OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.setGameMintScale, (3)), 0);
         _credit(aliceId, 10);
-        vm.prank(alice); wwxrp.setGameMintScale(0);
+        vm.prank(alice); OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.setGameMintScale, (0)), 0);
         _credit(aliceId, 10);
         assertEq(wwxrp.claimable(aliceId), 30);
         vm.prank(alice); wwxrp.withdraw(0, 0);
@@ -97,7 +98,7 @@ contract WwxrpClaimableTest is DeployProtocol {
     }
 
     function test_SaturationCannotRevertAwardsAndWithdrawalPreservesUnmintableRemainder() public {
-        vm.prank(ContractAddresses.VAULT); wwxrp.vaultMintTo(alice, type(uint256).max);
+        vm.prank(ContractAddresses.VAULT); OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.vaultMintTo, (alice, type(uint256).max)), 0);
         _credit(aliceId, type(uint256).max - 5);
         _credit(aliceId, 10);
         assertEq(wwxrp.claimable(aliceId), type(uint256).max);

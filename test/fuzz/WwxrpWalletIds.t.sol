@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -249,7 +250,7 @@ contract WwxrpWalletIdsTest is DeployProtocol {
         address app = makeAddr("trusted_app");
         vm.mockCall(address(vault), abi.encodeWithSignature("isVaultOwner(address)", owner), abi.encode(true));
         vm.prank(owner);
-        wwxrp.setTrustedMinter(app, true);
+        OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.setTrustedMinter, (app, true)), 0);
 
         address x = makeAddr("boon_idless");
         address p = makeAddr("boon_registered");

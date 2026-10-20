@@ -1,3 +1,4 @@
+import { ownerAction } from "../helpers/deployFixture.js";
 import { expect } from "chai";
 import hre from "hardhat";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
@@ -132,9 +133,8 @@ describe("DegenerusDeityPass", function () {
   describe("setRenderer()", function () {
     it("owner can set the renderer address", async function () {
       const { deityPass, deployer, alice } = await getFixture();
-      const tx = await deityPass
-        .connect(deployer)
-        .setRenderer(alice.address);
+      const tx = await ownerAction(deityPass
+        .connect(deployer), "setRenderer", [alice.address]);
       await expect(tx)
         .to.emit(deityPass, "RendererUpdated")
         .withArgs(ZERO_ADDRESS, alice.address);
@@ -143,8 +143,8 @@ describe("DegenerusDeityPass", function () {
 
     it("can set renderer back to address(0) to disable external rendering", async function () {
       const { deityPass, deployer, alice } = await getFixture();
-      await deityPass.connect(deployer).setRenderer(alice.address);
-      await deityPass.connect(deployer).setRenderer(ZERO_ADDRESS);
+      await ownerAction(deityPass.connect(deployer), "setRenderer", [alice.address]);
+      await ownerAction(deityPass.connect(deployer), "setRenderer", [ZERO_ADDRESS]);
       expect(await deityPass.renderer()).to.equal(ZERO_ADDRESS);
     });
 
@@ -157,8 +157,8 @@ describe("DegenerusDeityPass", function () {
 
     it("emits RendererUpdated with previous and new renderer addresses", async function () {
       const { deityPass, deployer, alice, bob } = await getFixture();
-      await deityPass.connect(deployer).setRenderer(alice.address);
-      const tx = await deityPass.connect(deployer).setRenderer(bob.address);
+      await ownerAction(deityPass.connect(deployer), "setRenderer", [alice.address]);
+      const tx = await ownerAction(deityPass.connect(deployer), "setRenderer", [bob.address]);
       await expect(tx)
         .to.emit(deityPass, "RendererUpdated")
         .withArgs(alice.address, bob.address);
@@ -172,9 +172,8 @@ describe("DegenerusDeityPass", function () {
   describe("setRenderColors()", function () {
     it("owner can update render colors", async function () {
       const { deityPass, deployer } = await getFixture();
-      const tx = await deityPass
-        .connect(deployer)
-        .setRenderColors("#abcdef", "#123456", "#fedcba");
+      const tx = await ownerAction(deityPass
+        .connect(deployer), "setRenderColors", ["#abcdef", "#123456", "#fedcba"]);
       await expect(tx)
         .to.emit(deityPass, "RenderColorsUpdated")
         .withArgs("#abcdef", "#123456", "#fedcba");
@@ -197,70 +196,63 @@ describe("DegenerusDeityPass", function () {
     it("reverts with InvalidColor when outline color lacks '#' prefix", async function () {
       const { deityPass, deployer } = await getFixture();
       await expect(
-        deityPass
-          .connect(deployer)
-          .setRenderColors("aabbcc", "#112233", "#aabbcc")
+        ownerAction(deityPass
+          .connect(deployer), "setRenderColors", ["aabbcc", "#112233", "#aabbcc"])
       ).to.be.revertedWithCustomError(deityPass, "InvalidColor");
     });
 
     it("reverts with InvalidColor when color is too short", async function () {
       const { deityPass, deployer } = await getFixture();
       await expect(
-        deityPass.connect(deployer).setRenderColors("#abc", "#112233", "#aabbcc")
+        ownerAction(deityPass.connect(deployer), "setRenderColors", ["#abc", "#112233", "#aabbcc"])
       ).to.be.revertedWithCustomError(deityPass, "InvalidColor");
     });
 
     it("reverts with InvalidColor when color has invalid hex characters", async function () {
       const { deityPass, deployer } = await getFixture();
       await expect(
-        deityPass
-          .connect(deployer)
-          .setRenderColors("#gggggg", "#112233", "#aabbcc")
+        ownerAction(deityPass
+          .connect(deployer), "setRenderColors", ["#gggggg", "#112233", "#aabbcc"])
       ).to.be.revertedWithCustomError(deityPass, "InvalidColor");
     });
 
     it("reverts with InvalidColor when color is too long", async function () {
       const { deityPass, deployer } = await getFixture();
       await expect(
-        deityPass
-          .connect(deployer)
-          .setRenderColors("#aabbccdd", "#112233", "#aabbcc")
+        ownerAction(deityPass
+          .connect(deployer), "setRenderColors", ["#aabbccdd", "#112233", "#aabbcc"])
       ).to.be.revertedWithCustomError(deityPass, "InvalidColor");
     });
 
     it("accepts uppercase hex digits", async function () {
       const { deityPass, deployer } = await getFixture();
       await expect(
-        deityPass
-          .connect(deployer)
-          .setRenderColors("#AABBCC", "#112233", "#FEDCBA")
+        ownerAction(deityPass
+          .connect(deployer), "setRenderColors", ["#AABBCC", "#112233", "#FEDCBA"])
       ).to.not.be.reverted;
     });
 
     it("accepts mixed case hex digits", async function () {
       const { deityPass, deployer } = await getFixture();
       await expect(
-        deityPass
-          .connect(deployer)
-          .setRenderColors("#AbCdEf", "#1a2B3c", "#Fe0Dc1")
+        ownerAction(deityPass
+          .connect(deployer), "setRenderColors", ["#AbCdEf", "#1a2B3c", "#Fe0Dc1"])
       ).to.not.be.reverted;
     });
 
     it("reverts when background color is invalid", async function () {
       const { deityPass, deployer } = await getFixture();
       await expect(
-        deityPass
-          .connect(deployer)
-          .setRenderColors("#aabbcc", "invalid", "#112233")
+        ownerAction(deityPass
+          .connect(deployer), "setRenderColors", ["#aabbcc", "invalid", "#112233"])
       ).to.be.revertedWithCustomError(deityPass, "InvalidColor");
     });
 
     it("reverts when nonCrypto color is invalid", async function () {
       const { deityPass, deployer } = await getFixture();
       await expect(
-        deityPass
-          .connect(deployer)
-          .setRenderColors("#aabbcc", "#112233", "bad")
+        ownerAction(deityPass
+          .connect(deployer), "setRenderColors", ["#aabbcc", "#112233", "bad"])
       ).to.be.revertedWithCustomError(deityPass, "InvalidColor");
     });
   });

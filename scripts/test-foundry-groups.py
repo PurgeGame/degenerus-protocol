@@ -67,7 +67,7 @@ def groups():
     fuzz = sorted(Path("test/fuzz").glob("*.t.sol"))
     result = {
         "integration-gas": {p for p in files if p.parts[1] in {
-            "craps", "differential", "economics", "gas", "mutation", "invariant"}},
+            "craps", "differential", "economics", "gas", "mutation", "invariant", "governance"}},
         "repro-symbolic": {p for p in files if p.parts[1] in {"repro", "halmos"}},
     }
     chunk = max(1, (len(fuzz) + 3) // 4)

@@ -493,7 +493,7 @@ an independent bit carries its coinflip bonus to the next purchase settlement.
 The existing turbo trigger and BAF last-purchase window remain in place.
 
 WWXRP has no vault mint allowance, escrow reserve or automatic century top-ups.
-The vault or its current DGVE-majority owner can mint any amount for free through
+The vault or the DGVE governance executor can mint any amount for free through
 `vaultMintTo`; the owner can also use `DegenerusVault.wwxrpMint`. Vault-held WWXRP
 uses ordinary balances and burns. Standard ERC20 approvals and the trusted
 minter registry remain available.
@@ -630,3 +630,7 @@ and survivor replay from (word,lvl,T,stratum).
 ### High-roller jackpot reserve
 
 `JackpotBattle.lockJackpotBattle` assigns 5% of gross, price-scaled, unrolled Added to a persistent reserve and leaves 95% for the main subsidy lottery. Award counts use the unscaled baseline and are fixed at lock. Neither hidden multiplier changes the reserve contribution. Once the field finalizes, any eligible high entry gives the event one 10% chance to pay the whole reserve through Coinflip credit. Each accepted high entry has one equal ticket; sDGNRS is excluded, the vault is eligible, and activity score is unused. Pass and comp entries consume their existing funding and qualify. Paid entry/upgrade closure freezes the field before the settling RNG. The cold module samples already-resolved paid seats in bounded batches, preserving its nominee/count/cursor; the final draw is idempotent. Reserve grants do not generate action, comps or another protocol multiplier.
+
+## DGVE owner approval
+
+[Owner governance](OWNER_GOVERNANCE.md) executes the bounded owner controls after escrowed approval exceeds 50.1% of the live DGVE supply. Voting delegates can manage allocated votes; each depositor alone can withdraw their tokens. Initial icon uploads use a one-time creator setup window, which closes permanently at completion or governance takeover.

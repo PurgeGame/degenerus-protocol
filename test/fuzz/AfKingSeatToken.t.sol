@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {SeatFixture} from "./SeatConsumption.t.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -227,7 +228,7 @@ contract AfKingSeatToken is SeatFixture {
         // Through the vault the token's error bubbles.
         vm.prank(ContractAddresses.CREATOR);
         vm.expectRevert(AFKingSubscriptionToken.FreeTrancheOpen.selector);
-        vault.afkingSeatMint(makeAddr("grantee"), 1);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.afkingSeatMint, (makeAddr("grantee"), 1)), 0);
     }
 
     function testVaultSeatMintIsOwnerGated() public {
@@ -259,22 +260,22 @@ contract AfKingSeatToken is SeatFixture {
     function testVaultRestylesOwnAndSdgnrsConstructionSeats() public {
         address owner_ = ContractAddresses.CREATOR;
         vm.prank(owner_);
-        vault.playerAction(
+        abi.decode(OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (
             ContractAddresses.AFKING_SUB_TOKEN,
             abi.encodeWithSignature("setSeatTraits(uint256,uint8,uint24,uint24)", 2, 9, 0xabcdef, 0x123456),
             0
-        );
+        )), 0), (bytes));
         (uint8 s2, uint24 bg2, uint24 tr2) = afkingSubToken.seatTraits(2);
         assertEq(s2, 9, "vault seat restyled");
         assertEq(bg2, 0xabcdef);
         assertEq(tr2, 0x123456);
 
         vm.prank(owner_);
-        vault.playerAction(
+        abi.decode(OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (
             ContractAddresses.AFKING_SUB_TOKEN,
             abi.encodeWithSignature("setSeatTraits(uint256,uint8,uint24,uint24)", 1, 4, 0x0f0f0f, 0xf0f0f0),
             0
-        );
+        )), 0), (bytes));
         (uint8 s1, uint24 bg1, uint24 tr1) = afkingSubToken.seatTraits(1);
         assertEq(s1, 4, "sdgnrs seat restyled by its vault steward");
         assertEq(bg1, 0x0f0f0f);

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -387,7 +388,7 @@ contract VRFCore is DeployProtocol {
         vm.warp(block.timestamp + 21 hours);
 
         // Transport-only retry through the vault-owner Admin entry
-        admin.retryGameRng();
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
         assertGt(_readVrfRequestId(), firstRequestId, "Timeout must issue a replacement request");
         assertTrue(game.rngLocked(), "Replacement request remains pending");
 
@@ -420,7 +421,7 @@ contract VRFCore is DeployProtocol {
 
         // Timeout + retry
         vm.warp(block.timestamp + 21 hours);
-        admin.retryGameRng();
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
         uint48 indexAfterRetry = _lootboxRngIndex();
         assertEq(indexAfterRetry, indexAfterRequest, "Fuzz: retry should not change index");
 
@@ -437,7 +438,7 @@ contract VRFCore is DeployProtocol {
             assertTrue(game.rngLocked(), "reserved result cannot complete the commitment");
             assertEq(_lootboxRngIndex(), indexAfterRequest, "reserved result preserves the same cohort");
             vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-            admin.retryGameRng();
+            OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
             return;
         }
         assertEq(_readRngWordCurrent(), word2, "Replacement request supplies its own entropy");
@@ -494,7 +495,7 @@ contract VRFCore is DeployProtocol {
         admin.retryGameRng();
 
         // The vault owner authorizes a transport replacement through Admin.
-        admin.retryGameRng();
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
         uint256 dailyReqId = mockVRF.lastRequestId();
         assertTrue(dailyReqId != stalledReqId, "Admin issued a replacement VRF request");
         assertFalse(game.rngLocked(), "retry retains the original midday request mode");
@@ -656,7 +657,7 @@ contract VRFCore is DeployProtocol {
         uint48 indexBefore = _lootboxRngIndex();
 
         // The Admin entry should retry (not revert)
-        admin.retryGameRng();
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
 
         // After retry: rngLocked still true (new request in flight)
         assertTrue(game.rngLocked(), "Should still be locked after retry");
@@ -684,7 +685,7 @@ contract VRFCore is DeployProtocol {
         // 19h59m: even the vault owner (this test contract holds the DGVE majority) waits
         vm.warp(uint256(requestTime) + 20 hours - 1 minutes);
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        admin.retryGameRng();
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
 
         // Past 20h a non-owner still reverts: the retry is the vault owner's alone
         vm.warp(uint256(requestTime) + 20 hours + 1 minutes);
@@ -710,11 +711,11 @@ contract VRFCore is DeployProtocol {
         // 19h: not yet
         vm.warp(uint256(requestTime) + 19 hours);
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        admin.retryGameRng();
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
 
         // 20h: the vault owner's retry re-sends the request; the stamp keeps its day
         vm.warp(uint256(requestTime) + 20 hours);
-        admin.retryGameRng();
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
         uint256 retryReqId = _readVrfRequestId();
         assertTrue(retryReqId != oldReqId, "Retry re-issues the request");
         assertTrue(game.rngLocked(), "Still locked after retry");
@@ -724,7 +725,7 @@ contract VRFCore is DeployProtocol {
         // Retry spent: another 20h on, even the vault owner gets RngNotReady
         vm.warp(uint256(requestTime) + 40 hours + 1);
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        admin.retryGameRng();
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
 
         // The retried request's late fulfillment still lands and completes the day. It lands
         // after the next boundary, so the call that completes the day goes on to issue the
@@ -764,7 +765,7 @@ contract VRFCore is DeployProtocol {
         // No retry after the swap, even 20h on
         vm.warp(uint256(requestTime) + 20 hours + 1);
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        admin.retryGameRng();
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
         assertEq(_readVrfRequestId(), swapReqId, "the swap's request stands");
 
         // Fulfill on the new coordinator and complete the day
@@ -791,7 +792,7 @@ contract VRFCore is DeployProtocol {
 
         // Timeout + retry
         vm.warp(block.timestamp + 21 hours);
-        admin.retryGameRng();
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
         uint256 newReqId = mockVRF.lastRequestId();
         assertTrue(newReqId != oldReqId, "New request ID after retry");
 
@@ -824,7 +825,7 @@ contract VRFCore is DeployProtocol {
 
         // Timeout + retry
         vm.warp(block.timestamp + 21 hours);
-        admin.retryGameRng();
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
         assertEq(_lootboxRngIndex(), indexAfterRequest, "Index unchanged after retry");
 
         // Fulfill new request and complete day

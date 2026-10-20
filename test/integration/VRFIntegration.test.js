@@ -1,3 +1,4 @@
+import { ownerAction } from "../helpers/deployFixture.js";
 import { expect } from "chai";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
 import {
@@ -352,7 +353,7 @@ describe("VRFIntegration", function () {
       await advanceTime(20 * 60 * 60 + 60);
 
       // The separate owner-authorized Admin entry issues the sole retry.
-      const tx = await admin.connect(deployer).retryGameRng();
+      const tx = await ownerAction(admin.connect(deployer), "retryGameRng", []);
       const receipt = await tx.wait();
       expect(receipt.status).to.equal(1);
 
@@ -378,7 +379,7 @@ describe("VRFIntegration", function () {
       await advanceTime(20 * 60 * 60 + 60);
 
       // Issue retry request.
-      await admin.connect(deployer).retryGameRng();
+      await ownerAction(admin.connect(deployer), "retryGameRng", []);
       const retryRequestId = await getLastVRFRequestId(mockVRF);
       expect(retryRequestId).to.be.gt(originalId);
 

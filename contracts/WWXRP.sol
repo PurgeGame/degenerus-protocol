@@ -37,7 +37,7 @@ pragma solidity 0.8.34;
  *      - Standard ERC20 functionality (transfer, approve, etc.)
  *      - mintPrize(): Authorized minters can award WWXRP prizes
  *      - vaultMintTo(): Vault or its current owner can mint any amount for free
- *      - Trusted minters: the vault owner (>50.1% of DGVE) may register or
+ *      - Trusted minters: the DGVE governance executor may register or
  *        revoke any address as a minter/burner alongside the pinned game
  *        contracts, so future games can pay and take WWXRP. This is
  *        deliberate and total: WWXRP is the protocol's inflationary side coin
@@ -141,9 +141,9 @@ interface IDrawGame {
     function extsload(bytes32 slot) external view returns (bytes32);
 }
 
-/// @dev Vault ownership check (>50.1% of DGVE) for the trusted-minter registry.
+/// @dev DGVE governance executor check for the trusted-minter registry.
 interface IDrawVaultOwner {
-    /// @notice Checks DGVE-majority vault ownership, as implemented by DegenerusVault.
+    /// @notice Checks the pinned DGVE governance executor, as implemented by DegenerusVault.
     function isVaultOwner(address account) external view returns (bool);
 }
 
@@ -282,7 +282,7 @@ contract WWXRP {
     /// @notice Thrown when caller is not an authorized minter
     error OnlyMinter();
 
-    /// @notice Thrown when the caller does not hold vault ownership (>50.1% of DGVE)
+    /// @notice Thrown when the caller is not the pinned DGVE governance executor
     error NotVaultOwner();
 
     /// @notice Thrown when a draw burn is below the 25 WWXRP minimum
@@ -714,7 +714,7 @@ contract WWXRP {
     /// @dev Total by design: a trusted address may mint any amount to anyone through
     ///      mintPrize, burn any balance through burnForGame, and consume any player's
     ///      WWXRP boon through consumeBoon, exactly as the pinned game contracts can.
-    ///      The vault owner is whoever holds >50.1% of DGVE.
+    ///      The vault owner is the pinned DGVE approval executor.
     /// @param account The address to trust or revoke.
     /// @param trusted True to register, false to revoke.
     /// @custom:reverts NotVaultOwner When the caller is not the vault owner.
@@ -741,7 +741,7 @@ contract WWXRP {
     }
 
     /// @notice Mint any amount of WWXRP for free (a zero recipient mints nothing).
-    /// @dev Callable by the vault or its current owner (>50.1% of DGVE).
+    /// @dev Callable by the Vault or its pinned DGVE governance executor.
     ///      No reserve, allocation, payment or per-call mint limit applies.
     function vaultMintTo(address to, uint256 amount) external {
         if (msg.sender != MINTER_VAULT && !vaultOwner.isVaultOwner(msg.sender)) revert NotVaultOwner();

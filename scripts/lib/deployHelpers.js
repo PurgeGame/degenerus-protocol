@@ -39,7 +39,7 @@ export async function deployContract(hre, contractName, args = []) {
  *   Parsed scripts/data/icons32Data.symbolOrder.json (its legacy `diamond` key
  *   is unused — the current contract folds that icon into the 33-slot array)
  * @param {{finalize?: boolean}} [opts] - finalize() is IRREVERSIBLE and opt-in;
- *   verify the wired data on-chain first, then lock it as a deliberate step.
+ *   must match the immutable constructor option; completion finalizes automatically.
  */
 export async function wireIcons32(icons32, iconsData, opts = {}) {
   const { finalize = false } = opts;
@@ -61,15 +61,54 @@ export async function wireIcons32(icons32, iconsData, opts = {}) {
         `CARD_IDX=[3,4,5,6,0,2,1,7] to paths[16..23] and symQ3 before wiring.`
     );
   }
-  for (let start = 0; start < 33; start += 10) {
-    const batch = iconsData.paths.slice(start, Math.min(start + 10, 33));
-    await (await icons32.setPaths(start, batch)).wait();
+  if ([...iconsData.paths, ...iconsData.symQ1, ...iconsData.symQ2, ...iconsData.symQ3].some(s => typeof s !== "string" || s.length === 0)) {
+    throw new Error("Initial icon entries must be nonempty strings");
   }
-  await (await icons32.setSymbols(0, iconsData.symQ1)).wait();
-  await (await icons32.setSymbols(1, iconsData.symQ2)).wait();
-  await (await icons32.setSymbols(2, iconsData.symQ3)).wait();
-  if (finalize) {
-    await (await icons32.finalize()).wait();
+  if (await icons32.finalizeOnBootstrap() !== finalize) {
+    throw new Error("Finalization option differs from the deployed immutable option");
+  }
+  let mask = await icons32.initializedMask();
+  const complete = (1n << 36n) - 1n;
+  // Validate every existing entry before sending any transaction (especially the final upload).
+  for (let i = 0; i < 33; ++i) {
+    if ((mask & (1n << BigInt(i))) !== 0n && await icons32.data(i) !== iconsData.paths[i]) {
+      throw new Error(`Existing icon path ${i} differs from dataset; correction requires governance`);
+    }
+  }
+  for (let q = 0; q < 3; ++q) {
+    if ((mask & (1n << BigInt(33 + q))) !== 0n) {
+      for (let i = 0; i < 8; ++i) {
+        if (await icons32.symbol(q, i) !== iconsData[`symQ${q + 1}`][i]) {
+          throw new Error(`Existing symbol ${q}/${i} differs from dataset; correction requires governance`);
+        }
+      }
+    }
+  }
+  if (await icons32.bootstrapClosed() && mask !== complete) {
+    throw new Error("Icon bootstrap was closed before completion; remaining setup requires governance");
+  }
+  for (let start = 0; start < 33;) {
+    if ((mask & (1n << BigInt(start))) !== 0n) { ++start; continue; }
+    let end = start + 1;
+    while (end < 33 && end - start < 10 && (mask & (1n << BigInt(end))) === 0n) ++end;
+    await (await icons32.setPaths(start, iconsData.paths.slice(start, end))).wait();
+    start = end;
+  }
+  for (let q = 0; q < 3; ++q) {
+    if ((mask & (1n << BigInt(33 + q))) === 0n) {
+      await (await icons32.setSymbols(q, iconsData[`symQ${q + 1}`])).wait();
+    }
+  }
+  for (let i = 0; i < 33; ++i) {
+    if (await icons32.data(i) !== iconsData.paths[i]) throw new Error(`Icon path ${i} readback failed`);
+  }
+  for (let q = 0; q < 3; ++q) {
+    for (let i = 0; i < 8; ++i) {
+      if (await icons32.symbol(q, i) !== iconsData[`symQ${q + 1}`][i]) throw new Error(`Symbol ${q}/${i} readback failed`);
+    }
+  }
+  if (!await icons32.bootstrapClosed() || (finalize && !await icons32.finalized())) {
+    throw new Error("Icon setup did not close/finalize as requested");
   }
 }
 

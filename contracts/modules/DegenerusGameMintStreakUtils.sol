@@ -29,9 +29,9 @@ import {ContractAddresses} from "../ContractAddresses.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 
-/// @dev Vault interface for the DGVE-majority bounty-eligibility tier (cold path).
+/// @dev Vault interface for owner controls and the liquidation-buyer configuration.
 interface IDegenerusVaultOwner {
-    /// @notice DegenerusVault's majority-DGVE-holder check for `account`.
+    /// @notice Whether `account` is the pinned DGVE governance executor.
     function isVaultOwner(address account) external view returns (bool);
     /// @notice Whether the vault buys liquidated accounts when sDGNRS cannot fund the price,
     ///         and the ETH (wei) reserve it keeps untouched.

@@ -192,7 +192,7 @@ contract AccountLoansTest is RedemptionCloseTools {
     function _fundVaultLender() private {
         _seed(2, 0, 1 ether, 0);
         _seed(1, 0, 100 ether, 0);
-        vm.prank(ContractAddresses.CREATOR);
+        vm.prank(ContractAddresses.OWNER_GOVERNANCE);
         vault.setLiquidationBuyFallback(true, 1 ether);
     }
 
@@ -825,7 +825,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         uint256 principal = lens.previewBorrow(address(game), root, 1, type(uint256).max).principal;
         _seed(2, 0, 1 ether, 0);
         _seed(1, 0, uint128(principal / 2 + 1), uint128(2 ether + principal - principal / 2));
-        vm.prank(ContractAddresses.CREATOR);
+        vm.prank(ContractAddresses.OWNER_GOVERNANCE);
         vault.setLiquidationBuyFallback(true, 2 ether);
         assertEq(lens.previewBorrow(address(game), root, 1, type(uint256).max).lenderId, 1);
         _borrow(root, 1);
@@ -833,7 +833,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         assertEq(game.afkingFundingOf(address(vault)), 2 ether);
         _seize(1);
         assertEq(_payee(root), address(vault));
-        vm.prank(ContractAddresses.CREATOR);
+        vm.prank(ContractAddresses.OWNER_GOVERNANCE);
         vault.setLiquidationBuyFallback(false, 2 ether);
         _seed(root, 0, 1 ether + 1, 0);
         uint32[] memory ids = new uint32[](1); ids[0] = root;
@@ -846,14 +846,14 @@ contract AccountLoansTest is RedemptionCloseTools {
         _seed(2, 0, 1 ether, 0);
         vm.prank(seller); vm.expectRevert(bytes4(keccak256("Insolvent()"))); game.borrow(root, 1, type(uint256).max, 0);
         _seed(1, 0, 2 ether, 0);
-        vm.prank(ContractAddresses.CREATOR); vault.setLiquidationBuyFallback(true, 2 ether);
+        vm.prank(ContractAddresses.OWNER_GOVERNANCE); vault.setLiquidationBuyFallback(true, 2 ether);
         vm.prank(seller); vm.expectRevert(bytes4(keccak256("Insolvent()"))); game.borrow(root, 1, type(uint256).max, 0);
     }
 
     function test_SdgnrsPriorityAndFloorEquality() public {
         uint256 principal = lens.previewBorrow(address(game), root, 1, type(uint256).max).principal;
         _seed(2, 0, uint128(1 ether + principal), 0);
-        vm.prank(ContractAddresses.CREATOR); vault.setLiquidationBuyFallback(true, 0);
+        vm.prank(ContractAddresses.OWNER_GOVERNANCE); vault.setLiquidationBuyFallback(true, 0);
         assertEq(lens.previewBorrow(address(game), root, 1, type(uint256).max).lenderId, 2);
         _borrow(root, 1);
         assertEq(game.claimableWinningsOf(address(sdgnrs)), 1 ether);
@@ -919,7 +919,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         vm.prank(address(vault));
         game.sweepAccounts(ids);
         uint256 before = address(vault).balance + mockStETH.balanceOf(address(vault));
-        vm.prank(ContractAddresses.CREATOR);
+        vm.prank(ContractAddresses.OWNER_GOVERNANCE);
         vault.playerAction(ContractAddresses.GAME, abi.encodeWithSignature("claimWinningsStethFirst()"), 0);
         assertEq(address(vault).balance + mockStETH.balanceOf(address(vault)), before + 3 ether);
     }
@@ -1083,7 +1083,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         _default(child);
         _seed(2, 0, 1 ether, 0);
         _seed(1, 0, 100 ether, 0);
-        vm.prank(ContractAddresses.CREATOR); vault.setLiquidationBuyFallback(true, 1 ether);
+        vm.prank(ContractAddresses.OWNER_GOVERNANCE); vault.setLiquidationBuyFallback(true, 1 ether);
         _default(root);
         assertEq(_payee(root), address(vault));
         assertEq(_payee(child), address(sdgnrs));
@@ -1096,7 +1096,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         _borrow(child, 2);
         _seed(2, 0, 1 ether, 0);
         _seed(1, 0, 100 ether, 0);
-        vm.prank(ContractAddresses.CREATOR); vault.setLiquidationBuyFallback(true, 1 ether);
+        vm.prank(ContractAddresses.OWNER_GOVERNANCE); vault.setLiquidationBuyFallback(true, 1 ether);
         _borrow(root, 1);
         _seize(1);
         assertEq(_payee(child), address(vault), "the family moved with the main");
@@ -1254,7 +1254,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         );
         uint256 mainBefore = game.claimableWinningsOf(address(vault));
         uint256 flipBefore = coin.vaultMintAllowance();
-        vm.prank(ContractAddresses.CREATOR);
+        vm.prank(ContractAddresses.OWNER_GOVERNANCE);
         (uint256 ethOut, uint256 flipOut) = abi.decode(vault.playerAction(
             ContractAddresses.GAME,
             abi.encodeWithSignature("sweepAccounts(uint32[])", _one(child)),
@@ -1279,7 +1279,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         vm.expectRevert(DegenerusGameStorage.NotApproved.selector);
         game.sweepAccounts(ids);
         assertEq(game.claimableWinningsOf(address(sdgnrs)), sdBefore, "unauthorized batch rolls back fully");
-        vm.prank(ContractAddresses.CREATOR);
+        vm.prank(ContractAddresses.OWNER_GOVERNANCE);
         vault.playerAction(ContractAddresses.GAME, abi.encodeWithSignature("sweepAccounts(uint32[])", ids), 0);
         assertEq(game.claimableWinningsOf(address(sdgnrs)), sdBefore + 1 ether);
         assertEq(game.claimableWinningsOf(address(vault)), vaultBefore + 2 ether);

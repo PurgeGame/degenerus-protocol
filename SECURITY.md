@@ -8,12 +8,18 @@ impact to **burnie@degener.us** or a repository issue. The audit subject is the
 
 | Role | Authority and limits |
 | --- | --- |
-| Vault owner | Wallet with **more than 50.1% of DGVE**: `balance * 1000 > supply * 501`. Authority follows shares, not the deployer address. |
+| Vault owner | Fixed DGVE governance executor. Admin actions require proposal approval assigned before the execution block exceeding **50.1% of live DGVE supply**. Direct Vault gameplay requires that majority under one caller’s control in deposits from earlier blocks; exactly 50.1% fails. No wallet has direct owner access. |
+| Voting delegate | May assign or clear an owner's escrowed DGVE votes; a majority under one caller's control also permits direct Vault gameplay and restricted-budget purchases. Cannot withdraw, redeem or transfer that owner's tokens, change their delegate, or use their player account. |
 | Comp delegate | Owner-set FLIP-value spending limit. May grant any supported comp to any recipient. Cannot set prices, refill the shared budget or authorize delegates. Setting an allowance replaces it; zero revokes it. |
 | Battle creator | Owner-authorized custom-battle creation within contract bounds. No comp-budget authority. |
 | sDGNRS governance | VRF/feed recovery proposals and votes under stall, threshold and recovery-cancellation rules; balance-weighted charity voting through `GNRUS.vote`, once per slot per level, with multiple slots allowed. |
 | Player-approved operator | Only the authority granted through the Game's operator mechanism; permissionless settlement alone grants no spending or withdrawal rights. |
-| CREATOR | Initial allocations; icon-data setters until their irreversible finalization. This icon role is separate from DGVE ownership. |
+| CREATOR | Initial allocations; one-time installation of each icon path/name quadrant. This bootstrap closes on completion or the first successful governance icon write/finalization. Later icon changes require governance and remain possible only before finalization. |
+
+Each owner can withdraw their escrow at any time or revoke delegation while clearing support.
+Voting delegation grants full voting trust over that position. Same-block exclusion prevents
+atomic borrowing from supplying votes; it provides no review delay and does not exclude
+borrowing across blocks. Proposals expire after seven days. See [DGVE owner approval](docs/OWNER_GOVERNANCE.md).
 
 ## Vault-owner powers
 
@@ -29,7 +35,7 @@ impact to **burnie@degener.us** or a repository issue. The audit subject is the
 - Set lootbox RNG threshold and midday basefee ceiling. Declare Thanos scaling at least
   six levels ahead, with shift <=8, the projected-entry floor and pending-declaration locks.
 - Stake surplus Game ETH into stETH subject to player-claim reserves; exchange supplied
-  ETH for an equal amount of Game stETH through Admin.
+  ETH for an equal amount of Game stETH through Admin, paying the explicitly approved recipient.
 - Permanently raise a registered main ID's base smurf allowance directly through the Game,
   up to 65,535 base creations, plus one per 120 current main activity points, subject
   to the 65,535 total lifetime creation cap.

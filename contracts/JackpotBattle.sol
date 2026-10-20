@@ -39,7 +39,7 @@ contract JackpotBattle is CrapsBattleStorage {
 
     /// @notice Open a custom battle; the table's `createBattle` forwards here. See CrapsBattle.
     /// @dev The creator roll is checked FIRST so a granted creator never pays for the
-    ///      cross-contract call; the vault's majority holder always qualifies, so the authority
+    ///      cross-contract call; the DGVE governance executor always qualifies, so the authority
     ///      behind the grant can never be locked out of its own table.
     function createBattle(
         uint32 played,

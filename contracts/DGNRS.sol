@@ -55,7 +55,7 @@ interface IDegenerusGame {
  * @title DGNRS (DGNRS)
  * @notice Transferable ERC20 — the liquid face of the DGNRS token
  * @dev Holders burn DGNRS to claim proportional ETH + stETH + FLIP backing.
- *      DGVE majority holder can unwrap DGNRS back to soulbound sDGNRS for specific recipients.
+ *      DGVE-approved Vault action can unwrap DGNRS back to soulbound sDGNRS for specific recipients.
  */
 contract DGNRS {
     // =====================================================================
@@ -98,7 +98,7 @@ contract DGNRS {
     /// @param stethOut stETH paid out.
     /// @param flipOut FLIP paid out.
     event BurnThrough(address indexed from, uint256 amount, uint256 ethOut, uint256 stethOut, uint256 flipOut);
-    /// @notice Emitted when DGVE majority holder unwraps DGNRS back to soulbound sDGNRS
+    /// @notice Emitted when the Vault unwraps DGNRS back to soulbound sDGNRS
     /// @param recipient The address receiving the unwrapped sDGNRS.
     /// @param amount Amount unwrapped.
     event UnwrapTo(address indexed recipient, uint256 amount);

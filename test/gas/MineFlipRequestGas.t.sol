@@ -219,8 +219,12 @@ contract MineFlipRequestGasTest is DeployProtocol {
             vm.etch(address(gnrus), original);
             // All 20 vote reads and all 17 mutable slots flushed to fresh recipients.
             for (uint8 i; i < 20; ++i) {
+                vm.prank(ContractAddresses.OWNER_GOVERNANCE);
                 gnrus.setCharity(i, address(uint160(0xC000 + i)));
-                if (i >= 3) gnrus.setCharity(i, address(uint160(0xE000 + i)));
+                if (i >= 3) {
+                    vm.prank(ContractAddresses.OWNER_GOVERNANCE);
+                    gnrus.setCharity(i, address(uint160(0xE000 + i)));
+                }
             }
             // A funded affiliate winner with a fresh sDGNRS balance.
             // _levelScore is slot 3, with leader score/id in the upper 128 bits.

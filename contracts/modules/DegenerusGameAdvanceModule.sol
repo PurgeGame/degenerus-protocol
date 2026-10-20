@@ -1158,7 +1158,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
     ///         a raw entry's replacement cost and expected pot share are both
     ///         unchanged by any declaration.
     /// @dev Runs in the Game's storage context via the facade stub. Access: vault owner
-    ///      only (DGVE majority holder). Bounds: 3-level notice; shift capped at
+    ///      only (DGVE governance executor). Bounds: 3-level notice; shift capped at
     ///      SNAP_SHIFT_MAX (raising and lowering both allowed — fairness needs only that
     ///      each level's exponent is fixed before its first ticket materializes); a
     ///      non-zero shift must leave the target level's projected entries at or above
@@ -1194,7 +1194,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
     }
 }
 
-/// @dev Vault interface for the DGVE majority-holder check behind setThanosLevel.
+/// @dev Vault interface for the pinned governance owner check behind setThanosLevel.
 interface IVaultOwnerCheck {
     function isVaultOwner(address account) external view returns (bool);
 }

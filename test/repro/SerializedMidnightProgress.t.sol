@@ -260,9 +260,9 @@ contract SerializedMidnightProgressTest is MiddayFrozenPoolLatch {
         uint256 request = mockVRF.lastRequestId();
         uint48 committedRead = RecyclingState.readBuffer(address(game));
         vm.warp(vm.getBlockTimestamp() + 1 days);
-        assertTrue(vault.isVaultOwner(ContractAddresses.CREATOR), "fixture creator holds the vault majority");
+        assertTrue(vault.isVaultOwner(ContractAddresses.OWNER_GOVERNANCE), "executor holds the retry role");
         assertFalse(vault.isVaultOwner(address(game)), "Game is not the vault owner");
-        vm.prank(ContractAddresses.CREATOR);
+        vm.prank(ContractAddresses.OWNER_GOVERNANCE);
         admin.retryGameRng();
         assertGt(mockVRF.lastRequestId(), request, "Admin forwards the owner's authorized retry");
         assertFalse(game.rngLocked(), "retry preserves the original midday request mode");

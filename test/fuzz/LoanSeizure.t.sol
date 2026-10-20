@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
@@ -341,7 +342,7 @@ contract LoanSeizureTest is DeployProtocol {
         _borrow(borrower, child, 2);
         _etch(); SeizureSeeder(address(game)).setClaimable(2, 1 ether); _unetch();
         _fund(1, 100 ether);
-        vm.prank(ContractAddresses.CREATOR); vault.setLiquidationBuyFallback(true, 1 ether);
+        vm.prank(ContractAddresses.CREATOR); OwnerTargetCall.call(address(vault), abi.encodeCall(vault.setLiquidationBuyFallback, (true, 1 ether)), 0);
         _borrow(borrower, root, 1);
         _setBalances(root, 0, 0);
         _setBalances(child, 0, 0); // the deity purchase's change would otherwise repay
@@ -354,7 +355,7 @@ contract LoanSeizureTest is DeployProtocol {
         assertEq(deityPass.ownerOf(5), address(sdgnrs), "the smurf's own default moves it on");
         assertEq(game.acquiredBuyer(child), 2);
         vm.prank(ContractAddresses.CREATOR); vm.expectRevert(bytes4(keccak256("Soulbound()")));
-        vault.sweepNft(address(deityPass), ContractAddresses.CREATOR, 5);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.sweepNft, (address(deityPass), ContractAddresses.CREATOR, 5)), 0);
     }
 
     function test_SellerCanBuyANewDeityAfterSeizure() public {
@@ -490,7 +491,7 @@ contract LoanSeizureTest is DeployProtocol {
         _borrow(borrower, child, 2);
         _etch(); SeizureSeeder(address(game)).setClaimable(2, 1 ether); _unetch();
         _fund(1, 100 ether);
-        vm.prank(ContractAddresses.CREATOR); vault.setLiquidationBuyFallback(true, 1 ether);
+        vm.prank(ContractAddresses.CREATOR); OwnerTargetCall.call(address(vault), abi.encodeCall(vault.setLiquidationBuyFallback, (true, 1 ether)), 0);
         _borrow(borrower, root, 1);
         (uint256 seized, ) = _settleDue(1);
         assertEq(seized, 1);

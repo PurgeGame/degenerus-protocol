@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -41,7 +42,7 @@ contract WwxrpGameMintScaleTest is DeployProtocol {
         vm.expectEmit(false, false, false, true, address(wwxrp));
         emit GameMintScaleSet(scale);
         vm.prank(owner);
-        wwxrp.setGameMintScale(scale);
+        OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.setGameMintScale, (scale)), 0);
         uint256 expected = uint256(amount) * scale;
         assertEq(_mintFrom(ContractAddresses.GAME, amount), expected, "Game scaled");
         assertEq(_mintFrom(ContractAddresses.COINFLIP, amount), expected, "Coinflip scaled");
@@ -50,8 +51,8 @@ contract WwxrpGameMintScaleTest is DeployProtocol {
 
     function testZeroStopsGamePrintingButNotTrustedApps() public {
         vm.startPrank(owner);
-        wwxrp.setGameMintScale(0);
-        wwxrp.setTrustedMinter(app, true);
+        OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.setGameMintScale, (0)), 0);
+        OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.setTrustedMinter, (app, true)), 0);
         vm.stopPrank();
         assertEq(_mintFrom(ContractAddresses.GAME, 5), 0, "game prints nothing at 0");
         assertEq(_mintFrom(app, 5), 5, "trusted app mints the exact amount");
@@ -59,7 +60,7 @@ contract WwxrpGameMintScaleTest is DeployProtocol {
 
     function testHugeRequestNeverReverts() public {
         vm.prank(owner);
-        wwxrp.setGameMintScale(type(uint256).max);
+        OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.setGameMintScale, (type(uint256).max)), 0);
         uint256 room = type(uint256).max - wwxrp.totalSupply();
         assertEq(_mintFrom(ContractAddresses.GAME, type(uint256).max), room, "saturates at the supply room");
         assertEq(_mintFrom(ContractAddresses.COINFLIP, 1), 0, "a full supply mints nothing, no revert");
@@ -69,7 +70,7 @@ contract WwxrpGameMintScaleTest is DeployProtocol {
         scale = bound(scale, 2, type(uint256).max);
         amount = bound(amount, type(uint256).max / scale + 1, type(uint256).max);
         vm.prank(owner);
-        wwxrp.setGameMintScale(scale);
+        OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.setGameMintScale, (scale)), 0);
         uint256 room = type(uint256).max - wwxrp.totalSupply();
         assertEq(_mintFrom(ContractAddresses.JACKPOTS, amount), room, "overflow saturates");
     }
@@ -78,15 +79,15 @@ contract WwxrpGameMintScaleTest is DeployProtocol {
     ///      is also registered as trusted is still scaled (the pinned branch is checked first).
     function testFuzz_OnlyPinnedGameMintsAreScaled(uint64 scale, uint128 amount) public {
         vm.startPrank(owner);
-        wwxrp.setGameMintScale(scale);
-        wwxrp.setTrustedMinter(app, true);
-        wwxrp.setTrustedMinter(ContractAddresses.COINFLIP, true);
+        OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.setGameMintScale, (scale)), 0);
+        OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.setTrustedMinter, (app, true)), 0);
+        OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.setTrustedMinter, (ContractAddresses.COINFLIP, true)), 0);
         vm.stopPrank();
         assertEq(_mintFrom(app, amount), amount, "trusted app scaled");
         assertEq(_mintFrom(ContractAddresses.COINFLIP, amount), uint256(amount) * scale, "trusted pinned minter unscaled");
         uint256 before = wwxrp.balanceOf(player);
         vm.prank(owner);
-        wwxrp.vaultMintTo(player, amount);
+        OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.vaultMintTo, (player, amount)), 0);
         assertEq(wwxrp.balanceOf(player) - before, amount, "vault mint scaled");
     }
 
@@ -94,7 +95,7 @@ contract WwxrpGameMintScaleTest is DeployProtocol {
     function testFuzz_SaturationBoundaryIsExact(uint256 scale) public {
         scale = bound(scale, 2, type(uint128).max);
         vm.prank(owner);
-        wwxrp.setGameMintScale(scale);
+        OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.setGameMintScale, (scale)), 0);
         uint256 edge = type(uint256).max / scale;
         uint256 room = type(uint256).max - wwxrp.totalSupply();
         uint256 expected = edge * scale;
@@ -108,7 +109,7 @@ contract WwxrpGameMintScaleTest is DeployProtocol {
         wwxrp.setGameMintScale(2);
         assertEq(wwxrp.gameMintScale(), 1, "unchanged");
         vm.prank(owner);
-        wwxrp.setGameMintScale(1e30);
+        OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.setGameMintScale, (1e30)), 0);
         assertEq(wwxrp.gameMintScale(), 1e30, "any scale accepted");
         assertEq(_mintFrom(ContractAddresses.GAME, 3), 3e30, "scaled by the large multiplier");
     }

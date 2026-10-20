@@ -91,9 +91,9 @@ interface IGameMinerView {
     function minerAction() external view returns (uint8);
 }
 
-/// @dev Vault interface for DGVE ownership check (admin function access control).
+/// @dev Vault interface for the pinned governance owner check (admin access control).
 interface IDegenerusVaultOwnerGame {
-    /// @notice DegenerusVault's majority-DGVE-holder check for `account`.
+    /// @notice DegenerusVault's pinned governance owner check for `account`.
     function isVaultOwner(address account) external view returns (bool);
 }
 
@@ -598,7 +598,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
     }
 
     /// @notice Update lootbox RNG request threshold (wei).
-    /// @dev Access: vault owner only (DGVE majority holder).
+    /// @dev Access: vault owner only (DGVE governance executor).
     /// @custom:reverts OnlyVault If caller is not the vault owner.
     /// @custom:reverts ZeroValue If newThreshold is zero.
     function setLootboxRngThreshold(uint256 newThreshold) external {
@@ -614,7 +614,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
     }
 
     /// @notice Update the basefee ceiling above which mid-day RNG requests are refused.
-    /// @dev Access: vault owner only (DGVE majority holder). Zero disables the gate.
+    /// @dev Access: vault owner only (DGVE governance executor). Zero disables the gate.
     ///      Bounds what a mid-day fulfillment can cost the subscription by declining to
     ///      issue the request while the block is expensive; the daily advance is never
     ///      gated, so the game's own RNG is unaffected and pending boxes simply wait for
@@ -1431,7 +1431,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
     }
 
     /// @notice Stake game-held ETH into stETH via Lido.
-    /// @dev Access: vault owner only (DGVE majority holder).
+    /// @dev Access: vault owner only (DGVE governance executor).
     ///      SECURITY: Must retain ETH to cover player claims, excluding vault/DGNRS
     ///      claimable (those addresses accept stETH payouts natively).
     /// @param amount ETH amount to stake.

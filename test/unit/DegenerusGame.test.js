@@ -1,3 +1,4 @@
+import { ownerAction } from "../helpers/deployFixture.js";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
 import { expect } from "chai";
 import hre from "hardhat";
@@ -337,7 +338,7 @@ describe("DegenerusGame", function () {
       const { game, deployer } = await loadFixture(deployFullProtocol);
       // deployer is vault owner (holds 100% DGVE)
       const newThreshold = eth("2");
-      const tx = await game.connect(deployer).setLootboxRngThreshold(newThreshold);
+      const tx = await ownerAction(game.connect(deployer), "setLootboxRngThreshold", [newThreshold]);
       const ev = await getEvent(tx, game, "LootboxRngThresholdUpdated");
       expect(ev.args.current).to.equal(newThreshold);
     });
@@ -352,7 +353,7 @@ describe("DegenerusGame", function () {
     it("reverts when threshold is zero", async function () {
       const { game, deployer } = await loadFixture(deployFullProtocol);
       await expect(
-        game.connect(deployer).setLootboxRngThreshold(0n)
+        ownerAction(game.connect(deployer), "setLootboxRngThreshold", [0n])
       ).to.be.revertedWithCustomError(errorAbi("ZeroValue()"), "ZeroValue");
     });
   });

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -261,11 +262,11 @@ contract AfkingCompactTest is DeployProtocol {
     // ───────────────────────────── protocol seats ─────────────────────────────
 
     function test_VaultOwnerPauseEarnsNothingAndResumeRestarts() public {
-        vault.playerAction(
+        abi.decode(OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (
             ContractAddresses.GAME,
             abi.encodeWithSignature("setOperatorApproval(uint32,address,bool)", 0, VAULT_OP, true),
             0
-        );
+        )), 0), (bytes));
         game.depositAfkingFunding{value: 10 ether}(VAULT_ID);
         _nextDay();
         assertEq(_info(VAULT_ID).owedFlip, 100, "the Vault earns like any box member");

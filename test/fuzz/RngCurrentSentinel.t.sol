@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
@@ -76,7 +77,7 @@ contract RngCurrentSentinelTest is DeployProtocol {
         assertFalse(game.isRngFulfilled());
         vm.warp(vm.getBlockTimestamp() + 20 hours);
         vm.prank(ContractAddresses.CREATOR);
-        admin.retryGameRng();
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
         uint256 retry = mockVRF.lastRequestId();
         assertGt(retry, id, "existing owner retry replaces the reserved result");
         mockVRF.fulfillRandomWordsRaw(id, address(game), 42);

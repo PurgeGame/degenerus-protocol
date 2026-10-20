@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -447,7 +448,7 @@ contract V56SubHardening is DeployProtocol {
         vm.mockCall(address(game), callData, bytes(""));
         vm.expectCall(address(game), callData, 2);
         vm.prank(ContractAddresses.CREATOR);
-        vault.playerAction(ContractAddresses.GAME, abi.encodeWithSignature("mineFlip(uint32)", 50_000), 0);
+        abi.decode(OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (ContractAddresses.GAME, abi.encodeWithSignature("mineFlip(uint32)", 50_000), 0)), 0), (bytes));
         sdgnrs.gameAdvance(50_000);
     }
 
@@ -463,18 +464,18 @@ contract V56SubHardening is DeployProtocol {
         _quietCrapsTable();
         vm.prank(ContractAddresses.CREATOR);
         vm.expectRevert(abi.encodeWithSignature("NoWork()"));
-        vault.playerAction(ContractAddresses.GAME, abi.encodeWithSignature("mineFlip(uint32)", 0), 0);
+        abi.decode(OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (ContractAddresses.GAME, abi.encodeWithSignature("mineFlip(uint32)", 0), 0)), 0), (bytes));
 
         // Work-due arm: roll a fresh day -> advance due -> gameAdvance cranks via mineFlip (no revert).
         _warpToDayBoundary(5);
         assertTrue(game.advanceDue(), "fixture: advance due for the vault crank");
         vm.recordLogs();
         vm.prank(ContractAddresses.CREATOR);
-        vault.playerAction(
+        abi.decode(OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (
             ContractAddresses.GAME,
             abi.encodeWithSignature("mineFlip(uint32)", 50_000),
             0
-        );           // MUST NOT revert — routes through mineFlip and does the work
+        )), 0), (bytes));           // MUST NOT revert — routes through mineFlip and does the work
         _assertMinerProgress(address(vault));
     }
 

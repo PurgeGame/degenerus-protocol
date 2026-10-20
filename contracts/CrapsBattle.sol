@@ -42,11 +42,11 @@ interface IFlipCoin {
     function creditCrapsComps(uint256 amount) external;
 }
 
-/// @dev The vault's ownership test — a majority DGVE holder. The only authority this contract
+/// @dev The vault's ownership test — the pinned DGVE governance executor. The only authority this contract
 ///      recognises: it opens a custom battle and grants or revokes battle creators
 ///      (`setBattleCreator`). The vault saves its board through the ordinary player surface.
 interface IVaultOwnership {
-    /// @notice DegenerusVault's majority-DGVE-holder check for `account`.
+    /// @notice DegenerusVault's pinned governance owner check for `account`.
     function isVaultOwner(address account) external view returns (bool);
 }
 
@@ -750,7 +750,7 @@ contract CrapsBattle is CrapsBattleStorage {
     /// @param highRollerMult The high-roller lane's multiple, or zero for no high lane.
     /// @return slot The battle's slot — what an entrant joins and a settler resolves.
     /// @custom:reverts NotBattleCreator If the caller is neither a granted creator nor the
-    ///         vault's majority holder.
+    ///         DGVE governance executor.
     function createBattle(
         uint32 played,
         uint8 bankMult,
@@ -816,13 +816,13 @@ contract CrapsBattle is CrapsBattleStorage {
         w.key = _battleKey(w.bound, w.bankroll, w.goal, w.played, w.terms);
     }
 
-    /// @notice Grant or revoke the right to open a custom battle. The vault's majority holder is
+    /// @notice Grant or revoke the right to open a custom battle. The DGVE governance executor is
     ///         the only caller — and always holds the right itself — and this roll is the only
     ///         thing it confers: a creator has no say over settlement, arming or anyone else's
     ///         money, and every battle they open is joinable by anyone clearing its terms.
     /// @dev Held as a mapping rather than resolved through the vault on each placement so a
     ///      granted creator pays one warm SLOAD instead of a cross-contract call.
-    /// @custom:reverts NotVaultOwner If the caller does not hold the vault's DGVE majority.
+    /// @custom:reverts NotVaultOwner If the caller is not the DGVE governance executor.
     function setBattleCreator(address account, bool allowed) external {
         _delegateJackpot();
     }

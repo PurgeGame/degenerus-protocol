@@ -1,3 +1,4 @@
+import { ownerAction } from "../helpers/deployFixture.js";
 /**
  * @file EthInvariant.test.js
  * @description ETH solvency invariant tests for Degenerus protocol (Phase 08 audit, ACCT-01, ACCT-08).
@@ -180,7 +181,7 @@ describe("EthInvariant (ACCT-01, ACCT-08)", function () {
         const stakeAmount = stakeable / 2n; // Stake half the available ETH
         if (stakeAmount > 0n) {
           // deployer is vault owner (holds 100% DGVE); calls game.adminStakeEthForStEth directly
-          await game.connect(deployer).adminStakeEthForStEth(stakeAmount);
+          await ownerAction(game.connect(deployer), "adminStakeEthForStEth", [stakeAmount]);
         }
       }
     }

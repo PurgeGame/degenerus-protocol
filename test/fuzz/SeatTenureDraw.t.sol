@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {Vm} from "forge-std/Test.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -238,11 +239,11 @@ contract SeatTenureDraw is DeployProtocol {
         }
         address operator = makeAddr("vault-sub-operator");
         vm.prank(ContractAddresses.CREATOR);
-        vault.playerAction(
+        abi.decode(OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (
             ContractAddresses.GAME,
             abi.encodeWithSignature("setOperatorApproval(uint32,address,bool)", 0, operator, true),
             0
-        );
+        )), 0), (bytes));
         uint32 vaultId = game.walletIdOf(ContractAddresses.VAULT);
         vm.prank(operator);
         vm.expectRevert(abi.encodeWithSignature("E()"));

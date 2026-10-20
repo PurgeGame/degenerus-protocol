@@ -31,7 +31,7 @@ import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 
 /// @dev Vault interface for DGVE ownership check (admin render surface auth).
 interface IDegenerusVaultOwner {
-    /// @notice Checks DGVE-majority vault ownership, as implemented by DegenerusVault.
+    /// @notice Checks the pinned DGVE governance executor, as implemented by DegenerusVault.
     function isVaultOwner(address account) external view returns (bool);
 }
 
@@ -70,7 +70,7 @@ contract DegenerusRecordBounty {
     // -------------------------------------------------------------------------
 
     /// @notice Thrown when a caller lacks the required authority (not COINFLIP for
-    ///         `recordSet`, not a DGVE-majority vault owner for the render setters).
+    ///         `recordSet`, not a DGVE governance executor for the render setters).
     error NotAuthorized();
     /// @notice Thrown when a record kind or tokenId is outside the valid 0-4 range.
     error InvalidToken();

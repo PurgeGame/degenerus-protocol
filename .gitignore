@@ -60,6 +60,7 @@ docs/*
 !docs/DEITY-PASS-CUSTOMIZATION.md
 !docs/TOKEN-UNITS.md
 !docs/VAULT_PLAYER_ACTIONS.md
+!docs/OWNER_GOVERNANCE.md
 !docs/abi/
 docs/abi/*
 !docs/abi/DeityPassCustomizationRenderer.json

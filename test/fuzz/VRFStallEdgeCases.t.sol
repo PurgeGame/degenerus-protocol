@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -662,7 +663,7 @@ contract VRFStallEdgeCases is DeployProtocol {
 
         // The vault owner's single Admin retry (20h after the stamp) re-sends the same request.
         vm.prank(ContractAddresses.CREATOR);
-        admin.retryGameRng();
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
         uint256 retryReqId = mockVRF.lastRequestId();
         assertTrue(retryReqId != stalledReqId, "the retry issued a replacement VRF request");
         assertFalse(game.rngLocked(), "the retry preserves the mid-day mode");

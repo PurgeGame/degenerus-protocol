@@ -1,3 +1,4 @@
+import { ownerAction } from "../helpers/deployFixture.js";
 import { expect } from "chai";
 import hre from "hardhat";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
@@ -111,7 +112,7 @@ describe("RngStall", function () {
       await advanceTime(20 * 3600 + 60);
 
       // Retry call — should succeed and emit a new VRF request.
-      const tx = await admin.connect(deployer).retryGameRng();
+      const tx = await ownerAction(admin.connect(deployer), "retryGameRng", []);
       const receipt = await tx.wait();
       expect(receipt.status).to.equal(1);
 
@@ -131,7 +132,7 @@ describe("RngStall", function () {
       await issueFirstRequest(game, deployer);
 
       await advanceTime(20 * 3600 + 60);
-      await admin.connect(deployer).retryGameRng();
+      await ownerAction(admin.connect(deployer), "retryGameRng", []);
 
       // A new VRF request was issued, so the lock must still be held.
       expect(await game.rngLocked()).to.equal(true);
@@ -147,7 +148,7 @@ describe("RngStall", function () {
 
       // Trigger timeout (stall past the 20h daily retry threshold).
       await advanceTime(20 * 3600 + 60);
-      await admin.connect(deployer).retryGameRng();
+      await ownerAction(admin.connect(deployer), "retryGameRng", []);
 
       const retryId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(retryId, 7654321n);
@@ -168,7 +169,7 @@ describe("RngStall", function () {
       await issueFirstRequest(game, deployer);
 
       await advanceTime(20 * 3600 + 60);
-      await admin.connect(deployer).retryGameRng();
+      await ownerAction(admin.connect(deployer), "retryGameRng", []);
 
       const retryId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(retryId, 999n);
@@ -242,7 +243,7 @@ describe("RngStall", function () {
       await advanceTime(19 * 3600 + 59 * 60);
 
       await expect(
-        admin.connect(deployer).retryGameRng()
+        ownerAction(admin.connect(deployer), "retryGameRng", [])
       ).to.be.revertedWithCustomError(rngModule, "RngNotReady");
     });
 
@@ -260,7 +261,7 @@ describe("RngStall", function () {
       await advanceTime(20 * 3600 + 1);
 
       // Should not revert — retries the VRF request
-      const tx = await admin.connect(deployer).retryGameRng();
+      const tx = await ownerAction(admin.connect(deployer), "retryGameRng", []);
       const receipt = await tx.wait();
       expect(receipt.status).to.equal(1);
     });
@@ -284,7 +285,7 @@ describe("RngStall", function () {
 
       // The single timeout retry (same-day stall past 20h).
       await advanceTime(20 * 3600 + 60);
-      await admin.connect(deployer).retryGameRng();
+      await ownerAction(admin.connect(deployer), "retryGameRng", []);
       const id2 = await getLastVRFRequestId(mockVRF);
       expect(id2).to.be.gt(id1, "Retry request must exceed first");
 
@@ -292,7 +293,7 @@ describe("RngStall", function () {
       // not re-request — Admin rejects any second retry.
       await advanceTime(20 * 3600 + 60);
       await expect(
-        admin.connect(deployer).retryGameRng(),
+        ownerAction(admin.connect(deployer), "retryGameRng", []),
       ).to.be.revertedWithCustomError(rngModule, "RngNotReady");
       expect(await getLastVRFRequestId(mockVRF)).to.equal(id2);
     });
@@ -307,7 +308,7 @@ describe("RngStall", function () {
 
       // Spend the single retry (same-day stall past 20h).
       await advanceTime(20 * 3600 + 60);
-      await admin.connect(deployer).retryGameRng();
+      await ownerAction(admin.connect(deployer), "retryGameRng", []);
 
       // Further stall: no more retries; the retried request's own late
       // fulfillment is the recovery path.
@@ -335,11 +336,11 @@ describe("RngStall", function () {
       // Spend the single retry, then hold the stall across three more 20h
       // windows — each Admin retry is refused.
       await advanceTime(20 * 3600 + 60);
-      await admin.connect(deployer).retryGameRng();
+      await ownerAction(admin.connect(deployer), "retryGameRng", []);
       for (let i = 0; i < 3; i++) {
         await advanceTime(20 * 3600 + 60);
         await expect(
-          admin.connect(deployer).retryGameRng(),
+          ownerAction(admin.connect(deployer), "retryGameRng", []),
         ).to.be.revertedWithCustomError(rngModule, "RngNotReady");
       }
 
@@ -370,7 +371,7 @@ describe("RngStall", function () {
 
       // Trigger timeout and get a new requestId (same-day stall past 20h).
       await advanceTime(20 * 3600 + 60);
-      await admin.connect(deployer).retryGameRng();
+      await ownerAction(admin.connect(deployer), "retryGameRng", []);
       const newRequestId = await getLastVRFRequestId(mockVRF);
 
       expect(newRequestId).to.be.gt(oldRequestId);
@@ -396,7 +397,7 @@ describe("RngStall", function () {
       const oldRequestId = await getLastVRFRequestId(mockVRF);
 
       await advanceTime(20 * 3600 + 60);
-      await admin.connect(deployer).retryGameRng();
+      await ownerAction(admin.connect(deployer), "retryGameRng", []);
       const newRequestId = await getLastVRFRequestId(mockVRF);
 
       // First try with stale id (raw, silently ignored).
@@ -424,7 +425,7 @@ describe("RngStall", function () {
       const staleId = await getLastVRFRequestId(mockVRF);
 
       await advanceTime(20 * 3600 + 60);
-      await admin.connect(deployer).retryGameRng();
+      await ownerAction(admin.connect(deployer), "retryGameRng", []);
 
       const gameAddr = await game.getAddress();
       await mockVRF.fulfillRandomWordsRaw(staleId, gameAddr, 7777n);
@@ -580,7 +581,7 @@ describe("RngStall", function () {
       await issueFirstRequest(game, deployer); // new request.
       await advanceToNextDay();
       await advanceTime(20 * 3600 + 60);
-      await admin.connect(deployer).retryGameRng(); // retry.
+      await ownerAction(admin.connect(deployer), "retryGameRng", []); // retry.
 
       const retryId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(retryId, 222n);
@@ -599,7 +600,7 @@ describe("RngStall", function () {
       await issueFirstRequest(game, deployer);
 
       await advanceTime(20 * 3600 + 60);
-      await admin.connect(deployer).retryGameRng();
+      await ownerAction(admin.connect(deployer), "retryGameRng", []);
 
       const retryId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(retryId, 333n);
@@ -617,7 +618,7 @@ describe("RngStall", function () {
       await advanceToNextDay();
       await issueFirstRequest(game, deployer);
       await advanceTime(20 * 3600 + 60);
-      await admin.connect(deployer).retryGameRng();
+      await ownerAction(admin.connect(deployer), "retryGameRng", []);
       const retryId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(retryId, 444n);
       await drainCommittedWork(game, deployer, mockVRF);

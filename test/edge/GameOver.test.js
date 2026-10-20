@@ -1,3 +1,4 @@
+import { ownerAction } from "../helpers/deployFixture.js";
 import { expect } from "chai";
 import hre from "hardhat";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
@@ -301,7 +302,7 @@ describe("GameOver", function () {
       await advanceTime(SECONDS_912_DAYS + 86400);
       await triggerGameOverAtLevel0(game, deployer, mockVRF);
       expect(await game.gameOver()).to.be.true;
-      await expect(admin.connect(deployer).proposeFeedSwap(ZERO_ADDRESS))
+      await expect(ownerAction(admin.connect(deployer), "proposeFeedSwap", [ZERO_ADDRESS]))
         .to.be.revertedWithCustomError(admin, "GameOver");
     });
 

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {Test} from "forge-std/Test.sol";
 import {DegenerusVault} from "../../contracts/DegenerusVault.sol";
@@ -47,7 +48,7 @@ contract VaultCrapsCompsTest is Test {
     DegenerusVault internal vault;
     CompCrapsDouble internal craps;
 
-    address internal owner = ContractAddresses.CREATOR;
+    address internal owner = ContractAddresses.OWNER_GOVERNANCE;
     address internal stranger = makeAddr("stranger");
     uint32 internal streamer = 7;
 
@@ -123,17 +124,17 @@ contract VaultCrapsCompsTest is Test {
         vault.setCrapsCompAllowance(host, 10);
         vm.prank(owner);
         vm.expectRevert(DegenerusVault.ZeroAddress.selector);
-        vault.setCrapsCompAllowance(address(0), 10);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.setCrapsCompAllowance, (address(0), 10)), 0);
         vm.prank(owner);
         vm.expectEmit(true, true, false, true, address(vault));
         emit CrapsCompAllowanceSet(owner, host, 10);
-        vault.setCrapsCompAllowance(host, 10);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.setCrapsCompAllowance, (host, 10)), 0);
         assertEq(vault.crapsCompAllowanceOf(host), 10, "the allowance did not land");
     }
 
     function test_aDelegateSpendsItsAllowanceAtTheTablesPrice() public {
         vm.prank(owner);
-        vault.setCrapsCompAllowance(host, 10);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.setCrapsCompAllowance, (host, 10)), 0);
         // The double charges count x 1 + kind: 3 + 0 and 2 + 0 = 5.
         uint256[] memory r = new uint256[](2);
         r[0] = _code(0, streamer, false, 1, 3);
@@ -159,7 +160,7 @@ contract VaultCrapsCompsTest is Test {
 
     function test_theOwnerSpendsNoAllowance() public {
         vm.prank(owner);
-        vault.setCrapsCompAllowance(owner, 1);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.setCrapsCompAllowance, (owner, 1)), 0);
         vm.prank(owner);
         vault.crapsComp(_one(0, streamer, false, 1, 50));
         assertEq(vault.crapsCompAllowanceOf(owner), 1, "the owner's grant drew on an allowance");
@@ -167,9 +168,9 @@ contract VaultCrapsCompsTest is Test {
 
     function test_revokingAnAllowanceStopsTheDelegate() public {
         vm.prank(owner);
-        vault.setCrapsCompAllowance(host, 10);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.setCrapsCompAllowance, (host, 10)), 0);
         vm.prank(owner);
-        vault.setCrapsCompAllowance(host, 0);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.setCrapsCompAllowance, (host, 0)), 0);
         vm.prank(host);
         vm.expectRevert(DegenerusVault.NotVaultOwner.selector);
         vault.crapsComp(_one(0, streamer, false, 1, 1));

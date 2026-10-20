@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
@@ -223,7 +224,7 @@ contract IncineratorStallAwardGuard is DeployProtocol {
         simTime += STALL_DAYS * (1 days + 1);
         vm.warp(simTime);
         vm.prank(ContractAddresses.CREATOR);
-        admin.retryGameRng();
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
 
         uint256 word = _grindWord(armedDay);
         uint256 reqId = mockVRF.lastRequestId();

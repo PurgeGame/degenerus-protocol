@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {console} from "forge-std/console.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -432,7 +433,7 @@ contract MidDayStallCreditTest is StallCreditBase {
         _advUntilBlocked(); // no retry for a non-owner
 
         vm.prank(vaultOwner);
-        admin.retryGameRng();
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
         assertFalse(game.rngLocked(), "retry preserves the original midday mode");
         (uint48 t1, uint256 id1) = _stamps();
         assertTrue(id1 != id && id1 == vrf.lastRequestId(), "a fresh request ID");

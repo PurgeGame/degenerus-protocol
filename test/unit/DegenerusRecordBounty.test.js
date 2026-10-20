@@ -1,3 +1,4 @@
+import { ownerAction } from "../helpers/deployFixture.js";
 import { expect } from "chai";
 import hre from "hardhat";
 import { loadFixture, time } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
@@ -320,24 +321,24 @@ describe("DegenerusRecordBounty", function () {
         bounty.connect(f.alice).setRenderColors("#000000", "#ffffff")
       ).to.be.revertedWithCustomError(bounty, "NotAuthorized");
 
-      await expect(bounty.connect(f.deployer).setRenderer(f.bob.address))
+      await expect(ownerAction(bounty.connect(f.deployer), "setRenderer", [f.bob.address]))
         .to.emit(bounty, "RendererUpdated")
         .withArgs(ZERO_ADDRESS, f.bob.address);
       expect(await bounty.renderer()).to.equal(f.bob.address);
-      await bounty.connect(f.deployer).setRenderer(ZERO_ADDRESS);
+      await ownerAction(bounty.connect(f.deployer), "setRenderer", [ZERO_ADDRESS]);
     });
 
     it("validates hex colors and applies them to the render", async function () {
       const f = await getFixture();
       const bounty = await getBounty(f);
       await expect(
-        bounty.connect(f.deployer).setRenderColors("red", "#ffffff")
+        ownerAction(bounty.connect(f.deployer), "setRenderColors", ["red", "#ffffff"])
       ).to.be.revertedWithCustomError(bounty, "InvalidColor");
       await expect(
-        bounty.connect(f.deployer).setRenderColors("#00ff00", "#zzffff")
+        ownerAction(bounty.connect(f.deployer), "setRenderColors", ["#00ff00", "#zzffff"])
       ).to.be.revertedWithCustomError(bounty, "InvalidColor");
 
-      await bounty.connect(f.deployer).setRenderColors("#112233", "#aabbcc");
+      await ownerAction(bounty.connect(f.deployer), "setRenderColors", ["#112233", "#aabbcc"]);
       const [outline, background] = await bounty.renderColors();
       expect(outline).to.equal("#112233");
       expect(background).to.equal("#aabbcc");

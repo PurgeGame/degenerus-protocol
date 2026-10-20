@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
@@ -193,13 +194,13 @@ contract DgnrsWrapperPaths is DeployProtocol {
     function test_ownerUnwrapsOnlyThroughTheVault() public {
         address recipient = address(0xBEEF);
         uint256 amount = 5_000e12;
-        assertTrue(vault.isVaultOwner(address(this)), "fixture: the test contract holds the DGVE majority");
+        assertTrue(vault.isVaultOwner(ContractAddresses.OWNER_GOVERNANCE), "fixture: executor holds owner role");
 
         vm.expectRevert(DGNRS.Unauthorized.selector);
         dgnrs.unwrapTo(recipient, amount); // the owner account itself is not the vault
 
         uint256 vaultBefore = dgnrs.balanceOf(ContractAddresses.VAULT);
-        vault.dgnrsUnwrapTo(recipient, amount);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.dgnrsUnwrapTo, (recipient, amount)), 0);
         assertEq(dgnrs.balanceOf(ContractAddresses.VAULT), vaultBefore - amount, "vault DGNRS -= amount");
         assertEq(sdgnrs.balanceOf(recipient), amount, "recipient holds soulbound sDGNRS");
 
@@ -222,7 +223,7 @@ contract DgnrsWrapperPaths is DeployProtocol {
         vm.expectRevert(abi.encodeWithSignature("NotVaultOwner()"));
         vault.playerAction(ContractAddresses.SDGNRS, abi.encodeWithSignature("burnWrapped(uint256)", amount), 0);
 
-        vault.playerAction(ContractAddresses.SDGNRS, abi.encodeWithSignature("burnWrapped(uint256)", amount), 0);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (ContractAddresses.SDGNRS, abi.encodeWithSignature("burnWrapped(uint256)", amount), 0)), 0);
         assertEq(before - dgnrs.balanceOf(ContractAddresses.VAULT), amount, "vault DGNRS -= amount");
         (uint80 pending,) = sdgnrs.pendingRedemptions(game.walletIdOf(ContractAddresses.VAULT), batchId);
         assertEq(pending, amount, "the claim is recorded for the vault's wallet");
@@ -237,11 +238,11 @@ contract DgnrsWrapperPaths is DeployProtocol {
         uint256 vaultBalanceBefore = ContractAddresses.VAULT.balance;
         uint256 vaultStethBefore = mockStETH.balanceOf(ContractAddresses.VAULT);
 
-        (uint256 ethOut, uint256 stethOut,) = abi.decode(vault.playerAction(
+        (uint256 ethOut, uint256 stethOut,) = abi.decode(abi.decode(OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (
             ContractAddresses.SDGNRS,
             abi.encodeWithSignature("burnWrapped(uint256)", amount),
             0
-        ), (uint256, uint256, uint256));
+        )), 0), (bytes)), (uint256, uint256, uint256));
 
         assertEq(dgnrs.totalSupply(), supplyBefore - amount, "DGNRS supply fell by the burn");
         assertEq(ContractAddresses.VAULT.balance - vaultBalanceBefore, ethOut, "ETH landed in the vault");
@@ -249,27 +250,26 @@ contract DgnrsWrapperPaths is DeployProtocol {
         assertGt(ethOut + stethOut, 0, "the burn paid something");
     }
 
-    /// @notice Icons32Data follows vault ownership: the DGVE majority holder edits and finalizes,
-    ///         and moving the majority moves the ability.
+    /// @notice Initial creator provisioning is separate from subsequent governance authority.
     function test_iconsFollowVaultOwnership() public {
         string[] memory paths = new string[](1);
         paths[0] = "M0 0L10 10";
-        icons32.setPaths(0, paths); // the test contract is the DGVE majority holder
-
+        icons32.setPaths(0, paths);
         address newOwner = address(0xCAFE);
-        address dgve = vm.computeCreateAddress(address(vault), 2); // the vault's second child: DGVE
+        address dgve = vault.dgve();
         (bool ok,) = dgve.call(abi.encodeWithSignature("transfer(address,uint256)", newOwner, 1_000_000_000_000 ether));
         require(ok, "fixture: move the DGVE majority");
-        assertTrue(vault.isVaultOwner(newOwner) && !vault.isVaultOwner(address(this)), "fixture: ownership moved");
-
+        assertFalse(vault.isVaultOwner(newOwner));
+        assertFalse(vault.isVaultOwner(address(this)));
+        vm.prank(newOwner);
         vm.expectRevert(abi.encodeWithSignature("NotVaultOwner()"));
-        icons32.setPaths(0, paths);
+        icons32.setPaths(1, paths);
         vm.expectRevert(abi.encodeWithSignature("NotVaultOwner()"));
         icons32.finalize();
-
-        vm.prank(newOwner);
+        vm.prank(ContractAddresses.OWNER_GOVERNANCE);
         icons32.setPaths(1, paths);
-        vm.prank(newOwner);
+        assertTrue(icons32.bootstrapClosed());
+        vm.prank(ContractAddresses.OWNER_GOVERNANCE);
         icons32.finalize();
     }
 }

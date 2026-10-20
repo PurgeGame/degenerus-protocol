@@ -93,7 +93,7 @@ interface ISeatGameViews {
 
 /// @dev Vault interface for DGVE ownership check (admin surface auth).
 interface IDegenerusVaultOwner {
-    /// @notice Checks DGVE-majority vault ownership, as implemented by DegenerusVault.
+    /// @notice Checks the pinned DGVE governance executor, as implemented by DegenerusVault.
     function isVaultOwner(address account) external view returns (bool);
 }
 
@@ -130,7 +130,7 @@ contract AFKingSubscriptionToken {
       +======================================================================+*/
 
     /// @notice Caller is neither owner, approved, nor operator for the token
-    ///         (or the admin caller does not hold >50.1% of DGVE)
+    ///         (or the admin caller is not the pinned DGVE governance executor)
     error NotAuthorized();
 
     /// @notice Token does not exist (or wrong `from` on transfer)
@@ -265,7 +265,7 @@ contract AFKingSubscriptionToken {
     ISeatGameViews private constant game =
         ISeatGameViews(ContractAddresses.GAME);
 
-    /// @dev Vault DGVE-majority check gating the admin render surface
+    /// @dev Vault executor check gating the admin render surface
     IDegenerusVaultOwner private constant vault =
         IDegenerusVaultOwner(ContractAddresses.VAULT);
 

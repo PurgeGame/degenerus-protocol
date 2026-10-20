@@ -139,8 +139,8 @@ async function main() {
 
     // Wire Icons32Data. Symbol-ordered dataset only — the legacy
     // icons32Data.json is badge-FILE ordered and mismaps the cards quadrant.
-    // A local chain is disposable, so finalize() here matches the testnet and
-    // mainnet paths: opt-in via ICONS32_FINALIZE=1, never automatic.
+    // Finalization is an immutable opt-in chosen before deployment through
+    // ICONS32_FINALIZE=1; completion then finalizes automatically.
     const finalizeIcons = process.env.ICONS32_FINALIZE === "1";
     console.log(
       `  Wiring Icons32Data (33 paths, 3 name quadrants, finalize=${finalizeIcons})...`
@@ -353,6 +353,7 @@ function getConstructorArgs(
     // predates that refactor and reverted "incorrect number of arguments".
     return [];
   }
+  if (key === "ICONS_32") return [process.env.ICONS32_FINALIZE === "1"];
   if (key === "AFFILIATE") {
     return [
       affiliateBootstrap.owners,

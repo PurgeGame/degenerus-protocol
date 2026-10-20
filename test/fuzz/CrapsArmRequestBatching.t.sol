@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {Craps} from "../../contracts/Craps.sol";
@@ -107,7 +108,7 @@ contract CrapsArmRequestBatchingTest is DeployProtocol {
         _seat(address(0xBEEF), 1);
         vm.warp(vm.getBlockTimestamp() + 5 hours + 10 minutes);
         vm.prank(ContractAddresses.CREATOR);
-        game.setMiddayMaxBasefee(5);
+        OwnerTargetCall.call(address(game), abi.encodeCall(game.setMiddayMaxBasefee, (5)), 0);
         vm.fee(6 gwei);
         (bool armed, bool requested,) = _mine(16_000_000);
         assertTrue(armed, "a refused optional request does not undo the arm");

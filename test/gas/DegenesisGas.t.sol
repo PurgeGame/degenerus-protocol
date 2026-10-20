@@ -286,7 +286,14 @@ abstract contract DegenesisGasBase is DegenesisDeployProtocol {
     ///      Only the first touch of a slot in a test is cold: a slot read before a snapshot
     ///      revert stays warm. Each test therefore measures its minuend first; later
     ///      measurements can only read low, so every difference is an upper bound.
-    function _measureCall(address target, bytes memory data, address sender) internal returns (Measured memory m) {
+    function _measureCall(address target, bytes memory data, address sender) internal returns (Measured memory) {
+        return this.measureCall(target, data, sender);
+    }
+
+    /// @dev Keep state-diff ABI decoding out of each caller's optimizer frame. Recording
+    /// starts after this self-call and stops before it returns; the target's caller is unchanged.
+    function measureCall(address target, bytes calldata data, address sender) external returns (Measured memory m) {
+        require(msg.sender == address(this), "fixture self-call");
         uint256 snap = vm.snapshotState();
         _cool();
         if (sender != address(0)) vm.prank(sender);
@@ -906,8 +913,12 @@ abstract contract DegenesisDayNineRequestGas is DegenesisGasBase {
         DegenesisCharitySeeder(payable(address(gnrus))).seed(0);
         vm.etch(address(gnrus), original);
         for (uint8 i; i < 20; ++i) {
+            vm.prank(ContractAddresses.OWNER_GOVERNANCE);
             gnrus.setCharity(i, address(uint160(0xC000 + i)));
-            if (i >= 3) gnrus.setCharity(i, address(uint160(0xE000 + i)));
+            if (i >= 3) {
+                vm.prank(ContractAddresses.OWNER_GOVERNANCE);
+                gnrus.setCharity(i, address(uint160(0xE000 + i)));
+            }
         }
         // Affiliate _levelScore (slot 3), level 1: leader id/score in the upper 128 bits.
         vm.store(address(affiliate), keccak256(abi.encode(uint24(1), uint256(3))),

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -121,7 +122,7 @@ abstract contract SeatFixture is DeployProtocol {
             afkingSubToken.mintSeatFor(who);
         } else {
             vm.prank(ContractAddresses.CREATOR);
-            vault.afkingSeatMint(who, 1);
+            OwnerTargetCall.call(address(vault), abi.encodeCall(vault.afkingSeatMint, (who, 1)), 0);
         }
         seat = uint256(afkingSubToken.nextSerial()) - 1;
         require(afkingSubToken.ownerOf(seat) == who, "seat grant");
@@ -150,7 +151,7 @@ abstract contract SeatFixture is DeployProtocol {
         uint256 n = SEAT_CAP - headroom - _L() - _S();
         if (n == 0) return;
         vm.prank(ContractAddresses.CREATOR);
-        vault.afkingSeatMint(to, n);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.afkingSeatMint, (to, n)), 0);
         assertEq(_L() + _S(), SEAT_CAP - headroom, "fixture: sum at the target");
     }
 
@@ -484,11 +485,11 @@ contract SeatConsumptionTest is SeatFixture {
 
     function _approveVaultOperator() internal {
         vm.prank(ContractAddresses.CREATOR);
-        vault.playerAction(
+        abi.decode(OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (
             ContractAddresses.GAME,
             abi.encodeWithSignature("setOperatorApproval(uint32,address,bool)", 0, op, true),
             0
-        );
+        )), 0), (bytes));
     }
 
     /// @notice A change of the VAULT run through a vault-approved operator never calls
@@ -541,11 +542,11 @@ contract SeatConsumptionTest is SeatFixture {
         address to = makeAddr("grantee");
         vm.prank(ContractAddresses.CREATOR);
         vm.expectRevert(AFKingSubscriptionToken.FreeTrancheOpen.selector);
-        vault.afkingSeatMint(to, 1);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.afkingSeatMint, (to, 1)), 0);
 
         _fillFreeTrancheTo(1000);
         vm.prank(ContractAddresses.CREATOR);
-        vault.afkingSeatMint(to, 1);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.afkingSeatMint, (to, 1)), 0);
         assertEq(afkingSubToken.balanceOf(to), 1, "opens after the 1,000th free seat");
     }
 
@@ -560,11 +561,11 @@ contract SeatConsumptionTest is SeatFixture {
 
         vm.startPrank(ContractAddresses.CREATOR);
         vm.expectRevert(AFKingSubscriptionToken.SeatCapReached.selector);
-        vault.afkingSeatMint(to, 2); // would land on 2,001
-        vault.afkingSeatMint(to, 1); // lands on 2,000
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.afkingSeatMint, (to, 2)), 0); // would land on 2,001
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.afkingSeatMint, (to, 1)), 0); // lands on 2,000
         assertEq(_L() + _S(), 2000);
         vm.expectRevert(AFKingSubscriptionToken.SeatCapReached.selector);
-        vault.afkingSeatMint(to, 1);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.afkingSeatMint, (to, 1)), 0);
         vm.stopPrank();
     }
 
@@ -574,9 +575,9 @@ contract SeatConsumptionTest is SeatFixture {
         uint256 room = SEAT_CAP - _L() - _S();
         vm.prank(ContractAddresses.CREATOR);
         vm.expectRevert(AFKingSubscriptionToken.SeatCapReached.selector);
-        vault.afkingSeatMint(to, room + 1);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.afkingSeatMint, (to, room + 1)), 0);
         vm.prank(ContractAddresses.CREATOR);
-        vault.afkingSeatMint(to, room);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.afkingSeatMint, (to, room)), 0);
         assertEq(_L() + _S(), SEAT_CAP, "one call lands exactly on the cap");
         assertEq(afkingSubToken.balanceOf(to), room);
     }
@@ -588,7 +589,7 @@ contract SeatConsumptionTest is SeatFixture {
             0
         );
         vm.prank(ContractAddresses.CREATOR);
-        vault.afkingSeatMint(makeAddr("zero"), 0);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.afkingSeatMint, (makeAddr("zero"), 0)), 0);
         assertEq(afkingSubToken.nextSerial(), 3, "nothing minted");
     }
 
@@ -609,7 +610,7 @@ contract SeatConsumptionTest is SeatFixture {
 
         vm.startPrank(ContractAddresses.CREATOR);
         vm.expectRevert(AFKingSubscriptionToken.SeatCapReached.selector);
-        vault.afkingSeatMint(to, 1);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.afkingSeatMint, (to, 1)), 0);
         vm.stopPrank();
 
         // A cancel removes the entry at once: exactly one mint.
@@ -617,17 +618,17 @@ contract SeatConsumptionTest is SeatFixture {
         assertTrue(_pos(idA) == 0, "A left the set");
         assertTrue(_pos(idB) != 0, "B still live");
         vm.startPrank(ContractAddresses.CREATOR);
-        vault.afkingSeatMint(to, 1);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.afkingSeatMint, (to, 1)), 0);
         vm.expectRevert(AFKingSubscriptionToken.SeatCapReached.selector);
-        vault.afkingSeatMint(to, 1);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.afkingSeatMint, (to, 1)), 0);
         vm.stopPrank();
 
         // The unfunded expiry removes B: exactly one more.
         _evict(b, idB);
         vm.startPrank(ContractAddresses.CREATOR);
-        vault.afkingSeatMint(to, 1);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.afkingSeatMint, (to, 1)), 0);
         vm.expectRevert(AFKingSubscriptionToken.SeatCapReached.selector);
-        vault.afkingSeatMint(to, 1);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.afkingSeatMint, (to, 1)), 0);
         vm.stopPrank();
         assertEq(_L() + _S(), SEAT_CAP, "back at the cap");
     }
@@ -688,14 +689,14 @@ contract SeatConsumptionTest is SeatFixture {
         address x = makeAddr("seat-two");
         address y = makeAddr("seat-two-swept");
         vm.prank(ContractAddresses.CREATOR);
-        vault.sweepNft(ContractAddresses.AFKING_SUB_TOKEN, x, 2);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.sweepNft, (ContractAddresses.AFKING_SUB_TOKEN, x, 2)), 0);
         assertEq(afkingSubToken.ownerOf(2), x, "sweepNft moves serial 2");
         assertTrue(_inSet(VAULT_ID) && _activeId(VAULT_ID), "vault run untouched");
 
         vm.prank(x);
         afkingSubToken.transferFrom(x, address(vault), 2);
         vm.prank(ContractAddresses.CREATOR);
-        vault.sweepNft(address(afkingSubToken), y, 2);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.sweepNft, (address(afkingSubToken), y, 2)), 0);
         assertEq(afkingSubToken.ownerOf(2), y, "sweepNft moves serial 2");
 
         _driveDay();
@@ -706,11 +707,11 @@ contract SeatConsumptionTest is SeatFixture {
 
     function test_vaultPauseAndResumeKeepCombinedCapAtTwoThousand() public {
         vm.prank(ContractAddresses.CREATOR);
-        vault.playerAction(
+        abi.decode(OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (
             ContractAddresses.GAME,
             abi.encodeWithSignature("setOperatorApproval(uint32,address,bool)", 0, op, true),
             0
-        );
+        )), 0), (bytes));
         _fillFreeTrancheTo(1000);
 
         vm.prank(op);
@@ -730,7 +731,7 @@ contract SeatConsumptionTest is SeatFixture {
 
         vm.prank(ContractAddresses.CREATOR);
         vm.expectRevert(AFKingSubscriptionToken.SeatCapReached.selector);
-        vault.afkingSeatMint(to, 1);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.afkingSeatMint, (to, 1)), 0);
 
         uint256 n = _S() - _exemptEntries();
         assertLe(_S(), 2000, "set bound");

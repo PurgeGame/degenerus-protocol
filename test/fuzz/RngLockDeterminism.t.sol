@@ -319,29 +319,29 @@ contract RngLockDeterminism is DeployProtocol {
         }
         if (action == 3) {
             uint256 amt = bound(nonce, 1, 0.001 ether);
-            vm.prank(vaultOwner);
+            vm.prank(ContractAddresses.OWNER_GOVERNANCE);
             try game.adminStakeEthForStEth(amt) {} catch { return; }
             return;
         }
         if (action == 4) {
             uint256 amt = bound(nonce, 1, 0.01 ether);
-            vm.deal(vaultOwner, amt);
-            vm.prank(vaultOwner);
-            try admin.swapGameEthForStEth{value: amt}() {} catch { return; }
+            vm.deal(ContractAddresses.OWNER_GOVERNANCE, amt);
+            vm.prank(ContractAddresses.OWNER_GOVERNANCE);
+            try admin.swapGameEthForStEth{value: amt}(vaultOwner) {} catch { return; }
             return;
         }
         if (action == 5) {
             uint8 slot = uint8(bound(nonce, 3, 19));
             address recipient = actor;
-            vm.prank(vaultOwner);
+            vm.prank(ContractAddresses.OWNER_GOVERNANCE);
             try gnrus.setCharity(slot, recipient) {} catch { return; }
             return;
         }
         if (action == 6) {
             vm.deal(address(vault), 1 ether);
             uint256 tickets = bound(nonce, 1, 4);
-            vm.prank(vaultOwner);
-            try vault.playerAction{value: 0}(
+            vm.prank(ContractAddresses.OWNER_GOVERNANCE);
+            try vault.playerAction(
                 ContractAddresses.GAME,
                 abi.encodeWithSignature(
                     "purchase(uint32,uint256,uint256,bytes32,uint8,bool)",
@@ -353,7 +353,7 @@ contract RngLockDeterminism is DeployProtocol {
         }
         if (action == 7) {
             uint256 tickets = bound(nonce, 1, 2);
-            vm.prank(vaultOwner);
+            vm.prank(ContractAddresses.OWNER_GOVERNANCE);
             try vault.playerAction(
                 ContractAddresses.GAME,
                 abi.encodeWithSignature("redeemFlip(uint32,uint256)", 0, tickets),
@@ -385,8 +385,8 @@ contract RngLockDeterminism is DeployProtocol {
             uint8 hero = uint8(bound(nonce >> 24, 0, 3));
             uint256 total = uint256(amtPer) * ticketCount;
             vm.deal(address(vault), total);
-            vm.prank(vaultOwner);
-            try vault.playerAction{value: 0}(
+            vm.prank(ContractAddresses.OWNER_GOVERNANCE);
+            try vault.playerAction(
                 ContractAddresses.GAME,
                 abi.encodeWithSignature(
                     "placeDegeneretteBet(uint32,uint8,uint128,uint8,uint8)",
@@ -410,7 +410,7 @@ contract RngLockDeterminism is DeployProtocol {
         }
         if (action == 15) {
             uint256 amt = bound(nonce, 1e18, 100e18);
-            vm.prank(vaultOwner);
+            vm.prank(ContractAddresses.OWNER_GOVERNANCE);
             try vault.playerAction(
                 ContractAddresses.COINFLIP,
                 abi.encodeWithSignature("depositCoinflip(uint32,uint256)", 0, amt),
@@ -420,7 +420,7 @@ contract RngLockDeterminism is DeployProtocol {
         }
         if (action == 16) {
             uint256 amt = bound(nonce, 1e18, 100e18);
-            vm.prank(vaultOwner);
+            vm.prank(ContractAddresses.OWNER_GOVERNANCE);
             try vault.playerAction(
                 ContractAddresses.COIN,
                 abi.encodeWithSignature("decimatorBurn(uint32,uint256,uint32)", 0, amt, 0),
@@ -429,7 +429,7 @@ contract RngLockDeterminism is DeployProtocol {
             return;
         }
         if (action == 17) {
-            vm.prank(vaultOwner);
+            vm.prank(ContractAddresses.OWNER_GOVERNANCE);
             try vault.playerAction(
                 ContractAddresses.GAME,
                 abi.encodeWithSignature("claimWinningsStethFirst()"),
@@ -441,7 +441,7 @@ contract RngLockDeterminism is DeployProtocol {
             // game.claimWhalePass is permissionless and settles to the address passed in,
             // so the vault's claim is driven directly (no vault-side wrapper).
             uint32 vaultId = game.walletIdOf(address(vault));
-            vm.prank(vaultOwner);
+            vm.prank(ContractAddresses.OWNER_GOVERNANCE);
             try game.claimWhalePass(vaultId) {} catch { return; }
             return;
         }
@@ -453,7 +453,7 @@ contract RngLockDeterminism is DeployProtocol {
         }
         if (action == 20) {
             uint256 amt = bound(nonce, 1, 1e18);
-            vm.prank(vaultOwner);
+            vm.prank(ContractAddresses.OWNER_GOVERNANCE);
             try vault.playerAction(
                 ContractAddresses.SDGNRS,
                 abi.encodeWithSignature("burn(uint256)", amt),
@@ -464,7 +464,7 @@ contract RngLockDeterminism is DeployProtocol {
         if (action == 21) {
             uint32 today = game.currentDayView();
             uint32 claimDay = today == 0 ? 0 : today - 1;
-            vm.prank(vaultOwner);
+            vm.prank(ContractAddresses.OWNER_GOVERNANCE);
             try vault.playerAction(
                 ContractAddresses.SDGNRS,
                 abi.encodeWithSignature("claimRedemption(uint32,uint32)", 0, uint24(claimDay)),

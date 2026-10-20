@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {OwnerTargetCall} from "../../helpers/OwnerTargetCall.sol";
 import {RecyclingState} from "../../helpers/RecyclingState.sol";
 
 import "forge-std/Test.sol";
@@ -43,6 +44,7 @@ import {DegenerusVault} from "../../../contracts/DegenerusVault.sol";
 import {sDGNRS} from "../../../contracts/sDGNRS.sol";
 import {DGNRS} from "../../../contracts/DGNRS.sol";
 import {DegenerusAdmin} from "../../../contracts/DegenerusAdmin.sol";
+import {DegenerusOwnerGovernance} from "../../../contracts/DegenerusOwnerGovernance.sol";
 import {GNRUS} from "../../../contracts/GNRUS.sol";
 
 // Mock contracts
@@ -55,7 +57,7 @@ import {BitPackingLib} from "../../../contracts/libraries/BitPackingLib.sol";
 import {GameTimeLib} from "../../../contracts/libraries/GameTimeLib.sol";
 
 /// @title DeployProtocol -- Abstract base for Foundry invariant tests
-/// @notice Deploys all 4 mocks + 37 protocol contracts in setUp().
+/// @notice Deploys all 4 mocks + 38 protocol contracts in setUp().
 ///         Inherit this, call _deployProtocol() in your setUp().
 ///         Deploy time: `_deployTimestamp()` (virtual). The default, DEPLOY_TS_LEGACY, is day index 9
 ///         (GameTimeLib.MAIN_LAUNCH_DAY): Degenesis is over at deploy and normal level-0 play starts
@@ -134,6 +136,7 @@ abstract contract DeployProtocol is Test {
     DGNRS public dgnrs;
     DegenerusAdmin public admin;
     GNRUS public gnrus;
+    DegenerusOwnerGovernance public ownerGovernance;
 
     /// @dev Run `mineFlip` until the engine refuses with `NoWork` (nothing to do) or `RngNotReady`
     ///      (waiting on a word), or `maxCalls` calls have run. Any other revert is re-raised, so a
@@ -182,7 +185,7 @@ abstract contract DeployProtocol is Test {
     function _grantSmurfBase(address owner, uint16 base) internal {
         uint32 mainId = game.walletIdOf(owner);
         vm.prank(ContractAddresses.CREATOR);
-        game.raiseSmurfBaseAllowance(mainId, base);
+        OwnerTargetCall.call(address(game), abi.encodeCall(game.raiseSmurfBaseAllowance, (mainId, base)), 0);
     }
 
     function _fixtureId(address player) internal view returns (uint32) {
@@ -315,7 +318,7 @@ abstract contract DeployProtocol is Test {
         vm.warp(_deployTimestamp());
 
         // --- Deploy 4 mocks (nonces 1-4) ---
-        // Then 37 protocol contracts (nonces 5-41) ---
+        // Then 38 protocol contracts (nonces 5-42) ---
         mockVRF = new MockVRFCoordinator();           // nonce 1
         mockStETH = new MockStETH();                  // nonce 2
         mockLINK = new MockLinkToken();               // nonce 3
@@ -323,7 +326,7 @@ abstract contract DeployProtocol is Test {
 
         // Order matches DEPLOY_ORDER in predictAddresses.js
 
-        icons32 = new Icons32Data();                   // N+0 = nonce 5
+        icons32 = new Icons32Data(false);                   // N+0 = nonce 5
         mintModule = new DegenerusGameMintModule();    // N+1 = nonce 6
         advanceModule = new DegenerusGameAdvanceModule(); // N+2 = nonce 7
         whaleModule = new DegenerusGameWhaleModule();  // N+3 = nonce 8
@@ -418,6 +421,7 @@ abstract contract DeployProtocol is Test {
         rngModule = new DegenerusGameRngModule();                          // N+34 = nonce 39
         jackpotDrawModule = new DegenerusGameJackpotDrawModule();          // N+35 = nonce 40
         degenesisModule = new DegenerusGameDegenesisModule();              // N+36 = nonce 41
+        ownerGovernance = new DegenerusOwnerGovernance(); // N+37; preserve all prior CREATE nonces
         if (initializeDeities) game.initProtocolDeity();
     }
 

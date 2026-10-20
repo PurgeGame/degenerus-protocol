@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -256,7 +257,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         vm.warp(block.timestamp + 21 hours);
 
         // Retry fires through the Admin owner entry
-        admin.retryGameRng();
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
 
         // lootboxRngIndex should NOT have changed (retry, not fresh)
         uint48 indexAfterRetry = _readLootboxRngIndex();
@@ -484,7 +485,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         assertEq(game.rngWordForDay(day), 0);
         assertTrue(game.rngLocked(), "unanswered session stays locked for retry");
         vm.warp(block.timestamp + 20 hours + 2);
-        admin.retryGameRng();
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
         assertGt(mockVRF.lastRequestId(), request, "reserved zero requires a fresh retry");
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 2);
         for (uint256 i; i < 100 && game.rngLocked(); ++i) game.mineFlip(0);
@@ -506,7 +507,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         uint256 request = newVRF.lastRequestId();
         vm.warp(block.timestamp + 20 hours + 2);
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        admin.retryGameRng();
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
         assertEq(newVRF.lastRequestId(), request, "rotation already consumed the retry allowance");
         assertEq(_readRngWordCurrent(), 0, "reserved response remains unanswered");
         assertEq(_readLootboxWord(buffer), 0, "reserved entropy cannot publish a word");

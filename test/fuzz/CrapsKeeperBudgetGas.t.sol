@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
@@ -35,7 +36,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
             game.mineFlip{gas: 15_000_000}(0);
         }
         assertTrue(game.rngComplete());
-        crapsBattle.setBattleCreator(address(this), true);
+        OwnerTargetCall.call(address(crapsBattle), abi.encodeCall(crapsBattle.setBattleCreator, (address(this), true)), 0);
         slot = crapsBattle.createBattle(300, 25, 1000, 75, uint40(vm.getBlockTimestamp() + 60), true, 255);
         uint32 board = 1 | uint32(1) << 3 | uint32(1) << 6 | uint32(1) << 9
             | uint32(1) << 12 | uint32(1) << 15 | uint32(1) << 18;
@@ -245,7 +246,7 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         _finish(14_000_000, true);
         (uint256 request,) = _requestSingleSeatField();
         vm.warp(vm.getBlockTimestamp() + 20 hours + 1);
-        assertTrue(vault.isVaultOwner(ContractAddresses.CREATOR));
+        assertTrue(vault.isVaultOwner(ContractAddresses.OWNER_GOVERNANCE));
         assertFalse(vault.isVaultOwner(MINER));
         vm.prank(ContractAddresses.CREATOR);
         assertEq(game.nextMinerAction(), uint8(DegenerusGameStorage.MinerAction.Wait));

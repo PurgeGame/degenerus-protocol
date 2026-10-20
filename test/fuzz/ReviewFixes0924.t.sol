@@ -583,14 +583,14 @@ contract VaultBurnStethFallbackTest is RedemptionCloseTools {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
         owner = ContractAddresses.CREATOR;
-        require(vault.isVaultOwner(owner), "fixture: CREATOR holds the DGVE majority");
+        require(vault.isVaultOwner(ContractAddresses.OWNER_GOVERNANCE), "fixture: governance holds owner authority");
     }
 
     receive() external payable {}
 
     function test_burnEthPaysInFullWhenTheGameHoldsMostlyStEth() public {
         vm.deal(address(vault), 100 ether);
-        vm.prank(owner);
+        vm.prank(ContractAddresses.OWNER_GOVERNANCE);
         vault.playerAction(
             ContractAddresses.GAME,
             abi.encodeWithSignature("depositAfkingFunding(uint32)", 1),

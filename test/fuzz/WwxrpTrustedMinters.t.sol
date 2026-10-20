@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -49,12 +50,12 @@ contract WwxrpTrustedMintersTest is DeployProtocol {
 
         vm.prank(owner);
         vm.expectRevert(abi.encodeWithSignature("ZeroAddress()"));
-        wwxrp.setTrustedMinter(address(0), true);
+        OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.setTrustedMinter, (address(0), true)), 0);
 
         vm.expectEmit(true, false, false, true, address(wwxrp));
         emit TrustedMinterSet(futureGame, true);
         vm.prank(owner);
-        wwxrp.setTrustedMinter(futureGame, true);
+        OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.setTrustedMinter, (futureGame, true)), 0);
         assertTrue(wwxrp.trustedMinter(futureGame), "registered");
     }
 
@@ -70,7 +71,7 @@ contract WwxrpTrustedMintersTest is DeployProtocol {
 
     function testTrustedAddressMintsAndBurnsLikeTheGame() public {
         vm.prank(owner);
-        wwxrp.setTrustedMinter(futureGame, true);
+        OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.setTrustedMinter, (futureGame, true)), 0);
 
         uint256 supplyBefore = wwxrp.totalSupply();
         vm.prank(futureGame);
@@ -91,14 +92,14 @@ contract WwxrpTrustedMintersTest is DeployProtocol {
 
     function testRevokedAddressLosesBothPowers() public {
         vm.prank(owner);
-        wwxrp.setTrustedMinter(futureGame, true);
+        OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.setTrustedMinter, (futureGame, true)), 0);
         vm.prank(futureGame);
         wwxrp.mintPrize(player, 1 ether);
 
         vm.expectEmit(true, false, false, true, address(wwxrp));
         emit TrustedMinterSet(futureGame, false);
         vm.prank(owner);
-        wwxrp.setTrustedMinter(futureGame, false);
+        OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.setTrustedMinter, (futureGame, false)), 0);
         assertFalse(wwxrp.trustedMinter(futureGame), "revoked");
 
         vm.prank(futureGame);
@@ -131,7 +132,7 @@ contract WwxrpTrustedMintersTest is DeployProtocol {
 
     function testTrustedAddressConsumesBoonWithoutPlayerApproval() public {
         vm.prank(owner);
-        wwxrp.setTrustedMinter(futureGame, true);
+        OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.setTrustedMinter, (futureGame, true)), 0);
         _grantLane(player, WWXRP_LANE_SHIFT, 3);
         _grantLane(player, ETH_LANE_SHIFT, 1);
         _grantLane(player, 0, 2); // craps lane (slot1 low 24 bits)
@@ -153,9 +154,9 @@ contract WwxrpTrustedMintersTest is DeployProtocol {
 
     function testRevokedAddressCannotConsumeBoons() public {
         vm.prank(owner);
-        wwxrp.setTrustedMinter(futureGame, true);
+        OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.setTrustedMinter, (futureGame, true)), 0);
         vm.prank(owner);
-        wwxrp.setTrustedMinter(futureGame, false);
+        OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.setTrustedMinter, (futureGame, false)), 0);
         _grantLane(player, WWXRP_LANE_SHIFT, 1);
 
         vm.prank(futureGame);

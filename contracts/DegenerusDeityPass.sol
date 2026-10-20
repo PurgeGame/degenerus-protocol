@@ -43,7 +43,7 @@ interface IIcons32 {
 
 /// @dev Vault interface for DGVE ownership check.
 interface IDegenerusVaultOwner {
-    /// @notice DegenerusVault's majority-DGVE-holder check for `account`.
+    /// @notice DegenerusVault's pinned governance owner check for `account`.
     function isVaultOwner(address account) external view returns (bool);
 }
 
@@ -73,7 +73,7 @@ contract DegenerusDeityPass {
     // Errors
     // -------------------------------------------------------------------------
 
-    /// @notice Thrown when the caller is neither the DGVE-majority vault owner (owner-only
+    /// @notice Thrown when the caller is neither the DGVE governance executor (owner-only
     ///         setters) nor the game contract (`mint`).
     error NotAuthorized();
     /// @notice Thrown when a token query targets a token that does not exist, or `mint`

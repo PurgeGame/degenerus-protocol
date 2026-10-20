@@ -13,6 +13,7 @@ The [freeze record](docs/audit/freeze.json) identifies the tested inputs, their 
 | [Audit handoff](docs/AUDIT.md) | Exact source snapshot, scope and reading order |
 | [Token units](docs/TOKEN-UNITS.md) | Whole-token FLIP/WWXRP APIs and rounding rules |
 | [Architecture](docs/ARCHITECTURE.md) | Contract boundaries, value flow and invariants |
+| [DGVE owner approval](docs/OWNER_GOVERNANCE.md) | Escrow, voting delegation, admin actions and icon bootstrap |
 | [Security and roles](SECURITY.md) | Authorities, external dependencies and reporting |
 | [Known issues](KNOWN-ISSUES.md) | Accepted assumptions and disclosed limitations |
 | [Economic disclosures](ECONOMIC_DISCLOSURES.md) | Creator allocations and economic rights |

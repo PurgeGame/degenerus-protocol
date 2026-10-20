@@ -8,10 +8,9 @@ collection colors. The extension implements that exact hook and stores overrides
 in its own contract.
 
 Only the current `pass.ownerOf(tokenId)` can write or clear overrides. Game
-operator approval, Vault majority ownership, and the renderer deployer convey no
+operator approval, DGVE voting authority, and the renderer deployer convey no
 additional editing permission. `pass.setRenderer(address)` and
-`pass.setRenderColors(string,string,string)` retain their existing Vault-majority
-authorization. Passes remain soulbound: holders can never transfer one, and only the game
+`pass.setRenderColors(string,string,string)` require approval through DGVE owner governance. Passes remain soulbound: holders can never transfer one, and only the game
 moves a pass, with its deity account, to the lender of a defaulted loan.
 
 ## Frontend contract
@@ -207,10 +206,11 @@ an explicit future operation:
 3. Verify the extension's source/constructor argument, and that `renderer.pass()`
    equals the existing NFT address. Record the chain, pass and renderer addresses
    for the frontend. The extension has no administrator or initialization call.
-4. From an account satisfying the existing pass's `vault.isVaultOwner(msg.sender)`
-   check, call **`existingPass.setRenderer(newRendererAddress)`**. Only this
-   Vault-authorized transaction activates customization in the existing `tokenURI`.
-   No owner approvals, collection-color transaction or NFT migration are required.
+4. Propose **`existingPass.setRenderer(newRendererAddress)`** through DGVE owner
+   governance, gather settled approval exceeding 50.1% of live supply, and execute it.
+   The fixed executor satisfies the pass's `vault.isVaultOwner(msg.sender)` check.
+   No collection-color transaction or NFT migration is required. For an older deployed
+   pass, verify its deployed authorization rules instead of assuming this source applies.
 5. Configure frontend writes and event subscriptions with the new renderer ABI and
    address. Confirm a minted token's `tokenURI` contains the `id='badge'` group and
    matches `effectiveTokenStyle`. Existing holders can now submit their own settings.
@@ -223,8 +223,8 @@ deploying a fresh instance starts with no overrides. If the hook reverts or retu
 empty, the pass retains its existing internal-default fallback behavior.
 
 Contract-owned NFTs have the same strict owner rule. In particular, the genesis
-XRP and Ethereum passes are owned by protocol contracts: a Vault majority holder
-or game operator cannot edit on their behalf. Such a token can only be customized
+XRP and Ethereum passes are owned by protocol contracts: DGVE governance
+or a game operator cannot edit on their behalf. Such a token can only be customized
 if its actual owning contract has a suitable call path; this extension adds no
 forwarder to those existing owners.
 

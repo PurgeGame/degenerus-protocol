@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {DegenesisFixture} from "./helpers/DegenesisFixture.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
@@ -208,16 +209,16 @@ contract DegenesisCredit is DegenesisFixture {
 
     /// @notice Vault purchases and sDGNRS's AFKing deliveries earn no credit.
     function test_VaultAndSdgnrs_EarnNone() public {
-        vm.deal(ContractAddresses.CREATOR, 1 ether);
+        vm.deal(ContractAddresses.OWNER_GOVERNANCE, 1 ether);
         vm.prank(ContractAddresses.CREATOR);
-        vault.playerAction{value: 0.2 ether}(
+        abi.decode(OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (
             ContractAddresses.GAME,
             abi.encodeWithSignature(
                 "purchase(uint32,uint256,uint256,bytes32,uint8,bool)",
                 0, 8000, 0, bytes32(0), MintPaymentKind.DirectEth, false
             ),
             0
-        );
+        )), 0.2 ether), (bytes));
         assertEq(_creditOfId(VAULT_ID), 0, "the Vault earns no credit");
 
         // sDGNRS's daily deliveries run on Degenesis-split AFKing funding.
@@ -280,11 +281,11 @@ contract DegenesisCredit is DegenesisFixture {
         _seedCredit(VAULT_ID, 10 ether);
         address op = _player("operator", 2 ether);
         vm.prank(ContractAddresses.CREATOR);
-        vault.playerAction(
+        abi.decode(OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (
             ContractAddresses.GAME,
             abi.encodeWithSignature("setOperatorApproval(uint32,address,bool)", 0, op, true),
             0
-        );
+        )), 0), (bytes));
         vm.prank(op);
         vm.expectRevert();
         game.buyDegenesisBox{value: 0.1 ether}(VAULT_ID, 0.1 ether);

@@ -1,3 +1,4 @@
+import { ownerAction } from "../helpers/deployFixture.js";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
 import { expect } from "chai";
 import hre from "hardhat";
@@ -48,7 +49,7 @@ const PICK_CHARITY_CEILING_GAS = 700_000n;
  * Used by every it-block that drives an instant-apply or queue write.
  */
 async function setCharityFromVaultOwner(charity, vaultOwner, slot, recipient) {
-  return charity.connect(vaultOwner).setCharity(slot, recipient);
+  return ownerAction(charity.connect(vaultOwner), "setCharity", [slot, recipient]);
 }
 
 describe("GNRUS Charity Allowlist (v33.0)", function () {
@@ -101,14 +102,14 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
     it("setCharity with slot >= 20 reverts InvalidSlot (slot=20)", async function () {
       const { charity, deployer, recipient1 } = await loadFixture(deployGNRUSFixture);
       await expect(
-        charity.connect(deployer).setCharity(20, recipient1.address)
+        ownerAction(charity.connect(deployer), "setCharity", [20, recipient1.address])
       ).to.be.revertedWithCustomError(charity, "InvalidSlot");
     });
 
     it("setCharity with slot >= 20 reverts InvalidSlot (slot=255)", async function () {
       const { charity, deployer, recipient1 } = await loadFixture(deployGNRUSFixture);
       await expect(
-        charity.connect(deployer).setCharity(255, recipient1.address)
+        ownerAction(charity.connect(deployer), "setCharity", [255, recipient1.address])
       ).to.be.revertedWithCustomError(charity, "InvalidSlot");
     });
 
@@ -173,7 +174,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
     it("setCharity removal on already-empty slot with no pending reverts SlotAlreadyEmpty", async function () {
       const { charity, deployer } = await loadFixture(deployGNRUSFixture);
       await expect(
-        charity.connect(deployer).setCharity(7, ZERO_ADDRESS)
+        ownerAction(charity.connect(deployer), "setCharity", [7, ZERO_ADDRESS])
       ).to.be.revertedWithCustomError(charity, "SlotAlreadyEmpty");
     });
   });
@@ -188,7 +189,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
         const { charity, deployer, recipient1, recipient2 } = await loadFixture(deployGNRUSFixture);
         await setCharityFromVaultOwner(charity, deployer, lockedSlot, recipient1.address);
         await expect(
-          charity.connect(deployer).setCharity(lockedSlot, recipient2.address)
+          ownerAction(charity.connect(deployer), "setCharity", [lockedSlot, recipient2.address])
         ).to.be.revertedWithCustomError(charity, "SlotLocked");
       });
 
@@ -196,7 +197,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
         const { charity, deployer, recipient1 } = await loadFixture(deployGNRUSFixture);
         await setCharityFromVaultOwner(charity, deployer, lockedSlot, recipient1.address);
         await expect(
-          charity.connect(deployer).setCharity(lockedSlot, ZERO_ADDRESS)
+          ownerAction(charity.connect(deployer), "setCharity", [lockedSlot, ZERO_ADDRESS])
         ).to.be.revertedWithCustomError(charity, "SlotLocked");
       });
     }
@@ -220,7 +221,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
       const { charity, deployer, recipient1 } = await loadFixture(deployGNRUSFixture);
       await setCharityFromVaultOwner(charity, deployer, 0, recipient1.address);
       await expect(
-        charity.connect(deployer).setCharity(0, ZERO_ADDRESS)
+        ownerAction(charity.connect(deployer), "setCharity", [0, ZERO_ADDRESS])
       ).to.be.revertedWithCustomError(charity, "SlotLocked");
     });
   });
@@ -906,7 +907,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
 
       // setCharity from vault owner — instant-apply on empty slot, must not revert.
       await expect(
-        charity.connect(deployer).setCharity(5, recipient1.address)
+        ownerAction(charity.connect(deployer), "setCharity", [5, recipient1.address])
       ).to.not.be.reverted;
       // vote from a sDGNRS-funded voter against the freshly-applied slot — must not revert.
       await expect(

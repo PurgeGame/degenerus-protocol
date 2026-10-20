@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -222,7 +223,7 @@ contract RecordBountyTrophyTest is DeployProtocol {
     /// @notice A set renderer's non-empty return IS the tokenURI, verbatim —
     ///         any scheme, full metadata, no internal wrapping.
     function testExternalRendererOwnsFullMetadata() public {
-        recordBounty.setRenderer(address(new FullMetadataRenderer()));
+        OwnerTargetCall.call(address(recordBounty), abi.encodeCall(recordBounty.setRenderer, (address(new FullMetadataRenderer()))), 0);
         assertEq(
             recordBounty.tokenURI(2),
             "ipfs://custom-metadata/2",
@@ -233,13 +234,13 @@ contract RecordBountyTrophyTest is DeployProtocol {
     /// @notice A reverting or empty external render falls back to the internal
     ///         base64-JSON metadata.
     function testRendererRevertOrEmptyFallsBackToInternal() public {
-        recordBounty.setRenderer(address(new RevertingRenderer()));
+        OwnerTargetCall.call(address(recordBounty), abi.encodeCall(recordBounty.setRenderer, (address(new RevertingRenderer()))), 0);
         _assertInternalUri(recordBounty.tokenURI(0));
 
-        recordBounty.setRenderer(address(new EmptyRenderer()));
+        OwnerTargetCall.call(address(recordBounty), abi.encodeCall(recordBounty.setRenderer, (address(new EmptyRenderer()))), 0);
         _assertInternalUri(recordBounty.tokenURI(0));
 
-        recordBounty.setRenderer(address(0));
+        OwnerTargetCall.call(address(recordBounty), abi.encodeCall(recordBounty.setRenderer, (address(0))), 0);
         _assertInternalUri(recordBounty.tokenURI(0));
     }
 

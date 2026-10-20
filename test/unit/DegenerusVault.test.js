@@ -1,3 +1,4 @@
+import { ownerAction } from "../helpers/deployFixture.js";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
 import { expect } from "chai";
 import hre from "hardhat";
@@ -132,10 +133,11 @@ describe("DegenerusVault", function () {
   // 3. isVaultOwner
   // ---------------------------------------------------------------------------
   describe("isVaultOwner", function () {
-    it("returns true for account holding all DGVE supply", async function () {
-      const { vault, deployer } = await loadFixture(deployFullProtocol);
-      // deployer holds 100% of initial supply
-      expect(await vault.isVaultOwner(deployer.address)).to.be.true;
+    it("recognizes only the pinned executor, even when a wallet holds all shares", async function () {
+      const { vault, deployer, ownerGovernance } = await loadFixture(deployFullProtocol);
+      expect(await vault.isVaultOwner(await ownerGovernance.getAddress())).to.be.true;
+      // A majority wallet supplies approval through governance
+      expect(await vault.isVaultOwner(deployer.address)).to.be.false;
     });
 
     it("returns false for account holding 30% of DGVE supply", async function () {
@@ -145,13 +147,13 @@ describe("DegenerusVault", function () {
       expect(await vault.isVaultOwner(alice.address)).to.be.false;
     });
 
-    it("requires strictly more than 50.1% of DGVE supply", async function () {
+    it("does not recognize direct callers even above 50.1% ownership", async function () {
       const { vault, deployer, alice } = await loadFixture(deployFullProtocol);
       const dgve = await shareToken(vault, 2);
       await dgve.connect(deployer).transfer(alice.address, INITIAL_SUPPLY * 501n / 1000n);
       expect(await vault.isVaultOwner(alice.address)).to.be.false;
       await dgve.connect(deployer).transfer(alice.address, 1n);
-      expect(await vault.isVaultOwner(alice.address)).to.be.true;
+      expect(await vault.isVaultOwner(alice.address)).to.be.false;
     });
   });
 
@@ -435,14 +437,14 @@ describe("DegenerusVault", function () {
       await advanceToNextDay();
       // Deployer holds 100% DGVE initially
       await expect(
-        vault.connect(deployer).playerAction(await game.getAddress(), game.interface.encodeFunctionData("mineFlip", [0]), 0)
+        ownerAction(vault.connect(deployer), "playerAction", [await game.getAddress(), game.interface.encodeFunctionData("mineFlip", [0]), 0])
       ).to.not.be.reverted;
     });
 
     it("deployer (vault owner) can set operator approval", async function () {
       const { vault, deployer, alice, game } = await loadFixture(deployFullProtocol);
       await expect(
-        vault.connect(deployer).playerAction(await game.getAddress(), game.interface.encodeFunctionData("setOperatorApproval", [0, alice.address, true]), 0)
+        ownerAction(vault.connect(deployer), "playerAction", [await game.getAddress(), game.interface.encodeFunctionData("setOperatorApproval", [0, alice.address, true]), 0])
       ).to.not.be.reverted;
     });
 
@@ -457,7 +459,7 @@ describe("DegenerusVault", function () {
       const { vault, deployer } = await loadFixture(deployFullProtocol);
       // Should not revert for amount = 0
       await expect(
-        vault.connect(deployer).wwxrpMint(deployer.address, 0n)
+        ownerAction(vault.connect(deployer), "wwxrpMint", [deployer.address, 0n])
       ).to.not.be.reverted;
     });
 
@@ -471,7 +473,7 @@ describe("DegenerusVault", function () {
     it("playerAction preserves the Game zero-ticket no-op", async function () {
       const { vault, deployer, game } = await loadFixture(deployFullProtocol);
       await expect(
-        vault.connect(deployer).playerAction(await game.getAddress(), game.interface.encodeFunctionData("redeemFlip", [0, 0n]), 0)
+        ownerAction(vault.connect(deployer), "playerAction", [await game.getAddress(), game.interface.encodeFunctionData("redeemFlip", [0, 0n]), 0])
       ).to.not.be.reverted;
     });
 

@@ -1,3 +1,4 @@
+import { ownerAction } from "../helpers/deployFixture.js";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
 import { expect } from "chai";
 import hre from "hardhat";
@@ -67,7 +68,7 @@ async function deployWithGameOver() {
 // vault owner sweeps the whole balance to the deployer through the vault's own door.
 async function fundDeployerFromVault(ctx) {
   const { vault, dgnrs, deployer } = ctx;
-  await vault.connect(deployer).sweepToken(await dgnrs.getAddress(), deployer.address, 0n);
+  await ownerAction(vault.connect(deployer), "sweepToken", [await dgnrs.getAddress(), deployer.address, 0n]);
   return ctx;
 }
 async function deployFundedFullProtocol() {
@@ -277,7 +278,7 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
 
       const vaultBefore = await dgnrs.balanceOf(vaultAddr);
       const supplyBefore = await dgnrs.totalSupply();
-      await vault.connect(deployer).dgnrsUnwrapTo(alice.address, amount);
+      await ownerAction(vault.connect(deployer), "dgnrsUnwrapTo", [alice.address, amount]);
 
       // The vault's DGNRS decreased
       expect(await dgnrs.balanceOf(vaultAddr)).to.equal(vaultBefore - amount);
@@ -290,7 +291,7 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
     it("emits UnwrapTo event", async function () {
       const { dgnrs, vault, deployer, alice } = await loadFixture(deployFullProtocol);
       const amount = dgnrsUnits("1000");
-      const tx = await vault.connect(deployer).dgnrsUnwrapTo(alice.address, amount);
+      const tx = await ownerAction(vault.connect(deployer), "dgnrsUnwrapTo", [alice.address, amount]);
       const ev = await getEvent(tx, dgnrs, "UnwrapTo");
       expect(ev.args.recipient).to.equal(alice.address);
       expect(ev.args.amount).to.equal(amount);
@@ -316,47 +317,47 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
     it("reverts on zero address recipient", async function () {
       const { dgnrs, vault, deployer } = await loadFixture(deployFullProtocol);
       await expect(
-        vault.connect(deployer).dgnrsUnwrapTo(ZERO_ADDRESS, dgnrsUnits("100"))
+        ownerAction(vault.connect(deployer), "dgnrsUnwrapTo", [ZERO_ADDRESS, dgnrsUnits("100")])
       ).to.be.revertedWithCustomError(dgnrs, "ZeroAddress");
     });
 
     it("reverts when amount exceeds balance", async function () {
       const { dgnrs, vault, deployer, alice } = await loadFixture(deployFullProtocol);
       // Hold less than the 40B lifetime cap, so the balance check is the one that fires.
-      await vault.connect(deployer).sweepToken(await dgnrs.getAddress(), alice.address, 20_000_000_000n * dgnrsUnits("1"));
+      await ownerAction(vault.connect(deployer), "sweepToken", [await dgnrs.getAddress(), alice.address, 20_000_000_000n * dgnrsUnits("1")]);
       const bal = await dgnrs.balanceOf(await vault.getAddress());
       await expect(
-        vault.connect(deployer).dgnrsUnwrapTo(deployer.address, bal + 1n)
+        ownerAction(vault.connect(deployer), "dgnrsUnwrapTo", [deployer.address, bal + 1n])
       ).to.be.revertedWithCustomError(dgnrs, "Insufficient");
     });
 
     it("reverts past the 40B lifetime cap and reports the running total", async function () {
       const { dgnrs, vault, deployer, alice } = await loadFixture(deployFullProtocol);
       const cap = CREATOR_TOTAL / 5n;
-      await vault.connect(deployer).dgnrsUnwrapTo(alice.address, cap);
+      await ownerAction(vault.connect(deployer), "dgnrsUnwrapTo", [alice.address, cap]);
       expect(await dgnrs.totalUnwrapped()).to.equal(cap);
       await expect(
-        vault.connect(deployer).dgnrsUnwrapTo(alice.address, dgnrsUnits("1"))
+        ownerAction(vault.connect(deployer), "dgnrsUnwrapTo", [alice.address, dgnrsUnits("1")])
       ).to.be.revertedWithCustomError(dgnrs, "UnwrapCapExceeded");
     });
 
     it("reverts on zero amount", async function () {
       const { dgnrs, vault, deployer, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        vault.connect(deployer).dgnrsUnwrapTo(alice.address, 0n)
+        ownerAction(vault.connect(deployer), "dgnrsUnwrapTo", [alice.address, 0n])
       ).to.be.revertedWithCustomError(dgnrs, "UnwrapTooSmall");
     });
 
     it("reverts when unwrap amount is below one whole token", async function () {
       const { dgnrs, vault, deployer, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        vault.connect(deployer).dgnrsUnwrapTo(alice.address, dgnrsUnits("1") - 1n)
+        ownerAction(vault.connect(deployer), "dgnrsUnwrapTo", [alice.address, dgnrsUnits("1") - 1n])
       ).to.be.revertedWithCustomError(dgnrs, "UnwrapTooSmall");
     });
 
     it("allows exactly one whole token to be unwrapped", async function () {
       const { sdgnrs, vault, deployer, alice } = await loadFixture(deployFullProtocol);
-      await vault.connect(deployer).dgnrsUnwrapTo(alice.address, dgnrsUnits("1"));
+      await ownerAction(vault.connect(deployer), "dgnrsUnwrapTo", [alice.address, dgnrsUnits("1")]);
       expect(await sdgnrs.balanceOf(alice.address)).to.equal(dgnrsUnits("1"));
     });
   });
@@ -570,7 +571,7 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
       const { dgnrs, sdgnrs, vault, deployer, alice } = await loadFixture(deployWithGameOver);
       const dgnrsAddr = await dgnrs.getAddress();
       // The vault holds the DGNRS: hand the deployer a burnable balance through the vault's door.
-      await vault.connect(deployer).sweepToken(dgnrsAddr, deployer.address, dgnrsUnits("1000"));
+      await ownerAction(vault.connect(deployer), "sweepToken", [dgnrsAddr, deployer.address, dgnrsUnits("1000")]);
 
       // Initial state
       const dgnrsSupply0 = await dgnrs.totalSupply();
@@ -579,7 +580,7 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
 
       // After unwrapTo — both decrease by same amount
       const unwrapAmt = dgnrsUnits("5000");
-      await vault.connect(deployer).dgnrsUnwrapTo(alice.address, unwrapAmt);
+      await ownerAction(vault.connect(deployer), "dgnrsUnwrapTo", [alice.address, unwrapAmt]);
       const dgnrsSupply1 = await dgnrs.totalSupply();
       const wrapperBal1 = await sdgnrs.balanceOf(dgnrsAddr);
       expect(dgnrsSupply1).to.equal(wrapperBal1);

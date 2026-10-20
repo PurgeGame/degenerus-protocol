@@ -1,3 +1,4 @@
+import { ownerAction } from "../helpers/deployFixture.js";
 import { expect } from "chai";
 import hre from "hardhat";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
@@ -109,7 +110,7 @@ describe("GnrusRecovery", function () {
    */
   async function manufactureHolder(gnrus, sdgnrs, deployer, voter, holder, gameAddress) {
     const slot = 5; // non-locked (>= LOCKED_SLOTS)
-    await gnrus.connect(deployer).setCharity(slot, holder.address);
+    await ownerAction(gnrus.connect(deployer), "setCharity", [slot, holder.address]);
     await giveSDGNRS(sdgnrs, gameAddress, voter.address, hre.ethers.parseUnits("100", 12));
     await gnrus.connect(voter).vote(slot);
     await runLevelTransitionViaGame(gnrus, gameAddress, 0); // pickCharity(0) via game impersonation
@@ -157,11 +158,11 @@ describe("GnrusRecovery", function () {
       const fixture = await loadFixture(deployFullProtocol);
       const { gnrus, vault, deployer, dan } = fixture;
 
-      expect(await vault.isVaultOwner(deployer.address)).to.equal(true);
+      expect(await vault.isVaultOwner(deployer.address)).to.equal(false);
       expect(await gnrus.sweptAt()).to.equal(0n);
 
       await expect(
-        gnrus.connect(deployer).vaultRedeemFor(dan.address)
+        ownerAction(gnrus.connect(deployer), "vaultRedeemFor", [dan.address])
       ).to.be.revertedWithCustomError(gnrus, "NotSwept");
     });
 
@@ -188,7 +189,7 @@ describe("GnrusRecovery", function () {
       expect(await gnrus.balanceOf(zeroHolder.address)).to.equal(0n);
 
       await expect(
-        gnrus.connect(deployer).vaultRedeemFor(zeroHolder.address)
+        ownerAction(gnrus.connect(deployer), "vaultRedeemFor", [zeroHolder.address])
       ).to.be.revertedWithCustomError(gnrus, "InsufficientBurn");
     });
 
@@ -224,7 +225,7 @@ describe("GnrusRecovery", function () {
 
       // dan does NOT send the tx (deployer does), so dan pays no gas — its ETH
       // balance moves only by the redemption payout.
-      await gnrus.connect(deployer).vaultRedeemFor(dan.address);
+      await ownerAction(gnrus.connect(deployer), "vaultRedeemFor", [dan.address]);
 
       // Holder fully burned.
       expect(await gnrus.balanceOf(dan.address)).to.equal(0n);
@@ -247,11 +248,11 @@ describe("GnrusRecovery", function () {
       const fixture = await loadFixture(deployFullProtocol);
       const { gnrus, vault, deployer } = fixture;
 
-      expect(await vault.isVaultOwner(deployer.address)).to.equal(true);
+      expect(await vault.isVaultOwner(deployer.address)).to.equal(false);
       expect(await gnrus.sweptAt()).to.equal(0n);
 
       await expect(
-        gnrus.connect(deployer).sweepResidualToVault()
+        ownerAction(gnrus.connect(deployer), "sweepResidualToVault", [])
       ).to.be.revertedWithCustomError(gnrus, "NotSwept");
     });
 
@@ -276,7 +277,7 @@ describe("GnrusRecovery", function () {
 
       // Immediately post-sweep: block.timestamp == sweptAt << sweptAt + 3 years.
       await expect(
-        gnrus.connect(deployer).sweepResidualToVault()
+        ownerAction(gnrus.connect(deployer), "sweepResidualToVault", [])
       ).to.be.revertedWithCustomError(gnrus, "TooEarly");
     });
 
@@ -304,7 +305,7 @@ describe("GnrusRecovery", function () {
       // Pass the 3-year residual-recovery delay.
       await advanceTime(RESIDUAL_RECOVERY_DELAY + 3600);
 
-      await gnrus.connect(deployer).sweepResidualToVault();
+      await ownerAction(gnrus.connect(deployer), "sweepResidualToVault", []);
 
       // GNRUS drained.
       expect(await provider.getBalance(gnrusAddr)).to.equal(0n);

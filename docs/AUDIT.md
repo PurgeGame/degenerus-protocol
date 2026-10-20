@@ -62,7 +62,7 @@ justify adding prerequisites to ETH release.
 ## Project High-severity criteria
 
 A High finding must demonstrate substantial impact that one actor can cause unilaterally
-without vault-owner privileges (the >50.1% DGVE holder, initially CREATOR, and its comp
+without vault-owner privileges (the executor authorized by >50.1% of DGVE, initially held by CREATOR, and its comp
 delegates and battle creators), from a healthy live-game state: the game has not ended, VRF
 is functional, and `mineFlip(uint32)` is attempted on schedule.
 The finding must not require an unrelated service outage, prolonged miner inactivity

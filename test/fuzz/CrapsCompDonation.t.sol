@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
 
@@ -23,7 +24,7 @@ contract CrapsCompDonationTest is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
-        vm.prank(ContractAddresses.CREATOR);
+        vm.prank(ContractAddresses.OWNER_GOVERNANCE);
         slot = crapsBattle.createBattle(300, 4, 5, 2, uint40(block.timestamp + 1 hours), false, 0);
         index = slot - crapsBattle.CUSTOM_SLOT_BASE();
         vm.prank(ContractAddresses.GAME);
@@ -40,11 +41,11 @@ contract CrapsCompDonationTest is DeployProtocol {
         uint256 playerBalance = coin.balanceOf(player);
         uint256 ownerBalance = coin.balanceOf(ContractAddresses.CREATOR);
         vm.prank(ContractAddresses.CREATOR);
-        vault.setCrapsCompAllowance(ContractAddresses.CREATOR, 1);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.setCrapsCompAllowance, (ContractAddresses.CREATOR, 1)), 0);
 
-        vm.prank(ContractAddresses.CREATOR);
         vm.expectEmit(true, true, true, true, address(vault));
-        emit CrapsCompDonated(ContractAddresses.CREATOR, true, index, 1_000);
+        emit CrapsCompDonated(ContractAddresses.OWNER_GOVERNANCE, true, index, 1_000);
+        vm.prank(ContractAddresses.OWNER_GOVERNANCE);
         uint256 charged = vault.crapsCompDonate(true, index, 10);
 
         assertEq(charged, 1_000);
@@ -60,7 +61,7 @@ contract CrapsCompDonationTest is DeployProtocol {
     function test_delegateSharesOneLimitAcrossPassGrantsAndDonations() public {
         uint256 lane = coin.crapsCompAllowance();
         vm.prank(ContractAddresses.CREATOR);
-        vault.setCrapsCompAllowance(delegate, 25_800);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.setCrapsCompAllowance, (delegate, 25_800)), 0);
         uint256[] memory codes = new uint256[](1);
         // Bank one normal day pass for the player: 24,800 FLIP.
         codes[0] = uint256(game.walletIdOf(player)) | (uint256(4) << 160) | (uint256(1) << 200);
@@ -91,8 +92,8 @@ contract CrapsCompDonationTest is DeployProtocol {
         vm.expectRevert(DegenerusVault.NotVaultOwner.selector);
         vault.crapsCompDonate(true, index, 1);
         vm.startPrank(ContractAddresses.CREATOR);
-        vault.setCrapsCompAllowance(delegate, 1_000);
-        vault.setCrapsCompAllowance(delegate, 0);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.setCrapsCompAllowance, (delegate, 1_000)), 0);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.setCrapsCompAllowance, (delegate, 0)), 0);
         vm.stopPrank();
         vm.prank(delegate);
         vm.expectRevert(DegenerusVault.NotVaultOwner.selector);
@@ -104,7 +105,7 @@ contract CrapsCompDonationTest is DeployProtocol {
     function test_insufficientSharedBudgetRollsBackDelegateAllowanceAndSeed() public {
         uint256 lane = coin.crapsCompAllowance();
         vm.prank(ContractAddresses.CREATOR);
-        vault.setCrapsCompAllowance(delegate, lane + 100);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.setCrapsCompAllowance, (delegate, lane + 100)), 0);
         vm.prank(delegate);
         vm.expectRevert(FLIP.Insufficient.selector);
         vault.crapsCompDonate(true, index, uint24(lane / 100 + 1));
@@ -116,7 +117,7 @@ contract CrapsCompDonationTest is DeployProtocol {
     function test_aClosedPoolCannotReceiveCompFunds() public {
         uint256 lane = coin.crapsCompAllowance();
         vm.prank(ContractAddresses.CREATOR);
-        vault.setCrapsCompAllowance(delegate, 1_000);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.setCrapsCompAllowance, (delegate, 1_000)), 0);
         vm.warp(block.timestamp + 1 hours);
         vm.prank(delegate);
         vm.expectRevert(CrapsBattleStorage.BonusPeriodSpent.selector);

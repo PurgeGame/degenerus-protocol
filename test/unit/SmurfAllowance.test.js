@@ -1,3 +1,4 @@
+import { ownerAction } from "../helpers/deployFixture.js";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
 import { expect } from "chai";
 import hre from "hardhat";
@@ -13,9 +14,9 @@ describe("Smurf allowance vault-owner control", function () {
       const main = await game.walletIdOf(bob.address);
       await expect(game.connect(alice).raiseSmurfBaseAllowance(main, 300))
         .to.be.revertedWithCustomError(game, "OnlyVault");
-      await expect(game.connect(deployer).raiseSmurfBaseAllowance(main, 300))
+      await expect(ownerAction(game.connect(deployer), "raiseSmurfBaseAllowance", [main, 300]))
         .to.emit(game, "SmurfBaseAllowanceRaised").withArgs(main, 0, 300);
-      await expect(game.connect(deployer).raiseSmurfBaseAllowance(main, 300))
+      await expect(ownerAction(game.connect(deployer), "raiseSmurfBaseAllowance", [main, 300]))
         .to.be.revertedWithCustomError(game, "InvalidSmurfBaseIncrease");
 
       const dgve = await hre.ethers.getContractAt("DegenerusVaultShare", hre.ethers.getCreateAddress({
@@ -24,7 +25,7 @@ describe("Smurf allowance vault-owner control", function () {
       await dgve.connect(deployer).transfer(alice.address, await dgve.balanceOf(deployer.address));
       await expect(game.connect(deployer).raiseSmurfBaseAllowance(main, 65535))
         .to.be.revertedWithCustomError(game, "OnlyVault");
-      await expect(game.connect(alice).raiseSmurfBaseAllowance(main, 65535))
+      await expect(ownerAction(game.connect(alice), "raiseSmurfBaseAllowance", [main, 65535]))
         .to.emit(game, "SmurfBaseAllowanceRaised").withArgs(main, 300, 65535);
       expect((await game.mintPackedFor(bob.address)) >> 240n).to.equal(65535n);
     });

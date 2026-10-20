@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -199,12 +200,12 @@ contract BafConsolationClaimTest is DeployProtocol {
         _record(bob, 10, 999);
         _skip(10);
         vm.prank(ContractAddresses.CREATOR);
-        wwxrp.setGameMintScale(7);
+        OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.setGameMintScale, (7)), 0);
         assertEq(jackpots.bafConsolationOf(alice, 10), 1, "view reports the unscaled award");
         jackpots.claimBafConsolation(ids[alice], 10);
         assertEq(wwxrp.claimable(game.walletIdOf(alice)), 7);
         vm.prank(ContractAddresses.CREATOR);
-        wwxrp.setGameMintScale(0);
+        OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.setGameMintScale, (0)), 0);
         jackpots.claimBafConsolation(ids[bob], 10);
         assertEq(wwxrp.claimable(game.walletIdOf(bob)), 0, "zero mint scale still disables emission");
         assertEq(jackpots.bafConsolationOf(bob, 10), 0, "disabled mint still consumes the claim");

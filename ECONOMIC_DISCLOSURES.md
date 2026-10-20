@@ -6,11 +6,13 @@ price tables and reward curves.
 ## Creator and vault interests
 
 - CREATOR receives the initial DGVE and DGVF share supplies, initially controlling the
-  Vault. Governance authority follows DGVE ownership; redemptions follow the relevant shares.
+  Vault. Owner actions require escrowed DGVE approval exceeding **50.1% of current supply**,
+  assigned before the execution block, through the fixed governance executor. Holders may
+  delegate voting alone; withdrawals remain theirs. Redemptions follow the relevant shares.
 - The vault allocation is **200B DGNRS**, backed by the **20% sDGNRS allocation** held by
   the wrapper. These are the same economic position, not two allocations. **50B** is
   released to the Vault at deployment; **5B per level** vests to the Vault (anyone may trigger
-  the release), capped at **200B**. The Vault's owner, the DGVE majority holder, decides what
+  the release), capped at **200B**. DGVE owner governance decides what
   to do with it: burn it for backing, which lands ETH/stETH in vault reserves, unwrap up to
   **40B** over the contract's life into soulbound sDGNRS, or sweep it out.
 - Other initial sDGNRS allocations: affiliate 30%, lootbox 20%, whale 10%, reward 10%,
@@ -86,7 +88,7 @@ price tables and reward curves.
   may participate in rewards under their entry rules. The vault is excluded from BAF's
   top-4 leaderboard and its 10% top-bettor and 5% third/fourth-place slices, but retains
   BAF score for eligible ticket-based awards.
-- The vault owner (>50.1% of DGVE) can register any address as a WWXRP minter and burner
+- The vault owner (the DGVE governance executor) can register any address as a WWXRP minter and burner
   (`WWXRP.setTrustedMinter`), with no cap on what a trusted address may mint or burn. A trusted
   address may also spend any player's WWXRP boon through `WWXRP.consumeBoon`, without that
   player's approval. The vault owner also sets a whole-number multiplier, with no upper bound,

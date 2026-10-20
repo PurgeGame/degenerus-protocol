@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -17,7 +18,7 @@ contract WwxrpVaultMintTest is DeployProtocol {
         _deployProtocol();
         owner = ContractAddresses.CREATOR;
         alice = makeAddr("wwxrp_alice");
-        assertTrue(vault.isVaultOwner(owner));
+        assertTrue(vault.isVaultOwner(ContractAddresses.OWNER_GOVERNANCE));
         vm.prank(address(coinflip));
         wwxrp.mintPrize(alice, 1000 ether);
     }
@@ -26,9 +27,9 @@ contract WwxrpVaultMintTest is DeployProtocol {
         uint256 amount = 10_000_000_000 ether;
         uint256 supply = wwxrp.totalSupply();
         vm.prank(owner);
-        wwxrp.vaultMintTo(alice, amount);
+        OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.vaultMintTo, (alice, amount)), 0);
         vm.prank(owner);
-        vault.wwxrpMint(alice, amount);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.wwxrpMint, (alice, amount)), 0);
         assertEq(wwxrp.balanceOf(alice), 1000 ether + 2 * amount);
         assertEq(wwxrp.totalSupply(), supply + 2 * amount);
     }
@@ -36,7 +37,7 @@ contract WwxrpVaultMintTest is DeployProtocol {
     function testFuzzOwnerMintHasNoAllocationLimit(uint128 amount) public {
         uint256 supply = wwxrp.totalSupply();
         vm.prank(owner);
-        wwxrp.vaultMintTo(alice, amount);
+        OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.vaultMintTo, (alice, amount)), 0);
         assertEq(wwxrp.totalSupply(), supply + amount);
         assertEq(wwxrp.balanceOf(alice), 1000 ether + uint256(amount));
     }
@@ -53,25 +54,25 @@ contract WwxrpVaultMintTest is DeployProtocol {
         vault.wwxrpMint(alice, 1 ether);
     }
 
-    function testMintAuthorityFollowsCurrentDgveOwnership() public {
+    function testTransferredDgveStillRequiresTheExecutor() public {
         DegenerusVaultShare dgve = DegenerusVaultShare(computeCreateAddress(VAULT, 2));
         uint256 shares = dgve.balanceOf(owner);
         vm.prank(owner);
         dgve.transfer(alice, shares);
         assertFalse(vault.isVaultOwner(owner));
-        assertTrue(vault.isVaultOwner(alice));
+        assertFalse(vault.isVaultOwner(alice));
         vm.prank(owner);
         vm.expectRevert(WWXRP.NotVaultOwner.selector);
         wwxrp.vaultMintTo(owner, 1 ether);
         vm.prank(alice);
-        wwxrp.vaultMintTo(alice, 2 ether);
+        OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.vaultMintTo, (alice, 2 ether)), 0);
         assertEq(wwxrp.balanceOf(alice), 1002 ether);
     }
 
     function testMintToZeroMintsNothing() public {
         uint256 supply = wwxrp.totalSupply();
         vm.prank(owner);
-        wwxrp.vaultMintTo(address(0), 1 ether);
+        OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.vaultMintTo, (address(0), 1 ether)), 0);
         assertEq(wwxrp.totalSupply(), supply, "a zero recipient mints nothing");
         assertEq(wwxrp.balanceOf(address(0)), 0, "and credits nobody");
     }
@@ -111,7 +112,7 @@ contract WwxrpVaultMintTest is DeployProtocol {
     function testVaultCanMintToItselfAndBurnItsBalance() public {
         uint256 supply = wwxrp.totalSupply();
         vm.prank(owner);
-        vault.wwxrpMint(VAULT, 50 ether);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.wwxrpMint, (VAULT, 50 ether)), 0);
         assertEq(wwxrp.balanceOf(VAULT), 50 ether);
         vm.prank(address(game));
         wwxrp.burnForGame(VAULT, 30 ether);

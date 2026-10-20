@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -41,7 +42,7 @@ contract VaultAfkingFunding is DeployProtocol {
         vm.deal(stranger, 10 ether);
         mockVRF.fundSubscription(1, 100e18);
         owner = ContractAddresses.CREATOR;
-        require(vault.isVaultOwner(owner), "fixture: CREATOR holds the DGVE majority");
+        require(vault.isVaultOwner(ContractAddresses.OWNER_GOVERNANCE), "fixture: governance holds owner authority");
         _afking0 = game.afkingFundingOf(address(vault));
     }
 
@@ -52,7 +53,7 @@ contract VaultAfkingFunding is DeployProtocol {
     function test_stagingAndRecoveryAreOwnerOnly() public {
         vm.deal(address(vault), 5 ether);
         vm.prank(owner);
-        vault.playerAction(ContractAddresses.GAME, abi.encodeWithSignature("depositAfkingFunding(uint32)", 1), 2 ether);
+        abi.decode(OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (ContractAddresses.GAME, abi.encodeWithSignature("depositAfkingFunding(uint32)", 1), 2 ether)), 0), (bytes));
 
         uint256 recoverAmount0 = game.afkingFundingOf(address(vault));
         vm.prank(stranger);
@@ -76,14 +77,15 @@ contract VaultAfkingFunding is DeployProtocol {
 
     function test_ownerStagesAndRecoversWithoutMovingTheReserve() public {
         vm.deal(address(vault), 5 ether);
+        vm.deal(ContractAddresses.OWNER_GOVERNANCE, 1 ether);
         (uint256 eth0, ) = vault.previewEth(_dgveSupply());
 
         vm.prank(owner);
-        vault.playerAction{value: 1 ether}(
+        abi.decode(OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (
             ContractAddresses.GAME,
             abi.encodeWithSignature("depositAfkingFunding(uint32)", 1),
             3 ether
-        );
+        )), 1 ether), (bytes));
         assertEq(game.afkingFundingOf(address(vault)), _afking0 + 4 ether, "msg.value plus vault ETH staged");
         assertEq(address(vault).balance, 2 ether, "vault ETH left the vault");
         (uint256 eth1, uint256 st1) = vault.previewEth(_dgveSupply());
@@ -91,11 +93,11 @@ contract VaultAfkingFunding is DeployProtocol {
 
         uint256 recoverAmount1 = game.afkingFundingOf(address(vault));
         vm.prank(owner);
-        vault.playerAction(
+        abi.decode(OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (
             ContractAddresses.GAME,
             abi.encodeWithSignature("withdrawAfkingFunding(uint32,uint256)", 0, recoverAmount1),
             0
-        );
+        )), 0), (bytes));
         assertEq(game.afkingFundingOf(address(vault)), 0, "everything recovered");
         assertEq(address(vault).balance, 2 ether + 4 ether + _afking0, "back in the vault");
         (uint256 eth2, uint256 st2) = vault.previewEth(_dgveSupply());
@@ -106,7 +108,7 @@ contract VaultAfkingFunding is DeployProtocol {
         vm.deal(address(vault), 1 ether);
         vm.prank(owner);
         vm.expectRevert(DegenerusVault.Insufficient.selector);
-        vault.playerAction(ContractAddresses.GAME, abi.encodeWithSignature("depositAfkingFunding(uint32)", 1), 2 ether);
+        abi.decode(OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (ContractAddresses.GAME, abi.encodeWithSignature("depositAfkingFunding(uint32)", 1), 2 ether)), 0), (bytes));
     }
 
     // ---------------------------------------------------------------------
@@ -116,7 +118,7 @@ contract VaultAfkingFunding is DeployProtocol {
     function test_burnEthWithdrawsTheShortfallFromAfking() public {
         vm.deal(address(vault), 10 ether);
         vm.prank(owner);
-        vault.playerAction(ContractAddresses.GAME, abi.encodeWithSignature("depositAfkingFunding(uint32)", 1), 9 ether);
+        abi.decode(OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (ContractAddresses.GAME, abi.encodeWithSignature("depositAfkingFunding(uint32)", 1), 9 ether)), 0), (bytes));
         assertEq(address(vault).balance, 1 ether, "harness: the vault keeps 1 ETH on hand");
 
         uint256 supply = _dgveSupply();

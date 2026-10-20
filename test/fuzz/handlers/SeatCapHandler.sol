@@ -377,7 +377,7 @@ contract SeatCapHandler is Test {
         uint256 n = seed % 5 == 0 ? room + (seed >> 8) % 3 : nRaw % 41;
         address to = _recipient(seed >> 16);
         bool expectRevert = n != 0 && (free0 < 1000 || l + n + s > CAP);
-        vm.prank(CREATOR);
+        vm.prank(ContractAddresses.OWNER_GOVERNANCE);
         try vault.afkingSeatMint(to, n) {
             if (expectRevert) _violate("vault mint past a gate succeeded");
             ++oks[A_VMINT];
@@ -410,7 +410,7 @@ contract SeatCapHandler is Test {
         if (l + s + h >= CAP) return;
         uint256 n = CAP - h - l - s;
         address to = (seed >> 16) % 2 == 0 ? phantom : wallets[(seed >> 24) % N_WALLETS];
-        vm.prank(CREATOR);
+        vm.prank(ContractAddresses.OWNER_GOVERNANCE);
         try vault.afkingSeatMint(to, n) {
             ++oks[A_FFWD];
         } catch {
@@ -608,7 +608,7 @@ contract SeatCapHandler is Test {
         uint256 serial = seatsOf[from][(seed >> 8) % len];
         address to = _recipient(seed >> 16);
         if (from == address(vault)) {
-            vm.prank(CREATOR);
+            vm.prank(ContractAddresses.OWNER_GOVERNANCE);
             try vault.sweepNft(ContractAddresses.AFKING_SUB_TOKEN, to, serial) {} catch {
                 _violate("the vault could not move a seat it holds");
                 return;

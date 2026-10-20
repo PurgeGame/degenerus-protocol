@@ -94,6 +94,7 @@ export const DEPLOY_ORDER = [
   "GAME_RNG_MODULE",     // N+34: request, retry and publication
   "GAME_JACKPOT_DRAW_MODULE", // N+35: daily battle and FLIP drawings
   "GAME_DEGENESIS_MODULE", // N+36: Degenesis box sale, settlement and release
+  "OWNER_GOVERNANCE",     // N+37: DGVE escrow; all prior addresses remain unchanged
 ];
 
 /**
@@ -137,6 +138,7 @@ export const KEY_TO_CONTRACT = {
   GAME_RNG_MODULE: "DegenerusGameRngModule",
   GAME_JACKPOT_DRAW_MODULE: "DegenerusGameJackpotDrawModule",
   GAME_DEGENESIS_MODULE: "DegenerusGameDegenesisModule",
+  OWNER_GOVERNANCE: "DegenerusOwnerGovernance",
 };
 
 /**

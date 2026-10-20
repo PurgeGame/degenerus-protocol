@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
+import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {QuestInfo} from "../../contracts/interfaces/IDegenerusQuests.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -97,7 +99,7 @@ contract QuestRetryDoubleRoll is DeployProtocol {
         }
         vm.roll(block.number + 17);
         vm.warp(block.timestamp + 21 hours);
-        admin.retryGameRng();
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
         assertEq(game.level(), oldLevel + 1, "retry did not advance level");
         assertEq(_generationStart(target), sealBlock, "retry preserves the sealed bound (never re-stamps)");
         assertEq(_generationStart(1), bootstrapStart, "old levels retain their bounds");
@@ -129,6 +131,7 @@ contract QuestRetryDoubleRoll is DeployProtocol {
         // the vault owner fire the retry through Admin. The daily request is still pending, so this is the retry
         // branch (rngRequestTime LSB still 0).
         vm.warp(block.timestamp + 1 days + 1 hours);
+        vm.prank(ContractAddresses.OWNER_GOVERNANCE);
         (bool ok, ) = address(admin).call(abi.encodeWithSignature("retryGameRng()"));
         assertTrue(ok, "authorized Admin retry reverted");
 

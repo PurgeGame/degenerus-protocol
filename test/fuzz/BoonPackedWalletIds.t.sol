@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -288,7 +289,7 @@ contract BoonPackedWalletIds is DeployProtocol {
         (address player, uint32 id) = _wallet("wwxrp_enter_boon");
         ext.x_setBoon(id, 0, _lane(1) << WWXRP_LANE);
         vm.prank(ContractAddresses.VAULT);
-        wwxrp.vaultMintTo(player, 1_000);
+        OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.vaultMintTo, (player, 1_000)), 0);
 
         // The WWXRP raw read lands on the getter's slot.
         bytes32 slot1 = bytes32(uint256(keccak256(abi.encode(uint256(id), BOON_PACKED_SLOT))) + 1);
@@ -312,7 +313,7 @@ contract BoonPackedWalletIds is DeployProtocol {
         address minter = makeAddr("wwxrp_minter");
         vm.mockCall(ContractAddresses.VAULT, abi.encodeWithSignature("isVaultOwner(address)", owner), abi.encode(true));
         vm.prank(owner);
-        wwxrp.setTrustedMinter(minter, true);
+        OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.setTrustedMinter, (minter, true)), 0);
 
         vm.recordLogs();
         vm.prank(minter);

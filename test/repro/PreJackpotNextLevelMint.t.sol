@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 import {TicketQueueStorage as RingStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
@@ -185,7 +186,7 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
         _seed(8, false, false, true);
         _buyBox(2 ether);
         vm.prank(ContractAddresses.CREATOR);
-        game.setMiddayMaxBasefee(5);
+        OwnerTargetCall.call(address(game), abi.encodeCall(game.setMiddayMaxBasefee, (5)), 0);
         vm.fee(6 gwei);
         _mineRefused();
         assertEq(_midday(), 0, "rejected request commits no early cohort");
@@ -406,7 +407,7 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
         (bool outsider,) = address(admin).call(abi.encodeWithSignature("retryGameRng()"));
         assertFalse(outsider, "only the vault owner may spend the retry");
         vm.prank(ContractAddresses.CREATOR);
-        admin.retryGameRng();
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
         uint256 retryId = mockVRF.lastRequestId();
         assertGt(retryId, oldId, "owner sent a replacement request");
         assertFalse(game.rngLocked(), "transport retry retains the midday mode");

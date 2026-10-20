@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -28,7 +29,7 @@ contract CustomRngCohortGasTest is DeployProtocol {
         }
         assertFalse(game.rngLocked());
         _finishReadConsumers();
-        crapsBattle.setBattleCreator(address(this), true);
+        OwnerTargetCall.call(address(crapsBattle), abi.encodeCall(crapsBattle.setBattleCreator, (address(this), true)), 0);
         uint64 slot = crapsBattle.createBattle(300, 25, 1000, 75,
             uint40(vm.getBlockTimestamp() + 60), true, 255);
         for (uint256 i; i < SEATS; ++i) {

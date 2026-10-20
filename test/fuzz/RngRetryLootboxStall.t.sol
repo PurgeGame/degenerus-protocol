@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
@@ -143,7 +144,7 @@ contract RngRetryLootboxStallTest is DeployProtocol {
         uint256 simTime = block.timestamp + 1 days + 1; // new day; stalled request now past20h
         vm.warp(simTime);
         if (skipReqId != 0) {
-            admin.retryGameRng();
+            OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0);
             assertGt(mockVRF.lastRequestId(), skipReqId, "Admin replaced the withheld midday request");
             assertFalse(game.rngLocked(), "transport retry preserves midday mode before fresh daily work");
             assertEq(game.level(), L0, "retry alone does not promote the level");

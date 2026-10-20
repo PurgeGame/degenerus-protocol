@@ -1,3 +1,5 @@
+import { ownerExecutor } from "../helpers/deployFixture.js";
+import { ownerAction } from "../helpers/deployFixture.js";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
 import { expect } from "chai";
 import hre from "hardhat";
@@ -100,10 +102,10 @@ describe("VRF Governance", function () {
 
       await createStall(45);
 
-      const tx = await admin.connect(deployer).propose(vrfAddr, keyHash);
+      const tx = await ownerAction(admin.connect(deployer), "propose", [vrfAddr, keyHash]);
       const ev = await getEvent(tx, admin, "ProposalCreated");
       expect(ev.args.proposalId).to.equal(1n);
-      expect(ev.args.proposer).to.equal(await game.walletIdOf(deployer.address));
+      expect(ev.args.proposer).to.equal(1n);
       expect(ev.args.coordinator).to.equal(vrfAddr);
       expect(ev.args.keyHash).to.equal(keyHash);
       expect(ev.args.path).to.equal(0); // Admin path
@@ -119,7 +121,7 @@ describe("VRF Governance", function () {
       await createStall(43);
 
       await expect(
-        admin.connect(deployer).propose(vrfAddr, keyHash)
+        ownerAction(admin.connect(deployer), "propose", [vrfAddr, keyHash])
       ).to.be.revertedWithCustomError(admin, "NotStalled");
     });
 
@@ -151,14 +153,14 @@ describe("VRF Governance", function () {
     it("reverts with ZeroAddress for zero coordinator", async function () {
       const { admin, deployer } = await loadFixture(deployFullProtocol);
       await expect(
-        admin.connect(deployer).propose(ZERO_ADDRESS, hre.ethers.id("key"))
+        ownerAction(admin.connect(deployer), "propose", [ZERO_ADDRESS, hre.ethers.id("key")])
       ).to.be.revertedWithCustomError(admin, "ZeroAddress");
     });
 
     it("reverts with ZeroAddress for zero keyHash", async function () {
       const { admin, game, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       await expect(
-        admin.connect(deployer).propose(await mockVRF.getAddress(), ZERO_BYTES32)
+        ownerAction(admin.connect(deployer), "propose", [await mockVRF.getAddress(), ZERO_BYTES32])
       ).to.be.revertedWithCustomError(admin, "ZeroAddress");
     });
 
@@ -171,13 +173,13 @@ describe("VRF Governance", function () {
 
       await createStall(45);
 
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key1"));
+      await ownerAction(admin.connect(deployer), "propose", [vrfAddr, hre.ethers.id("key1")]);
       expect(await admin.proposalCount()).to.equal(1n);
 
       // Kill proposal 1 via reject vote so deployer can propose again
       await admin.connect(deployer).vote(1, false);
 
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key2"));
+      await ownerAction(admin.connect(deployer), "propose", [vrfAddr, hre.ethers.id("key2")]);
       expect(await admin.proposalCount()).to.equal(2n);
     });
 
@@ -187,7 +189,7 @@ describe("VRF Governance", function () {
 
       await createStall(45);
 
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
+      await ownerAction(admin.connect(deployer), "propose", [vrfAddr, hre.ethers.id("key")]);
 
       const [, , circulatingSnapshot] = await admin.proposals(1);
       const liveCirc = await sdgnrs.votingSupply();
@@ -206,7 +208,7 @@ describe("VRF Governance", function () {
 
       // Open a proposal during a genuine stall.
       await createStall(45);
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
+      await ownerAction(admin.connect(deployer), "propose", [vrfAddr, hre.ethers.id("key")]);
       const [, , , , stateBefore] = await admin.proposals(1);
       expect(stateBefore).to.equal(0, "proposal 1 should be Active before recovery");
 
@@ -236,7 +238,7 @@ describe("VRF Governance", function () {
       const vrfAddr = await mockVRF.getAddress();
 
       await createStall(45);
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
+      await ownerAction(admin.connect(deployer), "propose", [vrfAddr, hre.ethers.id("key")]);
 
       // alice has no sDGNRS — vote succeeds as a poke (checks execute/kill) but no VoteCast
       const tx = await admin.connect(alice).vote(1, true);
@@ -255,7 +257,7 @@ describe("VRF Governance", function () {
       await giveSDGNRS(sdgnrs, game, alice.address, 1n);
 
       await createStall(45);
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
+      await ownerAction(admin.connect(deployer), "propose", [vrfAddr, hre.ethers.id("key")]);
 
       const tx = await admin.connect(alice).vote(1, true);
       expect((await getEvents(tx, admin, "VoteCast")).length).to.equal(0);
@@ -273,7 +275,7 @@ describe("VRF Governance", function () {
       const vrfAddr = await mockVRF.getAddress();
 
       await createStall(45);
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
+      await ownerAction(admin.connect(deployer), "propose", [vrfAddr, hre.ethers.id("key")]);
 
       expect(await admin.threshold(1)).to.equal(5000);
     });
@@ -283,7 +285,7 @@ describe("VRF Governance", function () {
       const vrfAddr = await mockVRF.getAddress();
 
       await createStall(45);
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
+      await ownerAction(admin.connect(deployer), "propose", [vrfAddr, hre.ethers.id("key")]);
 
       await advanceTime(ONE_DAY);
       expect(await admin.threshold(1)).to.equal(5000);
@@ -294,7 +296,7 @@ describe("VRF Governance", function () {
       const vrfAddr = await mockVRF.getAddress();
 
       await createStall(45);
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
+      await ownerAction(admin.connect(deployer), "propose", [vrfAddr, hre.ethers.id("key")]);
 
       await advanceTime(2 * ONE_DAY);
       expect(await admin.threshold(1)).to.equal(4000);
@@ -305,7 +307,7 @@ describe("VRF Governance", function () {
       const vrfAddr = await mockVRF.getAddress();
 
       await createStall(45);
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
+      await ownerAction(admin.connect(deployer), "propose", [vrfAddr, hre.ethers.id("key")]);
 
       await advanceTime(3 * ONE_DAY);
       expect(await admin.threshold(1)).to.equal(3000);
@@ -316,7 +318,7 @@ describe("VRF Governance", function () {
       const vrfAddr = await mockVRF.getAddress();
 
       await createStall(45);
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
+      await ownerAction(admin.connect(deployer), "propose", [vrfAddr, hre.ethers.id("key")]);
 
       await advanceTime(4 * ONE_DAY);
       expect(await admin.threshold(1)).to.equal(2000);
@@ -327,7 +329,7 @@ describe("VRF Governance", function () {
       const vrfAddr = await mockVRF.getAddress();
 
       await createStall(45);
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
+      await ownerAction(admin.connect(deployer), "propose", [vrfAddr, hre.ethers.id("key")]);
 
       await advanceTime(5 * ONE_DAY);
       expect(await admin.threshold(1)).to.equal(1000);
@@ -338,7 +340,7 @@ describe("VRF Governance", function () {
       const vrfAddr = await mockVRF.getAddress();
 
       await createStall(45);
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
+      await ownerAction(admin.connect(deployer), "propose", [vrfAddr, hre.ethers.id("key")]);
 
       await advanceTime(6 * ONE_DAY);
       expect(await admin.threshold(1)).to.equal(500);
@@ -349,7 +351,7 @@ describe("VRF Governance", function () {
       const vrfAddr = await mockVRF.getAddress();
 
       await createStall(45);
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
+      await ownerAction(admin.connect(deployer), "propose", [vrfAddr, hre.ethers.id("key")]);
 
       await advanceTime(7 * ONE_DAY);
       expect(await admin.threshold(1)).to.equal(0);
@@ -365,7 +367,7 @@ describe("VRF Governance", function () {
       const vrfAddr = await mockVRF.getAddress();
 
       await createStall(45);
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
+      await ownerAction(admin.connect(deployer), "propose", [vrfAddr, hre.ethers.id("key")]);
 
       // Advance past 168h lifetime
       await advanceTime(7 * ONE_DAY + 1);
@@ -392,7 +394,7 @@ describe("VRF Governance", function () {
       const vrfAddr = await mockVRF.getAddress();
 
       await createStall(45);
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
+      await ownerAction(admin.connect(deployer), "propose", [vrfAddr, hre.ethers.id("key")]);
 
       // canExecute doesn't revert, just returns false when no approve weight
       expect(await admin.canExecute(1)).to.equal(false);
@@ -430,7 +432,7 @@ describe("VRF Governance", function () {
 
       const wrapperBefore = await dgnrs.balanceOf(vaultAddr);
       const stakedBefore = await sdgnrs.balanceOf(alice.address);
-      await vault.connect(deployer).dgnrsUnwrapTo(alice.address, amount);
+      await ownerAction(vault.connect(deployer), "dgnrsUnwrapTo", [alice.address, amount]);
       expect(await dgnrs.balanceOf(vaultAddr)).to.equal(wrapperBefore - amount);
       expect(await sdgnrs.balanceOf(alice.address)).to.equal(stakedBefore + amount);
     });
@@ -445,7 +447,7 @@ describe("VRF Governance", function () {
       await game.connect(deployer).mineFlip(0);
 
       await expect(
-        vault.connect(deployer).dgnrsUnwrapTo(alice.address, amount)
+        ownerAction(vault.connect(deployer), "dgnrsUnwrapTo", [alice.address, amount])
       ).to.be.revertedWithCustomError(dgnrs, "Unauthorized");
     });
   });
@@ -459,7 +461,7 @@ describe("VRF Governance", function () {
       const vrfAddr = await mockVRF.getAddress();
 
       await createStall(45);
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
+      await ownerAction(admin.connect(deployer), "propose", [vrfAddr, hre.ethers.id("key")]);
 
       // VRF recovers.
       await recoverVrf(game, deployer, mockVRF);
@@ -503,10 +505,10 @@ describe("VRF Governance", function () {
 
       await createStall(45);
 
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key1"));
+      await ownerAction(admin.connect(deployer), "propose", [vrfAddr, hre.ethers.id("key1")]);
 
       await expect(
-        admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key2"))
+        ownerAction(admin.connect(deployer), "propose", [vrfAddr, hre.ethers.id("key2")])
       ).to.be.revertedWithCustomError(admin, "AlreadyHasActiveProposal");
     });
 
@@ -514,12 +516,12 @@ describe("VRF Governance", function () {
       const { admin, game, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
 
-      expect(await admin.activeProposalId(deployer.address)).to.equal(0n);
+      expect(await admin.activeProposalId(await ownerExecutor(admin))).to.equal(0n);
 
       await createStall(45);
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key1"));
+      await ownerAction(admin.connect(deployer), "propose", [vrfAddr, hre.ethers.id("key1")]);
 
-      expect(await admin.activeProposalId(deployer.address)).to.equal(1n);
+      expect(await admin.activeProposalId(await ownerExecutor(admin))).to.equal(1n);
     });
 
     it("allows new proposal after previous is Killed", async function () {
@@ -529,7 +531,7 @@ describe("VRF Governance", function () {
       await giveSDGNRS(sdgnrs, game, deployer.address, hre.ethers.parseUnits("1000", 12));
       await createStall(45);
 
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key1"));
+      await ownerAction(admin.connect(deployer), "propose", [vrfAddr, hre.ethers.id("key1")]);
 
       // Kill proposal 1 via reject vote
       await admin.connect(deployer).vote(1, false);
@@ -537,9 +539,9 @@ describe("VRF Governance", function () {
       expect(state).to.equal(2, "Proposal 1 should be Killed");
 
       // Deployer can now propose again
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key2"));
+      await ownerAction(admin.connect(deployer), "propose", [vrfAddr, hre.ethers.id("key2")]);
       expect(await admin.proposalCount()).to.equal(2n);
-      expect(await admin.activeProposalId(deployer.address)).to.equal(2n);
+      expect(await admin.activeProposalId(await ownerExecutor(admin))).to.equal(2n);
     });
 
     it("allows new proposal after previous is Executed", async function () {
@@ -549,7 +551,7 @@ describe("VRF Governance", function () {
       await giveSDGNRS(sdgnrs, game, deployer.address, hre.ethers.parseUnits("1000", 12));
       await createStall(45);
 
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key1"));
+      await ownerAction(admin.connect(deployer), "propose", [vrfAddr, hre.ethers.id("key1")]);
 
       // Execute proposal 1 via approve vote
       await admin.connect(deployer).vote(1, true);
@@ -557,7 +559,7 @@ describe("VRF Governance", function () {
       expect(state).to.equal(1, "Proposal 1 should be Executed");
 
       // Deployer can now propose again (VRF still stalled after swap)
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key2"));
+      await ownerAction(admin.connect(deployer), "propose", [vrfAddr, hre.ethers.id("key2")]);
       expect(await admin.proposalCount()).to.equal(2n);
     });
 
@@ -567,15 +569,15 @@ describe("VRF Governance", function () {
 
       await createStall(45);
 
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key1"));
+      await ownerAction(admin.connect(deployer), "propose", [vrfAddr, hre.ethers.id("key1")]);
 
       // Advance past PROPOSAL_LIFETIME (168h)
       await advanceTime(7 * ONE_DAY + 1);
 
       // Deployer can propose again — lazy expiry check passes
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key2"));
+      await ownerAction(admin.connect(deployer), "propose", [vrfAddr, hre.ethers.id("key2")]);
       expect(await admin.proposalCount()).to.equal(2n);
-      expect(await admin.activeProposalId(deployer.address)).to.equal(2n);
+      expect(await admin.activeProposalId(await ownerExecutor(admin))).to.equal(2n);
     });
 
     it("different addresses can each have one active proposal", async function () {
@@ -590,7 +592,7 @@ describe("VRF Governance", function () {
       // 7-day stall for community path
       await createStall(7 * 24);
 
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key1"));
+      await ownerAction(admin.connect(deployer), "propose", [vrfAddr, hre.ethers.id("key1")]);
       await admin.connect(alice).propose(vrfAddr, hre.ethers.id("key2"));
       await admin.connect(bob).propose(vrfAddr, hre.ethers.id("key3"));
 
@@ -616,7 +618,7 @@ describe("VRF Governance", function () {
       await createStall(7 * 24);
 
       // Create 3 proposals from different addresses
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key1"));
+      await ownerAction(admin.connect(deployer), "propose", [vrfAddr, hre.ethers.id("key1")]);
       await admin.connect(alice).propose(vrfAddr, hre.ethers.id("key2"));
       await admin.connect(bob).propose(vrfAddr, hre.ethers.id("key3"));
 
@@ -661,7 +663,7 @@ describe("VRF Governance", function () {
       await createStall(7 * 24);
 
       // Create 3 proposals from different addresses
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key1"));
+      await ownerAction(admin.connect(deployer), "propose", [vrfAddr, hre.ethers.id("key1")]);
       await admin.connect(alice).propose(vrfAddr, hre.ethers.id("key2"));
       await admin.connect(bob).propose(vrfAddr, hre.ethers.id("key3"));
 
@@ -704,7 +706,7 @@ describe("VRF Governance", function () {
       // First stall episode: create and execute a proposal
       await createStall(7 * 24);
 
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key1"));
+      await ownerAction(admin.connect(deployer), "propose", [vrfAddr, hre.ethers.id("key1")]);
       await admin.connect(alice).propose(vrfAddr, hre.ethers.id("key2"));
       expect(await admin.proposalCount()).to.equal(2n);
 
@@ -722,7 +724,7 @@ describe("VRF Governance", function () {
 
       // Second stall episode: the new coordinator is also stalled (mock). Fresh proposals
       // (id >= cutoff) are executable; the superseded proposers' active slots are freed.
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key3"));
+      await ownerAction(admin.connect(deployer), "propose", [vrfAddr, hre.ethers.id("key3")]);
       await admin.connect(alice).propose(vrfAddr, hre.ethers.id("key4"));
       expect(await admin.proposalCount()).to.equal(4n);
 
@@ -752,7 +754,7 @@ describe("VRF Governance", function () {
       await createStall(45);
 
       // Create a proposal
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
+      await ownerAction(admin.connect(deployer), "propose", [vrfAddr, hre.ethers.id("key")]);
 
       // Cast reject vote -- deployer has enough weight to exceed threshold
       const tx = await admin.connect(deployer).vote(1, false);
@@ -779,7 +781,7 @@ describe("VRF Governance", function () {
       await createStall(45);
 
       // Deployer creates proposal (circ includes both deployer + alice amounts)
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
+      await ownerAction(admin.connect(deployer), "propose", [vrfAddr, hre.ethers.id("key")]);
 
       // Alice casts a tiny reject vote -- not enough to meet 60% threshold
       await admin.connect(alice).vote(1, false);
@@ -806,7 +808,7 @@ describe("VRF Governance", function () {
       await createStall(45);
 
       // Create proposal
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("key"));
+      await ownerAction(admin.connect(deployer), "propose", [vrfAddr, hre.ethers.id("key")]);
 
       // Cast approve vote -- deployer has enough weight to exceed threshold
       const tx = await admin.connect(deployer).vote(1, true);
@@ -834,18 +836,19 @@ describe("VRF Governance", function () {
       // Three equal eligible holders: either first vote is below the initial 50%.
       // The third holder abstains; the first two form an exact, nonzero tie.
       for (const owner of [deployer, alice, bob]) {
-        await vault.connect(deployer).dgnrsUnwrapTo(owner.address, hre.ethers.parseUnits("1000", 12));
+        await ownerAction(vault.connect(deployer), "dgnrsUnwrapTo", [owner.address, hre.ethers.parseUnits("1000", 12)]);
         expect(await sdgnrs.balanceOf(owner.address)).to.equal(hre.ethers.parseUnits("1000", 12));
       }
       expect(await sdgnrs.votingSupply()).to.equal(hre.ethers.parseUnits("3000", 12));
       expect(await sdgnrs.balanceOf(carol.address)).to.equal(0n);
       await createStall(45);
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("tie-key"));
+      await ownerAction(admin.connect(deployer), "propose", [vrfAddr, hre.ethers.id("tie-key")]);
       const id = await admin.proposalCount();
       expect((await admin.proposals(id))[2]).to.equal(3000n);
       expect(await admin.threshold(id)).to.equal(5000n);
 
-      await expect(admin.connect(deployer).vote(id, true))
+      const firstVote = await admin.connect(deployer).vote(id, true);
+      await expect(firstVote)
         .to.emit(admin, "VoteCast").withArgs(id, await game.walletIdOf(deployer.address), true, hre.ethers.parseUnits("1000", 12));
       const first = await admin.proposals(id);
       expect(first[4], "first vote must leave room for the opposing vote").to.equal(0n);
@@ -888,13 +891,13 @@ describe("VRF Governance", function () {
       const keyHash = hre.ethers.id("test-key");
 
       await createStall(45);
-      await admin.connect(deployer).propose(vrfAddr, keyHash);
+      await ownerAction(admin.connect(deployer), "propose", [vrfAddr, keyHash]);
 
       const [proposer, createdAt, circulatingSnapshot, path, state,
              coordinator, approveWeight, rejectWeight, storedKeyHash]
         = await admin.proposals(1);
 
-      expect(proposer).to.equal(await game.walletIdOf(deployer.address));
+      expect(proposer).to.equal(1n);
       expect(createdAt).to.be.gt(0n);
       // circulatingSnapshot is uint40 whole tokens; may be 0 if circ < 1e12
       const liveCirc = await sdgnrs.votingSupply();
@@ -933,7 +936,7 @@ describe("VRF Governance", function () {
 
       // 1) Open a proposal during a genuine >=44h stall and record approval weight.
       await createStall(45);
-      await admin.connect(deployer).propose(vrfAddr, hre.ethers.id("recovery-span"));
+      await ownerAction(admin.connect(deployer), "propose", [vrfAddr, hre.ethers.id("recovery-span")]);
       await admin.connect(deployer).vote(1, true); // sub-threshold approve -> stays Active
       let p = await admin.proposals(1);
       const createdAt = p[1];

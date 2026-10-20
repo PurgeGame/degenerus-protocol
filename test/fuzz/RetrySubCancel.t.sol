@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MockLinkToken} from "../../contracts/mocks/MockLinkToken.sol";
@@ -90,7 +91,7 @@ contract RetrySubCancelTest is DeployProtocol {
 
         vm.prank(vaultOwner);
         vm.expectRevert(bytes4(keccak256("SubscriptionActive()")));
-        admin.retrySubCancel(liveCoord, liveSub);
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retrySubCancel, (liveCoord, liveSub)), 0);
     }
 
     /// @notice The guard keys on the PAIR: the same id on a different coordinator is retired.
@@ -99,7 +100,7 @@ contract RetrySubCancelTest is DeployProtocol {
         uint256 liveId = admin.subscriptionId();
 
         vm.prank(vaultOwner);
-        admin.retrySubCancel(address(retired), liveId); // must not revert
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retrySubCancel, (address(retired), liveId)), 0); // must not revert
         assertTrue(retired.cancelled(), "retired cancel did not run");
     }
 
@@ -113,7 +114,7 @@ contract RetrySubCancelTest is DeployProtocol {
     function test_revertsWhileBacklogPending_thenSucceedsOnRetry() public {
         vm.prank(vaultOwner);
         vm.expectRevert(RetiredCoordinator.PendingRequestExists.selector);
-        admin.retrySubCancel(address(retired), RETIRED_SUB);
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retrySubCancel, (address(retired), RETIRED_SUB)), 0);
 
         assertEq(_linkOf(address(retired)), STRANDED, "failed attempt moved LINK");
         assertFalse(retired.cancelled(), "cancel recorded despite revert");
@@ -122,7 +123,7 @@ contract RetrySubCancelTest is DeployProtocol {
         retired.clearBacklog();
 
         vm.prank(vaultOwner);
-        admin.retrySubCancel(address(retired), RETIRED_SUB);
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retrySubCancel, (address(retired), RETIRED_SUB)), 0);
 
         assertEq(_linkOf(address(retired)), 0, "stranded LINK not recovered on retry");
     }
@@ -132,11 +133,11 @@ contract RetrySubCancelTest is DeployProtocol {
         for (uint256 i = 0; i < 3; i++) {
             vm.prank(vaultOwner);
             vm.expectRevert(RetiredCoordinator.PendingRequestExists.selector);
-            admin.retrySubCancel(address(retired), RETIRED_SUB);
+            OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retrySubCancel, (address(retired), RETIRED_SUB)), 0);
         }
         retired.clearBacklog();
         vm.prank(vaultOwner);
-        admin.retrySubCancel(address(retired), RETIRED_SUB);
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retrySubCancel, (address(retired), RETIRED_SUB)), 0);
         assertEq(_linkOf(address(retired)), 0, "recovery blocked after repeated failures");
     }
 
@@ -150,7 +151,7 @@ contract RetrySubCancelTest is DeployProtocol {
         uint96 before = _liveSubBalance();
 
         vm.prank(vaultOwner);
-        admin.retrySubCancel(address(retired), RETIRED_SUB);
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retrySubCancel, (address(retired), RETIRED_SUB)), 0);
 
         assertEq(
             uint256(_liveSubBalance()),
@@ -171,7 +172,7 @@ contract RetrySubCancelTest is DeployProtocol {
         uint256 vaultBefore = _linkOf(address(vault));
 
         vm.prank(vaultOwner);
-        admin.retrySubCancel(address(retired), RETIRED_SUB);
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retrySubCancel, (address(retired), RETIRED_SUB)), 0);
 
         assertEq(
             _linkOf(address(vault)) - vaultBefore,
@@ -198,7 +199,7 @@ contract RetrySubCancelTest is DeployProtocol {
 
         vm.prank(vaultOwner);
         vm.expectRevert(bytes("forward down"));
-        admin.retrySubCancel(address(retired), RETIRED_SUB);
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retrySubCancel, (address(retired), RETIRED_SUB)), 0);
 
         // Cancel rolled back with the forward — nothing moved, nothing spent.
         assertEq(_linkOf(address(retired)), STRANDED, "cancel was not rolled back");
@@ -215,7 +216,7 @@ contract RetrySubCancelTest is DeployProtocol {
         uint96 before = _liveSubBalance();
 
         vm.prank(vaultOwner);
-        admin.retrySubCancel(address(retired), RETIRED_SUB);
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retrySubCancel, (address(retired), RETIRED_SUB)), 0);
 
         assertEq(_linkOf(address(admin)), 0, "LINK stalled in Admin");
         assertEq(

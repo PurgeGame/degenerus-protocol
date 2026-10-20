@@ -2,6 +2,7 @@
 pragma solidity 0.8.34;
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
+import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
@@ -17,7 +18,7 @@ contract MinerCallerIndependenceTest is DeployProtocol {
     using stdStorage for StdStorage;
     address private constant DONOR = address(0xD010);
     address private constant OUTSIDER = address(0xD011);
-    address private constant OWNER = address(0xD012);
+    address private constant OWNER = ContractAddresses.OWNER_GOVERNANCE;
     bytes32 private constant CREDIT_SPENT = keccak256("MiddayRngCreditSpent(address,uint256,uint256)");
     uint256 private charge;
 
@@ -50,7 +51,6 @@ contract MinerCallerIndependenceTest is DeployProtocol {
         // A zero-address donor cannot acquire an ID or own credit.
         vm.expectRevert(bytes4(keccak256("E()")));
         _grant(address(0), charge * 7);
-        vm.mockCall(address(vault), abi.encodeWithSignature("isVaultOwner(address)", OWNER), abi.encode(true));
     }
 
     function _completeCurrentWork() private {
@@ -186,7 +186,7 @@ contract MinerCallerIndependenceTest is DeployProtocol {
         uint256 id = mockVRF.lastRequestId();
         assertGt(id, prior, "the donor's mineFlip requested a mid-day word");
         vm.warp(vm.getBlockTimestamp() + 20 hours + 2);
-        assertTrue(vault.isVaultOwner(OWNER), "control: caller holds the retry role");
+        assertTrue(vault.isVaultOwner(OWNER), "control: executor holds the retry role");
         assertEq(_selectionParity(), 2, "every miner waits for the same unanswered request");
         vm.prank(OWNER);
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));

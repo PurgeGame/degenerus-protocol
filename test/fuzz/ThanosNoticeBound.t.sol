@@ -27,8 +27,8 @@ contract ThanosNoticeBound is DeployProtocol {
     function setUp() public {
         _deployProtocol();
         vm.warp(vm.getBlockTimestamp() + 1 days);
-        owner = ContractAddresses.CREATOR;
-        require(vault.isVaultOwner(owner), "harness: CREATOR is not the vault owner");
+        owner = ContractAddresses.OWNER_GOVERNANCE;
+        require(vault.isVaultOwner(ContractAddresses.OWNER_GOVERNANCE), "harness: governance is not the vault owner");
         _forceLevel(L);
         assertEq(game.level(), L, "level poke did not land");
     }

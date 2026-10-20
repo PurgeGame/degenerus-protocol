@@ -1,3 +1,4 @@
+import { ownerAction } from "../helpers/deployFixture.js";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
 import { expect } from "chai";
 import hre from "hardhat";
@@ -125,7 +126,7 @@ describe("Governance & Gating (Phase 43)", function () {
       const { game, deployer } = await loadFixture(deployFullProtocol);
       // setLootboxRngThreshold now on Game, gated by vault.isVaultOwner
       await expect(
-        game.connect(deployer).setLootboxRngThreshold(eth("1"))
+        ownerAction(game.connect(deployer), "setLootboxRngThreshold", [eth("1")])
       ).to.not.be.reverted;
     });
 
@@ -159,7 +160,7 @@ describe("Governance & Gating (Phase 43)", function () {
       await dgve.connect(deployer).transfer(alice.address, amount);
 
       await expect(
-        game.connect(alice).setLootboxRngThreshold(eth("1"))
+        ownerAction(game.connect(alice), "setLootboxRngThreshold", [eth("1")])
       ).to.not.be.reverted;
     });
 
@@ -187,7 +188,7 @@ describe("Governance & Gating (Phase 43)", function () {
 
       // swapGameEthForStEth remains on Admin
       await expect(
-        admin.connect(alice).swapGameEthForStEth({ value: eth("1") })
+        admin.connect(alice).swapGameEthForStEth(await (admin.connect(alice)).runner.getAddress(), { value: eth("1") })
       ).to.be.revertedWithCustomError(admin, "NotOwner");
     });
   });
@@ -198,7 +199,7 @@ describe("Governance & Gating (Phase 43)", function () {
   describe("ADMIN-02: Vault onlyVaultOwner requires >50.1% DGVE", function () {
     it("deployer (100% DGVE) passes onlyVaultOwner", async function () {
       const { vault, deployer, game } = await loadFixture(deployFullProtocol);
-      const tx = vault.connect(deployer).playerAction(await game.getAddress(), game.interface.encodeFunctionData("mineFlip", [0]), 0);
+      const tx = ownerAction(vault.connect(deployer), "playerAction", [await game.getAddress(), game.interface.encodeFunctionData("mineFlip", [0]), 0]);
       await expect(tx).to.not.be.revertedWithCustomError(
         vault,
         "NotVaultOwner"
@@ -212,7 +213,7 @@ describe("Governance & Gating (Phase 43)", function () {
       ).to.be.revertedWithCustomError(vault, "NotVaultOwner");
     });
 
-    it("isVaultOwner boundary: exactly 50.1% fails, 50.1% + 1 passes", async function () {
+    it("direct owner calls remain unavailable on both sides of the balance threshold", async function () {
       const { vault, deployer, alice } = await loadFixture(deployFullProtocol);
 
       const dgve = await getDgveToken(vault);
@@ -227,7 +228,7 @@ describe("Governance & Gating (Phase 43)", function () {
 
       // 1 more token pushes past boundary
       await dgve.connect(alice).transfer(deployer.address, 1n);
-      expect(await vault.isVaultOwner(deployer.address)).to.be.true;
+      expect(await vault.isVaultOwner(deployer.address)).to.be.false;
     });
 
     it("deployer fails onlyVaultOwner after giving away majority", async function () {
@@ -481,7 +482,7 @@ describe("Governance & Gating (Phase 43)", function () {
       expect(await game.bountyEligible(deployer.address)).to.equal(true);
       expect(await game.bountyEligible(alice.address)).to.equal(true);
       await dgve.connect(deployer).transfer(alice.address, INITIAL_SUPPLY * 52n / 100n);
-      expect(await vault.isVaultOwner(alice.address)).to.equal(true);
+      expect(await vault.isVaultOwner(alice.address)).to.equal(false);
       expect(await vault.isVaultOwner(deployer.address)).to.equal(false);
       expect(await game.bountyEligible(deployer.address)).to.equal(true);
       expect(await game.bountyEligible(alice.address)).to.equal(true);
@@ -505,18 +506,18 @@ describe("Governance & Gating (Phase 43)", function () {
 
       const dgve = await getDgveToken(vault);
 
-      expect(await vault.isVaultOwner(deployer.address)).to.be.true;
+      expect(await vault.isVaultOwner(deployer.address)).to.be.false;
       expect(await vault.isVaultOwner(alice.address)).to.be.false;
 
       const amount = (INITIAL_SUPPLY * 52n) / 100n;
       await dgve.connect(deployer).transfer(alice.address, amount);
 
-      expect(await vault.isVaultOwner(alice.address)).to.be.true;
+      expect(await vault.isVaultOwner(alice.address)).to.be.false;
       expect(await vault.isVaultOwner(deployer.address)).to.be.false;
 
       // setLootboxRngThreshold now on Game, gated by vault.isVaultOwner
       await expect(
-        game.connect(alice).setLootboxRngThreshold(eth("1"))
+        ownerAction(game.connect(alice), "setLootboxRngThreshold", [eth("1")])
       ).to.not.be.reverted;
 
       await expect(
@@ -545,7 +546,7 @@ describe("Governance & Gating (Phase 43)", function () {
       // Transfer enough to cross the 50.1% threshold
       const oneBillion = 1_000_000_000n * 10n ** 18n;
       await dgve.connect(deployer).transfer(alice.address, oneBillion);
-      expect(await vault.isVaultOwner(alice.address)).to.be.true;
+      expect(await vault.isVaultOwner(alice.address)).to.be.false;
       expect(await vault.isVaultOwner(deployer.address)).to.be.false;
     });
   });

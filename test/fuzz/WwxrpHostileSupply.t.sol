@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -15,7 +16,7 @@ contract WwxrpHostileSupply is DeployProtocol {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
         mockVRF.fundSubscription(1, 1_000 ether);
-        require(vault.isVaultOwner(ContractAddresses.CREATOR), "fixture: CREATOR owns the vault");
+        require(vault.isVaultOwner(ContractAddresses.OWNER_GOVERNANCE), "fixture: CREATOR owns the vault");
     }
 
     function _fulfill() internal {
@@ -43,7 +44,7 @@ contract WwxrpHostileSupply is DeployProtocol {
 
     function test_supplyAtCeilingDoesNotBrickTheAdvance() public {
         // The vault owner (this contract) mints the whole remaining supply range to itself.
-        wwxrp.vaultMintTo(address(this), type(uint256).max - wwxrp.totalSupply());
+        OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.vaultMintTo, (address(this), type(uint256).max - wwxrp.totalSupply())), 0);
         assertEq(wwxrp.totalSupply(), type(uint256).max, "harness: supply at the ceiling");
 
         // Thirty real days: sDGNRS's seeded coinflip stake loses on about half of them, and each
@@ -57,8 +58,8 @@ contract WwxrpHostileSupply is DeployProtocol {
     }
 
     function test_mintPastTheCeilingSaturates() public {
-        wwxrp.vaultMintTo(address(this), type(uint256).max - wwxrp.totalSupply());
-        wwxrp.vaultMintTo(address(0xBEEF), 1);
+        OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.vaultMintTo, (address(this), type(uint256).max - wwxrp.totalSupply())), 0);
+        OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.vaultMintTo, (address(0xBEEF), 1)), 0);
         assertEq(wwxrp.totalSupply(), type(uint256).max, "a mint past the ceiling mints nothing");
         assertEq(wwxrp.balanceOf(address(0xBEEF)), 0, "and credits nobody");
     }

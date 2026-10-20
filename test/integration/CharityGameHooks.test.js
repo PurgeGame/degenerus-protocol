@@ -1,3 +1,4 @@
+import { ownerAction } from "../helpers/deployFixture.js";
 import { expect } from "chai";
 import hre from "hardhat";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
@@ -227,7 +228,7 @@ describe("CharityGameHooks", function () {
       // Single voter with non-zero weight ensures winner-loop selects slot 5 (skip-path B
       // would fire if no slot has any approve weight -- bestSlot stays 0xFF).
       const slot = 5;
-      await charity.connect(deployer).setCharity(slot, dan.address);
+      await ownerAction(charity.connect(deployer), "setCharity", [slot, dan.address]);
 
       // Fund alice with 100 sDGNRS so vote weight = 100 -> winner phase finds non-zero weight.
       const POOL_REWARD = 3;

@@ -26,7 +26,7 @@ pragma solidity 0.8.34;
 
 import {ContractAddresses} from "./ContractAddresses.sol";
 
-/// @dev Vault ownership check (DGVE majority holder), as implemented by DegenerusVault.
+/// @dev Governance executor check, as implemented by DegenerusVault.
 interface IVaultOwnerCheck {
     function isVaultOwner(address account) external view returns (bool);
 }
@@ -79,7 +79,7 @@ interface IVaultOwnerCheck {
 |     • finalize() can only be called once                                                              |
 |                                                                                                       |
 |  2. ACCESS CONTROL                                                                                    |
-|     • Only the vault owner (>50.1% DGVE holder) can call setter functions                             |
+|     • Creator initializes each entry once; later writes require governance                             |
 |     • View functions are publicly accessible                                                          |
 |                                                                                                       |
 |  3. BOUNDS CHECKING                                                                                   |
@@ -116,7 +116,7 @@ contract Icons32Data {
     // ERRORS
     // ---------------------------------------------------------------------
 
-    /// @notice Thrown when caller does not hold >50.1% of DGVE (the vault owner)
+    /// @notice Thrown when caller lacks governance or initial icon setup authority
     error NotVaultOwner();
 
     /// @notice Thrown when attempting to modify data after finalize() has been called
@@ -154,6 +154,14 @@ contract Icons32Data {
     /// @notice Flag indicating whether data has been locked permanently
     /// @dev Once true, no setter functions can be called
     bool private _finalized;
+    uint64 public initializedMask;
+    uint64 public constant COMPLETE_MASK = (uint64(1) << 36) - 1;
+    bool public bootstrapClosed;
+    bool public immutable finalizeOnBootstrap;
+
+    error InvalidInitialData();
+    error AlreadyInitialized();
+    event BootstrapClosed(bool finalized);
 
     // Note: Quadrant 3 (Dice) names are generated dynamically as "1" through "8"
 
@@ -161,9 +169,11 @@ contract Icons32Data {
     // CONSTRUCTOR
     // ---------------------------------------------------------------------
 
-    /// @notice Deploy contract for batch initialization by the vault owner
+    /// @notice Deploy contract for one-time batch initialization by the creator
     /// @dev Data must be populated via setter functions before finalization
-    constructor() {}
+    constructor(bool finalizeOnBootstrap_) {
+        finalizeOnBootstrap = finalizeOnBootstrap_;
+    }
 
     // ---------------------------------------------------------------------
     // INITIALIZATION FUNCTIONS (ONLY BEFORE FINALIZATION)
@@ -174,31 +184,46 @@ contract Icons32Data {
     ///      strings are individually unbounded, so the caller still sizes the batch to fit gas.
     /// @param startIndex Starting index in _paths array (0-32)
     /// @param paths Array of SVG path strings to set (max 10)
-    /// @custom:reverts NotVaultOwner When caller does not hold >50.1% of DGVE
+    /// @custom:reverts NotVaultOwner When caller lacks governance or initial icon setup authority
     /// @custom:reverts AlreadyFinalized When finalize() has already been called
     /// @custom:reverts MaxBatch When paths.length > 10
     /// @custom:reverts IndexOutOfBounds When startIndex + paths.length > 33
     function setPaths(uint256 startIndex, string[] calldata paths) external {
-        if (!IVaultOwnerCheck(ContractAddresses.VAULT).isVaultOwner(msg.sender)) revert NotVaultOwner();
-        if (_finalized) revert AlreadyFinalized();
+        bool bootstrap = _authorizeWrite();
         if (paths.length > 10) revert MaxBatch();
         if (startIndex + paths.length > 33) revert IndexOutOfBounds();
+        if (bootstrap && paths.length == 0) revert InvalidInitialData();
 
         for (uint256 i = 0; i < paths.length; ++i) {
+            if (bootstrap) {
+                uint64 bit = uint64(1) << (startIndex + i);
+                if (initializedMask & bit != 0) revert AlreadyInitialized();
+                if (bytes(paths[i]).length == 0) revert InvalidInitialData();
+                initializedMask |= bit;
+            }
             _paths[startIndex + i] = paths[i];
         }
+        if (bootstrap) _finishBootstrap();
     }
 
     /// @notice Set symbol names for a quadrant
-    /// @dev Only callable by the vault owner before finalization. Quadrant 3 (Dice) names are generated dynamically.
+    /// @dev The creator initializes each quadrant once; governance may edit before finalization. Dice names are generated dynamically.
     /// @param quadrant Quadrant index (0=Crypto, 1=Zodiac, 2=Cards) — matches symbol() getter indexing
     /// @param symbols Array of 8 symbol names for the quadrant
-    /// @custom:reverts NotVaultOwner When caller does not hold >50.1% of DGVE
+    /// @custom:reverts NotVaultOwner When caller lacks governance or initial icon setup authority
     /// @custom:reverts AlreadyFinalized When finalize() has already been called
     /// @custom:reverts InvalidQuadrant When quadrant is not 0, 1, or 2
     function setSymbols(uint256 quadrant, string[8] calldata symbols) external {
-        if (!IVaultOwnerCheck(ContractAddresses.VAULT).isVaultOwner(msg.sender)) revert NotVaultOwner();
-        if (_finalized) revert AlreadyFinalized();
+        bool bootstrap = _authorizeWrite();
+        if (quadrant > 2) revert InvalidQuadrant();
+        if (bootstrap) {
+            uint64 bit = uint64(1) << (33 + quadrant);
+            if (initializedMask & bit != 0) revert AlreadyInitialized();
+            for (uint256 i; i < 8; ++i) {
+                if (bytes(symbols[i]).length == 0) revert InvalidInitialData();
+            }
+            initializedMask |= bit;
+        }
 
         if (quadrant == 0) {
             for (uint256 i = 0; i < 8; ++i) {
@@ -208,23 +233,49 @@ contract Icons32Data {
             for (uint256 i = 0; i < 8; ++i) {
                 _symQ2[i] = symbols[i];
             }
-        } else if (quadrant == 2) {
+        } else {
             for (uint256 i = 0; i < 8; ++i) {
                 _symQ3[i] = symbols[i];
             }
-        } else {
-            revert InvalidQuadrant();
         }
+        if (bootstrap) _finishBootstrap();
     }
 
     /// @notice Finalize the contract, locking all data permanently
     /// @dev Only callable by the vault owner once. After this, no setter functions can be called.
-    /// @custom:reverts NotVaultOwner When caller does not hold >50.1% of DGVE
+    /// @custom:reverts NotVaultOwner When caller is not the DGVE governance executor
     /// @custom:reverts AlreadyFinalized When finalize() has already been called
     function finalize() external {
         if (!IVaultOwnerCheck(ContractAddresses.VAULT).isVaultOwner(msg.sender)) revert NotVaultOwner();
         if (_finalized) revert AlreadyFinalized();
         _finalized = true;
+        if (!bootstrapClosed) {
+            bootstrapClosed = true;
+            emit BootstrapClosed(true);
+        }
+    }
+
+    function finalized() external view returns (bool) {
+        return _finalized;
+    }
+
+    /// @dev Creator can populate each initial entry once. Governance takeover closes this route forever.
+    function _authorizeWrite() private returns (bool bootstrap) {
+        if (_finalized) revert AlreadyFinalized();
+        if (!bootstrapClosed && msg.sender == ContractAddresses.CREATOR) return true;
+        if (!IVaultOwnerCheck(ContractAddresses.VAULT).isVaultOwner(msg.sender)) revert NotVaultOwner();
+        if (!bootstrapClosed) {
+            bootstrapClosed = true;
+            emit BootstrapClosed(false);
+        }
+    }
+
+    function _finishBootstrap() private {
+        if (initializedMask == COMPLETE_MASK) {
+            bootstrapClosed = true;
+            _finalized = finalizeOnBootstrap;
+            emit BootstrapClosed(_finalized);
+        }
     }
 
     // ---------------------------------------------------------------------

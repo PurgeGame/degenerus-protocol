@@ -588,21 +588,16 @@ contract CoverageGap222 is DeployProtocol {
         assertEq(icons32.symbol(0, 0), "BTC", "setSymbols quadrant 0 slot 0 = BTC");
     }
 
-    function test_gap_icons32_finalize_asCreator_locks() public {
-        vm.prank(ContractAddresses.CREATOR);
+    function test_gap_icons32_finalize_asGovernance_locks() public {
+        vm.prank(ContractAddresses.OWNER_GOVERNANCE);
         icons32.finalize();
+        assertTrue(icons32.finalized(), "governance finalized the artwork");
         // Subsequent setPaths must revert AlreadyFinalized.
         string[] memory paths = new string[](1);
         paths[0] = "M0 0L10 10";
-        vm.prank(ContractAddresses.CREATOR);
-        (bool ok, ) = address(icons32).call(
-            abi.encodeWithSignature(
-                "setPaths(uint256,string[])",
-                uint256(0),
-                paths
-            )
-        );
-        assertFalse(ok, "finalize locked setPaths");
+        vm.prank(ContractAddresses.OWNER_GOVERNANCE);
+        vm.expectRevert(bytes4(keccak256("AlreadyFinalized()")));
+        icons32.setPaths(0, paths);
     }
 
     // ====================================================================
@@ -641,7 +636,7 @@ contract CoverageGap222 is DeployProtocol {
     function test_gap_admin_swapGameEthForStEth_nonOwner_reverts() public {
         vm.prank(buyer);
         (bool ok, ) = address(admin).call(
-            abi.encodeWithSignature("swapGameEthForStEth()")
+            abi.encodeWithSignature("swapGameEthForStEth(address)", address(this))
         );
         // onlyOwner — non-owner must revert.
         assertFalse(ok, "swapGameEthForStEth rejected non-owner");

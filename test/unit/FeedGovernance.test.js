@@ -1,3 +1,4 @@
+import { ownerAction } from "../helpers/deployFixture.js";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
 import { expect } from "chai";
 import hre from "hardhat";
@@ -69,7 +70,7 @@ async function grantSdgnrs(sdgnrs, game, recipient, amount) {
  */
 async function setFeedViaGovernance(admin, sdgnrs, game, deployer, feedAddr) {
   await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseUnits("1000", 12));
-  await admin.connect(deployer).proposeFeedSwap(feedAddr);
+  await ownerAction(admin.connect(deployer), "proposeFeedSwap", [feedAddr]);
   const proposalId = await admin.feedProposalCount();
   await admin.connect(deployer).voteFeedSwap(proposalId, true);
 }
@@ -101,9 +102,7 @@ describe("Feed Governance", function () {
       expect(await admin.linkAmountToEth(eth("1"))).to.equal(0n);
 
       const newFeed = await deployNewFeed();
-      const tx = await admin
-        .connect(deployer)
-        .proposeFeedSwap(await newFeed.getAddress());
+      const tx = await ownerAction(admin.connect(deployer), "proposeFeedSwap", [await newFeed.getAddress()]);
       const ev = await getEvent(tx, admin, "FeedProposalCreated");
       expect(ev.args.path).to.equal(0n); // Admin path
     });
@@ -119,7 +118,7 @@ describe("Feed Governance", function () {
       const newFeedAddr = await newFeed.getAddress();
 
       // Feed is zero = max stall, so admin (2d threshold) can propose immediately
-      const tx = await admin.connect(deployer).proposeFeedSwap(newFeedAddr);
+      const tx = await ownerAction(admin.connect(deployer), "proposeFeedSwap", [newFeedAddr]);
       const ev = await getEvent(tx, admin, "FeedProposalCreated");
       expect(ev.args.proposalId).to.equal(1n);
       expect(ev.args.feed).to.equal(newFeedAddr);
@@ -129,7 +128,7 @@ describe("Feed Governance", function () {
     it("admin can propose zero address (disable feed)", async function () {
       const { admin, deployer } = await loadFixture(deployFullProtocol);
 
-      const tx = await admin.connect(deployer).proposeFeedSwap(ZERO_ADDRESS);
+      const tx = await ownerAction(admin.connect(deployer), "proposeFeedSwap", [ZERO_ADDRESS]);
       const ev = await getEvent(tx, admin, "FeedProposalCreated");
       expect(ev.args.feed).to.equal(ZERO_ADDRESS);
     });
@@ -167,13 +166,13 @@ describe("Feed Governance", function () {
       // First set the feed via governance (propose + vote with instant threshold)
       // Since feed is zero (unhealthy), admin can propose
       await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseUnits("1000", 12));
-      await admin.connect(deployer).proposeFeedSwap(feedAddr);
+      await ownerAction(admin.connect(deployer), "proposeFeedSwap", [feedAddr]);
       // Vote to execute (deployer has enough weight)
       await admin.connect(deployer).voteFeedSwap(1, true);
 
       // Now feed is set and healthy — proposing should revert
       await expect(
-        admin.connect(deployer).proposeFeedSwap(ZERO_ADDRESS)
+        ownerAction(admin.connect(deployer), "proposeFeedSwap", [ZERO_ADDRESS])
       ).to.be.revertedWithCustomError(admin, "FeedHealthy");
     });
 
@@ -183,7 +182,7 @@ describe("Feed Governance", function () {
       const wrongDecimals = hre.ethers.Wallet.createRandom().address;
       await hre.network.provider.send("hardhat_setCode", [wrongDecimals, "0x600860005260206000f3"]);
       await expect(
-        admin.connect(deployer).proposeFeedSwap(wrongDecimals)
+        ownerAction(admin.connect(deployer), "proposeFeedSwap", [wrongDecimals])
       ).to.be.revertedWithCustomError(admin, "InvalidFeedDecimals");
     });
 
@@ -191,7 +190,7 @@ describe("Feed Governance", function () {
       const { admin, deployer } = await loadFixture(deployFullProtocol);
       // No try/catch on the decimals read: a codeless address reverts the proposal.
       await expect(
-        admin.connect(deployer).proposeFeedSwap(deployer.address)
+        ownerAction(admin.connect(deployer), "proposeFeedSwap", [deployer.address])
       ).to.be.reverted;
     });
 
@@ -200,9 +199,9 @@ describe("Feed Governance", function () {
       const newFeed = await deployNewFeed();
       const feedAddr = await newFeed.getAddress();
 
-      await admin.connect(deployer).proposeFeedSwap(feedAddr);
+      await ownerAction(admin.connect(deployer), "proposeFeedSwap", [feedAddr]);
       await expect(
-        admin.connect(deployer).proposeFeedSwap(ZERO_ADDRESS)
+        ownerAction(admin.connect(deployer), "proposeFeedSwap", [ZERO_ADDRESS])
       ).to.be.revertedWithCustomError(admin, "AlreadyHasActiveProposal");
     });
 
@@ -218,7 +217,7 @@ describe("Feed Governance", function () {
       // Feed is zero = type(uint256).max stall, well above 2d admin threshold
       const newFeed = await deployNewFeed();
       await expect(
-        admin.connect(deployer).proposeFeedSwap(await newFeed.getAddress())
+        ownerAction(admin.connect(deployer), "proposeFeedSwap", [await newFeed.getAddress()])
       ).to.not.be.reverted;
     });
 
@@ -228,7 +227,7 @@ describe("Feed Governance", function () {
 
       // Set feed via governance first
       await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseUnits("1000", 12));
-      await admin.connect(deployer).proposeFeedSwap(feedAddr);
+      await ownerAction(admin.connect(deployer), "proposeFeedSwap", [feedAddr]);
       await admin.connect(deployer).voteFeedSwap(1, true);
       // Feed is now set and healthy
 
@@ -238,7 +237,7 @@ describe("Feed Governance", function () {
       await hre.ethers.provider.send("evm_mine");
 
       await expect(
-        admin.connect(deployer).proposeFeedSwap(ZERO_ADDRESS)
+        ownerAction(admin.connect(deployer), "proposeFeedSwap", [ZERO_ADDRESS])
       ).to.be.revertedWithCustomError(admin, "NotStalled");
     });
 
@@ -248,7 +247,7 @@ describe("Feed Governance", function () {
 
       // Set feed via governance
       await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseUnits("1000", 12));
-      await admin.connect(deployer).proposeFeedSwap(feedAddr);
+      await ownerAction(admin.connect(deployer), "proposeFeedSwap", [feedAddr]);
       await admin.connect(deployer).voteFeedSwap(1, true);
 
       // Make feed stale for 2.5 days
@@ -257,7 +256,7 @@ describe("Feed Governance", function () {
 
       const newFeed = await deployNewFeed();
       await expect(
-        admin.connect(deployer).proposeFeedSwap(await newFeed.getAddress())
+        ownerAction(admin.connect(deployer), "proposeFeedSwap", [await newFeed.getAddress()])
       ).to.not.be.reverted;
     });
   });
@@ -278,7 +277,7 @@ describe("Feed Governance", function () {
     it("zero-weight vote (no sDGNRS) does not revert — poke only, no event", async function () {
       const { admin, deployer, alice } = await loadFixture(deployFullProtocol);
       const newFeed = await deployNewFeed();
-      await admin.connect(deployer).proposeFeedSwap(await newFeed.getAddress());
+      await ownerAction(admin.connect(deployer), "proposeFeedSwap", [await newFeed.getAddress()]);
 
       // Alice has no sDGNRS — call succeeds but no FeedVoteCast emitted
       const tx = await admin.connect(alice).voteFeedSwap(1, true);
@@ -295,7 +294,7 @@ describe("Feed Governance", function () {
       // virtue of a zero denominator.
       await grantSdgnrs(sdgnrs, game, bob.address, hre.ethers.parseUnits("1", 12));
       await grantSdgnrs(sdgnrs, game, alice.address, 1n);
-      await admin.connect(deployer).proposeFeedSwap(await newFeed.getAddress());
+      await ownerAction(admin.connect(deployer), "proposeFeedSwap", [await newFeed.getAddress()]);
 
       const tx = await admin.connect(alice).voteFeedSwap(1, true);
       expect((await getEvents(tx, admin, "FeedVoteCast")).length).to.equal(0);
@@ -311,7 +310,7 @@ describe("Feed Governance", function () {
       // Grant deployer sDGNRS and give a minority stake so vote alone doesn't execute at 50%
       await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseUnits("100", 12));
       await grantSdgnrs(sdgnrs, game, alice.address, hre.ethers.parseUnits("1000", 12));
-      await admin.connect(deployer).proposeFeedSwap(newFeedAddr);
+      await ownerAction(admin.connect(deployer), "proposeFeedSwap", [newFeedAddr]);
 
       // Deployer votes approve (~9% weight, below 50% threshold)
       await admin.connect(deployer).voteFeedSwap(1, true);
@@ -330,7 +329,7 @@ describe("Feed Governance", function () {
       const { admin, sdgnrs, game, deployer } = await loadFixture(deployFullProtocol);
       const newFeed = await deployNewFeed();
       await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseUnits("1000", 12));
-      await admin.connect(deployer).proposeFeedSwap(await newFeed.getAddress());
+      await ownerAction(admin.connect(deployer), "proposeFeedSwap", [await newFeed.getAddress()]);
 
       const tx = await admin.connect(deployer).voteFeedSwap(1, true);
       const events = await getEvents(tx, admin, "FeedVoteCast");
@@ -344,7 +343,7 @@ describe("Feed Governance", function () {
       // Give deployer a minority stake so approve vote doesn't instantly execute
       await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseUnits("100", 12));
       await grantSdgnrs(sdgnrs, game, alice.address, hre.ethers.parseUnits("1000", 12));
-      await admin.connect(deployer).proposeFeedSwap(ZERO_ADDRESS);
+      await ownerAction(admin.connect(deployer), "proposeFeedSwap", [ZERO_ADDRESS]);
 
       // Vote approve (deployer has ~9% weight, below 50% threshold — won't execute)
       await admin.connect(deployer).voteFeedSwap(1, true);
@@ -357,7 +356,7 @@ describe("Feed Governance", function () {
     it("proposal expires after 168 hours (7 days)", async function () {
       const { admin, sdgnrs, game, deployer } = await loadFixture(deployFullProtocol);
       await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseUnits("1000", 12));
-      await admin.connect(deployer).proposeFeedSwap(ZERO_ADDRESS);
+      await ownerAction(admin.connect(deployer), "proposeFeedSwap", [ZERO_ADDRESS]);
 
       // Advance past 168h lifetime
       await advanceTime(SEVEN_DAYS_H + 1);
@@ -375,14 +374,14 @@ describe("Feed Governance", function () {
     it("returns 5000 (50%) at proposal creation", async function () {
       const { admin, deployer } = await loadFixture(deployFullProtocol);
       const newFeed = await deployNewFeed();
-      await admin.connect(deployer).proposeFeedSwap(await newFeed.getAddress());
+      await ownerAction(admin.connect(deployer), "proposeFeedSwap", [await newFeed.getAddress()]);
       expect(await admin.feedThreshold(1)).to.equal(5000);
     });
 
     it("returns 4000 (40%) after 24 hours", async function () {
       const { admin, deployer } = await loadFixture(deployFullProtocol);
       const newFeed = await deployNewFeed();
-      await admin.connect(deployer).proposeFeedSwap(await newFeed.getAddress());
+      await ownerAction(admin.connect(deployer), "proposeFeedSwap", [await newFeed.getAddress()]);
       await advanceTime(DAY + 1);
       expect(await admin.feedThreshold(1)).to.equal(4000);
     });
@@ -390,7 +389,7 @@ describe("Feed Governance", function () {
     it("returns 2500 (25%) after 48 hours", async function () {
       const { admin, deployer } = await loadFixture(deployFullProtocol);
       const newFeed = await deployNewFeed();
-      await admin.connect(deployer).proposeFeedSwap(await newFeed.getAddress());
+      await ownerAction(admin.connect(deployer), "proposeFeedSwap", [await newFeed.getAddress()]);
       await advanceTime(2 * DAY + 1);
       expect(await admin.feedThreshold(1)).to.equal(2500);
     });
@@ -398,7 +397,7 @@ describe("Feed Governance", function () {
     it("returns 1500 (15%) after 72 hours — floor", async function () {
       const { admin, deployer } = await loadFixture(deployFullProtocol);
       const newFeed = await deployNewFeed();
-      await admin.connect(deployer).proposeFeedSwap(await newFeed.getAddress());
+      await ownerAction(admin.connect(deployer), "proposeFeedSwap", [await newFeed.getAddress()]);
       await advanceTime(3 * DAY + 1);
       expect(await admin.feedThreshold(1)).to.equal(1500);
     });
@@ -406,7 +405,7 @@ describe("Feed Governance", function () {
     it("returns 0 after 168 hours (expired)", async function () {
       const { admin, deployer } = await loadFixture(deployFullProtocol);
       const newFeed = await deployNewFeed();
-      await admin.connect(deployer).proposeFeedSwap(await newFeed.getAddress());
+      await ownerAction(admin.connect(deployer), "proposeFeedSwap", [await newFeed.getAddress()]);
       await advanceTime(SEVEN_DAYS_H + 1);
       expect(await admin.feedThreshold(1)).to.equal(0);
     });
@@ -423,7 +422,7 @@ describe("Feed Governance", function () {
 
       // Feed is zero (unhealthy) — admin can propose immediately
       await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseUnits("1000", 12));
-      await admin.connect(deployer).proposeFeedSwap(newFeedAddr);
+      await ownerAction(admin.connect(deployer), "proposeFeedSwap", [newFeedAddr]);
 
       // Vote to approve — deployer has sDGNRS weight
       const tx = await admin.connect(deployer).voteFeedSwap(1, true);
@@ -449,7 +448,7 @@ describe("Feed Governance", function () {
 
       // Set feed via governance
       await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseUnits("1000", 12));
-      await admin.connect(deployer).proposeFeedSwap(newFeedAddr);
+      await ownerAction(admin.connect(deployer), "proposeFeedSwap", [newFeedAddr]);
       await admin.connect(deployer).voteFeedSwap(1, true);
 
       // linkAmountToEth should now return a value
@@ -463,7 +462,7 @@ describe("Feed Governance", function () {
 
       // Set feed first
       await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseUnits("1000", 12));
-      await admin.connect(deployer).proposeFeedSwap(feedAddr);
+      await ownerAction(admin.connect(deployer), "proposeFeedSwap", [feedAddr]);
       await admin.connect(deployer).voteFeedSwap(1, true);
       expect(await admin.linkEthPriceFeed()).to.equal(feedAddr);
 
@@ -472,7 +471,7 @@ describe("Feed Governance", function () {
       await hre.ethers.provider.send("evm_mine");
 
       // Propose disable (zero address)
-      await admin.connect(deployer).proposeFeedSwap(ZERO_ADDRESS);
+      await ownerAction(admin.connect(deployer), "proposeFeedSwap", [ZERO_ADDRESS]);
       await admin.connect(deployer).voteFeedSwap(2, true);
       expect(await admin.linkEthPriceFeed()).to.equal(ZERO_ADDRESS);
     });
@@ -486,7 +485,7 @@ describe("Feed Governance", function () {
 
       // First swap: zero → feed1
       await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseUnits("1000", 12));
-      await admin.connect(deployer).proposeFeedSwap(feed1Addr);
+      await ownerAction(admin.connect(deployer), "proposeFeedSwap", [feed1Addr]);
       await admin.connect(deployer).voteFeedSwap(1, true);
       expect(await admin.linkEthPriceFeed()).to.equal(feed1Addr);
 
@@ -495,7 +494,7 @@ describe("Feed Governance", function () {
       await hre.ethers.provider.send("evm_mine");
 
       // Second swap: feed1 → feed2
-      await admin.connect(deployer).proposeFeedSwap(feed2Addr);
+      await ownerAction(admin.connect(deployer), "proposeFeedSwap", [feed2Addr]);
       await admin.connect(deployer).voteFeedSwap(2, true);
       expect(await admin.linkEthPriceFeed()).to.equal(feed2Addr);
     });
@@ -551,7 +550,7 @@ describe("Feed Governance", function () {
       const newFeed = await deployNewFeed();
 
       await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseUnits("1000", 12));
-      await admin.connect(deployer).proposeFeedSwap(await newFeed.getAddress());
+      await ownerAction(admin.connect(deployer), "proposeFeedSwap", [await newFeed.getAddress()]);
 
       // Vote reject
       const tx = await admin.connect(deployer).voteFeedSwap(1, false);
@@ -572,7 +571,7 @@ describe("Feed Governance", function () {
     it("returns false for expired proposal", async function () {
       const { admin, deployer } = await loadFixture(deployFullProtocol);
       const newFeed = await deployNewFeed();
-      await admin.connect(deployer).proposeFeedSwap(await newFeed.getAddress());
+      await ownerAction(admin.connect(deployer), "proposeFeedSwap", [await newFeed.getAddress()]);
       await advanceTime(SEVEN_DAYS_H + 1);
       expect(await admin.canExecuteFeedSwap(1)).to.equal(false);
     });
@@ -588,7 +587,7 @@ describe("Feed Governance", function () {
 
       // Set feed via governance
       await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseUnits("1000", 12));
-      await admin.connect(deployer).proposeFeedSwap(feedAddr);
+      await ownerAction(admin.connect(deployer), "proposeFeedSwap", [feedAddr]);
       await admin.connect(deployer).voteFeedSwap(1, true);
 
       // Make feed stale, propose a new swap
@@ -596,7 +595,7 @@ describe("Feed Governance", function () {
       await hre.ethers.provider.send("evm_mine");
 
       const feed2 = await deployNewFeed();
-      await admin.connect(deployer).proposeFeedSwap(await feed2.getAddress());
+      await ownerAction(admin.connect(deployer), "proposeFeedSwap", [await feed2.getAddress()]);
 
       // Now refresh the original feed (simulate recovery)
       await mockFeed.setPrice(hre.ethers.parseEther("0.004")); // refreshes updatedAt
@@ -620,14 +619,14 @@ describe("Feed Governance", function () {
       await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseUnits("1000", 12));
 
       // Deployer proposes feed1
-      await admin.connect(deployer).proposeFeedSwap(await feed1.getAddress());
+      await ownerAction(admin.connect(deployer), "proposeFeedSwap", [await feed1.getAddress()]);
 
       // We can't have bob propose without sDGNRS, but we can test with deployer
       // after the first proposal expires
       await advanceTime(SEVEN_DAYS_H + 1); // expire proposal 1
 
       // Deployer proposes feed2
-      await admin.connect(deployer).proposeFeedSwap(await feed2.getAddress());
+      await ownerAction(admin.connect(deployer), "proposeFeedSwap", [await feed2.getAddress()]);
 
       // Execute proposal 2
       const tx = await admin.connect(deployer).voteFeedSwap(2, true);
@@ -653,7 +652,7 @@ describe("Feed Governance", function () {
       await grantSdgnrs(sdgnrs, game, bob.address, hre.ethers.parseUnits("1000", 12));
 
       // Two LIVE proposals coexist: A (admin, id 1) and B (community, id 2).
-      await admin.connect(deployer).proposeFeedSwap(feed1Addr); // id 1
+      await ownerAction(admin.connect(deployer), "proposeFeedSwap", [feed1Addr]); // id 1
       await admin.connect(bob).proposeFeedSwap(feed2Addr); // id 2
 
       // A executes and installs feed1 (healthy). The epoch cutoff advances past every existing id.
@@ -674,7 +673,7 @@ describe("Feed Governance", function () {
 
       // Governance is NOT bricked: a FRESH proposal (id >= cutoff) still executes against the
       // now-unhealthy feed. The proposer's old slot (superseded) no longer blocks re-proposal.
-      await admin.connect(deployer).proposeFeedSwap(feed2Addr); // id 3
+      await ownerAction(admin.connect(deployer), "proposeFeedSwap", [feed2Addr]); // id 3
       await admin.connect(deployer).voteFeedSwap(3, true);
       expect(await admin.linkEthPriceFeed()).to.equal(feed2Addr);
     });

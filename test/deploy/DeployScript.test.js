@@ -1,3 +1,4 @@
+import { ownerAction } from "../helpers/deployFixture.js";
 import { expect } from "chai";
 import hre from "hardhat";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
@@ -134,7 +135,7 @@ describe("Deploy Pipeline", function () {
       const f = await loadFixture(deployFullProtocol);
       // Deployer holds all DGVE, so they are the vault owner
       await expect(
-        f.deityPass.connect(f.deployer).setRenderer(ZERO_ADDRESS)
+        ownerAction(f.deityPass.connect(f.deployer), "setRenderer", [ZERO_ADDRESS])
       ).to.not.be.reverted;
     });
 

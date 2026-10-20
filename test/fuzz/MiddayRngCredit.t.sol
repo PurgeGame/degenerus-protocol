@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -324,11 +325,11 @@ contract MiddayRngCreditTest is DeployProtocol {
     function test_setMiddayMaxBasefee_rejectsOutOfBounds() public pricedBlock {
         vm.prank(vaultOwner);
         vm.expectRevert(bytes4(keccak256("OutOfBounds()")));
-        game.setMiddayMaxBasefee(256);
+        OwnerTargetCall.call(address(game), abi.encodeCall(game.setMiddayMaxBasefee, (256)), 0);
 
         // The boundary value itself is accepted.
         vm.prank(vaultOwner);
-        game.setMiddayMaxBasefee(255);
+        OwnerTargetCall.call(address(game), abi.encodeCall(game.setMiddayMaxBasefee, (255)), 0);
     }
 
     /// @notice The setter emits the previous and next ceiling. Default is 5 gwei.
@@ -336,7 +337,7 @@ contract MiddayRngCreditTest is DeployProtocol {
         vm.expectEmit(false, false, false, true, address(game));
         emit MiddayMaxBasefeeUpdated(5, 42);
         vm.prank(vaultOwner);
-        game.setMiddayMaxBasefee(42);
+        OwnerTargetCall.call(address(game), abi.encodeCall(game.setMiddayMaxBasefee, (42)), 0);
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -395,7 +396,7 @@ contract MiddayRngCreditTest is DeployProtocol {
     function test_zeroCeilingDisablesBasefeeGate() public pricedBlock {
         _purchaseAboveThreshold();
         vm.prank(vaultOwner);
-        game.setMiddayMaxBasefee(0);
+        OwnerTargetCall.call(address(game), abi.encodeCall(game.setMiddayMaxBasefee, (0)), 0);
 
         vm.fee(9_000 gwei);
         _mineRequest(outsider);

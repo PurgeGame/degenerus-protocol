@@ -228,7 +228,7 @@ contract LoanAccountingHandler is Test {
         require(accts.length == 0);
         _credit(SDGNRS_ID, 8 ether); // runs dry within a few loans so the Vault lends too
         _credit(VAULT_ID, 40 ether);
-        vm.prank(ContractAddresses.CREATOR);
+        vm.prank(ContractAddresses.OWNER_GOVERNANCE);
         vault.setLiquidationBuyFallback(true, VAULT_FLOOR);
         _etch();
         LoanAccountingSeeder(address(game)).startPhase(false);
@@ -626,7 +626,7 @@ contract LoanAccountingHandler is Test {
         uint256 lenderFunds = owner != 0 ? _funds(owner) : 0;
         bool ok;
         if (owner == VAULT_ID) {
-            vm.prank(ContractAddresses.CREATOR);
+            vm.prank(ContractAddresses.OWNER_GOVERNANCE);
             try vault.playerAction(
                 ContractAddresses.GAME,
                 abi.encodeWithSignature("sweepAccounts(uint32[])", ids),
@@ -716,7 +716,7 @@ contract LoanAccountingHandler is Test {
         address who = actors[actor];
         vm.prank(ContractAddresses.AFFILIATE);
         uint32 id = game.registerWallet(who, true);
-        vm.prank(ContractAddresses.CREATOR);
+        vm.prank(ContractAddresses.OWNER_GOVERNANCE);
         game.raiseSmurfBaseAllowance(id, 8);
         vm.prank(address(game));
         sdgnrsToken.transferFromPool(sDGNRS.Pool.Reward, who, 1e12);

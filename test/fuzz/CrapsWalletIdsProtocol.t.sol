@@ -136,7 +136,7 @@ contract CrapsWalletIdsProtocolTest is DeployProtocol {
     function test_firstContactOnACustomBattleRegistersBeforeTheBurn() public {
         _mint(alice, 10_000);
         uint16 goal = uint16(crapsBattle.MIN_BATTLE_GOAL_MULT());
-        vm.prank(ContractAddresses.CREATOR);
+        vm.prank(ContractAddresses.OWNER_GOVERNANCE);
         uint64 slot = crapsBattle.createBattle(600, 10, goal, 0, uint40(block.timestamp + 1 hours), true, 0);
         assertEq(game.walletIdOf(alice), 0, "fixture: fresh wallet");
         vm.recordLogs();
@@ -244,7 +244,7 @@ contract CrapsWalletIdsGasTest is DeployProtocol {
         _deployProtocol();
         day = crapsBattle.currentDayIndex();
         uint16 goal = uint16(crapsBattle.MIN_BATTLE_GOAL_MULT());
-        vm.prank(ContractAddresses.CREATOR);
+        vm.prank(ContractAddresses.OWNER_GOVERNANCE);
         slot = crapsBattle.createBattle(600, 10, goal, 0, uint40(block.timestamp + 1 hours), true, 0);
         vm.prank(ContractAddresses.CRAPS);
         coin.creditCrapsComps(1e12);

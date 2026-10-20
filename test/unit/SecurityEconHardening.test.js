@@ -1,3 +1,4 @@
+import { ownerAction } from "../helpers/deployFixture.js";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
 import { expect } from "chai";
 import hre from "hardhat";
@@ -563,9 +564,9 @@ describe("SecurityEconHardening", function () {
       expect((await mockVRF.getSubscription(subId))[0]).to.equal(0n);
 
       // Public unwrap supplies a real voter; governance installs the healthy feed.
-      await vault.connect(deployer).dgnrsUnwrapTo(deployer.address, hre.ethers.parseUnits("1000", 12));
+      await ownerAction(vault.connect(deployer), "dgnrsUnwrapTo", [deployer.address, hre.ethers.parseUnits("1000", 12)]);
       expect(await sdgnrs.votingSupply()).to.equal(hre.ethers.parseUnits("1000", 12));
-      await admin.connect(deployer).proposeFeedSwap(feedAddr);
+      await ownerAction(admin.connect(deployer), "proposeFeedSwap", [feedAddr]);
       const proposalId = await admin.feedProposalCount();
       await admin.connect(deployer).voteFeedSwap(proposalId, true);
       expect(await admin.linkEthPriceFeed()).to.equal(feedAddr);

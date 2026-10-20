@@ -202,7 +202,7 @@ contract CrapsRngSealHandler is Test {
         vault = DegenerusVault(payable(ContractAddresses.VAULT));
         // Custom battles open only for an allowed creator (JackpotBattle.setBattleCreator, vault
         // owner only); allow the deployer so the custom-battle door is actually exercised.
-        vm.prank(ContractAddresses.CREATOR);
+        vm.prank(ContractAddresses.OWNER_GOVERNANCE);
         JackpotBattle(address(craps_)).setBattleCreator(ContractAddresses.CREATOR, true);
         for (uint256 i; i < actorCount_; i++) {
             address a = address(uint160(uint256(keccak256(abi.encode("craps-seal-actor", i)))));
@@ -1070,7 +1070,7 @@ contract CrapsRngSealHandler is Test {
         }
         uint256 laneBefore = coin.crapsCompAllowance();
         uint256 value = craps.NORMAL_PASS_VALUE();
-        vm.prank(ContractAddresses.CREATOR);
+        vm.prank(ContractAddresses.OWNER_GOVERNANCE);
         try vault.crapsComp(reqs) {
             uint256 banked;
             for (uint256 i; i < n; i++) {

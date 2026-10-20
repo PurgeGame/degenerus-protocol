@@ -299,7 +299,7 @@ contract DegenerusVault {
     // ---------------------------------------------------------------------
     // ERRORS
     // ---------------------------------------------------------------------
-    /// @notice Caller does not hold >50.1% of DGVE supply
+    /// @notice Caller is not the pinned DGVE governance executor
     error NotVaultOwner();
     /// @notice The target/selector is outside the fixed player-action surface.
     error UnsupportedPlayerAction();
@@ -423,26 +423,23 @@ contract DegenerusVault {
     // ---------------------------------------------------------------------
     // MODIFIERS
     // ---------------------------------------------------------------------
-    /// @dev Restricts function to accounts holding >50.1% of DGVE supply
+    /// @dev Restricts owner functions to the pinned DGVE approval executor.
     modifier onlyVaultOwner() {
-        if (!_isVaultOwner(msg.sender)) revert NotVaultOwner();
+        if (msg.sender != ContractAddresses.OWNER_GOVERNANCE) revert NotVaultOwner();
         _;
     }
 
-    /// @dev Check if account holds >50.1% of DGVE supply (balance * 1000 > supply * 501)
+    /// @notice Whether account is the protocol's owner executor.
+    /// @dev The executor checks escrowed approval; pooled token balances confer no authority.
     /// @param account Address to check
     /// @return True if account qualifies as vault owner
-    function _isVaultOwner(address account) private view returns (bool) {
-        uint256 supply = ethShare.totalSupply();
-        uint256 balance = ethShare.balanceOf(account);
-        return balance * 1000 > supply * 501;
+    function isVaultOwner(address account) external pure returns (bool) {
+        return account == ContractAddresses.OWNER_GOVERNANCE;
     }
 
-    /// @notice Check if account holds >50.1% of DGVE supply
-    /// @param account Address to check
-    /// @return True if account qualifies as vault owner
-    function isVaultOwner(address account) external view returns (bool) {
-        return _isVaultOwner(account);
+    /// @notice Actual DGVE collateral contract, created by this Vault's constructor.
+    function dgve() external view returns (address) {
+        return address(ethShare);
     }
 
     // ---------------------------------------------------------------------
@@ -523,7 +520,7 @@ contract DegenerusVault {
     /// @param quantity Whale passes, or ticket purchase units (400 = one whole ticket)
     /// @param boxOrder Packed box order (ignored with whale passes)
     /// @param maxCost Budget made available to the purchase
-    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
+    /// @custom:reverts NotVaultOwner If caller is not the DGVE governance executor
     function spendDegenesis(bool whalePass, uint256 quantity, uint256 boxOrder, uint256 maxCost)
         external
         onlyVaultOwner
@@ -541,7 +538,7 @@ contract DegenerusVault {
     /// @param enabled Whether the vault acts as liquidation buyer-of-last-resort.
     /// @param floorWei ETH (wei) reserve kept untouched; the vault buys only while its claimable + afking
     ///        covers totalBudget + floorWei.
-    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE.
+    /// @custom:reverts NotVaultOwner If caller is not the DGVE governance executor.
     /// @custom:reverts Insufficient If floorWei exceeds the uint96 reserve-floor width.
     function setLiquidationBuyFallback(bool enabled, uint256 floorWei) external onlyVaultOwner {
         if (floorWei > type(uint96).max) revert Insufficient();
@@ -568,7 +565,7 @@ contract DegenerusVault {
     ///              days ahead); bit 168 high; bits 176..199 the period, first day or ticket day;
     ///              bits 200..207 the count, or the upgrade's period mask; bits 208..215 the
     ///              period for kind 5.
-    /// @custom:reverts NotVaultOwner If caller neither holds >50.1% of DGVE nor an allowance
+    /// @custom:reverts NotVaultOwner If caller is neither the DGVE governance executor nor an allowance holder
     /// @custom:reverts Insufficient If the batch is empty, or exceeds the caller's allowance
     /// @custom:reverts ZeroAddress If any code names wallet ID 0
     function crapsComp(uint256[] calldata codes) external {
@@ -602,7 +599,7 @@ contract DegenerusVault {
     }
 
     function _crapsCompBudget() private view returns (bool owner, uint256 allowance) {
-        owner = _isVaultOwner(msg.sender);
+        owner = msg.sender == ContractAddresses.OWNER_GOVERNANCE;
         allowance = owner ? 0 : crapsCompAllowanceOf[msg.sender];
         if (!owner && allowance == 0) revert NotVaultOwner();
     }
@@ -622,7 +619,7 @@ contract DegenerusVault {
     ///         charged to the shared comp lane. Replaces any earlier figure; zero revokes.
     /// @param who The delegate.
     /// @param amount What they may still comp, in whole FLIP.
-    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
+    /// @custom:reverts NotVaultOwner If caller is not the DGVE governance executor
     /// @custom:reverts ZeroAddress If `who` is the zero address
     function setCrapsCompAllowance(address who, uint256 amount) external onlyVaultOwner {
         if (who == address(0)) revert ZeroAddress();
@@ -633,7 +630,7 @@ contract DegenerusVault {
     /// @notice Mint any amount of WWXRP for free to a recipient
     /// @param to Recipient address
     /// @param amount Amount of WWXRP to mint
-    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
+    /// @custom:reverts NotVaultOwner If caller is not the DGVE governance executor
     function wwxrpMint(address to, uint256 amount) external onlyVaultOwner {
         if (amount == 0) return;
         wwxrpToken.vaultMintTo(to, amount);
@@ -648,7 +645,7 @@ contract DegenerusVault {
     ///      removes from its set frees one unit, so churn reopens room to sell.
     /// @param to Seat recipient
     /// @param amount Seats to mint
-    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
+    /// @custom:reverts NotVaultOwner If caller is not the DGVE governance executor
     /// @custom:reverts FreeTrancheOpen (token) While fewer than 1,000 free seats are out
     /// @custom:reverts SeatCapReached (token) When the mint would pass the 2,000 cap
     /// @custom:reverts ZeroAddress (token) When `to` is the zero address
@@ -662,7 +659,7 @@ contract DegenerusVault {
     ///      RNG-lock block; those checks revert on the wrapper side.
     /// @param recipient Receives the soulbound sDGNRS
     /// @param amount Amount of DGNRS to unwrap (12 decimals)
-    /// @custom:reverts NotVaultOwner If caller does not hold >50.1% of DGVE
+    /// @custom:reverts NotVaultOwner If caller is not the DGVE governance executor
     function dgnrsUnwrapTo(address recipient, uint256 amount) external onlyVaultOwner {
         dgnrsToken.unwrapTo(recipient, amount);
     }

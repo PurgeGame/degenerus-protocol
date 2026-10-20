@@ -165,8 +165,8 @@ async function main() {
     // 8. Wire Icons32Data (33 paths + 3 name quadrants). MUST use the
     //    symbol-ordered dataset — the legacy icons32Data.json is badge-FILE
     //    ordered and mismaps the whole cards quadrant. finalize() is an
-    //    IRREVERSIBLE lock, so it stays opt-in: verify the wired data on-chain,
-    //    then run with ICONS32_FINALIZE=1 as a deliberate second step.
+    //    IRREVERSIBLE lock, selected before deployment by ICONS32_FINALIZE=1.
+    //    The final initial upload then finalizes atomically.
     const finalizeIcons = process.env.ICONS32_FINALIZE === "1";
     console.log(
       `Wiring Icons32Data (33 paths, 3 name quadrants, finalize=${finalizeIcons})...`
@@ -183,7 +183,7 @@ async function main() {
     console.log(
       finalizeIcons
         ? "Icons32Data wired and FINALIZED (permanently immutable).\n"
-        : "Icons32Data wired (NOT finalized — verify, then ICONS32_FINALIZE=1).\n"
+        : "Icons32Data wired; bootstrap closed. Later finalization requires governance.\n"
     );
 
     // 9. Save deployment manifest
@@ -284,6 +284,7 @@ function getConstructorArgs(
   affiliateBootstrap,
   affiliatePreReferrals
 ) {
+  if (key === "ICONS_32") return [process.env.ICONS32_FINALIZE === "1"];
   if (key === "AFFILIATE") {
     return [
       affiliateBootstrap.owners,

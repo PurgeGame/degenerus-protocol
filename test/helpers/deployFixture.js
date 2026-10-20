@@ -16,6 +16,7 @@ let _patchedVrfKeyHash = null;
 // loadFixture restores chain snapshots without restoring JavaScript module globals. Retain
 // each Game's registrar so helpers never use a different fixture's most recent deployment.
 const _registrarByGame = new Map();
+const _governanceByTarget = new Map();
 // Legacy fixtures deploy on day index 9 (GameTimeLib.MAIN_LAUNCH_DAY): 8 days past day index 1.
 const LEGACY_DEPLOY_OFFSET = 8 * 86400;
 
@@ -42,6 +43,7 @@ const LEGACY_DEPLOY_OFFSET = 8 * 86400;
 export async function deployFullProtocol({
   affiliateBootstrap = [[], [], [], [], []],
   degenesis = false,
+  finalizeIcons = false,
 } = {}) {
   const signers = await hre.ethers.getSigners();
   const [deployer, alice, bob, carol, dan, eve, ...others] = signers;
@@ -105,7 +107,7 @@ export async function deployFullProtocol({
 
   for (const key of DEPLOY_ORDER) {
     const contractName = KEY_TO_CONTRACT[key];
-    const args = getConstructorArgs(key, predicted, affiliateBootstrap);
+    const args = getConstructorArgs(key, predicted, affiliateBootstrap, finalizeIcons);
     const contract = await deploy(contractName, args);
     const addr = await contract.getAddress();
     contracts[key] = contract;
@@ -125,6 +127,9 @@ export async function deployFullProtocol({
   // Both protocol passes and their packed ticket queues initialize in one transaction.
   const genesisReceipt = await (await contracts.GAME.initProtocolDeity({ gasLimit: 16_777_216 })).wait();
   _registrarByGame.set(deployedAddrs.get("GAME").toLowerCase(), deployedAddrs.get("COINFLIP"));
+  for (const addr of deployedAddrs.values()) {
+    _governanceByTarget.set(addr.toLowerCase(), deployedAddrs.get("OWNER_GOVERNANCE"));
+  }
 
   return {
     genesisReceipt,
@@ -154,6 +159,7 @@ export async function deployFullProtocol({
     quests: contracts.QUESTS,
     deityPass: contracts.DEITY_PASS,
     vault: contracts.VAULT,
+    ownerGovernance: contracts.OWNER_GOVERNANCE,
     sdgnrs: contracts.SDGNRS,
     dgnrs: contracts.DGNRS,
     admin: contracts.ADMIN,
@@ -194,6 +200,34 @@ export function restoreAddresses() {
   _patched = false;
 }
 
+/** Real approval lifecycle for owner-action integration tests. Target errors bubble unchanged. */
+export async function ownerExecutor(target) {
+  const address = _governanceByTarget.get((await target.getAddress()).toLowerCase());
+  if (!address) throw new Error("Unknown governance fixture target");
+  return address;
+}
+
+export async function ownerAction(target, method, args = [], options = {}) {
+  const signer = options.owner ?? target.runner;
+  const owner = await signer.getAddress();
+  const targetAddress = await target.getAddress();
+  const govAddress = _governanceByTarget.get(targetAddress.toLowerCase());
+  if (!govAddress) throw new Error("Unknown governance fixture target");
+  const gov = await hre.ethers.getContractAt("DegenerusOwnerGovernance", govAddress, signer);
+  const token = await hre.ethers.getContractAt("DegenerusVaultShare", await gov.dgve(), signer);
+  const amount = await token.balanceOf(owner);
+  await token.approve(govAddress, amount);
+  const proposalId = await gov.proposalCount() + 1n;
+  await gov.propose(owner, targetAddress, options.value ?? 0n, target.interface.encodeFunctionData(method, args), amount);
+  try {
+    const tx = await gov.execute(proposalId, target.interface.encodeFunctionData(method, args), {value: options.value ?? 0n});
+    await tx.wait();
+    return tx;
+  } finally {
+    await gov.withdraw();
+  }
+}
+
 // --- Internal helpers ---
 
 async function deploy(contractName, args = []) {
@@ -203,7 +237,8 @@ async function deploy(contractName, args = []) {
   return contract;
 }
 
-function getConstructorArgs(key, predicted, affiliateBootstrap) {
+function getConstructorArgs(key, predicted, affiliateBootstrap, finalizeIcons) {
+  if (key === "ICONS_32") return [finalizeIcons];
   if (key === "AFFILIATE") {
     return affiliateBootstrap;
   }

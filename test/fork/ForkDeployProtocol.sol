@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {DegenerusOwnerGovernance} from "../../contracts/DegenerusOwnerGovernance.sol";
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {SolvencyObligations} from "../fuzz/helpers/SolvencyObligations.sol";
@@ -200,7 +201,7 @@ abstract contract ForkDeployProtocol is DeployProtocol {
         mockLINK = new MockLinkToken(); // nonce 3 (unused)
         mockFeed = new MockLinkEthFeed(int256(0.004 ether)); // nonce 4 (unused)
 
-        icons32 = new Icons32Data();
+        icons32 = new Icons32Data(false);
         mintModule = new DegenerusGameMintModule();
         advanceModule = new DegenerusGameAdvanceModule();
         whaleModule = new DegenerusGameWhaleModule();
@@ -240,6 +241,7 @@ abstract contract ForkDeployProtocol is DeployProtocol {
         rngModule = new DegenerusGameRngModule();
         jackpotDrawModule = new DegenerusGameJackpotDrawModule();
         degenesisModule = new DegenerusGameDegenesisModule();
+        ownerGovernance = new DegenerusOwnerGovernance();
         game.initProtocolDeity();
 
         // Every CREATE landed on its compile-time constant: the fork build is the same protocol.
@@ -420,8 +422,7 @@ abstract contract ForkDeployProtocol is DeployProtocol {
     }
 
     function _vaultOwner() internal view returns (address) {
-        if (vault.isVaultOwner(address(this))) return address(this);
-        return ContractAddresses.CREATOR;
+        return ContractAddresses.OWNER_GOVERNANCE;
     }
 
     /// @dev Requests the REAL coordinator logged during `logs` from `sender`.

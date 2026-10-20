@@ -1,5 +1,13 @@
 # Audit readiness — 2026-10-16
 
+## DGVE owner governance — working-tree update, 2026-10-19
+
+The escrow executor, voting delegation, direct Vault gameplay, and bounded creator
+icon setup are newer than the frozen source below. The [owner-governance guide](OWNER_GOVERNANCE.md)
+describes the authority changes, and [verification](VERIFICATION.md#dgve-owner-governance-2026-10-19)
+records the current focused results and regression status. Historical freeze results
+do not certify these changes.
+
 ## Degenesis sale — review scope (not in the frozen source below)
 
 The seven-day Degenesis sale, its module and the supporting changes are in the working tree

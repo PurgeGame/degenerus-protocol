@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {Vm} from "forge-std/Vm.sol";
 import {DegenesisFixture} from "./helpers/DegenesisFixture.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {DegenerusVaultShare} from "../../contracts/DegenerusVault.sol";
+import {DegenerusOwnerGovernance} from "../../contracts/DegenerusOwnerGovernance.sol";
 
 /// @title DegenesisVaultSpend -- the Vault's restricted Degenesis budget (check 9)
 /// @notice The budget is built by real Degenesis volume and its real split. The Vault owner spends
@@ -50,7 +53,7 @@ contract DegenesisVaultSpend is DegenesisFixture {
     function _spend(bool whale, uint256 quantity, uint256 boxOrder, uint256 maxCost) internal returns (uint256 cost) {
         vm.recordLogs();
         vm.prank(owner);
-        vault.spendDegenesis(whale, quantity, boxOrder, maxCost);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.spendDegenesis, (whale, quantity, boxOrder, maxCost)), 0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 n;
         for (uint256 i; i < logs.length; ++i) {
@@ -75,6 +78,35 @@ contract DegenesisVaultSpend is DegenesisFixture {
     }
 
     // ------------------------------------------------------------------ paths
+
+    function test_DirectGovernanceSpendUsesOnlyVaultBudgetWithoutProposal() public {
+        DegenerusVaultShare token = ownerGovernance.dgve();
+        uint256 amount = token.balanceOf(owner);
+        vm.startPrank(owner);
+        token.approve(address(ownerGovernance), amount);
+        ownerGovernance.deposit(amount, address(0));
+        uint256 cost = 10 * game.mintPrice();
+        uint32 owed = game.entriesOwedView(1, ContractAddresses.VAULT);
+        Snap memory before = _snap();
+        address[] memory owners = new address[](1); owners[0] = owner;
+        vm.expectRevert(DegenerusOwnerGovernance.NoMajority.selector);
+        ownerGovernance.directAction(abi.encodeCall(vault.spendDegenesis, (false, 4000, 0, cost)), owners);
+        vm.roll(vm.getBlockNumber() + 1);
+        ownerGovernance.withdraw();
+        token.approve(address(ownerGovernance), amount);
+        ownerGovernance.deposit(amount, address(0));
+        vm.expectRevert(DegenerusOwnerGovernance.NoMajority.selector);
+        ownerGovernance.directAction(abi.encodeCall(vault.spendDegenesis, (false, 4000, 0, cost)), owners);
+        // Read through the cheatcode: the optimizer may cache block.number within this test transaction.
+        vm.roll(vm.getBlockNumber() + 1);
+        ownerGovernance.directAction(abi.encodeCall(vault.spendDegenesis, (false, 4000, 0, cost)), owners);
+        vm.stopPrank();
+        _assertExactSpend(before, cost);
+        assertEq(game.entriesOwedView(1, ContractAddresses.VAULT) - owed, 40);
+        assertEq(ownerGovernance.proposalCount(), 0);
+        assertEq(ownerGovernance.totalEscrowed(), amount);
+        assertEq(address(ownerGovernance).balance, 0);
+    }
 
     function test_SpendTickets_ExactCost_SentinelMaxCostEqualsCost() public {
         assertEq(_claimableOf(VAULT_ID), 1, "fixture: the Vault holds its 1-wei sentinel");
@@ -145,7 +177,7 @@ contract DegenesisVaultSpend is DegenesisFixture {
         uint256 cost = 10 * game.mintPrice();
         vm.prank(owner);
         vm.expectRevert();
-        vault.spendDegenesis(false, 4000, 0, cost);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.spendDegenesis, (false, 4000, 0, cost)), 0);
     }
 
     function _clearVaultClaimable() internal {
@@ -186,7 +218,7 @@ contract DegenesisVaultSpend is DegenesisFixture {
         uint256 cost = 10 * game.mintPrice();
         vm.prank(owner);
         vm.expectRevert();
-        vault.spendDegenesis(false, 4000, 0, cost - 1);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.spendDegenesis, (false, 4000, 0, cost - 1)), 0);
     }
 
     /// @notice The Vault's own winnings cannot top up a short maxCost.
@@ -195,18 +227,18 @@ contract DegenesisVaultSpend is DegenesisFixture {
         uint256 cost = 10 * game.mintPrice();
         vm.prank(owner);
         vm.expectRevert();
-        vault.spendDegenesis(false, 4000, 0, cost - 1);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.spendDegenesis, (false, 4000, 0, cost - 1)), 0);
         vm.prank(owner);
         vm.expectRevert();
-        vault.spendDegenesis(false, 4000, 0, 0);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.spendDegenesis, (false, 4000, 0, 0)), 0);
     }
 
     function test_MaxCostAboveBudget_Reverts() public {
         vm.prank(owner);
         vm.expectRevert();
-        vault.spendDegenesis(false, 4000, 0, budget + 1);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.spendDegenesis, (false, 4000, 0, budget + 1)), 0);
         vm.prank(owner);
         vm.expectRevert();
-        vault.spendDegenesis(true, 3, 0, budget + 1); // three whale passes cost 7.2 ETH > 5 ETH
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.spendDegenesis, (true, 3, 0, budget + 1)), 0); // three whale passes cost 7.2 ETH > 5 ETH
     }
 }

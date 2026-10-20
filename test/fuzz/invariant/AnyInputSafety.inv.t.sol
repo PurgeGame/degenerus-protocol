@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {OwnerTargetCall} from "../../helpers/OwnerTargetCall.sol";
 
 import {console} from "forge-std/console.sol";
 import {StdInvariant} from "forge-std/StdInvariant.sol";
@@ -119,7 +120,7 @@ contract AnyInputSafety is DeployProtocol {
         game.purchaseDeityPass{value: 45 ether}(0, 7, bytes32(0));
         // Vault-owner configuration: charity slots naming actors (GNRUS vote / burn reachable) and
         // three craps battle creators (createBattle reachable).
-        vm.startPrank(ContractAddresses.CREATOR);
+        vm.startPrank(ContractAddresses.OWNER_GOVERNANCE);
         for (uint256 s = 3; s < 6; ++s) {
             try gnrus.setCharity(uint8(s), actors[s]) {} catch {}
         }
@@ -162,7 +163,7 @@ contract AnyInputSafety is DeployProtocol {
         vm.prank(actors[5]);
         game.depositAfkingFunding{value: 20 ether}(vaultId);
         vm.prank(ContractAddresses.CREATOR);
-        vault.setLiquidationBuyFallback(true, 0);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.setLiquidationBuyFallback, (true, 0)), 0);
         _bystanderClaimable();
         // Two actors run coinflip auto-rebuy, so the carry / take-profit doors have a live subject.
         for (uint256 i = 1; i < 4; i += 2) {
@@ -290,7 +291,7 @@ contract AnyInputSafety is DeployProtocol {
                 // A callback can deliver 0/1 (after nudges), which intentionally leaves Game
                 // waiting. mineFlip cannot replace that transport; only the timed owner retry can.
                 if (request != 0 && delivered && !game.isRngFulfilled()) {
-                    vm.prank(ContractAddresses.CREATOR);
+                    vm.prank(ContractAddresses.OWNER_GOVERNANCE);
                     try admin.retryGameRng() {
                         if (_fulfillLast(r.cranks + 2_000_000)) continue;
                     } catch {}

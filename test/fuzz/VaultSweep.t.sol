@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -43,7 +44,7 @@ contract VaultSweepTest is DeployProtocol {
 
         vaultOwner = ContractAddresses.CREATOR;
         outsider = makeAddr("sweep_outsider");
-        require(vault.isVaultOwner(vaultOwner), "harness: CREATOR is not the vault owner");
+        require(vault.isVaultOwner(ContractAddresses.OWNER_GOVERNANCE), "harness: governance is not the vault owner");
 
         // LINK parked in the vault, as shutdownVrf / retrySubCancel would leave it.
         mockLINK.mint(address(vault), PARKED);
@@ -65,14 +66,14 @@ contract VaultSweepTest is DeployProtocol {
     function test_sweepToken_rejectsZeroRecipient() public {
         vm.prank(vaultOwner);
         vm.expectRevert(bytes4(keccak256("ZeroAddress()")));
-        vault.sweepToken(address(mockLINK), address(0), 0);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.sweepToken, (address(mockLINK), address(0), 0)), 0);
     }
 
     /// @notice stETH sits here as a real balance backing DGVE and can never be swept.
     function test_sweepToken_rejectsProtectedSteth() public {
         vm.prank(vaultOwner);
         vm.expectRevert(bytes4(keccak256("ProtectedToken()")));
-        vault.sweepToken(ContractAddresses.STETH_TOKEN, vaultOwner, 0);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.sweepToken, (ContractAddresses.STETH_TOKEN, vaultOwner, 0)), 0);
     }
 
     /// @notice FLIP is deliberately NOT protected: FLIP redirects VAULT-destined transfers and
@@ -84,7 +85,7 @@ contract VaultSweepTest is DeployProtocol {
 
         vm.prank(vaultOwner);
         vm.expectRevert(bytes4(keccak256("Insufficient()")));
-        vault.sweepToken(ContractAddresses.COIN, vaultOwner, 0);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.sweepToken, (ContractAddresses.COIN, vaultOwner, 0)), 0);
     }
 
     /// @notice A FLIP transfer aimed at the vault lands in allowance, never in balanceOf.
@@ -107,7 +108,7 @@ contract VaultSweepTest is DeployProtocol {
         emit TokenSwept(address(mockLINK), vaultOwner, PARKED);
 
         vm.prank(vaultOwner);
-        vault.sweepToken(address(mockLINK), vaultOwner, 0);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.sweepToken, (address(mockLINK), vaultOwner, 0)), 0);
 
         assertEq(mockLINK.balanceOf(address(vault)), 0, "LINK left in the vault");
         assertEq(mockLINK.balanceOf(vaultOwner), PARKED, "LINK did not reach the recipient");
@@ -115,7 +116,7 @@ contract VaultSweepTest is DeployProtocol {
 
     function test_sweepToken_partialAmount() public {
         vm.prank(vaultOwner);
-        vault.sweepToken(address(mockLINK), vaultOwner, 200 ether);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.sweepToken, (address(mockLINK), vaultOwner, 200 ether)), 0);
 
         assertEq(mockLINK.balanceOf(address(vault)), PARKED - 200 ether, "wrong remainder");
         assertEq(mockLINK.balanceOf(vaultOwner), 200 ether, "wrong amount sent");
@@ -124,7 +125,7 @@ contract VaultSweepTest is DeployProtocol {
     function test_sweepToken_revertsOverBalance() public {
         vm.prank(vaultOwner);
         vm.expectRevert(bytes4(keccak256("Insufficient()")));
-        vault.sweepToken(address(mockLINK), vaultOwner, PARKED + 1);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.sweepToken, (address(mockLINK), vaultOwner, PARKED + 1)), 0);
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -140,7 +141,7 @@ contract VaultSweepTest is DeployProtocol {
     function test_sweepNft_rejectsZeroRecipient() public {
         vm.prank(vaultOwner);
         vm.expectRevert(bytes4(keccak256("ZeroAddress()")));
-        vault.sweepNft(address(nft), address(0), 7);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.sweepNft, (address(nft), address(0), 7)), 0);
     }
 
     /// @notice The case this exists for: an unrelated NFT sent to the vault gets out.
@@ -151,7 +152,7 @@ contract VaultSweepTest is DeployProtocol {
         emit NftSwept(address(nft), vaultOwner, 7);
 
         vm.prank(vaultOwner);
-        vault.sweepNft(address(nft), vaultOwner, 7);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.sweepNft, (address(nft), vaultOwner, 7)), 0);
 
         assertEq(nft.ownerOf(7), vaultOwner, "stray NFT not rescued");
     }
@@ -161,6 +162,6 @@ contract VaultSweepTest is DeployProtocol {
     function test_sweepNft_soulboundSelfExcludes() public {
         vm.prank(vaultOwner);
         vm.expectRevert(bytes4(keccak256("Soulbound()")));
-        vault.sweepNft(address(deityPass), vaultOwner, 1);
+        OwnerTargetCall.call(address(vault), abi.encodeCall(vault.sweepNft, (address(deityPass), vaultOwner, 1)), 0);
     }
 }

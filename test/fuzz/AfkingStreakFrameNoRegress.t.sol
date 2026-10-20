@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {AfkingStethHost} from "./helpers/AfkingStethFixture.sol";
@@ -80,11 +81,11 @@ contract AfkingStreakFrameNoRegress is DeployProtocol {
         vm.warp(block.timestamp + 1 days);
         uint32 vaultId = _aid(address(vault));
         vm.prank(ContractAddresses.CREATOR);
-        vault.playerAction(
+        abi.decode(OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (
             ContractAddresses.GAME,
             abi.encodeWithSignature("setOperatorApproval(uint32,address,bool)", 0, OP, true),
             0
-        );
+        )), 0), (bytes));
         AfkingStethHost.SubView memory beforeSub = _sub(address(vault));
         vm.prank(OP);
         vm.expectRevert(DegenerusGameStorage.RngLocked.selector);

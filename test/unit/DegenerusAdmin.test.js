@@ -1,3 +1,4 @@
+import { ownerAction } from "../helpers/deployFixture.js";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
 import { expect } from "chai";
 import hre from "hardhat";
@@ -178,7 +179,7 @@ describe("DegenerusAdmin", function () {
 
       // Set price feed via governance (propose + vote → auto-executes)
       await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseEther("1000"));
-      await admin.connect(deployer).proposeFeedSwap(feedAddr);
+      await ownerAction(admin.connect(deployer), "proposeFeedSwap", [feedAddr]);
       await admin.connect(deployer).voteFeedSwap(await admin.feedProposalCount(), true);
 
       // Pre-fund subscription to desired level to set multiplier tier
@@ -421,7 +422,7 @@ describe("DegenerusAdmin", function () {
       const feedAddr = await mockFeed.getAddress();
       // Set feed via governance (propose + vote → auto-executes)
       await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseEther("1000"));
-      await admin.connect(deployer).proposeFeedSwap(feedAddr);
+      await ownerAction(admin.connect(deployer), "proposeFeedSwap", [feedAddr]);
       await admin.connect(deployer).voteFeedSwap(await admin.feedProposalCount(), true);
       // mockFeed price is 0.004 ETH per LINK
       const result = await admin.linkAmountToEth(eth("1"));
@@ -434,7 +435,7 @@ describe("DegenerusAdmin", function () {
       const feedAddr = await mockFeed.getAddress();
       // Set feed via governance (propose + vote → auto-executes)
       await grantSdgnrs(sdgnrs, game, deployer.address, hre.ethers.parseEther("1000"));
-      await admin.connect(deployer).proposeFeedSwap(feedAddr);
+      await ownerAction(admin.connect(deployer), "proposeFeedSwap", [feedAddr]);
       await admin.connect(deployer).voteFeedSwap(await admin.feedProposalCount(), true);
       const result = await admin.linkAmountToEth(0n);
       expect(result).to.equal(0n);
@@ -450,7 +451,7 @@ describe("DegenerusAdmin", function () {
       const vrfAddr = await mockVRF.getAddress();
       const newKeyHash = hre.ethers.id("test-key-hash");
       await expect(
-        admin.connect(deployer).propose(vrfAddr, newKeyHash)
+        ownerAction(admin.connect(deployer), "propose", [vrfAddr, newKeyHash])
       ).to.be.revertedWithCustomError(admin, "NotStalled");
     });
 
@@ -459,7 +460,7 @@ describe("DegenerusAdmin", function () {
       const newKeyHash = hre.ethers.id("test-key-hash");
       // Even if stalled, zero coordinator should revert ZeroAddress first
       await expect(
-        admin.connect(deployer).propose(ZERO_ADDRESS, newKeyHash)
+        ownerAction(admin.connect(deployer), "propose", [ZERO_ADDRESS, newKeyHash])
       ).to.be.revertedWithCustomError(admin, "ZeroAddress");
     });
 
@@ -467,7 +468,7 @@ describe("DegenerusAdmin", function () {
       const { admin, mockVRF, deployer } = await loadFixture(deployFullProtocol);
       const vrfAddr = await mockVRF.getAddress();
       await expect(
-        admin.connect(deployer).propose(vrfAddr, ZERO_BYTES32)
+        ownerAction(admin.connect(deployer), "propose", [vrfAddr, ZERO_BYTES32])
       ).to.be.revertedWithCustomError(admin, "ZeroAddress");
     });
 
@@ -552,17 +553,24 @@ describe("DegenerusAdmin", function () {
   // 7. swapGameEthForStEth
   // ---------------------------------------------------------------------------
   describe("swapGameEthForStEth", function () {
+    it("rejects zero and the governance executor as recipients", async function () {
+      const { admin, deployer, ownerGovernance } = await loadFixture(deployFullProtocol);
+      for (const recipient of [hre.ethers.ZeroAddress, await ownerGovernance.getAddress()]) {
+        await expect(ownerAction(admin.connect(deployer), "swapGameEthForStEth", [recipient], {value: eth("1")}))
+          .to.be.revertedWithCustomError(admin, "InvalidRecipient");
+      }
+    });
     it("reverts when called by non-owner", async function () {
       const { admin, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        admin.connect(alice).swapGameEthForStEth({ value: eth("1") })
+        admin.connect(alice).swapGameEthForStEth(await (admin.connect(alice)).runner.getAddress(), { value: eth("1") })
       ).to.be.revertedWithCustomError(admin, "NotOwner");
     });
 
     it("reverts when msg.value is zero", async function () {
       const { admin, deployer } = await loadFixture(deployFullProtocol);
       await expect(
-        admin.connect(deployer).swapGameEthForStEth({ value: 0n })
+        ownerAction(admin.connect(deployer), "swapGameEthForStEth", [await (admin.connect(deployer)).runner.getAddress()], { value: 0n })
       ).to.be.revertedWithCustomError(admin, "InvalidAmount");
     });
   });

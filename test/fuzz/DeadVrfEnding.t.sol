@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {claimableBalance} from "../helpers/ClaimableBalance.sol";
 
@@ -547,7 +548,7 @@ contract DeadVrfEndingTest is DeployProtocol {
 
         vm.warp(block.timestamp + 21 hours);
         vm.prank(ContractAddresses.CREATOR);
-        admin.retryGameRng(); // the vault owner's single retry (20h)
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0); // the vault owner's single retry (20h)
         vm.warp(block.timestamp + 1 days);
         assertFalse(game.livenessTriggered(), "past the deadline, behind, inside the window");
 
@@ -701,7 +702,7 @@ contract DeadVrfEndingTest is DeployProtocol {
 
         vm.prank(ContractAddresses.CREATOR);
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        admin.retryGameRng(); // the coordinator swap already spent the single retry
+        OwnerTargetCall.call(address(admin), abi.encodeCall(admin.retryGameRng, ()), 0); // the coordinator swap already spent the single retry
         assertEq(fresh.lastRequestId(), 1, "no retry after the swap");
 
         _runDay(fresh);

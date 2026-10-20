@@ -44,7 +44,7 @@ interface IDegenerusGameDonations {
 
 /// @notice Minimal interface for DegenerusVault owner check used by GNRUS governance.
 interface IDegenerusVaultOwner {
-    /// @notice Check if an address is the vault owner (>50.1% DGVE).
+    /// @notice Check if an address is the pinned DGVE governance executor.
     function isVaultOwner(address account) external view returns (bool);
 }
 
@@ -304,7 +304,7 @@ contract GNRUS {
     /// @dev Game contract for winnings claims backing redemptions
     IDegenerusGameDonations private constant game = IDegenerusGameDonations(ContractAddresses.GAME);
 
-    /// @dev Vault contract for owner (>50.1% DGVE) checks
+    /// @dev Vault contract for pinned governance owner checks
     IDegenerusVaultOwner private constant vault = IDegenerusVaultOwner(ContractAddresses.VAULT);
 
     // =====================================================================

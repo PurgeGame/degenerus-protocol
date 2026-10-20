@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
@@ -79,18 +80,18 @@ contract SmurfAllowanceTest is DeployProtocol {
     function test_AdminBaseIsAdditiveMonotonicAndPreservesMintFields() public {
         _score(0);
         vm.prank(ContractAddresses.CREATOR);
-        game.raiseSmurfBaseAllowance(main, 2);
+        OwnerTargetCall.call(address(game), abi.encodeCall(game.raiseSmurfBaseAllowance, (main, 2)), 0);
         _create(); _create(); _reject(LIMIT);
         _score(240);
         _create(); _create(); _reject(LIMIT);
         vm.prank(ContractAddresses.CREATOR);
         vm.expectRevert(INVALID);
-        game.raiseSmurfBaseAllowance(main, 2);
+        OwnerTargetCall.call(address(game), abi.encodeCall(game.raiseSmurfBaseAllowance, (main, 2)), 0);
         vm.prank(ContractAddresses.CREATOR);
         vm.expectRevert(INVALID);
-        game.raiseSmurfBaseAllowance(main, 1);
+        OwnerTargetCall.call(address(game), abi.encodeCall(game.raiseSmurfBaseAllowance, (main, 1)), 0);
         vm.prank(ContractAddresses.CREATOR);
-        game.raiseSmurfBaseAllowance(main, 3);
+        OwnerTargetCall.call(address(game), abi.encodeCall(game.raiseSmurfBaseAllowance, (main, 3)), 0);
         _create();
         uint256 w = _quotaWord();
         assertEq(game.walletIdOf(owner), main);
@@ -121,9 +122,9 @@ contract SmurfAllowanceTest is DeployProtocol {
     function test_GrantRejectsUnknownMainAndOversizedCalldata() public {
         vm.startPrank(ContractAddresses.CREATOR);
         vm.expectRevert(E);
-        game.raiseSmurfBaseAllowance(0, 1);
+        OwnerTargetCall.call(address(game), abi.encodeCall(game.raiseSmurfBaseAllowance, (0, 1)), 0);
         vm.expectRevert(E);
-        game.raiseSmurfBaseAllowance(type(uint32).max, 1);
+        OwnerTargetCall.call(address(game), abi.encodeCall(game.raiseSmurfBaseAllowance, (type(uint32).max, 1)), 0);
         (bool ok, bytes memory ret) =
             address(game).call(abi.encodeWithSelector(game.raiseSmurfBaseAllowance.selector, main, uint256(65536)));
         assertFalse(ok, "a count wider than uint16 is rejected");
@@ -173,7 +174,7 @@ contract SmurfAllowanceTest is DeployProtocol {
         vm.expectEmit(true, false, false, true, address(game));
         emit SmurfBaseAllowanceRaised(main, previous, 65_535);
         vm.prank(ContractAddresses.CREATOR);
-        game.raiseSmurfBaseAllowance(main, 65_535);
+        OwnerTargetCall.call(address(game), abi.encodeCall(game.raiseSmurfBaseAllowance, (main, 65_535)), 0);
         assertEq(_quotaWord(), (word & ~(uint256(0xffff) << 240)) | (uint256(65_535) << 240));
     }
 
@@ -259,7 +260,7 @@ contract SmurfAllowanceTest is DeployProtocol {
         // Grants cannot target a child, even when that child has a high score.
         vm.prank(ContractAddresses.CREATOR);
         vm.expectRevert(E);
-        game.raiseSmurfBaseAllowance(child, 2);
+        OwnerTargetCall.call(address(game), abi.encodeCall(game.raiseSmurfBaseAllowance, (child, 2)), 0);
         assertFalse(lens.smurfCreationInfo(address(game), child).eligibleMain);
     }
 

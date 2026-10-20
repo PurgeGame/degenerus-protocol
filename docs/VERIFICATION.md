@@ -8,6 +8,44 @@ local output directories or CI artifacts.
 The dated implementation sections below are historical, scoped evidence; their
 pass counts do not certify later revisions.
 
+### DGVE owner governance (2026-10-19)
+
+The owner route now uses escrowed DGVE, revocable voting delegation, and same-block
+exclusion. Proposals store a calldata hash and emit the complete action. A controlled
+majority can use `directAction` for Vault `playerAction` and `spendDegenesis`; all other
+owner actions require proposals. Positions occupy two slots and proposals four.
+
+The focused Foundry run passes 56 tests, including the real-protocol purchase route
+and the invariant handler (256 runs, 32,768 calls). The four Hardhat governance tests
+pass, covering distinct transactions in the same block, verified event-based calldata
+recovery, and CLI discovery of current delegates. The reference model passes 27 directed
+scenarios and both randomized campaigns, with 230 proposal executions and 186 direct actions.
+The complete default Hardhat selection passes: 97 files, 1,618 tests, no failures or
+pending cases. The batched default Foundry selection covers all 623 selected source
+roots: 5,434 distinct test cases pass, with two opt-in checks skipped (repricing fixture
+export and archived growth/foil runtime comparison). Counts deduplicate imported suites;
+passing reruns cover the corrected ownership fixtures. The gas selection also completes
+with transaction isolation enabled across 85 files. Mainnet-fork, deep-profile and Halmos
+symbolic lanes were not run for this change; these results are not a deployment
+certification. Removing the Vault's private owner predicate produced identical
+executable Vault and governance bytecode.
+
+Measured on Hardhat with solc 0.8.34, via-IR, optimizer 1000 and Osaka: a repeated
+Vault ticket purchase costs 175,887 gas through two delegated thirds, compared with
+153,515 for the same underlying Vault call at the same state (22,372 gas overhead).
+Initial approvals and delegated deposits total 301,368 gas. Without a common voting
+controller, the repeated two-holder proposal cycle totals 429,836 gas. These figures
+cover the specific 400-unit ticket purchase with 0.01 ETH of Vault funding; other
+actions and owner-list sizes have different costs.
+
+Reproduce the focused checks with `scripts/test-foundry-groups.py --file
+test/governance/OwnerGovernance.t.sol --file test/governance/OwnerGovernanceInvariant.t.sol
+--file test/governance/OwnerGovernanceProtocol.t.sol --file test/fuzz/DegenesisVaultSpend.t.sol`
+and `scripts/test-hardhat-groups.py --file test/unit/OwnerGovernance.test.js`. Run these
+in separate checkouts if concurrent. The production structural gates include
+`check-owner-actions.js`, `check-owner-governance-layout.js`, the existing Vault player
+allowlist, deployment-size checks and the storage-layout oracle.
+
 ### Compact lootbox orders (2026-10-17)
 
 One box type per purchase; three 85-bit orders per queue word (see `docs/ARCHITECTURE.md`).

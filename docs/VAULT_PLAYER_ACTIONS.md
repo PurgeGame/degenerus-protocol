@@ -1,6 +1,6 @@
 # Vault player controls
 
-The holder of **more than 50.1% of DGVE** can call
+An [owner governance proposal](OWNER_GOVERNANCE.md) approved by **more than 50.1% of live DGVE supply** can call
 `vault.playerAction(target, data, ethValue)` to perform player actions as the Vault.
 `data` is the destination's normal ABI-encoded function call. `ethValue` is ETH
 drawn from the Vault in addition to the transaction's `msg.value`. Return values
@@ -42,7 +42,7 @@ Wallet-wide functions without an account-ID argument still act on the Vault wall
 | GNRUS | Charity votes and GNRUS burns |
 | LINK | `transferAndCall`, including LINK donations credited to the Vault |
 
-For example, buy a foil pack with 0.1 ETH from Vault reserves:
+For example, the approved transaction below buys a foil pack with 0.1 ETH from Vault reserves. Encode this Vault call as the governance proposal; a holder cannot call it directly:
 
 ```solidity
 vault.playerAction(
@@ -64,7 +64,7 @@ share redemption. Their privileged destination selectors are excluded from
 `playerAction`, so each budgeted operation has one route. Approved Game operators can continue
 to use explicit account ID 1; that approval does not grant access to
 `playerAction` or ETH held directly by the Vault. Such approvals persist across a
-change of DGVE majority holder; the current holder revokes any of them through
+change of DGVE ownership; a subsequent owner proposal revokes any of them through
 `playerAction`.
 
 ## Rules that still apply
@@ -86,15 +86,15 @@ Underlying restrictions are deliberately preserved:
 - The Vault's referral is already assigned permanently; it cannot replace it.
 - VRF/feed proposals and votes are excluded: `sDGNRS.votingSupply()` excludes
   the Vault's treasury allocation. Counting that balance as votes would violate
-  the governance denominator. The DGVE holder retains its own Admin owner path
-  and any voting rights from its personal eligible holdings.
-- Craps custom battle creation requires creator authorization. The DGVE owner
+  the governance denominator. The DGVE executor retains the Admin owner proposal path. Holders retain
+  community voting rights from their personal eligible sDGNRS holdings.
+- Craps custom battle creation requires creator authorization. An owner proposal
   can grant that to the Vault with `CrapsBattle.setBattleCreator(VAULT, true)`.
 - Normal RNG/day locks, game-over restrictions, prices, quotas, balances,
   claim existence and voting eligibility remain enforced at the destination.
 
-Controls that check `isVaultOwner(msg.sender)` are called **directly by the DGVE
-holder**, rather than through the Vault: Game thresholds/Thanos/smurf allowances,
+Controls that check `isVaultOwner(msg.sender)` are called **by the governance
+executor** at their own target address: Game thresholds/Thanos/smurf allowances,
 Craps creator permissions, WWXRP mint scale/trusted minters, GNRUS charity/recovery
 controls, and Admin owner operations. Permissionless maintenance and cache/identity
 helpers can likewise be called externally without impersonating the Vault.

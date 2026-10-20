@@ -1,3 +1,4 @@
+import { ownerAction } from "../helpers/deployFixture.js";
 import { expect } from "chai";
 import hre from "hardhat";
 import { readFileSync } from "node:fs";
@@ -23,7 +24,7 @@ async function impersonate(address) {
 }
 
 async function fixture() {
-  const f = await loadFixture(deployFullProtocol);
+  const f = await deployFullProtocol({finalizeIcons: true});
   await wireIcons32(f.icons32, ICONS, { finalize: true });
   const gameSigner = await impersonate(await f.game.getAddress());
   for (let id = 0; id < 31; id++) {
@@ -33,7 +34,7 @@ async function fixture() {
   await hre.network.provider.send("hardhat_stopImpersonatingAccount", [await f.game.getAddress()]);
   const renderer = await (await hre.ethers.getContractFactory("DeityPassCustomizationRenderer"))
     .deploy(await f.deityPass.getAddress());
-  await f.deityPass.connect(f.deployer).setRenderer(await renderer.getAddress());
+  await ownerAction(f.deityPass.connect(f.deployer), "setRenderer", [await renderer.getAddress()]);
   return { ...f, renderer };
 }
 
@@ -169,7 +170,7 @@ describe("DeityPassCustomizationRenderer", function () {
     const { deityPass, renderer, alice, deployer } = await loadFixture(fixture);
     await renderer.connect(alice).setTokenColors(8, { ...inherit(), rimColor: "#ff69b4" });
     await renderer.connect(alice).setTokenGeometry(8, geometry(1200, 1000, -1000));
-    await deityPass.connect(deployer).setRenderColors("#112233", "#445566", "#778899");
+    await ownerAction(deityPass.connect(deployer), "setRenderColors", ["#112233", "#445566", "#778899"]);
     const style = await renderer.effectiveTokenStyle(8);
     expect(style.colors).to.deep.equal(["#ff69b4", "#ffffff", "#778899", "#445566", "#112233"]);
     expect(style.overrideMask).to.equal(33);
@@ -258,14 +259,14 @@ describe("DeityPassCustomizationRenderer", function () {
     for (let id = 0; id < 32; id++) {
       const before = decode(await deityPass.tokenURI(id));
       expect(before.svg).to.include(ICONS.paths[id]);
-      await deityPass.connect(deployer).setRenderer(hre.ethers.ZeroAddress);
+      await ownerAction(deityPass.connect(deployer), "setRenderer", [hre.ethers.ZeroAddress]);
       const internal = decode(await deityPass.tokenURI(id));
       expect(before.json.name).to.equal(internal.json.name);
       expect(before.json.description).to.equal(internal.json.description);
       expect(before.svg).to.include(internal.svg.match(/<g transform='matrix\([^']+'><g[^>]*>/)[0].replace(" style='vector-effect:non-scaling-stroke'", ""));
-      await deityPass.connect(deployer).setRenderer(await renderer.getAddress());
+      await ownerAction(deityPass.connect(deployer), "setRenderer", [await renderer.getAddress()]);
     }
-    await deityPass.connect(deployer).setRenderColors("#Ab8D3f", "#d9d9d9", "#AB8D3F");
+    await ownerAction(deityPass.connect(deployer), "setRenderColors", ["#Ab8D3f", "#d9d9d9", "#AB8D3F"]);
     const { svg } = decode(await deityPass.tokenURI(29));
     expect(svg).to.include('<circle r="35" fill="#fff"/>');
     expect(svg).to.include('<circle r="28" fill="#111111"/>');
@@ -307,9 +308,9 @@ describe("DeityPassCustomizationRenderer", function () {
     const customized = await deityPass.tokenURI(8);
     expect(decode(customized).json.name).to.equal(original.name);
     expect(decode(customized).json.description).to.equal(original.description);
-    await deityPass.connect(deployer).setRenderer(hre.ethers.ZeroAddress);
+    await ownerAction(deityPass.connect(deployer), "setRenderer", [hre.ethers.ZeroAddress]);
     expect(await deityPass.tokenURI(8)).to.not.equal(customized);
-    await deityPass.connect(deployer).setRenderer(await renderer.getAddress());
+    await ownerAction(deityPass.connect(deployer), "setRenderer", [await renderer.getAddress()]);
     expect(await deityPass.tokenURI(8)).to.equal(customized);
   });
 });
