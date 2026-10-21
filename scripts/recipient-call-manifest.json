@@ -2155,7 +2155,7 @@
     "path": "contracts/DegenerusAdmin.sol",
     "scope": "DegenerusAdmin.shutdownVrf",
     "kind": "bounded-wrapper",
-    "expression": "BoundedCall.call( coordinator, 0, 300_000, abi.encodeWithSelector(IVRFCoordinatorV2_5Owner.cancelSubscription.selector, subId, target), 0 )",
+    "expression": "BoundedCall.call( coordinator, 0, 450_000, abi.encodeWithSelector(IVRFCoordinatorV2_5Owner.cancelSubscription.selector, subId, target), 0 )",
     "count": 1,
     "review": "ISOLATED: F0 fixed budget, unconditional gas admission and capped return copy; site defines refusal/drop/zero."
   },
@@ -2163,7 +2163,7 @@
     "path": "contracts/DegenerusAdmin.sol",
     "scope": "DegenerusAdmin.shutdownVrf",
     "kind": "bounded-wrapper",
-    "expression": "BoundedCall.callBool( address(linkToken), 150_000, abi.encodeWithSelector(ILinkTokenLike.transfer.selector, target, bal) )",
+    "expression": "BoundedCall.callBool( address(linkToken), 200_000, abi.encodeWithSelector(ILinkTokenLike.transfer.selector, target, bal) )",
     "count": 1,
     "review": "ISOLATED: F0 fixed budget, unconditional gas admission and capped return copy; site defines refusal/drop/zero."
   },
@@ -7307,7 +7307,7 @@
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule.stakeExcessEth",
     "kind": "bounded-wrapper",
-    "expression": "BoundedCall.call(ContractAddresses.STETH_TOKEN, amount, 200_000, abi.encodeWithSelector(IStETH.submit.selector, address(0)), 32)",
+    "expression": "BoundedCall.call(ContractAddresses.STETH_TOKEN, amount, 300_000, abi.encodeWithSelector(IStETH.submit.selector, address(0)), 32)",
     "count": 1,
     "review": "ISOLATED: F0 fixed 200k stETH submit inside a trusted rollback frame; refusal or zero shares reverts the frame and keeps the ETH."
   },
@@ -9682,16 +9682,8 @@
   {
     "path": "contracts/modules/DegenerusGameRngUtils.sol",
     "scope": "DegenerusGameRngUtils._closeRedemptionBatch",
-    "kind": "bounded-wrapper",
-    "expression": "BoundedCall.call(sdgnrs, ethAmount, 30_000, \"\", 0)",
-    "count": 1,
-    "review": "ISOLATED: fixed 30k transfer of available reserve ETH to the pinned sDGNRS; refusal retains reserve and pool, successful send debits both."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameRngUtils.sol",
-    "scope": "DegenerusGameRngUtils._closeRedemptionBatch",
     "kind": "external",
-    "expression": "IsDGNRS(sdgnrs).closeRedemptionBatch(claimable)",
+    "expression": "IsDGNRS(ContractAddresses.SDGNRS).closeRedemptionBatch(claimable)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -10267,7 +10259,7 @@
     "path": "contracts/modules/GameAfkingModule.sol",
     "scope": "GameAfkingModule.pullAfkingSteth",
     "kind": "bounded-wrapper",
-    "expression": "BoundedCall.call(ContractAddresses.STETH_TOKEN, 0, 200_000, abi.encodeWithSelector(IStETH.transferSharesFrom.selector, source, address(this), shares), 32)",
+    "expression": "BoundedCall.call(ContractAddresses.STETH_TOKEN, 0, 300_000, abi.encodeWithSelector(IStETH.transferSharesFrom.selector, source, address(this), shares), 32)",
     "count": 1,
     "review": "ISOLATED: F0 fixed stETH read/transfer inside the atomic AFKing frame; failure reverts that frame only."
   },
@@ -10419,7 +10411,7 @@
     "path": "contracts/sDGNRS.sol",
     "scope": "sDGNRS._claimRedemptionFor",
     "kind": "external",
-    "expression": "game.creditRedemptionDirect{value: ethForDirect}(walletId, ethDirect)",
+    "expression": "game.creditRedemptionDirect(walletId, ethDirect)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -10427,7 +10419,7 @@
     "path": "contracts/sDGNRS.sol",
     "scope": "sDGNRS._claimRedemptionFor",
     "kind": "external",
-    "expression": "game.creditRedemptionDirect{value: ethForForfeit}(SDGNRS_WALLET_ID, forfeitEth)",
+    "expression": "game.creditRedemptionDirect(SDGNRS_WALLET_ID, forfeitEth)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -10435,7 +10427,7 @@
     "path": "contracts/sDGNRS.sol",
     "scope": "sDGNRS._claimRedemptionFor",
     "kind": "external",
-    "expression": "game.resolveRedemptionLootbox{value: ethForLootbox}( walletId, lootboxEth, entropy, actScore, batchId )",
+    "expression": "game.resolveRedemptionLootbox(walletId, lootboxEth, entropy, actScore, batchId)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -10523,17 +10515,17 @@
     "path": "contracts/sDGNRS.sol",
     "scope": "sDGNRS._holderValue",
     "kind": "recipient-helper",
-    "expression": "_liveMoney(withSteth)",
+    "expression": "_liveMoney(withCustody)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing backing read routed through _holderValue; stETH custody counts only after game over (live legs cannot pay it)."
+    "review": "TRANSITIVE_BASELINE: existing backing read routed through _holderValue; token custody (ETH, stETH) counts only after game over (live legs pay only from the Game reserve)."
   },
   {
     "path": "contracts/sDGNRS.sol",
-    "scope": "sDGNRS._liveMoney",
+    "scope": "sDGNRS._redemptionBacking",
     "kind": "external",
     "expression": "steth.balanceOf(address(this))",
     "count": 1,
-    "review": "EXTERNAL_SERVICE: pinned Lido/Chainlink dependency; chain reachability and isolation are tracked in external-call-census.md."
+    "review": "EXTERNAL_SERVICE: pinned Lido dependency, read only when withCustody (after game over); chain reachability and isolation are tracked in external-call-census.md."
   },
   {
     "path": "contracts/sDGNRS.sol",
@@ -10553,11 +10545,19 @@
   },
   {
     "path": "contracts/sDGNRS.sol",
+    "scope": "sDGNRS._liveMoney",
+    "kind": "recipient-helper",
+    "expression": "_redemptionBacking(_claimableWinnings(), withCustody)",
+    "count": 1,
+    "review": "TRANSITIVE: reaches the Lido balance read only when withCustody (game-over burns, claims and preview); live callers (burn minimum, live preview) pass false."
+  },
+  {
+    "path": "contracts/sDGNRS.sol",
     "scope": "sDGNRS._payGameOverValue",
-    "kind": "external",
-    "expression": "steth.balanceOf(address(this))",
+    "kind": "recipient-helper",
+    "expression": "_redemptionBacking(0, true)",
     "count": 2,
-    "review": "OFF_CHAIN: holder-initiated game-over burn."
+    "review": "OFF_CHAIN: holder-initiated game-over burn; custody read through _redemptionBacking."
   },
   {
     "path": "contracts/sDGNRS.sol",

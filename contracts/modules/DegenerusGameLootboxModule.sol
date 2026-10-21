@@ -83,7 +83,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
     // error E() — inherited from DegenerusGameStorage
     /// @notice Thrown when msg.value exceeds the declared lootbox or credit amount.
-    error MsgValueExceedsAmount();
 
     // =========================================================================
     // Events
@@ -232,8 +231,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     /// @dev One whole WWXRP token: the floor
     ///      under every size-scaled box WWXRP amount (see `_boxWwxrpStake`).
     uint256 private constant LOOTBOX_WWXRP_PRIZE = 1;
-    /// @dev WWXRP per ETH of roll value — 5 tokens per 0.01 ETH. Since WWXRP carries 18
-    ///      decimals like wei, the conversion is a bare multiply on the wei amount.
+    /// @dev Whole WWXRP per ETH of roll value — 5 tokens per 0.01 ETH. WWXRP has 0 decimals:
+    ///      the wei amount times this rate is a 1e18-scaled intermediate that `_boxWwxrpStake`
+    ///      divides down to whole tokens (the token then applies its own game mint scale).
     uint256 private constant LOOTBOX_WWXRP_PER_ETH = 500;
     /// @dev Domain-separation tags mixed (via hash2) into the box seed to derive each
     ///      Degenerette-spin sub-seed. Counter-tagged off the primary chunk, so the spins
@@ -868,25 +868,21 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint48 private constant REDEMPTION_INDEX_TAG = uint48(1) << 47;
 
     /// @notice Resolve redemption lootboxes for an sDGNRS gambling burn claim.
-    /// @dev Forwarded ETH and the protected redemption reserve fund one box order. The ledger
-    ///      remainder leaves claimablePool when the value enters the prize pool. The order
-    ///      resolves at the live level using the burn's activity snapshot and batch entropy.
+    /// @dev The protected redemption reserve funds one box order; the value leaves claimablePool
+    ///      when it enters the prize pool. The order resolves at the live level using the burn's
+    ///      activity snapshot and batch entropy.
     /// @param id The claim's beneficiary wallet ID
-    /// @param amount Total lootbox value to resolve (msg.value ETH plus reserved Game backing)
+    /// @param amount Total lootbox value to resolve, drawn from the redemption reserve
     /// @param rngWord RNG entropy for lootbox resolution
     /// @param activityScore Snapshotted activity score (whole points) from burn submission
     /// @param batchId The redemption batch the claim belongs to (seed and event tag)
     function resolveRedemptionLootbox(
         uint32 id, uint256 amount, uint256 rngWord, uint16 activityScore, uint32 batchId
-    ) external payable {
+    ) external {
         if (msg.sender != ContractAddresses.SDGNRS) revert OnlySDGNRS();
         if (amount == 0) return;
-        if (msg.value > amount) revert MsgValueExceedsAmount();
-        uint256 ledgerPortion = amount - msg.value;
-        if (ledgerPortion != 0) {
-            _setRedemptionReserve(_redemptionReserve() - ledgerPortion);
-            claimablePool -= uint128(ledgerPortion);
-        }
+        _setRedemptionReserve(_redemptionReserve() - amount);
+        claimablePool -= uint128(amount);
 
         if (prizePoolFrozen) {
             (uint128 pNext, uint128 pFuture) = _getPendingPools();
@@ -916,18 +912,14 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     }
 
     /// @notice Credit the direct half of an sDGNRS redemption claim to `id`'s claimable winnings.
-    /// @dev Forwarded ETH increases the pool; the remainder moves protected redemption
-    ///      backing to the beneficiary without changing the pool total.
+    /// @dev Moves protected redemption backing to the beneficiary without changing the pool total.
     /// @param id Claimant wallet ID credited.
-    /// @param amount Total direct-half value (msg.value ETH plus reserved Game backing).
-    function creditRedemptionDirect(uint32 id, uint256 amount) external payable {
+    /// @param amount Total direct-half value, drawn from the redemption reserve.
+    function creditRedemptionDirect(uint32 id, uint256 amount) external {
         if (msg.sender != ContractAddresses.SDGNRS) revert OnlySDGNRS();
-        if (msg.value > amount) revert MsgValueExceedsAmount();
         if (amount == 0) return;
-        uint256 ledgerPortion = amount - msg.value;
-        if (ledgerPortion != 0) _setRedemptionReserve(_redemptionReserve() - ledgerPortion);
+        _setRedemptionReserve(_redemptionReserve() - amount);
         _creditClaimableLogged(id, amount);
-        claimablePool += uint128(msg.value);
     }
 
     /// @notice Resolve an AfKing-subscription box at the LIVE level from a caller-passed
@@ -1087,9 +1079,9 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     ///      box seed at nonce 0). The Degenerette-spin rolls (WWXRP / FLIP-spins / ETH-spin) derive
     ///      their sub-seeds via hash2(seed, BOX_*_SPIN_TAG) and consume no primary bits.
     /// @param payColdBustConsolation Whether a ticket-path cold-bust (`whole == 0`) pays the
-    ///        roll's `_boxWwxrpStake` in WWXRP; `true` for queued entries
-    ///        and `resolveAfkingBox`, `false` for the auto-resolve callers (`resolveLootboxDirect`,
-    ///        `resolveRedemptionLootbox`), which stay silent on cold-bust
+    ///        roll's `_boxWwxrpStake` in WWXRP; `true` for every box order (queued entries and
+    ///        the redemption order, through `_rollBoxes`) and `resolveAfkingBox`, `false` only
+    ///        for `resolveLootboxDirect`, which stays silent on cold-bust
     /// @param distressEth Portion of lootbox ETH bought during distress mode (pre-EV-scaling basis)
     /// @param totalPackedEth Total packed lootbox ETH (pre-EV-scaling basis, denominator for distress fraction)
     /// @param activityScore Frozen whole-point activity score threaded to the Degenerette spin rolls
@@ -1228,8 +1220,8 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
             // call). The cap keeps `wholeTicketsToEntries`' `<< 2` in range too. Reachable
             // only at economically absurd (though encodable) order sizes; saturation matches
             // the per-roll ceiling's own graceful-cap policy.
-            // Queued entries and `resolveAfkingBox` pay the WWXRP cold-bust consolation;
-            // the other auto-resolve callers stay silent.
+            // Box orders (queued and redemption) and `resolveAfkingBox` pay the WWXRP cold-bust
+            // consolation; only `resolveLootboxDirect` stays silent.
             _addBoxTickets(acc, rollLevel - currentLevel, whole);
             if (payColdBustConsolation && whole == 0) {
                 acc.wwxrp += _boxWwxrpStake(rollAmount);

@@ -419,7 +419,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             EXTERNAL_READ_GAS, abi.encodeWithSelector(IStETH.allowance.selector, source, address(this)));
         if (!allowanceOk) revert AfkingStethPullFailed();
         if (allowance < quote) return 0;
-        (bool ok, bytes memory result) = BoundedCall.call(ContractAddresses.STETH_TOKEN, 0, 200_000,
+        (bool ok, bytes memory result) = BoundedCall.call(ContractAddresses.STETH_TOKEN, 0, 300_000,
             abi.encodeWithSelector(IStETH.transferSharesFrom.selector, source, address(this), shares), 32);
         if (!ok) revert AfkingStethPullFailed();
         uint256 transferred = abi.decode(result, (uint256));

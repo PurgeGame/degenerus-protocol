@@ -121,10 +121,9 @@ interface IsDGNRS {
     /// @return flipOut Amount of FLIP that would be minted
     function previewBurnValue(uint256 amount) external view returns (uint256 ethOut, uint256 flipOut);
 
-    /// @notice Total ETH value reserved in sDGNRS custody for closed gambling-burn batches.
-    /// @dev A batch close reserves its MAX payout and the Game moves whatever sDGNRS custody does
-    ///      not already hold out of sDGNRS's claimable, so the reserve is never part of the
-    ///      Game's balance and the game-over drain never subtracts it.
+    /// @notice Total ETH value reserved for closed gambling-burn batches.
+    /// @dev A batch close reserves its MAX payout and the Game moves it out of sDGNRS's claimable
+    ///      into its redemption reserve, which stays inside claimablePool until the legs pay it.
     function pendingRedemptionEthValue() external view returns (uint256);
 
     /// @notice Open/settling batch IDs, settlement cursor and unpriced burned supply.
@@ -137,7 +136,7 @@ interface IsDGNRS {
     ///         mid-day) VRF request; the ending's request closes nothing.
     /// @dev Never reverts. An empty batch, or a close while another batch settles, is a no-op.
     /// @param gameClaimable sDGNRS's claimable balance on the Game.
-    /// @return pull ETH value the Game must move from that claimable into sDGNRS custody.
+    /// @return pull Value the Game moves from that claimable into its redemption reserve.
     function closeRedemptionBatch(uint256 gameClaimable) external returns (uint256 pull);
 
     /// @notice Resolve the settling batch at a flat roll of 100 if its live settlement never started

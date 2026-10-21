@@ -1067,7 +1067,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
     /// @dev Private dispatch surface: no Game facade; only the transition delegates here.
     function stakeExcessEth(uint256 amount) external {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
-        (bool ok, bytes memory receipt) = BoundedCall.call(ContractAddresses.STETH_TOKEN, amount, 200_000,
+        (bool ok, bytes memory receipt) = BoundedCall.call(ContractAddresses.STETH_TOKEN, amount, 300_000,
             abi.encodeWithSelector(IStETH.submit.selector, address(0)), 32);
         if (!ok || abi.decode(receipt, (uint256)) == 0) revert StEthStakeRefused();
     }

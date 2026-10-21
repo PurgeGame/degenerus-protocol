@@ -89,9 +89,8 @@ contract LootboxBernoulliTester {
     ///           if (payColdBustConsolation && whole == 0) {
     ///               acc.wwxrp += _boxWwxrpStake(rollAmount);
     ///           }
-    ///         The manual callers and `resolveAfkingBox` pass `payColdBustConsolation = true`;
-    ///         the other auto-resolve callers (`resolveLootboxDirect`,
-    ///         `resolveRedemptionLootbox`) pass `false`.
+    ///         Box orders (queued entries and the redemption order) and `resolveAfkingBox` pass
+    ///         `payColdBustConsolation = true`; only `resolveLootboxDirect` passes `false`.
     /// @param payColdBustConsolation The per-caller flag gating the consolation payout.
     /// @param scaledPre Pre-Bernoulli scaled ticket count.
     /// @param seed Per-resolution 256-bit keccak seed.

@@ -589,8 +589,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
 
         // Compute available funds FIRST (before any side effects)
         // Deity pass refunds have not happened yet, so claimablePool is pre-refund.
-        // The Game-held redemption reserve is already in claimablePool; value sent to
-        // sDGNRS custody has left both the Game's balance and this liability.
+        // The Game-held redemption reserve is already in claimablePool.
         uint256 reserved = uint256(claimablePool);
         uint256 preRefundAvailable = totalFunds > reserved ? totalFunds - reserved : 0;
 

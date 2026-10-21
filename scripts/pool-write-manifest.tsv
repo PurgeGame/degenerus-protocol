@@ -65,7 +65,7 @@ VALUE-IN	_setPendingPools	_buyFoilPack	modules/DegenerusGameFoilPackModule.sol	R
 VALUE-IN	_setPendingPools	purchaseDeityPass	modules/DegenerusGameWhaleModule.sol	READ	pass purchase revenue -> pending pools during freeze
 VALUE-IN	_setPendingPools	purchaseLazyPass	modules/DegenerusGameWhaleModule.sol	READ	pass purchase revenue -> pending pools during freeze
 POOL-TO-POOL	_setPendingPools	resolveEthSpinFromBox	modules/DegenerusGameDegeneretteModule.sol	READ	box ETH-spin flush (same shape as runDegeneretteWork)
-POOL-TO-POOL	_setPendingPools	resolveRedemptionLootbox	modules/DegenerusGameLootboxModule.sol	READ	redemption ETH plus sDGNRS ledger debit funds pending future during freeze
+POOL-TO-POOL	_setPendingPools	resolveRedemptionLootbox	modules/DegenerusGameLootboxModule.sol	READ	redemption reserve debit funds pending future during freeze
 MUTATOR-DEF	_setPrizePools	_addFuturePrizePool	modules/DegenerusGameJackpotModule.sol	READ	helper body delegates to the packed-slot setter
 MUTATOR-DEF	_setPrizePools	_addNextPrizePool	modules/DegenerusGameJackpotModule.sol	READ	helper body delegates to the packed-slot setter
 VALUE-IN	_setPrizePools	_collectBetFunds	modules/DegenerusGameDegeneretteModule.sol	READ	ETH bet lands in future (same funding mix as the frozen path)
@@ -82,7 +82,7 @@ POOL-TO-POOL	_setPrizePools	awardWhalePass	modules/DegenerusGameWhaleModule.sol	
 VALUE-IN	_setPrizePools	_buyFoilPack	modules/DegenerusGameFoilPackModule.sol	READ	foil premium lands in live pools (75/25 split) (private _buyFoilPack, reached only through purchaseWithFoil; the pack leg of the additive purchase)
 VALUE-IN	_setPrizePools	purchaseDeityPass	modules/DegenerusGameWhaleModule.sol	READ	pass purchase revenue -> live pools
 VALUE-IN	_setPrizePools	purchaseLazyPass	modules/DegenerusGameWhaleModule.sol	READ	pass purchase revenue -> live pools
-POOL-TO-POOL	_setPrizePools	resolveRedemptionLootbox	modules/DegenerusGameLootboxModule.sol	READ	redemption ETH plus sDGNRS ledger debit funds future (live path)
+POOL-TO-POOL	_setPrizePools	resolveRedemptionLootbox	modules/DegenerusGameLootboxModule.sol	READ	redemption reserve debit funds future (live path)
 DECL	claimablePool	<file-scope>	storage/DegenerusGameStorage.sol	DECL	counted-term state variable declaration
 PAIRED-CREDIT	claimablePool	_addClaimableEth	modules/DegenerusGameDegeneretteModule.sol	WRITE	aggregate + per-player in tandem; funded by the running pool debit in _distributePayout
 VALUE-OUT	claimablePool	_claimWinningsInternal	DegenerusGame.sol	WRITE	player withdrawal: aggregate falls as ETH leaves (CEI); per-player claimable zeroed in tandem
@@ -98,10 +98,8 @@ POOL-TO-POOL	_setPendingPools	_releaseBafReserve	modules/DegenerusGameJackpotDra
 PAIRED-CREDIT	claimablePool	_resumeEth	modules/DegenerusGameJackpotModule.sol	WRITE	winners' liabilityDelta aggregate; per-winner credits in _payEthQuadrant; funded by the current-pool debit in runDailyJackpot
 POOL-TO-POOL	claimablePool	_settleShortfall	storage/DegenerusGameStorage.sol	WRITE	canonical spend waterfall (claimable then afking); the matching value destination is at each call site (D-01: pairing kept at call sites)
 POOL-TO-POOL	claimablePool	claimDeadVrf	modules/DegenerusGameGameOverModule.sol	WRITE	moves part of the fixed dead-ending pot (unallocated ETH left after _handleGameOverDrain) into claimable; total bounded by deadPot (created share <= traits x perTrait, uncreated weight debited from the tally)
-VALUE-IN	claimablePool	creditRedemptionDirect	modules/DegenerusGameLootboxModule.sol	WRITE	aggregate in tandem with the arriving value
 VALUE-IN	claimablePool	distributeYieldSurplus	modules/DegenerusGameJackpotModule.sol	WRITE	aggregate for the three sink credits (23% x3)
 DRAIN-ZERO	claimablePool	_handleFinalSweep	modules/DegenerusGameGameOverModule.sol	WRITE	30-day final sweep: sinks paid their claimable, residual forfeited three-way, claims closed (GO_SWEPT)
-VALUE-OUT	claimablePool	_closeRedemptionBatch	modules/DegenerusGameRngUtils.sol	WRITE	Request close debits the full pull from ordinary claimable into the protected reserve; successfully sent ETH leaves the reserve and claimablePool together. RedemptionIsolation verifies both ledgers and receipt.
 VALUE-OUT	claimablePool	withdrawAfkingFunding	modules/DegenerusGameMintModule.sol	WRITE	prepaid afking returned to funder; per-player afking half debited in tandem
 DECL	currentPrizePool	<file-scope>	storage/DegenerusGameStorage.sol	DECL	counted-term state variable declaration
 POOL-TO-POOL	currentPrizePool	_consolidatePoolsAndRewardJackpots	modules/DegenerusGameAdvanceModule.sol	WRITE	consolidation: next merges into current, x00 keep-roll moves future->current
@@ -132,7 +130,7 @@ MUTATOR-DEF	_creditClaimableLogged	_creditClaimableLogged	storage/DegenerusGameS
 PAIRED-CREDIT	_creditClaimableLogged	_handleGameOverDrain	modules/DegenerusGameGameOverModule.sol	READ	per-owner deity refunds credited by wallet ID; aggregate into totalRefunded, which the drain adds to claimablePool
 PAIRED-CREDIT	_creditClaimableLogged	_queueWhalePassClaimCore	modules/DegenerusGamePayoutUtils.sol	READ	sub-half-pass remainder credited and RETURNED for the caller to fold into its claimableDelta (single aggregate bump + source-pool debit)
 PAIRED-CREDIT	_creditClaimableLogged	claimDeadVrf	modules/DegenerusGameGameOverModule.sol	READ	deterministic-ending share credited to the holding's owner ID; paired with its own claimablePool increment
-VALUE-IN	_creditClaimableLogged	creditRedemptionDirect	modules/DegenerusGameLootboxModule.sol	READ	direct redemption credits the player from msg.value plus a debit of sDGNRS claimable; claimablePool rises only by msg.value
+VALUE-IN	_creditClaimableLogged	creditRedemptionDirect	modules/DegenerusGameLootboxModule.sol	READ	direct redemption credits the player from the redemption reserve, which already sits inside claimablePool; the pool total is unchanged
 VALUE-IN	_creditClaimableLogged	distributeYieldSurplus	modules/DegenerusGameJackpotModule.sol	READ	recognized stETH yield surplus: runs only when balance+stETH exceeds the full obligation set; three sink credits (vault, sDGNRS, GNRUS IDs)
 PAIRED-CREDIT	_creditClaimableLogged	sweepAccounts	modules/DegenerusGameMintModule.sol	READ	Internal consolidation to the current main ID; exact claimable/prepaid source debits preserve claimablePool and custody
 PAIRED-CREDIT	_creditClaimableLogged	_autoRepayLoan	modules/DegenerusGameAdvanceModule.sol	READ	Automatic loan repayment (full term at the due level; the current repayment price at a VRF-alive game over) moves the borrower's own claimable and prepaid funding to its lender; exact source debit, claimablePool unchanged
@@ -143,5 +141,5 @@ PAIRED-CREDIT	_creditClaimableLogged	repay	modules/DegenerusGameMintModule.sol	R
 VALUE-IN	claimablePool	buyDegenesisBox	modules/DegenerusGameDegenesisModule.sol	WRITE	Whole Degenesis amount held as a reserved obligation until the cohort splits; funded by msg.value, claimable and prepaid draws (the draw legs are debited in _settleShortfall, overpay credits afking via _creditAfkingValue)
 POOL-TO-POOL	claimablePool	_splitDegenesisCohorts	modules/DegenerusGameDegenesisModule.sol	WRITE	cohort split: half of the volume leaves claimablePool for the future pool; the other half stays inside it as the Vault budget (degenesisVaultBudget) and the sDGNRS AFKing funding (balancesPacked high half)
 POOL-TO-POOL	_addPrizeContribution	_splitDegenesisCohorts	modules/DegenerusGameDegenesisModule.sol	READ	the released half credits the future pool (freeze-aware), paired with the claimablePool decrement above
-POOL-TO-POOL	claimablePool	resolveRedemptionLootbox	modules/DegenerusGameLootboxModule.sol	WRITE	sDGNRS ledger remainder leaves claimablePool and enters the future prize pool; forwarded ETH is new backing
+POOL-TO-POOL	claimablePool	resolveRedemptionLootbox	modules/DegenerusGameLootboxModule.sol	WRITE	the redemption reserve debit leaves claimablePool and enters the future prize pool
 PRE-COUNTED	_creditClaimableLogged	_releaseRedemptionReserve	storage/DegenerusGameStorage.sol	READ	Reclassifies Game-held redemption reserve into sDGNRS ordinary claimable; claimablePool already counts the value and is unchanged.

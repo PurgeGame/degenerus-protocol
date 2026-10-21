@@ -820,8 +820,8 @@ interface IDegenerusGame {
 
     /// @notice Credit the direct half of an sDGNRS redemption claim to the claimant's claimable winnings.
     /// @param id Claimant wallet ID credited.
-    /// @param amount Total direct-half value (msg.value ETH + the stETH remainder pulled here).
-    function creditRedemptionDirect(uint32 id, uint256 amount) external payable;
+    /// @param amount Total direct-half value, drawn from the redemption reserve.
+    function creditRedemptionDirect(uint32 id, uint256 amount) external;
 
     /// @notice Claim the caller's winnings, preferring stETH over native ETH.
     function claimWinningsStethFirst() external;

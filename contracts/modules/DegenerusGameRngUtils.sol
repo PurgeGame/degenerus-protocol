@@ -3,7 +3,6 @@ pragma solidity 0.8.34;
 
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
-import {BoundedCall} from "../libraries/BoundedCall.sol";
 import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 
@@ -16,23 +15,16 @@ abstract contract DegenerusGameRngUtils is DegenerusGameStorage {
     event DailyRngApplied(uint24 day, uint256 rawWord, uint256 nudges, uint256 finalWord);
 
     /// @dev Isolate the whole priced pull from ordinary spending. Only settlement legs may
-    ///      consume the unsent reserve; it remains inside claimablePool until paid or recycled.
+    ///      consume the reserve; it remains inside claimablePool until paid or recycled.
     function _closeRedemptionBatch() internal {
-        address sdgnrs = ContractAddresses.SDGNRS;
         // Requests need the read certificate, so the previous batch has finished settling.
         _releaseRedemptionReserve();
         uint256 claimable = _claimableOf(SDGNRS_WALLET_ID);
-        uint256 pull = IsDGNRS(sdgnrs).closeRedemptionBatch(claimable);
+        uint256 pull = IsDGNRS(ContractAddresses.SDGNRS).closeRedemptionBatch(claimable);
         if (pull == 0) return;
         _debitClaimable(SDGNRS_WALLET_ID, pull);
         _setRedemptionReserve(pull);
         emit ClaimableSpent(SDGNRS_WALLET_ID, pull, claimable - pull, MintPaymentKind.Internal, pull);
-        uint256 ethAmount = pull < address(this).balance ? pull : address(this).balance;
-        if (ethAmount == 0) return;
-        (bool sent,) = BoundedCall.call(sdgnrs, ethAmount, 30_000, "", 0);
-        if (!sent) return;
-        _setRedemptionReserve(pull - ethAmount);
-        claimablePool -= uint128(ethAmount);
     }
 
     function _swapTicketSlot() internal {

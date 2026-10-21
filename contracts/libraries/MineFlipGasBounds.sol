@@ -108,7 +108,7 @@ library MineFlipGasBounds {
     // 160k retains >23% margin; the ordinary fresh recipient is cheaper.
     uint256 internal constant DEGENESIS_FLUSH_PER_CREDIT = 160_000;
     // Flush frame, seventh close with AFKing excess/events and burn, decode/return: <=118.1k.
-    uint256 internal constant DEGENESIS_TAIL_GAS = 125_000;
+    uint256 internal constant DEGENESIS_TAIL_GAS = 142_000;
     // Degenesis day-close branch with a fresh seat-draw credit: <=177.2k including state gas.
     uint256 internal constant DEGENESIS_DAY_CLOSE = 215_000;
     // Seven cold splits, fresh budget, pool and pricing slots: 472.2k; seven closes and burn 98.3k.

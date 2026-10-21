@@ -69,13 +69,13 @@ interface IDegenerusGamePlayer {
     /// @notice `player`'s current default Game account (0 = none; never allocates).
     function walletIdOf(address player) external view returns (uint32);
     function acquiredBuyer(uint32 id) external view returns (uint32 buyer);
-    /// @notice Resolve a redemption lootbox (sDGNRS forwards ETH as msg.value; GAME debits any ledger remainder).
+    /// @notice Resolve a redemption lootbox, drawn from the Game's redemption reserve.
     function resolveRedemptionLootbox(
         uint32 playerId, uint256 amount, uint256 rngWord, uint16 activityScore, uint32 batchId
-    ) external payable;
-    /// @notice Credit a redemption's direct half to wallet `playerId`'s game claimable (same ETH +
-    ///         ledger-remainder funding).
-    function creditRedemptionDirect(uint32 playerId, uint256 amount) external payable;
+    ) external;
+    /// @notice Credit a redemption's direct half to wallet `playerId`'s game claimable, drawn from
+    ///         the Game's redemption reserve.
+    function creditRedemptionDirect(uint32 playerId, uint256 amount) external;
 }
 
 /// @notice Interface for Coinflip contract methods used by sDGNRS.
@@ -268,8 +268,8 @@ contract sDGNRS {
     /// @dev Total reserved redemption ETH value across closed batches and their unpaid claims: a
     ///      close adds min(the batch's 175% share, free backing), resolution lowers it to the rolled total,
     ///      each paid claim releases its rolled share and a finished batch releases its rounding
-    ///      dust. Held in this contract's ETH custody plus the Game's redemption reserve, which the
-    ///      close moves out of the Game claimable. uint96 holds 7.9e28 wei (~658x the total ETH supply) —
+    ///      dust. Backed live by the Game's redemption reserve, which the close moves out of the
+    ///      Game claimable; after game over by custody and the claimable. uint96 holds 7.9e28 wei (~658x the total ETH supply) —
     ///      real-ETH-bounded, safe. Packed into slot 0.
     uint96 private _pendingRedemptionEthValue;
 
@@ -400,16 +400,17 @@ contract sDGNRS {
 
     /// @notice Close the open batch inside the transaction that sends the next live VRF request.
     /// @dev Game only, daily and mid-day requests only (the ending's request closes nothing).
-    ///      One price for the whole batch: (ETH + Game claimable − every outstanding reserve) × batch tokens ÷
+    ///      One price for the whole batch: (Game claimable − every outstanding reserve) × batch tokens ÷
     ///      the holder base (supply plus the batch's escrow). Earlier batches are settled before a
     ///      live close (every request waits for stage 1), so earlier claims reserve nothing.
     ///      The batch's tokens left
     ///      supply at their burns; here they only leave the escrow count. The batch's MAX (175%)
-    ///      payout, capped at free backing, is reserved, and `pull` is the part of the reserve that ETH custody does not already
-    ///      hold, capped at the Game claimable. A close while another batch still settles keeps the
+    ///      payout, capped at free backing, is reserved, and all of it moves into the Game's
+    ///      redemption reserve. A close while another batch still settles keeps the
     ///      batch open (unreachable: requests wait for settlement).
     /// @param gameClaimable sDGNRS's claimable balance on the Game (1 wei of it is dust).
-    /// @return pull Value isolated from ordinary Game claimable; available ETH moves into custody.
+    /// @return pull The batch's reserve, isolated from ordinary Game claimable (at most
+    ///         `gameClaimable` − 1).
     function closeRedemptionBatch(uint256 gameClaimable) external onlyGame returns (uint256 pull) {
         uint32 id = _openBatch;
         RedemptionBatch storage batch = _redemptionBatches[id & 1];
@@ -419,8 +420,8 @@ contract sDGNRS {
         uint256 escrowed = _escrowedSupply - 1;
         uint256 holderBase = _totalSupply + escrowed;
         uint256 claimable = gameClaimable > 1 ? gameClaimable - 1 : 0;
-        // Live legs pay only ETH and the Game reserve, so token custody waits for the ending.
-        (, uint256 gross) = _redemptionBacking(claimable, 0);
+        // Live legs pay only from the Game reserve, so token custody waits for the ending.
+        uint256 gross = claimable > type(uint96).max ? type(uint96).max : claimable;
         uint256 reserved = _pendingRedemptionEthValue;
         uint256 money = gross > reserved ? gross - reserved : 0;
         uint256 ethBase = ((money * tokens) / holderBase / 1e9) * 1e9;
@@ -447,12 +448,8 @@ contract sDGNRS {
             _openBatch = id + 1;
         }
 
-        // The maximum fits ETH custody plus Game backing, so the pull is never capped.
-        uint256 custodyEth = address(this).balance;
-        if (reserved > custodyEth) {
-            pull = reserved - custodyEth;
-            if (pull > claimable) pull = claimable;
-        }
+        // maxPayout <= money <= gross = claimable.
+        pull = maxPayout;
         emit RedemptionBatchClosed(id, tokens, ethBase, flipEscrow);
     }
 
@@ -658,8 +655,8 @@ contract sDGNRS {
     uint16 private constant DEGENESIS_POOL_BPS = 1000;
 
     /// @dev Maximum redemption roll (percent). The resolve roll is in [21, 175]; at batch close the
-    ///      MAX possible payout min(base × MAX_ROLL / 100, free backing) is reserved and held in this contract's ETH
-    ///      custody plus the Game's redemption reserve, moved out of claimableWinnings[SDGNRS], so no concurrent claimable drain
+    ///      MAX possible payout min(base × MAX_ROLL / 100, free backing) is reserved and held in the
+    ///      Game's redemption reserve, moved out of claimableWinnings[SDGNRS], so no concurrent claimable drain
     ///      can under-fund a later claim. Resolution lowers the reserve from MAX to the rolled total
     ///      (accounting only — any over-pull stays as free backing).
     uint256 private constant MAX_ROLL = 175;
@@ -818,9 +815,9 @@ contract sDGNRS {
     // =====================================================================
 
     /// @notice Receive ETH deposit from the game contract.
-    /// @dev GAME deposits reserve ETH and the afking-funding claim/withdraw send-back (the Game's
-    ///      `.call` has msg.sender == GAME). Accounting-safe: reserves are read live via
-    ///      address(this).balance everywhere, so no running counter is kept here.
+    /// @dev The Game pays sDGNRS ETH only from game over on (its claimable and the final sweep).
+    ///      Custody counts as backing only then, read live via address(this).balance, so no running
+    ///      counter is kept here.
     /// @custom:reverts Unauthorized If caller is not the game contract.
     receive() external payable {
         if (msg.sender != ContractAddresses.GAME) revert Unauthorized();
@@ -853,8 +850,8 @@ contract sDGNRS {
         return _totalSupply;
     }
 
-    /// @notice Total redemption ETH reserved in this contract's custody for closed batches and their
-    ///         unpaid claims (wei).
+    /// @notice Total redemption value reserved for closed batches and their unpaid claims (wei):
+    ///         paid from the Game's redemption reserve live, from custody after game over.
     /// @dev ABI-preserving view over the packed slot-0 field (cross-contract + harness readers).
     function pendingRedemptionEthValue() external view returns (uint256) {
         return _pendingRedemptionEthValue;
@@ -1052,8 +1049,8 @@ contract sDGNRS {
 
     /// @dev `amount`'s share of backing net of reserves over the holder base; token custody
     ///      counts only when claims can pay in it.
-    function _holderValue(uint256 amount, bool withSteth) private view returns (uint256) {
-        return (_liveMoney(withSteth) * amount) / (uint256(_totalSupply) + _escrowedSupply - 1);
+    function _holderValue(uint256 amount, bool withCustody) private view returns (uint256) {
+        return (_liveMoney(withCustody) * amount) / (uint256(_totalSupply) + _escrowedSupply - 1);
     }
 
     /// @dev Pay `value` of game-over backing to `to`: ETH first, stETH for the rest. sDGNRS's game
@@ -1065,11 +1062,11 @@ contract sDGNRS {
         // Keep it in place; this contract's ETH receiver accepts only Game deposits.
         if (to == address(this)) return (0, 0);
         uint256 ethBal = address(this).balance;
-        (uint256 custody,) = _redemptionBacking(0, steth.balanceOf(address(this)));
+        (uint256 custody,) = _redemptionBacking(0, true);
         if ((value > ethBal || value + _pendingRedemptionEthValue > custody) && _claimableWinnings() != 0) {
             game.claimWinnings(0);
             ethBal = address(this).balance;
-            (custody,) = _redemptionBacking(0, steth.balanceOf(address(this)));
+            (custody,) = _redemptionBacking(0, true);
         }
         uint256 stethBal = custody - ethBal;
 
@@ -1175,7 +1172,7 @@ contract sDGNRS {
             _redemptionAmounts((uint256(batch.ethPayout) * tokens) / batch.tokens, isTerminal);
 
         // Release the rolled share from the reserve (both direct and lootbox portions leave
-        // sDGNRS). The MAX − rolled over-pull stays in custody or the Game reserve as free backing. Checked:
+        // sDGNRS). The MAX − rolled over-pull stays in the Game reserve as free backing. Checked:
         // resolution left at least the batch's rolled total, which bounds every claim's share.
         _pendingRedemptionEthValue = uint96(_pendingRedemptionEthValue - totalRolledEth);
 
@@ -1204,8 +1201,8 @@ contract sDGNRS {
             return;
         }
 
-        // Live legs forward custody ETH and spend the remainder from the protected Game
-        // reserve. Ordinary loans and purchases cannot consume this backing.
+        // Live legs spend the protected Game reserve. Ordinary loans and purchases cannot
+        // consume this backing.
         if (lootboxEth != 0) {
             uint16 actScore = uint16(entry >> BATCH_PLAYER_SCORE_SHIFT) - 1;
             // Burns commit before the word that settles their batch exists: the batch closes
@@ -1213,30 +1210,18 @@ contract sDGNRS {
             // session word).
             // The claim's beneficiary ID, committed at the burn, is the owner input.
             uint256 entropy = EntropyLib.hash2(word, uint256(walletId));
-            uint256 bal = address(this).balance;
-            uint256 ethForLootbox = bal < lootboxEth ? bal : lootboxEth;
-            game.resolveRedemptionLootbox{value: ethForLootbox}(
-                walletId, lootboxEth, entropy, actScore, batchId
-            );
+            game.resolveRedemptionLootbox(walletId, lootboxEth, entropy, actScore, batchId);
         }
 
         // Direct half: credit into the player's game claimable (a permissionless trigger must
         // not push ETH at the player); the player withdraws via the access-gated claimWinnings.
-        if (ethDirect != 0) {
-            uint256 bal = address(this).balance;
-            uint256 ethForDirect = bal < ethDirect ? bal : ethDirect;
-            game.creditRedemptionDirect{value: ethForDirect}(walletId, ethDirect);
-        }
+        if (ethDirect != 0) game.creditRedemptionDirect(walletId, ethDirect);
 
         // Forfeited dust-lootbox half → sDGNRS's OWN claimable on the Game (SDGNRS_WALLET_ID),
-        // using the same ETH/ledger funding mix as the direct leg. With this leg the full rolled amount
-        // leaves the contract (direct half to the player, forfeited half to sDGNRS), so it reconciles
-        // exactly with the pendingRedemptionEthValue release — no ETH is stranded in the contract.
-        if (forfeitEth != 0) {
-            uint256 bal = address(this).balance;
-            uint256 ethForForfeit = bal < forfeitEth ? bal : forfeitEth;
-            game.creditRedemptionDirect{value: ethForForfeit}(SDGNRS_WALLET_ID, forfeitEth);
-        }
+        // from the same reserve. With this leg the full rolled amount leaves the reserve (direct
+        // half to the player, forfeited half to sDGNRS), so it reconciles exactly with the
+        // pendingRedemptionEthValue release.
+        if (forfeitEth != 0) game.creditRedemptionDirect(SDGNRS_WALLET_ID, forfeitEth);
     }
 
     // =====================================================================
@@ -1244,9 +1229,10 @@ contract sDGNRS {
     // =====================================================================
 
     /// @notice Preview the value and FLIP output for burning sDGNRS
-    /// @dev The live price: the proportional share of ETH + Game backing, net of
-    ///      pendingRedemptionEthValue (owed to closed batches), over the holder base (supply plus
-    ///      the open batch's escrow); stETH custody counts only after game over. A live burn is
+    /// @dev The live price: the proportional share of Game backing (sDGNRS's Game claimable plus
+    ///      the Game's redemption reserve), net of pendingRedemptionEthValue (owed to closed
+    ///      batches), over the holder base (supply plus the open batch's escrow); token custody
+    ///      (ETH and stETH) counts only after game over. A live burn is
     ///      priced when its batch closes, so this is an estimate before the batch-wide upside cap. After game over
     ///      it is exactly the deterministic burn's value. The value is paid as ETH, stETH, or a mix
     ///      chosen at pay time — the two are at par protocol-wide, so it is reported as one
@@ -1370,23 +1356,27 @@ contract sDGNRS {
         walletId = id;
     }
 
-    /// @dev ETH + admitted stETH + Game backing, capped to the packed batch value range.
-    function _redemptionBacking(uint256 gameBacking, uint256 stethBalance)
+    /// @dev Game backing plus, when `withCustody` (after game over), token custody: ETH and
+    ///      admitted stETH. Capped to the packed batch value range.
+    function _redemptionBacking(uint256 gameBacking, bool withCustody)
         private view returns (uint256 custody, uint256 gross)
     {
-        custody = address(this).balance;
-        gross = custody + gameBacking;
-        if (gross > type(uint96).max || stethBalance > type(uint96).max - gross) stethBalance = 0;
-        custody += stethBalance;
-        gross += stethBalance;
+        gross = gameBacking;
+        if (withCustody) {
+            custody = address(this).balance;
+            gross += custody;
+            uint256 stethBalance = steth.balanceOf(address(this));
+            if (gross > type(uint96).max || stethBalance > type(uint96).max - gross) stethBalance = 0;
+            custody += stethBalance;
+            gross += stethBalance;
+        }
         if (gross > type(uint96).max) gross = type(uint96).max;
     }
 
     /// @dev Admitted backing net of every outstanding redemption reserve, floored at 0. Token
     ///      custody counts only once claims can pay in it (after game over).
-    function _liveMoney(bool withSteth) private view returns (uint256) {
-        (, uint256 gross) = _redemptionBacking(_claimableWinnings(),
-            withSteth ? steth.balanceOf(address(this)) : 0);
+    function _liveMoney(bool withCustody) private view returns (uint256) {
+        (, uint256 gross) = _redemptionBacking(_claimableWinnings(), withCustody);
         uint256 reserved = _pendingRedemptionEthValue;
         return gross > reserved ? gross - reserved : 0;
     }

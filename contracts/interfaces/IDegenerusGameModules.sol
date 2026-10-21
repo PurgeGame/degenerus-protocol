@@ -393,11 +393,11 @@ interface IDegenerusGameLootboxModule {
         uint16 activityScore
     ) external payable;
 
-    /// @notice Resolves an sDGNRS redemption's full lootbox leg (auth, funding-mix pull, pool
+    /// @notice Resolves an sDGNRS redemption's full lootbox leg (auth, reserve debit, pool
     ///         credit, one box order of up to 20 equal boxes) — delegatecall target of the
     ///         Game's thin stub.
     /// @param id The reward account's wallet ID.
-    /// @param amount Total lootbox value (msg.value ETH + the stETH remainder pulled inside)
+    /// @param amount Total lootbox value, drawn from the redemption reserve
     /// @param rngWord RNG word for entropy
     /// @param activityScore Raw activity score (whole points) snapshotted at burn submission
     /// @param batchId Redemption batch of the claim (tags the order's seeds and events)
@@ -407,12 +407,12 @@ interface IDegenerusGameLootboxModule {
         uint256 rngWord,
         uint16 activityScore,
         uint32 batchId
-    ) external payable;
+    ) external;
 
     /// @notice Credit the direct half of an sDGNRS redemption claim to the claimant's claimable winnings.
     /// @param id Claimant wallet ID credited.
-    /// @param amount Total direct-half value (msg.value ETH + the stETH remainder pulled here).
-    function creditRedemptionDirect(uint32 id, uint256 amount) external payable;
+    /// @param amount Total direct-half value, drawn from the redemption reserve.
+    function creditRedemptionDirect(uint32 id, uint256 amount) external;
 
     /// @notice Resolve an AfKing-subscription box at the LIVE level from a caller-passed
     ///         frozen-day word.

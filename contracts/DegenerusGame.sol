@@ -1341,10 +1341,10 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
 
     /// @notice Resolve redemption lootboxes for an sDGNRS gambling burn claim.
     /// @dev Called by sDGNRS during the miner's live redemption settlement. Delegatecall stub into
-    ///      DegenerusGameLootboxModule's resolveRedemptionLootbox body (auth, funding-mix pull,
+    ///      DegenerusGameLootboxModule's resolveRedemptionLootbox body (auth, reserve debit,
     ///      pool credit, and the one-order box resolution all live there). The signature matches
-    ///      the module function exactly (identical selector), so the calldata + msg.value forward
-    ///      as-is — re-encoding here would cost contract-size headroom for no behavior change.
+    ///      the module function exactly (identical selector), so the calldata forwards as-is —
+    ///      re-encoding here would cost contract-size headroom for no behavior change.
     ///      Signature: resolveRedemptionLootbox(uint32 playerId, uint256 amount,
     ///      uint256 rngWord, uint16 activityScore, uint32 batchId).
     function resolveRedemptionLootbox(
@@ -1353,7 +1353,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
         uint256,
         uint16,
         uint32
-    ) external payable {
+    ) external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_LOOTBOX_MODULE
             .delegatecall(msg.data);
@@ -1361,14 +1361,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
     }
 
     /// @notice Credit the direct half of an sDGNRS redemption claim to `player`'s claimable winnings.
-    /// @dev Called by sDGNRS while it settles a live redemption. The value arrives with the same
-    ///      funding mix as resolveRedemptionLootbox: msg.value covers 0..amount and the rest is
-    ///      pulled as stETH via transferFrom (sDGNRS pre-approves GAME for max). The credit rides
-    ///      the claimable reserve (claimablePool in tandem). Body lives in the lootbox module (the
-    ///      sole redemption-side payable entry); the thin stub forwards the calldata + msg.value.
-    ///      Signature: creditRedemptionDirect(uint32 playerId, uint256 amount). `amount` is the
-    ///      total direct-half value (msg.value ETH + the stETH remainder pulled in the module).
-    function creditRedemptionDirect(uint32, uint256) external payable {
+    /// @dev Called by sDGNRS while it settles a live redemption. The value is drawn from the
+    ///      redemption reserve, which already sits inside claimablePool. Body lives in the lootbox
+    ///      module; the thin stub forwards the calldata.
+    ///      Signature: creditRedemptionDirect(uint32 playerId, uint256 amount).
+    function creditRedemptionDirect(uint32, uint256) external {
         (bool ok, bytes memory data) = ContractAddresses
             .GAME_LOOTBOX_MODULE
             .delegatecall(msg.data);

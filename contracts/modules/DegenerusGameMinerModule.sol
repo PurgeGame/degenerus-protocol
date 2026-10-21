@@ -139,7 +139,7 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
                 if (action == MinerAction.RequestDaily && degenesisClosed < DEGENESIS_DAYS) {
                     requestMax += GasBounds.DEGENESIS_REQUEST_GAS;
                 }
-                // Batch pricing, backing settlement and ETH/stETH funding stay atomic with
+                // Batch pricing and the reserve pull stay atomic with
                 // the commitment. Only a nonempty open batch pays their rare admission cost.
                 // The first mandatory action bypasses estimates, including this sizing read.
                 if (moved) {

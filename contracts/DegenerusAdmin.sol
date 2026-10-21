@@ -1230,7 +1230,7 @@ contract DegenerusAdmin {
         address target = ContractAddresses.VAULT;
 
         (bool cancelled,) = BoundedCall.call(
-            coordinator, 0, 300_000,
+            coordinator, 0, 450_000,
             abi.encodeWithSelector(IVRFCoordinatorV2_5Owner.cancelSubscription.selector, subId, target), 0
         );
         if (cancelled) emit SubscriptionCancelled(subId, target);
@@ -1239,7 +1239,7 @@ contract DegenerusAdmin {
             address(linkToken), 50_000, abi.encodeWithSelector(ILinkTokenLike.balanceOf.selector, address(this))
         );
         if (bal != 0 && BoundedCall.callBool(
-            address(linkToken), 150_000, abi.encodeWithSelector(ILinkTokenLike.transfer.selector, target, bal)
+            address(linkToken), 200_000, abi.encodeWithSelector(ILinkTokenLike.transfer.selector, target, bal)
         )) {
             emit SubscriptionShutdown(subId, target, bal);
             return;
