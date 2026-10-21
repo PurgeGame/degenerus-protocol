@@ -3,7 +3,6 @@ pragma solidity ^0.8.26;
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
-import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
 /// @title FinalSweepPayoutLegs — the game-over final sweep's three bare payout calls cannot revert.
 ///
@@ -139,7 +138,7 @@ contract FinalSweepPayoutLegs is DeployProtocol {
         assertEq(mockStETH.balanceOf(address(game)), 0);
     }
 
-    // ── VRF shutdown: semantic refusal permits recovery; gas failure rolls back ─────
+    // ── VRF shutdown: best-effort after the sweep commits; any failure is ignored ─────
 
     /// @notice The healthy shutdown: the sweep cancels the subscription and routes Admin's LINK
     ///         to the vault.
@@ -187,34 +186,55 @@ contract FinalSweepPayoutLegs is DeployProtocol {
         assertEq(address(game).balance, 0, "the sweep did not pay out (false-returning LINK)");
     }
 
-    function test_emptyCancelFailurePreservesSweepAndSubscriptionForRetry() public {
-        _assertShutdownGasFailure(address(mockVRF), mockVRF.cancelSubscription.selector);
+    /// @notice An empty-revert (gas-family) cancel cannot hold the sweep back: the shutdown is
+    ///         best-effort after the sweep commits, so every sink is paid, the handle is spent and
+    ///         Admin's LINK still reaches the vault.
+    function test_emptyCancelFailureStillCommitsSweepAndRoutesLink() public {
+        _assertShutdownFailureKeepsSweep(address(mockVRF), mockVRF.cancelSubscription.selector, true);
     }
 
-    function test_emptyLinkFailureRollsBackCancellationAndSweepForRetry() public {
-        _assertShutdownGasFailure(address(mockLINK), mockLINK.transfer.selector);
+    /// @notice An empty-revert LINK transfer cannot hold the sweep back either; the LINK it could
+    ///         not move stays in Admin and nothing else is left half-done.
+    function test_emptyLinkFailureStillCommitsSweepAndLeavesLinkInAdmin() public {
+        _assertShutdownFailureKeepsSweep(address(mockLINK), mockLINK.transfer.selector, false);
     }
 
-    function _assertShutdownGasFailure(address target, bytes4 selector) private {
+    function _assertShutdownFailureKeepsSweep(address target, bytes4 selector, bool linkMoves) private {
         _driveToGameOver();
         vm.deal(address(game), 90 ether);
         mockLINK.mint(address(admin), 7 ether);
-        uint256 subId = admin.subscriptionId();
-        assertGt(subId, 0);
-        bytes32 beforeLedger = keccak256(abi.encode(_ledger()));
+        assertGt(admin.subscriptionId(), 0);
+        uint256 held = address(game).balance + mockStETH.balanceOf(address(game));
+        uint256 vaultLink = mockLINK.balanceOf(ContractAddresses.VAULT);
+        Ledger memory b = _ledger();
         vm.mockCallRevert(target, abi.encodeWithSelector(selector), "");
-        vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
         _sweep();
-        assertEq(admin.subscriptionId(), subId, "failed shutdown consumed its handle");
-        assertEq(mockLINK.balanceOf(address(admin)), 7 ether, "failed shutdown moved LINK");
-        assertEq(address(game).balance, 90 ether, "failed shutdown paid the sweep");
-        assertEq(keccak256(abi.encode(_ledger())), beforeLedger, "failed shutdown changed recipients");
+        Ledger memory a = _ledger();
+        assertEq(address(game).balance, 0, "a failed shutdown held back the ETH sweep");
+        assertEq(mockStETH.balanceOf(address(game)), 0, "a failed shutdown held back the stETH sweep");
+        uint256 paid = (a.vaultEth - b.vaultEth) + (a.sdEth - b.sdEth) + (a.gnEth - b.gnEth)
+            + (a.vaultSt - b.vaultSt) + (a.sdSt - b.sdSt) + (a.gnSt - b.gnSt);
+        assertEq(paid, held, "every wei the game held reached the three sinks");
+        assertEq(admin.subscriptionId(), 0, "the shutdown spends its handle once");
+        if (linkMoves) {
+            assertEq(mockLINK.balanceOf(address(admin)), 0, "LINK left in Admin");
+            assertEq(mockLINK.balanceOf(ContractAddresses.VAULT) - vaultLink, 7 ether, "LINK did not reach the vault");
+        } else {
+            assertEq(mockLINK.balanceOf(address(admin)), 7 ether, "a failed LINK transfer moved LINK");
+            assertEq(mockLINK.balanceOf(ContractAddresses.VAULT), vaultLink, "a failed LINK transfer credited the vault");
+        }
+
+        // The sweep is final: a later crank, healthy dependencies and all, neither re-pays the
+        // sinks nor re-runs the shutdown.
         vm.clearMockedCalls();
+        bytes32 settled = keccak256(abi.encode(_ledger()));
+        uint256 adminLink = mockLINK.balanceOf(address(admin));
         vm.prank(keeper);
-        game.mineFlip(type(uint32).max);
-        assertEq(admin.subscriptionId(), 0, "funded retry did not shut down");
-        assertEq(address(game).balance, 0, "funded retry did not sweep");
-        assertEq(mockLINK.balanceOf(address(admin)), 0, "funded retry did not transfer LINK");
+        try game.mineFlip(type(uint32).max) {} catch {}
+        assertEq(keccak256(abi.encode(_ledger())), settled, "a later crank moved swept funds");
+        assertEq(address(game).balance, 0);
+        assertEq(admin.subscriptionId(), 0);
+        assertEq(mockLINK.balanceOf(address(admin)), adminLink, "a later crank re-ran the shutdown");
     }
 
     /// @notice A shortfall below what the three sinks are owed — only an stETH loss larger than
