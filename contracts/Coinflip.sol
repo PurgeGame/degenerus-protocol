@@ -1742,14 +1742,6 @@ contract Coinflip {
         _emitClaimState(SDGNRS_WALLET_ID);
     }
 
-    /// @notice Return a refused redemption's whole-FLIP principal to settled sDGNRS backing.
-    function returnRedeemedFlip(uint256 amount) external {
-        if (msg.sender != ContractAddresses.SDGNRS) revert OnlysDGNRS();
-        PlayerCoinflipState storage state = playerState[SDGNRS_WALLET_ID];
-        state.claimableStored = _toUint128Sat(uint256(state.claimableStored) + amount);
-        _emitClaimState(SDGNRS_WALLET_ID);
-    }
-
     /*+======================================================================+
       |                    VIEW FUNCTIONS                                    |
       +======================================================================+*/

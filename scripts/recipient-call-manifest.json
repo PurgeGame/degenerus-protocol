@@ -10594,18 +10594,10 @@
   {
     "path": "contracts/sDGNRS.sol",
     "scope": "sDGNRS._runRedemptionWork",
-    "kind": "bounded-wrapper",
-    "expression": "BoundedCall.call( address(this), 0, nextMax, abi.encodeWithSelector(this.settleRedemptionHead.selector, entry, id, word), 0 )",
+    "kind": "recipient-helper",
+    "expression": "_claimRedemptionFor(entry, address(0), id, false, word)",
     "count": 1,
-    "review": "ISOLATED: F0 fixed budget, unconditional gas admission and capped return copy; site defines refusal/drop/zero."
-  },
-  {
-    "path": "contracts/sDGNRS.sol",
-    "scope": "sDGNRS._runRedemptionWork",
-    "kind": "external",
-    "expression": "coinflip.returnRedeemedFlip(flipShare)",
-    "count": 1,
-    "review": "PROTOCOL: restricted Coinflip bookkeeping returns a dropped claim principal to settled backing; no recipient callback."
+    "review": "PROTOCOL: live miner settlement runs each claim inline (isTerminal false); the live branch calls only Coinflip.creditFlip and the Game redemption legs, with no recipient callback and no stETH."
   },
   {
     "path": "contracts/sDGNRS.sol",
@@ -10860,14 +10852,6 @@
     "scope": "sDGNRS.runRedemptionWork",
     "kind": "recipient-helper",
     "expression": "_runRedemptionWork(word, allowance)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/sDGNRS.sol",
-    "scope": "sDGNRS.settleRedemptionHead",
-    "kind": "recipient-helper",
-    "expression": "_claimRedemptionFor(entry, address(0), batchId, false, word)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },

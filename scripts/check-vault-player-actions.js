@@ -57,7 +57,7 @@ const excluded = {
   ],
   SDGNRS: [
     "burnAtGameOver", "burnForLiquidation", "closeRedemptionBatch", "depositSteth",
-    "recycleCentury", "resolveTerminalRedemptions", "runRedemptionWork", "settleRedemptionHead",
+    "recycleCentury", "resolveTerminalRedemptions", "runRedemptionWork",
     "transferFromPool", "wrapperTransferTo",
     "gameAdvance", // Anyone can trigger this externally; bounty belongs to sDGNRS, not the caller.
   ],

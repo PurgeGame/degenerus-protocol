@@ -31,7 +31,6 @@ import {IStETH} from "./interfaces/IStETH.sol";
 import {EntropyLib} from "./libraries/EntropyLib.sol";
 import {FlipRoundLib} from "./libraries/FlipRoundLib.sol";
 import {MineFlipGas} from "./libraries/MineFlipGas.sol";
-import {BoundedCall} from "./libraries/BoundedCall.sol";
 
 
 /// @notice Interface for game contract player-facing functions used by sDGNRS.
@@ -92,7 +91,6 @@ interface ICoinflipPlayer {
     /// @notice Credit a FLIP flip stake to wallet `id` (sDGNRS is an authorized flip creditor;
     ///         0 is a no-op).
     function creditFlip(uint32 id, uint256 amount) external;
-    function returnRedeemedFlip(uint256 amount) external;
 }
 
 /// @notice Interface for DGNRS wrapper contract used by sDGNRS.
@@ -270,8 +268,8 @@ contract sDGNRS {
     /// @dev Total reserved redemption ETH value across closed batches and their unpaid claims: a
     ///      close adds min(the batch's 175% share, free backing), resolution lowers it to the rolled total,
     ///      each paid claim releases its rolled share and a finished batch releases its rounding
-    ///      dust. Held in this contract's own ETH + stETH custody (the close tops custody up from
-    ///      the Game claimable). uint96 holds 7.9e28 wei (~658x the total ETH supply) —
+    ///      dust. Held in this contract's ETH custody plus the Game's redemption reserve, which the
+    ///      close moves out of the Game claimable. uint96 holds 7.9e28 wei (~658x the total ETH supply) —
     ///      real-ETH-bounded, safe. Packed into slot 0.
     uint96 private _pendingRedemptionEthValue;
 
@@ -354,7 +352,7 @@ contract sDGNRS {
         activityScore = uint16(entry >> BATCH_PLAYER_SCORE_SHIFT);
     }
 
-    /// @dev The settling batch's prefix below the miner's cursor is consumed (paid or dropped):
+    /// @dev The settling batch's prefix below the miner's cursor is paid:
     ///      the miner leaves those entries in place, so they are not live.
     function _liveClaimIndex(uint32 walletId, uint32 batchId) private view returns (uint256 index, bool live) {
         uint32 settling = _settlingBatch;
@@ -402,8 +400,7 @@ contract sDGNRS {
 
     /// @notice Close the open batch inside the transaction that sends the next live VRF request.
     /// @dev Game only, daily and mid-day requests only (the ending's request closes nothing).
-    ///      External custody failure counts as zero; insufficient call gas reverts. One price for the
-    ///      whole batch: (ETH + stETH + Game claimable − every outstanding reserve) × batch tokens ÷
+    ///      One price for the whole batch: (ETH + Game claimable − every outstanding reserve) × batch tokens ÷
     ///      the holder base (supply plus the batch's escrow). Earlier batches are settled before a
     ///      live close (every request waits for stage 1), so earlier claims reserve nothing.
     ///      The batch's tokens left
@@ -562,27 +559,14 @@ contract sDGNRS {
                 if (boxes > GasBounds.REDEMPTION_BOXES_MAX) boxes = GasBounds.REDEMPTION_BOXES_MAX;
                 nextMax += GasBounds.HUMAN_ENTRY_GAS + boxes * GasBounds.HUMAN_BOX_GAS;
             }
-            // The self-call keeps its whole bound after EIP-150 retention.
-            if (!MineFlipGas.canRun(meter, nextMax + nextMax / 63 + MineFlipGas.CALL_RESERVE,
-                REDEMPTION_TAIL_GAS)) break;
+            if (!MineFlipGas.canRun(meter, nextMax, REDEMPTION_TAIL_GAS)) break;
             // The entry stays in place: the frontier retires it for every claim lookup.
             // Commit the frontier before any nested calls.
             _redemptionCursor = uint32(++cursor);
             MineFlipGas.markProgress(meter);
             reserveLeft -= rolled;
-            // A refused claim rolls back alone. Its share returns to backing without a record.
-            (bool paid,) = BoundedCall.call(
-                address(this), 0, nextMax,
-                abi.encodeWithSelector(this.settleRedemptionHead.selector, entry, id, word), 0
-            );
-            if (!paid) {
-                _pendingRedemptionEthValue -= uint96(rolled);
-                // A lost synthetic flip already forfeited the principal, paid or not.
-                if (batch.flipReward != 0) {
-                    uint256 flipShare = (uint256(batch.flipEscrow) * claimTokens) / batchTokens;
-                    if (flipShare != 0) coinflip.returnRedeemedFlip(flipShare);
-                }
-            }
+            // A live claim calls only protocol contracts and has no failure branch.
+            _claimRedemptionFor(entry, address(0), id, false, word);
         }
         if (cursor != initialCursor) { result.progressed = true; MineFlipGas.markProgress(meter); }
         result.done = cursor == total;
@@ -606,13 +590,6 @@ contract sDGNRS {
         _setBatchPlayerCount(id & 1, 0);
     }
 
-    /// @dev Self-call target of the miner drain: a refused claim rolls back alone, and the
-    ///      caller releases its reserve after advancing the queue frontier.
-    function settleRedemptionHead(uint128 entry, uint32 batchId, uint256 word) external {
-        if (msg.sender != address(this)) revert Unauthorized();
-        _claimRedemptionFor(entry, address(0), batchId, false, word);
-    }
-
     /// @notice Holder base (supply plus the open batch's escrow) immediately after the last century
     ///         refill (initial supply before the first).
     /// @dev All intervening reductions of the holder base are burns; a live gambling burn counts
@@ -626,7 +603,7 @@ contract sDGNRS {
     /// @notice Permanently disables recycling once terminal pool destruction begins.
     bool public recyclingClosed;
 
-    /// @dev The settling batch's rolled total not yet assigned to a paid or dropped claim; between
+    /// @dev The settling batch's rolled total not yet assigned to a paid claim; between
     ///      settlement calls only. Packed beside the century markers.
     uint96 private _settlingReserveLeft;
 
@@ -681,8 +658,8 @@ contract sDGNRS {
     uint16 private constant DEGENESIS_POOL_BPS = 1000;
 
     /// @dev Maximum redemption roll (percent). The resolve roll is in [21, 175]; at batch close the
-    ///      MAX possible payout min(base × MAX_ROLL / 100, free backing) is reserved and held in this contract's ETH +
-    ///      stETH custody, topped up from claimableWinnings[SDGNRS], so no concurrent claimable drain
+    ///      MAX possible payout min(base × MAX_ROLL / 100, free backing) is reserved and held in this contract's ETH
+    ///      custody plus the Game's redemption reserve, moved out of claimableWinnings[SDGNRS], so no concurrent claimable drain
     ///      can under-fund a later claim. Resolution lowers the reserve from MAX to the rolled total
     ///      (accounting only — any over-pull stays as free backing).
     uint256 private constant MAX_ROLL = 175;
@@ -1234,7 +1211,6 @@ contract sDGNRS {
             // Burns commit before the word that settles their batch exists: the batch closes
             // with the request that word answers. Live callers pass that word (the miner's
             // session word).
-            if (word <= 1) revert NotResolved();
             // The claim's beneficiary ID, committed at the burn, is the owner input.
             uint256 entropy = EntropyLib.hash2(word, uint256(walletId));
             uint256 bal = address(this).balance;
