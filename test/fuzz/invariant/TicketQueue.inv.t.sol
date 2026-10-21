@@ -13,6 +13,7 @@ import {TicketTrackingHandler} from "../handlers/TicketTrackingHandler.sol";
 contract TicketQueueInvariant is DeployProtocol {
     TicketTrackingHandler public ticketHandler;
     VRFHandler public vrfHandler;
+    uint256 internal requestsAtSetUp;
 
     function setUp() public virtual {
         _deployProtocol();
@@ -20,6 +21,7 @@ contract TicketQueueInvariant is DeployProtocol {
 
         ticketHandler = new TicketTrackingHandler(game, 10);
         vrfHandler = new VRFHandler(mockVRF, game);
+        requestsAtSetUp = mockVRF.lastRequestId();
 
         targetContract(address(ticketHandler));
         targetContract(address(vrfHandler));
@@ -55,7 +57,9 @@ contract TicketQueueInvariant is DeployProtocol {
 
     /// @dev Non-vacuity. Per run the queue
     ///      must actually be drained and fed words: measured minima over 771 default-profile runs were 3
-    ///      successful mineFlips and 1 VRF fulfilment. Purchases can legitimately all fail in one run (an early
+    ///      successful mineFlips and 1 VRF fulfilment. The one wordless run is a liveness ending whose terminal
+    ///      request was armed and then left 14 days without a mineFlip: it resolves dead without ever
+    ///      requesting. Purchases can legitimately all fail in one run (an early
     ///      daily-RNG lock; 127 of 771 runs had none), so purchases and queued entries are accumulated over the
     ///      process (unique TQ_ prefix) and must be non-zero once MIN_RUNS runs have completed.
     uint256 private constant MIN_RUNS = 16;
@@ -67,7 +71,9 @@ contract TicketQueueInvariant is DeployProtocol {
 
     function afterInvariant() public {
         assertGe(ticketHandler.ghost_advances(), 1, "vacuous: mineFlip never succeeded in this run");
-        assertGe(vrfHandler.ghost_vrfFulfillments(), 1, "vacuous: no VRF word was fulfilled in this run");
+        if (!game.gameOver() || mockVRF.lastRequestId() != requestsAtSetUp) {
+            assertGe(vrfHandler.ghost_vrfFulfillments(), 1, "vacuous: no VRF word was fulfilled in this run");
+        }
         uint256 runs = _acc("TQ_RUNS", 1);
         uint256 purchases = _acc("TQ_purchases", ticketHandler.ghost_purchases());
         uint256 entries = _acc("TQ_entries", ticketHandler.ghost_totalEntries());

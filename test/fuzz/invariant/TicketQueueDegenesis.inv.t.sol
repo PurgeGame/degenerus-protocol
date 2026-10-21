@@ -23,6 +23,7 @@ contract TicketQueueDegenesis is TicketQueueInvariant, DegenesisWeekOpening {
         _degenesisWeek(true);
         ticketHandler = new TicketTrackingHandler(game, 10);
         vrfHandler = new VRFHandler(mockVRF, game);
+        requestsAtSetUp = mockVRF.lastRequestId();
         targetContract(address(ticketHandler));
         targetContract(address(vrfHandler));
     }
