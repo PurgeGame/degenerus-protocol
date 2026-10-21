@@ -75,7 +75,7 @@ contract RedemptionReserveTest is RedemptionFixture {
         vm.recordLogs();
         assertTrue(_work(9_000_000));
         (bool found, uint256 direct,) = _claimedLegs(vm.getRecordedLogs(), who, batch);
-        assertTrue(found, "fixed-budget worker paid rather than dropped");
+        assertTrue(found, "fixed-budget worker paid the claim");
         assertEq(direct, expected);
         assertGe(game.claimableWinningsOf(who), before + expected);
     }
@@ -216,9 +216,9 @@ contract RedemptionReserveTest is RedemptionFixture {
         sdgnrs.claimRedemption(0, 1);
         assertEq(alice.balance - before, expected, "malformed token amount cannot block available ETH payout");
     }
-    function testDroppedClaimRestoresFlipPrincipalAndEthBacking() public { _checkDrop(false, true); }
-    function testGasExhaustedClaimRestoresFlipWithinTailBudget() public { _checkDrop(true, true); }
-    function testDroppedClaimAfterLostFlipKeepsPrincipalForfeited() public { _checkDrop(false, false); }
+    function testRevertedClaimKeepsFlipPrincipalAndEthBacking() public { _checkRevert(false, true); }
+    function testGasExhaustedClaimRevertsStepAndKeepsBacking() public { _checkRevert(true, true); }
+    function testRevertedClaimAfterLostFlipKeepsPrincipalForfeited() public { _checkRevert(false, false); }
     /// @dev A roll-100 word whose batch-1 synthetic flip wins or loses as asked.
     function _wordForFlip(bool won) private pure returns (uint256 word) {
         for (uint256 k;; ++k) {
@@ -226,7 +226,11 @@ contract RedemptionReserveTest is RedemptionFixture {
             if ((_synthReward(word, 1) != 0) == won) return word;
         }
     }
-    function _checkDrop(bool exhaustGas, bool won) private {
+    /// @dev A claim that cannot complete reverts the step with the reserve, FLIP backing and claim
+    ///      untouched. Once it works the claim pays from the protected reserve, a won flip pays the
+    ///      claimant rather than returning to backing, and the unrolled remainder goes home at the
+    ///      next close.
+    function _checkRevert(bool exhaustGas, bool won) private {
         _fundOrdinary(100 ether);
         _seedFlipBacking(1_000_000);
         _burn(alice, sdgnrs.totalSupply() / 100);
@@ -235,24 +239,39 @@ contract RedemptionReserveTest is RedemptionFixture {
         (,,, uint96 escrow,,) = sdgnrs.redemptionBatches(1);
         assertGt(escrow, 0);
         settlementWord = _wordForFlip(won);
-        vm.mockCall(address(game), abi.encodeWithSelector(game.rngConsumerStage.selector), abi.encode(uint8(1)));
+        _mockSettlingStage();
         assertFalse(_work(RESOLVE_ONLY_ALLOWANCE));
         vm.prank(address(sdgnrs));
-        uint256 before = coinflip.redeemableFlipBacking();
+        uint256 backing = coinflip.redeemableFlipBacking();
         uint256 reserve = game.redemptionReserve();
+        bytes memory module = ContractAddresses.GAME_LOOTBOX_MODULE.code;
         if (exhaustGas) vm.etch(ContractAddresses.GAME_LOOTBOX_MODULE, type(RedemptionReserveGasBomb).runtimeCode);
         else vm.mockCallRevert(address(game), abi.encodeWithSelector(game.resolveRedemptionLootbox.selector), hex"deadbeef");
-        assertTrue(_work(9_000_000));
-        assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
+        uint256 reserved = sdgnrs.pendingRedemptionEthValue();
+        _assertWorkRevertsUnchanged(1, 9_000_000);
+        assertEq(sdgnrs.pendingRedemptionEthValue(), reserved, "the claim's reserve is still held");
+        assertGt(_claimTokens(alice, 1), 0, "the claim is still live");
         vm.prank(address(sdgnrs));
-        if (won) assertEq(coinflip.redeemableFlipBacking(), before + escrow, "drop after a won flip restores FLIP principal");
-        else assertEq(coinflip.redeemableFlipBacking(), before, "a lost flip forfeits the principal, paid or dropped");
+        assertEq(coinflip.redeemableFlipBacking(), backing, "FLIP backing is untouched");
         assertEq(game.redemptionReserve(), reserve);
         vm.clearMockedCalls();
+        vm.etch(ContractAddresses.GAME_LOOTBOX_MODULE, module);
+        _mockSettlingStage();
+        uint256 stake = coinflip.coinflipAmount(alice);
+        assertTrue(_work(9_000_000));
+        assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
+        assertEq(_claimTokens(alice, 1), 0);
+        vm.prank(address(sdgnrs));
+        assertEq(coinflip.redeemableFlipBacking(), backing, "a paid claim never returns its FLIP principal to backing");
+        if (won) assertGt(coinflip.coinflipAmount(alice), stake, "a won flip pays the claimant");
+        else assertEq(coinflip.coinflipAmount(alice), stake, "a lost flip forfeits the principal");
+        vm.clearMockedCalls();
+        uint256 leftover = game.redemptionReserve();
+        assertGt(leftover, 0, "the unrolled remainder stays protected until the next close");
         uint256 ordinary = game.claimableWinningsOf(address(sdgnrs));
         _closeFundedReserve();
         assertEq(game.redemptionReserve(), 0);
         assertEq(uint256(vm.load(address(game), bytes32(uint256(84)))), 1, "released reserve home retains its sentinel");
-        assertEq(game.claimableWinningsOf(address(sdgnrs)), ordinary + reserve, "drop restores all unsent ETH backing");
+        assertEq(game.claimableWinningsOf(address(sdgnrs)), ordinary + leftover, "the remainder returns to ordinary backing");
     }
 }

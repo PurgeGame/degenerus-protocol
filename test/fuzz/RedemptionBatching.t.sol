@@ -234,11 +234,88 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         }
     }
 
-    function test_CachedEscrowRewardCannotBeSuppliedByAnExternalCaller() public {
+    /// @dev Through the router with no earlier progress, a head claim that reverts reverts the
+    ///      keeper's mineFlip and leaves every claim live and unpaid; once the cause clears the
+    ///      same cohort settles in full.
+    function test_MineFlipRevertsWhenTheHeadClaimReverts() public {
         uint32 day = _openBatchId();
-        uint32 aliceId = game.walletIdOf(alice);
-        vm.expectRevert(sDGNRS.Unauthorized.selector);
-        sdgnrs.settleRedemptionHead(uint128(aliceId) << 80, day, 99);
+        _burn(alice, sdgnrs.totalSupply() / 1000);
+        _burn(bob, sdgnrs.totalSupply() / 1000);
+        _resolve(day, 100, 99); _commitWord(99);
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        assertTrue(sdgnrs.redemptionSettlementPending(), "nonvacuity: redemptions await settlement");
+        bytes32 before = _redemptionDigest(day);
+        vm.mockCallRevert(address(game), abi.encodeWithSelector(game.resolveRedemptionLootbox.selector), hex"12345678");
+        vm.prank(keeper);
+        vm.expectRevert();
+        game.mineFlip{gas: 9_500_000}(0);
+        assertEq(_redemptionDigest(day), before, "a reverted mineFlip changes no redemption state");
+        assertGt(_claimTokens(alice, day), 0);
+        assertGt(_claimTokens(bob, day), 0);
+        vm.clearMockedCalls();
+        for (uint256 i; i < 8 && sdgnrs.redemptionSettlementPending(); ++i) {
+            vm.prank(keeper);
+            game.mineFlip{gas: 9_500_000}(0);
+        }
+        assertFalse(sdgnrs.redemptionSettlementPending());
+        assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
+        assertEq(_claimTokens(alice, day), 0);
+        assertEq(_claimTokens(bob, day), 0);
+    }
+
+    /// @dev One keeper call with `gasLimit`: it either reverts untouched or retires a prefix of
+    ///      the live claims, and every retired claim has been paid.
+    function _mineAndCheckClaims(address[] memory players, uint32 day, uint256 gasLimit) private {
+        uint256 n = players.length;
+        uint256[] memory tokens = new uint256[](n);
+        uint256[] memory credit = new uint256[](n);
+        for (uint256 i; i < n; ++i) {
+            tokens[i] = _claimTokens(players[i], day);
+            credit[i] = game.claimableWinningsOf(players[i]);
+        }
+        uint256 reserved = sdgnrs.pendingRedemptionEthValue();
+        uint256 cursor = _cursor();
+        vm.prank(keeper);
+        (bool ok,) = address(game).call{gas: gasLimit}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
+        bool prefix = true;
+        for (uint256 i; i < n; ++i) {
+            uint256 left = _claimTokens(players[i], day);
+            uint256 now_ = game.claimableWinningsOf(players[i]);
+            if (tokens[i] == 0) continue;
+            if (left == 0) {
+                assertTrue(ok, "a reverted call retires nothing");
+                assertTrue(prefix, "claims retire in queue order");
+                assertGt(now_, credit[i], "a retired claim is paid");
+            } else {
+                prefix = false;
+                assertEq(left, tokens[i], "an unstarted claim is untouched");
+                assertEq(now_, credit[i], "an unstarted claim is unpaid");
+            }
+        }
+        if (!ok) {
+            assertEq(_cursor(), cursor, "a reverted call leaves the cursor");
+            assertEq(sdgnrs.pendingRedemptionEthValue(), reserved, "a reverted call leaves the reserve");
+        }
+    }
+
+    /// @dev Whatever gas the keeper supplies, a claim is either paid and retired or untouched.
+    function testFuzz_MinerGasNeverRetiresAClaimUnpaid(uint256 seed) public {
+        uint32 day = _openBatchId();
+        address[] memory players = _newBurners(3, sdgnrs.totalSupply() * 16 / 1000);
+        _resolve(day, 175, 99); _commitWord(99);
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        assertTrue(sdgnrs.redemptionSettlementPending(), "nonvacuity: redemptions await settlement");
+        for (uint256 i; i < 12 && sdgnrs.redemptionSettlementPending(); ++i) {
+            _mineAndCheckClaims(players, day, bound(uint256(keccak256(abi.encode(seed, i))), 400_000, 9_500_000));
+        }
+        // Ample gas finishes whatever the short calls left.
+        for (uint256 i; i < 8 && sdgnrs.redemptionSettlementPending(); ++i) _mineAndCheckClaims(players, day, 12_000_000);
+        assertFalse(sdgnrs.redemptionSettlementPending());
+        assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
+        for (uint256 i; i < players.length; ++i) {
+            assertEq(_claimTokens(players[i], day), 0);
+            assertGt(game.claimableWinningsOf(players[i]), 0);
+        }
     }
 
     function test_PerClaimStepsAndOneCallPlayerEventsAndBalancesAreIdentical() public {

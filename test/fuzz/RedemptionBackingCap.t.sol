@@ -168,16 +168,18 @@ contract RedemptionBackingCapTest is RedemptionFixture {
         paid = _received(player) - before;
     }
 
-    function test_DroppedCappedClaimStaysRetiredAcrossBothBufferReuses() public {
+    function test_PaidCappedClaimStaysRetiredAcrossBothBufferReuses() public {
         _giveRemainingPools(alice);
         uint256 amount = sdgnrs.totalSupply() * 60 / 100;
         _burn(alice, amount);
         uint32 first = _resolveLive(175);
-        vm.mockCallRevert(address(game), abi.encodeWithSelector(game.resolveRedemptionLootbox.selector), hex"12345678");
         assertTrue(_work(9_000_000));
+        uint256 credit = game.claimableWinningsOf(alice);
+        assertGt(credit, 0, "the capped claim is paid");
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
         assertEq(_claimTokens(alice, first), 0);
-        vm.clearMockedCalls();
+        // The paid claim took the whole capped backing; fresh backing prices the later burns.
+        vm.deal(address(sdgnrs), address(sdgnrs).balance + 10_000 ether);
         for (uint256 i; i < 2; ++i) {
             _burn(alice, _minimumLiveBurn());
             uint32 next = _resolveLive(100);

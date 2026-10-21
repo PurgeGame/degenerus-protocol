@@ -103,15 +103,25 @@ contract RedemptionStorageReuseTest is RedemptionFixture {
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
     }
 
-    function test_DroppedPrefixStaysConsumedWhenRemainderBecomesTerminal() public {
+    /// @dev A later claim that reverts its step leaves the paid prefix consumed and the rest live,
+    ///      so the remainder still claims once the game ends.
+    function test_PaidPrefixStaysConsumedWhenALaterStepRevertsAndRemainderBecomesTerminal() public {
         uint32 batchId = _seedThreeClaims();
-        vm.mockCallRevert(address(game), abi.encodeWithSelector(game.resolveRedemptionLootbox.selector), hex"12345678");
         assertFalse(_work(_oneClaimBudget()));
         assertEq(_cursor(), 1);
+        uint256 credit = game.claimableWinningsOf(alice);
+        vm.mockCallRevert(address(game), abi.encodeWithSelector(game.resolveRedemptionLootbox.selector), hex"12345678");
+        _assertWorkRevertsUnchanged(batchId, 9_000_000);
+        assertEq(_cursor(), 1);
         assertEq(_claimTokens(alice, batchId), 0);
-        vm.clearMockedCalls();
+        assertGt(_claimTokens(bob, batchId), 0);
+        assertGt(_claimTokens(carol, batchId), 0);
         _terminalize();
         _assertNoTerminalClaim(alice, batchId);
-        assertGt(_claimTokens(bob, batchId), 0);
+        assertEq(game.claimableWinningsOf(alice), credit);
+        uint256 before = _received(bob);
+        vm.prank(bob);
+        sdgnrs.claimRedemption(0, batchId);
+        assertGt(_received(bob), before);
     }
 }

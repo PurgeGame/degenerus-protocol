@@ -194,13 +194,23 @@ contract RedemptionAccountsTest is RedemptionFixture {
         assertEq(_claimTokens(alice, id), 0);
     }
 
-    function test_DroppedClaimCannotBeRecoveredByOperatorAfterGameOver() public {
+    /// @notice A live settlement step that reverts consumes nothing: if the game ends before it
+    ///         succeeds, the account's claim is still live and the operator's terminal claim pays
+    ///         the account's payee in full.
+    function test_RevertedLiveSettlementLeavesClaimForOperatorAfterGameOver() public {
         _burn(alice, sdgnrs.totalSupply() / 1000);
         uint32 batchId = _resolveLive(100);
+        uint256 expected = _claimBase(alice, batchId);
         vm.mockCallRevert(address(game), abi.encodeWithSelector(game.resolveRedemptionLootbox.selector), hex"12345678");
-        assertTrue(_work(9_000_000));
-        vm.clearMockedCalls();
-        _latchGameOver();
+        _assertWorkRevertsUnchanged(batchId, 9_000_000);
+        _terminalize();
+        assertGt(_claimTokens(alice, batchId), 0, "the unsettled claim is still live");
+        uint256 before = _received(alice);
+        vm.prank(operator);
+        sdgnrs.claimRedemption(aliceId, batchId);
+        assertEq(_received(alice) - before, expected, "the payee receives the rolled amount");
+        assertEq(_claimTokens(alice, batchId), 0);
+        assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
         vm.expectRevert(sDGNRS.NoClaim.selector);
         vm.prank(operator);
         sdgnrs.claimRedemption(aliceId, batchId);

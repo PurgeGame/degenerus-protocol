@@ -186,20 +186,21 @@ contract RedemptionIsolationTest is RedemptionFixture {
         assertEq(_claimTokens(carol, first + 2), amount);
     }
 
+    /// @dev The first unit always starts; with too little gas for its claim the step reverts
+    ///      whole, so the claim is neither retired nor paid.
     function testUnderfundedFirstClaimCannotBeDropped() public {
         _burn(alice, sdgnrs.totalSupply() / 1000);
         uint32 id = _resolveLive(100);
         uint256 tokens = _claimTokens(alice, id);
-        uint256 reserved = sdgnrs.pendingRedemptionEthValue();
+        bytes32 before = _redemptionDigest(id);
         vm.prank(address(game));
-        (bool ok, bytes memory reason) = address(sdgnrs).call{gas: 200_000}(
+        (bool ok,) = address(sdgnrs).call{gas: 200_000}(
             abi.encodeWithSelector(sdgnrs.runRedemptionWork.selector, settlementWord,
                 MineFlipGas.budget(0, 10_000, true))
         );
         assertFalse(ok);
-        assertEq(reason, abi.encodeWithSelector(MineFlipGas.InsufficientExecutionGas.selector));
+        assertEq(_redemptionDigest(id), before, "an underfunded step changes no redemption state");
         assertEq(_claimTokens(alice, id), tokens);
-        assertEq(sdgnrs.pendingRedemptionEthValue(), reserved);
         assertEq(_cursor(), 0);
     }
     function testCloseEthSendFailureModesConserveLedger() public {

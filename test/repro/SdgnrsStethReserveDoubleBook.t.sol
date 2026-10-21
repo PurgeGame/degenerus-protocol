@@ -27,20 +27,26 @@ contract SdgnrsStethReserveDoubleBook is RedemptionFixture {
     }
     function test_bothClaimantsPaid_claimOrderXY() public { _pair(false); }
     function test_bothClaimantsPaid_claimOrderYX() public { _pair(true); }
-    function test_DroppedReserveReturnsToNextBatchBacking() public {
+    /// @dev A settled batch leaves its unrolled maximum and rounding dust in backing: the next
+    ///      batch prices on everything the paid claim did not take.
+    function test_UnrolledExcessAndDustReturnToNextBatchBacking() public {
         vm.deal(address(sdgnrs), 10_000 ether);
         uint256 n = sdgnrs.totalSupply() / 1000;
         _burn(alice, n);
-        uint32 first = _resolveLive(175);
-        vm.mockCallRevert(address(game), abi.encodeWithSelector(game.resolveRedemptionLootbox.selector), hex"12345678");
+        uint32 first = _resolveLive(100);
+        uint256 rolled = _claimBase(alice, first);
+        assertGt(rolled, 0);
+        uint256 backing = _money();
+        uint256 credit = game.claimableWinningsOf(alice);
         assertTrue(_work(9_000_000));
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
         assertEq(_claimTokens(alice, first), 0);
-        assertEq(address(sdgnrs).balance, 10_000 ether, "the dropped claim's ETH stays as backing");
-        vm.clearMockedCalls();
+        assertGt(game.claimableWinningsOf(alice), credit, "the claim is paid");
+        assertLt(address(sdgnrs).balance, 10_000 ether, "the paid claim left custody");
+        assertApproxEqAbs(_money(), backing, 1 gwei, "payment leaves the rest of the backing intact");
         uint256 expected = (_money() * n / sdgnrs.totalSupply() / 1 gwei) * 1 gwei;
         _burn(bob, n);
-        uint32 second = _resolveLive(175);
+        uint32 second = _resolveLive(100);
         assertEq(_claimBase(bob, second), expected);
         assertTrue(_work(9_000_000));
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);

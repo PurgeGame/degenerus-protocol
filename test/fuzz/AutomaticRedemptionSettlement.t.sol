@@ -104,55 +104,168 @@ contract AutomaticRedemptionSettlementTest is RedemptionFixture {
         assertEq(game.claimableWinningsOf(bob), bobCredit, "a drained cohort pays nothing twice");
     }
 
-    /// @dev Refused claims cannot hold the cohort and leave no reserve or event behind.
-    function test_RefusedSettlementDropsClaimsAndReleasesBacking() public {
-        uint32 day = _openBatchId();
-        _burn(alice, sdgnrs.totalSupply() / 1000);
-        _burn(bob, sdgnrs.totalSupply() / 1000);
-        _resolve(day, 100, 99);
-        uint256 custody = address(sdgnrs).balance;
-        vm.mockCallRevert(address(sdgnrs), abi.encodeWithSelector(sdgnrs.settleRedemptionHead.selector), hex"12345678");
-        vm.recordLogs();
-        vm.prank(address(game));
-        assertTrue(_process(9_000_000));
+    function _assertCohortPaid(uint32 day) internal {
         assertFalse(sdgnrs.redemptionSettlementPending());
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
-        assertEq(address(sdgnrs).balance, custody);
         assertEq(_claimTokens(alice, day), 0);
         assertEq(_claimTokens(bob, day), 0);
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        for (uint256 i; i < logs.length; ++i) assertTrue(logs[i].emitter != address(sdgnrs));
     }
 
-    /// @dev A metering-selector revert cannot impersonate caller underfunding.
-    function test_SpoofedGameMeteringErrorDropsClaim() public {
+    /// @dev Two live claims at roll 100; the first burner heads the queue.
+    function _resolveTwoClaims() internal returns (uint32 day) {
+        _burn(alice, sdgnrs.totalSupply() / 1000);
+        _burn(bob, sdgnrs.totalSupply() / 1000);
+        day = _resolveLive(100);
+    }
+
+    /// @dev Roll-100 batch whose synthetic flip wins, with FLIP escrowed for both claims.
+    function _resolveWinningFlip() internal returns (uint32 day) {
+        _seedFlipBacking(1_000_000);
+        _burn(alice, sdgnrs.totalSupply() / 1000);
+        _burn(bob, sdgnrs.totalSupply() / 1000);
+        day = _openBatchId();
+        _closeAsGame();
+        for (uint256 k;; ++k) {
+            settlementWord = ((uint256(100 - 21) + 155 * k) << 8) | 2;
+            if (_synthReward(settlementWord, day) != 0) break;
+        }
+        _mockSettlingStage();
+        vm.prank(address(game));
+        sdgnrs.runRedemptionWork(settlementWord, RESOLVE_ONLY_ALLOWANCE);
+        (, , uint256 escrow, , uint16 reward) = _batch(day);
+        assertGt(escrow, 0, "FLIP escrowed");
+        assertGt(reward, 0, "the batch flip won");
+    }
+
+    /// @dev A claim that cannot complete reverts the whole step: no claim is consumed, none paid,
+    ///      the reserve and cursor stay put. Once the cause clears, the same cohort settles in full.
+    function test_RevertedLootboxLegRevertsWholeSettlement() public {
+        uint32 day = _resolveTwoClaims();
+        uint256 credit = game.claimableWinningsOf(alice);
+        uint256 bobCredit = game.claimableWinningsOf(bob);
+        vm.mockCallRevert(address(game), abi.encodeWithSelector(game.resolveRedemptionLootbox.selector), hex"12345678");
+        assertGt(_claimTokens(alice, day), 0);
+        bytes memory reason = _assertWorkRevertsUnchanged(day, 9_000_000);
+        assertEq(reason, hex"12345678", "the failing leg's reason bubbles");
+        assertEq(_cursor(), 0);
+        assertGt(_claimTokens(alice, day), 0);
+        assertGt(_claimTokens(bob, day), 0);
+        vm.clearMockedCalls();
+        _mockSettlingStage();
+        assertTrue(_work(9_000_000));
+        _assertCohortPaid(day);
+        assertGt(game.claimableWinningsOf(alice), credit);
+        assertGt(game.claimableWinningsOf(bob), bobCredit);
+    }
+
+    function test_RevertedDirectLegRevertsWholeSettlement() public {
+        uint32 day = _resolveTwoClaims();
+        uint256 credit = game.claimableWinningsOf(alice);
+        vm.mockCallRevert(address(game), abi.encodeWithSelector(game.creditRedemptionDirect.selector), hex"12345678");
+        _assertWorkRevertsUnchanged(day, 9_000_000);
+        assertGt(_claimTokens(alice, day), 0);
+        assertGt(_claimTokens(bob, day), 0);
+        vm.clearMockedCalls();
+        _mockSettlingStage();
+        assertTrue(_work(9_000_000));
+        _assertCohortPaid(day);
+        assertGt(game.claimableWinningsOf(alice), credit);
+    }
+
+    function test_RevertedFlipCreditRevertsWholeSettlement() public {
+        uint32 day = _resolveWinningFlip();
+        vm.mockCallRevert(address(coinflip), abi.encodeWithSelector(coinflip.creditFlip.selector), hex"12345678");
+        _assertWorkRevertsUnchanged(day, 9_000_000);
+        assertGt(_claimTokens(alice, day), 0);
+        assertGt(_claimTokens(bob, day), 0);
+        vm.clearMockedCalls();
+        _mockSettlingStage();
+        uint256 stake = coinflip.coinflipAmount(alice);
+        assertTrue(_work(9_000_000));
+        _assertCohortPaid(day);
+        assertGt(coinflip.coinflipAmount(alice), stake, "the FLIP credit lands once the leg works");
+    }
+
+    /// @dev A prefix paid by an earlier step stays consumed when a later claim reverts its step.
+    function test_RevertedLaterClaimKeepsEarlierPaidPrefix() public {
+        uint32 day = _resolveTwoClaims();
+        assertFalse(_work(_oneClaimBudget()));
+        assertEq(_cursor(), 1);
+        assertEq(_claimTokens(alice, day), 0);
+        uint256 paid = game.claimableWinningsOf(alice);
+        assertGt(paid, 0);
+        vm.mockCallRevert(address(game), abi.encodeWithSelector(game.resolveRedemptionLootbox.selector), hex"12345678");
+        _assertWorkRevertsUnchanged(day, 9_000_000);
+        assertEq(_cursor(), 1);
+        assertEq(game.claimableWinningsOf(alice), paid, "the paid prefix is not paid twice");
+        assertGt(_claimTokens(bob, day), 0);
+        vm.clearMockedCalls();
+        _mockSettlingStage();
+        assertTrue(_work(9_000_000));
+        _assertCohortPaid(day);
+        assertEq(game.claimableWinningsOf(alice), paid);
+    }
+
+    /// @dev A metering-selector revert cannot impersonate caller underfunding: it bubbles as
+    ///      itself and consumes nothing.
+    function test_SpoofedGameMeteringErrorRevertsWholeSettlement() public {
         _burn(alice, sdgnrs.totalSupply() / 1000);
         uint32 day = _resolveLive(100);
+        uint256 credit = game.claimableWinningsOf(alice);
         vm.mockCallRevert(address(game), abi.encodeWithSelector(game.resolveRedemptionLootbox.selector),
             abi.encodeWithSignature("EmptyRevert()"));
+        bytes memory reason = _assertWorkRevertsUnchanged(day, 9_000_000);
+        assertEq(reason, abi.encodeWithSignature("EmptyRevert()"));
+        assertGt(_claimTokens(alice, day), 0);
+        vm.clearMockedCalls();
+        _mockSettlingStage();
         assertTrue(_work(9_000_000));
         assertEq(_claimTokens(alice, day), 0);
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
+        assertGt(game.claimableWinningsOf(alice), credit);
     }
 
-    /// @dev A refusing nested dependency rolls back only its claim.
-    function test_NestedBoxSubcallRefusalDropsClaim() public {
+    /// @dev A refusing nested dependency reverts the step; its claim stays live and pays once the
+    ///      dependency answers.
+    function test_NestedBoxSubcallRefusalRevertsWholeSettlement() public {
         _burn(alice, sdgnrs.totalSupply() / 1000);
         uint32 day = _resolveLive(100);
+        uint256 credit = game.claimableWinningsOf(alice);
+        bytes memory original = ContractAddresses.GAME_BOON_MODULE.code;
         vm.etch(ContractAddresses.GAME_BOON_MODULE, type(RedemptionRefusingBoonModule).runtimeCode);
+        _assertWorkRevertsUnchanged(day, 9_000_000);
+        assertGt(_claimTokens(alice, day), 0);
+        vm.etch(ContractAddresses.GAME_BOON_MODULE, original);
         assertTrue(_work(9_000_000));
         assertEq(_claimTokens(alice, day), 0);
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
+        assertGt(game.claimableWinningsOf(alice), credit);
     }
 
-    /// @dev Exhaustion after the full fixed budget is a claim failure.
-    function test_NestedBoxSubcallExhaustionDropsClaim() public {
+    /// @dev Exhaustion of the nested call's whole gas reverts the step the same way.
+    function test_NestedBoxSubcallExhaustionRevertsWholeSettlement() public {
         _burn(alice, sdgnrs.totalSupply() / 1000);
         uint32 day = _resolveLive(100);
+        uint256 credit = game.claimableWinningsOf(alice);
+        bytes memory original = ContractAddresses.GAME_BOON_MODULE.code;
         vm.etch(ContractAddresses.GAME_BOON_MODULE, type(RedemptionGasBurningBoonModule).runtimeCode);
+        _assertWorkRevertsUnchanged(day, 9_000_000);
+        assertGt(_claimTokens(alice, day), 0);
+        vm.etch(ContractAddresses.GAME_BOON_MODULE, original);
         assertTrue(_work(9_000_000));
         assertEq(_claimTokens(alice, day), 0);
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
+        assertGt(game.claimableWinningsOf(alice), credit);
+    }
+
+    /// @dev Admission only decides whether a claim starts: with an allowance below the head
+    ///      claim's bound the step returns without touching it.
+    function test_ShortAllowanceStartsNoClaim() public {
+        uint32 day = _resolveTwoClaims();
+        bytes32 before = _redemptionDigest(day);
+        assertFalse(_work(1_000_000));
+        assertEq(_redemptionDigest(day), before, "a claim that does not fit is left whole");
+        assertEq(_cursor(), 0);
     }
 
     function _logDigest(bytes32 digest, Vm.Log[] memory logs) internal view returns (bytes32) {
@@ -176,8 +289,7 @@ contract AutomaticRedemptionSettlementTest is RedemptionFixture {
     }
 
     /// @dev The cohort's pinned session word decides every live payout: one engine call, one
-    ///      call per claim with the Game's live word moved in between, and the parked route
-    ///      (claims refused, then claimed later on their parked word) all produce one transcript.
+    ///      call per claim with the Game's live word moved in between, all produce one transcript.
     function test_FrozenWordProducesSameTranscriptAcrossAllClaimRoutes() public {
         uint32 day = _openBatchId();
         uint256 amount = sdgnrs.totalSupply() / 1000;

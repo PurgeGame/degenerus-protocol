@@ -225,10 +225,42 @@ abstract contract RedemptionFixture is DeployProtocol {
         id = _openBatchId();
         _closeAsGame();
         settlementWord = _wordForRoll(roll);
-        vm.mockCall(address(game), abi.encodeWithSignature("rngConsumerStage()"), abi.encode(uint8(1)));
+        _mockSettlingStage();
         vm.prank(address(game));
         sdgnrs.runRedemptionWork(settlementWord, RESOLVE_ONLY_ALLOWANCE);
         assertEq(_rollOf(id), roll);
+    }
+    /// @dev The Game reports the RNG consumer stage that lets the redemption worker run.
+    function _mockSettlingStage() internal {
+        vm.mockCall(address(game), abi.encodeWithSignature("rngConsumerStage()"), abi.encode(uint8(1)));
+    }
+    /// @dev Every redemption-state value a settlement step can move: the batch cursors, the
+    ///      reserve and custody figures, the batch terms, sDGNRS's FLIP backing, and each
+    ///      holder's claim entry, Game credit, flip stake and balance.
+    function _redemptionDigest(uint32 id) internal returns (bytes32 digest) {
+        (uint32 open, uint32 settling, uint32 cursor, uint256 escrowed) = sdgnrs.redemptionBatchState();
+        digest = keccak256(abi.encode(open, settling, cursor, escrowed, sdgnrs.redemptionSettlementPending(),
+            sdgnrs.pendingRedemptionEthValue(), game.redemptionReserve(), address(sdgnrs).balance,
+            game.claimableWinningsOf(address(sdgnrs))));
+        (uint256 tokens, uint256 ethBase, uint256 flipEscrow, uint16 roll, uint16 flipReward) = _batch(id);
+        digest = keccak256(abi.encode(digest, tokens, ethBase, flipEscrow, roll, flipReward));
+        vm.prank(address(sdgnrs));
+        digest = keccak256(abi.encode(digest, coinflip.redeemableFlipBacking()));
+        address[3] memory holders = [alice, bob, carol];
+        for (uint256 i; i < holders.length; ++i) {
+            digest = keccak256(abi.encode(digest, _claimTokens(holders[i], id), game.claimableWinningsOf(holders[i]),
+                coinflip.coinflipAmount(holders[i]), holders[i].balance));
+        }
+    }
+    /// @dev A settlement step that reverts consumes no claim: every redemption-state value is
+    ///      identical afterwards. Returns the revert data.
+    function _assertWorkRevertsUnchanged(uint32 id, uint256 budget) internal returns (bytes memory reason) {
+        bytes32 before = _redemptionDigest(id);
+        vm.prank(address(game));
+        bool ok;
+        (ok, reason) = address(sdgnrs).call{gas: 15_000_000}(abi.encodeCall(sdgnrs.runRedemptionWork, (settlementWord, budget)));
+        assertFalse(ok, "the failing claim reverts the whole settlement step");
+        assertEq(_redemptionDigest(id), before, "a reverted settlement step changes no redemption state");
     }
     function _work(uint256 budget) internal returns (bool done) {
         vm.prank(address(game));
