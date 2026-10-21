@@ -199,4 +199,86 @@ contract CrapsAliasedSlotTest is CrapsPins {
         assertEq(betId >> 64, uint256(slot), "the custom entry must key to its own slot");
         assertGt(flip.burned(carol), 0, "the custom entry was not charged");
     }
+
+    // ---- timing cases ------------------------------------------------------------------------
+    // The aliased door is shut at every point of a window's life, and the field it would have
+    // joined resolves to completion on its armed head count, so no late seat can leave a window
+    // partly walked.
+
+    function _armedWindow() internal returns (uint64 slot, bytes32 key, uint48 index) {
+        vm.prank(ContractAddresses.GAME);
+        craps.openBonusDay();
+        slot = _slotAt(PER);
+        key = craps.keyOfSlot(slot);
+        _seat(alice, PER);
+        _seat(bob, PER);
+        vm.warp(_dayStart() + _closeOf(PER));
+        index = craps.armWindow(slot);
+    }
+
+    function _aliasReverts(uint64 slot, bytes4 reason) internal {
+        uint64 alias_ = uint64(uint256(slot) + ALIAS_STRIDE);
+        assertLt(uint256(alias_), craps.customSlotBase(), "alias must stay in the bonus lane");
+        game.setScore(dave, craps.SYBIL_SCORE_FLOOR());
+        vm.prank(dave);
+        vm.expectRevert(reason);
+        craps.enterBattle(alias_, _seven(), 1);
+        assertEq(flip.burned(dave), 0, "dave was charged despite the revert");
+    }
+
+    function _settlesWhole(uint64 slot, bytes32 key, uint64 entrants) internal {
+        craps.settleSlot(slot, WHOLE_FIELD);
+        CrapsViews.Battle memory b = craps.battleOf(key);
+        assertEq(b.entrants, entrants, "the field grew after the arm");
+        assertEq(b.resolved, entrants, "the field did not resolve to its armed head count");
+        assertTrue(b.finalized, "the field did not finalize");
+    }
+
+    /// @dev (c) Shut, word not yet delivered: the alias is refused, and once the word lands the
+    ///      field settles on exactly the seats it had when armed.
+    function test_aliasRefusedWhileWordPending() public {
+        (uint64 slot, bytes32 key, uint48 index) = _armedWindow();
+        uint64 entrants = craps.battleOf(key).entrants;
+        _aliasReverts(slot, CrapsBattleStorage.NoSuchBattle.selector);
+        _setWord(index, uint256(keccak256("pending-word")));
+        _settlesWhole(slot, key, entrants);
+        (bool progressed,) = _crank(craps);
+        assertTrue(progressed, "the keeper did not cross the settled window");
+    }
+
+    /// @dev (a) Shut, word public, field not yet walked: neither the alias nor the window's own
+    ///      slot takes a seat, so a board chosen against the known dice has no way in.
+    function test_aliasRefusedWithWordPublicBeforeSettlement() public {
+        (uint64 slot, bytes32 key, uint48 index) = _armedWindow();
+        _setWord(index, uint256(keccak256("public-word")));
+        uint64 entrants = craps.battleOf(key).entrants;
+        _aliasReverts(slot, CrapsBattleStorage.NoSuchBattle.selector);
+        game.setScore(carol, craps.SYBIL_SCORE_FLOOR());
+        vm.prank(carol);
+        vm.expectRevert(CrapsBattleStorage.BonusPeriodSpent.selector);
+        craps.enterBattle(slot, _seven(), 1);
+        _settlesWhole(slot, key, entrants);
+    }
+
+    /// @dev (b) Fully settled: the alias is refused and the finalized field is untouched.
+    function test_aliasRefusedAfterFinalization() public {
+        (uint64 slot, bytes32 key, uint48 index) = _armedWindow();
+        _setWord(index, uint256(keccak256("final-word")));
+        uint64 entrants = craps.battleOf(key).entrants;
+        _settlesWhole(slot, key, entrants);
+        _aliasReverts(slot, CrapsBattleStorage.NoSuchBattle.selector);
+        CrapsViews.Battle memory b = craps.battleOf(key);
+        assertEq(b.entrants, entrants, "a finalized field grew");
+        assertEq(b.resolved, entrants, "a finalized field's cursor moved");
+        assertTrue(b.finalized, "a finalized field reopened");
+    }
+
+    /// @dev The jackpot remainders: the day's jackpot window admits only its exact slot, and the
+    ///      detached remainder admits nothing, so their aliases fail at the joinability test.
+    function test_jackpotRemainderAliasesRefused() public {
+        vm.prank(ContractAddresses.GAME);
+        craps.openBonusDay();
+        _aliasReverts(_slotAt(5), CrapsBattleStorage.BonusPeriodSpent.selector);
+        _aliasReverts(_slotAt(6), CrapsBattleStorage.BonusPeriodSpent.selector);
+    }
 }
