@@ -160,6 +160,7 @@ contract FSMAdvanceHarness is DegenerusGameMinerModule {
         rngRequestTime = 1;
         vrfRequestId = 1;
         humanReadComplete = true;
+        _redemptionReserveStored = 1;
         vrfCoordinator = IVRFCoordinator(ContractAddresses.VRF_COORDINATOR);
     }
 
