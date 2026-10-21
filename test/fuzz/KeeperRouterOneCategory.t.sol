@@ -308,7 +308,13 @@ contract KeeperRouterOneCategory is DeployProtocol {
         // CEI-last: the credit follows the loop's exit check and the gas measurement.
         uint256 credit = _indexOf(dispatch, "coinflip.creditFlip(minerId, reward);");
         uint256 measured = _indexOf(dispatch, "uint256 used = MineFlipGas.consumed(rewardStart, gasleft());");
-        uint256 loopExit = _indexOf(dispatch, "if (!moved) revert MineFlipGas.InsufficientExecutionGas();");
+        // The no-progress exit: a refused randomness request returns before any measurement or credit;
+        // otherwise a failed admission check reverts.
+        string memory noProgressExit =
+            "if (!moved) {\n            if (requestRefused) return;\n            revert MineFlipGas.InsufficientExecutionGas();\n        }";
+        assertEq(_countOccurrences(dispatch, noProgressExit), 1, "one no-progress exit after the loop");
+        assertEq(_countOccurrences(dispatch, "if (requestRefused) return;"), 1, "the refusal exit is only the no-progress one");
+        uint256 loopExit = _indexOf(dispatch, noProgressExit);
         assertGt(measured, loopExit, "gas is measured after every worker returned");
         assertGt(credit, measured, "the credit is the last external effect");
         // Every worker target is a pinned protocol address.
