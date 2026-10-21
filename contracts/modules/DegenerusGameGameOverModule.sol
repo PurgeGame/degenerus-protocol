@@ -441,8 +441,9 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
 
 
     /// @dev Request the ending's entropy without consulting any read consumer. The first attempt
-    ///      arms the request day and time; a coordinator refusal leaves them armed and records
-    ///      the refusal.
+    ///      arms the request day and time and asks in the same call, so the 14-day dead-VRF
+    ///      clock starts when VRF is first asked; a coordinator refusal leaves them armed and
+    ///      records the refusal.
     function _requestTerminalRng(uint24 day, MineFlipGas.Meter memory meter, TerminalWork memory work) private returns (bool requested) {
         if (_lrRead(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK) == 0 || _rngRequestActive()) revert E();
         if (!MineFlipGas.canRun(meter, GasBounds.RNG_TERMINAL_REQUEST, GasBounds.TERMINAL_TAIL)) return false;
@@ -454,7 +455,6 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             rngWordCurrent = RNG_WORD_WAITING;
             work.progressed = true;
             MineFlipGas.markProgress(meter);
-            return false;
         }
         (bool ok, uint256 id) = _boundedVrfRequest(VRF_REQUEST_CONFIRMATIONS);
         if (!ok) {
