@@ -53,6 +53,11 @@ contract StoragePackingTest is Test {
     }
 
     function testFuzz_CrapsIndexAndCursorPreserveEachOther(uint256 slot, uint48 index, uint64 cursor) public {
+        // Slots are a day-lane window (`day * 8 + remainder` over a uint24 day, whose day tag fills
+        // the ring word's 24 tag bits) or a custom battle at or above 2^40.
+        slot = slot & 1 == 0
+            ? bound(slot >> 1, 0, (uint256(type(uint24).max) << 3) | 7)
+            : bound(slot >> 1, uint256(1) << 40, type(uint64).max);
         CrapsPackingHarness h = new CrapsPackingHarness();
         h.index(slot, index);
         h.cursor(slot, cursor);
