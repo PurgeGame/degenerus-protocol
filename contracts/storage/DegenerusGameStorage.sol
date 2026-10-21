@@ -3248,8 +3248,8 @@ abstract contract DegenerusGameStorage {
         return _simulatedDayIndex() > uint24(dailyIdx) + _VRF_DEADMAN_DAYS;
     }
 
-    /// @dev An active, unanswered request expires from its original timestamp. A delivered
-    ///      word proves VRF is alive even while the miner has not published it. Retained idle
+    /// @dev An active request whose word is not yet in use (published) expires from its original
+    ///      timestamp, whether or not the word has been delivered. Retained idle
     ///      timestamps grant neither callback authority nor a timeout. A refused terminal
     ///      attempt has no active request, but keeps its one-shot timer and unpublished latch.
     function _vrfDead() internal view returns (bool) {
@@ -3260,9 +3260,9 @@ abstract contract DegenerusGameStorage {
             if (_lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK) != 0) return true;
             if (_lrRead(LR_GO_SWAP_SHIFT, LR_GO_SWAP_MASK) == 0) return false;
         }
-        // Active/waiting authority is sufficient. A previously recorded day cannot
-        // excuse an unanswered terminal or replacement request.
-        return rngWordCurrent == RNG_WORD_WAITING;
+        // Dead unless the word is already in use: a word delivered after the timeout, or
+        // left unpublished past it, is never applied, so the ending depends only on time.
+        return !_rngSessionPublished();
     }
 
     /// @dev Returns the day index for a specific timestamp.

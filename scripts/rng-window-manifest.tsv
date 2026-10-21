@@ -206,7 +206,6 @@ ACCESSOR	rngFlagsAndNudges	_setRngRequestActive	storage/DegenerusGameStorage.sol
 ACCESSOR	rngFlagsAndNudges	_setRngSessionPublished	storage/DegenerusGameStorage.sol	WRITE	Masked mandatory-publication setter preserves nudge bits.
 ACCESSOR	rngFlagsAndNudges	_setTicketRedemptionOpen	storage/DegenerusGameStorage.sol	WRITE	Masked lifecycle setter preserves nudge bits.
 EXEMPT-ADVANCE	rngFlagsAndNudges	_swapRngBuffers	storage/DegenerusGameStorage.sol	WRITE	Normal completion gate precedes seal; terminal bypass kills unfinished box/bet/Craps work. Retry never swaps.
-GATE	rngWordCurrent	_vrfDead	storage/DegenerusGameStorage.sol	READ	existence check only, read once a request is a whole VRF-dead window old: a delivered daily word means VRF works even if the day processing it never completes (a stuck stage or a backlog), so that game ends by the deadman on a fresh terminal word instead; no value decision
 GATE	_dailyWordAt	_reservableDay	storage/CrapsBattleStorage.sol	READ
 GATE	degenesisWord	_degenesisSettlePending	storage/DegenerusGameStorage.sol	READ	Existence test (word != 0) selecting the DegenesisSettle stage; no value decision.
 GATE	rngFlagsAndNudges	_degenesisSettlePending	storage/DegenerusGameStorage.sol	READ	Terminal-bit test (bit 13) so the stage never runs once the terminal word is applied; no entropy consumed.
