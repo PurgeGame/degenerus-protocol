@@ -226,11 +226,14 @@ abstract contract DegenesisWeekOpening is DeployProtocol {
     }
 
     /// @dev One mineFlip on the least of 0.8M, 1.6M, ... 12.8M gas that runs, so little carries over
-    ///      into settlement after the first action.
+    ///      into settlement after the first action. The recording keeps a reverted probe's logs, so
+    ///      committed logs are scanned before each probe and a reverted probe's logs are dropped.
     function _dgwMineSmall() internal {
         for (uint256 g = 800_000; g <= 12_800_000; g *= 2) {
+            _dgwScan();
             (bool ok,) = address(game).call{gas: g}(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
             if (ok) return;
+            if (!_dgwKeepLogs()) vm.getRecordedLogs();
         }
         game.mineFlip(0);
     }
