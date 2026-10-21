@@ -224,15 +224,19 @@ contract SubscriberAfkingNativeGasTest is DeployProtocol {
             host.liquidateForTest(PLAYER, mode == 1);
             uint256 fundingBefore = game.afkingFundingOf(PLAYER);
             uint256 claimableBefore = host.claimableOf(PLAYER);
-            MineFlipGas.Result memory result = host.subWork{gas: 2_000_000}(2_000_000);
+            // The pass admits each member only with SUBSCRIBER_ITEM_GAS + SUBSCRIBER_TAIL_GAS left
+            // (1.95M at the 1.7M item bound); after the empty box section a 2M budget no longer
+            // reaches the ticket-section member, so the caller budget is 4M.
+            MineFlipGas.Result memory result = host.subWork{gas: 4_000_000}(4_000_000);
             uint256 used = _lastGas();
             emit log_named_uint("acquired_subscriber_cleanup_gas", used);
-            assertTrue(result.progressed && result.done);
-            assertEq(host.memberCount(), 0);
-            assertEq(game.afkingFundingOf(PLAYER), fundingBefore);
-            assertEq(host.claimableOf(PLAYER), claimableBefore);
-            assertEq(host.pendingEntries(PLAYER, 5), 0);
-            assertLe(used, GasBounds.SUBSCRIBER_ITEM_GAS + GasBounds.SUBSCRIBER_TAIL_GAS);
+            assertTrue(result.progressed, "the cleanup progresses");
+            assertTrue(result.done, "the pass completes");
+            assertEq(host.memberCount(), 0, "the acquired member is removed");
+            assertEq(game.afkingFundingOf(PLAYER), fundingBefore, "no further funding debit");
+            assertEq(host.claimableOf(PLAYER), claimableBefore, "no claimable debit");
+            assertEq(host.pendingEntries(PLAYER, 5), 0, "no entries bought");
+            assertLe(used, GasBounds.SUBSCRIBER_ITEM_GAS + GasBounds.SUBSCRIBER_TAIL_GAS, "cleanup within the item bound");
             assertTrue(vm.revertToState(base));
         }
     }
