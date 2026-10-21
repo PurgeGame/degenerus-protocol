@@ -263,14 +263,18 @@ contract StorageFoundationTest is Test {
         vm.store(address(harness), bytes32(GameSlots.LEVEL),
             bytes32((levelWord & ~levelMask) | (uint256(lvl) << (GameSlots.LEVEL_OFFSET * 8))));
 
-        uint256 allocSentinel = 0x123456789ABCDEF0123456789ABCDEF01;
-        uint256 claimedSentinel = 0x2FEDCBA9876543210FEDCBA9876543210;
+        // Sentinels fill their fields: allocation is 128 bits, claimed 127 bits (below bit 255).
+        uint256 allocSentinel = 0x23456789ABCDEF0123456789ABCDEF01;
+        uint256 claimedSentinel = 0x2EDCBA9876543210FEDCBA9876543210;
+        assertLt(allocSentinel, uint256(1) << 128);
+        assertLt(claimedSentinel, uint256(1) << 127);
         uint256 packed = (uint256(1) << 255) | (claimedSentinel << 128) | allocSentinel;
         vm.store(address(harness), bytes32(GameSlots.LEVEL_DGNRS_PACKED), bytes32(packed));
 
         (uint256 allocation, uint256 claimed) = harness.exposed_getLevelDgnrs(lvl);
         assertEq(allocation, allocSentinel, "levelDgnrsPacked allocation not at its slot low 128");
         assertEq(claimed, claimedSentinel, "levelDgnrsPacked claimed not at bits 128..254");
+        assertLt(claimed, uint256(1) << 127, "the retained bit 255 leaks into claimed");
 
         (allocation, claimed) = harness.exposed_getLevelDgnrs(lvl - 1);
         assertEq(allocation | claimed, 0, "a past level reads as empty");
