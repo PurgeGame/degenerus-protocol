@@ -183,8 +183,10 @@ contract OwnerGovernanceInvariantTest is OwnerGovernanceFixture {
         for (uint256 i; i < 3; ++i) {
             (uint256 amount, uint256 p, uint40 assignedBlock, uint40 depositBlock,) = gov.positions(handler.owners(i));
             liability += amount;
-            if (amount == 0) assertEq(depositBlock, 0);
-            else assertLe(depositBlock, block.number);
+            // A withdrawal zeroes only the amount (depositBlock and the delegate stay as dead
+            // fields); amount == 0 is the closed state, and a closed position holds no vote.
+            assertLe(depositBlock, block.number);
+            if (amount == 0) assertEq(p, 0, "a closed position is assigned to no proposal");
             if (p == 0) { assertEq(assignedBlock, 0); }
             else {
                 locked[p] += amount;
