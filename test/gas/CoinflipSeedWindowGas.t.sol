@@ -19,7 +19,11 @@ contract CoinflipSeedWindowGas is DeployProtocol {
     uint256 internal constant VAULT_WALK_GAS_CEIL = 180_000;
     // Retained tagged pages add a lookup check even when only the virtual seed pays.
     // R90 measured 43,671 on this Osaka fixture; native pricing is checked separately.
-    uint256 internal constant SEEDED_DAY_RESOLVE_GAS_CEIL = 44_500;
+    // Day 20 is the final seeded day, which arms sDGNRS's unlimited auto-rebuy: the retained
+    // take-profit sentinel (autoRebuyStop = 1) is a one-time zero-to-nonzero write of its second
+    // state word, measured 64,255 after storage reuse phase 2 (ceiling was 44,500). No lane
+    // or stake word is cleared.
+    uint256 internal constant SEEDED_DAY_RESOLVE_GAS_CEIL = 67_000;
 
     function setUp() public {
         _deployProtocol();
