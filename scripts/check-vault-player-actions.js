@@ -46,7 +46,7 @@ const excluded = {
   ],
   CRAPS: [
     "vaultComp", "donate", // Dedicated Vault batch/delegate-budget controls.
-    "creditPasses", "deliverPasses", "resolveRngSlot", "runCrapsMaintenance", "runDailyBattleWork",
+    "creditPasses", "deliverPasses", "resolveRngSlot",
     "setBattleCreator", // DGVE owner calls this directly, including to authorize the Vault.
   ],
   PARIMUTUEL: ["recordGrowth", "runGrowthWork"],
