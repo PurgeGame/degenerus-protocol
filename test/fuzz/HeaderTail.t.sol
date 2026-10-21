@@ -7,7 +7,10 @@ contract HeaderTailHarness is DegenerusGameStorage {
     mapping(uint24 => uint256[256]) internal legacy;
     function prepare(uint24 lvl) external { _setTicketBufferLevel(lvl); }
     function stamp(uint24 lvl) external view returns(uint24) { return _ticketBufferLevel(lvl); }
-    function bits(uint24 lvl) external view returns(uint256) { return traitBucketLive[lvl & 1]; }
+    /// @dev The validity bitmap readers see: zero while the parity's retained bitmap is stale.
+    function bits(uint24 lvl) external view returns(uint256) { return _traitBitmap(lvl); }
+    function physicalBits(uint24 lvl) external view returns(uint256) { return traitBucketLive[lvl & 1]; }
+    function stale(uint24 lvl) external view returns(bool) { return traitBucketStale & (1 << (lvl & 1)) != 0; }
     function header(uint24 lvl, uint8 trait) external view returns(uint256) { return lvlTraitEntry[lvl & 1][trait]; }
     function rawWord(uint24 lvl,uint8 trait,uint256 i) external view returns(uint256 word) {
         uint256 elem=_traitBufferBase(lvl)+trait;
@@ -136,9 +139,12 @@ contract HeaderTailTest is Test {
     function setUp() public { h=new HeaderTailHarness(); h.prepare(1); }
     function _prices(uint24 lvl,uint8 trait,uint256 n) private view returns (uint256 f,uint256 d) {
         (uint256 oldLen,)=h.lengths(lvl,trait);
-        uint256 bits=h.bits(lvl);
-        bool init=bits&(uint256(1)<<trait)==0;
-        uint256 stores=1+(init?1:0)+((oldLen&7)+n)/8;
+        uint256 bits=h.physicalBits(lvl);
+        // A freshly stamped level's first append clears its stale flag (a nonzero slot) and treats
+        // the retained bitmap as empty.
+        bool stale=h.stale(lvl);
+        bool init=stale || bits&(uint256(1)<<trait)==0;
+        uint256 stores=1+(stale?1:0)+(init?1:0)+((oldLen&7)+n)/8;
         if(h.header(lvl,trait)==0) ++f;
         if(init && bits==0) ++f;
         uint256 start=oldLen/8;
