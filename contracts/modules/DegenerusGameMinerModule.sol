@@ -186,7 +186,7 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
                 } else if (action == MinerAction.GrowthSettle) {
                     // Selected only while the pending bit is set; settlement is revert-free for
                     // committed state.
-                    target = address(parimutuel);
+                    target = ContractAddresses.PARIMUTUEL;
                     externalWorker = true;
                     callData = abi.encodeWithSelector(parimutuel.runGrowthWork.selector, allowance);
                 } else {

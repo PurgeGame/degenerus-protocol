@@ -371,8 +371,10 @@ named constants in the consumer; full string hashes are constant expressions.
 - Affiliate selection (`H(AFFILIATE_ROLL_TAG, day, buyerWalletId, code)`, packed) and
   salvage quotes (`H(sellerWalletId, previousDailyWord)`) are intentionally
   deterministic/public; they are not fresh VRF draws.
-- There is no entropy fallback. A VRF request unanswered for 14 days ends the
-  game deterministically with no word at all: the terminal level's tickets share
+- There is no entropy fallback. A VRF request whose word is not in use (published
+  by a mineFlip) 14 days after it was sent ends the game deterministically with no
+  word at all, whether the word never came or came and was never published; a word
+  delivered after that point is discarded: the terminal level's tickets share
   the pot (`claimDeadVrf`). A normal ending draws only on a terminal word it
   requested itself after liveness froze purchases. The NatSpec of
   `_livenessTriggered`, `_vrfDead` and

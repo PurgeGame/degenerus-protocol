@@ -77,7 +77,7 @@ The affiliate winner is fixed when the terminal cohort is latched, before any te
 word exists; later score claims do not reopen the award. The terminal word is one the
 game-over path requests itself after liveness froze purchases, even when the deadman
 ends a game whose day is stuck in processing. If VRF is dead (a
-request unanswered for 14 days) the ending is deterministic instead: deity refunds as
+request whose word is not in use 14 days after it was sent) the ending is deterministic instead: deity refunds as
 above, no affiliate share, and the rest split across every ticket of the terminal level,
 claimed through `claimDeadVrf`. The later final sweep handles unclaimed balances.
 Read the terminal paths separately from live-game withdrawal paths.
@@ -570,8 +570,8 @@ live match days no longer need it; a collision rejects the new purchase without
 blocking advancement. Historical records are reconstructed from events.
 Match randomness is fixed, but ETH caps, sDGNRS rewards, and recirculation use live
 payout state; old wins are not reserved ETH obligations. A VRF stall skips missed days on
-recovery and freezes auto-rebuy arming; a request unanswered for 14 days ends the game
-deterministically. The NatSpec of `_livenessTriggered`,
+recovery and freezes auto-rebuy arming; a request whose word is not in use 14 days after it
+was sent ends the game deterministically. The NatSpec of `_livenessTriggered`,
 `_vrfDead` and `_handleGameOverPath` states the implemented behavior.
 
 At the first AFKing stage of each level, sDGNRS attempts a whale-pass purchase of
