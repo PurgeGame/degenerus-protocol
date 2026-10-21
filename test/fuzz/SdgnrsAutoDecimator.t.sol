@@ -40,6 +40,9 @@ contract AutoDecimatorGameHarness is DegenerusGame {
         _setRngComplete(false);
         rngWordCurrent = word < 2 ? RNG_WORD_WAITING : word;
         _setDecWindowOpen(true);
+        // An open window at level lvl targets lvl + 1, which owns the reusable entry bank (the
+        // level transition that opened it set decEntriesLevel = lvl + 1).
+        decEntriesLevel = lvl + 1;
         if (opening) decBattleRounds[lvl + 1].openedDay = _simulatedDayIndex();
         _setDecDayOneActive(opening);
         lastPurchaseDay = opening;
