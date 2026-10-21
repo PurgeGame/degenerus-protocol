@@ -9050,14 +9050,6 @@
   {
     "path": "contracts/modules/DegenerusGameMinerModule.sol",
     "scope": "DegenerusGameMinerModule.mineFlip",
-    "kind": "external",
-    "expression": "parimutuel.runGrowthWork( MineFlipGas.child(meter, RETURN_RESERVE + WORKER_BOUNDARY))",
-    "count": 1,
-    "review": "PROTOCOL: target comes from the fixed MinerWork action/module dispatch."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMinerModule.sol",
-    "scope": "DegenerusGameMinerModule.mineFlip",
     "kind": "opcode-or-value",
     "expression": "target.call{gas: forwarded}(callData)",
     "count": 1,

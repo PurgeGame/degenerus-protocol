@@ -87,19 +87,6 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
                 continue;
             }
 
-            if (action == MinerAction.GrowthSettle) {
-                // Selected only while the pending bit is set. Every call moves the settlement
-                // cursor at least one step (pays a winner or steps past a paid sealed round), or
-                // reports every sealed round paid and clears the bit, so the stage always
-                // progresses. Settlement is revert-free for committed state.
-                MineFlipGas.Result memory growth = parimutuel.runGrowthWork(
-                    MineFlipGas.child(meter, RETURN_RESERVE + WORKER_BOUNDARY));
-                if (growth.done) _setGrowthSettlePending(false);
-                moved = moved || growth.progressed || growth.done;
-                if (!growth.done) break;
-                continue;
-            }
-
             if (action == MinerAction.PrepareSubscriptions && _afkingResetDay <= dailyIdx) {
                 // Once pinned, a preparation day survives midnight and partial batches.
                 _afkingResetDay = _simulatedDayIndex();
@@ -196,6 +183,12 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
                     callData = abi.encodeWithSelector(
                         IsDGNRS.runRedemptionWork.selector, _lootboxWord(_rngReadBuffer()), allowance
                     );
+                } else if (action == MinerAction.GrowthSettle) {
+                    // Selected only while the pending bit is set; settlement is revert-free for
+                    // committed state.
+                    target = address(parimutuel);
+                    externalWorker = true;
+                    callData = abi.encodeWithSelector(parimutuel.runGrowthWork.selector, allowance);
                 } else {
                     target = ContractAddresses.CRAPS;
                     externalWorker = true;
@@ -237,6 +230,12 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
                         progressed = true;
                         MineFlipGas.markProgress(meter);
                     }
+                }
+                if (action == MinerAction.GrowthSettle && done) {
+                    // Every sealed round is paid: clearing the pending bit is the progress.
+                    _setGrowthSettlePending(false);
+                    progressed = true;
+                    MineFlipGas.markProgress(meter);
                 }
                 if (!progressed) {
                     // done describes eligibility/completion, not work performed.
