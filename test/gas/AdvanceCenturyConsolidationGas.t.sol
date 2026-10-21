@@ -23,6 +23,7 @@ import {BafViews} from "../helpers/BafViews.sol";
 import {BafBoardSeed} from "../helpers/BafBoardSeed.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
 import {CrapsSlots} from "../helpers/GameSlots.sol";
+import {GameFunding} from "../helpers/GameFunding.sol";
 
 /// @dev The level-100 BAF award schedule and its award events. With R scatter rounds (48 below a
 ///      500 ETH pool) positions 0..2R-1 are the rounds in (best, second) pairs, a round pair's four
@@ -598,7 +599,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         assertEq(weight, 409_600, "draw intervals must fill its header");
 
         // A real closed batch remains unresolved until the later redemption consumer stage.
-        vm.deal(address(sdgnrs), 10_000 ether);
+        GameFunding.credit(2, 10_000 ether);
         uint256 burn = sdgnrs.totalSupply() / 1000;
         address burner = address(0xCE470);
         _giveWalletId(burner); // reward recipients are game players with wallet IDs

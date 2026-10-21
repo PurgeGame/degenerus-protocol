@@ -2,6 +2,7 @@
 pragma solidity 0.8.34;
 
 import {RedemptionCloseTools} from "../fuzz/helpers/RedemptionCloseTools.sol";
+import {GameFunding} from "../helpers/GameFunding.sol";
 
 /// @dev Real burns and requests: every claim the mandatory keeper drain settles, in a normal or a
 /// recovered (stalled) session, resolves its box from the cohort's pinned session word, and the
@@ -91,8 +92,8 @@ contract ForcedRedemptionSessionWordTest is RedemptionCloseTools {
         _request();
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 0xB007);
         _complete();
-        // Live legs pay from ETH custody and the Game reserve; stETH custody prices only the ending.
-        vm.deal(address(sdgnrs), address(sdgnrs).balance + 2000 ether);
+        // Live legs pay from the Game reserve; token custody prices only the ending.
+        GameFunding.credit(2, 2000 ether);
         uint256[] memory boxes = new uint256[](OWNERS);
         uint16[] memory scores = new uint16[](OWNERS);
         uint32 burnDay;
@@ -172,7 +173,10 @@ contract ForcedRedemptionSessionWordTest is RedemptionCloseTools {
                 assertEq(base, 0, "late entitlement consumed once");
             }
             assertGt(reserved, 0);
-            assertEq(sdgnrs.pendingRedemptionEthValue(), 0, "no forfeiture or stranded reserve");
+            // Equal claims share the rolled total by floor division: only that rounding remainder
+            // (under OWNERS wei) is left unassigned.
+            (, uint96 rolledTotal,,,,) = sdgnrs.redemptionBatches(burnDay);
+            assertEq(sdgnrs.pendingRedemptionEthValue(), uint256(rolledTotal) % OWNERS, "no forfeiture or stranded reserve");
             return;
         }
         _complete();

@@ -4,13 +4,12 @@ pragma solidity 0.8.34;
 import {StorageCensus} from "./StorageCensus.sol";
 import {RedemptionFixture} from "../fuzz/helpers/RedemptionFixture.sol";
 import {RedemptionReserveHarness} from "../repro/RedemptionReserve.t.sol";
+import {GameFunding} from "../helpers/GameFunding.sol";
 
 contract RedemptionReserveCensus is StorageCensus, RedemptionFixture {
     function setUp() public override {
         RedemptionFixture.setUp();
-        vm.deal(address(sdgnrs), 1_000 ether);
-        vm.prank(address(sdgnrs));
-        game.creditRedemptionDirect{value: 1_000 ether}(2, 1_000 ether);
+        GameFunding.credit(2, 1_000 ether);
         vm.deal(address(game), 0);
         mockStETH.mint(address(game), 1_000 ether);
         _censusRegisterProtocol();

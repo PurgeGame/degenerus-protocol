@@ -10,6 +10,7 @@ import {AFKingSubscriptionToken} from "../../contracts/AFKingSubscriptionToken.s
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
+import {GameFunding} from "../helpers/GameFunding.sol";
 
 /// @title RedemptionAccounts -- sDGNRS redemption claims by account ID, and the protocol self pulls
 /// @notice `claimRedemption(id, batch)`: `id == 0` is the caller
@@ -227,9 +228,7 @@ contract RedemptionAccountsTest is RedemptionFixture {
         _burn(alice, sdgnrs.totalSupply() / 1000);
         _stripCustody();
         uint256 credit = 50 ether;
-        vm.deal(address(sdgnrs), credit);
-        vm.prank(address(sdgnrs));
-        game.creditRedemptionDirect{value: credit}(2, credit);
+        GameFunding.credit(2, credit);
         assertEq(address(sdgnrs).balance, 0);
         assertGt(game.claimableWinningsOf(address(sdgnrs)), credit - 1);
         _latchGameOver();
@@ -248,8 +247,7 @@ contract RedemptionAccountsTest is RedemptionFixture {
         assertEq(game.walletIdOf(address(gnrus)), 3, "GNRUS holds reserved ID 3");
         vm.deal(address(gnrus), 0);
         uint256 credit = 10 ether;
-        vm.prank(address(sdgnrs));
-        game.creditRedemptionDirect{value: credit}(3, credit);
+        GameFunding.credit(3, credit);
         address holder = makeAddr("gnrus_holder");
         uint256 amount = gnrus.totalSupply() / 100;
         uint256 selfBal = gnrus.balanceOf(address(gnrus));

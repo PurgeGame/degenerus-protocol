@@ -5,11 +5,10 @@ import {RedemptionCloseHarness} from "./helpers/RedemptionCloseTools.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 
-/// @notice Game-held stETH backs protected reserves; live claims use ETH and reserved ledger value.
+/// @notice Game-held ETH and stETH back the protected reserve; live closes and claims move no ETH.
 contract RedemptionStethFallbackTest is RedemptionFixture {
     function _fundGameBacking(uint256 liquid) internal { _fundGameBacking(liquid, 1000 ether); }
     function _fundGameBacking(uint256 liquid, uint256 credit) internal {
-        vm.deal(address(sdgnrs), 0);
         vm.deal(address(game), liquid);
         mockStETH.mint(address(game), credit - liquid);
         bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(address(sdgnrs))), GameSlots.BALANCES_PACKED));
@@ -39,11 +38,10 @@ contract RedemptionStethFallbackTest is RedemptionFixture {
         uint256 reserved = sdgnrs.pendingRedemptionEthValue();
         assertEq(reserved, 17.5 ether);
         assertEq(game.claimableWinningsOf(address(sdgnrs)), claimable - reserved);
-        uint256 sent = liquid < reserved ? liquid : reserved;
-        assertEq(game.claimablePoolView(), pool - sent);
-        assertEq(address(sdgnrs).balance, sent);
+        assertEq(game.claimablePoolView(), pool, "the reserve stays inside claimablePool");
+        assertEq(address(sdgnrs).balance, 0, "the close sends sDGNRS no ETH");
         assertEq(mockStETH.balanceOf(address(sdgnrs)), 0);
-        assertEq(game.redemptionReserve(), reserved - sent);
+        assertEq(game.redemptionReserve(), reserved, "the whole pull is the reserve");
         _solvent();
         settlementWord = _wordForRoll(175);
         vm.mockCall(address(game), abi.encodeWithSignature("rngConsumerStage()"), abi.encode(uint8(1)));
@@ -51,7 +49,8 @@ contract RedemptionStethFallbackTest is RedemptionFixture {
         uint256 future = game.futurePrizePoolView();
         assertTrue(_work(9_000_000));
         assertEq(_claimTokens(alice, id), 0, "real claim settled, not parked");
-        assertEq(address(game).balance + mockStETH.balanceOf(address(game)) - gameBefore, sent);
+        assertEq(address(game).balance + mockStETH.balanceOf(address(game)), gameBefore, "no ETH moves");
+        assertEq(address(sdgnrs).balance, 0, "sDGNRS holds no ETH");
         assertApproxEqAbs(game.claimableWinningsOf(alice), reserved / 2, 1);
         assertEq(game.futurePrizePoolView() - future, reserved / 2);
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
@@ -119,12 +118,13 @@ contract RedemptionStethFallbackTest is RedemptionFixture {
         (bool ok,) = address(sdgnrs).call{value: 1 ether}("");
         assertFalse(ok);
     }
-    function test_ForcedEthIsIncludedInClosePrice() public {
+    function test_ForcedEthIsIgnoredByTheLiveClosePrice() public {
         uint256 n = sdgnrs.totalSupply() / 1000;
         _burn(alice, n);
         vm.deal(address(sdgnrs), 11_000 ether);
         _closeAsGame();
-        assertEq(_claimBase(alice, 1), 11 ether);
+        assertEq(_claimBase(alice, 1), 10 ether, "priced from Game backing only");
+        assertEq(address(sdgnrs).balance, 11_000 ether, "forced ETH stays in custody");
         _solvent();
     }
 }

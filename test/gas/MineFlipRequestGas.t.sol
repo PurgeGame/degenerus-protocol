@@ -14,6 +14,7 @@ import {VRFRandomWordsRequest, IVRFCoordinator} from "../../contracts/interfaces
 import {MockStETH} from "../../contracts/mocks/MockStETH.sol";
 import {MineFlipGasBounds as Bounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {DegenerusGameRngUtils} from "../../contracts/modules/DegenerusGameRngUtils.sol";
+import {GameFunding} from "../helpers/GameFunding.sol";
 
 contract RequestCloseProbe is DegenerusGameRngUtils {
     function closeOnly() external { _closeRedemptionBatch(); }
@@ -291,8 +292,9 @@ contract MineFlipRequestGasTest is DeployProtocol {
             (uint128 tokens, uint96 payout,, uint96 flipEscrow,,) = sdgnrs.redemptionBatches(1);
             assertEq(tokens, burned);
             assertGt(flipEscrow, 0, "coinflip backing withdrawn");
-            // ETH custody plus the Game-held reserve fund the whole maximum; stETH never moves at close.
-            assertEq(address(sdgnrs).balance + game.redemptionReserve(), payout, "whole reserve funded");
+            // The Game-held reserve funds the whole maximum; no ETH or stETH moves at close.
+            assertEq(address(sdgnrs).balance, 0, "close sends sDGNRS no ETH");
+            assertEq(game.redemptionReserve(), payout, "whole reserve funded");
             assertEq(mockStETH.balanceOf(address(sdgnrs)), 0, "close moves no stETH");
             // Plus the 1-wei registration sentinel, which the redemption pull never takes.
             assertEq(game.claimableWinningsOf(address(sdgnrs)), 10_000 ether + 1 - payout, "claimable debited");

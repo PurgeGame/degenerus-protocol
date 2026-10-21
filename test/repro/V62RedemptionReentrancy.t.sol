@@ -185,15 +185,10 @@ contract V62RedemptionReentrancy is RedemptionCloseTools {
         uint256 ethDirect = totalRolledEth / 2;
         uint256 lootboxEth = totalRolledEth - ethDirect;
 
-        // ---- 3. Custody shaping: liquid ETH strictly between 0 and the rolled amount with the
-        //         Game's protected redemption reserve covering the exact remainder (no headroom),
-        //         so BOTH game legs exercise the msg.value + reserve funding mix. ----
-        uint256 seedEth = ethDirect / 4;
-        assertGt(seedEth, 0, "precondition: seedEth must be > 0");
-        uint256 pendingNow = sdgnrs.pendingRedemptionEthValue();
-        vm.deal(address(sdgnrs), seedEth);
-        uint256 reserve = pendingNow - seedEth;
-        vm.store(address(game), bytes32(GameSlots.REDEMPTION_RESERVE_STORED), bytes32(reserve + 1));
+        // ---- 3. Backing shaping: the Game's protected redemption reserve (what the close pulled)
+        //         is the only backing, with no headroom, and both legs draw from it. ----
+        uint256 reserve = sdgnrs.pendingRedemptionEthValue();
+        assertEq(game.redemptionReserve(), reserve, "the close funded the whole reserve");
         // Ordinary claimable[SDGNRS] is empty: only the reserve, inside claimablePool, backs the claim.
         vm.deal(address(game), reserve);
         _setGameClaimableSdgnrs(0);
@@ -227,20 +222,20 @@ contract V62RedemptionReentrancy is RedemptionCloseTools {
             "V62-03 L1: live settlement pushed stETH at the claimant"
         );
 
-        // The direct half landed as a game-claimable credit; seedEth rode the legs as msg.value
-        // and the Game reserve funded the rest of the rolled value.
+        // The direct half landed as a game-claimable credit; the Game reserve funded the whole
+        // rolled value and no ETH moved.
         assertEq(
             game.claimableWinningsOf(address(attacker)),
             ethDirect + 1,
             "V62-03 L1: direct half must credit the claimant's game claimable"
         );
         assertEq(
-            address(game).balance + mockStETH.balanceOf(address(game)) - gameValueBefore,
-            seedEth,
-            "V62-03 L1: only the seed ETH moves to the game"
+            address(game).balance + mockStETH.balanceOf(address(game)),
+            gameValueBefore,
+            "V62-03 L1: no ETH moves into or out of the game"
         );
-        assertEq(game.redemptionReserve(), reserve - (ethDirect + lootboxEth - seedEth),
-            "V62-03 L1: the reserve funds the rest of the rolled value");
+        assertEq(game.redemptionReserve(), reserve - (ethDirect + lootboxEth),
+            "V62-03 L1: the reserve funds the whole rolled value");
 
         // Reservation fully released and the reserve identity holds.
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0, "V62-03 L1: reservation not fully released");
@@ -288,6 +283,8 @@ contract V62RedemptionReentrancy is RedemptionCloseTools {
         vm.deal(address(game), 0);
         _setGameClaimableSdgnrs(0);
         _setGameClaimablePool(0);
+        // Game over released the reserve into custody: nothing is left to pull from the Game.
+        vm.store(address(game), bytes32(GameSlots.REDEMPTION_RESERVE_STORED), bytes32(uint256(1)));
 
         // Arm the attacker: the hook re-enters burn(), which under gameOver is the DETERMINISTIC
         // path — it would pay out immediately against any backing it can see.

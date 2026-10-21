@@ -3,6 +3,7 @@ pragma solidity 0.8.34;
 import {RedemptionFixture} from "./helpers/RedemptionFixture.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {GameFunding} from "../helpers/GameFunding.sol";
 
 /// @notice Regression coverage for request-bound, forward-priced redemption batches.
 contract StakedStonkRedemptionTest is RedemptionFixture {
@@ -35,7 +36,7 @@ contract StakedStonkRedemptionTest is RedemptionFixture {
     function test_PriceIsFixedAtCloseNotBurn() public {
         _burn(alice, sdgnrs.totalSupply() / 1000);
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
-        vm.deal(address(sdgnrs), 20_000 ether);
+        GameFunding.setClaimable(2, 20_000 ether + 1);
         uint32 id = _resolveLive(100);
         assertEq(_claimBase(alice, id), 20 ether);
         assertEq(sdgnrs.pendingRedemptionEthValue(), 20 ether);

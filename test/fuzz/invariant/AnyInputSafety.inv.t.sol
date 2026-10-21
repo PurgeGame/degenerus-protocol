@@ -11,6 +11,7 @@ import {AnyInputHandler, IAnyBalance} from "../handlers/AnyInputHandler.sol";
 import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
 import {DegenerusGameStorage} from "../../../contracts/storage/DegenerusGameStorage.sol";
+import {GameFunding} from "../../helpers/GameFunding.sol";
 
 /// @dev Runs the production seizure worker for loans due at `due` while leaving `level` in place.
 contract AnyInputSeizer is DegenerusGameStorage {
@@ -464,11 +465,9 @@ contract AnyInputSafety is DeployProtocol {
 
     /// @dev Seed a backed claim through the authenticated sDGNRS award hook.
     function _bystanderClaimable() internal {
-        // Seed a deterministic protocol award through the real payable accounting door.
-        vm.deal(address(sdgnrs), address(sdgnrs).balance + 0.1 ether);
+        // Seed a deterministic backed claim straight into the Game ledger.
         uint32 bystanderId = game.walletIdOf(BYSTANDER);
-        vm.prank(address(sdgnrs));
-        game.creditRedemptionDirect{value: 0.1 ether}(bystanderId, 0.1 ether);
+        GameFunding.credit(bystanderId, 0.1 ether);
         assertGe(game.claimableWinningsOf(BYSTANDER), 0.1 ether, "fixture: bystander claim missing");
     }
 

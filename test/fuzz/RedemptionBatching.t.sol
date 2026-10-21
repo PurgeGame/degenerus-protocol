@@ -10,6 +10,7 @@ import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {GameFunding} from "../helpers/GameFunding.sol";
 
 contract RedemptionBatchGameSeeder is DegenerusGame {
     /// @dev Seal the write buffer (its box and bet counts latch into the read counts) and publish
@@ -201,7 +202,7 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         uint32 day = _openBatchId();
         address[] memory players = _newBurners(3, 1e18);
         // Accepted at the value minimum; a later backing loss must not strand the claim.
-        vm.deal(address(sdgnrs), 0);
+        GameFunding.setClaimable(2, 1);
         _resolve(day, 100, 99);
         (bool done,,uint256 quote) = _drain(150_000);
         assertFalse(done); assertEq(quote, 0);
@@ -215,7 +216,7 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         uint32 day = _openBatchId();
         _seedFlipBacking(1_000_000);
         address[] memory players = _newBurners(3, sdgnrs.totalSupply() / 1000);
-        vm.deal(address(sdgnrs), 0);
+        GameFunding.setClaimable(2, 1);
         _resolve(day, 100, 99);
         (uint128 tokens,,,uint96 escrow,,uint16 reward) = sdgnrs.redemptionBatches(day);
         assertGt(escrow, 0);

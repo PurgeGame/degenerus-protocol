@@ -10,6 +10,7 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {GameSlotKeys} from "../helpers/GameSlots.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {GameFunding} from "../helpers/GameFunding.sol";
 
 /// @dev Runs the production seizure worker for loans due at `due` while leaving `level` where it
 ///      was, so an ownership change can be placed mid-session.
@@ -165,8 +166,7 @@ contract RngStructuralLivenessReviewTest is DeployProtocol {
         // A real whale purchase gives the root far-future inventory and a positive loan quote.
         vm.prank(seller); game.purchaseWhalePass{value: 2.4 ether}(sellerRoot, 1, 0);
         _queue(seller, sellerChild, 100);
-        vm.deal(address(sdgnrs), 100 ether);
-        vm.prank(address(sdgnrs)); game.creditRedemptionDirect{value: 100 ether}(2, 100 ether);
+        GameFunding.credit(2, 100 ether);
         _requestMidday(0x5101D);
         uint256 snapshot = vm.snapshotState();
         (bytes32 beforeSale,,) = _drain(6_000_000, address(0xCA11));

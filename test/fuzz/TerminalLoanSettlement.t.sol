@@ -612,22 +612,37 @@ contract TerminalLoanPendingBatchTest is TerminalLoanBase {
 
     /// @dev Drive the real engine until the request that enters `target` has run; the word stays out.
     function _driveToTransition(uint24 target) private {
+        _driveDays(target, type(uint256).max, 0);
+    }
+
+    /// @dev The same drive with an idle gap of `gapDays` just before the transition day, so the
+    ///      transition's request is the catch-up request after the gap.
+    function _driveToTransitionAfterGap(uint24 target, uint256 gapDays) private {
+        uint256 snap = vm.snapshotState();
+        uint256 transitionDay = _driveDays(target, type(uint256).max, 0);
+        vm.revertToState(snap);
+        assertEq(_driveDays(target, transitionDay, gapDays), transitionDay, "the gap keeps the transition day");
+    }
+
+    function _driveDays(uint24 target, uint256 gapDay, uint256 gapDays) private returns (uint256) {
         uint256 simTime = block.timestamp;
         for (uint256 day; day < 60; ++day) {
             simTime += 1 days + 1;
+            if (day == gapDay) simTime += gapDays * 1 days;
             vm.warp(simTime);
             _seedNextPrizePool(500 ether);
             _buyTickets(4000);
             for (uint256 j; j < 80; ++j) {
-                if (game.level() >= target) return;
+                if (game.level() >= target) return day;
                 _fulfillLatest();
-                if (game.level() >= target) return;
+                if (game.level() >= target) return day;
                 (bool ok,) = address(game).call(abi.encodeWithSignature("mineFlip(uint32)", uint32(0)));
-                if (game.level() >= target) return;
+                if (game.level() >= target) return day;
                 if (!ok) break;
             }
         }
         fail("transition not reached");
+        return 0;
     }
 
     function test_DeadmanFinishesThePendingBatchFromItsCursorThenLaterLevels() public {
@@ -641,7 +656,8 @@ contract TerminalLoanPendingBatchTest is TerminalLoanBase {
             _seedLevel(ids[i], 60, 400);
             _borrow(owner, ids[i], i < 20 ? 1 : (i < 25 ? 2 : 40));
         }
-        _driveToTransition(1);
+        _driveToTransitionAfterGap(1, 28);
+        uint256 requestedAt = vm.getBlockTimestamp();
         _fulfillLatest(); // the transition's word lands: VRF is alive
         vm.recordLogs();
         game.mineFlip{gas: 800_000}(0); // the ordinary stage settles part of level 1's batch
@@ -650,9 +666,11 @@ contract TerminalLoanPendingBatchTest is TerminalLoanBase {
         assertGt(cursorAfterOrdinary, 0, "part of the batch settled");
         assertLt(cursorAfterOrdinary, 20, "and part is still pending");
 
-        // Nobody mines for the deadman's 30 days; the delivered word means VRF is alive.
-        vm.warp(block.timestamp + 31 days);
+        // Mining stops again. The day before the gap was the last sealed day, so the deadman fires
+        // a few days later, while the delivered word is still inside its 14-day window: VRF alive.
+        for (uint256 i; i < 10 && !game.livenessTriggered(); ++i) vm.warp(vm.getBlockTimestamp() + 1 days);
         assertTrue(game.livenessTriggered(), "deadman");
+        assertLt(vm.getBlockTimestamp(), requestedAt + 14 days, "the word is still inside its window");
         assertEq(game.nextMinerAction(), ACTION_TERMINAL);
         requestAtDecision = mockVRF.lastRequestId();
         assertTrue(_mine(30_000_000)); // decision

@@ -11,6 +11,7 @@ import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 import {TicketQueueStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
+import {GameFunding} from "../helpers/GameFunding.sol";
 
 /// @title CensusBoundaryBase -- shared driving for the boundary campaigns
 /// @dev Each campaign plays its approach with the census OFF (`censusOn = false`: calls still run,
@@ -127,9 +128,8 @@ abstract contract CensusBoundaryBase is StorageCensus {
     }
 
     function _fundLender() internal {
-        vm.deal(address(sdgnrs), address(sdgnrs).balance + 600 ether);
-        vm.prank(address(sdgnrs));
-        game.creditRedemptionDirect{value: 500 ether}(2, 500 ether);
+        vm.deal(address(sdgnrs), address(sdgnrs).balance + 100 ether);
+        GameFunding.credit(2, 500 ether);
     }
 
     /// @dev Borrow for player i due at `due`, when the lens quotes an eligible loan.

@@ -6,6 +6,7 @@ import {RedemptionFixture} from "../fuzz/helpers/RedemptionFixture.sol";
 import {RedemptionCloseHarness} from "../fuzz/helpers/RedemptionCloseTools.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {GameFunding} from "../helpers/GameFunding.sol";
 
 contract RedemptionHostileBalance {
     uint256 private immutable mode;
@@ -61,9 +62,7 @@ contract RedemptionHostileEth {
 
 contract RedemptionIsolationTest is RedemptionFixture {
     function _fundLedger(uint256 amount) private {
-        vm.deal(address(sdgnrs), amount);
-        vm.prank(address(sdgnrs));
-        game.creditRedemptionDirect{value: amount}(2, amount);
+        GameFunding.credit(2, amount);
     }
 
     function _reserveLedger(uint256 amount) private {
@@ -84,46 +83,62 @@ contract RedemptionIsolationTest is RedemptionFixture {
         vm.etch(address(game), code);
     }
 
-    function testCloseMovesOnlyAvailableEthAndPreservesLedgerRemainder() public {
+    function testCloseMovesWholePullIntoReserveAndSendsNoEth() public {
         _fundLedger(100 ether);
         _burn(alice, sdgnrs.totalSupply() / 100);
         vm.deal(address(game), 0.1 ether);
         uint256 beforeClaimable = game.claimableWinningsOf(address(sdgnrs));
         uint256 beforePool = _pool();
         uint256 beforeSteth = mockStETH.balanceOf(address(sdgnrs));
+        uint256 beforeSdgnrs = address(sdgnrs).balance;
         _closeFunded();
-        assertEq(address(sdgnrs).balance, 0.1 ether);
-        assertEq(game.claimableWinningsOf(address(sdgnrs)) + game.redemptionReserve(), beforeClaimable - 0.1 ether);
-        assertEq(_pool(), beforePool - 0.1 ether);
+        assertEq(address(sdgnrs).balance, beforeSdgnrs, "no ETH reaches sDGNRS");
+        assertEq(address(game).balance, 0.1 ether, "no ETH leaves the Game");
+        assertEq(game.redemptionReserve(), sdgnrs.pendingRedemptionEthValue(), "reserve is the whole pull");
+        assertGt(game.redemptionReserve(), 0);
+        assertEq(game.claimableWinningsOf(address(sdgnrs)) + game.redemptionReserve(), beforeClaimable);
+        assertEq(_pool(), beforePool, "the reserve stays inside claimablePool");
         assertEq(mockStETH.balanceOf(address(sdgnrs)), beforeSteth);
         assertTrue(sdgnrs.redemptionSettlementPending());
     }
 
-    function testLiveDirectFundingMovesLedgerAndOnlyEthIncreasesPool() public {
+    function testLiveDirectLegMovesReserveToWalletWithoutPoolChange() public {
         _fundLedger(100 ether);
         uint256 beforeClaimable = game.claimableWinningsOf(address(sdgnrs));
         uint256 beforeAlice = game.claimableWinningsOf(alice);
-        uint256 beforePool = _pool();
         uint32 aliceId = game.walletIdOf(alice);
-        _reserveLedger(8 ether);
-        vm.deal(address(sdgnrs), 2 ether);
+        _reserveLedger(10 ether);
+        uint256 beforePool = _pool();
         vm.prank(address(sdgnrs));
-        game.creditRedemptionDirect{value: 2 ether}(aliceId, 10 ether);
-        assertEq(game.claimableWinningsOf(address(sdgnrs)), beforeClaimable - 8 ether);
+        game.creditRedemptionDirect(aliceId, 10 ether);
+        assertEq(game.claimableWinningsOf(address(sdgnrs)), beforeClaimable - 10 ether);
         assertEq(game.claimableWinningsOf(alice), beforeAlice + 10 ether);
-        assertEq(_pool(), beforePool + 2 ether);
+        assertEq(game.redemptionReserve(), 0);
+        assertEq(_pool(), beforePool);
     }
 
-    function testLiveSelfCreditRecyclesOnlyForwardedEth() public {
+    function testLiveSelfCreditReturnsReserveToClaimable() public {
         _fundLedger(100 ether);
         uint256 beforeClaimable = game.claimableWinningsOf(address(sdgnrs));
+        _reserveLedger(10 ether);
         uint256 beforePool = _pool();
-        _reserveLedger(8 ether);
-        vm.deal(address(sdgnrs), 2 ether);
         vm.prank(address(sdgnrs));
-        game.creditRedemptionDirect{value: 2 ether}(2, 10 ether);
-        assertEq(game.claimableWinningsOf(address(sdgnrs)), beforeClaimable + 2 ether);
-        assertEq(_pool(), beforePool + 2 ether);
+        game.creditRedemptionDirect(2, 10 ether);
+        assertEq(game.claimableWinningsOf(address(sdgnrs)), beforeClaimable);
+        assertEq(game.redemptionReserve(), 0);
+        assertEq(_pool(), beforePool);
+    }
+
+    function testLiveLegsRefuseWhatTheReserveCannotCover() public {
+        _fundLedger(100 ether);
+        _reserveLedger(1 ether);
+        vm.startPrank(address(sdgnrs));
+        vm.expectRevert();
+        game.creditRedemptionDirect(2, 1 ether + 1);
+        vm.expectRevert();
+        game.resolveRedemptionLootbox(2, 1 ether + 1, 1, 0, 1);
+        vm.stopPrank();
+        assertEq(game.redemptionReserve(), 1 ether);
     }
 
     function testCustodyFailuresAndOversizedWordsCannotBlockClose() public {
@@ -203,40 +218,26 @@ contract RedemptionIsolationTest is RedemptionFixture {
         assertEq(_claimTokens(alice, id), tokens);
         assertEq(_cursor(), 0);
     }
-    function testCloseEthSendFailureModesConserveLedger() public {
+    /// @dev The close never calls sDGNRS with ETH, whatever its code does on receipt.
+    function testCloseSendsNoEthWhateverSdgnrsDoes() public {
         _fundLedger(10 ether);
         uint256 beforeClaimable = game.claimableWinningsOf(address(sdgnrs));
         uint256 beforePool = _pool();
+        uint256 beforeGame = address(game).balance;
         uint256 snap = vm.snapshotState();
         for (uint256 mode; mode < 6; ++mode) {
             vm.mockCall(address(sdgnrs), abi.encodeWithSelector(sdgnrs.redemptionSettlementPending.selector), abi.encode(false));
             vm.mockCall(address(sdgnrs), abi.encodeWithSelector(sdgnrs.closeRedemptionBatch.selector), abi.encode(uint256(1 ether)));
             vm.etch(address(sdgnrs), address(new RedemptionHostileEth(mode)).code);
             _closeFunded();
-            bool success = mode == 2 || mode == 3 || mode == 5;
-            uint256 moved = success ? 1 ether : 0;
             assertEq(game.claimableWinningsOf(address(sdgnrs)), beforeClaimable - 1 ether);
-            assertEq(game.redemptionReserve(), 1 ether - moved);
-            assertEq(_pool(), beforePool - moved);
-            assertEq(address(sdgnrs).balance, moved);
+            assertEq(game.redemptionReserve(), 1 ether);
+            assertEq(_pool(), beforePool);
+            assertEq(address(sdgnrs).balance, 0);
+            assertEq(address(game).balance, beforeGame);
             assertTrue(vm.revertToState(snap));
         }
         vm.clearMockedCalls();
-    }
-
-    function testCloseEthSendUnderfundingCannotBecomeRefusal() public {
-        _fundLedger(10 ether);
-        uint256 beforePool = _pool();
-        vm.mockCall(address(sdgnrs), abi.encodeWithSelector(sdgnrs.closeRedemptionBatch.selector), abi.encode(uint256(1 ether)));
-        bytes memory code = address(game).code;
-        vm.etch(address(game), type(RedemptionCloseHarness).runtimeCode);
-        (bool ok, bytes memory reason) = address(game).call{gas: 60_000}(abi.encodeWithSelector(RedemptionCloseHarness.close.selector));
-        vm.etch(address(game), code);
-        vm.clearMockedCalls();
-        assertFalse(ok);
-        assertEq(reason, abi.encodeWithSelector(MineFlipGas.InsufficientExecutionGas.selector));
-        assertEq(_pool(), beforePool);
-        assertEq(address(sdgnrs).balance, 0);
     }
 
     /// @dev Live pricing counts only what live legs can pay, so the close reads no token custody.

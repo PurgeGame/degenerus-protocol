@@ -6,6 +6,7 @@ import {DegenerusGameRngUtils} from "../../contracts/modules/DegenerusGameRngUti
 import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {GameFunding} from "../helpers/GameFunding.sol";
 
 contract RedemptionReserveHarness is DegenerusGameRngUtils {
     function close() external { _closeRedemptionBatch(); }
@@ -59,10 +60,7 @@ contract RedemptionReserveTest is RedemptionFixture {
         _callHarness(abi.encodeCall(RedemptionReserveHarness.close, ()));
     }
     function _fundOrdinary(uint256 amount) private {
-        vm.deal(address(sdgnrs), amount);
-        vm.prank(address(sdgnrs));
-        game.creditRedemptionDirect{value: amount}(2, amount);
-        vm.deal(address(sdgnrs), 0);
+        GameFunding.setClaimable(2, amount + 1);
     }
     function _start(uint16 roll) private {
         settlementWord = _wordForRoll(roll);
@@ -140,10 +138,10 @@ contract RedemptionReserveTest is RedemptionFixture {
         _burn(alice, sdgnrs.totalSupply() / 100);
         vm.deal(address(game), 0);
         _closeFundedReserve();
-        assertGt(game.redemptionReserve(), 0, "an ETH-short close keeps the reserve in the Game");
+        assertGt(game.redemptionReserve(), 0, "a close keeps the whole reserve in the Game");
         assertTrue(sdgnrs.redemptionSettlementPending());
         (uint256 preview,) = sdgnrs.previewBurnValue(sdgnrs.totalSupply());
-        assertEq(preview, 100 ether - sdgnrs.pendingRedemptionEthValue(), "preview includes unsent backing exactly once");
+        assertEq(preview, 100 ether - sdgnrs.pendingRedemptionEthValue(), "preview counts the reserve exactly once");
     }
 
     function testLeftoverReturnsAndNextClosePricesIt() public {

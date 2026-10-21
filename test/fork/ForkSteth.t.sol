@@ -365,9 +365,9 @@ contract ForkStethTest is ForkDeployProtocol {
     /// @notice A live sDGNRS redemption against a Game whose backing is partly REAL stETH (the
     ///         vault owner staked the sDGNRS-settleable ETH): the batch closes inside the real daily
     ///         request, settles on the real word through mineFlip, and the claim legs pay the
-    ///         beneficiary. The live close moves ETH only; the unsent part of the pull stays in the
-    ///         Game as its redemption reserve, and the live legs settle from sDGNRS ETH plus that
-    ///         reserve, never touching stETH. Nothing reverts and the game stays solvent.
+    ///         beneficiary. The live close moves no value: the whole pull stays in the Game as its
+    ///         redemption reserve, and the live legs settle from that reserve, never touching
+    ///         ETH custody or stETH. Nothing reverts and the game stays solvent.
     function test_liveRedemptionSettlesThroughRealStethLegs() public {
         _runningGame();
         _giveWalletId(alice);
@@ -398,7 +398,7 @@ contract ForkStethTest is ForkDeployProtocol {
         uint256 sdEth0 = ContractAddresses.SDGNRS.balance;
         uint256 gameEth0 = address(game).balance;
         uint256 gameSt0 = lido.balanceOf(address(game));
-        // Next day: the daily request closes the batch (ETH only; the rest stays reserved in the Game).
+        // Next day: the daily request closes the batch (the whole pull stays reserved in the Game).
         vm.warp(vm.getBlockTimestamp() + 1 days);
         for (uint256 i; i < 64 && !game.rngLocked(); ++i) {
             vm.prank(keeper);
@@ -410,14 +410,12 @@ contract ForkStethTest is ForkDeployProtocol {
         uint256 gameReserve = game.redemptionReserve();
         emit log_named_uint("game ETH before the close", gameEth0);
         emit log_named_uint("batch maximum reserved by sDGNRS", reserved);
-        emit log_named_uint("ETH moved into sDGNRS at close", sdEth - sdEth0);
-        emit log_named_uint("unsent part kept as the Game reserve", gameReserve);
+        emit log_named_uint("Game redemption reserve after the close", gameReserve);
         assertGt(reserved, 0, "the batch closed with a reserve");
         assertEq(lido.balanceOf(ContractAddresses.SDGNRS), sdSt0, "the live close moves no stETH");
         assertGe(lido.balanceOf(address(game)) + STETH_ROUNDING, gameSt0, "the Game keeps its stETH backing");
-        assertGt(sdEth, sdEth0, "the close sent ETH to sDGNRS");
-        assertGt(gameReserve, 0, "the ETH-short Game kept the unsent pull as its reserve");
-        assertGe(sdEth + gameReserve, reserved, "ETH custody plus the Game reserve covers the batch maximum");
+        assertEq(sdEth, sdEth0, "the close sends no ETH to sDGNRS");
+        assertEq(gameReserve, reserved, "the whole batch maximum is the Game reserve");
 
         uint256 aliceClaimable0 = game.claimableWinningsOf(alice);
         _crank(400);

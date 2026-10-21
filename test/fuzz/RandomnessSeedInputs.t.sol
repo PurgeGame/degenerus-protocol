@@ -8,6 +8,7 @@ import {IDegenerusGameLootboxModule} from "../../contracts/interfaces/IDegenerus
 import {Vm} from "forge-std/Vm.sol";
 import {TicketQueueStorage as TQ} from "./helpers/TicketQueueStorage.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
+import {GameFunding} from "../helpers/GameFunding.sol";
 
 contract SeedInputSeeder is DegenerusGame, WalletSeed {
     function seed(address player, uint256 word, uint256 amount) external {
@@ -69,8 +70,9 @@ contract RandomnessSeedInputsTest is DeployProtocol {
         else if (route == 1) host.afking(PLAYER, amount, word);
         else {
             uint32 id = game.walletIdOf(PLAYER);
+            GameFunding.reserve(amount);
             vm.prank(address(sdgnrs));
-            game.resolveRedemptionLootbox{value: amount}(id, amount, word, 0, 1);
+            game.resolveRedemptionLootbox(id, amount, word, 0, 1);
         }
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bool found;

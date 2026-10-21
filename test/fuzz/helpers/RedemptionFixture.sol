@@ -8,6 +8,8 @@ import {DegenerusGame} from "../../../contracts/DegenerusGame.sol";
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
 import {FlipRoundLib} from "../../../contracts/libraries/FlipRoundLib.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {GameFunding} from "../../helpers/GameFunding.sol";
+import {RedemptionCloseHarness} from "./RedemptionCloseTools.sol";
 
 /// @dev Latches game over directly, for unit checks of the post-game-over doors.
 contract RedemptionGameOverLatch is DegenerusGame {
@@ -39,7 +41,7 @@ abstract contract RedemptionFixture is DeployProtocol {
         vm.warp(vm.getBlockTimestamp() + 1 days);
         mockVRF.fundSubscription(1, 100 ether);
         _complete(2);
-        vm.deal(address(sdgnrs), 10_000 ether);
+        GameFunding.credit(2, 10_000 ether);
         // The Reward pool holds 10% of supply: 3% to each holder.
         uint256 share = sdgnrs.totalSupply() * 3 / 100;
         // Reward recipients are game players, so each holds a wallet ID (a burn requires one).
@@ -164,20 +166,24 @@ abstract contract RedemptionFixture is DeployProtocol {
         return (synth & 1) == 1 ? FlipRoundLib.coinflipRewardPercent(0, synth, uint24(id)) : 0;
     }
 
-    /// @dev sDGNRS's money: ETH + Game claimable (less 1 wei dust) + Game reserve − reserves, plus
-    ///      stETH custody once the game is over (live legs cannot pay it).
+    /// @dev sDGNRS's money: Game claimable (less 1 wei dust) + Game reserve − reserves, plus its
+    ///      ETH and stETH custody once the game is over (live legs cannot pay from it).
     function _money() internal view returns (uint256) {
         uint256 claimable = game.claimableWinningsOf(address(sdgnrs));
-        uint256 gross = address(sdgnrs).balance + (game.gameOver() ? mockStETH.balanceOf(address(sdgnrs)) : 0)
+        uint256 gross = (game.gameOver() ? address(sdgnrs).balance + mockStETH.balanceOf(address(sdgnrs)) : 0)
             + (claimable > 1 ? claimable - 1 : 0) + game.redemptionReserve();
         uint256 reserved = sdgnrs.pendingRedemptionEthValue();
         return gross > reserved ? gross - reserved : 0;
     }
 
+    /// @dev The Game's production close: release the old reserve, price the batch, and move the
+    ///      whole pull from sDGNRS's claimable into the Game reserve. Returns the reserve.
     function _closeAsGame() internal returns (uint256 pull) {
-        uint256 claimable = game.claimableWinningsOf(address(sdgnrs));
-        vm.prank(address(game));
-        pull = sdgnrs.closeRedemptionBatch(claimable);
+        bytes memory code = address(game).code;
+        vm.etch(address(game), type(RedemptionCloseHarness).runtimeCode);
+        RedemptionCloseHarness(address(game)).close();
+        vm.etch(address(game), code);
+        pull = game.redemptionReserve();
     }
 
     /// @dev Direct and lootbox legs of `player`'s RedemptionClaimed in `logs` (batch `id`).

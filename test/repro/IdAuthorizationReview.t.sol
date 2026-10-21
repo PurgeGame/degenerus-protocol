@@ -9,6 +9,7 @@ import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
+import {GameFunding} from "../helpers/GameFunding.sol";
 
 /// @dev Enters the due level and runs the production seizure worker in the Game's context.
 contract IdReviewSeizer is DegenerusGameStorage {
@@ -127,9 +128,7 @@ contract IdAuthorizationReviewTest is DeployProtocol {
     }
 
     function _award(uint32 id, uint256 amount) private {
-        vm.deal(address(sdgnrs), amount);
-        vm.prank(address(sdgnrs));
-        game.creditRedemptionDirect{value: amount}(id, amount);
+        GameFunding.credit(id, amount);
     }
 
     function test_SeizureLeavesNoOldOwnershipOrOperatorApprovals() public {

@@ -4,7 +4,7 @@ pragma solidity 0.8.34;
 import {AutomaticRedemptionSettlementTest} from "../fuzz/AutomaticRedemptionSettlement.t.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {Vm} from "forge-std/Vm.sol";
-import {RedemptionReserveHarness} from "../repro/RedemptionReserve.t.sol";
+import {GameFunding} from "../helpers/GameFunding.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 
@@ -24,33 +24,26 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
 
     /// @dev Redemption amounts can span the full available backing.
     /// The full custom order stays bounded by twenty boxes even at aggregate ETH scale.
-    function testFuzz_ColdLargeLootboxFitsOrderBound(uint256 seed, uint128 size, bool reserveOnly) public {
+    function testFuzz_ColdLargeLootboxFitsOrderBound(uint256 seed, uint128 size) public {
         uint256 amount = bound(size, 20 ether, 120_000_000 ether);
-        if (reserveOnly) {
-            _reserveFunding(amount, 0);
-        } else vm.deal(address(sdgnrs), amount);
+        GameFunding.reserve(amount);
         uint256 word = uint256(keccak256(abi.encode(seed))) | 2;
         uint32 aliceId = game.walletIdOf(alice);
         _coolSettlementState();
         uint256 before = gasleft();
         vm.prank(address(sdgnrs));
-        game.resolveRedemptionLootbox{value: reserveOnly ? 0 : amount}(aliceId, amount, word, 30_000, 1);
+        game.resolveRedemptionLootbox(aliceId, amount, word, 30_000, 1);
         uint256 used = before - gasleft() + 21_000;
         assertLe(used, GasBounds.HUMAN_ENTRY_GAS + 20 * GasBounds.HUMAN_BOX_GAS);
     }
 
-    function testFuzz_ColdWholeClaimFitsItsReservation(uint256 word, uint16 rollSeed, uint8 fundingMode, uint128 backingSeed) public {
+    function testFuzz_ColdWholeClaimFitsItsReservation(uint256 word, uint16 rollSeed, uint128 backingSeed) public {
         // The retired 160 ETH cap no longer limits a beneficiary.
-        vm.deal(address(sdgnrs), bound(backingSeed, 10_000 ether, 120_000_000 ether));
+        GameFunding.credit(2, bound(backingSeed, 10_000 ether, 120_000_000 ether));
         uint32 day = _openBatchId();
         _burnAtMaximumActivity(sdgnrs.totalSupply() * 16 / 1000);
         uint16 roll = uint16(21 + uint256(rollSeed) % 155);
         _resolve(day, roll, word > 1 ? word : 99);
-        if (fundingMode % 3 != 0) {
-            uint256 reserve = sdgnrs.pendingRedemptionEthValue();
-            uint256 ethPart = fundingMode % 3 == 1 ? 0 : reserve / 7;
-            _reserveFunding(reserve, ethPart);
-        }
         uint256 rolled = _claimBase(alice, day) * roll / 100;
         uint256 chunks = _boxes(rolled - rolled / 2);
         uint256 beneficiaryBefore = game.claimableWinningsOf(alice);
@@ -71,20 +64,6 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
             abi.encode(uint256(30_000), game.walletIdOf(alice)));
         _burn(alice, amount);
         vm.clearMockedCalls();
-    }
-
-    /// @dev Switch the funding split without changing the priced batch. The seeded Game
-    /// reserve is fully backed and removed from ordinary claimable through the real helper.
-    function _reserveFunding(uint256 amount, uint256 ethPart) private {
-        uint256 reserve = amount - ethPart;
-        vm.deal(address(sdgnrs), reserve);
-        vm.prank(address(sdgnrs));
-        game.creditRedemptionDirect{value: reserve}(2, reserve);
-        bytes memory code = address(game).code;
-        vm.etch(address(game), type(RedemptionReserveHarness).runtimeCode);
-        RedemptionReserveHarness(address(game)).reserveFromOrdinary(reserve);
-        vm.etch(address(game), code);
-        vm.deal(address(sdgnrs), ethPart);
     }
 
     function _assertPaid(uint32 batch, uint256 rolled, uint256 beforeCredit, bool withEscrow) private {
@@ -114,7 +93,7 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
         return GasBounds.REDEMPTION_BASE_GAS + GasBounds.REDEMPTION_TAIL_GAS
             + (boxes == 0 ? 0 : GasBounds.HUMAN_ENTRY_GAS + boxes * GasBounds.HUMAN_BOX_GAS);
     }
-    function _coldSingleClaim(uint256 base, uint16 roll, uint256 word, uint8 fundingMode, bool withEscrow)
+    function _coldSingleClaim(uint256 base, uint16 roll, uint256 word, bool withEscrow)
         private returns (uint256 used, uint256 boxes)
     {
         uint32 day = _openBatchId();
@@ -135,11 +114,6 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
         }
         uint256 rolled = _claimBase(alice, day) * roll / 100;
         boxes = _boxes(rolled - rolled / 2);
-        if (fundingMode != 0) {
-            uint256 reserve = sdgnrs.pendingRedemptionEthValue();
-            uint256 ethPart = fundingMode == 1 ? 0 : reserve / 7;
-            _reserveFunding(reserve, ethPart);
-        }
         uint256 beneficiaryBefore = game.claimableWinningsOf(alice);
         _coolSettlementState();
         vm.recordLogs();
@@ -151,7 +125,7 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
     }
 
-    /// @dev Per-order calibration: the cold maximum over words, funding modes and the won-escrow
+    /// @dev Per-order calibration: the cold maximum over words and the won-escrow
     ///      leg for beneficiaries with 0, 5, 10 and 20 custom boxes. Each stays inside its
     ///      admission, and the largest beneficiary's admission stays inside one 10M chunk.
     function test_ColdSingleBeneficiaryOrderShapes() public {
@@ -161,17 +135,15 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
             uint256 worst;
             uint256 words = s == 4 ? 12 : s == 3 ? 24 : 48;
             for (uint256 w; w < words; ++w) {
-                for (uint8 mode; mode < 3; ++mode) {
-                    for (uint256 e; e < 2; ++e) {
-                        uint256 snap = vm.snapshotState();
-                        (uint256 used, uint256 chunks) = _coldSingleClaim(
-                            bases[s], 175, uint256(keccak256(abi.encode("chunk shape", s, w))), mode, e == 1
-                        );
-                        assertEq(chunks, expect[s], "shape box count");
-                        assertLe(used, _declared(chunks), "cold beneficiary fits its admission");
-                        if (used > worst) worst = used;
-                        vm.revertToState(snap);
-                    }
+                for (uint256 e; e < 2; ++e) {
+                    uint256 snap = vm.snapshotState();
+                    (uint256 used, uint256 chunks) = _coldSingleClaim(
+                        bases[s], 175, uint256(keccak256(abi.encode("chunk shape", s, w))), e == 1
+                    );
+                    assertEq(chunks, expect[s], "shape box count");
+                    assertLe(used, _declared(chunks), "cold beneficiary fits its admission");
+                    if (used > worst) worst = used;
+                    vm.revertToState(snap);
                 }
             }
             emit log_named_uint(string.concat("REDEEM cold max, boxes=", vm.toString(expect[s])), worst);

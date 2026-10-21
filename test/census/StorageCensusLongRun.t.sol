@@ -10,6 +10,7 @@ import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
+import {GameFunding} from "../helpers/GameFunding.sol";
 
 interface ICensusShare {
     function transfer(address to, uint256 amount) external returns (bool);
@@ -154,9 +155,8 @@ contract StorageCensusLongRunTest is StorageCensus {
             wwxrp.mintPrize(cast[i], 2_000);
         }
         // Lender backing: sDGNRS (wallet 2) lends against far-future tickets when it holds claimable.
-        vm.deal(address(sdgnrs), 600 ether);
-        vm.prank(address(sdgnrs));
-        game.creditRedemptionDirect{value: 500 ether}(2, 500 ether);
+        vm.deal(address(sdgnrs), 100 ether);
+        GameFunding.credit(2, 500 ether);
     }
 
     // ------------------------------------------------------------------------------- one day

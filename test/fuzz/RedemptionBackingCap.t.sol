@@ -4,6 +4,7 @@ pragma solidity 0.8.34;
 import {RedemptionFixture} from "./helpers/RedemptionFixture.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {GameFunding} from "../helpers/GameFunding.sol";
 
 contract RedemptionBackingCapTest is RedemptionFixture {
     /// @dev Independent assertion of the protocol limit: a claim's admission bound is base 600k plus
@@ -60,7 +61,7 @@ contract RedemptionBackingCapTest is RedemptionFixture {
 
     function test_LiveVeryLargeCappedClaimSettlesWithinAdmission() public {
         _giveRemainingPools(alice);
-        vm.deal(address(sdgnrs), 100_000_000 ether);
+        GameFunding.credit(2, 100_000_000 ether);
         _burn(alice, sdgnrs.totalSupply() * 60 / 100);
         uint32 id = _resolveLive(175);
         uint256 before = gasleft();
@@ -179,7 +180,7 @@ contract RedemptionBackingCapTest is RedemptionFixture {
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
         assertEq(_claimTokens(alice, first), 0);
         // The paid claim took the whole capped backing; fresh backing prices the later burns.
-        vm.deal(address(sdgnrs), address(sdgnrs).balance + 10_000 ether);
+        GameFunding.credit(2, 10_000 ether);
         for (uint256 i; i < 2; ++i) {
             _burn(alice, _minimumLiveBurn());
             uint32 next = _resolveLive(100);

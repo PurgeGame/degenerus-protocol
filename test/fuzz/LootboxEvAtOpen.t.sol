@@ -12,6 +12,7 @@ import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
+import {GameFunding} from "../helpers/GameFunding.sol";
 
 contract EvOpenHost is QueueHost {
     function seed(address player, uint24 key, uint256 used) external returns (uint32 id) {
@@ -283,10 +284,10 @@ contract LootboxEvAtOpenTest is DeployProtocol {
     function test_RedemptionDrawsOnceAndProtocolAfkStaysExempt() public {
         uint256 word = 2;
         while (uint16(EntropyLib.hash4(word, id, 0x426f784f70656e, 1) >> 40) % 20 >= 8) ++word;
-        vm.deal(address(sdgnrs), 1 ether);
+        GameFunding.reserve(1 ether);
         vm.startStateDiffRecording();
         vm.prank(address(sdgnrs));
-        host.resolveRedemptionLootbox{value: 1 ether}(id, 1 ether, word, 30_000, 1);
+        host.resolveRedemptionLootbox(id, 1 ether, word, 30_000, 1);
         assertEq(_capWrites(vm.stopAndReturnStateDiff()), 1, "redemption is not charged twice");
         assertEq(host.evUsed(id, key), 1 ether);
         uint32 protocolId = host.walletIdOf(address(sdgnrs));

@@ -18,30 +18,21 @@ interface IFlipCoinflipPlayerMock {
     function withdrawRedeemedFlip(uint256 base) external;
 }
 
-/// @title RedemptionLootboxPayableForward — regression for the live-game redemption ETH-forward.
+/// @title RedemptionLootboxReserveLeg -- live redemption legs settle from the Game reserve alone.
 ///
-/// @notice Live redemption settlement (the Redemption-stage worker mineFlip dispatches) forwards
-///         sDGNRS's liquid ETH into BOTH game legs:
-///         `game.resolveRedemptionLootbox{value: ethForLootbox}` and
-///         `game.creditRedemptionDirect{value: ethForDirect}`. The Game-side stubs are payable
-///         and DELEGATECALL their module bodies — delegatecall preserves msg.value, so every
-///         module function on that path must be payable too. The pinned set:
+/// @notice Live redemption settlement (the Redemption-stage worker mineFlip dispatches) calls
+///         `game.resolveRedemptionLootbox` and `game.creditRedemptionDirect` with no ETH. Both
+///         Game stubs DELEGATECALL their module bodies, which draw the full amount from the
+///         redemption reserve. The pinned set, run through the REAL module chain:
 ///
-///         1. LootboxModule.resolveRedemptionLootbox — the delegatecall target of the Game's
-///            5-ETH-chunk loop. Non-payable, its compiled callvalue guard refuses the whole
-///            claim (the keeper drain parks it unpaid) whenever sDGNRS holds ANY liquid ETH
-///            (the normal funded state).
-///         2. BoonModule.checkAndClearExpiredBoon — a nested delegatecall dispatch inside
-///            `_resolveLootboxCommon`, reached whenever the claimant has boon state. Same
-///            guard, one frame deeper.
+///         1. LootboxModule.resolveRedemptionLootbox -- the delegatecall target of the Game's
+///            5-ETH-chunk loop.
+///         2. BoonModule.checkAndClearExpiredBoon -- a nested delegatecall dispatch inside
+///            `_resolveLootboxCommon`, reached whenever the claimant has boon state.
 ///
-///         Every prior suite missed this because the module-side target was mocked
-///         (vm.mockCall intercepts a delegatecall BEFORE the callvalue guard runs) or sDGNRS
-///         held zero liquid ETH at claim time (msg.value == 0 never trips a non-payable guard).
-///         This file runs the REAL module chain with sDGNRS holding liquid ETH.
-///
-/// @dev TEST-ONLY. Run: forge test --match-path test/repro/RedemptionLootboxPayableForward.t.sol -vv
-contract RedemptionLootboxPayableForward is RedemptionCloseTools {
+///         The Game holds exactly the reserve; no ETH moves between the Game and sDGNRS.
+
+contract RedemptionLootboxReserveLeg is RedemptionCloseTools {
     // =====================================================================
     //                          CONSTANTS / SLOTS
     // =====================================================================
@@ -58,7 +49,7 @@ contract RedemptionLootboxPayableForward is RedemptionCloseTools {
 
     /// @dev sDGNRS funding / burn sizing mirrors V62RedemptionReentrancy: large enough that the
     ///      175% MAX roll yields a multi-ETH lootbox half (so the Game-side 5-ETH-chunk loop
-    ///      runs more than once and each chunk's delegatecall carries the in-flight msg.value).
+    ///      runs more than once).
     uint256 internal constant PLAYER_FUNDING = 80_000_000_000e12;
     uint256 internal constant BURN_AMOUNT = 10_000_000_000e12;
 
@@ -72,8 +63,8 @@ contract RedemptionLootboxPayableForward is RedemptionCloseTools {
         _giveWalletId(player);
         vm.deal(player, 1 ether);
 
-        // Fund the game with ETH backing and credit claimable[SDGNRS] so the submit-time
-        // pullRedemptionReserve ETH leg can segregate the 175% MAX into sDGNRS's balance.
+        // Fund the game with ETH backing and credit claimable[SDGNRS] so the batch close
+        // can move the 175% MAX into the Game reserve.
         vm.deal(address(game), 1000 ether);
         _setGameClaimableSdgnrs(1000 ether);
         _setGameClaimablePool(uint128(1000 ether));
@@ -147,8 +138,7 @@ contract RedemptionLootboxPayableForward is RedemptionCloseTools {
 
     /// @dev Give `who` live boon state: an unexpired coinflip boon (slot0). The claim-time
     ///      lootbox resolution then takes the nested BoonModule delegatecall
-    ///      (checkAndClearExpiredBoon via the any-bits gate) with the claim's msg.value in
-    ///      flight.
+    ///      (checkAndClearExpiredBoon via the any-bits gate).
     function _injectBoonState(address who) internal {
         bytes32 base = keccak256(abi.encode(uint256(_giveWalletId(who)), SLOT_BOON_PACKED));
         uint24 day = game.currentDayView();
@@ -156,13 +146,9 @@ contract RedemptionLootboxPayableForward is RedemptionCloseTools {
         vm.store(address(game), base, bytes32(s0));
     }
 
-    uint256 private seedEthUsed;
-
-    /// @dev Drive a full burn → resolve → custody-shape cycle and return the claim's rolled
-    ///      halves. After this, sDGNRS holds seedEth liquid ETH (strictly 0 < seedEth <
-    ///      lootboxEth) with the Game reserve covering the exact remainder, so the lootbox leg
-    ///      forwards a REAL msg.value and spends the rest from the reserve.
-    function _burnResolveAndShapeCustody()
+    /// @dev Drive a full burn -> resolve cycle and return the claim's rolled halves. The Game
+    ///      then holds exactly the reserve, so both legs spend only the protected reserve.
+    function _burnResolveAndFundReserve()
         internal
         returns (uint32 dayD, uint256 ethDirect, uint256 lootboxEth)
     {
@@ -182,16 +168,9 @@ contract RedemptionLootboxPayableForward is RedemptionCloseTools {
         ethDirect = totalRolledEth / 2;
         lootboxEth = totalRolledEth - ethDirect;
 
-        // Liquid ETH strictly between 0 and the lootbox half; the Game's protected redemption
-        // reserve covers the remainder of the full reservation (an ETH-short close). msg.value
-        // on the lootbox leg is then seedEth (> 0).
-        uint256 seedEth = lootboxEth / 4;
-        assertGt(seedEth, 0, "precondition: seedEth must be > 0");
-        uint256 pendingNow = sdgnrs.pendingRedemptionEthValue();
-        vm.deal(address(sdgnrs), seedEth);
-        seedEthUsed = seedEth;
-        uint256 reserve = pendingNow - seedEth;
-        vm.store(address(game), bytes32(GameSlots.REDEMPTION_RESERVE_STORED), bytes32(reserve + 1));
+        // The close moved the whole pull into the reserve; leave the Game holding exactly it.
+        uint256 reserve = sdgnrs.pendingRedemptionEthValue();
+        assertEq(game.redemptionReserve(), reserve, "the close funds the whole reserve");
         vm.deal(address(game), reserve);
         _setGameClaimableSdgnrs(0);
         _setGameClaimablePool(uint128(reserve));
@@ -204,38 +183,34 @@ contract RedemptionLootboxPayableForward is RedemptionCloseTools {
     //                          THE REGRESSIONS
     // =====================================================================
 
-    /// @notice HEADLINE: a live-game claim with sDGNRS holding liquid ETH must settle. The
-    ///         lootbox leg's `{value: seedEth}` rides the Game-side delegatecall chunk loop into
-    ///         LootboxModule.resolveRedemptionLootbox — non-payable, the compiled callvalue
-    ///         guard would refuse the entire claim (every mainnet claim, since a funded sDGNRS
-    ///         always holds some liquid ETH).
-    function test_LiveClaimSettlesWithForwardedEthLeg() public {
-        (uint32 dayD, uint256 ethDirect, uint256 lootboxEth) = _burnResolveAndShapeCustody();
+    /// @notice HEADLINE: a live-game claim settles from the reserve with no ETH forwarded to the
+    ///         lootbox or direct leg.
+    function test_LiveClaimSettlesFromReserveOnly() public {
+        (uint32 dayD, uint256 ethDirect, uint256 lootboxEth) = _burnResolveAndFundReserve();
 
         uint256 gameValueBefore = address(game).balance + mockStETH.balanceOf(address(game));
+        uint256 sdgnrsEthBefore = address(sdgnrs).balance;
         _settleCohort();
         (uint128 owed,) = sdgnrs.pendingRedemptions(game.walletIdOf(player), dayD);
         assertEq(uint256(owed), 0, "the claim settled rather than parking");
 
-        // Direct half lands as a game-claimable credit; the seed ETH rides the legs as msg.value
-        // and the Game reserve funds the rest of the rolled value.
         assertEq(
             claimableBalance(game, player),
             ethDirect,
             "direct half must credit the claimant's game claimable"
         );
-        assertEq(address(game).balance + mockStETH.balanceOf(address(game)) - gameValueBefore,
-            seedEthUsed, "only the seed ETH moves");
-        assertEq(game.redemptionReserve(), 0, "the reserve funds the rest of the rolled value");
+        assertEq(address(game).balance + mockStETH.balanceOf(address(game)), gameValueBefore, "no ETH moves");
+        assertEq(address(sdgnrs).balance, sdgnrsEthBefore, "sDGNRS sends no ETH");
+        assertEq(game.redemptionReserve(), 0, "the reserve funds the whole rolled value");
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0, "reservation must be fully released");
+        assertGt(lootboxEth, 0);
     }
 
     /// @notice Same claim with the claimant holding live boon state. The lootbox resolution then
-    ///         delegatecalls BoonModule.checkAndClearExpiredBoon (any-boon-bits gate) while the
-    ///         claim's msg.value is still in flight — it must be payable or the claim is refused
-    ///         one frame deeper than the outer fix.
-    function test_LiveClaimSettlesWithBoonStateAndForwardedEthLeg() public {
-        (uint32 dayD, uint256 ethDirect, uint256 lootboxEth) = _burnResolveAndShapeCustody();
+    ///         delegatecalls BoonModule.checkAndClearExpiredBoon (any-boon-bits gate) one frame
+    ///         deeper and must still settle.
+    function test_LiveClaimSettlesWithBoonStateFromReserve() public {
+        (uint32 dayD, uint256 ethDirect,) = _burnResolveAndFundReserve();
         _injectBoonState(player);
 
         uint256 gameValueBefore = address(game).balance + mockStETH.balanceOf(address(game));
@@ -248,9 +223,8 @@ contract RedemptionLootboxPayableForward is RedemptionCloseTools {
             ethDirect,
             "direct half must credit the claimant's game claimable"
         );
-        assertEq(address(game).balance + mockStETH.balanceOf(address(game)) - gameValueBefore,
-            seedEthUsed, "only the seed ETH moves");
-        assertEq(game.redemptionReserve(), 0, "the reserve funds the rest of the rolled value");
+        assertEq(address(game).balance + mockStETH.balanceOf(address(game)), gameValueBefore, "no ETH moves");
+        assertEq(game.redemptionReserve(), 0, "the reserve funds the whole rolled value");
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0, "reservation must be fully released");
     }
 }

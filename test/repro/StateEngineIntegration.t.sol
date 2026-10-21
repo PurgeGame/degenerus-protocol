@@ -11,6 +11,7 @@ import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {GameFunding} from "../helpers/GameFunding.sol";
 
 /// @dev The large-cycle fixture changes only already-funded prize pools. Checkpoint
 /// readers never write: request words, locks, ticket queues and phase flags remain real.
@@ -96,7 +97,7 @@ contract StateEngineIntegrationTest is RedemptionCloseTools {
     }
 
     function _queueMixedWork() private returns (uint32 burnDay) {
-        vm.deal(address(sdgnrs), 10_000 ether);
+        GameFunding.credit(2, 10_000 ether);
         _giveWalletId(ALICE);
         uint256 amount = sdgnrs.totalSupply() * 16 / 1000;
         vm.prank(address(game));

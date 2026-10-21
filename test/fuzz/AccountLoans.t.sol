@@ -11,6 +11,7 @@ import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {IsDGNRS} from "../../contracts/interfaces/IsDGNRS.sol";
 import {RedemptionCloseTools} from "./helpers/RedemptionCloseTools.sol";
 import {TicketQueueStorage} from "./helpers/TicketQueueStorage.sol";
+import {GameFunding} from "../helpers/GameFunding.sol";
 
 /// @dev Etched over the Game for state seeding. `enterDue` jumps `level` to a due level and arms
 ///      its seizure the way `prepareRequestBoundary` does; `seize` runs the production seizure
@@ -197,9 +198,7 @@ contract AccountLoansTest is RedemptionCloseTools {
     }
 
     function _awardEth(uint32 id, uint256 amount) private {
-        vm.deal(address(sdgnrs), address(sdgnrs).balance + amount);
-        vm.prank(address(sdgnrs));
-        game.creditRedemptionDirect{value: amount}(id, amount);
+        GameFunding.credit(id, amount);
     }
 
     function _rate(uint256 d) private pure returns (uint256) {
@@ -979,7 +978,7 @@ contract AccountLoansTest is RedemptionCloseTools {
     }
 
     function test_PreviouslySubmittedRedemptionRemainsWithSeizedAccount() public {
-        vm.deal(address(sdgnrs), 10_000 ether);
+        GameFunding.credit(2, 10_000 ether);
         _primeCurrentDayRng();
         _giveSdgnrs(seller, 10e18);
         vm.prank(seller); sdgnrs.burn(5e18);

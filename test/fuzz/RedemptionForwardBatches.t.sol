@@ -6,6 +6,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
+import {GameFunding} from "../helpers/GameFunding.sol";
 
 /// @dev Both endings reach resolveTerminalRedemptions through the real Game ending worker.
 contract RedemptionForwardBatchesTest is RedemptionFixture {
@@ -225,7 +226,7 @@ contract RedemptionForwardBatchesTest is RedemptionFixture {
         _giveSteth(stethHeld);
 
         (uint32 id,) = _state();
-        uint256 custody = address(sdgnrs).balance + mockStETH.balanceOf(address(sdgnrs));
+        uint256 sdgnrsBalance = address(sdgnrs).balance + mockStETH.balanceOf(address(sdgnrs));
         vm.recordLogs();
         vm.prank(address(game));
         uint256 pull = sdgnrs.closeRedemptionBatch(gameClaimable);
@@ -237,17 +238,17 @@ contract RedemptionForwardBatchesTest is RedemptionFixture {
         uint256 reserve = sdgnrs.pendingRedemptionEthValue();
         assertEq(reserve, ethBase * 175 / 100, "the close reserves the batch MAX");
         assertLe(pull, gameClaimable > 1 ? gameClaimable - 1 : 0, "pull never exceeds the claimable");
-        assertGe(custody + pull, reserve, "custody plus the pull backs the reserve");
+        assertEq(pull, reserve, "the whole reserve is pulled into the Game reserve");
+        assertEq(address(sdgnrs).balance + mockStETH.balanceOf(address(sdgnrs)), sdgnrsBalance, "the close moves no custody");
         assertEq(sdgnrs.totalSupply(), supply - amount, "the close leaves supply alone");
         assertEq(_escrow(), 0);
     }
 
     function test_StethHeavyBackingClosesAndSettlesEndToEnd() public {
         // sDGNRS's backing sits as Game claimable while the Game holds nearly all of its funds as
-        // stETH: the close sends what ETH it can and the protected reserve funds the rest.
-        vm.deal(address(sdgnrs), 9_999 ether);
-        vm.prank(address(sdgnrs));
-        game.creditRedemptionDirect{value: 9_999 ether}(2, 9_999 ether);
+        // stETH: the close moves the whole pull into the protected reserve, sending no ETH, and
+        // sDGNRS's own ETH is ignored while the game is live.
+        GameFunding.credit(2, 9_999 ether);
         vm.deal(address(sdgnrs), 1 ether);
         uint256 gameEth = address(game).balance;
         vm.deal(address(game), 1 ether);
@@ -403,15 +404,17 @@ contract RedemptionForwardBatchesTest is RedemptionFixture {
         boxes = (amount - 1) / 1 ether + 1;
         if (boxes > 20) boxes = 20;
         boxSize = (amount / boxes / 1e12) * 1e12;
-        vm.deal(address(sdgnrs), address(sdgnrs).balance + amount);
+        GameFunding.reserve(amount);
         uint256 sdgnrsBefore = address(sdgnrs).balance;
         uint256 gameBefore = address(game).balance;
+        uint256 reserveBefore = game.redemptionReserve();
+        uint256 poolBefore = game.claimablePoolView();
         uint256 futureBefore = game.futurePrizePoolView();
         uint32 aliceId = game.walletIdOf(alice);
         vm.recordLogs();
         vm.prank(address(sdgnrs));
         uint256 g0 = gasleft();
-        game.resolveRedemptionLootbox{value: amount}(aliceId, amount, uint256(keccak256(abi.encode("leg", amount))), 300, batchId
+        game.resolveRedemptionLootbox(aliceId, amount, uint256(keccak256(abi.encode("leg", amount))), 300, batchId
         );
         gasUsed = g0 - gasleft();
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -420,8 +423,11 @@ contract RedemptionForwardBatchesTest is RedemptionFixture {
             if (logs[i].emitter == address(game) && logs[i].topics[0] == OPENED_TOPIC
                 && uint256(logs[i].topics[2]) == tagged) ++opened;
         }
-        assertEq(sdgnrsBefore - address(sdgnrs).balance, amount, "the whole leg leaves sDGNRS");
-        assertEq(address(game).balance - gameBefore, amount, "and lands in the Game");
+        assertEq(address(sdgnrs).balance, sdgnrsBefore, "no ETH leaves sDGNRS");
+        assertEq(address(game).balance, gameBefore, "no ETH moves into the Game");
+        assertEq(reserveBefore - game.redemptionReserve(), amount, "the whole leg drains the reserve");
+        // Box prizes may credit claimable winnings back into the pool.
+        assertGe(game.claimablePoolView() + amount, poolBefore, "claimablePool drops by at most the leg");
         // Box prizes are drawn against the pool after the credit, so the pool moved by at most
         // the amount; with no prize paid out of it the credit is exactly the amount.
         assertLe(game.futurePrizePoolView(), futureBefore + amount, "pool credit is the amount");

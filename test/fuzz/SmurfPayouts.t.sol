@@ -12,6 +12,7 @@ import {DegenerusGameDegeneretteModule} from "../../contracts/modules/DegenerusG
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
+import {GameFunding} from "../helpers/GameFunding.sol";
 
 /// @title SmurfPayouts -- every protocol payout for a smurf account reaches its owner
 /// @notice A smurf's state stays on the smurf (ledgers by ID, latches on its mint word), and every
@@ -370,9 +371,9 @@ contract SmurfPayoutsTest is SmurfFixture {
             );
         } else if (kind == Box.Redemption) {
             address sd = ContractAddresses.SDGNRS;
-            vm.deal(sd, sd.balance + 5 ether);
+            GameFunding.reserve(5 ether);
             vm.prank(sd);
-            ext.x_delegate{value: 5 ether}(
+            ext.x_delegate(
                 lootbox,
                 abi.encodeCall(
                     DegenerusGameLootboxModule.resolveRedemptionLootbox, (id, 5 ether, word, uint16(0), uint32(1))

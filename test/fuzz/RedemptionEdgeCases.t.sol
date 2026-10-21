@@ -3,6 +3,7 @@ pragma solidity 0.8.34;
 import {RedemptionFixture} from "./helpers/RedemptionFixture.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {GameFunding} from "../helpers/GameFunding.sol";
 
 /// @notice Regression coverage for request-bound, forward-priced redemption batches.
 contract RedemptionEdgeCasesTest is RedemptionFixture {
@@ -35,7 +36,7 @@ contract RedemptionEdgeCasesTest is RedemptionFixture {
         assertEq(_claimTokens(alice, id), 3 * n);
     }
     function test_BatchCanExceedHalfSupply() public {
-        vm.deal(address(sdgnrs), 1 ether);
+        GameFunding.setClaimable(2, 1 ether + 1);
         uint256 supply = sdgnrs.totalSupply();
         vm.prank(address(game));
         sdgnrs.transferFromPool(sDGNRS.Pool.Affiliate, alice, supply * 3 / 10);
@@ -80,7 +81,7 @@ contract RedemptionEdgeCasesTest is RedemptionFixture {
     }
     function test_ZeroValueClaimStillClearsItsTokens() public {
         _burn(alice, 1e18);
-        vm.deal(address(sdgnrs), 0);
+        GameFunding.setClaimable(2, 1);
         uint32 id = _resolveLive(21);
         assertTrue(_work(9_000_000));
         assertEq(_claimTokens(alice, id), 0);

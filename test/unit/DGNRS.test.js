@@ -44,19 +44,25 @@ async function giveSDGNRS(sdgnrs, game, recipient, amount) {
   await seedDailyWord(game, await game.currentDayView(), BigInt("0x" + "de".repeat(32)));
 }
 
-// Fund Game claimable through its real credit hook, including matching ETH custody.
-async function fundGameClaimableForSdgnrs(gameAddr, sdgnrsAddr, amount) {
-  const balance = await hre.ethers.provider.getBalance(sdgnrsAddr);
-  await hre.ethers.provider.send("hardhat_setBalance", [sdgnrsAddr, hre.ethers.toBeHex(balance + amount)]);
-  await hre.network.provider.request({ method: "hardhat_impersonateAccount", params: [sdgnrsAddr] });
-  try {
-    const signer = await hre.ethers.getSigner(sdgnrsAddr);
-    const game = await hre.ethers.getContractAt("DegenerusGame", gameAddr);
-    await hre.network.provider.send("hardhat_setNextBlockBaseFeePerGas", ["0x0"]);
-    await game.connect(signer).creditRedemptionDirect(2, amount, { value: amount, gasPrice: 0 });
-  } finally {
-    await hre.network.provider.request({ method: "hardhat_stopImpersonatingAccount", params: [sdgnrsAddr] });
-  }
+// Fund sDGNRS's Game claimable (wallet ID 2) in tandem with claimablePool and the Game's ETH.
+// Live redemption legs draw only from the Game, so no ETH is sent through sDGNRS.
+const BALANCES_PACKED_SLOT = 7n;
+const CLAIMABLE_POOL_SLOT = 1n;
+async function fundGameClaimableForSdgnrs(gameAddr, _sdgnrsAddr, amount) {
+  const word = (v) => hre.ethers.toBeHex(v, 32);
+  const balanceSlot = hre.ethers.keccak256(
+    hre.ethers.AbiCoder.defaultAbiCoder().encode(["uint256", "uint256"], [2n, BALANCES_PACKED_SLOT])
+  );
+  const packed = BigInt(await hre.ethers.provider.getStorage(gameAddr, balanceSlot));
+  await hre.network.provider.send("hardhat_setStorageAt", [gameAddr, balanceSlot, word(packed + amount)]);
+  const poolWord = BigInt(await hre.ethers.provider.getStorage(gameAddr, hre.ethers.toBeHex(CLAIMABLE_POOL_SLOT, 32)));
+  await hre.network.provider.send("hardhat_setStorageAt", [
+    gameAddr,
+    hre.ethers.toBeHex(CLAIMABLE_POOL_SLOT, 32),
+    word(poolWord + (amount << 128n)),
+  ]);
+  const balance = await hre.ethers.provider.getBalance(gameAddr);
+  await hre.ethers.provider.send("hardhat_setBalance", [gameAddr, hre.ethers.toBeHex(balance + amount)]);
 }
 
 async function assertBurnAdmitted(sdgnrs, amount) {
@@ -621,7 +627,7 @@ describe("DGNRS", function () {
       expect(flipOut).to.equal(0n);
     });
 
-    it("proportional preview when ETH exists", async function () {
+    it("proportional preview prices Game claimable and ignores custody ETH", async function () {
       const { sdgnrs, game, deployer } = await loadFixture(deployFullProtocol);
       const gameAddr = await game.getAddress();
       const sdgnrsAddr = await sdgnrs.getAddress();
@@ -641,9 +647,14 @@ describe("DGNRS", function () {
         params: [gameAddr],
       });
 
-      // Preview for 1% of supply
+      // Live pricing leaves sDGNRS's own ETH out until game over.
       const onePercent = INITIAL_SUPPLY / 100n;
-      const [ethOut, flipOut] = await sdgnrs.previewBurnValue(onePercent);
+      const [custodyOut] = await sdgnrs.previewBurnValue(onePercent);
+      expect(custodyOut).to.equal(0n);
+
+      // Preview for 1% of supply against 100 ETH of Game claimable
+      await fundGameClaimableForSdgnrs(gameAddr, sdgnrsAddr, eth("100"));
+      const [ethOut] = await sdgnrs.previewBurnValue(onePercent);
       // 1% of 100 ETH = 1 ETH
       expect(ethOut).to.be.closeTo(eth("1"), eth("0.01"));
     });

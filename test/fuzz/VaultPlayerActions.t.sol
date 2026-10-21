@@ -11,6 +11,7 @@ import {IDegenerusGame, MintPaymentKind} from "../../contracts/interfaces/IDegen
 import {ICoinflip} from "../../contracts/interfaces/ICoinflip.sol";
 import {VaultPlayerActions} from "../../contracts/libraries/VaultPlayerActions.sol";
 import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
+import {GameFunding} from "../helpers/GameFunding.sol";
 
 /// @notice Real protocol calls prove identity, payment and eligibility survive the forwarding
 ///         boundary. Only the growth market's phase is mocked; its authorization and burn are real.
@@ -130,9 +131,7 @@ contract VaultPlayerActionsTest is SeatFixture {
     function test_liveClaimableCanBuyWithoutVaultEthAndBeWithdrawn() public {
         assertFalse(game.gameOver());
         vm.deal(address(vault), 0);
-        vm.deal(address(sdgnrs), 1 ether);
-        vm.prank(address(sdgnrs));
-        game.creditRedemptionDirect{value: 1 ether}(VAULT_ID, 1 ether);
+        GameFunding.credit(VAULT_ID, 1 ether);
         uint256 claimable = game.claimableWinningsOf(address(vault));
         _act(
             address(game),

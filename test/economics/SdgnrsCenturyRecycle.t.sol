@@ -5,6 +5,7 @@ import {RedemptionCloseTools} from "../fuzz/helpers/RedemptionCloseTools.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {GameFunding} from "../helpers/GameFunding.sol";
 
 /// @dev Chosen-roll accounting fixture: explicitly supplies the completed ticket
 ///      prerequisites and the same published session lifecycle that live settlement requires.
@@ -38,8 +39,8 @@ contract SdgnrsCenturyRecycleTest is RedemptionCloseTools {
         _giveWalletId(ALICE);
         _giveWalletId(BOB);
         _giveWalletId(ContractAddresses.CREATOR);
-        // Custody-backed redemptions exercise the real reservation gate without game-ledger mocks.
-        vm.deal(address(sdgnrs), 100 ether);
+        // Reserve-backed redemptions exercise the real reservation gate without game-ledger mocks.
+        GameFunding.credit(2, 100 ether);
     }
 
     function _assertAdmissibleBurn(uint256 amount) private view {

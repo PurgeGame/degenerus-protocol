@@ -7,6 +7,7 @@ import {VRFHandler} from "../helpers/VRFHandler.sol";
 import {RedemptionHandler} from "../handlers/RedemptionHandler.sol";
 import {WrapperPathHandler} from "../handlers/WrapperPathHandler.sol";
 import {sDGNRS} from "../../../contracts/sDGNRS.sol";
+import {GameFunding} from "../../helpers/GameFunding.sol";
 
 /// @title RedemptionInvariants -- Proves gambling burn redemption system invariants
 /// @notice Current redemption solvency, supply, wrapper backing and claim invariants.
@@ -26,7 +27,7 @@ contract RedemptionInvariants is DeployProtocol {
         handler = new RedemptionHandler(sdgnrs, game, mockVRF, coin, 5);
         vrfHandler = new VRFHandler(mockVRF, game);
         wrapperHandler = new WrapperPathHandler(sdgnrs, dgnrs, game, mockVRF, 3);
-        vm.deal(address(sdgnrs), 10_000 ether);
+        GameFunding.credit(2, 10_000 ether);
         mockVRF.fundSubscription(1, 100 ether);
         for (uint256 i; i < handler.getActorCount(); ++i) _giveWalletId(handler.getActor(i));
         // A wrapped gambling burn records its claim on the burner's wallet ID; without one every
@@ -67,18 +68,21 @@ contract RedemptionInvariants is DeployProtocol {
     //                         INV-01: ETH SEGREGATION SOLVENCY
     // =========================================================================
 
-    /// @notice Segregated ETH never exceeds what the contract can cover.
-    /// @dev Uses assertGe (not assertEq) because the contract may have more ETH
-    ///      than the segregated amount (from other deposits, game winnings).
-    ///      Includes stETH since it is liquid backing.
+    /// @notice Segregated redemption value never exceeds what backs it.
+    /// @dev Live, the Game's redemption reserve backs it and sDGNRS custody is ignored; after game
+    ///      over custody and sDGNRS's Game claimable (which holds the released reserve) back it.
+    ///      Uses assertGe (not assertEq): backing may exceed the segregated amount.
     function invariant_ethSegregationSolvency() public view {
         uint256 segregated = sdgnrs.pendingRedemptionEthValue();
-        uint256 ethBal = address(sdgnrs).balance;
-        uint256 stethBal = mockStETH.balanceOf(address(sdgnrs));
+        uint256 backing = game.redemptionReserve();
+        if (game.gameOver()) {
+            uint256 claimable = game.claimableWinningsOf(address(sdgnrs));
+            backing += address(sdgnrs).balance + mockStETH.balanceOf(address(sdgnrs)) + (claimable > 1 ? claimable - 1 : 0);
+        }
         assertGe(
-            ethBal + stethBal,
+            backing,
             segregated,
-            "INV-01: segregated ETH exceeds contract ETH+stETH balance"
+            "INV-01: segregated redemption value exceeds its backing"
         );
     }
 
