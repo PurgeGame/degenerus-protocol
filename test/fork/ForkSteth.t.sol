@@ -39,7 +39,7 @@ contract ForkStethTest is ForkDeployProtocol {
 
     bytes32 private constant LIDO_SUBMITTED = keccak256("Submitted(address,uint256,address)");
     bytes32 private constant WINNINGS_CLAIMED = keccak256("WinningsClaimed(uint32,uint256,uint128)");
-    bytes32 private constant AFKING_STETH_FUNDED = keccak256("AfkingStethFunded(uint32,uint32,uint256,uint256)");
+    bytes32 private constant AFKING_STETH_FUNDED = keccak256("AfkingStethFunded(uint32,uint256,uint256)");
 
     address private driver = makeAddr("driver");
     address private alice = makeAddr("alice");
@@ -362,11 +362,12 @@ contract ForkStethTest is ForkDeployProtocol {
 
     // ------------------------------------------------------------------ redemption
 
-    /// @notice A live sDGNRS redemption whose reserve the game funds partly in REAL stETH (the
+    /// @notice A live sDGNRS redemption against a Game whose backing is partly REAL stETH (the
     ///         vault owner staked the sDGNRS-settleable ETH): the batch closes inside the real daily
-    ///         request, settles on the real word through mineFlip, and the claim legs pull the
-    ///         stETH back from sDGNRS with transferFrom. Nothing reverts; sDGNRS custody tracks its
-    ///         reserve within the rounding bound.
+    ///         request, settles on the real word through mineFlip, and the claim legs pay the
+    ///         beneficiary. The live close moves ETH only; the unsent part of the pull stays in the
+    ///         Game as its redemption reserve, and the live legs settle from sDGNRS ETH plus that
+    ///         reserve, never touching stETH. Nothing reverts and the game stays solvent.
     function test_liveRedemptionSettlesThroughRealStethLegs() public {
         _runningGame();
         _giveWalletId(alice);
@@ -383,6 +384,7 @@ contract ForkStethTest is ForkDeployProtocol {
             game.claimWinnings(0);
         }
         _adminStake(_stakeable());
+        assertGt(lido.balanceOf(address(game)), 0, "fixture: the game holds real stETH backing");
         _assertSolvent("before the burn");
 
         uint32 batch;
@@ -393,8 +395,10 @@ contract ForkStethTest is ForkDeployProtocol {
         assertGt(tokens, 0, "alice joined the open batch");
 
         uint256 sdSt0 = lido.balanceOf(ContractAddresses.SDGNRS);
+        uint256 sdEth0 = ContractAddresses.SDGNRS.balance;
         uint256 gameEth0 = address(game).balance;
-        // Next day: the daily request closes the batch (ETH first, stETH for the rest).
+        uint256 gameSt0 = lido.balanceOf(address(game));
+        // Next day: the daily request closes the batch (ETH only; the rest stays reserved in the Game).
         vm.warp(vm.getBlockTimestamp() + 1 days);
         for (uint256 i; i < 64 && !game.rngLocked(); ++i) {
             vm.prank(keeper);
@@ -402,21 +406,27 @@ contract ForkStethTest is ForkDeployProtocol {
         }
         assertTrue(game.rngLocked(), "fixture: daily request");
         uint256 reserved = sdgnrs.pendingRedemptionEthValue();
-        uint256 custody = ContractAddresses.SDGNRS.balance + lido.balanceOf(ContractAddresses.SDGNRS);
-        uint256 stethIn = lido.balanceOf(ContractAddresses.SDGNRS) - sdSt0;
+        uint256 sdEth = ContractAddresses.SDGNRS.balance;
+        uint256 gameReserve = game.redemptionReserve();
         emit log_named_uint("game ETH before the close", gameEth0);
-        emit log_named_uint("redemption reserve", reserved);
-        emit log_named_uint("sDGNRS custody after close", custody);
-        emit log_named_uint("stETH moved into sDGNRS at close", stethIn);
+        emit log_named_uint("batch maximum reserved by sDGNRS", reserved);
+        emit log_named_uint("ETH moved into sDGNRS at close", sdEth - sdEth0);
+        emit log_named_uint("unsent part kept as the Game reserve", gameReserve);
         assertGt(reserved, 0, "the batch closed with a reserve");
-        assertGt(stethIn, 0, "the close paid part of the reserve in real stETH");
-        assertGe(custody + STETH_ROUNDING, reserved, "custody covers the reserve within rounding");
-        emit log_named_uint("custody shortfall vs reserve (wei)", reserved > custody ? reserved - custody : 0);
+        assertEq(lido.balanceOf(ContractAddresses.SDGNRS), sdSt0, "the live close moves no stETH");
+        assertGe(lido.balanceOf(address(game)) + STETH_ROUNDING, gameSt0, "the Game keeps its stETH backing");
+        assertGt(sdEth, sdEth0, "the close sent ETH to sDGNRS");
+        assertGt(gameReserve, 0, "the ETH-short Game kept the unsent pull as its reserve");
+        assertGe(sdEth + gameReserve, reserved, "ETH custody plus the Game reserve covers the batch maximum");
 
+        uint256 aliceClaimable0 = game.claimableWinningsOf(alice);
         _crank(400);
         (uint128 left,) = sdgnrs.pendingRedemptions(game.walletIdOf(alice), batch);
-        assertEq(left, 0, "the claim settled through the real stETH legs");
-        assertGt(game.claimableWinningsOf(alice), 1, "the direct half reached alice's claimable");
+        assertEq(left, 0, "the claim settled through the live legs");
+        assertGt(game.claimableWinningsOf(alice), aliceClaimable0 + 1, "the direct half reached alice's claimable");
+        assertEq(lido.balanceOf(ContractAddresses.SDGNRS), sdSt0, "live settlement moves no stETH");
+        emit log_named_uint("Game reserve after settlement", game.redemptionReserve());
+        assertLt(game.redemptionReserve(), gameReserve, "the live legs drew on the Game reserve");
         _assertSolvent("after redemption settlement");
     }
 
