@@ -97,6 +97,7 @@ contract NestingStack {
     bool public sealDone;
     bool public rootDone;
     bool public workerDispatched;
+    bool public workerOverran;
     bool public workerProgressed;
 
     constructor() { worker = new NestingWorker(); }
@@ -138,10 +139,11 @@ contract NestingStack {
             workerAllowance = next & type(uint192).max;
             (ok, data) = address(worker).call{gas: MineFlipGas.forwardable(meter, rootDecl)}(
                 abi.encodeCall(NestingWorker.run, (next, c.workerPrelude, c.unitGas, 1)));
-            // As MinerModule after progress: an empty (out-of-gas) refusal keeps the prefix,
-            // every semantic error (WorkGasBound included) unwinds the whole call.
+            // As MinerModule after progress: an empty (out-of-gas) refusal or an estimate
+            // overrun (WorkGasBound) keeps the prefix; every other error unwinds the whole call.
             if (!ok) {
-                if (data.length != 0) bubble(data);
+                if (data.length == 4 && bytes4(data) == MineFlipGas.WorkGasBound.selector) workerOverran = true;
+                else if (data.length != 0) bubble(data);
             } else {
                 workerProgressed = abi.decode(data, (MineFlipGas.Result)).progressed;
             }
@@ -215,6 +217,7 @@ contract MineFlipGasNestingTest is Test {
             if (ok) {
                 if (r.firstOk == 0) r.firstOk = g;
                 assertTrue(s.rootDone(), "the root tail ran");
+                assertFalse(s.workerOverran(), "an admitted worker never overruns its estimate");
                 uint256 units = c.externalFirst ? w.units() : s.leafUnits();
                 assertGe(units, 1, "the first unit ran");
                 if (!c.externalFirst) {
@@ -312,6 +315,7 @@ contract MineFlipGasNestingTest is Test {
             if (ok) {
                 if (firstOk == 0) firstOk = g;
                 assertTrue(s.sealDone() && s.rootDone());
+                assertFalse(s.workerOverran(), "an admitted worker never overruns its estimate");
                 if (s.workerDispatched()) {
                     uint256 a = s.workerAllowance();
                     if (a == 0) ++zero;

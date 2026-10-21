@@ -1,40 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
-import {claimableBalance} from "../helpers/ClaimableBalance.sol";
-
 import {Test} from "forge-std/Test.sol";
-import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
-import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {DegenerusGameGameOverModule} from "../../contracts/modules/DegenerusGameGameOverModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
-
-/// @dev Etch overlay for the full-protocol flow: a caught-up past-deadline ending at level 10
-///      with a populated terminal cohort, plus a view of the ending's latches.
-contract MissingWordSeeder is DegenerusGame, BucketSeed {
-    function seedEnding(address holder) external {
-        uint24 day = _simulatedDayIndex();
-        level = 10;
-        purchaseStartDay = day - 31;
-        dailyIdx = day - 1;
-        _setLevelPrizePool(10, 1000 ether);
-        ticketsFullyProcessed = true;
-        subsFullyProcessed = true;
-        _afkingResetDay = day;
-        for (uint256 t; t < 256; ++t) _seedBucket(11, uint8(t), holder, t == 253 ? 1 : 4); // one gold six
-    }
-
-    /// @dev The applied terminal word vanishes while its applied/published flags stay.
-    function dropTerminalWord() external {
-        rngWordCurrent = RNG_WORD_WAITING;
-    }
-
-    function endingState() external view returns (uint256 dead, uint256 paid, uint256 pot, uint256 total, uint256 created) {
-        return (_lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK), _goRead(GO_JACKPOT_PAID_SHIFT, GO_JACKPOT_PAID_MASK), deadPot, deadTotal, deadCreated);
-    }
-}
 
 contract TerminalSinkStub {
     uint256 public burns;
@@ -87,78 +58,13 @@ contract MissingWordDrainHarness is DegenerusGameGameOverModule, BucketSeed {
 
 /// @notice The normal ending's drain needs the terminal word. With distributable funds and no
 ///         word it latches the deterministic ending and pays nothing; the next terminal call
-///         tallies the cohort and fixes the pot once. On the mineFlip chain the same state is a
-///         Wait (request active, no word) that the 14-day dead window already resolves.
+///         tallies the cohort and fixes the pot once. The mineFlip chain never produces this state:
+///         every write of the waiting word also clears the published flag.
 contract DegradeTerminalMissingWordTest is DeployProtocol {
-    uint256 private constant WORD = 0x987654321;
-    address private constant HOLDER = address(0x715E7);
-    address private constant TOP = address(0xAFF1);
-    bytes32 private constant ETH_WIN = keccak256("JackpotEthWin(uint32,uint24,uint16,uint256,uint256)");
-
-    bytes private realCode;
-
     function setUp() public {
         _deployProtocol();
         mockVRF.fundSubscription(1, 100e18);
         vm.warp(block.timestamp + 500 days);
-        realCode = address(game).code;
-    }
-
-    function _fixture(bytes memory data) private returns (bytes memory result) {
-        vm.etch(address(game), type(MissingWordSeeder).runtimeCode);
-        bool ok;
-        (ok, result) = address(game).call(data);
-        vm.etch(address(game), realCode);
-        if (!ok) assembly ("memory-safe") { revert(add(result, 32), mload(result)) }
-    }
-
-    function _endingState() private returns (uint256 dead, uint256 paid, uint256 pot, uint256 total, uint256 created) {
-        bytes memory data = _fixture(abi.encodeCall(MissingWordSeeder.endingState, ()));
-        (dead, paid, pot, total, created) = abi.decode(data, (uint256, uint256, uint256, uint256, uint256));
-    }
-
-    function _reachPayout() private {
-        _fixture(abi.encodeCall(MissingWordSeeder.seedEnding, (HOLDER)));
-        vm.deal(address(game), 100 ether);
-        vm.prank(address(game));
-        affiliate.payAffiliate(1000 ether, bytes32(uint256(uint160(TOP))), 0xB001, 11, true, 0);
-        assertTrue(game.livenessTriggered(), "caught up past the deadline");
-        game.mineFlip(0); // latch: VRF alive, so the loan book settles first
-        game.mineFlip(0); // the (empty) loan book
-        game.mineFlip(0); // terminal request
-        mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), WORD);
-        game.mineFlip(0); // apply the word
-        assertFalse(game.gameOver(), "applying the word does not pay out");
-    }
-
-    /// @dev Chain route: the seeded state is a Wait, and the dead window ends the game without a word.
-    function test_ChainWaitsThenTakesTheDeadEndingWithoutAWord() public {
-        _reachPayout();
-        _fixture(abi.encodeCall(MissingWordSeeder.dropTerminalWord, ()));
-        vm.expectRevert(bytes4(keccak256("RngNotReady()")));
-        game.mineFlip(0);
-        vm.warp(block.timestamp + 14 days);
-        vm.recordLogs();
-        for (uint256 i; i < 20 && !game.gameOver(); ++i) game.mineFlip(0);
-        assertTrue(game.gameOver(), "dead ending reached game over");
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-        for (uint256 i; i < logs.length; ++i) {
-            assertTrue(logs[i].topics[0] != ETH_WIN, "no drawn award");
-        }
-        (uint256 dead, uint256 paid, uint256 pot, uint256 total, uint256 created) = _endingState();
-        assertEq(dead, 1);
-        assertEq(paid, 1);
-        assertEq(pot, 100 ether, "the whole balance is the pot");
-        assertEq(created, 255 * 4 + 1, "the applied cohort is tallied as created");
-        assertGe(total, created * 100, "the pot divides over created plus queued weight");
-        assertEq(claimableBalance(game, TOP), 0, "the dead ending pays no affiliate");
-        assertEq(address(game).balance, 100 ether, "nothing moved at the payout");
-
-        uint256[] memory refs = new uint256[](1);
-        refs[0] = uint256(5) << 64; // HOLDER's first ticket of trait 5
-        game.claimDeadVrf(game.walletIdOf(HOLDER), refs);
-        uint256 perTrait = (pot * created * 100) / total / 256;
-        assertEq(claimableBalance(game, HOLDER), perTrait / 4, "one of trait 5's four equal shares");
     }
 
     /// @dev Drain route: the degraded branch itself, in the state no chain path produces.

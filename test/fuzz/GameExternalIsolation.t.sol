@@ -240,7 +240,8 @@ contract GameExternalIsolationTest is DeployProtocol {
     }
 
     function test_TerminalRefusalsCannotPreventFourteenDayEnding() public {
-        vm.expectCall(address(mockVRF), abi.encodeWithSelector(IVRFCoordinator.requestRandomWords.selector), uint64(5));
+        // Each fault mode is asked twice: by the arming call and by the retry a day later.
+        vm.expectCall(address(mockVRF), abi.encodeWithSelector(IVRFCoordinator.requestRandomWords.selector), uint64(10));
         for (uint8 mode = 1; mode <= 7; ++mode) {
             if (mode == 4 || mode == 6) continue;
             uint256 snap = vm.snapshotState();

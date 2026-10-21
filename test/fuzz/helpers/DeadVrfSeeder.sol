@@ -89,7 +89,8 @@ contract DeadVrfSeeder is DegenerusGame, BucketSeed {
         rngWordCurrent = word < 2 ? RNG_WORD_WAITING : word;
         vrfRequestId = 777;
         _setRngRequestActive(true);
-        _setRngSessionPublished(false);
+        // Publication commits as its own unit before the stuck apply, so a delivered word is in use.
+        _setRngSessionPublished(word >= 2);
         rngRequestTime = uint48(block.timestamp - 30 days);
         _recordDailyRng(s, applied ? word : 0);
         if (applied) coinflip.processCoinflipPayouts(0, word, s);

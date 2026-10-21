@@ -152,6 +152,16 @@ abstract contract StallCreditBase is DeployProtocol {
         assertTrue(game.gameOver(), label);
     }
 
+    /// @dev Answer and publish whatever request the last advance left in flight, so a later gap
+    ///      starts with no unpublished word.
+    function _publishAnswered() internal {
+        _answer();
+        (, uint256 id) = _stamps();
+        if (id == 0) return;
+        vm.prank(stranger);
+        try game.mineFlip(0) {} catch {}
+    }
+
     function _answer() internal {
         uint256 id = vrf.lastRequestId();
         if (id == 0) return;
@@ -402,6 +412,7 @@ contract MidDayStallCreditTest is StallCreditBase {
         _seed(29);
         uint24 x = game.currentDayView();
         _sealDay(x);
+        _publishAnswered();
         _warpToDay(x + 30);
         assertFalse(game.livenessTriggered(), "a gap waits");
         _warpToDay(x + 31);
@@ -474,15 +485,29 @@ contract MidDayStallCreditTest is StallCreditBase {
         _answer();
     }
 
-    /// @notice An answered mid-day request never reads as a dead VRF, however long nobody advances.
-    function test_answeredMiddayIsNeverVrfDead() public {
+    /// @notice A mid-day word that a mineFlip has published never reads as a dead VRF, however
+    ///         long nobody advances afterwards.
+    function test_publishedMiddayIsNeverVrfDead() public {
+        _seed(5);
+        uint24 x = game.currentDayView();
+        _sealDay(x);
+        _middayRequest();
+        _answer();
+        _adv(); // publishes the word
+        _warpToDay(x + 20);
+        assertFalse(_vrfDead(), "published: not dead");
+    }
+
+    /// @notice A mid-day word that nobody publishes within 14 days of its request is dead, even
+    ///         though the coordinator answered it.
+    function test_unpublishedMiddayWordIsDeadAfterTheWindow() public {
         _seed(5);
         uint24 x = game.currentDayView();
         _sealDay(x);
         _middayRequest();
         _answer();
         _warpToDay(x + 20);
-        assertFalse(_vrfDead(), "VRF answered: not dead");
+        assertTrue(_vrfDead(), "answered but unpublished for 14 days: dead");
     }
 
     /// @notice The ending's terminal request is refused by the coordinator: the VRF-dead window

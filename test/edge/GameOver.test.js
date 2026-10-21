@@ -140,11 +140,7 @@ describe("GameOver", function () {
       await game.connect(deployer).mineFlip(0);
       expect(await getLastVRFRequestId(mockVRF)).to.equal(0n);
 
-      // Third call arms the terminal request without sending it.
-      await game.connect(deployer).mineFlip(0);
-      expect(await getLastVRFRequestId(mockVRF)).to.equal(0n);
-
-      // Fourth call: issues VRF (gameOver still false)
+      // Third call arms the terminal request and asks in the same call (gameOver still false)
       await game.connect(deployer).mineFlip(0);
       expect(await game.gameOver()).to.equal(false);
 
@@ -161,8 +157,7 @@ describe("GameOver", function () {
       await advanceTime(SECONDS_912_DAYS + 86400);
       await game.connect(deployer).mineFlip(0); // decision
       await game.connect(deployer).mineFlip(0); // the (empty) loan book
-      await game.connect(deployer).mineFlip(0); // arm the terminal request
-      await game.connect(deployer).mineFlip(0); // terminal request
+      await game.connect(deployer).mineFlip(0); // arm and request
 
       const requestId = await getLastVRFRequestId(mockVRF);
       await mockVRF.fulfillRandomWords(requestId, 42n);

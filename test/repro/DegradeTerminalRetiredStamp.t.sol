@@ -79,8 +79,7 @@ contract DegradeTerminalRetiredStampTest is DeployProtocol {
         assertTrue(game.livenessTriggered(), "caught up past the deadline");
         game.mineFlip(0); // latches the cohort level; VRF alive, so the loan book settles first
         game.mineFlip(0); // the (empty) loan book
-        game.mineFlip(0); // arms the terminal request
-        game.mineFlip(0); // requests the terminal word
+        game.mineFlip(0); // arms and requests the terminal word
         uint256 requestId = mockVRF.lastRequestId();
         mockVRF.fulfillRandomWords(requestId, WORD);
         game.mineFlip(0); // applies the word in its own transaction

@@ -134,15 +134,13 @@ abstract contract ColdTerminalFixture is DeployProtocol {
         vm.cool(address(affiliate));
     }
 
-    /// @dev The ending arms its own terminal request in one transaction and sends it in the
-    ///      next; the coordinator answers it with the word the winning buckets were seeded for.
+    /// @dev The ending's first transaction sends its own terminal request; the coordinator
+    ///      answers it with the word the winning buckets were seeded for.
     function _requestTerminalWord() private {
         uint256 before = mockVRF.lastRequestId();
         game.mineFlip(0); // decision
         game.mineFlip(0); // the (empty) loan book
         assertEq(mockVRF.lastRequestId(), before, "no request before the loan book is settled");
-        game.mineFlip(0); // arm
-        assertEq(mockVRF.lastRequestId(), before, "arming sends no request");
         game.mineFlip(0);
         uint256 id = mockVRF.lastRequestId();
         assertGt(id, before, "the ending sends its own terminal request");

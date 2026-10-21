@@ -359,12 +359,13 @@ contract MinerNoProgressTest is Test {
     function test_UsefulCertificationCommitsWhenNextWorkerDeclines() public {
         _seed(DegenerusGameStorage.MinerAction.Maintenance);
         bytes memory selector = abi.encodeWithSignature("runCrapsMaintenance(uint256)");
-        for (uint256 mode; mode < 5; ++mode) {
+        for (uint256 mode; mode < 6; ++mode) {
             game.uncertify();
             if (mode < 2) vm.mockCall(ContractAddresses.CRAPS, selector, abi.encode(false, mode == 0, uint256(0)));
             else vm.mockCallRevert(ContractAddresses.CRAPS, selector, abi.encodeWithSelector(
                 mode == 2 ? MineFlipGas.InsufficientExecutionGas.selector :
-                mode == 3 ? DegenerusGameMinerModule.NoWork.selector : DegenerusGameMinerModule.RngNotReady.selector));
+                mode == 3 ? DegenerusGameMinerModule.NoWork.selector :
+                mode == 4 ? DegenerusGameMinerModule.RngNotReady.selector : MineFlipGas.WorkGasBound.selector));
             vm.recordLogs();
             game.mineFlip{gas: 16_700_000}(0);
             assertTrue(game.rngComplete());
@@ -375,10 +376,18 @@ contract MinerNoProgressTest is Test {
     function test_InvariantFailureStillRollsBackEarlierWork() public {
         _seed(DegenerusGameStorage.MinerAction.Maintenance);
         game.uncertify();
+        bytes4 invariant = bytes4(keccak256("InvariantBroken()"));
+        vm.mockCallRevert(ContractAddresses.CRAPS, abi.encodeWithSignature("runCrapsMaintenance(uint256)"),
+            abi.encodeWithSelector(invariant));
+        _expectFailure(invariant, 16_700_000);
+        assertFalse(game.rngComplete());
+    }
+
+    function test_WorkGasBoundWithoutPrefixStillReverts() public {
+        _seed(DegenerusGameStorage.MinerAction.Maintenance);
         vm.mockCallRevert(ContractAddresses.CRAPS, abi.encodeWithSignature("runCrapsMaintenance(uint256)"),
             abi.encodeWithSelector(MineFlipGas.WorkGasBound.selector));
         _expectFailure(MineFlipGas.WorkGasBound.selector, 16_700_000);
-        assertFalse(game.rngComplete());
     }
 
     function test_ExhaustedWorkerGasRevertsWithoutWorkAndKeepsAUsefulPrefix() public {

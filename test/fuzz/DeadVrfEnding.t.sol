@@ -32,6 +32,7 @@ contract DeadVrfLivenessHarness is DegenerusGameStorage {
         dailyIdx = day - sealedAge;
         rngRequestTime = requestTime;
         _setRngRequestActive(requestTime > 1);
+        _setRngSessionPublished(requestTime <= 1);
         rngWordCurrent = word < 2 ? RNG_WORD_WAITING : word;
         // The last daily word was applied on the last sealed day (an unattended gap since then).
         lastVrfProcessedTimestamp = uint48(block.timestamp - uint256(sealedAge) * 1 days);
@@ -41,7 +42,12 @@ contract DeadVrfLivenessHarness is DegenerusGameStorage {
     }
 
     function applyWordFor(uint48 t, uint256 word) external {
+        _setRngSessionPublished(true);
         _recordDailyRng(_simulatedDayIndexAt(t), word);
+    }
+
+    function publish() external {
+        _setRngSessionPublished(true);
     }
 
     function startEnding() external {
@@ -117,11 +123,14 @@ contract DeadVrfLivenessTest is Test {
         assertFalse(h.liveness(), "a 20-day backlog in the jackpot phase stays alive");
     }
 
-    function test_deliveredWordMeansVrfWorks() public {
+    function test_onlyAPublishedWordKeepsVrfAlivePastTheWindow() public {
         h.seed(5, 10, uint48(block.timestamp - 15 days), 15, 2, 0xB0B);
-        assertFalse(h.vrfDead(), "delivered but never applied (a stuck day): VRF works, not dead");
+        assertTrue(h.vrfDead(), "delivered but not published within 14 days: dead");
         h.seed(5, 10, uint48(block.timestamp - 15 days), 15, 2, 0);
         assertTrue(h.vrfDead(), "nothing delivered for 14 days: dead");
+        h.seed(5, 10, uint48(block.timestamp - 15 days), 15, 2, 0xB0B);
+        h.publish();
+        assertFalse(h.vrfDead(), "a published word is in use: not dead");
     }
 
     function test_deadlineFiresOnceCaughtUpOrOnceTheEndingStarted() public {
@@ -378,10 +387,10 @@ contract DeadVrfEndingTest is DeployProtocol {
         _endGame();
     }
 
-    /// @dev Real flow: a daily request with no word applied for 14 days ends the game
+    /// @dev Real flow: a daily request with no word published for 14 days ends the game
     ///      deterministically. A word that arrives after the window, before anyone advanced,
-    ///      was never applied, so it is late and counts for nothing.
-    function test_wordDeliveredAfterTheWindowStillCounts() public {
+    ///      is never published or applied.
+    function test_wordDeliveredAfterTheWindowIsDiscarded() public {
         // A live level-1 purchase phase, sealed yesterday (setUp's warp alone would trip the
         // 30-day deadman before the stall begins).
         vm.etch(address(game), type(DeadlineSeeder).runtimeCode);
@@ -397,12 +406,12 @@ contract DeadVrfEndingTest is DeployProtocol {
         vm.warp(block.timestamp + 14 days);
         assertTrue(game.livenessTriggered(), "VRF dead after 14 days with nothing delivered");
         mockVRF.fulfillRandomWords(req, 0xDEAD); // lands late, before anyone advanced
-        assertFalse(game.livenessTriggered(), "a delivered word means VRF works");
-        for (uint256 i; i < 64 && uint24(uint256(vm.load(address(game), bytes32(uint256(0)))) >> 24) < r; ++i) game.mineFlip(0);
-        assertEq(uint24(uint256(vm.load(address(game), bytes32(uint256(0)))) >> 24), r, "stalled day completed");
-        assertEq(game.rngWordForDay(r), 0, "old processing word is not claim history");
-        _assertCoinflipResult(r, 0xDEAD);
-        assertFalse(game.gameOver(), "the game carries on");
+        assertTrue(game.livenessTriggered(), "a word not published inside the window keeps VRF dead");
+        vm.recordLogs();
+        for (uint256 i; i < 64 && !game.gameOver(); ++i) game.mineFlip(0);
+        assertTrue(game.gameOver(), "dead ending reached game over");
+        assertTrue(_sawPayoutFixed(vm.getRecordedLogs()), "the deterministic ending");
+        assertEq(game.rngWordForDay(r), 0, "the late word was never applied");
     }
 
     /// @dev A day stuck in processing (VRF fine) until the 30-day deadman: the ending must draw
@@ -748,7 +757,7 @@ contract DeadVrfEndingTest is DeployProtocol {
 
         // Realistic-allowance reference (owner rule: the engine spends whatever it is given, so
         // the reference batch is a 10M call, not an unbounded one): one call's cost, then the
-        // call that swaps and arms, then the cost of the call that sends the terminal request.
+        // cost of the call that swaps and sends the terminal request.
         uint256 g0 = gasleft();
         game.mineFlip{gas: 10_000_000}(0);
         uint256 batchGas = g0 - gasleft();
@@ -762,11 +771,7 @@ contract DeadVrfEndingTest is DeployProtocol {
             requestGas = g0 - gasleft();
             (,, swapped) = _terminalQueues();
         }
-        assertEq(swapped, 1, "full-gas reference reaches the terminal arming");
-        assertEq(mockVRF.lastRequestId(), req0, "the swap call arms without sending the request");
-        g0 = gasleft();
-        game.mineFlip{gas: 10_000_000}(0);
-        requestGas = g0 - gasleft();
+        assertEq(swapped, 1, "full-gas reference reaches the terminal request attempt");
         if (refusing) assertEq(mockVRF.lastRequestId(), req0, "refused request installs no ID");
         else assertGt(mockVRF.lastRequestId(), req0, "the terminal request went out");
         vm.revertToState(snap);

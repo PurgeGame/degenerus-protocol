@@ -96,10 +96,9 @@ contract TerminalRngCheckpointsTest is Test {
 
     function test_TerminalApplicationStaysPinnedAcrossMidnightAndDoesNotRepeat() public {
         assertTrue(_advance(priorDay, 4_000_000));
-        assertEq(vrf.calls(), 0, "arming never calls the coordinator");
-        assertTrue(_advance(priorDay, 4_000_000));
-        assertEq(vrf.calls(), 1, "the later terminal request went out");
-        (uint24 day, uint48 at,,) = h.identity();
+        assertEq(vrf.calls(), 1, "the first attempt arms and sends the terminal request");
+        (uint24 day, uint48 at, bool requested,) = h.identity();
+        assertTrue(requested, "an accepted request is active in the arming call");
         assertEq(day, priorDay + 1, "a sealed normal day cannot supply the terminal identity");
         h.deliver(0xC0FFEE);
         vm.warp(vm.getBlockTimestamp() + 2 days);
@@ -128,8 +127,6 @@ contract TerminalRngCheckpointsTest is Test {
         (,,, bool progressed) = h.runGameOverAdvance{gas: 4_000_000}(
             priorDay, 10, MineFlipGas.budget(4_000_000, type(uint32).max, true));
         assertTrue(progressed);
-        assertEq(vrf.calls(), 0);
-        assertTrue(_advance(priorDay, 4_000_000));
         assertEq(vrf.calls(), 1);
     }
 
