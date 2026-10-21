@@ -219,8 +219,8 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
                     requestRefused = true;
                     break;
                 }
-                // A declined next step must not undo an already committed prefix.
-                // Accounting/invariant errors still bubble, including WorkGasBound.
+                // A declined or overrun next step must not undo an already committed prefix;
+                // its own frame rolled back and it runs first in the next call. Other errors bubble.
                 if (!moved || !(_checkpointRefusal(result)
                     || (action == MinerAction.RequestMidday && _middayRefusal(result)))) _revertWork(result);
                 break;
@@ -339,7 +339,7 @@ contract DegenerusGameMinerModule is DegenerusGameMintStreakUtils {
         if (data.length == 0) return true;
         if (data.length != 4) return false;
         bytes4 selector = bytes4(data);
-        return selector == MineFlipGas.InsufficientExecutionGas.selector
+        return selector == MineFlipGas.InsufficientExecutionGas.selector || selector == MineFlipGas.WorkGasBound.selector
             || selector == EmptyRevert.selector || selector == NoWork.selector || selector == RngNotReady.selector;
     }
 
