@@ -551,10 +551,14 @@ contract BafAwardTailProbeGas is BafAwardGroupFixture {
     }
 
     function _seedHead() internal override {
+        // Level 100 shares board bank (100 / 10) & 3 = 2 (bafTop[2], mapping slot 1); its tag is
+        // bits 48..71 of bafTopLevels, which sits after lastBafResolvedDay in slot 3 (bit 72).
+        // Each 128-bit entry is score (bits 0..95) | wallet ID (bits 96..127): stale scores with
+        // wallet ID 0, so every head slot reads as empty.
         bytes32 board = keccak256(abi.encode(uint256(2), uint256(1)));
         for (uint256 i; i < 2; ++i) {
-            uint256 low = uint256(1_000_000 + i * 2) << 96;
-            uint256 high = uint256(1_000_001 + i * 2) << 96;
+            uint256 low = uint256(1_000_000 + i * 2);
+            uint256 high = uint256(1_000_001 + i * 2);
             vm.store(address(jackpots), bytes32(uint256(board) + i), bytes32(low | (high << 128)));
         }
         uint256 tags = uint256(vm.load(address(jackpots), bytes32(uint256(3))));
