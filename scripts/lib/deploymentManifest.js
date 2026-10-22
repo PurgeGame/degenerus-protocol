@@ -272,28 +272,22 @@ export const DEPLOYMENTS = [
     "key": "CRAPS",
     "contract": "CrapsBattle",
     "aliases": [
-      "CRAPS"
-    ],
-    "fixtureField": "crapsBattle",
-    "fixtureType": "CrapsViews"
-  },
-  {
-    "key": "CRAPS_ENGINE",
-    "contract": "CrapsEngine",
-    "aliases": [
-      "CRAPS_ENGINE"
-    ],
-    "fixtureField": "crapsEngine",
-    "fixtureType": "CrapsEngine"
-  },
-  {
-    "key": "JACKPOT_BATTLE",
-    "contract": "JackpotBattle",
-    "aliases": [
+      "CRAPS",
+      "CRAPS_ENGINE",
       "JACKPOT_BATTLE"
     ],
-    "fixtureField": "jackpotBattle",
-    "fixtureType": "JackpotBattle"
+    "fixtureField": "crapsBattle",
+    "fixtureType": "CrapsViews",
+    "fixtureAliases": {
+      "CRAPS_ENGINE": {
+        "field": "crapsEngine",
+        "type": "CrapsEngine"
+      },
+      "JACKPOT_BATTLE": {
+        "field": "jackpotBattle",
+        "type": "JackpotBattle"
+      }
+    }
   },
   {
     "key": "WWXRP",

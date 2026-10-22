@@ -3,6 +3,7 @@ pragma solidity 0.8.38;
 
 import {Test} from "forge-std/Test.sol";
 import {Craps} from "../../contracts/Craps.sol";
+import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
 import {LegacyCrapsEngine} from "../helpers/LegacyCrapsEngine.sol";
 
@@ -37,7 +38,7 @@ contract CrapsEngineParity is Test {
         uint256 oldHeader = owner | (chips << 160) | (uint256(4) << 206) | (uint256(0x7f) << 217);
         uint256 compact = owner | (chips << 32) | (uint256(4) << 62) | (uint256(0x7f) << 65);
         if (awarded) { oldHeader |= uint256(1) << 224; compact |= uint256(1) << 72; }
-        CrapsEngine engine = new CrapsEngine();
+        CrapsEngine engine = new CrapsBattle();
         LegacyCrapsEngine legacy = new LegacyCrapsEngine();
         Craps.SlipResult memory before = legacy.settleBattle(
             betId, oldHeader, 30, 1500, 7500, slot, (uint256(9) << 64) | 3, word);
@@ -48,7 +49,7 @@ contract CrapsEngineParity is Test {
 
     /// forge-config: default.fuzz.runs = 64
     function testFuzz_directRunUsesSharedRollCeiling(bytes32 seed, bool latched) public {
-        CrapsEngine e = new CrapsEngine();
+        CrapsEngine e = new CrapsBattle();
         uint256 goal = latched ? 5e39 : 5e40;
         // Enough capital to force a bound, with a full board and no survival or scatter ambiguity.
         uint256 chips = 3 | (3 << 9) | (3 << 12) | (1 << 15);
@@ -60,7 +61,7 @@ contract CrapsEngineParity is Test {
     }
 
     function test_sharedBudgetMatchesInlineReferenceAndLegacyPrefix() public {
-        CrapsEngine e = new CrapsEngine();
+        CrapsEngine e = new CrapsBattle();
         InlineCrapsReference ref = new InlineCrapsReference();
         uint256 acc;
         for (uint256 i = 0; i < 400; ++i) {

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {JackpotBattle} from "../JackpotBattle.sol";
+
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusVault} from "../DegenerusVault.sol";
 import {DegenerusAdmin} from "../DegenerusAdmin.sol";
@@ -49,7 +51,7 @@ library OwnerActions {
                 || selector == WWXRP.vaultMintTo.selector;
         }
         if (target == ContractAddresses.CRAPS) {
-            return selector == CrapsBattle.createBattle.selector || selector == CrapsBattle.setBattleCreator.selector;
+            return selector == JackpotBattle.createBattle.selector || selector == JackpotBattle.setBattleCreator.selector;
         }
         if (target == ContractAddresses.GNRUS) {
             return selector == GNRUS.setCharity.selector || selector == GNRUS.vaultRedeemFor.selector

@@ -3,6 +3,7 @@ pragma solidity 0.8.38;
 
 import {CrapsPins} from "../craps/CrapsPins.sol";
 import {CrapsViews} from "../craps/CrapsViews.sol";
+import {MockableCrapsViews} from "../craps/MockableCrapsViews.sol";
 import {Craps} from "../../contracts/Craps.sol";
 import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -43,7 +44,7 @@ contract UnpushedSidegameRngSafety is CrapsPins {
         assertEq(_idFor(address(0xA11CE)), 4);
         assertEq(_idFor(address(0xB0B)), 5);
         _warpToAwardGenesis();
-        table = new CrapsViews();
+        table = new MockableCrapsViews();
         api = JackpotBattle(address(table));
         uint256 elapsed = (vm.getBlockTimestamp() - 82_620) % 1 days;
         uint256 dayStart = vm.getBlockTimestamp() + 1 days - elapsed;
@@ -76,7 +77,7 @@ contract UnpushedSidegameRngSafety is CrapsPins {
         vm.stopPrank();
 
         table.seedProgressive(1_000_000);
-        vm.etch(ContractAddresses.CRAPS_ENGINE, address(new UnpushedSidegameOutcomeEngine()).code);
+        vm.etch(address(0xC6A6), address(new UnpushedSidegameOutcomeEngine()).code);
     }
 
     function _settleScheduled() private returns (uint256 award) {

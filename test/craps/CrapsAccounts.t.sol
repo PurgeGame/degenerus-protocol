@@ -194,8 +194,8 @@ contract CrapsAccountsTest is CrapsPins {
         if (door == PASSES) return abi.encodeCall(CrapsBattle.applyCrapsPasses, (id, day + 1, 1, false, BOARD));
         if (door == FUTURE) return abi.encodeCall(CrapsBattle.buyFutureCrapsDays, (id, day + 1, 1, false, BOARD));
         if (door == UPGRADE) return abi.encodeCall(CrapsBattle.upgradeDayWindows, (id, day, UPGRADE_MASK));
-        if (door == CONVERT) return abi.encodeCall(CrapsBattle.convertNormalToHigh, (id, 1));
-        return abi.encodeCall(CrapsBattle.upgradeReservedDay, (id, day + 1));
+        if (door == CONVERT) return abi.encodeCall(JackpotBattle.convertNormalToHigh, (id, 1));
+        return abi.encodeCall(JackpotBattle.upgradeReservedDay, (id, day + 1));
     }
 
     function _call(uint8 door, address caller, uint32 id, uint256 arg) internal returns (bool ok, bytes memory ret) {
@@ -618,13 +618,13 @@ contract CrapsAccountsTest is CrapsPins {
     // ── 8. Stub/body alignment ───────────────────────────────────────────────
 
     function test_stubSelectorsMatchTheJackpotBattleBodies() public pure {
-        assertEq(CrapsBattle.convertNormalToHigh.selector, JackpotBattle.convertNormalToHigh.selector);
-        assertEq(CrapsBattle.convertNormalToHigh.selector, bytes4(keccak256("convertNormalToHigh(uint32,uint32)")));
-        assertEq(CrapsBattle.upgradeReservedDay.selector, JackpotBattle.upgradeReservedDay.selector);
-        assertEq(CrapsBattle.upgradeReservedDay.selector, bytes4(keccak256("upgradeReservedDay(uint32,uint24)")));
-        assertEq(CrapsBattle.createBattle.selector, JackpotBattle.createBattle.selector);
+        assertEq(JackpotBattle.convertNormalToHigh.selector, JackpotBattle.convertNormalToHigh.selector);
+        assertEq(JackpotBattle.convertNormalToHigh.selector, bytes4(keccak256("convertNormalToHigh(uint32,uint32)")));
+        assertEq(JackpotBattle.upgradeReservedDay.selector, JackpotBattle.upgradeReservedDay.selector);
+        assertEq(JackpotBattle.upgradeReservedDay.selector, bytes4(keccak256("upgradeReservedDay(uint32,uint24)")));
+        assertEq(JackpotBattle.createBattle.selector, JackpotBattle.createBattle.selector);
         assertEq(
-            CrapsBattle.createBattle.selector,
+            JackpotBattle.createBattle.selector,
             bytes4(keccak256("createBattle(uint32,uint8,uint16,uint24,uint40,bool,uint16)"))
         );
     }

@@ -39,6 +39,10 @@ contract DecimatorGeneratedEngineMeter {
 }
 
 contract DecimatorGeneratedFlatEngine {
+    function extsload(bytes32 slot) external view returns (bytes32 value) {
+        assembly ("memory-safe") { value := sload(slot) }
+    }
+
     function settleSlipBounded(uint256, uint256, uint256, uint256, bytes32,
         uint256 bankroll, uint256, uint256, uint256) external pure returns (Craps.SlipResult memory r)
     { r.peakBankroll = bankroll; }
@@ -159,7 +163,6 @@ contract DecimatorJackpotGasTest is Test {
         vm.etch(ContractAddresses.GAME_WHALE_MODULE, type(DegenerusGameWhaleModule).runtimeCode);
         vm.etch(ContractAddresses.GAME_TICKET_MODULE, type(DegenerusGameTicketModule).runtimeCode);
         vm.etch(ContractAddresses.GAME_FOILPACK_MODULE, type(DegenerusGameFoilPackModule).runtimeCode);
-        vm.etch(ContractAddresses.CRAPS_ENGINE, type(CrapsEngine).runtimeCode);
         vm.etch(ContractAddresses.CRAPS, type(CrapsBattle).runtimeCode);
         vm.etch(ContractAddresses.COINFLIP, type(DecimatorGasCoinflip).runtimeCode);
         vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
@@ -369,7 +372,7 @@ contract DecimatorJackpotGasTest is Test {
     }
 
     function _engineCeiling() private returns (uint256 engine) {
-        vm.etch(ContractAddresses.CRAPS_ENGINE, type(CrapsEngine).runtimeCode);
+        vm.etch(ContractAddresses.CRAPS_ENGINE, type(CrapsBattle).runtimeCode);
         address meterAddress = address(0xDEC17);
         vm.etch(meterAddress, type(DecimatorGeneratedEngineMeter).runtimeCode);
         DecimatorGeneratedEngineMeter meter = DecimatorGeneratedEngineMeter(meterAddress);

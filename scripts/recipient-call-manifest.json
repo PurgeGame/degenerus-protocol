@@ -689,14 +689,6 @@
   },
   {
     "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle._delegateJackpot",
-    "kind": "assembly",
-    "expression": "delegatecall(gas(), target, 0, calldatasize(), 0, 0)",
-    "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
-  },
-  {
-    "path": "contracts/CrapsBattle.sol",
     "scope": "CrapsBattle._door",
     "kind": "recipient-helper",
     "expression": "_resolveAccount(id)",
@@ -865,14 +857,6 @@
   },
   {
     "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle._resolve",
-    "kind": "recipient-helper",
-    "expression": "_settlementOf(betId, header, w, word)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/CrapsBattle.sol",
     "scope": "CrapsBattle._resolveAccount",
     "kind": "external",
     "expression": "IGameCraps(_GAME).resolveAccount(id, msg.sender)",
@@ -891,9 +875,9 @@
     "path": "contracts/CrapsBattle.sol",
     "scope": "CrapsBattle._resolveSlotRange",
     "kind": "recipient-helper",
-    "expression": "_settleBatch(slot, from, end, (end0 - 1) - dayN - w.drawn, dayBase, w, word, meter)",
+    "expression": "_settleBatch(batch, w, meter)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "P6: memory-only SeatBatch carries the same slot/range/word and settlement totals; seat admission, cursor write, payout recipients and self-call frames unchanged."
   },
   {
     "path": "contracts/CrapsBattle.sol",
@@ -947,17 +931,9 @@
     "path": "contracts/CrapsBattle.sol",
     "scope": "CrapsBattle._settleBatch",
     "kind": "recipient-helper",
-    "expression": "_resolve(id, n, _loadBetUnchecked(id, id >> 64 == slot && uint64(id) > ownN), w, word)",
+    "expression": "_resolve(id, n, _loadBetUnchecked(id, id >> 64 == wordBatch.slot && uint64(id) > wordBatch.ownN), w, wordBatch.word)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle._settlementOf",
-    "kind": "external",
-    "expression": "ICrapsEngine(ContractAddresses.CRAPS_ENGINE).settleBattle( betId, header, w.played / 10, w.bankroll, w.goal, w.bound, (uint256(w.entrants) << 64) | w.seat, word)",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+    "review": "P6: memory-only SeatBatch carries the same slot/range/word and settlement totals; seat admission, cursor write, payout recipients and self-call frames unchanged."
   },
   {
     "path": "contracts/CrapsBattle.sol",
@@ -1089,14 +1065,6 @@
   },
   {
     "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle.closeBattle",
-    "kind": "recipient-helper",
-    "expression": "_delegateJackpot()",
-    "count": 1,
-    "review": "PROTOCOL: player door forwards to the pinned JackpotBattle delegate (lane-C byte move)."
-  },
-  {
-    "path": "contracts/CrapsBattle.sol",
     "scope": "CrapsBattle.constructor",
     "kind": "opcode-or-value",
     "expression": "ensReg.call( abi.encodeWithSignature(\"setName(string)\", \"craps.degenerus.eth\") )",
@@ -1105,35 +1073,11 @@
   },
   {
     "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle.convertNormalToHigh",
-    "kind": "recipient-helper",
-    "expression": "_delegateJackpot()",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle.createBattle",
-    "kind": "recipient-helper",
-    "expression": "_delegateJackpot()",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/CrapsBattle.sol",
     "scope": "CrapsBattle.deliverPasses",
     "kind": "recipient-helper",
     "expression": "_reserveDay(id, uint24(tomorrow), takeHigh, chips, 0)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle.donate",
-    "kind": "recipient-helper",
-    "expression": "_delegateJackpot()",
-    "count": 1,
-    "review": "PROTOCOL: player door forwards to the pinned JackpotBattle delegate (lane-C byte move)."
   },
   {
     "path": "contracts/CrapsBattle.sol",
@@ -1225,14 +1169,6 @@
   },
   {
     "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle.fallback",
-    "kind": "recipient-helper",
-    "expression": "_delegateJackpot()",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/CrapsBattle.sol",
     "scope": "CrapsBattle.openBonusDay",
     "kind": "recipient-helper",
     "expression": "_dailyWordAt(today)",
@@ -1252,14 +1188,6 @@
     "scope": "CrapsBattle.resolveRngSlot",
     "kind": "recipient-helper",
     "expression": "_resolveSlotRange(slot, allowance, _RESOLVE_MAX_SEATS)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle.setBattleCreator",
-    "kind": "recipient-helper",
-    "expression": "_delegateJackpot()",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
@@ -1292,14 +1220,6 @@
     "scope": "CrapsBattle.upgradeDayWindows",
     "kind": "recipient-helper",
     "expression": "_upgradeDayWindows(account, day, periodMask, false)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle.upgradeReservedDay",
-    "kind": "recipient-helper",
-    "expression": "_delegateJackpot()",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
@@ -5913,22 +5833,6 @@
   },
   {
     "path": "contracts/JackpotBattle.sol",
-    "scope": "JackpotBattle._armSlot",
-    "kind": "external",
-    "expression": "IReadCohortLifecycle(address(this)).registerRngSlot(index, slot, w.key)",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/JackpotBattle.sol",
-    "scope": "JackpotBattle._armSlot",
-    "kind": "recipient-helper",
-    "expression": "_writeBuffer()",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle._bookFees",
     "kind": "external",
     "expression": "IFlipCrapsComps(ContractAddresses.COIN).creditCrapsComps(earned)",
@@ -5958,6 +5862,38 @@
     "expression": "ICoinflipStake(ContractAddresses.COINFLIP).creditFlip(id, amount)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+  },
+  {
+    "path": "contracts/JackpotBattle.sol",
+    "scope": "JackpotBattle._jackpotArmSlot",
+    "kind": "external",
+    "expression": "IReadCohortLifecycle(address(this)).registerRngSlot(index, slot, w.key)",
+    "count": 1,
+    "review": "P6: lifecycle helper renamed to preserve its inherited binding; recipient, caller guard, calldata and retained self-call boundary unchanged."
+  },
+  {
+    "path": "contracts/JackpotBattle.sol",
+    "scope": "JackpotBattle._jackpotArmSlot",
+    "kind": "recipient-helper",
+    "expression": "_writeBuffer()",
+    "count": 1,
+    "review": "P6: lifecycle helper renamed to preserve its inherited binding; recipient, caller guard, calldata and retained self-call boundary unchanged."
+  },
+  {
+    "path": "contracts/JackpotBattle.sol",
+    "scope": "JackpotBattle._jackpotPayProgressive",
+    "kind": "recipient-helper",
+    "expression": "_payProgressiveShare(w.key, winnerId, winnerWord, peakFlip, score, bps)",
+    "count": 1,
+    "review": "P6: lifecycle helper renamed to preserve its inherited binding; recipient, caller guard, calldata and retained self-call boundary unchanged."
+  },
+  {
+    "path": "contracts/JackpotBattle.sol",
+    "scope": "JackpotBattle._jackpotWindowTerms",
+    "kind": "recipient-helper",
+    "expression": "_dailyWordAt(day)",
+    "count": 1,
+    "review": "P6: lifecycle helper renamed to preserve its inherited binding; recipient, caller guard, calldata and retained self-call boundary unchanged."
   },
   {
     "path": "contracts/JackpotBattle.sol",
@@ -6003,9 +5939,17 @@
     "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle._keepScheduled",
     "kind": "recipient-helper",
-    "expression": "_armSlot(cur, w)",
+    "expression": "_jackpotArmSlot(cur, w)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "P6: lifecycle helper renamed to preserve its inherited binding; recipient, caller guard, calldata and retained self-call boundary unchanged."
+  },
+  {
+    "path": "contracts/JackpotBattle.sol",
+    "scope": "JackpotBattle._keepScheduled",
+    "kind": "recipient-helper",
+    "expression": "_jackpotWindowTerms(day, (uint256(cur) % _BONUS_SLOTS_PER_DAY) - 1)",
+    "count": 1,
+    "review": "P6: lifecycle helper renamed to preserve its inherited binding; recipient, caller guard, calldata and retained self-call boundary unchanged."
   },
   {
     "path": "contracts/JackpotBattle.sol",
@@ -6027,14 +5971,6 @@
     "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle._keepScheduled",
     "kind": "recipient-helper",
-    "expression": "_windowTerms(day, (uint256(cur) % _BONUS_SLOTS_PER_DAY) - 1)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/JackpotBattle.sol",
-    "scope": "JackpotBattle._keepScheduled",
-    "kind": "recipient-helper",
     "expression": "_wordAt(read)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
@@ -6044,14 +5980,6 @@
     "scope": "JackpotBattle._keepScheduled",
     "kind": "recipient-helper",
     "expression": "_writeBuffer()",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/JackpotBattle.sol",
-    "scope": "JackpotBattle._payProgressive",
-    "kind": "recipient-helper",
-    "expression": "_payProgressiveShare(w.key, winnerId, winnerWord, peakFlip, score, bps)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
@@ -6083,9 +6011,9 @@
     "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle._payout",
     "kind": "recipient-helper",
-    "expression": "_payProgressive(w, peakFlip, score, winnerId, winnerWord)",
+    "expression": "_jackpotPayProgressive(w, peakFlip, score, winnerId, winnerWord)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "P6: lifecycle helper renamed to preserve its inherited binding; recipient, caller guard, calldata and retained self-call boundary unchanged."
   },
   {
     "path": "contracts/JackpotBattle.sol",
@@ -6137,14 +6065,6 @@
   },
   {
     "path": "contracts/JackpotBattle.sol",
-    "scope": "JackpotBattle._windowTerms",
-    "kind": "recipient-helper",
-    "expression": "_dailyWordAt(day)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle.appendJackpotBattle",
     "kind": "recipient-helper",
     "expression": "_append(field, cursor, last)",
@@ -6174,14 +6094,6 @@
     "expression": "_accountId(id)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/JackpotBattle.sol",
-    "scope": "JackpotBattle.createBattle",
-    "kind": "external",
-    "expression": "ICrapsEngine(ContractAddresses.CRAPS_ENGINE).customDefinition( played, bankMult, goalMult, stakeUnits, closeTime, multiEntry, highRollerMult )",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
   {
     "path": "contracts/JackpotBattle.sol",

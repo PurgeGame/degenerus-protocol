@@ -42,7 +42,7 @@ EXEMPT-ADVANCE	PARAM	word	_openWindow	CrapsBattle.sol	reached only via openBonus
 CONSUMER-SEALED	PARAM	word	_resolve	CrapsBattle.sol	same settling index word as _settleBatch; header (owner, chips, flags) frozen at entry close (amendSlip gates on _joinableSlot); only the scoreboard is written; DAY tickets amend under the period-0 test (:1378-1382), not _joinableSlot; upgradeDayWindows is a second post-entry header writer, safe because a shut window reverts it wholesale
 PURE-DERIVE	PARAM	word	_routineWeight	CrapsBattle.sol	Pure sum of 1<<_tierPick over five ordinary windows; shared tier decoder keeps pricing and budget weights equal
 CONSUMER-SEALED	PARAM	word	_scoreBattle	CrapsBattle.sol	word = the slot's settling index word (sealed after the arm); folds the frozen composite into _battles[key], tie-breaks on the word, pays via _payout when the last seat lands
-CONSUMER-SEALED	PARAM	word	_settleBatch	CrapsBattle.sol	word = _wordAt(_slotIndex[slot]-1), index bound at arm to _currentIndex()+1 (unworded); seats 1..entrants and their headers froze at entry close, before the arm; the seat->betId map recomputes ownN = entrants - dayTickets at settle, sound because the _dayTickets low bits stop at period-0 close
+CONSUMER-SEALED	PARAM	wordBatch	_settleBatch	CrapsBattle.sol	wordBatch.word = _wordAt(_slotIndex[slot]-1), index bound at arm to _currentIndex()+1 (unworded); seats 1..entrants and their headers froze at entry close, before the arm; the seat->betId map recomputes ownN = entrants - dayTickets at settle, sound because the _dayTickets low bits stop at period-0 close
 PURE-DERIVE	PARAM	word	_settlementOf	CrapsBattle.sol	internal pure: scatter keyed hash3(word, SCATTER_TAG, owner), engine seed hash3(_CRAPS_SEED_DOMAIN, word, w.bound), rounding hash3(word, CRAPS_ROUND_TAG, betId); header frozen pre-arm; shared with the preview
 PURE-DERIVE	PARAM	word	_tieBreak	CrapsBattle.sol	private pure hash2(word, challenger) > hash2(word, leader): random total order on the settling word, arrival-order free
 PURE-DERIVE	ARG	CrapsPriceLib.tier	_tierPick	CrapsBattle.sol	Pure shared tier decoder of _bonusRoll(word,period); bookends use the same fixed period, and entry terms and allocation weights use the same tier
@@ -65,17 +65,17 @@ PURE-DERIVE	ARG	EntropyLib.hash2	rollDailyQuest	DegenerusQuests.sol	DAILY_QUEST_
 EXEMPT-ADVANCE	PARAM	entropy	rollDailyQuest	DegenerusQuests.sol	onlyGame; called by rngGate with the just-applied daily word; idempotent per day; a global quest type, not per-player
 PURE-DERIVE	ARG	EntropyLib.hash2	rollLevelQuest	DegenerusQuests.sol	LEVEL_QUEST_TAG isolates the global level quest from daily quests
 EXEMPT-ADVANCE	PARAM	entropy	rollLevelQuest	DegenerusQuests.sol	onlyGame; called by advanceGame at the level transition with the rngGate word; global level quest type
-PURE-DERIVE	PARAM	word	_bonusRoll	JackpotBattle.sol	Pure daily/window-term helper on the committed day word and fixed period/domain; no post-commit selecting input.
-PURE-DERIVE	PARAM	word	_boostMult	JackpotBattle.sol	Pure daily/window-term helper on the committed day word and fixed period/domain; no post-commit selecting input.
-PURE-DERIVE	PARAM	word	_boostUnits	JackpotBattle.sol	Pure daily/window-term helper on the committed day word and fixed period/domain; no post-commit selecting input.
-PURE-DERIVE	PARAM	word	_highBoostUnits	JackpotBattle.sol	Pure daily/window-term helper on the committed day word and fixed period/domain; no post-commit selecting input.
-PURE-DERIVE	PARAM	word	_laneBoost	JackpotBattle.sol	Pure daily/window-term helper on the committed day word and fixed period/domain; no post-commit selecting input.
-NOT-RNG	PARAM	winnerWord	_payProgressive	JackpotBattle.sol	Packed winning-seat header (owner and standing), fixed by the resolved field; not a VRF word.
+PURE-DERIVE	PARAM	word	_jackpotBonusRoll	JackpotBattle.sol	Pure daily/window-term helper on the committed day word and fixed period/domain; no post-commit selecting input.
+PURE-DERIVE	PARAM	word	_jackpotBoostMult	JackpotBattle.sol	Pure daily/window-term helper on the committed day word and fixed period/domain; no post-commit selecting input.
+PURE-DERIVE	PARAM	word	_jackpotBoostUnits	JackpotBattle.sol	Pure daily/window-term helper on the committed day word and fixed period/domain; no post-commit selecting input.
+PURE-DERIVE	PARAM	word	_jackpotHighBoostUnits	JackpotBattle.sol	Pure daily/window-term helper on the committed day word and fixed period/domain; no post-commit selecting input.
+PURE-DERIVE	PARAM	word	_jackpotLaneBoost	JackpotBattle.sol	Pure daily/window-term helper on the committed day word and fixed period/domain; no post-commit selecting input.
+NOT-RNG	PARAM	winnerWord	_jackpotPayProgressive	JackpotBattle.sol	Packed winning-seat header (owner and standing), fixed by the resolved field; not a VRF word.
 NOT-RNG	PARAM	winnerWord	_payProgressiveShare	JackpotBattle.sol	Packed winning-seat header (owner and standing), fixed by the resolved field; not a VRF word.
 CONSUMER-SEALED	PARAM	word	_payout	JackpotBattle.sol	reached once from _scoreBattle when the field completes; word = settling index word; winner/boost/lane from the closed scoreboard and frozen headers; pool reads are magnitudes
 CONSUMER-SEALED	PARAM	word	_prepare	JackpotBattle.sol	Only reached through GAME-only prepare/start after request locked the field; nonzero battle word and level latched on first preparation, resumed calls keep that snapshot; multiplier cannot be rerolled
 PURE-DERIVE	PARAM	entropy	_subsidyMultiplier	JackpotBattle.sol	Pure decoder of the future battle word hashed with the locked slot and fixed subsidy domain; no post-commit selecting input.
-PURE-DERIVE	PARAM	word	_windowTermsOn	JackpotBattle.sol	Pure daily/window-term helper on the committed day word and fixed period/domain; no post-commit selecting input.
+PURE-DERIVE	PARAM	word	_jackpotWindowTermsOn	JackpotBattle.sol	Pure daily/window-term helper on the committed day word and fixed period/domain; no post-commit selecting input.
 CONSUMER-SEALED	PARAM	word	finalizeBattle	JackpotBattle.sol	Only the pinned table invokes finalization; the slot was sealed before the active read word, and canonical resolved seats determine standing.
 CONSUMER-SEALED	PARAM	word	prepareJackpotBattle	JackpotBattle.sol	GAME-only via table delegate after paid-entry lock; forwards the committed battle word to _prepare and returns its frozen word, collection cursor and remaining target
 PURE-DERIVE	PARAM	word	_drawHash	WWXRP.sol	private view keccak(domain, this, day, word); word = game.rngWordForDay(day+1) in claim(): entries bind to the wall day at enter(), day+1 cannot seal until the next day's advance; the entrant's bucket is keccak(DOM_BUCKET, chainid, this, day, walletId) % 10, fixed at enter() from the admitted wallet ID (no VRF input)
@@ -350,3 +350,4 @@ PRODUCER	ARG	BoundedCall.call	_boundedVrfRequest	storage/DegenerusGameStorage.so
 
 EXEMPT-ADVANCE	PARAM	entropy	_bafNearRound	DegenerusJackpots.sol	private view helper receives unchanged hash2(base, round) from locked BAF pair draw; same band, trait and epoch, with sampling before ranking
 EXEMPT-ADVANCE	ARG	degenerusGame.sampleTraitEntries	_bafNearRound	DegenerusJackpots.sol	forwards the committed per-round entropy to the existing pinned Game sampler; near buffers prepared under the daily lock, no new actor input
+NOT-RNG	ARG	MineFlipGas.canRun	_settleBatch	CrapsBattle.sol	Only wordBatch.count enters the credit-tail admission cost; the committed wordBatch.word never enters the gas meter.

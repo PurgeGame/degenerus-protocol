@@ -25,7 +25,6 @@ CLASS	callee	function	file	mode	pin	rationale
 CRANK-CAUGHT	lowlevel:delegatecall	pullAfkingSteth	DegenerusGame.sol	BARE		Atomic funding dispatcher; nested failures unwind all token movements before _tryFundAfkingSteth catches semantic refusal. Empty/OOG failures propagate.
 OFF-CRANK	IFlipCoin.burnCoin	_burnCoin	CrapsBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
 OFF-CRANK	IFlipCoin.burnCoinForCraps	_burnForCraps	CrapsBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
-CRANK-SELF	yul:delegatecall	_delegateJackpot	CrapsBattle.sol	BARE		Self call/delegate into pinned own Craps module; bounded lifecycle/settlement effects, failure atomic.
 OFF-CRANK	IGameCraps.rngLocked	_joinableSlot	CrapsBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
 OFF-CRANK	IReadCohortLifecycle.admitCustom	_place	CrapsBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
 CRANK-PINNED	IGameCraps.rngLocked	_rememberBoard	CrapsBattle.sol	BARE	test/craps/CrapsPins.sol	Pinned Game view; fixed slot read for scheduled board update.
@@ -33,7 +32,6 @@ CRANK-SELF	IHighRollerReserve.settleHighRollerReserve	_resolveSlotRange	CrapsBat
 CRANK-SELF	IReadCohortLifecycle.finalizeBattle	_scoreBattle	CrapsBattle.sol	BARE		Pinned Craps/Jackpot implementation self-call in the table storage context; canonical sealed slot and cursor are preserved and all settlement failures bubble.
 CRANK-TRY	IFlipCoin.burnCoin	_seatBody	CrapsBattle.sol	TRY		Caught request/burn refusal preserves already committed work for bounded retry.
 CRANK-PINNED	ICoinflipStake.creditFlipBatch	_settleBatch	CrapsBattle.sol	BARE	test/fuzz/CrapsProtocolWiring.t.sol	Pinned Coinflip batch credits; bounded seats; caller CRAPS is authorized and amounts come from field settlement.
-CRANK-PINNED	ICrapsEngine.settleBattle	_settlementOf	CrapsBattle.sol	BARE	test/craps/CrapsHighReserve.t.sol	Pinned immutable CrapsEngine resolves committed valid terms, bounded by settlement work budget.
 OFF-CRANK	lowlevel:call	constructor	CrapsBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
 OFF-CRANK	IVaultOwnership.isVaultOwner	setBattleCreator	JackpotBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
 OFF-CRANK	delegatecall:IGameAfkingModule.maybeCurse	_claimWinningsWithCurse	DegenerusGame.sol	BARE		claimWinnings / claimWinnings(amount) player claim path; GNRUS, sDGNRS and VAULT redemptions call it as players
@@ -91,7 +89,7 @@ OFF-CRANK	lowlevel:delegatecall	subscribe	DegenerusGame.sol	BARE		player / sDGNR
 OFF-CRANK	lowlevel:delegatecall	updateVrfCoordinatorAndSub	DegenerusGame.sol	BARE		ADMIN governance coordinator rotation (DegenerusAdmin is the caller)
 OFF-CRANK	lowlevel:delegatecall	wireVrf	DegenerusGame.sol	BARE		ADMIN-only VRF wiring (DegenerusAdmin.wireVrf is the caller)
 OFF-CRANK	IStETH.balanceOf	yieldPoolView	DegenerusGame.sol	BARE		external view; no contract calls it (distributeYieldSurplus sums its own obligations)
-CRANK-SELF	IReadCohortLifecycle.registerRngSlot	_armSlot	JackpotBattle.sol	BARE		Pinned Craps/Jackpot implementation self-call in the table storage context; canonical sealed slot and cursor are preserved and all settlement failures bubble.
+CRANK-SELF	IReadCohortLifecycle.registerRngSlot	_jackpotArmSlot	JackpotBattle.sol	BARE		Pinned Craps/Jackpot implementation self-call in the table storage context; canonical sealed slot and cursor are preserved and all settlement failures bubble.
 CRANK-PINNED	IFlipCrapsComps.creditCrapsComps	_bookFees	JackpotBattle.sol	BARE	test/craps/JackpotBattle.t.sol	Pinned FLIP comp-lane credit, once per round at field seal; delegatecall context is CRAPS, FLIP's only accepted caller; amount is 2% of the base seats' fee-funded bankroll plus 80% of a 12% loss budget on the extra high fees, bounded by uint32/uint64 seat and unit counters far below the uint128 lane; replaces the jackpot slot's finalization credit
 CRANK-PINNED	IFlipCoin.creditCrapsComps	_creditComps	JackpotBattle.sol	BARE	test/craps/JackpotBattle.t.sol	Pinned FLIP comps credit from authorized CRAPS context; bounded settlement amounts.
 CRANK-PINNED	ICoinflipStake.creditFlip	_creditFlip	JackpotBattle.sol	BARE	test/fuzz/CrapsProtocolWiring.t.sol	Pinned Coinflip credit, authorized CRAPS caller; bounded field/reserve payout.
@@ -237,7 +235,6 @@ OFF-CRANK	IGameCraps.resolveAccount	_resolveAccount	CrapsBattle.sol	BARE		Player
 OFF-CRANK	IGameCraps.mintPackedOfId	_newcomer	CrapsBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
 OFF-CRANK	IGameCraps.level	_newcomer	CrapsBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
 OFF-CRANK	IGameCraps.resolveAccount	_accountId	JackpotBattle.sol	BARE		Pass-door account resolution (convertNormalToHigh, upgradeReservedDay); unreachable from required settlement work.
-OFF-CRANK	ICrapsEngine.customDefinition	createBattle	JackpotBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
 OFF-CRANK	IVaultOwnership.isVaultOwner	createBattle	JackpotBattle.sol	BARE		Player/configuration/preview-only path, unreachable from required settlement work.
 OFF-CRANK	IDegenerusVaultOwner.isVaultOwner	_raiseSmurfBaseAllowance	modules/GamePurchase.sol	BARE		Pinned DGVE governance owner check for main-ID base grants; configuration only, unreachable from settlement work
 CRANK-PINNED	IsDGNRS.burnForLiquidation	seizeLoan	modules/DegenerusGameGameOverModule.sol	BARE	test/fuzz/LoanSeizure.t.sol;test/fuzz/TerminalLoanSettlement.t.sol	Loan seizure of a main burns the borrower wallet's native sDGNRS; fixed pinned target, onlyGame, zero-balance early return, checked subtraction of a balance never above supply: no revert path

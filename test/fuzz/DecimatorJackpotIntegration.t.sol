@@ -50,6 +50,10 @@ contract DecimatorJackpotPreferenceProbe {
     }
 }
 
+contract DecimatorJackpotCombinedProbe is DecimatorJackpotEngineProbe, DecimatorJackpotPreferenceProbe {}
+
+contract DecimatorJackpotRealEngineProbe is CrapsEngine, DecimatorJackpotPreferenceProbe {}
+
 contract DecimatorJackpotHarness is DegenerusGameDecimatorModule, WalletSeed {
     function seedProtocolWallets() external { _seedProtocolWallets(); }
     function keyOf(uint32 id) external view returns (address) { return _walletKey(id); }
@@ -140,8 +144,7 @@ contract DecimatorJackpotIntegrationTest is Test {
         vm.etch(ContractAddresses.GAME_JACKPOT_MODULE, type(DegenerusGameDailyModule).runtimeCode);
         vm.etch(ContractAddresses.GAME_DECIMATOR_MODULE, type(DegenerusGameDecimatorModule).runtimeCode);
         vm.etch(ContractAddresses.GAME_WHALE_MODULE, type(DegenerusGameWhaleModule).runtimeCode);
-        vm.etch(ContractAddresses.CRAPS_ENGINE, type(DecimatorJackpotEngineProbe).runtimeCode);
-        vm.etch(ContractAddresses.CRAPS, type(DecimatorJackpotPreferenceProbe).runtimeCode);
+        vm.etch(ContractAddresses.CRAPS, type(DecimatorJackpotCombinedProbe).runtimeCode);
         vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
         vm.mockCall(ContractAddresses.AFFILIATE, abi.encodeWithSignature("affiliateTop(uint24)"), abi.encode(uint32(0), uint96(0)));
         h = DecimatorJackpotHarness(ContractAddresses.GAME);
@@ -532,7 +535,7 @@ contract DecimatorJackpotIntegrationTest is Test {
     }
 
     function test_RealEnginePreferredBoardsAndCallerPartitionsKeepTranscript() public {
-        vm.etch(ContractAddresses.CRAPS_ENGINE, type(CrapsEngine).runtimeCode);
+        vm.etch(ContractAddresses.CRAPS, type(DecimatorJackpotRealEngineProbe).runtimeCode);
         for (uint160 q; q < 4; ++q) {
             uint32 chips = q == 0 ? 0 : q == 1 ? 1 : q == 2 ? 3 : 3 | 3 << 9 | 1 << 24;
             DecimatorJackpotPreferenceProbe(ContractAddresses.CRAPS).set(address(0xa100 + q), chips);

@@ -25,7 +25,7 @@ contract JackpotVariableHarness is JackpotTableHarness {
 contract JackpotVariableDecoder is JackpotBattle {
     function subsidy(uint256 bucket) external pure returns (uint256) { return _subsidyMultiplier(bucket); }
     function presetFee(uint256 roll) external pure returns (uint256) {
-        (,,, uint256 units,) = _bonusPreset(roll, 5);
+        (,,, uint256 units,) = _jackpotBonusPreset(roll, 5);
         return units * 100;
     }
 }

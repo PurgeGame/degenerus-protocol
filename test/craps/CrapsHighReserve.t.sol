@@ -4,7 +4,7 @@ pragma solidity 0.8.38;
 import {CrapsLensReader} from "../../contracts/CrapsLens.sol";
 
 import {CrapsPins} from "./CrapsPins.sol";
-import {JackpotTableHarness} from "./JackpotBattle.t.sol";
+import {JackpotTableHarness, MockableJackpotTableHarness} from "./JackpotBattle.t.sol";
 import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
 import {IJackpotBattle} from "../../contracts/interfaces/IJackpotBattle.sol";
 import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
@@ -29,7 +29,7 @@ contract CrapsHighReserveTest is CrapsPins {
     function setUp() public {
         _installPins();
         _warpToAwardGenesis();
-        table = new JackpotTableHarness();
+        table = new MockableJackpotTableHarness();
         cold = JackpotBattle(address(table));
         api = IJackpotBattle(address(table));
         uint256 elapsed = (vm.getBlockTimestamp() - 82_620) % 1 days;
@@ -37,7 +37,7 @@ contract CrapsHighReserveTest is CrapsPins {
         _openDay(10);
         // Busts isolate the new reserve from engine returns and unrelated progressive awards.
         Craps.SlipResult memory bust;
-        vm.mockCall(ContractAddresses.CRAPS_ENGINE, abi.encodeWithSelector(CrapsEngine.settleBattle.selector), abi.encode(bust));
+        vm.mockCall(address(0xC6A6), abi.encodeWithSelector(CrapsEngine.settleBattle.selector), abi.encode(bust));
     }
 
     function _openDay(uint16 h) internal { _openDay(h, false); }

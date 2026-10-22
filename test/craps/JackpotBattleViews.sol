@@ -14,11 +14,8 @@ interface IJackpotBattleViews {
     ) external;
 }
 
-/// @title The cold module with the progressive award exposed
-/// @dev Test-only. Production reaches `_payProgressive` from finalization alone; the suite drives
-///      it directly through the table's self-call, so install this runtime over
-///      `ContractAddresses.JACKPOT_BATTLE` with `vm.etch` before calling `payProgressiveAt`.
-contract JackpotBattleViews is JackpotBattle {
+/// @dev Test-only progressive award entry, guarded by the table's self-call.
+abstract contract JackpotBattleViews is JackpotBattle {
     function payProgressive(
         Window calldata w,
         uint256 peak,
@@ -27,6 +24,6 @@ contract JackpotBattleViews is JackpotBattle {
         uint256 winnerWord
     ) external {
         if (msg.sender != address(this)) revert OnlyTableSelf();
-        _payProgressive(w, peak, score, winnerId, winnerWord);
+        _jackpotPayProgressive(w, peak, score, winnerId, winnerWord);
     }
 }

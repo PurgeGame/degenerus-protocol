@@ -6,92 +6,15 @@ import {BitPackingLib} from "./libraries/BitPackingLib.sol";
 import {Craps} from "./Craps.sol";
 import {CrapsPriceLib} from "./libraries/CrapsPriceLib.sol";
 import {CrapsBattleStorage} from "./storage/CrapsBattleStorage.sol";
+import {JackpotBattle} from "./JackpotBattle.sol";
+import {CrapsEngine} from "./CrapsEngine.sol";
+import {ICoinflipStake, ICrapsEngine, IFlipCoin, IGameCraps, IHighRollerReserve, IReadCohortLifecycle, IVaultOwnership} from "./CrapsInterfaces.sol";
 import {CrapsCustomTerms} from "./CrapsCustomTerms.sol";
 import {LootboxCraps} from "./LootboxCraps.sol";
 import {CrapsPreferenceLib} from "./libraries/CrapsPreferenceLib.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
 import {FlipRoundLib} from "./libraries/FlipRoundLib.sol";
 import {GameTimeLib} from "./libraries/GameTimeLib.sol";
-
-/// @dev The dice engine, a pure function at its own pinned address: the table hands it a slip's
-///      packed chips and every term of the run, and reads the run back. Reached by STATICCALL —
-///      the engine holds no storage and can change nothing.
-interface ICrapsEngine {
-    function settleBattle(uint256 betId, uint256 header, uint256 chipFlip, uint256 bankroll,
-        uint256 goal, uint48 bound, uint256 field, uint256 word) external pure returns (Craps.SlipResult memory);
-
-    function customDefinition(uint32 played, uint8 bankMult, uint16 goalMult, uint24 stakeUnits, uint40 closeTime, bool multiEntry, uint16 highRollerMult) external view returns (uint256);
-}
-
-/// @dev The one FLIP sink this game uses, authorized to `ContractAddresses.CRAPS` in the
-///      protocol's FLIP.sol. Craps only ever BURNS: a stake goes in and nothing here hands liquid
-///      FLIP back, because nothing here is ever given back. Every payment — a run's winnings, a
-///      pot, a lane — ships as coinflip credit.
-interface IFlipCoin {
-    /// @notice FLIP.sol's burn of `amount` from `target`'s FLIP balance, consuming settled
-    ///         coinflip winnings only for the shortfall.
-    function burnCoin(address target, uint256 amount) external;
-    /// @dev The paid-craps twin. Takes the price with action flags in its low byte and hands back
-    ///      the one-hot craps-boon tier consumed by this burn (0 on every burn that consumed none).
-    ///      The FLIP burn stays on `target`'s address, which is the account's PAYEE (the caller
-    ///      for a self door, a smurf's owner, or an ordinary account's own key); `id` is the
-    ///      account's nonzero wallet ID, obtained by the table before the bet body, which keys
-    ///      the craps boon lane and the craps quest. A comp burn ignores `id`.
-    function burnCoinForCraps(address target, uint32 id, uint256 grossAndFlags) external returns (uint8 boonMask);
-    /// @dev Feed the craps comp lane: two percent of a completed field's eligible bankroll.
-    function creditCrapsComps(uint256 amount) external;
-}
-
-/// @dev The vault's ownership test — the pinned DGVE governance executor. The only authority this contract
-///      recognises: it opens a custom battle and grants or revokes battle creators
-///      (`setBattleCreator`). The vault saves its board through the ordinary player surface.
-interface IVaultOwnership {
-    /// @notice DegenerusVault's pinned governance owner check for `account`.
-    function isVaultOwner(address account) external view returns (bool);
-}
-
-/// @dev Mint-history entry pricing, account resolution and the daily RNG lock.
-interface IGameCraps {
-    /// @notice Raw mint history: lifetime count, last mint level and deity ownership. Read for
-    ///         the account ID (newcomer pricing follows its own mint history).
-    function mintPackedOfId(uint32 id) external view returns (uint256);
-    /// @notice Resolve account `id` for `caller`: key, payee and whether `caller` may act for it
-    ///         (its key, a smurf's owner, or an approved operator). Reverts for an unallocated
-    ///         or zero `id`; never reverts on authorization. Player doors require `authorized`;
-    ///         `vaultComp` uses only the key.
-    function resolveAccount(uint32 id, address caller)
-        external view returns (address key, address payee, bool authorized);
-    function level() external view returns (uint24);
-    /// @notice Daily request through final day seal, including a fulfilled, pending jackpot battle.
-    function rngLocked() external view returns (bool);
-}
-
-interface IHighRollerReserve {
-    function settleHighRollerReserve(uint64 slot) external;
-}
-
-/// @dev Run winnings and competitive battle pots pay as next-day coinflip stake. The batch lane
-///      lets a slot settle many entrants with one external call.
-interface ICoinflipStake {
-    /// @notice Coinflip's credit of `amount` FLIP stake to wallet `id` (0 is a no-op).
-    function creditFlip(uint32 id, uint256 amount) external;
-    /// @notice Coinflip's batched credit of `amounts` FLIP stake to wallets `ids` (zero IDs and
-    ///         zero amounts are skipped).
-    function creditFlipBatch(uint32[] calldata ids, uint256[] calldata amounts) external;
-    /// @notice Arm THE BIGGEST DICE RUN — the fifth category of the shared BIGGEST record.
-    /// @dev CRAPS only, and this kind only: the generic `armRecord` door is the GAME's and
-    ///      carries the four existing kinds' 20%-improvement claim rule, which is not this one's.
-    ///      Coinflip credits the claim itself, so a finalization makes ONE call and the player
-    ///      takes ONE credit.
-    ///      The claim is credited by wallet ID; the sDGNRS leg and the trophy go to the payee
-    ///      Game's `payRecordSdgnrs` returns. Bets hold nonzero IDs, so the table never passes 0.
-    /// @param id The run owner's wallet ID, credited with the claim.
-    /// @param candidate The winner's high point over its starting bankroll, in basis points.
-    /// @dev DECLARED WITHOUT ITS RETURN, deliberately. `Coinflip` returns the FLIP it claimed and
-    ///      logs it in `BigRecordUpdated`; nothing on this side of the call needs the figure, so
-    ///      the table does not pay to decode one. The selector is the same either way.
-    function armDiceRunRecord(uint32 id, uint256 candidate) external;
-}
 
 /// @title CrapsBattle
 /// @notice Slot-based FLIP craps battles. A slot fixes one bankroll, goal, ten-chip round,
@@ -117,27 +40,18 @@ interface ICoinflipStake {
 ///
 ///      This contract depends on the pinned FLIP, Coinflip, Vault and Game addresses. FLIP and
 ///      Coinflip must in turn authorize `ContractAddresses.CRAPS` for burns and credits.
-interface IReadCohortLifecycle {
-    function admitCustom(uint64 slot) external;
-    function registerRngSlot(uint48 index, uint64 slot, bytes32 key) external;
-    function resolveRngSlot(uint64 slot, uint256 allowance) external returns (MineFlipGas.Result memory);
-    function finalizeBattle(CrapsBattleStorage.Window calldata w, uint256 board, uint256 word) external;
-    function payBattlePot(uint64 slot, bytes32 key, uint256 winnerId, uint256 pot, uint256 boost, uint256 word) external;
-}
-
-contract CrapsBattle is CrapsBattleStorage {
-    /// @dev Pinned cold lifecycle module; both contracts inherit the same append-only layout.
-    fallback() external { _delegateJackpot(); }
-
-    function _delegateJackpot() internal {
-        address target = ContractAddresses.JACKPOT_BATTLE;
-        assembly ("memory-safe") {
-            calldatacopy(0, 0, calldatasize())
-            let ok := delegatecall(gas(), target, 0, calldatasize(), 0, 0)
-            returndatacopy(0, 0, returndatasize())
-            if iszero(ok) { revert(0, returndatasize()) }
-            return(0, returndatasize())
-        }
+contract CrapsBattle is JackpotBattle, CrapsEngine {
+    struct SeatBatch {
+        uint64 slot;
+        uint64 from;
+        uint64 end;
+        uint64 ownN;
+        uint256 dayBase;
+        uint256 word;
+        uint256 count;
+        uint64 done;
+        uint256 staked;
+        uint256 high;
     }
 
     function resolveRngSlot(uint64 slot, uint256 allowance) external returns (MineFlipGas.Result memory result) {
@@ -179,7 +93,7 @@ contract CrapsBattle is CrapsBattleStorage {
     /// @dev Register this contract's ENS reverse name (best-effort; skipped when the registrar is
     ///      unset — local/test/testnet builds). The `setName(string)` selector is shared by the L1
     ///      ReverseRegistrar and Base's L2ReverseRegistrar. Constructor code is init code, so this
-    ///      costs nothing against the deployed contract's EIP-170 ceiling.
+    ///      does not increase the deployed runtime size.
     constructor() {
         // WINDOWS OPEN ON DEGENESIS DAY 2, or the day after deployment if that is later. Every
         // earlier day is marked consumed and the scheduled cursor is born at the first window
@@ -593,14 +507,21 @@ contract CrapsBattle is CrapsBattleStorage {
         if (from + seatLimit < end) end = from + seatLimit;
         if (end <= from) { result.done = true; return result; }
         (uint256 dayBase, uint64 dayN) = _dayField(slot);
-        (uint256 put, uint256 hi) = _settleBatch(slot, from, end, (end0 - 1) - dayN - w.drawn, dayBase, w, word, meter);
+        SeatBatch memory batch;
+        batch.slot = slot;
+        batch.from = from;
+        batch.end = end;
+        batch.ownN = (end0 - 1) - dayN - w.drawn;
+        batch.dayBase = dayBase;
+        batch.word = word;
+        _settleBatch(batch, w, meter);
         uint64 afterCursor = _bonusCursorOf(slot);
         result.progressed = afterCursor >= from;
         result.rewardBasis = result.progressed ? afterCursor - from + 1 : 0;
         result.done = afterCursor + 1 == end0;
         if (result.progressed) {
             if (slot < _CUSTOM_SLOT_BASE && !_isJackpotSlot(slot)) {
-                _bookDay(uint24(uint256(slot) / _BONUS_SLOTS_PER_DAY), put, hi);
+                _bookDay(uint24(uint256(slot) / _BONUS_SLOTS_PER_DAY), batch.staked, batch.high);
             } else if (_isJackpotSlot(slot)) {
                 IHighRollerReserve(address(this)).settleHighRollerReserve(slot);
             }
@@ -610,38 +531,34 @@ contract CrapsBattle is CrapsBattleStorage {
 
     /// @dev Each atomic seat includes sole-high and final-field payments. Credit arrays are
     /// flushed once; the admission tail grows for every already accumulated cold beneficiary.
-    function _settleBatch(
-        uint64 slot, uint64 from, uint64 end, uint64 ownN, uint256 dayBase,
-        Window memory w, uint256 word, MineFlipGas.Meter memory meter
-    ) private returns (uint256 staked, uint256 high) {
-        uint32[] memory ids = new uint32[](end - from);
-        uint256[] memory amounts = new uint256[](end - from);
-        uint256 k;
+    function _settleBatch(SeatBatch memory wordBatch, Window memory w, MineFlipGas.Meter memory meter) private {
+        uint32[] memory ids = new uint32[](wordBatch.end - wordBatch.from);
+        uint256[] memory amounts = new uint256[](wordBatch.end - wordBatch.from);
         uint256 freePtr;
         assembly ("memory-safe") { freePtr := mload(0x40) }
-        uint64 done;
-        for (uint64 n = from; n < end; ++n) {
-            if (!MineFlipGas.canRun(meter, _SEAT_GAS_MAX, _SETTLE_TAIL_GAS + (k + 1) * _CREDIT_GAS_MAX)) break;
+        for (uint64 n = wordBatch.from; n < wordBatch.end; ++n) {
+            if (!MineFlipGas.canRun(meter, _SEAT_GAS_MAX, _SETTLE_TAIL_GAS + (wordBatch.count + 1) * _CREDIT_GAS_MAX)) break;
             assembly ("memory-safe") { mstore(0x40, freePtr) }
-            uint256 id = _seatId(slot, n, ownN, dayBase, w.entrants - ownN - w.drawn);
+            uint256 id = _seatId(wordBatch.slot, n, wordBatch.ownN, wordBatch.dayBase, w.entrants - wordBatch.ownN - w.drawn);
             SeatResult memory result = _resolve(id, n,
-                _loadBetUnchecked(id, id >> 64 == slot && uint64(id) > ownN), w, word);
-            staked += result.staked;
-            high += result.high;
+                _loadBetUnchecked(id, id >> 64 == wordBatch.slot && uint64(id) > wordBatch.ownN), w, wordBatch.word);
+            wordBatch.staked += result.staked;
+            wordBatch.high += result.high;
             if (result.paid != 0) {
-                ids[k] = result.id;
-                amounts[k] = result.paid;
-                ++k;
+                ids[wordBatch.count] = result.id;
+                amounts[wordBatch.count] = result.paid;
+                ++wordBatch.count;
             }
-            done = n;
+            wordBatch.done = n;
             MineFlipGas.markProgress(meter);
         }
         // Reserve the cursor write in _SETTLE_TAIL_GAS even on a budget stop.
         // No admitted seat means no write. The fresh masked write preserves the
         // field binding, and commits before the accumulated stake credits leave.
-        if (done != 0) _setBonusCursor(slot, done);
-        if (k != 0) {
-            assembly ("memory-safe") { mstore(ids, k) mstore(amounts, k) }
+        if (wordBatch.done != 0) _setBonusCursor(wordBatch.slot, wordBatch.done);
+        if (wordBatch.count != 0) {
+            uint256 count = wordBatch.count;
+            assembly ("memory-safe") { mstore(ids, count) mstore(amounts, count) }
             ICoinflipStake(ContractAddresses.COINFLIP).creditFlipBatch(ids, amounts);
         }
     }
@@ -690,7 +607,7 @@ contract CrapsBattle is CrapsBattleStorage {
 
     /// @notice Read a raw storage slot. Periphery escape hatch for lens/viewer contracts, the
     ///         same read surface `DegenerusGame.extsload` gives the game: packed-state decodes
-    ///         and client replay live off-contract where EIP-170 headroom is free, and new read
+    ///         and client replay live off-contract, and new read
     ///         surfaces deploy without touching this contract. Read-only — storage is already
     ///         public to off-chain readers via eth_getStorageAt; this mirrors that visibility to
     ///         eth_call/staticcall consumers.
@@ -715,32 +632,6 @@ contract CrapsBattle is CrapsBattleStorage {
         }
     }
 
-    /// @notice Open a custom battle: a race on terms of your own, on its own slot, settling on a
-    ///         table nobody can know until it shuts. The whole definition is vetted ONCE, here,
-    ///         for the whole field — an entrant restates nothing and so can key nothing else.
-    ///         Served by JackpotBattle.
-    /// @param played    The round a slip puts down, in whole FLIP. A whole ten chips.
-    /// @param bankMult  How many of those rounds deep the bankroll runs.
-    /// @param goalMult  The target, as a multiple of that bankroll.
-    /// @param stakeUnits The bounty each entrant posts, in `_BATTLE_STAKE_UNIT` granules.
-    /// @param closeTime When entry shuts. From then, anyone may `closeBattle` it.
-    /// @param multiEntry Whether one account may hold more than one seat in this battle.
-    /// @param highRollerMult The high-roller lane's multiple, or zero for no high lane.
-    /// @return slot The battle's slot — what an entrant joins and a settler resolves.
-    /// @custom:reverts NotBattleCreator If the caller is neither a granted creator nor the
-    ///         DGVE governance executor.
-    function createBattle(
-        uint32 played,
-        uint8 bankMult,
-        uint16 goalMult,
-        uint24 stakeUnits,
-        uint40 closeTime,
-        bool multiEntry,
-        uint16 highRollerMult
-    ) external returns (uint64 slot) {
-        _delegateJackpot();
-    }
-
     /// @notice Join a custom battle for account `id` (0 = the caller), placing zero through seven
     ///         chips and leaving the rest of the ten-chip round to the dice. Custom tickets
     ///         receive no shooter-profit boost.
@@ -751,14 +642,6 @@ contract CrapsBattle is CrapsBattleStorage {
         betId = _enterWindow(_joinableSlot(slot), chips, multiple, account, 0);
         _rememberBoard(word, chips);
     }
-
-    /// @notice Shut a custom battle and take the table it will settle on. Permissionless once its
-    ///         close time has passed.
-    /// @dev The same shape as a window's arm, for the same reason: the index is chosen NOW, so
-    ///      nobody could know it while joining. Custom slots carry no in-order rule — a window
-    ///      lane needs slot order to BE table order so a settler can walk a day in sequence, but
-    ///      a custom battle is resolved through its own slot alone.
-    function closeBattle(uint64 slot) external returns (uint48 index) { _delegateJackpot(); }
 
     /// @dev Decode a custom battle into the same `Window` representation used by bonus slots, so
     ///      entry, settlement and payment share one path.
@@ -782,17 +665,6 @@ contract CrapsBattle is CrapsBattleStorage {
             w.bound = uint48(slot);
         }
         w.key = _battleKey(w.bound, w.bankroll, w.goal, w.played, w.terms);
-    }
-
-    /// @notice Grant or revoke the right to open a custom battle. The DGVE governance executor is
-    ///         the only caller — and always holds the right itself — and this roll is the only
-    ///         thing it confers: a creator has no say over settlement, arming or anyone else's
-    ///         money, and every battle they open is joinable by anyone clearing its terms.
-    /// @dev Held as a mapping rather than resolved through the vault on each placement so a
-    ///      granted creator pays one warm SLOAD instead of a cross-contract call.
-    /// @custom:reverts NotVaultOwner If the caller is not the DGVE governance executor.
-    function setBattleCreator(address account, bool allowed) external {
-        _delegateJackpot();
     }
 
     /// @dev Whether `header` takes the high lane in the window at `windowSlot`. A window-local or
@@ -902,9 +774,9 @@ contract CrapsBattle is CrapsBattleStorage {
     ///      by the paying path and the preview so the two can never disagree about what a bet is
     ///      worth. Pure in the committed inputs — the caller supplies the word.
     function _settlementOf(uint256 betId, uint256 header, Window memory w, uint256 word)
-        internal view returns (Settlement memory s)
+        internal pure returns (Settlement memory s)
     {
-        SlipResult memory r = ICrapsEngine(ContractAddresses.CRAPS_ENGINE).settleBattle(
+        SlipResult memory r = settleBattle(
             betId, header, w.played / 10, w.bankroll, w.goal, w.bound,
             (uint256(w.entrants) << 64) | w.seat, word);
         assembly ("memory-safe") { s := r }
@@ -1174,42 +1046,6 @@ contract CrapsBattle is CrapsBattleStorage {
         _reserveRun(startDay, count, high, chips, boonMask, uint32(word >> CrapsPreferenceLib.ID_SHIFT));
         _rememberBoard(word, chips);
     }
-
-    /// @notice Convert account `id`'s uncommitted normal pass credits (0 = the caller) into
-    ///         high-roller credits, at twenty-one normals per high — the credits' own value
-    ///         ratio, exactly.
-    /// @dev ONE PACKED WRITE moves both lanes, so the debit and the credit are all-or-nothing by
-    ///      construction and no failure can leave either lane half-moved. Only BANKED credits are
-    ///      reachable: a reservation already committed to a day lives in that day's seat word,
-    ///      not here. ONE-WAY — a high credit never breaks back into normals.
-    /// @param highCount How many high-roller credits to buy. Costs `21 * highCount` normals.
-    /// @custom:reverts BadPassCount If `highCount` is zero.
-    /// @custom:reverts PassLaneFull If the high lane cannot hold the conversion.
-    /// @custom:reverts Panic(0x11) If the account holds fewer than `21 * highCount` normals.
-    /// @custom:reverts NoWalletId If the Game has no wallet ID for the caller.
-    /// @custom:reverts NotApproved If the caller may not act for account `id`.
-    function convertNormalToHigh(uint32 id, uint32 highCount) external { _delegateJackpot(); }
-
-    /// @notice Turn account `id`'s NORMAL reservation on a future day (0 = the caller) into a
-    ///         HIGH one by spending one banked high-roller credit; the normal credit the day was
-    ///         taken with is banked back.
-    /// @dev A swap of like for like, so nothing is priced here: the seat already exists, blank
-    ///      or on its named board, and only its lane changes — the
-    ///      whole-day high mask on the bet word and one high ticket in every period's counter,
-    ///      exactly what `_writeDaySeat` writes for a high reservation. The day's multiple is
-    ///      still read off the window at settlement. Only a day that is STRICTLY FUTURE and not
-    ///      yet worded qualifies, the same test a fresh reservation passes: once the day opens,
-    ///      `upgradeDayWindows` is the door and it prices each window off the word. The high
-    ///      credit is debited before the normal one is banked, so a caller with no high credit
-    ///      fails on the debit and nothing moves. ONE-WAY, like `convertNormalToHigh`.
-    /// @param day The reserved day.
-    /// @custom:reverts DayNotReservable If `day` is today, past, or its word has landed.
-    /// @custom:reverts NoSuchBet If the account holds no day ticket on `day`.
-    /// @custom:reverts NothingToUpgrade If that ticket is already high.
-    /// @custom:reverts Panic(0x11) If the account holds no high-roller credit.
-    /// @custom:reverts NoWalletId If the Game has no wallet ID for the caller.
-    /// @custom:reverts NotApproved If the caller may not act for account `id`.
-    function upgradeReservedDay(uint32 id, uint24 day) external { _delegateJackpot(); }
 
     /// @dev What a seat in a window of each class is expected to cost, times the expected high
     ///      multiple for the high lane.
@@ -1641,17 +1477,6 @@ contract CrapsBattle is CrapsBattleStorage {
         if (period != 0) revert BonusPeriodSpent();
         return _enterDayLane(today, word, chips, multiple, account, flags);
     }
-
-    /// @notice Add FLIP to a battle's seed, so its winner takes more than the entrants put in.
-    /// @dev Permissionless, but accepted only while the battle remains joinable. The explicit
-    ///      ceiling protects the scoreboard's 31-bit seed field. VAULT donations charge the
-    ///      comp lane; all other callers burn their own FLIP. Neither consumes a boon or
-    ///      reports quest progress. Donations do not earn comp allowance at settlement.
-    /// @param custom   True for a custom battle, false for one of today's bonus windows.
-    /// @param index    The custom battle's number, or the window's period.
-    /// @param granules What to add, in `_BATTLE_STAKE_UNIT` granules.
-    /// @return amount The amount added, in whole FLIP, also charged to the donor or comp lane.
-    function donate(bool custom, uint256 index, uint24 granules) external returns (uint256 amount) { _delegateJackpot(); }
 
     /// @dev Seat the house and the vault on the DAY lane: one ticket each, playing every window
     ///      of the day, at the sum of what those windows cost. They take whatever seats are next:

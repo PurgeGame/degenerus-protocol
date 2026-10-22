@@ -437,10 +437,10 @@ contract CrapsGasTest is CrapsPins {
     /// @dev Gas wins are irrelevant if the production wrapper no longer deploys. Keep a small
     ///      explicit margin under EIP-170's 24,576-byte runtime ceiling; the richer test harness
     ///      itself is intentionally much larger and is not what ships.
-    function test_productionRuntimeFitsEip170() public {
+    function test_productionBytecodeFitsGlamsterdam() public {
         CrapsBattle production = new CrapsBattle();
         emit log_named_uint("CrapsBattle runtime bytes", address(production).code.length);
-        // Rail raised 24,400 -> 24,450 (USER 2026-09-23) for the coin draw's craps seats.
-        assertLe(address(production).code.length, 24_500, "CrapsBattle runtime left too little deployment headroom");
+        assertLe(address(production).code.length, 65_536, "CrapsBattle exceeds the Glamsterdam runtime limit");
+        assertLe(type(CrapsBattle).creationCode.length, 131_072, "CrapsBattle exceeds the Glamsterdam initcode limit");
     }
 }

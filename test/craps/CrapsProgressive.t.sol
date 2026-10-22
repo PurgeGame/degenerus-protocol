@@ -6,7 +6,6 @@ import {Vm} from "forge-std/Vm.sol";
 import {Craps} from "../../contracts/Craps.sol";
 import {CrapsBattle, IReadCohortLifecycle} from "../../contracts/CrapsBattle.sol";
 import {CrapsPins} from "./CrapsPins.sol";
-import {JackpotBattleViews} from "./JackpotBattleViews.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @dev Taps for the progressive alone. Every one of them drives a SHIPPED internal — the fold
@@ -213,7 +212,6 @@ contract CrapsProgressiveTest is CrapsPins {
         _installPins();
         game.registerWallet(alice, true);
         game.registerWallet(bob, true);
-        vm.etch(ContractAddresses.JACKPOT_BATTLE, address(new JackpotBattleViews()).code);
         _warpToTableGenesis();
         craps = new ProgHarness();
         // The deployment day is a Craps warm-up day with no windows; every fixture plays

@@ -355,7 +355,8 @@ contract Craps {
         // the whole hand machine through the battle wrapper and exhausts its stack.
         uint256[13] memory wins;
         // Non-place slots also hold constant stake/state and hand-local bonus scratch.
-        wins[7] = boost;
+        // A zero hot threshold uses twelve rolls, including rotation-only schedules.
+        wins[7] = boost & 0xFF == 0 ? boost | 12 : boost;
         wins[3] = _settlementState(b);
         wins[12] = _stakeFor(b);
         unchecked {
@@ -430,9 +431,6 @@ contract Craps {
                 // per-hand bonus control here to keep the via-IR resolver frame bounded.
                 wins[1] = (wins[7] & 0xFFFF) | (((wins[7] >> _BOOST_TURN_SHIFT) == (cur & _CUR_HANDS_MASK) + 1
                     ? _ROTATION_UPLIFT : 0) << 16);
-                // Rotation-only callers still wait twelve rolls; a missing hot schedule
-                // must not turn the personal bonus into a whole-hand bonus.
-                if ((wins[1] & 0xFF) == 0) wins[1] |= 12;
                 uint256 handOut = _runSettlement(
                     b,
                     handSeed(seed, cur & _CUR_HANDS_MASK), _handCursor(cur, rollBudget), wins[3], wins

@@ -99,8 +99,6 @@ abstract contract BoundedDeployProtocol is DeployProtocol {
         parimutuel = DegenerusParimutuel(payable(deployCode("DegenerusParimutuel.sol:DegenerusParimutuel", abi.encode())));
         recordBounty = DegenerusRecordBounty(payable(deployCode("DegenerusRecordBounty.sol:DegenerusRecordBounty", abi.encode())));
         crapsBattle = CrapsViews(payable(deployCode("CrapsViews.sol:CrapsViews", abi.encode())));
-        crapsEngine = CrapsEngine(payable(deployCode("CrapsEngine.sol:CrapsEngine", abi.encode())));
-        jackpotBattle = JackpotBattle(payable(deployCode("JackpotBattle.sol:JackpotBattle", abi.encode())));
         wwxrp = WWXRP(payable(deployCode("WWXRP.sol:WWXRP", abi.encode())));
         minerModule = DegenerusGameMinerModule(payable(deployCode("DegenerusGameMinerModule.sol:DegenerusGameMinerModule", abi.encode())));
         ownerGovernance = DegenerusOwnerGovernance(payable(deployCode("DegenerusOwnerGovernance.sol:DegenerusOwnerGovernance", abi.encode())));
@@ -119,6 +117,8 @@ abstract contract BoundedDeployProtocol is DeployProtocol {
         boonModule = DegenerusGameBoonModule(payable(address(boxModule)));
         degeneretteModule = DegenerusGameDegeneretteModule(payable(address(boxModule)));
         afkingModule = GameAfkingModule(payable(address(boxModule)));
+        crapsEngine = CrapsEngine(payable(address(crapsBattle)));
+        jackpotBattle = JackpotBattle(payable(address(crapsBattle)));
         // END CANONICAL DEPLOYMENTS
         if (initializeDeities) game.initProtocolDeity();
     }

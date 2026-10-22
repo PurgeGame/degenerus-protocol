@@ -80,7 +80,7 @@ library ContractAddresses {
     address internal constant DEITY_PASS =
         address(0x13aa49bAc059d709dd0a18D6bb63290076a702D7);
     address internal constant WWXRP =
-        address(0x3C4293F66941ECa00f4950C10d4255d5c271bAeF);
+        address(0xDA5A5ADC64C8013d334A0DA9e711B364Af7A4C2d);
     address internal constant STETH_TOKEN =
         address(0x2e234DAe75C793f67A35089C9d99245E1C58470b);
     address internal constant LINK_TOKEN =
@@ -120,18 +120,18 @@ library ContractAddresses {
     // authorizes nothing. Committed as its Foundry deterministic-test address
     // (nonce N+30) for the same reason as CRAPS above.
     address internal constant CRAPS_ENGINE =
-        address(0xDA5A5ADC64C8013d334A0DA9e711B364Af7A4C2d);
+        address(0x92a6649Fdcc044DA968d94202465578a9371C7b1);
     // The daily jackpot battle's cold lifecycle module — appended, so it shifts no
     // prior address. CRAPS delegatecalls it, so it runs in the table's storage
     // and declares no storage of its own; its lock, draw and seal entry points
     // are GAME-only. Committed as its Foundry deterministic-test address (nonce N+31).
     address internal constant JACKPOT_BATTLE =
-        address(0x886D6d1eB8D415b00052828CD6d5B321f072073d);
+        address(0x92a6649Fdcc044DA968d94202465578a9371C7b1);
     // State-engine modules append to the CREATE sequence; all prior identities stay fixed.
     address internal constant GAME_TICKET_MODULE =
         address(0xA4AD4f68d0b91CFD19687c881e50f3A00242828c);
     address internal constant GAME_MINER_MODULE =
-        address(0x89CA9F4f77B267778EB2eA0Ba1bEAdEe8523af36);
+        address(0x886D6d1eB8D415b00052828CD6d5B321f072073d);
     address internal constant GAME_RNG_MODULE =
         address(0x1d1499e622D69689cdf9004d05Ec547d650Ff211);
     address internal constant GAME_JACKPOT_DRAW_MODULE =
@@ -139,7 +139,7 @@ library ContractAddresses {
     address internal constant GAME_DEGENESIS_MODULE =
         address(0xa0Cb889707d426A7A386870A03bc70d1b0697598);
     // Owner escrow appended after all existing CREATEs.
-    address internal constant OWNER_GOVERNANCE = address(0xe54a55121A47451c5727ADBAF9b9FC1643477e25);
+    address internal constant OWNER_GOVERNANCE = address(0x3C4293F66941ECa00f4950C10d4255d5c271bAeF);
     // Chainlink LINK/ETH aggregator that values LINK donations. Optional:
     // address(0) leaves DegenerusAdmin's feed slot empty, so the reward lane
     // stays dark until the feed-swap governance path installs one. Patched per

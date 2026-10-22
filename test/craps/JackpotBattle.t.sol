@@ -23,6 +23,8 @@ import {CrapsPriceLib} from "../../contracts/libraries/CrapsPriceLib.sol";
 import {LegacyCrapsEngine} from "../helpers/LegacyCrapsEngine.sol";
 import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
 
+
+
 /// @dev An independent recomputation of one battle run: the same engine entry, driven with the
 ///      terms the battle's spec names, so the battle's orchestration (dedupe, units, the bust
 ///      rule, the pot) is graded against runs it did not compute itself.
@@ -101,6 +103,17 @@ contract JackpotTableHarness is CrapsViews {
     function jackpotTerms(uint64 slot) external view returns (Window memory) { return _slotWindow(slot); }
     /// @dev Unopen a day, so the next lock detaches its battle to remainder seven of that day.
     function clearBoostBudget(uint24 day) external { _storeBudget(day, 0); }
+}
+
+/// @dev Only installed when a test explicitly replaces the dice outcome.
+contract MockableJackpotTableHarness is JackpotTableHarness {
+    function settleBattle(uint256 betId, uint256 header, uint256 chipFlip, uint256 bankroll,
+        uint256 goal, uint48 bound, uint256 field, uint256 word)
+        public pure override returns (SlipResult memory)
+    {
+        return CrapsEngine(address(0xC6A6)).settleBattle(
+            betId, header, chipFlip, bankroll, goal, bound, field, word);
+    }
 }
 
 contract JackpotBattleTest is CrapsPins {
@@ -659,7 +672,8 @@ contract JackpotBattleTest is CrapsPins {
                 | ((bank * 5 / 1) << 16);
             result.stop = Craps.SlipStop.Goal;
         }
-        vm.mockCall(ContractAddresses.CRAPS_ENGINE, abi.encodeWithSelector(CrapsEngine.settleBattle.selector), abi.encode(result));
+        vm.etch(address(table), type(MockableJackpotTableHarness).runtimeCode);
+        vm.mockCall(address(0xC6A6), abi.encodeWithSelector(CrapsEngine.settleBattle.selector), abi.encode(result));
     }
 
     function _expectedPool(CrapsBattleStorage.JackpotRound memory r) private pure returns (uint256) {

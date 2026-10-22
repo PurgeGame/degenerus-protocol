@@ -24,6 +24,7 @@ import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJ
 import {DegenerusGameJackpotDrawModule} from "../../contracts/modules/DegenerusGameJackpotDrawModule.sol";
 import {DegenerusGameRngModule} from "../../contracts/modules/DegenerusGameRngModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 
 /// @dev Run twice with DIFFERENTIAL_BASELINE=true/false; compare named observations with compare-replay.js.
 ///      Overrides keep common state-owner pins and separate code addresses for baseline modules.
@@ -168,6 +169,8 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
         // Equal account warmth in both executions. Foundry does not reset SSTORE original values.
         for (uint256 i; i < observed.length; ++i) vm.cool(observed[i]);
         for (uint256 i; i < replayModules.length; ++i) vm.cool(replayModules[i]);
+        vm.cool(ContractAddresses.CRAPS_ENGINE);
+        vm.cool(address(0x1006)); vm.cool(address(0x1007));
         if (warm) this.warmInputs(from, to, value, data);
         vm.recordLogs();
         vm.startStateDiffRecording();
@@ -193,6 +196,11 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
             Vm.AccountAccess memory a = accesses[i];
             if (a.kind == VmSafe.AccountAccessKind.DelegateCall) {
                 console.log(string.concat("DIFFEDGE|", _name(a.account), "|", vm.toString(abi.encodePacked(bytes4(a.data)))));
+            }
+            if (a.kind == VmSafe.AccountAccessKind.StaticCall
+                && (a.account == ContractAddresses.CRAPS_ENGINE || a.account == address(0x1007))) {
+                console.log(string.concat("DIFFENGINE|", _name(a.account), "|",
+                    vm.toString(abi.encodePacked(bytes4(a.data))), "|", _name(a.accessor)));
             }
             for (uint256 j; j < a.storageAccesses.length; ++j) {
                 Vm.StorageAccess memory s = a.storageAccesses[j];
@@ -348,6 +356,22 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
         for (uint256 day = 1; day <= 7; ++day) _degenesisDay(day);
         _seedFloats();
         for (uint24 day = GameTimeLib.MAIN_LAUNCH_DAY; day < GameTimeLib.MAIN_LAUNCH_DAY + 6; ++day) {
+            _playDay(day);
+        }
+        _censusEnd();
+    }
+
+    function testFocusedCraps() public { _focusedCraps(false); }
+    function testWarmCraps() public { _focusedCraps(true); }
+
+    function _focusedCraps(bool warm_) private {
+        warm = warm_;
+        vm.pauseGasMetering();
+        _censusBegin("craps-focused");
+        _playDeployDay();
+        for (uint256 cohort = 1; cohort <= 7; ++cohort) _degenesisDay(cohort);
+        _seedFloats();
+        for (uint24 day = GameTimeLib.MAIN_LAUNCH_DAY; day < GameTimeLib.MAIN_LAUNCH_DAY + 8; ++day) {
             _playDay(day);
         }
         _censusEnd();

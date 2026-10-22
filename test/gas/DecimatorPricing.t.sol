@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 import {DecimatorSampleReference as Sample} from "../helpers/DecimatorSamplingReference.sol";
 import {Test} from "forge-std/Test.sol";
 import {DecimatorBattleHarness} from "../fuzz/helpers/DecimatorBattleHarness.sol";
@@ -67,7 +68,7 @@ contract DecimatorPricingTest is Test {
         vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
         h = new DecimatorBattleHarness();
         meter = new DecimatorPricingMeter();
-        vm.etch(ContractAddresses.CRAPS_ENGINE, type(CrapsEngine).runtimeCode);
+        vm.etch(ContractAddresses.CRAPS_ENGINE, type(CrapsBattle).runtimeCode);
     }
 
     /// @dev Valid boards naming 0..7 chips under the normal battle rules.
@@ -194,7 +195,7 @@ contract DecimatorPricingTest is Test {
 
         // The engine's ceiling: 511 rolls before 48 shooters, the heaviest named board, a
         // bankroll no run can bust. Seeds are searched for runs that reach the roll bound.
-        vm.etch(ContractAddresses.CRAPS_ENGINE, type(CrapsEngine).runtimeCode);
+        vm.etch(ContractAddresses.CRAPS_ENGINE, type(CrapsBattle).runtimeCode);
         DecimatorEngineMeter em = new DecimatorEngineMeter();
         uint256 chips = 3 | 3 << 9 | 1 << 24; // seven named chips
         uint256 boost = (0x050c070c0a0c0e0c120c140c190c1e0c >> (7 << 4)) & 0xFFFF;

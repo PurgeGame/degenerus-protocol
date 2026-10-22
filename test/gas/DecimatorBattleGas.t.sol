@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 import {Test} from "forge-std/Test.sol";
 import {DecimatorBattleHarness} from "../fuzz/helpers/DecimatorBattleHarness.sol";
 import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
@@ -14,7 +15,7 @@ contract DecimatorBattleGasTest is Test {
         vm.warp(uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621);
         vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
         h = new DecimatorBattleHarness();
-        vm.etch(ContractAddresses.CRAPS_ENGINE, type(CrapsEngine).runtimeCode);
+        vm.etch(ContractAddresses.CRAPS_ENGINE, type(CrapsBattle).runtimeCode);
     }
 
     function test_SealGasIndependentOfPopulation() public {

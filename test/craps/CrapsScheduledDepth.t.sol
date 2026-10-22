@@ -18,7 +18,7 @@ contract DepthJackpotDecoder is JackpotBattle {
     function preset(uint256 roll, uint256 period)
         external pure returns (uint128 bank, uint128 goal, uint256 round, uint256 units, uint256 tier)
     {
-        return _bonusPreset(roll, period);
+        return _jackpotBonusPreset(roll, period);
     }
 }
 

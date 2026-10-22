@@ -417,7 +417,7 @@ contract MinerNoProgressTest is Test {
             abi.encode(uint32(1), uint32(0), uint32(0), uint256(0)));
         vm.mockCall(ContractAddresses.COINFLIP, abi.encodeWithSignature("creditFlip(uint32,uint256)"), bytes(""));
         vm.etch(ContractAddresses.CRAPS, address(new MinerMaintenanceTable()).code);
-        vm.etch(ContractAddresses.JACKPOT_BATTLE, address(new JackpotBattle()).code);
+
         return MinerMaintenanceTable(ContractAddresses.CRAPS);
     }
 

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -96,7 +97,7 @@ contract NativeAtomicDecimatorTest is Test {
     function test_LongRealDiceRunWithHeapInsertionFitsOneStep() public {
         vm.warp(uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621);
         vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
-        vm.etch(ContractAddresses.CRAPS_ENGINE, type(CrapsEngine).runtimeCode);
+        vm.etch(ContractAddresses.CRAPS_ENGINE, type(CrapsBattle).runtimeCode);
         DecimatorBattleHarness host = new DecimatorBattleHarness();
         uint256 word = uint256(keccak256(abi.encode("round200k", uint256(259))));
         bytes32 seed = keccak256(abi.encode(keccak256("decimator.battle.dice.v1"), word, uint24(5)));

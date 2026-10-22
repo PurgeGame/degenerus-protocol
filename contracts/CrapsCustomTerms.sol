@@ -3,8 +3,7 @@ pragma solidity 0.8.38;
 
 error BadBattleTerms();
 
-/// @dev Shared custom-table bounds and packing. Storage-free; only CrapsEngine deploys
-///      the validation code, while CrapsBattle uses the same constants to decode terms.
+/// @dev Storage-free bounds, validation and packing for custom battles.
 abstract contract CrapsCustomTerms {
     /// @notice Granularity of battle stakes, seeds and tier boosts.
     uint256 internal constant _BATTLE_STAKE_UNIT = 100;

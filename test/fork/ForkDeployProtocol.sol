@@ -230,8 +230,6 @@ abstract contract ForkDeployProtocol is DeployProtocol {
         parimutuel = new DegenerusParimutuel();
         recordBounty = new DegenerusRecordBounty();
         crapsBattle = new CrapsViews();
-        crapsEngine = new CrapsEngine();
-        jackpotBattle = new JackpotBattle();
         wwxrp = new WWXRP();
         minerModule = new DegenerusGameMinerModule();
         ownerGovernance = new DegenerusOwnerGovernance();
@@ -250,6 +248,8 @@ abstract contract ForkDeployProtocol is DeployProtocol {
         boonModule = DegenerusGameBoonModule(payable(address(boxModule)));
         degeneretteModule = DegenerusGameDegeneretteModule(payable(address(boxModule)));
         afkingModule = GameAfkingModule(payable(address(boxModule)));
+        crapsEngine = CrapsEngine(payable(address(crapsBattle)));
+        jackpotBattle = JackpotBattle(payable(address(crapsBattle)));
         // END CANONICAL DEPLOYMENTS
         game.initProtocolDeity();
 

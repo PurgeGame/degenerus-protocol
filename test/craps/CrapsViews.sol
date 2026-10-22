@@ -4,7 +4,7 @@ pragma solidity 0.8.38;
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {CrapsBattle, IReadCohortLifecycle} from "../../contracts/CrapsBattle.sol";
 import {Craps} from "../../contracts/Craps.sol";
-import {IJackpotBattleViews} from "./JackpotBattleViews.sol";
+import {IJackpotBattleViews, JackpotBattleViews} from "./JackpotBattleViews.sol";
 import {CrapsSeedViews} from "./CrapsSeedViews.sol";
 import {CrapsPriceLib} from "../../contracts/libraries/CrapsPriceLib.sol";
 import {CrapsPreferenceLib} from "../../contracts/libraries/CrapsPreferenceLib.sol";
@@ -22,24 +22,7 @@ interface ICrapsWalletIdView {
 ///         production kept. Every signature below is byte-for-byte the one that used to be on the
 ///         contract, which is what lets the assertions that grade them stay untouched.
 /// @dev Test-only. It is never deployed to a live chain, so its size is nobody's constraint.
-contract CrapsViews is CrapsSeedViews, CrapsBattle {
-    function runDailyBattleWork(uint256) external returns (MineFlipGas.Result memory) { _delegateJackpot(); }
-
-    function runCrapsMaintenance(uint256) external returns (MineFlipGas.Result memory) {
-        _delegateJackpot();
-    }
-
-
-
-
-
-
-
-
-
-
-
-
+contract CrapsViews is CrapsSeedViews, CrapsBattle, JackpotBattleViews {
 
     /// @dev Legacy score helper for harnesses. Production receives this score from the engine
     ///      in Settlement.rank and has no reason to compute it again.
@@ -638,8 +621,6 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
         }
     }
 
-
-
     function PROG_ROUTINE_COMMON_BPS() external pure returns (uint256) {
         return _PROG_ROUTINE_COMMON_BPS;
     }
@@ -665,7 +646,6 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
         w.key = key;
         _payProgressive(w, peakFlip, score, 0, uint256(_idOf(winner)) | (_AWARD_STANDING << _BET_SCORE_SHIFT));
     }
-
 
     /// @dev The composite's money component, clamp included.
     function wonComponentOf(uint256 won) external pure returns (uint256) {
@@ -1106,8 +1086,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle {
     /// @param winnerId The winner's bet id, logged with the payout.
     /// @param winnerWord The winner's settled bet header, carrying its owner wallet ID (bits 0-31),
     ///        which the payout is credited to.
-    ///      Reached by self-call through the table's delegate fallback, so the suite installs
-    ///      `JackpotBattleViews` at `JACKPOT_BATTLE` before calling it.
+    ///      Reached through the test-only self-call entry inherited from JackpotBattleViews.
     function _payProgressive(Window memory w, uint256 peakFlip, uint256 score, uint256 winnerId, uint256 winnerWord) internal {
         IJackpotBattleViews(address(this)).payProgressive(w, peakFlip, score, winnerId, winnerWord);
     }

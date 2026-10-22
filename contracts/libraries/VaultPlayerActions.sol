@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {JackpotBattle} from "../JackpotBattle.sol";
+
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
 import {ICoinflip} from "../interfaces/ICoinflip.sol";
@@ -68,13 +70,13 @@ library VaultPlayerActions {
         if (target == ContractAddresses.CRAPS) {
             return selector == CrapsBattle.setPreferredBoard.selector
                 || selector == CrapsBattle.amendSlip.selector
-                || selector == CrapsBattle.createBattle.selector
+                || selector == JackpotBattle.createBattle.selector
                 || selector == CrapsBattle.enterBattle.selector
-                || selector == CrapsBattle.closeBattle.selector
+                || selector == JackpotBattle.closeBattle.selector
                 || selector == CrapsBattle.applyCrapsPasses.selector
                 || selector == CrapsBattle.buyFutureCrapsDays.selector
-                || selector == CrapsBattle.convertNormalToHigh.selector
-                || selector == CrapsBattle.upgradeReservedDay.selector
+                || selector == JackpotBattle.convertNormalToHigh.selector
+                || selector == JackpotBattle.upgradeReservedDay.selector
                 || selector == CrapsBattle.upgradeDayWindows.selector
                 || selector == CrapsBattle.openBonusDay.selector
                 || selector == CrapsBattle.enterBonusBattle.selector

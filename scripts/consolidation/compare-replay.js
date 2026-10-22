@@ -2,12 +2,14 @@ import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { AbiCoder, Interface } from 'ethers';
 const [left, right, abiFile, output, mode = "P1"] = process.argv.slice(2);
-if (!["P1", "P2", "--p5", "--p5-separate-mint", "--integrated", "--compiler-only"].includes(mode)) throw new Error(`Unknown comparison mode: ${mode}`);
+if (!["P1", "P2", "--p6", "--p5", "--p5-separate-mint", "--integrated", "--compiler-only"].includes(mode)) throw new Error(`Unknown comparison mode: ${mode}`);
 const compilerOnly = mode === "--compiler-only";
 const phase = compilerOnly ? null : mode;
 const p5Mode = ["--p5", "--p5-separate-mint", "--integrated"].includes(mode);
 if (!output) throw new Error('usage: compare-replay.js BASELINE_LOG CANDIDATE_LOG BASELINE_CONTRACTS_JSON OUTPUT_JSON');
 const abis = JSON.parse(fs.readFileSync(abiFile));
+const engineSelectors = new Set(new Interface(abis.CrapsEngine?.abi || []).fragments
+  .filter(f => f.type === 'function').map(f => f.selector));
 const byTopic = new Map();
 const anonymous = new Map();
 for (const contract of Object.values(abis)) for (const f of new Interface(contract.abi).fragments) {
@@ -95,6 +97,11 @@ export function parse(text) {
       run.edgesByLabel ||= {};
       const labelKey = `${tx.label}|${key}`;
       run.edgesByLabel[labelKey] = (run.edgesByLabel[labelKey] || 0) + 1;
+    } else if (kind === 'DIFFENGINE') {
+      if (!engineSelectors.has(p[1])) continue;
+      run.engineEdges ||= {};
+      const key = `${p[1]}:${p[2]}`;
+      run.engineEdges[key] = (run.engineEdges[key] || 0) + 1;
     } else if (kind === 'DIFFCHECK') {
       run.checkpoints.push({ id: +p[0], action: p[1], level: p[2], slots: { ...run.slots }, eth: { ...run.eth }, tokens: { ...run.tokens }, events: run.events.splice(0) });
     }
@@ -207,7 +214,38 @@ if (phase === 'P2' || mode === '--integrated') {
     boxEdges.push(row);
   }
 }
-const report = { differences: errors, proofs, removedEdges: edges, adapterEdges, boxEdges, p5Edges, runs: a.map((r,i) => ({ transactions: r.transactions.length, checkpoints: r.checkpoints.length, slots: Object.keys(r.initial).length, baselineGas: r.gas, candidateGas: b[i]?.gas })) };
+const crapsEdges = [];
+if (mode === '--p6' || mode === '--integrated') {
+  for (const signature of [
+    'settleBattle(uint256,uint256,uint256,uint256,uint256,uint48,uint256,uint256)',
+    'customDefinition(uint32,uint8,uint16,uint24,uint40,bool,uint16)',
+  ]) {
+    const selector = new Interface([`function ${signature}`]).getFunction(signature).selector;
+    const count = runs => runs.reduce((n, r) => n + (r.engineEdges?.[`${selector}:CRAPS`] || 0), 0);
+    const edge = { signature, baseline: count(a), candidate: count(b) };
+    assert(edge.baseline > 0, `Missing baseline coverage: ${signature}`);
+    assert.equal(edge.candidate, 0, `Table retains engine frame: ${signature}`);
+    crapsEdges.push(edge);
+  }
+  const lifecycleCount = runs => runs.reduce((n, r) => n + Object.entries(r.edges)
+    .filter(([key]) => key.startsWith('0x0000000000000000000000000000000000001006:'))
+    .reduce((total, [, count]) => total + count, 0), 0);
+  const lifecycle = { signature: 'JackpotBattle fallback delegation', baseline: lifecycleCount(a), candidate: lifecycleCount(b) };
+  assert(lifecycle.baseline > 0, 'Missing baseline lifecycle delegation coverage');
+  assert.equal(lifecycle.candidate, 0, 'Table retains lifecycle delegation');
+  crapsEdges.push(lifecycle);
+  const external = runs => {
+    const counts = {};
+    for (const r of runs) for (const [key, count] of Object.entries(r.engineEdges || {})) {
+      if (key.endsWith(':CRAPS')) continue;
+      counts[key] = (counts[key] || 0) + count;
+    }
+    return counts;
+  };
+  assert.deepEqual(external(b), external(a), 'External engine STATICCALL coverage changed');
+  proofs.externalEngineFrames = external(a);
+}
+const report = { differences: errors, proofs, removedEdges: edges, adapterEdges, crapsEdges, boxEdges, p5Edges, runs: a.map((r,i) => ({ transactions: r.transactions.length, checkpoints: r.checkpoints.length, slots: Object.keys(r.initial).length, baselineGas: r.gas, candidateGas: b[i]?.gas })) };
 fs.writeFileSync(output, JSON.stringify(report, null, 2)+'\n');
 console.log(JSON.stringify({ differences: errors.length, firstDifferences: errors.slice(0,10), proofs, removedEdges: edges, runs: report.runs.map(({ baselineGas,candidateGas,...r })=>r) }, null, 2));
 if (errors.length) process.exitCode = 1;

@@ -2,6 +2,7 @@
 pragma solidity 0.8.38;
 import {CrapsPins, MockCoinflip} from "./CrapsPins.sol";
 import {CrapsViews} from "./CrapsViews.sol";
+import {MockableCrapsViews} from "./MockableCrapsViews.sol";
 import {Craps} from "../../contracts/Craps.sol";
 import {LootboxCraps} from "../../contracts/LootboxCraps.sol";
 import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
@@ -97,7 +98,8 @@ contract CustomCohortRecyclingTest is CrapsPins {
         uint48 index = table.closeBattle(slot);
         _setWord(index, 0xB0B5);
         Craps.SlipResult memory win; win.bankrollIn = 1; win.bankrollOut = 1;
-        vm.mockCall(ContractAddresses.CRAPS_ENGINE, abi.encodeWithSelector(CrapsEngine.settleBattle.selector), abi.encode(win));
+        vm.etch(address(table), type(MockableCrapsViews).runtimeCode);
+        vm.mockCall(address(0xC6A6), abi.encodeWithSelector(CrapsEngine.settleBattle.selector), abi.encode(win));
         vm.mockCallRevert(ContractAddresses.COINFLIP, abi.encodeWithSelector(MockCoinflip.creditFlipBatch.selector), "payout failure");
         vm.expectRevert(bytes("payout failure")); _readWork(table, index);
         assertFalse(cohort.rngCohortComplete(index));

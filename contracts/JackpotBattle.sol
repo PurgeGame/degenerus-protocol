@@ -3,13 +3,13 @@ pragma solidity 0.8.38;
 
 import {MineFlipGas} from "./libraries/MineFlipGas.sol";
 import {Craps} from "./Craps.sol";
-import {ICoinflipStake, ICrapsEngine, IFlipCoin, IGameCraps} from "./CrapsBattle.sol";
+import {ICoinflipStake, ICrapsEngine, IFlipCoin, IGameCraps} from "./CrapsInterfaces.sol";
 import {CrapsBattleStorage} from "./storage/CrapsBattleStorage.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
 import {CrapsPriceLib} from "./libraries/CrapsPriceLib.sol";
 import {CrapsPreferenceLib} from "./libraries/CrapsPreferenceLib.sol";
 import {PriceLookupLib} from "./libraries/PriceLookupLib.sol";
-import {IReadCohortLifecycle, IVaultOwnership} from "./CrapsBattle.sol";
+import {IReadCohortLifecycle, IVaultOwnership} from "./CrapsInterfaces.sol";
 import {JackpotBattleFieldLib} from "./libraries/JackpotBattleFieldLib.sol";
 import {GameTimeLib} from "./libraries/GameTimeLib.sol";
 
@@ -21,10 +21,7 @@ interface IFlipCrapsComps {
     function creditCrapsComps(uint256 amount) external;
 }
 
-/// @notice Cold lifecycle for the daily jackpot battle, delegated by CrapsBattle.
-/// @dev Deployed at `JACKPOT_BATTLE` and reached only by CrapsBattle's fallback delegatecall, so it
-///      runs in the table's storage; both contracts inherit the identical shared layout. The table itself runs all paid/day/awarded seats through its normal
-///      budgeted resolver.
+/// @notice Lifecycle component inherited by CrapsBattle in the table storage context.
 contract JackpotBattle is CrapsBattleStorage {
     error BadJackpotField();
     error OnlyTableSelf();
@@ -36,7 +33,7 @@ contract JackpotBattle is CrapsBattleStorage {
     uint256 private constant _HIGH_COMP_SHARE_BPS = 8000;
     event JackpotBattleEntry(uint64 indexed slot, uint256 indexed betId, uint32 indexed playerId, uint256 units, uint32 chips);
 
-    /// @notice Open a custom battle; the table's `createBattle` forwards here. See CrapsBattle.
+    /// @notice Open a custom battle with validated immutable terms.
     /// @dev The creator roll is checked FIRST so a granted creator never pays for the
     ///      cross-contract call; the DGVE governance executor always qualifies, so the authority
     ///      behind the grant can never be locked out of its own table.
@@ -52,7 +49,7 @@ contract JackpotBattle is CrapsBattleStorage {
         if (!_battleCreator[msg.sender] && !IVaultOwnership(ContractAddresses.VAULT).isVaultOwner(msg.sender)) {
             revert NotBattleCreator();
         }
-        uint256 terms = ICrapsEngine(ContractAddresses.CRAPS_ENGINE).customDefinition(
+        uint256 terms = _customDefinition(
             played, bankMult, goalMult, stakeUnits, closeTime, multiEntry, highRollerMult
         );
         unchecked { slot = uint64(_CUSTOM_SLOT_BASE + ++_customBattleCount); }
@@ -79,24 +76,24 @@ contract JackpotBattle is CrapsBattleStorage {
             if (custom) slot = _CUSTOM_SLOT_BASE + index;
             else {
                 if (index >= _BONUS_PERIODS_PER_DAY) revert BonusPeriodSpent();
-                slot = _slotOf(_currentDayIndex(), index);
+                slot = _jackpotSlotOf(_currentDayIndex(), index);
             }
         }
         if (slot >= _CUSTOM_SLOT_BASE) {
             uint256 c = _customBattle[slot];
             if (c == 0) revert NoSuchBattle();
             if (block.timestamp >= ((c >> _CB_CLOSE_SHIFT) & _CB_CLOSE_MASK)) revert BonusPeriodSpent();
-        } else if (_isJackpotSlot(slot)) {
-            if (slot != _slotOf(_bonus - 1, _BONUS_PERIODS_PER_DAY - 1)
+        } else if (_jackpotIsJackpotSlot(slot)) {
+            if (slot != _jackpotSlotOf(_bonus - 1, _BONUS_PERIODS_PER_DAY - 1)
                 || IGameCraps(_GAME).rngLocked()) revert BonusPeriodSpent();
         } else {
-            (,, uint256 live) = _currentBonusSlot();
+            (,, uint256 live) = _jackpotCurrentBonusSlot();
             if (slot < live) revert BonusPeriodSpent();
         }
         if (_slotIndexOf(slot) != 0) revert BonusPeriodSpent();
         bytes32 key = _rngBattleKey(uint64(slot));
         uint256 g = _loadBattle(key);
-        if (slot < _CUSTOM_SLOT_BASE && !_isJackpotSlot(slot)
+        if (slot < _CUSTOM_SLOT_BASE && !_jackpotIsJackpotSlot(slot)
             && g >> 255 == 0 && _dailyWordAt(_currentDayIndex()) == 0) revert RngNotReady();
         if (slot < _CUSTOM_SLOT_BASE && g == 0) revert BonusPeriodSpent();
         if (granules == 0 || g == 0) revert SeedAboveMax();
@@ -424,7 +421,7 @@ contract JackpotBattle is CrapsBattleStorage {
         if (totalUnits == 0) _settleHighRollerReserve(slot);
     }
 
-    /// @notice The table's post-batch hook, reached through its self-call and delegate fallback.
+    /// @notice The table's post-batch hook, reached through its self-call.
     /// @dev No caller-supplied candidate, count, randomness or cursor is trusted.
     function settleHighRollerReserve(uint64 slot) external {
         if (msg.sender != address(this)) revert OnlyTableSelf();
@@ -532,7 +529,7 @@ contract JackpotBattle is CrapsBattleStorage {
     function upgradeReservedDay(uint32 id, uint24 day) external {
         if (!_reservableDay(day)) revert DayNotReservable();
         id = _accountId(id);
-        uint256 daySlot = _daySlotOf(day);
+        uint256 daySlot = _jackpotDaySlotOf(day);
         uint256 seat = _loadDaySeat(daySlot, id) & _MASK32;
         if (seat == 0) revert NoSuchBet();
         uint256 betId = (daySlot << 64) | seat;
@@ -558,7 +555,7 @@ contract JackpotBattle is CrapsBattleStorage {
         return id;
     }
 
-    function _daySlotOf(uint256 day) private pure returns (uint256) {
+    function _jackpotDaySlotOf(uint256 day) private pure returns (uint256) {
         unchecked {
             return day * _BONUS_SLOTS_PER_DAY;
         }
@@ -568,26 +565,26 @@ contract JackpotBattle is CrapsBattleStorage {
     function finalizeBattle(Window calldata w, uint256 board, uint256 word) external {
         if (msg.sender != address(this)) revert OnlyTableSelf();
         _payout(w, board, word);
-        // Preserve payout-before-completion ordering in the same cold-module call.
+        // Preserve payout-before-completion ordering in the same self-call.
         // Dedicated daily jackpot fields do not belong to the normal read cohort.
-        if (!_isJackpotSlot(w.bound)) {
+        if (!_jackpotIsJackpotSlot(w.bound)) {
             uint48 index;
             unchecked { index = _slotIndexOf(w.bound) - 1; }
             _completeRngSlot(w.bound, index);
         }
     }
 
-    function _bonusRoll(uint256 word, uint256 period) private pure returns (uint256) {
+    function _jackpotBonusRoll(uint256 word, uint256 period) private pure returns (uint256) {
         unchecked {
             return _hash3(word, SCHEDULE_TAG, period == _BONUS_PERIODS_PER_DAY - 2 ? 0 : period);
         }
     }
 
-    function _boostBase(Window memory w) internal view returns (uint256) {
-        return _shareOf(w, false);
+    function _jackpotBoostBase(Window memory w) internal view returns (uint256) {
+        return _jackpotShareOf(w, false);
     }
 
-    function _boostMult(uint256 word, uint48 bound) internal pure returns (uint256) {
+    function _jackpotBoostMult(uint256 word, uint48 bound) internal pure returns (uint256) {
         unchecked {
             uint256 roll = _hash3(word, bound, BOOST_TAG) % 1000;
             if (roll < 768) return 1;
@@ -597,12 +594,12 @@ contract JackpotBattle is CrapsBattleStorage {
         }
     }
 
-    function _boostUnits(Window memory w, uint256 word) internal view returns (uint256) {
+    function _jackpotBoostUnits(Window memory w, uint256 word) internal view returns (uint256) {
         unchecked {
             // Multiplied in WEI and only then cut to granules. Flooring the base first would
             // round a small window's whole boost away — a thin day funds well under one granule
             // per window, and it is the top rungs that make such a window pay at all.
-            return (_boostBase(w) * _boostMult(word, w.bound)) / (4 * _BATTLE_STAKE_UNIT);
+            return (_jackpotBoostBase(w) * _jackpotBoostMult(word, w.bound)) / (4 * _BATTLE_STAKE_UNIT);
         }
     }
 
@@ -614,15 +611,15 @@ contract JackpotBattle is CrapsBattleStorage {
         ICoinflipStake(ContractAddresses.COINFLIP).creditFlip(id, amount);
     }
 
-    function _dayField(uint256 slot) private view returns (uint256 base, uint64 n) {
+    function _jackpotDayField(uint256 slot) private view returns (uint256 base, uint64 n) {
         if (slot >= _CUSTOM_SLOT_BASE || slot % _BONUS_SLOTS_PER_DAY == 7) return (0, 0);
         unchecked {
-            uint256 d = _daySlotOf(slot / _BONUS_SLOTS_PER_DAY);
+            uint256 d = _jackpotDaySlotOf(slot / _BONUS_SLOTS_PER_DAY);
             return (d << 64, uint32(_loadDayTickets(d)));
         }
     }
 
-    function _decodeBest(uint256 best)
+    function _jackpotDecodeBest(uint256 best)
         internal
         pure
         returns (Craps.SlipStop stop, uint256 hands, uint256 peakFlip, uint256 endFlip)
@@ -637,29 +634,29 @@ contract JackpotBattle is CrapsBattleStorage {
         }
     }
 
-    function _highBase(Window memory w) internal view returns (uint256) {
-        return _shareOf(w, true);
+    function _jackpotHighBase(Window memory w) internal view returns (uint256) {
+        return _jackpotShareOf(w, true);
     }
 
-    function _highBoostUnits(Window memory w, uint256 word) internal view returns (uint256) {
+    function _jackpotHighBoostUnits(Window memory w, uint256 word) internal view returns (uint256) {
         unchecked {
-            return (_highBase(w) * _boostMult(word, w.bound)) / (4 * _BATTLE_STAKE_UNIT);
+            return (_jackpotHighBase(w) * _jackpotBoostMult(word, w.bound)) / (4 * _BATTLE_STAKE_UNIT);
         }
     }
 
-    function _highBounty(Window memory w) internal pure returns (uint256) {
+    function _jackpotHighBounty(Window memory w) internal pure returns (uint256) {
         unchecked { return w.highExtra != 0 ? w.highExtra : (w.highMult - 1) * w.stakeUnits * _BATTLE_STAKE_UNIT; }
     }
 
-    function _isJackpotSlot(uint256 slot) internal pure returns (bool) {
+    function _jackpotIsJackpotSlot(uint256 slot) internal pure returns (bool) {
         return slot < _CUSTOM_SLOT_BASE && slot % _BONUS_SLOTS_PER_DAY >= _BONUS_PERIODS_PER_DAY;
     }
 
-    function _laneBoost(Window memory w, uint256 word) internal view returns (uint256) {
-        return _roundBoost(_highBoostUnits(w, word)) * _BATTLE_STAKE_UNIT;
+    function _jackpotLaneBoost(Window memory w, uint256 word) internal view returns (uint256) {
+        return _jackpotRoundBoost(_jackpotHighBoostUnits(w, word)) * _BATTLE_STAKE_UNIT;
     }
 
-    function _payProgressive(
+    function _jackpotPayProgressive(
         Window memory w,
         uint256 peakFlip,
         uint256 score,
@@ -686,7 +683,7 @@ contract JackpotBattle is CrapsBattleStorage {
         unchecked {
             uint32 winner = uint32(winnerWord);
             uint256 pool = _progressive;
-            uint256 candidate = _poolShare(pool, bps);
+            uint256 candidate = _jackpotPoolShare(pool, bps);
             if (candidate == 0) return;
             uint256 paid = candidate;
             // The WHOLE gross award leaves the pool, pass slice included — a pass is this award
@@ -708,10 +705,10 @@ contract JackpotBattle is CrapsBattleStorage {
             uint256 entrants = g & _MASK32;
             // The main boost is shared by the finalization log and the payout. Its derivation
             // reads the day's budget and hashes the settling word, so compute it once here.
-            uint256 boost = _boostUnits(w, word);
+            uint256 boost = _jackpotBoostUnits(w, word);
             bool scheduled = slot < _CUSTOM_SLOT_BASE;
             uint256 best = (g >> _BG_BEST_SHIFT) & _SC_BEST_MASK;
-            (Craps.SlipStop stop,, uint256 peakFlip, uint256 endFlip) = _decodeBest(best);
+            (Craps.SlipStop stop,, uint256 peakFlip, uint256 endFlip) = _jackpotDecodeBest(best);
             // THE SCORE, drawn once here and reused by everything downstream that reads a high
             // point: the finalization log, the progressive's rung and the record's candidate.
             // BOTH SIDES IN WHOLE FLIP — every scheduled bankroll is a whole-FLIP multiple of 300
@@ -744,7 +741,7 @@ contract JackpotBattle is CrapsBattleStorage {
             // below for the lane's winner — so an ordinary field still asks it one question.
             uint256 f = _loadHighField(w.key);
             // The jackpot battle's comp share is paid on its fees alone when its field seals.
-            if (!_isJackpotSlot(slot)) {
+            if (!_jackpotIsJackpotSlot(slot)) {
                 uint256 highSeats = uint32(f);
                 uint256 eligible = uint256(w.bankroll) * (entrants + w.extraUnits);
                 if (highSeats != 0) eligible += uint256(w.bankroll) * highSeats * (w.highMult - 1);
@@ -753,17 +750,17 @@ contract JackpotBattle is CrapsBattleStorage {
             }
             // The winning seat is an index into the same own-then-day range the settle walk used,
             // so naming it takes the same mapping back.
-            (uint256 dayBase, uint64 dayN) = _dayField(slot);
+            (uint256 dayBase, uint64 dayN) = _jackpotDayField(slot);
             uint64 ownN = uint64(entrants) - dayN - w.drawn;
 
             uint64 seat = uint64(uint32(g >> _BG_WINNER_SHIFT));
-            uint256 winnerId = _seatId(slot, seat, ownN, dayBase, dayN);
+            uint256 winnerId = _jackpotSeatId(slot, seat, ownN, dayBase, dayN);
             uint256 winnerWord = _loadBet(winnerId);
             // The boost: this table's own pick from the band the window advertised, plus anything
             // donated on top of it. Nothing about either was stored.
             // Donations pay in full and bypass protocol-bonus rounding.
             uint256 donated = (g >> _BG_SEED_SHIFT) & _BG_SEED_MASK;
-            boost = _roundBoost(boost);
+            boost = _jackpotRoundBoost(boost);
             // The bounties and the house money, and NOTHING else. What the field busted away is
             // deleted where it busted.
             uint256 pot = (w.stakeUnits * (entrants + w.extraUnits) + boost + donated) * _BATTLE_STAKE_UNIT + w.extraPot;
@@ -775,14 +772,14 @@ contract JackpotBattle is CrapsBattleStorage {
             uint256 heads = uint32(f);
             if (heads >= 2) {
                 seat = uint64((f >> _HF_WINNER_SHIFT) & _MASK32);
-                uint256 hId = _seatId(slot, seat, ownN, dayBase, dayN);
+                uint256 hId = _jackpotSeatId(slot, seat, ownN, dayBase, dayN);
                 uint256 hWord = _loadBet(hId);
                 _storeHighField(w.key, f | _HF_DONE_BIT);
-                uint256 lane = _laneBoost(w, word);
+                uint256 lane = _jackpotLaneBoost(w, word);
                 // The extra bounties are the seats' own posted money and pay out whole; only the
                 // lane boost is protocol money, so only it can pay in passes.
                 uint32 hWinner = uint32(hWord);
-                uint256 lanePot = heads * _highBounty(w) + lane
+                uint256 lanePot = heads * _jackpotHighBounty(w) + lane
                     - _splitAward(w.key, hWinner, _SPLIT_SRC_HIGH_CONTESTED | lane);
                 if (lanePot != 0) {
                     _creditFlip(hWinner, lanePot);
@@ -811,13 +808,13 @@ contract JackpotBattle is CrapsBattleStorage {
             // called — a field that never got near a record does not pay for a cross-contract
             // read to be told so — and `Coinflip` logs the claim it makes.
             if (scheduled) {
-                _payProgressive(w, peakFlip, score, winnerId, winnerWord);
+                _jackpotPayProgressive(w, peakFlip, score, winnerId, winnerWord);
                 _recordDiceRun(uint32(winnerWord), score);
             }
         }
     }
 
-    function _poolShare(uint256 pool, uint256 bps) internal pure returns (uint256) {
+    function _jackpotPoolShare(uint256 pool, uint256 bps) internal pure returns (uint256) {
         unchecked {
             return (pool / _BPS_DENOMINATOR) * bps + ((pool % _BPS_DENOMINATOR) * bps) / _BPS_DENOMINATOR;
         }
@@ -829,14 +826,14 @@ contract JackpotBattle is CrapsBattleStorage {
         }
     }
 
-    function _roundBoost(uint256 units) internal pure returns (uint256) {
+    function _jackpotRoundBoost(uint256 units) internal pure returns (uint256) {
         if (units <= _BOOST_ROUND_ABOVE) return units;
         unchecked {
             return ((units + _BOOST_ROUND_STEP / 2) / _BOOST_ROUND_STEP) * _BOOST_ROUND_STEP;
         }
     }
 
-    function _seatId(uint256 slot, uint64 seat, uint64 ownN, uint256 dayBase, uint64 dayN)
+    function _jackpotSeatId(uint256 slot, uint64 seat, uint64 ownN, uint256 dayBase, uint64 dayN)
         private pure returns (uint256)
     {
         // Both counts come from uint32 fields. The sum fits uint64, and each
@@ -848,23 +845,23 @@ contract JackpotBattle is CrapsBattleStorage {
         }
     }
 
-    function _shareOf(Window memory w, bool high) private view returns (uint256) {
-        if (w.bound >= _CUSTOM_SLOT_BASE || _isJackpotSlot(w.bound)) return 0;
+    function _jackpotShareOf(Window memory w, bool high) private view returns (uint256) {
+        if (w.bound >= _CUSTOM_SLOT_BASE || _jackpotIsJackpotSlot(w.bound)) return 0;
         unchecked {
             uint256 slot = uint256(w.bound);
             uint24 day = uint24(slot / _BONUS_SLOTS_PER_DAY);
             uint256 packed = _loadBudget(day);
             uint256 budget = (high ? packed >> 112 : packed) & _BUDGET_MASK;
-            return _windowShare(budget, packed >> _BUDGET_W_SHIFT, w.tier);
+            return _jackpotWindowShare(budget, packed >> _BUDGET_W_SHIFT, w.tier);
         }
     }
 
-    function _windowShare(uint256 budget, uint256 weight, uint256 tier) private pure returns (uint256) {
+    function _jackpotWindowShare(uint256 budget, uint256 weight, uint256 tier) private pure returns (uint256) {
         if (weight == 0) return 0;
         unchecked { return budget * (1 << (tier - 1)) / weight; }
     }
 
-    function _armSlot(uint64 slot, Window memory w) internal returns (uint48 index) {
+    function _jackpotArmSlot(uint64 slot, Window memory w) internal returns (uint48 index) {
         unchecked {
             index = _writeBuffer();
             _setSlotIndex(slot, index + 1);
@@ -877,7 +874,7 @@ contract JackpotBattle is CrapsBattleStorage {
             // `slot % _BONUS_SLOTS_PER_DAY` exactly. A custom battle is not on the day clock and
             // carries no day field at all.
             if (slot < _CUSTOM_SLOT_BASE) {
-                uint256 tickets = _loadDayTickets(_daySlotOf(uint256(slot) / _BONUS_SLOTS_PER_DAY));
+                uint256 tickets = _loadDayTickets(_jackpotDaySlotOf(uint256(slot) / _BONUS_SLOTS_PER_DAY));
                 if (uint32(tickets) != 0) _storeBattle(w.key, _loadBattle(w.key) + (uint32(tickets)));
                 uint256 dayHigh = (tickets >> (_DT_HIGH_SHIFT * (uint256(slot) % _BONUS_SLOTS_PER_DAY))) & _MASK32;
                 if (dayHigh != 0) _storeHighField(w.key, _loadHighField(w.key) + (dayHigh));
@@ -889,7 +886,7 @@ contract JackpotBattle is CrapsBattleStorage {
         emit CrapsBonusArmed(w.key, uint48(slot), index);
     }
 
-    function _bonusPreset(uint256 roll, uint256 period) internal pure
+    function _jackpotBonusPreset(uint256 roll, uint256 period) internal pure
         returns (uint128 bankroll, uint128 goal, uint256 boardStake, uint256 stakeUnits, uint256 tier)
     {
         // The jackpot fee is known now. Its bankroll/pot are derived only after its field locks.
@@ -901,22 +898,22 @@ contract JackpotBattle is CrapsBattleStorage {
             _schedRound(bank), bounty / 100, pick + 1);
     }
 
-    function _currentBonusSlot() internal view returns (uint24 day, uint256 period, uint256 slot) {
+    function _jackpotCurrentBonusSlot() internal view returns (uint24 day, uint256 period, uint256 slot) {
         day = _currentDayIndex();
         uint256 elapsed = (block.timestamp - 82_620) % 1 days;
         if (elapsed >= 1 days - 20 minutes) period = 5;
         else if (elapsed >= 20 minutes) {
             unchecked { period = 1 + (elapsed - 3 minutes) / 6 hours; }
         }
-        slot = _slotOf(day, period);
+        slot = _jackpotSlotOf(day, period);
     }
 
-    function _finishWindowTerms(uint24 day, uint256 period, Window memory w, uint256 highMult)
+    function _jackpotFinishWindowTerms(uint24 day, uint256 period, Window memory w, uint256 highMult)
         private pure returns (Window memory)
     {
         unchecked {
             w.postedStake = (w.played / _BONUS_CHIPS) * _MAX_PICKED_CHIPS;
-            w.bound = uint48(_slotOf(day, period));
+            w.bound = uint48(_jackpotSlotOf(day, period));
             w.highMult = highMult;
             w.terms = w.stakeUnits | (highMult << _TERM_HIGH_SHIFT);
         }
@@ -939,7 +936,7 @@ contract JackpotBattle is CrapsBattleStorage {
             emit CrapsScheduledExpired(cur);
             cur = uint64((uint256(today) - _SETTLEMENT_DAYS) * _BONUS_SLOTS_PER_DAY);
         }
-        (,, uint256 open) = _currentBonusSlot();
+        (,, uint256 open) = _jackpotCurrentBonusSlot();
         for (uint256 hops; hops < _KEEP_MAX_HOPS; ++hops) {
             if (!MineFlipGas.canRun(meter, _MAINTENANCE_GAS_MAX, _WORK_TAIL_GAS)) break;
             uint24 day = uint24(uint256(cur) / _BONUS_SLOTS_PER_DAY);
@@ -953,9 +950,9 @@ contract JackpotBattle is CrapsBattleStorage {
             }
             if (cur % _BONUS_SLOTS_PER_DAY > _BONUS_PERIODS_PER_DAY) { ++cur; continue; }
             if (_slotIndexOf(cur) == 0) {
-                if (cur >= open || _isJackpotSlot(cur)) { result.done = true; break; }
-                Window memory w = _windowTerms(day, (uint256(cur) % _BONUS_SLOTS_PER_DAY) - 1);
-                _armSlot(cur, w);
+                if (cur >= open || _jackpotIsJackpotSlot(cur)) { result.done = true; break; }
+                Window memory w = _jackpotWindowTerms(day, (uint256(cur) % _BONUS_SLOTS_PER_DAY) - 1);
+                _jackpotArmSlot(cur, w);
                 result.progressed = true;
                 MineFlipGas.markProgress(meter);
                 // Re-examine the armed slot: a field ends maintenance (done) so the same miner
@@ -974,7 +971,7 @@ contract JackpotBattle is CrapsBattleStorage {
         MineFlipGas.finish(meter);
     }
 
-    function _slotOf(uint256 day, uint256 period) private pure returns (uint256) {
+    function _jackpotSlotOf(uint256 day, uint256 period) private pure returns (uint256) {
         unchecked {
             return day * _BONUS_SLOTS_PER_DAY + period + 1;
         }
@@ -1000,7 +997,7 @@ contract JackpotBattle is CrapsBattleStorage {
                 uint256 header = _loadBet((slot << 64) | ++done);
                 bool high = header & _BET_HIGH_BIT != 0;
                 if (slot == daySlot_) _credit(uint32(header), high, 1);
-                else comps += _windowAheadPrice(slot - daySlot_ - 1, high);
+                else comps += _jackpotWindowAheadPrice(slot - daySlot_ - 1, high);
                 moved = true;
                 MineFlipGas.markProgress(meter);
             }
@@ -1011,7 +1008,7 @@ contract JackpotBattle is CrapsBattleStorage {
         return (true, moved);
     }
 
-    function _windowAheadPrice(uint256 period, bool high) private pure returns (uint256 price) {
+    function _jackpotWindowAheadPrice(uint256 period, bool high) private pure returns (uint256 price) {
         unchecked {
             price = period == 0 || period == _BONUS_PERIODS_PER_DAY - 2
                 ? _EV_WINDOW_OPENER
@@ -1020,14 +1017,14 @@ contract JackpotBattle is CrapsBattleStorage {
         }
     }
 
-    function _windowTerms(uint24 day, uint256 period) private view returns (Window memory w) {
-        uint256 slot = _slotOf(day, period);
+    function _jackpotWindowTerms(uint24 day, uint256 period) private view returns (Window memory w) {
+        uint256 slot = _jackpotSlotOf(day, period);
         uint256 state = _loadBattle(bytes32(slot));
         uint256 frozen = state >> _BG_TERM_TIER_SHIFT;
         if (frozen & _BG_TERMS_FROZEN == 0) {
             uint256 word = _dailyWordAt(day);
             if (word == 0 && period != _BONUS_PERIODS_PER_DAY - 1) revert RngNotReady();
-            return _windowTermsOn(day, period, word);
+            return _jackpotWindowTermsOn(day, period, word);
         }
         // Opened terms survive word retirement in the existing scoreboard. Settlement
         // entropy still comes from the committed normal RNG cohort (or jackpot round).
@@ -1041,13 +1038,13 @@ contract JackpotBattle is CrapsBattleStorage {
                 w.played = _schedRound(bank);
             }
         }
-        return _finishWindowTerms(day, period, w,
+        return _jackpotFinishWindowTerms(day, period, w,
             frozen & _BG_TERM_HIGH_TAIL != 0 ? CrapsPriceLib.HIGH_TAIL : CrapsPriceLib.HIGH_BASE);
     }
 
-    function _windowTermsOn(uint24 day, uint256 period, uint256 word) internal view returns (Window memory w) {
-        (w.bankroll, w.goal, w.played, w.stakeUnits, w.tier) = _bonusPreset(_bonusRoll(word, period), period);
-        return _finishWindowTerms(day, period, w, _highMultOf(word));
+    function _jackpotWindowTermsOn(uint24 day, uint256 period, uint256 word) internal view returns (Window memory w) {
+        (w.bankroll, w.goal, w.played, w.stakeUnits, w.tier) = _jackpotBonusPreset(_jackpotBonusRoll(word, period), period);
+        return _jackpotFinishWindowTerms(day, period, w, _highMultOf(word));
     }
 
     function runCrapsMaintenance(uint256 allowance) external returns (MineFlipGas.Result memory result) {

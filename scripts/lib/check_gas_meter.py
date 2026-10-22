@@ -15,8 +15,6 @@ from rng_window_extract import enclosing_functions, strip_comments_and_strings
 # Accounting reads measure deltas, including the minimum work needed for a reward.
 # Admission reads select deterministic checkpoints/forwarding.
 REVIEWED = {
-    ("CrapsBattle.sol", "_delegateJackpot"): [
-        "let ok := delegatecall(gas(), target, 0, calldatasize(), 0, 0)"],
     ("DegenerusGame.sol", "minerAction"): [
         "let ok := delegatecall(gas(), target, ptr, calldatasize(), 0, 0)"],
     ("libraries/MineFlipGas.sol", "start"): [

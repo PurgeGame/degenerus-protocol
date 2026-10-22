@@ -5,17 +5,11 @@ import {Craps} from "./Craps.sol";
 import {FlipRoundLib} from "./libraries/FlipRoundLib.sol";
 import {CrapsCustomTerms} from "./CrapsCustomTerms.sol";
 
-/// @title CrapsEngine
-/// @notice The table's stateless computations: custom-definition validation and the pure
-///         dice entry points. The table uses `settleBattle` to resolve runs.
-/// @dev Holds no storage, takes no constructor arguments, has no owner and no upgrade path.
-///      `CrapsBattle` reaches it by STATICCALL at the pinned `ContractAddresses.CRAPS_ENGINE`,
-///      which is what keeps the table itself under the EIP-170 ceiling: the engine's whole
-///      closure — board, scatter, shooter loop — compiles here and nowhere else. Anyone may call
-///      it; it can only compute. Custom validation also reads the close-time deadline against the clock.
+/// @notice Stateless engine component inherited by CrapsBattle.
+/// @dev External entry points remain pure/view for independent STATICCALL consumers.
 contract CrapsEngine is Craps, CrapsCustomTerms {
     /// @notice Validate and pack a custom table's immutable definition.
-    function customDefinition(uint32 played, uint8 bankMult, uint16 goalMult, uint24 stakeUnits, uint40 closeTime, bool multiEntry, uint16 highRollerMult) external view returns (uint256)
+    function customDefinition(uint32 played, uint8 bankMult, uint16 goalMult, uint24 stakeUnits, uint40 closeTime, bool multiEntry, uint16 highRollerMult) public view returns (uint256)
     {
         return _customDefinition(played, bankMult, goalMult, stakeUnits, closeTime, multiEntry, highRollerMult);
     }
@@ -41,7 +35,7 @@ contract CrapsEngine is Craps, CrapsCustomTerms {
         uint256 goal,
         uint256 salt,
         uint256 boost
-    ) external pure returns (SlipResult memory r) {
+    ) public pure returns (SlipResult memory r) {
         r = _play(packedChips, chipFlip, scatterHash, scatterCount, seed, bankroll, goal, salt, boost);
     }
 
@@ -60,7 +54,7 @@ contract CrapsEngine is Craps, CrapsCustomTerms {
         uint256 salt,
         uint256 boost,
         uint256 bounds
-    ) external pure returns (SlipResult memory r) {
+    ) public pure returns (SlipResult memory r) {
         uint256 cap = bounds & 0xFFFF;
         uint256 rollBudget = bounds >> 16;
         if (cap > _MAX_SLIP_HANDS) cap = _MAX_SLIP_HANDS;
@@ -81,7 +75,7 @@ contract CrapsEngine is Craps, CrapsCustomTerms {
     ///      between-shooter budget and 1,111-roll absolute ceiling.
     /// @dev Compact header: owner32, chips30, boon3, high6 (bit 71 unused), then the derived awarded bit.
     function settleBattle(uint256 betId, uint256 header, uint256 chipFlip, uint256 bankroll,
-        uint256 goal, uint48 bound, uint256 field, uint256 word) external pure returns (SlipResult memory r)
+        uint256 goal, uint48 bound, uint256 field, uint256 word) public pure virtual returns (SlipResult memory r)
     {
         uint256 key = header >> 72 == 0
             ? uint32(header)

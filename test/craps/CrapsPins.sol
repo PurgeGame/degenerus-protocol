@@ -422,9 +422,8 @@ abstract contract CrapsPins is Test {
         vm.etch(ContractAddresses.COINFLIP, address(new MockCoinflip()).code);
         vm.etch(ContractAddresses.VAULT, address(new MockVault()).code);
         vm.etch(ContractAddresses.QUESTS, address(new MockQuests()).code);
-        // The real engine, at its pin: the table settles nothing without it.
-        vm.etch(ContractAddresses.CRAPS_ENGINE, address(new CrapsEngine()).code);
-        vm.etch(ContractAddresses.JACKPOT_BATTLE, address(new JackpotBattle()).code);
+        vm.etch(ContractAddresses.CRAPS, type(CrapsBattle).runtimeCode);
+        vm.etch(address(0xC6A6), type(CrapsEngine).runtimeCode);
         quests = MockQuests(ContractAddresses.QUESTS);
         game = MockGame(ContractAddresses.GAME);
         mockWalletIdRoot = game.walletIdRoot();

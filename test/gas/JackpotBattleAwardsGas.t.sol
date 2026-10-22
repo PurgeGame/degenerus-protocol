@@ -3,7 +3,6 @@ pragma solidity 0.8.38;
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
-import {JackpotBattleViews} from "../craps/JackpotBattleViews.sol";
 import {CrapsSlots} from "../helpers/GameSlots.sol";
 
 /// @dev The jackpot slot winner's progressive award against the real Coinflip and Game, driven
@@ -14,7 +13,6 @@ contract JackpotBattleAwardsGasTest is DeployProtocol {
 
     function setUp() public {
         _deployProtocol();
-        vm.etch(ContractAddresses.JACKPOT_BATTLE, address(new JackpotBattleViews()).code);
         crapsBattle.seedProgressive(500_000_000 ether);
         _giveWalletId(WINNER);
     }
