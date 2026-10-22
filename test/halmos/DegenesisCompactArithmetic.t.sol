@@ -3,6 +3,7 @@ pragma solidity 0.8.38;
 
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {DegenerusGameBoxModule} from "../../contracts/modules/DegenerusGameBoxModule.sol";
 import {DegenerusGameLootboxModule} from "../../contracts/modules/DegenerusGameLootboxModule.sol";
 
 /// @dev Exposes the production box-queue append/read and order decode unchanged.
@@ -46,7 +47,7 @@ contract CompactQueueHarness is DegenerusGameStorage {
 }
 
 /// @dev Exposes the production 12-bit score code unchanged.
-contract ScoreCodeHarness is DegenerusGameLootboxModule {
+contract ScoreCodeHarness is DegenerusGameBoxModule {
     function code(uint256 score) external pure returns (uint256) {
         return _scoreCode(score);
     }

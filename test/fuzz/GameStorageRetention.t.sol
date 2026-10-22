@@ -4,6 +4,7 @@ pragma solidity 0.8.38;
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGameRngUtils} from "../../contracts/modules/DegenerusGameRngUtils.sol";
+import {DegenerusGameBoxModule} from "../../contracts/modules/DegenerusGameBoxModule.sol";
 import {DegenerusGameBoonModule} from "../../contracts/modules/DegenerusGameBoonModule.sol";
 import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJackpotModule.sol";
 import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
@@ -52,7 +53,7 @@ contract GameRetentionHarness is DegenerusGameRngUtils {
     }
 }
 
-contract RetainedBoonHarness is DegenerusGameBoonModule {
+contract RetainedBoonHarness is DegenerusGameBoxModule {
     function seed(uint256 s0) external { boonPacked[7].slot0 = s0; }
     function today() external view returns (uint24) { return _simulatedDayIndex(); }
 }

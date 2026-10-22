@@ -2,9 +2,10 @@
 pragma solidity 0.8.38;
 
 import {Test} from "forge-std/Test.sol";
+import {DegenerusGameBoxModule} from "../../contracts/modules/DegenerusGameBoxModule.sol";
 import {GameAfkingModule} from "../../contracts/modules/GameAfkingModule.sol";
 
-contract AfkingIdSetHarness is GameAfkingModule {
+contract AfkingIdSetHarness is DegenerusGameBoxModule {
     function add(address owner, bool tickets) external returns (uint32 id) {
         (id,) = _registerWallet(owner, 0);
         _insertMember(id, uint256(id) | (tickets ? SUB_TICKETS_BIT : 0), 7);

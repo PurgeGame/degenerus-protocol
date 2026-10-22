@@ -19,6 +19,7 @@ import {DegenerusGameWhaleModule} from "../../../contracts/modules/DegenerusGame
 import {DegenerusGameJackpotModule} from "../../../contracts/modules/DegenerusGameJackpotModule.sol";
 import {DegenerusGameDecimatorModule} from "../../../contracts/modules/DegenerusGameDecimatorModule.sol";
 import {DegenerusGameGameOverModule} from "../../../contracts/modules/DegenerusGameGameOverModule.sol";
+import {DegenerusGameBoxModule} from "../../../contracts/modules/DegenerusGameBoxModule.sol";
 import {DegenerusGameLootboxModule} from "../../../contracts/modules/DegenerusGameLootboxModule.sol";
 import {DegenerusGameBoonModule} from "../../../contracts/modules/DegenerusGameBoonModule.sol";
 import {DegenerusGameDegeneretteModule} from "../../../contracts/modules/DegenerusGameDegeneretteModule.sol";
@@ -111,6 +112,7 @@ abstract contract DeployProtocol is Test {
     DegenerusGameJackpotModule public jackpotModule;
     DegenerusGameDecimatorModule public decimatorModule;
     DegenerusGameGameOverModule public gameOverModule;
+    DegenerusGameBoxModule public boxModule;
     DegenerusGameLootboxModule public lootboxModule;
     DegenerusGameBoonModule public boonModule;
     DegenerusGameDegeneretteModule public degeneretteModule;
@@ -336,11 +338,8 @@ abstract contract DeployProtocol is Test {
         jackpotModule = new DegenerusGameJackpotModule();
         decimatorModule = new DegenerusGameDecimatorModule();
         gameOverModule = new DegenerusGameGameOverModule();
-        lootboxModule = new DegenerusGameLootboxModule();
-        boonModule = new DegenerusGameBoonModule();
-        degeneretteModule = new DegenerusGameDegeneretteModule();
+        boxModule = new DegenerusGameBoxModule();
         bingoModule = new DegenerusGameBingoModule();
-        afkingModule = new GameAfkingModule();
         coin = new FLIP();
         coinflip = new Coinflip();
         game = new DegenerusGame();
@@ -367,6 +366,10 @@ abstract contract DeployProtocol is Test {
         jackpotDrawModule = new DegenerusGameJackpotDrawModule();
         degenesisModule = new DegenerusGameDegenesisModule();
         ownerGovernance = new DegenerusOwnerGovernance();
+        lootboxModule = DegenerusGameLootboxModule(payable(address(boxModule)));
+        boonModule = DegenerusGameBoonModule(payable(address(boxModule)));
+        degeneretteModule = DegenerusGameDegeneretteModule(payable(address(boxModule)));
+        afkingModule = GameAfkingModule(payable(address(boxModule)));
         // END CANONICAL DEPLOYMENTS
         if (initializeDeities) game.initProtocolDeity();
     }

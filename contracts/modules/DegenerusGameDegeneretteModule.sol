@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {GameBoxInternals} from "./GameBoxInternals.sol";
+
 import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol";
 
 /*
@@ -29,8 +31,7 @@ import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol
 import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
 import {RECORD_KIND_SPIN} from "../interfaces/ICoinflip.sol";
 import {
-    IDegenerusGameLootboxModule,
-    IDegenerusGameBoonModule
+    IDegenerusGameLootboxModule
 } from "../interfaces/IDegenerusGameModules.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {MineFlipGas} from "../libraries/MineFlipGas.sol";
@@ -52,7 +53,7 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
  *      FLIP payouts face a per-bet survival flip (double-or-nothing) at resolution,
  *      so all FLIP entering existence survives at least one coinflip.
  */
-contract DegenerusGameDegeneretteModule is
+abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
     DegenerusGamePayoutUtils,
     DegenerusGameMintStreakUtils
 {
@@ -155,14 +156,6 @@ contract DegenerusGameDegeneretteModule is
     // Internal Helpers
     // -------------------------------------------------------------------------
 
-    /// @dev Reverts with the provided reason bytes from a delegatecall failure.
-    /// @param reason The revert reason bytes from the failed call.
-    function _revertDelegate(bytes memory reason) private pure {
-        if (reason.length == 0) revert EmptyRevert();
-        assembly ("memory-safe") {
-            revert(add(32, reason), mload(reason))
-        }
-    }
 
     // -------------------------------------------------------------------------
     // Constants
@@ -408,34 +401,43 @@ contract DegenerusGameDegeneretteModule is
         return _runDegeneretteWork(gasAllowance);
     }
 
+    struct BetWork {
+        uint48 index;
+        uint256 pos;
+        uint256 qlen;
+        uint256 rngWord;
+        uint256 startPos;
+    }
+
     function _runDegeneretteWork(uint256 gasAllowance) private returns (MineFlipGas.Result memory result) {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (_activeDegeneretteCursor() != 0) return result;
+        BetWork memory c;
         MineFlipGas.Meter memory meter = MineFlipGas.start(gasAllowance);
-        uint48 index = _rngReadBuffer();
-        uint256 pos = degeneretteCursor;
-        uint256 qlen = degeneretteReadCount;
-        if (pos == qlen) { result.done = true; return result; }
+        c.index = _rngReadBuffer();
+        c.pos = degeneretteCursor;
+        c.qlen = degeneretteReadCount;
+        if (c.pos == c.qlen) { result.done = true; return result; }
         if (_rngConsumerStage() != 4) return result;
-        uint256 rngWord = _lootboxWord(index);
+        c.rngWord = _lootboxWord(c.index);
         ResolveAcc memory acc;
-        uint256 startPos = pos;
-        _setActiveDegeneretteCursor(pos + 1);
-        while (pos < qlen) {
-            uint256 bet = _loadDegeneretteBet(index, pos);
+        c.startPos = c.pos;
+        _setActiveDegeneretteCursor(c.pos + 1);
+        while (c.pos < c.qlen) {
+            uint256 bet = _loadDegeneretteBet(c.index, c.pos);
             if (!MineFlipGas.canRun(meter, _betGasMaximum(bet), BET_TAIL_GAS)) break;
-            ++pos;
-            _setActiveDegeneretteCursor(pos + 1);
+            ++c.pos;
+            _setActiveDegeneretteCursor(c.pos + 1);
             ++result.rewardBasis;
-            _resolveBet(bet, uint32(index), uint64(pos), rngWord, acc);
+            _resolveBet(bet, uint32(c.index), uint64(c.pos), c.rngWord, acc);
             MineFlipGas.markProgress(meter);
         }
         _flushOwner(acc);
         _flushPool(acc);
-        result.progressed = pos != startPos;
-        if (result.progressed) degeneretteCursor = uint48(pos);
+        result.progressed = c.pos != c.startPos;
+        if (result.progressed) degeneretteCursor = uint48(c.pos);
         _setActiveDegeneretteCursor(0);
-        result.done = pos == qlen;
+        result.done = c.pos == c.qlen;
         if (result.done) _tryCompleteRng();
         MineFlipGas.finish(meter);
     }
@@ -767,6 +769,15 @@ contract DegenerusGameDegeneretteModule is
     ///      accumulate into `acc` per owner (flushed by the caller or at the next owner);
     ///      lootbox-share is summed across this bet's spins and resolved ONCE here (one box
     ///      per bet). Every spin is recorded in the bet's single DegeneretteResolved event.
+    struct ResolvedBet {
+        uint32 playerId;
+        uint8 symbol;
+        uint8 spinCount;
+        uint8 currency;
+        uint16 activityScore;
+        uint128 amountPerSpin;
+    }
+
     function _resolveBet(
         uint256 bet,
         uint32 index,
@@ -774,31 +785,32 @@ contract DegenerusGameDegeneretteModule is
         uint256 rngWord,
         ResolveAcc memory acc
     ) private {
-        uint32 playerId = uint32(bet);
-        if (playerId != acc.ownerId) {
+        ResolvedBet memory c;
+        c.playerId = uint32(bet);
+        if (c.playerId != acc.ownerId) {
             _flushOwner(acc);
-            acc.ownerId = playerId;
+            acc.ownerId = c.playerId;
             acc.ownerElement = 0;
             acc.payee = address(0);
         }
-        uint8 symbol = uint8((bet >> BET_SYMBOL_SHIFT) & MASK_5);
-        uint8 spinCount = uint8((bet >> BET_COUNT_SHIFT) & MASK_5);
-        uint8 currency = uint8((bet >> BET_CURRENCY_SHIFT) & 1);
-        uint16 activityScore = uint16((bet >> BET_ACTIVITY_SHIFT) & MASK_16);
-        uint128 amountPerSpin = uint128(
+        c.symbol = uint8((bet >> BET_SYMBOL_SHIFT) & MASK_5);
+        c.spinCount = uint8((bet >> BET_COUNT_SHIFT) & MASK_5);
+        c.currency = uint8((bet >> BET_CURRENCY_SHIFT) & 1);
+        c.activityScore = uint16((bet >> BET_ACTIVITY_SHIFT) & MASK_16);
+        c.amountPerSpin = uint128(
             ((bet >> BET_STAKE_SHIFT) & MASK_64) *
-                (currency == CURRENCY_ETH ? ETH_STAKE_UNIT : FLIP_STAKE_UNIT)
+                (c.currency == CURRENCY_ETH ? ETH_STAKE_UNIT : FLIP_STAKE_UNIT)
         );
 
         BetTotals memory totals;
         // Five bytes per spin: player traits (big-endian), then score | house wilds << 4.
-        bytes memory spins = new bytes(uint256(spinCount) * 5);
+        bytes memory spins = new bytes(uint256(c.spinCount) * 5);
 
-        for (uint8 spinIdx; spinIdx < spinCount; ) {
-            SpinResult memory spin = _rollBetSpin(rngWord, index, symbol, spinIdx, currency);
+        for (uint8 spinIdx; spinIdx < c.spinCount; ) {
+            SpinResult memory spin = _rollBetSpin(rngWord, index, c.symbol, spinIdx, c.currency);
             if (spinIdx == 0) totals.firstResultTraits = spin.resultTraits;
             uint8 s = spin.score;
-            uint256 payout = _degenerettePayout(spin, currency, amountPerSpin, activityScore);
+            uint256 payout = _degenerettePayout(spin, c.currency, c.amountPerSpin, c.activityScore);
             {
                 uint256 traits = spin.playerTraits;
                 uint256 tail = uint256(s) | (uint256(spin.resultWilds) << 4);
@@ -818,9 +830,9 @@ contract DegenerusGameDegeneretteModule is
                 // lootbox-share is returned and summed into this bet's box. `paid` is
                 // what the spin actually pays across both legs.
                 (uint256 spinLootboxShare, uint256 paid) = _distributePayout(
-                    playerId,
-                    currency,
-                    amountPerSpin,
+                    c.playerId,
+                    c.currency,
+                    c.amountPerSpin,
                     payout,
                     acc
                 );
@@ -838,8 +850,8 @@ contract DegenerusGameDegeneretteModule is
             // Award sDGNRS from Reward pool on S>=7 ETH bets. Stays per-spin:
             // _awardDegeneretteDgnrs reads poolBalance fresh per call, so summing
             // off a stale balance would change the payout.
-            if (currency == CURRENCY_ETH && s >= 7) {
-                _awardDegeneretteDgnrs(acc, amountPerSpin, s);
+            if (c.currency == CURRENCY_ETH && s >= 7) {
+                _awardDegeneretteDgnrs(acc, c.amountPerSpin, s);
             }
 
             unchecked {
@@ -856,8 +868,8 @@ contract DegenerusGameDegeneretteModule is
         // earns nothing. The accumulator holds exactly this bet's payout once (added per
         // spin), so doubling adds it again and zeroing subtracts it back out. The outcome
         // reads off DegeneretteResolved: totalPayout vs the payouts its packed spins imply.
-        if (currency == CURRENCY_FLIP && totals.totalPayout != 0) {
-            if (EntropyLib.hash4(rngWord, playerId, betId, BET_SURVIVAL_TAG) & 1 == 1) {
+        if (c.currency == CURRENCY_FLIP && totals.totalPayout != 0) {
+            if (EntropyLib.hash4(rngWord, c.playerId, betId, BET_SURVIVAL_TAG) & 1 == 1) {
                 acc.flipMint += totals.totalPayout;
                 totals.totalPayout *= 2;
             } else {
@@ -880,7 +892,7 @@ contract DegenerusGameDegeneretteModule is
             uint256 rounded = totals.totalPayout > FlipRoundLib.FLIP_ROUND_THRESHOLD
                 ? FlipRoundLib.roundFlipToHundreds(
                     totals.totalPayout,
-                    EntropyLib.hash4(rngWord, playerId, betId, FLIP_ROUND_TAG)
+                    EntropyLib.hash4(rngWord, c.playerId, betId, FLIP_ROUND_TAG)
                 )
                 : FlipRoundLib.floorWholeFlip(totals.totalPayout);
             if (rounded > totals.totalPayout) {
@@ -898,10 +910,10 @@ contract DegenerusGameDegeneretteModule is
             // The bet-win recirc box itemizes its contents via LootBoxOpened (like every box path)
             // so the per-box FLIP datum is recoverable.
             _resolveLootboxDirect(
-                playerId,
+                c.playerId,
                 totals.betLootboxShare,
                 EntropyLib.hash2(rngWord, betId),
-                activityScore
+                c.activityScore
             );
         }
 
@@ -912,12 +924,12 @@ contract DegenerusGameDegeneretteModule is
             uint256 refFlip = (totals.affiliateBoxShare * PRICE_COIN_UNIT) /
                 PriceLookupLib.priceForLevel(level + 1);
             coinflip.creditFlip(
-                affiliate.getReferrerIdById(playerId), (refFlip * AFFILIATE_BOX_BPS) / 10_000
+                affiliate.getReferrerIdById(c.playerId), (refFlip * AFFILIATE_BOX_BPS) / 10_000
             );
         }
 
         emit DegeneretteResolved(
-            playerId,
+            c.playerId,
             index,
             betId,
             totals.totalPayout,
@@ -939,11 +951,11 @@ contract DegenerusGameDegeneretteModule is
             // side slot; an unflagged bet never reads it when the buffer is reused.
             // The chain's FLIP joins the owner's batched mint, which pays the owner's payee.
             acc.flipMint += _flipSpinChain(
-                playerId,
+                c.playerId,
                 recordBounty * TOKEN_MATH_SCALE,
-                activityScore,
-                EntropyLib.hash4(rngWord, playerId, betId, RECORD_SPIN_TAG),
-                symbol,
+                c.activityScore,
+                EntropyLib.hash4(rngWord, c.playerId, betId, RECORD_SPIN_TAG),
+                c.symbol,
                 BOX_SPIN_TYPE_RECORD
             );
         }
@@ -1096,47 +1108,24 @@ contract DegenerusGameDegeneretteModule is
         return _rollSpin(spinSeed, resultSeed, symbol, currency);
     }
 
-    /// @dev Delegates to the boon module to consume the degenerette stake boon in this
+    /// @dev Consume the degenerette stake boon in this
     ///      bet's own currency lane. Returns 0 when the lane is empty or expired (an
     ///      expired lane is cleared); the other currencies' lanes are never touched.
     function _consumeDegeneretteBoon(
         uint32 id,
         uint8 currency
     ) private returns (uint16 boonBps) {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_BOON_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameBoonModule.consumeDegeneretteBoon.selector,
-                    id,
-                    currency
-                )
-            );
-        if (!ok) _revertDelegate(data);
-        boonBps = abi.decode(data, (uint16));
+        return _boxConsumeDegeneretteBoon(id, currency);
     }
 
-    /// @dev Delegates to the lootbox open module to resolve lootbox rewards directly: the
-    ///      internal ETH reward-spin recirculation and a purchased bet's combined win box both
-    ///      draw the shared per-level EV allowance. The resolved box itemizes its contents via `LootBoxOpened` like every box path.
+    /// @dev Resolve a purchased bet's combined win box against the shared per-level EV allowance.
     function _resolveLootboxDirect(
         uint32 id,
         uint256 amount,
         uint256 rngWord,
         uint16 activityScore
     ) private {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_LOOTBOX_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameLootboxModule.resolveLootboxDirect.selector,
-                    id,
-                    amount,
-                    rngWord,
-                    activityScore
-                )
-            );
-        if (!ok) _revertDelegate(data);
+        _boxResolveLootboxDirect(id, amount, rngWord, activityScore);
     }
 
     // -------------------------------------------------------------------------
@@ -1363,7 +1352,7 @@ contract DegenerusGameDegeneretteModule is
     // Lootbox-triggered Degenerette spins
     // -------------------------------------------------------------------------
     // Three lootbox value rolls resolve as Degenerette spins instead of flat awards.
-    // Each is delegatecalled by the lootbox module in the Game's storage context; the
+    // Lootbox settlement calls these bodies in the Game's storage context; the
     // `address(this) != GAME` guard rejects any direct call on the deployed module
     // instance. Spin draws derive purely from the passed (hash2-tagged, freeze-safe)
     // seed — no live state enters the seed, so the outcome is fixed at fulfillment.
@@ -1429,6 +1418,16 @@ contract DegenerusGameDegeneretteModule is
         uint256 seed,
         uint8 symbol
     ) external payable returns (uint256 wwxrpOut) {
+        return _boxResolveWwxrpSpinFromBox(playerId, stake, activityScore, seed, symbol);
+    }
+
+    function _boxResolveWwxrpSpinFromBox(
+        uint32 playerId,
+        uint256 stake,
+        uint16 activityScore,
+        uint256 seed,
+        uint8 symbol
+    ) internal override returns (uint256 wwxrpOut) {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (stake == 0 || stake > type(uint128).max) return 0;
         uint64 betId = _boxBetId(seed, BOX_SPIN_TYPE_WWXRP);
@@ -1467,6 +1466,16 @@ contract DegenerusGameDegeneretteModule is
         uint256 seed,
         uint8 symbol
     ) external payable returns (uint256 flipOut) {
+        return _boxResolveFlipSpinsFromBox(playerId, totalStake, activityScore, seed, symbol);
+    }
+
+    function _boxResolveFlipSpinsFromBox(
+        uint32 playerId,
+        uint256 totalStake,
+        uint16 activityScore,
+        uint256 seed,
+        uint8 symbol
+    ) internal override returns (uint256 flipOut) {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         // Returned, not minted: the caller sums every FLIP lane in the entry and credits once.
         return
@@ -1549,6 +1558,16 @@ contract DegenerusGameDegeneretteModule is
         uint256 seed,
         uint8 symbol
     ) external payable {
+        _boxResolveEthSpinFromBox(playerId, stake, activityScore, seed, symbol);
+    }
+
+    function _boxResolveEthSpinFromBox(
+        uint32 playerId,
+        uint256 stake,
+        uint16 activityScore,
+        uint256 seed,
+        uint8 symbol
+    ) internal override {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (stake == 0 || stake > type(uint128).max) return;
         uint64 betId = _boxBetId(seed, BOX_SPIN_TYPE_ETH);
@@ -1596,12 +1615,22 @@ contract DegenerusGameDegeneretteModule is
         // Recirc into a fresh re-hashed box; allowEthSpin=false there -> no ETH-spin cascade.
         // The recirculated box's contents are itemized for the UI via its own LootBoxOpened.
         if (lootboxShare != 0) {
-            _resolveLootboxDirect(
-                playerId,
-                lootboxShare,
-                EntropyLib.hash2(seed, BOX_RECIRC_TAG),
-                activityScore
+            // Keep this frame so the box resolver has no static recursion path.
+            (bool ok, bytes memory data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(
+                abi.encodeWithSelector(
+                    IDegenerusGameLootboxModule.resolveLootboxDirect.selector,
+                    playerId,
+                    lootboxShare,
+                    EntropyLib.hash2(seed, BOX_RECIRC_TAG),
+                    activityScore
+                )
             );
+            if (!ok) {
+                if (data.length == 0) revert EmptyRevert();
+                assembly ("memory-safe") {
+                    revert(add(32, data), mload(data))
+                }
+            }
         }
     }
 }

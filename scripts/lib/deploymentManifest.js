@@ -65,30 +65,33 @@ export const DEPLOYMENTS = [
   },
   {
     "key": "GAME_LOOTBOX_MODULE",
-    "contract": "DegenerusGameLootboxModule",
+    "contract": "DegenerusGameBoxModule",
     "aliases": [
-      "GAME_LOOTBOX_MODULE"
+      "GAME_LOOTBOX_MODULE",
+      "GAME_BOON_MODULE",
+      "GAME_DEGENERETTE_MODULE",
+      "GAME_AFKING_MODULE"
     ],
-    "fixtureField": "lootboxModule",
-    "fixtureType": "DegenerusGameLootboxModule"
-  },
-  {
-    "key": "GAME_BOON_MODULE",
-    "contract": "DegenerusGameBoonModule",
-    "aliases": [
-      "GAME_BOON_MODULE"
-    ],
-    "fixtureField": "boonModule",
-    "fixtureType": "DegenerusGameBoonModule"
-  },
-  {
-    "key": "GAME_DEGENERETTE_MODULE",
-    "contract": "DegenerusGameDegeneretteModule",
-    "aliases": [
-      "GAME_DEGENERETTE_MODULE"
-    ],
-    "fixtureField": "degeneretteModule",
-    "fixtureType": "DegenerusGameDegeneretteModule"
+    "fixtureField": "boxModule",
+    "fixtureType": "DegenerusGameBoxModule",
+    "fixtureAliases": {
+      "GAME_LOOTBOX_MODULE": {
+        "field": "lootboxModule",
+        "type": "DegenerusGameLootboxModule"
+      },
+      "GAME_BOON_MODULE": {
+        "field": "boonModule",
+        "type": "DegenerusGameBoonModule"
+      },
+      "GAME_DEGENERETTE_MODULE": {
+        "field": "degeneretteModule",
+        "type": "DegenerusGameDegeneretteModule"
+      },
+      "GAME_AFKING_MODULE": {
+        "field": "afkingModule",
+        "type": "GameAfkingModule"
+      }
+    }
   },
   {
     "key": "GAME_BINGO_MODULE",
@@ -98,15 +101,6 @@ export const DEPLOYMENTS = [
     ],
     "fixtureField": "bingoModule",
     "fixtureType": "DegenerusGameBingoModule"
-  },
-  {
-    "key": "GAME_AFKING_MODULE",
-    "contract": "GameAfkingModule",
-    "aliases": [
-      "GAME_AFKING_MODULE"
-    ],
-    "fixtureField": "afkingModule",
-    "fixtureType": "GameAfkingModule"
   },
   {
     "key": "COIN",

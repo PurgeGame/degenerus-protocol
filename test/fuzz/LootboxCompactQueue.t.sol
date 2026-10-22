@@ -1,18 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
-import {Vm, VmSafe} from "forge-std/Vm.sol";
+import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
+import {DegenerusGameBoxModule} from "../../contracts/modules/DegenerusGameBoxModule.sol";
+import {DegenerusGameBoonModule} from "../../contracts/modules/DegenerusGameBoonModule.sol";
+import {GameBoxInternals} from "../../contracts/modules/GameBoxInternals.sol";
 import {DegenerusGameLootboxModule} from "../../contracts/modules/DegenerusGameLootboxModule.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
-import {IDegenerusGameBoonModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {QueueHost} from "../helpers/BoxQueueHost.sol";
 import {GameFunding} from "../helpers/GameFunding.sol";
@@ -20,9 +22,21 @@ import {WalletSeed} from "../helpers/WalletSeed.sol";
 import {TicketQueueStorage} from "./helpers/TicketQueueStorage.sol";
 
 /// @dev The Lootbox module's own score codec, the one owner of the queued entry word.
-contract ScoreCodeHarness is DegenerusGameLootboxModule {
+contract ScoreCodeHarness is DegenerusGameBoxModule {
     function code(uint256 score) external pure returns (uint256) { return _scoreCode(score); }
     function decode(uint256 c) external pure returns (uint256) { return _scoreFromCode(c); }
+}
+
+contract BoonSeedBoxHarness is DegenerusGameBoxModule {
+    event BoonSeed(uint32 id, uint256 count, uint24 currentLevel, uint256 seed, uint256 nonceBase);
+
+    function _boxRollBoxBoons(
+        uint32 id, uint256 perBoxBudget, uint256 boxCount, uint256 originalAmount,
+        uint24 currentLevel, uint256 seed, uint256 nonceBase
+    ) internal override(DegenerusGameBoonModule, GameBoxInternals) {
+        emit BoonSeed(id, boxCount, currentLevel, seed, nonceBase);
+        super._boxRollBoxBoons(id, perBoxBudget, boxCount, originalAmount, currentLevel, seed, nonceBase);
+    }
 }
 
 /// @title LootboxCompactQueue -- three 85-bit orders per queue word
@@ -335,11 +349,11 @@ contract LootboxCompactQueueTest is DeployProtocol {
         _buy(alice, order);
         assertEq(host.entryAt(b, 0), host.entryAt(b, 1));
         assertEq(host.entryAt(b, 1), host.entryAt(b, 2), "three identical entries");
+        BoonSeedBoxHarness probe = new BoonSeedBoxHarness();
+        vm.etch(ContractAddresses.GAME_LOOTBOX_MODULE, address(probe).code);
         host.sealAndPublish(WORD);
         vm.recordLogs();
-        vm.startStateDiffRecording();
         assertTrue(host.work(ALLOWANCE).done, "drain completes");
-        VmSafe.AccountAccess[] memory accesses = vm.stopAndReturnStateDiff();
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint32 id = _id(alice);
         bytes32[3] memory seq;
@@ -349,34 +363,25 @@ contract LootboxCompactQueueTest is DeployProtocol {
         assertTrue(_root(WORD, b, 0) != _root(WORD, b, 1) && _root(WORD, b, 1) != _root(WORD, b, 2));
         assertTrue(seq[0] != seq[1] && seq[1] != seq[2] && seq[0] != seq[2], "distinct box seed sequences");
 
-        // The boon seeds the contract actually passed: one rollBoxBoons delegatecall per order,
-        // in position order, each carrying its own order's seed.
+        // Observe the internal draw boundary while running its production body.
         uint256[3] memory boon;
         uint256 calls;
-        for (uint256 i; i < accesses.length; ++i) {
-            VmSafe.AccountAccess memory a = accesses[i];
-            if (a.kind != VmSafe.AccountAccessKind.DelegateCall || a.data.length < 4
-                || bytes4(a.data) != IDegenerusGameBoonModule.rollBoxBoons.selector) continue;
-            (uint32 boonId,, uint256 boxCount,, uint24 lvl, uint256 seed, uint256 nonceBase) =
-                abi.decode(_args(a.data), (uint32, uint256, uint256, uint256, uint24, uint256, uint256));
+        bytes32 topic = keccak256("BoonSeed(uint32,uint256,uint24,uint256,uint256)");
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics.length != 1 || logs[i].topics[0] != topic) continue;
+            (uint32 boonId, uint256 boxCount, uint24 lvl, uint256 seed, uint256 nonceBase) =
+                abi.decode(logs[i].data, (uint32, uint256, uint24, uint256, uint256));
             if (boonId != id || boxCount != 10) continue;
-            assertEq(a.account, ContractAddresses.GAME_BOON_MODULE, "the boon draw runs the Boon module");
-            assertFalse(a.reverted, "the boon draw completed");
+            assertEq(logs[i].emitter, address(game), "the boon draw uses Game storage");
             assertEq(lvl, host.level() + 1, "drawn at the open level");
             assertEq(nonceBase, 0, "each order's boxes number from its own start");
-            assertLt(calls, 3, "one boon dispatch per order");
+            assertLt(calls, 3, "one boon draw per order");
             assertEq(seed, EntropyLib.hash4(_root(WORD, b, calls), uint256(id), BOX_BOON_TAG, b),
                 "the order's boon seed binds its logical position");
             boon[calls++] = seed;
         }
-        assertEq(calls, 3, "every order dispatched its boon draw");
+        assertEq(calls, 3, "every order runs its boon draw");
         assertTrue(boon[0] != boon[1] && boon[1] != boon[2] && boon[0] != boon[2], "distinct boon seeds");
-    }
-
-    /// @dev Calldata without its selector.
-    function _args(bytes memory data) internal pure returns (bytes memory out) {
-        out = new bytes(data.length - 4);
-        for (uint256 i; i < out.length; ++i) out[i] = data[i + 4];
     }
 
     // =========================================================================

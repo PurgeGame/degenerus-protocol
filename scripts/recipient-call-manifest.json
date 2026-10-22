@@ -7273,6 +7273,14 @@
   },
   {
     "path": "contracts/modules/DegenerusGameBoonModule.sol",
+    "scope": "DegenerusGameBoonModule._boxRollBoxBoons",
+    "kind": "recipient-helper",
+    "expression": "_rollBoxBoonLane( id, perBoxBudget, boxCount, originalAmount, seed, nonceBase, expectedPerBoon, currentDay )",
+    "count": 1,
+    "review": "Guarded Box component helper in Game storage; ordinary forwarding is internal. Preserves original arguments, external recipient guards, draw ordering, and whole-parent failure bubbling."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameBoonModule.sol",
     "scope": "DegenerusGameBoonModule._creditActivity",
     "kind": "external",
     "expression": "quests.awardQuestStreakBonus(id, uint16(amt), currentDay)",
@@ -7355,9 +7363,9 @@
     "path": "contracts/modules/DegenerusGameBoonModule.sol",
     "scope": "DegenerusGameBoonModule.rollBoxBoons",
     "kind": "recipient-helper",
-    "expression": "_rollBoxBoonLane( id, perBoxBudget, boxCount, originalAmount, seed, nonceBase, expectedPerBoon, currentDay )",
+    "expression": "_boxRollBoxBoons(id, perBoxBudget, boxCount, originalAmount, currentLevel, seed, nonceBase)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "Guarded Box component helper in Game storage; ordinary forwarding is internal. Preserves original arguments, external recipient guards, draw ordering, and whole-parent failure bubbling."
   },
   {
     "path": "contracts/modules/DegenerusGameDecimatorModule.sol",
@@ -7473,19 +7481,27 @@
   },
   {
     "path": "contracts/modules/DegenerusGameDegeneretteModule.sol",
+    "scope": "DegenerusGameDegeneretteModule._boxResolveEthSpinFromBox",
+    "kind": "opcode-or-value",
+    "expression": "ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall( abi.encodeWithSelector( IDegenerusGameLootboxModule.resolveLootboxDirect.selector, playerId, lootboxShare, EntropyLib.hash2(seed, BOX_RECIRC_TAG), activityScore ) )",
+    "count": 1,
+    "review": "Retained same-box recirculation delegatecall; same Game storage, sender/value and exact failure bubbling; ETH spins disabled in the child resolver."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameDegeneretteModule.sol",
+    "scope": "DegenerusGameDegeneretteModule._boxResolveEthSpinFromBox",
+    "kind": "recipient-helper",
+    "expression": "_awardDegeneretteDgnrs(acc, betAmount, s)",
+    "count": 1,
+    "review": "Guarded Box component helper in Game storage; ordinary forwarding is internal. Preserves original arguments, external recipient guards, draw ordering, and whole-parent failure bubbling."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameDegeneretteModule.sol",
     "scope": "DegenerusGameDegeneretteModule._collectBetFunds",
     "kind": "external",
     "expression": "coin.burnCoin(burnFrom, totalBet)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameDegeneretteModule.sol",
-    "scope": "DegenerusGameDegeneretteModule._consumeDegeneretteBoon",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses .GAME_BOON_MODULE .delegatecall( abi.encodeWithSelector( IDegenerusGameBoonModule.consumeDegeneretteBoon.selector, id, currency ) )",
-    "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
   },
   {
     "path": "contracts/modules/DegenerusGameDegeneretteModule.sol",
@@ -7531,14 +7547,6 @@
     "path": "contracts/modules/DegenerusGameDegeneretteModule.sol",
     "scope": "DegenerusGameDegeneretteModule._placeDegeneretteBetCore",
     "kind": "recipient-helper",
-    "expression": "_consumeDegeneretteBoon(playerId, currency)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameDegeneretteModule.sol",
-    "scope": "DegenerusGameDegeneretteModule._placeDegeneretteBetCore",
-    "kind": "recipient-helper",
     "expression": "_effectiveQuestStreak(playerId)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
@@ -7563,25 +7571,25 @@
     "path": "contracts/modules/DegenerusGameDegeneretteModule.sol",
     "scope": "DegenerusGameDegeneretteModule._resolveBet",
     "kind": "external",
-    "expression": "affiliate.getReferrerIdById(playerId)",
+    "expression": "affiliate.getReferrerIdById(c.playerId)",
     "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+    "review": "Settlement context stores the same decoded player, stake, score and cursor in memory. Recipient and payout ordering are unchanged; bet-win box resolution stays atomic in Game storage."
   },
   {
     "path": "contracts/modules/DegenerusGameDegeneretteModule.sol",
     "scope": "DegenerusGameDegeneretteModule._resolveBet",
     "kind": "external",
-    "expression": "coinflip.creditFlip( affiliate.getReferrerIdById(playerId), (refFlip * AFFILIATE_BOX_BPS) / 10_000 )",
+    "expression": "coinflip.creditFlip( affiliate.getReferrerIdById(c.playerId), (refFlip * AFFILIATE_BOX_BPS) / 10_000 )",
     "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+    "review": "Settlement context stores the same decoded player, stake, score and cursor in memory. Recipient and payout ordering are unchanged; bet-win box resolution stays atomic in Game storage."
   },
   {
     "path": "contracts/modules/DegenerusGameDegeneretteModule.sol",
     "scope": "DegenerusGameDegeneretteModule._resolveBet",
     "kind": "recipient-helper",
-    "expression": "_awardDegeneretteDgnrs(acc, amountPerSpin, s)",
+    "expression": "_awardDegeneretteDgnrs(acc, c.amountPerSpin, s)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "Settlement context stores the same decoded player, stake, score and cursor in memory. Recipient and payout ordering are unchanged; bet-win box resolution stays atomic in Game storage."
   },
   {
     "path": "contracts/modules/DegenerusGameDegeneretteModule.sol",
@@ -7595,17 +7603,17 @@
     "path": "contracts/modules/DegenerusGameDegeneretteModule.sol",
     "scope": "DegenerusGameDegeneretteModule._resolveBet",
     "kind": "recipient-helper",
-    "expression": "_resolveLootboxDirect( playerId, totals.betLootboxShare, EntropyLib.hash2(rngWord, betId), activityScore )",
+    "expression": "_resolveLootboxDirect( c.playerId, totals.betLootboxShare, EntropyLib.hash2(rngWord, betId), c.activityScore )",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "Settlement context stores the same decoded player, stake, score and cursor in memory. Recipient and payout ordering are unchanged; bet-win box resolution stays atomic in Game storage."
   },
   {
     "path": "contracts/modules/DegenerusGameDegeneretteModule.sol",
     "scope": "DegenerusGameDegeneretteModule._resolveLootboxDirect",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses .GAME_LOOTBOX_MODULE .delegatecall( abi.encodeWithSelector( IDegenerusGameLootboxModule.resolveLootboxDirect.selector, id, amount, rngWord, activityScore ) )",
+    "kind": "recipient-helper",
+    "expression": "_boxResolveLootboxDirect(id, amount, rngWord, activityScore)",
     "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
+    "review": "Guarded Box component helper in Game storage; ordinary forwarding is internal. Preserves original arguments, external recipient guards, draw ordering, and whole-parent failure bubbling."
   },
   {
     "path": "contracts/modules/DegenerusGameDegeneretteModule.sol",
@@ -7619,9 +7627,9 @@
     "path": "contracts/modules/DegenerusGameDegeneretteModule.sol",
     "scope": "DegenerusGameDegeneretteModule._runDegeneretteWork",
     "kind": "recipient-helper",
-    "expression": "_resolveBet(bet, uint32(index), uint64(pos), rngWord, acc)",
+    "expression": "_resolveBet(bet, uint32(c.index), uint64(c.pos), c.rngWord, acc)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "Settlement context stores the same decoded player, stake, score and cursor in memory. Recipient and payout ordering are unchanged; bet-win box resolution stays atomic in Game storage."
   },
   {
     "path": "contracts/modules/DegenerusGameDegeneretteModule.sol",
@@ -7651,17 +7659,9 @@
     "path": "contracts/modules/DegenerusGameDegeneretteModule.sol",
     "scope": "DegenerusGameDegeneretteModule.resolveEthSpinFromBox",
     "kind": "recipient-helper",
-    "expression": "_awardDegeneretteDgnrs(acc, betAmount, s)",
+    "expression": "_boxResolveEthSpinFromBox(playerId, stake, activityScore, seed, symbol)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameDegeneretteModule.sol",
-    "scope": "DegenerusGameDegeneretteModule.resolveEthSpinFromBox",
-    "kind": "recipient-helper",
-    "expression": "_resolveLootboxDirect( playerId, lootboxShare, EntropyLib.hash2(seed, BOX_RECIRC_TAG), activityScore )",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "Guarded Box component helper in Game storage; ordinary forwarding is internal. Preserves original arguments, external recipient guards, draw ordering, and whole-parent failure bubbling."
   },
   {
     "path": "contracts/modules/DegenerusGameDegeneretteModule.sol",
@@ -8617,27 +8617,67 @@
   },
   {
     "path": "contracts/modules/DegenerusGameLootboxModule.sol",
+    "scope": "DegenerusGameLootboxModule._boxResolveAfkingBox",
+    "kind": "recipient-helper",
+    "expression": "_flushBoxAcc(id, acc, currentLevel)",
+    "count": 1,
+    "review": "Guarded Box component helper in Game storage; ordinary forwarding is internal. Preserves original arguments, external recipient guards, draw ordering, and whole-parent failure bubbling."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameLootboxModule.sol",
+    "scope": "DegenerusGameLootboxModule._boxResolveAfkingBox",
+    "kind": "recipient-helper",
+    "expression": "_resolveLootboxCommon( id, 0, scaledAmount, targetLevel, currentLevel, seed, true, 0, 0, activityScore, true, acc )",
+    "count": 1,
+    "review": "Guarded Box component helper in Game storage; ordinary forwarding is internal. Preserves original arguments, external recipient guards, draw ordering, and whole-parent failure bubbling."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameLootboxModule.sol",
+    "scope": "DegenerusGameLootboxModule._boxResolveAfkingBox",
+    "kind": "recipient-helper",
+    "expression": "_rollSingleBoxBoons(id, scaledAmount, currentLevel, seed)",
+    "count": 1,
+    "review": "Guarded Box component helper in Game storage; ordinary forwarding is internal. Preserves original arguments, external recipient guards, draw ordering, and whole-parent failure bubbling."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameLootboxModule.sol",
+    "scope": "DegenerusGameLootboxModule._boxResolveHumanBoxOrder",
+    "kind": "recipient-helper",
+    "expression": "_rollOrder( c, buffer, _boxEntryCount(entry), ((entry >> LB_UNITS_SHIFT) & LB_UNITS_MASK) * LB_VALUE_UNIT )",
+    "count": 1,
+    "review": "Guarded Box component helper in Game storage; ordinary forwarding is internal. Preserves original arguments, external recipient guards, draw ordering, and whole-parent failure bubbling."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameLootboxModule.sol",
+    "scope": "DegenerusGameLootboxModule._boxResolveLootboxDirect",
+    "kind": "recipient-helper",
+    "expression": "_flushBoxAcc(id, acc, currentLevel)",
+    "count": 1,
+    "review": "Guarded Box component helper in Game storage; ordinary forwarding is internal. Preserves original arguments, external recipient guards, draw ordering, and whole-parent failure bubbling."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameLootboxModule.sol",
+    "scope": "DegenerusGameLootboxModule._boxResolveLootboxDirect",
+    "kind": "recipient-helper",
+    "expression": "_resolveLootboxCommon( id, 0, scaledAmount, targetLevel, currentLevel, seed, false, 0, 0, activityScore, false, acc )",
+    "count": 1,
+    "review": "Guarded Box component helper in Game storage; ordinary forwarding is internal. Preserves original arguments, external recipient guards, draw ordering, and whole-parent failure bubbling."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameLootboxModule.sol",
+    "scope": "DegenerusGameLootboxModule._boxResolveLootboxDirect",
+    "kind": "recipient-helper",
+    "expression": "_rollSingleBoxBoons(id, scaledAmount, currentLevel, seed)",
+    "count": 1,
+    "review": "Guarded Box component helper in Game storage; ordinary forwarding is internal. Preserves original arguments, external recipient guards, draw ordering, and whole-parent failure bubbling."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameLootboxModule.sol",
     "scope": "DegenerusGameLootboxModule._callEthSpin",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_DEGENERETTE_MODULE .delegatecall( abi.encodeWithSelector( IDegenerusGameDegeneretteModule.resolveEthSpinFromBox.selector, id, stake, activityScore, seed, uint8(32) ) )",
+    "kind": "recipient-helper",
+    "expression": "_boxResolveEthSpinFromBox(id, stake, activityScore, seed, 32)",
     "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameLootboxModule.sol",
-    "scope": "DegenerusGameLootboxModule._callFlipSpins",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_DEGENERETTE_MODULE .delegatecall( abi.encodeWithSelector( IDegenerusGameDegeneretteModule.resolveFlipSpinsFromBox.selector, id, stake, activityScore, seed, uint8(32) ) )",
-    "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameLootboxModule.sol",
-    "scope": "DegenerusGameLootboxModule._callWwxrpSpin",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_DEGENERETTE_MODULE .delegatecall( abi.encodeWithSelector( IDegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox.selector, id, stake, activityScore, seed, uint8(32) ) )",
-    "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
+    "review": "Guarded Box component helper in Game storage; ordinary forwarding is internal. Preserves original arguments, external recipient guards, draw ordering, and whole-parent failure bubbling."
   },
   {
     "path": "contracts/modules/DegenerusGameLootboxModule.sol",
@@ -8715,55 +8755,23 @@
     "path": "contracts/modules/DegenerusGameLootboxModule.sol",
     "scope": "DegenerusGameLootboxModule._resolveLootboxRoll",
     "kind": "recipient-helper",
-    "expression": "_callFlipSpins(id, stake, activityScore, EntropyLib.hash2(seed, BOX_FLIP_SPIN_TAG))",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameLootboxModule.sol",
-    "scope": "DegenerusGameLootboxModule._resolveLootboxRoll",
-    "kind": "recipient-helper",
-    "expression": "_callWwxrpSpin( id, _boxWwxrpSpinStake(amount), activityScore, EntropyLib.hash2(seed, BOX_WWXRP_SPIN_TAG) )",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameLootboxModule.sol",
-    "scope": "DegenerusGameLootboxModule._resolveLootboxRoll",
-    "kind": "recipient-helper",
     "expression": "_creditDgnrsReward(acc, pendingDgnrs)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/modules/DegenerusGameLootboxModule.sol",
-    "scope": "DegenerusGameLootboxModule._resolveLootboxRoll",
-    "kind": "recipient-helper",
-    "expression": "_rollCrapsPasses(id, _largeFlipOut(amount, seed, currentLevel), amount, seed, activityScore, acc)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameLootboxModule.sol",
     "scope": "DegenerusGameLootboxModule._rollBoxes",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_BOON_MODULE .delegatecall( abi.encodeWithSelector( IDegenerusGameBoonModule.rollBoxBoons.selector, c.id, _lootboxBoonBudget(scaled), count, scaled, c.currentLevel, c.boonSeed, 0 ) )",
+    "kind": "recipient-helper",
+    "expression": "_boxRollBoxBoons(c.id, _lootboxBoonBudget(scaled), count, scaled, c.currentLevel, c.boonSeed, 0)",
     "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
+    "review": "Guarded Box component helper in Game storage; ordinary forwarding is internal. Preserves original arguments, external recipient guards, draw ordering, and whole-parent failure bubbling."
   },
   {
     "path": "contracts/modules/DegenerusGameLootboxModule.sol",
     "scope": "DegenerusGameLootboxModule._rollBoxes",
     "kind": "recipient-helper",
     "expression": "_resolveLootboxCommon( c.id, c.index, scaled, _rollTargetLevel(c.currentLevel, seed), c.currentLevel, seed, true, distressEth, boosted, c.score, true, c.acc )",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameLootboxModule.sol",
-    "scope": "DegenerusGameLootboxModule._rollCrapsPasses",
-    "kind": "recipient-helper",
-    "expression": "_callWwxrpSpin( id, _boxWwxrpSpinStake(amount), activityScore, EntropyLib.hash2(seed, BOX_PASS_SPIN_TAG) )",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
@@ -8786,10 +8794,10 @@
   {
     "path": "contracts/modules/DegenerusGameLootboxModule.sol",
     "scope": "DegenerusGameLootboxModule._rollSingleBoxBoons",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_BOON_MODULE .delegatecall( abi.encodeWithSelector( IDegenerusGameBoonModule.rollBoxBoons.selector, id, _lootboxBoonBudget(amount), 1, amount, currentLevel, seed, 0 ) )",
+    "kind": "recipient-helper",
+    "expression": "_boxRollBoxBoons(id, _lootboxBoonBudget(amount), 1, amount, currentLevel, seed, 0)",
     "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
+    "review": "Guarded Box component helper in Game storage; ordinary forwarding is internal. Preserves original arguments, external recipient guards, draw ordering, and whole-parent failure bubbling."
   },
   {
     "path": "contracts/modules/DegenerusGameLootboxModule.sol",
@@ -8803,57 +8811,25 @@
     "path": "contracts/modules/DegenerusGameLootboxModule.sol",
     "scope": "DegenerusGameLootboxModule.resolveAfkingBox",
     "kind": "recipient-helper",
-    "expression": "_flushBoxAcc(id, acc, currentLevel)",
+    "expression": "_boxResolveAfkingBox(id, amount, day, rngWord, activityScore)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameLootboxModule.sol",
-    "scope": "DegenerusGameLootboxModule.resolveAfkingBox",
-    "kind": "recipient-helper",
-    "expression": "_resolveLootboxCommon( id, 0, scaledAmount, targetLevel, currentLevel, seed, true, 0, 0, activityScore, true, acc )",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameLootboxModule.sol",
-    "scope": "DegenerusGameLootboxModule.resolveAfkingBox",
-    "kind": "recipient-helper",
-    "expression": "_rollSingleBoxBoons(id, scaledAmount, currentLevel, seed)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "Guarded Box component helper in Game storage; ordinary forwarding is internal. Preserves original arguments, external recipient guards, draw ordering, and whole-parent failure bubbling."
   },
   {
     "path": "contracts/modules/DegenerusGameLootboxModule.sol",
     "scope": "DegenerusGameLootboxModule.resolveHumanBoxOrder",
     "kind": "recipient-helper",
-    "expression": "_rollOrder( c, buffer, _boxEntryCount(entry), ((entry >> LB_UNITS_SHIFT) & LB_UNITS_MASK) * LB_VALUE_UNIT )",
+    "expression": "_boxResolveHumanBoxOrder(buffer, position, entry, rngWord, currentLevel)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "Guarded Box component helper in Game storage; ordinary forwarding is internal. Preserves original arguments, external recipient guards, draw ordering, and whole-parent failure bubbling."
   },
   {
     "path": "contracts/modules/DegenerusGameLootboxModule.sol",
     "scope": "DegenerusGameLootboxModule.resolveLootboxDirect",
     "kind": "recipient-helper",
-    "expression": "_flushBoxAcc(id, acc, currentLevel)",
+    "expression": "_boxResolveLootboxDirect(id, amount, rngWord, activityScore)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameLootboxModule.sol",
-    "scope": "DegenerusGameLootboxModule.resolveLootboxDirect",
-    "kind": "recipient-helper",
-    "expression": "_resolveLootboxCommon( id, 0, scaledAmount, targetLevel, currentLevel, seed, false, 0, 0, activityScore, false, acc )",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameLootboxModule.sol",
-    "scope": "DegenerusGameLootboxModule.resolveLootboxDirect",
-    "kind": "recipient-helper",
-    "expression": "_rollSingleBoxBoons(id, scaledAmount, currentLevel, seed)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "Guarded Box component helper in Game storage; ordinary forwarding is internal. Preserves original arguments, external recipient guards, draw ordering, and whole-parent failure bubbling."
   },
   {
     "path": "contracts/modules/DegenerusGameLootboxModule.sol",
@@ -9530,10 +9506,10 @@
   {
     "path": "contracts/modules/GameAfkingModule.sol",
     "scope": "GameAfkingModule._openAfkingBox",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses .GAME_LOOTBOX_MODULE .delegatecall( abi.encodeWithSelector( IDegenerusGameLootboxModule.resolveAfkingBox.selector, element, amount, day, word, score ) )",
+    "kind": "recipient-helper",
+    "expression": "_boxResolveAfkingBox(element, amount, day, word, score)",
     "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
+    "review": "Guarded Box component helper in Game storage; ordinary forwarding is internal. Preserves original arguments, external recipient guards, draw ordering, and whole-parent failure bubbling."
   },
   {
     "path": "contracts/modules/GameAfkingModule.sol",
@@ -9570,10 +9546,10 @@
   {
     "path": "contracts/modules/GameAfkingModule.sol",
     "scope": "GameAfkingModule._runHumanBoxWork",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall( abi.encodeWithSelector(IDegenerusGameLootboxModule.resolveHumanBoxOrder.selector, idx, cur, entry, indexWord, currentLevel) )",
+    "kind": "recipient-helper",
+    "expression": "_boxResolveHumanBoxOrder(idx, cur, entry, indexWord, currentLevel)",
     "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
+    "review": "Guarded Box component helper in Game storage; ordinary forwarding is internal. Preserves original arguments, external recipient guards, draw ordering, and whole-parent failure bubbling."
   },
   {
     "path": "contracts/modules/GameAfkingModule.sol",

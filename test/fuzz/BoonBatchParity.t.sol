@@ -5,10 +5,11 @@ import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IDegenerusGameBoonModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
+import {DegenerusGameBoxModule} from "../../contracts/modules/DegenerusGameBoxModule.sol";
 import {DegenerusGameBoonModule} from "../../contracts/modules/DegenerusGameBoonModule.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
 
-contract BoonBatchParityHarness is DegenerusGameBoonModule, WalletSeed {
+contract BoonBatchParityHarness is DegenerusGameBoxModule, WalletSeed {
     function seed(address player) external returns (uint32) {
         return _seedWallet(player);
     }

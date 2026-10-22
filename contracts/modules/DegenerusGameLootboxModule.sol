@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {GameBoxInternals} from "./GameBoxInternals.sol";
+
 import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol";
 
 /*
@@ -30,7 +32,6 @@ import {CrapsPriceLib} from "../libraries/CrapsPriceLib.sol";
 import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
 import {IStETH} from "../interfaces/IStETH.sol";
 
-import {IDegenerusGameBoonModule, IDegenerusGameDegeneretteModule} from "../interfaces/IDegenerusGameModules.sol";
 
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {GamePurchaseBox} from "./GamePurchaseBox.sol";
@@ -75,7 +76,7 @@ interface ICrapsPassDelivery {
  * - Box opening (resolveHumanBoxOrder, resolveAfkingBox, resolveLootboxDirect, resolveRedemptionLootbox)
  * - Deity-boon event declarations shared with DegenerusGameBoonModule (issueDeityBoon lives there)
  */
-contract DegenerusGameLootboxModule is GamePurchaseBox {
+abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBox {
     // =========================================================================
     // Errors
     // =========================================================================
@@ -107,25 +108,6 @@ contract DegenerusGameLootboxModule is GamePurchaseBox {
         bool roundedUp
     );
 
-    /// @notice Emitted when a lootbox awards a whale pass jackpot
-    /// @param id The reward account's wallet ID.
-    /// @param targetLevel Level AT BOX-OPEN TIME (`level + 1`), reported for
-    ///        downstream indexers. Ticket queuing is deferred to the player-paid
-    ///        `claimWhalePass` endpoint; tickets actually get queued at the level
-    ///        when the beneficiary calls `claimWhalePass`, which may be greater
-    ///        than this value (the player can delay the claim).
-    /// @param entriesPerLevel Entries per level the materialized whale pass grants (2: a
-    ///        full pass, one whole ticket every other level)
-    /// @param statsBoost 0 at open; stats are applied at `claimWhalePass`
-    /// @param frozenUntilLevel 0 at open; the freeze is applied at `claimWhalePass`
-    event LootBoxWhalePassJackpot(
-        uint32 indexed id,
-        uint256 lootboxAmount,
-        uint24 targetLevel,
-        uint32 entriesPerLevel,
-        uint24 statsBoost,
-        uint24 frozenUntilLevel
-    );
 
     /// @notice Aggregated DGNRS settlement for an opened entry's contiguous reward batch.
     /// @dev An ETH-spin boundary may split one entry into multiple batches because that spin can
@@ -140,29 +122,6 @@ contract DegenerusGameLootboxModule is GamePurchaseBox {
     ///         credit instead. Emitted once per entry, never once per box.
     event LootBoxCrapsPasses(uint32 indexed id, uint32 normal, uint32 highRoller, uint24 day);
 
-    /// @notice Unified lootbox reward event for boon awards
-    /// @param id The reward account's wallet ID.
-    /// @param rewardType The type of reward (2=CoinflipBoon, 4=Boost5, 5=Boost15, 6=Boost25/Purchase, 8=DecimatorBoost, 9=WhaleBoon, 10=ActivityBoon/DeityPassBoon, 11=LazyPassBoon, 12=QuestShield, 13=DegeneretteBoon, 14=CrapsBoon)
-    /// @param amount Primary reward amount (varies by type: BPS for boosts, token amount for boons; for type 13 the rolled boonType 32-40, which identifies the boon's currency and size)
-    event LootBoxReward(uint32 indexed id, uint8 indexed rewardType, uint256 lootboxAmount, uint256 amount);
-
-    /// @notice Emitted when a lootbox-drawn boon is discarded instead of delivered — the
-    ///         statically-drawn type is a deity-pass discount and the player already holds a
-    ///         pass or supply is capped. Every other type, decimator tiers included, is
-    ///         delivered. Nothing is written; the draw itself stays fully deterministic.
-    /// @param id The reward account's wallet ID.
-    /// @param boonType The statically-drawn boon type that was discarded
-    event BoonDiscarded(uint32 indexed id, uint8 boonType);
-
-    /// @notice Emitted when a deity issues a boon to another player
-    /// @param deity The deity pass holder issuing the boon
-    /// @param recipient The player receiving the boon
-    /// @param day The day index when the boon was issued
-    /// @param slot The slot index (0-2) of the boon
-    /// @param boonType The type of boon issued (1-43; 10-12 and 20-21 are unused)
-    event DeityBoonIssued(
-        uint32 indexed deity, uint32 indexed recipient, uint24 indexed day, uint8 slot, uint8 boonType
-    );
 
     // =========================================================================
     // External Contract References
@@ -463,35 +422,13 @@ contract DegenerusGameLootboxModule is GamePurchaseBox {
         _flushBoxAcc(c.id, c.acc, c.currentLevel);
     }
 
-    /// @dev Re-raise a failed nested module call with its own revert data. Empty data (the
-    ///      sub-call ran out of gas) becomes EmptyRevert(), which callers metering gas treat as
-    ///      caller-withheld gas; any other failure keeps its reason.
-    function _revertDelegate(bytes memory reason) private pure {
-        if (reason.length == 0) revert EmptyRevert();
-        assembly ("memory-safe") {
-            revert(add(32, reason), mload(reason))
-        }
-    }
 
     /// @dev One box's boon draw, for the resolvers that settle a single box outside the
     ///      entry sweep (daily afking boxes, degenerette auto-resolve, ETH-spin recirc).
     ///      Identical draw to the entry path's per-order call;
     ///      `seed` is the box's own account-specific resolution seed, drawn at nonce 0.
     function _rollSingleBoxBoons(uint32 id, uint256 amount, uint24 currentLevel, uint256 seed) private {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_BOON_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameBoonModule.rollBoxBoons.selector,
-                    id,
-                    _lootboxBoonBudget(amount),
-                    1,
-                    amount,
-                    currentLevel,
-                    seed,
-                    0
-                )
-            );
-        if (!ok) _revertDelegate(data);
+        _boxRollBoxBoons(id, _lootboxBoonBudget(amount), 1, amount, currentLevel, seed, 0);
     }
 
     /// @dev Settle an entry's remaining accumulated rewards: one call per fungible lane, one
@@ -576,8 +513,7 @@ contract DegenerusGameLootboxModule is GamePurchaseBox {
         acc.tickets[offset] = lane > laneCap ? uint32(laneCap) : uint32(lane);
     }
 
-    /// @dev Roll `count` boxes of `size` wei each, then dispatch their boon draws in one
-    ///      delegatecall. Every box takes its own seed — the nonce is its position in the order —
+    /// @dev Roll `count` boxes of `size` wei each, then draw their boons as one batch. Every box takes its own seed — the nonce is its position in the order —
     ///      so two boxes of one order draw independently (their outcomes may still coincide).
     function _rollBoxes(BoxRoll memory c, uint256 count, uint256 size) private {
         if (count == 0 || size == 0) return;
@@ -620,20 +556,7 @@ contract DegenerusGameLootboxModule is GamePurchaseBox {
             }
         }
 
-        (bool okBoon, bytes memory data) = ContractAddresses.GAME_BOON_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameBoonModule.rollBoxBoons.selector,
-                    c.id,
-                    _lootboxBoonBudget(scaled),
-                    count,
-                    scaled,
-                    c.currentLevel,
-                    c.boonSeed,
-                    0
-                )
-            );
-        if (!okBoon) _revertDelegate(data);
+        _boxRollBoxBoons(c.id, _lootboxBoonBudget(scaled), count, scaled, c.currentLevel, c.boonSeed, 0);
     }
 
     /// @dev Domain of a queued entry's root: hash4(QUEUED_ORDER_DOMAIN, word, buffer, position).
@@ -644,7 +567,7 @@ contract DegenerusGameLootboxModule is GamePurchaseBox {
     uint48 private constant QUEUED_ENTRY_TAG = uint48(1) << 46;
 
     /// @notice Settle one queued entry atomically.
-    /// @dev Delegatecall target of the AFKing box worker, which owns queue order and stores the
+    /// @dev The AFKing box worker owns queue order and stores the
     ///      advanced cursor before this call, so an entry settles at most once. The entry's
     ///      root binds the cohort word to the entry's buffer and position, both fixed when the
     ///      purchase appended it, before that buffer's word was requested; every box and boon
@@ -657,6 +580,12 @@ contract DegenerusGameLootboxModule is GamePurchaseBox {
     /// @param currentLevel Open level (`level + 1`).
     function resolveHumanBoxOrder(uint48 buffer, uint256 position, uint256 entry, uint256 rngWord, uint24 currentLevel)
         external
+    {
+        _boxResolveHumanBoxOrder(buffer, position, entry, rngWord, currentLevel);
+    }
+
+    function _boxResolveHumanBoxOrder(uint48 buffer, uint256 position, uint256 entry, uint256 rngWord, uint24 currentLevel)
+        internal override
     {
         BoxRoll memory c;
         c.id = uint32(entry);
@@ -690,6 +619,13 @@ contract DegenerusGameLootboxModule is GamePurchaseBox {
     function resolveLootboxDirect(uint32 id, uint256 amount, uint256 rngWord, uint16 activityScore)
         external
         payable
+    {
+        _boxResolveLootboxDirect(id, amount, rngWord, activityScore);
+    }
+
+    function _boxResolveLootboxDirect(uint32 id, uint256 amount, uint256 rngWord, uint16 activityScore)
+        internal override
+
     {
         // Delegatecall-only: address(this) == GAME under the nested dispatch. A direct call on the
         // deployed module would trap the in-flight msg.value (the amount==0 early-return path).
@@ -822,9 +758,8 @@ contract DegenerusGameLootboxModule is GamePurchaseBox {
     ///      end-game feature (active only the final day before game-over, by which point
     ///      afking subscribers are gone). No `RngNotReady` guard here — the caller (the
     ///      GameAfkingModule open leg `_runAfkingWork`) gates on the active published word and a sealed stamp day,
-    ///      so a zero word never reaches this function. Sole caller: the GameAfkingModule open-leg, via the
-    ///      GAME_LOOTBOX_MODULE delegatecall (the box materialization is private to this
-    ///      module — `resolveAfkingBox` binds the caller-passed active session word;
+    ///      so a zero word never reaches this function. The AFKing open leg passes the active
+    ///      session word to this resolver;
     ///      `resolveLootboxDirect` reads no day at all and takes the committed word its caller
     ///      passes — the Degenerette's betId-mixed word).
     /// @param id Box owner (resolved by the GameAfkingModule open-leg from the sub).
@@ -834,6 +769,12 @@ contract DegenerusGameLootboxModule is GamePurchaseBox {
     /// @param activityScore The stamped activity score in whole points (the FROZEN EV input).
     function resolveAfkingBox(uint32 id, uint256 amount, uint24 day, uint256 rngWord, uint16 activityScore)
         external
+    {
+        _boxResolveAfkingBox(id, amount, day, rngWord, activityScore);
+    }
+
+    function _boxResolveAfkingBox(uint32 id, uint256 amount, uint24 day, uint256 rngWord, uint16 activityScore)
+        internal override
     {
         if (amount == 0) return;
 
@@ -1320,60 +1261,25 @@ contract DegenerusGameLootboxModule is GamePurchaseBox {
         if (stake < LOOTBOX_WWXRP_PRIZE * TOKEN_MATH_SCALE) stake = LOOTBOX_WWXRP_PRIZE * TOKEN_MATH_SCALE;
     }
 
-    /// @dev Delegatecall the Degenerette module's WWXRP box-spin resolver (Game storage context).
+    /// @dev Resolve a WWXRP box spin in Game storage.
     function _callWwxrpSpin(uint32 id, uint256 stake, uint16 activityScore, uint256 seed)
         private
         returns (uint256 wwxrpOut)
     {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_DEGENERETTE_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox.selector,
-                    id,
-                    stake,
-                    activityScore,
-                    seed,
-                    uint8(32)
-                )
-            );
-        if (!ok) _revertDelegate(data);
-        wwxrpOut = abi.decode(data, (uint256));
+        return _boxResolveWwxrpSpinFromBox(id, stake, activityScore, seed, 32);
     }
 
-    /// @dev Delegatecall the Degenerette module's triple-FLIP box-spin resolver.
+    /// @dev Resolve the triple-FLIP box spin.
     function _callFlipSpins(uint32 id, uint256 stake, uint16 activityScore, uint256 seed)
         private
         returns (uint256 flipOut)
     {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_DEGENERETTE_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameDegeneretteModule.resolveFlipSpinsFromBox.selector,
-                    id,
-                    stake,
-                    activityScore,
-                    seed,
-                    uint8(32)
-                )
-            );
-        if (!ok) _revertDelegate(data);
-        flipOut = abi.decode(data, (uint256));
+        return _boxResolveFlipSpinsFromBox(id, stake, activityScore, seed, 32);
     }
 
-    /// @dev Delegatecall the Degenerette module's ETH box-spin resolver.
+    /// @dev Resolve an ETH box spin.
     function _callEthSpin(uint32 id, uint256 stake, uint16 activityScore, uint256 seed) private {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_DEGENERETTE_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameDegeneretteModule.resolveEthSpinFromBox.selector,
-                    id,
-                    stake,
-                    activityScore,
-                    seed,
-                    uint8(32)
-                )
-            );
-        if (!ok) _revertDelegate(data);
+        _boxResolveEthSpinFromBox(id, stake, activityScore, seed, 32);
     }
 
     /// @dev Calculate scaled ticket count from budget with ranged variance tiers.

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {GameBoxInternals} from "./GameBoxInternals.sol";
+
 import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol";
 
 /*
@@ -31,7 +33,7 @@ import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
 import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
-import {IDegenerusGameLootboxModule, IDegenerusGameWhaleModule, IDegenerusGameDegenesisModule} from "../interfaces/IDegenerusGameModules.sol";
+import {IDegenerusGameWhaleModule, IDegenerusGameDegenesisModule} from "../interfaces/IDegenerusGameModules.sol";
 import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
 import {IDegenerusGame, MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {BoundedCall} from "../libraries/BoundedCall.sol";
@@ -77,7 +79,7 @@ interface ISeatToken {
  *                   underflow FAILS LOUD (the `claimablePool -=` propagates, it is never
  *                   swallowed).
  */
-contract GameAfkingModule is DegenerusGameMintStreakUtils {
+abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakUtils {
     uint256 private constant HUMAN_ENTRY_GAS = GasBounds.HUMAN_ENTRY_GAS;
     uint256 private constant HUMAN_BOX_GAS = GasBounds.HUMAN_BOX_GAS;
     uint256 private constant HUMAN_TAIL_GAS = GasBounds.HUMAN_TAIL_GAS;
@@ -677,15 +679,26 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         return _runSubscriberWork(processDay, gasAllowance);
     }
 
+    struct SubscriberWork {
+        uint256 processed;
+        uint256 mp;
+        uint256 cursor;
+        uint256 boxStamps;
+        uint256 boxEthAccrued;
+        uint256 ticketEthAccrued;
+        uint24 resumeDay;
+    }
+
     function _runSubscriberWork(uint24 processDay, uint256 gasAllowance)
         private returns (MineFlipGas.Result memory result)
     {
+        SubscriberWork memory c;
         MineFlipGas.Meter memory meter = MineFlipGas.start(gasAllowance);
         if (processDay != _afkingResetDay || processDay <= dailyIdx) revert E();
         if (subsFullyProcessed) { result.done = true; return result; }
         if (!_rngComplete() || rngLockedFlag || _rngRequestActive() || _livenessTriggered()) return result;
-        uint256 processed;
-        uint256 mp = _mintPriceInContext();
+
+        c.mp = _mintPriceInContext();
         // Hoist the level read once.
         uint24 currentLevel = level;
         // Chunk-invariant global reads, hoisted once: the GO_SWEPT flag (written only by
@@ -700,7 +713,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
         // While this pass runs, rewards accrue through the last completed pass; a protocol seat
         // resuming in this pass earns from this day on.
         uint24 endpoint = _afkingEndpoint();
-        uint24 resumeDay = processDay - 1;
+        c.resumeDay = processDay - 1;
 
         // sDGNRS level-start whale purchase, attempted ONCE per level here at the start of
         // afking processing (out of the per-sub loop, so it adds NO per-sub cost). On the first
@@ -740,33 +753,30 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             MineFlipGas.markProgress(meter);
         }
 
-        uint256 cursor = _subCursor;
-        if (cursor == 0) {
+        c.cursor = _subCursor;
+        if (c.cursor == 0) {
             // The pass's first visit: price the new cohort and clear the protocol BOUGHT bits.
-            _afkingCohortPriceMilli = uint16(_packEthToMilliEth(mp));
+            _afkingCohortPriceMilli = uint16(_packEthToMilliEth(c.mp));
             _afkingProtocolFlags &= ~(AFK_VAULT_BOUGHT | AFK_SDGNRS_BOUGHT);
         }
-        uint256 boxStamps; // pending boxes stamped this chunk — one batched counter add at chunk end
         // Batched pool accounting: each funded buy debits its full cost from its funding
         // accounts and accrues that spend here by mode. At chunk end claimablePool releases the
         // sum once and the prize pools are credited once (boxes 90% future / 10% next, tickets
         // 90% next / 10% future), so the per-sub cost is an add, not a pool SSTORE.
-        uint256 boxEthAccrued;
-        uint256 ticketEthAccrued;
 
         // Public membership/mode changes are locked throughout this pass. Each section
         // is dense, and its zero sentinel stays empty even at the combined 2000-member cap.
         while (true) {
-            uint256 position = cursor < SUBSCRIBER_TICKET_PHASE
-                ? cursor : SUBSCRIBER_CAP - (cursor - SUBSCRIBER_TICKET_PHASE);
+            uint256 position = c.cursor < SUBSCRIBER_TICKET_PHASE
+                ? c.cursor : SUBSCRIBER_CAP - (c.cursor - SUBSCRIBER_TICKET_PHASE);
             uint256 lane = _subLaneAt(position);
             uint32 element = uint32(lane);
             if (!MineFlipGas.canRun(meter, element == 0 ? 0 : SUBSCRIBER_ITEM_GAS, SUBSCRIBER_TAIL_GAS)) break;
             MineFlipGas.markProgress(meter);
             if (element == 0) {
                 result.progressed = true;
-                if (cursor < SUBSCRIBER_TICKET_PHASE) {
-                    cursor = SUBSCRIBER_TICKET_PHASE;
+                if (c.cursor < SUBSCRIBER_TICKET_PHASE) {
+                    c.cursor = SUBSCRIBER_TICKET_PHASE;
                     continue;
                 }
                 result.done = true;
@@ -779,7 +789,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 _removeFromSet(position + 1);
                 _setSubMetaLane(element, 0);
                 emit SubscriptionExpired(element, 2);
-                unchecked { ++processed; }
+                unchecked { ++c.processed; }
                 continue;
             }
 
@@ -787,13 +797,13 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             // The Vault owner's pause buys nothing until the owner resumes it.
             if (protocolSeat && element == VAULT_WALLET_ID
                 && _afkingProtocolFlags & AFK_VAULT_OWNER_PAUSED != 0) {
-                unchecked { ++cursor; ++processed; }
+                unchecked { ++c.cursor; ++c.processed; }
                 continue;
             }
 
             uint256 balances = balancesPacked[element];
             (uint256 ethValue, uint256 amount, bool isTicket, uint256 claimableUse) =
-                _resolveBuy(lane, mp, swept ? 0 : uint128(balances));
+                _resolveBuy(lane, c.mp, swept ? 0 : uint128(balances));
             uint256 funding = balances >> 128;
             if (funding < ethValue) {
                 funding = _tryFundAfkingSteth(element, ethValue, funding);
@@ -807,7 +817,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                     // it can pay again.
                     uint8 unfunded = element == VAULT_WALLET_ID ? AFK_VAULT_UNFUNDED : AFK_SDGNRS_UNFUNDED;
                     if (_afkingProtocolFlags & unfunded == 0) _pauseProtocolSeat(element, position + 1, unfunded);
-                    unchecked { ++cursor; ++processed; }
+                    unchecked { ++c.cursor; ++c.processed; }
                     continue;
                 }
                 // An unfunded ordinary member expires: hand its streak back (anchored at
@@ -817,7 +827,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 _removeFromSet(position + 1);
                 _setSubMetaLane(element, 0);
                 emit SubscriptionExpired(element, 1);
-                unchecked { ++processed; }
+                unchecked { ++c.processed; }
                 continue;
             }
 
@@ -825,7 +835,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 uint8 unfunded = element == VAULT_WALLET_ID ? AFK_VAULT_UNFUNDED : AFK_SDGNRS_UNFUNDED;
                 // Funded again: resume, with this pass's endpoint as its checkpoint day.
                 if (_afkingProtocolFlags & unfunded != 0) {
-                    lane = _resumeProtocolSeat(element, position + 1, unfunded, resumeDay);
+                    lane = _resumeProtocolSeat(element, position + 1, unfunded, c.resumeDay);
                 }
                 _afkingProtocolFlags |= element == VAULT_WALLET_ID ? AFK_VAULT_BOUGHT : AFK_SDGNRS_BOUGHT;
             }
@@ -853,31 +863,31 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             // spend only in lootbox mode, so the routing keys on `cost`, never `amount`.
             uint256 cost = ethValue + claimableUse;
             if (isTicket) {
-                ticketEthAccrued += cost;
+                c.ticketEthAccrued += cost;
             } else {
-                boxEthAccrued += cost;
-                unchecked { ++boxStamps; }
+                c.boxEthAccrued += cost;
+                unchecked { ++c.boxStamps; }
             }
 
-            unchecked { ++cursor; ++processed; }
+            unchecked { ++c.cursor; ++c.processed; }
         }
 
         // Persist the advanced cursor (uint16) for the next chunk / call.
-        _subCursor = uint16(cursor);
+        _subCursor = uint16(c.cursor);
         // Commit this chunk's pending-box count in ONE warm RMW (the cursor write above
         // already dirtied the shared slot) — the per-stamp version would pay it per sub.
-        if (boxStamps != 0) {
+        if (c.boxStamps != 0) {
             unchecked {
-                _pendingBoxCount += uint16(boxStamps);
+                _pendingBoxCount += uint16(c.boxStamps);
             }
         }
         // Release the chunk's spend from claimablePool in one checked debit, then credit the
         // prize pools once for the batched box + ticket spend.
-        uint256 spent = boxEthAccrued + ticketEthAccrued;
+        uint256 spent = c.boxEthAccrued + c.ticketEthAccrued;
         if (spent != 0) claimablePool -= uint128(spent);
-        _routeAfkingPoolEth(boxEthAccrued, ticketEthAccrued);
-        result.progressed = result.progressed || processed != 0;
-        result.rewardBasis = processed;
+        _routeAfkingPoolEth(c.boxEthAccrued, c.ticketEthAccrued);
+        result.progressed = result.progressed || c.processed != 0;
+        result.rewardBasis = c.processed;
         if (result.done) {
             subsFullyProcessed = true;
             _afkingEndpointDay = processDay;
@@ -932,7 +942,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
 
     /// @dev Reverts with the delegatecall failure reason bytes. Canonical module tail
     ///      (cf. DegenerusGameDegeneretteModule / DecimatorModule) for the
-    ///      nested delegatecall into the LootboxModule's `resolveAfkingBox`.
+    ///      calls into the Degenesis and Whale modules.
     function _revertDelegate(bytes memory reason) private pure {
         if (reason.length == 0) revert EmptyRevert();
         assembly ("memory-safe") {
@@ -953,19 +963,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
     /// @param word The published active session word, read once by the caller.
     /// @param score The member's frozen activity score.
     function _openAfkingBox(uint32 element, uint256 amount, uint24 day, uint256 word, uint16 score) private {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_LOOTBOX_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameLootboxModule.resolveAfkingBox.selector,
-                    element,
-                    amount,
-                    day,
-                    word,
-                    score
-                )
-            );
-        if (!ok) _revertDelegate(data);
+        _boxResolveAfkingBox(element, amount, day, word, score);
     }
 
     /// @notice Open stamped boxes belonging to the unlocked active session.
@@ -1054,11 +1052,7 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
             uint256 boxes = _boxEntryCount(entry);
             if (!MineFlipGas.canRun(meter, HUMAN_ENTRY_GAS + boxes * HUMAN_BOX_GAS, HUMAN_TAIL_GAS)) break;
             boxCursor = uint48(cur + 1);
-            (bool ok, bytes memory data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(
-                abi.encodeWithSelector(IDegenerusGameLootboxModule.resolveHumanBoxOrder.selector,
-                    idx, cur, entry, indexWord, currentLevel)
-            );
-            if (!ok) _revertDelegate(data);
+            _boxResolveHumanBoxOrder(idx, cur, entry, indexWord, currentLevel);
             ++cur;
             result.progressed = true;
             MineFlipGas.markProgress(meter);

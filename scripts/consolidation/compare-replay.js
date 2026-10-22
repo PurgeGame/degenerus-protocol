@@ -1,9 +1,10 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { AbiCoder, Interface } from 'ethers';
-const [left, right, abiFile, output, mode] = process.argv.slice(2);
-if (mode && mode !== "--compiler-only") throw new Error(`Unknown comparison mode: ${mode}`);
+const [left, right, abiFile, output, mode = "P1"] = process.argv.slice(2);
+if (!["P1", "P2", "--compiler-only"].includes(mode)) throw new Error(`Unknown comparison mode: ${mode}`);
 const compilerOnly = mode === "--compiler-only";
+const phase = compilerOnly ? null : mode;
 if (!output) throw new Error('usage: compare-replay.js BASELINE_LOG CANDIDATE_LOG BASELINE_CONTRACTS_JSON OUTPUT_JSON');
 const abis = JSON.parse(fs.readFileSync(abiFile));
 const byTopic = new Map();
@@ -79,7 +80,7 @@ export function parse(text) {
         args[2] = '<executionGas>'; // only gas-derived field excluded in this workload
       }
       let signature = event.signature;
-      if (!compilerOnly && event.name === 'DegenesisVaultSpent') {
+      if (phase === 'P1' && event.name === 'DegenesisVaultSpent') {
         assert.equal(p[0], 'Game');
         assert.equal(tx.label, 'degenesis-vault-spend');
         if (signature === 'DegenesisVaultSpent(uint256)') args.unshift('1');
@@ -163,7 +164,32 @@ for (const e of adapterEdges) {
   if (e.label === 'foil-ticket-and-floor-hook') assert.equal(e.candidate,e.baseline,'Foil must retain its explicit-value Mint adapter');
   else assert.equal(e.candidate,0,'Smurf creation must use the internal explicit-value helper');
 }
-const report = { differences: errors, proofs, removedEdges: edges, adapterEdges, runs: a.map((r,i) => ({ transactions: r.transactions.length, checkpoints: r.checkpoints.length, slots: Object.keys(r.initial).length, baselineGas: r.gas, candidateGas: b[i]?.gas })) };
+const boxEdges = [];
+if (phase === 'P2') {
+  for (const signature of [
+    'resolveHumanBoxOrder(uint48,uint256,uint256,uint256,uint24)',
+    'resolveAfkingBox(uint32,uint256,uint24,uint256,uint16)',
+    'rollBoxBoons(uint32,uint256,uint256,uint256,uint24,uint256,uint256)',
+    'resolveWwxrpSpinFromBox(uint32,uint256,uint16,uint256,uint8)',
+    'resolveFlipSpinsFromBox(uint32,uint256,uint16,uint256,uint8)',
+    'resolveEthSpinFromBox(uint32,uint256,uint16,uint256,uint8)',
+    'consumeDegeneretteBoon(uint32,uint8)',
+    'resolveLootboxDirect(uint32,uint256,uint256,uint16)',
+  ]) {
+    const selector = new Interface([`function ${signature}`]).getFunction(signature).selector;
+    const count = runs => runs.reduce((total, r) => total + Object.entries(r.edges)
+      .filter(([key]) => key.endsWith(`:${selector}`)).reduce((n, [,value]) => n + value, 0), 0);
+    const retainedRecirculation = signature.startsWith('resolveLootboxDirect(');
+    const row = {signature, baseline:count(a), candidate:count(b), retainedRecirculation};
+    // Foil still enters the three spin resolvers from outside Box. Only calls from
+    // the box worker itself disappear; a destination-only census reports totals.
+    const externalSpinEntry = /resolve(WwxrpSpin|FlipSpins|EthSpin)FromBox/.test(signature);
+    if (!retainedRecirculation && !externalSpinEntry) assert.equal(row.candidate,0,`Box still forwards ${signature}`);
+    else assert(row.candidate <= row.baseline,`Box forwarding increased for ${signature}`);
+    boxEdges.push(row);
+  }
+}
+const report = { differences: errors, proofs, removedEdges: edges, adapterEdges, boxEdges, runs: a.map((r,i) => ({ transactions: r.transactions.length, checkpoints: r.checkpoints.length, slots: Object.keys(r.initial).length, baselineGas: r.gas, candidateGas: b[i]?.gas })) };
 fs.writeFileSync(output, JSON.stringify(report, null, 2)+'\n');
 console.log(JSON.stringify({ differences: errors.length, firstDifferences: errors.slice(0,10), proofs, removedEdges: edges, runs: report.runs.map(({ baselineGas,candidateGas,...r })=>r) }, null, 2));
 if (errors.length) process.exitCode = 1;

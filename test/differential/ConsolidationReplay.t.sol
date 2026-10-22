@@ -10,15 +10,19 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
+import {GameAfkingModule} from "../../contracts/modules/GameAfkingModule.sol";
+import {DegenerusGameBoonModule} from "../../contracts/modules/DegenerusGameBoonModule.sol";
+import {DegenerusGameDegeneretteModule} from "../../contracts/modules/DegenerusGameDegeneretteModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @dev Run twice with DIFFERENTIAL_BASELINE=true/false; compare named observations with compare-replay.js.
-///      P1 preserves CREATE order. Baseline runtime is compiled with the same fixture pins.
+///      Overrides keep common state-owner pins and separate code addresses for baseline modules.
 contract ConsolidationReplayTest is StorageCensusLongRunTest {
     address[] private observed;
     bool private baseline;
     uint256 private checkpoint;
     bool private warm;
+    address[] private replayModules;
 
     function setUp() public override {
         super.setUp();
@@ -61,8 +65,23 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
                 bytes memory code = vm.parseJsonBytes(variants, string.concat(key, ".runtime"));
                 require(code.length != 0, "missing variant runtime");
                 vm.etch(target, code);
+                string memory name = vm.keyExistsJson(variants, string.concat(key, ".name"))
+                    ? vm.parseJsonString(variants, string.concat(key, ".name")) : "";
+                bytes32 moduleName = keccak256(bytes(name));
+                if (moduleName == keccak256("GameAfkingModule")) afkingModule = GameAfkingModule(target);
+                if (moduleName == keccak256("DegenerusGameBoonModule")) boonModule = DegenerusGameBoonModule(target);
+                if (moduleName == keccak256("DegenerusGameDegeneretteModule")) degeneretteModule = DegenerusGameDegeneretteModule(target);
             }
         }
+        replayModules.push(address(mintModule)); replayModules.push(address(boonModule));
+        replayModules.push(address(lootboxModule)); replayModules.push(address(afkingModule));
+        replayModules.push(address(degeneretteModule)); replayModules.push(address(ticketModule));
+        replayModules.push(address(degenesisModule)); replayModules.push(address(advanceModule));
+        replayModules.push(address(jackpotModule)); replayModules.push(address(jackpotDrawModule));
+        replayModules.push(address(decimatorModule)); replayModules.push(address(whaleModule));
+        replayModules.push(address(gameOverModule)); replayModules.push(address(bingoModule));
+        replayModules.push(address(foilModule)); replayModules.push(address(minerModule));
+        replayModules.push(address(rngModule));
         _censusRegisterProtocol();
         for (uint256 i; i < cast.length; ++i) _observe(cast[i], string.concat("player:", vm.toString(i)));
         _observe(CENSUS_KEEPER, "keeper");
@@ -114,10 +133,12 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
     {
         vm.pauseGasMetering();
         ++censusSeq;
+        if (keccak256(bytes(label)) == keccak256("mineFlip")) {
+            label = string.concat(label, ":", vm.toString(uint256(game.nextMinerAction())));
+        }
         // Equal account warmth in both executions. Foundry does not reset SSTORE original values.
         for (uint256 i; i < observed.length; ++i) vm.cool(observed[i]);
-        vm.cool(address(mintModule)); vm.cool(address(boonModule)); vm.cool(address(lootboxModule));
-        vm.cool(address(ticketModule)); vm.cool(address(afkingModule)); vm.cool(address(degenesisModule));
+        for (uint256 i; i < replayModules.length; ++i) vm.cool(replayModules[i]);
         if (warm) _warmInputs(from, to, value, data);
         vm.recordLogs();
         vm.startStateDiffRecording();
@@ -248,7 +269,6 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
     function testFocusedPurchases() public { _focusedPurchases(false); }
     function testWarmPurchases() public { _focusedPurchases(true); }
 
-    // Expand compiler comparisons through Degenesis and six normal gameplay days.
     function testFocusedBoxes() public { _focusedBoxes(false); }
     function testWarmBoxes() public { _focusedBoxes(true); }
 

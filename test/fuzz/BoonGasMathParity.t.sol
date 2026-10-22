@@ -2,10 +2,11 @@
 pragma solidity 0.8.38;
 
 import {Test} from "forge-std/Test.sol";
+import {DegenerusGameBoxModule} from "../../contracts/modules/DegenerusGameBoxModule.sol";
 import {DegenerusGameBoonModule} from "../../contracts/modules/DegenerusGameBoonModule.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 
-contract BoonGasMathHarness is DegenerusGameBoonModule {
+contract BoonGasMathHarness is DegenerusGameBoxModule {
     function optimizedAverage(uint24 currentLevel) external pure returns (uint256) {
         return _boonAvgMaxValue(currentLevel);
     }

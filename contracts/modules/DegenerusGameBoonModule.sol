@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {GameBoxInternals} from "./GameBoxInternals.sol";
+
 /*
  * TERMS OF INTERACTION — submitting a transaction to this contract accepts them.
  *
@@ -51,7 +53,7 @@ import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
  *      slot at all and are credited to `mintPacked_` and the quest streak the moment they
  *      are drawn or gifted. See DegenerusGameStorage for bit layout.
  */
-contract DegenerusGameBoonModule is GamePurchaseBoon {
+abstract contract DegenerusGameBoonModule is GameBoxInternals, GamePurchaseBoon {
     error AlreadyOwnsDeityPass();
     error SymbolTaken();
 
@@ -276,9 +278,8 @@ contract DegenerusGameBoonModule is GamePurchaseBoon {
     }
 
     /// @notice Consume a player's degenerette stake boon for a bet in `currency`
-    /// @dev Called via nested delegatecall from the Degenerette module during bet placement.
-    ///      Payable: an ETH bet carries its stake as msg.value, which delegatecall keeps in
-    ///      flight through this nested dispatch.
+    /// @dev The Box bundle consumes this internally during bet placement.
+    ///      Payable so external dispatch preserves an ETH bet's msg.value.
     ///
     ///      ETH and FLIP have independent lanes; a bet reads and spends its own lane.
     ///      An expired lane pays nothing and is cleared here. Unsupported currencies
@@ -290,6 +291,13 @@ contract DegenerusGameBoonModule is GamePurchaseBoon {
         uint32 id,
         uint8 currency
     ) external payable returns (uint16 boostBps) {
+        return _boxConsumeDegeneretteBoon(id, currency);
+    }
+
+    function _boxConsumeDegeneretteBoon(
+        uint32 id,
+        uint8 currency
+    ) internal override returns (uint16 boostBps) {
         // Delegatecall-only: address(this) == GAME under the nested dispatch. A direct call on the
         // deployed module would trap the in-flight msg.value (empty local state returns silently).
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
@@ -539,9 +547,7 @@ contract DegenerusGameBoonModule is GamePurchaseBoon {
     // =========================================================================
     //
     // The draw table, its weights and every delivery branch execute in Game storage.
-    // The Lootbox module reaches this through ONE delegatecall per entry — see `rollBoxBoons`,
-    // which loops the entry's boxes internally rather than making the caller pay a call frame
-    // per box.
+    // The Box resolver draws each entry's boons internally from position-derived seeds.
 
     /// @dev Assumed utilization of max boon value (50%)
     uint16 private constant LOOTBOX_BOON_UTILIZATION_BPS = 5000;
@@ -722,18 +728,10 @@ contract DegenerusGameBoonModule is GamePurchaseBoon {
     error RecipientBoonCapReached();
     /// @notice Thrown when the deity boon slot has already been used on the current day.
     error SlotAlreadyUsed();
-    /// @notice Thrown when a deity boon is requested before the preceding day's RNG word has landed.
-    error RngNotReady();
 
     /// @notice Draw boons for every box in one opened entry.
-    /// @dev Delegatecall entrypoint from the Lootbox module; runs in the Game's storage context.
-    ///      ONE call covers the whole entry: the caller passes how many boxes it rolled and the
-    ///      per-box budget, and the loop lives here. An entry can hold a hundred boxes; one
-    ///      frame per box, each with its own expiry and activity delegatecalls, is the cost
-    ///      this collapses into a single call.
-    ///
-    ///      Each box still gets its OWN draw off a counter-tagged seed, so a box is a bet here
-    ///      too; what is shared is the frame, not the outcome.
+    /// @dev External dispatch preserves the Game storage context. Box resolution calls
+    ///      the internal body; each box draws from its own counter-tagged seed.
     /// @param id Box owner's wallet ID (boon state key).
     /// @param perBoxBudget Boon budget of a single box, in wei of ETH-equivalent value.
     /// @param boxCount Boxes rolled in this entry.
@@ -750,6 +748,18 @@ contract DegenerusGameBoonModule is GamePurchaseBoon {
         uint256 seed,
         uint256 nonceBase
     ) external payable {
+        _boxRollBoxBoons(id, perBoxBudget, boxCount, originalAmount, currentLevel, seed, nonceBase);
+    }
+
+    function _boxRollBoxBoons(
+        uint32 id,
+        uint256 perBoxBudget,
+        uint256 boxCount,
+        uint256 originalAmount,
+        uint24 currentLevel,
+        uint256 seed,
+        uint256 nonceBase
+    ) internal virtual override {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (perBoxBudget == 0 || boxCount == 0) return;
 

@@ -3,12 +3,13 @@ pragma solidity 0.8.38;
 
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {Test, Vm} from "forge-std/Test.sol";
+import {DegenerusGameBoxModule} from "../../contracts/modules/DegenerusGameBoxModule.sol";
 import {GameAfkingModule} from "../../contracts/modules/GameAfkingModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
 
-contract AfkingMembershipHarness is GameAfkingModule, WalletSeed {
+contract AfkingMembershipHarness is DegenerusGameBoxModule, WalletSeed {
     /// @dev A completed pass with `pending`'s box paid and unopened; `clean` is an unpaid-for
     ///      member of the same cohort. The pass endpoint is the process day.
     function seed(address pending, address clean, uint8 quantity) external returns (uint24 processDay) {
@@ -68,9 +69,14 @@ contract AfkingPendingMembershipTest is Test {
     function setUp() public {
         vm.warp(uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621);
         h = new AfkingMembershipHarness();
+        vm.etch(ContractAddresses.GAME, address(h).code);
+        vm.copyStorage(address(h), ContractAddresses.GAME);
+        h = AfkingMembershipHarness(ContractAddresses.GAME);
         vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
         vm.mockCall(ContractAddresses.QUESTS, bytes(""), bytes(""));
         vm.mockCall(ContractAddresses.AFFILIATE, bytes(""), bytes(""));
+        vm.mockCall(ContractAddresses.WWXRP, bytes(""), bytes(""));
+        vm.mockCall(ContractAddresses.COINFLIP, bytes(""), bytes(""));
         vm.mockCall(ContractAddresses.GAME_LOOTBOX_MODULE, bytes(""), bytes(""));
     }
 

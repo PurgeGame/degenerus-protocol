@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {DegenerusGameBoxModule} from "../modules/DegenerusGameBoxModule.sol";
 import {DegenerusGameDegeneretteModule} from "../modules/DegenerusGameDegeneretteModule.sol";
 import {DegenerusTraitUtils} from "../DegenerusTraitUtils.sol";
 
 /// @dev Exposes the production pure math for exhaustive and differential tests.
-contract DegeneretteMathHarness is DegenerusGameDegeneretteModule {
+contract DegeneretteMathHarness is DegenerusGameBoxModule {
     function score(uint32 p, uint32 r) external pure returns (uint8, uint8) {
         return _score(p, r);
     }

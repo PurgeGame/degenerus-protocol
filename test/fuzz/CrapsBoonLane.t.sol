@@ -3,10 +3,11 @@ pragma solidity 0.8.38;
 
 import {Test} from "forge-std/Test.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {DegenerusGameBoxModule} from "../../contracts/modules/DegenerusGameBoxModule.sol";
 import {DegenerusGameBoonModule} from "../../contracts/modules/DegenerusGameBoonModule.sol";
 import {DeityBoonViewer} from "../../contracts/DeityBoonViewer.sol";
 
-contract CrapsBoonModuleHarness is DegenerusGameBoonModule {
+contract CrapsBoonModuleHarness is DegenerusGameBoxModule {
     function tree(uint256 roll) external pure returns (uint8) {
         return _boonFromRoll(roll);
     }

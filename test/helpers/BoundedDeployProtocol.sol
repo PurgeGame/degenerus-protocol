@@ -20,6 +20,7 @@ import {DegenerusGameWhaleModule} from "../../contracts/modules/DegenerusGameWha
 import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJackpotModule.sol";
 import {DegenerusGameDecimatorModule} from "../../contracts/modules/DegenerusGameDecimatorModule.sol";
 import {DegenerusGameGameOverModule} from "../../contracts/modules/DegenerusGameGameOverModule.sol";
+import {DegenerusGameBoxModule} from "../../contracts/modules/DegenerusGameBoxModule.sol";
 import {DegenerusGameLootboxModule} from "../../contracts/modules/DegenerusGameLootboxModule.sol";
 import {DegenerusGameBoonModule} from "../../contracts/modules/DegenerusGameBoonModule.sol";
 import {DegenerusGameDegeneretteModule} from "../../contracts/modules/DegenerusGameDegeneretteModule.sol";
@@ -80,11 +81,8 @@ abstract contract BoundedDeployProtocol is DeployProtocol {
         jackpotModule = DegenerusGameJackpotModule(payable(deployCode("DegenerusGameJackpotModule.sol:DegenerusGameJackpotModule", abi.encode())));
         decimatorModule = DegenerusGameDecimatorModule(payable(deployCode("DegenerusGameDecimatorModule.sol:DegenerusGameDecimatorModule", abi.encode())));
         gameOverModule = DegenerusGameGameOverModule(payable(deployCode("DegenerusGameGameOverModule.sol:DegenerusGameGameOverModule", abi.encode())));
-        lootboxModule = DegenerusGameLootboxModule(payable(deployCode("DegenerusGameLootboxModule.sol:DegenerusGameLootboxModule", abi.encode())));
-        boonModule = DegenerusGameBoonModule(payable(deployCode("DegenerusGameBoonModule.sol:DegenerusGameBoonModule", abi.encode())));
-        degeneretteModule = DegenerusGameDegeneretteModule(payable(deployCode("DegenerusGameDegeneretteModule.sol:DegenerusGameDegeneretteModule", abi.encode())));
+        boxModule = DegenerusGameBoxModule(payable(deployCode("DegenerusGameBoxModule.sol:DegenerusGameBoxModule", abi.encode())));
         bingoModule = DegenerusGameBingoModule(payable(deployCode("DegenerusGameBingoModule.sol:DegenerusGameBingoModule", abi.encode())));
-        afkingModule = GameAfkingModule(payable(deployCode("GameAfkingModule.sol:GameAfkingModule", abi.encode())));
         coin = FLIP(payable(deployCode("FLIP.sol:FLIP", abi.encode())));
         coinflip = Coinflip(payable(deployCode("Coinflip.sol:Coinflip", abi.encode())));
         game = DegenerusGame(payable(deployCode("DegenerusGame.sol:DegenerusGame", abi.encode())));
@@ -111,6 +109,10 @@ abstract contract BoundedDeployProtocol is DeployProtocol {
         jackpotDrawModule = DegenerusGameJackpotDrawModule(payable(deployCode("DegenerusGameJackpotDrawModule.sol:DegenerusGameJackpotDrawModule", abi.encode())));
         degenesisModule = DegenerusGameDegenesisModule(payable(deployCode("DegenerusGameDegenesisModule.sol:DegenerusGameDegenesisModule", abi.encode())));
         ownerGovernance = DegenerusOwnerGovernance(payable(deployCode("DegenerusOwnerGovernance.sol:DegenerusOwnerGovernance", abi.encode())));
+        lootboxModule = DegenerusGameLootboxModule(payable(address(boxModule)));
+        boonModule = DegenerusGameBoonModule(payable(address(boxModule)));
+        degeneretteModule = DegenerusGameDegeneretteModule(payable(address(boxModule)));
+        afkingModule = GameAfkingModule(payable(address(boxModule)));
         // END CANONICAL DEPLOYMENTS
         if (initializeDeities) game.initProtocolDeity();
     }

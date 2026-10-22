@@ -2,13 +2,14 @@
 pragma solidity 0.8.38;
 
 import {Test} from "forge-std/Test.sol";
+import {DegenerusGameBoxModule} from "../../contracts/modules/DegenerusGameBoxModule.sol";
 import {GameAfkingModule} from "../../contracts/modules/GameAfkingModule.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
-contract AfkingSectionsHarness is GameAfkingModule, WalletSeed {
+contract AfkingSectionsHarness is DegenerusGameBoxModule, WalletSeed {
     constructor() { _seedProtocolWallets(); dailyIdx = _simulatedDayIndex(); }
 
     function put(address owner, bool tickets) external returns (uint32 id) {
@@ -55,8 +56,12 @@ contract AfkingSectionsTest is Test {
     function setUp() public {
         vm.warp(uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621 + 1 days);
         h = new AfkingSectionsHarness();
+        vm.etch(ContractAddresses.GAME, address(h).code);
+        vm.copyStorage(address(h), ContractAddresses.GAME);
+        h = AfkingSectionsHarness(ContractAddresses.GAME);
         vm.mockCall(ContractAddresses.QUESTS, bytes(""), bytes(""));
         vm.mockCall(ContractAddresses.AFFILIATE, bytes(""), bytes(""));
+        vm.mockCall(ContractAddresses.WWXRP, bytes(""), bytes(""));
         vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
         vm.mockCall(ContractAddresses.GAME_LOOTBOX_MODULE, bytes(""), bytes(""));
     }
