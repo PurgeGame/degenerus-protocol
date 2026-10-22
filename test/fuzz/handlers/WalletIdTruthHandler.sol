@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {PeripheralSlots} from "../../helpers/PeripheralSlots.sol";
 
 import "forge-std/Test.sol";
 import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
@@ -94,13 +95,13 @@ contract WalletIdTruthHandler is Test {
     uint256 internal constant AFF_CODE = 0; // DegenerusAffiliate._affiliateCode
     uint256 internal constant AFF_EARNED = 1; // affiliateCoinEarned[ownerId]
     uint256 internal constant AFF_REFERRAL = 2; // playerReferralCode
-    uint256 internal constant AFF_LEVEL_SCORE = 3; // _levelScore
-    uint256 internal constant SD_BATCH_PLAYERS = 9; // sDGNRS._batchPlayers (packed-word mappings at 9, 10)
+    uint256 internal constant AFF_LEVEL_SCORE = PeripheralSlots.AFF_LEVEL_SCORE; // _levelScore
+    uint256 internal constant SD_BATCH_PLAYERS = PeripheralSlots.SD_BATCH_PLAYERS; // sDGNRS._batchPlayers (packed-word mappings at 9, 10)
     uint256 internal constant SD_DAY_VALUE = 11; // sDGNRS._redemptionDayValue
     uint256 internal constant SD_ID_SHIFT = 152;
     uint256 internal constant PM_COUNTS = 0; // DegenerusParimutuel.growthCounts
     uint256 internal constant PM_LANES = 2; // DegenerusParimutuel.growthSideLanes
-    uint256 internal constant JP_BAF_TOP = 1; // DegenerusJackpots.bafTop
+    uint256 internal constant JP_BAF_TOP = PeripheralSlots.JP_BAF_TOP; // DegenerusJackpots.bafTop
     uint256 internal constant DEC_WINDOW_BIT = (GameSlots.DECIMATOR_FLAGS_OFFSET * 8); // DEC_WINDOW_OPEN = 1
 
     // ------------------------------------------------------------------ accounts (plan F1/F2, decisions G1/G4)
@@ -1604,7 +1605,7 @@ contract WalletIdTruthHandler is Test {
                 if (cache >> 66 != 0) _fail("AFFEARN", "earnings word spills past bit 255", _keyOf(id), cache >> 66, 0);
                 _checkUplines("AFFEARN", id, cache);
             }
-            uint256 scoreWord = uint256(vm.load(AFFILIATE, keccak256(abi.encode(lvl & 3, AFF_LEVEL_SCORE))));
+            uint256 scoreWord = uint256(vm.load(AFFILIATE, bytes32(PeripheralSlots.AFF_LEVEL_SCORE + uint256(lvl & 3))));
             uint32 leader = uint24(scoreWord >> 232) == lvl ? uint32(scoreWord >> 163) : 0;
             if (leader != 0 && !_registered(leader)) _fail("AFFLEAD", "level leader is not a registered ID", address(0), leader, lvl);
         }
@@ -1680,7 +1681,7 @@ contract WalletIdTruthHandler is Test {
     function _checkSdgnrsBatches() internal view {
         for (uint256 p; p < 2; ++p) {
             uint256 root = SD_BATCH_PLAYERS + p;
-            uint256 n = uint32(uint256(vm.load(SDGNRS, bytes32(uint256(7)))) >> (192 + p * 32));
+            uint256 n = uint32(uint256(vm.load(SDGNRS, bytes32(PeripheralSlots.SD_BATCH_COUNTS))) >> (192 + p * 32));
             if (n > 256) n = 256;
             for (uint256 i; i < n; ++i) {
                 uint128 entry = uint128(uint256(vm.load(SDGNRS, keccak256(abi.encode(i / 2, root)))) >> (128 * (i % 2)));
@@ -1708,11 +1709,11 @@ contract WalletIdTruthHandler is Test {
 
     /// @dev Jackpots BAF board lanes (`score96 | id << 96`, two per word) hold registered IDs.
     function _checkBafBoard() internal view {
-        uint256 tags = uint256(vm.load(JACKPOTS, bytes32(uint256(3)))) >> 24;
+        uint256 tags = uint256(vm.load(JACKPOTS, bytes32(PeripheralSlots.JP_BAF_BANK_LEVELS))) >> 24;
         for (uint256 bank; bank < 4; ++bank) {
             uint24 lvl = uint24(tags >> (bank * 24));
-            uint256 count = uint8(uint256(vm.load(JACKPOTS, keccak256(abi.encode(uint256(lvl), uint256(2))))) >> 64);
-            uint256 base = uint256(keccak256(abi.encode(bank, JP_BAF_TOP)));
+            uint256 count = uint8(uint256(vm.load(JACKPOTS, keccak256(abi.encode(uint256(lvl), PeripheralSlots.JP_BAF_LEVEL)))) >> 64);
+            uint256 base = uint256(bytes32(PeripheralSlots.JP_BAF_TOP + uint256(bank) * 2));
             for (uint256 i; i < count; ++i) {
                 uint256 word = uint256(vm.load(JACKPOTS, bytes32(base + (i >> 1))));
                 uint32 id = uint32(word >> ((i & 1) * 128 + 96));

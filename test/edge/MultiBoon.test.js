@@ -23,8 +23,8 @@ import {
  * is stored independently and multiple categories coexist.
  *
  * Key constraints for testing:
- *   - deityBoonRecipientDay: a recipient can receive at most ONE deity boon
- *     per day (regardless of which deity issues it).
+ *   - Each deity has three daily slots and a lifetime cap of ten gifts per recipient.
+ *     A recipient may receive several gifts on the same day.
  *   - Deity boons expire on day change (deityDay != currentDay -> cleared).
  *   - Consume functions are access-restricted (COIN/COINFLIP/self-call only).
  *
@@ -159,8 +159,7 @@ describe("Multi-category boon coexistence", function () {
     );
     expect(COINFLIP_TYPES).to.include(result1.boonType);
 
-    // Day N+k: Issue a purchase boon to Bob (different day, so
-    // deityBoonRecipientDay check passes). _applyBoon writes purchase fields
+    // Day N+k: Issue a purchase boon to Bob. _applyBoon writes purchase fields
     // to independent bit positions in boonPacked[Bob].slot0, preserving the
     // coinflip tier that was written earlier.
     const result2 = await issueSpecificBoon(
@@ -362,7 +361,7 @@ describe("Multi-category boon coexistence", function () {
           }
           issued = true;
         } catch {
-          // recipient already received boon today -- skip
+          // Try another available deity slot.
           continue;
         }
       }

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
+import {PeripheralSlots} from "../helpers/PeripheralSlots.sol";
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -28,7 +29,7 @@ contract PeripheralReuseTest is DeployProtocol {
     function testIncineratorTagCountAndWholeWordReplacement() public {
         _incin(99, 100);
         _incin(99, 200);
-        bytes32 slot = _map(0, 7);
+        bytes32 slot = keccak256(abi.encode(0, PeripheralSlots.WW_INCIN_ENTRY));
         vm.store(address(wwxrp), slot, bytes32(type(uint256).max));
         _incin(199, 25);
         (uint256 total, uint32 count) = wwxrp.incineratorInfo(200);
@@ -48,7 +49,7 @@ contract PeripheralReuseTest is DeployProtocol {
     function testGnrWeightTagReplacesOldLevelAndPoisonedHighBits() public {
         vm.store(address(gnrus), bytes32(uint256(4)), bytes32(uint256(uint160(address(0xCAFE)))));
         vm.mockCall(address(sdgnrs), abi.encodeWithSelector(sdgnrs.balanceOf.selector, ALICE), abi.encode(uint256(100e12)));
-        bytes32 slot = _map(0, 25);
+        bytes32 slot = bytes32(PeripheralSlots.GNR_APPROVE_WEIGHT + uint256(0));
         vm.store(address(gnrus), slot, bytes32(type(uint256).max));
         uint24 lvl = gnrus.currentLevel();
         assertEq(gnrus.slotApproveWeight(lvl, 0), 0);
@@ -64,7 +65,7 @@ contract PeripheralReuseTest is DeployProtocol {
     function testAffiliateTaggedBankDiscardsEveryStaleField() public {
         bytes32 code = bytes32("ALICE");
         vm.prank(ALICE); affiliate.createAffiliateCode(code, 0);
-        bytes32 slot = _map(1, 3);
+        bytes32 slot = bytes32(PeripheralSlots.AFF_LEVEL_SCORE + uint256(1));
         vm.store(address(affiliate), slot, bytes32(type(uint256).max));
         assertEq(affiliate.totalAffiliateScore(5), 0);
         vm.prank(address(game)); affiliate.payAffiliate(1_000, code, 456, 5, true, 0);
@@ -83,7 +84,7 @@ contract PeripheralReuseTest is DeployProtocol {
         for (uint32 i; i < 4; ++i) {
             vm.prank(address(coinflip)); jackpots.recordBafFlip(id + i, 10, 100 - i);
         }
-        uint256 base = uint256(_map(1, 1));
+        uint256 base = PeripheralSlots.JP_BAF_TOP + 2;
         vm.store(address(jackpots), bytes32(base), bytes32(type(uint256).max));
         vm.store(address(jackpots), bytes32(base + 1), bytes32(type(uint256).max));
         vm.prank(address(coinflip)); jackpots.recordBafFlip(id, 50, 25);
@@ -116,14 +117,14 @@ contract PeripheralReuseTest is DeployProtocol {
     }
 
     function testWwxrpBalanceRetainsSentinelAndDayBitmapBoundaries() public {
-        bytes32 slot = _map(id, 10);
+        bytes32 slot = keccak256(abi.encode(id, PeripheralSlots.WW_CLAIMABLE));
         vm.prank(address(game)); wwxrp.creditPrize(id, 99);
         assertEq(uint256(vm.load(address(wwxrp), slot)), 100);
         vm.prank(ALICE); wwxrp.withdraw(0, 0);
         assertEq(wwxrp.claimable(id), 0);
         assertEq(uint256(vm.load(address(wwxrp), slot)), 1);
-        vm.store(address(wwxrp), _map(0, 5), bytes32(uint256(1) << 255));
-        vm.store(address(wwxrp), _map(1, 5), bytes32(uint256(1)));
+        vm.store(address(wwxrp), keccak256(abi.encode(0, PeripheralSlots.WW_DAY_CLAIMED)), bytes32(uint256(1) << 255));
+        vm.store(address(wwxrp), keccak256(abi.encode(1, PeripheralSlots.WW_DAY_CLAIMED)), bytes32(uint256(1)));
         assertFalse(wwxrp.dayClaimed(254)); assertTrue(wwxrp.dayClaimed(255));
         assertTrue(wwxrp.dayClaimed(256)); assertFalse(wwxrp.dayClaimed(257));
     }

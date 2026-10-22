@@ -309,8 +309,7 @@ contract KeeperFaucetResistance is DeployProtocol {
         if (shape == 2) {
             // The warm-ring shape really entered the boon draw: the ring slot now holds today.
             uint24 d = game.currentDayView();
-            uint256 w = uint256(vm.load(address(game), keccak256(abi.encode(uint256(d & 1),
-                keccak256(abi.encode(uint32(1), GameSlots.PROTOCOL_BOON_POOLS))))));
+            uint256 w = uint256(vm.load(address(game), bytes32(uint256(GameSlots.PROTOCOL_BOON_POOLS) + (uint256(uint32(1)) == 1 ? 0 : 2) + (uint256(d & 1) & 1))));
             assertEq(uint24(w >> 216), d, "ring slot not retagged to today");
             assertEq(uint32(w >> 176), n, "every bet entered the boon draw");
         }
@@ -350,10 +349,10 @@ contract KeeperFaucetResistance is DeployProtocol {
     function _warmBoonRing(uint32 issuer, uint256 entries) internal {
         uint24 d = game.currentDayView();
         uint256 ring = uint256(d & 1);
-        bytes32 poolRoot = keccak256(abi.encode(issuer, GameSlots.PROTOCOL_BOON_POOLS));
-        bytes32 entryRoot = keccak256(abi.encode(ring, keccak256(abi.encode(issuer, GameSlots.PROTOCOL_BOON_ENTRIES))));
+        bytes32 poolRoot = bytes32(GameSlots.PROTOCOL_BOON_POOLS + (issuer == 1 ? 0 : 2) + ring);
+        bytes32 entryRoot = bytes32(uint256(GameSlots.PROTOCOL_BOON_ENTRIES) + (uint256(issuer) == 1 ? 0 : 2) + (uint256(ring) & 1));
         uint256 old = uint256(d - 2);
-        vm.store(address(game), keccak256(abi.encode(ring, poolRoot)),
+        vm.store(address(game), poolRoot,
             bytes32((old << 216) | (uint256(7) << 208) | (uint256(entries) << 176) | (uint256(1) << 112) | 1));
         for (uint256 i; i < entries; ++i) {
             vm.store(address(game), keccak256(abi.encode(i, entryRoot)), bytes32((uint256(i + 1) << 32) | _fixtureId(player)));

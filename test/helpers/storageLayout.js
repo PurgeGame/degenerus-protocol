@@ -20,8 +20,8 @@ export async function compiledStorageLayout(contract = "DegenerusGame") {
   return cached.promise;
 }
 
-export async function compiledStorageSlot(variable) {
-  const layout = await compiledStorageLayout();
+export async function compiledStorageSlot(variable, contract = "DegenerusGame") {
+  const layout = await compiledStorageLayout(contract);
   const entry = layout.storage.find((item) => item.label === variable);
   if (!entry) throw new Error(`Compiled storage field missing: ${variable}`);
   return BigInt(entry.slot);

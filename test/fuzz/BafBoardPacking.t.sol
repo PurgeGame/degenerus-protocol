@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {PeripheralSlots} from "../helpers/PeripheralSlots.sol";
 
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -28,8 +29,8 @@ contract BafBoardPackingTest is Test {
     DegenerusJackpots internal jp;
 
     uint256 private constant BAF_PLAYER_ROOT = 0;
-    uint256 private constant BAF_TOP_ROOT = 1;
-    uint256 private constant BAF_LEVEL_ROOT = 2;
+    uint256 private constant BAF_TOP_ROOT = PeripheralSlots.JP_BAF_TOP;
+    uint256 private constant BAF_LEVEL_ROOT = PeripheralSlots.JP_BAF_LEVEL;
     uint256 private constant MASK128 = type(uint128).max;
     uint32 private constant VAULT_ID = 1;
 
@@ -111,7 +112,7 @@ contract BafBoardPackingTest is Test {
     // =====================================================================
 
     function _boardWords(uint24 lvl) private view returns (bytes32 base, uint256 w0, uint256 w1) {
-        base = keccak256(abi.encode(uint256((lvl / 10) & 3), BAF_TOP_ROOT));
+        base = bytes32(PeripheralSlots.JP_BAF_TOP + uint256((lvl / 10) & 3) * 2);
         w0 = uint256(vm.load(address(jp), base));
         w1 = uint256(vm.load(address(jp), bytes32(uint256(base) + 1)));
     }

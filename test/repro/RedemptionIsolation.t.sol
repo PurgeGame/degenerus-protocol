@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
+import {PeripheralSlots} from "../helpers/PeripheralSlots.sol";
 
 import {RedemptionReserveHarness} from "./RedemptionReserve.t.sol";
 import {RedemptionFixture} from "../fuzz/helpers/RedemptionFixture.sol";
@@ -171,17 +172,17 @@ contract RedemptionIsolationTest is RedemptionFixture {
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
     }
 
-    function testBatchParityReplacesBothWordsAndSlotSevenRetainsSentinel() public {
+    function testBatchParityReplacesBothWordsAndEscrowRetainsSentinel() public {
         _burn(alice, sdgnrs.totalSupply() / 1000);
         uint32 first = _resolveLive(175);
         assertTrue(_work(9_000_000));
-        assertEq(uint256(vm.load(address(sdgnrs), bytes32(uint256(7)))), 1);
+        assertEq(uint256(vm.load(address(sdgnrs), bytes32(PeripheralSlots.SD_BATCH_COUNTS))), 1);
         _burn(bob, sdgnrs.totalSupply() / 1000);
         _resolveLive(100);
         assertTrue(_work(9_000_000));
-        assertEq(uint256(vm.load(address(sdgnrs), bytes32(uint256(7)))), 1);
+        assertEq(uint256(vm.load(address(sdgnrs), bytes32(PeripheralSlots.SD_BATCH_COUNTS))), 1);
 
-        bytes32 slot = keccak256(abi.encode(uint256(first & 1), uint256(6)));
+        bytes32 slot = bytes32(PeripheralSlots.SD_BATCHES + uint256(first & 1) * 2);
         vm.store(address(sdgnrs), slot, bytes32(type(uint256).max));
         vm.store(address(sdgnrs), bytes32(uint256(slot) + 1), bytes32(type(uint256).max));
         (uint80 stale, , , , ,) = sdgnrs.redemptionBatches(first);

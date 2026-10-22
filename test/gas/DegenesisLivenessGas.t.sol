@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
+import {PeripheralSlots} from "../helpers/PeripheralSlots.sol";
 
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
@@ -340,8 +341,7 @@ abstract contract DegenesisStallRequestGas is DegenesisGasBase {
                 gnrus.setCharity(i, address(uint160(0xE000 + i)));
             }
         }
-        vm.store(address(affiliate), keccak256(abi.encode(uint24(1), uint256(3))),
-            bytes32((uint256(1) << 232) | (uint256(winnerId) << 163) | (uint256(1) << 128) | 1));
+        vm.store(address(affiliate), bytes32(PeripheralSlots.AFF_LEVEL_SCORE + uint256(uint24(1))), bytes32((uint256(1) << 232) | (uint256(winnerId) << 163) | (uint256(1) << 128) | 1));
     }
 
     function test_StallRequestSplitsAllSeven() public {

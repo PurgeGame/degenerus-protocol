@@ -562,13 +562,13 @@ contract RngWindowFreezeHandler is Test {
 
     function _snapshotFoilDraws() private {
         for (uint256 i; i < 2; ++i) {
-            _snapFoilDraws[i] = uint256(vm.load(address(game), keccak256(abi.encode(i, GameSlots.DAILY_FOIL_DRAW))));
+            _snapFoilDraws[i] = uint256(vm.load(address(game), bytes32(GameSlots.DAILY_FOIL_DRAW + (uint256(i) & 1))));
         }
     }
 
     function _checkFoilDraws() private {
         for (uint256 i; i < 2; ++i) {
-            if (uint256(vm.load(address(game), keccak256(abi.encode(i, GameSlots.DAILY_FOIL_DRAW)))) != _snapFoilDraws[i]) {
+            if (uint256(vm.load(address(game), bytes32(GameSlots.DAILY_FOIL_DRAW + (uint256(i) & 1)))) != _snapFoilDraws[i]) {
                 ghost_frozenSlotMutations++;
                 ghost_lastMutatedSlotTag = 13;
             }
@@ -599,8 +599,8 @@ contract RngWindowFreezeHandler is Test {
         _snapIndex = _activeLootboxIndex() ^ 1;
         _snapDayWord = _rngWordByDay(_snapDay);
         _snapDayTags = uint256(vm.load(address(game), bytes32(GameSlots.RNG_DAY_TAGS))); // rngDayTags
-        _snapDayPayload0 = uint256(vm.load(address(game), keccak256(abi.encode(uint256(0), RNG_WORD_BY_DAY_SLOT))));
-        _snapDayPayload1 = uint256(vm.load(address(game), keccak256(abi.encode(uint256(1), RNG_WORD_BY_DAY_SLOT))));
+        _snapDayPayload0 = uint256(vm.load(address(game), bytes32(RNG_WORD_BY_DAY_SLOT + (uint256(0) & 1))));
+        _snapDayPayload1 = uint256(vm.load(address(game), bytes32(RNG_WORD_BY_DAY_SLOT + (uint256(1) & 1))));
         _snapLootboxWord = _lootboxRngWord(_snapIndex);
         _snapLootboxReadiness = uint256(vm.load(address(game), bytes32(0))) & (uint256(7) << 253);
         _snapLootboxCursor = _lootboxRngIndexCursor();
@@ -709,8 +709,8 @@ contract RngWindowFreezeHandler is Test {
 
     function _dailyRingChanged() private view returns (bool) {
         return uint256(vm.load(address(game), bytes32(GameSlots.RNG_DAY_TAGS))) != _snapDayTags
-            || uint256(vm.load(address(game), keccak256(abi.encode(uint256(0), RNG_WORD_BY_DAY_SLOT)))) != _snapDayPayload0
-            || uint256(vm.load(address(game), keccak256(abi.encode(uint256(1), RNG_WORD_BY_DAY_SLOT)))) != _snapDayPayload1;
+            || uint256(vm.load(address(game), bytes32(RNG_WORD_BY_DAY_SLOT + (uint256(0) & 1)))) != _snapDayPayload0
+            || uint256(vm.load(address(game), bytes32(RNG_WORD_BY_DAY_SLOT + (uint256(1) & 1)))) != _snapDayPayload1;
     }
 
     function _rngWordByDay(uint24 day) internal view returns (uint256) {
@@ -794,7 +794,7 @@ contract RngWindowFreezeHandler is Test {
     ///      counter-neutral here as defence-in-depth). The contract slot is restored immediately. A `true`
     ///      return proves the detector registers a known in-window violation — the falsifiability guarantee.
     function debugSeedInWindowMutationAndCheck() external returns (bool detected) {
-        bytes32 dayWordSlot = keccak256(abi.encode(uint256(_snapDay & 1), RNG_WORD_BY_DAY_SLOT));
+        bytes32 dayWordSlot = bytes32(RNG_WORD_BY_DAY_SLOT + uint256(_snapDay & 1));
         uint256 original = uint256(vm.load(address(game), dayWordSlot));
 
         // Seed the in-window mutation: flip the snapshotted day word to a different value.

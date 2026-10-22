@@ -7,6 +7,7 @@ import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol
 import {WWXRP} from "../../contracts/WWXRP.sol";
 import {WalletTableLib} from "../../contracts/libraries/WalletTableLib.sol";
 import {CrapsPreferenceLib} from "../../contracts/libraries/CrapsPreferenceLib.sol";
+import {CrapsLensReader} from "../../contracts/CrapsLens.sol";
 import {GameSlots, CrapsSlots} from "../helpers/GameSlots.sol";
 
 /// @dev Reads `.slot` / `.offset` straight off the audited Game storage declarations.
@@ -83,7 +84,6 @@ contract GameSlotHarness is DegenerusGameStorage {
     function s_lootboxRngPacked() external pure returns (uint256 s, uint256 o) { assembly { s := lootboxRngPacked.slot o := lootboxRngPacked.offset } }
     function s_rngDayTags() external pure returns (uint256 s, uint256 o) { assembly { s := rngDayTags.slot o := rngDayTags.offset } }
     function s_deityBoonPacked() external pure returns (uint256 s, uint256 o) { assembly { s := deityBoonPacked.slot o := deityBoonPacked.offset } }
-    function s_deityBoonRecipientDay() external pure returns (uint256 s, uint256 o) { assembly { s := deityBoonRecipientDay.slot o := deityBoonRecipientDay.offset } }
     function s_degeneretteRecordBounty() external pure returns (uint256 s, uint256 o) { assembly { s := degeneretteRecordBounty.slot o := degeneretteRecordBounty.offset } }
     function s_earlyTicketLevel() external pure returns (uint256 s, uint256 o) { assembly { s := earlyTicketLevel.slot o := earlyTicketLevel.offset } }
     function s_lootboxEvCapPacked() external pure returns (uint256 s, uint256 o) { assembly { s := lootboxEvCapPacked.slot o := lootboxEvCapPacked.offset } }
@@ -158,6 +158,16 @@ contract GameSlotHarness is DegenerusGameStorage {
 
 /// @dev Reads Craps `.slot`s off the audited Craps storage, plus the LootboxCraps Game-slot pins.
 contract CrapsSlotHarness is CrapsBattleStorage {
+    function lens__battles() external pure returns (uint256 s) { assembly { s := _battles.slot } }
+    function lens__battleDays() external pure returns (uint256 s) { assembly { s := _battleDays.slot } }
+    function lens__slotState() external pure returns (uint256 s) { assembly { s := _slotState.slot } }
+    function lens__customBattle() external pure returns (uint256 s) { assembly { s := _customBattle.slot } }
+    function lens__highRollerReserve() external pure returns (uint256 s) { assembly { s := _highRollerReserve.slot } }
+    function lens__jackpotRounds() external pure returns (uint256 s) { assembly { s := _jackpotRounds.slot } }
+    function lens__bonus() external pure returns (uint256 s) { assembly { s := _bonus.slot } }
+    function lens__passCreditsById() external pure returns (uint256 s) { assembly { s := _passCreditsById.slot } }
+    function lens__progressive() external pure returns (uint256 s) { assembly { s := _progressive.slot } }
+
     function dayStaked() external pure returns (uint256 s) { assembly { s := _dayStaked.slot } }
     function highField() external pure returns (uint256 s) { assembly { s := _highField.slot } }
     function passCreditsById() external pure returns (uint256 s) { assembly { s := _passCreditsById.slot } }
@@ -198,6 +208,51 @@ contract StorageSlotPinsTest is Test {
         (s,) = h.s_boonPacked(); assertEq((new WwxrpSlotHarness()).boonPackedSlot(), s, "WWXRP.GAME_BOON_PACKED_SLOT");
 
         (s,) = h.s_wallets(); assertEq(WalletTableLib.OWNERS_SLOT, s, "WalletTableLib.OWNERS_SLOT");
+    }
+
+    function test_CrapsLens_BATTLES_SLOT() public {
+        CrapsSlotHarness c = new CrapsSlotHarness();
+        assertEq(CrapsLensReader.BATTLES_SLOT, c.lens__battles(), "CrapsLensReader.BATTLES_SLOT");
+    }
+
+    function test_CrapsLens_BATTLE_DAYS_SLOT() public {
+        CrapsSlotHarness c = new CrapsSlotHarness();
+        assertEq(CrapsLensReader.BATTLE_DAYS_SLOT, c.lens__battleDays(), "CrapsLensReader.BATTLE_DAYS_SLOT");
+    }
+
+    function test_CrapsLens_SLOT_STATE_SLOT() public {
+        CrapsSlotHarness c = new CrapsSlotHarness();
+        assertEq(CrapsLensReader.SLOT_STATE_SLOT, c.lens__slotState(), "CrapsLensReader.SLOT_STATE_SLOT");
+    }
+
+    function test_CrapsLens_CUSTOM_BATTLE_SLOT() public {
+        CrapsSlotHarness c = new CrapsSlotHarness();
+        assertEq(CrapsLensReader.CUSTOM_BATTLE_SLOT, c.lens__customBattle(), "CrapsLensReader.CUSTOM_BATTLE_SLOT");
+    }
+
+    function test_CrapsLens_HIGH_ROLLER_RESERVE_SLOT() public {
+        CrapsSlotHarness c = new CrapsSlotHarness();
+        assertEq(CrapsLensReader.HIGH_ROLLER_RESERVE_SLOT, c.lens__highRollerReserve(), "CrapsLensReader.HIGH_ROLLER_RESERVE_SLOT");
+    }
+
+    function test_CrapsLens_JACKPOT_ROUNDS_SLOT() public {
+        CrapsSlotHarness c = new CrapsSlotHarness();
+        assertEq(CrapsLensReader.JACKPOT_ROUNDS_SLOT, c.lens__jackpotRounds(), "CrapsLensReader.JACKPOT_ROUNDS_SLOT");
+    }
+
+    function test_CrapsLens_BONUS_SLOT() public {
+        CrapsSlotHarness c = new CrapsSlotHarness();
+        assertEq(CrapsLensReader.BONUS_SLOT, c.lens__bonus(), "CrapsLensReader.BONUS_SLOT");
+    }
+
+    function test_CrapsLens_PASS_CREDITS_SLOT() public {
+        CrapsSlotHarness c = new CrapsSlotHarness();
+        assertEq(CrapsLensReader.PASS_CREDITS_SLOT, c.lens__passCreditsById(), "CrapsLensReader.PASS_CREDITS_SLOT");
+    }
+
+    function test_CrapsLens_PROGRESSIVE_SLOT() public {
+        CrapsSlotHarness c = new CrapsSlotHarness();
+        assertEq(CrapsLensReader.PROGRESSIVE_SLOT, c.lens__progressive(), "CrapsLensReader.PROGRESSIVE_SLOT");
     }
 
     function test_CrapsSlotConstants() public {
@@ -287,7 +342,6 @@ contract StorageSlotPinsTest is Test {
         (s, o) = h.s_lootboxRngPacked(); assertEq(s, GameSlots.LOOTBOX_RNG_PACKED, "lootboxRngPacked.slot"); assertEq(o, 0, "lootboxRngPacked.offset");
         (s, o) = h.s_rngDayTags(); assertEq(s, GameSlots.RNG_DAY_TAGS, "rngDayTags.slot"); assertEq(o, 0, "rngDayTags.offset");
         (s, o) = h.s_deityBoonPacked(); assertEq(s, GameSlots.DEITY_BOON_PACKED, "deityBoonPacked.slot"); assertEq(o, 0, "deityBoonPacked.offset");
-        (s, o) = h.s_deityBoonRecipientDay(); assertEq(s, GameSlots.DEITY_BOON_RECIPIENT_DAY, "deityBoonRecipientDay.slot"); assertEq(o, 0, "deityBoonRecipientDay.offset");
         (s, o) = h.s_degeneretteRecordBounty(); assertEq(s, GameSlots.DEGENERETTE_RECORD_BOUNTY, "degeneretteRecordBounty.slot"); assertEq(o, 0, "degeneretteRecordBounty.offset");
         (s, o) = h.s_earlyTicketLevel(); assertEq(s, GameSlots.EARLY_TICKET_LEVEL, "earlyTicketLevel.slot"); assertEq(o, 0, "earlyTicketLevel.offset");
         (s, o) = h.s_lootboxEvCapPacked(); assertEq(s, GameSlots.LOOTBOX_EV_CAP_PACKED, "lootboxEvCapPacked.slot"); assertEq(o, 0, "lootboxEvCapPacked.offset");

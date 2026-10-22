@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {PeripheralSlots} from "../helpers/PeripheralSlots.sol";
 
 import {BafViews} from "../helpers/BafViews.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -215,7 +216,7 @@ abstract contract BafStagedResumeFixture is BafBracketFixture {
     function test_EmptyBracketReturnsTheWholeReservation() public {
         _clearDepositDraw();
         // Every recorded score belongs to a closed epoch and the board is empty.
-        vm.store(address(jackpots), keccak256(abi.encode(uint256(LVL), uint256(2))), bytes32(uint256(1)));
+        vm.store(address(jackpots), keccak256(abi.encode(uint256(LVL), PeripheralSlots.JP_BAF_LEVEL)), bytes32(uint256(1)));
         assertEq(jackpots.bafHeadWinner(LVL, word, 0), 0);
         _checkResidue(reserve);
     }

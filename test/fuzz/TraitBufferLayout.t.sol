@@ -6,7 +6,7 @@ import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage
 import {GameSlots} from "../helpers/GameSlots.sol";
 
 contract TraitBufferLayoutHarness is DegenerusGameStorage {
-    uint256 internal afterBuffers = 0xabcdef;
+    constructor() { dailyHeroWagers[0][0] = 0xabcdef; }
 
     function root() external pure returns (uint256 value) {
         assembly { value := lvlTraitEntry.slot }
@@ -22,10 +22,10 @@ contract TraitBufferLayoutHarness is DegenerusGameStorage {
         assembly { word := sload(slot) }
     }
     function neighbors() external view returns (uint256, uint256) {
-        return (_redemptionReserveStored, afterBuffers);
+        return (_redemptionReserveStored, dailyHeroWagers[0][0]);
     }
     function afterSlot() external pure returns (uint256 value) {
-        assembly { value := afterBuffers.slot }
+        assembly { value := dailyHeroWagers.slot }
     }
 }
 

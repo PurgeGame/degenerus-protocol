@@ -795,7 +795,7 @@ contract CrapsHighRollerGasTest is CrapsPins {
 
         bytes32 field = _slotOfMapping(key, _HIGH_FIELD_SLOT);
         uint24 day = craps.currentDayIndex();
-        bytes32 staked = _slotOfMapping(bytes32(uint256(day & 63)), _DAY_STAKED_SLOT);
+        bytes32 staked = bytes32(_DAY_STAKED_SLOT + (day & 63));
         assertEq(_countWrites(writes, field), 0, "an ordinary field wrote the sideboard");
         assertEq(_countWrites(reads, field), 1, "an ordinary field read the sideboard other than once");
         // A CUSTOM BATTLE BOOKS NO ACTION AT ALL. The day accumulator sizes the protocol's own
@@ -821,7 +821,7 @@ contract CrapsHighRollerGasTest is CrapsPins {
 
         bytes32 field = _slotOfMapping(key, _HIGH_FIELD_SLOT);
         uint24 day = craps.currentDayIndex();
-        bytes32 staked = _slotOfMapping(bytes32(uint256(day & 63)), _DAY_STAKED_SLOT);
+        bytes32 staked = bytes32(_DAY_STAKED_SLOT + (day & 63));
         assertGt(_countWrites(writes, field), 0, "three high seats wrote no sideboard");
         // CUSTOM AGAIN: a lane on someone else's table is still someone else's table, so the high
         // half of the day accumulator does not move either.

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {PeripheralSlots} from "../helpers/PeripheralSlots.sol";
 
 import {GamePoolSlots} from "../helpers/GamePoolSlots.sol";
 
@@ -495,10 +496,7 @@ contract TurboBafTicketFloor is DeployProtocol {
         return
             uint64(
                 uint256(
-                    vm.load(
-                        address(jackpots),
-                        keccak256(abi.encode(uint256(lvl), uint256(2)))
-                    )
+                    vm.load(address(jackpots), keccak256(abi.encode(uint256(lvl), PeripheralSlots.JP_BAF_LEVEL)))
                 )
             );
     }

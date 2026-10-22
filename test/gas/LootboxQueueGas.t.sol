@@ -35,7 +35,7 @@ contract LootboxQueueGasSeeder is DegenerusGamePayoutUtils {
     ///      occupant's lane-0 write to overwrite.
     function dirtyWritePositions(uint256 count) external {
         uint48 buffer = _rngWriteBuffer();
-        uint256 base = uint256(keccak256(abi.encode(keccak256(abi.encode(uint256(buffer), GameSlots.BOX_QUEUE)))));
+        uint256 base = uint256(keccak256(abi.encode(bytes32(GameSlots.BOX_QUEUE + uint256(buffer)))));
         uint256 start = (lootboxRngPacked >> LR_BOX_COUNT_SHIFT) & LR_COUNT_MASK;
         uint256 stale = 7 | (uint256(1) << 77);
         stale |= (stale << 85) | (stale << 170);

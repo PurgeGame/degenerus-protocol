@@ -1,3 +1,4 @@
+import { compiledStorageSlot } from "../helpers/storageLayout.js";
 import { expect } from "chai";
 import hre from "hardhat";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
@@ -72,8 +73,7 @@ describe("BafCreditRouting", function () {
   });
 
   const SLOT0 = "0x" + "0".repeat(64);
-  const LAST_BAF_RESOLVED_DAY_SLOT =
-    "0x" + (3).toString(16).padStart(64, "0");
+
 
   // ---------------------------------------------------------------------------
   // Helpers
@@ -114,6 +114,7 @@ describe("BafCreditRouting", function () {
 
   /** Set lastBafResolvedDay (uint24 at slot 3), preserving the packed board tags. */
   async function setLastBafResolvedDay(jackpotsAddr, day) {
+    const LAST_BAF_RESOLVED_DAY_SLOT = hre.ethers.toBeHex(await compiledStorageSlot("lastBafResolvedDay", "DegenerusJackpots"), 32);
     const before = BigInt(await hre.ethers.provider.getStorage(jackpotsAddr, LAST_BAF_RESOLVED_DAY_SLOT));
     const mask = (1n << 24n) - 1n;
     const value = "0x" + ((before & ~mask) | (BigInt(day) & mask)).toString(16).padStart(64, "0");

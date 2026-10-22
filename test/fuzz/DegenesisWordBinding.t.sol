@@ -35,7 +35,7 @@ contract DegenesisWordBinding is DegenesisHarness {
     }
 
     function _ringWord(uint256 parity) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(parity, GameSlots.RNG_WORD_BY_DAY))));
+        return uint256(vm.load(address(game), bytes32(GameSlots.RNG_WORD_BY_DAY + (uint256(parity) & 1))));
     }
 
     /// @dev Bind cohort 1 to day 3 with `w3`, settle one 128-order chunk, then run the day-4 and
@@ -109,8 +109,8 @@ contract DegenesisWordBinding is DegenesisHarness {
         vm.recordLogs();
         uint256 q = _bindAndRotate(n, w3);
         uint256 junk = uint256(keccak256("ring-junk"));
-        vm.store(address(game), keccak256(abi.encode(uint256(0), GameSlots.RNG_WORD_BY_DAY)), bytes32(junk));
-        vm.store(address(game), keccak256(abi.encode(uint256(1), GameSlots.RNG_WORD_BY_DAY)), bytes32(junk ^ 1));
+        vm.store(address(game), bytes32(GameSlots.RNG_WORD_BY_DAY + (uint256(0) & 1)), bytes32(junk));
+        vm.store(address(game), bytes32(GameSlots.RNG_WORD_BY_DAY + (uint256(1) & 1)), bytes32(junk ^ 1));
         uint256 tags = uint256(vm.load(address(game), bytes32(GameSlots.RNG_DAY_TAGS)));
         tags = (tags & ~(uint256(type(uint24).max) << 24)) | (uint256(3) << 24);
         vm.store(address(game), bytes32(GameSlots.RNG_DAY_TAGS), bytes32(tags));

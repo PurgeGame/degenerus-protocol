@@ -1298,11 +1298,8 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
     ///      then the hero sampled by `_rollHeroSymbol` from the prior day's settled wager
     ///      pool replaces the winning quadrant's symbol bits only. The quadrant keeps its
     ///      base-rolled color, so all four colors stay independent 1/8 draws regardless of
-    ///      where (or whether) a hero lands. Reads `dailyHeroWagers[dailyIdx]`: `dailyIdx`
-    ///      moves only at `_unlockRng` and at rngGate's gap skip (AdvanceModule), both outside
-    ///      jackpot processing, so here it is frozen at the previous day's index. Bets placed
-    ///      on day D write to `dailyHeroWagers[D]`; day D+1's jackpot reads slot[D] via
-    ///      `dailyIdx == D` (set by day D's `_unlockRng`).
+    ///      where (or whether) a hero lands. The daily request freezes this pool;
+    ///      later wagers accumulate for the next daily commitment.
     /// @param banQuadrant Quadrant the hero may not land in, or `_NO_QUADRANT_BAN`.
     function _rollBoard(uint256 randWord, uint8 banQuadrant) private view returns (uint32) {
         uint8[4] memory traits = JackpotBucketLib.getRandomTraits(randWord);
@@ -1329,7 +1326,7 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
     }
 
     /// @dev Samples the day's hero `(quadrant, symbol)` via a weighted random roll across
-    ///      the 24 eligible slots of `dailyHeroWagers[day]`; Dice never receive a boost.
+    ///      the 24 eligible slots of the sealed hero pool; Dice never receive a boost.
     ///      Pass 1 SLOADs the 3 eligible packed quadrants once, decodes their uint32
     ///      amounts, accumulates the total, and tracks
     ///      the largest-amount slot (first-seen on ties to match the scan order).
@@ -1366,7 +1363,7 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
                 }
                 continue;
             }
-            uint256 packed = dailyHeroWagers[day][q];
+            uint256 packed = _dailyHeroWagerWord(day, q);
             for (uint8 s; s < 8; ) {
                 uint8 idx;
                 unchecked {

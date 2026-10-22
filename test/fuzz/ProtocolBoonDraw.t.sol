@@ -38,12 +38,12 @@ contract ProtocolBoonFixture is DegenerusGameStorage, WalletSeed {
     function endGame() external { gameOver = true; }
     function requireLivenessTriggered() external view { require(_livenessTriggered(), "not past death deadline"); }
     function maxEntries(address issuer, uint24 day) external {
-        protocolBoonPools[_walletIdOf(issuer)][day & 1].day = day;
-        protocolBoonPools[_walletIdOf(issuer)][day & 1].entryCount = type(uint32).max;
+        protocolBoonPools[_protocolBoonIndex(_walletIdOf(issuer))][day & 1].day = day;
+        protocolBoonPools[_protocolBoonIndex(_walletIdOf(issuer))][day & 1].entryCount = type(uint32).max;
     }
     function fullWeight(address issuer, uint24 day) external {
-        protocolBoonPools[_walletIdOf(issuer)][day & 1].day = day;
-        protocolBoonPools[_walletIdOf(issuer)][day & 1].totalWeight = type(uint64).max;
+        protocolBoonPools[_protocolBoonIndex(_walletIdOf(issuer))][day & 1].day = day;
+        protocolBoonPools[_protocolBoonIndex(_walletIdOf(issuer))][day & 1].totalWeight = type(uint64).max;
     }
     function bet(uint48 index, uint64 id) external view returns (uint256 word) {
         word = _loadDegeneretteBet(index & 1, id - 1);
@@ -205,8 +205,8 @@ contract ProtocolBoonDrawTest is DeployProtocol {
             vm.record();
             vm.prank(bettor); _bet(0, 0.005 ether);
             (, bytes32[] memory writes) = vm.accesses(address(game));
-            bytes32 poolSlot = keccak256(abi.encode(uint256(day & 1), keccak256(abi.encode(uint32(1), GameSlots.PROTOCOL_BOON_POOLS))));
-            bytes32 entryRoot = keccak256(abi.encode(uint256(day & 1), keccak256(abi.encode(uint32(1), GameSlots.PROTOCOL_BOON_ENTRIES))));
+            bytes32 poolSlot = bytes32(uint256(GameSlots.PROTOCOL_BOON_POOLS) + (uint256(uint32(1)) == 1 ? 0 : 2) + (uint256(day & 1) & 1));
+            bytes32 entryRoot = bytes32(uint256(GameSlots.PROTOCOL_BOON_ENTRIES) + (uint256(uint32(1)) == 1 ? 0 : 2) + (uint256(day & 1) & 1));
             bytes32 entrySlot = keccak256(abi.encode(i, entryRoot));
             uint256 headerWrites;
             uint256 entryWrites;
@@ -645,7 +645,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
 
     function _poolWord(address issuer, uint24 d) private view returns (uint256) {
         return uint256(vm.load(
-            address(game), keccak256(abi.encode(uint256(d & 1), keccak256(abi.encode(game.walletIdOf(issuer), GameSlots.PROTOCOL_BOON_POOLS))))
+            address(game), bytes32(uint256(GameSlots.PROTOCOL_BOON_POOLS) + (uint256(game.walletIdOf(issuer)) == 1 ? 0 : 2) + (uint256(d & 1) & 1))
         ));
     }
 
@@ -721,7 +721,7 @@ contract ProtocolBoonDrawTest is DeployProtocol {
         // Un-draw the stale pools so only the day-tag guard can stop them drawing on x + 3.
         for (uint256 i; i < 2; ++i) {
             address issuer = i == 0 ? address(vault) : address(sdgnrs);
-            bytes32 slot = keccak256(abi.encode(uint256(x & 1), keccak256(abi.encode(game.walletIdOf(issuer), GameSlots.PROTOCOL_BOON_POOLS))));
+            bytes32 slot = bytes32(uint256(GameSlots.PROTOCOL_BOON_POOLS) + (uint256(game.walletIdOf(issuer)) == 1 ? 0 : 2) + (uint256(x & 1) & 1));
             vm.store(address(game), slot, bytes32(uint256(vm.load(address(game), slot)) & ~(uint256(0xFF) << 208)));
         }
         uint256 vaultWord = _poolWord(address(vault), x);

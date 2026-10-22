@@ -43,7 +43,7 @@ contract DailyJackpotCommitmentSeeder is DegenerusGame, BucketSeed {
         _recordDailyRng(day - 1, 123_456);
         // One settled hero: quadrant 1, symbol 5. A wager placed during the request
         // window belongs to `day`, never to this sealed ledger.
-        lootboxRngPacked = _recordDailyHeroWager(day - 1, 1, 5, 1000, lootboxRngPacked);
+        lootboxRngPacked = _recordHeroWager(1, 5, 1000, lootboxRngPacked);
         _seedHalfPasses(attacker, 2);
         rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((1) & 1) << 12);
 

@@ -15,6 +15,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IDegenerusGameBoonModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 import {QueueHost} from "../helpers/BoxQueueHost.sol";
+import {GameFunding} from "../helpers/GameFunding.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
 import {TicketQueueStorage} from "./helpers/TicketQueueStorage.sol";
 
@@ -472,10 +473,10 @@ contract LootboxCompactQueueTest is DeployProtocol {
     function test_Redemption_PerBoxAboveQueuedCap() public {
         _buy(alice, BoxOrderLib.boSmalls(1));
         uint32 id = _id(alice);
-        vm.deal(address(sdgnrs), 60_000 ether);
+        GameFunding.reserve(50_000 ether);
         vm.recordLogs();
         vm.prank(address(sdgnrs));
-        host.redemption{value: 50_000 ether}(alice, id, 50_000 ether, uint256(keccak256("big-redemption")), 9);
+        host.redemption(alice, id, 50_000 ether, uint256(keccak256("big-redemption")), 9);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 seen;
         uint256 mul = host.evMultiplier(0);

@@ -60,7 +60,18 @@ contract GoldenTicketHarness is DegenerusGameJackpotModule, BucketSeed {
     /// @dev Wager `amount` units on (quadrant, symbol) for the hero pool read by
     ///      draws whose frozen dailyIdx == day.
     function setHeroWager(uint24 day, uint8 q, uint8 s, uint32 amount) external {
-        dailyHeroWagers[day][q] |= uint256(amount) << (uint256(s) * 32);
+        if (q >= 3) return;
+        uint256 meta = lootboxRngPacked;
+        uint256 key = ((meta >> HERO_WRITE_SHIFT) & 1) ^ 1;
+        uint256 bit = uint256(1) << (24 + key * 3 + q);
+        if (uint24(meta) != uint256(day) + 1) meta &= ~(uint256(7) << (24 + key * 3));
+        uint256 packed = meta & bit != 0 ? dailyHeroWagers[key][q] : 0;
+        dailyHeroWagers[key][q] = packed | (uint256(amount) << (uint256(s) * 32));
+        lootboxRngPacked = (meta & ~uint256(type(uint24).max)) | (uint256(day) + 1) | bit;
+    }
+
+    function heroWord(uint24 day, uint8 q) external view returns (uint256) {
+        return _dailyHeroWagerWord(day, q);
     }
 
     function goldenTicketRaw() external view returns (uint256) {
@@ -300,6 +311,7 @@ contract GoldenTicketArmResolve is Test {
 
     function testDiceWagersCannotBoostAnyJackpotDie() public {
         for (uint8 symbol; symbol < 8; ++symbol) h.setHeroWager(ARM_IDX, 3, symbol, type(uint32).max);
+        assertEq(h.heroWord(ARM_IDX, 3), 0, "the fourth quadrant has no hero storage");
         uint256 state = vm.snapshotState();
         for (uint256 word = 1; word <= 64; ++word) {
             vm.recordLogs();
@@ -316,6 +328,7 @@ contract GoldenTicketArmResolve is Test {
 
     function testNonDiceHeroStillWinsAgainstMaxDiceWagers() public {
         for (uint8 symbol; symbol < 8; ++symbol) h.setHeroWager(ARM_IDX, 3, symbol, type(uint32).max);
+        assertEq(h.heroWord(ARM_IDX, 3), 0, "the fourth quadrant has no hero storage");
         h.setHeroWager(ARM_IDX, 1, 2, 1);
         uint256 state = vm.snapshotState();
         for (uint256 word = 1; word <= 64; ++word) {
@@ -391,7 +404,7 @@ contract GoldenTicketArmResolve is Test {
 
     function testSealedFoilDrawIgnoresDifferentRngWordWithoutRevert() public {
         armDay([1, 2, 3, 4]);
-        bytes32 slot = keccak256(abi.encode(uint256((ARM_IDX + 1) & 1), GameSlots.DAILY_FOIL_DRAW));
+        bytes32 slot = bytes32(GameSlots.DAILY_FOIL_DRAW + uint256((ARM_IDX + 1) & 1));
         bytes32 sealedDraw = vm.load(address(h), slot);
         vm.recordLogs();
         h.runDailyJackpot(true, LVL, allGoldWord([1, 2, 3, 4], 0xBEEF), gasleft());
@@ -723,7 +736,7 @@ contract GoldenTicketArmResolve is Test {
         (bool present, uint32 recordedMain, ) = h.foilDrawFor(day);
         assertTrue(present, "the day's foil record was written");
         assertEq(mainPacked, recordedMain, "the event's board equals the one recorded for foil claims");
-        uint256 draw = uint256(vm.load(address(h), keccak256(abi.encode(uint256(day & 1), GameSlots.DAILY_FOIL_DRAW))));
+        uint256 draw = uint256(vm.load(address(h), bytes32(GameSlots.DAILY_FOIL_DRAW + uint256(day & 1))));
         assertEq(uint128(draw >> 88), uint128(uint256(keccak256(abi.encode(word, day, keccak256("foil-payout-seed"))))), "seed binds logical day");
         assertTrue(draw & (uint256(1) << 216) != 0);
         assertEq(uint24(draw >> 217), day, "draw ring authenticates the logical day");

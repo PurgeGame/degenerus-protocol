@@ -35,6 +35,30 @@ contract Module {
 """)
         self.assertEqual(writes, {("insert", "heapRoot"), ("rank", "heapRoot")})
 
+    def test_fixed_array_alias_and_parameter_writes_are_attributed(self):
+        writes = self.writes("""
+contract Module {
+    function insert(uint256 i, uint256 node) external {
+        uint256[200] storage heap = heapRoot;
+        heap[i] = node;
+        sift(heap);
+    }
+    function sift(uint256[200] storage heap) internal {
+        delete heap[0];
+    }
+    function read() external view returns (uint256) {
+        uint256[200] storage heap = heapRoot;
+        return heap[0];
+    }
+}
+""")
+        self.assertEqual(writes, {("insert", "heapRoot"), ("sift", "heapRoot")})
+
+    def test_fixed_array_declarations_are_not_reads(self):
+        for declaration in ["uint256[2] internal root;", "uint32[32] private root;",
+                            "mapping(uint32 => uint256)[4] internal root;"]:
+            self.assertEqual(EXTRACT.classify_mode(declaration, "root"), "DECL")
+
     def test_nested_mapping_alias_delete_is_attributed(self):
         writes = self.writes("""
 contract Module {

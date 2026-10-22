@@ -227,6 +227,7 @@ abstract contract ForkGlamsterdamBudgetsBase is ForkDeployProtocol {
         (r.cold, r.coldSlots, charge) = _surcharge(acc, p.sender, p.target);
         r.analyticCold = r.warm + charge;
         if (trueCold) assertEq(r.coldMeasured, r.analyticCold, "cold frame versus warmed replay");
+        uint256 firstWrites = (charge - r.cold * 2_500 - r.coldSlots * 2_000) / 100;
         r.osaka = trueCold ? r.coldMeasured : r.analyticCold;
         GlamsterdamReprice.Result memory g = GlamsterdamReprice.reprice(r.osaka, acc, p.target);
         for (uint256 i = 1; i < acc.length; ++i) {
@@ -239,7 +240,8 @@ abstract contract ForkGlamsterdamBudgetsBase is ForkDeployProtocol {
         r.newSlots = g.newSlots;
         // Use the same sender/target warmth as the cold-frame cross-check.
         r.exec = uint256(int256(r.osaka) + g.execDelta - int256(g.coldAccounts * 400))
-            + r.cold * 400 + EXTCODE_DELTA * r.extcode + VALUE_CALL_DELTA * r.valueCalls;
+            + r.cold * 400 + EXTCODE_DELTA * r.extcode + VALUE_CALL_DELTA * r.valueCalls
+            - firstWrites * 100 - r.newAccts * 25_000;
         r.state = g.stateGas + NEW_ACCOUNT_STATE_GAS * r.newAccts;
         r.total = r.exec + r.state;
     }

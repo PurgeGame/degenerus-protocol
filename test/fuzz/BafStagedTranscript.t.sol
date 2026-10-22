@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {PeripheralSlots} from "../helpers/PeripheralSlots.sol";
 
 import {BafViews} from "../helpers/BafViews.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -290,8 +291,8 @@ abstract contract BafTranscriptFixture is DeployProtocol {
 
     // DegenerusJackpots storage: bafPlayer slot 0, bafTop slot 1, bafLevel slot 2.
     uint256 internal constant BAF_PLAYER_SLOT = 0;
-    uint256 internal constant BAF_TOP_SLOT = 1;
-    uint256 internal constant BAF_LEVEL_SLOT = 2;
+    uint256 internal constant BAF_TOP_SLOT = PeripheralSlots.JP_BAF_TOP;
+    uint256 internal constant BAF_LEVEL_SLOT = PeripheralSlots.JP_BAF_LEVEL;
 
     bytes32 internal constant ADVANCE_SIG = keccak256("Advance(uint8,uint24)");
     bytes32 internal constant ETH_SIG = keccak256("JackpotEthWin(uint32,uint24,uint16,uint256,uint256)");
@@ -994,7 +995,7 @@ abstract contract BafTranscriptFixture is DeployProtocol {
 
     function _bracket() internal view returns (Bracket memory b) {
         b.levelWord = uint256(vm.load(address(jackpots), keccak256(abi.encode(uint256(lvl), BAF_LEVEL_SLOT))));
-        uint256 topBase = uint256(keccak256(abi.encode(uint256((lvl / 10) & 3), BAF_TOP_SLOT)));
+        uint256 topBase = uint256(bytes32(PeripheralSlots.JP_BAF_TOP + uint256((lvl / 10) & 3) * 2));
         for (uint256 i; i < 2; ++i) b.top[i] = vm.load(address(jackpots), bytes32(topBase + i));
         b.resolvedDay = jackpots.getLastBafResolvedDay();
     }
@@ -1204,7 +1205,7 @@ abstract contract BafTranscriptFixture is DeployProtocol {
     ///      request and its VRF answer (the century fixture's arming without its gas seeding).
     function _armWord(uint256 w) internal {
         for (uint24 i = 1; i <= 7; ++i) {
-            vm.store(address(crapsBattle), keccak256(abi.encode(uint256((DAY - i) & 63), CRAPS_DAY_STAKED_SLOT)),
+            vm.store(address(crapsBattle), bytes32(CRAPS_DAY_STAKED_SLOT + uint256((DAY - i) & 63)),
                 bytes32((uint256(DAY - i) << 232) | (uint256(500_000) << 112) | uint256(1_000_000)));
         }
         vm.prank(address(game));

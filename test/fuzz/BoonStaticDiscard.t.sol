@@ -74,7 +74,7 @@ contract BoonStaticDiscard is DeployProtocol {
         uint32 id = _giveWalletId(player);
         uint256 word = BoxOrderLib.boEntry(id, ethAmount / BoxOrderLib.SCALE, 1, 0, 1, false);
         RecyclingState.seedWriteBuffer(address(game), index);
-        bytes32 data = keccak256(abi.encode(keccak256(abi.encode(uint256(index), GameSlots.BOX_QUEUE))));
+        bytes32 data = keccak256(abi.encode(bytes32(GameSlots.BOX_QUEUE + uint256(index))));
         vm.store(address(game), data, bytes32(word));
         uint256 lr = uint256(vm.load(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED)));
         lr = (lr & ~(uint256(0xFFFFFFFF) << 120)) | (uint256(1) << 120);

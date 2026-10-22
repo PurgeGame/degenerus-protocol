@@ -144,7 +144,7 @@ contract FoilClaimBatch is DeployProtocol {
             _completeDay(_seed(nPurchaseDays, d));
             _endDay = game.currentDayView();
             (uint32 board, uint24 drawLevel) = _foilDraw(_endDay);
-            bytes32 outer = keccak256(abi.encode(uint256(drawLevel & 3), FOIL_RECORD_SLOT));
+            bytes32 outer = bytes32(FOIL_RECORD_SLOT + uint256(drawLevel & 3));
             bytes32 firstSlot = keccak256(abi.encode(_fid[0], outer));
             uint256 first = uint256(vm.load(address(game), firstSlot));
             if (first >> 255 != 0 && uint24(first) <= _endDay && drawLevel != 0) {
@@ -292,7 +292,7 @@ contract FoilClaimBatch is DeployProtocol {
     /// @dev Authenticate the exact day in dailyFoilDraw[day & 1]. Bits [32..63] are reserved
     ///      and always read zero.
     function _foilDraw(uint24 day) internal view returns (uint32 mainSet, uint24 lvl) {
-        uint256 draw = uint256(vm.load(address(game), keccak256(abi.encode(uint256(day & 1), FOIL_DRAW_SLOT))));
+        uint256 draw = uint256(vm.load(address(game), bytes32(FOIL_DRAW_SLOT + uint256(day & 1))));
         if (uint24(draw >> 217) != day) return (0, 0);
         mainSet = uint32(draw);
         lvl = uint24(draw >> 64);
@@ -352,7 +352,7 @@ contract FoilClaimBatch is DeployProtocol {
     ///      tier 8 (symbol AND color both match every quadrant) regardless of what the day's
     ///      real board actually rolled — only the win set is forced, never the level.
     function _forceWinSetToLine(uint24 day, uint32 sel) internal {
-        bytes32 slot = keccak256(abi.encode(uint256(day & 1), FOIL_DRAW_SLOT));
+        bytes32 slot = bytes32(FOIL_DRAW_SLOT + uint256(day & 1));
         uint256 draw = uint256(vm.load(address(game), slot));
         vm.store(address(game), slot, bytes32((draw & ~uint256(type(uint32).max)) | uint256(sel)));
     }
@@ -367,7 +367,7 @@ contract FoilClaimBatch is DeployProtocol {
         vm.prank(p);
         game.purchase{value: 10 * priceWei}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
         uint32 playerId = game.walletIdOf(p);
-        bytes32 inner = keccak256(abi.encode(uint256(lvl & 3), FOIL_RECORD_SLOT));
+        bytes32 inner = bytes32(FOIL_RECORD_SLOT + uint256(lvl & 3));
         uint256 rec = uint256(vm.load(address(game), keccak256(abi.encode(playerId, inner))));
         multBps = uint16(rec >> 24);
         for (uint256 i; i < 50 && rec >> 255 == 0; ++i) {
@@ -426,7 +426,7 @@ contract FoilClaimBatch is DeployProtocol {
     ///      onto a still-empty record (level 0: the zero value, not a real day shape).
     function _tickUntilSealed(uint24 day, uint256 maxTicks) internal {
         for (uint256 i; i < maxTicks; ++i) {
-            if (uint24(uint256(vm.load(address(game), keccak256(abi.encode(uint256(day & 1), FOIL_DRAW_SLOT)))) >> 217) == day) return;
+            if (uint24(uint256(vm.load(address(game), bytes32(FOIL_DRAW_SLOT + uint256(day & 1)))) >> 217) == day) return;
             _tick();
         }
         revert("harness: day never sealed within the bound");
@@ -460,13 +460,13 @@ contract FoilClaimBatch is DeployProtocol {
         uint16 multBps,
         string memory tag
     ) internal {
-        bytes32 slot = keccak256(abi.encode(uint256(day & 1), FOIL_DRAW_SLOT));
+        bytes32 slot = bytes32(FOIL_DRAW_SLOT + uint256(day & 1));
         (, uint24 recordedLvl) = _foilDraw(day);
         assertEq(uint256(recordedLvl), uint256(lvl), string.concat(tag, ": dailyFoilDraw level mismatch"));
         uint256 reserved = (uint256(vm.load(address(game), slot)) >> 32) & type(uint32).max;
         assertEq(reserved, 0, string.concat(tag, ": dailyFoilDraw bits 32..63 must read zero"));
 
-        uint256 record = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(player)), keccak256(abi.encode(uint256(lvl & 3), FOIL_RECORD_SLOT))))));
+        uint256 record = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(player)), bytes32(FOIL_RECORD_SLOT + uint256(lvl & 3))))));
         uint32 sel = uint32(record >> 56);
         multBps;
         _forceWinSetToLine(day, sel);
@@ -542,9 +542,9 @@ contract FoilClaimBatch is DeployProtocol {
     ///      because here overshoot cannot skip a shape we care about.
     function _driveUntilSealedByWarp(uint24 day, uint256 maxDays) internal {
         for (uint256 i; i < maxDays; ++i) {
-            if (uint24(uint256(vm.load(address(game), keccak256(abi.encode(uint256(day & 1), FOIL_DRAW_SLOT)))) >> 217) == day) return;
+            if (uint24(uint256(vm.load(address(game), bytes32(FOIL_DRAW_SLOT + uint256(day & 1)))) >> 217) == day) return;
             _completeDay(uint256(keccak256(abi.encode("flat-face-day", day, i))));
-            if (uint24(uint256(vm.load(address(game), keccak256(abi.encode(uint256(day & 1), FOIL_DRAW_SLOT)))) >> 217) == day) return;
+            if (uint24(uint256(vm.load(address(game), bytes32(FOIL_DRAW_SLOT + uint256(day & 1)))) >> 217) == day) return;
             vm.warp(vm.getBlockTimestamp() + 1 days);
         }
         revert("harness: day never sealed within the bound");
@@ -555,11 +555,11 @@ contract FoilClaimBatch is DeployProtocol {
     uint256 private constant SEEDED = uint256(1) << 216;
 
     function _drawWord() private view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(_endDay & 1), FOIL_DRAW_SLOT))));
+        return uint256(vm.load(address(game), bytes32(FOIL_DRAW_SLOT + uint256(_endDay & 1))));
     }
 
     function _setDrawWord(uint256 w) private {
-        vm.store(address(game), keccak256(abi.encode(uint256(_endDay & 1), FOIL_DRAW_SLOT)), bytes32(w));
+        vm.store(address(game), bytes32(FOIL_DRAW_SLOT + uint256(_endDay & 1)), bytes32(w));
     }
 
     function _deferMatch(uint256 daysLater, uint24 newLevel) private {
@@ -588,7 +588,7 @@ contract FoilClaimBatch is DeployProtocol {
             line |= uint32(part) << (8 * q);
         }
         uint24 lvl = uint24(_drawWord() >> 64);
-        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(_fb[0])), keccak256(abi.encode(uint256(lvl & 3), FOIL_RECORD_SLOT))));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(_fb[0])), bytes32(FOIL_RECORD_SLOT + uint256(lvl & 3))));
         uint256 record = uint256(vm.load(address(game), slot));
         vm.store(address(game), slot, bytes32((record & ~(uint256(type(uint32).max) << 152)) | (uint256(line) << 152)));
     }
@@ -731,7 +731,7 @@ contract FoilClaimBatch is DeployProtocol {
             _deferMatch(1, 0);
             uint24 day = _endDay + delta;
             uint256 current = (draw & ~(uint256(type(uint24).max) << 217)) | (uint256(day) << 217);
-            vm.store(address(game), keccak256(abi.encode(uint256(day & 1), FOIL_DRAW_SLOT)), bytes32(current));
+            vm.store(address(game), bytes32(FOIL_DRAW_SLOT + uint256(day & 1)), bytes32(current));
             game.claimFoilMatch(_fid[0], day, 3);
             vm.expectRevert(bytes4(NO_MATCH));
             game.claimFoilMatch(_fid[0], day, 3);
@@ -748,7 +748,7 @@ contract FoilClaimBatch is DeployProtocol {
     function test_reuse_fourTicketsHaveIndependentClaimBits() public {
         uint256 draw = _drawWord();
         uint24 lvl = uint24(draw >> 64);
-        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(_fb[0])), keccak256(abi.encode(uint256(lvl & 3), FOIL_RECORD_SLOT))));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(_fb[0])), bytes32(FOIL_RECORD_SLOT + uint256(lvl & 3))));
         uint256 pack = uint256(vm.load(address(game), slot));
         uint256 lines;
         for (uint256 i; i < 4; ++i) lines |= uint256(uint32(draw)) << (56 + i * 32);
@@ -769,7 +769,7 @@ contract FoilClaimBatch is DeployProtocol {
         _setDrawWord(draw);
 
         uint24 lvl = uint24(draw >> 64);
-        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(_fb[0])), keccak256(abi.encode(uint256(lvl & 3), FOIL_RECORD_SLOT))));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(_fb[0])), bytes32(FOIL_RECORD_SLOT + uint256(lvl & 3))));
         uint256 pack = uint256(vm.load(address(game), slot));
         vm.store(address(game), slot, bytes32((pack & ~(uint256(type(uint24).max) << 208)) | (uint256(lvl + 4) << 208)));
         vm.expectRevert(bytes4(NO_MATCH));
@@ -781,7 +781,7 @@ contract FoilClaimBatch is DeployProtocol {
     function test_reuse_realPurchaseProtectsLivePackThenOverwritesExpiredSlot() public {
         uint24 oldLevel = uint24(_drawWord() >> 64);
         uint24 nextLevel = oldLevel + 4;
-        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(_fb[0])), keccak256(abi.encode(uint256(oldLevel & 3), FOIL_RECORD_SLOT))));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(_fb[0])), bytes32(FOIL_RECORD_SLOT + uint256(oldLevel & 3))));
         uint256 oldRecord = uint256(vm.load(address(game), slot));
         // A previously settled gold award must not mark the replacement pack as paid.
         oldRecord |= uint256(1) << 232;
@@ -824,7 +824,7 @@ contract FoilClaimBatch is DeployProtocol {
     function test_reuse_realPurchaseCannotReplaceUndrainedPack() public {
         uint24 oldLevel = uint24(_drawWord() >> 64);
         uint24 nextLevel = oldLevel + 4;
-        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(_fb[0])), keccak256(abi.encode(uint256(oldLevel & 3), FOIL_RECORD_SLOT))));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(_fb[0])), bytes32(FOIL_RECORD_SLOT + uint256(oldLevel & 3))));
         uint256 pending = uint256(vm.load(address(game), slot)) & ~(uint256(1) << 255);
         vm.store(address(game), slot, bytes32(pending));
         _deferMatch(4, 0);
@@ -855,7 +855,7 @@ contract FoilClaimBatch is DeployProtocol {
         vm.expectRevert(bytes4(NO_MATCH)); game.claimFoilMatch(_fid[0], _endDay, 3);
         _setDrawWord(draw);
         uint24 lvl = uint24(draw >> 64);
-        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(_fb[0])), keccak256(abi.encode(uint256(lvl & 3), FOIL_RECORD_SLOT))));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(_fb[0])), bytes32(FOIL_RECORD_SLOT + uint256(lvl & 3))));
         uint256 pack = uint256(vm.load(address(game), slot));
         vm.store(address(game), slot, bytes32(pack & ~(uint256(1) << 255)));
         vm.expectRevert(bytes4(NO_MATCH)); game.claimFoilMatch(_fid[0], _endDay, 3);

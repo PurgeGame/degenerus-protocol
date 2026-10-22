@@ -121,7 +121,11 @@ contract RngCohortRecyclingTest is Test {
     }
     function test_InvalidPhysicalTagsNeverAliasARealBuffer() public {
         h.seal(); _finish();
-        assertEq(h.word(2), 0); assertEq(h.entry(2, 0), 0);
+        assertEq(h.word(2), 0);
+        // This harness exposes the raw internal reader. Its sole production caller
+        // supplies _rngReadBuffer() (0 or 1); an invalid direct tag must not alias it.
+        vm.expectRevert(abi.encodeWithSignature("Panic(uint256)", uint256(0x32)));
+        h.entry(2, 0);
         vm.expectRevert(DegenerusGameStorage.E.selector); h.craps(2, true);
     }
 }

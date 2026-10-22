@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {CrapsSlots} from "../helpers/GameSlots.sol";
+import {PeripheralSlots} from "../helpers/PeripheralSlots.sol";
 import {CrapsLensReader} from "../../contracts/CrapsLens.sol";
 
 import {CrapsPins} from "./CrapsPins.sol";
@@ -307,6 +309,8 @@ contract CrapsStorageReuseTest is CrapsPins {
     }
 
     function _mapped(uint256 root, uint256 key) private pure returns (bytes32) {
+        if (root == PeripheralSlots.CR_DAY_TICKETS || root == PeripheralSlots.CR_DAY_STAKED || root == PeripheralSlots.CR_BOOST_BUDGET || root == CrapsLensReader.BATTLE_DAYS_SLOT) return bytes32(root + key);
+        if (root == CrapsLensReader.JACKPOT_ROUNDS_SLOT) return bytes32(root + key * 5);
         return keccak256(abi.encode(key, root));
     }
 
@@ -315,14 +319,14 @@ contract CrapsStorageReuseTest is CrapsPins {
         uint24 fresh = oldDay + 64;
         uint256 physical = (uint256(oldDay) * 8 + 6) & 511;
         uint256 poison = (uint256(oldDay) << 232) | ((uint256(1) << 232) - 1);
-        vm.store(address(table), _mapped(2, physical), bytes32(type(uint256).max));
-        vm.store(address(table), _mapped(2, physical - 1), bytes32(type(uint256).max));
-        vm.store(address(table), _mapped(12, oldDay & 63), bytes32(poison));
-        vm.store(address(table), _mapped(5, physical), bytes32(poison));
-        vm.store(address(table), _mapped(11, physical), bytes32(poison));
-        for (uint256 root = 6; root <= 10; ++root) {
-            if (root == 7 || root == 8) continue;
-            vm.store(address(table), _mapped(root, oldDay & 63), bytes32(poison));
+        vm.store(address(table), _mapped(CrapsLensReader.BATTLES_SLOT, physical), bytes32(type(uint256).max));
+        vm.store(address(table), _mapped(CrapsLensReader.BATTLES_SLOT, physical - 1), bytes32(type(uint256).max));
+        vm.store(address(table), _mapped(CrapsLensReader.BATTLE_DAYS_SLOT, oldDay & 63), bytes32(poison));
+        vm.store(address(table), _mapped(CrapsLensReader.SLOT_STATE_SLOT, physical), bytes32(poison));
+        vm.store(address(table), _mapped(CrapsSlots.HIGH_FIELD, physical), bytes32(poison));
+        uint256[3] memory dayRoots = [PeripheralSlots.CR_DAY_TICKETS, PeripheralSlots.CR_DAY_STAKED, PeripheralSlots.CR_BOOST_BUDGET];
+        for (uint256 i; i < dayRoots.length; ++i) {
+            vm.store(address(table), _mapped(dayRoots[i], oldDay & 63), bytes32(poison));
         }
         uint256[6] memory beforeWrite = table.ringRead(fresh);
         for (uint256 i; i < 6; ++i) assertEq(beforeWrite[i], 0, "mismatched tag exposed stale state");
@@ -333,13 +337,13 @@ contract CrapsStorageReuseTest is CrapsPins {
         got = table.ringRead(oldDay);
         for (uint256 i; i < 6; ++i) assertEq(got[i], 0, "old logical day reads replacement");
         assertEq(table.boardAt(uint256(fresh) * 8 + 5), 0, "initialized sibling resurrected old board");
-        assertEq(uint256(vm.load(address(table), _mapped(12, oldDay & 63))), (uint256(fresh) << 232) | 64);
+        assertEq(uint256(vm.load(address(table), _mapped(CrapsLensReader.BATTLE_DAYS_SLOT, oldDay & 63))), (uint256(fresh) << 232) | 64);
         assertEq(table.rawState(uint64(uint256(fresh) * 8 + 6)), (uint256(fresh) << 232) | 2, "padding survived");
     }
 
     function testFuzz_FourSeatLanesPreserveNeighborsAndReplaceWholeStaleLane(uint24 day, uint32 owner) public {
         day = uint24(bound(day, 4, type(uint24).max - 68)) & ~uint24(3);
-        uint256 outer = uint256(keccak256(abi.encode(uint256(day & 63) >> 2, uint256(7))));
+        uint256 outer = PeripheralSlots.CR_DAY_SEATED + (uint256(day & 63) >> 2);
         bytes32 at = keccak256(abi.encode(owner, outer));
         vm.store(address(table), at, bytes32(type(uint256).max));
         for (uint24 i; i < 4; ++i) table.putSeat(day + i, owner, 11 + i | (uint256(3) << 33));
@@ -381,7 +385,7 @@ contract CrapsStorageReuseTest is CrapsPins {
         vm.prank(ContractAddresses.GAME); api.lockJackpotBattle(day + 1, 1 ether, 2);
         (uint64 oldSlot,,,) = api.jackpotProgress();
         assertEq(oldSlot & 7, 7);
-        uint256 base = uint256(_mapped(17, oldSlot & 511));
+        uint256 base = uint256(_mapped(CrapsLensReader.JACKPOT_ROUNDS_SLOT, oldSlot & 511));
         for (uint256 i; i < 5; ++i) vm.store(address(table), bytes32(base + i), bytes32(type(uint256).max));
         _warp(day + 64);
         vm.prank(ContractAddresses.GAME); api.lockJackpotBattle(day + 65, 1 ether, 2);
@@ -427,10 +431,10 @@ contract CrapsStorageReuseTest is CrapsPins {
         uint24 fresh = oldDay + 64;
         uint256 physical = (uint256(oldDay) * 8 + 6) & 511;
         uint256 poison = (uint256(oldDay) << 232) | ((uint256(1) << 232) - 1);
-        uint256[6] memory roots = [uint256(2), 5, 11, 6, 9, 10];
+        uint256[6] memory roots = [CrapsLensReader.BATTLES_SLOT, CrapsLensReader.SLOT_STATE_SLOT, CrapsSlots.HIGH_FIELD, PeripheralSlots.CR_DAY_TICKETS, PeripheralSlots.CR_DAY_STAKED, PeripheralSlots.CR_BOOST_BUDGET];
         uint256 key = family < 3 ? physical : oldDay & 63;
         vm.store(address(table), _mapped(roots[family], key), bytes32(poison));
-        if (family == 0) vm.store(address(table), _mapped(12, oldDay & 63), bytes32(poison));
+        if (family == 0) vm.store(address(table), _mapped(CrapsLensReader.BATTLE_DAYS_SLOT, oldDay & 63), bytes32(poison));
         uint256[6] memory got = table.ringRead(fresh);
         assertEq(got[family], 0, "tag check");
         table.ringWrite(fresh);

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
+import {PeripheralSlots} from "./PeripheralSlots.sol";
 
 import {BafViews} from "./BafViews.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
@@ -181,7 +182,8 @@ contract BafStageHost is DegenerusGame, BucketSeed {
     function seedBufferLevel(uint24 lvl) external { _setTicketBufferLevel(lvl); }
     function bufferLevel(bool next) external view returns (uint24) { return _ticketBufferLevel(next ? 1 : 0); }
     function seedHero(uint8 q, uint8 symbol, bool banned) external {
-        dailyHeroWagers[dailyIdx][q] = uint256(1) << (uint256(symbol) * 32);
+        lootboxRngPacked = _recordHeroWager(q, symbol, 1, lootboxRngPacked);
+        _sealHeroWagers(dailyIdx + 1);
         if (banned) goldenTicket = (uint256(1) << 190) | (uint256(q) << 191) | (uint256(dailyIdx) << 193);
     }
 
@@ -538,11 +540,11 @@ abstract contract BafBracketFixture is DeployProtocol {
 
     /// @dev `bafLevel[lvl]` and the two `bafTop[lvl]` words (two 128-bit lanes each) in DegenerusJackpots.
     function _bracketBoard(uint24 lvl) internal view returns (uint64 epoch, uint8 topLen, bool skipped, uint256 topBits) {
-        uint256 packed = uint256(vm.load(address(jackpots), keccak256(abi.encode(uint256(lvl), uint256(2)))));
+        uint256 packed = uint256(vm.load(address(jackpots), keccak256(abi.encode(uint256(lvl), PeripheralSlots.JP_BAF_LEVEL))));
         epoch = uint64(packed);
         topLen = uint8(packed >> 64);
         skipped = uint8(packed >> 72) != 0;
-        uint256 base = uint256(keccak256(abi.encode(uint256((lvl / 10) & 3), uint256(1))));
+        uint256 base = PeripheralSlots.JP_BAF_TOP + ((lvl / 10) & 3) * 2;
         for (uint256 i; i < 2; ++i) topBits |= uint256(vm.load(address(jackpots), bytes32(base + i)));
     }
 }

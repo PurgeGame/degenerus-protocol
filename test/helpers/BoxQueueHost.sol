@@ -126,10 +126,9 @@ contract QueueHost is DegenerusGame {
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
     }
 
-    /// @dev sDGNRS's redemption leg; the caller pranks SDGNRS so msg.sender carries through.
+    /// @dev Reserve-funded sDGNRS redemption leg; the caller seeds the Game reserve and pranks SDGNRS.
     function redemption(address player, uint32 id, uint256 amount, uint256 rngWord, uint32 batchId)
         external
-        payable
     {
         (bool ok, bytes memory data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(
             abi.encodeWithSignature(

@@ -29,7 +29,7 @@ contract QuadrantWhaleHarness is GoldenTicketHarness {
         deityBySymbol[(trait >> 6) * 8 + (trait & 7)] = _seedWallet(who);
     }
     function deityOf(uint8 trait) external view returns (address) {
-        return _walletKey(deityBySymbol[(trait >> 6) * 8 + (trait & 7)]);
+        return _walletKey(uint32(deityBySymbol[(trait >> 6) * 8 + (trait & 7)]));
     }
     function bucketLength(uint8 trait) external view returns (uint256) { return _bucketLength(4, trait); }
     function seedRepeated(uint8 trait, address who) external { _seedBucket(4, trait, who, 65); }

@@ -147,7 +147,7 @@ contract PurchaseHotPathGasTest is DeployProtocol {
             vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)) >> 2, GameSlots.SUB_META))),
             vm.load(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED)),
             _newestBoxEntry(),
-            vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), keccak256(abi.encode(uint256((game.level() + 1) & 3), GameSlots.FOIL_RECORD)))))
+            vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), bytes32(GameSlots.FOIL_RECORD + uint256((game.level() + 1) & 3)))))
         ));
         emit log_named_bytes32(string.concat(scenario, " state"), digest);
     }

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {PeripheralSlots} from "../helpers/PeripheralSlots.sol";
 
 import {GamePoolSlots} from "../helpers/GamePoolSlots.sol";
 
@@ -231,7 +232,7 @@ abstract contract VaultBafRig is DeployProtocol {
     }
 
     function _bafWord(uint24 lvl) internal view returns (uint256) {
-        return uint256(vm.load(address(jackpots), keccak256(abi.encode(uint256(lvl), uint256(2)))));
+        return uint256(vm.load(address(jackpots), keccak256(abi.encode(uint256(lvl), PeripheralSlots.JP_BAF_LEVEL))));
     }
 
     function _bafEpoch(uint24 lvl) internal view returns (uint64) {

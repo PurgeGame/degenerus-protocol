@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {PeripheralSlots} from "../../helpers/PeripheralSlots.sol";
 
 import {console} from "forge-std/console.sol";
 import {StdInvariant} from "forge-std/StdInvariant.sol";
@@ -8,6 +9,7 @@ import {WalletIdTruthHandler} from "../handlers/WalletIdTruthHandler.sol";
 import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../../contracts/interfaces/IDegenerusGame.sol";
 import {GameSlots, GameSlotKeys, CrapsSlots} from "../../helpers/GameSlots.sol";
+import {GameFunding} from "../../helpers/GameFunding.sol";
 
 /// @title WalletIdTruth -- the suite-wide wallet-ID truth invariant (plan section 0), with accounts (plan F)
 /// @notice One canonical registry and ID-keyed account state. After every handler call:
@@ -315,7 +317,7 @@ contract WalletIdTruthInvariant is DeployProtocol {
         vm.prank(p);
         crapsBattle.setPreferredBoard(0, 1 | (1 << 9));
         // Populate a real redemption record above the current minimum value.
-        vm.deal(address(sdgnrs), 20_000 ether);
+        GameFunding.credit(2, 20_000 ether);
         uint256 burnAmount = dgnrs.balanceOf(p);
         (uint256 burnValue,) = sdgnrs.previewBurnValue(burnAmount);
         assertGe(burnValue, sdgnrs.MIN_REDEMPTION_VALUE(), "fixture: redemption meets minimum");
@@ -328,8 +330,8 @@ contract WalletIdTruthInvariant is DeployProtocol {
         assertEq(rw, (uint256(1) << 32) | game.walletIdOf(ref), "referral stores only the ID");
         uint256 vaultCode = uint256(vm.load(address(affiliate), keccak256(abi.encode(bytes32("VAULT"), uint256(0)))));
         assertEq(uint32(vaultCode), 1, "VAULT code owner ID");
-        uint256 batch = uint256(vm.load(address(sdgnrs), keccak256(abi.encode(uint256(0), uint256(9)))))
-            | uint256(vm.load(address(sdgnrs), keccak256(abi.encode(uint256(0), uint256(10)))));
+        uint256 batch = uint256(vm.load(address(sdgnrs), keccak256(abi.encode(uint256(0), PeripheralSlots.SD_BATCH_PLAYERS + 0))))
+            | uint256(vm.load(address(sdgnrs), keccak256(abi.encode(uint256(0), PeripheralSlots.SD_BATCH_PLAYERS + 1))));
         assertEq(uint32(batch >> 80), id, "sDGNRS batch beneficiary ID");
         handler.ingest();
         handler.checkAll();
@@ -351,8 +353,8 @@ contract WalletIdTruthInvariant is DeployProtocol {
 
     function test_oracleDetectsAnUnallocatedRedemptionRecipient() public {
         // Queue 0: one packed count at slot 7 bits 192..223, lanes at keccak(index / 2, 9).
-        uint256 root = 9;
-        bytes32 counts = bytes32(uint256(7));
+        uint256 root = PeripheralSlots.SD_BATCH_PLAYERS;
+        bytes32 counts = bytes32(PeripheralSlots.SD_BATCH_COUNTS);
         uint256 w = uint256(vm.load(address(sdgnrs), counts));
         vm.store(address(sdgnrs), counts, bytes32((w & ~(uint256(type(uint32).max) << 192)) | (uint256(1) << 192)));
         vm.store(address(sdgnrs), keccak256(abi.encode(uint256(0), root)),

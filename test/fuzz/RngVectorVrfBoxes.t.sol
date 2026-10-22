@@ -191,7 +191,7 @@ contract RngVectorCompactBoxFreeze is DegenesisHarness {
     }
 
     function _queueWord(uint48 buf, uint256 i) internal view returns (uint256) {
-        bytes32 base = keccak256(abi.encode(keccak256(abi.encode(uint256(buf), GameSlots.BOX_QUEUE))));
+        bytes32 base = keccak256(abi.encode(bytes32(GameSlots.BOX_QUEUE + uint256(buf))));
         return uint256(vm.load(address(game), bytes32(uint256(base) + i)));
     }
 

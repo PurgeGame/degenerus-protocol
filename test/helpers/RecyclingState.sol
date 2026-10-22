@@ -11,12 +11,12 @@ library RecyclingState {
         uint256 shift = (day & 1) * 24;
         uint256 tags = uint256(vm.load(host, bytes32(GameSlots.RNG_DAY_TAGS)));
         vm.store(host, bytes32(GameSlots.RNG_DAY_TAGS), bytes32((tags & ~(uint256(type(uint24).max) << shift)) | (uint256(day) << shift)));
-        vm.store(host, keccak256(abi.encode(uint256(day & 1), GameSlots.RNG_WORD_BY_DAY)), bytes32(value));
+        vm.store(host, bytes32(GameSlots.RNG_WORD_BY_DAY + uint256(day & 1)), bytes32(value));
     }
     function dailyWord(address host, uint24 day) internal view returns (uint256) {
         uint256 tags = uint256(vm.load(host, bytes32(GameSlots.RNG_DAY_TAGS)));
         if (day == 0 || uint24(tags >> ((day & 1) * 24)) != day) return 0;
-        return uint256(vm.load(host, keccak256(abi.encode(uint256(day & 1), GameSlots.RNG_WORD_BY_DAY))));
+        return uint256(vm.load(host, bytes32(GameSlots.RNG_WORD_BY_DAY + uint256(day & 1))));
     }
     function writeBuffer(address host) internal view returns (uint48) { return uint48((uint256(vm.load(host, bytes32(GameSlots.RNG_FLAGS_AND_NUDGES))) >> 252) & 1); }
     function readBuffer(address host) internal view returns (uint48) { return writeBuffer(host) ^ 1; }
@@ -67,7 +67,7 @@ library RecyclingState {
     }
     /// @dev Physical storage slot holding box entry `position` of `buffer` (three entries a word).
     function boxWordSlot(uint48 buffer, uint256 position) internal pure returns (bytes32) {
-        bytes32 data = keccak256(abi.encode(keccak256(abi.encode(uint256(buffer), GameSlots.BOX_QUEUE))));
+        bytes32 data = keccak256(abi.encode(bytes32(GameSlots.BOX_QUEUE + uint256(buffer))));
         return bytes32(uint256(data) + position / 3);
     }
     /// @dev Stored 85-bit box entry `position` of `buffer`: word `position / 3`, lane `position % 3`.

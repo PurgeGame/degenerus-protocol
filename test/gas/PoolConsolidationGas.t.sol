@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {PeripheralSlots} from "../helpers/PeripheralSlots.sol";
 
 import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
@@ -55,8 +56,8 @@ abstract contract PoolConsolidationFixture is FreshWordLeg {
     uint256 internal constant WIN_WORD = 0x0ee7fcb287531227df7efcfddb3f0151121ee9e59765e743a190d8e26ee417fd;
     uint256 internal constant SKIP_WORD = WIN_WORD ^ 1;
     // WWXRP incinerator storage: `_incinHeader` slot 6, `_incinEntry` slot 7 (cum, player).
-    uint256 internal constant INCIN_HEADER_SLOT = 6;
-    uint256 internal constant INCIN_ENTRY_SLOT = 7;
+    uint256 internal constant INCIN_HEADER_SLOT = PeripheralSlots.WW_INCIN_HEADER;
+    uint256 internal constant INCIN_ENTRY_SLOT = PeripheralSlots.WW_INCIN_ENTRY;
 
     CenturyNativeGasHost internal host;
     uint32 internal incineratorWinner;
@@ -124,7 +125,7 @@ abstract contract PoolConsolidationFixture is FreshWordLeg {
         uint256 total = uint256(count) * 1 ether;
         vm.store(
             address(wwxrp),
-            keccak256(abi.encode(uint256(0), INCIN_HEADER_SLOT)),
+            bytes32(PeripheralSlots.WW_INCIN_HEADER),
             bytes32(total | (uint256(count) << 192) | (uint256(bracket) << 224))
         );
         uint256 roll = uint256(

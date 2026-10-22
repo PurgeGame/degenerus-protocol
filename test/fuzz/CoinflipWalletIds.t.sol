@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {PeripheralSlots} from "../helpers/PeripheralSlots.sol";
 
 import {CoinflipStorage} from "../helpers/CoinflipStorage.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -38,8 +39,8 @@ contract CoinflipWalletIdsTest is DeployProtocol {
     uint256 internal constant BAF_DRAW_ENTRY_ROOT = 8;
     /// @dev DegenerusJackpots storage roots (scripts/layout/golden/DegenerusJackpots.json).
     uint256 internal constant BAF_PLAYER_ROOT = 0;
-    uint256 internal constant BAF_TOP_ROOT = 1;
-    uint256 internal constant BAF_LEVEL_ROOT = 2;
+    uint256 internal constant BAF_TOP_ROOT = PeripheralSlots.JP_BAF_TOP;
+    uint256 internal constant BAF_LEVEL_ROOT = PeripheralSlots.JP_BAF_LEVEL;
 
     uint256 internal constant STAKE_LANE_MAX = type(uint32).max;
     uint256 internal constant SEED = 200_000;
@@ -801,7 +802,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         assertGt(_bafTotal(bracket, 1), 0, "vault scores under ID 1");
         assertEq(_bafTotal(bracket, 2), 0, "sDGNRS never scores");
         assertEq(jackpots.bafHeadWinner(bracket, 0, 0), id);
-        bytes32 base = keccak256(abi.encode(uint256((bracket / 10) & 3), BAF_TOP_ROOT));
+        bytes32 base = bytes32(PeripheralSlots.JP_BAF_TOP + uint256((bracket / 10) & 3) * 2);
         uint256 w0 = uint256(vm.load(address(jackpots), base));
         uint256 w1 = uint256(vm.load(address(jackpots), bytes32(uint256(base) + 1)));
         uint256 lv = uint256(vm.load(address(jackpots), keccak256(abi.encode(uint256(bracket), BAF_LEVEL_ROOT))));

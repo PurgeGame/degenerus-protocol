@@ -18,7 +18,7 @@ contract JackpotVariableHarness is JackpotTableHarness {
     function roundBase(uint64 slot) external pure returns (bytes32) {
         uint256 root;
         assembly ("memory-safe") { root := _jackpotRounds.slot }
-        return keccak256(abi.encode(uint256(slot & 511), root));
+        return bytes32(root + uint256(slot & 511) * 5);
     }
 }
 

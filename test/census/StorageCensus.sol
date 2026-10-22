@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {PeripheralSlots} from "../helpers/PeripheralSlots.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 
 import {Vm} from "forge-std/Vm.sol";
@@ -360,8 +361,7 @@ abstract contract StorageCensus is DeployProtocol {
                 if (sa[j].account == account && !sa[j].isWrite && _censusWithin(cur, sa[j].slot)) return (true, sa[j].slot);
             }
         }
-        uint256 directLimit = GameSlots.LVL_TRAIT_ENTRY + 512;
-        if (directLimit < 512) directLimit = 512;
+        uint256 directLimit = PeripheralSlots.CENSUS_DIRECT_END;
         for (uint256 p; p < directLimit; ++p) {
             if (_censusWithin(cur, bytes32(p))) return (true, bytes32(p));
         }

@@ -422,7 +422,7 @@ contract FoilDrainMiddaySwap is DeployProtocol {
     // =====================================================================
 
     function _packedFoilRecord(uint24 lvl, address who) internal view returns (uint256) {
-        uint256 packed = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), keccak256(abi.encode(uint256(lvl & 3), SLOT_FOIL_RECORD))))));
+        uint256 packed = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), bytes32(SLOT_FOIL_RECORD + uint256(lvl & 3))))));
         return uint24(packed >> 208) == lvl ? packed : 0;
     }
 
@@ -457,9 +457,7 @@ contract FoilDrainMiddaySwap is DeployProtocol {
             uint256(
                 vm.load(
                     address(game),
-                    keccak256(
-                        abi.encode(uint256(day), SLOT_RNG_WORD_BY_DAY)
-                    )
+                    bytes32(SLOT_RNG_WORD_BY_DAY + (uint256(day) & 1))
                 )
             );
     }

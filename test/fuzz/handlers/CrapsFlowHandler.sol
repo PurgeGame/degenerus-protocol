@@ -158,7 +158,7 @@ contract CrapsFlowHandler {
         uint256 shift = (day & 1) * 24;
         uint256 tags = uint256(game.slots(bytes32(GameSlots.RNG_DAY_TAGS)));
         game.set(bytes32(GameSlots.RNG_DAY_TAGS), bytes32((tags & ~(uint256(type(uint24).max) << shift)) | (uint256(day) << shift)));
-        game.set(keccak256(abi.encode(uint256(day & 1), DAY_WORD_SLOT)), bytes32(word));
+        game.set(bytes32(DAY_WORD_SLOT + uint256(day & 1)), bytes32(word));
     }
 
     function _trackSlot(uint64 slot) internal {

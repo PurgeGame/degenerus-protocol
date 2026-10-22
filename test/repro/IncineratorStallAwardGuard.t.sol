@@ -264,7 +264,7 @@ contract IncineratorStallAwardGuard is DeployProtocol {
         }
 
         emit log_named_uint("armed day", armedDay);
-        emit log_named_uint("recorded armed-day word low bit", uint256(game.extsload(bytes32(uint256(keccak256(abi.encode(uint256(armedDay & 1), GameSlots.RNG_WORD_BY_DAY)))))) & 1);
+        emit log_named_uint("recorded armed-day word low bit", uint256(game.extsload(bytes32(uint256(bytes32(GameSlots.RNG_WORD_BY_DAY + uint256(armedDay & 1)))))) & 1);
         emit log_named_uint("armed day won (1) or lost (0)", armedWin ? 1 : 0);
         emit log_named_uint("incinerator resolutions", found);
         emit log_named_uint("flip award", flipAward);

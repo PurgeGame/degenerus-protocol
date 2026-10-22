@@ -7,6 +7,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {QueueHost} from "../helpers/BoxQueueHost.sol";
+import {GameFunding} from "../helpers/GameFunding.sol";
 
 /// @title LootboxOpenBounds -- every admissible entry kind opens without reverting, inside its admission
 /// @notice A queued entry that reverts would stop the human-box drain for good (the worker bubbles
@@ -120,11 +121,11 @@ contract LootboxOpenBoundsTest is DeployProtocol {
     /// @notice The in-memory redemption order at its 20-box ceiling with a very large leg.
     function test_RedemptionOrderMax() public {
         uint256 amount = 1_000_000 ether;
-        vm.deal(address(sdgnrs), amount);
+        GameFunding.reserve(amount);
         _cool();
         uint256 before = gasleft();
         vm.prank(address(sdgnrs));
-        host.redemption{value: amount}(alice, aliceId, amount, WORD, 7);
+        host.redemption(alice, aliceId, amount, WORD, 7);
         uint256 used = before - gasleft();
         emit log_named_uint("redemption_order_20_boxes", used);
         assertLe(used, GasBounds.HUMAN_ENTRY_GAS + GasBounds.REDEMPTION_BOXES_MAX * GasBounds.HUMAN_BOX_GAS,
@@ -133,8 +134,8 @@ contract LootboxOpenBoundsTest is DeployProtocol {
 
     /// @notice The smallest redemption leg sDGNRS forwards (its 0.01 ETH floor) keeps a nonzero size.
     function test_RedemptionOrderFloor() public {
-        vm.deal(address(sdgnrs), 1 ether);
+        GameFunding.reserve(0.01 ether);
         vm.prank(address(sdgnrs));
-        host.redemption{value: 0.01 ether}(alice, aliceId, 0.01 ether, WORD, 8);
+        host.redemption(alice, aliceId, 0.01 ether, WORD, 8);
     }
 }

@@ -122,7 +122,7 @@ contract WhaleBoonExpiry is DeployProtocol {
             game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         }
         uint256 entry = BoxOrderLib.boEntry(game.walletIdOf(player), ethAmount / BoxOrderLib.SCALE, 1, 0, 1, false);
-        bytes32 dataBase = keccak256(abi.encode(keccak256(abi.encode(uint256(index), SLOT_BOX_QUEUE))));
+        bytes32 dataBase = keccak256(abi.encode(bytes32(SLOT_BOX_QUEUE + uint256(index))));
         vm.store(address(game), dataBase, bytes32(entry)); // position 0: previous case was fully consumed
 
         uint256 vrfWord = uint256(keccak256(abi.encode("whaleBoonExpiry", player, index)));

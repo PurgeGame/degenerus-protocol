@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {PeripheralSlots} from "../helpers/PeripheralSlots.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 
@@ -11,7 +12,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 ///         leader fields untouched.
 contract AffiliateLeaderPacking is DeployProtocol {
     // forge inspect DegenerusAffiliate storage-layout
-    uint256 constant SLOT_TOTAL = 3; // _levelScore: total [0:128) | leader score [128:224) | leader ID [224:256)
+    uint256 constant SLOT_TOTAL = PeripheralSlots.AFF_LEVEL_SCORE; // _levelScore: total [0:128) | leader score [128:224) | leader ID [224:256)
     uint24 constant LVL = 5;
 
     address[4] affs;
@@ -48,7 +49,7 @@ contract AffiliateLeaderPacking is DeployProtocol {
     }
 
     function _slot(uint256 base) internal pure returns (bytes32) {
-        return keccak256(abi.encode(uint256(LVL & 3), base));
+        return bytes32(base + (LVL & 3));
     }
 
     function _assertViews(uint32 leader, uint256 leaderScore, uint256 total) internal view {

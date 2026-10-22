@@ -14,6 +14,7 @@ import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlip
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 import {QueueHost} from "../helpers/BoxQueueHost.sol";
+import {GameFunding} from "../helpers/GameFunding.sol";
 
 /// @dev Records the Game's box-cursor slot each time a reward credit reaches Coinflip. Etched over
 ///      Coinflip, so it keeps its log at a private slot base clear of Coinflip's own storage.
@@ -581,10 +582,10 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
         // Redemption order: three ~1 ETH customs off the ID-mixed redemption word.
         uint256 rw = uint256(keccak256("redemption-word"));
         uint32 batch = 5;
-        vm.deal(address(sdgnrs), 10 ether);
+        GameFunding.reserve(3 ether);
         vm.recordLogs();
         vm.prank(address(sdgnrs));
-        host.redemption{value: 3 ether}(alice, id, 3 ether, rw, batch);
+        host.redemption(alice, id, 3 ether, rw, batch);
         _assertSeeded(vm.getRecordedLogs(), REDEMPTION_INDEX_TAG | uint48(batch), rw, id, 3);
     }
 

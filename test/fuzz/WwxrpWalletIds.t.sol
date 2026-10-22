@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {PeripheralSlots} from "../helpers/PeripheralSlots.sol";
 import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {Vm} from "forge-std/Vm.sol";
@@ -32,8 +33,8 @@ contract WwxrpWalletIdsTest is DeployProtocol {
     bytes32 private constant DOM_INCIN_WINNER = "WWXRP_INCIN_WINNER";
 
     /// @dev WWXRP storage roots (scripts/layout/golden/WWXRP.json).
-    uint256 private constant DRAW_ENTRY_ROOT = 4;
-    uint256 private constant INCIN_ENTRY_ROOT = 7;
+    uint256 private constant DRAW_ENTRY_ROOT = PeripheralSlots.WW_DRAW_ENTRY;
+    uint256 private constant INCIN_ENTRY_ROOT = PeripheralSlots.WW_INCIN_ENTRY;
     uint256 private constant WWXRP_LANE_SHIFT = 232;
 
     function setUp() public {

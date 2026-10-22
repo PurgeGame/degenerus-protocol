@@ -23,6 +23,7 @@ import {BafViews} from "../helpers/BafViews.sol";
 import {BafBoardSeed} from "../helpers/BafBoardSeed.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
 import {CrapsSlots} from "../helpers/GameSlots.sol";
+import {PeripheralSlots} from "../helpers/PeripheralSlots.sol";
 import {GameFunding} from "../helpers/GameFunding.sol";
 
 /// @dev The level-100 BAF award schedule and its award events. With R scatter rounds (48 below a
@@ -283,18 +284,14 @@ library BafPairDraw {
 /// @dev The century bracket's BAF state. Every wallet the scatter rounds can sample qualifies: the
 ///      trait-bucket holders the seeder places for the minted-level rounds and every far-future
 ///      queue holder get a distinct positive score, written to DegenerusJackpots storage directly
-///      (`bafPlayer` slot 0, `bafTop` slot 1, `bafLevel` slot 2). Four large bettors fill the head
+///      (`bafPlayer` slot 0 and the compiler-pinned `bafLevel` root). Four large bettors fill the head
 ///      board, and one depositor fills the armed day's draw book.
 library CenturyBafScores {
     Vm private constant VM = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
     uint256 private constant LVL = 100;
 
     function levelWord(address jackpots) internal view returns (uint256) {
-        return uint256(VM.load(jackpots, keccak256(abi.encode(LVL, uint256(2)))));
-    }
-
-    function topEntry(address jackpots, uint256 i) internal view returns (uint256) {
-        return uint256(VM.load(jackpots, bytes32(uint256(keccak256(abi.encode(LVL, uint256(1)))) + i)));
+        return uint256(VM.load(jackpots, keccak256(abi.encode(LVL, PeripheralSlots.JP_BAF_LEVEL))));
     }
 
     /// @dev Scores the seeder's trait-bucket holders (round r: 0xC3700000 + r * 4096 + 1..2048)
@@ -669,7 +666,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
 
     function _armCenturyWord(uint256 word, uint24 day) private {
         for (uint24 i = 1; i <= 7; ++i) {
-            vm.store(address(crapsBattle), keccak256(abi.encode(uint256((day - i) & 63), CRAPS_DAY_STAKED_SLOT)),
+            vm.store(address(crapsBattle), bytes32(CRAPS_DAY_STAKED_SLOT + uint256((day - i) & 63)),
                 bytes32((uint256(day - i) << 232) | (uint256(500_000) << 112) | uint256(1_000_000)));
         }
         vm.prank(address(game));

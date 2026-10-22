@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {PeripheralSlots} from "../helpers/PeripheralSlots.sol";
 
 import {Vm, VmSafe} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -19,7 +20,7 @@ abstract contract AffiliateIdFixture is DeployProtocol {
     uint256 internal constant CODE_ROOT = 0;
     uint256 internal constant EARNED_ROOT = 1;
     uint256 internal constant REFERRAL_ROOT = 2;
-    uint256 internal constant LEVEL_SCORE_ROOT = 3;
+    uint256 internal constant LEVEL_SCORE_ROOT = PeripheralSlots.AFF_LEVEL_SCORE;
     uint256 internal constant SYNTHETIC_ENDPOINT = 10_000;
 
     bytes32 internal constant ROLL_TAG = keccak256("affiliate-payout-roll-v1");
@@ -177,7 +178,7 @@ abstract contract AffiliateIdFixture is DeployProtocol {
     }
 
     function _levelWord(uint24 lvl) internal view returns (uint256) {
-        uint256 word = uint256(vm.load(address(affiliate), keccak256(abi.encode(uint256(lvl & 3), LEVEL_SCORE_ROOT))));
+        uint256 word = uint256(vm.load(address(affiliate), bytes32(PeripheralSlots.AFF_LEVEL_SCORE + uint256(lvl & 3))));
         return uint24(word >> 232) == lvl ? word : 0;
     }
 

@@ -17,6 +17,7 @@ import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 import {DegenerusGameWhaleModule} from "../../contracts/modules/DegenerusGameWhaleModule.sol";
 import {CrapsPreferenceLib} from "../../contracts/libraries/CrapsPreferenceLib.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
+import {CrapsSlots} from "../helpers/GameSlots.sol";
 
 contract DecimatorJackpotEngineProbe {
     function settleSlipBounded(uint256 chips, uint256 chip, uint256 board, uint256 scatter, bytes32,
@@ -475,10 +476,10 @@ contract DecimatorJackpotIntegrationTest is Test {
         assertEq(funding + cash + passCost + unpaid, budget, "complete daily ETH conservation");
     }
 
-    /// @dev The table's saved board (mapping root 14), decoded as the lens decodes it.
+    /// @dev The table's compiler-pinned saved board, decoded as the lens decodes it.
     function _savedBoard(uint32 walletId) private view returns (uint32 chips) {
         (chips,) = CrapsPreferenceLib.decode(uint256(vm.load(ContractAddresses.CRAPS,
-            keccak256(abi.encode(uint256(walletId), uint256(14))))));
+            keccak256(abi.encode(uint256(walletId), CrapsSlots.PASS_CREDITS_BY_ID)))));
     }
 
     function test_RealPreferredBoardCannotChangeWhileGeneratedWorkIsPending() public {

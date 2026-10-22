@@ -19,8 +19,7 @@ import {
  * the deity ordinal's four-bit lane in deityRecipientBoonCount[recipient]. Once a deity has issued 10 boons to
  * a recipient, further issuance from that deity to that recipient reverts
  * RecipientBoonCapReached. A different deity, or a different recipient, has its
- * own independent count. The pre-existing one-boon-per-recipient-per-day gate
- * (deityBoonRecipientDay, keyed by recipient across all deities) is unchanged.
+ * own independent count. Multiple gifts to one recipient on the same day are allowed.
  *
  * The deity passes are purchased at genesis (before any day is settled) and RNG
  * is settled with words >= 1000 to avoid the genesis level-0 low-entropy
@@ -63,7 +62,7 @@ describe("Deity boon per-(deity, recipient) lifetime cap", function () {
       .connect(alice)
       .purchaseDeityPass(0, 4, "0x0000000000000000000000000000000000000000000000000000000000000000", { value: eth(24) });
 
-    // One boon per day to Bob (recipient is limited to one boon per day). Slot 0
+    // Issue across ten days to cover the lifetime counter across rollovers. Slot 0
     // is always free on a fresh day because the deity's used-slot mask resets on
     // the day rollover.
     // Seed the preceding day before the first issuance day.
@@ -136,7 +135,7 @@ describe("Deity boon per-(deity, recipient) lifetime cap", function () {
       game.connect(alice).issueDeityBoon(await game.walletIdOf(alice.address), await giveWalletId(game, bob.address), 0)
     ).to.be.revertedWithCustomError(boonModule, "RecipientBoonCapReached");
     // ...but dan->bob is a fresh pair, so dan can still boon bob the same day
-    // (the failed alice attempt did not consume bob's one-boon-per-day slot).
+    // The failed Alice attempt did not consume the other deity's daily slot.
     await expect(
       game.connect(dan).issueDeityBoon(await game.walletIdOf(dan.address), await giveWalletId(game, bob.address), 0)
     ).to.not.be.reverted;

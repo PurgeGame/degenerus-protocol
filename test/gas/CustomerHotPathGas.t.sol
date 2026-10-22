@@ -16,7 +16,12 @@ contract CustomerHotPathSeeder is DegenerusGameStorage, WalletSeed {
     function heroStorageSlots() external pure returns (uint256 hero, uint256 meta) {
         assembly { hero := dailyHeroWagers.slot meta := lootboxRngPacked.slot }
     }
-    function sealToday() external { dailyIdx = _simulatedDayIndex(); }
+    function sealToday() external {
+        uint24 day = _simulatedDayIndex();
+        _sealHeroWagers(day - 1);
+        _sealHeroWagers(day);
+        dailyIdx = day;
+    }
     function seedBoon(uint32 id, bool craps, bool expired) external {
         uint256 day = _simulatedDayIndex() - (expired ? 3 : 0);
         if (craps) boonPacked[id].slot1 = 3 | (day << BP_LANE_DAY_SHIFT);
@@ -126,8 +131,8 @@ contract CustomerHotPathGasTest is DeployProtocol {
             // and mask only its metadata out of the otherwise byte-exact state digest.
             bytes32 previous = a.previousValue;
             if (a.account == address(game) && uint256(a.slot) == heroMetaSlot) {
-                value &= ~bytes32(uint256((1 << 30) - 1));
-                previous &= ~bytes32(uint256((1 << 30) - 1));
+                value &= ~bytes32(uint256(((1 << 30) - 1) | (1 << 38)));
+                previous &= ~bytes32(uint256(((1 << 30) - 1) | (1 << 38)));
             }
             if (value != previous && !_heroWord(a, day)) state = keccak256(abi.encode(state, a.account, a.slot, value));
             if (trace) emit log(string.concat(scenario, " ", a.isWrite ? (readSeen[i] ? "RW " : "W ") : "R ",
@@ -151,6 +156,7 @@ contract CustomerHotPathGasTest is DeployProtocol {
 
     function _heroWord(Vm.StorageAccess memory a, uint24 day) private view returns (bool) {
         if (a.account != address(game)) return false;
+        if (uint256(a.slot) >= heroRoot && uint256(a.slot) - heroRoot < 6) return true;
         uint256[3] memory keys = [uint256(0), 1, uint256(day)];
         for (uint256 i; i < keys.length; ++i) {
             uint256 base = uint256(keccak256(abi.encode(keys[i], heroRoot)));

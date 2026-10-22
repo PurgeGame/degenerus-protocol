@@ -15,14 +15,15 @@ contract StoredBoardHarness is DegenerusGameJackpotModule {
         jackpotCounter = counter;
         jackpotFlags = turbo ? JACKPOT_TURBO : 0;
         _setPrizePools(0, 100 ether);
-        dailyHeroWagers[100][1] = uint256(1000) << (5 * 32);
+        lootboxRngPacked = _recordHeroWager(1, 5, 1000, lootboxRngPacked);
+        _sealHeroWagers(101);
         // Both parity lanes exist; the preceding day's board must never be selected.
         dailyFoilDraw[0] = _packFoilDraw(0xC0804000, 3, 100, 123);
     }
 
     function replaceHeroAfterSeal() external {
         // Test-only fault injection: a reroll would change quadrant 1 from 101 to 103.
-        dailyHeroWagers[100][1] = uint256(1000) << (7 * 32);
+        dailyHeroWagers[((lootboxRngPacked >> HERO_WRITE_SHIFT) & 1) ^ 1][1] = uint256(1000) << (7 * 32);
     }
 
     function draw() external view returns (bool, uint32, uint24) { return _foilDrawFor(101); }

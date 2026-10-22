@@ -663,7 +663,7 @@ contract DegenesisRngFreezeHandler is Test {
     }
 
     function _bufferDigest(uint48 buf, uint256 count) internal view returns (bytes32 h) {
-        bytes32 base = keccak256(abi.encode(keccak256(abi.encode(uint256(buf), GameSlots.BOX_QUEUE))));
+        bytes32 base = keccak256(abi.encode(bytes32(GameSlots.BOX_QUEUE + uint256(buf))));
         for (uint256 i; i < (count + 2) / 3; ++i) {
             h = keccak256(abi.encode(h, vm.load(address(game), bytes32(uint256(base) + i))));
         }

@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {CrapsViews} from "../../craps/CrapsViews.sol";
 import {CrapsPins} from "../../craps/CrapsPins.sol";
 import {CrapsBattle} from "../../../contracts/CrapsBattle.sol";
+import {CrapsLensReader} from "../../../contracts/CrapsLens.sol";
 import {CrapsFlowHandler} from "../handlers/CrapsFlowHandler.sol";
 
 contract InvHarness is CrapsViews {}
@@ -179,10 +180,10 @@ contract CrapsConservationInv is CrapsPins {
 
     /// @dev Seed the exact bug shape invariant (2) exists for — a progressive balance with no
     ///      funding behind it — and prove the wired check registers it, then goes green again
-    ///      when the inflation is reverted. `_progressive` is slot 15 of `CrapsBattle`
-    ///      (scripts/layout/golden/CrapsBattle.json), field-isolated: the whole slot is the pool.
+    ///      when the inflation is reverted. Use the lens root checked against the compiled
+    ///      `_progressive` declaration; the whole slot is the pool.
     function test_falsifiable_progressiveInflationIsCaught() public {
-        bytes32 slot = bytes32(uint256(15));
+        bytes32 slot = bytes32(CrapsLensReader.PROGRESSIVE_SLOT);
         bytes32 prior = vm.load(address(craps), slot);
         uint256 inflated = uint256(prior) + handler.ghost_subsidies() + 1_000_000;
         vm.store(address(craps), slot, bytes32(inflated));

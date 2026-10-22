@@ -33,7 +33,7 @@ library DegeneretteQueue {
 
     /// @dev Bet word with id `betId` at `index`.
     function betAt(Vm vm, address game, uint48 index, uint64 betId) internal view returns (uint256) {
-        bytes32 data = keccak256(abi.encode(uint256(keccak256(abi.encode(uint256(index & 1), QUEUE_SLOT)))));
+        bytes32 data = keccak256(abi.encode(uint256(bytes32(QUEUE_SLOT + uint256(index & 1)))));
         if (betId == 0) return 0;
         uint256 p = uint256(betId) - 1;
         uint128 lane = uint128(uint256(vm.load(game, bytes32(uint256(data) + (p >> 1)))) >> ((p & 1) * 128));

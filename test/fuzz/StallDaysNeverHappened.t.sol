@@ -130,7 +130,7 @@ contract StallDaysNeverHappened is DeployProtocol {
     }
 
     function _foilDraw(uint24 day) private view returns (uint256) {
-        uint256 word = uint256(vm.load(address(game), keccak256(abi.encode(uint256(day & 1), FOIL_DRAW_SLOT))));
+        uint256 word = uint256(vm.load(address(game), bytes32(FOIL_DRAW_SLOT + uint256(day & 1))));
         return uint24(word >> 217) == day ? word : 0;
     }
 

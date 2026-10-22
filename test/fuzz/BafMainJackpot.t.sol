@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
+import {PeripheralSlots} from "../helpers/PeripheralSlots.sol";
 
 import {Vm} from "forge-std/Vm.sol";
 import {BafBracketFixture} from "../helpers/BafStageHost.sol";
@@ -117,7 +118,7 @@ contract BafMainJackpotTest is BafBracketFixture {
     function test_CandidateEventsRetainAllZeroScoreSpots() public {
         host.seedSession(LVL, WORD, true);
         _armBaf(LVL, 100 ether, 0);
-        vm.store(address(jackpots), keccak256(abi.encode(uint256(LVL), uint256(2))), bytes32(uint256(1)));
+        vm.store(address(jackpots), keccak256(abi.encode(uint256(LVL), PeripheralSlots.JP_BAF_LEVEL)), bytes32(uint256(1)));
         vm.recordLogs();
         host.daily(ONE);
         Vm.Log[] memory logs = vm.getRecordedLogs();

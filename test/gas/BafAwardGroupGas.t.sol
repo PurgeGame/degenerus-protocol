@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+import {PeripheralSlots} from "../helpers/PeripheralSlots.sol";
 
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
@@ -555,15 +556,15 @@ contract BafAwardTailProbeGas is BafAwardGroupFixture {
         // bits 48..71 of bafTopLevels, which sits after lastBafResolvedDay in slot 3 (bit 72).
         // Each 128-bit entry is score (bits 0..95) | wallet ID (bits 96..127): stale scores with
         // wallet ID 0, so every head slot reads as empty.
-        bytes32 board = keccak256(abi.encode(uint256(2), uint256(1)));
+        bytes32 board = bytes32(PeripheralSlots.JP_BAF_TOP + uint256(2) * 2);
         for (uint256 i; i < 2; ++i) {
             uint256 low = uint256(1_000_000 + i * 2);
             uint256 high = uint256(1_000_001 + i * 2);
             vm.store(address(jackpots), bytes32(uint256(board) + i), bytes32(low | (high << 128)));
         }
-        uint256 tags = uint256(vm.load(address(jackpots), bytes32(uint256(3))));
-        vm.store(address(jackpots), bytes32(uint256(3)), bytes32((tags & ~(uint256(type(uint24).max) << 72)) | (uint256(100) << 72)));
-        bytes32 levelSlot = keccak256(abi.encode(uint256(100), uint256(2)));
+        uint256 tags = uint256(vm.load(address(jackpots), bytes32(PeripheralSlots.JP_BAF_BANK_LEVELS)));
+        vm.store(address(jackpots), bytes32(PeripheralSlots.JP_BAF_BANK_LEVELS), bytes32((tags & ~(uint256(type(uint24).max) << 72)) | (uint256(100) << 72)));
+        bytes32 levelSlot = keccak256(abi.encode(uint256(100), PeripheralSlots.JP_BAF_LEVEL));
         vm.store(address(jackpots), levelSlot, bytes32(uint256(vm.load(address(jackpots), levelSlot)) | (uint256(4) << 64)));
     }
 

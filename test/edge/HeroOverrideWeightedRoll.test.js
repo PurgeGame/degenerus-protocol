@@ -120,37 +120,24 @@ function computeChi2Multinomial(observed, expected) {
   return chi2;
 }
 
-// Each physical hero-pool key names a fixed four-word array; only three quadrants
-// are eligible. The day/validity metadata determines parity-buffer versus spill reads.
-function derivedailyHeroWagersSlot(D, q, baseSlot) {
-  const parentSlot = BigInt(
-    hre.ethers.keccak256(
-      hre.ethers.AbiCoder.defaultAbiCoder().encode(
-        ["uint256", "uint256"],
-        [BigInt(D), baseSlot]
-      )
-    )
-  );
-  return (
-    "0x" + (parentSlot + BigInt(q)).toString(16).padStart(64, "0")
-  );
+// Two fixed buffers, each containing three packed quadrant words.
+function derivedailyHeroWagersSlot(buffer, q, baseSlot) {
+  return hre.ethers.toBeHex(BigInt(baseSlot) + BigInt(buffer) * 3n + BigInt(q), 32);
 }
 
-// Reads `dailyHeroWagers[D][0..3]` as `BigInt[4]` (matches the
-// `rollHeroSymbolRef` input shape).
 async function readDailyHeroWagersSlots(addr, D, baseSlot) {
   const metaSlot = await deriveDailyHeroWagersBaseSlot("lootboxRngPacked");
   const meta = BigInt(await hre.ethers.provider.getStorage(addr, metaSlot));
+  const game = await hre.ethers.getContractAt("DegenerusGame", addr);
   const day = BigInt(D);
-  const latest = meta & 0xffffffn;
+  let key = (meta >> 38n) & 1n;
   const out = [0n, 0n, 0n, 0n];
-  if (day + 1n < latest) return out;
+  if (day + 1n === (meta & 0xffffffn)) key ^= 1n;
+  else if (day !== await game.currentDayView()) return out;
   for (let q = 0; q < 3; ++q) {
-    const valid = 1n << (24n + (day & 1n) * 3n + BigInt(q));
-    const buffered = latest >= day && (meta & valid) !== 0n;
-    if (!buffered && day <= 1n) continue;
-    const slot = derivedailyHeroWagersSlot(buffered ? day & 1n : day, q, baseSlot);
-    out[q] = BigInt(await hre.ethers.provider.getStorage(addr, slot));
+    if ((meta & (1n << (24n + key * 3n + BigInt(q)))) !== 0n) {
+      out[q] = BigInt(await hre.ethers.provider.getStorage(addr, derivedailyHeroWagersSlot(key, q, baseSlot)));
+    }
   }
   return out;
 }
@@ -214,26 +201,19 @@ function unpackHeroFromTraitsPacked(mainTraitsPacked, heroQuadrant) {
   };
 }
 
-// Synthetic state seeding for the chi² and gas-regression fixtures. Packs
-// the 32-length raw uint32 amounts via `packDailyHeroWagers` (Plan 01),
-// then writes the 4 packed values directly into slot[D][0..3] via
-// hardhat_setStorageAt. The chi² fixtures (TST-HRROLL-01 + 02) and the
-// worst-case-seeded gas-regression baseline (TST-HRROLL-06) use this path;
-// TST-HRROLL-03 uses the production path (placeDegeneretteBet) instead.
+// Seed an already committed pool for the independent weighted-roll oracle.
 async function seedDailyHeroWagersDirect(addr, D, baseSlot, rawAmounts) {
   const day = BigInt(D);
   const packed = packDailyHeroWagers(rawAmounts);
-  for (let q = 0; q < 3; ++q) {
-    await hre.network.provider.send("hardhat_setStorageAt", [
-      addr, derivedailyHeroWagersSlot(day & 1n, q, baseSlot),
-      hre.ethers.toBeHex(packed[q], 32),
-    ]);
-  }
-  // The three buffer-valid bits and retained day authenticate these reusable words.
-  // Preserve pending ETH and every field above the low 30-bit hero metadata lane.
   const metaSlot = await deriveDailyHeroWagersBaseSlot("lootboxRngPacked");
   const meta = BigInt(await hre.ethers.provider.getStorage(addr, metaSlot));
-  const updated = (meta & ~((1n << 30n) - 1n)) | day | (7n << (24n + (day & 1n) * 3n));
+  const key = ((meta >> 38n) & 1n) ^ 1n;
+  for (let q = 0; q < 3; ++q) {
+    await hre.network.provider.send("hardhat_setStorageAt", [
+      addr, derivedailyHeroWagersSlot(key, q, baseSlot), hre.ethers.toBeHex(packed[q], 32),
+    ]);
+  }
+  const updated = (meta & ~0xffffffn) | (day + 1n) | (7n << (24n + key * 3n));
   await hre.network.provider.send("hardhat_setStorageAt", [
     addr, hre.ethers.toBeHex(metaSlot, 32), hre.ethers.toBeHex(updated, 32),
   ]);
@@ -608,16 +588,10 @@ describe("HeroOverrideWeightedRoll — Phase 293 v42.0 HRROLL regression fixture
             dailyHeroWagers: slotsBeforeAdvance,
           });
 
-          // Advance day-D → D+1 via the wall-clock warp. The fixture uses
-          // the storage-layout proof technique (per the
-          // HeroOverrideDayIndex.test.js sister-fixture path-of-investigation
-          // note): the test asserts on slot byte-identity under the natural
-          // day-warp, which is the same invariant the production
-          // `_unlockRng` write would otherwise preserve. `dailyIdx` remains
-          // frozen across `advanceToNextDay()` (no `_unlockRng` fires in
-          // this minimal fixture path; the slot read at the post-advance
-          // step is what TST-HRROLL-03 is structurally about).
+          // The real daily request freezes the accumulated pool before its VRF result.
           await advanceToNextDay();
+          for (let i = 0; i < 12 && !(await game.rngLocked()); ++i) await game.mineFlip(0);
+          expect(await game.rngLocked(), "daily request seals the hero pool").to.equal(true);
           const wallDayAfter = Number(await game.currentDayView());
           expect(
             wallDayAfter,

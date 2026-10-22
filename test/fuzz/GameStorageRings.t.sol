@@ -95,7 +95,7 @@ contract GameStorageRingsTest is Test {
         first = uint24(bound(first, 0, type(uint24).max - 4));
         for (uint24 i; i < 4; ++i) h.pool(first + i, oldAmount);
         for (uint24 i; i < 4; ++i) assertEq(h.pool(first + i), oldAmount);
-        bytes32 slot = keccak256(abi.encode(first & 3, GameSlots.LEVEL_PRIZE_POOL));
+        bytes32 slot = bytes32(GameSlots.LEVEL_PRIZE_POOL + uint256(first & 3));
         vm.store(address(h), slot, bytes32(type(uint256).max));
         assertEq(h.pool(first), 0, "poisoned tag is unreadable");
         h.pool(first + 4, next);

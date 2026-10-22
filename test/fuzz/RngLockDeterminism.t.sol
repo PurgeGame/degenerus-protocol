@@ -18,6 +18,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
+import {GameFunding} from "../helpers/GameFunding.sol";
 
 /// @title RngLockDeterminism -- Foundry fuzz harness asserting byte-identical
 ///        VRF-derived outputs under mid-rngLock-window state perturbations.
@@ -581,7 +582,7 @@ contract RngLockDeterminism is DeployProtocol {
         // Failed admission is a fixture failure, never an assumed-away fuzz input.
         vm.prank(address(game));
         sdgnrs.transferFromPool(sDGNRS.Pool.Reward, holder, 100 ether);
-        vm.deal(address(sdgnrs), 20_000 ether);
+        GameFunding.credit(2, 20_000 ether);
         uint256 burnAmount = bound(burnAmountSeed, 1e18, 100e18);
         (uint256 preview,) = sdgnrs.previewBurnValue(burnAmount);
         assertGe(preview, 0.01 ether, "fixture meets the burn admission minimum");

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
+import {PeripheralSlots} from "../helpers/PeripheralSlots.sol";
 
 import {Test} from "forge-std/Test.sol";
 import {WWXRP} from "../../contracts/WWXRP.sol";
@@ -241,7 +242,7 @@ contract WWXRPRecyclingTest is Test {
         assertEq(raw, 25);
         assertEq(total, 25);
         assertEq(count, 1);
-        bytes32 headerSlot = keccak256(abi.encode(uint256(2) << 8, uint256(3)));
+        bytes32 headerSlot = bytes32(PeripheralSlots.WW_DRAW_HEADER + 2 * 10);
         uint256 header = uint256(vm.load(address(token), headerSlot));
         vm.store(address(token), headerSlot, bytes32(header | (uint256(type(uint32).max) << 192)));
         _mint(next, 25);

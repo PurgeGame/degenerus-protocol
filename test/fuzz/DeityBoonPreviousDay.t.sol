@@ -174,15 +174,13 @@ contract DeityBoonPreviousDayTest is DeployProtocol {
         for (uint8 i; i < 3; ++i) assertEq(tomorrow[i], _expected(TODAY_WORD, 2, i));
     }
 
-    function test_SlotAndRecipientDailyLimitsStillApply() public {
+    function test_RecipientCanUseAnotherSlotButUsedSlotStillReverts() public {
         _issue(RECIPIENT, 0, TODAY, _expected(YESTERDAY_WORD, TODAY, 0));
         uint32 otherId = game.walletIdOf(address(0xB002));
         vm.expectRevert(DegenerusGameBoonModule.SlotAlreadyUsed.selector);
         vm.prank(DEITY);
         game.issueDeityBoon(deityId, otherId, 0);
-        vm.expectRevert(DegenerusGameBoonModule.RecipientAlreadyBoonedToday.selector);
-        vm.prank(DEITY);
-        game.issueDeityBoon(deityId, recipientId, 1);
+        _issue(RECIPIENT, 1, TODAY, _expected(YESTERDAY_WORD, TODAY, 1));
     }
 
     function test_LifetimeLimitStillAppliesAcrossSeedDays() public {

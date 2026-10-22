@@ -2,6 +2,7 @@
 pragma solidity 0.8.34;
 import {RedemptionFixture} from "./helpers/RedemptionFixture.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
+import {GameFunding} from "../helpers/GameFunding.sol";
 
 contract RedemptionMinimumValueTest is RedemptionFixture {
     function test_OneTokenCanMeetValueMinimum() public {
@@ -9,7 +10,7 @@ contract RedemptionMinimumValueTest is RedemptionFixture {
         uint256 amount = 1e12;
         (uint256 gross, ) = sdgnrs.previewBurnValue(sdgnrs.totalSupply());
         uint256 target = 0.01 ether * sdgnrs.totalSupply() / amount;
-        vm.deal(address(sdgnrs), address(sdgnrs).balance + target - gross);
+        GameFunding.credit(2, target - gross);
         (uint256 value, ) = sdgnrs.previewBurnValue(amount);
         assertEq(value, 0.01 ether);
         vm.prank(alice); sdgnrs.burn(amount);
@@ -21,7 +22,7 @@ contract RedemptionMinimumValueTest is RedemptionFixture {
         uint256 amount = 1e12;
         (uint256 gross, ) = sdgnrs.previewBurnValue(sdgnrs.totalSupply());
         uint256 target = 0.01 ether * sdgnrs.totalSupply() / amount;
-        vm.deal(address(sdgnrs), address(sdgnrs).balance + target - gross - 1);
+        GameFunding.credit(2, target - gross - 1);
         (uint256 value, ) = sdgnrs.previewBurnValue(amount);
         assertEq(value, 0.01 ether - 1);
         uint256 supply = sdgnrs.totalSupply();

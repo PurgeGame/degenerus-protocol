@@ -175,7 +175,7 @@ contract DegenesisSolvencyHandler is Test {
     function ringWord(uint256 day) public view returns (uint256) {
         uint256 tags = uint256(vm.load(address(game), bytes32(GameSlots.RNG_DAY_TAGS)));
         if (uint24(tags >> ((day & 1) * 24)) != day) return 0;
-        return uint256(vm.load(address(game), keccak256(abi.encode(day & 1, GameSlots.RNG_WORD_BY_DAY))));
+        return uint256(vm.load(address(game), bytes32(GameSlots.RNG_WORD_BY_DAY + uint256(day & 1))));
     }
 
     function _balancesOf(uint32 id) internal view returns (uint256) {

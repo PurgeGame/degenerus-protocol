@@ -96,7 +96,7 @@ export async function seedDailyWord(game, day, word) {
   const tags = BigInt(await hre.ethers.provider.getStorage(address, tagsSlot));
   const nextTags = (tags & ~(0xffffffn << shift)) | (day << shift);
   await hre.network.provider.send("hardhat_setStorageAt", [address, hre.ethers.toBeHex(tagsSlot, 32), hre.ethers.toBeHex(nextTags, 32)]);
-  const slot = hre.ethers.keccak256(hre.ethers.AbiCoder.defaultAbiCoder().encode(["uint256", "uint256"], [parity, await compiledStorageSlot("rngWordByDay")]));
+  const slot = hre.ethers.toBeHex((await compiledStorageSlot("rngWordByDay")) + parity, 32);
   await hre.network.provider.send("hardhat_setStorageAt", [address, slot, hre.ethers.toBeHex(word, 32)]);
 }
 

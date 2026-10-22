@@ -260,7 +260,7 @@ contract DegeneretteSweep is DeployProtocol {
         assertEq(uint32(b), game.walletIdOf(bob), "second owner id");
         assertEq((b >> 42) & 1, FLIP, "FLIP currency");
         assertEq((b >> 60) & type(uint64).max, 200, "FLIP stake in whole FLIP");
-        bytes32 base = keccak256(abi.encode(keccak256(abi.encode(uint256(IDX), QUEUE_SLOT))));
+        bytes32 base = keccak256(abi.encode(bytes32(QUEUE_SLOT + uint256(IDX))));
         assertEq(uint256(vm.load(address(game), base)), a | (b << 128), "storage, events and views use identical lanes");
         assertEq(game.degeneretteBetInfo(IDX, 3), 0, "past the queue reads zero");
         assertEq(game.degeneretteBetInfo(IDX, 0), 0, "id zero reads zero");
@@ -538,7 +538,7 @@ contract DegeneretteSweep is DeployProtocol {
 
     /// @notice Reusing a buffer for a shorter queue retires the retained tail by count.
     function testDenseQueueReusesBufferWithoutReadingStaleTail() public {
-        uint256 base = uint256(keccak256(abi.encode(keccak256(abi.encode(uint256(IDX), QUEUE_SLOT)))));
+        uint256 base = uint256(keccak256(abi.encode(bytes32(QUEUE_SLOT + uint256(IDX)))));
         bytes32 oldTail;
         for (uint256 cycle; cycle < 3; ++cycle) {
             uint48 buffer = cycle == 1 ? IDX ^ 1 : IDX;
@@ -563,7 +563,7 @@ contract DegeneretteSweep is DeployProtocol {
     function testResolutionNeverWritesBetStorage() public {
         for (uint256 i; i < 3; ++i) _place(alice, FLIP, 100, 1);
         _landWord(IDX, uint256(keccak256("immutable queued bets")));
-        uint256 base = uint256(keccak256(abi.encode(keccak256(abi.encode(uint256(IDX), QUEUE_SLOT)))));
+        uint256 base = uint256(keccak256(abi.encode(bytes32(QUEUE_SLOT + uint256(IDX)))));
         bytes32 first = vm.load(address(game), bytes32(base));
         bytes32 second = vm.load(address(game), bytes32(base + 1));
         vm.record();
