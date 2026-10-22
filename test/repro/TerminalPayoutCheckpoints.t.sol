@@ -8,6 +8,7 @@ import {DegenerusGameDailyModule} from "../../contracts/modules/DegenerusGameDai
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
+import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
 
 contract TerminalBurnCounter {
@@ -63,8 +64,10 @@ contract TerminalPayoutCheckpointsTest is Test {
         uint24 day = h.seed(110, 0xAC4DE45EDBEEF);
         vm.deal(address(h), 1000 ether);
         vm.cool(address(h));
-        // Covers the setup's admission bound, Degenesis split included.
-        (,, bool unlocked,) = h.runGameOverAdvance{gas: 10_000_000}(day, 110, 2_500_000);
+        // Keep the original 100k prelude/check headroom above the current setup reservation.
+        uint256 setupAllowance = GasBounds.TERMINAL_SETUP + GasBounds.DEGENESIS_TERMINAL_GAS
+            + GasBounds.TERMINAL_TAIL + 100_000;
+        (,, bool unlocked,) = h.runGameOverAdvance{gas: 10_000_000}(day, 110, setupAllowance);
         assertFalse(unlocked);
         (bool ended, uint256 paid, uint256 time, uint256 budget,) = h.terminalState();
         assertTrue(ended);
