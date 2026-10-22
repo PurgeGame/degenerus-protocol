@@ -20,12 +20,33 @@ export const DEPLOYMENTS = [
   },
   {
     "key": "GAME_ADVANCE_MODULE",
-    "contract": "DegenerusGameAdvanceModule",
+    "contract": "DegenerusGameDailyModule",
     "aliases": [
-      "GAME_ADVANCE_MODULE"
+      "GAME_ADVANCE_MODULE",
+      "GAME_JACKPOT_MODULE",
+      "GAME_JACKPOT_DRAW_MODULE",
+      "GAME_RNG_MODULE"
     ],
-    "fixtureField": "advanceModule",
-    "fixtureType": "DegenerusGameAdvanceModule"
+    "fixtureField": "dailyModule",
+    "fixtureType": "DegenerusGameDailyModule",
+    "fixtureAliases": {
+      "GAME_ADVANCE_MODULE": {
+        "field": "advanceModule",
+        "type": "DegenerusGameAdvanceModule"
+      },
+      "GAME_JACKPOT_MODULE": {
+        "field": "jackpotModule",
+        "type": "DegenerusGameJackpotModule"
+      },
+      "GAME_RNG_MODULE": {
+        "field": "rngModule",
+        "type": "DegenerusGameRngModule"
+      },
+      "GAME_JACKPOT_DRAW_MODULE": {
+        "field": "jackpotDrawModule",
+        "type": "DegenerusGameJackpotDrawModule"
+      }
+    }
   },
   {
     "key": "GAME_WHALE_MODULE",
@@ -35,15 +56,6 @@ export const DEPLOYMENTS = [
     ],
     "fixtureField": "whaleModule",
     "fixtureType": "DegenerusGameWhaleModule"
-  },
-  {
-    "key": "GAME_JACKPOT_MODULE",
-    "contract": "DegenerusGameJackpotModule",
-    "aliases": [
-      "GAME_JACKPOT_MODULE"
-    ],
-    "fixtureField": "jackpotModule",
-    "fixtureType": "DegenerusGameJackpotModule"
   },
   {
     "key": "GAME_DECIMATOR_MODULE",
@@ -299,24 +311,6 @@ export const DEPLOYMENTS = [
     ],
     "fixtureField": "minerModule",
     "fixtureType": "DegenerusGameMinerModule"
-  },
-  {
-    "key": "GAME_RNG_MODULE",
-    "contract": "DegenerusGameRngModule",
-    "aliases": [
-      "GAME_RNG_MODULE"
-    ],
-    "fixtureField": "rngModule",
-    "fixtureType": "DegenerusGameRngModule"
-  },
-  {
-    "key": "GAME_JACKPOT_DRAW_MODULE",
-    "contract": "DegenerusGameJackpotDrawModule",
-    "aliases": [
-      "GAME_JACKPOT_DRAW_MODULE"
-    ],
-    "fixtureField": "jackpotDrawModule",
-    "fixtureType": "DegenerusGameJackpotDrawModule"
   },
   {
     "key": "GAME_DEGENESIS_MODULE",

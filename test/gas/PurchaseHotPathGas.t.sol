@@ -75,8 +75,8 @@ contract PurchaseHotPathGasTest is DeployProtocol {
         _restoreRuntime(json, "DegenerusGameLootboxModule", address(lootboxModule));
         _restoreRuntime(json, "DegenerusGameBoonModule", address(boonModule));
         _restoreRuntime(json, "DegenerusGameTicketModule", address(ticketModule));
-        _restoreRuntime(json, "DegenerusGameJackpotModule", address(jackpotModule));
-        _restoreRuntime(json, "DegenerusGameJackpotDrawModule", address(jackpotDrawModule));
+        _restoreRuntime(json, "DegenerusGameDailyModule", address(jackpotModule));
+        _restoreRuntime(json, "DegenerusGameDailyModule", address(jackpotDrawModule));
         _restoreRuntime(json, "GameAfkingModule", address(afkingModule));
         uint256 active = uint256(vm.load(address(quests), bytes32(0)));
         vm.store(address(quests), bytes32(uint256(2)), bytes32(uint256(uint16(active >> 128))));

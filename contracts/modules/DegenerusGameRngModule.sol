@@ -1,21 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
-import {IDegenerusGameAdvanceModule} from "../interfaces/IDegenerusGameModules.sol";
-import {DegenerusGameRngUtils} from "./DegenerusGameRngUtils.sol";
+import {DegenerusGameAdvanceModule} from "./DegenerusGameAdvanceModule.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 
 /// @notice Commitment boundary, publication and transport-only recovery.
 /// @dev The miner engine selects when these actions run. A fresh request is last.
-contract DegenerusGameRngModule is DegenerusGameRngUtils {
+abstract contract DegenerusGameRngModule is DegenerusGameAdvanceModule {
     error PreResetWindow();
     error InsufficientLink();
     error NoPendingLootbox();
     error BelowThreshold();
     error GasTooHigh();
-    error RngNotReady();
 
-    event Advance(uint8 stage, uint24 lvl);
     uint8 private constant STAGE_RNG_REQUESTED = 1;
     uint16 private constant VRF_REQUEST_CONFIRMATIONS = 6;
     uint16 private constant VRF_MIDDAY_CONFIRMATIONS = 4;
@@ -33,10 +30,7 @@ contract DegenerusGameRngModule is DegenerusGameRngUtils {
     function requestDailyRng(uint24 day) external {
         if (address(this) != ContractAddresses.GAME || !_lootboxReadComplete() || _minerMaintenancePending()
             || _livenessTriggered() || day != _afkingResetDay || day <= dailyIdx || !subsFullyProcessed) revert RngNotReady();
-        (bool ok, bytes memory result) = ContractAddresses.GAME_ADVANCE_MODULE.delegatecall(
-            abi.encodeWithSelector(IDegenerusGameAdvanceModule.prepareRequestBoundary.selector, day)
-        );
-        if (!ok) _revertDelegate(result);
+        prepareRequestBoundary(day);
         _swapTicketSlot();
         _swapFoilSlot();
         _sealHeroWagers(day);
@@ -145,7 +139,7 @@ contract DegenerusGameRngModule is DegenerusGameRngUtils {
         // together on the write side for the final request's own commit, which
         // its chain drains BEFORE the final draw. The word still serves the
         // pending lootboxes.
-        bool activated = _activateNextTickets();
+        bool activated = _rngActivateNextTickets();
         if (activated && _ticketQueueLength(_tqFarFutureKey(earlyTicketLevel)) != 0) {
             ticketsFullyProcessed = false;
             _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, MID_DAY_FUTURE_POOL);
@@ -225,7 +219,7 @@ contract DegenerusGameRngModule is DegenerusGameRngUtils {
         return true;
     }
 
-    function _activateNextTickets() private returns (bool activated) {
+    function _rngActivateNextTickets() private returns (bool activated) {
         // The sole caller checked liveness before any relevant state could change.
         uint24 nextLvl = level + 2;
         if (
@@ -258,10 +252,4 @@ contract DegenerusGameRngModule is DegenerusGameRngUtils {
         _closeRedemptionBatch();
     }
 
-    function _revertDelegate(bytes memory reason) private pure {
-        if (reason.length == 0) revert EmptyRevert();
-        assembly ("memory-safe") {
-            revert(add(32, reason), mload(reason))
-        }
-    }
 }

@@ -228,10 +228,6 @@ contract JackpotTicketAwardChunksTest is Test {
 }
 
 contract TicketGasHarness is TicketChunkHarness {
-    event JackpotTicketWin(
-        uint32 indexed walletId, uint24 indexed lvl, uint16 indexed trait,
-        uint32 tickets, uint24 sourceLvl, uint256 entryIndex, bool roundedUp
-    );
 
     /// @dev Replays positions [0, count) as `_resumeTicketWork` draws them; returns internal gas.
     function drawGas(uint24 lvl, uint256 entropy, uint8 trait, uint8 count, uint8 salt)

@@ -24,16 +24,17 @@ pragma solidity 0.8.38;
  * Provided AS IS, without warranty of any kind. Full text: TERMS.md
  */
 
+import {IStETH} from "../interfaces/IStETH.sol";
+import {DegenerusGameJackpotModule} from "./DegenerusGameJackpotModule.sol";
 import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol";
 import {IJackpotBattle} from "../interfaces/IJackpotBattle.sol";
 import {IDegenerusGame, MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {IDegenerusJackpots} from "../interfaces/IDegenerusJackpots.sol";
-import {IDegenerusGameAdvanceModule, IDegenerusGameJackpotModule, IDegenerusGameFoilPackModule, IDegenerusGameBoonModule, IDegenerusGameGameOverModule,
+import {IDegenerusGameAdvanceModule, IDegenerusGameFoilPackModule, IDegenerusGameBoonModule, IDegenerusGameGameOverModule,
     IGameAfkingModule, IDegenerusGameDegenesisModule} from "../interfaces/IDegenerusGameModules.sol";
 import {GameTimeLib} from "../libraries/GameTimeLib.sol";
 import {BoundedCall} from "../libraries/BoundedCall.sol";
-import {IStETH} from "../interfaces/IStETH.sol";
 import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
 import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
@@ -48,13 +49,12 @@ interface IWwxrpIncinerator { function resolveIncinerator(uint24 bracket, uint25
 /// @notice Daily economics and lifecycle transitions, selected by the miner engine.
 /// @dev Publication and ticket materialization precede these actions. Read consumers
 ///      follow day sealing. Fresh RNG commitment belongs to the RNG module.
-contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
+abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, DegenerusGameRngUtils {
     error RngNotReady();
     error StEthStakeRefused();
 
-    IStETH internal constant steth = IStETH(ContractAddresses.STETH_TOKEN);
     IGNRUSResolve private constant charityResolve = IGNRUSResolve(ContractAddresses.GNRUS);
-    IDegenerusJackpots private constant jackpots = IDegenerusJackpots(ContractAddresses.JACKPOTS);
+    IDegenerusJackpots private constant advanceJackpots = IDegenerusJackpots(ContractAddresses.JACKPOTS);
     IWwxrpIncinerator private constant wwxrpIncinerator = IWwxrpIncinerator(ContractAddresses.WWXRP);
 
     event Advance(uint8 stage, uint24 lvl);
@@ -262,9 +262,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         }
 
         if (_jackpotBattlePending()) {
-            result = _runJackpotWork(abi.encodeWithSelector(
-                IDegenerusGameJackpotModule.runPurchaseJackpotBattle.selector, _mintCeiling(), word, _phaseAllowance(meter)
-            ));
+            result = runPurchaseJackpotBattle(_mintCeiling(), word, _phaseAllowance(meter));
             stage = inJackpot ? STAGE_JACKPOT_BATTLE : STAGE_PURCHASE_BATTLE;
         } else if (phaseTransitionActive) {
             if (!MineFlipGas.canRun(meter, GasBounds.TRANSITION_CLOSE, GasBounds.DAILY_PHASE_TAIL)) return result;
@@ -280,25 +278,18 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
             stage = STAGE_TRANSITION_DONE;
         } else if (jackpotWork.kind == 7) {
             // Reserved BAF awards are drawn and paid in groups before the first jackpot-phase daily.
-            result = _runJackpotWork(abi.encodeWithSelector(
-                IDegenerusGameJackpotModule.runBafAwards.selector, word, _phaseAllowance(meter)
-            ));
+            result = runBafAwards(word, _phaseAllowance(meter));
             stage = STAGE_JACKPOT_BAF_AWARDS;
         } else if (jackpotWork.kind == 1 || jackpotWork.kind == 2) {
             // Pricing can set ticket-leg flags before the ETH quadrants have finished.
-            result = _runJackpotWork(abi.encodeWithSelector(
-                IDegenerusGameJackpotModule.runDailyJackpot.selector,
-                inJackpot, inJackpot ? lvl : purchaseLevel, word, MineFlipGas.child(meter, sealTail)
-            ));
+            result = runDailyJackpot(inJackpot, inJackpot ? lvl : purchaseLevel, word, MineFlipGas.child(meter, sealTail));
             if (result.done && !inJackpot && !_purchaseTicketLegPending()) {
                 _sealPurchaseDay(purchaseLevel, day, _simulatedDayIndex(), purchaseStartDay);
             }
             stage = inJackpot ? STAGE_JACKPOT_DAILY_STARTED : STAGE_PURCHASE_DAILY;
         } else if (!inJackpot) {
             if (_purchaseTicketLegPending()) {
-                result = _runJackpotWork(abi.encodeWithSelector(
-                    IDegenerusGameJackpotModule.runPurchaseDailyTickets.selector, word, MineFlipGas.child(meter, sealTail)
-                ));
+                result = runPurchaseDailyTickets(word, MineFlipGas.child(meter, sealTail));
                 if (result.done) _sealPurchaseDay(purchaseLevel, day, _simulatedDayIndex(), purchaseStartDay);
                 stage = STAGE_PURCHASE_DAILY_TICKETS;
             } else if (!lastPurchase && purchaseLevel == 1 && day < GameTimeLib.MAIN_LAUNCH_DAY) {
@@ -314,15 +305,12 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
                 if (purchaseLevel == 1) {
                     if (!MineFlipGas.canRun(meter, GasBounds.LEVEL_ONE_DRAW, GasBounds.DAILY_PHASE_TAIL)) return result;
                     IDegenerusGame(address(this)).emitDailyWinningTraits(word);
-                    _payDailyCoinJackpot(1, word, 1, 1);
+                    payDailyFlipJackpot(1, word, 1, 1);
                     result.progressed = true;
                     MineFlipGas.markProgress(meter);
                     result.done = true;
                 } else {
-                    result = _runJackpotWork(abi.encodeWithSelector(
-                        IDegenerusGameJackpotModule.runDailyJackpot.selector,
-                        false, purchaseLevel, word, MineFlipGas.child(meter, sealTail)
-                    ));
+                    result = runDailyJackpot(false, purchaseLevel, word, MineFlipGas.child(meter, sealTail));
                 }
                 if (result.done && !_purchaseTicketLegPending()) {
                     _sealPurchaseDay(purchaseLevel, day, _simulatedDayIndex(), purchaseStartDay);
@@ -341,7 +329,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
                         _growthOver(_growthRatchet(purchaseLevel - 2), _growthRatchet(purchaseLevel - 1), achieved))) {
                     _setGrowthSettlePending(true);
                 }
-                _distributeYieldSurplus(word);
+                distributeYieldSurplus(word);
                 _consolidatePoolsAndRewardJackpots(lvl, purchaseLevel, day, word, purchaseStartDay);
                 jackpotPhaseFlag = true;
                 lastPurchaseDay = false;
@@ -352,14 +340,10 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
                 stage = STAGE_ENTERED_JACKPOT;
             }
         } else if (_earlyBirdLegPending()) {
-            result = _runJackpotWork(abi.encodeWithSelector(
-                IDegenerusGameJackpotModule.runEarlyBirdTickets.selector, word, _phaseAllowance(meter)
-            ));
+            result = runEarlyBirdTickets(word, _phaseAllowance(meter));
             stage = STAGE_JACKPOT_EARLY_BIRD_TICKETS;
         } else if (dailyJackpotCoinTicketsPending) {
-            result = _runJackpotWork(abi.encodeWithSelector(
-                IDegenerusGameJackpotModule.runDailyJackpotTickets.selector, word, _phaseAllowance(meter)
-            ));
+            result = runDailyJackpotTickets(word, _phaseAllowance(meter));
             if (result.done) {
                 if (jackpotCounter >= _jackpotDays()) {
                     _endPhase(lvl);
@@ -370,9 +354,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
                 }
             } else stage = STAGE_JACKPOT_COIN_TICKETS;
         } else {
-            result = _runJackpotWork(abi.encodeWithSelector(
-                IDegenerusGameJackpotModule.runDailyJackpot.selector, true, lvl, word, _phaseAllowance(meter)
-            ));
+            result = runDailyJackpot(true, lvl, word, _phaseAllowance(meter));
             stage = STAGE_JACKPOT_DAILY_STARTED;
         }
         MineFlipGas.finish(meter);
@@ -502,12 +484,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         return MineFlipGas.child(meter, GasBounds.DAILY_PHASE_TAIL);
     }
 
-    function _runJackpotWork(bytes memory callData) private returns (MineFlipGas.Result memory) {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_JACKPOT_MODULE.delegatecall(callData);
-        if (!ok) _revertDelegate(data);
-        return abi.decode(data, (MineFlipGas.Result));
-    }
-
     /// @notice Terminal handling always precedes live-game mutations. Loan settlement owed by an
     ///         ending decided with VRF alive runs alone until every loan is settled.
     function runTerminalPhase(uint256 allowance) external returns (MineFlipGas.Result memory result) {
@@ -528,7 +504,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
     }
 
     /// @notice Fresh daily boundary only; the caller seals and sends in this same transaction.
-    function prepareRequestBoundary(uint24 day) external {
+    function prepareRequestBoundary(uint24 day) public {
         if (address(this) != ContractAddresses.GAME || !_lootboxReadComplete() || _livenessTriggered()
             || day != _afkingResetDay || day <= dailyIdx || !subsFullyProcessed) revert E();
         // Degenesis cohorts split and price before the request. Every cohort is split no later than
@@ -715,12 +691,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
         emit LevelDgnrsAllocated(lvl, levelAllocation);
     }
 
-    function _distributeYieldSurplus(uint256 rngWord) private {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_JACKPOT_MODULE
-            .delegatecall(abi.encodeWithSelector(IDegenerusGameJackpotModule.distributeYieldSurplus.selector, rngWord));
-        if (!ok) _revertDelegate(data);
-    }
-
     function _revertDelegate(bytes memory reason) private pure {
         if (reason.length == 0) revert EmptyRevert();
         assembly ("memory-safe") {
@@ -854,7 +824,7 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
                 p.future -= claimed;
                 p.claimable += claimed;
             } else {
-                jackpots.markBafSkipped(lvl);
+                advanceJackpots.markBafSkipped(lvl);
 
                 // Century BAF incinerator: level-x99 WWXRP burners bet on this
                 // exact skip. WWXRP draws one burn-weighted winner and credits
@@ -982,16 +952,6 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
             }
         }
         _unlockRng(day);
-    }
-
-    function _payDailyCoinJackpot(uint24 lvl, uint256 randWord, uint24 minLevel, uint24 maxLevel) private {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_JACKPOT_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameJackpotModule.payDailyFlipJackpot.selector, lvl, randWord, minLevel, maxLevel
-                )
-            );
-        if (!ok) _revertDelegate(data);
     }
 
     function _activateNextTickets() private returns (bool activated) {

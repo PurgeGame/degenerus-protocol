@@ -2,6 +2,7 @@
 pragma solidity 0.8.38;
 
 import {DegenerusGameJackpotDrawModule} from "../../contracts/modules/DegenerusGameJackpotDrawModule.sol";
+import {DegenerusGameDailyModule} from "../../contracts/modules/DegenerusGameDailyModule.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {
@@ -282,9 +283,9 @@ contract GoldenTicketFoilPack is Test {
         buyerId = h.registerWallet(BUYER);
 
         // The grand delegatecalls the real jackpot module in the Game's context.
-        DegenerusGameJackpotModule jm = new DegenerusGameJackpotModule();
+        DegenerusGameJackpotModule jm = new DegenerusGameDailyModule();
         vm.etch(ContractAddresses.GAME_JACKPOT_MODULE, address(jm).code);
-        vm.etch(ContractAddresses.GAME_JACKPOT_DRAW_MODULE, address(new DegenerusGameJackpotDrawModule()).code);
+        vm.etch(ContractAddresses.GAME_JACKPOT_DRAW_MODULE, address(new DegenerusGameDailyModule()).code);
 
         CoinflipRecorder fr = new CoinflipRecorder();
         vm.etch(ContractAddresses.COINFLIP, address(fr).code);

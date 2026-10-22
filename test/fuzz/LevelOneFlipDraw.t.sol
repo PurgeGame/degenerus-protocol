@@ -4,6 +4,7 @@ pragma solidity 0.8.38;
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJackpotModule.sol";
+import {DegenerusGameDailyModule} from "../../contracts/modules/DegenerusGameDailyModule.sol";
 import {DegenerusGameJackpotDrawModule} from "../../contracts/modules/DegenerusGameJackpotDrawModule.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -122,7 +123,7 @@ contract LevelOneFlipDrawTest is Test {
         // Advance records the level-one board before entering the FLIP leg.
         vm.prank(ContractAddresses.GAME);
         h.emitDailyWinningTraits(WORD);
-        vm.etch(ContractAddresses.GAME_JACKPOT_DRAW_MODULE, address(new DegenerusGameJackpotDrawModule()).code);
+        vm.etch(ContractAddresses.GAME_JACKPOT_DRAW_MODULE, address(new DegenerusGameDailyModule()).code);
         assertGt(ContractAddresses.GAME_JACKPOT_DRAW_MODULE.code.length, 0, "the delegated draw has code");
         vm.etch(ContractAddresses.COINFLIP, address(new FlipDrawCoinflipDouble()).code);
         vm.etch(ContractAddresses.CRAPS, address(new NoCrapsCallsDouble()).code);

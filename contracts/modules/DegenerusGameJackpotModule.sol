@@ -7,7 +7,6 @@ import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol
 
 import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 
-import {DegenerusGameJackpotDrawUtils} from "./DegenerusGameJackpotDrawUtils.sol";
 
 /*
  * TERMS OF INTERACTION — submitting a transaction to this contract accepts them.
@@ -32,8 +31,8 @@ import {DegenerusGameJackpotDrawUtils} from "./DegenerusGameJackpotDrawUtils.sol
  * Provided AS IS, without warranty of any kind. Full text: TERMS.md
  */
 
+import {DegenerusGameJackpotDrawModule} from "./DegenerusGameJackpotDrawModule.sol";
 import {IStETH} from "../interfaces/IStETH.sol";
-import {DegenerusGamePayoutUtils} from "./DegenerusGamePayoutUtils.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {PackedTicketSampleLib} from "../libraries/PackedTicketSampleLib.sol";
@@ -41,7 +40,7 @@ import {FlipRoundLib} from "../libraries/FlipRoundLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {JackpotBucketLib} from "../libraries/JackpotBucketLib.sol";
 import {TicketWorkPlan} from "../libraries/JackpotTicketPlan.sol";
-import {IDegenerusGameWhaleModule, IDegenerusGameJackpotDrawModule, IDegenerusGameTicketModule, IDegenerusGameDecimatorModule, DecimatorJackpotTerms} from "../interfaces/IDegenerusGameModules.sol";
+import {IDegenerusGameWhaleModule, IDegenerusGameTicketModule, IDegenerusGameDecimatorModule, DecimatorJackpotTerms} from "../interfaces/IDegenerusGameModules.sol";
 
 /**
  * @title DegenerusGameJackpotModule
@@ -73,7 +72,7 @@ import {IDegenerusGameWhaleModule, IDegenerusGameJackpotDrawModule, IDegenerusGa
  *      - EntropyLib.hash2 provides full-diffusion keccak derivation for sub-selections.
  *      - Winner selection intentionally allows duplicates (more tickets = more chances).
  */
-contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJackpotDrawUtils {
+abstract contract DegenerusGameJackpotModule is DegenerusGameJackpotDrawModule {
     // -------------------------------------------------------------------------
     // Errors
     // -------------------------------------------------------------------------
@@ -84,19 +83,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     // -------------------------------------------------------------------------
     // Events
     // -------------------------------------------------------------------------
-
-    /// @dev ETH jackpot win.
-    ///      traitId is uint16: values 0-255 are real trait IDs; values ≥256 are
-    ///      sentinels for non-trait sources (e.g. BAF_TRAIT_SENTINEL = 420).
-    event JackpotEthWin(
-        uint32 indexed walletId,
-        uint24 indexed level,
-        uint16 indexed traitId,
-        uint256 amount,
-        uint256 entryIndex
-    );
-
-
 
     /// @dev Emitted once per daily drawing with the day's one winning board.
     event DailyWinningTraits(uint24 indexed day, uint32 mainTraitsPacked);
@@ -119,30 +105,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
         uint24 indexed level,
         uint8 quadrant,
         uint8 symbol
-    );
-
-    /// @dev Golden-ticket payout. `route` names which of the two routes won:
-    ///      GOLDEN_TICKET_ROUTE_BOARD (0) is the cross-day board resolution — the draw
-    ///      after an armed 4-gold day pays the armed winner by this board's gold count,
-    ///      and `grand` is true when this board also rolled 4 golds AND repeated the
-    ///      armed quadrant's symbol (the hero is banned from the armed quadrant on this
-    ///      draw, so that symbol is the raw base roll). GOLDEN_TICKET_ROUTE_FOIL (1) is
-    ///      the foil-pack route — a pack whose drain rolled two all-gold tickets takes
-    ///      the grand outright, so `grand` is always true there. `goldCount` is the
-    ///      resolve board's gold count on the board route and the qualifying pack's gold
-    ///      quadrant count on the foil route. ethAmount moved futurePrizePool -> winner
-    ///      claimable; halfPassCount and flipCredit are face-value credits with no pool
-    ///      debit; wwxrpAmount is the 0-gold consolation, before WWXRP's gameMintScale.
-    event GoldenTicketWin(
-        uint32 indexed walletId,
-        uint24 indexed level,
-        uint8 route,
-        uint8 goldCount,
-        bool grand,
-        uint256 ethAmount,
-        uint256 halfPassCount,
-        uint256 flipCredit,
-        uint256 wwxrpAmount
     );
 
     // -------------------------------------------------------------------------
@@ -311,7 +273,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     /// @param randWord VRF entropy for winner selection and trait derivation.
     /// @param allowance Gas the call may spend before checkpointing.
     function runDailyJackpot(bool isJackpotPhase, uint24 lvl, uint256 randWord, uint256 allowance)
-        external returns (MineFlipGas.Result memory result)
+        public returns (MineFlipGas.Result memory result)
     {
         return _runDailyJackpot(isJackpotPhase, lvl, randWord, allowance);
     }
@@ -570,7 +532,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     /// @param word VRF entropy (the day's recorded word).
     /// @param allowance Gas the call may spend before checkpointing.
     function runPurchaseDailyTickets(uint256 word, uint256 allowance)
-        external returns (MineFlipGas.Result memory)
+        public returns (MineFlipGas.Result memory)
     {
         return _runTicketWork(4, word, allowance);
     }
@@ -587,7 +549,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     /// @param word VRF entropy (the day's recorded word, the one Phase 1 used).
     /// @param allowance Gas the call may spend before checkpointing.
     function runDailyJackpotTickets(uint256 word, uint256 allowance)
-        external returns (MineFlipGas.Result memory)
+        public returns (MineFlipGas.Result memory)
     {
         return _runTicketWork(6, word, allowance);
     }
@@ -625,7 +587,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     /// @param word VRF entropy (the day's recorded word).
     /// @param allowance Gas the call may spend before checkpointing.
     function runEarlyBirdTickets(uint256 word, uint256 allowance)
-        external returns (MineFlipGas.Result memory)
+        public returns (MineFlipGas.Result memory)
     {
         return _runTicketWork(5, word, allowance);
     }
@@ -783,7 +745,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     ///      signature carries the day's VRF word for delegatecall-shape stability;
     ///      the surplus split is deterministic and consumes no entropy.
     ///      23% each to sDGNRS, vault, and charity (GNRUS) claimable, 23% yield accumulator (~8% buffer).
-    function distributeYieldSurplus(uint256) external {
+    function distributeYieldSurplus(uint256) public {
         uint256 stBal = _boundedStethBalance();
         uint256 totalBal = address(this).balance + stBal;
         (uint128 nextPool, uint128 futurePool) = _getPrizePools();
@@ -1075,7 +1037,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
             (uint256(1) << 190) |
             (uint256(quadrant) << 191) |
             (uint256(dailyIdx) << 193);
-        _payGoldenTicket(
+        payGoldenTicket(
             uint32(g),
             lvl,
             GOLDEN_TICKET_ROUTE_BOARD,
@@ -1108,7 +1070,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
         uint8 golds
     ) external {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
-        _payGoldenTicket(winner, lvl, GOLDEN_TICKET_ROUTE_FOIL, golds, true);
+        payGoldenTicket(winner, lvl, GOLDEN_TICKET_ROUTE_FOIL, golds, true);
     }
 
     // =========================================================================
@@ -1175,23 +1137,6 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     // =========================================================================
     // Internal Helpers — Winner Resolution
     // =========================================================================
-
-    /// @dev Pays the golden-ticket ladder. On the board route the resolve board's gold
-    ///      count picks the rung; the foil route enters at `grand` directly (its
-    ///      `golds` is the pack's gold quadrant count, above every rung boundary, so it
-    ///      falls through to the grand branch). ETH rungs move futurePrizePool into
-    ///      the winner's claimable (the only real ETH leg); half-pass and flip-credit
-    ///      rungs are face-value credits with no pool debit — pass dilution is
-    ///      absorbed by future prize pools and the flip credit stakes the next day's
-    ///      coinflip. The grand pays 25% of futurePrizePool in ETH and denominates
-    ///      the rest of the headline (the three prize pools plus the yield accumulator —
-    ///      claimable is player money already owed and is excluded) 75% in half-passes at
-    ///      HALF_WHALE_PASS_PRICE and 25% in flip credit at the level's ticket rate.
-    function _payGoldenTicket(uint32 winner, uint24 lvl, uint8 route, uint8 golds, bool grand) private {
-        _delegateJackpotDraw(abi.encodeWithSelector(
-            IDegenerusGameJackpotDrawModule.payGoldenTicket.selector, winner, lvl, route, golds, grand
-        ));
-    }
 
     /// @dev Rolls a board off one VRF word: fully random base traits (6 bits per quadrant),
     ///      then the hero sampled by `_rollHeroSymbol` from the daily request's frozen wager
@@ -1318,30 +1263,9 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     /// @param randWord VRF entropy for the board and winner selection.
     /// @param minLevel Minimum target level for the coin distribution (inclusive).
     /// @param maxLevel Maximum target level for the coin distribution (inclusive).
-    function payDailyFlipJackpot(uint24 lvl, uint256 randWord, uint24 minLevel, uint24 maxLevel) external {
+    function payDailyFlipJackpot(uint24 lvl, uint256 randWord, uint24 minLevel, uint24 maxLevel) public {
         (, uint32 traits,) = _foilDrawFor(uint256(dailyIdx) + 1);
-        _delegateJackpotDraw(abi.encodeWithSelector(
-            IDegenerusGameJackpotDrawModule.awardDailyFlipJackpot.selector,
-            minLevel, maxLevel, traits, _calcDailyCoinBudget(lvl, level), randWord
-        ));
-    }
-
-    /// @notice One step of the daily jackpot battle, in either phase (see _playJackpotBattle).
-    /// @dev Awards are drawn from the far-future queues of [lvl + 1, lvl + 99]; the field and its
-    ///      Added were locked at the daily request.
-    ///      Signature: runPurchaseJackpotBattle(uint24 lvl, uint256 word, uint256 allowance) —
-    ///      the mint ceiling the draw's levels start above, the day's recorded VRF word, and the
-    ///      gas the call may spend; the calldata forwards as-is to the draw module.
-    function runPurchaseJackpotBattle(uint24, uint256, uint256)
-        external returns (MineFlipGas.Result memory)
-    {
-        return abi.decode(_delegateJackpotDraw(msg.data), (MineFlipGas.Result));
-    }
-
-    function _delegateJackpotDraw(bytes memory callData) private returns (bytes memory data) {
-        bool ok;
-        (ok, data) = ContractAddresses.GAME_JACKPOT_DRAW_MODULE.delegatecall(callData);
-        if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
+        awardDailyFlipJackpot(minLevel, maxLevel, traits, _calcDailyCoinBudget(lvl, level), randWord);
     }
 
     /// @notice Roll, record and emit level 1's purchase-day board without running any
@@ -1399,21 +1323,13 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
         return uint16(DAILY_CURRENT_BPS_MIN + (seed % range));
     }
 
-    /// @notice The BAF selection and its grouped award stage share the cold draw module.
-    function runBafJackpot(uint256, uint24, uint256) external returns (uint256 claimableDelta) {
-        if (msg.sender != address(this)) revert OnlySelf();
-        return abi.decode(_delegateJackpotDraw(msg.data), (uint256));
-    }
-
-    function runBafAwards(uint256 word, uint256 allowance) external returns (MineFlipGas.Result memory) {
+    function runBafAwards(uint256 word, uint256 allowance) public returns (MineFlipGas.Result memory) {
         // The same locked word, hero pool and golden-ticket ban feed the later main draw.
         // Both paths use this calculation, so BAF needs no separate board state or ordering.
         uint8[4] memory main = JackpotBucketLib.unpackWinningTraits(_rollMainTraits(word));
         uint8 solo = _pickSoloQuadrant(main, EntropyLib.hash2(word, level));
         uint8[3] memory traits;
         for (uint256 q; q < 3; ++q) traits[q] = main[q < solo ? q : q + 1];
-        return abi.decode(_delegateJackpotDraw(abi.encodeWithSelector(
-            IDegenerusGameJackpotDrawModule.runBafAwards.selector, word, allowance, traits
-        )), (MineFlipGas.Result));
+        return runBafAwards(word, allowance, traits);
     }
 }

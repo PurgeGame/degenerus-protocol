@@ -14,9 +14,10 @@ test-assurance-tools:
 # class of bug where an interface function is declared but never implemented,
 # causing silent staticcall reverts at the call site (see prior mintPackedFor
 # incident). Builds contracts first so forge inspect has fresh ABI data.
+# CHECK_ARTIFACTS may name a fresh standard-JSON artifact set from a separately gated build.
 check-interfaces:
-	@FOUNDRY_DISABLE_NIGHTLY_WARNING=1 forge build --skip test >/dev/null
-	@scripts/check-interface-coverage.sh
+	@if [ -z "$(CHECK_ARTIFACTS)" ]; then FOUNDRY_DISABLE_NIGHTLY_WARNING=1 forge build --skip test >/dev/null; fi
+	@CHECK_ARTIFACTS="$(CHECK_ARTIFACTS)" scripts/check-interface-coverage.sh
 
 # ── Delegatecall alignment gate ─────────────────────────────────────────
 # Verifies every interface-bound abi.encodeWithSelector(IFACE.fn.selector, ...)
@@ -91,8 +92,8 @@ check-gasleft:
 
 .PHONY: check-memory-guard
 check-memory-guard:
-	@FOUNDRY_DISABLE_NIGHTLY_WARNING=1 forge build --skip test >/dev/null
-	@python3 scripts/check-memory-guard.py
+	@if [ -z "$(CHECK_ARTIFACTS)" ]; then FOUNDRY_DISABLE_NIGHTLY_WARNING=1 forge build --skip test >/dev/null; fi
+	@python3 scripts/check-memory-guard.py $(CHECK_ARTIFACTS)
 
 # Compiler-AST source gate: every external, value, hook and assembly call is reviewed.
 .PHONY: check-recipient-calls

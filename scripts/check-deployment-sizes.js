@@ -33,7 +33,10 @@ for (const entry of entries) {
   const metadata = typeof artifact.metadata === 'string' ? JSON.parse(artifact.metadata) : artifact.metadata;
   if (!metadata?.sources) throw new Error(`${name}: source metadata missing`);
   for (const [file, expected] of Object.entries(metadata.sources)) {
-    if (!sourceHashes.has(file)) sourceHashes.set(file, keccak256(fs.readFileSync(file)));
+    if (!sourceHashes.has(file)) {
+      const sourcePath = fs.existsSync(file) ? file : path.join('node_modules', file);
+      sourceHashes.set(file, keccak256(fs.readFileSync(sourcePath)));
+    }
     if (sourceHashes.get(file) !== expected.keccak256) throw new Error(`${name}: stale source ${file}`);
   }
   function bytes(value) {

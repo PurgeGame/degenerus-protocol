@@ -16,6 +16,7 @@ import {DegenerusGameMinerModule} from "../../contracts/modules/DegenerusGameMin
 import {DegenerusGameRngModule} from "../../contracts/modules/DegenerusGameRngModule.sol";
 import {DegenerusGameMintModule} from "../../contracts/modules/DegenerusGameMintModule.sol";
 import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameAdvanceModule.sol";
+import {DegenerusGameDailyModule} from "../../contracts/modules/DegenerusGameDailyModule.sol";
 import {DegenerusGameWhaleModule} from "../../contracts/modules/DegenerusGameWhaleModule.sol";
 import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJackpotModule.sol";
 import {DegenerusGameDecimatorModule} from "../../contracts/modules/DegenerusGameDecimatorModule.sol";
@@ -76,9 +77,8 @@ abstract contract BoundedDeployProtocol is DeployProtocol {
             address[] memory players, bytes32[] memory refs) = _affiliateBootstrap();
         icons32 = Icons32Data(payable(deployCode("Icons32Data.sol:Icons32Data", abi.encode(false))));
         mintModule = DegenerusGameMintModule(payable(deployCode("DegenerusGameMintModule.sol:DegenerusGameMintModule", abi.encode())));
-        advanceModule = DegenerusGameAdvanceModule(payable(deployCode("DegenerusGameAdvanceModule.sol:DegenerusGameAdvanceModule", abi.encode())));
+        dailyModule = DegenerusGameDailyModule(payable(deployCode("DegenerusGameDailyModule.sol:DegenerusGameDailyModule", abi.encode())));
         whaleModule = DegenerusGameWhaleModule(payable(deployCode("DegenerusGameWhaleModule.sol:DegenerusGameWhaleModule", abi.encode())));
-        jackpotModule = DegenerusGameJackpotModule(payable(deployCode("DegenerusGameJackpotModule.sol:DegenerusGameJackpotModule", abi.encode())));
         decimatorModule = DegenerusGameDecimatorModule(payable(deployCode("DegenerusGameDecimatorModule.sol:DegenerusGameDecimatorModule", abi.encode())));
         gameOverModule = DegenerusGameGameOverModule(payable(deployCode("DegenerusGameGameOverModule.sol:DegenerusGameGameOverModule", abi.encode())));
         boxModule = DegenerusGameBoxModule(payable(deployCode("DegenerusGameBoxModule.sol:DegenerusGameBoxModule", abi.encode())));
@@ -105,10 +105,12 @@ abstract contract BoundedDeployProtocol is DeployProtocol {
         jackpotBattle = JackpotBattle(payable(deployCode("JackpotBattle.sol:JackpotBattle", abi.encode())));
         wwxrp = WWXRP(payable(deployCode("WWXRP.sol:WWXRP", abi.encode())));
         minerModule = DegenerusGameMinerModule(payable(deployCode("DegenerusGameMinerModule.sol:DegenerusGameMinerModule", abi.encode())));
-        rngModule = DegenerusGameRngModule(payable(deployCode("DegenerusGameRngModule.sol:DegenerusGameRngModule", abi.encode())));
-        jackpotDrawModule = DegenerusGameJackpotDrawModule(payable(deployCode("DegenerusGameJackpotDrawModule.sol:DegenerusGameJackpotDrawModule", abi.encode())));
         degenesisModule = DegenerusGameDegenesisModule(payable(deployCode("DegenerusGameDegenesisModule.sol:DegenerusGameDegenesisModule", abi.encode())));
         ownerGovernance = DegenerusOwnerGovernance(payable(deployCode("DegenerusOwnerGovernance.sol:DegenerusOwnerGovernance", abi.encode())));
+        advanceModule = DegenerusGameAdvanceModule(payable(address(dailyModule)));
+        jackpotModule = DegenerusGameJackpotModule(payable(address(dailyModule)));
+        rngModule = DegenerusGameRngModule(payable(address(dailyModule)));
+        jackpotDrawModule = DegenerusGameJackpotDrawModule(payable(address(dailyModule)));
         lootboxModule = DegenerusGameLootboxModule(payable(address(boxModule)));
         boonModule = DegenerusGameBoonModule(payable(address(boxModule)));
         degeneretteModule = DegenerusGameDegeneretteModule(payable(address(boxModule)));

@@ -7,6 +7,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {DecimatorJackpotHarness} from "../fuzz/DecimatorJackpotIntegration.t.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
 import {DegenerusGameMinerModule} from "../../contracts/modules/DegenerusGameMinerModule.sol";
+import {DegenerusGameDailyModule} from "../../contracts/modules/DegenerusGameDailyModule.sol";
 import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameAdvanceModule.sol";
 import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJackpotModule.sol";
 import {DegenerusGameDecimatorModule} from "../../contracts/modules/DegenerusGameDecimatorModule.sol";
@@ -152,8 +153,8 @@ contract DecimatorJackpotGasTest is Test {
         vm.fee(1 gwei);
         vm.etch(ContractAddresses.GAME, type(DecimatorGasHost).runtimeCode);
         vm.etch(ContractAddresses.GAME_MINER_MODULE, type(DegenerusGameMinerModule).runtimeCode);
-        vm.etch(ContractAddresses.GAME_ADVANCE_MODULE, type(DegenerusGameAdvanceModule).runtimeCode);
-        vm.etch(ContractAddresses.GAME_JACKPOT_MODULE, type(DegenerusGameJackpotModule).runtimeCode);
+        vm.etch(ContractAddresses.GAME_ADVANCE_MODULE, type(DegenerusGameDailyModule).runtimeCode);
+        vm.etch(ContractAddresses.GAME_JACKPOT_MODULE, type(DegenerusGameDailyModule).runtimeCode);
         vm.etch(ContractAddresses.GAME_DECIMATOR_MODULE, type(DegenerusGameDecimatorModule).runtimeCode);
         vm.etch(ContractAddresses.GAME_WHALE_MODULE, type(DegenerusGameWhaleModule).runtimeCode);
         vm.etch(ContractAddresses.GAME_TICKET_MODULE, type(DegenerusGameTicketModule).runtimeCode);

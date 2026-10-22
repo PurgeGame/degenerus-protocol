@@ -13,6 +13,9 @@ import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 import {GameAfkingModule} from "../../contracts/modules/GameAfkingModule.sol";
 import {DegenerusGameBoonModule} from "../../contracts/modules/DegenerusGameBoonModule.sol";
 import {DegenerusGameDegeneretteModule} from "../../contracts/modules/DegenerusGameDegeneretteModule.sol";
+import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJackpotModule.sol";
+import {DegenerusGameJackpotDrawModule} from "../../contracts/modules/DegenerusGameJackpotDrawModule.sol";
+import {DegenerusGameRngModule} from "../../contracts/modules/DegenerusGameRngModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @dev Run twice with DIFFERENTIAL_BASELINE=true/false; compare named observations with compare-replay.js.
@@ -72,6 +75,12 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
                 if (moduleName == keccak256("DegenerusGameBoonModule")) boonModule = DegenerusGameBoonModule(target);
                 if (moduleName == keccak256("DegenerusGameDegeneretteModule")) degeneretteModule = DegenerusGameDegeneretteModule(target);
             }
+        }
+        if (vm.envOr("DIFFERENTIAL_DAILY_BASELINE", false)) {
+            require(bytes(overrideFile).length != 0, "daily baseline requires runtime overrides");
+            jackpotModule = DegenerusGameJackpotModule(address(0x4001));
+            jackpotDrawModule = DegenerusGameJackpotDrawModule(address(0x4002));
+            rngModule = DegenerusGameRngModule(address(0x4003));
         }
         replayModules.push(address(mintModule)); replayModules.push(address(boonModule));
         replayModules.push(address(lootboxModule)); replayModules.push(address(afkingModule));
@@ -133,13 +142,14 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
     {
         vm.pauseGasMetering();
         ++censusSeq;
-        if (keccak256(bytes(label)) == keccak256("mineFlip")) {
-            label = string.concat(label, ":", vm.toString(uint256(game.nextMinerAction())));
+        if (to == address(game) && data.length >= 4 && bytes4(data) == game.mineFlip.selector) {
+            vm.prank(from, from);
+            label = string.concat(label, ":", vm.toString(game.nextMinerAction()));
         }
         // Equal account warmth in both executions. Foundry does not reset SSTORE original values.
         for (uint256 i; i < observed.length; ++i) vm.cool(observed[i]);
         for (uint256 i; i < replayModules.length; ++i) vm.cool(replayModules[i]);
-        if (warm) _warmInputs(from, to, value, data);
+        if (warm) this.warmInputs(from, to, value, data);
         vm.recordLogs();
         vm.startStateDiffRecording();
         vm.prank(from, from);
@@ -247,7 +257,9 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
         super._censusEnd();
     }
 
-    function _warmInputs(address from, address to, uint256 value, bytes memory data) private {
+    /// @dev A fresh frame bounds access-record memory across long warm replays.
+    function warmInputs(address from, address to, uint256 value, bytes calldata data) external {
+        require(msg.sender == address(this));
         uint256 snapshot = vm.snapshotState();
         vm.startStateDiffRecording();
         vm.prank(from, from);
@@ -264,6 +276,43 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
             }
         }
         ok; // The measured call must preserve both success and revert cases.
+    }
+
+    function testFocusedDaily() public { _focusedDaily(false); }
+    function testWarmDaily() public { _focusedDaily(true); }
+
+    function _focusedDaily(bool warm_) private {
+        warm = warm_;
+        vm.pauseGasMetering();
+        _censusBegin("daily-focused");
+        _playDeployDay();
+        for (uint256 day = 1; day <= 7; ++day) _degenesisDay(day);
+        uint24 end = GameTimeLib.MAIN_LAUNCH_DAY + 12;
+        for (uint24 day = GameTimeLib.MAIN_LAUNCH_DAY; day < end; ++day) {
+            _warpDay(day, 7200);
+            _crank(1000 + day);
+            if (game.level() < 2 && !game.jackpotPhase()) {
+                uint256 target = game.prizePoolTargetView() + 1;
+                uint256 nextPool = game.nextPrizePoolView();
+                if (nextPool < target) {
+                    // Seed a funded transition threshold for this bounded ticket fixture.
+                    bytes32 slot = bytes32(GameSlots.PRIZE_POOLS_PACKED);
+                    uint256 pools = uint256(vm.load(address(game), slot));
+                    vm.store(address(game), slot, bytes32((pools & ~uint256(type(uint128).max)) | target));
+                    vm.deal(address(game), address(game).balance + target - nextPool);
+                }
+            }
+            _buy("daily-ticket-purchase", cast[day % cast.length], 40_000, 0,
+                MintPaymentKind.DirectEth, game.mintPrice() * 100);
+            _crank(2000 + day);
+        }
+        assertGt(game.level(), 1, "daily scenario crosses purchase and jackpot phases");
+        for (uint24 day = end; day < end + 60 && !game.gameOver(); ++day) {
+            _warpDay(day, 7200);
+            _crank(9000 + day);
+        }
+        assertTrue(game.gameOver(), "responsive VRF reaches terminal settlement");
+        _censusEnd();
     }
 
     function testFocusedPurchases() public { _focusedPurchases(false); }

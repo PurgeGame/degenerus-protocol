@@ -22,8 +22,8 @@ interface IJackpotBattleMeter {
 }
 
 /// @notice Frozen daily FLIP draws and the separately metered jackpot-battle field.
-/// @dev Delegate-called by JackpotModule; uses the same GAME storage and session.
-contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGameJackpotDrawUtils {
+/// @dev Shared daily-bundle component; uses the GAME storage and session.
+abstract contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGameJackpotDrawUtils {
     uint256 private constant GOLDEN_TICKET_WWXRP = 100;
     event GoldenTicketWin(
         uint32 indexed walletId,
@@ -43,7 +43,7 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
         uint8 route,
         uint8 golds,
         bool grand
-    ) external {
+    ) public {
         uint256 ethAward;
         uint256 halfPasses;
         uint256 flipValueWei;
@@ -154,12 +154,12 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
     event JackpotFlipWin(uint32 indexed walletId, uint24 indexed level, uint8 indexed traitId,
         uint256 amount, uint256 entryIndex);
 
-    function awardDailyFlipJackpot(uint24 minLevel, uint24 maxLevel, uint32 traits, uint256 budget, uint256 word) external {
+    function awardDailyFlipJackpot(uint24 minLevel, uint24 maxLevel, uint32 traits, uint256 budget, uint256 word) public {
         _awardDailyCoinToTraitWinners(minLevel, maxLevel, traits, budget, word);
     }
 
     function runPurchaseJackpotBattle(uint24 lvl, uint256 word, uint256 allowance)
-        external returns (MineFlipGas.Result memory)
+        public returns (MineFlipGas.Result memory)
     {
         return _runPurchaseJackpotBattle(lvl, word, allowance);
     }
@@ -436,7 +436,7 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
         uint256 poolWei,
         uint24 lvl,
         uint256
-    ) external returns (uint256 claimableDelta) {
+    ) public returns (uint256 claimableDelta) {
         if (msg.sender != address(this)) revert OnlySelf();
         // BAF levels are even. Prepare both buffers once, including empty levels, so
         // the sampler can use its current/next flag directly without stale tickets.
@@ -471,8 +471,8 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
     ///      `work.paid` tracks the reserved ETH not yet credited; the last group returns what no
     ///      candidate took to the pending future pool, closes the bracket and retires the work
     ///      record. The game-over latch releases the reservation instead.
-    function runBafAwards(uint256 word, uint256 allowance, uint8[3] calldata traits)
-        external returns (MineFlipGas.Result memory result)
+    function runBafAwards(uint256 word, uint256 allowance, uint8[3] memory traits)
+        public returns (MineFlipGas.Result memory result)
     {
         MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
         JackpotWork storage work = jackpotWork;
@@ -531,7 +531,7 @@ contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, DegenerusGa
     }
 
     /// @dev Draw and record each near-level pair once, when its first award executes.
-    function _drawBafPair(JackpotWork storage work, uint256 word, uint256 i, uint8[3] calldata traits)
+    function _drawBafPair(JackpotWork storage work, uint256 word, uint256 i, uint8[3] memory traits)
         private returns (uint32[4] memory winners)
     {
         uint256 rounds = (work.traits - 3) / 2;

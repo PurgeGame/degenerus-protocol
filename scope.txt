@@ -72,6 +72,7 @@ contracts/libraries/TicketEntropy.sol
 contracts/libraries/VaultPlayerActions.sol
 contracts/libraries/WalletTableLib.sol
 contracts/modules/DegenerusGameAdvanceModule.sol
+contracts/modules/DegenerusGameDailyModule.sol
 contracts/modules/DegenerusGameBingoModule.sol
 contracts/modules/DegenerusGameBoonModule.sol
 contracts/modules/DegenerusGameDecimatorModule.sol

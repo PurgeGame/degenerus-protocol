@@ -6723,7 +6723,7 @@
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule._consolidatePoolsAndRewardJackpots",
     "kind": "external",
-    "expression": "jackpots.markBafSkipped(lvl)",
+    "expression": "advanceJackpots.markBafSkipped(lvl)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -6734,14 +6734,6 @@
     "expression": "wwxrpIncinerator.resolveIncinerator(lvl, rngWord)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
-    "scope": "DegenerusGameAdvanceModule._distributeYieldSurplus",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_JACKPOT_MODULE .delegatecall(abi.encodeWithSelector(IDegenerusGameJackpotModule.distributeYieldSurplus.selector, rngWord))",
-    "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
@@ -6766,14 +6758,6 @@
     "expression": "_unlockRng(day)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
-    "scope": "DegenerusGameAdvanceModule._payDailyCoinJackpot",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_JACKPOT_MODULE .delegatecall( abi.encodeWithSelector( IDegenerusGameJackpotModule.payDailyFlipJackpot.selector, lvl, randWord, minLevel, maxLevel ) )",
-    "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
@@ -6814,14 +6798,6 @@
     "expression": "dgnrs.transferFromPool(IsDGNRS.Pool.Affiliate, top, dgnrsReward)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
-    "scope": "DegenerusGameAdvanceModule._runJackpotWork",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_JACKPOT_MODULE.delegatecall(callData)",
-    "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
@@ -7051,14 +7027,6 @@
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule.runDailyPhase",
     "kind": "recipient-helper",
-    "expression": "_distributeYieldSurplus(word)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
-    "scope": "DegenerusGameAdvanceModule.runDailyPhase",
-    "kind": "recipient-helper",
     "expression": "_endPhase(lvl)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
@@ -7067,79 +7035,7 @@
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule.runDailyPhase",
     "kind": "recipient-helper",
-    "expression": "_payDailyCoinJackpot(1, word, 1, 1)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
-    "scope": "DegenerusGameAdvanceModule.runDailyPhase",
-    "kind": "recipient-helper",
     "expression": "_processPhaseTransition(purchaseLevel)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
-    "scope": "DegenerusGameAdvanceModule.runDailyPhase",
-    "kind": "recipient-helper",
-    "expression": "_runJackpotWork(abi.encodeWithSelector( IDegenerusGameJackpotModule.runBafAwards.selector, word, _phaseAllowance(meter) ))",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
-    "scope": "DegenerusGameAdvanceModule.runDailyPhase",
-    "kind": "recipient-helper",
-    "expression": "_runJackpotWork(abi.encodeWithSelector( IDegenerusGameJackpotModule.runDailyJackpot.selector, false, purchaseLevel, word, MineFlipGas.child(meter, sealTail) ))",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
-    "scope": "DegenerusGameAdvanceModule.runDailyPhase",
-    "kind": "recipient-helper",
-    "expression": "_runJackpotWork(abi.encodeWithSelector( IDegenerusGameJackpotModule.runDailyJackpot.selector, inJackpot, inJackpot ? lvl : purchaseLevel, word, MineFlipGas.child(meter, sealTail) ))",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
-    "scope": "DegenerusGameAdvanceModule.runDailyPhase",
-    "kind": "recipient-helper",
-    "expression": "_runJackpotWork(abi.encodeWithSelector( IDegenerusGameJackpotModule.runDailyJackpot.selector, true, lvl, word, _phaseAllowance(meter) ))",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
-    "scope": "DegenerusGameAdvanceModule.runDailyPhase",
-    "kind": "recipient-helper",
-    "expression": "_runJackpotWork(abi.encodeWithSelector( IDegenerusGameJackpotModule.runDailyJackpotTickets.selector, word, _phaseAllowance(meter) ))",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
-    "scope": "DegenerusGameAdvanceModule.runDailyPhase",
-    "kind": "recipient-helper",
-    "expression": "_runJackpotWork(abi.encodeWithSelector( IDegenerusGameJackpotModule.runEarlyBirdTickets.selector, word, _phaseAllowance(meter) ))",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
-    "scope": "DegenerusGameAdvanceModule.runDailyPhase",
-    "kind": "recipient-helper",
-    "expression": "_runJackpotWork(abi.encodeWithSelector( IDegenerusGameJackpotModule.runPurchaseDailyTickets.selector, word, MineFlipGas.child(meter, sealTail) ))",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
-    "scope": "DegenerusGameAdvanceModule.runDailyPhase",
-    "kind": "recipient-helper",
-    "expression": "_runJackpotWork(abi.encodeWithSelector( IDegenerusGameJackpotModule.runPurchaseJackpotBattle.selector, _mintCeiling(), word, _phaseAllowance(meter) ))",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
@@ -7166,6 +7062,86 @@
     "expression": "_unlockRng(day)",
     "count": 3,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
+    "scope": "DegenerusGameAdvanceModule.runDailyPhase",
+    "kind": "recipient-helper",
+    "expression": "distributeYieldSurplus(word)",
+    "count": 1,
+    "review": "Internal daily-bundle forwarding to the existing guarded jackpot/draw body in Game storage; caller/value and frozen word are preserved. Ticket and Decimator gas caps, external-state calls, and payout/cursor checkpoints remain in the implementation."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
+    "scope": "DegenerusGameAdvanceModule.runDailyPhase",
+    "kind": "recipient-helper",
+    "expression": "payDailyFlipJackpot(1, word, 1, 1)",
+    "count": 1,
+    "review": "Internal daily-bundle forwarding to the existing guarded jackpot/draw body in Game storage; caller/value and frozen word are preserved. Ticket and Decimator gas caps, external-state calls, and payout/cursor checkpoints remain in the implementation."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
+    "scope": "DegenerusGameAdvanceModule.runDailyPhase",
+    "kind": "recipient-helper",
+    "expression": "runBafAwards(word, _phaseAllowance(meter))",
+    "count": 1,
+    "review": "Internal daily-bundle forwarding to the existing guarded jackpot/draw body in Game storage; caller/value and frozen word are preserved. Ticket and Decimator gas caps, external-state calls, and payout/cursor checkpoints remain in the implementation."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
+    "scope": "DegenerusGameAdvanceModule.runDailyPhase",
+    "kind": "recipient-helper",
+    "expression": "runDailyJackpot(false, purchaseLevel, word, MineFlipGas.child(meter, sealTail))",
+    "count": 1,
+    "review": "Internal daily-bundle forwarding to the existing guarded jackpot/draw body in Game storage; caller/value and frozen word are preserved. Ticket and Decimator gas caps, external-state calls, and payout/cursor checkpoints remain in the implementation."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
+    "scope": "DegenerusGameAdvanceModule.runDailyPhase",
+    "kind": "recipient-helper",
+    "expression": "runDailyJackpot(inJackpot, inJackpot ? lvl : purchaseLevel, word, MineFlipGas.child(meter, sealTail))",
+    "count": 1,
+    "review": "Internal daily-bundle forwarding to the existing guarded jackpot/draw body in Game storage; caller/value and frozen word are preserved. Ticket and Decimator gas caps, external-state calls, and payout/cursor checkpoints remain in the implementation."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
+    "scope": "DegenerusGameAdvanceModule.runDailyPhase",
+    "kind": "recipient-helper",
+    "expression": "runDailyJackpot(true, lvl, word, _phaseAllowance(meter))",
+    "count": 1,
+    "review": "Internal daily-bundle forwarding to the existing guarded jackpot/draw body in Game storage; caller/value and frozen word are preserved. Ticket and Decimator gas caps, external-state calls, and payout/cursor checkpoints remain in the implementation."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
+    "scope": "DegenerusGameAdvanceModule.runDailyPhase",
+    "kind": "recipient-helper",
+    "expression": "runDailyJackpotTickets(word, _phaseAllowance(meter))",
+    "count": 1,
+    "review": "Internal daily-bundle forwarding to the existing guarded jackpot/draw body in Game storage; caller/value and frozen word are preserved. Ticket and Decimator gas caps, external-state calls, and payout/cursor checkpoints remain in the implementation."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
+    "scope": "DegenerusGameAdvanceModule.runDailyPhase",
+    "kind": "recipient-helper",
+    "expression": "runEarlyBirdTickets(word, _phaseAllowance(meter))",
+    "count": 1,
+    "review": "Internal daily-bundle forwarding to the existing guarded jackpot/draw body in Game storage; caller/value and frozen word are preserved. Ticket and Decimator gas caps, external-state calls, and payout/cursor checkpoints remain in the implementation."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
+    "scope": "DegenerusGameAdvanceModule.runDailyPhase",
+    "kind": "recipient-helper",
+    "expression": "runPurchaseDailyTickets(word, MineFlipGas.child(meter, sealTail))",
+    "count": 1,
+    "review": "Internal daily-bundle forwarding to the existing guarded jackpot/draw body in Game storage; caller/value and frozen word are preserved. Ticket and Decimator gas caps, external-state calls, and payout/cursor checkpoints remain in the implementation."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
+    "scope": "DegenerusGameAdvanceModule.runDailyPhase",
+    "kind": "recipient-helper",
+    "expression": "runPurchaseJackpotBattle(_mintCeiling(), word, _phaseAllowance(meter))",
+    "count": 1,
+    "review": "Internal daily-bundle forwarding to the existing guarded jackpot/draw body in Game storage; caller/value and frozen word are preserved. Ticket and Decimator gas caps, external-state calls, and payout/cursor checkpoints remain in the implementation."
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
@@ -8417,14 +8393,6 @@
   },
   {
     "path": "contracts/modules/DegenerusGameJackpotModule.sol",
-    "scope": "DegenerusGameJackpotModule._delegateJackpotDraw",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_JACKPOT_DRAW_MODULE.delegatecall(callData)",
-    "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameJackpotModule.sol",
     "scope": "DegenerusGameJackpotModule._payEthQuadrant",
     "kind": "recipient-helper",
     "expression": "_awardWhalePass(lvl, trait, passShare, seed, false)",
@@ -8433,19 +8401,11 @@
   },
   {
     "path": "contracts/modules/DegenerusGameJackpotModule.sol",
-    "scope": "DegenerusGameJackpotModule._payGoldenTicket",
-    "kind": "recipient-helper",
-    "expression": "_delegateJackpotDraw(abi.encodeWithSelector( IDegenerusGameJackpotDrawModule.payGoldenTicket.selector, winner, lvl, route, golds, grand ))",
-    "count": 1,
-    "review": "PROTOCOL: own JackpotDraw module delegation for the moved golden-ticket payout; alignment gate tracks the selector."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameJackpotModule.sol",
     "scope": "DegenerusGameJackpotModule._resolveGoldenTicket",
     "kind": "recipient-helper",
-    "expression": "_payGoldenTicket( uint32(g), lvl, GOLDEN_TICKET_ROUTE_BOARD, golds, grand )",
+    "expression": "payGoldenTicket( uint32(g), lvl, GOLDEN_TICKET_ROUTE_BOARD, golds, grand )",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "Internal daily-bundle forwarding to the existing guarded jackpot/draw body in Game storage; caller/value and frozen word are preserved. Ticket and Decimator gas caps, external-state calls, and payout/cursor checkpoints remain in the implementation."
   },
   {
     "path": "contracts/modules/DegenerusGameJackpotModule.sol",
@@ -8539,33 +8499,25 @@
     "path": "contracts/modules/DegenerusGameJackpotModule.sol",
     "scope": "DegenerusGameJackpotModule.payDailyFlipJackpot",
     "kind": "recipient-helper",
-    "expression": "_delegateJackpotDraw(abi.encodeWithSelector( IDegenerusGameJackpotDrawModule.awardDailyFlipJackpot.selector, minLevel, maxLevel, traits, _calcDailyCoinBudget(lvl, level), randWord ))",
+    "expression": "awardDailyFlipJackpot(minLevel, maxLevel, traits, _calcDailyCoinBudget(lvl, level), randWord)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "Internal daily-bundle forwarding to the existing guarded jackpot/draw body in Game storage; caller/value and frozen word are preserved. Ticket and Decimator gas caps, external-state calls, and payout/cursor checkpoints remain in the implementation."
   },
   {
     "path": "contracts/modules/DegenerusGameJackpotModule.sol",
     "scope": "DegenerusGameJackpotModule.payGoldenTicketGrand",
     "kind": "recipient-helper",
-    "expression": "_payGoldenTicket(winner, lvl, GOLDEN_TICKET_ROUTE_FOIL, golds, true)",
+    "expression": "payGoldenTicket(winner, lvl, GOLDEN_TICKET_ROUTE_FOIL, golds, true)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "Internal daily-bundle forwarding to the existing guarded jackpot/draw body in Game storage; caller/value and frozen word are preserved. Ticket and Decimator gas caps, external-state calls, and payout/cursor checkpoints remain in the implementation."
   },
   {
     "path": "contracts/modules/DegenerusGameJackpotModule.sol",
     "scope": "DegenerusGameJackpotModule.runBafAwards",
     "kind": "recipient-helper",
-    "expression": "_delegateJackpotDraw(abi.encodeWithSelector( IDegenerusGameJackpotDrawModule.runBafAwards.selector, word, allowance, traits ))",
+    "expression": "runBafAwards(word, allowance, traits)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameJackpotModule.sol",
-    "scope": "DegenerusGameJackpotModule.runBafJackpot",
-    "kind": "recipient-helper",
-    "expression": "_delegateJackpotDraw(msg.data)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "Internal daily-bundle forwarding to the existing guarded jackpot/draw body in Game storage; caller/value and frozen word are preserved. Ticket and Decimator gas caps, external-state calls, and payout/cursor checkpoints remain in the implementation."
   },
   {
     "path": "contracts/modules/DegenerusGameJackpotModule.sol",
@@ -8596,14 +8548,6 @@
     "scope": "DegenerusGameJackpotModule.runPurchaseDailyTickets",
     "kind": "recipient-helper",
     "expression": "_runTicketWork(4, word, allowance)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameJackpotModule.sol",
-    "scope": "DegenerusGameJackpotModule.runPurchaseJackpotBattle",
-    "kind": "recipient-helper",
-    "expression": "_delegateJackpotDraw(msg.data)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
@@ -9114,14 +9058,6 @@
   {
     "path": "contracts/modules/DegenerusGameRngModule.sol",
     "scope": "DegenerusGameRngModule.requestDailyRng",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_ADVANCE_MODULE.delegatecall( abi.encodeWithSelector(IDegenerusGameAdvanceModule.prepareRequestBoundary.selector, day) )",
-    "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameRngModule.sol",
-    "scope": "DegenerusGameRngModule.requestDailyRng",
     "kind": "recipient-helper",
     "expression": "_minerMaintenancePending()",
     "count": 1,
@@ -9142,6 +9078,14 @@
     "expression": "_sealRngWriteBuffer()",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameRngModule.sol",
+    "scope": "DegenerusGameRngModule.requestDailyRng",
+    "kind": "recipient-helper",
+    "expression": "prepareRequestBoundary(day)",
+    "count": 1,
+    "review": "Internal daily-bundle request preparation; existing Game-context, sealed-read, day and liveness guards remain. Degenesis, Craps and recipient-owning external calls keep their frames; any failure rolls back the request atomically."
   },
   {
     "path": "contracts/modules/DegenerusGameRngModule.sol",

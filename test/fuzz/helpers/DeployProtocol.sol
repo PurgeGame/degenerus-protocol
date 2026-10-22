@@ -15,6 +15,7 @@ import {DegenerusGameMinerModule} from "../../../contracts/modules/DegenerusGame
 import {DegenerusGameRngModule} from "../../../contracts/modules/DegenerusGameRngModule.sol";
 import {DegenerusGameMintModule} from "../../../contracts/modules/DegenerusGameMintModule.sol";
 import {DegenerusGameAdvanceModule} from "../../../contracts/modules/DegenerusGameAdvanceModule.sol";
+import {DegenerusGameDailyModule} from "../../../contracts/modules/DegenerusGameDailyModule.sol";
 import {DegenerusGameWhaleModule} from "../../../contracts/modules/DegenerusGameWhaleModule.sol";
 import {DegenerusGameJackpotModule} from "../../../contracts/modules/DegenerusGameJackpotModule.sol";
 import {DegenerusGameDecimatorModule} from "../../../contracts/modules/DegenerusGameDecimatorModule.sol";
@@ -107,6 +108,7 @@ abstract contract DeployProtocol is Test {
     DegenerusGameRngModule public rngModule;
     DegenerusGameJackpotDrawModule public jackpotDrawModule;
     DegenerusGameDegenesisModule public degenesisModule;
+    DegenerusGameDailyModule internal dailyModule;
     DegenerusGameAdvanceModule public advanceModule;
     DegenerusGameWhaleModule public whaleModule;
     DegenerusGameJackpotModule public jackpotModule;
@@ -333,9 +335,8 @@ abstract contract DeployProtocol is Test {
             address[] memory players, bytes32[] memory refs) = _affiliateBootstrap();
         icons32 = new Icons32Data(false);
         mintModule = new DegenerusGameMintModule();
-        advanceModule = new DegenerusGameAdvanceModule();
+        dailyModule = new DegenerusGameDailyModule();
         whaleModule = new DegenerusGameWhaleModule();
-        jackpotModule = new DegenerusGameJackpotModule();
         decimatorModule = new DegenerusGameDecimatorModule();
         gameOverModule = new DegenerusGameGameOverModule();
         boxModule = new DegenerusGameBoxModule();
@@ -362,10 +363,12 @@ abstract contract DeployProtocol is Test {
         jackpotBattle = new JackpotBattle();
         wwxrp = new WWXRP();
         minerModule = new DegenerusGameMinerModule();
-        rngModule = new DegenerusGameRngModule();
-        jackpotDrawModule = new DegenerusGameJackpotDrawModule();
         degenesisModule = new DegenerusGameDegenesisModule();
         ownerGovernance = new DegenerusOwnerGovernance();
+        advanceModule = DegenerusGameAdvanceModule(payable(address(dailyModule)));
+        jackpotModule = DegenerusGameJackpotModule(payable(address(dailyModule)));
+        rngModule = DegenerusGameRngModule(payable(address(dailyModule)));
+        jackpotDrawModule = DegenerusGameJackpotDrawModule(payable(address(dailyModule)));
         lootboxModule = DegenerusGameLootboxModule(payable(address(boxModule)));
         boonModule = DegenerusGameBoonModule(payable(address(boxModule)));
         degeneretteModule = DegenerusGameDegeneretteModule(payable(address(boxModule)));

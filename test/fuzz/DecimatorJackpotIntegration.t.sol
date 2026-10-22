@@ -4,6 +4,7 @@ pragma solidity 0.8.38;
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGameDecimatorModule} from "../../contracts/modules/DegenerusGameDecimatorModule.sol";
+import {DegenerusGameDailyModule} from "../../contracts/modules/DegenerusGameDailyModule.sol";
 import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJackpotModule.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
@@ -136,7 +137,7 @@ contract DecimatorJackpotIntegrationTest is Test {
     function setUp() public {
         vm.warp(uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621);
         vm.etch(ContractAddresses.GAME, type(DecimatorJackpotHarness).runtimeCode);
-        vm.etch(ContractAddresses.GAME_JACKPOT_MODULE, type(DegenerusGameJackpotModule).runtimeCode);
+        vm.etch(ContractAddresses.GAME_JACKPOT_MODULE, type(DegenerusGameDailyModule).runtimeCode);
         vm.etch(ContractAddresses.GAME_DECIMATOR_MODULE, type(DegenerusGameDecimatorModule).runtimeCode);
         vm.etch(ContractAddresses.GAME_WHALE_MODULE, type(DegenerusGameWhaleModule).runtimeCode);
         vm.etch(ContractAddresses.CRAPS_ENGINE, type(DecimatorJackpotEngineProbe).runtimeCode);

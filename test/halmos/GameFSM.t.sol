@@ -3,6 +3,7 @@ pragma solidity 0.8.38;
 
 import "forge-std/Test.sol";
 import {DegenerusGameMinerModule} from "../../contracts/modules/DegenerusGameMinerModule.sol";
+import {DegenerusGameDailyModule} from "../../contracts/modules/DegenerusGameDailyModule.sol";
 import {DegenerusGameRngModule} from "../../contracts/modules/DegenerusGameRngModule.sol";
 import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameAdvanceModule.sol";
 import {DegenerusGameGameOverModule} from "../../contracts/modules/DegenerusGameGameOverModule.sol";
@@ -215,8 +216,8 @@ contract GameFSMProductionTransitionTest is Test {
         vm.etch(address(machine), type(FSMAdvanceHarness).runtimeCode);
         vm.deal(address(machine), 0);
         vm.etch(ContractAddresses.GAME_GAMEOVER_MODULE, type(DegenerusGameGameOverModule).runtimeCode);
-        vm.etch(ContractAddresses.GAME_ADVANCE_MODULE, type(DegenerusGameAdvanceModule).runtimeCode);
-        vm.etch(ContractAddresses.GAME_RNG_MODULE, type(DegenerusGameRngModule).runtimeCode);
+        vm.etch(ContractAddresses.GAME_ADVANCE_MODULE, type(DegenerusGameDailyModule).runtimeCode);
+        vm.etch(ContractAddresses.GAME_RNG_MODULE, type(DegenerusGameDailyModule).runtimeCode);
         vm.etch(ContractAddresses.GAME_JACKPOT_MODULE, type(FSMEmptyJackpotModule).runtimeCode);
         // The engine drains the (empty) ticket queues and the delivered cohort's (empty) human
         // boxes on its own path (60d31f775); both run production bytecode.

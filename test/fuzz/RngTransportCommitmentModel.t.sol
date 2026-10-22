@@ -3,6 +3,7 @@ pragma solidity 0.8.38;
 
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameRngModule} from "../../contracts/modules/DegenerusGameRngModule.sol";
+import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameAdvanceModule.sol";
 import {IVRFCoordinator} from "../../contracts/interfaces/IVRFCoordinator.sol";
 import {MockVRFCoordinator} from "../../contracts/mocks/MockVRFCoordinator.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -121,7 +122,7 @@ contract RngTransportCommitmentModelTest is Test {
         bytes32 fixedInputs = game.commitment();
         vm.warp(ORIGIN + 20 hours - 1);
         vm.prank(ContractAddresses.ADMIN);
-        vm.expectRevert(DegenerusGameRngModule.RngNotReady.selector);
+        vm.expectRevert(DegenerusGameAdvanceModule.RngNotReady.selector);
         game.retryRng();
         vm.warp(ORIGIN + 20 hours);
         vm.prank(ContractAddresses.ADMIN);
@@ -136,7 +137,7 @@ contract RngTransportCommitmentModelTest is Test {
         _deliver(address(coordinator), id, 0xC0FFEE);
         assertEq(_word(), uint256(0xC0FFEE) + (daily ? count : 0));
         vm.prank(ContractAddresses.ADMIN);
-        vm.expectRevert(DegenerusGameRngModule.RngNotReady.selector);
+        vm.expectRevert(DegenerusGameAdvanceModule.RngNotReady.selector);
         game.retryRng();
     }
 

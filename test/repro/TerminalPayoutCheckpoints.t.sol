@@ -4,6 +4,7 @@ pragma solidity 0.8.38;
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameGameOverModule} from "../../contracts/modules/DegenerusGameGameOverModule.sol";
 import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJackpotModule.sol";
+import {DegenerusGameDailyModule} from "../../contracts/modules/DegenerusGameDailyModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {JackpotBucketLib} from "../../contracts/libraries/JackpotBucketLib.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
@@ -54,7 +55,7 @@ contract TerminalPayoutCheckpointsTest is Test {
         vm.warp(uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621 + 100 days);
         vm.etch(ContractAddresses.GAME, type(TerminalPayoutHarness).runtimeCode);
         TerminalPayoutHarness h = TerminalPayoutHarness(ContractAddresses.GAME);
-        vm.etch(ContractAddresses.GAME_JACKPOT_MODULE, address(new DegenerusGameJackpotModule()).code);
+        vm.etch(ContractAddresses.GAME_JACKPOT_MODULE, address(new DegenerusGameDailyModule()).code);
         vm.etch(ContractAddresses.GNRUS, type(TerminalBurnCounter).runtimeCode);
         vm.etch(ContractAddresses.SDGNRS, type(TerminalBurnCounter).runtimeCode);
         vm.etch(ContractAddresses.COIN, type(TerminalBurnCounter).runtimeCode);

@@ -7,6 +7,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {DegenerusGameMinerModule} from "../../contracts/modules/DegenerusGameMinerModule.sol";
 import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameAdvanceModule.sol";
+import {DegenerusGameDailyModule} from "../../contracts/modules/DegenerusGameDailyModule.sol";
 import {DegenerusGameGameOverModule} from "../../contracts/modules/DegenerusGameGameOverModule.sol";
 import {IDegenerusGameRngModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {IVRFCoordinator} from "../../contracts/interfaces/IVRFCoordinator.sol";
@@ -505,7 +506,7 @@ contract MinerNoProgressTest is Test {
     }
 
     function _terminalWorkers() private {
-        vm.etch(ContractAddresses.GAME_ADVANCE_MODULE, address(new DegenerusGameAdvanceModule()).code);
+        vm.etch(ContractAddresses.GAME_ADVANCE_MODULE, address(new DegenerusGameDailyModule()).code);
         vm.etch(ContractAddresses.GAME_GAMEOVER_MODULE, address(new DegenerusGameGameOverModule()).code);
         vm.mockCall(ContractAddresses.AFFILIATE, abi.encodeWithSignature("affiliateTop(uint24)"), abi.encode(uint32(0), uint96(0)));
     }

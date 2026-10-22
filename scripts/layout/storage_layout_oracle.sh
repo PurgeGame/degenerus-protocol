@@ -34,6 +34,7 @@ CONTRACTS=(
 )
 # Delegatecall modules — must share DegenerusGame's storage layout exactly (run in its context).
 MODULES=(
+  DegenerusGameDailyModule
   DegenerusGameAdvanceModule DegenerusGameMintModule DegenerusGameLootboxModule
   DegenerusGameJackpotModule DegenerusGameDecimatorModule DegenerusGameDegeneretteModule
   DegenerusGameWhaleModule GameAfkingModule DegenerusGameBoonModule
@@ -42,7 +43,19 @@ MODULES=(
   DegenerusGameJackpotDrawModule DegenerusGameDegenesisModule DegenerusGameBoxModule
 )
 
-inspect_norm() { forge inspect "$1" storageLayout --json --skip test 2>/dev/null | "${NORM[@]}"; }
+inspect_norm() {
+  if [[ -n "${CHECK_ARTIFACTS:-}" ]]; then
+    python3 - "$CHECK_ARTIFACTS" "$1" <<'PY' | "${NORM[@]}"
+import json, pathlib, sys
+matches = list(pathlib.Path(sys.argv[1]).glob('*/' + sys.argv[2] + '.json'))
+if len(matches) != 1:
+    raise SystemExit(f'Expected one layout artifact for {sys.argv[2]}, found {len(matches)}')
+print(json.dumps(json.loads(matches[0].read_text())['storageLayout']))
+PY
+  else
+    forge inspect "$1" storageLayout --json --skip test 2>/dev/null | "${NORM[@]}"
+  fi
+}
 
 fail=0
 

@@ -48,13 +48,13 @@ MAPPINGS=(
   # as a separate contract that DegenerusGame delegatecalls into. Check the module
   # contract itself (code runs from the module, storage lives on DegenerusGame via
   # shared DegenerusGameStorage inheritance).
-  "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameAdvanceModule|contracts/modules/DegenerusGameAdvanceModule.sol:DegenerusGameAdvanceModule"
+  "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameAdvanceModule|contracts/modules/DegenerusGameDailyModule.sol:DegenerusGameDailyModule"
   "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameMinerModule|contracts/modules/DegenerusGameMinerModule.sol:DegenerusGameMinerModule"
-  "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameRngModule|contracts/modules/DegenerusGameRngModule.sol:DegenerusGameRngModule"
+  "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameRngModule|contracts/modules/DegenerusGameDailyModule.sol:DegenerusGameDailyModule"
   "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameTicketModule|contracts/modules/DegenerusGameTicketModule.sol:DegenerusGameTicketModule"
-  "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameJackpotDrawModule|contracts/modules/DegenerusGameJackpotDrawModule.sol:DegenerusGameJackpotDrawModule"
+  "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameJackpotDrawModule|contracts/modules/DegenerusGameDailyModule.sol:DegenerusGameDailyModule"
   "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameGameOverModule|contracts/modules/DegenerusGameGameOverModule.sol:DegenerusGameGameOverModule"
-  "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameJackpotModule|contracts/modules/DegenerusGameJackpotModule.sol:DegenerusGameJackpotModule"
+  "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameJackpotModule|contracts/modules/DegenerusGameDailyModule.sol:DegenerusGameDailyModule"
   "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameDecimatorModule|contracts/modules/DegenerusGameDecimatorModule.sol:DegenerusGameDecimatorModule"
   "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameWhaleModule|contracts/modules/DegenerusGameWhaleModule.sol:DegenerusGameWhaleModule"
   "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameMintModule|contracts/modules/DegenerusGameMintModule.sol:DegenerusGameMintModule"
@@ -94,6 +94,16 @@ PY
 # Extract "<selector>\t<signature>" rows from `forge inspect ... methods` output.
 get_methods() {
   local target="$1"
+  if [[ -n "${CHECK_ARTIFACTS:-}" ]]; then
+    python3 - "$CHECK_ARTIFACTS" "$target" <<'PY'
+import json, pathlib, sys
+source, name = sys.argv[2].split(':')
+artifact = json.loads((pathlib.Path(sys.argv[1]) / pathlib.Path(source).name / (name + '.json')).read_text())
+for signature, selector in sorted(artifact['methodIdentifiers'].items()):
+    print(selector + '\t' + signature)
+PY
+    return
+  fi
   forge inspect "$target" methods --skip test 2>/dev/null \
     | awk -F'|' '/^\|/ && $2 ~ /\(/ {
         gsub(/^[ \t]+|[ \t]+$/, "", $2);

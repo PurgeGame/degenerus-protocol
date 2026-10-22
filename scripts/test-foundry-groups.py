@@ -326,8 +326,9 @@ def main():
             fresh = [] if "--force" in forge_args else ["--force"]
             # Forge adds repeated verbosity flags. Appending -vvv to a default
             # -vv enables level-five tracing and can exhaust the hosted runner.
-            verbosity = [] if any(arg == "--verbosity" or re.fullmatch(r"-v+", arg)
-                                  for arg in forge_args) else ["-vv"]
+            verbosity = [] if os.environ.get("FOUNDRY_VERBOSITY") or any(
+                arg == "--verbosity" or re.fullmatch(r"-v+", arg) for arg in forge_args
+            ) else ["-vv"]
             command = ["forge", "test", *verbosity, *skip, *fresh, *forge_args]
             identity = source_identity()
             input_path = run_dir / f"{name}-inputs.json"

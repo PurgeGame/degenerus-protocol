@@ -178,8 +178,12 @@ contract PurchaseBattleWithoutTicketsTest is PurchaseBattleStagesBase {
         // The engine reaches the battle through the metered entry (level, word, allowance); a
         // prefix match pins the level and the day's word.
         vm.expectCall(
-            ContractAddresses.GAME_JACKPOT_MODULE,
-            abi.encodeWithSignature("runPurchaseJackpotBattle(uint24,uint256,uint256)", uint24(1), word)
+            ContractAddresses.CRAPS,
+            abi.encodeWithSelector(
+                IJackpotBattle.prepareJackpotBattle.selector,
+                uint24(1),
+                uint256(keccak256(abi.encode(word, uint24(1), keccak256("far-future-coin"))))
+            )
         );
         _battle();
         (, Tally memory daily) = _measure();
