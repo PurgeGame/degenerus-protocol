@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {GameMiner} from "../../contracts/modules/GameMiner.sol";
 import {DegenerusGameMinerModule} from "../../contracts/modules/DegenerusGameMinerModule.sol";
 import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameAdvanceModule.sol";
 import {DegenerusGameDailyModule} from "../../contracts/modules/DegenerusGameDailyModule.sol";
@@ -193,12 +194,12 @@ contract MinerNoProgressTest is Test {
 
     function test_IdleAndWaitRevertBeforeDispatchAtLowAndHighGas() public {
         _seed(DegenerusGameStorage.MinerAction.Idle);
-        assertLt(_expectFailure(DegenerusGameMinerModule.NoWork.selector, 16_700_000), 100_000);
-        _expectFailure(DegenerusGameMinerModule.NoWork.selector, 150_000);
+        assertLt(_expectFailure(GameMiner.NoWork.selector, 16_700_000), 100_000);
+        _expectFailure(GameMiner.NoWork.selector, 150_000);
         game.seed(DegenerusGameStorage.MinerAction.Wait);
         assertFalse(game.advanceDue());
-        assertLt(_expectFailure(DegenerusGameMinerModule.RngNotReady.selector, 16_700_000), 100_000);
-        _expectFailure(DegenerusGameMinerModule.RngNotReady.selector, 150_000);
+        assertLt(_expectFailure(GameMiner.RngNotReady.selector, 16_700_000), 100_000);
+        _expectFailure(GameMiner.RngNotReady.selector, 150_000);
     }
 
     function test_ObservedMaintenanceDoneWithoutProgressStopsAfterOneDispatch() public {
@@ -208,7 +209,7 @@ contract MinerNoProgressTest is Test {
         bytes memory selector = abi.encodeWithSignature("runCrapsMaintenance(uint256)");
         vm.mockCall(ContractAddresses.CRAPS, selector, abi.encode(false, true, uint256(0)));
         vm.expectCall(ContractAddresses.CRAPS, selector, uint64(1));
-        assertLt(_expectFailure(DegenerusGameMinerModule.NoWork.selector, 16_700_000), 200_000);
+        assertLt(_expectFailure(GameMiner.NoWork.selector, 16_700_000), 200_000);
         assertEq(game.minerAction(), 16);
     }
 
@@ -234,7 +235,7 @@ contract MinerNoProgressTest is Test {
             _seed(action);
             (address target, bytes memory selector) = _worker(action);
             vm.mockCall(target, selector, abi.encode(false, true, type(uint256).max));
-            _expectFailure(DegenerusGameMinerModule.NoWork.selector, 16_700_000);
+            _expectFailure(GameMiner.NoWork.selector, 16_700_000);
             vm.mockCall(target, selector, abi.encode(false, false, uint256(0)));
             _expectFailure(MineFlipGas.InsufficientExecutionGas.selector, 16_700_000);
             vm.revertToState(snap);
@@ -335,7 +336,7 @@ contract MinerNoProgressTest is Test {
         game.setMiddayThreshold(500);
         assertEq(game.minerAction(), uint8(DegenerusGameStorage.MinerAction.Idle), "below threshold is idle");
         vm.expectCall(ContractAddresses.GAME_RNG_MODULE, request, 0);
-        _expectFailure(DegenerusGameMinerModule.NoWork.selector, 16_700_000);
+        _expectFailure(GameMiner.NoWork.selector, 16_700_000);
         game.setMiddayThreshold(0);
         _fundCoordinator(1 ether);
         assertEq(game.minerAction(), uint8(DegenerusGameStorage.MinerAction.Idle), "LINK floor is checked first");
@@ -365,8 +366,8 @@ contract MinerNoProgressTest is Test {
             if (mode < 2) vm.mockCall(ContractAddresses.CRAPS, selector, abi.encode(false, mode == 0, uint256(0)));
             else vm.mockCallRevert(ContractAddresses.CRAPS, selector, abi.encodeWithSelector(
                 mode == 2 ? MineFlipGas.InsufficientExecutionGas.selector :
-                mode == 3 ? DegenerusGameMinerModule.NoWork.selector :
-                mode == 4 ? DegenerusGameMinerModule.RngNotReady.selector : MineFlipGas.WorkGasBound.selector));
+                mode == 3 ? GameMiner.NoWork.selector :
+                mode == 4 ? GameMiner.RngNotReady.selector : MineFlipGas.WorkGasBound.selector));
             vm.recordLogs();
             game.mineFlip{gas: 16_700_000}(0);
             assertTrue(game.rngComplete());
@@ -431,7 +432,7 @@ contract MinerNoProgressTest is Test {
             table.seedHead(DAY, p + 1, 1, true);
             vm.warp(start + closes[p] - 1);
             assertFalse(table.minerMaintenancePending());
-            _expectFailure(DegenerusGameMinerModule.NoWork.selector, 16_700_000);
+            _expectFailure(GameMiner.NoWork.selector, 16_700_000);
             // Direct idle maintenance reports no progress, even without an eligible clock step.
             vm.prank(address(game));
             MineFlipGas.Result memory idle = JackpotBattle(address(table)).runCrapsMaintenance(3_000_000);
@@ -454,7 +455,7 @@ contract MinerNoProgressTest is Test {
         table.seedHead(DAY, 6, 1, true);
         vm.warp(start + 1 days - 1);
         assertFalse(table.minerMaintenancePending());
-        _expectFailure(DegenerusGameMinerModule.NoWork.selector, 16_700_000);
+        _expectFailure(GameMiner.NoWork.selector, 16_700_000);
         vm.prank(address(game));
         assertFalse(JackpotBattle(address(table)).runCrapsMaintenance(3_000_000).progressed);
         table.seedHead(DAY + 1, 0, 0, false);
@@ -464,7 +465,7 @@ contract MinerNoProgressTest is Test {
         game.mineFlip{gas: 16_700_000}(0);
         assertEq(table.head(), uint64(uint256(DAY + 2) * 8));
         _assertWorkUnpaid();
-        _expectFailure(DegenerusGameMinerModule.NoWork.selector, 16_700_000);
+        _expectFailure(GameMiner.NoWork.selector, 16_700_000);
     }
 
     function test_MaintenanceCannotBypassAnOutstandingRngRequest() public {
@@ -472,7 +473,7 @@ contract MinerNoProgressTest is Test {
         game.seed(DegenerusGameStorage.MinerAction.Wait);
         table.seedHead(DAY, 1, 1, true);
         assertTrue(table.minerMaintenancePending());
-        _expectFailure(DegenerusGameMinerModule.RngNotReady.selector, 16_700_000);
+        _expectFailure(GameMiner.RngNotReady.selector, 16_700_000);
         assertEq(table.binding(uint64(uint256(DAY) * 8 + 1)), 0);
     }
 
@@ -500,7 +501,7 @@ contract MinerNoProgressTest is Test {
             assertEq(table.cursor(head), 80);
             assertEq(table.head(), head + 8);
             for (uint256 i = 1; i <= 80; ++i) assertEq(table.credits(uint32(0xA000 + i)), CrapsPreferenceLib.RETAINED | 1);
-            _expectFailure(DegenerusGameMinerModule.NoWork.selector, 16_700_000);
+            _expectFailure(GameMiner.NoWork.selector, 16_700_000);
             vm.revertToState(snap);
         }
     }
@@ -528,7 +529,7 @@ contract MinerNoProgressTest is Test {
         assertEq(game.minerAction(), 1, "a VRF-alive decision settles the loan book before any wait");
         game.mineFlip{gas: 16_700_000}(0); // the (empty) loan book
         assertEq(game.minerAction(), 2);
-        assertLt(_expectFailure(DegenerusGameMinerModule.RngNotReady.selector, 16_700_000), 100_000);
+        assertLt(_expectFailure(GameMiner.RngNotReady.selector, 16_700_000), 100_000);
         vm.warp(block.timestamp + 15 days);
         assertEq(game.minerAction(), 1, "dead VRF fallback must remain reachable");
     }

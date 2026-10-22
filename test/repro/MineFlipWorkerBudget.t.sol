@@ -166,7 +166,8 @@ contract MineFlipHumanBudgetTest is DeployProtocol {
         uint256 beforeOrder = host.order();
         bytes memory code = ContractAddresses.GAME_BOON_MODULE.code;
         vm.etch(ContractAddresses.GAME_BOON_MODULE, hex"fe");
-        vm.expectRevert(bytes4(keccak256("EmptyRevert()"))); host.workHuman(HUMAN_WORK_ALLOWANCE);
+        // BOON aliases Box: invalid code now fails at the worker boundary with empty data.
+        vm.expectRevert(bytes("")); host.workHuman(HUMAN_WORK_ALLOWANCE);
         assertEq(host.order(), beforeOrder);
         assertEq(host.cursor(), 0);
         vm.etch(ContractAddresses.GAME_BOON_MODULE, code);

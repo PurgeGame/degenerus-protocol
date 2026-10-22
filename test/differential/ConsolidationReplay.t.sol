@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {DegenerusGameLootboxModule} from "../../contracts/modules/DegenerusGameLootboxModule.sol";
+import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameAdvanceModule.sol";
 import {DegenerusGameMintModule} from "../../contracts/modules/DegenerusGameMintModule.sol";
 import {DegenerusGameWhaleModule} from "../../contracts/modules/DegenerusGameWhaleModule.sol";
 import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
@@ -16,7 +18,6 @@ import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
-import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 import {GameAfkingModule} from "../../contracts/modules/GameAfkingModule.sol";
 import {DegenerusGameBoonModule} from "../../contracts/modules/DegenerusGameBoonModule.sol";
 import {DegenerusGameDegeneretteModule} from "../../contracts/modules/DegenerusGameDegeneretteModule.sol";
@@ -80,13 +81,7 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
                 vm.etch(target, code);
                 string memory name = vm.keyExistsJson(variants, string.concat(key, ".name"))
                     ? vm.parseJsonString(variants, string.concat(key, ".name")) : "";
-                bytes32 moduleName = keccak256(bytes(name));
-                if (moduleName == keccak256("DegenerusGameMinerModule")) minerModule = DegenerusGameMinerModule(target);
-                if (moduleName == keccak256("DegenerusGameBingoModule")) bingoModule = DegenerusGameBingoModule(target);
-                if (moduleName == keccak256("GameAfkingModule")) afkingModule = GameAfkingModule(target);
-                if (moduleName == keccak256("DegenerusGameBoonModule")) boonModule = DegenerusGameBoonModule(target);
-                if (moduleName == keccak256("DegenerusGameDegeneretteModule")) degeneretteModule = DegenerusGameDegeneretteModule(target);
-                _p5MapVariant(name, target);
+                _mapVariant(name, target);
             }
         }
         if (vm.envOr("DIFFERENTIAL_DAILY_BASELINE", false)) {
@@ -131,7 +126,7 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
         return address(uint160(uint256(keccak256(abi.encodePacked(hex"d694", address(vault), hex"01")))));
     }
 
-    function _p5MapVariant(string memory name, address target) private {
+    function _mapVariant(string memory name, address target) private {
         bytes32 key = keccak256(bytes(name));
         if (key == keccak256("DegenerusGameMintModule")) mintModule = DegenerusGameMintModule(payable(target));
         if (key == keccak256("DegenerusGameWhaleModule")) whaleModule = DegenerusGameWhaleModule(payable(target));
@@ -140,6 +135,16 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
         if (key == keccak256("DegenerusGameDecimatorModule")) decimatorModule = DegenerusGameDecimatorModule(payable(target));
         if (key == keccak256("DegenerusGameDegenesisModule")) degenesisModule = DegenerusGameDegenesisModule(payable(target));
         if (key == keccak256("DegenerusGameFoilPackModule")) foilModule = DegenerusGameFoilPackModule(payable(target));
+        if (key == keccak256("DegenerusGameMinerModule")) minerModule = DegenerusGameMinerModule(payable(target));
+        if (key == keccak256("DegenerusGameBingoModule")) bingoModule = DegenerusGameBingoModule(payable(target));
+        if (key == keccak256("GameAfkingModule")) afkingModule = GameAfkingModule(payable(target));
+        if (key == keccak256("DegenerusGameBoonModule")) boonModule = DegenerusGameBoonModule(payable(target));
+        if (key == keccak256("DegenerusGameDegeneretteModule")) degeneretteModule = DegenerusGameDegeneretteModule(payable(target));
+        if (key == keccak256("DegenerusGameAdvanceModule")) advanceModule = DegenerusGameAdvanceModule(payable(target));
+        if (key == keccak256("DegenerusGameJackpotModule")) jackpotModule = DegenerusGameJackpotModule(payable(target));
+        if (key == keccak256("DegenerusGameJackpotDrawModule")) jackpotDrawModule = DegenerusGameJackpotDrawModule(payable(target));
+        if (key == keccak256("DegenerusGameRngModule")) rngModule = DegenerusGameRngModule(payable(target));
+        if (key == keccak256("DegenerusGameLootboxModule")) lootboxModule = DegenerusGameLootboxModule(payable(target));
     }
 
     function _baseline(address target, string memory name) private {
