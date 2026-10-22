@@ -52,3 +52,38 @@ without transaction intrinsic gas and must run with `FOUNDRY_ISOLATE=false`.
 `compile_sizes.py` is the active copy of the former planning experiment. It uses the current
 compiler pin and resolves compiler/dependency paths for the current worktree. Frozen planning
 inputs and outputs remain evidence of their original compiler.
+
+## Integrated P2–P6 checks
+
+The combined manifest has 23 ordered protocol deployments. Box, Daily, Pass,
+Endgame and Craps each deploy once; Miner and Bingo alias Game. The legacy Mint
+key aliases Endgame, whose explicit-value purchase helpers are internal.
+Regenerate canonical fixture sections with `generate-fixtures.js` and address
+pins with the deployment-specific patcher after changing the manifest.
+
+For the integrated replay, keep `DIFFERENTIAL_BASELINE=false` on both sides.
+Install the base revision through `DIFFERENTIAL_OVERRIDES`: compile its original
+modules at distinct code addresses, with the same state-owner addresses as the
+candidate fixture. Include baseline CrapsViews at the common table address and
+its original lifecycle/engine at 0x1006/0x1007. The replay maps all original module
+fields before account cooling and census registration. The old
+`DIFFERENTIAL_BASELINE=true` P1 adapter is unsuitable for aliased deployments.
+
+The replay combines cold/warm purchases, boxes, hot Game entries, Daily and
+Craps scenarios with the storage-census long run. Compare with:
+
+```sh
+node --max-old-space-size=10000 scripts/consolidation/compare-replay.js \
+  BASELINE_LOG CANDIDATE_LOG BASELINE_ABIS_JSON RESULT_JSON --integrated
+```
+
+Integrated mode enables the Box, Game, Pass/Endgame and Craps removed-edge checks
+and keeps the retained external engine calls strict. It applies no P1 event or
+allocation migration. Only `MinerWork.executionGas` is excluded from comparison;
+basefee-zero miner rewards must remain zero.
+
+Production builds used for both layout and call-cycle checks must emit both
+`storageLayout` and `irOptimized` when overriding Forge's extra-output setting.
+Use fresh production artifacts for size/memory checks and verify address-pin
+restoration after every test invocation. Acceptance evidence and the remaining
+final-pass checks are listed in `.planning/consolidation/INTEGRATION-REPORT.md`.

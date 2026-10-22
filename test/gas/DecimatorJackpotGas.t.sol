@@ -6,14 +6,11 @@ import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DecimatorJackpotHarness} from "../fuzz/DecimatorJackpotIntegration.t.sol";
 import {BucketSeed} from "../helpers/BucketSeed.sol";
-import {DegenerusGameMinerModule} from "../../contracts/modules/DegenerusGameMinerModule.sol";
+import {GameMiner} from "../../contracts/modules/GameMiner.sol";
+import {DegenerusGamePassModule} from "../../contracts/modules/DegenerusGamePassModule.sol";
+import {DegenerusGameEndgameModule} from "../../contracts/modules/DegenerusGameEndgameModule.sol";
 import {DegenerusGameDailyModule} from "../../contracts/modules/DegenerusGameDailyModule.sol";
-import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameAdvanceModule.sol";
 import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJackpotModule.sol";
-import {DegenerusGameDecimatorModule} from "../../contracts/modules/DegenerusGameDecimatorModule.sol";
-import {DegenerusGameWhaleModule} from "../../contracts/modules/DegenerusGameWhaleModule.sol";
-import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
-import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
 import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {DecimatorJackpotTerms} from "../../contracts/interfaces/IDegenerusGameModules.sol";
@@ -67,7 +64,7 @@ contract DecimatorGeneratedWorkMeter {
     }
 }
 
-contract DecimatorGasHost is DecimatorJackpotHarness, BucketSeed {
+contract DecimatorGasHost is DecimatorJackpotHarness, BucketSeed, GameMiner {
     function primeMiner(bool activePass) external {
         uint24 day = _simulatedDayIndex();
         dailyIdx = day - 1;
@@ -87,9 +84,7 @@ contract DecimatorGasHost is DecimatorJackpotHarness, BucketSeed {
         }
     }
     function mine() external returns (uint256 actualBasefee) {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_MINER_MODULE.delegatecall(
-            abi.encodeCall(DegenerusGameMinerModule.mineFlip, (uint32(0))));
-        if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
+        _mineFlip(0);
         return block.basefee;
     }
     function readySoloWithGoldBuckets() external {
@@ -156,13 +151,10 @@ contract DecimatorJackpotGasTest is Test {
         vm.warp(uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621 + 2 days);
         vm.fee(1 gwei);
         vm.etch(ContractAddresses.GAME, type(DecimatorGasHost).runtimeCode);
-        vm.etch(ContractAddresses.GAME_MINER_MODULE, type(DegenerusGameMinerModule).runtimeCode);
+        // Miner lives in Game; install each worker bundle once at its aliased address.
         vm.etch(ContractAddresses.GAME_ADVANCE_MODULE, type(DegenerusGameDailyModule).runtimeCode);
-        vm.etch(ContractAddresses.GAME_JACKPOT_MODULE, type(DegenerusGameDailyModule).runtimeCode);
-        vm.etch(ContractAddresses.GAME_DECIMATOR_MODULE, type(DegenerusGameDecimatorModule).runtimeCode);
-        vm.etch(ContractAddresses.GAME_WHALE_MODULE, type(DegenerusGameWhaleModule).runtimeCode);
-        vm.etch(ContractAddresses.GAME_TICKET_MODULE, type(DegenerusGameTicketModule).runtimeCode);
-        vm.etch(ContractAddresses.GAME_FOILPACK_MODULE, type(DegenerusGameFoilPackModule).runtimeCode);
+        vm.etch(ContractAddresses.GAME_DECIMATOR_MODULE, type(DegenerusGameEndgameModule).runtimeCode);
+        vm.etch(ContractAddresses.GAME_WHALE_MODULE, type(DegenerusGamePassModule).runtimeCode);
         vm.etch(ContractAddresses.CRAPS, type(CrapsBattle).runtimeCode);
         vm.etch(ContractAddresses.COINFLIP, type(DecimatorGasCoinflip).runtimeCode);
         vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
