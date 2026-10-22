@@ -115,8 +115,9 @@ split flag.
 **Cohort split and pricing.** `prepareDegenesis(day)` runs inside `prepareRequestBoundary`, before the
 daily request, while `degenesisClosed < 7`. A cohort is sealed once its day index is below the
 request day. The split sends `V / 4` to the Vault budget (`degenesisVaultBudget`, inside
-`claimablePool`, excluded from Vault claimables), `V / 4` to sDGNRS AFKing funding, and `V / 2` to
-the future pool; the quarters stay inside `claimablePool` and only the future half leaves it. A
+`claimablePool`, excluded from Vault claimables), `V / 4` to sDGNRS AFKing funding, `V / 4` to
+the future pool, and `V / 4` to insurance in `yieldAccumulator`. The Vault and sDGNRS quarters
+stay inside `claimablePool`; the future and insurance quarters leave it together. A
 request after a stretch with no requests splits every sealed cohort at once. Pricing then closes
 empty sealed cohorts and prices one nonempty cohort once the previous cohort has closed, with
 `Q = min(2.5T, 2/3 of the Degenesis pool)` and `T` = 20B tokens on days 1-3, 10B on days 4-7. Pricing
@@ -145,10 +146,13 @@ flush it still owes. Orders resolve to the reward account's wallet ID; sDGNRS go
 reservation is released, `degenesisActive` and `degenesisWord` clear and `degenesisClosed`
 increments. The seventh close burns the remaining `Pool.Degenesis` balance, once.
 
-**Vault and sDGNRS funding.** `Vault.spendDegenesis(whalePass, quantity, boxOrder, maxCost)`
+**Vault and sDGNRS funding.** `Vault.spendDegenesis(recipientId, whalePass, quantity, boxOrder, maxCost)`
 (owner only) reaches the module through the facade. It moves `maxCost` from `degenesisVaultBudget`
 into Vault claimable, runs the existing claimable-funded Mint or Whale purchase, and returns what the
-purchase did not take, so the budget never becomes withdrawable and `claimablePool` is unchanged.
+purchase did not take. The selected allocated account receives the products and normal rewards,
+without new DeGenesis credit or operator approval. Recipient 0 selects the Vault. The Vault
+ledger returns to its original balance; the actual cost leaves the restricted budget and
+`claimablePool` for the ordinary purchase pools.
 sDGNRS subscribes with AFKing funding first, and `topUpSdgnrsAfking()` tops its AFKing funding up to
 10 ETH from claimable (above the 1-wei sentinel) before each once-per-level bulk whale attempt.
 

@@ -245,24 +245,37 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint256 quantity,
         bytes32 affiliateCode
     ) external payable {
-        if (_livenessTriggered()) revert GameOver();
-        uint24 passLevel = level + 1;
-
-        if (quantity == 0 || quantity > WHALE_MAX_QUANTITY) revert InvalidQuantity();
-
-        // Boons are keyed by wallet ID: an unregistered buyer reads the empty ID-0 lanes.
-        (bool hasValidBoon, uint256 s0) = _whaleBoonState(_resolveAccountId(buyerId));
-        // x00 (century) levels: minimum 2 passes (8 ETH) to deter fresh-account century bonus
-        // farming. Standard-price path only; a boon purchase takes the discount branch.
-        if (!hasValidBoon && passLevel % 100 == 0 && quantity < 2) revert MinQuantityRequired();
-        (uint256 firstPrice, uint256 restPrice) = _whaleUnitPrices(passLevel, hasValidBoon, s0);
-        uint256 totalPrice = firstPrice + restPrice * (quantity - 1);
-
-        // Claimable-pay: msg.value first (overpay -> payer's afking), claimable covers the rest.
+        (uint24 passLevel, uint256 totalPrice, bool hasValidBoon, uint256 s0) =
+            _whalePurchaseQuote(buyerId, quantity, false);
         buyerId = _registerCallerAccount(buyerId == 0 ? _walletIdOf(msg.sender) : buyerId, totalPrice);
         uint256 freshPaid = msg.value > totalPrice ? totalPrice : msg.value;
         if (msg.value > freshPaid) _creditAfkingValue(_requireWalletId(msg.sender), msg.value - freshPaid);
-        _deliverWhalePass(buyerId, passLevel, quantity, totalPrice, freshPaid, hasValidBoon, s0, affiliateCode);
+        _consumeWhaleBoon(buyerId, hasValidBoon, s0);
+        _accrueDegenesisCredit(buyerId, totalPrice);
+        _deliverWhalePass(buyerId, buyerId, passLevel, quantity, totalPrice, freshPaid, affiliateCode);
+    }
+
+    /// @notice Buy a recipient's whale passes using the Vault's restricted Degenesis funding.
+    function purchaseWhalePassForDegenesis(uint32 recipientId, uint256 quantity) external {
+        if (address(this) != ContractAddresses.GAME || msg.sender != ContractAddresses.VAULT) revert E();
+        _requireAllocated(recipientId);
+        (uint24 passLevel, uint256 totalPrice, bool hasValidBoon, uint256 s0) =
+            _whalePurchaseQuote(recipientId, quantity, true);
+        _consumeWhaleBoon(recipientId, hasValidBoon, s0);
+        _deliverWhalePass(recipientId, VAULT_WALLET_ID, passLevel, quantity, totalPrice, 0, bytes32(0));
+    }
+
+    function _whalePurchaseQuote(uint32 buyerId, uint256 quantity, bool gift)
+        private view returns (uint24 passLevel, uint256 totalPrice, bool hasValidBoon, uint256 s0)
+    {
+        if (_livenessTriggered()) revert GameOver();
+        passLevel = level + 1;
+        if (quantity == 0 || quantity > WHALE_MAX_QUANTITY) revert InvalidQuantity();
+        (hasValidBoon, s0) = _whaleBoonState(gift ? buyerId : _resolveAccountId(buyerId));
+        if (!hasValidBoon && passLevel % 100 == 0 && quantity < 2) revert MinQuantityRequired();
+        (uint256 firstPrice, uint256 restPrice) = _whaleUnitPrices(passLevel, hasValidBoon, s0);
+        // Quantity is 1..1,000 and each unit price is at most 4 ETH.
+        unchecked { totalPrice = firstPrice + restPrice * (quantity - 1); }
     }
 
     /**
@@ -319,8 +332,9 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
             paidPasses = groups * WHALE_BULK_BONUS_DIVISOR;
             totalPrice = firstPrice + restPrice * (paidPasses - 1);
         }
+        _consumeWhaleBoon(SDGNRS_WALLET_ID, hasValidBoon, s0);
         _deliverWhalePass(
-            SDGNRS_WALLET_ID, passLevel, paidPasses, totalPrice, 0, hasValidBoon, s0, bytes32(0)
+            SDGNRS_WALLET_ID, SDGNRS_WALLET_ID, passLevel, paidPasses, totalPrice, 0, bytes32(0)
         );
     }
 
@@ -354,7 +368,11 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         }
     }
 
-    /// @dev The whale purchase past its quote: consumes the boon, debits the price (fresh ETH
+    function _consumeWhaleBoon(uint32 buyerId, bool hasValidBoon, uint256 s0) private {
+        if (hasValidBoon) boonPacked[buyerId].slot0 = (s0 & BP_WHALE_CLEAR) | BP_SLOT0_RETAINED;
+    }
+
+    /// @dev Delivery after quote and boon consumption: debits the price (fresh ETH
     ///      first, then claimable, then afking), extends the freeze/streak, queues the aggregate
     ///      ticket award, pays the affiliate legs, the batched DGNRS minter reward, the pool split,
     ///      the bundled lootbox, the early Craps credit and the one-time seat. Shared by the player
@@ -364,28 +382,21 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     /// @param quantity Paid passes (1..WHALE_MAX_QUANTITY).
     /// @param totalPrice The canonical quote for `quantity` at these boon terms.
     /// @param freshPaid The msg.value applied to the price (0 for the automatic purchase).
-    /// @param hasValidBoon Whether the quote took the boon discount (consumed here).
-    /// @param s0 The buyer's packed boon slot-0 word, read with the boon state.
+    /// @param payerId Account whose claimable and AFKing balances fund the shortfall.
     /// @param affiliateCode Affiliate/referral code (bytes32(0) = stored code / vault default).
     function _deliverWhalePass(
         uint32 buyerId,
+        uint32 payerId,
         uint24 passLevel,
         uint256 quantity,
         uint256 totalPrice,
         uint256 freshPaid,
-        bool hasValidBoon,
-        uint256 s0,
         bytes32 affiliateCode
     ) private {
-        if (hasValidBoon) {
-            // Clear whale fields (consumed)
-            boonPacked[buyerId].slot0 = (s0 & BP_WHALE_CLEAR) | BP_SLOT0_RETAINED;
-        }
-        _settleShortfall(buyerId, totalPrice - freshPaid, true);
+        _settleShortfall(payerId, totalPrice - freshPaid, true);
         // Whale-pass ETH-in (any funding source): the full price routes to the pools; the
         // pass lootbox is a pool-funded reward, so its LootBoxBuy must NOT be re-counted.
         emit WhalePassPurchased(buyerId, quantity, totalPrice);
-        _accrueDegenesisCredit(buyerId, totalPrice);
 
         uint256 prevData = mintPacked_[buyerId];
 

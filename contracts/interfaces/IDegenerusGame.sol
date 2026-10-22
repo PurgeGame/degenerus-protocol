@@ -402,15 +402,16 @@ interface IDegenerusGame {
     /// @custom:reverts E If `id` is unallocated, outside the sale, over credit, or out of bounds.
     function buyDegenesisBox(uint32 id, uint256 amount) external payable;
 
-    /// @notice Vault-only: spend the Vault's Degenesis budget on an ordinary purchase for the
-    ///         Vault at its normal price. The unspent part of `maxCost` returns to the budget.
+    /// @notice Vault-only: spend the Vault's Degenesis budget on an ordinary purchase for an
+    ///         allocated recipient at its normal price. The unspent part of `maxCost` returns to the budget.
+    /// @param recipientId Allocated recipient account; 0 selects the Vault.
     /// @param whalePass True for whale passes, false for tickets and lootboxes.
     /// @param quantity Whale passes, or ticket purchase units (400 = one whole ticket).
     /// @param boxOrder Packed lootbox order (ignored with whale passes).
     /// @param maxCost Budget made available to the purchase.
     /// @custom:reverts E If the caller is not the Vault, the budget is short, or the purchase
     ///         costs more than `maxCost`.
-    function spendDegenesis(bool whalePass, uint256 quantity, uint256 boxOrder, uint256 maxCost) external;
+    function spendDegenesis(uint32 recipientId, bool whalePass, uint256 quantity, uint256 boxOrder, uint256 maxCost) external;
 
     /// @notice Spendable Degenesis credit accrued by a player.
     /// @param player Player to query.

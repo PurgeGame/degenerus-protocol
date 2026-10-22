@@ -513,19 +513,20 @@ contract DegenerusVault {
     }
 
     /// @notice Spend the restricted Degenesis budget on tickets and lootboxes, or whale passes,
-    ///         for the vault at their normal price
+    ///         for an allocated recipient at their normal price
     /// @dev The game moves at most `maxCost` of the budget into the purchase and returns the
     ///      rest in the same call; the budget has no other way out.
+    /// @param recipientId Allocated recipient account; 0 selects the Vault.
     /// @param whalePass True for whale passes, false for tickets and lootboxes
     /// @param quantity Whale passes, or ticket purchase units (400 = one whole ticket)
     /// @param boxOrder Packed box order (ignored with whale passes)
     /// @param maxCost Budget made available to the purchase
     /// @custom:reverts NotVaultOwner If caller is not the DGVE governance executor
-    function spendDegenesis(bool whalePass, uint256 quantity, uint256 boxOrder, uint256 maxCost)
+    function spendDegenesis(uint32 recipientId, bool whalePass, uint256 quantity, uint256 boxOrder, uint256 maxCost)
         external
         onlyVaultOwner
     {
-        gamePlayer.spendDegenesis(whalePass, quantity, boxOrder, maxCost);
+        gamePlayer.spendDegenesis(recipientId, whalePass, quantity, boxOrder, maxCost);
     }
 
     /// @notice Enable/disable the liquidation-buyer fallback and set the protected ETH reserve floor.

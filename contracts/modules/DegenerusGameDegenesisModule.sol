@@ -11,8 +11,8 @@ import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {FlipRoundLib} from "../libraries/FlipRoundLib.sol";
 import {GameTimeLib} from "../libraries/GameTimeLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
-import {MintPaymentKind, IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
-import {IDegenerusGameWhaleModule} from "../interfaces/IDegenerusGameModules.sol";
+import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
+import {IDegenerusGameWhaleModule, IDegenerusGameMintModule} from "../interfaces/IDegenerusGameModules.sol";
 
 interface IDegenesisWwxrp {
     function creditPrize(uint32 to, uint256 amount) external;
@@ -73,8 +73,8 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
         uint32 highPasses
     );
 
-    /// @notice A sealed cohort's volume left the reserve: half to the future pool, a quarter
-    ///         each to the Vault budget and sDGNRS AFKing funding.
+    /// @notice A sealed cohort funds equal shares of future prizes, insurance, the Vault budget
+    ///         and sDGNRS AFKing.
     event DegenesisCohortSplit(uint8 indexed degenesisDay, uint256 volume);
     /// @notice A sealed cohort was priced and bound to `boundDay`'s daily word.
     event DegenesisCohortPriced(uint8 indexed degenesisDay, uint256 volume, uint256 payoutBudget, uint24 boundDay);
@@ -82,10 +82,10 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
     event DegenesisCohortClosed(uint8 indexed degenesisDay, uint256 dgnrsPaid);
     /// @notice Leftover Degenesis inventory burned once the seventh cohort closed.
     event DegenesisInventoryBurned(uint256 dgnrs);
-    /// @notice The Vault's Degenesis budget paid `cost` for an ordinary purchase for the Vault.
+    /// @notice The Vault's Degenesis budget paid `cost` for `recipientId`.
     ///         The budget, not the Vault's claimable, pays it; the purchase's ClaimableSpent in the
     ///         same transaction reports a post-state that still includes the budget moved in.
-    event DegenesisVaultSpent(uint256 cost);
+    event DegenesisVaultSpent(uint32 indexed recipientId, uint256 cost);
 
     // ---- Degenesis FLIP ladder (lootbox band recentered on a 400% branch mean) ----
     // E[flipBps] = 0.8*lowMean + 0.2*highMean = 40000 (400% of order ETH on the FLIP-valued
@@ -238,7 +238,7 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
         _splitDegenesisCohorts(type(uint24).max);
     }
 
-    /// @notice Spend the Vault's Degenesis budget on an ordinary purchase for the Vault: tickets
+    /// @notice Spend the Vault's Degenesis budget on a recipient's tickets
     ///         and lootboxes, or whale passes, at their normal price.
     /// @dev Vault-only, reached through the facade's delegatecall so msg.sender stays the Vault.
     ///      Moves `maxCost` from the budget into Vault claimable (a reclassification inside
@@ -246,24 +246,27 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
     ///      back what the purchase did not take. The purchase may lower the Vault's balance word
     ///      by at most `maxCost`, from claimable alone, so the net move is exactly the cost and
     ///      none of the budget stays withdrawable. No affiliate code: the Vault default applies.
+    /// @param recipientId Allocated recipient account; 0 selects the Vault.
     /// @param whalePass True for whale passes, false for tickets and lootboxes.
     /// @param quantity Whale passes, or ticket purchase units (400 = one whole ticket).
     /// @param boxOrder Packed lootbox order (ignored with whale passes).
     /// @param maxCost Budget moved in for the purchase.
-    function spendDegenesis(bool whalePass, uint256 quantity, uint256 boxOrder, uint256 maxCost) external {
+    function spendDegenesis(uint32 recipientId, bool whalePass, uint256 quantity, uint256 boxOrder, uint256 maxCost) external {
         uint256 budget = degenesisVaultBudget;
         if (address(this) != ContractAddresses.GAME || msg.sender != ContractAddresses.VAULT || maxCost > budget) {
             revert E();
         }
+        if (recipientId == 0) recipientId = VAULT_WALLET_ID;
+        _requireAllocated(recipientId);
         uint256 funded = balancesPacked[VAULT_WALLET_ID] + maxCost;
         balancesPacked[VAULT_WALLET_ID] = funded;
         (bool ok, bytes memory data) = whalePass
             ? ContractAddresses.GAME_WHALE_MODULE.delegatecall(abi.encodeWithSelector(
-                IDegenerusGameWhaleModule.purchaseWhalePass.selector, uint32(0), quantity, bytes32(0)
+                IDegenerusGameWhaleModule.purchaseWhalePassForDegenesis.selector, recipientId, quantity
             ))
-            : ContractAddresses.GAME.delegatecall(abi.encodeWithSelector(
-                IDegenerusGame.purchase.selector, uint32(0), quantity, boxOrder, bytes32(0),
-                MintPaymentKind.Claimable, false
+            : ContractAddresses.GAME_MINT_MODULE.delegatecall(abi.encodeWithSelector(
+                IDegenerusGameMintModule.purchaseWith.selector, recipientId, quantity, boxOrder, bytes32(0),
+                MintPaymentKind.Claimable, uint256(0), VAULT_WALLET_ID
             ));
         if (!ok) _revertDelegate(data);
         uint256 after_ = balancesPacked[VAULT_WALLET_ID];
@@ -272,7 +275,7 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
         uint256 unspent = maxCost - cost;
         balancesPacked[VAULT_WALLET_ID] = after_ - unspent;
         degenesisVaultBudget = uint128(budget - cost);
-        emit DegenesisVaultSpent(cost);
+        emit DegenesisVaultSpent(recipientId, cost);
     }
 
     function _revertDelegate(bytes memory reason) private pure {
@@ -283,7 +286,7 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
     }
 
     /// @dev Split every sealed, unsplit cohort before `day`. Half of V leaves claimablePool for
-    ///      the future pool; the Vault budget and sDGNRS AFKing quarters stay inside it. V is a
+    ///      future prizes and insurance equally; the Vault budget and sDGNRS AFKing quarters stay inside it. V is a
     ///      whole number of DEGENESIS_UNIT, so the quarters are exact.
     function _splitDegenesisCohorts(uint24 day) private {
         uint256 quarters;
@@ -298,7 +301,8 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
         }
         if (quarters == 0) return;
         claimablePool -= uint128(quarters * 2);
-        _addPrizeContribution(0, uint128(quarters * 2));
+        _addPrizeContribution(0, uint128(quarters));
+        yieldAccumulator += quarters;
         degenesisVaultBudget += uint128(quarters);
         balancesPacked[SDGNRS_WALLET_ID] += quarters << 128;
         emit AfkingFunded(SDGNRS_WALLET_ID, quarters);

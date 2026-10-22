@@ -694,10 +694,10 @@ contract DegenerusGame is GamePurchase, GameHooks {
     }
 
     /// @notice Vault-only: spend the Vault's Degenesis budget on tickets and lootboxes, or whale
-    ///         passes, for the Vault at their normal price.
-    /// @dev Signature: spendDegenesis(bool whalePass, uint256 quantity, uint256 boxOrder,
+    ///         passes, for an allocated recipient at their normal price.
+    /// @dev Signature: spendDegenesis(uint32 recipientId, bool whalePass, uint256 quantity, uint256 boxOrder,
     ///      uint256 maxCost). Forwards as-is so the module sees the Vault as msg.sender.
-    function spendDegenesis(bool, uint256, uint256, uint256) external {
+    function spendDegenesis(uint32, bool, uint256, uint256, uint256) external {
         (bool ok, bytes memory data) = ContractAddresses.GAME_DEGENESIS_MODULE.delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }

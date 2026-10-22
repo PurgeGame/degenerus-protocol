@@ -936,7 +936,7 @@ abstract contract GamePurchase is
 
         // Degenesis credit on the whole ticket + lootbox spend: every leg of this body is ETH,
         // claimable or AFKing funded (FLIP-paid tickets route through redeemFlip instead).
-        _accrueDegenesisCredit(buyerId, totalCost);
+        _accruePurchaseDegenesisCredit(buyerId, totalCost);
 
         // Recycle bonus: spending at least 3 whole tickets' worth of claimable
         // winnings (quote.priceWei is the per-whole-ticket cost) earns 10% of the
@@ -960,6 +960,14 @@ abstract contract GamePurchase is
                 affWinnerCredit
             );
         }
+        _accrueAdapterDegenesisCredit(buyerId, totalCost);
+    }
+
+    function _accrueAdapterDegenesisCredit(uint32, uint256) internal virtual {}
+
+    /// @dev Ordinary purchases, including smurf creation, retain their credit behavior.
+    function _accruePurchaseDegenesisCredit(uint32 buyerId, uint256 cost) internal virtual {
+        _accrueDegenesisCredit(buyerId, cost);
     }
 
     /// @dev Bubble up revert reason from delegatecall failure.

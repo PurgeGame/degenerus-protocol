@@ -251,6 +251,9 @@ interface IDegenerusGameWhaleModule {
         bool ticketLeg
     ) external returns (uint256 spent);
 
+    /// @notice Vault-funded recipient purchase, callable only in Game storage.
+    function purchaseWhalePassForDegenesis(uint32 recipientId, uint256 quantity) external;
+
     /// @notice sDGNRS's once-per-level automatic whale purchase (afking process STAGE only).
     /// @dev Delegatecall-only, nested from GameAfkingModule.runSubscriberWork; no facade
     ///      stub forwards it. Buys the largest whole group of five paid passes whose quote fits
@@ -673,10 +676,11 @@ interface IDegenerusGameDegenesisModule {
     /// @notice Split every unsplit Degenesis cohort; idempotent. Terminal setup's entry.
     function splitDegenesis() external;
 
-    /// @notice Vault-only: spend the Vault's Degenesis budget on an ordinary purchase for the Vault.
+    /// @notice Vault-only: spend the Vault's Degenesis budget on an ordinary purchase for an allocated recipient.
+    /// @param recipientId Allocated recipient account; 0 selects the Vault.
     /// @param whalePass True for whale passes, false for tickets and lootboxes
     /// @param quantity Whale passes, or ticket purchase units (400 = one whole ticket)
     /// @param boxOrder Packed lootbox order (zero with whale passes)
     /// @param maxCost Budget moved in for the purchase; the unspent part returns
-    function spendDegenesis(bool whalePass, uint256 quantity, uint256 boxOrder, uint256 maxCost) external;
+    function spendDegenesis(uint32 recipientId, bool whalePass, uint256 quantity, uint256 boxOrder, uint256 maxCost) external;
 }
