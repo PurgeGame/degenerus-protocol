@@ -1,3 +1,4 @@
+import { compiledStorageLayout } from "../helpers/storageLayout.js";
 import { ownerAction } from "../helpers/deployFixture.js";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
 import { expect } from "chai";
@@ -116,6 +117,26 @@ async function depositETH(sdgnrs, game, amount) {
   const gameSigner = await hre.ethers.getSigner(gameAddr);
   await gameSigner.sendTransaction({ to: sdgnrsAddr, value: amount });
   await hre.network.provider.request({ method: "hardhat_stopImpersonatingAccount", params: [gameAddr] });
+}
+
+// Live gambling burns use Game-held ordinary claimable backing.
+async function fundGameBacking(sdgnrs, game, amount) {
+  const layout = await compiledStorageLayout();
+  const balanceRoot = layout.storage.find((entry) => entry.label === "balancesPacked");
+  const pool = layout.storage.find((entry) => entry.label === "claimablePool");
+  const gameAddr = await game.getAddress();
+  const id = await game.walletIdOf(await sdgnrs.getAddress());
+  const balanceSlot = hre.ethers.keccak256(hre.ethers.AbiCoder.defaultAbiCoder()
+    .encode(["uint256", "uint256"], [id, BigInt(balanceRoot.slot)]));
+  const poolSlot = hre.ethers.toBeHex(BigInt(pool.slot), 32);
+  const balanceWord = BigInt(await hre.ethers.provider.getStorage(gameAddr, balanceSlot));
+  const poolWord = BigInt(await hre.ethers.provider.getStorage(gameAddr, poolSlot));
+  await hre.network.provider.send("hardhat_setStorageAt", [gameAddr, balanceSlot,
+    hre.ethers.toBeHex(balanceWord + amount, 32)]);
+  await hre.network.provider.send("hardhat_setStorageAt", [gameAddr, poolSlot,
+    hre.ethers.toBeHex(poolWord + (amount << (BigInt(pool.offset) * 8n)), 32)]);
+  await hre.network.provider.send("hardhat_setBalance", [gameAddr,
+    hre.ethers.toBeHex((await hre.ethers.provider.getBalance(gameAddr)) + amount)]);
 }
 
 describe("DGNRS (DGNRS Liquid Token)", function () {
@@ -495,7 +516,7 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
       const { sdgnrs, game, alice } = await loadFixture(deployFundedFullProtocol);
       const amount = INITIAL_SUPPLY / 100n;
       await giveSDGNRS(sdgnrs, game, alice.address, amount);
-      await depositETH(sdgnrs, game, eth("10"));
+      await fundGameBacking(sdgnrs, game, eth("10"));
       expect((await sdgnrs.previewBurnValue(amount))[0]).to.be.gte(eth("0.01"));
 
       const supplyBefore = await sdgnrs.totalSupply();
@@ -606,7 +627,7 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
       const granted = supply0 / 100n;
       const burned = granted / 2n;
       await giveSDGNRS(sdgnrs, game, alice.address, granted);
-      await depositETH(sdgnrs, game, eth("10"));
+      await fundGameBacking(sdgnrs, game, eth("10"));
       expect((await sdgnrs.previewBurnValue(burned))[0]).to.be.gte(eth("0.01"));
       await sdgnrs.connect(alice).burn(burned);
       expect(await sdgnrs.totalSupply()).to.equal(supply0 - burned);

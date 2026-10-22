@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {GameSlots} from "../helpers/GameSlots.sol";
+
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameAdvanceModule} from "../../contracts/modules/DegenerusGameAdvanceModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -142,10 +144,10 @@ contract StorageFoundationTest is Test {
         assertEq(uint8(uint256(slot0) >> 192), 1, "ticketsFullyProcessed not at slot 0 offset 24");
     }
 
-    /// @dev Verify prizePoolsPacked at Slot 2 and prizePoolPendingPacked at Slot 11, and
+    /// @dev Verify prizePoolsPacked at Slot 2 and prizePoolPendingPacked at its pinned slot, and
     ///      that both decode as [future:128 | next:128] — each half owns exactly half the
     ///      slot, so the halves can never carry into one another.
-    function testPackedPoolSlotsUnshifted() public {
+    function testPackedPoolSlots() public {
         // Write a known value to Slot 2 via vm.store, then read back via harness getter
         uint256 sentinel2 = 0xDEADBEEF00000000000000000000000100000000000000000000000000000002;
         vm.store(address(harness), bytes32(uint256(2)), bytes32(sentinel2));
@@ -153,13 +155,13 @@ contract StorageFoundationTest is Test {
         assertEq(uint256(next2), sentinel2 & POOL_HALF, "prizePoolsPacked not at slot 2 (next)");
         assertEq(uint256(future2), sentinel2 >> 128, "prizePoolsPacked not at slot 2 (future)");
 
-        // Write a known value to Slot 11 via vm.store, then read back via harness getter
+        // Write a known value to the pending-pool slot via vm.store, then read back via harness getter
         uint256 sentinel11 = 0x0000000000000000000000000000000300000000000000000000000000000004;
-        vm.store(address(harness), bytes32(uint256(11)), bytes32(sentinel11));
+        vm.store(address(harness), bytes32(GameSlots.PRIZE_POOL_PENDING_PACKED), bytes32(sentinel11));
         harness.setPrizePoolFrozen(true);
         (uint128 next11, uint128 future11) = harness.exposed_getPendingPools();
-        assertEq(uint256(next11), sentinel11 & POOL_HALF, "prizePoolPendingPacked not at slot 11 (next)");
-        assertEq(uint256(future11), sentinel11 >> 128, "prizePoolPendingPacked not at slot 11 (future)");
+        assertEq(uint256(next11), sentinel11 & POOL_HALF, "prizePoolPendingPacked at the pinned slot (next)");
+        assertEq(uint256(future11), sentinel11 >> 128, "prizePoolPendingPacked at the pinned slot (future)");
     }
 
     /// @dev Widest value either pool half holds. Each half is a full uint128 — ~3.4e38

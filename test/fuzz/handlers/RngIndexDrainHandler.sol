@@ -59,7 +59,7 @@ abstract contract RngIndexDrainOracle is Test {
     }
 
     function _bucketSlot(uint24 lvl, uint256 trait) private pure returns (bytes32) {
-        return bytes32(uint256(keccak256(abi.encode(uint256(lvl & 1), SLOT_BUCKETS))) + trait);
+        return bytes32(SLOT_BUCKETS + uint256(lvl & 1) * 256 + trait);
     }
 
     function _bucketLengthOf(DegenerusGame subject, uint24 lvl, uint256 trait) private view returns (uint256) {

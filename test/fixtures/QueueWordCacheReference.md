@@ -1,17 +1,7 @@
-# Queue drain differential reference
+# Archived queue drain reference
 
-`contracts/mocks/QueueWordCacheReference.hex` contains the deployed FoilPack runtime for the packed queue without the input-word cache. `QueueWordCacheReference.sol.txt` preserves that implementation's source. It uses the same combined registry/owed record and lane codec as the candidate.
+`contracts/mocks/QueueWordCacheReference.hex` and `QueueWordCacheReference.sol.txt` preserve an archived implementation and its source. Their level-keyed trait mapping and queue storage are incompatible with the current layout. Neither artifact is loaded by the current tests or deployment scripts.
 
-`test/fuzz/QueueWordCache.t.sol` pins the runtime hash, overlays the reference and candidate at the same module address, and compares each drain's storage writes, event bytes, cursor, and deterministic work charge from an identical snapshot. The reference is a test fixture and is never deployed by protocol deployment scripts.
+`test/fuzz/QueueWordCache.t.sol` validates the live queue-word cache using an uncached oracle over raw queue lanes and canonical queue rotation. Current trait fixtures use the fixed parity buffers through `BucketSeed`, `MintBucketSeed`, or `bucketSeed.js`.
 
-Compiler: Solidity 0.8.34, via IR, optimizer 1000, Osaka, Foundry address pins. The source is compiled at `contracts/modules/DegenerusGameFoilPackModule.sol` in an isolated copy of the queue-packing candidate. Reference compiler metadata and hash verification evidence are retained under `.planning/queue-packing/word-cache/`.
-
-Reference runtime Keccak-256: `0x5a6a7e70f0c61accb0ac17b9d3698408b2a40be2dc2d09f7c7e197c25c6fd76f`.
-
-Run #53 refresh: changed only the independent reference's old round emit to the direct
-`EntryTraitsRevealed` emitter and its per-round compute charge from 3 to 4, then rebuilt
-against the appended generation-window slot and updated round reserve. The uncached
-queue-read implementation remains unchanged. This keeps the differential test about
-queue caching while comparing the same reveal format and budget on both sides.
-
-Keep this reference independent of the cached implementation; regenerating it from the candidate would invalidate the differential comparison.
+The archived source and bytecode remain paired; changing their slot calculations without recompiling the historical implementation would invalidate that record.

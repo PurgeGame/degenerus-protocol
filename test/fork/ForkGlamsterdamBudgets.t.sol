@@ -90,9 +90,48 @@ abstract contract ForkGlamsterdamBudgetsBase is ForkDeployProtocol {
 
     // ------------------------------------------------------------------ machinery
 
-    function _call(Probe memory p) internal returns (bool ok, bytes memory ret) {
+    /// @dev The measured callee is nested inside an isolated transaction. A top-level
+    ///      lastCallGas includes intrinsic gas and the calldata floor, neither of which
+    ///      consumes a BoundedCall callee budget. Capture its gross frame gas here.
+    function executeProbe(Probe memory p) external returns (bool ok, bytes memory ret, uint256 used) {
+        require(msg.sender == address(this), "probe self-call");
         vm.prank(p.sender);
         (ok, ret) = p.target.call{value: p.value}(p.data);
+        used = vm.lastCallGas().gasTotalUsed;
+    }
+
+    function _call(Probe memory p) internal returns (bool ok, bytes memory ret, uint256 used) {
+        return this.executeProbe(p);
+    }
+
+    function _productionAccesses(VmSafe.AccountAccess[] memory acc)
+        private view returns (VmSafe.AccountAccess[] memory)
+    {
+        uint256 count;
+        for (uint256 i; i < acc.length; ++i) {
+            // The probe wrapper and cheatcode calls are measurement infrastructure.
+            if (acc[i].account == address(this) || acc[i].account == address(vm)) continue;
+            acc[count++] = acc[i];
+        }
+        assembly ("memory-safe") { mstore(acc, count) }
+        return acc;
+    }
+
+    function _warmAccessList(VmSafe.AccountAccess[] memory acc) private {
+        uint256 count = acc.length;
+        for (uint256 i; i < acc.length; ++i) count += acc[i].storageAccesses.length;
+        VmSafe.AccessListItem[] memory list = new VmSafe.AccessListItem[](count);
+        uint256 next;
+        for (uint256 i; i < acc.length; ++i) {
+            list[next++] = VmSafe.AccessListItem(acc[i].account, new bytes32[](0));
+            for (uint256 j; j < acc[i].storageAccesses.length; ++j) {
+                VmSafe.StorageAccess memory a = acc[i].storageAccesses[j];
+                bytes32[] memory keys = new bytes32[](1);
+                keys[0] = a.slot;
+                list[next++] = VmSafe.AccessListItem(a.account, keys);
+            }
+        }
+        vm.accessList(list);
     }
 
     /// @dev Cold surcharge of the call over a fully warm run: accounts other than sender/target/precompiles
@@ -142,9 +181,9 @@ abstract contract ForkGlamsterdamBudgetsBase is ForkDeployProtocol {
 
         // 1. the isolated cold call: first execution in this test
         if (trueCold) {
-            (bool okc,) = _call(p);
+            (bool okc,, uint256 used) = _call(p);
             r.ok = okc;
-            r.coldMeasured = vm.lastCallGas().gasTotalUsed;
+            r.coldMeasured = used;
             r.measuredCold = true;
             vm.revertToState(snap);
             snap = vm.snapshotState();
@@ -152,8 +191,8 @@ abstract contract ForkGlamsterdamBudgetsBase is ForkDeployProtocol {
 
         // 2. accesses
         vm.startStateDiffRecording();
-        (bool ok1,) = _call(p);
-        VmSafe.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
+        (bool ok1,,) = _call(p);
+        VmSafe.AccountAccess[] memory acc = _productionAccesses(vm.stopAndReturnStateDiff());
         if (!trueCold) r.ok = ok1;
         vm.revertToState(snap);
         snap = vm.snapshotState();
@@ -176,15 +215,18 @@ abstract contract ForkGlamsterdamBudgetsBase is ForkDeployProtocol {
             }
         }
 
-        // 4. fully warm baseline
-        _call(p);
-        r.warm = vm.lastCallGas().gasTotalUsed;
+        // 4. Explicitly warm the isolated wrapper transaction. Its access-list
+        // intrinsic cost is outside the measured callee frame.
+        _warmAccessList(acc);
+        (,, r.warm) = _call(p);
+        vm.noAccessList();
         vm.revertToState(snap);
 
         // 5. analytic cold and re-price
         uint256 charge;
         (r.cold, r.coldSlots, charge) = _surcharge(acc, p.sender, p.target);
         r.analyticCold = r.warm + charge;
+        if (trueCold) assertEq(r.coldMeasured, r.analyticCold, "cold frame versus warmed replay");
         r.osaka = trueCold ? r.coldMeasured : r.analyticCold;
         GlamsterdamReprice.Result memory g = GlamsterdamReprice.reprice(r.osaka, acc, p.target);
         for (uint256 i = 1; i < acc.length; ++i) {
@@ -195,7 +237,9 @@ abstract contract ForkGlamsterdamBudgetsBase is ForkDeployProtocol {
         r.sstores = g.sstores;
         r.firstChanges = g.firstChanges;
         r.newSlots = g.newSlots;
-        r.exec = g.glamsterdamExec + EXTCODE_DELTA * r.extcode + VALUE_CALL_DELTA * r.valueCalls;
+        // Use the same sender/target warmth as the cold-frame cross-check.
+        r.exec = uint256(int256(r.osaka) + g.execDelta - int256(g.coldAccounts * 400))
+            + r.cold * 400 + EXTCODE_DELTA * r.extcode + VALUE_CALL_DELTA * r.valueCalls;
         r.state = g.stateGas + NEW_ACCOUNT_STATE_GAS * r.newAccts;
         r.total = r.exec + r.state;
     }

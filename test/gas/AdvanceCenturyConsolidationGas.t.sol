@@ -566,6 +566,13 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         return 400;
     }
 
+    /// @dev One setup transaction keeps the large read-only scoring loop nested under isolation.
+    function seedBafScores(uint256 nRounds, uint24 day) external {
+        require(msg.sender == address(this), "fixture self-call");
+        CenturyBafScores.seedCandidatesR(address(jackpots), address(game), nRounds / 2, nRounds > 48 ? 4 : 1);
+        CenturyBafScores.seedHead(address(jackpots), address(coinflip), address(game), day);
+    }
+
     function setUp() public {
         _deployProtocol();
         uint24 centuryDay = _centuryDay();
@@ -591,8 +598,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
         assertEq(game.rngWordForDay(centuryDay), 0, "the word-apply transaction must apply fresh RNG");
         assertFalse(game.decWindow(), "real century request closes the burn window");
 
-        CenturyBafScores.seedCandidatesR(address(jackpots), address(game), rounds / 2, rounds > 48 ? 4 : 1);
-        CenturyBafScores.seedHead(address(jackpots), address(coinflip), address(game), centuryDay);
+        this.seedBafScores(rounds, centuryDay);
         assertEq(uint8(CenturyBafScores.levelWord(address(jackpots)) >> 64), 4, "bafLevel layout: four board entries");
         (, uint96 weight, uint32 count) = coinflip.bafDrawInfo();
         assertEq(count, 4096, "draw layout must match source");

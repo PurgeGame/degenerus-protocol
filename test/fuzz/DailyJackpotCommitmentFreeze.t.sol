@@ -120,7 +120,7 @@ contract DailyJackpotCommitmentFreezeTest is DeployProtocol {
     function _pending() private view returns (uint256 next, uint256 future) {
         uint256 flags = uint256(vm.load(address(game), bytes32(GameSlots.PRIZE_POOL_FROZEN)));
         if (uint8(flags >> (GameSlots.PRIZE_POOL_FROZEN_OFFSET * 8)) == 0) return (0, 0);
-        uint256 packed = uint256(vm.load(address(game), bytes32(uint256(11))));
+        uint256 packed = uint256(vm.load(address(game), bytes32(GameSlots.PRIZE_POOL_PENDING_PACKED)));
         return (uint128(packed), packed >> 128);
     }
 

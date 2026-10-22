@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+
+import {GameSlots} from "../helpers/GameSlots.sol";
+
 import {StorageCensus} from "./StorageCensus.sol";
 import {RedemptionFixture} from "../fuzz/helpers/RedemptionFixture.sol";
 import {RedemptionReserveHarness} from "../repro/RedemptionReserve.t.sol";
@@ -38,7 +41,7 @@ contract RedemptionReserveCensus is StorageCensus, RedemptionFixture {
             assertGt(game.claimableWinningsOf(alice), beforeCredit, "each measured claim is paid");
             _close("reserve-release");
             assertEq(game.redemptionReserve(), 0);
-            assertEq(uint256(vm.load(address(game), bytes32(uint256(84)))), 1);
+            assertEq(uint256(vm.load(address(game), bytes32(GameSlots.REDEMPTION_RESERVE_STORED))), 1);
         }
         _censusEnd();
     }

@@ -52,7 +52,6 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     uint256 private constant CLAIMABLE_POOL_SLOT = GameSlots.CLAIMABLE_POOL; // uint128 packed at offset 16 of slot 1
     uint256 private constant BALANCES_PACKED_SLOT = GameSlots.BALANCES_PACKED; // mapping(address => uint256) balancesPacked [afking:high128 | claimable:low128]
     uint256 private constant TICKET_QUEUE_SLOT = GameSlots.TICKET_QUEUE; // mapping(uint24 => address[])
-    uint256 private constant TICKETS_OWED_PACKED_SLOT = 13; // mapping(uint24 => mapping(address => uint40))
 
     FFKeyHarness private ffk;
     address private keeper;

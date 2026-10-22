@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {GameSlots} from "../helpers/GameSlots.sol";
+
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
@@ -167,28 +169,33 @@ contract KeeperGasProfileTest is DeployProtocol {
     }
 
     /// @dev Canonical live logical buckets; physical encodings intentionally differ.
-    function _bucketDigest() private view returns (bytes32 d) {
+    function _bucketDigest() private view returns (bytes32) {
+        return this.digestParity(this.digestParity(bytes32(0), 0), 1);
+    }
+
+    /// @dev Keep inventory hashing outside the keeper driver's optimizer frame.
+    function digestParity(bytes32 d, uint256 parity) external view returns (bytes32) {
         bool tails = vm.envOr("HEADER_TAIL", true);
-        uint256 bitmapSlot = vm.envOr("TAIL_BITMAP_SLOT", uint256(75));
-        uint256 stamps = uint256(game.extsload(bytes32(uint256(5))));
-        for (uint256 parity; parity < 2; ++parity) {
-            uint24 lvl = uint24(stamps >> (80 + parity * 24));
-            uint256 bits = tails ? uint256(game.extsload(bytes32(bitmapSlot + parity))) : 0;
-            d = keccak256(abi.encode(d, lvl));
-            uint256 base = uint256(keccak256(abi.encode(parity, uint256(8))));
-            for (uint256 trait; trait < 256; ++trait) {
-                uint256 header = uint256(game.extsload(bytes32(base + trait)));
-                uint256 count = tails ? ((bits >> trait) & 1 != 0 ? uint32(header) : 0)
-                    : (lvl != 0 && uint24(header >> 232) == lvl ? (header << 24) >> 24 : 0);
-                d = keccak256(abi.encode(d, count));
-                uint256 data = uint256(keccak256(abi.encode(base + trait)));
-                for (uint256 w; w < (count + 7) / 8; ++w) {
-                    uint256 word = tails && w == count / 8 ? header >> 32
-                        : uint256(game.extsload(bytes32(data + w)));
-                    d = keccak256(abi.encode(d, word));
-                }
+        uint256 bitmapSlot = vm.envOr("TAIL_BITMAP_SLOT", GameSlots.TRAIT_BUCKET_LIVE);
+        uint256 stamps = uint256(game.extsload(bytes32(GameSlots.TICKET_BUFFER_LEVELS)));
+        uint24 lvl = uint24(stamps >> (80 + parity * 24));
+        uint256 bits = tails ? uint256(game.extsload(bytes32(bitmapSlot + parity))) : 0;
+        d = keccak256(abi.encode(d, lvl));
+        uint256 base = recycled ? GameSlots.LVL_TRAIT_ENTRY + parity * 256
+            : uint256(keccak256(abi.encode(parity, uint256(8))));
+        for (uint256 trait; trait < 256; ++trait) {
+            uint256 header = uint256(game.extsload(bytes32(base + trait)));
+            uint256 count = tails ? ((bits >> trait) & 1 != 0 ? uint32(header) : 0)
+                : (lvl != 0 && uint24(header >> 232) == lvl ? (header << 24) >> 24 : 0);
+            d = keccak256(abi.encode(d, count));
+            uint256 data = uint256(keccak256(abi.encode(base + trait)));
+            for (uint256 w; w < (count + 7) / 8; ++w) {
+                uint256 word = tails && w == count / 8 ? header >> 32
+                    : uint256(game.extsload(bytes32(data + w)));
+                d = keccak256(abi.encode(d, word));
             }
         }
+        return d;
     }
 
     function _snapshotInventory(uint24 lvl) private {
@@ -197,12 +204,13 @@ contract KeeperGasProfileTest is DeployProtocol {
             uint256 packed = uint256(game.extsload(bytes32(uint256(5))));
             if (uint24(packed >> (80 + (lvl & 1) * 24)) != lvl) return;
         }
-        uint256 base = uint256(keccak256(abi.encode(uint256(recycled ? lvl & 1 : lvl), uint256(8))));
+        uint256 base = recycled ? GameSlots.LVL_TRAIT_ENTRY + uint256(lvl & 1) * 256
+            : uint256(keccak256(abi.encode(uint256(lvl), uint256(8))));
         uint256 occurrences; uint256 words;
         for (uint256 trait; trait < 256; ++trait) {
             uint256 header = uint256(game.extsload(bytes32(base + trait)));
             uint256 bits = vm.envOr("HEADER_TAIL", true)
-                ? uint256(game.extsload(bytes32(vm.envOr("TAIL_BITMAP_SLOT", uint256(75)) + (lvl & 1)))) : 0;
+                ? uint256(game.extsload(bytes32(vm.envOr("TAIL_BITMAP_SLOT", GameSlots.TRAIT_BUCKET_LIVE) + (lvl & 1)))) : 0;
             uint256 count = vm.envOr("HEADER_TAIL", true) ? (((bits >> trait) & 1) != 0 ? uint32(header) : 0)
                 : (recycled ? (uint24(header >> 232) == lvl ? (header << 24) >> 24 : 0) : header);
             occurrences += count;

@@ -113,7 +113,8 @@ contract StorageRecyclingLifecycleTest is DeployProtocol {
             if (uint24(packed >> (80 + (lvl & 1) * 24)) != lvl
                 || packed & (uint256(1) << (GameSlots.TRAIT_BUCKET_STALE_OFFSET * 8 + (lvl & 1))) != 0) return;
         }
-        uint256 base = uint256(keccak256(abi.encode(uint256(recycled ? lvl & 1 : lvl), uint256(8))));
+        uint256 base = recycled ? GameSlots.LVL_TRAIT_ENTRY + uint256(lvl & 1) * 256
+            : uint256(keccak256(abi.encode(uint256(lvl), uint256(8))));
         uint256 occurrences; uint256 words;
         for (uint256 trait; trait < 256; ++trait) {
             uint256 header = uint256(game.extsload(bytes32(base + trait)));

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+
+import {GameSlots} from "../helpers/GameSlots.sol";
 import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 import {TicketQueueStorage as RingStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
 
@@ -96,7 +98,7 @@ contract SdgnrsCenturyTransitionTest is BoundaryGasFixture {
         vm.etch(address(game), realCode);
         uint256 beforeSupply = sdgnrs.totalSupply();
         uint24 ffKey = (uint24(1) << 22) | (game.level() + 2);
-        bytes32 ffLenSlot = keccak256(abi.encode(uint256(RingStorage.queueKey(uint24(ffKey))), uint256(12)));
+        bytes32 ffLenSlot = keccak256(abi.encode(uint256(RingStorage.queueKey(uint24(ffKey))), GameSlots.TICKET_QUEUE));
         assertEq(uint32(uint256(vm.load(address(game), ffLenSlot))), 150, "fixture: unminted queue seeded");
 
         game.mineFlip(0);

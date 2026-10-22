@@ -413,7 +413,7 @@ abstract contract CrapsPins is Test {
 
     uint256 internal constant PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
     uint256 internal constant WORD_SLOT = 3;
-    uint256 internal constant DAY_WORD_SLOT = 10;
+    uint256 internal constant DAY_WORD_SLOT = GameSlots.RNG_WORD_BY_DAY;
 
     function _installPins() internal {
         vm.etch(ContractAddresses.GAME, address(new MockGame()).code);

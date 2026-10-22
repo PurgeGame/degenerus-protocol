@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
+
+import {GameSlots} from "../helpers/GameSlots.sol";
 import {TicketQueueStorage as RingStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
 
 import {Test} from "forge-std/Test.sol";
@@ -61,7 +63,7 @@ contract DeityTransitionDrainGasTest is BoundaryGasFixture {
 
     function testColdThirtyTwoPerpetualGrantsFitAndCloseWithoutDrainingUnmintedQueue() public {
         uint24 ffKey = (uint24(1) << 22) | (LVL + 2);
-        bytes32 ffLenSlot = keccak256(abi.encode(uint256(RingStorage.queueKey(uint24(ffKey))), uint256(12)));
+        bytes32 ffLenSlot = keccak256(abi.encode(uint256(RingStorage.queueKey(uint24(ffKey))), GameSlots.TICKET_QUEUE));
 
         // A realistic 10M allowance succeeds and closes the transition. The call is reported, not
         // bounded (the engine admits chunks while the allowance lasts); the close checkpoint itself

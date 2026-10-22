@@ -180,8 +180,8 @@ const DEITY_SENTINEL_TICKET_IDX =
 // Storage slot indices for `lvlTraitEntry` + `deityBySymbol`, validated at
 // test runtime via `forge inspect storageLayout`. These match Phase 294 §2
 // EMPTY-diff attestation against the v41 close pin.
-const FALLBACK_TRAIT_BURN_TICKET_SLOT = 8n;
-const FALLBACK_DEITY_BY_SYMBOL_SLOT = 25n; // Phase C layout (deleted lootbox roots shifted it)
+const FALLBACK_TRAIT_BURN_TICKET_SLOT = 84n;
+const FALLBACK_DEITY_BY_SYMBOL_SLOT = 24n;
 
 // -----------------------------------------------------------------------------
 // Module-level helpers
@@ -206,23 +206,9 @@ function computeDeityBySymbolSlot(fullSymId, baseSlot) {
   );
 }
 
-// Compute the storage slot for `lvlTraitEntry[lvl][trait]` length word.
-// Solidity layout for `mapping(uint24 => address[][256])`:
-//   outerSlot = keccak256(abi.encode(uint256(lvl), uint256(baseSlot)))
-//   For the `address[][256]` fixed-array at outerSlot, element `trait`
-//   sits at `outerSlot + trait` and holds the length of the inner
-//   `address[]` dynamic array. The dynamic-array elements live at
-//   `keccak256(outerSlot + trait)` + i.
+// Trait header in the fixed parity buffer; completed words start at keccak256(header).
 function computeTraitBucketLengthSlot(lvl, trait, baseSlot) {
-  const outerSlot = BigInt(
-    hre.ethers.keccak256(
-      hre.ethers.AbiCoder.defaultAbiCoder().encode(
-        ["uint256", "uint256"],
-        [BigInt(lvl) & 1n, baseSlot]
-      )
-    )
-  );
-  return outerSlot + BigInt(trait);
+  return BigInt(baseSlot) + (BigInt(lvl) & 1n) * 256n + BigInt(trait);
 }
 
 // Compute the storage slot for the i-th element of a dynamic `address[]`
@@ -362,7 +348,7 @@ describe("DeityPassGoldNerfRegression — Phase 295 v42.0 DPNERF regression fixt
   describe(
     "TST-DPNERF setup-and-sanity — JS-replay oracle wiring + forge-inspect storage-layout baseSlot derivation",
     function () {
-      it("derives deityBySymbol base slot from the compiled Hardhat storageLayout and matches the current layout pin (slot 25)", async function () {
+      it("derives deityBySymbol base slot from the compiled Hardhat storageLayout and matches the current layout pin", async function () {
         const slot = await deriveStorageSlot("deityBySymbol");
         expect(typeof slot).to.equal("bigint");
         expect(slot >= 0n).to.equal(true);
@@ -372,7 +358,7 @@ describe("DeityPassGoldNerfRegression — Phase 295 v42.0 DPNERF regression fixt
         );
       });
 
-      it("derives lvlTraitEntry base slot from the compiled Hardhat storageLayout and matches the v41 close pin (slot 8)", async function () {
+      it("derives lvlTraitEntry base slot from the compiled Hardhat storageLayout and matches the current fixed-array layout pin", async function () {
         const slot = await deriveStorageSlot("lvlTraitEntry");
         expect(typeof slot).to.equal("bigint");
         expect(slot >= 0n).to.equal(true);

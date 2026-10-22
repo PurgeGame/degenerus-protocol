@@ -151,7 +151,7 @@ async function measureLevelOneAdvance(prevPoolEth, expectedAwards) {
     const owners = Array.from({ length: TRAIT_HOLDERS }, (_, i) => holder(0xace000000n + BigInt(t) * 0x10000n + BigInt(i + 1)));
     owners.forEach((owner) => traitOwners.add(owner.toLowerCase()));
     const positions = await registerFixtureOwners(1n, owners);
-    await writeLanes(gameAddr, mapSlot(1n, bucketRoot) + BigInt(t), positions, 1n);
+    await writeLanes(gameAddr, bucketRoot + 256n + BigInt(t), positions, 1n);
     traitLive |= 1n << BigInt(t);
   }
   await setSlot(gameAddr, traitLiveSlot, traitLive);

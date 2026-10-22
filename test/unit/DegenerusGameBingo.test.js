@@ -25,15 +25,7 @@ function wordHex(value) {
 }
 
 function traitBucketSlot(level, trait, baseSlot) {
-  const outer = BigInt(
-    hre.ethers.keccak256(
-      hre.ethers.AbiCoder.defaultAbiCoder().encode(
-        ["uint24", "uint256"],
-        [BigInt(level) & 1n, baseSlot]
-      )
-    )
-  );
-  return outer + BigInt(trait);
+  return BigInt(baseSlot) + (BigInt(level) & 1n) * 256n + BigInt(trait);
 }
 
 function arrayElementSlot(lengthSlot, index) {

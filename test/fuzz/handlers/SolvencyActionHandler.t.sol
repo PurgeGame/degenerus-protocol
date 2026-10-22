@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {GameSlots} from "../../helpers/GameSlots.sol";
+
 import {DeployProtocol, DegenesisDeployProtocol} from "../helpers/DeployProtocol.sol";
 import {SolvencyActionHandler} from "./SolvencyActionHandler.sol";
 import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
@@ -62,7 +64,7 @@ contract SolvencyActionHandlerDegenesis is DegenesisDeployProtocol {
     }
 
     function _budget() internal view returns (uint256) {
-        return uint128(uint256(vm.load(address(game), bytes32(uint256(15)))));
+        return uint128(uint256(vm.load(address(game), bytes32(GameSlots.DEGENESIS_VAULT_BUDGET))));
     }
 
     function testDegenesisBuyEarnsCreditAndSplitsAtTheDailyRequest() public {

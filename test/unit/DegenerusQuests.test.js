@@ -1,3 +1,4 @@
+import { compiledStorageLayout } from "../helpers/storageLayout.js";
 import { expect } from "chai";
 import hre from "hardhat";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers.js";
@@ -1014,21 +1015,22 @@ describe("DegenerusQuests", function () {
   //     quest streak by LEVEL_QUEST_STREAK_BONUS (5), not the daily +1.
   // =========================================================================
   describe("Level quest streak bonus (+5 on completion)", function () {
-    // mintPacked_ lives at storage slot 9 on the Game (forge inspect
-    // DegenerusGame storageLayout). _isLevelQuestEligible reads it:
+    // _isLevelQuestEligible reads these mintPacked_ fields:
     //   unitsLvl  = packed >> 96 (LEVEL_UNITS_LEVEL_SHIFT)  must == level + 1   (4+ units this level)
     //   units     = packed >> 208 (LEVEL_UNITS_SHIFT, 16 bits) must >= 4
     //   streak    = (packed >> 48) >= 5 (LEVEL_STREAK_SHIFT), live: (packed >> 148) + 1 >= level
     //   (an active pass alone also qualifies)
     // Poke exactly those bits so the player is eligible without a real mint.
     async function makeLevelQuestEligible(hreEthers, game, player) {
+      const layout = await compiledStorageLayout();
+      const mintRoot = BigInt(layout.storage.find((entry) => entry.label === "mintPacked_").slot);
       const lvl = await game.level();
       const packed =
         (5n << 48n) | ((BigInt(lvl) + 1n) << 96n) | ((BigInt(lvl) + 1n) << 148n) | (400n << 208n);
       const slot = hreEthers.keccak256(
         hreEthers.AbiCoder.defaultAbiCoder().encode(
           ["uint32", "uint256"],
-          [await giveWalletId(game, player), 9n]
+          [await giveWalletId(game, player), mintRoot]
         )
       );
       await hreEthers.provider.send("hardhat_setStorageAt", [

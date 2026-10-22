@@ -134,7 +134,7 @@ contract PurchaseHotPathGasTest is DeployProtocol {
             game.mintPackedFor(BUYER), game.entriesOwedView(game.level() + 1, BUYER),
             coinflip.coinflipAmount(BUYER), coinflip.coinflipAmount(REFERRER),
             coinflip.coinflipAmount(address(vault)), coinflip.coinflipAmount(address(sdgnrs)),
-            vm.load(address(game), bytes32(uint256(2))), vm.load(address(game), bytes32(uint256(11))),
+            vm.load(address(game), bytes32(uint256(2))), vm.load(address(game), bytes32(GameSlots.PRIZE_POOL_PENDING_PACKED)),
             vm.load(address(quests), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), uint256(1)))),
             vm.load(address(quests), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), uint256(2))))
         ));
@@ -214,7 +214,7 @@ contract PurchaseHotPathGasTest is DeployProtocol {
         _measure("lapsed_afking_box", 400, 1, 0, MintPaymentKind.DirectEth, _price() * 2);
     }
     function test_Gas_LevelQuestCompletion() public {
-        vm.store(address(game), keccak256(abi.encode(BUYER, uint256(9))), bytes32(uint256(5) << 48));
+        vm.store(address(game), keccak256(abi.encode(game.walletIdOf(BUYER), GameSlots.MINT_PACKED)), bytes32(uint256(5) << 48));
         _measure("level_quest", 4000, 0, 0, MintPaymentKind.DirectEth, _price() * 10);
     }
     function test_Gas_BiggestBuy() public {

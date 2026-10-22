@@ -94,7 +94,6 @@ contract TicketLifecycleTest is DeployProtocol {
     uint256 private constant SLOT_1 = 1;
 
     uint256 private constant TICKET_QUEUE_SLOT = GameSlots.TICKET_QUEUE;
-    uint256 private constant TICKETS_OWED_PACKED_SLOT = 13;
     uint256 private constant PRIZE_POOLS_PACKED_SLOT = GameSlots.PRIZE_POOLS_PACKED;
 
     /// @dev Low 128 bits of the packed pool slots: the next half. Layout is

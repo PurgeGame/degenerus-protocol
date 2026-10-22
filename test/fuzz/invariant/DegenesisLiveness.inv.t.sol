@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {GameSlots} from "../../helpers/GameSlots.sol";
+
 import {console} from "forge-std/console.sol";
 import {StdInvariant} from "forge-std/StdInvariant.sol";
 import {DegenesisDeployProtocol} from "../helpers/DeployProtocol.sol";
@@ -71,8 +73,8 @@ contract DegenesisLiveness is DegenesisDeployProtocol {
             console.log("level", uint256(game.level()));
             console.log("gameOver", game.gameOver());
             console.log("closed", uint256(uint8(uint256(vm.load(address(game), bytes32(0))) >> 216)));
-            console.logBytes32(vm.load(address(game), bytes32(uint256(26))));
-            console.logBytes32(vm.load(address(game), bytes32(uint256(81))));
+            console.logBytes32(vm.load(address(game), bytes32(GameSlots.DEGENESIS_ACTIVE)));
+            console.logBytes32(vm.load(address(game), bytes32(GameSlots.DEGENESIS_WORD)));
             console.log("nextMinerAction", uint256(game.nextMinerAction()));
             console.log("rngLocked", game.rngLocked());
             console.log("liveness fired on day", uint256(handler.finishLivenessDay()));

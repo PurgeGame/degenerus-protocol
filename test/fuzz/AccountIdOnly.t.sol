@@ -38,7 +38,7 @@ contract AccountIdOnlyTest is DeployProtocol {
     }
 
     function test_SubaccountsResolveTheirOwnerAndKeepHistorySeparate() public view {
-        uint256 base = uint256(keccak256(abi.encode(uint256(13))));
+        uint256 base = uint256(keccak256(abi.encode(GameSlots.WALLETS)));
         for (uint32 id = a; id <= b; ++id) {
             uint256 element = uint256(vm.load(address(game), bytes32(base + id)));
             assertEq(uint160(element), 0);
@@ -113,7 +113,7 @@ contract AccountIdOnlyTest is DeployProtocol {
         address[5] memory voters;
         uint32[5] memory ids;
         // Align the first voter to a packed-word boundary.
-        while (uint256(vm.load(address(game), bytes32(uint256(13)))) % 5 != 0) _giveWalletId(address(uint160(0xF000 + uint256(vm.load(address(game), bytes32(uint256(13)))))));
+        while (uint256(vm.load(address(game), bytes32(GameSlots.WALLETS))) % 5 != 0) _giveWalletId(address(uint160(0xF000 + uint256(vm.load(address(game), bytes32(GameSlots.WALLETS))))));
         for (uint256 i; i < 5; ++i) {
             (voters[i], ids[i]) = _voter(i);
             vm.prank(voters[i]);
@@ -135,7 +135,7 @@ contract AccountIdOnlyTest is DeployProtocol {
         IdVoteAdminHarness(payable(address(admin))).seedProposal();
         address[5] memory voters;
         uint32[5] memory ids;
-        while (uint256(vm.load(address(game), bytes32(uint256(13)))) % 5 != 0) _giveWalletId(address(uint160(0xF000 + uint256(vm.load(address(game), bytes32(uint256(13)))))));
+        while (uint256(vm.load(address(game), bytes32(GameSlots.WALLETS))) % 5 != 0) _giveWalletId(address(uint160(0xF000 + uint256(vm.load(address(game), bytes32(GameSlots.WALLETS))))));
         for (uint256 i; i < 5; ++i) {
             (voters[i], ids[i]) = _voter(i);
             vm.prank(voters[i]);

@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+
+import {GameSlots} from "../helpers/GameSlots.sol";
+
 import {RedemptionFixture} from "../fuzz/helpers/RedemptionFixture.sol";
 import {DegenerusGameRngUtils} from "../../contracts/modules/DegenerusGameRngUtils.sol";
 import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
@@ -269,7 +272,7 @@ contract RedemptionReserveTest is RedemptionFixture {
         uint256 ordinary = game.claimableWinningsOf(address(sdgnrs));
         _closeFundedReserve();
         assertEq(game.redemptionReserve(), 0);
-        assertEq(uint256(vm.load(address(game), bytes32(uint256(84)))), 1, "released reserve home retains its sentinel");
+        assertEq(uint256(vm.load(address(game), bytes32(GameSlots.REDEMPTION_RESERVE_STORED))), 1, "released reserve home retains its sentinel");
         assertEq(game.claimableWinningsOf(address(sdgnrs)), ordinary + leftover, "the remainder returns to ordinary backing");
     }
 }

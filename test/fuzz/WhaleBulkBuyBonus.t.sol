@@ -36,7 +36,6 @@ contract WhaleBulkBuyBonusTest is DeployProtocol {
 
     uint256 private constant SLOT_0 = 0;
     uint256 private constant TICKET_QUEUE_SLOT = GameSlots.TICKET_QUEUE;
-    uint256 private constant ENTRIES_OWED_SLOT = 13;
     uint256 private constant LEVEL_SHIFT = 96;
     uint256 private constant WRITE_SLOT_SHIFT = 200;
     uint256 private constant LAST_PURCHASE_DAY_SHIFT = 136;

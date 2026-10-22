@@ -9,8 +9,6 @@ contract TicketLensHarness is DegenerusGameStorage {
         assembly { value := sload(slot) }
     }
     function append(uint24 lvl, uint8 trait, uint32 ownerIdx, uint32 count) external {
-        uint256 base;
-        assembly { base := lvlTraitEntry.slot }
         _setTicketBufferLevel(lvl);
         _bucketAppendRun(_traitBufferBase(lvl), trait, ownerIdx, count, lvl);
     }

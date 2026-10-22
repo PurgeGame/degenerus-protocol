@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {GameSlots} from "../helpers/GameSlots.sol";
+
 import {Vm} from "forge-std/Vm.sol";
 import {console} from "forge-std/console.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
@@ -272,7 +274,7 @@ abstract contract StorageCensus is DeployProtocol {
     /// @dev Walk a written slot up to its root: mapping hops through the recorded 64-byte keccak
     ///      preimages (trying member offsets 0..31 below the slot), dynamic-array hops through
     ///      keccak(slot) of a slot this tx wrote or read (a push writes the length, an indexed
-    ///      write reads it for the bounds check), then keccak(p) of top-level slots 0..511.
+    ///      write reads it for the bounds check), then keccak(p) of direct roots through the trait buffers.
     function _censusAttribute(address account, bytes32 slot, Table memory t, Vm.AccountAccess[] memory acc)
         internal
         view
@@ -358,7 +360,9 @@ abstract contract StorageCensus is DeployProtocol {
                 if (sa[j].account == account && !sa[j].isWrite && _censusWithin(cur, sa[j].slot)) return (true, sa[j].slot);
             }
         }
-        for (uint256 p; p < 512; ++p) {
+        uint256 directLimit = GameSlots.LVL_TRAIT_ENTRY + 512;
+        if (directLimit < 512) directLimit = 512;
+        for (uint256 p; p < directLimit; ++p) {
             if (_censusWithin(cur, bytes32(p))) return (true, bytes32(p));
         }
         return (false, bytes32(0));

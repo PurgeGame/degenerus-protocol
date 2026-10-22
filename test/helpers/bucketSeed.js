@@ -46,7 +46,7 @@ function mapSlot(key, base) {
 }
 
 function bucketLengthSlot(lvl, trait, traitSlot = TRAIT_SLOT) {
-  return mapSlot(BigInt(lvl) & 1n, traitSlot) + BigInt(trait);
+  return BigInt(traitSlot) + (BigInt(lvl) & 1n) * 256n + BigInt(trait);
 }
 
 function ownerLengthSlot(lvl, ownerSlot = OWNER_SLOT) {

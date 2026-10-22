@@ -464,15 +464,13 @@ contract FoilDrainMiddaySwap is DeployProtocol {
             );
     }
 
-    /// How many times `who` appears in lvlTraitEntry[lvl][traitId] — slot 8.
+    /// How many times `who` appears in lvlTraitEntry[lvl][traitId]. Uses the fixed parity buffer.
     function _traitEntryCountOf(
         uint24 lvl,
         uint8 traitId,
         address who
     ) internal view returns (uint256 n) {
-        bytes32 levelSlot = keccak256(
-            abi.encode(uint256(lvl & 1), SLOT_LVL_TRAIT_ENTRY)
-        );
+        uint256 levelSlot = SLOT_LVL_TRAIT_ENTRY + uint256(lvl & 1) * 256;
         bytes32 elem = bytes32(uint256(levelSlot) + uint256(traitId));
         uint256 header = uint256(vm.load(address(game), elem));
         uint256 packedStamps = uint256(vm.load(address(game), bytes32(GameSlots.TICKET_BUFFER_LEVELS)));

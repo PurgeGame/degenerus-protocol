@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {GameSlots} from "../helpers/GameSlots.sol";
+
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
@@ -129,7 +131,7 @@ abstract contract QueueWordCacheBase is Test {
         internal returns (Observation memory o)
     {
         QueueWordCacheHarness hh = h;
-        uint256 base = uint256(keccak256(abi.encode(keccak256(abi.encode(hh.physicalKey(key), uint256(12))))));
+        uint256 base = uint256(keccak256(abi.encode(keccak256(abi.encode(hh.physicalKey(key), GameSlots.TICKET_QUEUE)))));
         uint24 anchor = hh.prime(key, lvl, idx, entropy, shift);
         vm.recordLogs();
         vm.startStateDiffRecording();

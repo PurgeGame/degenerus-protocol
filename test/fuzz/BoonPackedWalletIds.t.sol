@@ -75,7 +75,7 @@ contract BoonPackedWalletIds is DeployProtocol {
     uint256 private constant DEGEN_ETH_LANE = 184;
     uint256 private constant DEGEN_FLIP_LANE = 208;
     uint256 private constant WWXRP_LANE = 232;
-    uint256 private constant BOON_PACKED_SLOT = 47;
+    uint256 private constant BOON_PACKED_SLOT = GameSlots.BOON_PACKED;
 
     BoonGameExt private ext;
 

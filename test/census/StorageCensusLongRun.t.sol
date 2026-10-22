@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+
 import {StorageCensus} from "./StorageCensus.sol";
 import {console} from "forge-std/console.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";

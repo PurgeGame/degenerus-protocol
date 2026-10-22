@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {GameSlots} from "../helpers/GameSlots.sol";
+
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
@@ -141,7 +143,7 @@ contract CustomerFollowupGasTest is DeployProtocol {
                 value &= ~bytes32(uint256((1 << 30) - 1));
                 previous &= ~bytes32(uint256((1 << 30) - 1));
             }
-            if (a.account == address(game) && a.slot == keccak256(abi.encode(PLAYER, uint256(9)))) {
+            if (a.account == address(game) && a.slot == keccak256(abi.encode(game.walletIdOf(PLAYER), GameSlots.MINT_PACKED))) {
                 bytes32 mask = bytes32(((uint256(1) << 30) - 1) << 185);
                 value &= ~mask;
                 previous &= ~mask;
@@ -220,7 +222,7 @@ contract CustomerFollowupGasTest is DeployProtocol {
 
 
     function _existingMint() private {
-        bytes32 slot = keccak256(abi.encode(PLAYER, uint256(9)));
+        bytes32 slot = keccak256(abi.encode(game.walletIdOf(PLAYER), GameSlots.MINT_PACKED));
         vm.store(address(game), slot, vm.load(address(game), slot) | bytes32(uint256(1)));
     }
     function test_Gas_DegeneretteExistingMint() public {

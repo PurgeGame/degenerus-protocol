@@ -530,7 +530,7 @@ contract DailyRngStallRecovery is DeployProtocol {
         if (TQ.length(address(game), key) == 0) return;
         vm.store(
             address(game),
-            keccak256(abi.encode(uint256(TQ.queueKey(key)), uint256(12))),
+            keccak256(abi.encode(uint256(TQ.queueKey(key)), GameSlots.TICKET_QUEUE)),
             bytes32(0)
         );
     }

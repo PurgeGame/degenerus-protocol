@@ -40,6 +40,10 @@ contract SlotProbe is DegenerusGameStorage {
 /// @dev Adds only the replay taps the suite grades the binding with. It overrides nothing —
 ///      the doubles live at the pins (see CrapsPins), so every rule under test is the real one.
 contract LootboxCrapsHarness is CrapsSeedViews {
+    function pinnedGameSlots() external pure returns (uint256[4] memory) {
+        return [RNG_STATE_SLOT, LOOTBOX_RNG_WORD_SLOT, RNG_WORD_BY_DAY_SLOT, RNG_DAY_TAGS_SLOT];
+    }
+
 
     /// @dev The `resolveHandAt` / `resolveHandsAt` / `shooterDice` replay wrappers were cut from
     ///      production: they cost `CrapsBattle` its EIP-170 headroom and the paying path never called
@@ -288,6 +292,24 @@ contract LootboxCrapsTest is CrapsPins {
     ///      Moving either variable changes this test's answer, and renaming one fails to compile.
     ///      No `vm.ffi` — this repo keeps it disabled, and `FarFutureSalvageSwap` leans on that
     ///      being true as part of its own security argument.
+
+    function test_RngStateConstantMatchesCompilerSlot() public {
+        uint256[4] memory pins = (new LootboxCrapsHarness()).pinnedGameSlots();
+        assertEq(pins[0], (new SlotProbe()).lootboxRngPackedSlot());
+    }
+    function test_RngWordConstantMatchesCompilerSlot() public {
+        uint256[4] memory pins = (new LootboxCrapsHarness()).pinnedGameSlots();
+        assertEq(pins[1], (new SlotProbe()).lootboxRngWordSlot());
+    }
+    function test_DailyWordConstantMatchesCompilerSlot() public {
+        uint256[4] memory pins = (new LootboxCrapsHarness()).pinnedGameSlots();
+        assertEq(pins[2], (new SlotProbe()).rngWordByDaySlot());
+    }
+    function test_DayTagsConstantMatchesCompilerSlot() public {
+        uint256[4] memory pins = (new LootboxCrapsHarness()).pinnedGameSlots();
+        assertEq(pins[3], (new SlotProbe()).rngDayTagsSlot());
+    }
+
     function test_lootboxRngSlotsMatchTheAuditedStorageLayout() public {
         SlotProbe probe = new SlotProbe();
         assertEq(

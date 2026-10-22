@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
@@ -1030,7 +1031,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         uint256 before = lens.previewBorrow(address(game), root, 1, type(uint256).max).principal;
         _seed(child, 8000, 4 ether, 3 ether);
         assertEq(lens.previewBorrow(address(game), root, 1, type(uint256).max).principal, before);
-        uint256 table = uint256(keccak256(abi.encode(uint256(13))));
+        uint256 table = uint256(keccak256(abi.encode(GameSlots.WALLETS)));
         bytes32 childElement = vm.load(address(game), bytes32(table + child));
         _default(root);
         assertEq(_payee(root), address(sdgnrs));

@@ -42,7 +42,7 @@ contract CrapsFlowHandler {
 
     /// @dev The game-side storage slots the words live in — the same numbers `CrapsPins` pins.
     uint256 internal constant WORD_SLOT = 3;
-    uint256 internal constant DAY_WORD_SLOT = 10;
+    uint256 internal constant DAY_WORD_SLOT = GameSlots.RNG_WORD_BY_DAY;
 
     uint256 internal constant PERIODS = 7;
 

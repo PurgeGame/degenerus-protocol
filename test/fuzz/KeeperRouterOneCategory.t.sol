@@ -99,7 +99,6 @@ contract KeeperRouterOneCategory is DeployProtocol {
     /// @dev ticketQueue mapping root (uint24 => address[]) + entriesOwedPacked
     ///      (uint24 => address => uint40) — for forcing advanceDue via a read-slot backlog.
     uint256 private constant TICKET_QUEUE_SLOT = GameSlots.TICKET_QUEUE;
-    uint256 private constant TICKETS_OWED_PACKED_SLOT = 13;
     uint24 private constant TICKET_SLOT_BIT = 1 << 23; // mirrors DegenerusGameStorage.TICKET_SLOT_BIT
 
     uint256 private constant FIXED_WORD = uint256(keccak256("keeper_router_one_category_word"));

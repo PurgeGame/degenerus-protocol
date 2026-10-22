@@ -40,8 +40,8 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
     // modules; re-derived from scripts/layout/golden/DegenerusGame.json)
     // -------------------------------------------------------------------------
 
-    /// @dev lvlTraitEntry — slot 8; the parity buffer base is keccak256(lvl & 1 . 8).
-    uint256 private constant SLOT_TRAIT_BURN_TICKET = 8;
+    /// @dev Root of the two fixed trait buffers, pinned against the compiled layout.
+    uint256 private constant SLOT_TRAIT_BURN_TICKET = GameSlots.LVL_TRAIT_ENTRY;
 
     /// @dev packed slot 14: ticketCursor (uint32) offset 0; ticketLevel (uint24) offset 4;
     ///      ticketSoloOffset (uint32) offset 16.
@@ -102,7 +102,7 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
 
     /// @dev Storage slot of the array length of `lvlTraitEntry[lvl][traitId]`'s header.
     function _slotTraitBurnLen(uint24 lvl, uint8 traitId) private pure returns (bytes32) {
-        bytes32 base = keccak256(abi.encode(uint256(lvl & 1), SLOT_TRAIT_BURN_TICKET));
+        uint256 base = SLOT_TRAIT_BURN_TICKET + uint256(lvl & 1) * 256;
         return bytes32(uint256(base) + uint256(traitId));
     }
 

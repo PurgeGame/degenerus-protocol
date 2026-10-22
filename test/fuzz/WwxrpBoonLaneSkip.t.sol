@@ -12,7 +12,7 @@ interface IGameBoonView {
 
 /// @title WwxrpBoonLaneSkip -- WWXRP.enter reads the Game's WWXRP boon lane before consuming
 /// @notice enter() dispatches the Game's consumeCoinflipBoon only when the player's WWXRP lane
-///         (Game slot 47 mapping, second word, bits 232..255) has a nonzero tier. These tests pin
+///         (Game slot 46 mapping, second word, bits 232..255) has a nonzero tier. These tests pin
 ///         that slot against the Game's own getter and prove the skipped dispatch is a no-op.
 contract WwxrpBoonLaneSkipTest is DeployProtocol {
     uint256 private constant BOON_PACKED_SLOT = GameSlots.BOON_PACKED;

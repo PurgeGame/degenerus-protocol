@@ -39,7 +39,7 @@ contract DeityGenesisBatchGasTest is DeployProtocol {
         (, bytes32[] memory writes) = vm.accesses(address(game));
         for (uint24 lvl = 1; lvl <= 100; ++lvl) {
             uint24 key = _genesisKey(lvl);
-            bytes32 lengthSlot = keccak256(abi.encode(uint256(key), uint256(12)));
+            bytes32 lengthSlot = keccak256(abi.encode(uint256(key), GameSlots.TICKET_QUEUE));
             bytes32 wordSlot = keccak256(abi.encode(lengthSlot));
             bytes32 pendingRoot = bytes32(GameSlots.TICKET_PENDING);
             uint256 owedWrites = lvl == 1 ? 1 : lvl <= 8 ? 7 : lvl >= 97 ? 4 : 8;
@@ -107,7 +107,7 @@ contract DeityGenesisBatchGasTest is DeployProtocol {
             assertEq(uint32(TQ.owed(address(game), key, address(vault)) >> 8),
                 lvl == 6 || lvl == 7 ? 16 : 4);
             assertEq(uint32(TQ.owed(address(game), key, address(sdgnrs)) >> 8), lvl == 6 ? 12 : 4);
-            bytes32 lengthSlot = keccak256(abi.encode(uint256(key), uint256(12)));
+            bytes32 lengthSlot = keccak256(abi.encode(uint256(key), GameSlots.TICKET_QUEUE));
             assertEq(uint32(uint256(vm.load(address(game), lengthSlot))), lvl == 1 ? 9 : 2);
         }
         for (uint160 i = 1; i <= 7; ++i) {

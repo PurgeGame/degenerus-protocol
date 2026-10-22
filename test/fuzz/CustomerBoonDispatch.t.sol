@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
+import {GameSlots} from "../helpers/GameSlots.sol";
+
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
@@ -44,7 +46,7 @@ contract CustomerBoonDispatchTest is DeployProtocol {
         address[4] memory callers = [ContractAddresses.COIN, ContractAddresses.COINFLIP,
             ContractAddresses.WWXRP, address(0xBAD)];
         address caller = callers[callerSeed % 4];
-        bytes32 slot = keccak256(abi.encode(uint256(player), uint256(47)));
+        bytes32 slot = keccak256(abi.encode(uint256(player), GameSlots.BOON_PACKED));
         vm.store(address(game), slot, bytes32(slot0));
         vm.store(address(game), bytes32(uint256(slot) + 1), bytes32(slot1));
         uint256 snap = vm.snapshotState();
@@ -69,7 +71,7 @@ contract CustomerBoonDispatchTest is DeployProtocol {
             ContractAddresses.WWXRP, address(0xBAD)];
         address caller = callers[callerSeed % 4];
         if (emptyTier) slot0 &= ~(uint256(255) << 168);
-        bytes32 slot = keccak256(abi.encode(uint256(player), uint256(47)));
+        bytes32 slot = keccak256(abi.encode(uint256(player), GameSlots.BOON_PACKED));
         vm.store(address(game), slot, bytes32(slot0));
         vm.store(address(game), bytes32(uint256(slot) + 1), bytes32(slot1));
         uint256 snap = vm.snapshotState();

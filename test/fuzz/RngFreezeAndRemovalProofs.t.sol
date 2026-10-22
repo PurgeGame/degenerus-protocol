@@ -217,7 +217,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
 
     /// @dev Grant `who` the permanent deity-pass bit (shift 184) in DegenerusGame.mintPacked_ (slot 9).
     function _grantDeityPass(address who) internal {
-        bytes32 slot = keccak256(abi.encode(game.walletIdOf(who), uint256(9)));
+        bytes32 slot = keccak256(abi.encode(game.walletIdOf(who), GameSlots.MINT_PACKED));
         uint256 packed = uint256(vm.load(address(game), slot));
         packed |= (uint256(1) << 184);
         vm.store(address(game), slot, bytes32(packed));
@@ -257,7 +257,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
     /// @dev Slot for `mintPacked_[_walletIdOf(who)]` (the same mapping the existing `_grantDeityPass` writes;
     ///      mapping root is slot 9 — confirmed against the existing helper at lines 479-484).
     function _mintPackedSlot(address who) internal view returns (bytes32) {
-        return keccak256(abi.encode(game.walletIdOf(who), uint256(9)));
+        return keccak256(abi.encode(game.walletIdOf(who), GameSlots.MINT_PACKED));
     }
 
     /// @dev Wallet-table element holding `who`'s half passes (bits 192..255).
