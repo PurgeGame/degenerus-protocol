@@ -344,7 +344,7 @@ contract VaultPlayerActionsTest is SeatFixture {
     }
 
     function test_budgetedVaultControlsHaveOnlyTheirDedicatedRoute() public {
-        _reject(ContractAddresses.GAME, abi.encodeCall(IDegenerusGame.spendDegenesis, (false, 0, 0, 1)));
+        _reject(ContractAddresses.GAME, abi.encodeCall(IDegenerusGame.spendDegenesis, (0, false, 0, 0, 1)));
         _reject(ContractAddresses.DGNRS, abi.encodeWithSignature("unwrapTo(address,uint256)", owner, 1e12));
         _reject(ContractAddresses.CRAPS, abi.encodeWithSignature("vaultComp(uint256)", uint256(1)));
         _reject(ContractAddresses.CRAPS, abi.encodeWithSignature("donate(bool,uint256,uint24)", false, uint256(0), uint24(1)));

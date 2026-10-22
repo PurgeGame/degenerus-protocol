@@ -7,7 +7,7 @@ import {PoolFlowHandler} from "../handlers/PoolFlowHandler.sol";
 import {PoolConservation} from "./PoolConservation.inv.t.sol";
 
 /// @title PoolConservationDegenesis -- pool conservation after a real Degenesis week (turbo launch)
-/// @notice The pools start holding the splits' future-pool halves and the turbo jackpot's movements.
+/// @notice The pools start holding the splits' future-prize and insurance quarters and the turbo jackpot's movements.
 contract PoolConservationDegenesis is PoolConservation, DegenesisWeekOpening {
     function _deployTimestamp() internal pure override(DeployProtocol, DegenesisWeekOpening) returns (uint256) {
         return DEPLOY_TS_DEGENESIS;

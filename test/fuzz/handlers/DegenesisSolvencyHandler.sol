@@ -52,7 +52,7 @@ contract DegenesisSolvencyHandler is Test {
     bytes32 internal constant SIG_CLOSED = keccak256("DegenesisCohortClosed(uint8,uint256)");
     bytes32 internal constant SIG_BURNED = keccak256("DegenesisInventoryBurned(uint256)");
     bytes32 internal constant SIG_RELEASED = keccak256("DegenesisFundsReleased(uint256,uint256)");
-    bytes32 internal constant SIG_VAULT_SPENT = keccak256("DegenesisVaultSpent(uint256)");
+    bytes32 internal constant SIG_VAULT_SPENT = keccak256("DegenesisVaultSpent(uint32,uint256)");
     bytes32 internal constant SIG_STAKE = keccak256("CoinflipStakeUpdated(uint32,uint24,uint256,uint256)");
 
     address[] public actors;
@@ -345,8 +345,9 @@ contract DegenesisSolvencyHandler is Test {
         uint256 poolBefore = game.claimablePoolView();
         int256 surplusBefore = surplus();
         vm.recordLogs();
+        uint32 recipient = extraSeed % 3 == 0 ? 0 : game.walletIdOf(_actor(extraSeed));
         vm.prank(ContractAddresses.VAULT);
-        try game.spendDegenesis(false, qty, box == 0 ? 0 : BoxOrderLib.boCustom(box), maxCost) {
+        try game.spendDegenesis(recipient, false, qty, box == 0 ? 0 : BoxOrderLib.boCustom(box), maxCost) {
             ++ghost_vaultSpends;
             if (surplus() != surplusBefore) ghost_vaultSpendDrift += surplus() - surplusBefore;
             Vm.Log[] memory logs = vm.getRecordedLogs();

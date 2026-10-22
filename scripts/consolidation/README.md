@@ -25,3 +25,17 @@ For native baseline/candidate purchase gas, run `native-paired-gas.js LOCAL_RPC 
 When comparing a log containing all three replay tests, pass `--run-index 1` to `reconcile-gas.py` to select the long-run scenario. Cold focused, long run and warm focused are indices 0, 1 and 2 respectively.
 
 Run the fork budget probes with `FOUNDRY_ISOLATE=true` and `-vvv`. Their cold/warm cross-check requires fresh transaction warmth; the non-isolated invocation fails three calibration assertions on both baseline and candidate. All 40 fork tests pass in isolated mode. The instrumented consolidation replay remains non-isolated; native paired probes demonstrate cold-account savings that its cooling/warming setup does not reproduce. Keep those gas results distinct.
+
+For P1b, use baseline runtimes compiled from `8df041030b961987a1864eaf5e4e3c01184e2662`.
+The replay sends the baseline self-purchase its four-argument calldata. At each actual cohort
+split it asserts the old half-future allocation or the new quarter-future/quarter-insurance
+allocation. It then adjusts only the baseline future/insurance balances and the request's
+1% pending seed before later gameplay. The comparator maps only the Vault self-spend event
+to the new indexed-recipient form; all other state, events and results remain strict, with
+the existing `MinerWork.executionGas` exclusion. Gift behavior is covered by the focused suite.
+Use `check-surface.js BASELINE CANDIDATE --degenesis-gift` to allow exactly the replacement
+`spendDegenesis` signature while checking the rest of the Game ABI unchanged.
+
+`ConsolidationAutoWhaleGas.t.sol` pairs the existing cold automatic-whale benchmark with
+the committed baseline runtimes. Run it with the consolidation profile and the same baseline
+artifact directory; this paired test reads the baseline artifacts without an environment toggle.

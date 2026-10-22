@@ -301,8 +301,9 @@ contract DegenesisLivenessHandler is Test {
         bool whale = whaleSeed % 4 == 0;
         uint256 qty = whale ? 1 : bound(qtySeed, 400, 4000);
         uint256 cost = whale ? 2.4 ether : price * qty / 400;
+        uint32 recipient = qtySeed % 3 == 0 ? 0 : game.walletIdOf(_actor(qtySeed));
         vm.prank(ContractAddresses.VAULT);
-        try game.spendDegenesis(whale, qty, 0, cost + 0.5 ether) {
+        try game.spendDegenesis(recipient, whale, qty, 0, cost + 0.5 ether) {
             ++ghost_vaultSpends;
         } catch {}
     }

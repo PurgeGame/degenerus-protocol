@@ -64,6 +64,8 @@ contract DegenesisTerminal is DegenesisFixture {
         uint256 resolvedDuringEnding;
         bool drained;
         uint256 drainedClaimablePool;
+        uint256 drainedAvailable;
+        uint256 drainedBacking;
         uint256 refunds;
         Pre atGameOver; // state just before the call that set gameOver
         Pre atSplit; // state just before the call that split
@@ -103,7 +105,8 @@ contract DegenesisTerminal is DegenesisFixture {
                     e.releasedSdgnrs += s;
                     ++releases;
                 } else if (l.topics[0] == DRAINED_SIG) {
-                    (, , e.drainedClaimablePool) = abi.decode(l.data, (uint24, uint256, uint256));
+                    (, e.drainedAvailable, e.drainedClaimablePool) = abi.decode(l.data, (uint24, uint256, uint256));
+                    e.drainedBacking = _gameBalance();
                     e.drained = true;
                 } else if (l.topics[0] == REFUNDS_SIG) {
                     e.refunds += abi.decode(l.data, (uint256));
@@ -139,6 +142,10 @@ contract DegenesisTerminal is DegenesisFixture {
         assertEq(_active(), 0, "unresolved orders forfeited");
         assertEq(_degenesisPool(), 0, "Degenesis inventory burned");
         assertTrue(e.drained, "final prizes funded");
+        assertEq(_slot(GameSlots.YIELD_ACCUMULATOR), 0, "insurance cleared");
+        assertEq(_pendingNext() + _pendingFuture(), 0, "pending balances cleared");
+        assertFalse(_frozen(), "terminal freeze cleared");
+        assertEq(e.drainedAvailable + e.drainedClaimablePool, e.drainedBacking, "final distributable includes insurance exactly once");
         // The release left claimablePool by exactly what it released (plus any deity refunds),
         // so the final prize budget (ETH + stETH - claimablePool) includes it exactly once.
         assertEq(e.drainedClaimablePool + e.atGameOver.unsplit / 2 + e.releasedVault + e.releasedSdgnrs,
@@ -187,6 +194,8 @@ contract DegenesisTerminal is DegenesisFixture {
         _warpDay(10 + 32 + 31, 1 hours);
         for (uint256 i; i < 50; ++i) if (!_tryMine()) break;
         assertEq(_countSig(vm.getRecordedLogs(), RELEASED_SIG), 0, "no second release");
+        assertEq(_slot(GameSlots.YIELD_ACCUMULATOR), 0, "insurance stays cleared");
+        assertEq(_pendingNext() + _pendingFuture(), 0, "pending balances stay cleared");
         assertEq(_vaultBudget(), 0, "budget stays zero");
         assertEq(_afkingOf(SDGNRS_ID), 0, "sDGNRS AFKing stays zero");
     }

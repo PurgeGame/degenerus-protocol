@@ -17,7 +17,7 @@ contract OwnerCollateral is ERC20 {
 contract OwnerVaultStub {
     address public immutable dgve;
     constructor(address token) { dgve = token; }
-    function spendDegenesis(bool, uint256, uint256, uint256 maxCost) external pure returns (uint256) {
+    function spendDegenesis(uint32, bool, uint256, uint256, uint256 maxCost) external pure returns (uint256) {
         return maxCost;
     }
     function playerAction(address to, bytes calldata data, uint256 ethValue) external payable returns (bytes memory result) {
@@ -165,7 +165,7 @@ contract OwnerGovernanceTest is OwnerGovernanceFixture {
         vm.expectRevert(Gov.NoMajority.selector); gov.directAction(abi.encodeCall(DegenerusVault.playerAction, (Pins.GAME, _playerData(), 0)), _owners(A, address(0)));
         vm.expectRevert(DegenerusVault.UnsupportedPlayerAction.selector); gov.directAction(abi.encodeCall(DegenerusVault.playerAction, (Pins.GAME, _data(7), 0)), _owners(A, B));
         vm.expectRevert(DegenerusVault.UnsupportedPlayerAction.selector);
-        gov.directAction(abi.encodeCall(DegenerusVault.playerAction, (Pins.VAULT, abi.encodeCall(DegenerusVault.spendDegenesis, (false, 400, 0, 1 ether)), 0)), _owners(A, B));
+        gov.directAction(abi.encodeCall(DegenerusVault.playerAction, (Pins.VAULT, abi.encodeCall(DegenerusVault.spendDegenesis, (0, false, 400, 0, 1 ether)), 0)), _owners(A, B));
         vm.expectRevert(Gov.ActionNotAllowed.selector);
         gov.directAction(abi.encodeCall(DegenerusVault.setLiquidationBuyFallback, (true, 0)), _owners(A, B));
         vm.expectRevert(Gov.ActionNotAllowed.selector); gov.directAction(hex"12", _owners(A, B));

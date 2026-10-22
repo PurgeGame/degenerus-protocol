@@ -108,7 +108,7 @@ contract OwnerVoteHandler is Test {
         bytes memory data;
         if (action % 4 == 0) data = abi.encodeCall(DegenerusVault.playerAction,
             (Pins.GAME, abi.encodeCall(DegenerusGame.depositAfkingFunding, (uint32(1))), 0));
-        else if (action % 4 == 1) data = abi.encodeCall(DegenerusVault.spendDegenesis, (false, 400, 0, 1));
+        else if (action % 4 == 1) data = abi.encodeCall(DegenerusVault.spendDegenesis, (0, false, 400, 0, 1));
         else if (action % 4 == 2) data = abi.encodeCall(DegenerusVault.setLiquidationBuyFallback, (true, 0));
         else data = _data(); // A raw Game call cannot choose a non-Vault target.
 

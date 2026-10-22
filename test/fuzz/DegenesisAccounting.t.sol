@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {GameSlots} from "../helpers/GameSlots.sol";
+import {IDegenerusGameDegenesisModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {DegenesisFixture} from "./helpers/DegenesisFixture.sol";
 
@@ -8,7 +10,7 @@ import {DegenesisFixture} from "./helpers/DegenesisFixture.sol";
 /// @notice A buy adds its applied price to claimablePool and nothing else; a claimable or prepaid
 ///         buy first debits its source, so claimablePool is unchanged; overpay lands in the
 ///         payer's AFKing; frozen pending pools are untouched. The split, at the first request
-///         after the cohort's day, moves exactly V/2 out of claimablePool into the future pool
+///         after the cohort's day, moves V/2 out of claimablePool into equal future and insurance shares
 ///         and reclassifies V/4 each to the Vault budget and sDGNRS AFKing, exact in wei.
 ///         Claimable balances are seeded with vm.store (ledger, claimablePool and ETH in tandem).
 contract DegenesisAccounting is DegenesisFixture {
@@ -34,6 +36,7 @@ contract DegenesisAccounting is DegenesisFixture {
         uint256 vaultBudget;
         uint256 sdgnrsAfking;
         uint256 unsplit;
+        uint256 insurance;
     }
 
     function _books() internal view returns (Books memory b) {
@@ -46,9 +49,11 @@ contract DegenesisAccounting is DegenesisFixture {
         b.vaultBudget = _vaultBudget();
         b.sdgnrsAfking = _afkingOf(SDGNRS_ID);
         b.unsplit = _unsplitVolume();
+        b.insurance = _slot(GameSlots.YIELD_ACCUMULATOR);
     }
 
     function _assertPoolsUntouched(Books memory a, Books memory b) internal pure {
+        assertEq(b.insurance, a.insurance, "insurance unchanged at purchase");
         assertEq(b.next, a.next, "live next untouched");
         assertEq(b.future, a.future, "live future untouched");
         assertEq(b.pendingNext, a.pendingNext, "pending next untouched");
@@ -189,7 +194,8 @@ contract DegenesisAccounting is DegenesisFixture {
         assertTrue(_cohortSplit(c), "split flag set");
         assertEq(a.claimablePool - b.claimablePool, v / 2, "claimablePool -= V/2 exactly");
         // The request then freezes the pools, moving 1% of the live future pool into pending.
-        assertEq(b.future + b.pendingFuture - a.future, v / 2, "future pool += V/2 exactly (live + pending)");
+        assertEq(b.future + b.pendingFuture - a.future, v / 4, "future pool += V/4 exactly (live + pending)");
+        assertEq(b.insurance - a.insurance, v / 4, "insurance += V/4");
         assertEq(b.next + b.pendingNext, a.next, "next pool untouched");
         assertEq(b.vaultBudget - a.vaultBudget, v / 4, "Vault budget += V/4");
         assertEq(b.sdgnrsAfking - a.sdgnrsAfking, v / 4, "sDGNRS AFKing += V/4");
@@ -252,5 +258,58 @@ contract DegenesisAccounting is DegenesisFixture {
         _assertSolvent();
         _drain();
         _splitAt(4, 2, 0.7 ether);
+    }
+
+    function _isolatedSplit(uint24 day) internal {
+        bytes memory code = address(game).code;
+        vm.etch(address(game), address(degenesisModule).code);
+        IDegenerusGameDegenesisModule(address(game)).prepareDegenesis(day);
+        vm.etch(address(game), code);
+    }
+
+    function test_MissedCohorts_FrozenSplit_EmptyAndRepeatedProcessing() public {
+        _buyDegenesis(alice, 0.0101 ether);
+        _warpDay(3, 1 hours);
+        _buyDegenesis(alice, 0.0123 ether);
+        _warpDay(5, 1 hours);
+        _buyDegenesis(alice, 0.0145 ether);
+        // Seed only the freeze flag; real purchases supply every cohort's volume.
+        uint256 slot0 = _slot(GameSlots.PRIZE_POOL_FROZEN);
+        vm.store(address(game), bytes32(GameSlots.PRIZE_POOL_FROZEN), bytes32(slot0 | (uint256(1) << (GameSlots.PRIZE_POOL_FROZEN_OFFSET * 8))));
+        Books memory a = _books();
+        uint256 volume = 0.0369 ether;
+        _isolatedSplit(6);
+        Books memory b = _books();
+        assertEq(a.claimablePool - b.claimablePool, volume / 2);
+        assertEq(b.future, a.future, "frozen live pool untouched");
+        assertEq(b.pendingFuture - a.pendingFuture, volume / 4);
+        assertEq(b.insurance - a.insurance, volume / 4);
+        assertEq(b.vaultBudget - a.vaultBudget, volume / 4);
+        assertEq(b.sdgnrsAfking - a.sdgnrsAfking, volume / 4);
+        _isolatedSplit(6);
+        assertEq(abi.encode(_books()), abi.encode(b), "repeated processing adds nothing");
+    }
+
+    function test_AllFundingSources_SplitWithExistingInsurance() public {
+        _seedClaimable(aliceId, 1 ether);
+        vm.deal(alice, 1 ether);
+        vm.prank(alice);
+        game.depositAfkingFunding{value: 1 ether}(aliceId);
+        // Separate purchases exhaust claimable before drawing prepaid principal.
+        vm.prank(alice);
+        game.buyDegenesisBox(0, 1 ether);
+        vm.prank(alice);
+        game.buyDegenesisBox(0, 0.0101 ether);
+        _buyDegenesis(alice, 0.0123 ether);
+        uint256 volume = 1.0224 ether;
+        _warpDay(3, 1 hours);
+        Books memory a = _books();
+        _isolatedSplit(3);
+        Books memory b = _books();
+        assertEq(a.claimablePool - b.claimablePool, volume / 2);
+        assertEq(b.future + b.pendingFuture - a.future - a.pendingFuture, volume / 4);
+        assertEq(b.insurance - a.insurance, volume / 4);
+        assertEq(b.vaultBudget - a.vaultBudget, volume / 4);
+        assertEq(b.sdgnrsAfking - a.sdgnrsAfking, volume / 4);
     }
 }

@@ -13,6 +13,9 @@ for (const contract of Object.values(abis)) for (const f of new Interface(contra
   variants.set(f.format('full'), { fragment:f, iface:new Interface([f]) });
   byTopic.set(f.topicHash, variants);
 }
+const spent = new Interface(['event DegenesisVaultSpent(uint32 indexed recipientId,uint256 cost)']);
+const spentEvent = spent.getEvent('DegenesisVaultSpent');
+byTopic.set(spentEvent.topicHash, new Map([[spentEvent.format('full'), {fragment:spentEvent, iface:spent}]]));
 const abi = AbiCoder.defaultAbiCoder();
 export function parse(text) {
   const runs = [], names = new Map();
@@ -73,7 +76,16 @@ export function parse(text) {
         assert.equal(args[3], '0', 'basefee=0 workload must not pay a miner reward');
         args[2] = '<executionGas>'; // only gas-derived field excluded in this workload
       }
-      run.events.push({ emitter: p[0], signature: event.signature, args });
+      let signature = event.signature;
+      if (event.name === 'DegenesisVaultSpent') {
+        assert.equal(p[0], 'Game');
+        assert.equal(tx.label, 'degenesis-vault-spend');
+        if (signature === 'DegenesisVaultSpent(uint256)') args.unshift('1');
+        else assert.equal(signature, 'DegenesisVaultSpent(uint32,uint256)');
+        assert.equal(args[0], '1', 'replay spending is a Vault self-purchase');
+        signature = 'DegenesisVaultSpent(uint32,uint256)';
+      }
+      run.events.push({ emitter: p[0], signature, args });
     } else if (kind === 'DIFFEDGE') {
       const key = p.join(':'); run.edges[key] = (run.edges[key] || 0) + 1;
       run.edgesByLabel ||= {};

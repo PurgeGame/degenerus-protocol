@@ -29,7 +29,7 @@ OWNER	claimablePool	DegenerusGame.sol	claimWinnings/withdrawAfkingFunding releas
 OWNER	claimablePool	modules/DegenerusGameAdvanceModule.sol	_consolidatePoolsAndRewardJackpots adds the level-transition claimableDelta after crediting winners; one of the paired liability writers
 OWNER	claimablePool	modules/DegenerusGameDecimatorModule.sol	_releaseToFuture moves an zero-quota round, or the pass money fixed at ranking, from the reservation to the (frozen-aware) future pool
 OWNER	claimablePool	modules/DegenerusGameDegeneretteModule.sol	_addClaimableEth pairs pool += with _creditClaimable for Degenerette ETH wins; same identity as every other crediting site
-OWNER	claimablePool	modules/DegenerusGameDegenesisModule.sol	buyDegenesisBox holds the whole Degenesis amount as a reserved obligation (pool += amount after the buyer draw); _splitDegenesisCohorts releases the future-pool half at the cohort split
+OWNER	claimablePool	modules/DegenerusGameDegenesisModule.sol	buyDegenesisBox holds the whole Degenesis amount as a reserved obligation (pool += amount after the buyer draw); _splitDegenesisCohorts releases equal future-prize and insurance quarters at the cohort split
 OWNER	claimablePool	modules/DegenerusGameGameOverModule.sol	_handleGameOverDrain adds deity refunds; _handleFinalSweep zeroes it after debiting VAULT/SDGNRS/GNRUS (terminal, GO_SWEPT latch guards later withdraws)
 OWNER	claimablePool	modules/DegenerusGameJackpotModule.sol	jackpot payouts (_processDailyEth liabilityDelta, golden ticket, yield surplus) add liability in tandem with _creditClaimable
 OWNER	claimablePool	modules/DegenerusGameJackpotDrawModule.sol	BAF stage completion releases the reserved ETH term of awards no candidate took (jackpotWork.paid residue) back to the future pool
@@ -229,3 +229,4 @@ OWNER	snapPendingShift	modules/DegenerusGameGameOverModule.sol	Authorized vault-
 HELPER	_redemptionReserveStored	storage/DegenerusGameStorage.sol	_setRedemptionReserve writes amount + 1; _releaseRedemptionReserve reclassifies completed or terminal reserve into ordinary sDGNRS claimable without changing claimablePool.
 HELPER	lootboxRngPacked	storage/DegenerusGameStorage.sol	_sealHeroWagers swaps hero buffers at the daily request and clears only the next write-buffer validity bits.
 OWNER	boonPacked	modules/GamePurchaseBoon.sol	Purchase boost consumes the same packed tier/day fields in Game storage; no other fields or call authority change.
+OWNER	yieldAccumulator	modules/DegenerusGameDegenesisModule.sol	_splitDegenesisCohorts reserves the insurance quarter in the existing accumulator

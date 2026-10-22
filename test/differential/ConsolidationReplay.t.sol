@@ -134,6 +134,7 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
         require(msg.sender == address(this));
         Vm.AccountAccess[] memory accesses = vm.stopAndReturnStateDiff();
         Vm.Log[] memory logs = vm.getRecordedLogs();
+        _reconcileCohortAllocation(accesses, logs);
         for (uint256 i; i < logs.length; ++i) {
             console.log(string.concat("DIFFEVENT|", _name(logs[i].emitter), "|", vm.toString(abi.encode(logs[i].topics, logs[i].data))));
         }
@@ -153,6 +154,52 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
                 console.log(string.concat("DIFFETH|", _name(a.account), "|", vm.toString(a.account.balance)));
             }
         }
+    }
+
+    /// @dev Assert each real split, then apply only the specified allocation change to the
+    ///      old runtime's state before later gameplay. Every other observation remains strict.
+    function _reconcileCohortAllocation(Vm.AccountAccess[] memory accesses, Vm.Log[] memory logs) private {
+        uint256 quarters;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter == address(game) && logs[i].topics.length == 2
+                && logs[i].topics[0] == keccak256("DegenesisCohortSplit(uint8,uint256)")) {
+                quarters += abi.decode(logs[i].data, (uint256)) / 4;
+            }
+        }
+        if (quarters == 0) return;
+        uint256 futureDelta;
+        uint256 insuranceDelta;
+        for (uint256 i; i < accesses.length; ++i) {
+            Vm.AccountAccess memory a = accesses[i];
+            if (a.kind != VmSafe.AccountAccessKind.DelegateCall || a.account != address(degenesisModule) || a.reverted) continue;
+            for (uint256 j; j < a.storageAccesses.length; ++j) {
+                Vm.StorageAccess memory v = a.storageAccesses[j];
+                if (!v.isWrite || v.reverted || v.account != address(game)) continue;
+                if (v.slot == bytes32(GameSlots.PRIZE_POOLS_PACKED))
+                    futureDelta += (uint256(v.newValue) >> 128) - (uint256(v.previousValue) >> 128);
+                if (v.slot == bytes32(GameSlots.YIELD_ACCUMULATOR))
+                    insuranceDelta += uint256(v.newValue) - uint256(v.previousValue);
+            }
+        }
+        assertEq(futureDelta, baseline ? quarters * 2 : quarters, "split future allocation");
+        assertEq(insuranceDelta, baseline ? 0 : quarters, "split insurance allocation");
+        console.log(string.concat("DIFFALLOCATION|", baseline ? "baseline" : "candidate", "|", vm.toString(quarters),
+            "|", vm.toString(futureDelta), "|", vm.toString(insuranceDelta)));
+        if (!baseline || game.gameOver()) return;
+        // Daily requests freeze immediately after the split; only their 1% seed moves with it.
+        assertTrue(game.rngLocked(), "allocation adaptation requires daily request");
+        uint256 pools = uint256(vm.load(address(game), bytes32(GameSlots.PRIZE_POOLS_PACKED)));
+        uint256 pending = uint256(vm.load(address(game), bytes32(GameSlots.PRIZE_POOL_PENDING_PACKED)));
+        uint256 totalFuture = (pools >> 128) + (pending >> 128);
+        assertEq(uint128(pending), 0, "no pending next contribution at request");
+        assertEq(pending >> 128, totalFuture / 100, "exact request seed before adaptation");
+        totalFuture -= quarters;
+        vm.store(address(game), bytes32(GameSlots.PRIZE_POOLS_PACKED), bytes32(uint256(uint128(pools)) | ((totalFuture - totalFuture / 100) << 128)));
+        vm.store(address(game), bytes32(GameSlots.PRIZE_POOL_PENDING_PACKED), bytes32((totalFuture / 100) << 128));
+        bytes32 slot = bytes32(GameSlots.YIELD_ACCUMULATOR);
+        bytes32 before = vm.load(address(game), slot);
+        vm.store(address(game), slot, bytes32(uint256(before) + quarters));
+        console.log(string.concat("DIFFSLOT|Game|", vm.toString(slot), "|", vm.toString(vm.load(address(game), slot)), "|", vm.toString(before)));
     }
 
     function _crank(uint256 tag) internal override {
@@ -219,6 +266,12 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
         _buy("box-score", cast[1], 400, BoxOrderLib.boCustom(0.1 ether), MintPaymentKind.DirectEth, game.mintPrice() + 0.1 ether);
         GameFunding.credit(id, 1 ether);
         _buy("claimable", cast[0], 400, 0, MintPaymentKind.Claimable, 0);
+        _success("ordinary-whale", cast[2], address(game), 2.4 ether,
+            abi.encodeCall(game.purchaseWhalePass, (uint32(0), uint256(1), bytes32(0))));
+        GameFunding.credit(1, 3 ether);
+        _buy("ordinary-vault-ticket", address(vault), 400, 0, MintPaymentKind.Claimable, 0);
+        _success("ordinary-vault-whale", address(vault), address(game), 0,
+            abi.encodeCall(game.purchaseWhalePass, (uint32(0), uint256(1), bytes32(0))));
         _ctx("purchase-revert", false, cast[2], address(game), 0, abi.encodeCall(game.purchase, (uint32(0), 400, 0, bytes32(0), MintPaymentKind.DirectEth, false)));
         // Affiliate is the actual caller of both registration hooks. The address-derived
         // referrer code allocates cast[4]'s permanent identity while cast[3] registers itself.
@@ -262,7 +315,7 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
         GameFunding.addPool(1 ether);
         vm.deal(address(game), address(game).balance + 1 ether);
         bytes32 vaultWord = vm.load(address(game), GameSlotKeys.balances(1));
-        _success("degenesis-vault-spend", address(vault), address(game), 0, abi.encodeCall(game.spendDegenesis, (false, uint256(400), uint256(0), uint256(0.1 ether))));
+        _success("degenesis-vault-spend", address(vault), address(game), 0, baseline ? abi.encodeWithSignature("spendDegenesis(bool,uint256,uint256,uint256)", false, uint256(400), uint256(0), uint256(0.1 ether)) : abi.encodeCall(game.spendDegenesis, (0, false, uint256(400), uint256(0), uint256(0.1 ether))));
         assertEq(vm.load(address(game), GameSlotKeys.balances(1)), vaultWord);
         assertEq(uint128(uint256(vm.load(address(game), bytes32(GameSlots.DEGENESIS_VAULT_BUDGET)))), 1 ether - game.mintPrice());
         _warpDay(2, 5 minutes);

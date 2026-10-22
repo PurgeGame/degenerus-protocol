@@ -69,7 +69,7 @@ contract OwnerGovernanceProtocolTest is DeployProtocol {
         vm.prank(representative); vm.expectRevert(DegenerusVault.UnsupportedPlayerAction.selector);
         ownerGovernance.directAction(abi.encodeCall(DegenerusVault.playerAction, (address(game), abi.encodeCall(DegenerusGame.setLootboxRngThreshold, (1 ether)), 0)), owners);
         vm.prank(representative); vm.expectRevert(DegenerusVault.UnsupportedPlayerAction.selector);
-        ownerGovernance.directAction(abi.encodeCall(DegenerusVault.playerAction, (address(vault), abi.encodeCall(DegenerusVault.spendDegenesis, (false, 400, 0, 1 ether)), 0)), owners);
+        ownerGovernance.directAction(abi.encodeCall(DegenerusVault.playerAction, (address(vault), abi.encodeCall(DegenerusVault.spendDegenesis, (0, false, 400, 0, 1 ether)), 0)), owners);
     }
     function testIconBootstrapTakeoverAndLaterChangesRequireGovernance() public {
         string[] memory paths = new string[](1); paths[0] = "initial";

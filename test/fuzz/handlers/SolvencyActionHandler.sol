@@ -279,8 +279,9 @@ contract SolvencyActionHandler is Test {
         uint256 qty = whale ? 1 : bound(qtySeed, 400, 4000);
         uint256 cost = whale ? WHALE_PASS_PRICE : priceWei * qty / 400;
         uint256 maxCost = cost + bound(extraSeed, 0, 1 ether);
+        uint32 recipient = extraSeed % 3 == 0 ? 0 : game.walletIdOf(actors[extraSeed % actors.length]);
         vm.prank(ContractAddresses.VAULT);
-        try game.spendDegenesis(whale, qty, 0, maxCost) {
+        try game.spendDegenesis(recipient, whale, qty, 0, maxCost) {
             ghost_vaultSpends++;
         } catch {}
     }

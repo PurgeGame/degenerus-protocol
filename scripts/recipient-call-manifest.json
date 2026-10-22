@@ -5315,9 +5315,9 @@
     "path": "contracts/DegenerusVault.sol",
     "scope": "DegenerusVault.spendDegenesis",
     "kind": "external",
-    "expression": "gamePlayer.spendDegenesis(whalePass, quantity, boxOrder, maxCost)",
+    "expression": "gamePlayer.spendDegenesis(recipientId, whalePass, quantity, boxOrder, maxCost)",
     "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+    "review": "Governance-only restricted spending forwards the recipient to the fixed Game; no recipient approval or recipient funds are used."
   },
   {
     "path": "contracts/DegenerusVault.sol",
@@ -7747,17 +7747,17 @@
     "path": "contracts/modules/DegenerusGameDegenesisModule.sol",
     "scope": "DegenerusGameDegenesisModule.spendDegenesis",
     "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME.delegatecall(abi.encodeWithSelector( IDegenerusGame.purchase.selector, uint32(0), quantity, boxOrder, bytes32(0), MintPaymentKind.Claimable, false ))",
+    "expression": "ContractAddresses.GAME_MINT_MODULE.delegatecall(abi.encodeWithSelector( IDegenerusGameMintModule.purchaseWith.selector, recipientId, quantity, boxOrder, bytes32(0), MintPaymentKind.Claimable, uint256(0), VAULT_WALLET_ID ))",
     "count": 1,
-    "review": "Restricted protocol Degenesis budget delegates to the fixed Game six-argument purchase with foil=false. Game context, original caller, claimable funding and revert atomicity are preserved."
+    "review": "Game-context, Vault-only restricted spending validates allocation before staging funds; fixed Mint adapter receives the recipient and Vault payer, zero ETH and zero affiliate code. Exact debit is capped and all effects revert together. P5 must re-point this edge when Mint retires."
   },
   {
     "path": "contracts/modules/DegenerusGameDegenesisModule.sol",
     "scope": "DegenerusGameDegenesisModule.spendDegenesis",
     "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_WHALE_MODULE.delegatecall(abi.encodeWithSelector( IDegenerusGameWhaleModule.purchaseWhalePass.selector, uint32(0), quantity, bytes32(0) ))",
+    "expression": "ContractAddresses.GAME_WHALE_MODULE.delegatecall(abi.encodeWithSelector( IDegenerusGameWhaleModule.purchaseWhalePassForDegenesis.selector, recipientId, quantity ))",
     "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
+    "review": "Game-context, Vault-only restricted spending delegates to the fixed Whale gift entry; the allocated recipient receives normal benefits and the Vault ledger alone pays under the exact cap. P5 must re-point this edge."
   },
   {
     "path": "contracts/modules/DegenerusGameFoilPackModule.sol",
@@ -9483,17 +9483,25 @@
     "path": "contracts/modules/DegenerusGameWhaleModule.sol",
     "scope": "DegenerusGameWhaleModule.purchaseWhalePass",
     "kind": "recipient-helper",
-    "expression": "_deliverWhalePass(buyerId, passLevel, quantity, totalPrice, freshPaid, hasValidBoon, s0, affiliateCode)",
+    "expression": "_deliverWhalePass(buyerId, buyerId, passLevel, quantity, totalPrice, freshPaid, affiliateCode)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "Validated entry uses the shared whale quote and delivery: the ordinary entry passes the same buyer and payer, while the Game-context Vault-only gift entry fixes the Vault payer and allocated recipient. Only the ordinary entry accrues DeGenesis credit; recipient benefits and token payee rules are shared."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameWhaleModule.sol",
+    "scope": "DegenerusGameWhaleModule.purchaseWhalePassForDegenesis",
+    "kind": "recipient-helper",
+    "expression": "_deliverWhalePass(recipientId, VAULT_WALLET_ID, passLevel, quantity, totalPrice, 0, bytes32(0))",
+    "count": 1,
+    "review": "Validated entry uses the shared whale quote and delivery: the ordinary entry passes the same buyer and payer, while the Game-context Vault-only gift entry fixes the Vault payer and allocated recipient. Only the ordinary entry accrues DeGenesis credit; recipient benefits and token payee rules are shared."
   },
   {
     "path": "contracts/modules/DegenerusGameWhaleModule.sol",
     "scope": "DegenerusGameWhaleModule.purchaseWhalePassForSdgnrs",
     "kind": "recipient-helper",
-    "expression": "_deliverWhalePass( SDGNRS_WALLET_ID, passLevel, paidPasses, totalPrice, 0, hasValidBoon, s0, bytes32(0) )",
+    "expression": "_deliverWhalePass( SDGNRS_WALLET_ID, SDGNRS_WALLET_ID, passLevel, paidPasses, totalPrice, 0, bytes32(0) )",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "Automatic sDGNRS purchase retains sDGNRS as buyer and payer, zero fresh ETH, existing quote, rewards and pre-request guards."
   },
   {
     "path": "contracts/modules/GameAfkingModule.sol",
