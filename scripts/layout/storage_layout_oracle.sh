@@ -41,6 +41,7 @@ MODULES=(
   DegenerusGameBingoModule DegenerusGameGameOverModule DegenerusGameFoilPackModule
   DegenerusGameTicketModule DegenerusGameMinerModule DegenerusGameRngModule
   DegenerusGameJackpotDrawModule DegenerusGameDegenesisModule DegenerusGameBoxModule
+  DegenerusGamePassModule DegenerusGameEndgameModule
 )
 
 inspect_norm() {

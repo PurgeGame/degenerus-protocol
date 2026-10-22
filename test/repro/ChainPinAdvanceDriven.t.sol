@@ -9,7 +9,7 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {TicketQueueStorage} from "../fuzz/helpers/TicketQueueStorage.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {IDegenerusGame, MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
-import {IDegenerusGameFoilPackModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
+import {IDegenerusGameFoilWorkerModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
@@ -86,7 +86,7 @@ contract PerpetualProbe is ModuleSpy {
     }
 
     function _enter() internal override {
-        if (msg.sig != IDegenerusGameFoilPackModule.queuePerpetualTickets.selector) return;
+        if (msg.sig != IDegenerusGameFoilWorkerModule.queuePerpetualTickets.selector) return;
         uint24 target = abi.decode(msg.data[4:], (uint24));
         emit PerpPre(
             level, target, _ticketQueueLength(_tqFarFutureKey(level)), _ticketQueueLength(_tqFarFutureKey(target)),
@@ -95,7 +95,7 @@ contract PerpetualProbe is ModuleSpy {
     }
 
     function _leave(bytes memory) internal override {
-        if (msg.sig != IDegenerusGameFoilPackModule.queuePerpetualTickets.selector) return;
+        if (msg.sig != IDegenerusGameFoilWorkerModule.queuePerpetualTickets.selector) return;
         uint24 target = abi.decode(msg.data[4:], (uint24));
         emit PerpPost(_ticketQueueLength(_tqFarFutureKey(target)));
     }
@@ -205,9 +205,9 @@ abstract contract ChainPinBase is DeployProtocol {
         address drawReal = address(uint160(uint256(keccak256("chainpin.draw.real"))));
         address foilReal = address(uint160(uint256(keccak256("chainpin.foil.real"))));
         vm.etch(drawReal, ContractAddresses.GAME_JACKPOT_DRAW_MODULE.code);
-        vm.etch(foilReal, ContractAddresses.GAME_FOILPACK_MODULE.code);
+        vm.etch(foilReal, ContractAddresses.GAME_TICKET_MODULE.code);
         vm.etch(ContractAddresses.GAME_JACKPOT_DRAW_MODULE, type(BafProbe).runtimeCode);
-        vm.etch(ContractAddresses.GAME_FOILPACK_MODULE, type(PerpetualProbe).runtimeCode);
+        vm.etch(ContractAddresses.GAME_TICKET_MODULE, type(PerpetualProbe).runtimeCode);
     }
 
     // ---------------------------------------------------------------------

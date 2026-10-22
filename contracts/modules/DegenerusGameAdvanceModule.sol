@@ -31,7 +31,7 @@ import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol
 import {IJackpotBattle} from "../interfaces/IJackpotBattle.sol";
 import {IDegenerusGame, MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {IDegenerusJackpots} from "../interfaces/IDegenerusJackpots.sol";
-import {IDegenerusGameAdvanceModule, IDegenerusGameFoilPackModule, IDegenerusGameBoonModule, IDegenerusGameGameOverModule,
+import {IDegenerusGameAdvanceModule, IDegenerusGameFoilWorkerModule, IDegenerusGameBoonModule, IDegenerusGameGameOverModule,
     IGameAfkingModule, IDegenerusGameDegenesisModule} from "../interfaces/IDegenerusGameModules.sol";
 import {GameTimeLib} from "../libraries/GameTimeLib.sol";
 import {BoundedCall} from "../libraries/BoundedCall.sol";
@@ -1000,8 +1000,8 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
     }
 
     function _processPhaseTransition(uint24 purchaseLevel) private {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_FOILPACK_MODULE.delegatecall(
-            abi.encodeWithSelector(IDegenerusGameFoilPackModule.queuePerpetualTickets.selector, purchaseLevel + 99)
+        (bool ok, bytes memory data) = ContractAddresses.GAME_TICKET_MODULE.delegatecall(
+            abi.encodeWithSelector(IDegenerusGameFoilWorkerModule.queuePerpetualTickets.selector, purchaseLevel + 99)
         );
         if (!ok) _revertDelegate(data);
 

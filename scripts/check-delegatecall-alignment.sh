@@ -32,6 +32,7 @@ declare -A NAMING_EXCEPTIONS=(
   [GameOverModule]=GAMEOVER_MODULE
   [GameAfkingModule]=AFKING_MODULE
   [FoilPackModule]=FOILPACK_MODULE
+  [FoilWorkerModule]=TICKET_MODULE
 )
 
 # Reverse of NAMING_EXCEPTIONS for constant_to_iface(). Keyed by the post-`GAME_`
@@ -70,9 +71,7 @@ is_dead_constant() {
 # in-source comment markers) so the deployed contracts stay byte-identical;
 # appending an entry is a visible diff in PR review, mirroring DEAD_CONSTANTS.
 declare -A ORPHAN_JUSTIFIED=(
-  [DegenerusGameFoilPackModule.sol:IDegenerusGameDegeneretteModule]="_foilSpin owns the delegatecall -> GAME_DEGENERETTE_MODULE"
-  [DegenerusGameFoilPackModule.sol:IDegenerusGameLootboxModule]="purchaseWithFoil passes GAME_LOOTBOX_MODULE to the private _moduleCall helper (quoteBoxOrder)"
-  [DegenerusGameFoilPackModule.sol:IDegenerusGameMintModule]="purchaseWithFoil passes GAME_MINT_MODULE to the private _moduleCall helper (purchaseWith)"
+  [DegenerusGameFoilCore.sol:IDegenerusGameDegeneretteModule]="_foilSpin owns the delegatecall -> GAME_DEGENERETTE_MODULE"
   [DegenerusGameMintModule.sol:IDegenerusGameLootboxModule]="_lootboxLeg owns the delegatecall -> GAME_LOOTBOX_MODULE"
   [DegenerusGameAdvanceModule.sol:IDegenerusGameJackpotModule]="_runJackpotWork owns the delegatecall -> GAME_JACKPOT_MODULE"
   [DegenerusGameJackpotModule.sol:IDegenerusGameJackpotDrawModule]="_delegateJackpotDraw owns the delegatecall -> GAME_JACKPOT_DRAW_MODULE"

@@ -15,7 +15,7 @@ import {PackedTicketShuffle} from "../libraries/PackedTicketShuffle.sol";
 import {PackedTicketSampleLib} from "../libraries/PackedTicketSampleLib.sol";
 import {DegenerusGameJackpotDrawUtils} from "./DegenerusGameJackpotDrawUtils.sol";
 
-import {IDegenerusGameFoilPackModule} from "../interfaces/IDegenerusGameModules.sol";
+import {IDegenerusGameFoilWorkerModule} from "../interfaces/IDegenerusGameModules.sol";
 
 /// @notice Materializes a committed ticket/foil cohort under one immutable word.
 /// @dev Available transaction gas selects a
@@ -134,7 +134,11 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
                 do {
                     uint256 seed = EntropyLib.hash4(DIRECT_TICKET_DOMAIN, plan.entropy,
                         (uint256(q) << 32) | i, round);
+                    // The round retains no allocated memory and makes no external calls.
+                    uint256 free;
+                    assembly ("memory-safe") { free := mload(0x40) }
                     _materializeJackpotRound(plan.queueLvl, group.lanes, group.count, seed);
+                    assembly ("memory-safe") { mstore(0x40, free) }
                     ++round;
                     result.progressed = true;
                     MineFlipGas.markProgress(meter);
@@ -165,6 +169,7 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
     function _resumeQueuedJackpotTickets(JackpotWork storage work, TicketWorkPlan calldata plan,
         MineFlipGas.Meter memory meter, MineFlipGas.Result memory result) private
     {
+        uint24 writeKey;
         uint8 q = work.quadrant;
         uint256 i = work.winner;
         while (q < 4) {
@@ -197,7 +202,11 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
                         plan.sourceLvl, trait, len, effectiveLen, deity, seed, salt, i, cursor
                     );
                     if (winner != 0) {
-                        _queueEntries(winner, plan.queueLvl, uint32(plan.entriesEach), true);
+                        if (uint32(plan.entriesEach) != 0) {
+                            if (writeKey == 0) writeKey = plan.queueLvl > _mintCeiling()
+                                ? _tqFarFutureKey(plan.queueLvl) : _tqWriteKey(plan.queueLvl);
+                            _queueJackpotEntries(winner, plan.queueLvl, writeKey, uint32(plan.entriesEach));
+                        }
                         emit JackpotTicketWin(winner, plan.queueLvl, trait, uint32(plan.entriesEach),
                             plan.sourceLvl, index, false);
                     }
@@ -209,6 +218,20 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
         }
         if (q != work.quadrant) work.quadrant = q;
         if (i != work.winner) work.winner = uint16(i);
+    }
+
+    /// @dev One award call keeps its queue route fixed; it has no external callbacks.
+    function _queueJackpotEntries(uint32 id, uint24 targetLevel, uint24 key, uint32 entries) private {
+        uint80 packed = _entryPacked(key, id);
+        uint32 owed = uint32(packed >> 8);
+        uint8 rem = uint8(packed);
+        if (packed == 0) {
+            packed = uint80(id) << OWNER_IDX_SHIFT;
+            _tqAppend(key, id);
+        }
+        emit EntriesQueued(id, targetLevel, entries);
+        owed = _addOwed(owed, entries, key & TICKET_FAR_FUTURE_BIT != 0);
+        _setEntryOwed(key, id, (packed & OWNER_IDX_MASK) | (uint80(owed) << 8) | uint80(rem));
     }
 
     function _directTicketGroup(TicketWorkPlan calldata plan, uint8 q, uint256 start, uint256 n)
@@ -336,11 +359,7 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
             if (foil) {
                 if (!MineFlipGas.canRun(meter, FOIL_CALL_MAX, TAIL)) break;
                 uint256 body = MineFlipGas.child(meter, TAIL + CALL_OVERHEAD);
-                (bool ok, bytes memory data) = ContractAddresses.GAME_FOILPACK_MODULE.delegatecall(
-                    abi.encodeWithSelector(IDegenerusGameFoilPackModule.runFoilWork.selector, body)
-                );
-                if (!ok) _revertTicket(data);
-                MineFlipGas.Result memory step = abi.decode(data, (MineFlipGas.Result));
+                MineFlipGas.Result memory step = _ticketFoilWork(body);
                 result.progressed = result.progressed || step.progressed;
                 if (step.progressed) MineFlipGas.markProgress(meter);
                 result.rewardBasis += step.rewardBasis;
@@ -542,6 +561,14 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
             rem = 0;
         }
         return (packed, owed, rem);
+    }
+
+    function _ticketFoilWork(uint256 body) internal virtual returns (MineFlipGas.Result memory) {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_TICKET_MODULE.delegatecall(
+            abi.encodeWithSelector(IDegenerusGameFoilWorkerModule.runFoilWork.selector, body)
+        );
+        if (!ok) _revertTicket(data);
+        return abi.decode(data, (MineFlipGas.Result));
     }
 
     function _revertTicket(bytes memory data) private pure {

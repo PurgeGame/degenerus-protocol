@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {IDegenerusGameFoilWorkerModule} from "../../contracts/interfaces/IDegenerusGameModules.sol";
 
 import {Test, Vm} from "forge-std/Test.sol";
 import {VmSafe} from "forge-std/Vm.sol";
@@ -160,7 +161,7 @@ contract TraitLayoutComparisonTest is Test {
         TraitLayoutFoilSeeder(ContractAddresses.GAME).seed(lvl, reused);
         vm.etch(ContractAddresses.GAME, address(new DegenerusGameFoilPackModule()).code);
         _measure(string.concat("foil_", lvl == 42 ? "even" : "odd", reused ? "_reused" : "_fresh"),
-            ContractAddresses.GAME, abi.encodeCall(DegenerusGameFoilPackModule.runFoilWork, (10_000_000)));
+            ContractAddresses.GAME, abi.encodeCall(IDegenerusGameFoilWorkerModule.runFoilWork, (10_000_000)));
     }
     function test_Layout_FoilEvenFresh() public { _foil(42, false); }
     function test_Layout_FoilOddFresh() public { _foil(43, false); }

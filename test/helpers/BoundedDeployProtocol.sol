@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {DegenerusGamePassModule} from "../../contracts/modules/DegenerusGamePassModule.sol";
+import {DegenerusGameEndgameModule} from "../../contracts/modules/DegenerusGameEndgameModule.sol";
 import {OwnerTargetCall} from "./OwnerTargetCall.sol";
 import {RecyclingState} from "./RecyclingState.sol";
 
@@ -76,17 +78,14 @@ abstract contract BoundedDeployProtocol is DeployProtocol {
         (address[] memory owners, bytes32[] memory codes, uint8[] memory kicks,
             address[] memory players, bytes32[] memory refs) = _affiliateBootstrap();
         icons32 = Icons32Data(payable(deployCode("Icons32Data.sol:Icons32Data", abi.encode(false))));
-        mintModule = DegenerusGameMintModule(payable(deployCode("DegenerusGameMintModule.sol:DegenerusGameMintModule", abi.encode())));
+        endgameModule = DegenerusGameEndgameModule(payable(deployCode("DegenerusGameEndgameModule.sol:DegenerusGameEndgameModule", abi.encode())));
         dailyModule = DegenerusGameDailyModule(payable(deployCode("DegenerusGameDailyModule.sol:DegenerusGameDailyModule", abi.encode())));
-        whaleModule = DegenerusGameWhaleModule(payable(deployCode("DegenerusGameWhaleModule.sol:DegenerusGameWhaleModule", abi.encode())));
-        decimatorModule = DegenerusGameDecimatorModule(payable(deployCode("DegenerusGameDecimatorModule.sol:DegenerusGameDecimatorModule", abi.encode())));
-        gameOverModule = DegenerusGameGameOverModule(payable(deployCode("DegenerusGameGameOverModule.sol:DegenerusGameGameOverModule", abi.encode())));
+        passModule = DegenerusGamePassModule(payable(deployCode("DegenerusGamePassModule.sol:DegenerusGamePassModule", abi.encode())));
         boxModule = DegenerusGameBoxModule(payable(deployCode("DegenerusGameBoxModule.sol:DegenerusGameBoxModule", abi.encode())));
         bingoModule = DegenerusGameBingoModule(payable(deployCode("DegenerusGameBingoModule.sol:DegenerusGameBingoModule", abi.encode())));
         coin = FLIP(payable(deployCode("FLIP.sol:FLIP", abi.encode())));
         coinflip = Coinflip(payable(deployCode("Coinflip.sol:Coinflip", abi.encode())));
         game = DegenerusGame(payable(deployCode("DegenerusGame.sol:DegenerusGame", abi.encode())));
-        ticketModule = DegenerusGameTicketModule(payable(deployCode("DegenerusGameTicketModule.sol:DegenerusGameTicketModule", abi.encode())));
         affiliate = DegenerusAffiliate(payable(deployCode("DegenerusAffiliate.sol:DegenerusAffiliate", abi.encode(owners, codes, kicks, players, refs))));
         jackpots = DegenerusJackpots(payable(deployCode("DegenerusJackpots.sol:DegenerusJackpots", abi.encode())));
         quests = DegenerusQuests(payable(deployCode("DegenerusQuests.sol:DegenerusQuests", abi.encode())));
@@ -96,7 +95,6 @@ abstract contract BoundedDeployProtocol is DeployProtocol {
         dgnrs = DGNRS(payable(deployCode("DGNRS.sol:DGNRS", abi.encode())));
         admin = DegenerusAdmin(payable(deployCode("DegenerusAdmin.sol:DegenerusAdmin", abi.encode())));
         gnrus = GNRUS(payable(deployCode("GNRUS.sol:GNRUS", abi.encode())));
-        foilModule = DegenerusGameFoilPackModule(payable(deployCode("DegenerusGameFoilPackModule.sol:DegenerusGameFoilPackModule", abi.encode())));
         afkingSubToken = AFKingSubscriptionToken(payable(deployCode("AFKingSubscriptionToken.sol:AFKingSubscriptionToken", abi.encode())));
         parimutuel = DegenerusParimutuel(payable(deployCode("DegenerusParimutuel.sol:DegenerusParimutuel", abi.encode())));
         recordBounty = DegenerusRecordBounty(payable(deployCode("DegenerusRecordBounty.sol:DegenerusRecordBounty", abi.encode())));
@@ -105,12 +103,18 @@ abstract contract BoundedDeployProtocol is DeployProtocol {
         jackpotBattle = JackpotBattle(payable(deployCode("JackpotBattle.sol:JackpotBattle", abi.encode())));
         wwxrp = WWXRP(payable(deployCode("WWXRP.sol:WWXRP", abi.encode())));
         minerModule = DegenerusGameMinerModule(payable(deployCode("DegenerusGameMinerModule.sol:DegenerusGameMinerModule", abi.encode())));
-        degenesisModule = DegenerusGameDegenesisModule(payable(deployCode("DegenerusGameDegenesisModule.sol:DegenerusGameDegenesisModule", abi.encode())));
         ownerGovernance = DegenerusOwnerGovernance(payable(deployCode("DegenerusOwnerGovernance.sol:DegenerusOwnerGovernance", abi.encode())));
+        mintModule = DegenerusGameMintModule(payable(address(endgameModule)));
+        decimatorModule = DegenerusGameDecimatorModule(payable(address(endgameModule)));
+        gameOverModule = DegenerusGameGameOverModule(payable(address(endgameModule)));
+        foilModule = DegenerusGameFoilPackModule(payable(address(endgameModule)));
+        degenesisModule = DegenerusGameDegenesisModule(payable(address(endgameModule)));
         advanceModule = DegenerusGameAdvanceModule(payable(address(dailyModule)));
         jackpotModule = DegenerusGameJackpotModule(payable(address(dailyModule)));
         rngModule = DegenerusGameRngModule(payable(address(dailyModule)));
         jackpotDrawModule = DegenerusGameJackpotDrawModule(payable(address(dailyModule)));
+        whaleModule = DegenerusGameWhaleModule(payable(address(passModule)));
+        ticketModule = DegenerusGameTicketModule(payable(address(passModule)));
         lootboxModule = DegenerusGameLootboxModule(payable(address(boxModule)));
         boonModule = DegenerusGameBoonModule(payable(address(boxModule)));
         degeneretteModule = DegenerusGameDegeneretteModule(payable(address(boxModule)));

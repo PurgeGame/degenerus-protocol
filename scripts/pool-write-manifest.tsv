@@ -61,7 +61,7 @@ POOL-TO-POOL	_setPendingPools	_freezePool	modules/DegenerusGameRngUtils.sol	READ
 POOL-TO-POOL	_setPendingPools	_releaseToFuture	modules/DegenerusGameDecimatorModule.sol	READ	The same release during a freeze credits pending future, paired with the claimablePool decrement
 POOL-TO-POOL	_setPendingPools	_routeAfkingPoolEth	modules/GameAfkingModule.sol	READ	the afking buy's pool credit, freeze path
 MUTATOR-DEF	_setPendingPools	_setPendingPools	storage/DegenerusGameStorage.sol	READ	canonical pending-slot setter definition
-VALUE-IN	_setPendingPools	_buyFoilPack	modules/DegenerusGameFoilPackModule.sol	READ	foil premium lands in pending pools during freeze (75/25 split; fresh ETH + relabel mix) (private _buyFoilPack, reached only through purchaseWithFoil; the pack leg of the additive purchase)
+VALUE-IN	_setPendingPools	_buyFoilPack	modules/DegenerusGameFoilCore.sol	READ	foil premium lands in pending pools during freeze (75/25 split; fresh ETH + relabel mix) (private _buyFoilPack, reached only through purchaseWithFoil; the pack leg of the additive purchase)
 VALUE-IN	_setPendingPools	purchaseDeityPass	modules/DegenerusGameWhaleModule.sol	READ	pass purchase revenue -> pending pools during freeze
 VALUE-IN	_setPendingPools	purchaseLazyPass	modules/DegenerusGameWhaleModule.sol	READ	pass purchase revenue -> pending pools during freeze
 POOL-TO-POOL	_setPendingPools	_boxResolveEthSpinFromBox	modules/DegenerusGameDegeneretteModule.sol	READ	box ETH-spin flush (same shape as runDegeneretteWork)
@@ -79,7 +79,7 @@ MUTATOR-DEF	_setPrizePools	_setFuturePrizePool	storage/DegenerusGameStorage.sol	
 MUTATOR-DEF	_setPrizePools	_setPrizePools	storage/DegenerusGameStorage.sol	READ	canonical packed-slot setter definition
 POOL-TO-POOL	_setPrizePools	_startDailyEth	modules/DegenerusGameJackpotModule.sol	READ	the purchase-phase drip merge (future debit + ticket-leg next credit + insurance skim debit) — one packed write
 POOL-TO-POOL	_setPrizePools	awardWhalePass	modules/DegenerusGameWhaleModule.sol	READ	exact full-pass cost from up to 25% of a jackpot-phase quadrant credits future; paired current debit includes returned spend; ticket-leg passes do not write pools
-VALUE-IN	_setPrizePools	_buyFoilPack	modules/DegenerusGameFoilPackModule.sol	READ	foil premium lands in live pools (75/25 split) (private _buyFoilPack, reached only through purchaseWithFoil; the pack leg of the additive purchase)
+VALUE-IN	_setPrizePools	_buyFoilPack	modules/DegenerusGameFoilCore.sol	READ	foil premium lands in live pools (75/25 split) (private _buyFoilPack, reached only through purchaseWithFoil; the pack leg of the additive purchase)
 VALUE-IN	_setPrizePools	purchaseDeityPass	modules/DegenerusGameWhaleModule.sol	READ	pass purchase revenue -> live pools
 VALUE-IN	_setPrizePools	purchaseLazyPass	modules/DegenerusGameWhaleModule.sol	READ	pass purchase revenue -> live pools
 POOL-TO-POOL	_setPrizePools	resolveRedemptionLootbox	modules/DegenerusGameLootboxModule.sol	READ	redemption reserve debit funds future (live path)

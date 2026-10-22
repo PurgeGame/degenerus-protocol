@@ -25,10 +25,7 @@ contract DegenerusGameMintModule is GamePurchase {
     ///      Ordinary Vault-funded smurf creation uses GamePurchase directly.
     function _accruePurchaseDegenesisCredit(uint32, uint256) internal override {}
 
-    function _accrueAdapterDegenesisCredit(uint32 buyerId, uint256 cost) internal override {
-        // The adapter's validated seventh argument remains available without keeping it on the stack.
-        uint256 payerId;
-        assembly ("memory-safe") { payerId := calldataload(196) }
+    function _accrueAdapterDegenesisCredit(uint32 buyerId, uint256 cost, uint32 payerId) internal override {
         if (payerId != VAULT_WALLET_ID) _accrueDegenesisCredit(buyerId, cost);
     }
 }

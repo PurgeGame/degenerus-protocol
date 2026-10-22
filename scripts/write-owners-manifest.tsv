@@ -67,11 +67,11 @@ OWNER	deityBySymbol	modules/DegenerusGameWhaleModule.sol	_registerDeity records 
 OWNER	deityPassPricePaid	modules/DegenerusGameWhaleModule.sol	purchaseDeityPass records the price paid (caps the early-gameover refund); plain assignment, one pass per buyer
 OWNER	earlyTicketLevel	modules/DegenerusGameAdvanceModule.sol	first fresh daily or mid-day request after the goal freezes this absolute next-level pool and permanently closes its far-future queue to later entries
 OWNER	earlyTicketLevel	modules/DegenerusGameRngModule.sol	first fresh daily or mid-day request after the goal freezes this absolute next-level pool and permanently closes its far-future queue to later entries
-OWNER	foilCursor	modules/DegenerusGameFoilPackModule.sol	_runFoilWork persists the resume position on budget deferral and zeroes it with the read count when the cohort drains; sole module writer
+OWNER	foilCursor	modules/DegenerusGameFoilCore.sol	_runFoilWork persists the resume position on budget deferral and zeroes it with the read count when the cohort drains; sole module writer
 OWNER	foilCursor	modules/DegenerusGameRngUtils.sol	_swapFoilSlot resets the cursor when swapping frozen cohorts
-OWNER	foilFirstDrawDay	modules/DegenerusGameFoilPackModule.sol	cohort generation stamps reset on swap and pinned on materialization
+OWNER	foilFirstDrawDay	modules/DegenerusGameFoilCore.sol	cohort generation stamps reset on swap and pinned on materialization
 OWNER	foilFirstDrawDay	modules/DegenerusGameRngUtils.sol	cohort generation stamps reset on swap and pinned on materialization
-OWNER	foilGenerationDay	modules/DegenerusGameFoilPackModule.sol	cohort generation stamps reset on swap and pinned on materialization
+OWNER	foilGenerationDay	modules/DegenerusGameFoilCore.sol	cohort generation stamps reset on swap and pinned on materialization
 OWNER	foilGenerationDay	modules/DegenerusGameRngUtils.sol	cohort generation stamps reset on swap and pinned on materialization
 OWNER	foilMatchClaimed	storage/DegenerusGameStorage.sol	_markFoilMatchClaimed sets the exact-day ticket bit before payout (CEI); expiry-gated claims recycle one of two per-player day lanes while preserving the other lane
 OWNER	gameOver	modules/DegenerusGameGameOverModule.sol	_handleGameOverDrain latches terminal state; sole writer, one-way
@@ -154,7 +154,7 @@ OWNER	degeneretteCursor	modules/DegenerusGameDegeneretteModule.sol	Shared RNG se
 HELPER	degeneretteCursor	storage/DegenerusGameStorage.sol	Shared RNG seal resets the read cursor; Degenerette worker advances only after each atomic committed bet settles.
 OWNER	deityPassSales	modules/DegenerusGameWhaleModule.sol	Paid deity registration increments the sale counter atomically with NFT registration.
 OWNER	deityRecipientBoonCount	modules/DegenerusGameBoonModule.sol	Increments the per-deity/per-recipient lifetime boon cap before issuing the boon.
-OWNER	foilRecord	modules/DegenerusGameFoilPackModule.sol	Four-slot exact-level-tagged pack record; buy reuse guard protects pending/matching rights, generator stores all lines, gold claim marks its consumed bit.
+OWNER	foilRecord	modules/DegenerusGameFoilCore.sol	Four-slot exact-level-tagged pack record; buy reuse guard protects pending/matching rights, generator stores all lines, gold claim marks its consumed bit.
 OWNER	humanReadComplete	modules/GameAfkingModule.sol	Human FIFO worker certifies completion once every entry has settled; the shared RNG seal invalidates it for a fresh cohort.
 OWNER	jackpotCounter	modules/DegenerusGameJackpotModule.sol	Increments once after the daily coin/ticket leg completes; Advance resets at phase end.
 OWNER	jackpotWork	modules/DegenerusGameJackpotModule.sol	Jackpot worker owns canonical plan/cursor and quadrant accounting; terminal cutover retires only unpaid normal work and seeds its own terminal plan. A work of another kind or level met by _runDailyJackpot or _runTicketWork is deleted before the requested draw is priced.
@@ -184,8 +184,8 @@ OWNER	decJackpotPlans	modules/DegenerusGameDecimatorModule.sol	Seal sets pending
 OWNER	decGeneratedOwners	modules/DegenerusGameDecimatorModule.sol	Only retained generated candidates write the owner by entry ordinal (1..N); later rounds reuse those keys.
 HELPER	boxReadCount	storage/DegenerusGameStorage.sol	_swapRngBuffers latches the box write count into the read length at a seal (normal or terminal request); sole writer. The human-box worker walks boxCursor up to it.
 HELPER	degeneretteReadCount	storage/DegenerusGameStorage.sol	_swapRngBuffers latches the bet write count into the read length at a seal (normal or terminal request); sole writer. The Degenerette worker walks degeneretteCursor up to it.
-OWNER	foilReadCount	modules/DegenerusGameFoilPackModule.sol	_runFoilWork zeroes the read count with the cursor when the sealed cohort drains; _swapFoilSlot (RngUtils) swaps the two counts with the cohorts at the daily or terminal swap.
-OWNER	foilWriteCount	modules/DegenerusGameFoilPackModule.sol	_buyFoilPack appends a pack at the write count and increments it in the cursor slot the write key already loaded; _swapFoilSlot (RngUtils) swaps the two counts with the cohorts.
+OWNER	foilReadCount	modules/DegenerusGameFoilCore.sol	_runFoilWork zeroes the read count with the cursor when the sealed cohort drains; _swapFoilSlot (RngUtils) swaps the two counts with the cohorts at the daily or terminal swap.
+OWNER	foilWriteCount	modules/DegenerusGameFoilCore.sol	_buyFoilPack appends a pack at the write count and increments it in the cursor slot the write key already loaded; _swapFoilSlot (RngUtils) swaps the two counts with the cohorts.
 HELPER	deityPassIds	storage/DegenerusGameStorage.sol	_appendDeityId appends a packed uint32 ID and increments its logical count; helper called by deity registration.
 INIT	wallets	storage/DegenerusGameStorage.sol	Storage constructor reserves ID zero by setting the wallet-table length to one; later registration appends normally.
 HELPER	walletIds	storage/DegenerusGameStorage.sol	_registerWallet assigns a default gameplay ID and initializes or preserves the permanent governance/affiliate identity in the high lane.

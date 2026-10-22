@@ -6763,9 +6763,9 @@
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule._processPhaseTransition",
     "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_FOILPACK_MODULE.delegatecall( abi.encodeWithSelector(IDegenerusGameFoilPackModule.queuePerpetualTickets.selector, purchaseLevel + 99) )",
+    "expression": "ContractAddresses.GAME_TICKET_MODULE.delegatecall( abi.encodeWithSelector(IDegenerusGameFoilWorkerModule.queuePerpetualTickets.selector, purchaseLevel + 99) )",
     "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
+    "review": "P5: perpetual-ticket worker selector targets the Pass alias GAME_TICKET_MODULE. Same Game storage, level argument, delegatecall context and bubbled failure; no opcode cap was removed."
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
@@ -7657,6 +7657,14 @@
   },
   {
     "path": "contracts/modules/DegenerusGameDegenesisModule.sol",
+    "scope": "DegenerusGameDegenesisModule._degenesisPurchaseWith",
+    "kind": "opcode-or-value",
+    "expression": "ContractAddresses.GAME_MINT_MODULE.delegatecall(abi.encodeWithSelector( IDegenerusGameMintModule.purchaseWith.selector, recipientId, quantity, boxOrder, bytes32(0), MintPaymentKind.Claimable, uint256(0), VAULT_WALLET_ID ))",
+    "count": 1,
+    "review": "P5: guarded Vault budget spend passes the allocated recipient into the explicit-value purchase hook. Standalone Degenesis delegates to Mint with Vault payer; Endgame overrides it internally. Whale purchases retain their Pass delegatecall."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameDegenesisModule.sol",
     "scope": "DegenerusGameDegenesisModule._resolveDegenesisOrder",
     "kind": "external",
     "expression": "IDegenesisPasses(ContractAddresses.CRAPS).creditPasses(o.id, o.normalPasses, o.highPasses)",
@@ -7723,209 +7731,257 @@
     "path": "contracts/modules/DegenerusGameDegenesisModule.sol",
     "scope": "DegenerusGameDegenesisModule.spendDegenesis",
     "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_MINT_MODULE.delegatecall(abi.encodeWithSelector( IDegenerusGameMintModule.purchaseWith.selector, recipientId, quantity, boxOrder, bytes32(0), MintPaymentKind.Claimable, uint256(0), VAULT_WALLET_ID ))",
-    "count": 1,
-    "review": "Game-context, Vault-only restricted spending validates allocation before staging funds; fixed Mint adapter receives the recipient and Vault payer, zero ETH and zero affiliate code. Exact debit is capped and all effects revert together. P5 must re-point this edge when Mint retires."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameDegenesisModule.sol",
-    "scope": "DegenerusGameDegenesisModule.spendDegenesis",
-    "kind": "opcode-or-value",
     "expression": "ContractAddresses.GAME_WHALE_MODULE.delegatecall(abi.encodeWithSelector( IDegenerusGameWhaleModule.purchaseWhalePassForDegenesis.selector, recipientId, quantity ))",
     "count": 1,
     "review": "Game-context, Vault-only restricted spending delegates to the fixed Whale gift entry; the allocated recipient receives normal benefits and the Vault ledger alone pays under the exact cap. P5 must re-point this edge."
   },
   {
-    "path": "contracts/modules/DegenerusGameFoilPackModule.sol",
-    "scope": "DegenerusGameFoilPackModule._buyFoilPack",
+    "path": "contracts/modules/DegenerusGameDegenesisModule.sol",
+    "scope": "DegenerusGameDegenesisModule.spendDegenesis",
+    "kind": "recipient-helper",
+    "expression": "_degenesisPurchaseWith(recipientId, quantity, boxOrder)",
+    "count": 1,
+    "review": "P5: guarded Vault budget spend passes the allocated recipient into the explicit-value purchase hook. Standalone Degenesis delegates to Mint with Vault payer; Endgame overrides it internally. Whale purchases retain their Pass delegatecall."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameEndgameModule.sol",
+    "scope": "DegenerusGameEndgameModule._degenesisPurchaseWith",
+    "kind": "recipient-helper",
+    "expression": "_purchaseWith(recipientId, quantity, boxOrder, bytes32(0), MintPaymentKind.Claimable, 0, VAULT_WALLET_ID)",
+    "count": 1,
+    "review": "P5: internal explicit-value purchase in Game storage preserves sender/value and recipient. Degenesis supplies the authorized Vault payer and earns no adapter credit; Foil supplies payer zero and retains credit. No public purchaseWith selector is added to Game or Endgame."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameEndgameModule.sol",
+    "scope": "DegenerusGameEndgameModule._foilPurchaseWith",
+    "kind": "recipient-helper",
+    "expression": "_purchaseWith(buyerId, quantity, boxOrder, affiliateCode, payKind, fresh, 0)",
+    "count": 1,
+    "review": "P5: internal explicit-value purchase in Game storage preserves sender/value and recipient. Degenesis supplies the authorized Vault payer and earns no adapter credit; Foil supplies payer zero and retains credit. No public purchaseWith selector is added to Game or Endgame."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameFoilCore.sol",
+    "scope": "DegenerusGameFoilCore._buyFoilPack",
     "kind": "external",
     "expression": "affiliate.payAffiliate( (claimableUsed * PRICE_COIN_UNIT) / priceWei, affiliateCode, buyerId, affLevel, false, 0 )",
     "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review. P5: unchanged expression moved from FoilPack into the shared Foil core."
   },
   {
-    "path": "contracts/modules/DegenerusGameFoilPackModule.sol",
-    "scope": "DegenerusGameFoilPackModule._buyFoilPack",
+    "path": "contracts/modules/DegenerusGameFoilCore.sol",
+    "scope": "DegenerusGameFoilCore._buyFoilPack",
     "kind": "external",
     "expression": "affiliate.payAffiliate( (freshBasis * PRICE_COIN_UNIT) / priceWei, affiliateCode, buyerId, affLevel, true, 0 )",
     "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review. P5: unchanged expression moved from FoilPack into the shared Foil core."
   },
   {
-    "path": "contracts/modules/DegenerusGameFoilPackModule.sol",
-    "scope": "DegenerusGameFoilPackModule._buyFoilPack",
+    "path": "contracts/modules/DegenerusGameFoilCore.sol",
+    "scope": "DegenerusGameFoilCore._buyFoilPack",
     "kind": "external",
     "expression": "coinflip.creditFlip(buyerId, kickback)",
     "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review. P5: unchanged expression moved from FoilPack into the shared Foil core."
   },
   {
-    "path": "contracts/modules/DegenerusGameFoilPackModule.sol",
-    "scope": "DegenerusGameFoilPackModule._buyFoilPack",
+    "path": "contracts/modules/DegenerusGameFoilCore.sol",
+    "scope": "DegenerusGameFoilCore._buyFoilPack",
     "kind": "external",
     "expression": "quests .handleFoilPurchase(buyerId, cost, 0, 0, priceWei, levelQuestPrice)",
     "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review. P5: unchanged expression moved from FoilPack into the shared Foil core."
   },
   {
-    "path": "contracts/modules/DegenerusGameFoilPackModule.sol",
-    "scope": "DegenerusGameFoilPackModule._buyFoilPack",
+    "path": "contracts/modules/DegenerusGameFoilCore.sol",
+    "scope": "DegenerusGameFoilCore._buyFoilPack",
     "kind": "recipient-helper",
     "expression": "_playerActivityScoreCached(buyerId, streakSnapshot)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. P5: unchanged expression moved from FoilPack into the shared Foil core."
   },
   {
-    "path": "contracts/modules/DegenerusGameFoilPackModule.sol",
-    "scope": "DegenerusGameFoilPackModule._buyFoilPack",
+    "path": "contracts/modules/DegenerusGameFoilCore.sol",
+    "scope": "DegenerusGameFoilCore._buyFoilPack",
     "kind": "recipient-helper",
     "expression": "_recordMintData( buyerId, lvl, uint32((FOIL_PACK_TICKETS * 4 * QTY_SCALE) << snapS) )",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. P5: unchanged expression moved from FoilPack into the shared Foil core."
   },
   {
-    "path": "contracts/modules/DegenerusGameFoilPackModule.sol",
-    "scope": "DegenerusGameFoilPackModule._foilSpin",
-    "kind": "external",
-    "expression": "IFoilWwxrp(ContractAddresses.WWXRP).creditPrize(id, wwxrpOut)",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameFoilPackModule.sol",
-    "scope": "DegenerusGameFoilPackModule._foilSpin",
-    "kind": "external",
-    "expression": "coinflip.creditFlip(id, flipOut)",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameFoilPackModule.sol",
-    "scope": "DegenerusGameFoilPackModule._foilSpin",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_DEGENERETTE_MODULE.delegatecall( abi.encodeWithSelector(selector, id, stake, activityScore, seed, symbol) )",
-    "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameFoilPackModule.sol",
-    "scope": "DegenerusGameFoilPackModule._moduleCall",
-    "kind": "opcode-or-value",
-    "expression": "module.delegatecall(payload)",
-    "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameFoilPackModule.sol",
-    "scope": "DegenerusGameFoilPackModule._payFoilTier",
-    "kind": "recipient-helper",
-    "expression": "_foilSpin( IDegenerusGameDegeneretteModule.resolveEthSpinFromBox.selector, id, faces * PriceLookupLib.priceForLevel(L), activityScore, seed, symbol )",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameFoilPackModule.sol",
-    "scope": "DegenerusGameFoilPackModule._payFoilTier",
-    "kind": "recipient-helper",
-    "expression": "_foilSpin( IDegenerusGameDegeneretteModule.resolveFlipSpinsFromBox.selector, id, faces * FLIP_FACE_AMOUNT * TOKEN_MATH_SCALE, activityScore, seed, symbol )",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameFoilPackModule.sol",
-    "scope": "DegenerusGameFoilPackModule._payFoilTier",
-    "kind": "recipient-helper",
-    "expression": "_foilSpin( IDegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox.selector, id, faces * WWXRP_FACE_AMOUNT * TOKEN_MATH_SCALE, activityScore, seed, symbol )",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameFoilPackModule.sol",
-    "scope": "DegenerusGameFoilPackModule._pushFoilGrand",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_JACKPOT_MODULE.delegatecall( abi.encodeWithSelector( IDegenerusGameJackpotModule.payGoldenTicketGrand.selector, id, lvl, golds ) )",
-    "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameFoilPackModule.sol",
-    "scope": "DegenerusGameFoilPackModule._resolveFoilBuyer",
-    "kind": "recipient-helper",
-    "expression": "_pushFoilGrand(buyerId, lvl, golds, allGold)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameFoilPackModule.sol",
-    "scope": "DegenerusGameFoilPackModule._runFoilWork",
-    "kind": "recipient-helper",
-    "expression": "_resolveFoilBuyer(pack, entropy, terminal, counts, touchedTraits)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameFoilPackModule.sol",
-    "scope": "DegenerusGameFoilPackModule._settleGoldenTicket",
-    "kind": "external",
-    "expression": "coinflip.creditFlip(id, flipCredit)",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameFoilPackModule.sol",
-    "scope": "DegenerusGameFoilPackModule._tryClaimFoilMatch",
-    "kind": "recipient-helper",
-    "expression": "_payFoilTier(id, day, ticketIndex, L, sel, tier, faces, activityScore, uint128(draw >> _FOIL_DRAW_SEED_SHIFT))",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameFoilPackModule.sol",
-    "scope": "DegenerusGameFoilPackModule.claimFoilMatch",
+    "path": "contracts/modules/DegenerusGameFoilCore.sol",
+    "scope": "DegenerusGameFoilCore._foilClaimFoilMatch",
     "kind": "recipient-helper",
     "expression": "_tryClaimFoilMatch(playerId, day, ticketIndex)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. P5: unchanged expression moved from FoilPack into the shared Foil core."
   },
   {
-    "path": "contracts/modules/DegenerusGameFoilPackModule.sol",
-    "scope": "DegenerusGameFoilPackModule.claimFoilMatchMany",
+    "path": "contracts/modules/DegenerusGameFoilCore.sol",
+    "scope": "DegenerusGameFoilCore._foilClaimFoilMatchMany",
     "kind": "external",
-    "expression": "this.claimFoilMatch( id == 0 ? _walletIdOf(msg.sender) : id, drawDays[i], ticketIndexes[i] )",
+    "expression": "IDegenerusGameFoilPackModule(address(this)).claimFoilMatch( id == 0 ? _walletIdOf(msg.sender) : id, drawDays[i], ticketIndexes[i] )",
     "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+    "review": "P5: retained external Game self-call/try-catch. ID zero resolves to the outer caller before CALL; first-tuple failure reverts the batch, later failures roll back only the child. Recipient and calldata encodings are unchanged."
   },
   {
-    "path": "contracts/modules/DegenerusGameFoilPackModule.sol",
-    "scope": "DegenerusGameFoilPackModule.claimGoldenTicket",
+    "path": "contracts/modules/DegenerusGameFoilCore.sol",
+    "scope": "DegenerusGameFoilCore._foilClaimGoldenTicket",
     "kind": "recipient-helper",
     "expression": "_settleGoldenTicket(id, lvl, golds, allGold)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. P5: unchanged expression moved from FoilPack into the shared Foil core."
   },
   {
-    "path": "contracts/modules/DegenerusGameFoilPackModule.sol",
-    "scope": "DegenerusGameFoilPackModule.purchaseWithFoil",
+    "path": "contracts/modules/DegenerusGameFoilCore.sol",
+    "scope": "DegenerusGameFoilCore._foilPurchaseWith",
+    "kind": "opcode-or-value",
+    "expression": "ContractAddresses.GAME_MINT_MODULE.delegatecall(abi.encodeWithSelector( IDegenerusGameMintModule.purchaseWith.selector, buyerId, quantity, boxOrder, affiliateCode, payKind, fresh, uint32(0)))",
+    "count": 1,
+    "review": "P5: same-storage Foil helper preserves the existing guarded entry, explicit recipient, supplied fresh value and payout ordering. Standalone Mint forwarding is overridden by the internal purchase in Endgame; independent-state token/quest/affiliate calls and cross-bundle spin/grand frames remain intact."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameFoilCore.sol",
+    "scope": "DegenerusGameFoilCore._foilPurchaseWithFoil",
     "kind": "recipient-helper",
     "expression": "_buyFoilPack(buyerId, fresh - mintFresh, affiliateCode, payKind)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. P5: unchanged expression moved from FoilPack into the shared Foil core."
   },
   {
-    "path": "contracts/modules/DegenerusGameFoilPackModule.sol",
-    "scope": "DegenerusGameFoilPackModule.purchaseWithFoil",
+    "path": "contracts/modules/DegenerusGameFoilCore.sol",
+    "scope": "DegenerusGameFoilCore._foilPurchaseWithFoil",
     "kind": "recipient-helper",
-    "expression": "_moduleCall(ContractAddresses.GAME_MINT_MODULE, abi.encodeWithSelector( IDegenerusGameMintModule.purchaseWith.selector, buyerId, entryQuantityScaled, boxOrder, affiliateCode, payKind, mintFresh, uint32(0)))",
+    "expression": "_foilPurchaseWith(buyerId, entryQuantityScaled, boxOrder, affiliateCode, payKind, mintFresh)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "P5: same-storage Foil helper preserves the existing guarded entry, explicit recipient, supplied fresh value and payout ordering. Standalone Mint forwarding is overridden by the internal purchase in Endgame; independent-state token/quest/affiliate calls and cross-bundle spin/grand frames remain intact."
   },
   {
-    "path": "contracts/modules/DegenerusGameFoilPackModule.sol",
-    "scope": "DegenerusGameFoilPackModule.runFoilWork",
+    "path": "contracts/modules/DegenerusGameFoilCore.sol",
+    "scope": "DegenerusGameFoilCore._foilSpin",
+    "kind": "external",
+    "expression": "IFoilWwxrp(ContractAddresses.WWXRP).creditPrize(id, wwxrpOut)",
+    "count": 1,
+    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review. P5: unchanged expression moved from FoilPack into the shared Foil core."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameFoilCore.sol",
+    "scope": "DegenerusGameFoilCore._foilSpin",
+    "kind": "external",
+    "expression": "coinflip.creditFlip(id, flipOut)",
+    "count": 1,
+    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review. P5: unchanged expression moved from FoilPack into the shared Foil core."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameFoilCore.sol",
+    "scope": "DegenerusGameFoilCore._foilSpin",
+    "kind": "opcode-or-value",
+    "expression": "ContractAddresses.GAME_DEGENERETTE_MODULE.delegatecall( abi.encodeWithSelector(selector, id, stake, activityScore, seed, symbol) )",
+    "count": 1,
+    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target. P5: unchanged expression moved from FoilPack into the shared Foil core."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameFoilCore.sol",
+    "scope": "DegenerusGameFoilCore._payFoilTier",
+    "kind": "recipient-helper",
+    "expression": "_foilSpin( IDegenerusGameDegeneretteModule.resolveEthSpinFromBox.selector, id, faces * PriceLookupLib.priceForLevel(L), activityScore, seed, symbol )",
+    "count": 1,
+    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. P5: unchanged expression moved from FoilPack into the shared Foil core."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameFoilCore.sol",
+    "scope": "DegenerusGameFoilCore._payFoilTier",
+    "kind": "recipient-helper",
+    "expression": "_foilSpin( IDegenerusGameDegeneretteModule.resolveFlipSpinsFromBox.selector, id, faces * FLIP_FACE_AMOUNT * TOKEN_MATH_SCALE, activityScore, seed, symbol )",
+    "count": 1,
+    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. P5: unchanged expression moved from FoilPack into the shared Foil core."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameFoilCore.sol",
+    "scope": "DegenerusGameFoilCore._payFoilTier",
+    "kind": "recipient-helper",
+    "expression": "_foilSpin( IDegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox.selector, id, faces * WWXRP_FACE_AMOUNT * TOKEN_MATH_SCALE, activityScore, seed, symbol )",
+    "count": 1,
+    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. P5: unchanged expression moved from FoilPack into the shared Foil core."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameFoilCore.sol",
+    "scope": "DegenerusGameFoilCore._pushFoilGrand",
+    "kind": "opcode-or-value",
+    "expression": "ContractAddresses.GAME_JACKPOT_MODULE.delegatecall( abi.encodeWithSelector( IDegenerusGameJackpotModule.payGoldenTicketGrand.selector, id, lvl, golds ) )",
+    "count": 1,
+    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target. P5: unchanged expression moved from FoilPack into the shared Foil core."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameFoilCore.sol",
+    "scope": "DegenerusGameFoilCore._resolveFoilBuyer",
+    "kind": "recipient-helper",
+    "expression": "_pushFoilGrand(buyerId, lvl, golds, allGold)",
+    "count": 1,
+    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. P5: unchanged expression moved from FoilPack into the shared Foil core."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameFoilCore.sol",
+    "scope": "DegenerusGameFoilCore._runFoilWork",
+    "kind": "recipient-helper",
+    "expression": "_resolveFoilBuyer(pack, entropy, terminal, counts, touchedTraits)",
+    "count": 1,
+    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. P5: unchanged expression moved from FoilPack into the shared Foil core."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameFoilCore.sol",
+    "scope": "DegenerusGameFoilCore._settleGoldenTicket",
+    "kind": "external",
+    "expression": "coinflip.creditFlip(id, flipCredit)",
+    "count": 1,
+    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review. P5: unchanged expression moved from FoilPack into the shared Foil core."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameFoilCore.sol",
+    "scope": "DegenerusGameFoilCore._tryClaimFoilMatch",
+    "kind": "recipient-helper",
+    "expression": "_payFoilTier(id, day, ticketIndex, L, sel, tier, faces, activityScore, uint128(draw >> _FOIL_DRAW_SEED_SHIFT))",
+    "count": 1,
+    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. P5: unchanged expression moved from FoilPack into the shared Foil core."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameFoilUserModule.sol",
+    "scope": "DegenerusGameFoilUserModule.claimFoilMatch",
+    "kind": "recipient-helper",
+    "expression": "_foilClaimFoilMatch(id, day, ticketIndex)",
+    "count": 1,
+    "review": "P5: selector wrapper forwards unchanged parameters internally to the guarded Foil core body. User entries are deployed on Endgame; workers are deployed on Pass. The batch body retains its external self-call."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameFoilUserModule.sol",
+    "scope": "DegenerusGameFoilUserModule.claimFoilMatchMany",
+    "kind": "recipient-helper",
+    "expression": "_foilClaimFoilMatchMany(ids, drawDays, ticketIndexes)",
+    "count": 1,
+    "review": "P5: selector wrapper forwards unchanged parameters internally to the guarded Foil core body. User entries are deployed on Endgame; workers are deployed on Pass. The batch body retains its external self-call."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameFoilUserModule.sol",
+    "scope": "DegenerusGameFoilUserModule.claimGoldenTicket",
+    "kind": "recipient-helper",
+    "expression": "_foilClaimGoldenTicket(accountId, lvl)",
+    "count": 1,
+    "review": "P5: selector wrapper forwards unchanged parameters internally to the guarded Foil core body. User entries are deployed on Endgame; workers are deployed on Pass. The batch body retains its external self-call."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameFoilUserModule.sol",
+    "scope": "DegenerusGameFoilUserModule.purchaseWithFoil",
+    "kind": "recipient-helper",
+    "expression": "_foilPurchaseWithFoil(buyerId, entryQuantityScaled, boxOrder, affiliateCode, payKind)",
+    "count": 1,
+    "review": "P5: selector wrapper forwards unchanged parameters internally to the guarded Foil core body. User entries are deployed on Endgame; workers are deployed on Pass. The batch body retains its external self-call."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameFoilWorkerModule.sol",
+    "scope": "DegenerusGameFoilWorkerModule.runFoilWork",
     "kind": "recipient-helper",
     "expression": "_runFoilWork(allowance)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "P5: selector wrapper forwards unchanged parameters internally to the guarded Foil core body. User entries are deployed on Endgame; workers are deployed on Pass. The batch body retains its external self-call."
   },
   {
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
@@ -7966,6 +8022,14 @@
     "expression": "_requestTerminalRng(day, meter, work)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameGameOverModule.sol",
+    "scope": "DegenerusGameGameOverModule._endgameSplitDegenesis",
+    "kind": "opcode-or-value",
+    "expression": "ContractAddresses.GAME_DEGENESIS_MODULE.delegatecall( abi.encodeWithSelector(IDegenerusGameDegenesisModule.splitDegenesis.selector) )",
+    "count": 1,
+    "review": "P5: terminal cohort split becomes ordinary internal forwarding in Endgame, preserving Game context and split-before-budget ordering. Standalone GameOver retains its delegate helper; caught terminal Ticket work is unchanged."
   },
   {
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
@@ -8082,18 +8146,18 @@
   {
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
     "scope": "DegenerusGameGameOverModule._handleGameOverDrain",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_DEGENESIS_MODULE.delegatecall( abi.encodeWithSelector(IDegenerusGameDegenesisModule.splitDegenesis.selector) )",
+    "kind": "recipient-helper",
+    "expression": "_boundedStethBalance()",
     "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
+    "review": "ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
   },
   {
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
     "scope": "DegenerusGameGameOverModule._handleGameOverDrain",
     "kind": "recipient-helper",
-    "expression": "_boundedStethBalance()",
+    "expression": "_endgameSplitDegenesis()",
     "count": 1,
-    "review": "ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
+    "review": "P5: terminal cohort split becomes ordinary internal forwarding in Endgame, preserving Game context and split-before-budget ordering. Standalone GameOver retains its delegate helper; caught terminal Ticket work is unchanged."
   },
   {
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
@@ -8944,6 +9008,14 @@
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
   {
+    "path": "contracts/modules/DegenerusGamePassModule.sol",
+    "scope": "DegenerusGamePassModule._ticketFoilWork",
+    "kind": "recipient-helper",
+    "expression": "_runFoilWork(allowance)",
+    "count": 1,
+    "review": "P5: Ticket Foil work carries the existing logical allowance and admission/tail checks. Pass executes the ordinary same-storage edge internally; standalone Ticket retains a delegating helper. Miner and Jackpot capped frames remain external."
+  },
+  {
     "path": "contracts/modules/DegenerusGamePayoutUtils.sol",
     "scope": "DegenerusGamePayoutUtils._payoutWithStethFallback",
     "kind": "external",
@@ -9122,10 +9194,18 @@
   {
     "path": "contracts/modules/DegenerusGameTicketModule.sol",
     "scope": "DegenerusGameTicketModule._runTicketWork",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_FOILPACK_MODULE.delegatecall( abi.encodeWithSelector(IDegenerusGameFoilPackModule.runFoilWork.selector, body) )",
+    "kind": "recipient-helper",
+    "expression": "_ticketFoilWork(body)",
     "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
+    "review": "P5: Ticket Foil work carries the existing logical allowance and admission/tail checks. Pass executes the ordinary same-storage edge internally; standalone Ticket retains a delegating helper. Miner and Jackpot capped frames remain external."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameTicketModule.sol",
+    "scope": "DegenerusGameTicketModule._ticketFoilWork",
+    "kind": "opcode-or-value",
+    "expression": "ContractAddresses.GAME_TICKET_MODULE.delegatecall( abi.encodeWithSelector(IDegenerusGameFoilWorkerModule.runFoilWork.selector, body) )",
+    "count": 1,
+    "review": "P5: Ticket Foil work carries the existing logical allowance and admission/tail checks. Pass executes the ordinary same-storage edge internally; standalone Ticket retains a delegating helper. Miner and Jackpot capped frames remain external."
   },
   {
     "path": "contracts/modules/DegenerusGameTicketModule.sol",

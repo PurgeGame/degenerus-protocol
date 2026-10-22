@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {DegenerusGamePassModule} from "../../contracts/modules/DegenerusGamePassModule.sol";
+import {DegenerusGameEndgameModule} from "../../contracts/modules/DegenerusGameEndgameModule.sol";
 import {DegenerusOwnerGovernance} from "../../contracts/DegenerusOwnerGovernance.sol";
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
@@ -207,17 +209,14 @@ abstract contract ForkDeployProtocol is DeployProtocol {
         (address[] memory owners, bytes32[] memory codes, uint8[] memory kicks,
             address[] memory players, bytes32[] memory refs) = (new address[](0), new bytes32[](0), new uint8[](0), new address[](0), new bytes32[](0));
         icons32 = new Icons32Data(false);
-        mintModule = new DegenerusGameMintModule();
+        endgameModule = DegenerusGameEndgameModule(payable(deployCode("DegenerusGameEndgameModule.sol:DegenerusGameEndgameModule", abi.encode())));
         dailyModule = new DegenerusGameDailyModule();
-        whaleModule = new DegenerusGameWhaleModule();
-        decimatorModule = new DegenerusGameDecimatorModule();
-        gameOverModule = new DegenerusGameGameOverModule();
+        passModule = DegenerusGamePassModule(payable(deployCode("DegenerusGamePassModule.sol:DegenerusGamePassModule", abi.encode())));
         boxModule = new DegenerusGameBoxModule();
         bingoModule = new DegenerusGameBingoModule();
         coin = new FLIP();
         coinflip = new Coinflip();
         game = new DegenerusGame();
-        ticketModule = new DegenerusGameTicketModule();
         affiliate = new DegenerusAffiliate(owners, codes, kicks, players, refs);
         jackpots = new DegenerusJackpots();
         quests = new DegenerusQuests();
@@ -227,7 +226,6 @@ abstract contract ForkDeployProtocol is DeployProtocol {
         dgnrs = new DGNRS();
         admin = new DegenerusAdmin();
         gnrus = new GNRUS();
-        foilModule = new DegenerusGameFoilPackModule();
         afkingSubToken = new AFKingSubscriptionToken();
         parimutuel = new DegenerusParimutuel();
         recordBounty = new DegenerusRecordBounty();
@@ -236,12 +234,18 @@ abstract contract ForkDeployProtocol is DeployProtocol {
         jackpotBattle = new JackpotBattle();
         wwxrp = new WWXRP();
         minerModule = new DegenerusGameMinerModule();
-        degenesisModule = new DegenerusGameDegenesisModule();
         ownerGovernance = new DegenerusOwnerGovernance();
+        mintModule = DegenerusGameMintModule(payable(address(endgameModule)));
+        decimatorModule = DegenerusGameDecimatorModule(payable(address(endgameModule)));
+        gameOverModule = DegenerusGameGameOverModule(payable(address(endgameModule)));
+        foilModule = DegenerusGameFoilPackModule(payable(address(endgameModule)));
+        degenesisModule = DegenerusGameDegenesisModule(payable(address(endgameModule)));
         advanceModule = DegenerusGameAdvanceModule(payable(address(dailyModule)));
         jackpotModule = DegenerusGameJackpotModule(payable(address(dailyModule)));
         rngModule = DegenerusGameRngModule(payable(address(dailyModule)));
         jackpotDrawModule = DegenerusGameJackpotDrawModule(payable(address(dailyModule)));
+        whaleModule = DegenerusGameWhaleModule(payable(address(passModule)));
+        ticketModule = DegenerusGameTicketModule(payable(address(passModule)));
         lootboxModule = DegenerusGameLootboxModule(payable(address(boxModule)));
         boonModule = DegenerusGameBoonModule(payable(address(boxModule)));
         degeneretteModule = DegenerusGameDegeneretteModule(payable(address(boxModule)));

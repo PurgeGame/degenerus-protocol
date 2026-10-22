@@ -6,6 +6,8 @@ import {RecyclingState} from "../../helpers/RecyclingState.sol";
 import "forge-std/Test.sol";
 
 // Production contracts
+import {DegenerusGamePassModule} from "../../../contracts/modules/DegenerusGamePassModule.sol";
+import {DegenerusGameEndgameModule} from "../../../contracts/modules/DegenerusGameEndgameModule.sol";
 import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 import {Icons32Data} from "../../../contracts/Icons32Data.sol";
 import {DegenerusGameJackpotDrawModule} from "../../../contracts/modules/DegenerusGameJackpotDrawModule.sol";
@@ -102,6 +104,8 @@ abstract contract DeployProtocol is Test {
 
     // Protocol contracts
     Icons32Data public icons32;
+    DegenerusGamePassModule internal passModule;
+    DegenerusGameEndgameModule internal endgameModule;
     DegenerusGameMintModule public mintModule;
     DegenerusGameTicketModule public ticketModule;
     DegenerusGameMinerModule public minerModule;
@@ -334,17 +338,14 @@ abstract contract DeployProtocol is Test {
         (address[] memory owners, bytes32[] memory codes, uint8[] memory kicks,
             address[] memory players, bytes32[] memory refs) = _affiliateBootstrap();
         icons32 = new Icons32Data(false);
-        mintModule = new DegenerusGameMintModule();
+        endgameModule = DegenerusGameEndgameModule(payable(deployCode("DegenerusGameEndgameModule.sol:DegenerusGameEndgameModule", abi.encode())));
         dailyModule = new DegenerusGameDailyModule();
-        whaleModule = new DegenerusGameWhaleModule();
-        decimatorModule = new DegenerusGameDecimatorModule();
-        gameOverModule = new DegenerusGameGameOverModule();
+        passModule = DegenerusGamePassModule(payable(deployCode("DegenerusGamePassModule.sol:DegenerusGamePassModule", abi.encode())));
         boxModule = new DegenerusGameBoxModule();
         bingoModule = new DegenerusGameBingoModule();
         coin = new FLIP();
         coinflip = new Coinflip();
         game = new DegenerusGame();
-        ticketModule = new DegenerusGameTicketModule();
         affiliate = new DegenerusAffiliate(owners, codes, kicks, players, refs);
         jackpots = new DegenerusJackpots();
         quests = new DegenerusQuests();
@@ -354,7 +355,6 @@ abstract contract DeployProtocol is Test {
         dgnrs = new DGNRS();
         admin = new DegenerusAdmin();
         gnrus = new GNRUS();
-        foilModule = new DegenerusGameFoilPackModule();
         afkingSubToken = new AFKingSubscriptionToken();
         parimutuel = new DegenerusParimutuel();
         recordBounty = new DegenerusRecordBounty();
@@ -363,12 +363,18 @@ abstract contract DeployProtocol is Test {
         jackpotBattle = new JackpotBattle();
         wwxrp = new WWXRP();
         minerModule = new DegenerusGameMinerModule();
-        degenesisModule = new DegenerusGameDegenesisModule();
         ownerGovernance = new DegenerusOwnerGovernance();
+        mintModule = DegenerusGameMintModule(payable(address(endgameModule)));
+        decimatorModule = DegenerusGameDecimatorModule(payable(address(endgameModule)));
+        gameOverModule = DegenerusGameGameOverModule(payable(address(endgameModule)));
+        foilModule = DegenerusGameFoilPackModule(payable(address(endgameModule)));
+        degenesisModule = DegenerusGameDegenesisModule(payable(address(endgameModule)));
         advanceModule = DegenerusGameAdvanceModule(payable(address(dailyModule)));
         jackpotModule = DegenerusGameJackpotModule(payable(address(dailyModule)));
         rngModule = DegenerusGameRngModule(payable(address(dailyModule)));
         jackpotDrawModule = DegenerusGameJackpotDrawModule(payable(address(dailyModule)));
+        whaleModule = DegenerusGameWhaleModule(payable(address(passModule)));
+        ticketModule = DegenerusGameTicketModule(payable(address(passModule)));
         lootboxModule = DegenerusGameLootboxModule(payable(address(boxModule)));
         boonModule = DegenerusGameBoonModule(payable(address(boxModule)));
         degeneretteModule = DegenerusGameDegeneretteModule(payable(address(boxModule)));

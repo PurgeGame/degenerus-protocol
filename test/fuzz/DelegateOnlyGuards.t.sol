@@ -36,8 +36,8 @@ contract DelegateOnlyGuards is DeployProtocol {
     // address being the Game; called on the module itself, each must refuse before touching
     // the module's own (empty) storage.
 
-    function test_purchaseWith_directCallReverts() public {
-        vm.expectRevert(bytes4(keccak256("OnlyDelegatecall()")));
+    function test_purchaseWith_retiredSelectorReverts() public {
+        vm.expectRevert(bytes(""));
         mintModule.purchaseWith{value: 1 ether}(1, 400, 0, bytes32(0), MintPaymentKind.DirectEth, 1 ether, 0);
     }
 

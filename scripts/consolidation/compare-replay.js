@@ -2,9 +2,10 @@ import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { AbiCoder, Interface } from 'ethers';
 const [left, right, abiFile, output, mode = "P1"] = process.argv.slice(2);
-if (!["P1", "P2", "--compiler-only"].includes(mode)) throw new Error(`Unknown comparison mode: ${mode}`);
+if (!["P1", "P2", "--p5", "--p5-separate-mint", "--integrated", "--compiler-only"].includes(mode)) throw new Error(`Unknown comparison mode: ${mode}`);
 const compilerOnly = mode === "--compiler-only";
 const phase = compilerOnly ? null : mode;
+const p5Mode = ["--p5", "--p5-separate-mint", "--integrated"].includes(mode);
 if (!output) throw new Error('usage: compare-replay.js BASELINE_LOG CANDIDATE_LOG BASELINE_CONTRACTS_JSON OUTPUT_JSON');
 const abis = JSON.parse(fs.readFileSync(abiFile));
 const byTopic = new Map();
@@ -160,12 +161,29 @@ const adapterEdges = ['foil-ticket-and-floor-hook', 'create-smurf'].map(label =>
   baseline:a.reduce((n,r)=>n+(r.edgesByLabel?.[`${label}|mod:Mint:${adapterSelector}`]||0),0),
   candidate:b.reduce((n,r)=>n+(r.edgesByLabel?.[`${label}|mod:Mint:${adapterSelector}`]||0),0),
 }));
-for (const e of adapterEdges) {
-  if (e.label === 'foil-ticket-and-floor-hook') assert.equal(e.candidate,e.baseline,'Foil must retain its explicit-value Mint adapter');
-  else assert.equal(e.candidate,0,'Smurf creation must use the internal explicit-value helper');
+const p5Edges = [];
+if (p5Mode) {
+  for (const signature of [
+    'runFoilWork(uint256)', 'splitDegenesis()',
+    'purchaseWith(uint32,uint256,uint256,bytes32,uint8,uint256,uint32)',
+  ]) {
+    const selector = new Interface([`function ${signature}`]).getFunction(signature).selector;
+    const count = runs => runs.reduce((n, r) => n + Object.entries(r.edges)
+      .reduce((sum, [key, value]) => sum + (key.endsWith(`:${selector}`) ? value : 0), 0), 0);
+    const edge = {signature, baseline:count(a), candidate:count(b)};
+    p5Edges.push(edge);
+    if (mode === '--p5-separate-mint' && signature.startsWith('purchaseWith('))
+      assert(edge.candidate > 0, 'Separate Mint comparison must exercise the retained adapter');
+    else assert.equal(edge.candidate, 0, `P5 still delegates through ${signature}`);
+  }
+} else {
+  for (const e of adapterEdges) {
+    if (e.label === 'foil-ticket-and-floor-hook') assert.equal(e.candidate,e.baseline,'Foil must retain its explicit-value Mint adapter');
+    else assert.equal(e.candidate,0,'Smurf creation must use the internal explicit-value helper');
+  }
 }
 const boxEdges = [];
-if (phase === 'P2') {
+if (phase === 'P2' || mode === '--integrated') {
   for (const signature of [
     'resolveHumanBoxOrder(uint48,uint256,uint256,uint256,uint24)',
     'resolveAfkingBox(uint32,uint256,uint24,uint256,uint16)',
@@ -189,7 +207,7 @@ if (phase === 'P2') {
     boxEdges.push(row);
   }
 }
-const report = { differences: errors, proofs, removedEdges: edges, adapterEdges, boxEdges, runs: a.map((r,i) => ({ transactions: r.transactions.length, checkpoints: r.checkpoints.length, slots: Object.keys(r.initial).length, baselineGas: r.gas, candidateGas: b[i]?.gas })) };
+const report = { differences: errors, proofs, removedEdges: edges, adapterEdges, boxEdges, p5Edges, runs: a.map((r,i) => ({ transactions: r.transactions.length, checkpoints: r.checkpoints.length, slots: Object.keys(r.initial).length, baselineGas: r.gas, candidateGas: b[i]?.gas })) };
 fs.writeFileSync(output, JSON.stringify(report, null, 2)+'\n');
 console.log(JSON.stringify({ differences: errors.length, firstDifferences: errors.slice(0,10), proofs, removedEdges: edges, runs: report.runs.map(({ baselineGas,candidateGas,...r })=>r) }, null, 2));
 if (errors.length) process.exitCode = 1;

@@ -586,16 +586,20 @@ interface IGameAfkingModule {
     function smite(uint256 deityId, uint32 smiteeId) external;
 }
 
+/// @notice Foil generation and perpetual-ticket workers hosted by the pass bundle.
+interface IDegenerusGameFoilWorkerModule {
+    function runFoilWork(uint256 allowance) external returns (MineFlipGas.Result memory);
+    /// @notice Queue every deity owner's perpetual ticket for a phase-transition target level.
+    function queuePerpetualTickets(uint24 targetLevel) external;
+
+}
+
 /// @title IDegenerusGameFoilPackModule
 /// @notice Interface for the foil pack buy + match claim.
 /// @dev The Game retains thin delegatecall dispatch stubs targeting these selectors;
 ///      both bodies run in the Game's storage context (delegatecall), so the resolved
 ///      player is passed explicitly and msg.value rides through the call.
 interface IDegenerusGameFoilPackModule {
-    function runFoilWork(uint256 allowance) external returns (MineFlipGas.Result memory);
-    /// @notice Queue every deity owner's perpetual ticket for a phase-transition target level.
-    function queuePerpetualTickets(uint24 targetLevel) external;
-
     /// @notice The foil branch of Game.purchase: an additive foil pack on top of optional ticket
     ///         and lootbox legs. Registers the buyer first (paid admission uses the whole quoted
     ///         spend), caps fresh ETH at the combined cost, credits any overpay to the payer's

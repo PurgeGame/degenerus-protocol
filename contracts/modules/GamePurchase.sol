@@ -699,6 +699,7 @@ abstract contract GamePurchase is
         if (_livenessTriggered()) revert E();
         // Every caller registered the buyer before this frame; the mint word is warm.
 
+        uint32 adapterPayerId = payerId;
         if (payerId == 0) payerId = buyerId;
 
         // Biggest-buy record, armed up front so any claim seeds the flip credit this
@@ -960,10 +961,10 @@ abstract contract GamePurchase is
                 affWinnerCredit
             );
         }
-        _accrueAdapterDegenesisCredit(buyerId, totalCost);
+        _accrueAdapterDegenesisCredit(buyerId, totalCost, adapterPayerId);
     }
 
-    function _accrueAdapterDegenesisCredit(uint32, uint256) internal virtual {}
+    function _accrueAdapterDegenesisCredit(uint32, uint256, uint32) internal virtual {}
 
     /// @dev Ordinary purchases, including smurf creation, retain their credit behavior.
     function _accruePurchaseDegenesisCredit(uint32 buyerId, uint256 cost) internal virtual {

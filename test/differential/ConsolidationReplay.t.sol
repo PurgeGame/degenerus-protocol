@@ -1,5 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {DegenerusGameMintModule} from "../../contracts/modules/DegenerusGameMintModule.sol";
+import {DegenerusGameWhaleModule} from "../../contracts/modules/DegenerusGameWhaleModule.sol";
+import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
+import {DegenerusGameGameOverModule} from "../../contracts/modules/DegenerusGameGameOverModule.sol";
+import {DegenerusGameDecimatorModule} from "../../contracts/modules/DegenerusGameDecimatorModule.sol";
+import {DegenerusGameDegenesisModule} from "../../contracts/modules/DegenerusGameDegenesisModule.sol";
+import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
 
 import {StorageCensusLongRunTest} from "../census/StorageCensusLongRun.t.sol";
 import {Vm, VmSafe} from "forge-std/Vm.sol";
@@ -74,6 +81,7 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
                 if (moduleName == keccak256("GameAfkingModule")) afkingModule = GameAfkingModule(target);
                 if (moduleName == keccak256("DegenerusGameBoonModule")) boonModule = DegenerusGameBoonModule(target);
                 if (moduleName == keccak256("DegenerusGameDegeneretteModule")) degeneretteModule = DegenerusGameDegeneretteModule(target);
+                _p5MapVariant(name, target);
             }
         }
         if (vm.envOr("DIFFERENTIAL_DAILY_BASELINE", false)) {
@@ -116,6 +124,17 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
 
     function _flipShare() private view returns (address) {
         return address(uint160(uint256(keccak256(abi.encodePacked(hex"d694", address(vault), hex"01")))));
+    }
+
+    function _p5MapVariant(string memory name, address target) private {
+        bytes32 key = keccak256(bytes(name));
+        if (key == keccak256("DegenerusGameMintModule")) mintModule = DegenerusGameMintModule(payable(target));
+        if (key == keccak256("DegenerusGameWhaleModule")) whaleModule = DegenerusGameWhaleModule(payable(target));
+        if (key == keccak256("DegenerusGameTicketModule")) ticketModule = DegenerusGameTicketModule(payable(target));
+        if (key == keccak256("DegenerusGameGameOverModule")) gameOverModule = DegenerusGameGameOverModule(payable(target));
+        if (key == keccak256("DegenerusGameDecimatorModule")) decimatorModule = DegenerusGameDecimatorModule(payable(target));
+        if (key == keccak256("DegenerusGameDegenesisModule")) degenesisModule = DegenerusGameDegenesisModule(payable(target));
+        if (key == keccak256("DegenerusGameFoilPackModule")) foilModule = DegenerusGameFoilPackModule(payable(target));
     }
 
     function _baseline(address target, string memory name) private {
@@ -338,6 +357,10 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
         warm = warm_;
         vm.pauseGasMetering();
         _censusBegin("focused");
+        _success("lazy-pass", cast[5], address(game), 0.24 ether,
+            abi.encodeCall(game.purchaseLazyPass, (uint32(0), bytes32(0))));
+        _success("deity-pass", cast[6], address(game), 24 ether,
+            abi.encodeCall(game.purchaseDeityPass, (uint32(0), uint8(7), bytes32(0))));
         _crank(1);
         _buy("first-registration", cast[0], 400, 0, MintPaymentKind.DirectEth, game.mintPrice());
         uint32 id = game.walletIdOf(cast[0]);

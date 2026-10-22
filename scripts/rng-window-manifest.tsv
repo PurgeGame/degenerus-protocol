@@ -120,7 +120,7 @@ CURSOR	lootboxRngPacked	_collectBetFunds	modules/DegenerusGameDegeneretteModule.
 PRODUCER	lootboxRngPacked	_collectBetFunds	modules/DegenerusGameDegeneretteModule.sol	WRITE	Writes accumulating hero-buffer validity, pending ETH/FLIP and the write-buffer bet count +1; the daily request alone swaps hero buffers, so a bet cannot change the sealed pool. The sealed read count lives in degeneretteReadCount, which bets never write.
 GATE	_lootboxWord	runDecimatorJackpot	modules/DegenerusGameDecimatorModule.sol	READ
 CONSUMER-SEALED	_lootboxWord	_runDegeneretteWork	modules/DegenerusGameDegeneretteModule.sol	READ
-CONSUMER-SEALED	_lootboxWord	_runFoilWork	modules/DegenerusGameFoilPackModule.sol	READ	normal frozen read cohort generates and stores all foil lines once
+CONSUMER-SEALED	_lootboxWord	_runFoilWork	modules/DegenerusGameFoilCore.sol	READ	normal frozen read cohort generates and stores all foil lines once
 EXEMPT-ADVANCE	_currentRngWord	_applyTerminalRng	modules/DegenerusGameGameOverModule.sol	READ
 EXEMPT-ADVANCE	_rawDailyRngWord	_applyTerminalRng	modules/DegenerusGameGameOverModule.sol	READ
 EXEMPT-ADVANCE	rngRequestDay	_applyTerminalRng	modules/DegenerusGameGameOverModule.sol	READ	Logical commitment/application identity: set only on fresh normal/terminal boundary, preserved by callback/retry and all consumer checkpoints.

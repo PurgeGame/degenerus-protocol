@@ -11,12 +11,38 @@ export const DEPLOYMENTS = [
   },
   {
     "key": "GAME_MINT_MODULE",
-    "contract": "DegenerusGameMintModule",
+    "contract": "DegenerusGameEndgameModule",
     "aliases": [
-      "GAME_MINT_MODULE"
+      "GAME_MINT_MODULE",
+      "GAME_DECIMATOR_MODULE",
+      "GAME_GAMEOVER_MODULE",
+      "GAME_FOILPACK_MODULE",
+      "GAME_DEGENESIS_MODULE"
     ],
-    "fixtureField": "mintModule",
-    "fixtureType": "DegenerusGameMintModule"
+    "fixtureField": "endgameModule",
+    "fixtureType": "DegenerusGameEndgameModule",
+    "fixtureAliases": {
+      "GAME_MINT_MODULE": {
+        "field": "mintModule",
+        "type": "DegenerusGameMintModule"
+      },
+      "GAME_DECIMATOR_MODULE": {
+        "field": "decimatorModule",
+        "type": "DegenerusGameDecimatorModule"
+      },
+      "GAME_GAMEOVER_MODULE": {
+        "field": "gameOverModule",
+        "type": "DegenerusGameGameOverModule"
+      },
+      "GAME_FOILPACK_MODULE": {
+        "field": "foilModule",
+        "type": "DegenerusGameFoilPackModule"
+      },
+      "GAME_DEGENESIS_MODULE": {
+        "field": "degenesisModule",
+        "type": "DegenerusGameDegenesisModule"
+      }
+    }
   },
   {
     "key": "GAME_ADVANCE_MODULE",
@@ -50,30 +76,23 @@ export const DEPLOYMENTS = [
   },
   {
     "key": "GAME_WHALE_MODULE",
-    "contract": "DegenerusGameWhaleModule",
+    "contract": "DegenerusGamePassModule",
     "aliases": [
-      "GAME_WHALE_MODULE"
+      "GAME_WHALE_MODULE",
+      "GAME_TICKET_MODULE"
     ],
-    "fixtureField": "whaleModule",
-    "fixtureType": "DegenerusGameWhaleModule"
-  },
-  {
-    "key": "GAME_DECIMATOR_MODULE",
-    "contract": "DegenerusGameDecimatorModule",
-    "aliases": [
-      "GAME_DECIMATOR_MODULE"
-    ],
-    "fixtureField": "decimatorModule",
-    "fixtureType": "DegenerusGameDecimatorModule"
-  },
-  {
-    "key": "GAME_GAMEOVER_MODULE",
-    "contract": "DegenerusGameGameOverModule",
-    "aliases": [
-      "GAME_GAMEOVER_MODULE"
-    ],
-    "fixtureField": "gameOverModule",
-    "fixtureType": "DegenerusGameGameOverModule"
+    "fixtureField": "passModule",
+    "fixtureType": "DegenerusGamePassModule",
+    "fixtureAliases": {
+      "GAME_WHALE_MODULE": {
+        "field": "whaleModule",
+        "type": "DegenerusGameWhaleModule"
+      },
+      "GAME_TICKET_MODULE": {
+        "field": "ticketModule",
+        "type": "DegenerusGameTicketModule"
+      }
+    }
   },
   {
     "key": "GAME_LOOTBOX_MODULE",
@@ -140,15 +159,6 @@ export const DEPLOYMENTS = [
     ],
     "fixtureField": "game",
     "fixtureType": "DegenerusGame"
-  },
-  {
-    "key": "GAME_TICKET_MODULE",
-    "contract": "DegenerusGameTicketModule",
-    "aliases": [
-      "GAME_TICKET_MODULE"
-    ],
-    "fixtureField": "ticketModule",
-    "fixtureType": "DegenerusGameTicketModule"
   },
   {
     "key": "AFFILIATE",
@@ -232,15 +242,6 @@ export const DEPLOYMENTS = [
     "fixtureType": "GNRUS"
   },
   {
-    "key": "GAME_FOILPACK_MODULE",
-    "contract": "DegenerusGameFoilPackModule",
-    "aliases": [
-      "GAME_FOILPACK_MODULE"
-    ],
-    "fixtureField": "foilModule",
-    "fixtureType": "DegenerusGameFoilPackModule"
-  },
-  {
     "key": "AFKING_SUB_TOKEN",
     "contract": "AFKingSubscriptionToken",
     "aliases": [
@@ -311,15 +312,6 @@ export const DEPLOYMENTS = [
     ],
     "fixtureField": "minerModule",
     "fixtureType": "DegenerusGameMinerModule"
-  },
-  {
-    "key": "GAME_DEGENESIS_MODULE",
-    "contract": "DegenerusGameDegenesisModule",
-    "aliases": [
-      "GAME_DEGENESIS_MODULE"
-    ],
-    "fixtureField": "degenesisModule",
-    "fixtureType": "DegenerusGameDegenesisModule"
   },
   {
     "key": "OWNER_GOVERNANCE",

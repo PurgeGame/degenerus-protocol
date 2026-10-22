@@ -14,7 +14,8 @@ for (const [file, bounded, affiliate] of [
     `            address[] memory players, bytes32[] memory refs) = ${affiliate};`];
   for (const row of DEPLOYMENTS) {
     const args = row.key === 'ICONS_32' ? 'false' : row.key === 'AFFILIATE' ? 'owners, codes, kicks, players, refs' : '';
-    const creation = bounded ? `${row.fixtureType}(payable(deployCode("${row.fixtureType}.sol:${row.fixtureType}", abi.encode(${args}))))` : `new ${row.fixtureType}(${args})`;
+    const fromArtifact = bounded || ['DegenerusGamePassModule', 'DegenerusGameEndgameModule'].includes(row.fixtureType);
+    const creation = fromArtifact ? `${row.fixtureType}(payable(deployCode("${row.fixtureType}.sol:${row.fixtureType}", abi.encode(${args}))))` : `new ${row.fixtureType}(${args})`;
     lines.push(`        ${row.fixtureField} = ${creation};`);
   }
   // An alias can have a distinct interface type; no CREATE is emitted for it.

@@ -234,6 +234,10 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
     /// @notice Split every unsplit cohort, sealed or not. Idempotent.
     /// @dev Delegatecalled by terminal setup, after which no order can join a cohort.
     function splitDegenesis() external {
+        _endgameDegenesisSplit();
+    }
+
+    function _endgameDegenesisSplit() internal {
         if (address(this) != ContractAddresses.GAME) revert E();
         _splitDegenesisCohorts(type(uint24).max);
     }
@@ -260,15 +264,14 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
         _requireAllocated(recipientId);
         uint256 funded = balancesPacked[VAULT_WALLET_ID] + maxCost;
         balancesPacked[VAULT_WALLET_ID] = funded;
-        (bool ok, bytes memory data) = whalePass
-            ? ContractAddresses.GAME_WHALE_MODULE.delegatecall(abi.encodeWithSelector(
+        if (whalePass) {
+            (bool ok, bytes memory data) = ContractAddresses.GAME_WHALE_MODULE.delegatecall(abi.encodeWithSelector(
                 IDegenerusGameWhaleModule.purchaseWhalePassForDegenesis.selector, recipientId, quantity
-            ))
-            : ContractAddresses.GAME_MINT_MODULE.delegatecall(abi.encodeWithSelector(
-                IDegenerusGameMintModule.purchaseWith.selector, recipientId, quantity, boxOrder, bytes32(0),
-                MintPaymentKind.Claimable, uint256(0), VAULT_WALLET_ID
             ));
-        if (!ok) _revertDelegate(data);
+            if (!ok) _revertDegenesis(data);
+        } else {
+            _degenesisPurchaseWith(recipientId, quantity, boxOrder);
+        }
         uint256 after_ = balancesPacked[VAULT_WALLET_ID];
         // Checked: a word that grew, an AFKing draw or a draw above maxCost reverts.
         uint256 cost = funded - after_;
@@ -278,7 +281,15 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
         emit DegenesisVaultSpent(recipientId, cost);
     }
 
-    function _revertDelegate(bytes memory reason) private pure {
+    function _degenesisPurchaseWith(uint32 recipientId, uint256 quantity, uint256 boxOrder) internal virtual {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(abi.encodeWithSelector(
+            IDegenerusGameMintModule.purchaseWith.selector, recipientId, quantity, boxOrder, bytes32(0),
+            MintPaymentKind.Claimable, uint256(0), VAULT_WALLET_ID
+        ));
+        if (!ok) _revertDegenesis(data);
+    }
+
+    function _revertDegenesis(bytes memory reason) private pure {
         if (reason.length == 0) revert EmptyRevert();
         assembly ("memory-safe") {
             revert(add(32, reason), mload(reason))

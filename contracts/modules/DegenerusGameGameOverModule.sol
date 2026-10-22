@@ -574,12 +574,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         // Every unsplit Degenesis cohort splits first, so none of its volume stays reserved. The
         // split is idempotent, and once the seventh cohort closes every cohort is split.
         if (degenesisClosed < DEGENESIS_DAYS) {
-            (bool okDeg, bytes memory degData) = ContractAddresses.GAME_DEGENESIS_MODULE.delegatecall(
-                abi.encodeWithSelector(IDegenerusGameDegenesisModule.splitDegenesis.selector)
-            );
-            if (!okDeg) {
-                assembly ("memory-safe") { revert(add(degData, 32), mload(degData)) }
-            }
+            _endgameSplitDegenesis();
         }
 
         bool dead = _lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK) != 0;
@@ -735,6 +730,15 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         // left to roll a first quadrant. 255 denotes priced but not yet initialized.
         _startJackpotWork(uint128(remaining), 0, terminalLevel, 3, 255, false, false);
         return _resumeTerminalPayout(day, meter, work);
+    }
+
+    function _endgameSplitDegenesis() internal virtual {
+        (bool ok, bytes memory data) = ContractAddresses.GAME_DEGENESIS_MODULE.delegatecall(
+            abi.encodeWithSelector(IDegenerusGameDegenesisModule.splitDegenesis.selector)
+        );
+        if (!ok) {
+            assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
+        }
     }
 
     function _resumeTerminalPayout(uint24 day, MineFlipGas.Meter memory meter, TerminalWork memory work) private returns (bool done) {
