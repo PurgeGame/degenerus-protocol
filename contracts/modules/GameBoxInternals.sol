@@ -24,11 +24,6 @@ abstract contract GameBoxInternals {
         uint256 nonceBase
     ) internal virtual;
 
-    function _boxConsumeDegeneretteBoon(
-        uint32 id,
-        uint8 currency
-    ) internal virtual returns (uint16 boostBps);
-
     function _boxResolveWwxrpSpinFromBox(
         uint32 playerId,
         uint256 stake,

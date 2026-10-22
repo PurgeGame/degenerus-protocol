@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { AbiCoder, Interface } from 'ethers';
 const [left, right, abiFile, output, mode = "P1"] = process.argv.slice(2);
-if (!["P1", "P2", "--p6", "--p5", "--p5-separate-mint", "--integrated", "--compiler-only"].includes(mode)) throw new Error(`Unknown comparison mode: ${mode}`);
+if (!["P1", "P2", "P3", "--p6", "--p5", "--p5-separate-mint", "--integrated", "--compiler-only"].includes(mode)) throw new Error(`Unknown comparison mode: ${mode}`);
 const compilerOnly = mode === "--compiler-only";
 const phase = compilerOnly ? null : mode;
 const p5Mode = ["--p5", "--p5-separate-mint", "--integrated"].includes(mode);
@@ -190,7 +190,7 @@ if (p5Mode) {
   }
 }
 const boxEdges = [];
-if (phase === 'P2' || mode === '--integrated') {
+if (phase === 'P2' || phase === 'P3' || mode === '--integrated') {
   for (const signature of [
     'resolveHumanBoxOrder(uint48,uint256,uint256,uint256,uint24)',
     'resolveAfkingBox(uint32,uint256,uint24,uint256,uint16)',
@@ -245,7 +245,24 @@ if (mode === '--p6' || mode === '--integrated') {
   assert.deepEqual(external(b), external(a), 'External engine STATICCALL coverage changed');
   proofs.externalEngineFrames = external(a);
 }
-const report = { differences: errors, proofs, removedEdges: edges, adapterEdges, crapsEdges, boxEdges, p5Edges, runs: a.map((r,i) => ({ transactions: r.transactions.length, checkpoints: r.checkpoints.length, slots: Object.keys(r.initial).length, baselineGas: r.gas, candidateGas: b[i]?.gas })) };
+const gameEdges = [];
+if (phase === 'P3' || mode === '--integrated') {
+  for (const signature of [
+    'mineFlip(uint32)', 'minerAction()', 'playerActivityScoreCachedById(uint32)',
+    'placeDegeneretteBet(uint32,uint8,uint128,uint8,uint8)', 'issueDeityBoon(uint32,uint32,uint8)',
+    'consumeCoinflipBoon(uint32)', 'consumeDecimatorBoost(uint32)',
+    'claimBingo(uint32,uint24,uint8,uint32[8])', 'claimAffiliateDgnrs(uint32)',
+    'maybeCurse(uint32)', 'drainAffiliateBases(uint256,uint256)',
+  ]) {
+    const selector = new Interface([`function ${signature}`]).getFunction(signature).selector;
+    const count = runs => runs.reduce((total,r) => total + Object.entries(r.edges)
+      .filter(([key]) => key.endsWith(`:${selector}`)).reduce((n,[,v]) => n+v,0),0);
+    const row = {signature,baseline:count(a),candidate:count(b)};
+    assert.equal(row.candidate,0,`Game still forwards ${signature}`);
+    gameEdges.push(row);
+  }
+}
+const report = { differences: errors, proofs, removedEdges: edges, adapterEdges, boxEdges, gameEdges, crapsEdges, p5Edges, runs: a.map((r,i) => ({ transactions: r.transactions.length, checkpoints: r.checkpoints.length, slots: Object.keys(r.initial).length, baselineGas: r.gas, candidateGas: b[i]?.gas })) };
 fs.writeFileSync(output, JSON.stringify(report, null, 2)+'\n');
 console.log(JSON.stringify({ differences: errors.length, firstDifferences: errors.slice(0,10), proofs, removedEdges: edges, runs: report.runs.map(({ baselineGas,candidateGas,...r })=>r) }, null, 2));
 if (errors.length) process.exitCode = 1;

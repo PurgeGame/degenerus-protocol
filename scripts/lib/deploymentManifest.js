@@ -125,15 +125,6 @@ export const DEPLOYMENTS = [
     }
   },
   {
-    "key": "GAME_BINGO_MODULE",
-    "contract": "DegenerusGameBingoModule",
-    "aliases": [
-      "GAME_BINGO_MODULE"
-    ],
-    "fixtureField": "bingoModule",
-    "fixtureType": "DegenerusGameBingoModule"
-  },
-  {
     "key": "COIN",
     "contract": "FLIP",
     "aliases": [
@@ -155,10 +146,22 @@ export const DEPLOYMENTS = [
     "key": "GAME",
     "contract": "DegenerusGame",
     "aliases": [
-      "GAME"
+      "GAME",
+      "GAME_BINGO_MODULE",
+      "GAME_MINER_MODULE"
     ],
     "fixtureField": "game",
-    "fixtureType": "DegenerusGame"
+    "fixtureType": "DegenerusGame",
+    "fixtureAliases": {
+      "GAME_BINGO_MODULE": {
+        "field": "bingoModule",
+        "type": "DegenerusGameBingoModule"
+      },
+      "GAME_MINER_MODULE": {
+        "field": "minerModule",
+        "type": "DegenerusGameMinerModule"
+      }
+    }
   },
   {
     "key": "AFFILIATE",
@@ -297,15 +300,6 @@ export const DEPLOYMENTS = [
     ],
     "fixtureField": "wwxrp",
     "fixtureType": "WWXRP"
-  },
-  {
-    "key": "GAME_MINER_MODULE",
-    "contract": "DegenerusGameMinerModule",
-    "aliases": [
-      "GAME_MINER_MODULE"
-    ],
-    "fixtureField": "minerModule",
-    "fixtureType": "DegenerusGameMinerModule"
   },
   {
     "key": "OWNER_GOVERNANCE",

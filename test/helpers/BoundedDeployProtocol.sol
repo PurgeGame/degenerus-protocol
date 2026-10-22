@@ -82,7 +82,6 @@ abstract contract BoundedDeployProtocol is DeployProtocol {
         dailyModule = DegenerusGameDailyModule(payable(deployCode("DegenerusGameDailyModule.sol:DegenerusGameDailyModule", abi.encode())));
         passModule = DegenerusGamePassModule(payable(deployCode("DegenerusGamePassModule.sol:DegenerusGamePassModule", abi.encode())));
         boxModule = DegenerusGameBoxModule(payable(deployCode("DegenerusGameBoxModule.sol:DegenerusGameBoxModule", abi.encode())));
-        bingoModule = DegenerusGameBingoModule(payable(deployCode("DegenerusGameBingoModule.sol:DegenerusGameBingoModule", abi.encode())));
         coin = FLIP(payable(deployCode("FLIP.sol:FLIP", abi.encode())));
         coinflip = Coinflip(payable(deployCode("Coinflip.sol:Coinflip", abi.encode())));
         game = DegenerusGame(payable(deployCode("DegenerusGame.sol:DegenerusGame", abi.encode())));
@@ -100,7 +99,6 @@ abstract contract BoundedDeployProtocol is DeployProtocol {
         recordBounty = DegenerusRecordBounty(payable(deployCode("DegenerusRecordBounty.sol:DegenerusRecordBounty", abi.encode())));
         crapsBattle = CrapsViews(payable(deployCode("CrapsViews.sol:CrapsViews", abi.encode())));
         wwxrp = WWXRP(payable(deployCode("WWXRP.sol:WWXRP", abi.encode())));
-        minerModule = DegenerusGameMinerModule(payable(deployCode("DegenerusGameMinerModule.sol:DegenerusGameMinerModule", abi.encode())));
         ownerGovernance = DegenerusOwnerGovernance(payable(deployCode("DegenerusOwnerGovernance.sol:DegenerusOwnerGovernance", abi.encode())));
         mintModule = DegenerusGameMintModule(payable(address(endgameModule)));
         decimatorModule = DegenerusGameDecimatorModule(payable(address(endgameModule)));
@@ -117,6 +115,8 @@ abstract contract BoundedDeployProtocol is DeployProtocol {
         boonModule = DegenerusGameBoonModule(payable(address(boxModule)));
         degeneretteModule = DegenerusGameDegeneretteModule(payable(address(boxModule)));
         afkingModule = GameAfkingModule(payable(address(boxModule)));
+        bingoModule = DegenerusGameBingoModule(payable(address(game)));
+        minerModule = DegenerusGameMinerModule(payable(address(game)));
         crapsEngine = CrapsEngine(payable(address(crapsBattle)));
         jackpotBattle = JackpotBattle(payable(address(crapsBattle)));
         // END CANONICAL DEPLOYMENTS

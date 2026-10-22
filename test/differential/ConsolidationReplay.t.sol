@@ -23,6 +23,8 @@ import {DegenerusGameDegeneretteModule} from "../../contracts/modules/DegenerusG
 import {DegenerusGameJackpotModule} from "../../contracts/modules/DegenerusGameJackpotModule.sol";
 import {DegenerusGameJackpotDrawModule} from "../../contracts/modules/DegenerusGameJackpotDrawModule.sol";
 import {DegenerusGameRngModule} from "../../contracts/modules/DegenerusGameRngModule.sol";
+import {DegenerusGameMinerModule} from "../../contracts/modules/DegenerusGameMinerModule.sol";
+import {DegenerusGameBingoModule} from "../../contracts/modules/DegenerusGameBingoModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 
@@ -79,6 +81,8 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
                 string memory name = vm.keyExistsJson(variants, string.concat(key, ".name"))
                     ? vm.parseJsonString(variants, string.concat(key, ".name")) : "";
                 bytes32 moduleName = keccak256(bytes(name));
+                if (moduleName == keccak256("DegenerusGameMinerModule")) minerModule = DegenerusGameMinerModule(target);
+                if (moduleName == keccak256("DegenerusGameBingoModule")) bingoModule = DegenerusGameBingoModule(target);
                 if (moduleName == keccak256("GameAfkingModule")) afkingModule = GameAfkingModule(target);
                 if (moduleName == keccak256("DegenerusGameBoonModule")) boonModule = DegenerusGameBoonModule(target);
                 if (moduleName == keccak256("DegenerusGameDegeneretteModule")) degeneretteModule = DegenerusGameDegeneretteModule(target);
@@ -458,6 +462,66 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
         _checkpoint();
     }
 
+    function testFocusedHotEntries() public { _focusedHotEntries(false); }
+    function testWarmHotEntries() public { _focusedHotEntries(true); }
+
+    function _focusedHotEntries(bool warm_) private {
+        warm = warm_;
+        vm.pauseGasMetering();
+        _censusBegin("hot-entries");
+        _crank(1);
+        _buy("hot-register", cast[0], 400, 0, MintPaymentKind.DirectEth, game.mintPrice());
+        _buy("hot-funder", cast[1], 400, 0, MintPaymentKind.DirectEth, game.mintPrice());
+        _success("hot-deity", cast[2], address(game), 24 ether,
+            abi.encodeCall(game.purchaseDeityPass, (uint32(0), uint8(1), bytes32(0))));
+        uint32 id = game.walletIdOf(cast[0]);
+        uint32 issuer = game.walletIdOf(cast[2]);
+        _warpDay(20, 5 minutes);
+        bytes memory runtime = address(game).code;
+        vm.etch(address(game), type(ConsolidationSeed).runtimeCode);
+        ConsolidationSeed(address(game)).hotEntries(id);
+        vm.etch(address(game), runtime);
+        vm.deal(address(game), address(game).balance + 1 ether);
+        GameFunding.credit(id, 0.5 ether);
+        _success("hot-cashout-curse", cast[0], address(game), 0,
+            abi.encodeWithSignature("claimWinnings(uint32,uint256)", id, uint256(0.1 ether)));
+        address[3] memory consumers = [address(coinflip), address(coin), address(wwxrp)];
+        for (uint256 i; i < consumers.length; ++i) {
+            (bool ok, bytes memory result) = _ctx(string.concat("hot-consume-", vm.toString(i)), false,
+                consumers[i], address(game), 0, abi.encodeCall(game.consumeCoinflipBoon, (id)));
+            assertTrue(ok); assertGt(abi.decode(result, (uint16)), 0);
+        }
+        (bool consumed, bytes memory boost) = _ctx("hot-decimator-boon", false, address(coin), address(game), 0,
+            abi.encodeCall(game.consumeDecimatorBoon, (id)));
+        assertTrue(consumed); assertEq(abi.decode(boost, (uint16)), 5000);
+        (bool denied,) = _ctx("hot-unauthorized-boon", false, cast[1], address(game), 0,
+            abi.encodeCall(game.consumeCoinflipBoon, (id)));
+        assertFalse(denied);
+        vm.prank(address(game)); coin.mintForGame(cast[0], 1000);
+        _success("hot-eth-bet", cast[0], address(game), 0.01 ether,
+            abi.encodeCall(game.placeDegeneretteBet, (id, uint8(0), uint128(0.01 ether), uint8(1), uint8(1))));
+        _success("hot-flip-bet", cast[0], address(game), 0,
+            abi.encodeCall(game.placeDegeneretteBet, (id, uint8(1), uint128(100), uint8(1), uint8(2))));
+        _success("hot-gift-bet", cast[1], address(game), 0.01 ether,
+            abi.encodeCall(game.placeDegeneretteBet, (id, uint8(0), uint128(0.01 ether), uint8(1), uint8(3))));
+        for (uint8 slot; slot < 2; ++slot) _success("hot-deity-gift", cast[2], address(game), 0,
+            abi.encodeCall(game.issueDeityBoon, (issuer, id, slot)));
+        _success("hot-activity-cache", cast[1], address(game), 0,
+            abi.encodeCall(game.playerActivityScoreCachedById, (id)));
+        uint32[8] memory slots;
+        _success("hot-bingo", cast[1], address(game), 0,
+            abi.encodeCall(game.claimBingo, (id, uint24(10), uint8(0), slots)));
+        (bool duplicate,) = _ctx("hot-bingo-duplicate", false, cast[1], address(game), 0,
+            abi.encodeCall(game.claimBingo, (id, uint24(10), uint8(0), slots)));
+        assertFalse(duplicate);
+        _success("hot-affiliate-bases", address(affiliate), address(game), 0,
+            abi.encodeCall(game.drainAffiliateBases, (uint256(id), uint256(0))));
+        (bool unauthorized,) = _ctx("hot-unauthorized-bases", false, cast[1], address(game), 0,
+            abi.encodeCall(game.drainAffiliateBases, (uint256(id), uint256(0))));
+        assertFalse(unauthorized);
+        _censusEnd();
+    }
+
     function _success(string memory label, address from, address to, uint256 value, bytes memory data) private {
         (bool ok,) = _ctx(label, false, from, to, value, data);
         require(ok, label);
@@ -471,6 +535,21 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
 }
 
 contract ConsolidationSeed is DegenerusGameStorage {
+    function hotEntries(uint32 id) external {
+        level = 10;
+        uint24 day = _simulatedDayIndex();
+        dailyIdx = day;
+        purchaseStartDay = day;
+        _recordDailyRng(day - 1, 0xCAFE);
+        _setTicketBufferLevel(10);
+        for (uint8 color; color < 8; ++color) _bucketAppendRun(_traitBufferBase(10), color << 3, id, 1, 10);
+        boonPacked[id].slot0 = BP_SLOT0_RETAINED | uint256(day) << BP_COINFLIP_DAY_SHIFT
+            | uint256(3) << BP_COINFLIP_TIER_SHIFT | uint256(3) << BP_DECIMATOR_TIER_SHIFT;
+        uint256 lane = (uint256(day) & BP_LANE_DAY_MASK) << BP_LANE_DAY_SHIFT | 3;
+        boonPacked[id].slot1 = BP_SLOT1_RETAINED | lane | lane << BP_WWXRP_LANE_SHIFT
+            | lane << _degeneretteLaneShift(0) | lane << _degeneretteLaneShift(1);
+    }
+
     function redemptionWindow() external { _setTicketRedemptionOpen(true); }
     function collateral(uint32 id) external { _queueEntries(id, _activeTicketLevel() + 6, 400, false); }
 }

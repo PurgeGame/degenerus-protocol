@@ -342,7 +342,6 @@ abstract contract DeployProtocol is Test {
         dailyModule = new DegenerusGameDailyModule();
         passModule = DegenerusGamePassModule(payable(deployCode("DegenerusGamePassModule.sol:DegenerusGamePassModule", abi.encode())));
         boxModule = new DegenerusGameBoxModule();
-        bingoModule = new DegenerusGameBingoModule();
         coin = new FLIP();
         coinflip = new Coinflip();
         game = new DegenerusGame();
@@ -360,7 +359,6 @@ abstract contract DeployProtocol is Test {
         recordBounty = new DegenerusRecordBounty();
         crapsBattle = new CrapsViews();
         wwxrp = new WWXRP();
-        minerModule = new DegenerusGameMinerModule();
         ownerGovernance = new DegenerusOwnerGovernance();
         mintModule = DegenerusGameMintModule(payable(address(endgameModule)));
         decimatorModule = DegenerusGameDecimatorModule(payable(address(endgameModule)));
@@ -377,6 +375,8 @@ abstract contract DeployProtocol is Test {
         boonModule = DegenerusGameBoonModule(payable(address(boxModule)));
         degeneretteModule = DegenerusGameDegeneretteModule(payable(address(boxModule)));
         afkingModule = GameAfkingModule(payable(address(boxModule)));
+        bingoModule = DegenerusGameBingoModule(payable(address(game)));
+        minerModule = DegenerusGameMinerModule(payable(address(game)));
         crapsEngine = CrapsEngine(payable(address(crapsBattle)));
         jackpotBattle = JackpotBattle(payable(address(crapsBattle)));
         // END CANONICAL DEPLOYMENTS

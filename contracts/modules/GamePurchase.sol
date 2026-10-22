@@ -24,9 +24,9 @@ pragma solidity 0.8.38;
  * Provided AS IS, without warranty of any kind. Full text: TERMS.md
  */
 
+import {GameAfkingClaims} from "./GameAfkingClaims.sol";
 import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {RECORD_KIND_BUY} from "../interfaces/ICoinflip.sol";
-import {IGameAfkingModule} from "../interfaces/IDegenerusGameModules.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {DegenerusGameMintStreakUtils, IDegenerusVaultOwner} from "./DegenerusGameMintStreakUtils.sol";
@@ -41,7 +41,8 @@ abstract contract GamePurchase is
     DegenerusGamePayoutUtils,
     DegenerusGameMintStreakUtils,
     GamePurchaseBoon,
-    GamePurchaseBox
+    GamePurchaseBox,
+    GameAfkingClaims
 {
     /// @dev Same-frame price and phase snapshot shared by both purchase entry points.
     struct PurchaseQuote {
@@ -576,10 +577,7 @@ abstract contract GamePurchase is
                 // Preserve the source account's cashout rule when an ordinary owner extracts
                 // its winnings. No ETH leaves the Game and claimablePool is unchanged.
                 if (!acquired && amount != 0) {
-                    (bool ok, bytes memory data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(
-                        abi.encodeWithSelector(IGameAfkingModule.maybeCurse.selector, id)
-                    );
-                    if (!ok) _revertDelegate(data);
+                    _maybeCurse(id);
                 }
             }
             uint256 flipAmount = coinflip.sweepAccountCoinflips(id);

@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {GameMiner} from "./modules/GameMiner.sol";
+import {GameDegeneretteBet} from "./modules/GameDegeneretteBet.sol";
+import {GameBingo} from "./modules/GameBingo.sol";
 import {GamePurchase} from "./modules/GamePurchase.sol";
 import {GameHooks} from "./modules/GameHooks.sol";
 
@@ -60,7 +63,7 @@ import {MineFlipGas} from "./libraries/MineFlipGas.sol";
 
 import {IsDGNRS} from "./interfaces/IsDGNRS.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
-import {IDegenerusGameMinerModule, IDegenerusGameBoonModule, IGameAfkingModule, IDegenerusGameFoilPackModule} from "./interfaces/IDegenerusGameModules.sol";
+import {IDegenerusGameBoonModule, IDegenerusGameFoilPackModule} from "./interfaces/IDegenerusGameModules.sol";
 import {MintPaymentKind} from "./interfaces/IDegenerusGame.sol";
 
 import {ContractAddresses} from "./ContractAddresses.sol";
@@ -77,11 +80,6 @@ import {EntropyLib} from "./libraries/EntropyLib.sol";
   |  These are defined locally to avoid circular import dependencies.            |
   +==============================================================================+*/
 
-/// @dev A static self-call delegates the read-only engine query without inlining it here.
-interface IGameMinerView {
-    function minerAction() external view returns (uint8);
-}
-
 /// @dev Vault interface for the pinned governance owner check (admin access control).
 interface IDegenerusVaultOwnerGame {
     /// @notice DegenerusVault's pinned governance owner check for `account`.
@@ -97,12 +95,11 @@ interface IDegenerusVaultOwnerGame {
  * @author Burnie Degenerus
  * @notice Core game contract implementing the game state machine, VRF integration,
  *         and orchestration of all gameplay mechanics.
- * @dev Inherits DegenerusGameStorage for shared storage layout with delegate modules.
- *      Uses delegatecall pattern for complex logic (12 modules: advance, afking, bingo, boon,
- *      decimator, degenerette, foilpack, gameover, jackpot, lootbox, mint, whale).
+ * @dev Owns shared Game storage. User entry points and the miner dispatcher call internal
+ *      components; bounded workers retain their explicit delegatecall frames.
  * @custom:security-contact burnie@degener.us
  */
-contract DegenerusGame is GamePurchase, GameHooks {
+contract DegenerusGame is GamePurchase, GameHooks, GameMiner, GameDegeneretteBet, GameBingo {
     /*+======================================================================+
       |                              ERRORS                                  |
       +======================================================================+
@@ -118,10 +115,6 @@ contract DegenerusGame is GamePurchase, GameHooks {
 
     // error RngLocked(), NotApproved() — inherited from DegenerusGameStorage
 
-    /// @notice mineFlip found nothing to do (raised by the miner engine).
-    error NoWork();
-    /// @notice mineFlip cannot advance until its committed randomness arrives.
-    error RngNotReady();
     /// @notice mineFlip could not admit any useful execution step with the supplied gas.
     error InsufficientExecutionGas();
     /// @notice A nonzero gas-estimate multiplier must be at least 10,000 basis points.
@@ -254,27 +247,9 @@ contract DegenerusGame is GamePurchase, GameHooks {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Claim color-completion bingo: all 8 colors of one symbol on a level.
-    /// @dev Dispatches to GAME_BINGO_MODULE via delegatecall; void return. Permissionless:
-    ///      the bingo settles to account `id` (the slot owner; 0 = caller), never the caller, so
-    ///      any caller may settle any owner's claim; the DGNRS leg goes to the account's payee.
-    ///      Each account may claim one bingo reward per level, regardless of which qualifying
-    ///      symbol it uses, until L+2 takes over that level's ticket buffer (then the unclaimed
-    ///      bingo expires). Signature: claimBingo(uint32 id, uint24 level, uint8 symbol,
-    ///      uint32[8] slots) — the owner to claim for, the level (uint24 storage-key width), the
-    ///      symbol 0-31 (quadrant = symbol >> 3, symInQ = symbol & 7), and the per-color positions
-    ///      in lvlTraitEntry[(level) & 1][traitId] the owner occupies. The signature matches the module
-    ///      function exactly (identical selector), so the calldata forwards as-is.
-    function claimBingo(
-        uint32,
-        uint24,
-        uint8,
-        uint32[8] calldata
-    ) external {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_BINGO_MODULE
-            .delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
+    /// @notice Settle an account's eight-color bingo to its payee. Permissionless; at most one claim per level.
+    function claimBingo(uint32 id, uint24 lvl, uint8 symbol, uint32[8] calldata slots) external {
+        _claimBingo(id, lvl, symbol, slots);
     }
 
     /// @notice Claim deterministic-ending shares: after a game over caused by a dead VRF, every
@@ -336,36 +311,17 @@ contract DegenerusGame is GamePurchase, GameHooks {
     }
 
     /// @notice Run the next ordered game actions through safe gas checkpoints.
-    /// @dev Only this entry pays miners, after sufficient measured execution and actual progress.
+    /// @dev Rewards follow measured progress. Worker caps, refusal handling and committed prefixes remain in the engine.
     /// @param gasMultiplierBps Gas-estimate factor: 0 or 10,000 = 1x; minimum 2,500 = 0.25x.
-    /// @dev Sub-1x packs more work on cheaper schedules at the caller's risk: an overrun
-    ///      reverts their transaction or work stops after committed units; work is never skipped.
-    ///      The first eligible checkpoint ignores estimates; actual gas must still fund it.
-    function mineFlip(uint32 gasMultiplierBps) external {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_MINER_MODULE.delegatecall(
-            abi.encodeWithSelector(IDegenerusGameMinerModule.mineFlip.selector, gasMultiplierBps)
-        );
-        if (!ok) _revertDelegate(data);
-    }
+    function mineFlip(uint32 gasMultiplierBps) external { _mineFlip(gasMultiplierBps); }
 
-    /// @notice The next action of the ordered mining engine for a caller holding no mid-day credit.
+    /// @notice The next action for a caller holding no mid-day credit.
     function nextMinerAction() external view returns (uint8) {
-        return IGameMinerView(address(this)).minerAction();
+        return uint8(_nextMinerAction(address(this)));
     }
 
-    /// @notice Read-only module dispatch for work discovery as msg.sender: a donor holding
-    ///         mid-day credit also sees a below-threshold request its mineFlip would pay for.
-    function minerAction() external returns (uint8) {
-        address target = ContractAddresses.GAME_MINER_MODULE;
-        assembly ("memory-safe") {
-            let ptr := mload(0x40)
-            calldatacopy(ptr, 0, calldatasize())
-            let ok := delegatecall(gas(), target, ptr, calldatasize(), 0, 0)
-            returndatacopy(ptr, 0, returndatasize())
-            if iszero(ok) { revert(ptr, returndatasize()) }
-            return(ptr, returndatasize())
-        }
-    }
+    /// @notice Work discovery as msg.sender, including its below-threshold mid-day credit.
+    function minerAction() external returns (uint8) { return _minerAction(); }
 
     /// @notice Permissionless AFKing claim — settles each listed account on both sides: its own
     ///         reward and its affiliate base to the upline, for every day since its last
@@ -379,22 +335,9 @@ contract DegenerusGame is GamePurchase, GameHooks {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Affiliate-only settlement of up to eight packed subs of one run: pays each sub its
-    ///         own reward and returns their summed affiliate base. Routed from
-    ///         DegenerusAffiliate.claim(); the module impl enforces the AFFILIATE-only access gate
-    ///         under delegatecall.
-    /// @dev Signature: drainAffiliateBases(uint256 ids, uint256 uplines). The signature matches the
-    ///      module function exactly (identical selector), so the calldata forwards as-is and the
-    ///      module's return data passes through unchanged — re-encoding here would cost
-    ///      contract-size headroom for no behavior change.
-    function drainAffiliateBases(uint256, uint256) external returns (uint256, uint256, uint256) {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_AFKING_MODULE
-            .delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
-        assembly ("memory-safe") {
-            return(add(data, 32), mload(data))
-        }
+    /// @notice Affiliate-only settlement of up to eight packed subscriptions and their upline bases.
+    function drainAffiliateBases(uint256 ids, uint256 uplines) external returns (uint256, uint256, uint256) {
+        return _drainAffiliateBases(ids, uplines);
     }
 
     /// @notice Permissionless paid cure of account `id`'s cashout/smite curse (100 FLIP from
@@ -795,79 +738,24 @@ contract DegenerusGame is GamePurchase, GameHooks {
         if (!ok) _revertDelegate(data);
     }
 
-    /// @notice Place single-symbol Degenerette bets.
-    /// @dev The bet belongs to account `id` (0 = caller); an authorized caller spends the
-    ///      account's funds, any other caller funds the bet itself (a permissionless gift).
-    ///      Bets accept ETH and FLIP only. Heroes are symbols 0..23 (no Dice).
-    ///      The module resolves the account/funder split, so `id` forwards raw. Signature:
-    ///      placeDegeneretteBet(uint32 id, uint8 currency, uint128 amountPerSpin,
-    ///      uint8 spinCount, uint8 symbol). The signature matches the
-    ///      module function exactly (identical selector), so the calldata forwards as-is.
-    function placeDegeneretteBet(
-        uint32,
-        uint8,
-        uint128,
-        uint8,
-        uint8
-    ) external payable {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_DEGENERETTE_MODULE
-            .delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
+    /// @notice Place a funded ETH or FLIP bet for an account; an unauthorised funder pays for its gift.
+    function placeDegeneretteBet(uint32 id, uint8 currency, uint128 amountPerSpin, uint8 spinCount, uint8 symbol)
+        external payable
+    {
+        _placeBet(id, currency, amountPerSpin, spinCount, symbol);
     }
 
-    /// @notice Consume the trusted caller's bonus lane for a player's next action.
-    /// @dev COINFLIP spends the coinflip boon, COIN spends the craps boon, and WWXRP spends
-    ///      the WWXRP boon. Delegatecall preserves the caller and the module keeps the lanes
-    ///      separate. Future WWXRP applications go through WWXRP.consumeBoon (trusted minters only).
-    ///      Signature: consumeCoinflipBoon(uint32 id) — the wallet whose boon to consume.
-    ///      The signature matches the module function exactly (identical selector), so the
-    ///      calldata forwards as-is — re-encoding here would cost contract-size headroom for
-    ///      no behavior change. ID 0 holds no boon state, so it returns 0 here.
-    /// @return boostBps The boost in basis points to apply.
-    /// @custom:reverts Unauthorized If caller is not COIN, COINFLIP or WWXRP.
-    function consumeCoinflipBoon(
-        uint32 id
-    ) external returns (uint16 boostBps) {
-        if (
-            msg.sender != ContractAddresses.COIN &&
-            msg.sender != ContractAddresses.COINFLIP &&
-            msg.sender != ContractAddresses.WWXRP
-        ) revert Unauthorized();
-        // Most deposits/entries have no boon. Check the caller's own tier here
-        // and avoid dispatching the cold module just to return zero. A nonzero
-        // tier still reaches the module for expiry, consumption and its event.
-        uint256 tier = msg.sender == ContractAddresses.COINFLIP
-            ? uint8(boonPacked[id].slot0 >> BP_COINFLIP_TIER_SHIFT)
-            : (boonPacked[id].slot1 >> (msg.sender == ContractAddresses.WWXRP ? BP_WWXRP_LANE_SHIFT : 0))
-                & BP_LANE_TIER_MASK;
-        if (tier == 0) return 0;
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_BOON_MODULE
-            .delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
-        return abi.decode(data, (uint16));
+    /// @notice Consume the trusted caller's coinflip, craps or WWXRP boon lane.
+    function consumeCoinflipBoon(uint32 id) external returns (uint16 boostBps) {
+        if (msg.sender != ContractAddresses.COIN && msg.sender != ContractAddresses.COINFLIP
+            && msg.sender != ContractAddresses.WWXRP) revert Unauthorized();
+        return _consumeActionBoon(id);
     }
 
-    /// @notice Consume decimator boon for burn bonus.
-    /// @dev Access: COIN contract only. ID 0 holds no boon state, so it returns 0.
-    /// @return boostBps The boost in basis points to apply.
-    /// @custom:reverts Unauthorized If caller is not COIN contract.
-    function consumeDecimatorBoon(
-        uint32 id
-    ) external returns (uint16 boostBps) {
+    /// @notice Consume the account's decimator boon; only COIN may spend this lane.
+    function consumeDecimatorBoon(uint32 id) external returns (uint16 boostBps) {
         if (msg.sender != ContractAddresses.COIN) revert Unauthorized();
-        if (uint8(boonPacked[id].slot0 >> BP_DECIMATOR_TIER_SHIFT) == 0) return 0;
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_BOON_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameBoonModule.consumeDecimatorBoost.selector,
-                    id
-                )
-            );
-        if (!ok) _revertDelegate(data);
-        return abi.decode(data, (uint16));
+        return _consumeDecimatorBoost(id);
     }
 
     /// @notice Get raw deity boon state for off-chain or viewer contract computation.
@@ -917,14 +805,9 @@ contract DegenerusGame is GamePurchase, GameHooks {
         dailySeed = _recordedDailyWord(day - 1);
     }
 
-    /// @notice Issue a deity boon from deity account `deityId` to account `recipientId`.
-    /// @dev Body in the boon module (account resolution, the existing-recipient rule and the
-    ///      self-boon check by ID). Signature: issueDeityBoon(uint32 deityId, uint32
-    ///      recipientId, uint8 slot) — matches the module selector, so the calldata forwards
-    ///      as-is.
-    function issueDeityBoon(uint32, uint32, uint8) external {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_BOON_MODULE.delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
+    /// @notice Issue one deity account's daily boon to an existing recipient account.
+    function issueDeityBoon(uint32 deityId, uint32 recipientId, uint8 slot) external {
+        _issueDeityBoon(deityId, recipientId, slot);
     }
 
     /*+==========================================================================+
@@ -934,29 +817,8 @@ contract DegenerusGame is GamePurchase, GameHooks {
       |  This prevents gas exhaustion from large purchases.                      |
       +==========================================================================+*/
 
-    /*+================================================================================================================+
-      |                    DELEGATE MODULE HELPERS                                                                     |
-      +================================================================================================================+
-      |  Internal functions that delegatecall into specialized modules.                                                |
-      |  All modules MUST inherit DegenerusGameStorage for slot alignment.                                             |
-      |                                                                                                                |
-      |  Modules:                                                                                                      |
-      |  • GAME_ADVANCE_MODULE      - Daily advance, VRF, daily processing                                             |
-      |  • GAME_AFKING_MODULE       - AFKing subscriptions, seats and prepaid balances                                 |
-      |  • GAME_BINGO_MODULE        - Bingo card purchase and claims                                                   |
-      |  • GAME_BOON_MODULE         - Deity boon effects and activation                                                |
-      |  • GAME_DECIMATOR_MODULE    - Decimator burns, draws and settlement                                            |
-      |  • GAME_DEGENERETTE_MODULE  - Degenerette bet placement and resolution                                         |
-      |  • GAME_FOILPACK_MODULE     - Foil pack purchase, match and round drains                                       |
-      |  • GAME_GAMEOVER_MODULE     - Game-over declaration and final sweeps                                           |
-      |  • GAME_JACKPOT_MODULE      - Jackpot calculations and payouts                                                 |
-      |  • GAME_LOOTBOX_MODULE      - Lootbox open, credit, and payout                                                 |
-      |  • GAME_MINT_MODULE         - Explicit-value Foil purchase adapter                                            |
-      |  • GAME_WHALE_MODULE        - Whale pass purchases and whale pass claims                                       |
-      |                                                                                                                |
-      |  SECURITY: delegatecall executes module code in this contract's                                                |
-      |  context, with access to all storage. Modules are constant addresses.                                          |
-      +================================================================================================================+*/
+    // Worker facades preserve explicit delegatecall frames in Game storage.
+    // Targets and bundle aliases come from the canonical deployment manifest.
 
     /*+========================================================================================+
       |                    DECIMATOR JACKPOT LOGIC                                             |
@@ -1087,18 +949,12 @@ contract DegenerusGame is GamePurchase, GameHooks {
     }
 
     /// @dev Shared claim body: pull winnings (capped pre-gameOver by `maxClaim`) to the account's
-    ///      payee, then set the account's cashout curse. The curse SET runs in the Game's context
-    ///      via delegatecall to GameAfkingModule.
+    ///      payee, then set the account's cashout curse in the same storage context.
     function _claimWinningsWithCurse(uint32 id, uint256 maxClaim) private {
         address payee;
         (id, payee) = _resolveAccountPayee(id);
         _claimWinningsInternal(id, payee, false, maxClaim);
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_AFKING_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(IGameAfkingModule.maybeCurse.selector, id)
-            );
-        if (!ok) _revertDelegate(data);
+        _maybeCurse(id);
     }
 
     /// @notice Claim accrued ETH winnings with stETH-first payout.
@@ -1178,21 +1034,8 @@ contract DegenerusGame is GamePurchase, GameHooks {
         return _afkingOf(_walletIdOf(player));
     }
 
-    /// @notice Claim DGNRS affiliate rewards for the current level (single affiliate account).
-    /// @dev Permissionless: the reward is deterministic and credits the affiliate, so any
-    ///      caller may settle any affiliate's claim (0 = caller; DGNRS to the payee). Thin delegatecall
-    ///      dispatch stub into DegenerusGameBingoModule's claimAffiliateDgnrs body. The
-    ///      delegatecall MUST be preserved (not a direct module call): the body invokes
-    ///      dgnrs.transferFromPool (onlyGame) and coinflip.creditFlip (onlyFlipCreditors), both
-    ///      of which authorize on msg.sender == GAME — so the logic has to execute in the Game's
-    ///      context. Signature: claimAffiliateDgnrs(uint32 id). The signature matches the
-    ///      module function exactly (identical selector), so the calldata forwards as-is.
-    function claimAffiliateDgnrs(uint32) external {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_BINGO_MODULE
-            .delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
-    }
+    /// @notice Settle an account's affiliate reward to its payee.
+    function claimAffiliateDgnrs(uint32 id) external { _claimAffiliateDgnrs(id); }
 
     /// @notice Permissionless batch affiliate-DGNRS claim; a blank array claims the caller's own.
     /// @dev Per-item isolated: an ineligible / already-claimed affiliate skips instead of
@@ -1229,7 +1072,7 @@ contract DegenerusGame is GamePurchase, GameHooks {
     /// @notice O(1) discovery: does mineFlip() have pending work for a creditless caller?
     /// @dev Queries the same derived action selector used by the miner engine.
     function advanceDue() external view returns (bool) {
-        uint8 action = IGameMinerView(address(this)).minerAction();
+        uint8 action = uint8(_nextMinerAction(address(this)));
         return action != uint8(MinerAction.Idle) && action != uint8(MinerAction.Wait);
     }
 
@@ -2012,11 +1855,7 @@ contract DegenerusGame is GamePurchase, GameHooks {
                 | (BitPackingLib.MASK_24 << BitPackingLib.DAY_SHIFT))) == 0) {
             return _playerActivityScore(id, _effectiveQuestStreak(id));
         }
-        (bool ok, bytes memory data) = ContractAddresses.GAME_MINER_MODULE.delegatecall(
-            abi.encodeWithSelector(IDegenerusGameMinerModule.playerActivityScoreCachedById.selector, id)
-        );
-        if (!ok) _revertDelegate(data);
-        return abi.decode(data, (uint256));
+        return _playerActivityScoreCached(id, _effectiveQuestStreak(id));
     }
 
     /*+======================================================================+

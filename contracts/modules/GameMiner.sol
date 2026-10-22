@@ -1,0 +1,351 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+pragma solidity 0.8.38;
+
+import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol";
+
+import {BitPackingLib} from "../libraries/BitPackingLib.sol";
+import {ContractAddresses} from "../ContractAddresses.sol";
+import {MineFlipGas} from "../libraries/MineFlipGas.sol";
+import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
+import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
+
+import {IDegenerusGameAdvanceModule, IDegenerusGameRngModule, IDegenerusGameTicketModule,
+    IDegenerusGameDegeneretteModule, IDegenerusGameDecimatorModule, IGameAfkingModule,
+    IDegenerusGameDegenesisModule} from "../interfaces/IDegenerusGameModules.sol";
+import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
+
+interface IMinerCrapsWork {
+    function runCrapsReadWork(uint48 index, uint256 allowance) external returns (MineFlipGas.Result memory);
+    function runCrapsMaintenance(uint256 allowance) external returns (MineFlipGas.Result memory);
+}
+
+/// @notice The single permissionless state engine. Workers never choose global priority.
+abstract contract GameMiner is DegenerusGameMintStreakUtils {
+    error NoWork();
+    error RngNotReady();
+
+    // Covers calldata construction, call/decoding, category normalization and loop exit.
+    uint256 private constant WORKER_BOUNDARY = GasBounds.ENGINE_BOUNDARY;
+    uint256 private constant RETURN_RESERVE = GasBounds.ENGINE_RETURN;
+    // Base-fee reimbursement excludes the caller-selected priority fee.
+    uint256 private constant INITIAL_REWARD_BASEFEE_CAP = 500_000_000;
+
+    event MinerWork(address indexed caller, uint8 firstAction, uint256 executionGas, uint256 flipReward);
+
+    /// @notice The next action for a mineFlip by msg.sender: a donor holding credit sees a
+    ///         below-threshold mid-day request that a creditless caller does not.
+    function _minerAction() internal view returns (uint8) {
+        return uint8(_nextMinerAction(msg.sender));
+    }
+
+    /// @dev Permissionless cache refresh, executed against Game storage only. Returns the
+    ///      wallet ID beside the score (0 for an unregistered wallet; never allocated here).
+    function _minerActivityById(uint32 id) internal returns (uint256) {
+        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
+        return _playerActivityScoreCached(id, _effectiveQuestStreak(id));
+    }
+
+    function _minerActivity(address player) internal returns (uint256 score, uint32 id) {
+        if (address(this) != ContractAddresses.GAME) revert E();
+        id = _walletIdOf(player);
+        score = _playerActivityScoreCached(id, _effectiveQuestStreak(id));
+    }
+
+    function _mineFlip(uint32 gasMultiplierBps) internal {
+        if (address(this) != ContractAddresses.GAME) revert E();
+        gasMultiplierBps = MineFlipGas.normalize(gasMultiplierBps);
+        uint256 rewardStart = gasleft();
+        MinerAction first = _nextMinerAction(msg.sender);
+        if (first == MinerAction.Idle) revert NoWork();
+        if (first == MinerAction.Wait) revert RngNotReady();
+        bool rewardEligible = first != MinerAction.Terminal;
+        uint256 rewardPrice = PriceLookupLib.priceForLevel(_activeTicketLevel());
+        uint256 rewardDueAt = _minerRewardDueAt();
+        // Read before work, like the clock: the call that releases the lock still earns the locked rate.
+        bool lockedAtStart = rngLockedFlag;
+        MineFlipGas.Meter memory meter = MineFlipGas.start(MineFlipGas.budget(gasleft(), gasMultiplierBps, true));
+        bool moved;
+        bool requestRefused;
+        uint256 unpaidAttemptGas;
+
+        // There are fewer than 32 category transitions. Workers own all unbounded queues.
+        for (uint256 transitions; transitions < 32; ++transitions) {
+            // Only reads separate the initial selection from the first dispatch.
+            // Every later iteration must reselect after the preceding worker's changes.
+            MinerAction action = transitions == 0 ? first : _nextMinerAction(msg.sender);
+            if (action == MinerAction.Idle || action == MinerAction.Wait) break;
+            if (moved) MineFlipGas.markProgress(meter);
+            if (!MineFlipGas.canRun(meter, WORKER_BOUNDARY, RETURN_RESERVE)) break;
+
+            if (action == MinerAction.CertifyRead) {
+                // Selected only with the read cohort drained (stage 7) and no certificate.
+                // That selector read is the certificate's evidence, so certify from it:
+                // the action can never be reselected in the same state.
+                _setRngComplete(true);
+                moved = true;
+                MineFlipGas.markProgress(meter);
+                continue;
+            }
+
+            if (action == MinerAction.PrepareSubscriptions && _afkingResetDay <= dailyIdx) {
+                // Once pinned, a preparation day survives midnight and partial batches.
+                _afkingResetDay = _simulatedDayIndex();
+                _subCursor = 0;
+                _subOpenCursor = 0;
+                subsFullyProcessed = false;
+                moved = true;
+                MineFlipGas.markProgress(meter);
+                if (!MineFlipGas.canRun(meter, WORKER_BOUNDARY, RETURN_RESERVE)) break;
+            }
+
+            uint256 allowance = MineFlipGas.child(meter, WORKER_BOUNDARY + RETURN_RESERVE);
+            address target;
+            bytes memory callData;
+            bool externalWorker;
+            bool basicResult;
+            bool request = action == MinerAction.RequestDaily || action == MinerAction.RequestMidday;
+
+            if (action == MinerAction.Terminal) {
+                basicResult = true;
+                target = ContractAddresses.GAME_ADVANCE_MODULE;
+                callData = abi.encodeWithSelector(IDegenerusGameAdvanceModule.runTerminalPhase.selector, allowance);
+            } else if (action == MinerAction.DailyGap || action == MinerAction.DailyApply) {
+                bool gap = action == MinerAction.DailyGap;
+                uint256 applyMax = gap ? GasBounds.DAILY_GAP : GasBounds.DAILY_APPLY;
+                // Recording a word also copies it for Degenesis until the seventh cohort closes.
+                if (degenesisClosed < DEGENESIS_DAYS) applyMax += GasBounds.DEGENESIS_WORD_COPY_GAS;
+                if (!MineFlipGas.canRun(meter, applyMax, RETURN_RESERVE + WORKER_BOUNDARY)) break;
+                target = ContractAddresses.GAME_ADVANCE_MODULE;
+                callData = abi.encodeWithSelector(
+                    gap ? IDegenerusGameAdvanceModule.applyDailyGap.selector : IDegenerusGameAdvanceModule.applyDailyWord.selector
+                );
+            } else if (action == MinerAction.DailyPhase) {
+                basicResult = true;
+                target = ContractAddresses.GAME_ADVANCE_MODULE;
+                callData = abi.encodeWithSelector(IDegenerusGameAdvanceModule.runDailyPhase.selector, allowance);
+            } else if (action == MinerAction.Publish) {
+                target = ContractAddresses.GAME_RNG_MODULE;
+                callData = abi.encodeWithSelector(IDegenerusGameRngModule.publishRng.selector);
+            } else if (request) {
+                target = ContractAddresses.GAME_RNG_MODULE;
+                if (action == MinerAction.RequestDaily) {
+                    callData = abi.encodeWithSelector(IDegenerusGameRngModule.requestDailyRng.selector, _afkingResetDay);
+                } else {
+                    callData = abi.encodeWithSelector(IDegenerusGameRngModule.requestMinerRng.selector);
+                }
+                uint256 requestMax = action == MinerAction.RequestDaily
+                    ? GasBounds.RNG_DAILY_REQUEST : GasBounds.RNG_MIDDAY_REQUEST;
+                // The daily request splits and prices Degenesis cohorts until the seventh closes.
+                if (action == MinerAction.RequestDaily && degenesisClosed < DEGENESIS_DAYS) {
+                    requestMax += GasBounds.DEGENESIS_REQUEST_GAS;
+                }
+                // Batch pricing and the reserve pull stay atomic with
+                // the commitment. Only a nonempty open batch pays their rare admission cost.
+                // The first mandatory action bypasses estimates, including this sizing read.
+                if (moved) {
+                    (,,, uint256 escrowed) = IsDGNRS(ContractAddresses.SDGNRS).redemptionBatchState();
+                    if (escrowed != 0) requestMax += GasBounds.RNG_REDEMPTION_CLOSE;
+                }
+                if (!MineFlipGas.canRun(meter, requestMax, RETURN_RESERVE + WORKER_BOUNDARY)) break;
+            } else {
+                basicResult = true;
+                if (action == MinerAction.Tickets) {
+                    target = ContractAddresses.GAME_TICKET_MODULE;
+                    uint24 anchor = !jackpotPhaseFlag && lastPurchaseDay && rngLockedFlag ? level : level + 1;
+                    callData = abi.encodeWithSelector(IDegenerusGameTicketModule.runTicketWork.selector, anchor, allowance);
+                } else if (action == MinerAction.DegenesisSettle) {
+                    // Not an RNG consumer: a Degenesis backlog never gates completion or requests.
+                    target = ContractAddresses.GAME_DEGENESIS_MODULE;
+                    callData = abi.encodeWithSelector(IDegenerusGameDegenesisModule.runDegenesisWork.selector, allowance);
+                } else if (action == MinerAction.SeizeLoans) {
+                    target = ContractAddresses.GAME_ADVANCE_MODULE;
+                    callData = abi.encodeWithSelector(IDegenerusGameAdvanceModule.runLoanSeizureWork.selector, allowance);
+                } else if (action == MinerAction.PrepareSubscriptions) {
+                    target = ContractAddresses.GAME_AFKING_MODULE;
+                    callData = abi.encodeWithSelector(IGameAfkingModule.runSubscriberWork.selector, _afkingResetDay, allowance);
+                } else if (action == MinerAction.Afking) {
+                    target = ContractAddresses.GAME_AFKING_MODULE;
+                    callData = abi.encodeWithSelector(IGameAfkingModule.runAfkingWork.selector, allowance);
+                } else if (action == MinerAction.HumanBoxes) {
+                    target = ContractAddresses.GAME_AFKING_MODULE;
+                    callData = abi.encodeWithSelector(IGameAfkingModule.runHumanBoxWork.selector, allowance);
+                } else if (action == MinerAction.Degenerette) {
+                    target = ContractAddresses.GAME_DEGENERETTE_MODULE;
+                    callData = abi.encodeWithSelector(IDegenerusGameDegeneretteModule.runDegeneretteWork.selector, allowance);
+                } else if (action == MinerAction.Decimator) {
+                    target = ContractAddresses.GAME_DECIMATOR_MODULE;
+                    callData = abi.encodeWithSelector(IDegenerusGameDecimatorModule.runDecimatorWork.selector, allowance);
+                } else if (action == MinerAction.Redemption) {
+                    target = ContractAddresses.SDGNRS;
+                    externalWorker = true;
+                    // Stage 1 runs before any later request, so the published read word is the
+                    // one that answered the request that closed the settling batch.
+                    callData = abi.encodeWithSelector(
+                        IsDGNRS.runRedemptionWork.selector, _lootboxWord(_rngReadBuffer()), allowance
+                    );
+                } else if (action == MinerAction.GrowthSettle) {
+                    // Selected only while the pending bit is set; settlement is revert-free for
+                    // committed state.
+                    target = ContractAddresses.PARIMUTUEL;
+                    externalWorker = true;
+                    callData = abi.encodeWithSelector(parimutuel.runGrowthWork.selector, allowance);
+                } else {
+                    target = ContractAddresses.CRAPS;
+                    externalWorker = true;
+                    callData = action == MinerAction.Craps
+                        ? abi.encodeWithSelector(IMinerCrapsWork.runCrapsReadWork.selector, _rngReadBuffer(), allowance)
+                        : abi.encodeWithSelector(IMinerCrapsWork.runCrapsMaintenance.selector, allowance);
+                }
+            }
+
+            uint256 forwarded = MineFlipGas.forwardable(meter, RETURN_RESERVE);
+            uint256 beforeCall = gasleft();
+            bool ok;
+            bytes memory result;
+            if (externalWorker) (ok, result) = target.call{gas: forwarded}(callData);
+            else (ok, result) = target.delegatecall{gas: forwarded}(callData);
+            if (!ok) {
+                unpaidAttemptGas = MineFlipGas.consumed(beforeCall, gasleft());
+                // Only our request worker emits this selector; external revert bytes are discarded.
+                if ((request || action == MinerAction.Terminal) && result.length == 4
+                    && bytes4(result) == ExternalRequestRefused.selector) {
+                    requestRefused = true;
+                    break;
+                }
+                // A declined or overrun next step must not undo an already committed prefix;
+                // its own frame rolled back and it runs first in the next call. Other errors bubble.
+                if (!moved || !(_checkpointRefusal(result)
+                    || (action == MinerAction.RequestMidday && _middayRefusal(result)))) _revertWork(result);
+                break;
+            }
+
+            if (basicResult) {
+                // Preserve the full Result ABI and bool validation without allocating a struct.
+                (bool progressed, bool done,) = abi.decode(result, (bool, bool, uint256));
+                if (action == MinerAction.Tickets && done) {
+                    // An empty queue can still advance its one-time certificate.
+                    if (!ticketsFullyProcessed) { ticketsFullyProcessed = true; progressed = true; MineFlipGas.markProgress(meter); }
+                    if (_lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) != 0) {
+                        _lrWrite(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK, 0);
+                        progressed = true;
+                        MineFlipGas.markProgress(meter);
+                    }
+                }
+                if (action == MinerAction.GrowthSettle && done) {
+                    // Every sealed round is paid: clearing the pending bit is the progress.
+                    _setGrowthSettlePending(false);
+                    progressed = true;
+                    MineFlipGas.markProgress(meter);
+                }
+                if (!progressed) {
+                    // done describes eligibility/completion, not work performed.
+                    // Never redispatch an unchanged worker, even if it says done.
+                    unpaidAttemptGas = MineFlipGas.consumed(beforeCall, gasleft());
+                    if (!moved) {
+                        if (done) revert NoWork();
+                        revert MineFlipGas.InsufficientExecutionGas();
+                    }
+                    break;
+                }
+                moved = true;
+                MineFlipGas.markProgress(meter);
+                if (!done) break;
+            } else { moved = true; MineFlipGas.markProgress(meter); }
+            // A request commits the next cohort; terminal stages own their continuation.
+            if (action == MinerAction.Terminal || request) break;
+        }
+
+        // The only remaining zero-progress exit is a failed engine admission check.
+        if (!moved) {
+            if (requestRefused) return;
+            revert MineFlipGas.InsufficientExecutionGas();
+        }
+        // This top-level meter starts with all available gas; worker allowance checks
+        // retain the actual bounds. No successful call can overspend this initial amount.
+        uint256 used = MineFlipGas.consumed(rewardStart, gasleft());
+        used = used > unpaidAttemptGas ? used - unpaidAttemptGas : 0;
+        uint256 reward;
+        // Every call's first MIN_REWARDED_GAS is unpaid. Splitting work into small calls forfeits
+        // another unpaid million per call; the only thing an extra qualifying call can gain is the
+        // sub-FLIP rounding below, bounded by one FLIP per paid call.
+        // The stake ledger is keyed by wallet ID: a miner without one is not paid.
+        uint32 minerId = rewardEligible && !gameOver && used > MineFlipGas.MIN_REWARDED_GAS
+            ? _walletIdOf(msg.sender) : 0;
+        if (minerId != 0) {
+            // Price only compensation, after work and its gas measurement are complete.
+            uint256 elapsed = block.timestamp > rewardDueAt ? block.timestamp - rewardDueAt : 0;
+            (uint256 cap, uint256 multiplierBps) = _minerRewardTerms(elapsed);
+            if (_minerHoldsActivePass(minerId)) multiplierBps <<= 1;
+            if (lockedAtStart) multiplierBps <<= 1;
+            uint256 rate = block.basefee;
+            if (rate > cap) rate = cap;
+            uint256 numerator = (used - MineFlipGas.MIN_REWARDED_GAS) * rate * PRICE_COIN_UNIT * multiplierBps;
+            uint256 denominator = rewardPrice * 10_000;
+            // Legacy raw reward was floor(numerator * 1e18 / denominator). Preserve its
+            // zero cutoff without multiplying, then pay whole FLIP with the existing minimum.
+            if (numerator >= (denominator - 1) / 1e18 + 1) {
+                reward = numerator / denominator;
+                if (reward == 0) reward = 1;
+                // Coinflip stakes are whole FLIP: a positive reward pays at least 1 FLIP,
+                // larger rewards floor to whole FLIP. Applied after the gas measurement, so
+                // the normalization cannot price itself. Both events report this figure;
+                // below the daily stake cap it is exactly what Coinflip credits.
+                coinflip.creditFlip(minerId, reward);
+                emit MinerBounty(MINER_BOUNTY_ADVANCE, msg.sender, reward);
+            }
+        }
+        emit MinerWork(msg.sender, uint8(first), used, reward);
+    }
+
+    /// @dev Saturate before shifting or multiplying so arbitrary elapsed time cannot overflow.
+    function _minerRewardTerms(uint256 elapsed) internal pure returns (uint256 capWei, uint256 multiplierBps) {
+        uint256 steps = elapsed / 30 minutes;
+        if (steps > 4) steps = 4;
+        capWei = INITIAL_REWARD_BASEFEE_CAP << steps;
+        multiplierBps = 3_000 + 4_500 * steps;
+    }
+
+    /// @dev A deity pass, or a lazy/whale pass whose window covers the current level,
+    ///      doubles the caller's bounty. Same pass test as the activity score.
+    function _minerHoldsActivePass(uint32 minerId) internal view returns (bool) {
+        uint256 packed = mintPacked_[minerId];
+        if (packed >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0) return true;
+        uint256 passType = (packed >> BitPackingLib.WHALE_PASS_TYPE_SHIFT) & 3;
+        return (passType == 1 || passType == 3)
+            && ((packed >> BitPackingLib.FROZEN_UNTIL_LEVEL_SHIFT) & BitPackingLib.MASK_24) >= level;
+    }
+
+    /// @dev One clock for every action in a call: the wait since the latest VRF request (a
+    ///      retry keeps its origin), or since the current day's reset when that is later, so the
+    ///      reset's daily work starts at the base rate. Callers cannot move it: only requests and
+    ///      the calendar do. Read before work; no worker writes it.
+    function _minerRewardDueAt() internal view returns (uint256 due) {
+        due = rngRequestTime;
+        uint256 reset = block.timestamp - (block.timestamp - 82_620) % 1 days;
+        if (reset > due) due = reset;
+    }
+
+    function _middayRefusal(bytes memory data) private pure returns (bool) {
+        if (data.length != 4) return false;
+        bytes4 selector;
+        assembly ("memory-safe") { selector := mload(add(data, 32)) }
+        return selector == IDegenerusGameRngModule.GasTooHigh.selector || selector == IDegenerusGameRngModule.PreResetWindow.selector
+            || selector == IDegenerusGameRngModule.InsufficientLink.selector || selector == IDegenerusGameRngModule.NoPendingLootbox.selector
+            || selector == IDegenerusGameRngModule.BelowThreshold.selector;
+    }
+
+    function _checkpointRefusal(bytes memory data) private pure returns (bool) {
+        if (data.length == 0) return true;
+        if (data.length != 4) return false;
+        bytes4 selector = bytes4(data);
+        return selector == MineFlipGas.InsufficientExecutionGas.selector || selector == MineFlipGas.WorkGasBound.selector
+            || selector == EmptyRevert.selector || selector == NoWork.selector || selector == RngNotReady.selector;
+    }
+
+    function _revertWork(bytes memory data) private pure {
+        if (data.length == 0 || (data.length == 4 && bytes4(data) == EmptyRevert.selector)) {
+            revert MineFlipGas.InsufficientExecutionGas();
+        }
+        assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
+    }
+}
