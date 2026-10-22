@@ -132,7 +132,7 @@ self_test() {
   mkdir -p "$tmp/src"
   cat > "$tmp/src/Fixture.sol" <<'SOL'
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity ^0.8.26;
+pragma solidity 0.8.38;
 contract Fixture {
     uint128 internal claimablePool;
     function registeredCredit(uint128 x) external {

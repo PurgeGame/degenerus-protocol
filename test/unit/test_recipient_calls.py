@@ -21,7 +21,7 @@ class RecipientCallsTest(unittest.TestCase):
             root = Path(folder)
             (root / 'contracts').mkdir()
             (root / 'node_modules').mkdir()
-            source = '''pragma solidity >=0.8.26 <0.9.0;
+            source = '''pragma solidity 0.8.38;
 interface Receiver { function arbitraryHook() external; }
 contract Calls {
  address payable stored;
@@ -51,11 +51,11 @@ contract Calls {
             root = Path(folder)
             (root / 'contracts').mkdir()
             (root / 'node_modules').mkdir()
-            (root / 'node_modules/Payout.sol').write_text('''pragma solidity >=0.8.26 <0.9.0;
+            (root / 'node_modules/Payout.sol').write_text('''pragma solidity 0.8.38;
 library Payout {
  function pay(address payable recipient, uint amount) internal { recipient.transfer(amount); }
 }''')
-            source = '''pragma solidity >=0.8.26 <0.9.0;
+            source = '''pragma solidity 0.8.38;
 import {Payout as Alias} from "Payout.sol";
 contract Calls {
  using Alias for address payable;
@@ -80,7 +80,7 @@ contract Calls {
             root = Path(folder)
             (root / 'contracts').mkdir()
             (root / 'node_modules').mkdir()
-            source = '''pragma solidity >=0.8.26 <0.9.0;
+            source = '''pragma solidity 0.8.38;
 contract Base {
  function payout(address payable to) internal virtual {}
  function relay(address payable to) external { payout(to); }
@@ -102,7 +102,7 @@ contract Child is Base {
             root = Path(folder)
             (root / 'contracts').mkdir()
             (root / 'node_modules').mkdir()
-            source = '''pragma solidity >=0.8.26 <0.9.0;
+            source = '''pragma solidity 0.8.38;
 interface Oracle { function price() external view returns (uint); }
 contract Calls {
  Oracle oracle;
@@ -121,7 +121,7 @@ contract Calls {
             root = Path(folder)
             (root / 'contracts').mkdir()
             (root / 'node_modules').mkdir()
-            source = '''pragma solidity >=0.8.26 <0.9.0;
+            source = '''pragma solidity 0.8.38;
 contract Calls {
  function _pay(address payable to) private { to.transfer(1); }
  function run(address payable to) external { FIRST }
@@ -138,13 +138,13 @@ contract Calls {
             root = Path(folder)
             (root / 'contracts/libraries').mkdir(parents=True)
             (root / 'node_modules').mkdir()
-            (root / 'contracts/libraries/BoundedCall.sol').write_text('''pragma solidity >=0.8.26 <0.9.0;
+            (root / 'contracts/libraries/BoundedCall.sol').write_text('''pragma solidity 0.8.38;
 library BoundedCall {
  function staticWord(address target) internal view returns (bool ok) {
   (ok,) = target.staticcall("");
  }
 }''')
-            (root / 'contracts/Calls.sol').write_text('''pragma solidity >=0.8.26 <0.9.0;
+            (root / 'contracts/Calls.sol').write_text('''pragma solidity 0.8.38;
 import {BoundedCall as Renamed} from "./libraries/BoundedCall.sol";
 contract Calls {
  using Renamed for address;

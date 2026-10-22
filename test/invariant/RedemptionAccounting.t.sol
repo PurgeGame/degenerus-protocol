@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity ^0.8.26;
+pragma solidity 0.8.38;
 import {RedemptionFixture} from "../fuzz/helpers/RedemptionFixture.sol";
 import {RedemptionHandler} from "../fuzz/handlers/RedemptionHandler.sol";
 

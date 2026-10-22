@@ -105,7 +105,7 @@ self_test() {
   trap 'rm -rf "$tmp"' RETURN
   mkdir -p "$tmp/src"
   cat > "$tmp/src/Fixture.sol" <<'SOL'
-pragma solidity ^0.8.26;
+pragma solidity 0.8.38;
 interface ISat { function settle(uint256 word, uint24 day) external; }
 contract Fixture {
     ISat internal constant sat = ISat(address(1));

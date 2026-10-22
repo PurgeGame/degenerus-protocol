@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity 0.8.34;
+pragma solidity 0.8.38;
 
 /// @notice Independent absolute-day ledger. No page, ring, hint or packed-state logic.
 /// @dev Whole FLIP, 90 resolved days, implicit seeds and current carry/take-profit rounding.

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity ^0.8.26;
+pragma solidity 0.8.38;
 
 /// @title ForkPins -- the single source of truth for the mainnet-fork suite.
 /// @notice scripts/lib/patchForFork.js parses these constants (name = literal;) to patch

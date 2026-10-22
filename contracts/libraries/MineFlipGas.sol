@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity 0.8.34;
+pragma solidity 0.8.38;
 
 /// @notice Gas admission at deterministic checkpoints in the permissionless game engine.
 /// @dev Estimates admit continuations, never veto the first mandatory checkpoint.

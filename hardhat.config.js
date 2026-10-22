@@ -40,7 +40,7 @@ const config = {
   solidity: {
     compilers: [
       {
-        version: "0.8.34",
+        version: "0.8.38",
         settings: {
           viaIR: true,
           // L1 mainnet deploy target. Must be explicit: hardhat falls back to

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity 0.8.34;
+pragma solidity 0.8.38;
 
 /// @dev Isolated jackpot battle fixtures retain the real reader's SLOAD and call cost.
 contract CrapsPreferenceStore {

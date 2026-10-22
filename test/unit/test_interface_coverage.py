@@ -59,7 +59,7 @@ for signature, selector in methods:
 
     def test_new_interface_cannot_silently_escape_the_map(self):
         (self.root / "contracts/interfaces/IUnmapped.sol").write_text(
-            "pragma solidity 0.8.34; interface IUnmapped { function newCall() external; }\n"
+            "pragma solidity 0.8.38; interface IUnmapped { function newCall() external; }\n"
         )
         result = self.run_gate()
         self.assertNotEqual(result.returncode, 0)

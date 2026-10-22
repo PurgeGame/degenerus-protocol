@@ -1,7 +1,9 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { AbiCoder, Interface } from 'ethers';
-const [left, right, abiFile, output] = process.argv.slice(2);
+const [left, right, abiFile, output, mode] = process.argv.slice(2);
+if (mode && mode !== "--compiler-only") throw new Error(`Unknown comparison mode: ${mode}`);
+const compilerOnly = mode === "--compiler-only";
 if (!output) throw new Error('usage: compare-replay.js BASELINE_LOG CANDIDATE_LOG BASELINE_CONTRACTS_JSON OUTPUT_JSON');
 const abis = JSON.parse(fs.readFileSync(abiFile));
 const byTopic = new Map();
@@ -77,7 +79,7 @@ export function parse(text) {
         args[2] = '<executionGas>'; // only gas-derived field excluded in this workload
       }
       let signature = event.signature;
-      if (event.name === 'DegenesisVaultSpent') {
+      if (!compilerOnly && event.name === 'DegenesisVaultSpent') {
         assert.equal(p[0], 'Game');
         assert.equal(tx.label, 'degenesis-vault-spend');
         if (signature === 'DegenesisVaultSpent(uint256)') args.unshift('1');

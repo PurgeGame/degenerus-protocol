@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity 0.8.34;
+pragma solidity 0.8.38;
 
 /// @dev One ID-keyed pass-credit word holds normal passes [0:31], high passes [32:63],
 ///      compact board [64:83] and initialized bit [84]. Door helpers carry an ID in memory

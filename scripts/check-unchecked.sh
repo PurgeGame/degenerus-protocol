@@ -65,7 +65,7 @@ self_test() {
   local tmp; tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' RETURN
   mkdir -p "$tmp/src"
   cat > "$tmp/src/F.sol" <<'SOL'
-pragma solidity ^0.8.26;
+pragma solidity 0.8.38;
 contract F {
     uint256 public n;
     function a(uint256 x) external { unchecked { n = x - 1; } }   // BOUNDED

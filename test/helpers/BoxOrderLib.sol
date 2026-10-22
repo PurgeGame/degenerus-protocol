@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity ^0.8.26;
+pragma solidity 0.8.38;
 
 /// @dev Test-side encoders/decoders for the box purchase input that `purchase()`'s third
 ///      parameter carries — [quantity:7][kind:2][customUnits:21], every bit at or above 30 zero,

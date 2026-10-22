@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.26;
+pragma solidity 0.8.38;
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";

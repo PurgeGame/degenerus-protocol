@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity 0.8.34;
+pragma solidity 0.8.38;
 
 /// @dev Mock Lido stETH with shares-based rebase model.
 ///      balanceOf grows passively when rebase() is called (no holder enumeration).

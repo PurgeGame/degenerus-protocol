@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity 0.8.34;
+pragma solidity 0.8.38;
 
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {RECORD_KIND_LUCKBOX} from "../interfaces/ICoinflip.sol";

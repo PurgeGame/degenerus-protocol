@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity 0.8.34;
+pragma solidity 0.8.38;
 
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -35,13 +35,13 @@ contract StackSpillCallbackGasTest is Test {
 
     function test_FulfillmentGasPin() public {
         // Cold callback execution only; calldata intrinsic gas is outside this frame.
-        assertEq(_fulfill(REQUEST), 12_278, "callback execution gas changed");
+        assertEq(_fulfill(REQUEST), 12_275, "callback execution gas changed");
         assertEq(uint256(vm.load(TARGET, bytes32(uint256(3)))), WORD);
         assertEq(uint256(vm.load(TARGET, bytes32(0))), FLAGS);
     }
 
     function test_StaleRequestGasPin() public {
-        assertEq(_fulfill(REQUEST + 1), 7_163, "stale callback execution gas changed");
+        assertEq(_fulfill(REQUEST + 1), 7_160, "stale callback execution gas changed");
         assertEq(uint256(vm.load(TARGET, bytes32(uint256(3)))), 1);
         assertEq(uint256(vm.load(TARGET, bytes32(0))), FLAGS);
     }

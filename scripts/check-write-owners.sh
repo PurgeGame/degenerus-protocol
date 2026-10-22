@@ -54,9 +54,9 @@ run_gate() {
 self_test() {
   local tmp; tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' RETURN
   mkdir -p "$tmp/src/modules"
-  printf 'pragma solidity ^0.8.26;\ncontract S { uint256 internal level; uint256 internal cursor; }\n' > "$tmp/src/Storage.sol"
-  printf 'pragma solidity ^0.8.26;\nimport "../Storage.sol";\ncontract A is S { function f() external { level = 1; } }\n' > "$tmp/src/modules/A.sol"
-  printf 'pragma solidity ^0.8.26;\nimport "../Storage.sol";\ncontract B is S { function g() external { cursor = 2; } }\n' > "$tmp/src/modules/B.sol"
+  printf 'pragma solidity 0.8.38;\ncontract S { uint256 internal level; uint256 internal cursor; }\n' > "$tmp/src/Storage.sol"
+  printf 'pragma solidity 0.8.38;\nimport "../Storage.sol";\ncontract A is S { function f() external { level = 1; } }\n' > "$tmp/src/modules/A.sol"
+  printf 'pragma solidity 0.8.38;\nimport "../Storage.sol";\ncontract B is S { function g() external { cursor = 2; } }\n' > "$tmp/src/modules/B.sol"
   printf 'CLASS\tidentifier\tfile\trationale\nOWNER\tlevel\tmodules/A.sol\tA owns level\nOWNER\tcursor\tmodules/B.sol\tB owns cursor\n' > "$tmp/m.tsv"
   local pass=0 fail=0 out
   if CONTRACTS_DIR="$tmp/src" IDS_OVERRIDE="level,cursor" SCOPE_RE="^(Storage\\.sol|modules/)" MANIFEST_FILE="$tmp/m.tsv" QUIET=1 run_gate >/dev/null 2>&1; then pass=$((pass+1)); else fail=$((fail+1)); echo "self-test 1 FAIL"; fi

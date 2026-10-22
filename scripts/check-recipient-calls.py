@@ -38,6 +38,9 @@ def discover(root=ROOT):
     sources = {p.relative_to(root).as_posix(): {'content': p.read_text()}
                for p in sorted((root / 'contracts').rglob('*.sol'))}
     config = root / 'foundry.toml'
+    # Synthetic source fixtures inherit the project's compiler pin too.
+    if not config.exists():
+        config = ROOT / 'foundry.toml'
     version = tomllib.loads(config.read_text()).get('profile', {}).get('default', {}).get('solc_version') if config.exists() else None
     installed = Path.home() / '.svm' / str(version) / f'solc-{version}'
     compiler = str(installed) if installed.is_file() else shutil.which('solc')

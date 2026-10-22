@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity ^0.8.26;
+pragma solidity 0.8.38;
 
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";

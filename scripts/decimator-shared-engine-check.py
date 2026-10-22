@@ -11,7 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = r'''
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity 0.8.34;
+pragma solidity 0.8.38;
 import {Craps} from "../src/Craps.sol";
 import {CrapsEngine} from "../src/CrapsEngine.sol";
 
@@ -101,7 +101,7 @@ def main():
 src = "src"
 test = "test"
 libs = []
-solc_version = "0.8.34"
+solc_version = "0.8.38"
 via_ir = true
 optimizer = true
 optimizer_runs = 1000

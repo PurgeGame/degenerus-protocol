@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity 0.8.34;
+pragma solidity 0.8.38;
 import {BoundedDeployProtocol} from "../helpers/BoundedDeployProtocol.sol";
 import {BoundedGasProbe} from "../helpers/BoundedGasProbe.sol";
 import {CoinflipStorage} from "../helpers/CoinflipStorage.sol";

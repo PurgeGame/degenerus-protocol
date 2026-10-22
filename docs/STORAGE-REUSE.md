@@ -3,7 +3,7 @@
 This is a **new-deployment layout**, not a migration of an existing deployment. The implementation
 is under verification. Native Glamsterdam comparisons are recorded in
 [`GAS-CALIBRATION.md`](../scripts/audit/storage-reuse/GAS-CALIBRATION.md); final release gates remain separate.
-Compiler settings remain solc 0.8.34, via IR, 1,000 optimizer runs, Osaka bytecode.
+Compiler settings remain solc 0.8.38, via IR, 1,000 optimizer runs, Osaka bytecode.
 
 ## Player behavior
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity 0.8.34;
+pragma solidity 0.8.38;
 
 /// @title LootboxBernoulliTester
 /// @notice Test helper that exposes the manual-path Bernoulli whole-ticket collapse

@@ -139,7 +139,7 @@ self_test() {
   mkdir -p "$tmp/src"
   cat > "$tmp/src/Fixture.sol" <<'SOL'
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity ^0.8.26;
+pragma solidity 0.8.38;
 contract Fixture {
     mapping(uint24 => uint256) internal rngWordByDay;
     function registeredConsumer(uint24 d) external view returns (uint256) {

@@ -456,7 +456,7 @@ the subsequent smurf feature, which has not started at this checkpoint.
 ## Setup
 
 Use Node 20 and Python 3.12 to match Hardhat CI, plus Bash, Git and Foundry.
-Install local Python packages in a virtual environment. Solidity 0.8.34, via IR,
+Install local Python packages in a virtual environment. Solidity 0.8.38, via IR,
 1,000 optimizer runs and EVM Osaka are set in both compiler configurations.
 The npm dependencies and forge-std revision are locked in the repository. Foundry
 CI pins `nightly-c07d504b4ae67754584f4e05ff0c547a43c50f7b`, the build used by

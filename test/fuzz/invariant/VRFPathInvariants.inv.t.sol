@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity ^0.8.26;
+pragma solidity 0.8.38;
 
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {VRFPathHandler} from "../handlers/VRFPathHandler.sol";

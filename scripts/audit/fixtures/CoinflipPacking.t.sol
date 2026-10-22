@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity 0.8.34;
+pragma solidity 0.8.38;
 
 // Research fixture: run through benchmark-coinflip-packing.py, which compiles
 // temporary copies of the production contract with alternative stake codecs.

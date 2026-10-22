@@ -179,7 +179,7 @@ self_test() {
 
   mkdir -p "$tmp/src" "$tmp/test"
   cat > "$tmp/src/Fixture.sol" <<'SOL'
-pragma solidity ^0.8.26;
+pragma solidity 0.8.38;
 interface IThing { function ping() external; function pong() external view returns (uint256); }
 contract Fixture {
     IThing internal constant thing = IThing(address(1));

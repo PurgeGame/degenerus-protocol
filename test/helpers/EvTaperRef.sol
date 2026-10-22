@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity ^0.8.26;
+pragma solidity 0.8.38;
 
 /// @dev Independent reference for the lootbox EV allowance taper: marginal weight 1 to 10 ETH,
 ///      1 -> 1/2 over 10..20 ETH, 1/2 -> 0 over 20..40 ETH. Integrates exactly in integers and

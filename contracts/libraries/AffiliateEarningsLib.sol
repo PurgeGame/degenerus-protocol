@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity 0.8.34;
+pragma solidity 0.8.38;
 
 /// @notice Seven affiliate levels plus the immutable upline cache in one retained word.
 /// @dev Two exact 35-bit scores, five clipped 19-bit bonus inputs, a uint24 level and 66 cache bits.

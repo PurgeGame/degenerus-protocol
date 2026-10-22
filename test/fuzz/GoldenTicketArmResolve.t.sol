@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity ^0.8.26;
+pragma solidity 0.8.38;
 
 import {JackpotBoardFixtures} from "./helpers/JackpotBoardFixtures.sol";
 import {GoldSixLib} from "../../contracts/libraries/GoldSixLib.sol";

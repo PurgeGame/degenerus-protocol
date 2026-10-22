@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 SOURCE = r'''
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity 0.8.34;
+pragma solidity 0.8.38;
 import {Craps} from "../src/Craps.sol";
 import {CrapsEngine} from "../src/CrapsEngine.sol";
 
@@ -307,7 +307,7 @@ def main():
 src = "src"
 test = "test"
 libs = []
-solc_version = "0.8.34"
+solc_version = "0.8.38"
 via_ir = true
 optimizer = true
 optimizer_runs = 1000
@@ -325,7 +325,7 @@ block_gas_limit = 30000000000
         rows = {label: int(value) for label, value in re.findall(r"^\s+([a-z_0-9]+): (\d+)\s*$", log, re.M)}
         artifact = {
             "component_gas": rows,
-            "assumptions": ["Isolated Solidity 0.8.34, via-IR, optimizer runs 1000, Osaka EVM",
+            "assumptions": ["Isolated Solidity 0.8.38, via-IR, optimizer runs 1000, Osaka EVM",
                             "Two storage words per heap node; cold external calls",
                             "Excludes transaction intrinsic gas, entries, cursor, rewards, ETH reserves and credits",
                             "Heap gas rows exclude the added final-flip gate; three gate tests check eligibility semantics",

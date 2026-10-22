@@ -51,7 +51,7 @@ def main():
     args = parser.parse_args()
     results = {
         "baseline_commit": BASELINE_COMMIT,
-        "compiler": "0.8.34, via-IR, optimizer runs 1000, Osaka",
+        "compiler": "0.8.38, via-IR, optimizer runs 1000, Osaka",
         "measurement": "Isolated transactions, intrinsic gas included, external dependency calls stubbed. Net includes capped refunds; gross adds refunds back.",
         "scope": "Production Coinflip.sol at the baseline commit versus the working tree; whole-FLIP lanes floor per addition and saturate at the per-day cap.",
         "variants": {},
@@ -59,6 +59,9 @@ def main():
     for variant in args.variants:
         bits, load = VARIANTS[variant]
         source = load()
+        original_source = source
+        source = re.sub(r"pragma solidity [^;]+;", "pragma solidity 0.8.38;", source, count=1)
+        results.setdefault("original_source_sha256", {})[variant] = hashlib.sha256(original_source.encode()).hexdigest()
         results.setdefault("source_sha256", {})[variant] = hashlib.sha256(source.encode()).hexdigest()
         with tempfile.TemporaryDirectory(prefix=f"coinflip-{variant}-") as directory:
             work = Path(directory)
@@ -74,7 +77,7 @@ def main():
             (work / "foundry.toml").write_text(f'''[profile.default]
 src = "contracts"
 test = "test"
-solc_version = "0.8.34"
+solc_version = "0.8.38"
 via_ir = true
 optimizer = true
 optimizer_runs = 1000

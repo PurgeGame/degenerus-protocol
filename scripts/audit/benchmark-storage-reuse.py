@@ -84,13 +84,17 @@ def compile_baseline(destination, solc, address_pins):
     pin = json.loads((ROOT / "scripts/audit/storage-reuse/baseline.json").read_text())["source_head"]
     names = ["Coinflip", "DegenerusAffiliate", "DegenerusJackpots"]
     sources = {str(p.relative_to(ROOT)): {"content": p.read_text()} for p in (ROOT / "contracts").rglob("*.sol")}
-    sources["contracts/ContractAddresses.sol"] = {"content": address_pins.read_text()}
+    sources["contracts/ContractAddresses.sol"] = {"content": re.sub(
+        r"pragma solidity [^;]+;", "pragma solidity 0.8.38;", address_pins.read_text(), count=1)}
     for name in names:
         path = f"contracts/{name}.sol"
         content = subprocess.check_output(["git", "show", f"{pin}:{path}"], cwd=ROOT, text=True)
         if name == "Coinflip":
             assert content.count("COIN_CLAIM_DAYS = 730;") == 1
             content = content.replace("COIN_CLAIM_DAYS = 730;", "COIN_CLAIM_DAYS = 90;")
+        # Adapt only the compiler directive in the in-memory historical input.
+        # Frozen source evidence remains unchanged.
+        content = re.sub(r"pragma solidity [^;]+;", "pragma solidity 0.8.38;", content, count=1)
         sources[path] = {"content": content}
     settings = {"optimizer": {"enabled": True, "runs": 1000}, "viaIR": True, "evmVersion": "osaka",
         "remappings": ["@openzeppelin/=node_modules/@openzeppelin/"],
@@ -99,8 +103,8 @@ def compile_baseline(destination, solc, address_pins):
     destination.mkdir(parents=True, exist_ok=True)
     (destination / "compiler-input.json").write_text(json.dumps(request))
     version = subprocess.check_output([solc, "--version"], text=True)
-    if "0.8.34+" not in version:
-        raise RuntimeError("benchmark requires pinned solc 0.8.34")
+    if "0.8.38+" not in version:
+        raise RuntimeError("benchmark requires pinned solc 0.8.38")
     result = subprocess.run([solc, "--base-path", str(ROOT), "--allow-paths", str(ROOT), "--standard-json"],
         input=json.dumps(request), text=True, capture_output=True, check=True)
     output = json.loads(result.stdout)
@@ -199,7 +203,7 @@ def old_state(overrides, addresses, artifacts):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--compile-baseline", type=Path)
-    parser.add_argument("--solc", default=str(Path.home() / ".svm/0.8.34/solc-0.8.34"))
+    parser.add_argument("--solc", default=str(Path.home() / ".svm/0.8.38/solc-0.8.38"))
     parser.add_argument("--fixtures", type=Path)
     parser.add_argument("--baseline", type=Path)
     parser.add_argument("--pins", type=Path, required=True, help="Exact ContractAddresses source used to compile the fixtures")

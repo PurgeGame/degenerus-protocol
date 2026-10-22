@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.34;
+pragma solidity 0.8.38;
 import {StorageRecyclingSymbolicTest} from "../halmos/StorageRecycling.t.sol";
 contract StorageRecyclingGuardKillsTest is StorageRecyclingSymbolicTest {
     function test_StaleRunHeaderTail() public {

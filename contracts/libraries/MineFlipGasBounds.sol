@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity 0.8.34;
+pragma solidity 0.8.38;
 
 /// @notice Cold-path admission bounds for Osaka and Glamsterdam, including new-state gas.
 /// @dev No state reservoir is assumed. Bounds include the named operation; callers reserve

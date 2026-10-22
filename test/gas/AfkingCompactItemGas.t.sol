@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity 0.8.34;
+pragma solidity 0.8.38;
 
 import {console2} from "forge-std/console2.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";

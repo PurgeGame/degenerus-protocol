@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity ^0.8.26;
+pragma solidity 0.8.38;
 
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {CrapsViews} from "./CrapsViews.sol";

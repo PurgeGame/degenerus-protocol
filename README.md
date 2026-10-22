@@ -19,7 +19,7 @@ The [freeze record](docs/audit/freeze.json) identifies the tested inputs, their 
 | [Economic disclosures](ECONOMIC_DISCLOSURES.md) | Creator allocations and economic rights |
 | [Verification](docs/VERIFICATION.md) | Build, tests and known verification limits |
 
-Solidity **0.8.34**, via IR, optimizer **1,000 runs**, EVM **Osaka**. Dependencies are
+Solidity **0.8.38**, via IR, optimizer **1,000 runs**, EVM **Osaka**. Dependencies are
 recorded in `package-lock.json` and `foundry.lock`; see verification instructions before
 running tests that patch deployment constants.
 

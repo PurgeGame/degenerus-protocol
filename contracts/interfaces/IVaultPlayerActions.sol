@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity 0.8.34;
+pragma solidity 0.8.38;
 
 // Solidity cannot take .selector from an overloaded method name. These aliases
 // disambiguate only those overloads; all other selectors use canonical interfaces.

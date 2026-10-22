@@ -14,7 +14,7 @@ Native validation uses an unlocked signer on local chain ID 1337 only. Start Get
 
 ```sh
 node scripts/consolidation/native-deploy.js prepare http://127.0.0.1:18548 .planning/consolidation/native/deployment
-systemd-run --user --scope -q -p MemoryMax=20G -p MemorySwapMax=1G /home/zak/.svm/0.8.34/solc-0.8.34 --base-path . --include-path node_modules --standard-json < .planning/consolidation/native/deployment/input.json > .planning/consolidation/native/deployment/output.json
+systemd-run --user --scope -q -p MemoryMax=20G -p MemorySwapMax=1G /home/zak/.svm/0.8.38/solc-0.8.38 --base-path . --include-path node_modules --standard-json < .planning/consolidation/native/deployment/input.json > .planning/consolidation/native/deployment/output.json
 node scripts/consolidation/native-deploy.js deploy http://127.0.0.1:18548 .planning/consolidation/native/deployment
 ```
 
@@ -39,3 +39,16 @@ Use `check-surface.js BASELINE CANDIDATE --degenesis-gift` to allow exactly the 
 `ConsolidationAutoWhaleGas.t.sol` pairs the existing cold automatic-whale benchmark with
 the committed baseline runtimes. Run it with the consolidation profile and the same baseline
 artifact directory; this paired test reads the baseline artifacts without an environment toggle.
+
+For a compiler-only comparison, build the same production revision independently with each
+compiler and run the same expanded replay on both with `DIFFERENTIAL_BASELINE=false`.
+The replay now includes cold/warm purchases, cold/warm box gameplay, and the storage-census
+long run. Pass `--compiler-only` as the final comparator argument to keep event signatures
+and arguments strict; only `MinerWork.executionGas` is excluded. Do not use the historical
+P1b semantic/runtime adapters for a compiler comparison. The long-run scenario is index 2
+when all five tests are run in name order. `StackSpillCallbackGas.t.sol` measures execution
+without transaction intrinsic gas and must run with `FOUNDRY_ISOLATE=false`.
+
+`compile_sizes.py` is the active copy of the former planning experiment. It uses the current
+compiler pin and resolves compiler/dependency paths for the current worktree. Frozen planning
+inputs and outputs remain evidence of their original compiler.

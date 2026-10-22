@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity ^0.8.26;
+pragma solidity 0.8.38;
 
 /// @dev Fixed preimages for exact 24-bit trait-board scenarios. Each pair is the first
 /// two positive integers whose H(word, TRAIT_BOARD_TAG) has the requested low bits.

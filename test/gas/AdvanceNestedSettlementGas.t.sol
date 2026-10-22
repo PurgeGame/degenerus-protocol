@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity ^0.8.26;
+pragma solidity 0.8.38;
 
 // The stage-by-stage composed-transaction checks that lived here (word apply / daily stage /
 // ticket stage each held to a whole-transaction limit) were retired with the advanceGame stage

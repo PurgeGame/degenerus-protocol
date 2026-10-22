@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity ^0.8.26;
+pragma solidity 0.8.38;
 import {TicketQueueStorage as RingStorage} from "./helpers/TicketQueueStorage.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 

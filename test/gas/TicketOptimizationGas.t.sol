@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity ^0.8.33;
+pragma solidity 0.8.38;
 import {RoundDrainChunkGas, ChunkHarness} from "./RoundDrainChunkGas.t.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 

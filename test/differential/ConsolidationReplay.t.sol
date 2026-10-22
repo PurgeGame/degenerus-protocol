@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity 0.8.34;
+pragma solidity 0.8.38;
 
 import {StorageCensusLongRunTest} from "../census/StorageCensusLongRun.t.sol";
 import {Vm, VmSafe} from "forge-std/Vm.sol";
@@ -9,6 +9,7 @@ import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
+import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @dev Run twice with DIFFERENTIAL_BASELINE=true/false; compare named observations with compare-replay.js.
@@ -246,6 +247,23 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
 
     function testFocusedPurchases() public { _focusedPurchases(false); }
     function testWarmPurchases() public { _focusedPurchases(true); }
+
+    // Expand compiler comparisons through Degenesis and six normal gameplay days.
+    function testFocusedBoxes() public { _focusedBoxes(false); }
+    function testWarmBoxes() public { _focusedBoxes(true); }
+
+    function _focusedBoxes(bool warm_) private {
+        warm = warm_;
+        vm.pauseGasMetering();
+        _censusBegin("box-focused");
+        _playDeployDay();
+        for (uint256 day = 1; day <= 7; ++day) _degenesisDay(day);
+        _seedFloats();
+        for (uint24 day = GameTimeLib.MAIN_LAUNCH_DAY; day < GameTimeLib.MAIN_LAUNCH_DAY + 6; ++day) {
+            _playDay(day);
+        }
+        _censusEnd();
+    }
 
     function _focusedPurchases(bool warm_) private {
         warm = warm_;

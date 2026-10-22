@@ -197,7 +197,7 @@ an explicit future operation:
    production Icons32 paths are installed (normally finalized by deployment).
    This source-based compatibility result does not attest an unspecified live address.
 2. Compile `contracts/DeityPassCustomizationRenderer.sol` with the repository's
-   Solidity **0.8.34**, optimizer **1000 runs**, **viaIR=true**, EVM **osaka** settings.
+   Solidity **0.8.38**, optimizer **1000 runs**, **viaIR=true**, EVM **osaka** settings.
    The target network must support that EVM target. Deploy **one**
    `DeityPassCustomizationRenderer(existingPassAddress)` after the pass exists.
    The constructor rejects addresses with no code; the binding is immutable.

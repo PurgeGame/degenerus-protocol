@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity 0.8.34;
+pragma solidity 0.8.38;
 
 /// @dev Eight independent lane-column rotations across four packed owner words.
 ///      All moves are in memory. `positions` carries one original-position byte

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 
-pragma solidity ^0.8.26;
+pragma solidity 0.8.38;
 
 import {Vm, VmSafe} from "forge-std/Vm.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
