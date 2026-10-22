@@ -963,11 +963,11 @@ contract DegenerusGameFoilPackModule is
                 if (counts[tD]++ == 0) touchedTraits[touchedLen++] = tD;
             }
 
-            // Batch-write the sixteen entries into lvlTraitEntry[lvl][traitId] as packed
+            // Batch-write the sixteen entries into lvlTraitEntry[(lvl) & 1][traitId] as packed
             // lanes naming the buyer's wallet ID, one length update per distinct trait.
             // Mirrors the mint module's batch writer; re-zeroes the shared scratch so
             // the next buyer starts clean.
-            uint256 levelSlot = _traitBufferBase(lvl);
+            uint256 levelSlot = _traitBatchBase(lvl);
             uint256 ownerIdx = buyerId;
             for (uint16 u; u < touchedLen; ) {
                 uint8 traitId = touchedTraits[u];

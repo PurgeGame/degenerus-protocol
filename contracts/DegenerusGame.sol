@@ -273,7 +273,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
     ///      bingo expires). Signature: claimBingo(uint32 id, uint24 level, uint8 symbol,
     ///      uint32[8] slots) — the owner to claim for, the level (uint24 storage-key width), the
     ///      symbol 0-31 (quadrant = symbol >> 3, symInQ = symbol & 7), and the per-color positions
-    ///      in lvlTraitEntry[level][traitId] the owner occupies. The signature matches the module
+    ///      in lvlTraitEntry[(level) & 1][traitId] the owner occupies. The signature matches the module
     ///      function exactly (identical selector), so the calldata forwards as-is.
     function claimBingo(
         uint32,

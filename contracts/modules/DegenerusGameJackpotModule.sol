@@ -615,7 +615,7 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     ///      of dailyTicketBudgetsPacked), with the same day's word from rngGate, ahead of the
     ///      coin+tickets stage. Phase 1 already moved the full 3% budget future -> next; this
     ///      distributes the latched entries through the shared ticket plan (`_ticketWorkPlan`).
-    ///      Winners come from `lvlTraitEntry[level + 1]` on the day's recorded main board,
+    ///      Winners come from `lvlTraitEntry[(level + 1) & 1]` on the day's recorded main board,
     ///      across its three non-solo quadrants:
     ///      the solo quadrant is the one the ETH leg picked (from its own entropy,
     ///      hash2(word, level)), and it carries only the solo ETH prize. Tickets queue at

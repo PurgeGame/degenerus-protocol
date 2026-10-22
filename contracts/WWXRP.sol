@@ -391,10 +391,10 @@ contract WWXRP {
     uint256 private constant BPS = 10_000;
 
     /// @dev Where DegenerusGame keeps a wallet's WWXRP boon: `boonPacked` is the wallet-ID-keyed
-    ///      mapping at Game slot 47, the lane is 24 bits at bit 232 of the wallet's second word, and
+    ///      mapping at Game slot 46, the lane is 24 bits at bit 232 of the wallet's second word, and
     ///      its low two bits are the tier (0 = no boon). Read-only, used to skip the consume
     ///      dispatch for a wallet holding no WWXRP boon; pinned against the Game layout.
-    uint256 internal constant GAME_BOON_PACKED_SLOT = 47;
+    uint256 internal constant GAME_BOON_PACKED_SLOT = 46;
     uint256 private constant GAME_WWXRP_LANE_SHIFT = 232;
     uint256 private constant GAME_LANE_TIER_MASK = 0x3;
 

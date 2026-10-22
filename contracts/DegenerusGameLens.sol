@@ -835,9 +835,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         uint256 bitmapBase;
         assembly { bitmapBase := traitBucketLive.slot }
         if (_sload(game, bytes32(bitmapBase + (lvl & 1))) & (uint256(1) << trait) == 0) return (false, 0, 0, 0);
-        uint256 base;
-        assembly { base := lvlTraitEntry.slot }
-        bytes32 slot = bytes32(uint256(_mapSlot(uint256(lvl & 1), base)) + trait);
+        bytes32 slot = bytes32(_traitBufferBase(lvl) + trait);
         return _findPackedIndex(game, slot, ownerIndices, offset, maxWords, true);
     }
 

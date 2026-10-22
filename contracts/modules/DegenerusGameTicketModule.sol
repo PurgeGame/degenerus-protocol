@@ -654,11 +654,7 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
             }
         }
 
-        // Calculate the storage slot for this level's trait buckets.
-        // Solidity stores mapping(key => fixedArray) as keccak256(key . slot) + index,
-        // with dynamic array elements at keccak256(keccak256(key . slot) + index).
-        // This relies on the standard Solidity storage layout (stable since 0.4.x).
-        // Safe here because the contract is non-upgradeable.
+        // Trait headers are contiguous inside the selected parity buffer.
         uint256 levelSlot = _traitBufferBase(lvl);
 
         // Batch-write the packed lanes, one run per distinct trait.

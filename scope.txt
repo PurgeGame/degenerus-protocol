@@ -1,6 +1,6 @@
 # Complete production Solidity inventory, including deployment constants and supporting artwork.
-# 90 files; 38 top-level CREATE instances plus two Vault share-token CREATEs.
-# DegenerusGameLens, DeityBoonViewer and DeityPassCustomizationRenderer are optional
+# 93 files; 38 top-level CREATE instances plus two Vault share-token CREATEs.
+# DegenerusGameLens, CrapsLens, DeityBoonViewer and DeityPassCustomizationRenderer are optional
 # deployments outside this CREATE dependency closure (public readers/display code).
 # Tests/mocks and tools are reviewed as verification/deployment dependencies.
 

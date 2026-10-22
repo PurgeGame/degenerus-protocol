@@ -146,10 +146,9 @@ interface IAdminLinkValue {
  * 5. OVERFLOW PROTECTION: Solidity 0.8+ provides automatic overflow checks.
  *    `unchecked` blocks in modules are intentional optimizations for safe ops.
  *
- * 6. MAPPING COLLISION: Mappings use keccak256(key . slot), making collisions
- *    computationally infeasible. lvlTraitEntry maps physical parity to 256 tail-bearing
- *    headers, validated by the full buffer level and a per-buffer bitmap. A bucket header is at keccak256((level & 1) . slot) + traitId;
- *    packed occurrence words begin at keccak256(headerSlot).
+ * 6. TRAIT BUFFERS: A header is at lvlTraitEntry.slot + (level & 1) * 256 + traitId.
+ *    The full buffer level and per-buffer bitmap validate it. Completed occurrence
+ *    words begin at keccak256(headerSlot).
  *
  * UPGRADE NOTES
  * -----------------------------------------------------------------------------
@@ -695,14 +694,6 @@ abstract contract DegenerusGameStorage {
     ///      SECURITY: Pull pattern — players and funders withdraw their own funds (the claim
     ///      function / withdrawAfkingFunding), separating credit from transfer.
     mapping(uint32 => uint256) internal balancesPacked;
-
-    /// @dev Two physical trait buffers, keyed by actualLevel & 1. Each header packs
-    ///      a uint32 count and up to seven uint32 owner-index tail lanes above it.
-    ///      Full buffer level plus traitBucketLive validate each header. Completed
-    ///      words hold eight uint32 indices at keccak256(headerSlot).
-    ///      Owner registries remain keyed by actual level. Never treat a header as
-    ///      a Solidity array length; all readers use the validated bucket helpers.
-    mapping(uint24 => uint256[256]) internal lvlTraitEntry;
 
     /// @dev Bit-packed mint history per player.
     ///      Layout defined by constants in BitPackingLib and MintStreakUtils.
@@ -2033,7 +2024,7 @@ abstract contract DegenerusGameStorage {
         }
     }
 
-    /// @dev Wallet ID of occurrence `k` in lvlTraitEntry[lvl][trait]. No bound check: callers
+    /// @dev Wallet ID of occurrence `k` in lvlTraitEntry[(lvl) & 1][trait]. No bound check: callers
     ///      gate on the length.
     function _bucketIdAtUnchecked(uint24 lvl, uint8 trait, uint256 k) internal view returns (uint32) {
         return _bucketIdFromWord(_bucketWordAtUnchecked(lvl, trait, k), k);
@@ -4866,11 +4857,18 @@ abstract contract DegenerusGameStorage {
         if (_ticketLevelRetired(lvl)) revert E();
     }
 
+    /// @dev Select once for batch loops; the branch prevents arithmetic rematerialization.
+    function _traitBatchBase(uint24 lvl) internal pure returns (uint256 base) {
+        assembly ("memory-safe") {
+            switch and(lvl, 1)
+            case 0 { base := lvlTraitEntry.slot }
+            default { base := add(lvlTraitEntry.slot, 256) }
+        }
+    }
+
     function _traitBufferBase(uint24 lvl) internal pure returns (uint256 base) {
         assembly ("memory-safe") {
-            mstore(0, and(lvl, 1))
-            mstore(32, lvlTraitEntry.slot)
-            base := keccak256(0, 64)
+            base := add(lvlTraitEntry.slot, shl(8, and(lvl, 1)))
         }
     }
 
@@ -5139,6 +5137,11 @@ abstract contract DegenerusGameStorage {
     mapping(uint256 => uint256) internal degenesisOrders;
     /// @dev Dedicated redemption reserve, amount + 1; releasing it never clears this home.
     uint128 internal _redemptionReserveStored = 1;
+
+    /// @dev Two parity buffers of 256 headers: uint32 count plus seven uint32 tail lanes.
+    ///      Full buffer levels and traitBucketLive authenticate each header. Completed
+    ///      eight-lane words start at keccak256(headerSlot).
+    uint256[256][2] internal lvlTraitEntry;
 
     uint256 internal constant DEGENESIS_DAYS = 7;
     uint256 internal constant DEGENESIS_UNIT = 0.0001 ether;

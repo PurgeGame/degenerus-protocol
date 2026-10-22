@@ -374,7 +374,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             return (true, STAGE_GAMEOVER, false);
         }
 
-        // Terminal scope: the payout samples only lvlTraitEntry[drainLevel], so every probe here
+        // Terminal scope: the payout samples only lvlTraitEntry[(drainLevel) & 1], so every probe here
         // is drainLevel-only; every other windowed cohort is dead value and is never touched.
         if (!_terminalWordApplied()) {
             if (!_rngRequestActive() || rngWordCurrent == RNG_WORD_WAITING) {
@@ -935,7 +935,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         // this level holds created tickets; any other stamp (unprepared or retired) counts
         // none, so the ending always completes and the pot divides over the queued weight.
         uint256 live = _traitBitmap(lvl);
-        uint256 base = _traitBufferBase(lvl);
+        uint256 base = _traitBatchBase(lvl);
         for (uint256 t; t < 256; ) {
             if (live & (uint256(1) << t) != 0) {
                 uint256 n;

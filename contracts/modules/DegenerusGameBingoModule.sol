@@ -132,7 +132,7 @@ contract DegenerusGameBingoModule is DegenerusGameStorage {
     ///        the ABI decoder fail-closes on an oversized value, no truncation).
     /// @custom:reverts BingoExpired If a later same-parity level has taken over the ticket buffer.
     /// @param symbol Symbol 0-31 (quadrant = symbol >> 3, symInQ = symbol & 7).
-    /// @param slots Per-color positions in lvlTraitEntry[lvl][traitId] the owner occupies.
+    /// @param slots Per-color positions in lvlTraitEntry[(lvl) & 1][traitId] the owner occupies.
     function claimBingo(uint32 id, uint24 lvl, uint8 symbol, uint32[8] calldata slots) external {
         // Permissionless: a settled claim only ever credits the slot owner, never the caller.
         // Bucket lanes hold wallet IDs; a caller with no ID owns no slot.

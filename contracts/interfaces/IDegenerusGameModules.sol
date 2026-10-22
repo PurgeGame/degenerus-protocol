@@ -589,7 +589,7 @@ interface IDegenerusGameBingoModule {
     /// @param id Bingo owner to claim for (0 = caller; otherwise allocated, else E); permissionless.
     /// @param level The level to claim on (uint24 storage-key width).
     /// @param symbol Symbol 0-31 (quadrant = symbol >> 3, symInQ = symbol & 7).
-    /// @param slots Per-color positions in lvlTraitEntry[level][traitId] the owner occupies.
+    /// @param slots Per-color positions in lvlTraitEntry[(level) & 1][traitId] the owner occupies.
     function claimBingo(uint32 id, uint24 level, uint8 symbol, uint32[8] calldata slots) external;
 
     /// @notice Claim DGNRS affiliate rewards for the current level. The Game retains a

@@ -52,8 +52,8 @@ contract LootboxCraps is Craps {
     /// @dev Base slot of `DegenerusGameStorage.rngWordByDay`, a mapping(uint24 => uint256) — the
     ///      protocol's recorded DAILY word, retained separately from the shared live payload. Pinned
     ///      against the frozen tree exactly like those two, and covered by the same drift gate.
-    uint256 internal constant RNG_WORD_BY_DAY_SLOT = 10;
-    uint256 internal constant RNG_DAY_TAGS_SLOT = 31;
+    uint256 internal constant RNG_WORD_BY_DAY_SLOT = 9;
+    uint256 internal constant RNG_DAY_TAGS_SLOT = 30;
 
     // ---------------------------------------------------------------------------------------
     // Reading the protocol
