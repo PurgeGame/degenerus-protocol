@@ -6,6 +6,7 @@ import {
   predictAddresses,
   computeDeployDayBoundary,
   DEPLOY_ORDER,
+  expandAliases,
   KEY_TO_CONTRACT,
 } from "./lib/predictAddresses.js";
 import {

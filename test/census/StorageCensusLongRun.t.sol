@@ -45,7 +45,7 @@ contract StorageCensusLongRunTest is StorageCensus {
         return DEPLOY_TS_DEGENESIS;
     }
 
-    function setUp() public {
+    function setUp() public virtual {
         _deployProtocol();
         lens = new DegenerusGameLens();
         mockVRF.fundSubscription(1, 1_000 ether);
@@ -86,7 +86,7 @@ contract StorageCensusLongRunTest is StorageCensus {
         return uint256(keccak256(abi.encode(salt, a, b)));
     }
 
-    function _crank(uint256 tag) internal {
+    function _crank(uint256 tag) internal virtual {
         _cMineAll(3000, _rand(tag, block.timestamp));
     }
 

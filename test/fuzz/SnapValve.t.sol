@@ -16,17 +16,6 @@ import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 ///        ticket module etched at its pinned address) with a non-zero snapShift. Test-only; NO contracts/*.sol is mutated. Adds only
 ///        seeders, setters, and inspection views over the inherited module.
 contract SnapValveHarness is MintBucketSeed {
-    /// @dev The mint module answers the liveness tail through the Game's view; this harness is
-    ///      not deployed at the Game's address, so it evaluates the tail in place.
-    function _pastDeadlineTriggered(uint24 today, uint24 idx)
-        internal
-        view
-        override
-        returns (bool)
-    {
-        return DegenerusGameStorage._pastDeadlineTriggered(today, idx);
-    }
-
     function seedQueue(uint24 lvl, uint256 n, uint32 owedEach, uint8 remEach, uint160 base) external {
         rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((1) & 1) << 12);
         rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((uint48(0) + 1) & 1) << 12);

@@ -121,7 +121,7 @@ abstract contract StorageCensus is DeployProtocol {
         censusFailedTxs = 0;
     }
 
-    function _censusEnd() internal {
+    function _censusEnd() internal virtual {
         console.log(string.concat(
             "CENSUSMETA|", censusScenario, "|", vm.toString(uint256(censusStartDay)), "|",
             vm.toString(uint256(_censusDay())), "|", vm.toString(uint256(censusStartLevel)), "|",
@@ -145,7 +145,7 @@ abstract contract StorageCensus is DeployProtocol {
     /// @notice Make one top-level call as `from` and census its storage writes.
     /// @param protocolPaid true for mineFlip / keeper / VRF work, false for player actions.
     function _ctx(string memory label, bool protocolPaid, address from, address to, uint256 value, bytes memory data)
-        internal
+        internal virtual
         returns (bool ok, bytes memory ret)
     {
         if (!censusOn) {

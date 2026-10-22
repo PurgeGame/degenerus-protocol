@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
+import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 
 /// @title DelegateOnlyGuards -- payable delegatecall-only module entrypoints reject direct calls
@@ -35,19 +36,14 @@ contract DelegateOnlyGuards is DeployProtocol {
     // address being the Game; called on the module itself, each must refuse before touching
     // the module's own (empty) storage.
 
-    function test_beginBoxOrder_directCallReverts() public {
+    function test_purchaseWith_directCallReverts() public {
         vm.expectRevert(bytes4(keccak256("OnlyDelegatecall()")));
-        lootboxModule.beginBoxOrder(1, 1);
+        mintModule.purchaseWith{value: 1 ether}(1, 400, 0, bytes32(0), MintPaymentKind.DirectEth, 1 ether, 0);
     }
 
     function test_recordCoverBox_directCallReverts() public {
         vm.expectRevert(bytes4(keccak256("OnlyDelegatecall()")));
         lootboxModule.recordCoverBox(1, 1 ether, 1, false, 1);
-    }
-
-    function test_applyBoxOrderScore_directCallReverts() public {
-        vm.expectRevert(bytes4(keccak256("OnlyDelegatecall()")));
-        lootboxModule.applyBoxOrderScore(1, 1);
     }
 
     function test_resolveLootboxDirect_directCallReverts() public {

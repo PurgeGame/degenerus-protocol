@@ -3,6 +3,7 @@ import {
   predictAddresses,
   computeDeployDayBoundary,
   DEPLOY_ORDER,
+  expandAliases,
   KEY_TO_CONTRACT,
 } from "../../scripts/lib/predictAddresses.js";
 import { patchContractAddresses } from "../../scripts/lib/patchContractAddresses.js";
@@ -113,6 +114,9 @@ export async function deployFullProtocol({
     contracts[key] = contract;
     deployedAddrs.set(key, addr);
   }
+
+  for (const [alias, contract] of expandAliases(new Map(Object.entries(contracts)))) contracts[alias] = contract;
+  for (const [alias, addr] of expandAliases(deployedAddrs)) deployedAddrs.set(alias, addr);
 
   // --- Phase 5: Verify ---
   for (const [key, expectedAddr] of predicted) {

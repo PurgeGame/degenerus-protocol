@@ -11,17 +11,6 @@ import {WalletSeed} from "../helpers/WalletSeed.sol";
 /// @dev Extends the production ticket module so the live `runTicketWork` drains into THIS
 ///      contract's packed buckets; adds lane-level seeders and decoders only.
 contract BucketLaneHarness is DegenerusGameTicketModule, WalletSeed {
-    /// @dev The ticket module answers the liveness tail through the Game's view; this harness is
-    ///      not deployed at the Game's address, so it evaluates the tail in place.
-    function _pastDeadlineTriggered(uint24 today, uint24 idx)
-        internal
-        view
-        override
-        returns (bool)
-    {
-        return DegenerusGameStorage._pastDeadlineTriggered(today, idx);
-    }
-
     /// @dev Seed a queue owner's locator and positional owed field without weakening owner identity.
     function _seedOwedAt(uint24 key, address player, uint80 packed) internal {
         uint32 pos = _walletIdOf(player);

@@ -102,20 +102,13 @@ contract SmurfAllowanceTest is DeployProtocol {
         assertEq(game.walletIdentityOf(owner), main);
     }
 
-    function test_VaultOwnerOnlyAndDirectImplementationRejected() public {
+    function test_VaultOwnerOnly() public {
         vm.prank(owner);
         vm.expectRevert(bytes4(keccak256("OnlyVault()")));
         game.raiseSmurfBaseAllowance(main, 2);
         vm.prank(ContractAddresses.ADMIN);
         vm.expectRevert(bytes4(keccak256("OnlyVault()")));
         game.raiseSmurfBaseAllowance(main, 2);
-        vm.prank(ContractAddresses.CREATOR);
-        vm.expectRevert(bytes4(keccak256("OnlyDelegatecall()")));
-        (bool ok,) = ContractAddresses.GAME_MINT_MODULE.call(
-            abi.encodeWithSignature("raiseSmurfBaseAllowance(uint32,uint16)", main, uint16(2)));
-        // A low-level call does not fail the test on a missed expectation: expectRevert reports a
-        // match through `ok` instead, so it must be asserted.
-        assertTrue(ok, "the direct implementation call reverted with OnlyDelegatecall()");
         assertEq(_info().baseAllowance, 0);
     }
 

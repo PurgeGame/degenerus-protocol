@@ -27,9 +27,10 @@ def read(out):
  return result
 
 def expected_modules():
- source=(pathlib.Path(__file__).resolve().parents[1]/'lib/predictAddresses.js').read_text()
- mapping=re.search(r'export const KEY_TO_CONTRACT = \{([\s\S]*?)\};',source)[1]
- return sorted({name for name in re.findall(r': "(\w+)"',mapping) if name.endswith('Module')})
+ import subprocess
+ rows=json.loads(subprocess.check_output(['node','--input-type=module','-e',
+  'import {DEPLOYMENTS} from "./scripts/lib/deploymentManifest.js"; console.log(JSON.stringify(DEPLOYMENTS))'],text=True))
+ return sorted({r['contract'] for r in rows if r['contract'].endswith('Module')})
 
 def main():
  p=argparse.ArgumentParser(description=__doc__);p.add_argument('--out',type=pathlib.Path,default=pathlib.Path('forge-out'));p.add_argument('--baseline',type=pathlib.Path);p.add_argument('--report',type=pathlib.Path,required=True);a=p.parse_args()
@@ -48,5 +49,5 @@ def main():
  report={'module_count':len(modules),'modules':modules,'delegate_layout_mismatches':fail,'baseline_deltas':delta,'layouts':layouts}
  a.report.parent.mkdir(exist_ok=True,parents=True);a.report.write_text(json.dumps(report,indent=2)+'\n')
  print(json.dumps({'module_count':len(modules),'delegate_layout_mismatches':fail,'baseline_changed_contracts':sorted(delta)},indent=2))
- return bool(fail)
+ return bool(fail or delta)
 if __name__=='__main__':sys.exit(main())

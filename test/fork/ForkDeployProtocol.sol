@@ -201,6 +201,9 @@ abstract contract ForkDeployProtocol is DeployProtocol {
         mockLINK = new MockLinkToken(); // nonce 3 (unused)
         mockFeed = new MockLinkEthFeed(int256(0.004 ether)); // nonce 4 (unused)
 
+        // BEGIN CANONICAL DEPLOYMENTS
+        (address[] memory owners, bytes32[] memory codes, uint8[] memory kicks,
+            address[] memory players, bytes32[] memory refs) = (new address[](0), new bytes32[](0), new uint8[](0), new address[](0), new bytes32[](0));
         icons32 = new Icons32Data(false);
         mintModule = new DegenerusGameMintModule();
         advanceModule = new DegenerusGameAdvanceModule();
@@ -217,16 +220,13 @@ abstract contract ForkDeployProtocol is DeployProtocol {
         coinflip = new Coinflip();
         game = new DegenerusGame();
         ticketModule = new DegenerusGameTicketModule();
-        affiliate = new DegenerusAffiliate(
-            new address[](0), new bytes32[](0), new uint8[](0), new address[](0), new bytes32[](0)
-        );
+        affiliate = new DegenerusAffiliate(owners, codes, kicks, players, refs);
         jackpots = new DegenerusJackpots();
         quests = new DegenerusQuests();
         deityPass = new DegenerusDeityPass();
         vault = new DegenerusVault();
         sdgnrs = new sDGNRS();
         dgnrs = new DGNRS();
-        // Admin's constructor runs createSubscription + addConsumer on the REAL coordinator.
         admin = new DegenerusAdmin();
         gnrus = new GNRUS();
         foilModule = new DegenerusGameFoilPackModule();
@@ -242,6 +242,7 @@ abstract contract ForkDeployProtocol is DeployProtocol {
         jackpotDrawModule = new DegenerusGameJackpotDrawModule();
         degenesisModule = new DegenerusGameDegenesisModule();
         ownerGovernance = new DegenerusOwnerGovernance();
+        // END CANONICAL DEPLOYMENTS
         game.initProtocolDeity();
 
         // Every CREATE landed on its compile-time constant: the fork build is the same protocol.

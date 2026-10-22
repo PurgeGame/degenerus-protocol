@@ -323,8 +323,8 @@ PURE-DERIVE	PARAM	word	sample	libraries/DecimatorSamplingLib.sol	H(SAMPLE_TAG,wo
 # 2026-10-06 Phase C: one queue entry per purchase; queued seeds root on (word, buffer, position) and the wallet ID
 CONSUMER-SEALED	ARG	EntropyLib.hash4	resolveHumanBoxOrder	modules/DegenerusGameLootboxModule.sol	rootWord = hash4(QUEUED_ORDER_DOMAIN, published session word, buffer, position): buffer and position were fixed by the purchase append before the buffer was sealed and its word requested
 CONSUMER-SEALED	PARAM	rngWord	resolveHumanBoxOrder	modules/DegenerusGameLootboxModule.sol	rngWord = _lootboxWord(read buffer), published at fulfilment; AFKing owns FIFO admission and stores the advanced cursor before this atomic per-entry settlement; the entry (wallet ID, counts) is immutable after its append
-NOT-RNG	PARAM	word	_appendBoxOrder	modules/DegenerusGameMintModule.sol	packed box queue entry being appended; not a VRF value
-NOT-RNG	PARAM	word	applyBoxOrderScore	modules/DegenerusGameLootboxModule.sol	in-flight packed box entry gaining its score and EV fraction; not a VRF value
+NOT-RNG	PARAM	word	_appendBoxOrder	modules/GamePurchase.sol	packed box queue entry being appended; not a VRF value
+NOT-RNG	PARAM	word	_applyBoxOrderScore	modules/GamePurchaseBox.sol	in-flight packed box entry gaining its score and EV fraction; not a VRF value
 NOT-RNG	PARAM	word	_rememberBoard	CrapsBattle.sol	The account's Craps address word (board, INITIALIZED, cached wallet ID) from the door prologue; contains no RNG value.
 NOT-RNG	PARAM	word	_appendBet	storage/CrapsBattleStorage.sol	Logical slip fields compressed into a lane; no entropy.
 NOT-RNG	PARAM	word	_writeBetLane	storage/CrapsBattleStorage.sol	Logical slip fields and calendar generation, not RNG.
@@ -333,8 +333,8 @@ PURE-DERIVE	ARG	EntropyLib.hash2	runBafAwards	modules/DegenerusGameJackpotModule
 PURE-DERIVE	ARG	JackpotBucketLib.unpackWinningTraits	runBafAwards	modules/DegenerusGameJackpotModule.sol	unpacks the main board derived from the locked word and frozen hero/golden-ticket inputs
 EXEMPT-ADVANCE	PARAM	word	runBafAwards	modules/DegenerusGameJackpotModule.sol	advance-dispatched word; main board inputs stay frozen throughout BAF and the later main draw
 EXEMPT-ADVANCE	PARAM	word	_drawBafPair	modules/DegenerusGameJackpotDrawModule.sol	locked award-stage word passed with the three fixed non-solo main traits
-NOT-RNG	ARG	BitPackingLib.setPacked	createSmurf	modules/DegenerusGameMintModule.sol	mintWord is ID-keyed mint/quota storage; the masked update changes creation count or base, not entropy
-NOT-RNG	ARG	BitPackingLib.setPacked	raiseSmurfBaseAllowance	modules/DegenerusGameMintModule.sol	mintWord is ID-keyed mint/quota storage; the masked update changes creation count or base, not entropy
+NOT-RNG	ARG	BitPackingLib.setPacked	_createSmurf	modules/GamePurchase.sol	mintWord is ID-keyed mint/quota storage; the masked update changes creation count or base, not entropy
+NOT-RNG	ARG	BitPackingLib.setPacked	_raiseSmurfBaseAllowance	modules/GamePurchase.sol	mintWord is ID-keyed mint/quota storage; the masked update changes creation count or base, not entropy
 
 # 2026-10-17 Degenesis: outcomes derive from the cohort's bound daily word, copied by _recordDailyRng
 CONSUMER-SEALED	ARG	EntropyLib.hash4	_degenesisOutcome	modules/DegenerusGameDegenesisModule.sol	seed = hash4(DEGENESIS_ORDER_DOMAIN, bound daily word, day << 32 | index, wallet ID): the word is the daily word of the request day the cohort was priced for, copied only after prepareDegenesis froze the cohort volume, budget and order list (orders close with the sale day); the index and wallet ID are fixed at the append, and the outcome is pure in state so it is computed before any order pays
@@ -350,3 +350,6 @@ NOT-RNG	PARAM	word	bonusScore	libraries/AffiliateEarningsLib.sol	Packed stake/af
 NOT-RNG	PARAM	word	score	libraries/AffiliateEarningsLib.sol	Packed stake/affiliate storage; contains no RNG word.
 NOT-RNG	ARG	PriceLookupLib.priceForLevel	afkingSnapshot	DegenerusGameLens.sol	The packed levelWord is slot0 state, not entropy; the view extracts active ticket level for the current price.
 PRODUCER	ARG	BoundedCall.call	_boundedVrfRequest	storage/DegenerusGameStorage.sol	Bounded VRF transport; only key/subscription/confirmation data leave; no previous outcome enters the request.
+
+EXEMPT-ADVANCE	PARAM	entropy	_bafNearRound	DegenerusJackpots.sol	private view helper receives unchanged hash2(base, round) from locked BAF pair draw; same band, trait and epoch, with sampling before ranking
+EXEMPT-ADVANCE	ARG	degenerusGame.sampleTraitEntries	_bafNearRound	DegenerusJackpots.sol	forwards the committed per-round entropy to the existing pinned Game sampler; near buffers prepared under the daily lock, no new actor input

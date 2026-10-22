@@ -93,3 +93,9 @@ include_push_bytes = true
 [profile.halmos]
 out = "forge-out-halmos"
 skip = ["test/access/**", "test/craps/**", "test/deploy/**", "test/differential/**", "test/economics/**", "test/edge/**", "test/fuzz/**", "test/gas/**", "test/governance/**", "test/integration/**", "test/invariant/**", "test/mutation/**", "test/repro/**", "test/stat/**", "test/unit/**", "test/validation/**"]
+
+# Logic and Osaka execution measurements only; native Glamsterdam must be verified separately.
+[profile.consolidation]
+# Test contracts embed the complete deployment bytecode. Production limits are checked separately.
+code_size_limit = 1048576
+fs_permissions = [{ access = "read", path = "./contracts" }, { access = "read", path = "./.planning/consolidation/baseline" }]

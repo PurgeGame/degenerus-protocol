@@ -1,0 +1,13 @@
+# Contract<TAB>maximum entry pointer<TAB>measured reason for retaining the spill
+# Measurements and scope: .planning/consolidation/STACK-SPILL-REPORT.md
+DegenerusGameMintModule	0xa0	Retained one word: removing it costs 134 gas on first purchase and 88 on Foil versus selected variant; Game is 0x80. Old scalar-entry control saves 28 gas; old return32 model 89 gas.
+CrapsBattle	0x260	Scalar-entry control 45 gas; 1045 player / 6728 protocol entries. Two range/context local variants fail Yul stack allocation; wider settlement-loop rewrite deferred.
+DegenerusQuests	0x160	Scalar-entry control 22 gas; zero-spill aggregate costs 302263 player gas and saves only 5956 protocol gas over long run; rejected.
+DegenerusGameTicketModule	0x3a0	Scalar-entry control 76 gas; 502 protocol entries, return32 model 38152 lifetime gas. Reservation spans award/drain/round/trait loops; broader worker rewrite deferred, no candidate saving claimed.
+DegenerusGameDegeneretteModule	0x1a0	Scalar-entry control 27 gas; 520 player / 756 protocol entries, return32 model 34452 lifetime gas. Placement and multi-spin settlement require coordinated hot-loop rewrite; not attempted.
+GameAfkingModule	0x160	Scalar-entry control 21 gas; 247 player / 891 protocol entries, return32 model 23898 lifetime gas. Subscriber funding, cursor and batched pool state cross bounded loop; broad rewrite deferred.
+JackpotBattle	0xc0	Return32 model 6 gas; 96 player / 3426 protocol entries, modeled 21132 lifetime gas. Two local helper extractions keep 0xc0 (23719 to 23717 runtime bytes); no spill benefit.
+DegenerusGameJackpotModule	0x180	Scalar-entry control 24 gas; 492 protocol entries, return32 model 11808 lifetime gas. ETH quadrant meter/resume/payout state spans hot loop; broader rewrite deferred.
+DegenerusParimutuel	0x140	Scalar-entry control 15 gas; 140 player / 47 protocol entries, return32 model 3366 lifetime gas. Growth-credit batching and packed winner walk share loop state; rewrite deferred, unmeasured candidate.
+DegenerusGameJackpotDrawModule	0x100	Scalar-entry control 12 gas; 229 protocol entries, return32 model 2748 lifetime gas. Cached per-level per-trait cursor draw loop would need wider state passing; rewrite deferred.
+DegenerusGameFoilPackModule	0x200	Scalar-entry control 36 gas; no long-run entries (Foil covered by focused replay). Reservation in nested four-line trait/reservation worker; no measured lifetime benefit to justify broader rewrite.

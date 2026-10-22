@@ -13,6 +13,7 @@ import {
   predictAddresses,
   computeDeployDayBoundary,
   DEPLOY_ORDER,
+  expandAliases,
   KEY_TO_CONTRACT,
 } from "./lib/predictAddresses.js";
 import {
@@ -130,6 +131,7 @@ async function main() {
 
     // 7. Verify addresses
     console.log("\nVerifying address predictions...");
+    for (const [alias, addr] of expandAliases(deployed)) deployed.set(alias, addr);
     verifyAddresses(predicted, deployed);
     console.log("All addresses match predictions.\n");
 

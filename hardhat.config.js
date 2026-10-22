@@ -64,7 +64,7 @@ const config = {
   },
   networks: {
     hardhat: {
-      allowUnlimitedContractSize: false,
+      allowUnlimitedContractSize: process.env.CONSOLIDATION_CANDIDATE === "true",
       accounts: { count: 310 },
     },
     localhost: {

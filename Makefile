@@ -89,6 +89,11 @@ check-write-owners:
 check-gasleft:
 	@bash scripts/check-gasleft.sh
 
+.PHONY: check-memory-guard
+check-memory-guard:
+	@FOUNDRY_DISABLE_NIGHTLY_WARNING=1 forge build --skip test >/dev/null
+	@python3 scripts/check-memory-guard.py
+
 # Compiler-AST source gate: every external, value, hook and assembly call is reviewed.
 .PHONY: check-recipient-calls
 check-recipient-calls:

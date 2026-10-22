@@ -139,13 +139,9 @@ contract QueueHost is DegenerusGame {
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
     }
 
-    /// @dev The production score encoder: `applyBoxOrderScore` on an empty entry.
-    function scoreWord(uint256 score) external returns (uint256) {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(
-            abi.encodeWithSignature("applyBoxOrderScore(uint256,uint256)", uint256(0), score)
-        );
-        if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
-        return abi.decode(data, (uint256));
+    /// @dev The production score encoder on an empty entry.
+    function scoreWord(uint256 score) external pure returns (uint256) {
+        return _applyBoxOrderScore(0, score);
     }
 
     function evMultiplier(uint256 score) external pure returns (uint256) {

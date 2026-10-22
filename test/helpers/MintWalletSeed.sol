@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.26;
 
-import {DegenerusGameMintModule} from "../../contracts/modules/DegenerusGameMintModule.sol";
+import {GamePurchase} from "../../contracts/modules/GamePurchase.sol";
+import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 
 /// @title MintWalletSeed — WalletSeed for harnesses built on the Mint module
 /// @dev Same helpers as WalletSeed (keep the two aligned); a separate base because the Mint
@@ -9,7 +10,65 @@ import {DegenerusGameMintModule} from "../../contracts/modules/DegenerusGameMint
 /// @notice Harnesses that extend Game storage (directly or through a module) mix this in to
 ///         register wallets the way production does (`_registerWallet`) and to read queue,
 ///         bucket and whale-pass state by address. Bucket and queue lanes hold wallet IDs.
-abstract contract MintWalletSeed is DegenerusGameMintModule {
+abstract contract MintWalletSeed is GamePurchase {
+
+    function purchase(
+        uint32 buyerId,
+        uint256 entryQuantityScaled,
+        uint256 boxOrder,
+        bytes32 affiliateCode,
+        MintPaymentKind payKind
+    ) external payable {
+        _purchase(buyerId, entryQuantityScaled, boxOrder, affiliateCode, payKind);
+    }
+
+    function purchaseWith(
+        uint32 buyerId,
+        uint256 entryQuantityScaled,
+        uint256 boxOrder,
+        bytes32 affiliateCode,
+        MintPaymentKind payKind,
+        uint256 ethValue,
+        uint32 payerId
+    ) external payable {
+        _purchaseWith(buyerId, entryQuantityScaled, boxOrder, affiliateCode, payKind, ethValue, payerId);
+    }
+
+    function createSmurf(bytes32 affiliateCode, MintPaymentKind payKind)
+        external
+        payable
+        returns (uint32 smurfId)
+    {
+        return _createSmurf(affiliateCode, payKind);
+    }
+
+    function raiseSmurfBaseAllowance(uint32 mainId, uint16 newBase) external {
+        _raiseSmurfBaseAllowance(mainId, newBase);
+    }
+
+    function redeemFlip(
+        uint32 id,
+        uint256 entryQuantityScaled
+    ) external {
+        _redeemFlip(id, entryQuantityScaled);
+    }
+
+    function withdrawAfkingFunding(uint32 id, uint256 amount) external {
+        _withdrawAfkingFunding(id, amount);
+    }
+
+    function borrow(uint32 id, uint24 dueLevel, uint256 amount, uint256 minEthOut) external {
+        _borrow(id, dueLevel, amount, minEthOut);
+    }
+
+    function repay(uint32 id) external payable {
+        _repay(id);
+    }
+
+    function sweepAccounts(uint32[] calldata ids) external returns (uint256 ethCollected, uint256 flipCollected) {
+        return _sweepAccounts(ids);
+    }
+
     /// @dev Test-only account-key decoder for stored wallet IDs.
     function _walletKey(uint32 id) internal view returns (address) {
         return address(uint160(_walletElement(id)));

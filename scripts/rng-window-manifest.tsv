@@ -182,9 +182,9 @@ GATE	_recordedDailyWord	_minerMiddayEligible	storage/DegenerusGameStorage.sol	RE
 GATE	rngRequestDay	_nextMinerAction	storage/DegenerusGameStorage.sol	READ	Logical commitment/application identity: set only on fresh normal/terminal boundary, preserved by callback/retry and all consumer checkpoints.
 ACCESSOR	_nudgeCount	_nudgeCount	storage/DegenerusGameStorage.sol	READ	Nine-bit slot-0 accessor; neighboring flags are masked.
 ACCESSOR	rngFlagsAndNudges	_nudgeCount	storage/DegenerusGameStorage.sol	READ	Extract frozen eight-bit count, capped255 by the only production buyer.
-GATE	_recordedDailyWord	_pastDeadlineTriggered	storage/DegenerusGameStorage.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
-GATE	rngRequestDay	_pastDeadlineTriggered	storage/DegenerusGameStorage.sol	READ	Only the current-day active published daily commitment defers the purchase deadline across gap-credit to daily-application checkpoint; older commitments never qualify.
-GATE	rngWordCurrent	_pastDeadlineTriggered	storage/DegenerusGameStorage.sol	READ	Readiness above the reserved waiting sentinel only; protects already committed current-day gap work without deriving an outcome or bypassing deadman and ending latches.
+GATE	_recordedDailyWord	_livenessTriggered	storage/DegenerusGameStorage.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
+GATE	rngRequestDay	_livenessTriggered	storage/DegenerusGameStorage.sol	READ	Only the current-day active published daily commitment defers the purchase deadline across gap-credit to daily-application checkpoint; older commitments never qualify.
+GATE	rngWordCurrent	_livenessTriggered	storage/DegenerusGameStorage.sol	READ	Readiness above the reserved waiting sentinel only; protects already committed current-day gap work without deriving an outcome or bypassing deadman and ending latches.
 PURE-DERIVE	_nudgeCount	_rawDailyRngWord	storage/DegenerusGameStorage.sol	READ	Daily-lock-frozen receipt lets gap derivation retain exact original entropy.
 PURE-DERIVE	_rawDailyRngWord	_rawDailyRngWord	storage/DegenerusGameStorage.sol	READ	Undo callback nudge/normalization only for raw replay and gap derivation.
 PRODUCER	rngDayTags	_recordDailyRng	storage/DegenerusGameStorage.sol	WRITE	advance-only ring write after committed consumers complete

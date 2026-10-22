@@ -227,17 +227,17 @@
     "path": "contracts/Coinflip.sol",
     "scope": "Coinflip._claimCoinflipsInternal",
     "kind": "external",
-    "expression": "jackpots.recordBafFlip(id, bafLvl, winningBafCredit)",
+    "expression": "jackpots.recordBafFlip(id, bafLvl, totals.winningBafCredit)",
     "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+    "review": "STACK_SPILL_REVIEW: Memory-only claim totals replace locals; the pinned Jackpots/WWXRP recipient, values, position after settlement loop and authorization are unchanged."
   },
   {
     "path": "contracts/Coinflip.sol",
     "scope": "Coinflip._claimCoinflipsInternal",
     "kind": "external",
-    "expression": "wwxrp.creditPrize(id, lossCount * COINFLIP_LOSS_WWXRP_REWARD)",
+    "expression": "wwxrp.creditPrize(id, totals.lossCount * COINFLIP_LOSS_WWXRP_REWARD)",
     "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+    "review": "STACK_SPILL_REVIEW: Memory-only claim totals replace locals; the pinned Jackpots/WWXRP recipient, values, position after settlement loop and authorization are unchanged."
   },
   {
     "path": "contracts/Coinflip.sol",
@@ -2697,14 +2697,6 @@
   },
   {
     "path": "contracts/DegenerusGame.sol",
-    "scope": "DegenerusGame._purchaseFor",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses .GAME_MINT_MODULE .delegatecall( abi.encodeWithSelector( IDegenerusGameMintModule.purchase.selector, buyer, entryQuantityScaled, boxOrder, affiliateCode, payKind ) )",
-    "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
-  },
-  {
-    "path": "contracts/DegenerusGame.sol",
     "scope": "DegenerusGame._requireVaultOwner",
     "kind": "external",
     "expression": "vault.isVaultOwner(msg.sender)",
@@ -2754,18 +2746,10 @@
   {
     "path": "contracts/DegenerusGame.sol",
     "scope": "DegenerusGame.borrow",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_MINT_MODULE.delegatecall(msg.data)",
-    "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
-  },
-  {
-    "path": "contracts/DegenerusGame.sol",
-    "scope": "DegenerusGame.boxesPending",
     "kind": "recipient-helper",
-    "expression": "_livenessTriggered()",
+    "expression": "_borrow(id, dueLevel, amount, minEthOut)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "Owner-authorized loan: resolves the funded protocol lender, records debt and debits backing before ETH/stETH payout to the account payee."
   },
   {
     "path": "contracts/DegenerusGame.sol",
@@ -2906,10 +2890,10 @@
   {
     "path": "contracts/DegenerusGame.sol",
     "scope": "DegenerusGame.createSmurf",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_MINT_MODULE.delegatecall(msg.data)",
+    "kind": "recipient-helper",
+    "expression": "_createSmurf(affiliateCode, payKind)",
     "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
+    "review": "Registered owner creates the capped child after the loan/family check; fixed Affiliate binds owner referral, then the explicit-value internal buy debits the owner."
   },
   {
     "path": "contracts/DegenerusGame.sol",
@@ -2953,14 +2937,6 @@
   },
   {
     "path": "contracts/DegenerusGame.sol",
-    "scope": "DegenerusGame.floorAfkingStreakBase",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses .GAME_AFKING_MODULE .delegatecall(msg.data)",
-    "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
-  },
-  {
-    "path": "contracts/DegenerusGame.sol",
     "scope": "DegenerusGame.initProtocolDeity",
     "kind": "opcode-or-value",
     "expression": "ContractAddresses.GAME_BOON_MODULE.delegatecall(msg.data)",
@@ -2974,14 +2950,6 @@
     "expression": "ContractAddresses.GAME_BOON_MODULE.delegatecall(msg.data)",
     "count": 1,
     "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
-  },
-  {
-    "path": "contracts/DegenerusGame.sol",
-    "scope": "DegenerusGame.livenessTriggered",
-    "kind": "recipient-helper",
-    "expression": "_livenessTriggered()",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/DegenerusGame.sol",
@@ -3099,9 +3067,9 @@
     "path": "contracts/DegenerusGame.sol",
     "scope": "DegenerusGame.purchase",
     "kind": "recipient-helper",
-    "expression": "_purchaseFor( id, entryQuantityScaled, boxOrder, affiliateCode, payKind )",
+    "expression": "_purchase( id, entryQuantityScaled, boxOrder, affiliateCode, payKind )",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "Player purchase resolves the account and funds the ticket/box legs in Game context; fixed Affiliate, Quests and Coinflip recipients retain their authorization."
   },
   {
     "path": "contracts/DegenerusGame.sol",
@@ -3130,18 +3098,10 @@
   {
     "path": "contracts/DegenerusGame.sol",
     "scope": "DegenerusGame.raiseSmurfBaseAllowance",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_MINT_MODULE.delegatecall(msg.data)",
+    "kind": "recipient-helper",
+    "expression": "_raiseSmurfBaseAllowance(mainId, newBase)",
     "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
-  },
-  {
-    "path": "contracts/DegenerusGame.sol",
-    "scope": "DegenerusGame.recordAfkingSecondary",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses .GAME_AFKING_MODULE .delegatecall(msg.data)",
-    "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
+    "review": "Fixed Vault view authorizes OWNER_GOVERNANCE; only a monotonic base increase on an ordinary main is permitted."
   },
   {
     "path": "contracts/DegenerusGame.sol",
@@ -3154,34 +3114,10 @@
   {
     "path": "contracts/DegenerusGame.sol",
     "scope": "DegenerusGame.redeemFlip",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_MINT_MODULE.delegatecall(msg.data)",
+    "kind": "recipient-helper",
+    "expression": "_redeemFlip(id, entryQuantityScaled)",
     "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
-  },
-  {
-    "path": "contracts/DegenerusGame.sol",
-    "scope": "DegenerusGame.registerWallet",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_TICKET_MODULE.delegatecall(msg.data)",
-    "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
-  },
-  {
-    "path": "contracts/DegenerusGame.sol",
-    "scope": "DegenerusGame.registerWalletIdentity",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_TICKET_MODULE.delegatecall(msg.data)",
-    "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
-  },
-  {
-    "path": "contracts/DegenerusGame.sol",
-    "scope": "DegenerusGame.repay",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_MINT_MODULE.delegatecall(msg.data)",
-    "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
+    "review": "Account-resolved FLIP redemption checks the live window before token burn, quest handling and Coinflip reward credit."
   },
   {
     "path": "contracts/DegenerusGame.sol",
@@ -3206,14 +3142,6 @@
     "expression": "coin.burnCoin(msg.sender, cost)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/DegenerusGame.sol",
-    "scope": "DegenerusGame.reverseFlip",
-    "kind": "recipient-helper",
-    "expression": "_livenessTriggered()",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/DegenerusGame.sol",
@@ -3306,10 +3234,10 @@
   {
     "path": "contracts/DegenerusGame.sol",
     "scope": "DegenerusGame.sweepAccounts",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_MINT_MODULE.delegatecall(msg.data)",
+    "kind": "recipient-helper",
+    "expression": "_sweepAccounts(ids)",
     "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
+    "review": "Authorized account sweep consolidates to its main; fixed Coinflip settles the child and the retained AFKing delegate frame applies the cashout curse."
   },
   {
     "path": "contracts/DegenerusGame.sol",
@@ -3330,10 +3258,10 @@
   {
     "path": "contracts/DegenerusGame.sol",
     "scope": "DegenerusGame.withdrawAfkingFunding",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_MINT_MODULE.delegatecall(msg.data)",
+    "kind": "recipient-helper",
+    "expression": "_withdrawAfkingFunding(id, amount)",
     "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
+    "review": "Owner/operator withdrawal debits the prepaid ledger and claimable pool before ETH/stETH payout to the account payee."
   },
   {
     "path": "contracts/DegenerusGame.sol",
@@ -4249,6 +4177,14 @@
   },
   {
     "path": "contracts/DegenerusJackpots.sol",
+    "scope": "DegenerusJackpots._bafNearRound",
+    "kind": "external",
+    "expression": "degenerusGame.sampleTraitEntries(nextLevel, draw.trait, entropy)",
+    "count": 1,
+    "review": "STACK_SPILL_REVIEW: Near-round helper keeps sampling before ranking for each existing draw; same pinned Game, trait, band and hash2(base, round) seed. No new caller or reentrancy boundary."
+  },
+  {
+    "path": "contracts/DegenerusJackpots.sol",
     "scope": "DegenerusJackpots.bafConsolationOf",
     "kind": "external",
     "expression": "degenerusGame.walletIdOf(player)",
@@ -4282,10 +4218,10 @@
   {
     "path": "contracts/DegenerusJackpots.sol",
     "scope": "DegenerusJackpots.bafPairWinners",
-    "kind": "external",
-    "expression": "degenerusGame.sampleTraitEntries( band == 1, draws[j].trait, EntropyLib.hash2(base, round) )",
+    "kind": "recipient-helper",
+    "expression": "_bafNearRound( draws[j], band == 1, lvl, currentEpoch, EntropyLib.hash2(base, round) )",
     "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+    "review": "STACK_SPILL_REVIEW: Near-round helper keeps sampling before ranking for each existing draw; same pinned Game, trait, band and hash2(base, round) seed. No new caller or reentrancy boundary."
   },
   {
     "path": "contracts/DegenerusJackpots.sol",
@@ -6753,14 +6689,6 @@
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
-    "scope": "DegenerusGameAdvanceModule._activateNextTickets",
-    "kind": "recipient-helper",
-    "expression": "_livenessTriggered()",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule._autoStakeExcessEth",
     "kind": "opcode-or-value",
     "expression": "ContractAddresses.GAME_ADVANCE_MODULE.delegatecall( abi.encodeWithSelector(IDegenerusGameAdvanceModule.stakeExcessEth.selector, stakeable))",
@@ -7001,14 +6929,6 @@
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
-    "scope": "DegenerusGameAdvanceModule.applyDailyGap",
-    "kind": "recipient-helper",
-    "expression": "_livenessTriggered()",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule.applyDailyWord",
     "kind": "external",
     "expression": "ICrapsBonusDay(ContractAddresses.CRAPS).openBonusDay()",
@@ -7049,14 +6969,6 @@
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
-    "scope": "DegenerusGameAdvanceModule.applyDailyWord",
-    "kind": "recipient-helper",
-    "expression": "_livenessTriggered()",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule.prepareRequestBoundary",
     "kind": "external",
     "expression": "IJackpotBattle(ContractAddresses.CRAPS).lockJackpotBattle(battleDay, _levelPrizePool(poolLevel), level)",
@@ -7086,22 +6998,6 @@
     "expression": "ContractAddresses.GAME_DEGENESIS_MODULE.delegatecall( abi.encodeWithSelector(IDegenerusGameDegenesisModule.prepareDegenesis.selector, day) )",
     "count": 1,
     "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
-    "scope": "DegenerusGameAdvanceModule.prepareRequestBoundary",
-    "kind": "recipient-helper",
-    "expression": "_activateNextTickets()",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
-    "scope": "DegenerusGameAdvanceModule.prepareRequestBoundary",
-    "kind": "recipient-helper",
-    "expression": "_livenessTriggered()",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
@@ -7164,14 +7060,6 @@
     "scope": "DegenerusGameAdvanceModule.runDailyPhase",
     "kind": "recipient-helper",
     "expression": "_endPhase(lvl)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
-    "scope": "DegenerusGameAdvanceModule.runDailyPhase",
-    "kind": "recipient-helper",
-    "expression": "_livenessTriggered()",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
@@ -7292,14 +7180,6 @@
     "scope": "DegenerusGameAdvanceModule.runTerminalPhase",
     "kind": "recipient-helper",
     "expression": "_handleGameOverPath(_simulatedDayIndex(), level, MineFlipGas.child(meter, GasBounds.DAILY_PHASE_TAIL))",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
-    "scope": "DegenerusGameAdvanceModule.runTerminalPhase",
-    "kind": "recipient-helper",
-    "expression": "_livenessTriggered()",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
@@ -7763,14 +7643,6 @@
     "path": "contracts/modules/DegenerusGameDegeneretteModule.sol",
     "scope": "DegenerusGameDegeneretteModule.placeDegeneretteBet",
     "kind": "recipient-helper",
-    "expression": "_livenessTriggered()",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameDegeneretteModule.sol",
-    "scope": "DegenerusGameDegeneretteModule.placeDegeneretteBet",
-    "kind": "recipient-helper",
     "expression": "_placeDegeneretteBet( id, gift ? msg.sender : payee, gift, currency, amountPerSpin, spinCount, symbol )",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
@@ -7833,14 +7705,6 @@
   },
   {
     "path": "contracts/modules/DegenerusGameDegenesisModule.sol",
-    "scope": "DegenerusGameDegenesisModule.buyDegenesisBox",
-    "kind": "recipient-helper",
-    "expression": "_livenessTriggered()",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameDegenesisModule.sol",
     "scope": "DegenerusGameDegenesisModule.prepareDegenesis",
     "kind": "external",
     "expression": "dgnrs.poolBalance(IsDGNRS.Pool.Degenesis)",
@@ -7883,9 +7747,9 @@
     "path": "contracts/modules/DegenerusGameDegenesisModule.sol",
     "scope": "DegenerusGameDegenesisModule.spendDegenesis",
     "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_MINT_MODULE.delegatecall(abi.encodeWithSelector( IDegenerusGameMintModule.purchase.selector, uint32(0), quantity, boxOrder, bytes32(0), MintPaymentKind.Claimable ))",
+    "expression": "ContractAddresses.GAME.delegatecall(abi.encodeWithSelector( IDegenerusGame.purchase.selector, uint32(0), quantity, boxOrder, bytes32(0), MintPaymentKind.Claimable, false ))",
     "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
+    "review": "Restricted protocol Degenesis budget delegates to the fixed Game six-argument purchase with foil=false. Game context, original caller, claimable funding and revert atomicity are preserved."
   },
   {
     "path": "contracts/modules/DegenerusGameDegenesisModule.sol",
@@ -7926,14 +7790,6 @@
     "expression": "quests .handleFoilPurchase(buyerId, cost, 0, 0, priceWei, levelQuestPrice)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameFoilPackModule.sol",
-    "scope": "DegenerusGameFoilPackModule._buyFoilPack",
-    "kind": "recipient-helper",
-    "expression": "_livenessTriggered()",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/modules/DegenerusGameFoilPackModule.sol",
@@ -8051,14 +7907,6 @@
     "path": "contracts/modules/DegenerusGameFoilPackModule.sol",
     "scope": "DegenerusGameFoilPackModule.claimFoilMatch",
     "kind": "recipient-helper",
-    "expression": "_livenessTriggered()",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameFoilPackModule.sol",
-    "scope": "DegenerusGameFoilPackModule.claimFoilMatch",
-    "kind": "recipient-helper",
     "expression": "_tryClaimFoilMatch(playerId, day, ticketIndex)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
@@ -8070,14 +7918,6 @@
     "expression": "this.claimFoilMatch( id == 0 ? _walletIdOf(msg.sender) : id, drawDays[i], ticketIndexes[i] )",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameFoilPackModule.sol",
-    "scope": "DegenerusGameFoilPackModule.claimGoldenTicket",
-    "kind": "recipient-helper",
-    "expression": "_livenessTriggered()",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/modules/DegenerusGameFoilPackModule.sol",
@@ -8221,14 +8061,6 @@
     "kind": "recipient-helper",
     "expression": "_handleGameOverDrain(day, meter, work)",
     "count": 3,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameGameOverModule.sol",
-    "scope": "DegenerusGameGameOverModule._handleGameOverAdvance",
-    "kind": "recipient-helper",
-    "expression": "_livenessTriggered()",
-    "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
@@ -8969,14 +8801,6 @@
   },
   {
     "path": "contracts/modules/DegenerusGameLootboxModule.sol",
-    "scope": "DegenerusGameLootboxModule.beginBoxOrder",
-    "kind": "external",
-    "expression": "coinflip.armRecord(RECORD_KIND_LUCKBOX, buyerId, candidate)",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameLootboxModule.sol",
     "scope": "DegenerusGameLootboxModule.resolveAfkingBox",
     "kind": "recipient-helper",
     "expression": "_flushBoxAcc(id, acc, currentLevel)",
@@ -9121,299 +8945,11 @@
   },
   {
     "path": "contracts/modules/DegenerusGameMintModule.sol",
-    "scope": "DegenerusGameMintModule._callTicketPurchase",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses .GAME_BOON_MODULE .delegatecall( abi.encodeWithSelector( IDegenerusGameBoonModule.consumePurchaseBoost.selector, buyerId ) )",
-    "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMintModule.sol",
-    "scope": "DegenerusGameMintModule._callTicketPurchase",
-    "kind": "recipient-helper",
-    "expression": "_coinReceive(_payee(_walletElement(buyerId)), coinCost)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMintModule.sol",
-    "scope": "DegenerusGameMintModule._callTicketPurchase",
-    "kind": "recipient-helper",
-    "expression": "_recordMintData(buyerId, targetLevel, mintUnits)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMintModule.sol",
-    "scope": "DegenerusGameMintModule._coinReceive",
-    "kind": "external",
-    "expression": "coin.burnCoin(payer, amount)",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMintModule.sol",
-    "scope": "DegenerusGameMintModule._lootboxLeg",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_LOOTBOX_MODULE.delegatecall(payload)",
-    "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMintModule.sol",
-    "scope": "DegenerusGameMintModule._pastDeadlineTriggered",
-    "kind": "external",
-    "expression": "IDegenerusGame(address(this)).livenessTriggered()",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMintModule.sol",
-    "scope": "DegenerusGameMintModule._purchaseFor",
-    "kind": "recipient-helper",
-    "expression": "_purchaseForWithCached( buyerId, entryQuantityScaled, boxOrder, affiliateCode, payKind, fresh, cachedJpFlag, cachedLevel, priceWei, ticketCost, buyerId )",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMintModule.sol",
-    "scope": "DegenerusGameMintModule._purchaseForWith",
-    "kind": "recipient-helper",
-    "expression": "_purchaseForWithCached( buyerId, entryQuantityScaled, boxOrder, affiliateCode, payKind, ethValue, cachedJpFlag, cachedLevel, priceWei, ticketCost, payerId )",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMintModule.sol",
-    "scope": "DegenerusGameMintModule._purchaseForWithCached",
-    "kind": "external",
-    "expression": "affiliate.payAffiliateCombined( affiliateCode, buyerId, cachedLevel + 1, ticketFreshFlip, ticketRecycledFlip, lbFreshFlip, lbRecycledFlip, uint16(cachedScore) )",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMintModule.sol",
-    "scope": "DegenerusGameMintModule._purchaseForWithCached",
-    "kind": "external",
-    "expression": "coinflip.armRecord( RECORD_KIND_BUY, buyerId, entryQuantityScaled / (4 * QTY_SCALE) )",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMintModule.sol",
-    "scope": "DegenerusGameMintModule._purchaseForWithCached",
-    "kind": "external",
-    "expression": "coinflip.creditFlipPair( buyerId, lootboxFlipCredit, affWinnerId, affWinnerCredit )",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMintModule.sol",
-    "scope": "DegenerusGameMintModule._purchaseForWithCached",
-    "kind": "external",
-    "expression": "quests.handlePurchase( buyerId, totalCost, flipMintUnits, lootBoxAmount, priceWei, cachedJpFlag ? PriceLookupLib.priceForLevel(cachedLevel + 1) : priceWei )",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMintModule.sol",
-    "scope": "DegenerusGameMintModule._purchaseForWithCached",
-    "kind": "recipient-helper",
-    "expression": "_callTicketPurchase( buyerId, payerId, entryQuantityScaled, payKind, remainingEth, cachedJpFlag )",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMintModule.sol",
-    "scope": "DegenerusGameMintModule._purchaseForWithCached",
-    "kind": "recipient-helper",
-    "expression": "_livenessTriggered()",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMintModule.sol",
-    "scope": "DegenerusGameMintModule._purchaseForWithCached",
-    "kind": "recipient-helper",
-    "expression": "_lootboxLeg( abi.encodeWithSelector( IDegenerusGameLootboxModule.applyBoxOrderScore.selector, boxWord, cachedScore ) )",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMintModule.sol",
-    "scope": "DegenerusGameMintModule._purchaseForWithCached",
-    "kind": "recipient-helper",
-    "expression": "_lootboxLeg( abi.encodeWithSelector( IDegenerusGameLootboxModule.beginBoxOrder.selector, buyerId, boxOrder ) )",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMintModule.sol",
-    "scope": "DegenerusGameMintModule._purchaseForWithCached",
-    "kind": "recipient-helper",
-    "expression": "_playerActivityScore(buyerId, questStreak)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMintModule.sol",
-    "scope": "DegenerusGameMintModule._purchaseForWithCached",
-    "kind": "recipient-helper",
-    "expression": "_recordLootboxUnits(buyerId, lootBoxAmount)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMintModule.sol",
-    "scope": "DegenerusGameMintModule._redeemFlipFor",
-    "kind": "external",
-    "expression": "coinflip.creditFlip(buyerId, questReward)",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMintModule.sol",
-    "scope": "DegenerusGameMintModule._redeemFlipFor",
-    "kind": "external",
-    "expression": "quests .handlePurchase( buyerId, 0, flipMintUnits, 0, nextLevelPrice, nextLevelPrice )",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMintModule.sol",
-    "scope": "DegenerusGameMintModule._redeemFlipFor",
-    "kind": "recipient-helper",
-    "expression": "_callTicketPurchase( buyerId, 0, entryQuantityScaled, MintPaymentKind.DirectEth, 0, jackpotPhaseFlag )",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMintModule.sol",
-    "scope": "DegenerusGameMintModule._redeemFlipFor",
-    "kind": "recipient-helper",
-    "expression": "_livenessTriggered()",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMintModule.sol",
-    "scope": "DegenerusGameMintModule.borrow",
-    "kind": "recipient-helper",
-    "expression": "_livenessTriggered()",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMintModule.sol",
-    "scope": "DegenerusGameMintModule.borrow",
-    "kind": "recipient-helper",
-    "expression": "_payoutWithStethFallback(borrower, principal - ticketWei)",
-    "count": 1,
-    "review": "OFF_CHAIN: existing holder withdrawal/loan/charity route; transitive helper call pinned, new caller requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMintModule.sol",
-    "scope": "DegenerusGameMintModule.borrow",
-    "kind": "recipient-helper",
-    "expression": "_resolveLender(principal)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMintModule.sol",
-    "scope": "DegenerusGameMintModule.createSmurf",
-    "kind": "external",
-    "expression": "affiliate.payAffiliate(0, affiliateCode, ownerId, level + 1, true, 0)",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMintModule.sol",
-    "scope": "DegenerusGameMintModule.createSmurf",
-    "kind": "external",
-    "expression": "affiliate.referSmurf(ownerId, smurfId)",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMintModule.sol",
-    "scope": "DegenerusGameMintModule.createSmurf",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_MINT_MODULE.delegatecall( abi.encodeWithSelector( IDegenerusGameMintModule.purchaseWith.selector, smurfId, 4 * QTY_SCALE, 0, bytes32(0), payKind, fresh, ownerId ) )",
-    "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMintModule.sol",
-    "scope": "DegenerusGameMintModule.createSmurf",
-    "kind": "recipient-helper",
-    "expression": "_effectiveQuestStreak(ownerId)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMintModule.sol",
-    "scope": "DegenerusGameMintModule.createSmurf",
-    "kind": "recipient-helper",
-    "expression": "_playerActivityScore(ownerId, _effectiveQuestStreak(ownerId))",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMintModule.sol",
-    "scope": "DegenerusGameMintModule.purchase",
-    "kind": "recipient-helper",
-    "expression": "_purchaseFor( _resolveAccountId(buyerId), entryQuantityScaled, boxOrder, affiliateCode, payKind )",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMintModule.sol",
     "scope": "DegenerusGameMintModule.purchaseWith",
     "kind": "recipient-helper",
-    "expression": "_purchaseForWith( buyerId, entryQuantityScaled, boxOrder, affiliateCode, payKind, ethValue, payerId )",
+    "expression": "_purchaseWith(buyerId, entryQuantityScaled, boxOrder, affiliateCode, payKind, ethValue, payerId)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMintModule.sol",
-    "scope": "DegenerusGameMintModule.raiseSmurfBaseAllowance",
-    "kind": "external",
-    "expression": "IDegenerusVaultOwner(ContractAddresses.VAULT).isVaultOwner(msg.sender)",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMintModule.sol",
-    "scope": "DegenerusGameMintModule.redeemFlip",
-    "kind": "recipient-helper",
-    "expression": "_redeemFlipFor(buyerId, entryQuantityScaled)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMintModule.sol",
-    "scope": "DegenerusGameMintModule.sweepAccounts",
-    "kind": "external",
-    "expression": "coinflip.sweepAccountCoinflips(id)",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMintModule.sol",
-    "scope": "DegenerusGameMintModule.sweepAccounts",
-    "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_AFKING_MODULE.delegatecall( abi.encodeWithSelector(IGameAfkingModule.maybeCurse.selector, id) )",
-    "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameMintModule.sol",
-    "scope": "DegenerusGameMintModule.withdrawAfkingFunding",
-    "kind": "recipient-helper",
-    "expression": "_payoutWithStethFallback(payee, amount)",
-    "count": 1,
-    "review": "OFF_CHAIN: existing holder withdrawal/loan/charity route; transitive helper call pinned, new caller requires review."
+    "review": "Internal explicit-value purchase leg in Game storage; fixed Affiliate, Quests and Coinflip calls preserve original caller, account authorization, payment split and revert atomicity. Mint adapter entry rejects direct calls."
   },
   {
     "path": "contracts/modules/DegenerusGameMintStreakUtils.sol",
@@ -9539,14 +9075,6 @@
     "path": "contracts/modules/DegenerusGameRngModule.sol",
     "scope": "DegenerusGameRngModule._requestLootboxRng",
     "kind": "recipient-helper",
-    "expression": "_livenessTriggered()",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameRngModule.sol",
-    "scope": "DegenerusGameRngModule._requestLootboxRng",
-    "kind": "recipient-helper",
     "expression": "_minerMaintenancePending()",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
@@ -9609,27 +9137,11 @@
   },
   {
     "path": "contracts/modules/DegenerusGameRngModule.sol",
-    "scope": "DegenerusGameRngModule.publishRng",
-    "kind": "recipient-helper",
-    "expression": "_livenessTriggered()",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameRngModule.sol",
     "scope": "DegenerusGameRngModule.requestDailyRng",
     "kind": "opcode-or-value",
     "expression": "ContractAddresses.GAME_ADVANCE_MODULE.delegatecall( abi.encodeWithSelector(IDegenerusGameAdvanceModule.prepareRequestBoundary.selector, day) )",
     "count": 1,
     "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameRngModule.sol",
-    "scope": "DegenerusGameRngModule.requestDailyRng",
-    "kind": "recipient-helper",
-    "expression": "_livenessTriggered()",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/modules/DegenerusGameRngModule.sol",
@@ -9660,14 +9172,6 @@
     "scope": "DegenerusGameRngModule.requestMinerRng",
     "kind": "recipient-helper",
     "expression": "_requestLootboxRng(msg.sender)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameRngModule.sol",
-    "scope": "DegenerusGameRngModule.retryRng",
-    "kind": "recipient-helper",
-    "expression": "_livenessTriggered()",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
@@ -9881,14 +9385,6 @@
   },
   {
     "path": "contracts/modules/DegenerusGameWhaleModule.sol",
-    "scope": "DegenerusGameWhaleModule.claimWhalePass",
-    "kind": "recipient-helper",
-    "expression": "_livenessTriggered()",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameWhaleModule.sol",
     "scope": "DegenerusGameWhaleModule.purchaseDeityPass",
     "kind": "external",
     "expression": "ICrapsPassCredit(ContractAddresses.CRAPS).creditPasses( buyerId, earlyDeity ? 0 : 1, earlyDeity ? 1 : 0 )",
@@ -9916,14 +9412,6 @@
     "scope": "DegenerusGameWhaleModule.purchaseDeityPass",
     "kind": "recipient-helper",
     "expression": "_grantSeatCoin(buyerId)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameWhaleModule.sol",
-    "scope": "DegenerusGameWhaleModule.purchaseDeityPass",
-    "kind": "recipient-helper",
-    "expression": "_livenessTriggered()",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
@@ -9987,14 +9475,6 @@
     "path": "contracts/modules/DegenerusGameWhaleModule.sol",
     "scope": "DegenerusGameWhaleModule.purchaseLazyPass",
     "kind": "recipient-helper",
-    "expression": "_livenessTriggered()",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameWhaleModule.sol",
-    "scope": "DegenerusGameWhaleModule.purchaseLazyPass",
-    "kind": "recipient-helper",
     "expression": "_recordLootboxEntry(buyerId, lootboxAmount, 1)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
@@ -10009,25 +9489,9 @@
   },
   {
     "path": "contracts/modules/DegenerusGameWhaleModule.sol",
-    "scope": "DegenerusGameWhaleModule.purchaseWhalePass",
-    "kind": "recipient-helper",
-    "expression": "_livenessTriggered()",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameWhaleModule.sol",
     "scope": "DegenerusGameWhaleModule.purchaseWhalePassForSdgnrs",
     "kind": "recipient-helper",
     "expression": "_deliverWhalePass( SDGNRS_WALLET_ID, passLevel, paidPasses, totalPrice, 0, hasValidBoon, s0, bytes32(0) )",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameWhaleModule.sol",
-    "scope": "DegenerusGameWhaleModule.purchaseWhalePassForSdgnrs",
-    "kind": "recipient-helper",
-    "expression": "_livenessTriggered()",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
@@ -10155,14 +9619,6 @@
     "path": "contracts/modules/GameAfkingModule.sol",
     "scope": "GameAfkingModule._runSubscriberWork",
     "kind": "recipient-helper",
-    "expression": "_livenessTriggered()",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/GameAfkingModule.sol",
-    "scope": "GameAfkingModule._runSubscriberWork",
-    "kind": "recipient-helper",
     "expression": "_pauseProtocolSeat(element, position + 1, unfunded)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
@@ -10233,27 +9689,11 @@
   },
   {
     "path": "contracts/modules/GameAfkingModule.sol",
-    "scope": "GameAfkingModule.claimAfkingFlip",
-    "kind": "recipient-helper",
-    "expression": "_livenessTriggered()",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/GameAfkingModule.sol",
     "scope": "GameAfkingModule.decurse",
     "kind": "external",
     "expression": "coin.burnCoin(msg.sender, PRICE_COIN_UNIT / 10)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/modules/GameAfkingModule.sol",
-    "scope": "GameAfkingModule.drainAffiliateBases",
-    "kind": "recipient-helper",
-    "expression": "_livenessTriggered()",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/modules/GameAfkingModule.sol",
@@ -10387,14 +9827,6 @@
     "path": "contracts/modules/GameAfkingModule.sol",
     "scope": "GameAfkingModule.subscribe",
     "kind": "recipient-helper",
-    "expression": "_livenessTriggered()",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/modules/GameAfkingModule.sol",
-    "scope": "GameAfkingModule.subscribe",
-    "kind": "recipient-helper",
     "expression": "_pauseProtocolSeat(subId, position1, AFK_VAULT_OWNER_PAUSED)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
@@ -10406,6 +9838,254 @@
     "expression": "_settleBoth(subId)",
     "count": 2,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._borrow",
+    "kind": "recipient-helper",
+    "expression": "_payoutWithStethFallback(borrower, principal - ticketWei)",
+    "count": 1,
+    "review": "Owner-authorized loan: resolves the funded protocol lender, records debt and debits backing before ETH/stETH payout to the account payee."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._borrow",
+    "kind": "recipient-helper",
+    "expression": "_resolveLender(principal)",
+    "count": 1,
+    "review": "Owner-authorized loan: resolves the funded protocol lender, records debt and debits backing before ETH/stETH payout to the account payee."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._callTicketPurchase",
+    "kind": "recipient-helper",
+    "expression": "_coinReceive(_payee(_walletElement(buyerId)), coinCost)",
+    "count": 1,
+    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._callTicketPurchase",
+    "kind": "recipient-helper",
+    "expression": "_recordMintData(buyerId, targetLevel, mintUnits)",
+    "count": 1,
+    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._coinReceive",
+    "kind": "external",
+    "expression": "coin.burnCoin(payer, amount)",
+    "count": 1,
+    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._createSmurf",
+    "kind": "external",
+    "expression": "affiliate.payAffiliate(0, affiliateCode, ownerId, level + 1, true, 0)",
+    "count": 1,
+    "review": "Registered owner creates the capped child after the loan/family check; fixed Affiliate binds owner referral, then the explicit-value internal buy debits the owner."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._createSmurf",
+    "kind": "external",
+    "expression": "affiliate.referSmurf(ownerId, smurfId)",
+    "count": 1,
+    "review": "Registered owner creates the capped child after the loan/family check; fixed Affiliate binds owner referral, then the explicit-value internal buy debits the owner."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._createSmurf",
+    "kind": "recipient-helper",
+    "expression": "_effectiveQuestStreak(ownerId)",
+    "count": 1,
+    "review": "Registered owner creates the capped child after the loan/family check; fixed Affiliate binds owner referral, then the explicit-value internal buy debits the owner."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._createSmurf",
+    "kind": "recipient-helper",
+    "expression": "_playerActivityScore(ownerId, _effectiveQuestStreak(ownerId))",
+    "count": 1,
+    "review": "Registered owner creates the capped child after the loan/family check; fixed Affiliate binds owner referral, then the explicit-value internal buy debits the owner."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._createSmurf",
+    "kind": "recipient-helper",
+    "expression": "_purchaseWith(smurfId, 4 * QTY_SCALE, 0, bytes32(0), payKind, fresh, ownerId)",
+    "count": 1,
+    "review": "Registered owner creates the capped child after the loan/family check; fixed Affiliate binds owner referral, then the explicit-value internal buy debits the owner."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._purchase",
+    "kind": "recipient-helper",
+    "expression": "_purchaseForAccount( _resolveAccountId(buyerId), entryQuantityScaled, boxOrder, affiliateCode, payKind )",
+    "count": 1,
+    "review": "Player purchase resolves the account and funds the ticket/box legs in Game context; fixed Affiliate, Quests and Coinflip recipients retain their authorization."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._purchaseForAccount",
+    "kind": "recipient-helper",
+    "expression": "_purchaseForWithCached( buyerId, entryQuantityScaled, boxOrder, affiliateCode, payKind, fresh, quote, buyerId )",
+    "count": 1,
+    "review": "STACK_SPILL_REVIEW: Quote and funding aggregates are memory-only same-frame values. ETH purchase callers resolve nonzero payer before ticket purchase, so FLIP quest units remain zero. Pinned recipients and call order unchanged."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._purchaseForWith",
+    "kind": "recipient-helper",
+    "expression": "_purchaseForWithCached( buyerId, entryQuantityScaled, boxOrder, affiliateCode, payKind, ethValue, quote, payerId )",
+    "count": 1,
+    "review": "STACK_SPILL_REVIEW: Quote and funding aggregates are memory-only same-frame values. ETH purchase callers resolve nonzero payer before ticket purchase, so FLIP quest units remain zero. Pinned recipients and call order unchanged."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._purchaseForWithCached",
+    "kind": "external",
+    "expression": "affiliate.payAffiliateCombined( affiliateCode, buyerId, quote.cachedLevel + 1, ticket.ticketFreshFlip, ticket.ticketRecycledFlip, lbFreshFlip, lbRecycledFlip, uint16(cachedScore) )",
+    "count": 1,
+    "review": "STACK_SPILL_REVIEW: Quote and funding aggregates are memory-only same-frame values. ETH purchase callers resolve nonzero payer before ticket purchase, so FLIP quest units remain zero. Pinned recipients and call order unchanged."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._purchaseForWithCached",
+    "kind": "external",
+    "expression": "coinflip.armRecord( RECORD_KIND_BUY, buyerId, entryQuantityScaled / (4 * QTY_SCALE) )",
+    "count": 1,
+    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._purchaseForWithCached",
+    "kind": "external",
+    "expression": "coinflip.creditFlipPair( buyerId, lootboxFlipCredit, affWinnerId, affWinnerCredit )",
+    "count": 1,
+    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._purchaseForWithCached",
+    "kind": "external",
+    "expression": "quests.handlePurchase( buyerId, totalCost, 0, lootBoxAmount, quote.priceWei, quote.cachedJpFlag ? PriceLookupLib.priceForLevel(quote.cachedLevel + 1) : quote.priceWei )",
+    "count": 1,
+    "review": "STACK_SPILL_REVIEW: Quote and funding aggregates are memory-only same-frame values. ETH purchase callers resolve nonzero payer before ticket purchase, so FLIP quest units remain zero. Pinned recipients and call order unchanged."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._purchaseForWithCached",
+    "kind": "recipient-helper",
+    "expression": "_beginBoxOrder(buyerId, boxOrder)",
+    "count": 1,
+    "review": "Internal explicit-value purchase leg in Game storage; fixed Affiliate, Quests and Coinflip calls preserve original caller, account authorization, payment split and revert atomicity. Mint adapter entry rejects direct calls."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._purchaseForWithCached",
+    "kind": "recipient-helper",
+    "expression": "_callTicketPurchase( buyerId, payerId, entryQuantityScaled, payKind, remainingEth, quote.cachedJpFlag, ticket )",
+    "count": 1,
+    "review": "STACK_SPILL_REVIEW: Quote and funding aggregates are memory-only same-frame values. ETH purchase callers resolve nonzero payer before ticket purchase, so FLIP quest units remain zero. Pinned recipients and call order unchanged."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._purchaseForWithCached",
+    "kind": "recipient-helper",
+    "expression": "_playerActivityScore(buyerId, questStreak)",
+    "count": 1,
+    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._purchaseForWithCached",
+    "kind": "recipient-helper",
+    "expression": "_recordLootboxUnits(buyerId, lootBoxAmount)",
+    "count": 1,
+    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._purchaseWith",
+    "kind": "recipient-helper",
+    "expression": "_purchaseForWith( buyerId, entryQuantityScaled, boxOrder, affiliateCode, payKind, ethValue, payerId )",
+    "count": 1,
+    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._raiseSmurfBaseAllowance",
+    "kind": "external",
+    "expression": "IDegenerusVaultOwner(ContractAddresses.VAULT).isVaultOwner(msg.sender)",
+    "count": 1,
+    "review": "Fixed Vault view authorizes OWNER_GOVERNANCE; only a monotonic base increase on an ordinary main is permitted."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._redeemFlip",
+    "kind": "recipient-helper",
+    "expression": "_redeemFlipFor(buyerId, entryQuantityScaled)",
+    "count": 1,
+    "review": "Account-resolved FLIP redemption checks the live window before token burn, quest handling and Coinflip reward credit."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._redeemFlipFor",
+    "kind": "external",
+    "expression": "coinflip.creditFlip(buyerId, questReward)",
+    "count": 1,
+    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._redeemFlipFor",
+    "kind": "external",
+    "expression": "quests .handlePurchase( buyerId, 0, uint32(entryQuantityScaled / (4 * QTY_SCALE)), 0, nextLevelPrice, nextLevelPrice )",
+    "count": 1,
+    "review": "STACK_SPILL_REVIEW: FLIP quest units are the same bounded quantity/(4*QTY_SCALE); shared ticket funding uses caller memory. Pinned recipients and call order unchanged."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._redeemFlipFor",
+    "kind": "recipient-helper",
+    "expression": "_callTicketPurchase( buyerId, 0, entryQuantityScaled, MintPaymentKind.DirectEth, 0, jackpotPhaseFlag, ticket )",
+    "count": 1,
+    "review": "STACK_SPILL_REVIEW: FLIP quest units are the same bounded quantity/(4*QTY_SCALE); shared ticket funding uses caller memory. Pinned recipients and call order unchanged."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._sweepAccounts",
+    "kind": "external",
+    "expression": "coinflip.sweepAccountCoinflips(id)",
+    "count": 1,
+    "review": "Authorized account sweep consolidates to its main; fixed Coinflip settles the child and the retained AFKing delegate frame applies the cashout curse."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._sweepAccounts",
+    "kind": "opcode-or-value",
+    "expression": "ContractAddresses.GAME_AFKING_MODULE.delegatecall( abi.encodeWithSelector(IGameAfkingModule.maybeCurse.selector, id) )",
+    "count": 1,
+    "review": "Authorized account sweep consolidates to its main; fixed Coinflip settles the child and the retained AFKing delegate frame applies the cashout curse."
+  },
+  {
+    "path": "contracts/modules/GamePurchase.sol",
+    "scope": "GamePurchase._withdrawAfkingFunding",
+    "kind": "recipient-helper",
+    "expression": "_payoutWithStethFallback(payee, amount)",
+    "count": 1,
+    "review": "Owner/operator withdrawal debits the prepaid ledger and claimable pool before ETH/stETH payout to the account payee."
+  },
+  {
+    "path": "contracts/modules/GamePurchaseBox.sol",
+    "scope": "GamePurchaseBox._beginBoxOrder",
+    "kind": "external",
+    "expression": "coinflip.armRecord(RECORD_KIND_LUCKBOX, buyerId, candidate)",
+    "count": 1,
+    "review": "Internal box admission arms the fixed Coinflip record bounty for the validated buyer and custom per-box value; no arbitrary recipient."
   },
   {
     "path": "contracts/sDGNRS.sol",
@@ -10905,14 +10585,6 @@
   },
   {
     "path": "contracts/storage/DegenerusGameStorage.sol",
-    "scope": "DegenerusGameStorage._livenessTriggered",
-    "kind": "recipient-helper",
-    "expression": "_pastDeadlineTriggered(today, idx)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/storage/DegenerusGameStorage.sol",
     "scope": "DegenerusGameStorage._middayCreditCharge",
     "kind": "external",
     "expression": "IAdminLinkValue(ContractAddresses.ADMIN).linkAmountToEth(1 ether)",
@@ -10947,14 +10619,6 @@
     "path": "contracts/storage/DegenerusGameStorage.sol",
     "scope": "DegenerusGameStorage._nextMinerAction",
     "kind": "recipient-helper",
-    "expression": "_livenessTriggered()",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/storage/DegenerusGameStorage.sol",
-    "scope": "DegenerusGameStorage._nextMinerAction",
-    "kind": "recipient-helper",
     "expression": "_minerMaintenancePending()",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
@@ -10982,14 +10646,6 @@
     "expression": "IsDGNRS(ContractAddresses.SDGNRS).redemptionSettlementPending()",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/storage/DegenerusGameStorage.sol",
-    "scope": "DegenerusGameStorage._rngConsumerStage",
-    "kind": "recipient-helper",
-    "expression": "_livenessTriggered()",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/storage/DegenerusGameStorage.sol",

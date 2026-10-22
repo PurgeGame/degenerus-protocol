@@ -3,143 +3,11 @@ import { ethers } from "ethers";
 // 22:57 UTC in seconds — matches GameTimeLib.JACKPOT_RESET_TIME
 const JACKPOT_RESET_TIME = 82620n;
 
-/**
- * Contract deployment order. Each entry maps to a ContractAddresses.sol constant.
- * Order is critical — contracts with constructor-time cross-contract calls
- * must appear AFTER their dependencies.
- *
- * Constraints:
- *  - COIN (N+12) before VAULT (N+21): vault reads vaultMintAllowance()
- *  - GAME (N+14) + modules (N+1..11) before SDGNRS (N+22): vault/staked
- *    constructors self-subscribe via the game-resident afking path (game.subscribe, SUB-09)
- *  - Both protocol deity grants run together in one initProtocolDeity transaction AFTER
- *    every CREATE, so the additional initialization does not shift predicted addresses.
- *  - GAME_AFKING_MODULE (N+11) before VAULT (N+21) / SDGNRS (N+22): the v55 afking surface is
- *    game-resident (DegenerusGame delegatecalls GameAfkingModule); the vault/staked constructor
- *    self-subscribes hit live module code only if GAME + the afking module are deployed first.
- *    Both new modules are constructor-arg-less delegatecall modules (like the other 10) — no
- *    upstream dependency of their own; placed in the game-module block so source-order ≡ DEPLOY_ORDER
- *    ≡ the patched ContractAddresses.sol constant order (GAME_BINGO_MODULE :33 / GAME_AFKING_MODULE :35).
- *  - SDGNRS (N+22) before DGNRS (N+23): DGNRS reads SDGNRS balance
- *  - GAME (N+14) before ADMIN (N+24): admin calls wireVrf()
- *  - GNRUS (N+24): no constructor cross-calls, reads compile-time constants only
- *
- * v55.0 note: the standalone AfKing contract (old AF_KING key at the former N+18) was DISSOLVED — its
- * subscriber state + logic folded into DegenerusGame (GameAfkingModule). That key is removed here; the
- * two new game modules GAME_BINGO_MODULE + GAME_AFKING_MODULE are inserted in the game-module block.
- */
-export const DEPLOY_ORDER = [
-  "ICONS_32",              // N+0:  Icons32Data
-  "GAME_MINT_MODULE",      // N+1:  DegenerusGameMintModule
-  "GAME_ADVANCE_MODULE",   // N+2:  DegenerusGameAdvanceModule
-  "GAME_WHALE_MODULE",     // N+3:  DegenerusGameWhaleModule
-  "GAME_JACKPOT_MODULE",   // N+4:  DegenerusGameJackpotModule
-  "GAME_DECIMATOR_MODULE", // N+5:  DegenerusGameDecimatorModule
-  "GAME_GAMEOVER_MODULE",  // N+6:  DegenerusGameGameOverModule
-  "GAME_LOOTBOX_MODULE",   // N+7:  DegenerusGameLootboxModule
-  "GAME_BOON_MODULE",      // N+8:  DegenerusGameBoonModule
-  "GAME_DEGENERETTE_MODULE", // N+9:  DegenerusGameDegeneretteModule
-  "GAME_BINGO_MODULE",     // N+10: DegenerusGameBingoModule (no ctor args; claimBingo + ARCH-04 reclaim)
-  "GAME_AFKING_MODULE",    // N+11: GameAfkingModule (no ctor args; game-resident afking surface; must precede VAULT/SDGNRS subscribe)
-  "COIN",                  // N+12: FLIP
-  "COINFLIP",              // N+13: Coinflip (no constructor args)
-  "GAME",                  // N+14: DegenerusGame (internal storage only)
-  "GAME_TICKET_MODULE",    // N+15: registry live before Affiliate constructor
-  "AFFILIATE",             // N+16: DegenerusAffiliate
-  "JACKPOTS",              // N+17: DegenerusJackpots
-  "QUESTS",                // N+18: DegenerusQuests
-  "DEITY_PASS",            // N+19: DegenerusDeityPass
-  "VAULT",                 // N+20: DegenerusVault (calls COIN; constructor self-subscribes via game.subscribe)
-  "SDGNRS",                // N+21: sDGNRS (calls GAME; constructor self-subscribes via game.subscribe; mints to DGNRS)
-  "DGNRS",                 // N+22: DGNRS (reads SDGNRS balance)
-  "ADMIN",                 // N+23: DegenerusAdmin (calls VRF + GAME)
-  "GNRUS",                 // N+24: GNRUS (self-mint only, no cross-calls)
-  // v71.0: foil pack game-resident delegatecall module. Appended LAST so adding it
-  // does not shift any existing predicted address (the auto-subscribed VAULT/SDGNRS
-  // addresses feed trait derivation; keeping them fixed avoids perturbing RNG). It
-  // has no ctor args and no deploy-time dependents — only GAME's runtime delegatecalls.
-  "GAME_FOILPACK_MODULE",  // N+25: DegenerusGameFoilPackModule
-  // AFKing seat coin. Appended LAST so adding it shifts no existing predicted
-  // address. Constructor mints the 999/1 sale tranche to the already-deployed
-  // VAULT/SDGNRS; GAME (its minter + seat-exit target) is a compile-time
-  // constant, so it has no deploy-time dependents.
-  "AFKING_SUB_TOKEN",           // N+26: AFKingSubscriptionToken
-  // Growth-bet parimutuel. Appended LAST so adding it
-  // shifts no existing predicted address. No ctor args and no deploy-time dependents — it
-  // reads GAME and burns/credits FLIP at runtime only.
-  "PARIMUTUEL",             // N+27: DegenerusParimutuel
-  // Record-bounty trophy. Appended LAST so adding it shifts no existing
-  // predicted address. Constructor mints the four trophies to CREATOR and makes
-  // no cross-contract calls; COINFLIP (its only mutator) is a compile-time
-  // constant, so it has no deploy-time dependents.
-  "RECORD_BOUNTY",          // N+28: DegenerusRecordBounty
-  // Craps table. Appended LAST so adding it shifts no existing predicted address.
-  // CrapsBattle carries Craps + LootboxCraps by inheritance, so the table is ONE
-  // deployment, not three. No ctor args and no deploy-time dependents: it reads
-  // GAME's lootbox-RNG slots via extsload and burns/mints FLIP and credits
-  // COINFLIP at runtime only, all through compile-time constants. Its own
-  // address must be predicted rather than discovered, because FLIP and Coinflip
-  // bake CRAPS in as a constant to authorize the burn/mint/credit sinks.
-  "CRAPS",                  // N+29: CrapsBattle
-  // Craps dice engine. Appended LAST so adding it shifts no existing predicted
-  // address. A pure contract with no ctor args and no deploy-time dependents:
-  // CrapsBattle STATICCALLs it at runtime through a compile-time constant.
-  "CRAPS_ENGINE",           // N+30: CrapsEngine
-  // Jackpot battle craps battle. Appended LAST so adding it shifts no existing
-  // predicted address. No storage, no ctor args, no deploy-time dependents:
-  // GAME calls it at runtime through a compile-time constant.
-  "JACKPOT_BATTLE",       // N+31: JackpotBattle
-  "WWXRP",              // N+32: no constructor dependencies
-  "GAME_MINER_MODULE",  // N+33: the permissionless state engine
-  "GAME_RNG_MODULE",     // N+34: request, retry and publication
-  "GAME_JACKPOT_DRAW_MODULE", // N+35: daily battle and FLIP drawings
-  "GAME_DEGENESIS_MODULE", // N+36: Degenesis box sale, settlement and release
-  "OWNER_GOVERNANCE",     // N+37: DGVE escrow; all prior addresses remain unchanged
-];
-
-/**
- * Map from ContractAddresses constant name to Solidity contract name.
- */
-export const KEY_TO_CONTRACT = {
-  ICONS_32: "Icons32Data",
-  GAME_MINT_MODULE: "DegenerusGameMintModule",
-  GAME_ADVANCE_MODULE: "DegenerusGameAdvanceModule",
-  GAME_WHALE_MODULE: "DegenerusGameWhaleModule",
-  GAME_JACKPOT_MODULE: "DegenerusGameJackpotModule",
-  GAME_DECIMATOR_MODULE: "DegenerusGameDecimatorModule",
-  GAME_GAMEOVER_MODULE: "DegenerusGameGameOverModule",
-  GAME_LOOTBOX_MODULE: "DegenerusGameLootboxModule",
-  GAME_BOON_MODULE: "DegenerusGameBoonModule",
-  GAME_DEGENERETTE_MODULE: "DegenerusGameDegeneretteModule",
-  GAME_BINGO_MODULE: "DegenerusGameBingoModule",
-  GAME_AFKING_MODULE: "GameAfkingModule",
-  COIN: "FLIP",
-  COINFLIP: "Coinflip",
-  GAME: "DegenerusGame",
-  WWXRP: "WWXRP",
-  AFFILIATE: "DegenerusAffiliate",
-  JACKPOTS: "DegenerusJackpots",
-  QUESTS: "DegenerusQuests",
-  DEITY_PASS: "DegenerusDeityPass",
-  VAULT: "DegenerusVault",
-  SDGNRS: "sDGNRS",
-  DGNRS: "DGNRS",
-  ADMIN: "DegenerusAdmin",
-  GNRUS: "GNRUS",
-  GAME_FOILPACK_MODULE: "DegenerusGameFoilPackModule",
-  AFKING_SUB_TOKEN: "AFKingSubscriptionToken",
-  PARIMUTUEL: "DegenerusParimutuel",
-  RECORD_BOUNTY: "DegenerusRecordBounty",
-  CRAPS: "CrapsBattle",
-  CRAPS_ENGINE: "CrapsEngine",
-  JACKPOT_BATTLE: "JackpotBattle",
-  GAME_TICKET_MODULE: "DegenerusGameTicketModule",
-  GAME_MINER_MODULE: "DegenerusGameMinerModule",
-  GAME_RNG_MODULE: "DegenerusGameRngModule",
-  GAME_JACKPOT_DRAW_MODULE: "DegenerusGameJackpotDrawModule",
-  GAME_DEGENESIS_MODULE: "DegenerusGameDegenesisModule",
-  OWNER_GOVERNANCE: "DegenerusOwnerGovernance",
-};
+import { DEPLOYMENTS, expandAliases } from "./deploymentManifest.js";
+export { DEPLOYMENTS, expandAliases } from "./deploymentManifest.js";
+export const DEPLOY_ORDER = DEPLOYMENTS.map(row => row.key);
+export const KEY_TO_CONTRACT = Object.fromEntries(DEPLOYMENTS.flatMap(row =>
+  row.aliases.map(alias => [alias, row.contract])));
 
 /**
  * Predict CREATE addresses for the full deployment sequence.
@@ -156,7 +24,7 @@ export function predictAddresses(deployerAddress, startingNonce) {
     });
     addresses.set(DEPLOY_ORDER[i], addr);
   }
-  return addresses;
+  return expandAliases(addresses);
 }
 
 /**

@@ -326,102 +326,48 @@ abstract contract DeployProtocol is Test {
 
         // Order matches DEPLOY_ORDER in predictAddresses.js
 
-        icons32 = new Icons32Data(false);                   // N+0 = nonce 5
-        mintModule = new DegenerusGameMintModule();    // N+1 = nonce 6
-        advanceModule = new DegenerusGameAdvanceModule(); // N+2 = nonce 7
-        whaleModule = new DegenerusGameWhaleModule();  // N+3 = nonce 8
-        jackpotModule = new DegenerusGameJackpotModule(); // N+4 = nonce 9
-        decimatorModule = new DegenerusGameDecimatorModule(); // N+5 = nonce 10
-        gameOverModule = new DegenerusGameGameOverModule(); // N+6 = nonce 11
-        lootboxModule = new DegenerusGameLootboxModule(); // N+7 = nonce 12
-        boonModule = new DegenerusGameBoonModule();    // N+8 = nonce 13
-        degeneretteModule = new DegenerusGameDegeneretteModule(); // N+9 = nonce 14
-
-        // v55.0: the two new game-resident delegatecall modules (no ctor args — same shape as the
-        // 10 siblings above). They MUST be deployed before VAULT/SDGNRS: the vault/staked constructor
-        // self-subscribes hit the game-resident afking surface (DegenerusGame delegatecalls
-        // GameAfkingModule), which only resolves if the afking module sits at GAME_AFKING_MODULE.
-        // Order mirrors predictAddresses.js DEPLOY_ORDER (GAME_BINGO_MODULE N+10, GAME_AFKING_MODULE N+11).
-        bingoModule = new DegenerusGameBingoModule();  // N+10 = nonce 15
-        afkingModule = new GameAfkingModule();         // N+11 = nonce 16
-
-        coin = new FLIP();                       // N+12 = nonce 17
-
-        coinflip = new Coinflip();                // N+13 = nonce 18
-
-        game = new DegenerusGame();                    // N+14 = nonce 19
-        ticketModule = new DegenerusGameTicketModule(); // N+15 = nonce 20
-
+        // BEGIN CANONICAL DEPLOYMENTS
         (address[] memory owners, bytes32[] memory codes, uint8[] memory kicks,
             address[] memory players, bytes32[] memory refs) = _affiliateBootstrap();
-        affiliate = new DegenerusAffiliate(owners, codes, kicks, players, refs); // N+16
-
-        jackpots = new DegenerusJackpots();            // N+17 = nonce 22
-        quests = new DegenerusQuests();                // N+18 = nonce 23
-        deityPass = new DegenerusDeityPass();          // N+19 = nonce 24
-
-        // The subscriber state + logic are game-resident (GameAfkingModule, deployed at N+11 above).
-        // VAULT/SDGNRS self-subscribe via the game-resident path: DegenerusVault.sol and sDGNRS.sol
-        // call subscribe with a lootbox quantity of 1 (self, no seat: both are exempt) — both hit live
-        // GameAfkingModule code because GAME + the afking module are already deployed.
-
-        // Vault constructor calls COIN.vaultMintAllowance() + game.subscribe(...) (SUB-09)
-        vault = new DegenerusVault();                  // N+20 = nonce 25
-
-        // Stonk constructor calls game.subscribe(...) (SUB-09 self-subscribe).
-        // Mints the vault's 20% to the DGNRS address
-        sdgnrs = new sDGNRS();           // N+21 = nonce 26
-
-        // DGNRS reads its sDGNRS balance and mints the initial 50B DGNRS to the VAULT
-        dgnrs = new DGNRS();                  // N+22 = nonce 27
-
-        // Admin constructor calls VRF.createSubscription() + GAME.wireVrf()
-        admin = new DegenerusAdmin();                  // N+23 = nonce 28
-
-        // GNRUS: self-mints 1T to address(this), no cross-contract constructor calls
-        gnrus = new GNRUS();                            // N+24 = nonce 29
-
-        // v71.0: foil pack game-resident delegatecall module. Deployed LAST (append)
-        // so it adds no nonce shift to any existing contract — only GAME's runtime
-        // delegatecalls reference it, and it has no ctor args / no deploy-time deps.
-        foilModule = new DegenerusGameFoilPackModule(); // N+25 = nonce 30
-
-        // AFKing seat token — appended after everything it references (its constructor mints
-        // the two construction seats to SDGNRS and VAULT; GAME is its free-tranche minter and
-        // seat burner). VAULT/SDGNRS self-subscribed above as the exempt subscriptions, which
-        // never call the token, precisely because it deploys after them.
-        afkingSubToken = new AFKingSubscriptionToken();                  // N+26 = nonce 31
-
-        // Growth-bet parimutuel — appended, so it shifts no earlier nonce. No ctor args
-        // and no deploy-time deps; it reads GAME and burns/credits FLIP at runtime only.
-        parimutuel = new DegenerusParimutuel();                          // N+27 = nonce 32
-
-        // Record-bounty trophy — appended, so it shifts no earlier nonce. Constructor
-        // mints the four trophies to CREATOR with no cross-contract calls; only
-        // COINFLIP's runtime recordSet calls reference it.
-        recordBounty = new DegenerusRecordBounty();                      // N+28 = nonce 33
-
-        // Craps table — appended, so it shifts no earlier nonce. CrapsBattle carries Craps and
-        // LootboxCraps by inheritance, so this one deployment is the whole table. It must land
-        // here rather than only in the craps suite's mocks: this is the only place craps meets
-        // the REAL game (its extsload of the lootbox-RNG slots), the REAL FLIP (whose burn/mint
-        // gates authorize ContractAddresses.CRAPS, i.e. exactly this address), and the REAL
-        // Coinflip credit lane. Deployed last so ContractAddresses.CRAPS resolves to code.
-        crapsBattle = new CrapsViews();                                     // N+29 = nonce 34
-
-        // Craps dice engine — appended, so it shifts no earlier nonce. Pure, no ctor args; the
-        // table STATICCALLs ContractAddresses.CRAPS_ENGINE, so it must resolve to code here.
-        crapsEngine = new CrapsEngine();                                    // N+30 = nonce 35
-
-        // Jackpot battle craps battle — appended, so it shifts no earlier nonce. No storage, no
-        // ctor args; the jackpot module calls ContractAddresses.JACKPOT_BATTLE bare.
-        jackpotBattle = new JackpotBattle();                              // N+31 = nonce 36
-        wwxrp = new WWXRP(); // N+32 = nonce 37
-        minerModule = new DegenerusGameMinerModule();                      // N+33 = nonce 38
-        rngModule = new DegenerusGameRngModule();                          // N+34 = nonce 39
-        jackpotDrawModule = new DegenerusGameJackpotDrawModule();          // N+35 = nonce 40
-        degenesisModule = new DegenerusGameDegenesisModule();              // N+36 = nonce 41
-        ownerGovernance = new DegenerusOwnerGovernance(); // N+37; preserve all prior CREATE nonces
+        icons32 = new Icons32Data(false);
+        mintModule = new DegenerusGameMintModule();
+        advanceModule = new DegenerusGameAdvanceModule();
+        whaleModule = new DegenerusGameWhaleModule();
+        jackpotModule = new DegenerusGameJackpotModule();
+        decimatorModule = new DegenerusGameDecimatorModule();
+        gameOverModule = new DegenerusGameGameOverModule();
+        lootboxModule = new DegenerusGameLootboxModule();
+        boonModule = new DegenerusGameBoonModule();
+        degeneretteModule = new DegenerusGameDegeneretteModule();
+        bingoModule = new DegenerusGameBingoModule();
+        afkingModule = new GameAfkingModule();
+        coin = new FLIP();
+        coinflip = new Coinflip();
+        game = new DegenerusGame();
+        ticketModule = new DegenerusGameTicketModule();
+        affiliate = new DegenerusAffiliate(owners, codes, kicks, players, refs);
+        jackpots = new DegenerusJackpots();
+        quests = new DegenerusQuests();
+        deityPass = new DegenerusDeityPass();
+        vault = new DegenerusVault();
+        sdgnrs = new sDGNRS();
+        dgnrs = new DGNRS();
+        admin = new DegenerusAdmin();
+        gnrus = new GNRUS();
+        foilModule = new DegenerusGameFoilPackModule();
+        afkingSubToken = new AFKingSubscriptionToken();
+        parimutuel = new DegenerusParimutuel();
+        recordBounty = new DegenerusRecordBounty();
+        crapsBattle = new CrapsViews();
+        crapsEngine = new CrapsEngine();
+        jackpotBattle = new JackpotBattle();
+        wwxrp = new WWXRP();
+        minerModule = new DegenerusGameMinerModule();
+        rngModule = new DegenerusGameRngModule();
+        jackpotDrawModule = new DegenerusGameJackpotDrawModule();
+        degenesisModule = new DegenerusGameDegenesisModule();
+        ownerGovernance = new DegenerusOwnerGovernance();
+        // END CANONICAL DEPLOYMENTS
         if (initializeDeities) game.initProtocolDeity();
     }
 

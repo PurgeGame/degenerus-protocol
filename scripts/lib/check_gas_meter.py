@@ -42,24 +42,8 @@ AMBIENT = re.compile(r"\b(?:msg\s*\.\s*sender|tx\s*\.|block\s*\.|blockhash\s*\()
 DRAINS = set("""_seatEntry _runRound _resolveFoilBuyer _bucketAppendRun _bucketAppendLanes
 """.split())
 
-# This entry allocates a permanent ID; it never derives ticket entropy. Pin the
-# exact access-control statement, rather than exempting the whole function.
-TICKET_AUTH_GUARDS = {
-    ("modules/DegenerusGameTicketModule.sol", "registerWalletIdentity",
-     "if(msg.sender!=ContractAddresses.ADMIN&&msg.sender!=ContractAddresses.GNRUS"),
-    ("modules/DegenerusGameTicketModule.sol", "registerWalletIdentity",
-     "&&msg.sender!=ContractAddresses.AFFILIATE)revertE();"),
-    ("modules/DegenerusGameTicketModule.sol", "registerWallet",
-     "if(msg.sender!=ContractAddresses.AFFILIATE&&msg.sender!=ContractAddresses.COINFLIP"),
-    ("modules/DegenerusGameTicketModule.sol", "registerWallet",
-     "&&msg.sender!=ContractAddresses.CRAPS"),
-    ("modules/DegenerusGameTicketModule.sol", "registerWallet",
-     "&&msg.sender!=ContractAddresses.PARIMUTUEL&&msg.sender!=ContractAddresses.WWXRP"),
-    ("modules/DegenerusGameTicketModule.sol", "registerWallet",
-     "&&msg.sender!=ContractAddresses.ADMIN&&msg.sender!=ContractAddresses.COIN"),
-    ("modules/DegenerusGameTicketModule.sol", "registerWallet",
-     "&&msg.sender!=ContractAddresses.GNRUS)revertE();"),
-}
+# Ticket worker code has no ambient caller exceptions.
+TICKET_AUTH_GUARDS = set()
 
 
 def compact(code):

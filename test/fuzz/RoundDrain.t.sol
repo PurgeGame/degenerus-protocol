@@ -15,17 +15,6 @@ import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 ///      production ticket module (etched at its pinned address), runs the seated round drain in
 ///      THIS contract's storage; adds queue seeders and bucket decoders only.
 contract RoundDrainHarness is MintBucketSeed {
-    /// @dev The mint module answers the liveness tail through the Game's view; this harness is
-    ///      not deployed at the Game's address, so it evaluates the tail in place.
-    function _pastDeadlineTriggered(uint24 today, uint24 idx)
-        internal
-        view
-        override
-        returns (bool)
-    {
-        return DegenerusGameStorage._pastDeadlineTriggered(today, idx);
-    }
-
     function seedQueue(uint24 lvl, address[] calldata players, uint32[] calldata owed, uint8[] calldata rem, uint256 entropy)
         external
     {

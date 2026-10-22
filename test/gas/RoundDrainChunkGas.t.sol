@@ -30,17 +30,6 @@ contract TicketChunkRepricer {
 ///      storage through the metered `runTicketWork` entry the miner uses; adds queue seeders
 ///      only.
 contract ChunkHarness is MintBucketSeed {
-    /// @dev The mint module answers the liveness tail through the Game's view; this harness is
-    ///      not deployed at the Game's address, so it evaluates the tail in place.
-    function _pastDeadlineTriggered(uint24 today, uint24 idx)
-        internal
-        view
-        override(DegenerusGameMintModule)
-        returns (bool)
-    {
-        return DegenerusGameStorage._pastDeadlineTriggered(today, idx);
-    }
-
     /// @dev Pin `level` so `lvl` sits inside the minted read window the drain walks: the sweep
     ///      covers [anchor-1 .. _mintCeiling()] and the measured call passes anchor = lvl + 1
     ///      (the purchase level), so level = lvl gives the window [lvl .. lvl + 1] and routes a

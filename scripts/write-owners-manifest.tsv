@@ -19,7 +19,7 @@ OWNER	balancesPacked	DegenerusGame.sol	claimWinnings/withdrawAfkingFunding debit
 OWNER	balancesPacked	modules/DegenerusGameAdvanceModule.sol	_autoRepayLoan debits the due borrower's claimable then prepaid funding, paired with the lender's internal claimable credit; leaves the claimable sentinel
 OWNER	balancesPacked	modules/DegenerusGameDegenesisModule.sol	topUpSdgnrsAfking tops sDGNRS AFKing funding up from its claimable half (exact move inside one packed word); spendDegenesis moves the Vault budget in and the unspent part back around the unchanged purchase; _splitDegenesisCohorts adds the sDGNRS quarter to the AFKing half in tandem with the claimablePool/Vault budget carve
 OWNER	balancesPacked	modules/DegenerusGameGameOverModule.sol	_handleGameOverDrain one-shot Degenesis release clears the sDGNRS AFKing half (leaving its claimable half) in tandem with the claimablePool debit; the gameOver latch makes it once
-OWNER	balancesPacked	modules/DegenerusGameMintModule.sol	_processMintPayment debits claimable and afking from one packed snapshot; preserves the low-half sentinel and checks high-half sufficiency; _purchaseForWithCached applies the matching combined claimablePool debit
+OWNER	balancesPacked	modules/GamePurchase.sol	_processMintPayment debits claimable and afking from one packed snapshot; preserves the low-half sentinel and checks high-half sufficiency; _purchaseForWithCached applies the matching combined claimablePool debit
 HELPER	balancesPacked	storage/DegenerusGameStorage.sol	_creditClaimable/_debitClaimable/_debitAfking/_debitClaimableAndAfking/_debitClaimableAndAfkingFrom/_settleShortfallNoPool/_creditAfkingValue: the per-player packed-balance mutators every module calls
 OWNER	boonPacked	DegenerusGame.sol	NOT A STORAGE WRITE: deityBoonData declares a local uint32 boonPacked = deityBoonPacked[deity] in a view; label collision with the storage identifier
 OWNER	boonPacked	modules/DegenerusGameBoonModule.sol	NOT A STORAGE WRITE: issueDeityBoon's local uint32 boonPacked caches deityBoonPacked[deity]; the real store is deityBoonPacked (separate row)
@@ -34,7 +34,7 @@ OWNER	claimablePool	modules/DegenerusGameGameOverModule.sol	_handleGameOverDrain
 OWNER	claimablePool	modules/DegenerusGameJackpotModule.sol	jackpot payouts (_processDailyEth liabilityDelta, golden ticket, yield surplus) add liability in tandem with _creditClaimable
 OWNER	claimablePool	modules/DegenerusGameJackpotDrawModule.sol	BAF stage completion releases the reserved ETH term of awards no candidate took (jackpotWork.paid residue) back to the future pool
 OWNER	claimablePool	modules/DegenerusGameLootboxModule.sol	resolveRedemptionLootbox subtracts the redemption reserve debit before adding the full value to prize pools; creditRedemptionDirect moves reserve backing to the claimant without changing the pool.
-OWNER	claimablePool	modules/DegenerusGameMintModule.sol	_purchaseForWithCached folds the ticket+lootbox legs' claimable/afking draws into one pool decrement after _settleShortfallNoPool debited the player
+OWNER	claimablePool	modules/GamePurchase.sol	_purchaseForWithCached folds the ticket+lootbox legs' claimable/afking draws into one pool decrement after _settleShortfallNoPool debited the player
 OWNER	claimablePool	modules/GameAfkingModule.sol	_deliverAfkingBuy debits the pool for the afking-funded + claimable-funded spend after the per-account debits (one checked RMW)
 HELPER	claimablePool	storage/DegenerusGameStorage.sol	_settleShortfall applies the aggregate pool draw for both tiers; _creditAfkingValue pairs pool += with the afking credit (the only afking credit primitive)
 OWNER	currentPrizePool	modules/DegenerusGameAdvanceModule.sol	_consolidatePoolsAndRewardJackpots stores the settled current pool directly (single SSTORE batch); the jackpot/gameover modules go through _setCurrentPrizePool
@@ -92,7 +92,7 @@ HELPER	lootboxRngPacked	storage/DegenerusGameStorage.sol	_lrWrite field mutator 
 OWNER	middayRngCredit	modules/DegenerusGameRngModule.sol	creditMiddayRng (ADMIN, forwarded by the Game stub) banks a donor's LINK credit by wallet ID; _tryChargeMiddayCredit debits the caller's credit for a mid-day request; one module owns both sides
 OWNER	mintPacked_	modules/DegenerusGameBoonModule.sol	_creditActivity bumps LEVEL_COUNT via setPacked on a fresh read; field-isolated
 OWNER	mintPacked_	modules/DegenerusGameMintStreakUtils.sol	_recordMintData/_recordMintStreakForLevel/_applyCurseStack/_clearCurse and _playerActivityScoreCachedAt: mint-data field mutators inherited by modules; cached scoring writes only affiliate bits beside durable purchase history after a STATICCALL
-OWNER	mintPacked_	modules/DegenerusGameMintModule.sol	createSmurf initializes the fresh child flag and increments the main ID lifetime count in bits 224..239; raiseSmurfBaseAllowance writes only bits 240..255; both preserve neighboring fields before stateful external calls
+OWNER	mintPacked_	modules/GamePurchase.sol	createSmurf initializes the fresh child flag and increments the main ID lifetime count in bits 224..239; raiseSmurfBaseAllowance writes only bits 240..255; both preserve neighboring fields before stateful external calls
 OWNER	mintPacked_	modules/DegenerusGameWhaleModule.sol	purchaseWhalePass/purchaseDeityPass write the pass fields from the entry read; _grantSeatCoin sets SEAT_CLAIMED last in the function so no later whole-word write clobbers it
 HELPER	mintPacked_	storage/DegenerusGameStorage.sol	_activate10LevelPass/_applyWhalePassStats whole-word pass activation from a fresh read
 OWNER	phaseTransitionActive	modules/DegenerusGameAdvanceModule.sol	_endPhase sets; advanceGame clears at transition close; sole writer
@@ -142,7 +142,7 @@ OWNER	yieldAccumulator	modules/DegenerusGameAdvanceModule.sol	_consolidatePoolsA
 OWNER	yieldAccumulator	modules/DegenerusGameGameOverModule.sol	_handleGameOverDrain zeroes at terminal drain
 OWNER	yieldAccumulator	modules/DegenerusGameJackpotModule.sol	runDailyJackpot adds the insurance cut; distributeYieldSurplus adds the quarter share
 HELPER	playerClaimWord	storage/DegenerusGameStorage.sol	Bingo and affiliate claim helpers update their disjoint stamped fields before payouts; sibling stamps are preserved.
-OWNER	boonPacked	modules/DegenerusGameLootboxModule.sol	Consumes the applicable box/pass boon field with its masked one-shot write; other packed boons are preserved.
+OWNER	boonPacked	modules/GamePurchaseBox.sol	Consumes the applicable box/pass boon field with its masked one-shot write; other packed boons are preserved.
 OWNER	boonPacked	modules/DegenerusGameWhaleModule.sol	Consumes the applicable box/pass boon field with its masked one-shot write; other packed boons are preserved.
 OWNER	boxCursor	modules/GameAfkingModule.sol	Human FIFO worker stores the advanced cursor before each entry settles; the seal resets it.
 HELPER	dailyHeroWagers	storage/DegenerusGameStorage.sol	Degenerette's accumulating hero buffer; the daily request freezes it and logically resets the next write buffer.
@@ -190,14 +190,14 @@ HELPER	deityPassIds	storage/DegenerusGameStorage.sol	_appendDeityId appends a pa
 INIT	wallets	storage/DegenerusGameStorage.sol	Storage constructor reserves ID zero by setting the wallet-table length to one; later registration appends normally.
 HELPER	walletIds	storage/DegenerusGameStorage.sol	_registerWallet assigns a default gameplay ID and initializes or preserves the permanent governance/affiliate identity in the high lane.
 OWNER	walletIds	modules/DegenerusGameGameOverModule.sol	_seizeLoan clears only the borrower's default gameplay ID when a main account's loan is seized, retaining permanent identity.
-OWNER	_smurfWords	modules/DegenerusGameMintModule.sol	createSmurf appends each new smurf ID to its owner's append-only list (sole writer); the list length is the owner's SMURF_COUNT. A main's loan seizure (GameAfkingModule.cancelLiquidatedSubscriptions, AdvanceModule._seizeLoan) only reads it.
+OWNER	_smurfWords	modules/GamePurchase.sol	createSmurf appends each new smurf ID to its owner's append-only list (sole writer); the list length is the owner's SMURF_COUNT. A main's loan seizure (GameAfkingModule.cancelLiquidatedSubscriptions, AdvanceModule._seizeLoan) only reads it.
 OWNER	lootboxRngPacked	DegenerusGame.sol	setCrapsRngPending is CRAPS-only and changes only pending parity bits 250/251, preserving committed entropy/session fields.
 OWNER	_subOpenCursor	modules/DegenerusGameMinerModule.sol	Reset once at daily preparation after the previous read cohort completed
 OWNER	_subBoxCount	modules/GameAfkingModule.sol	Box-section membership maintained by insert, mode change and same-section removal
-OWNER	_loans	modules/DegenerusGameMintModule.sol	Borrow writes the packed loan; repay replaces it with principal-zero tombstone and updates the swapped due-index lane.
+OWNER	_loans	modules/GamePurchase.sol	Borrow writes the packed loan; repay replaces it with principal-zero tombstone and updates the swapped due-index lane.
 OWNER	_loans	modules/DegenerusGameAdvanceModule.sol	Auto-repayment replaces the completed loan with a principal-zero retained tombstone.
 HELPER	_loansDue	storage/DegenerusGameStorage.sol	_setLoanDueAt writes one packed lane of a due level's ID list; borrow appends and repay swap-and-pops through it.
-OWNER	_loansDueCount	modules/DegenerusGameMintModule.sol	borrow increments and repay decrements the due level's open-loan count (sole writer); settlement only reads it and leaves the count behind.
+OWNER	_loansDueCount	modules/GamePurchase.sol	borrow increments and repay decrements the due level's open-loan count (sole writer); settlement only reads it and leaves the count behind.
 OWNER	loanSeizeCursor	modules/DegenerusGameAdvanceModule.sol	prepareRequestBoundary resets it when arming a due level; _settleLevelLoans advances it past each chunk, from the ordinary stage or the game-over loan stage.
 OWNER	degenesisActive	modules/DegenerusGameDegenesisModule.sol	prepareDegenesis stamps the next cohort (budget and day) at the word-free request boundary; runDegenesisWork persists the order cursor; _closeDegenesisCohort clears it
 OWNER	degenesisActive	modules/DegenerusGameGameOverModule.sol	_handleGameOverDrain clears the active cohort at the terminal latch (unresolved orders are forfeited with the burned inventory)
@@ -228,3 +228,4 @@ OWNER	snapLevel	modules/DegenerusGameGameOverModule.sol	Authorized vault-owner d
 OWNER	snapPendingShift	modules/DegenerusGameGameOverModule.sol	Authorized vault-owner declaration stores the pending exponent for Advance.
 HELPER	_redemptionReserveStored	storage/DegenerusGameStorage.sol	_setRedemptionReserve writes amount + 1; _releaseRedemptionReserve reclassifies completed or terminal reserve into ordinary sDGNRS claimable without changing claimablePool.
 HELPER	lootboxRngPacked	storage/DegenerusGameStorage.sol	_sealHeroWagers swaps hero buffers at the daily request and clears only the next write-buffer validity bits.
+OWNER	boonPacked	modules/GamePurchaseBoon.sol	Purchase boost consumes the same packed tier/day fields in Game storage; no other fields or call authority change.

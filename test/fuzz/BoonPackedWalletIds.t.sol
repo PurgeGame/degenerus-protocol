@@ -626,7 +626,6 @@ contract BoonPackedWalletIds is DeployProtocol {
         address boon = ContractAddresses.GAME_BOON_MODULE;
         assertEq(abi.decode(ext.x_delegate(boon, abi.encodeCall(DegenerusGameBoonModule.consumeCoinflipBoon, (0))), (uint16)), 0);
         assertEq(abi.decode(ext.x_delegate(boon, abi.encodeCall(DegenerusGameBoonModule.consumeDecimatorBoost, (0))), (uint16)), 0);
-        assertEq(abi.decode(ext.x_delegate(boon, abi.encodeCall(DegenerusGameBoonModule.consumePurchaseBoost, (0))), (uint16)), 0);
         assertEq(abi.decode(ext.x_delegate(boon, abi.encodeCall(DegenerusGameBoonModule.consumeDegeneretteBoon, (0, 0))), (uint16)), 0);
         assertEq(abi.decode(ext.x_delegate(boon, abi.encodeCall(DegenerusGameBoonModule.consumeDegeneretteBoon, (0, 1))), (uint16)), 0);
         assertFalse(abi.decode(ext.x_delegate(boon, abi.encodeCall(DegenerusGameBoonModule.checkAndClearExpiredBoon, (0))), (bool)));

@@ -43,17 +43,6 @@ contract JackpotStageHarness is DegenerusGameJackpotModule, BucketSeed {
 
 /// @dev Queue seeder and delegatecall host for the live metered ticket worker.
 contract TicketBatchStageHarness is MintBucketSeed {
-    /// @dev The mint module answers the liveness tail through the Game's view; this harness is
-    ///      not deployed at the Game's address, so it evaluates the tail in place.
-    function _pastDeadlineTriggered(uint24 today, uint24 idx)
-        internal
-        view
-        override
-        returns (bool)
-    {
-        return DegenerusGameStorage._pastDeadlineTriggered(today, idx);
-    }
-
     /// @dev Shared seeding: `n` distinct players each owing `owedEach` traits into the current
     ///      read-slot queue for `lvl`, plus a non-zero lootbox entropy word at index 0 (the word
     ///      the batch reads via _lootboxWord( _lrRead(INDEX) - 1 )).

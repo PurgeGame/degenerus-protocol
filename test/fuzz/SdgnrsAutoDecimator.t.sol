@@ -53,7 +53,7 @@ contract AutoDecimatorGameHarness is DegenerusGame {
         (bool ok, bytes memory err) = ContractAddresses.GAME_ADVANCE_MODULE.delegatecall(
             abi.encodeCall(AutoDecimatorAdvanceHarness.applyOpeningWord, (day))
         );
-        if (!ok) assembly { revert(add(err, 32), mload(err)) }
+        if (!ok) assembly ("memory-safe") { revert(add(err, 32), mload(err)) }
     }
 
     function prepareNextRequest(uint24 day) external {
