@@ -5,7 +5,7 @@ pragma solidity 0.8.34;
 ///      compact board [64:83] and initialized bit [84]. Door helpers carry an ID in memory
 ///      in bits 85..116; it is never persisted. Bit 117 retains the storage word. PASS_SLOT is pinned against compiled storage.
 library CrapsPreferenceLib {
-    uint256 internal constant PASS_SLOT = 14;
+    uint256 internal constant PASS_SLOT = 9;
     uint256 internal constant SHIFT = 64;
     uint256 internal constant MASK = 0xFFFFF << SHIFT;
     uint256 internal constant INITIALIZED = 1 << 84;

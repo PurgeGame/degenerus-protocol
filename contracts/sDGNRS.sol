@@ -326,8 +326,6 @@ contract sDGNRS {
     /// @dev Two locators per account in one word, selected by batch parity. Each lane holds
     ///      batchId (low 32) and queue index (high 32). Tags prevent aliasing on buffer reuse.
     mapping(uint32 => uint128) private _claimLocations;
-    /// @dev Open and settling batches occupy opposite parities; completed terms are reused.
-    mapping(uint32 => RedemptionBatch) private _redemptionBatches;
 
     function redemptionBatches(uint32 id) external view returns (
         uint80 tokens, uint96 ethPayout, uint96 ethBase, uint96 flipEscrow, uint16 roll, uint16 flipReward
@@ -374,13 +372,13 @@ contract sDGNRS {
     /// @dev Raw sDGNRS burned into the open batch and not yet priced: already out of every balance
     ///      and `_totalSupply`. Every price or share uses supply plus economic escrow as the
     ///      holder base, so these tokens keep their share until their batch closes.
-    ///      Stored as the economic amount plus one to keep slot 7 initialized.
+    ///      Stored as the economic amount plus one to keep the escrow word initialized.
     uint128 private _escrowedSupply = 1;
     /// @dev The closed batch the miner is settling (0 = none).
     uint32 private _settlingBatch;
     /// @dev Next index into the settling batch's player list.
     uint32 private _redemptionCursor;
-    /// @dev Two uint32 queue counts, even then odd, fill the remaining eight bytes of slot 7.
+    /// @dev Two uint32 queue counts, even then odd, fill the remaining eight bytes of the escrow word.
     uint64 private _batchPlayerCounts;
 
     /// @dev A closed batch has unsettled claims: RNG consumer stage 1, which every later request
@@ -1409,4 +1407,7 @@ contract sDGNRS {
         balanceOf[to] += amount;
         emit Transfer(address(0), to, amount);
     }
+    /// @dev Open and settling batches occupy opposite parities; completed terms are reused.
+    RedemptionBatch[2] private _redemptionBatches;
+
 }

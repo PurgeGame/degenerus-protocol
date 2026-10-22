@@ -211,10 +211,6 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @notice Two tagged score words per wallet ID, indexed by (bracket / 10) & 1.
     mapping(uint32 => BafPlayer[2]) internal bafPlayer;
 
-    /// @notice Top-4 coinflip bettors for BAF per level, sorted by score descending. Two 128-bit
-    ///         entries per word: entry i lives in word i >> 1 at bit (i & 1) * 128, laid out as
-    ///         score (bits 0-95, whole tokens capped at uint96.max) | wallet ID (bits 96-127).
-    mapping(uint24 => uint256[2]) internal bafTop;
 
     /// @notice Epoch counter + bafTop board length per BAF bracket level.
     mapping(uint24 => BafLevel) internal bafLevel;
@@ -648,4 +644,9 @@ contract DegenerusJackpots is IDegenerusJackpots {
     function getLastBafResolvedDay() external view returns (uint24) {
         return lastBafResolvedDay;
     }
+    /// @notice Top-4 coinflip bettors for BAF per level, sorted by score descending. Two 128-bit
+    ///         entries per word: entry i lives in word i >> 1 at bit (i & 1) * 128, laid out as
+    ///         score (bits 0-95, whole tokens capped at uint96.max) | wallet ID (bits 96-127).
+    uint256[2][4] internal bafTop;
+
 }

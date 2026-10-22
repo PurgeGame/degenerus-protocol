@@ -1194,14 +1194,11 @@ contract DegenerusGameJackpotModule is DegenerusGamePayoutUtils, DegenerusGameJa
     }
 
     /// @dev Rolls a board off one VRF word: fully random base traits (6 bits per quadrant),
-    ///      then the hero sampled by `_rollHeroSymbol` from the prior day's settled wager
+    ///      then the hero sampled by `_rollHeroSymbol` from the daily request's frozen wager
     ///      pool replaces the winning quadrant's symbol bits only. The quadrant keeps its
     ///      base-rolled color, so all four colors stay independent 1/8 draws regardless of
-    ///      where (or whether) a hero lands. Reads the retained hero pool for `dailyIdx`, which
-    ///      moves only at `_unlockRng` and at rngGate's gap skip (AdvanceModule), both outside
-    ///      jackpot processing, so here it is frozen at the previous day's index. Bets placed
-    ///      on day D write to the day-D ring/spill pool; day D+1's jackpot reads that pool via
-    ///      `dailyIdx == D` (set by day D's `_unlockRng`).
+    ///      where (or whether) a hero lands. The daily request freezes this pool before
+    ///      asking for randomness; wagers after the request accumulate for the next draw.
     /// @param banQuadrant Quadrant the hero may not land in, or `_NO_QUADRANT_BAN`.
     function _rollBoard(uint256 randWord, uint8 banQuadrant) private view returns (uint32) {
         uint8[4] memory traits = JackpotBucketLib.getRandomTraits(randWord);

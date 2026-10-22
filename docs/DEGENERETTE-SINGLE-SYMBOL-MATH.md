@@ -66,6 +66,19 @@ the bet id is scoped to the RNG index the bet queued at (see
 identical final FLIP awards. Activity, stake boons, ETH caps and downstream
 reward draws also affect settlement independently.
 
+### Daily jackpot hero weights
+
+ETH wagers on the 24 eligible hero symbols add to the accumulating jackpot pool.
+A fresh daily RNG commitment freezes that pool for its pending board and starts
+collecting the next pool. Wagers placed during a VRF delay keep accumulating,
+even when the delay crosses several days. Retry requests and midday RNG leave
+both pools unchanged, so later wagers cannot change an already committed board.
+
+The hero views expose the sealed pool under the request day minus one and the
+accumulating pool under the current day. Other days return zero; use bet logs
+for historical calendar-day totals. Protocol deity-boon entries retain their
+separate calendar-day eligibility rules.
+
 ## Lane format
 
 Degenerette tickets are four positional bytes, lane `q` in byte `q`:

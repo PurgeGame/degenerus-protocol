@@ -6,7 +6,7 @@ import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
 
 /// @dev Resolve an external payee from Game's pinned wallet-table root.
 library WalletTableLib {
-    uint256 internal constant OWNERS_SLOT = 12;
+    uint256 internal constant OWNERS_SLOT = 11;
     uint256 private constant OWNERS_BASE = uint256(keccak256(abi.encode(OWNERS_SLOT)));
 
     /// @dev Ordinary accounts store an address; subaccounts store their ordinary owner's ID.

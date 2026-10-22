@@ -59,6 +59,17 @@ class Layout:
             for s in range(first, first + span):
                 self.by_slot[s].append(var)
 
+    def indirect_roots(self):
+        """Physical mapping/array heads, including heads nested in fixed arrays."""
+        roots = {"mapping": set(), "dynamic_array": set()}
+        for slot, variables in self.by_slot.items():
+            for var in variables:
+                type_id, _ = self.descend_word(var["type"], slot - int(var["slot"]), var["label"])
+                kind = self.types.get(type_id, {}).get("encoding")
+                if kind in roots:
+                    roots[kind].add(slot)
+        return roots
+
     def type_of(self, var):
         return var.get("type")
 
@@ -179,31 +190,34 @@ def resolve_unattributed(layout, slot, max_key=1024, span=1 << 20):
     """Second-chance attribution for a slot the census could not walk: a manually addressed
     list stored at keccak(keccak(key . root)) + i, i.e. `mapping(K => T[])` whose length word
     the transaction never touched (e.g. Game `foilQueue`). Brute-forces keys 0..max_key-1 of
-    every mapping root. Returns (root slot, key, index) or None. Needs pycryptodome."""
+    every physical mapping root, including fixed-array leaves. Direct dynamic-array
+    heads are also searched. Returns (root slot, key, index, kind) or None. Needs pycryptodome."""
     try:
         import Crypto  # noqa: F401
     except ImportError:
         return None
     s = int(slot, 16)
-    cache = _ARRAY_IN_MAPPING_CACHE.setdefault(id(layout), {"list": [], "elem": []})
-    if not cache["list"]:
-        roots = sorted({int(v["slot"]) for v in layout.storage
-                        if layout.types.get(v["type"], {}).get("encoding") == "mapping"})
-        for r in roots:
+    cache = _ARRAY_IN_MAPPING_CACHE.setdefault(layout, {"list": [], "elem": [], "built": False})
+    if not cache["built"]:
+        roots = layout.indirect_roots()
+        for r in sorted(roots["dynamic_array"]):
+            cache["list"].append((_keccak(r.to_bytes(32, "big")), r, 0, "D"))
+        for r in sorted(roots["mapping"]):
             for k in range(max_key):
                 inner = _keccak(k.to_bytes(32, "big") + r.to_bytes(32, "big"))
                 cache["elem"].append((inner, r, k))
-                cache["list"].append((_keccak(inner.to_bytes(32, "big")), r, k))
+                cache["list"].append((_keccak(inner.to_bytes(32, "big")), r, k, "A"))
         cache["list"].sort()
         cache["elem"].sort()
+        cache["built"] = True
     import bisect
     # A wide mapping value (e.g. uint256[256]) word far from any member the tx touched.
     i = bisect.bisect_right(cache["elem"], (s, 1 << 256, 0)) - 1
     if i >= 0 and s - cache["elem"][i][0] < 4096:
         return cache["elem"][i][1], cache["elem"][i][2], s - cache["elem"][i][0], "M"
-    i = bisect.bisect_right(cache["list"], (s, 1 << 256, 0)) - 1
+    i = bisect.bisect_right(cache["list"], (s, 1 << 256, 0, "")) - 1
     if i >= 0 and s - cache["list"][i][0] < span:
-        return cache["list"][i][1], cache["list"][i][2], s - cache["list"][i][0], "A"
+        return cache["list"][i][1], cache["list"][i][2], s - cache["list"][i][0], cache["list"][i][3]
     return None
 
 
@@ -320,7 +334,7 @@ def aggregate(scenarios, layouts):
                 hit = resolve_unattributed(layouts[e["account"]], e["slot"])
                 if hit:
                     SECOND_CHANCE[(e["account"], hit[0])] = SECOND_CHANCE.get((e["account"], hit[0]), 0) + 1
-                    e["root"], e["path"] = str(hit[0]), f"M0/A{hit[2]}" if hit[3] == "A" else f"M{hit[2]}"
+                    e["root"], e["path"] = str(hit[0]), (f"A{hit[2]}" if hit[3] == "D" else f"M0/A{hit[2]}" if hit[3] == "A" else f"M{hit[2]}")
             if "U" in e["path"].split("/"):
                 u = unattributed[(e["account"], e["path"])]
                 u["creates" if e["kind"] == "CREATE" else "clears"] += 1

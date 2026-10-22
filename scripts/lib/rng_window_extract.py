@@ -217,7 +217,7 @@ def enclosing_functions(masked: str):
 
 
 DECL_RE_TMPL = (
-    r"\b(?:uint\d*|mapping\s*\([^)]*\))\s+(?:internal|public|private|constant)\s+"
+    r"\b(?:uint\d*|mapping\s*\([^;{}]*?\))(?:\s*\[\s*\d*\s*\])*\s+(?:internal|public|private|constant)\s+"
 )
 
 
@@ -261,7 +261,7 @@ def scan_file(path: str, relpath: str):
     aliases = {}
     # Mapping references (including nested mappings) bind roots just like struct references.
     binding_re = re.compile(
-        r"\b(mapping\s*\([^;{}]*?\)|[A-Za-z_]\w*)\s+storage\s+([A-Za-z_]\w*)\s*=\s*([A-Za-z_]\w*)\b"
+        r"\b((?:mapping\s*\([^;{}]*?\)|[A-Za-z_]\w*)(?:\s*\[\s*\d*\s*\])*)\s+storage\s+([A-Za-z_]\w*)\s*=\s*([A-Za-z_]\w*)\b"
     )
     for match in binding_re.finditer(masked):
         typ, alias, root = match.groups()
@@ -273,7 +273,7 @@ def scan_file(path: str, relpath: str):
         roots_by_type.setdefault(typ, set()).add(root)
     for match in re.finditer(r"\bfunction\s+(\w+)\s*\(([^)]*)\)", masked, re.S):
         fn, params = match.groups()
-        for typ, alias in re.findall(r"\b(\w+)\s+storage\s+(\w+)\b", params):
+        for typ, alias in re.findall(r"\b(\w+(?:\s*\[\s*\d*\s*\])*)\s+storage\s+(\w+)\b", params):
             if typ in roots_by_type:
                 aliases.setdefault(fn, {}).setdefault(alias, set()).update(roots_by_type[typ])
 

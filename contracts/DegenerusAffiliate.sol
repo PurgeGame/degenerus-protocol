@@ -285,12 +285,6 @@ contract DegenerusAffiliate {
     /// @dev Private to prevent external manipulation; no public getter.
     mapping(uint32 => bytes32) private playerReferralCode;
 
-    /// @notice Per-level affiliate total packed with the leader.
-    /// @dev Bits [0:128): running sum, the exact denominator for score-proportional DGNRS
-    ///      claim distribution (saturating; unreachable). Bits [128:224): the leader's
-    ///      uint96-capped score. Bits [224:256): the leader's wallet ID. Every earning already
-    ///      rewrites this word, so tracking the lead reads and writes no other slot.
-    mapping(uint24 => uint256) private _levelScore;
 
     /// @notice A code's owner address, wallet ID (0 for an unknown code) and kickback.
     /// @dev Default codes resolve to their own address with 0% kickback.
@@ -1230,5 +1224,12 @@ contract DegenerusAffiliate {
         }
         return (amt * (BPS_DENOMINATOR - reductionBps)) / BPS_DENOMINATOR;
     }
+
+    /// @notice Per-level affiliate total packed with the leader.
+    /// @dev Bits [0:128): running sum, the exact denominator for score-proportional DGNRS
+    ///      claim distribution (saturating; unreachable). Bits [128:224): the leader's
+    ///      uint96-capped score. Bits [224:256): the leader's wallet ID. Every earning already
+    ///      rewrites this word, so tracking the lead reads and writes no other slot.
+    uint256[4] private _levelScore;
 
 }

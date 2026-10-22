@@ -48,19 +48,11 @@
     "typeLabel": "mapping(uint32 => uint128)"
   },
   {
-    "bytes": "32",
-    "encoding": "mapping",
-    "label": "_redemptionBatches",
-    "offset": 0,
-    "slot": 6,
-    "typeLabel": "mapping(uint32 => struct sDGNRS.RedemptionBatch)"
-  },
-  {
     "bytes": "16",
     "encoding": "inplace",
     "label": "_escrowedSupply",
     "offset": 0,
-    "slot": 7,
+    "slot": 6,
     "typeLabel": "uint128"
   },
   {
@@ -68,7 +60,7 @@
     "encoding": "inplace",
     "label": "_settlingBatch",
     "offset": 16,
-    "slot": 7,
+    "slot": 6,
     "typeLabel": "uint32"
   },
   {
@@ -76,7 +68,7 @@
     "encoding": "inplace",
     "label": "_redemptionCursor",
     "offset": 20,
-    "slot": 7,
+    "slot": 6,
     "typeLabel": "uint32"
   },
   {
@@ -84,7 +76,7 @@
     "encoding": "inplace",
     "label": "_batchPlayerCounts",
     "offset": 24,
-    "slot": 7,
+    "slot": 6,
     "typeLabel": "uint64"
   },
   {
@@ -92,7 +84,7 @@
     "encoding": "inplace",
     "label": "centurySupplyCheckpoint",
     "offset": 0,
-    "slot": 8,
+    "slot": 7,
     "typeLabel": "uint128"
   },
   {
@@ -100,7 +92,7 @@
     "encoding": "inplace",
     "label": "lastRecycledCentury",
     "offset": 16,
-    "slot": 8,
+    "slot": 7,
     "typeLabel": "uint24"
   },
   {
@@ -108,7 +100,7 @@
     "encoding": "inplace",
     "label": "recyclingClosed",
     "offset": 19,
-    "slot": 8,
+    "slot": 7,
     "typeLabel": "bool"
   },
   {
@@ -116,7 +108,7 @@
     "encoding": "inplace",
     "label": "_settlingReserveLeft",
     "offset": 20,
-    "slot": 8,
+    "slot": 7,
     "typeLabel": "uint96"
   },
   {
@@ -124,7 +116,15 @@
     "encoding": "inplace",
     "label": "_batchPlayers",
     "offset": 0,
-    "slot": 9,
+    "slot": 8,
     "typeLabel": "mapping(uint256 => uint256)[2]"
+  },
+  {
+    "bytes": "128",
+    "encoding": "inplace",
+    "label": "_redemptionBatches",
+    "offset": 0,
+    "slot": 10,
+    "typeLabel": "struct sDGNRS.RedemptionBatch[2]"
   }
 ]

@@ -63,7 +63,6 @@ OWNER	decBattleQueue	modules/DegenerusGameDecimatorModule.sol	Sealing appends FI
 OWNER	decimatorFlags	storage/DegenerusGameStorage.sol	Shared masked setters preserve independent burn-window and opening-day bits at slot-0 byte 18; used by Advance and terminal workers.
 OWNER	degeneretteRecordBounty	modules/DegenerusGameDegeneretteModule.sol	_placeDegeneretteBetCore writes the armed record bounty beside the queued bet; _resolveBet reads and deletes it once; sole writer
 OWNER	deityBoonPacked	modules/DegenerusGameBoonModule.sol	Manual gifts and automatic protocol draws stamp day|usedMask
-OWNER	deityBoonRecipientDay	modules/DegenerusGameBoonModule.sol	issueDeityBoon stamps the recipient's boon day (one boon per recipient per day); sole writer
 OWNER	deityBySymbol	modules/DegenerusGameWhaleModule.sol	_registerDeity records genesis or purchased symbol -> owner; sole writer
 OWNER	deityPassPricePaid	modules/DegenerusGameWhaleModule.sol	purchaseDeityPass records the price paid (caps the early-gameover refund); plain assignment, one pass per buyer
 OWNER	earlyTicketLevel	modules/DegenerusGameAdvanceModule.sol	first fresh daily or mid-day request after the goal freezes this absolute next-level pool and permanently closes its far-future queue to later entries
@@ -88,7 +87,7 @@ OWNER	lastVrfProcessedTimestamp	modules/DegenerusGameRngUtils.sol	_applyDailyRng
 OWNER	level	modules/DegenerusGameAdvanceModule.sol	_finalizeRngRequest promotes level = lvl on the fresh last-purchase request; the sole writer (advance-chain coupling with GNRUS.pickCharity)
 HELPER	levelDgnrsPacked	storage/DegenerusGameStorage.sol	_setLevelDgnrsAllocation/_addLevelDgnrsClaimed field mutators for the per-level DGNRS (allocation, claimed) pair
 HELPER	lootboxEvCapPacked	storage/DegenerusGameStorage.sol	_setLootboxEvUsedFor two-window (level,used) mutator
-OWNER	lootboxRngPacked	modules/DegenerusGameDegeneretteModule.sol	_collectBetFunds merges hero day/validity metadata and the pending ETH or FLIP addition and increments the write-buffer bet count in one write; preserves every other field.
+OWNER	lootboxRngPacked	modules/DegenerusGameDegeneretteModule.sol	_collectBetFunds merges hero buffer-validity metadata and the pending ETH or FLIP addition and increments the write-buffer bet count in one write; preserves every other field.
 HELPER	lootboxRngPacked	storage/DegenerusGameStorage.sol	_lrWrite field mutator (pending, threshold, mid-day latch, game-over latches); _appendBoxEntry adds pending ETH and increments the write-buffer box count; _swapRngBuffers clears pending ETH/FLIP and both write counts at a seal.
 OWNER	middayRngCredit	modules/DegenerusGameRngModule.sol	creditMiddayRng (ADMIN, forwarded by the Game stub) banks a donor's LINK credit by wallet ID; _tryChargeMiddayCredit debits the caller's credit for a mid-day request; one module owns both sides
 OWNER	mintPacked_	modules/DegenerusGameBoonModule.sol	_creditActivity bumps LEVEL_COUNT via setPacked on a fresh read; field-isolated
@@ -146,7 +145,7 @@ HELPER	playerClaimWord	storage/DegenerusGameStorage.sol	Bingo and affiliate clai
 OWNER	boonPacked	modules/DegenerusGameLootboxModule.sol	Consumes the applicable box/pass boon field with its masked one-shot write; other packed boons are preserved.
 OWNER	boonPacked	modules/DegenerusGameWhaleModule.sol	Consumes the applicable box/pass boon field with its masked one-shot write; other packed boons are preserved.
 OWNER	boxCursor	modules/GameAfkingModule.sol	Human FIFO worker stores the advanced cursor before each entry settles; the seal resets it.
-HELPER	dailyHeroWagers	storage/DegenerusGameStorage.sol	Degenerette's day-tagged hero ring and stalled-day spill writer; recycling cannot evict the frozen jackpot day.
+HELPER	dailyHeroWagers	storage/DegenerusGameStorage.sol	Degenerette's accumulating hero buffer; the daily request freezes it and logically resets the next write buffer.
 OWNER	dailyJackpotCoinTicketsPending	modules/DegenerusGameGameOverModule.sol	Terminal cutover retires the unpaid normal-day continuation after preserving all already-credited liabilities.
 OWNER	dailyTicketBudgetsPacked	modules/DegenerusGameGameOverModule.sol	Terminal cutover clears only unpaid normal-day budgets and battle flags; paid awards remain counted.
 OWNER	decBattleRounds	modules/DegenerusGameAdvanceModule.sol	Advance opens the next decimator window; Decimator owns sealed pool/capacity, canonical cursor, ranking and paid phase under the shared consumer gate.
@@ -228,3 +227,4 @@ OWNER	deityBySymbol	modules/DegenerusGameBoonModule.sol	Genesis protocol registr
 OWNER	snapLevel	modules/DegenerusGameGameOverModule.sol	Authorized vault-owner declaration records the level at which Advance consumes the pending exponent.
 OWNER	snapPendingShift	modules/DegenerusGameGameOverModule.sol	Authorized vault-owner declaration stores the pending exponent for Advance.
 HELPER	_redemptionReserveStored	storage/DegenerusGameStorage.sol	_setRedemptionReserve writes amount + 1; _releaseRedemptionReserve reclassifies completed or terminal reserve into ordinary sDGNRS claimable without changing claimablePool.
+HELPER	lootboxRngPacked	storage/DegenerusGameStorage.sol	_sealHeroWagers swaps hero buffers at the daily request and clears only the next write-buffer validity bits.

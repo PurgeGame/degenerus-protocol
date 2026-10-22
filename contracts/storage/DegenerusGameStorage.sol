@@ -123,6 +123,7 @@ interface IAdminLinkValue {
  * Each uint256, array length, or mapping root occupies its own slot.
  * Dynamic arrays: length at slot N, data at keccak256(N).
  * Mappings: value at keccak256(key . slot).
+ * Fixed arrays: contiguous elements, using Solidity's usual packing rules.
  *
  * SECURITY CONSIDERATIONS
  * -----------------------------------------------------------------------------
@@ -708,10 +709,6 @@ abstract contract DegenerusGameStorage {
     // RNG History
     // =========================================================================
 
-    /// @dev Two reusable word slots, indexed by day parity and authenticated
-    ///      by rngDayTags. Events provide historical replay; live views expose
-    ///      today/yesterday only.
-    mapping(uint24 => uint256) internal rngWordByDay;
 
     /// @dev Exact tag authentication also serves pinned processing days older than
     ///      yesterday. A committed word cannot be overwritten before consumers finish.
@@ -1997,7 +1994,7 @@ abstract contract DegenerusGameStorage {
     /// @dev Wallet ID of the deity holding a trait's symbol, or zero. Gold six has no virtual
     ///      deity entry; actual purchased entries remain eligible.
     function _traitDeity(uint8 trait) internal view returns (uint32) {
-        return trait == GoldSixLib.TRAIT ? 0 : deityBySymbol[(trait >> 6) * 8 + (trait & 7)];
+        return trait == GoldSixLib.TRAIT ? 0 : uint32(deityBySymbol[(trait >> 6) * 8 + (trait & 7)]);
     }
 
     /// @dev Virtual deity entry count for a trait bucket of size `len` (zero
@@ -2727,23 +2724,6 @@ abstract contract DegenerusGameStorage {
     // Degenerette Bet Queue
     // =========================================================================
 
-    /// @dev Degenerette bets per physical RNG buffer, two 128-bit lanes per word in placement order.
-    ///      A bet's id is its position + 1. Placement appends only to the write buffer; the
-    ///      ordered miner chain resolves the read buffer after its box entries. The cursor authenticates
-    ///      the resolved prefix. Manually addressed like `boxQueue`: bet `p` sits at
-    ///      `keccak256(degeneretteQueue[buffer].slot) + (p >> 1)`, the write count lives in
-    ///      lootboxRngPacked and the read length in `degeneretteReadCount`. Never use Solidity
-    ///      length, push, pop or indexing on this mapping.
-    ///      Compact layout used by storage, resolution, events and views (lane p & 1):
-    ///      - [0..31]    owner wallet ID
-    ///      - [32..36]   chosen hero symbol (0..23; hero quadrant = symbol >> 3; Dice excluded)
-    ///      - [37..41]   spin count (1..25)
-    ///      - [42]       currency (0 = ETH, 1 = FLIP)
-    ///      - [43]       record flag: a biggest-spin record bounty waits in degeneretteRecordBounty
-    ///      - [44..59]   activity score in whole points
-    ///      - [60..123]  stake per spin in currency units (ETH: gwei, FLIP: whole FLIP)
-    ///      - [124..127] reserved (always zero)
-    mapping(uint48 => uint256[]) internal degeneretteQueue;
 
     // =========================================================================
     // Operator Approvals
@@ -2756,8 +2736,6 @@ abstract contract DegenerusGameStorage {
     // Affiliate DGNRS Claims
     // =========================================================================
 
-    /// @dev Four retained prize snapshots: uint128 amount below a level+1 tag.
-    mapping(uint24 => uint256) internal levelPrizePool;
 
     function _levelPrizePool(uint24 lvl) internal view returns (uint256) {
         uint256 word = levelPrizePool[lvl & 3];
@@ -2878,8 +2856,6 @@ abstract contract DegenerusGameStorage {
     uint8 internal constant SDGNRS_DEITY_SYMBOL = 6;
     uint32 internal constant DEITY_PERPETUAL_ENTRIES = 4;
 
-    /// @dev Reverse lookup: symbol ID (0-31) → the holding deity's wallet ID (0 = unclaimed).
-    mapping(uint8 => uint32) internal deityBySymbol;
 
     // =========================================================================
     // Degenesis Settlement
@@ -3304,10 +3280,11 @@ abstract contract DegenerusGameStorage {
     // =========================================================================
     //
     // Layout (LSB -> MSB):
-    //   [bits   0:23]   heroBufferDay             uint24   (latest day in the hero ring)
-    //   [bits  24:29]   heroQuadrantsValid        uint6    (3 quadrant bits per parity)
+    //   [bits   0:23]   heroRequestDay            uint24   (sealed pool labels day - 1)
+    //   [bits  24:29]   heroQuadrantsValid        uint6    (3 quadrant bits per buffer)
     //   [bits  30:37]   middayMaxBasefeeGwei      uint8    (whole gwei, 0 disables the gate)
-    //   [bits  38:47]   unused
+    //   [bit      38]   heroWriteBuffer          bool
+    //   [bits  39:47]   unused
     //   [bits  48:87]   lootboxRngPendingEth      uint40   (scaled /1e15, 0.001 ETH res, ~1.1B ETH)
     //   [bits  88:119]  lootboxRngThreshold       uint32   (scaled /1e15, 0.001 ETH res, ~4.29M ETH)
     //   [bits 120:151]  boxWriteCount             uint32   (box entries appended to the write buffer)
@@ -3535,10 +3512,6 @@ abstract contract DegenerusGameStorage {
     ///      Bits 32..36 retain the immutable deity registration ordinal.
     mapping(uint32 => uint64) internal deityBoonPacked;
 
-    /// @dev Day when recipient last received a deity boon (prevents double-receipt
-    ///      on the same day, regardless of which deity issues it).
-    mapping(uint32 => uint24) internal deityBoonRecipientDay;
-
     // =========================================================================
     // Degenerette Bets
     // =========================================================================
@@ -3647,83 +3620,50 @@ abstract contract DegenerusGameStorage {
     ///      window after window, holds its latest entry's level (bits 64..87) and id (0..63).
     mapping(uint256 => uint256) internal decBattleEntries;
     mapping(uint24 => DecBattleRound) internal decBattleRounds;
-    /// @dev The leaderboard of the round at the head of the queue, keyed by heap position: a
-    ///      node is its score (whole-FLIP stack x normalized peak) above the 64-bit entry id, and
-    ///      equal scores order by a random tiebreak recomputed from the id. The FIFO settles one
-    ///      round at a time, so every round reuses these slots.
-    mapping(uint256 => uint256) internal decBattleHeap;
     mapping(uint32 => uint256) internal decBattlePlayers;
 
     // =========================================================================
     // Degenerette Hero Wager Tracking (Daily)
     // =========================================================================
 
-    /// @dev Daily hero symbol wagers (ETH only). Keys 0/1 are reusable day-parity buffers;
-    ///      their day and quadrant-valid bits live in lootboxRngPacked's low 30 bits.
-    ///      While advance is behind, days beyond dailyIdx+1 use their full day as the key
-    ///      (always >=2), preserving the frozen jackpot pool until settlement catches up.
-    ///      Value: 4 packed uint256s (only the first three quadrants are eligible).
-    ///      Each uint256 packs 8 × 32-bit amounts (one per symbol in that quadrant).
-    ///      Amounts stored in units of 1e14 wei (0.0001 ETH) to fit 32 bits
-    ///      (max ~429,500 ETH per symbol per day).
-    mapping(uint24 => uint256[4]) internal dailyHeroWagers;
+    uint256 internal constant HERO_WRITE_SHIFT = 38;
 
-    uint256 internal constant HERO_BUFFER_META_MASK = (1 << 30) - 1;
-
-    /// @dev Read a retained hero pool. Days older than the ring return zero, including
-    ///      any retired spill prefix. An invalid quadrant never exposes an old buffer.
+    /// @dev The sealed pool is labeled request day - 1. Today's view exposes the
+    ///      accumulating pool; other days have no retained calendar-day history.
     function _dailyHeroWagerWord(uint24 day, uint8 quadrant) internal view returns (uint256) {
-        unchecked {
-            if (quadrant >= 3) return 0;
-            uint256 meta = lootboxRngPacked;
-            uint256 latest = uint24(meta);
-            if (uint256(day) + 1 < latest) return 0;
-            uint256 bit = uint256(1) << (24 + (day & 1) * 3 + quadrant);
-            if (latest >= day && meta & bit != 0) {
-                return dailyHeroWagers[day & 1][quadrant];
-            }
-            return day > 1 ? dailyHeroWagers[day][quadrant] : 0;
-        }
+        if (quadrant >= 3) return 0;
+        uint256 meta = lootboxRngPacked;
+        uint256 key = (meta >> HERO_WRITE_SHIFT) & 1;
+        if (uint256(day) + 1 == uint24(meta)) key ^= 1;
+        else if (day != _simulatedDayIndex()) return 0;
+        if (meta & (uint256(1) << (24 + key * 3 + quadrant)) == 0) return 0;
+        return dailyHeroWagers[key][quadrant];
     }
 
-    /// @dev Only a day at/before dailyIdx+1 can recycle a buffer: everything evicted is
-    ///      strictly older than the jackpot's frozen dailyIdx. Later wall-clock days spill
-    ///      instead. When advance catches up, each quadrant lazily imports its spill word.
-    ///      Valid bits reset counts logically; the old nonzero word is overwritten directly,
-    ///      avoiding both a clearing SSTORE and a fresh zero-to-nonzero SSTORE.
-    ///      The caller merges returned metadata with its existing pending-ETH write.
-    function _recordDailyHeroWager(uint24 day, uint8 quadrant, uint8 symbol, uint256 units, uint256 meta)
+    /// @dev Only a fresh daily commitment swaps hero pools. Retry and midday RNG
+    ///      leave the frozen pool and accumulating pool unchanged.
+    function _sealHeroWagers(uint24 day) internal {
+        uint256 meta = lootboxRngPacked;
+        uint256 next = ((meta >> HERO_WRITE_SHIFT) & 1) ^ 1;
+        meta = (meta ^ (uint256(1) << HERO_WRITE_SHIFT)) &
+            ~(uint256(type(uint24).max) | (uint256(7) << (24 + next * 3)));
+        lootboxRngPacked = meta | day;
+    }
+
+    /// @dev Three packed quadrants, eight saturating uint32 weights each. The first
+    ///      wager after reuse overwrites stale lanes without clearing storage.
+    function _recordHeroWager(uint8 quadrant, uint8 symbol, uint256 units, uint256 meta)
         internal returns (uint256)
     {
-        // Validated symbol <24 bounds every shift; the uint24 days are widened before
-        // adding one. Paid units come from <=25 uint128 stakes /1e14, so adding a
-        // uint32 lane is also far below uint256's limit before saturation.
         unchecked {
-            uint24 key = day;
-            uint256 packed;
-            uint256 latest = uint24(meta);
-            if (day == latest || uint256(day) <= uint256(dailyIdx) + 1) {
-                key = day & 1;
-                uint256 valid = (meta >> 24) & 63;
-                if (day != latest) {
-                    valid = uint256(day) == latest + 1 ? valid & ~(uint256(7) << (key * 3)) : 0;
-                }
-                uint256 bit = uint256(1) << (key * 3 + quadrant);
-                if (valid & bit != 0) {
-                    packed = dailyHeroWagers[key][quadrant];
-                } else {
-                    // A day first seen during a stall may already have paid wagers.
-                    packed = day > 1 ? dailyHeroWagers[day][quadrant] : 0;
-                    meta = (meta & ~HERO_BUFFER_META_MASK) | day | ((valid | bit) << 24);
-                }
-            } else {
-                packed = dailyHeroWagers[key][quadrant];
-            }
+            uint256 key = (meta >> HERO_WRITE_SHIFT) & 1;
+            uint256 bit = uint256(1) << (24 + key * 3 + quadrant);
+            uint256 packed = meta & bit != 0 ? dailyHeroWagers[key][quadrant] : 0;
             uint256 shift = uint256(symbol) * 32;
             uint256 updated = uint32(packed >> shift) + units;
             if (updated > type(uint32).max) updated = type(uint32).max;
             dailyHeroWagers[key][quadrant] = (packed & ~(uint256(type(uint32).max) << shift)) | (updated << shift);
-            return meta;
+            return meta | bit;
         }
     }
 
@@ -3788,15 +3728,6 @@ abstract contract DegenerusGameStorage {
         uint16 scoreSnapshot;
     }
 
-    /// @dev Two-slot rings keyed [issuer][day & 1], so each day reuses the slots written two
-    ///      days earlier instead of fresh zero slots. Sound because day D's pool and entries are
-    ///      written only on wall day D (placement keys the wall day) and drawn only on wall day
-    ///      D + 1 (resolveProtocolBoonDraws returns unless the award day is today), so when day
-    ///      D + 2 reuses the slots, day D has been drawn or never can be. A pool whose `day` tag
-    ///      is not the day asked for holds another day and reads as empty; the first entry
-    ///      of a new day resets it. Entries at or past the pool's entryCount are leftovers.
-    mapping(uint32 => mapping(uint24 => ProtocolBoonPool)) internal protocolBoonPools;
-    mapping(uint32 => mapping(uint24 => mapping(uint32 => ProtocolBoonEntry))) internal protocolBoonEntries;
 
     bytes32 internal constant PROTOCOL_BOON_WINNER_TAG = keccak256("degenerus.protocol.boon.winner");
 
@@ -4329,40 +4260,17 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant SUBSCRIBER_CAP = 2000;
     uint256 internal constant SUBSCRIBER_TICKET_PHASE = 1 << 15;
 
-    /// @dev Box purchase queue per physical RNG buffer (keys 0/1): one 85-bit entry per
-    ///      purchase, three to a word, appended to the write buffer and settled FIFO from
-    ///      `boxCursor` once the buffer is sealed and its word published. Entries are never
-    ///      updated after their append. Logical position `p` sits in word
-    ///      `keccak256(boxQueue[buffer].slot) + p / 3` at bit `(p % 3) * 85`; the write count
-    ///      lives in lootboxRngPacked and the read length in `boxReadCount`, both in entries.
-    ///      Never use Solidity length, push, pop or indexing on this mapping. A drained buffer is
-    ///      reused by resetting only its count. Entry layout: the LB_* constants.
-    mapping(uint48 => uint256[]) internal boxQueue;
 
     // =========================================================================
     // Foil Pack
     // =========================================================================
 
-    /// @dev Four reusable pack slots per player, keyed by level & 3 and authenticated
-    ///      by the full level at bits 208..231. Purchase freezes boost and activity, but no day.
-    ///      Materialization writes four uint32 lines at bits 56..183, the first
-    ///      eligible draw at bits 0..23, generation day at bits 184..207, and ready
-    ///      at bit 255. Bit 232 marks gold paid. No historical reveal word is needed after generation.
-    mapping(uint24 => mapping(uint32 => uint256)) internal foilRecord;
 
     /// @dev Two reusable day lanes per player, set before payout. Each 32-bit lane
     ///      stores its exact day [0..23] and four ticket claim bits [24..27].
     mapping(uint32 => uint256) internal foilMatchClaimed;
 
-    /// @dev Two reusable draws keyed by day & 1: traits [0..31], level [64..87],
-    ///      payout seed [88..215], seed-present flag 216, exact day [217..240].
-    mapping(uint24 => uint256) internal dailyFoilDraw;
 
-    /// @dev Foil read/write cohorts (keys 0/1), frozen at the daily request only.
-    ///      New buys always append to the write half. Manually addressed: pack `p` of cohort
-    ///      `key` sits at `keccak256(foilQueue[key].slot) + p`, and the cohort lengths are
-    ///      foilWriteCount / foilReadCount. Never use Solidity length, push, pop or indexing.
-    mapping(uint24 => uint256[]) internal foilQueue;
 
     /// @dev Resumable read cursor and cohort-wide generation/eligibility stamps.
     uint32 internal foilCursor;
@@ -5176,4 +5084,84 @@ abstract contract DegenerusGameStorage {
     function _degenesisSettlePending() internal view returns (bool) {
         return degenesisClosed < DEGENESIS_DAYS && rngFlagsAndNudges & (uint16(1) << 13) == 0 && degenesisWord != 0;
     }
+    /// @dev Frozen and accumulating hero pools, each three packed symbol quadrants.
+    uint256[3][2] internal dailyHeroWagers;
+
+    /// @dev Two reusable word slots, indexed by day parity and authenticated
+    ///      by rngDayTags. Events provide historical replay; live views expose
+    ///      today/yesterday only.
+    uint256[2] internal rngWordByDay;
+
+    /// @dev Four retained prize snapshots: uint128 amount below a level+1 tag.
+    uint256[4] internal levelPrizePool;
+
+    /// @dev Two reusable draws keyed by day & 1: traits [0..31], level [64..87],
+    ///      payout seed [88..215], seed-present flag 216, exact day [217..240].
+    uint256[2] internal dailyFoilDraw;
+
+    /// @dev Reverse lookup: symbol ID (0-31) → the holding deity's wallet ID (0 = unclaimed).
+    uint256[32] internal deityBySymbol;
+
+    /// @dev The leaderboard of the round at the head of the queue, keyed by heap position: a
+    ///      node is its score (whole-FLIP stack x normalized peak) above the 64-bit entry id, and
+    ///      equal scores order by a random tiebreak recomputed from the id. The FIFO settles one
+    ///      round at a time, so every round reuses these slots.
+    uint256[200] internal decBattleHeap;
+
+    /// @dev Four reusable pack slots per player, keyed by level & 3 and authenticated
+    ///      by the full level at bits 208..231. Purchase freezes boost and activity, but no day.
+    ///      Materialization writes four uint32 lines at bits 56..183, the first
+    ///      eligible draw at bits 0..23, generation day at bits 184..207, and ready
+    ///      at bit 255. Bit 232 marks gold paid. No historical reveal word is needed after generation.
+    mapping(uint32 => uint256)[4] internal foilRecord;
+
+    /// @dev Two-slot rings keyed [issuer index][day & 1] (Vault 0, sDGNRS 1); each day reuses slots written two
+    ///      days earlier instead of fresh zero slots. Sound because day D's pool and entries are
+    ///      written only on wall day D (placement keys the wall day) and drawn only on wall day
+    ///      D + 1 (resolveProtocolBoonDraws returns unless the award day is today), so when day
+    ///      D + 2 reuses the slots, day D has been drawn or never can be. A pool whose `day` tag
+    ///      is not the day asked for holds another day and reads as empty; the first entry
+    ///      of a new day resets it. Entries at or past the pool's entryCount are leftovers.
+    ProtocolBoonPool[2][2] internal protocolBoonPools;
+
+    mapping(uint32 => ProtocolBoonEntry)[2][2] internal protocolBoonEntries;
+
+    /// @dev Box purchase queue per physical RNG buffer (keys 0/1): one 85-bit entry per
+    ///      purchase, three to a word, appended to the write buffer and settled FIFO from
+    ///      `boxCursor` once the buffer is sealed and its word published. Entries are never
+    ///      updated after their append. Logical position `p` sits in word
+    ///      `keccak256(boxQueue[buffer].slot) + p / 3` at bit `(p % 3) * 85`; the write count
+    ///      lives in lootboxRngPacked and the read length in `boxReadCount`, both in entries.
+    ///      Never use Solidity length, push, pop or element indexing for these packed payloads. A drained buffer is
+    ///      reused by resetting only its count. Entry layout: the LB_* constants.
+    uint256[][2] internal boxQueue;
+
+    /// @dev Foil read/write cohorts (keys 0/1), frozen at the daily request only.
+    ///      New buys always append to the write half. Manually addressed: pack `p` of cohort
+    ///      `key` sits at `keccak256(foilQueue[key].slot) + p`, and the cohort lengths are
+    ///      foilWriteCount / foilReadCount. Never use Solidity length, push, pop or indexing.
+    uint256[][2] internal foilQueue;
+
+    /// @dev Degenerette bets per physical RNG buffer, two 128-bit lanes per word in placement order.
+    ///      A bet's id is its position + 1. Placement appends only to the write buffer; the
+    ///      ordered miner chain resolves the read buffer after its box entries. The cursor authenticates
+    ///      the resolved prefix. Manually addressed like `boxQueue`: bet `p` sits at
+    ///      `keccak256(degeneretteQueue[buffer].slot) + (p >> 1)`, the write count lives in
+    ///      lootboxRngPacked and the read length in `degeneretteReadCount`. Never use Solidity
+    ///      length, push, pop or element indexing for these packed payloads.
+    ///      Compact layout used by storage, resolution, events and views (lane p & 1):
+    ///      - [0..31]    owner wallet ID
+    ///      - [32..36]   chosen hero symbol (0..23; hero quadrant = symbol >> 3; Dice excluded)
+    ///      - [37..41]   spin count (1..25)
+    ///      - [42]       currency (0 = ETH, 1 = FLIP)
+    ///      - [43]       record flag: a biggest-spin record bounty waits in degeneretteRecordBounty
+    ///      - [44..59]   activity score in whole points
+    ///      - [60..123]  stake per spin in currency units (ETH: gwei, FLIP: whole FLIP)
+    ///      - [124..127] reserved (always zero)
+    uint256[][2] internal degeneretteQueue;
+
+    function _protocolBoonIndex(uint32 issuer) internal pure returns (uint256) {
+        return issuer == VAULT_WALLET_ID ? 0 : 1;
+    }
+
 }

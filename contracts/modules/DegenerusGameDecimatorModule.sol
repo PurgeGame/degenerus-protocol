@@ -388,7 +388,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
             uint256 winners = round.winners;
             uint256 paid = round.paid;
             (uint256 base, uint256 champ, uint256 champPasses, uint256 perEth,, bool passMode) = _payTerms(round);
-            mapping(uint256 => uint256) storage heap = decBattleHeap;
+            uint256[200] storage heap = decBattleHeap;
             while (paid < winners) {
                 if (!MineFlipGas.canRun(meter, PAYMENT_GAS_MAX, WORK_TAIL_GAS)) break;
                 uint64 id = uint64(heap[paid]);
@@ -498,7 +498,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         returns (uint256, bool)
     {
         if (capacity == 0) return (0, false);
-        mapping(uint256 => uint256) storage heap = decBattleHeap;
+        uint256[200] storage heap = decBattleHeap;
         uint256 pos;
         if (size < capacity) {
             pos = size;
@@ -550,7 +550,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
             emit DecimatorRanked(lvl, 0, 0);
             return;
         }
-        mapping(uint256 => uint256) storage heap = decBattleHeap;
+        uint256[200] storage heap = decBattleHeap;
         // Every internal node of the min-heap is below a child, so the maximum is a leaf.
         uint256 i = winners / 2;
         uint256 best = i;

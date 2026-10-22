@@ -116,8 +116,8 @@ EXEMPT-ADVANCE	rngRequestDay	runDailyPhase	modules/DegenerusGameAdvanceModule.so
 CONSUMER-SEALED	_recordedDailyWord	issueDeityBoon	modules/DegenerusGameBoonModule.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
 CONSUMER-SEALED	_recordedDailyWord	resolveProtocolBoonDraws	modules/DegenerusGameBoonModule.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
 CONSUMER-SEALED	_lootboxWord	_runDecimatorWork	modules/DegenerusGameDecimatorModule.sol	READ
-CURSOR	lootboxRngPacked	_collectBetFunds	modules/DegenerusGameDegeneretteModule.sol	READ	ETH bet merges hero-ring day/valid bits (0..29) and pending ETH, FLIP bet pending FLIP; both commit the bet write count in the same write. Neither is entropy, a buffer index or a readiness flag; the count only positions the write-buffer append.
-PRODUCER	lootboxRngPacked	_collectBetFunds	modules/DegenerusGameDegeneretteModule.sol	WRITE	Writes hero-ring metadata, pending ETH/FLIP and the write-buffer bet count +1; a bet can recycle a hero buffer only for days <= dailyIdx+1, never the frozen dailyIdx pool. The sealed read count lives in degeneretteReadCount, which bets never write.
+CURSOR	lootboxRngPacked	_collectBetFunds	modules/DegenerusGameDegeneretteModule.sol	READ	ETH bet merges accumulating hero-buffer validity bits (24..29) and pending ETH, FLIP bet pending FLIP; both commit the bet write count in the same write. Neither is entropy, a buffer index or a readiness flag; the count only positions the write-buffer append.
+PRODUCER	lootboxRngPacked	_collectBetFunds	modules/DegenerusGameDegeneretteModule.sol	WRITE	Writes accumulating hero-buffer validity, pending ETH/FLIP and the write-buffer bet count +1; the daily request alone swaps hero buffers, so a bet cannot change the sealed pool. The sealed read count lives in degeneretteReadCount, which bets never write.
 GATE	_lootboxWord	runDecimatorJackpot	modules/DegenerusGameDecimatorModule.sol	READ
 CONSUMER-SEALED	_lootboxWord	_runDegeneretteWork	modules/DegenerusGameDegeneretteModule.sol	READ
 CONSUMER-SEALED	_lootboxWord	_runFoilWork	modules/DegenerusGameFoilPackModule.sol	READ	normal frozen read cohort generates and stores all foil lines once
@@ -169,7 +169,7 @@ ACCESSOR	rngFlagsAndNudges	_clearAppliedNudges	storage/DegenerusGameStorage.sol	
 ACCESSOR	rngFlagsAndNudges	_clearAppliedNudges	storage/DegenerusGameStorage.sol	WRITE	Miner recorder clears only nudge bits, never in the billed callback.
 ACCESSOR	_currentRngWord	_currentRngWord	storage/DegenerusGameStorage.sol	READ	Shared encoding accessor for current slot3; no extra state, all entropy readers use this decoder.
 ACCESSOR	rngWordCurrent	_currentRngWord	storage/DegenerusGameStorage.sol	READ	Shared encoding accessor for current slot3; no extra state, all entropy readers use this decoder.
-ACCESSOR	lootboxRngPacked	_dailyHeroWagerWord	storage/DegenerusGameStorage.sol	READ	Hero-ring metadata selects the retained pool; latest <= dailyIdx+1, so post-request bets cannot change the frozen dailyIdx day it returns.
+ACCESSOR	lootboxRngPacked	_dailyHeroWagerWord	storage/DegenerusGameStorage.sol	READ	Hero metadata selects the request-sealed pool for requestDay-1 and the accumulating pool for today; post-request bets write the other buffer.
 ACCESSOR	dailyFoilDraw	_foilDrawWord	storage/DegenerusGameStorage.sol	READ	Authenticates the exact logical day in the parity slot; no wall-age gate so stalled advance consumers retain their board.
 CONSUMER-SEALED	_currentRngWord	_lootboxWord	storage/DegenerusGameStorage.sol	READ	Current read identity and ready bit gate the shared payload decoder.
 ACCESSOR	_lootboxWord	_lootboxWord	storage/DegenerusGameStorage.sol	READ	packed ready bit plus activeIndex-1 authenticates current read payload
@@ -225,3 +225,5 @@ EXEMPT-ADVANCE	lootboxRngPacked	_swapRngBuffers	storage/DegenerusGameStorage.sol
 EXEMPT-ADVANCE	lootboxRngPacked	_swapRngBuffers	storage/DegenerusGameStorage.sol	WRITE	Seal clears pending ETH/FLIP and both write counts in one write; the new write buffer starts empty. Retry never swaps.
 
 EXEMPT-ADVANCE	rngRequestDay	_drawBafPair	modules/DegenerusGameJackpotDrawModule.sol	READ	tags candidate events with the locked request day; no selection input, existing request-day freeze coverage applies
+EXEMPT-ADVANCE	lootboxRngPacked	_sealHeroWagers	storage/DegenerusGameStorage.sol	READ	Fresh daily commitment reads the hero write-buffer selector; retries and midday requests never call this helper.
+EXEMPT-ADVANCE	lootboxRngPacked	_sealHeroWagers	storage/DegenerusGameStorage.sol	WRITE	Fresh daily commitment flips bit38, records its day, and clears only the next accumulating buffer validity. Other RNG fields are preserved.

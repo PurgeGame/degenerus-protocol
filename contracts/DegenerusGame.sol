@@ -2350,7 +2350,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
       |                    DEGENERETTE TRACKING VIEWS                        |
       +======================================================================+*/
 
-    /// @notice Get a retained daily hero wager. Recycled days return zero; use bet logs for history.
+    /// @notice Get hero weights for the sealed request day - 1, or the accumulating pool for today.
     /// @param day Day index (from GameTimeLib).
     /// @param quadrant Quadrant (0-3).
     /// @param symbol Symbol index within quadrant (0-7).
@@ -2365,7 +2365,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
         wagerUnits = (packed >> (uint256(symbol) * 32)) & 0xFFFFFFFF;
     }
 
-    /// @notice Get the most-wagered hero in a retained day. Recycled days return zeros.
+    /// @notice Get the leading hero in the sealed or accumulating pool; other days return zeros.
     /// @param day Day index (from GameTimeLib).
     /// @return winQuadrant The winning quadrant.
     /// @return winSymbol The winning symbol within that quadrant.

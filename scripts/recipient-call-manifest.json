@@ -1427,25 +1427,25 @@
     "path": "contracts/CrapsLens.sol",
     "scope": "CrapsLens.preferredBoardOf",
     "kind": "recipient-helper",
-    "expression": "CrapsLensReader.mapped(ContractAddresses.CRAPS, 14, walletId)",
+    "expression": "CrapsLensReader.mapped(ContractAddresses.CRAPS, CrapsLensReader.PASS_CREDITS_SLOT, walletId)",
     "count": 1,
-    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
+    "review": "BOUNDED_LAYOUT: reviewed raw view read through the unchanged table/game target and extsload interface. Compiler-pinned roots and masked or guarded array offsets replace the prior mapping derivation; no value transfer or mutating recipient call is introduced. Craps tagged reads retain period/day authentication; Game views retain winner, level and issuer guards."
   },
   {
     "path": "contracts/CrapsLens.sol",
     "scope": "CrapsLens.progressivePool",
     "kind": "recipient-helper",
-    "expression": "CrapsLensReader.read(ContractAddresses.CRAPS, 15)",
+    "expression": "CrapsLensReader.read(ContractAddresses.CRAPS, CrapsLensReader.PROGRESSIVE_SLOT)",
     "count": 1,
-    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
+    "review": "BOUNDED_LAYOUT: reviewed raw view read through the unchanged table/game target and extsload interface. Compiler-pinned roots and masked or guarded array offsets replace the prior mapping derivation; no value transfer or mutating recipient call is introduced. Craps tagged reads retain period/day authentication; Game views retain winner, level and issuer guards."
   },
   {
     "path": "contracts/CrapsLens.sol",
     "scope": "CrapsLensReader.battleKey",
     "kind": "recipient-helper",
-    "expression": "mapped(table, 13, slot)",
+    "expression": "mapped(table, CUSTOM_BATTLE_SLOT, slot)",
     "count": 1,
-    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
+    "review": "BOUNDED_LAYOUT: reviewed raw view read through the unchanged table/game target and extsload interface. Compiler-pinned roots and masked or guarded array offsets replace the prior mapping derivation; no value transfer or mutating recipient call is introduced. Craps tagged reads retain period/day authentication; Game views retain winner, level and issuer guards."
   },
   {
     "path": "contracts/CrapsLens.sol",
@@ -1459,41 +1459,41 @@
     "path": "contracts/CrapsLens.sol",
     "scope": "CrapsLensReader.boardOf",
     "kind": "recipient-helper",
-    "expression": "mapped(table, 2, battleKey(table, slot))",
+    "expression": "mapped(table, BATTLES_SLOT, battleKey(table, slot))",
     "count": 1,
-    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
+    "review": "BOUNDED_LAYOUT: reviewed raw view read through the unchanged table/game target and extsload interface. Compiler-pinned roots and masked or guarded array offsets replace the prior mapping derivation; no value transfer or mutating recipient call is introduced. Craps tagged reads retain period/day authentication; Game views retain winner, level and issuer guards."
   },
   {
     "path": "contracts/CrapsLens.sol",
     "scope": "CrapsLensReader.boardOf",
     "kind": "recipient-helper",
-    "expression": "mapped(table, 2, slot & 511)",
+    "expression": "mapped(table, BATTLES_SLOT, slot & 511)",
     "count": 1,
-    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
+    "review": "BOUNDED_LAYOUT: reviewed raw view read through the unchanged table/game target and extsload interface. Compiler-pinned roots and masked or guarded array offsets replace the prior mapping derivation; no value transfer or mutating recipient call is introduced. Craps tagged reads retain period/day authentication; Game views retain winner, level and issuer guards."
   },
   {
     "path": "contracts/CrapsLens.sol",
     "scope": "CrapsLensReader.boardOf",
     "kind": "recipient-helper",
-    "expression": "tagged(table, 12, slot >> 3, false)",
+    "expression": "tagged(table, BATTLE_DAYS_SLOT, slot >> 3, false)",
     "count": 1,
-    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
+    "review": "BOUNDED_LAYOUT: reviewed raw view read through the unchanged table/game target and extsload interface. Compiler-pinned roots and masked or guarded array offsets replace the prior mapping derivation; no value transfer or mutating recipient call is introduced. Craps tagged reads retain period/day authentication; Game views retain winner, level and issuer guards."
   },
   {
     "path": "contracts/CrapsLens.sol",
     "scope": "CrapsLensReader.highRollerDrawOf",
     "kind": "recipient-helper",
-    "expression": "tagged(table, 5, slot, true)",
+    "expression": "tagged(table, SLOT_STATE_SLOT, slot, true)",
     "count": 1,
-    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
+    "review": "BOUNDED_LAYOUT: reviewed raw view read through the unchanged table/game target and extsload interface. Compiler-pinned roots and masked or guarded array offsets replace the prior mapping derivation; no value transfer or mutating recipient call is introduced. Craps tagged reads retain period/day authentication; Game views retain winner, level and issuer guards."
   },
   {
     "path": "contracts/CrapsLens.sol",
     "scope": "CrapsLensReader.highRollerReserve",
     "kind": "recipient-helper",
-    "expression": "read(table, 19)",
+    "expression": "read(table, HIGH_ROLLER_RESERVE_SLOT)",
     "count": 1,
-    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
+    "review": "BOUNDED_LAYOUT: reviewed raw view read through the unchanged table/game target and extsload interface. Compiler-pinned roots and masked or guarded array offsets replace the prior mapping derivation; no value transfer or mutating recipient call is introduced. Craps tagged reads retain period/day authentication; Game views retain winner, level and issuer guards."
   },
   {
     "path": "contracts/CrapsLens.sol",
@@ -1515,17 +1515,17 @@
     "path": "contracts/CrapsLens.sol",
     "scope": "CrapsLensReader.jackpotBattleOf",
     "kind": "recipient-helper",
-    "expression": "mapped(table, 5, slot)",
+    "expression": "mapped(table, SLOT_STATE_SLOT, slot)",
     "count": 1,
-    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
+    "review": "BOUNDED_LAYOUT: reviewed raw view read through the unchanged table/game target and extsload interface. Compiler-pinned roots and masked or guarded array offsets replace the prior mapping derivation; no value transfer or mutating recipient call is introduced. Craps tagged reads retain period/day authentication; Game views retain winner, level and issuer guards."
   },
   {
     "path": "contracts/CrapsLens.sol",
     "scope": "CrapsLensReader.jackpotBattleOf",
     "kind": "recipient-helper",
-    "expression": "tagged(table, 5, slot, true)",
+    "expression": "tagged(table, SLOT_STATE_SLOT, slot, true)",
     "count": 1,
-    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
+    "review": "BOUNDED_LAYOUT: reviewed raw view read through the unchanged table/game target and extsload interface. Compiler-pinned roots and masked or guarded array offsets replace the prior mapping derivation; no value transfer or mutating recipient call is introduced. Craps tagged reads retain period/day authentication; Game views retain winner, level and issuer guards."
   },
   {
     "path": "contracts/CrapsLens.sol",
@@ -1539,9 +1539,9 @@
     "path": "contracts/CrapsLens.sol",
     "scope": "CrapsLensReader.jackpotEntryPrice",
     "kind": "recipient-helper",
-    "expression": "read(table, 4)",
+    "expression": "read(table, BONUS_SLOT)",
     "count": 1,
-    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
+    "review": "BOUNDED_LAYOUT: reviewed raw view read through the unchanged table/game target and extsload interface. Compiler-pinned roots and masked or guarded array offsets replace the prior mapping derivation; no value transfer or mutating recipient call is introduced. Craps tagged reads retain period/day authentication; Game views retain winner, level and issuer guards."
   },
   {
     "path": "contracts/CrapsLens.sol",
@@ -1579,9 +1579,17 @@
     "path": "contracts/CrapsLens.sol",
     "scope": "CrapsLensReader.tagged",
     "kind": "recipient-helper",
-    "expression": "mapped(table, root, slot & (periods ? 511 : 63))",
+    "expression": "mapped(table, root, slot & 511)",
     "count": 1,
-    "review": "OFF_CHAIN: CrapsLens view reads the table through extsload; separate view-only deployment never called by protocol or chain work."
+    "review": "BOUNDED_LAYOUT: reviewed raw view read through the unchanged table/game target and extsload interface. Compiler-pinned roots and masked or guarded array offsets replace the prior mapping derivation; no value transfer or mutating recipient call is introduced. Craps tagged reads retain period/day authentication; Game views retain winner, level and issuer guards."
+  },
+  {
+    "path": "contracts/CrapsLens.sol",
+    "scope": "CrapsLensReader.tagged",
+    "kind": "recipient-helper",
+    "expression": "read(table, root + (slot & 63))",
+    "count": 1,
+    "review": "BOUNDED_LAYOUT: reviewed raw view read through the unchanged table/game target and extsload interface. Compiler-pinned roots and masked or guarded array offsets replace the prior mapping derivation; no value transfer or mutating recipient call is introduced. Craps tagged reads retain period/day authentication; Game views retain winner, level and issuer guards."
   },
   {
     "path": "contracts/DGNRS.sol",
@@ -3811,9 +3819,9 @@
     "path": "contracts/DegenerusGameLens.sol",
     "scope": "DegenerusGameLens.decWinnerAt",
     "kind": "recipient-helper",
-    "expression": "_sload(game, _mapSlot(uint256(index), root))",
+    "expression": "_sload(game, bytes32(root + uint256(index)))",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "BOUNDED_LAYOUT: reviewed raw view read through the unchanged table/game target and extsload interface. Compiler-pinned roots and masked or guarded array offsets replace the prior mapping derivation; no value transfer or mutating recipient call is introduced. Craps tagged reads retain period/day authentication; Game views retain winner, level and issuer guards."
   },
   {
     "path": "contracts/DegenerusGameLens.sol",
@@ -3979,9 +3987,9 @@
     "path": "contracts/DegenerusGameLens.sol",
     "scope": "DegenerusGameLens.foilRecordOfById",
     "kind": "recipient-helper",
-    "expression": "_sload( game, _mapSlot(uint256(id), uint256(_mapSlot(uint256(lvl & 3), base))) )",
+    "expression": "_sload( game, _mapSlot(uint256(id), base + (lvl & 3)) )",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "BOUNDED_LAYOUT: reviewed raw view read through the unchanged table/game target and extsload interface. Compiler-pinned roots and masked or guarded array offsets replace the prior mapping derivation; no value transfer or mutating recipient call is introduced. Craps tagged reads retain period/day authentication; Game views retain winner, level and issuer guards."
   },
   {
     "path": "contracts/DegenerusGameLens.sol",
@@ -4091,9 +4099,9 @@
     "path": "contracts/DegenerusGameLens.sol",
     "scope": "DegenerusGameLens.protocolBoonPool",
     "kind": "recipient-helper",
-    "expression": "_sload(game, _mapSlot(uint256(day & 1), uint256(_mapSlot(uint256(_protocolIssuerId(issuer)), base))))",
+    "expression": "_sload(game, bytes32(base + _protocolBoonIndex(issuerId) * 2 + (day & 1)))",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "BOUNDED_LAYOUT: reviewed raw view read through the unchanged table/game target and extsload interface. Compiler-pinned roots and masked or guarded array offsets replace the prior mapping derivation; no value transfer or mutating recipient call is introduced. Craps tagged reads retain period/day authentication; Game views retain winner, level and issuer guards."
   },
   {
     "path": "contracts/DegenerusGameLens.sol",
@@ -6395,9 +6403,9 @@
     "path": "contracts/LootboxCraps.sol",
     "scope": "LootboxCraps._dailyWordAt(uint24:default,uint256:default)",
     "kind": "recipient-helper",
-    "expression": "_extsload(bytes32(_hash2(day & 1, RNG_WORD_BY_DAY_SLOT)))",
+    "expression": "_extsload(bytes32(RNG_WORD_BY_DAY_SLOT + (day & 1)))",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "BOUNDED_LAYOUT: reviewed raw view read through the unchanged table/game target and extsload interface. Compiler-pinned roots and masked or guarded array offsets replace the prior mapping derivation; no value transfer or mutating recipient call is introduced. Craps tagged reads retain period/day authentication; Game views retain winner, level and issuer guards."
   },
   {
     "path": "contracts/LootboxCraps.sol",
@@ -10411,7 +10419,7 @@
     "path": "contracts/sDGNRS.sol",
     "scope": "sDGNRS._claimRedemptionFor",
     "kind": "external",
-    "expression": "game.creditRedemptionDirect(walletId, ethDirect)",
+    "expression": "game.creditRedemptionDirect(SDGNRS_WALLET_ID, forfeitEth)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -10419,7 +10427,7 @@
     "path": "contracts/sDGNRS.sol",
     "scope": "sDGNRS._claimRedemptionFor",
     "kind": "external",
-    "expression": "game.creditRedemptionDirect(SDGNRS_WALLET_ID, forfeitEth)",
+    "expression": "game.creditRedemptionDirect(walletId, ethDirect)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
@@ -10521,27 +10529,11 @@
   },
   {
     "path": "contracts/sDGNRS.sol",
-    "scope": "sDGNRS._redemptionBacking",
-    "kind": "external",
-    "expression": "steth.balanceOf(address(this))",
-    "count": 1,
-    "review": "EXTERNAL_SERVICE: pinned Lido dependency, read only when withCustody (after game over); chain reachability and isolation are tracked in external-call-census.md."
-  },
-  {
-    "path": "contracts/sDGNRS.sol",
     "scope": "sDGNRS._liveMoney",
     "kind": "recipient-helper",
     "expression": "_claimableWinnings()",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/sDGNRS.sol",
-    "scope": "sDGNRS._payGameOverValue",
-    "kind": "external",
-    "expression": "game.claimWinnings(0)",
-    "count": 1,
-    "review": "OFF_CHAIN: holder-initiated game-over burn."
   },
   {
     "path": "contracts/sDGNRS.sol",
@@ -10554,10 +10546,10 @@
   {
     "path": "contracts/sDGNRS.sol",
     "scope": "sDGNRS._payGameOverValue",
-    "kind": "recipient-helper",
-    "expression": "_redemptionBacking(0, true)",
-    "count": 2,
-    "review": "OFF_CHAIN: holder-initiated game-over burn; custody read through _redemptionBacking."
+    "kind": "external",
+    "expression": "game.claimWinnings(0)",
+    "count": 1,
+    "review": "OFF_CHAIN: holder-initiated game-over burn."
   },
   {
     "path": "contracts/sDGNRS.sol",
@@ -10585,11 +10577,19 @@
   },
   {
     "path": "contracts/sDGNRS.sol",
-    "scope": "sDGNRS._runRedemptionWork",
+    "scope": "sDGNRS._payGameOverValue",
     "kind": "recipient-helper",
-    "expression": "_claimRedemptionFor(entry, address(0), id, false, word)",
+    "expression": "_redemptionBacking(0, true)",
+    "count": 2,
+    "review": "OFF_CHAIN: holder-initiated game-over burn; custody read through _redemptionBacking."
+  },
+  {
+    "path": "contracts/sDGNRS.sol",
+    "scope": "sDGNRS._redemptionBacking",
+    "kind": "external",
+    "expression": "steth.balanceOf(address(this))",
     "count": 1,
-    "review": "PROTOCOL: live miner settlement runs each claim inline (isTerminal false); the live branch calls only Coinflip.creditFlip and the Game redemption legs, with no recipient callback and no stETH."
+    "review": "EXTERNAL_SERVICE: pinned Lido dependency, read only when withCustody (after game over); chain reachability and isolation are tracked in external-call-census.md."
   },
   {
     "path": "contracts/sDGNRS.sol",
@@ -10598,6 +10598,14 @@
     "expression": "game.rngConsumerStage()",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+  },
+  {
+    "path": "contracts/sDGNRS.sol",
+    "scope": "sDGNRS._runRedemptionWork",
+    "kind": "recipient-helper",
+    "expression": "_claimRedemptionFor(entry, address(0), id, false, word)",
+    "count": 1,
+    "review": "PROTOCOL: live miner settlement runs each claim inline (isTerminal false); the live branch calls only Coinflip.creditFlip and the Game redemption legs, with no recipient callback and no stETH."
   },
   {
     "path": "contracts/sDGNRS.sol",

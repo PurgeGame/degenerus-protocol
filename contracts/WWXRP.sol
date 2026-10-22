@@ -391,10 +391,10 @@ contract WWXRP {
     uint256 private constant BPS = 10_000;
 
     /// @dev Where DegenerusGame keeps a wallet's WWXRP boon: `boonPacked` is the wallet-ID-keyed
-    ///      mapping at Game slot 46, the lane is 24 bits at bit 232 of the wallet's second word, and
+    ///      mapping at the compiler-pinned Game root below. Its lane is 24 bits at bit 232 of the second word;
     ///      its low two bits are the tier (0 = no boon). Read-only, used to skip the consume
     ///      dispatch for a wallet holding no WWXRP boon; pinned against the Game layout.
-    uint256 internal constant GAME_BOON_PACKED_SLOT = 46;
+    uint256 internal constant GAME_BOON_PACKED_SLOT = 37;
     uint256 private constant GAME_WWXRP_LANE_SHIFT = 232;
     uint256 private constant GAME_LANE_TIER_MASK = 0x3;
 
@@ -425,15 +425,6 @@ contract WWXRP {
       |  score endpoint; the previous entry's endpoint is the interval start.|
       +======================================================================+*/
 
-    /// @dev Header per (day, bucket):
-    ///      bits [0..95]    whole WWXRP burned (analytics / future scaling input)
-    ///      bits [96..191]  total effective score (last cumulative endpoint,
-    ///                      whole-WWXRP units)
-    ///      bits [192..223] entry count
-    ///      bits [224..255] participation day + 1 (zero means never initialized)
-    ///      Key: ((day % 3) << 8) | bucket. A bank can only be replaced after
-    ///      its previous day's two-day claim window closes.
-    mapping(uint256 => uint256) private _drawHeader;
 
     /// @dev Entry per (day, bucket, index):
     ///      bits [0..95]    cumulative effective score endpoint (exclusive,
@@ -465,11 +456,6 @@ contract WWXRP {
     ///      bracket total (~6.3e57 whole tokens at a 3x activity ceiling) is safe for
     ///      any reachable supply, and entry endpoints share it.
 
-    /// @dev Reused header at key zero, exact bracket24 at bits224..247:
-    ///      bits [0..191]   total effective score (last cumulative endpoint,
-    ///                      whole tokens units)
-    ///      bits [192..223] entry count
-    mapping(uint24 => uint256) private _incinHeader;
 
     /// @notice One incinerator interval entry in one slot: the endpoint (the bracket total
     ///         saturates at uint192.max, so every endpoint fits) and the entrant's wallet ID.
@@ -831,7 +817,6 @@ contract WWXRP {
         uint256 fullWeight = _entryWeight(amount, multBps, boonBps);
         uint256 effective = fullWeight;
 
-        uint256 hKey = _drawHeaderKey(day, bucket);
         uint256 header = _readDrawHeader(day, bucket);
         uint256 raw = header & type(uint96).max;
         uint256 total = (header >> 96) & type(uint96).max;
@@ -846,7 +831,9 @@ contract WWXRP {
         // cap), so they carry no winner weight and can never falsely verify.
         if (newTotal > type(uint96).max) newTotal = type(uint96).max;
 
-        _drawHeader[hKey] = newRaw | (newTotal << 96) | ((count + 1) << 192) | ((uint256(day) + 1) << 224);
+        uint256 headerSlot = _drawHeaderSlot(day, bucket);
+        uint256 packedHeader = newRaw | (newTotal << 96) | ((count + 1) << 192) | ((uint256(day) + 1) << 224);
+        assembly ("memory-safe") { sstore(headerSlot, packedHeader) }
         _drawEntry[_drawEntryKey(day, bucket, uint32(count))] = newTotal | (uint256(id) << 96);
 
         // Level-x99 burns double as century BAF-incinerator entries: the same
@@ -1147,7 +1134,7 @@ contract WWXRP {
         // zero-width intervals and carry no winner weight.
         if (newTotal > type(uint192).max) newTotal = type(uint192).max;
 
-        _incinHeader[0] = newTotal | ((count + 1) << 192) | (uint256(bracket) << 224);
+        _incinHeader = newTotal | ((count + 1) << 192) | (uint256(bracket) << 224);
         IncinEntry storage entry = _incinEntry[count];
         uint256 packed = newTotal | (uint256(id) << 192);
         assembly ("memory-safe") { sstore(entry.slot, packed) }
@@ -1253,7 +1240,7 @@ contract WWXRP {
     }
 
     function _incineratorHeader(uint24 bracket) private view returns (uint256) {
-        uint256 header = _incinHeader[0];
+        uint256 header = _incinHeader;
         return uint24(header >> 224) == bracket ? header : 0;
     }
 
@@ -1287,8 +1274,17 @@ contract WWXRP {
 
     /// @dev Authentication is mandatory before any entry read: reused words have
     ///      no tag of their own, and a shorter replacement leaves old tail slots.
+    function _drawHeaderSlot(uint24 day, uint8 bucket) private pure returns (uint256 slot) {
+        unchecked {
+            uint256 index = uint256(day % 3) * BUCKET_COUNT + bucket;
+            assembly ("memory-safe") { slot := add(_drawHeader.slot, index) }
+        }
+    }
+
     function _readDrawHeader(uint24 day, uint8 bucket) private view returns (uint256 header) {
-        header = _drawHeader[_drawHeaderKey(day, bucket)];
+        if (bucket >= BUCKET_COUNT) return 0;
+        uint256 slot = _drawHeaderSlot(day, bucket);
+        assembly ("memory-safe") { header := sload(slot) }
         if (uint32(header >> 224) != uint256(day) + 1) return 0;
     }
 
@@ -1313,13 +1309,6 @@ contract WWXRP {
             );
     }
 
-    function _drawHeaderKey(
-        uint24 day,
-        uint8 bucket
-    ) private pure returns (uint256) {
-        return (uint256(day % 3) << 8) | bucket;
-    }
-
     function _drawEntryKey(
         uint24 day,
         uint8 bucket,
@@ -1327,4 +1316,20 @@ contract WWXRP {
     ) private pure returns (uint256) {
         return (uint256(day % 3) << 40) | (uint256(bucket) << 32) | index;
     }
+    /// @dev Header per (day, bucket):
+    ///      bits [0..95]    whole WWXRP burned (analytics / future scaling input)
+    ///      bits [96..191]  total effective score (last cumulative endpoint,
+    ///                      whole-WWXRP units)
+    ///      bits [192..223] entry count
+    ///      bits [224..255] participation day + 1 (zero means never initialized)
+    ///      Indexed by [day % 3][bucket], with ten buckets. A bank can only be replaced after
+    ///      its previous day's two-day claim window closes.
+    uint256[10][3] private _drawHeader;
+
+    /// @dev Reused incinerator header, exact bracket24 at bits224..247:
+    ///      bits [0..191]   total effective score (last cumulative endpoint,
+    ///                      whole tokens units)
+    ///      bits [192..223] entry count
+    uint256 private _incinHeader;
+
 }

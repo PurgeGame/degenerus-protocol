@@ -10,17 +10,9 @@
   {
     "bytes": "32",
     "encoding": "mapping",
-    "label": "bafTop",
-    "offset": 0,
-    "slot": 1,
-    "typeLabel": "mapping(uint24 => uint256[2])"
-  },
-  {
-    "bytes": "32",
-    "encoding": "mapping",
     "label": "bafLevel",
     "offset": 0,
-    "slot": 2,
+    "slot": 1,
     "typeLabel": "mapping(uint24 => struct DegenerusJackpots.BafLevel)"
   },
   {
@@ -28,7 +20,7 @@
     "encoding": "inplace",
     "label": "lastBafResolvedDay",
     "offset": 0,
-    "slot": 3,
+    "slot": 2,
     "typeLabel": "uint24"
   },
   {
@@ -36,7 +28,15 @@
     "encoding": "inplace",
     "label": "bafTopLevels",
     "offset": 3,
-    "slot": 3,
+    "slot": 2,
     "typeLabel": "uint96"
+  },
+  {
+    "bytes": "256",
+    "encoding": "inplace",
+    "label": "bafTop",
+    "offset": 0,
+    "slot": 3,
+    "typeLabel": "uint256[2][4]"
   }
 ]

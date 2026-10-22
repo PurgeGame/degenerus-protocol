@@ -239,16 +239,10 @@ contract GNRUS {
     /// @dev `private` — access is exposed only via the explicit `getCharity(uint8)` view (with its own bounds check), not an auto-generated array getter.
     address[20] private currentSlate;
 
-    /// @notice Pending edit queue. Recipient value at slot index; sentinel via `pendingEditSet` bitmap.
-    /// @dev bit set + value zero  = pending-remove; bit set + value !zero = pending-replace; bit clear = no
-    ///      pending edit. Values are NOT zeroed when a bit clears — every read is gated on the bit, so a
-    ///      stale value is unobservable, and a later re-queue overwrites it (nonzero→nonzero SSTORE).
-    mapping(uint8 => address) private pendingEdit;
 
-    /// @dev One current-level weight per slot: weight232, exact level24.
-    mapping(uint8 => uint256) internal _slotApproveWeight;
 
     function slotApproveWeight(uint24 level, uint8 slot) public view returns (uint256) {
+        if (slot >= 20) return 0;
         uint256 word = _slotApproveWeight[slot];
         return uint24(word >> 232) == level ? uint232(word) : 0;
     }
@@ -814,4 +808,13 @@ contract GNRUS {
 
     /// @notice Accept ETH from game claimWinnings and direct deposits
     receive() external payable {}
+    /// @notice Pending edit queue. Recipient value at slot index; sentinel via `pendingEditSet` bitmap.
+    /// @dev bit set + value zero  = pending-remove; bit set + value !zero = pending-replace; bit clear = no
+    ///      pending edit. Values are NOT zeroed when a bit clears — every read is gated on the bit, so a
+    ///      stale value is unobservable, and a later re-queue overwrites it (nonzero→nonzero SSTORE).
+    address[20] private pendingEdit;
+
+    /// @dev One current-level weight per slot: weight232, exact level24.
+    uint256[20] internal _slotApproveWeight;
+
 }

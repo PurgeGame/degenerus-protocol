@@ -143,7 +143,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         // `day`'s ring slot (see protocolBoonPools). A slot tagged with another day holds an
         // older day's pool, which must never draw on this day's words: nothing was wagered on
         // `day`, so there is nothing to award.
-        ProtocolBoonPool storage pool = protocolBoonPools[issuerId][day & 1];
+        ProtocolBoonPool storage pool = protocolBoonPools[_protocolBoonIndex(issuerId)][day & 1];
         if (pool.day != day) return;
         uint64 totalWeight = pool.totalWeight;
         uint32 count = pool.entryCount;
@@ -155,7 +155,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         deityBoonPacked[issuerId] = (deityBoonPacked[issuerId] & ~uint64(type(uint32).max))
             | uint64(awardDay) | (uint64(7) << 24);
         if (count == 0) return;
-        mapping(uint32 => ProtocolBoonEntry) storage entries = protocolBoonEntries[issuerId][day & 1];
+        mapping(uint32 => ProtocolBoonEntry) storage entries = protocolBoonEntries[_protocolBoonIndex(issuerId)][day & 1];
         for (uint8 slot; slot < DEITY_DAILY_BOON_COUNT; ++slot) {
             uint256 roll = uint256(keccak256(abi.encode(
                 PROTOCOL_BOON_WINNER_TAG, issuer, day, slot, winnerWord
@@ -750,8 +750,6 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     error SelfBoon();
     /// @notice Thrown when the deity boon slot index is >= DEITY_DAILY_BOON_COUNT.
     error InvalidSlot();
-    /// @notice Thrown when the recipient already received a deity boon on the current day.
-    error RecipientAlreadyBoonedToday();
     /// @notice Thrown when the recipient hit the lifetime cap on boons from this deity.
     error RecipientBoonCapReached();
     /// @notice Thrown when the deity boon slot has already been used on the current day.
@@ -1360,7 +1358,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
 
     /// @notice Issue a deity boon from deity account `deityId` to account `recipientId`.
     /// @dev Raw msg.data target of Game.issueDeityBoon. Deity can issue up to 3 boons per day,
-    ///      one per recipient per day. A deity can issue at most DEITY_RECIPIENT_BOON_CAP boons
+    ///      including several to one recipient. A deity can issue at most DEITY_RECIPIENT_BOON_CAP boons
     ///      to any one recipient over the game's lifetime. The menu uses the preceding day's
     ///      finalized RNG, so it can be previewed one game day before issuance. The deity side is
     ///      authorized under the account rule; the recipient is a third party that must already
@@ -1375,7 +1373,6 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     /// @custom:reverts InvalidSlot When slot is >= 3
     /// @custom:reverts Unauthorized When deity does not own a deity pass
     /// @custom:reverts RngNotReady When the preceding day has no finalized RNG word
-    /// @custom:reverts RecipientAlreadyBoonedToday When recipient already received a boon today
     /// @custom:reverts RecipientBoonCapReached When this deity has hit the lifetime boon cap for the recipient
     /// @custom:reverts SlotAlreadyUsed When slot was already used today
     function issueDeityBoon(uint32 deityId, uint32 recipientId, uint8 slot) external {
@@ -1398,8 +1395,6 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         // mask in one store.
         uint64 boonPacked = deityBoonPacked[deityId];
         uint8 mask = uint24(boonPacked) == day ? uint8(boonPacked >> 24) : 0;
-        // One boon per recipient per day, across all deities.
-        if (deityBoonRecipientDay[recipientId] == day) revert RecipientAlreadyBoonedToday();
         // Lifetime cap is per (deity, recipient) pair.
         uint256 pairShift = uint256(uint8(boonPacked >> 32)) * 4;
         uint128 pairCounts = deityRecipientBoonCount[recipientId];
@@ -1410,7 +1405,6 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         if ((mask & slotMask) != 0) revert SlotAlreadyUsed();
         deityBoonPacked[deityId] =
             (boonPacked & ~uint64(type(uint32).max)) | uint64(day) | (uint64(mask | slotMask) << 24);
-        deityBoonRecipientDay[recipientId] = day;
         deityRecipientBoonCount[recipientId] = pairCounts + uint128(uint256(1) << pairShift);
 
         // Every menu type is always issuable — the deity roll excludes the two

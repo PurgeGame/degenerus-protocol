@@ -191,7 +191,9 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
     {
         uint256 base;
         assembly { base := protocolBoonPools.slot }
-        uint256 word = _sload(game, _mapSlot(uint256(day & 1), uint256(_mapSlot(uint256(_protocolIssuerId(issuer)), base))));
+        uint32 issuerId = _protocolIssuerId(issuer);
+        if (issuerId == 0) return pool;
+        uint256 word = _sload(game, bytes32(base + _protocolBoonIndex(issuerId) * 2 + (day & 1)));
         if (uint24(word >> 216) != day) return pool;
         pool.totalWageredWei = uint112(word);
         pool.totalWeight = uint64(word >> 112);
@@ -209,7 +211,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         if (index >= protocolBoonPool(game, issuer, day).entryCount) return entry;
         uint256 base;
         assembly { base := protocolBoonEntries.slot }
-        bytes32 daySlot = _mapSlot(uint256(day & 1), uint256(_mapSlot(uint256(_protocolIssuerId(issuer)), base)));
+        bytes32 daySlot = bytes32(base + _protocolBoonIndex(_protocolIssuerId(issuer)) * 2 + (day & 1));
         uint256 word = _sload(game, _mapSlot(uint256(index), uint256(daySlot)));
         entry.playerId = uint32(word);
         entry.cumulativeWeight = uint64(word >> 32);
@@ -749,7 +751,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
             || (r.phase != 1 && r.phase != 2)) revert E();
         uint256 rngWord = _decActiveWordOf(game);
         if (rngWord == 0) revert E();
-        uint256 stored = _sload(game, _mapSlot(uint256(index), root));
+        uint256 stored = _sload(game, bytes32(root + uint256(index)));
         uint64 id = uint64(stored);
         bytes32 tag = keccak256("decimator.battle.tie.v1");
         node.score = stored >> 64;
@@ -1076,7 +1078,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         }
         uint256 w = _sload(
             game,
-            _mapSlot(uint256(id), uint256(_mapSlot(uint256(lvl & 3), base)))
+            _mapSlot(uint256(id), base + (lvl & 3))
         );
         if (w == 0 || uint24(w >> _FOIL_LEVEL_SHIFT) != lvl) return f;
         f.present = true;

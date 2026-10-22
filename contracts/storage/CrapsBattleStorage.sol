@@ -649,47 +649,19 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
         _storeDaySeat(daySlot, id, word | bit);
     }
 
-    /// @dev How many DAY TICKETS a protocol day sold, with the per-period high counts above the
-    ///      total — see `_DT_HIGH_SHIFT`. A day ticket is one bet that plays every window of its
-    ///      day, and it is only sold while the day's FIRST window is still taking bets — so the
-    ///      TOTAL is frozen before any window can shut, and every window of the day therefore
-    ///      plays the same day field. That is what removes the need for a per-window high-water
-    ///      mark. A period's HIGH count stays open a little longer — an upgrade may move it until
-    ///      that period's own entry close — which is still strictly before the arm that folds it.
-    mapping(uint256 => uint256) internal _dayTickets;
 
-    /// @dev The holder's day-ticket seat in bits 0..31, scheduled window membership in
-    ///      bits 33..38, and the exact day at bits 40..63 of each lane. Four lanes share
-    ///      a word keyed by (day & 63) >> 2; _loadDaySeat authenticates the selected lane.
-    ///      Keyed by wallet ID. Day-ticket gates ask NONZERO — one ticket per wallet per day, and a bar on any single window of that
-    ///      day, since the ticket already sits in all of them — but storing the seat is what lets
-    ///      an upgrade name the account's own ticket as `(daySlot << 64) | seat` without a walk.
-    ///      Nothing here records how the seat was PAID for: a bought, pass-funded and prepaid
-    ///      seat are indistinguishable, which is the point.
-    mapping(uint256 => mapping(uint32 => uint256)) internal _daySeated;
 
     /// @notice Who may OPEN a custom battle. Joining one an authorized creator opened is free to
     ///         anyone who clears its terms, and the bonus windows are the protocol's own door.
     mapping(address => bool) internal _battleCreator;
 
-    /// @dev Per protocol day, total BANKROLL in bits 0..111, its high-roller part in bits
-    ///      112..223, and exact day at 232..255. The total sizes later bonuses; the
-    ///      high part is split out because the lanes recycle at different rates. Bounties and
-    ///      boost never enter. One packed write per settle batch, never one per seat.
-    mapping(uint24 => uint256) internal _dayStaked;
 
-    /// @dev A day's bonus budget in whole FLIP, fixed when the day opens and shared by its seven
-    ///      windows. Stored rather than recomputed so a window armed days later still pays what
-    ///      its own day advertised.
-    mapping(uint24 => uint256) internal _boostBudget;
 
     /// @dev A battle's high-roller sideboard — see the layout above. Written only by a field that
     ///      actually takes a high seat, so an ordinary battle never touches this mapping at all,
     ///      on entry or on settlement.
     mapping(bytes32 => uint256) internal _highField;
 
-    /// @dev Exact day plus initialized-period flags authenticate the full-width scoreboards.
-    mapping(uint24 => uint256) internal _battleDays;
 
     /// @dev A custom battle's whole definition, one word per slot — see the layout above. The
     ///      terms are fixed for the FIELD at creation rather than restated by each entrant, which
@@ -1072,7 +1044,6 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
         bool started;
         uint24 day;
     }
-    mapping(uint256 => JackpotRound) internal _jackpotRounds;
     uint64 internal _activeJackpotSlot;
     /// @dev The first day with scheduled windows, set at construction; no jackpot battle locks
     ///      for an earlier window day. Shares the active slot's word.
@@ -1117,19 +1088,11 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
         uint64 indexed slot, uint256 fees, uint256 atRisk, uint256 lossBudget, uint256 comps
     );
     uint64[4] internal _fundedCustomSlots;
-    mapping(uint48 => uint64[]) internal _rngSlots;
 
     uint256 internal constant _RING_VALUE_MASK = (uint256(1) << 232) - 1;
     uint208 internal constant _ROUND_PREPARED = uint208(1) << 207;
 
-    function _loadDayWord(mapping(uint24 => uint256) storage book, uint256 day) private view returns (uint256) {
-        uint256 word = book[uint24(day & 63)];
-        return word >> 232 == day ? word & _RING_VALUE_MASK : 0;
-    }
 
-    function _storeDayWord(mapping(uint24 => uint256) storage book, uint256 day, uint256 value) private {
-        book[uint24(day & 63)] = value | (day << 232);
-    }
 
     function _loadBattle(bytes32 key) internal view returns (uint256) {
         uint256 slot = uint256(key);
@@ -1310,6 +1273,53 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     function _highMultOf(uint256 word) internal pure returns (uint256) {
         if (word == 0) return 0;
         return CrapsPriceLib.highMultiple(_hash2(word, HIGH_TAG));
+    }
+
+    /// @dev How many DAY TICKETS a protocol day sold, with the per-period high counts above the
+    ///      total — see `_DT_HIGH_SHIFT`. A day ticket is one bet that plays every window of its
+    ///      day, and it is only sold while the day's FIRST window is still taking bets — so the
+    ///      TOTAL is frozen before any window can shut, and every window of the day therefore
+    ///      plays the same day field. That is what removes the need for a per-window high-water
+    ///      mark. A period's HIGH count stays open a little longer — an upgrade may move it until
+    ///      that period's own entry close — which is still strictly before the arm that folds it.
+    uint256[64] internal _dayTickets;
+
+    /// @dev Per protocol day, total BANKROLL in bits 0..111, its high-roller part in bits
+    ///      112..223, and exact day at 232..255. The total sizes later bonuses; the
+    ///      high part is split out because the lanes recycle at different rates. Bounties and
+    ///      boost never enter. One packed write per settle batch, never one per seat.
+    uint256[64] internal _dayStaked;
+
+    /// @dev A day's bonus budget in whole FLIP, fixed when the day opens and shared by its seven
+    ///      windows. Stored rather than recomputed so a window armed days later still pays what
+    ///      its own day advertised.
+    uint256[64] internal _boostBudget;
+
+    /// @dev Exact day plus initialized-period flags authenticate the full-width scoreboards.
+    uint256[64] internal _battleDays;
+
+    JackpotRound[512] internal _jackpotRounds;
+
+    uint64[][2] internal _rngSlots;
+
+    /// @dev The holder's day-ticket seat in bits 0..31, scheduled window membership in
+    ///      bits 33..38, and the exact day at bits 40..63 of each lane. Four lanes share
+    ///      a word keyed by (day & 63) >> 2; _loadDaySeat authenticates the selected lane.
+    ///      Keyed by wallet ID. Day-ticket gates ask NONZERO — one ticket per wallet per day, and a bar on any single window of that
+    ///      day, since the ticket already sits in all of them — but storing the seat is what lets
+    ///      an upgrade name the account's own ticket as `(daySlot << 64) | seat` without a walk.
+    ///      Nothing here records how the seat was PAID for: a bought, pass-funded and prepaid
+    ///      seat are indistinguishable, which is the point.
+    mapping(uint32 => uint256)[16] internal _daySeated;
+
+
+    function _loadDayWord(uint256[64] storage book, uint256 day) private view returns (uint256) {
+        uint256 word = book[uint24(day & 63)];
+        return word >> 232 == day ? word & _RING_VALUE_MASK : 0;
+    }
+
+    function _storeDayWord(uint256[64] storage book, uint256 day, uint256 value) private {
+        book[uint24(day & 63)] = value | (day << 232);
     }
 
 }

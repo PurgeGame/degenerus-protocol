@@ -689,11 +689,11 @@ contract DegenerusGameDegeneretteModule is
         // The ring slot for `day` (see protocolBoonPools). One still tagged with an older day
         // starts over empty; its entries are overwritten from index 0.
         uint24 ring = day & 1;
-        ProtocolBoonPool memory pool = protocolBoonPools[issuer][ring];
+        ProtocolBoonPool memory pool = protocolBoonPools[_protocolBoonIndex(issuer)][ring];
         if (pool.day != day) pool = ProtocolBoonPool(0, 0, 0, 0, day);
         uint32 index = pool.entryCount;
         uint64 cumulativeWeight = pool.totalWeight + uint64(weight);
-        ProtocolBoonEntry storage entryTarget = protocolBoonEntries[issuer][ring][index];
+        ProtocolBoonEntry storage entryTarget = protocolBoonEntries[_protocolBoonIndex(issuer)][ring][index];
         uint256 entryWord = uint256(playerId) | (uint256(cumulativeWeight) << 32) | (uint256(score) << 96);
         assembly ("memory-safe") { sstore(entryTarget.slot, entryWord) }
         // Weight <= uint64.max and multiplier >= 800 bound amount well below uint112.
@@ -702,7 +702,7 @@ contract DegenerusGameDegeneretteModule is
         pool.entryCount = index + 1;
         // Write the packed header once. Struct assignment can emit multiple read/modify
         // writes for these fields even though all five fit in one word.
-        ProtocolBoonPool storage target = protocolBoonPools[issuer][ring];
+        ProtocolBoonPool storage target = protocolBoonPools[_protocolBoonIndex(issuer)][ring];
         uint256 header = uint256(pool.totalWageredWei) | (uint256(pool.totalWeight) << 112)
             | (uint256(pool.entryCount) << 176) | (uint256(pool.awardedMask) << 208)
             | (uint256(pool.day) << 216);
@@ -735,11 +735,11 @@ contract DegenerusGameDegeneretteModule is
                 (uint128 next, uint128 future) = _getPrizePools();
                 _setPrizePools(next, future + uint128(totalBet));
             }
-            // The raw paid total also feeds the hero ledger. Merge its ring metadata
+            // The raw paid total also feeds the hero ledger. Merge its buffer metadata
             // into the already-required pending-ETH write: no extra metadata word or
             // SSTORE on a bet. The minimum ETH stake guarantees nonzero hero units.
-            uint256 lrWord = _recordDailyHeroWager(
-                _simulatedDayIndex(), symbol >> 3, symbol & 7, totalBet / 1e14, lootboxRngPacked
+            uint256 lrWord = _recordHeroWager(
+                symbol >> 3, symbol & 7, totalBet / 1e14, lootboxRngPacked
             );
             uint256 pendingEth = ((lrWord >> LR_PENDING_ETH_SHIFT) & LR_PENDING_ETH_MASK)
                 + _packEthToMilliEth(totalBet);

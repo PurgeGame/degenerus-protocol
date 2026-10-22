@@ -24,11 +24,11 @@
     "typeLabel": "mapping(uint32 => bytes32)"
   },
   {
-    "bytes": "32",
-    "encoding": "mapping",
+    "bytes": "128",
+    "encoding": "inplace",
     "label": "_levelScore",
     "offset": 0,
     "slot": 3,
-    "typeLabel": "mapping(uint24 => uint256)"
+    "typeLabel": "uint256[4]"
   }
 ]

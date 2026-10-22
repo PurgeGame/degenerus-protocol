@@ -211,8 +211,8 @@ contract DegenerusGameAdvanceModule is DegenerusGameRngUtils {
             // when both ring slots are stale, empty or already drawn.
             if (day > 1) {
                 uint24 poolDay = day - 1;
-                ProtocolBoonPool storage vaultPool = protocolBoonPools[VAULT_WALLET_ID][poolDay & 1];
-                ProtocolBoonPool storage sdgnrsPool = protocolBoonPools[SDGNRS_WALLET_ID][poolDay & 1];
+                ProtocolBoonPool storage vaultPool = protocolBoonPools[0][poolDay & 1];
+                ProtocolBoonPool storage sdgnrsPool = protocolBoonPools[1][poolDay & 1];
                 if ((vaultPool.day == poolDay && vaultPool.totalWeight != 0 && vaultPool.awardedMask == 0)
                     || (sdgnrsPool.day == poolDay && sdgnrsPool.totalWeight != 0 && sdgnrsPool.awardedMask == 0)) {
                     (bool ok, bytes memory data) = ContractAddresses.GAME_BOON_MODULE.delegatecall(

@@ -72,27 +72,27 @@
     "typeLabel": "address[20]"
   },
   {
-    "bytes": "32",
-    "encoding": "mapping",
-    "label": "pendingEdit",
-    "offset": 0,
-    "slot": 24,
-    "typeLabel": "mapping(uint8 => address)"
-  },
-  {
-    "bytes": "32",
-    "encoding": "mapping",
-    "label": "_slotApproveWeight",
-    "offset": 0,
-    "slot": 25,
-    "typeLabel": "mapping(uint8 => uint256)"
-  },
-  {
     "bytes": "20",
     "encoding": "inplace",
     "label": "lastWinningRecipient",
     "offset": 0,
-    "slot": 26,
+    "slot": 24,
     "typeLabel": "address"
+  },
+  {
+    "bytes": "640",
+    "encoding": "inplace",
+    "label": "pendingEdit",
+    "offset": 0,
+    "slot": 25,
+    "typeLabel": "address[20]"
+  },
+  {
+    "bytes": "640",
+    "encoding": "inplace",
+    "label": "_slotApproveWeight",
+    "offset": 0,
+    "slot": 45,
+    "typeLabel": "uint256[20]"
   }
 ]

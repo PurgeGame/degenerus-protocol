@@ -39,6 +39,7 @@ contract DegenerusGameRngModule is DegenerusGameRngUtils {
         if (!ok) _revertDelegate(result);
         _swapTicketSlot();
         _swapFoilSlot();
+        _sealHeroWagers(day);
         _freezePool();
         _sealRngWriteBuffer();
         rngRequestDay = day;

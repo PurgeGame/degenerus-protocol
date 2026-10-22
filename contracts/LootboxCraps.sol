@@ -52,8 +52,8 @@ contract LootboxCraps is Craps {
     /// @dev Base slot of `DegenerusGameStorage.rngWordByDay`, a mapping(uint24 => uint256) — the
     ///      protocol's recorded DAILY word, retained separately from the shared live payload. Pinned
     ///      against the frozen tree exactly like those two, and covered by the same drift gate.
-    uint256 internal constant RNG_WORD_BY_DAY_SLOT = 9;
-    uint256 internal constant RNG_DAY_TAGS_SLOT = 30;
+    uint256 internal constant RNG_WORD_BY_DAY_SLOT = 589;
+    uint256 internal constant RNG_DAY_TAGS_SLOT = 26;
 
     // ---------------------------------------------------------------------------------------
     // Reading the protocol
@@ -93,7 +93,7 @@ contract LootboxCraps is Craps {
     /// @dev A caller making only read-only Game calls may reuse the same day tags.
     function _dailyWordAt(uint24 day, uint256 tags) internal view returns (uint256) {
         if (day == 0 || uint24(tags >> ((day & 1) * 24)) != day) return 0;
-        return uint256(_extsload(bytes32(_hash2(day & 1, RNG_WORD_BY_DAY_SLOT))));
+        return uint256(_extsload(bytes32(RNG_WORD_BY_DAY_SLOT + (day & 1))));
     }
 
     /// @notice The protocol's day index right now — `GameTimeLib.currentDayIndexAt`, restated

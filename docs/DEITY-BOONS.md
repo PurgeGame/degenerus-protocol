@@ -149,8 +149,12 @@ separately with checked arithmetic.
 Each issuer has a separate pool for participation day `D`. Each nonempty pool awards
 its three normal deity boon slots on `D+1`, independently and **with replacement**.
 A single address can win all three, win from both issuers, and keep winning on
-later days. These awards do not read or write the ordinary manual-gift recipient
-caps. The three-slot daily supply per issuer remains the source of the rewards.
+later days. These awards do not read or write the manual-gift lifetime recipient
+cap. The three-slot daily supply per issuer remains the source of the rewards.
+
+Manual gifts also allow several boons to the same recipient on the same day. Each
+deity still has three daily slots and may give at most ten boons to any one
+recipient over the game's lifetime. A deity account cannot gift itself.
 
 - The boon menu is the existing deity menu, derived from `rngWordByDay[D]` and the
   issuer, award day, and slot. If that word is missing (notably deployment day),

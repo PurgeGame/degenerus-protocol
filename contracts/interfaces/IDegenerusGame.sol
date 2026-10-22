@@ -672,9 +672,9 @@ interface IDegenerusGame {
     // Degenerette Tracking Views
     // -------------------------------------------------------------------------
 
-    /// @notice Get hero wager units in a retained day. Recycled days return zero; use logs for history.
+    /// @notice Get hero weights for the sealed request day - 1, or the accumulating pool for today.
     function getDailyHeroWager(uint24 day, uint8 quadrant, uint8 symbol) external view returns (uint256 wagerUnits);
-    /// @notice Get the most-wagered hero in a retained day. Recycled days return zeros.
+    /// @notice Get the leading hero in the sealed or accumulating pool; other days return zeros.
     function getDailyHeroWinner(uint24 day) external view returns (uint8 winQuadrant, uint8 winSymbol, uint256 winAmount);
 
     // -------------------------------------------------------------------------
