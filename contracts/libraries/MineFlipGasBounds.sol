@@ -111,10 +111,10 @@ library MineFlipGasBounds {
     uint256 internal constant DEGENESIS_TAIL_GAS = 142_000;
     // Degenesis day-close branch with a fresh seat-draw credit: <=177.2k including state gas.
     uint256 internal constant DEGENESIS_DAY_CLOSE = 215_000;
-    // Seven cold splits, fresh budget, pool and pricing slots: 472.2k; seven closes and burn 98.3k.
-    uint256 internal constant DEGENESIS_REQUEST_GAS = 570_000;
-    // Seven-cohort split, release and active clear: 367.8k peak with the transient budget slot.
-    uint256 internal constant DEGENESIS_TERMINAL_GAS = 450_000;
+    // Six cold four-way splits, one empty close and pricing: 582.4k including four fresh slots.
+    uint256 internal constant DEGENESIS_REQUEST_GAS = 700_000;
+    // Seven cold four-way splits, release and active clear: 478.1k peak including the transient budget slot.
+    uint256 internal constant DEGENESIS_TERMINAL_GAS = 580_000;
     // Bound day's word into a fresh degenesisWord slot, with the gate reads: 120.4k.
     uint256 internal constant DEGENESIS_WORD_COPY_GAS = 145_000;
     // Forced cold winning/recirculating one-spin bet: 991.7k.

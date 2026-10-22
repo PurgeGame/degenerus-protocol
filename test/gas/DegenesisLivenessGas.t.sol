@@ -218,9 +218,9 @@ contract DegenesisPrepareBoundsFuzz is DegenesisGasBase {
 /// @title DegenesisPrepareSweepGas -- every nonempty-cohort pattern at the request, cold
 /// @notice All 128 subsets of nonempty cohorts with nothing closed and nothing split (zero-volume
 ///         days close, nonempty days split, the first nonempty sealed day is priced; the empty set
-///         closes all seven and burns). Each pattern is measured cold on Osaka; the four costliest
-///         patterns and the all-nonempty pattern are then repriced for the no-reservoir
-///         Glamsterdam total. Every figure must fit DEGENESIS_REQUEST_GAS.
+///         closes all seven and burns). Every pattern is measured cold on Osaka and repriced
+///         for the no-reservoir Glamsterdam total: an Osaka ranking need not preserve the
+///         state-gas ranking. Every figure must fit DEGENESIS_REQUEST_GAS.
 contract DegenesisPrepareSweepGas is DegenesisGasBase {
     function setUp() public {
         _deployProtocol();
@@ -239,56 +239,52 @@ contract DegenesisPrepareSweepGas is DegenesisGasBase {
         host.hostReserve(reserved);
     }
 
-    function _osaka(uint256 mask) internal returns (uint256 used) {
-        uint256 snap = vm.snapshotState();
-        _seedPattern(mask);
+    /// @dev Match measureCall's nested host frame without recording any accesses. Once a
+    ///      replay has been recorded, this Forge version can retain warmth across snapshots.
+    function measurePrepareOsaka() external returns (uint256 used) {
+        require(msg.sender == address(this), "fixture self-call");
         _cool();
         host.hostPrepare{gas: 5_000_000}(60);
         used = vm.lastCallGas().gasTotalUsed;
-        vm.revertToStateAndDelete(snap);
-    }
-
-    uint256[128] internal osakaOf;
-
-    function _sweep() internal {
-        for (uint256 mask; mask < 128; ++mask) {
-            osakaOf[mask] = _osaka(mask);
-            assertLe(osakaOf[mask], GasBounds.DEGENESIS_REQUEST_GAS, "Osaka pattern within the request addition");
-        }
-    }
-
-    /// @dev The costliest pattern not yet taken; marks it taken.
-    function _takeTop() internal returns (uint256 mask, uint256 used) {
-        for (uint256 m; m < 128; ++m) {
-            if (osakaOf[m] > used) (mask, used) = (m, osakaOf[m]);
-        }
-        osakaOf[mask] = 0;
-    }
-
-    function _repriced(uint256 mask) internal returns (uint256 worst) {
-        uint256 snap = vm.snapshotState();
-        _seedPattern(mask);
-        Measured memory m = _measure(abi.encodeCall(DegenesisGasHost.hostPrepare, (60)));
-        vm.revertToStateAndDelete(snap);
-        worst = _worst(m);
     }
 
     function test_EveryCohortPatternFits() public {
-        _sweep();
-        uint256 peak = _repriced(127);
-        uint256 peakMask = 127;
-        for (uint256 k; k < 4; ++k) {
-            (uint256 mask, uint256 used) = _takeTop();
-            if (k == 0) {
-                emit log_named_uint("peak Osaka over all 128 patterns", used);
-                emit log_named_uint("peak Osaka pattern (bit c-1 = cohort c nonempty)", mask);
-            }
-            uint256 w = _repriced(mask);
-            if (w > peak) (peak, peakMask) = (w, mask);
+        // Capture every uninstrumented cold call before the first recorded replay. Use those
+        // costs with each replay's schedule delta, rather than its potentially warmed gas.
+        uint256[128] memory osakaOf;
+        for (uint256 mask; mask < 128; ++mask) {
+            uint256 snap = vm.snapshotState();
+            _seedPattern(mask);
+            osakaOf[mask] = this.measurePrepareOsaka();
+            vm.revertToStateAndDelete(snap);
         }
-        emit log_named_uint("peak repriced (worst of osaka, no-reservoir) over the top patterns", peak);
+        uint256 peakOsaka;
+        uint256 peakOsakaMask;
+        uint256 peak;
+        uint256 peakMask;
+        Measured memory peakMeasurement;
+        for (uint256 mask; mask < 128; ++mask) {
+            uint256 snap = vm.snapshotState();
+            _seedPattern(mask);
+            Measured memory m = _measure(abi.encodeCall(DegenesisGasHost.hostPrepare, (60)));
+            vm.revertToStateAndDelete(snap);
+            int256 scheduleDelta = int256(m.exec) - int256(m.osaka);
+            m.osaka = osakaOf[mask];
+            m.exec = uint256(int256(m.osaka) + scheduleDelta);
+            if (m.osaka > peakOsaka) (peakOsaka, peakOsakaMask) = (m.osaka, mask);
+            uint256 worst = _worst(m);
+            if (worst > peak) {
+                (peak, peakMask) = (worst, mask);
+                peakMeasurement = m;
+            }
+        }
+        emit log_named_uint("peak Osaka over all 128 patterns", peakOsaka);
+        emit log_named_uint("peak Osaka pattern (bit c-1 = cohort c nonempty)", peakOsakaMask);
+        emit log_named_uint("peak repriced over all 128 patterns", peak);
         emit log_named_uint("its pattern", peakMask);
+        _log("worst request pattern", peakMeasurement);
         assertLe(peak, GasBounds.DEGENESIS_REQUEST_GAS, "every pattern fits the request addition");
+        assertLe((peak * 120 + 99) / 100, GasBounds.DEGENESIS_REQUEST_GAS, "request addition retains 20% margin");
     }
 }
 

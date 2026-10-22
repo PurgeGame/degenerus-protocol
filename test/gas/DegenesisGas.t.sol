@@ -683,6 +683,8 @@ abstract contract DegenesisPrepareGas is DegenesisGasBase {
         emit log_named_uint("priced", active == 0 ? 0 : 1);
         vm.revertToState(snap);
         assertLe(_worst(m), GasBounds.DEGENESIS_REQUEST_GAS, "request addition covers the Degenesis step");
+        assertLe((_worst(m) * 120 + 99) / 100, GasBounds.DEGENESIS_REQUEST_GAS,
+            "cold request addition retains 20% margin");
     }
 }
 
@@ -801,6 +803,8 @@ contract DegenesisTerminalGas is DegenesisGasBase {
         uint256 peak = _worst(m) + GlamsterdamReprice.NEW_SLOT_STATE_GAS;
         emit log_named_uint("peak including the transient Vault budget slot", peak);
         assertLe(peak, GasBounds.DEGENESIS_TERMINAL_GAS, "terminal setup addition");
+        assertLe((peak * 120 + 99) / 100, GasBounds.DEGENESIS_TERMINAL_GAS,
+            "terminal addition retains 20% margin");
         assertLt(GasBounds.TERMINAL_SETUP + GasBounds.DEGENESIS_TERMINAL_GAS + GasBounds.TERMINAL_TAIL, 10_000_000,
             "terminal setup checkpoint under 10M");
     }
