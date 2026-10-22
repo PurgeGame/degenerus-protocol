@@ -756,33 +756,44 @@ contract Coinflip {
         return degenerusGame.walletIdOf(player);
     }
 
+    /// @dev Claim state retained across the cached result and stake-page walk.
+    struct FlipClaimTotals {
+        uint256 takeProfit;
+        uint256 oldCarry;
+        uint24 start;
+        uint24 bafResolvedDay;
+        bool bafResolvedDayCached;
+        uint256 winningBafCredit;
+        uint256 lossCount;
+        uint24 processed;
+        uint24 cachedResultKey;
+        uint24 cachedStakeKey;
+    }
+
     /// @dev Process daily claims by account ID; loss consolation credits ID-keyed WWXRP.
     function _claimCoinflipsInternal(
         uint32 id,
         PlayerCoinflipState storage state
     ) internal returns (uint256 mintable) {
         IDegenerusGame game = degenerusGame;
+        FlipClaimTotals memory totals;
         if (id != 0) state.initialized = true;
         uint24 latest = flipsClaimableDay;
-        uint24 start = state.lastClaim;
+        totals.start = state.lastClaim;
 
         bool rebuyActive = state.autoRebuyEnabled;
-        uint256 takeProfit = rebuyActive && !state.autoRebuyUnlimited ? state.autoRebuyStop : 0;
+        totals.takeProfit = rebuyActive && !state.autoRebuyUnlimited ? state.autoRebuyStop : 0;
         uint256 carry;
-        uint256 winningBafCredit;
-        uint24 bafResolvedDay;
-        bool bafResolvedDayCached;
-        uint256 lossCount;
 
-        uint256 oldCarry = state.autoRebuyCarry;
+        totals.oldCarry = state.autoRebuyCarry;
         if (rebuyActive) {
-            carry = oldCarry;
-        } else if (oldCarry != 0) {
-            mintable += oldCarry;
+            carry = totals.oldCarry;
+        } else if (totals.oldCarry != 0) {
+            mintable += totals.oldCarry;
             state.autoRebuyCarry = 0;
         }
 
-        if (start >= latest) return mintable;
+        if (totals.start >= latest) return mintable;
         if (id == 0) {
             // No wallet ID, so no stake and no carry: the walk would settle nothing, and only
             // the cursor moves.
@@ -797,8 +808,8 @@ contract Coinflip {
         unchecked {
             minClaimableDay = latest > COIN_CLAIM_DAYS ? latest - COIN_CLAIM_DAYS : 0;
         }
-        if (start < minClaimableDay) {
-            start = minClaimableDay;
+        if (totals.start < minClaimableDay) {
+            totals.start = minClaimableDay;
             if (rebuyActive && carry != 0) {
                 carry = 0;
             }
@@ -807,26 +818,27 @@ contract Coinflip {
         // Widen the loop cursor so the final supported uint24 day cannot wrap to zero.
         uint256 cursor;
         unchecked {
-            cursor = uint256(start) + 1;
+            cursor = uint256(totals.start) + 1;
         }
-        uint24 processed = start;
+        totals.processed = totals.start;
 
-        uint32 remaining = COIN_CLAIM_DAYS;
+        // The nonzero loop guard bounds both unchecked decrements; this counter stays in [0, 90].
+        uint256 remaining = COIN_CLAIM_DAYS;
         bool seeded = _seeded(id);
 
         // Results at or before `latest` cannot change during this walk. Cache one
         // 32-day word; the sentinel is above every uint24 day's possible word key.
-        uint24 cachedResultKey = type(uint24).max;
+        totals.cachedResultKey = type(uint24).max;
         uint256 cachedResults;
         // Cache a tagged seven-day page. Stake words are read-only during settlement;
         // lastClaim consumes each resolved day without zeroing reusable storage.
-        uint24 cachedStakeKey = type(uint24).max;
+        totals.cachedStakeKey = type(uint24).max;
         uint256 cachedStakes;
         while (remaining != 0 && cursor <= latest) {
             uint24 resultKey = uint24(cursor >> 5);
-            if (resultKey != cachedResultKey) {
+            if (resultKey != totals.cachedResultKey) {
                 cachedResults = coinflipDayResultPacked[resultKey];
-                cachedResultKey = resultKey;
+                totals.cachedResultKey = resultKey;
             }
             uint16 rewardPercent = uint8(cachedResults >> ((cursor & 31) * 8));
             bool win = rewardPercent >= 50;
@@ -838,9 +850,9 @@ contract Coinflip {
             }
 
             uint24 stakeKey = uint24(cursor / 7);
-            if (stakeKey != cachedStakeKey) {
+            if (stakeKey != totals.cachedStakeKey) {
                 cachedStakes = _flipStakePage(stakeKey, id);
-                cachedStakeKey = stakeKey;
+                totals.cachedStakeKey = stakeKey;
             }
             uint256 storedStake = uint32(cachedStakes >> ((cursor % 7) * 32));
             uint256 stake = storedStake;
@@ -857,21 +869,21 @@ contract Coinflip {
                     uint256 payout = stake +
                         (stake * uint256(rewardPercent)) /
                         100;
-                    if (!bafResolvedDayCached) {
-                        bafResolvedDay = jackpots.getLastBafResolvedDay();
-                        bafResolvedDayCached = true;
+                    if (!totals.bafResolvedDayCached) {
+                        totals.bafResolvedDay = jackpots.getLastBafResolvedDay();
+                        totals.bafResolvedDayCached = true;
                     }
                     // Inclusive: a flip that RESOLVED on the BAF day itself (staked
                     // the day before) seeds the NEXT bracket via claim-time routing,
                     // so no flip day is score-dead. Days before the resolution stay
                     // filtered out.
-                    if (cursor >= bafResolvedDay) {
-                        winningBafCredit += payout;
+                    if (cursor >= totals.bafResolvedDay) {
+                        totals.winningBafCredit += payout;
                     }
                     if (rebuyActive) {
-                        if (takeProfit != 0) {
-                            uint256 reserved = (payout / takeProfit) *
-                                takeProfit;
+                        if (totals.takeProfit != 0) {
+                            uint256 reserved = (payout / totals.takeProfit) *
+                                totals.takeProfit;
                             if (reserved != 0) {
                                 mintable += reserved;
                             }
@@ -888,7 +900,7 @@ contract Coinflip {
                     }
                 } else {
                     unchecked {
-                        ++lossCount;
+                        ++totals.lossCount;
                     }
                     if (rebuyActive) {
                         carry = 0;
@@ -896,7 +908,7 @@ contract Coinflip {
                 }
             }
 
-            processed = uint24(cursor);
+            totals.processed = uint24(cursor);
             unchecked {
                 ++cursor;
                 --remaining;
@@ -905,7 +917,7 @@ contract Coinflip {
 
         // sDGNRS gets no BAF score: skip the recordBafFlip call entirely for it (the
         // daily coinflip resolution auto-claims sDGNRS through this walk).
-        if (winningBafCredit != 0 && id != SDGNRS_WALLET_ID) {
+        if (totals.winningBafCredit != 0 && id != SDGNRS_WALLET_ID) {
             (uint24 cachedLevel, , , , ) = game.purchaseInfo();
             // purchaseInfo.lvl is the ACTUAL game level (one snapshot, no separate
             // level() read); the bracket keys on the real level, not the routed buy
@@ -922,21 +934,21 @@ contract Coinflip {
             // 10, so (level + 1) maps every decade — including the x10 boundary — to
             // its closing bracket.
             uint24 bafLvl = _bafBracketLevel(cachedLevel + 1);
-            jackpots.recordBafFlip(id, bafLvl, winningBafCredit);
+            jackpots.recordBafFlip(id, bafLvl, totals.winningBafCredit);
         }
 
-        // Update last claim pointer if we processed any days
-        if (processed != start) {
-            state.lastClaim = processed;
+        // Update the last claim pointer if we processed any days.
+        if (totals.processed != totals.start) {
+            state.lastClaim = totals.processed;
         }
 
-        if (rebuyActive && oldCarry != carry) {
+        if (rebuyActive && totals.oldCarry != carry) {
             // The walk clamps carry to uint128, so the cast is exact.
             state.autoRebuyCarry = uint128(carry);
         }
 
-        if (lossCount != 0) {
-            wwxrp.creditPrize(id, lossCount * COINFLIP_LOSS_WWXRP_REWARD);
+        if (totals.lossCount != 0) {
+            wwxrp.creditPrize(id, totals.lossCount * COINFLIP_LOSS_WWXRP_REWARD);
         }
 
         return mintable;

@@ -31,11 +31,10 @@ import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
 import {IStETH} from "../interfaces/IStETH.sol";
 
 import {IDegenerusGameBoonModule, IDegenerusGameDegeneretteModule} from "../interfaces/IDegenerusGameModules.sol";
-import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
+
 import {ContractAddresses} from "../ContractAddresses.sol";
-import {RECORD_KIND_LUCKBOX} from "../interfaces/ICoinflip.sol";
-import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
-import {BitPackingLib} from "../libraries/BitPackingLib.sol";
+import {GamePurchaseBox} from "./GamePurchaseBox.sol";
+
 import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {FlipRoundLib} from "../libraries/FlipRoundLib.sol";
 import {SigFigLib} from "../libraries/SigFigLib.sol";
@@ -76,13 +75,12 @@ interface ICrapsPassDelivery {
  * - Box opening (resolveHumanBoxOrder, resolveAfkingBox, resolveLootboxDirect, resolveRedemptionLootbox)
  * - Deity-boon event declarations shared with DegenerusGameBoonModule (issueDeityBoon lives there)
  */
-contract DegenerusGameLootboxModule is DegenerusGameStorage {
+contract DegenerusGameLootboxModule is GamePurchaseBox {
     // =========================================================================
     // Errors
     // =========================================================================
 
     // error E() — inherited from DegenerusGameStorage
-    /// @notice Thrown when msg.value exceeds the declared lootbox or credit amount.
 
     // =========================================================================
     // Events
@@ -179,8 +177,6 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     // =========================================================================
     // Constants
     // =========================================================================
-
-    // Boon bonus values
 
     // Lootbox roll constants
     /// @dev Base ticket budget in BPS of the roll's MAIN amount — the box amount after the
@@ -330,144 +326,11 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
     uint16 private constant LOOTBOX_BOON_BUDGET_BPS = 1000;
     uint256 private constant LOOTBOX_BOON_MAX_BUDGET = 1 ether;
 
-    /// @notice Emitted when a box entry is appended. Same topic as the Mint / Whale / Afking
+    /// @notice Emitted when a box entry is appended. Same topic as the Game / Whale / Afking
     ///         declarations — one box-buy event across every path.
     /// @param index Physical write buffer (0/1) the entry joined.
     /// @param position The entry's zero-based position in that buffer.
     event LootBoxBuy(uint32 indexed buyer, uint48 indexed index, uint32 position, uint256 amount);
-
-    /// @notice Emitted when a lootbox-boost boon is consumed by a buy.
-    event BoostUsed(
-        uint32 indexed player, uint24 indexed day, uint256 originalAmount, uint256 boostedAmount, uint16 boostBps
-    );
-
-    /// @dev Floor for the biggest-box bounty.
-    uint256 private constant BIGGEST_BOX_MIN_ETH = 5 ether;
-    /// @dev Rake-free: all box ETH routes to the prize pools. Distress sends 100% next;
-    ///      otherwise 90% future / 10% next.
-    uint16 private constant BOX_SPLIT_FUTURE_BPS = 9000;
-    uint16 private constant BOX_SPLIT_NEXT_BPS = 1000;
-    /// @dev Boon boost: capped uplift, expiring, consumed on use.
-    uint256 private constant BOX_BOOST_MAX_VALUE = 10 ether;
-    uint32 private constant BOX_BOOST_EXPIRY_DAYS = 2;
-
-    /// @dev Capped boon uplift on one purchase's spend.
-    function _boostAmount(uint256 amount, uint16 bonusBps) private pure returns (uint256) {
-        uint256 capped = amount > BOX_BOOST_MAX_VALUE ? BOX_BOOST_MAX_VALUE : amount;
-        unchecked {
-            return (capped * bonusBps) / 10_000;
-        }
-    }
-
-    /// @dev Consume the player's lootbox-boost boon, if live, and return the uplift in wei.
-    ///      Deity-granted boosts are valid only on their grant day; others expire after
-    ///      BOX_BOOST_EXPIRY_DAYS. Either way the boon is cleared here — it is one-shot.
-    function _consumeBoxBoost(uint32 id, uint256 amount) private returns (uint256 extra) {
-        BoonPacked storage bp = boonPacked[id];
-        uint256 s0 = bp.slot0;
-        uint8 tier = uint8(s0 >> BP_LOOTBOX_TIER_SHIFT);
-        if (tier == 0) return 0;
-
-        uint24 day = _simulatedDayIndex();
-        uint24 deityDay = uint24(s0 >> BP_DEITY_LOOTBOX_DAY_SHIFT);
-        if (deityDay != 0 && deityDay != day) {
-            bp.slot0 = (s0 & BP_LOOTBOX_CLEAR) | BP_SLOT0_RETAINED;
-            return 0;
-        }
-        uint24 stampDay = uint24(s0 >> BP_LOOTBOX_DAY_SHIFT);
-        if (stampDay != 0 && day > stampDay + BOX_BOOST_EXPIRY_DAYS) {
-            bp.slot0 = (s0 & BP_LOOTBOX_CLEAR) | BP_SLOT0_RETAINED;
-            return 0;
-        }
-
-        uint16 boostBps = _lootboxTierToBps(tier);
-        extra = _boostAmount(amount, boostBps);
-        bp.slot0 = (s0 & BP_LOOTBOX_CLEAR) | BP_SLOT0_RETAINED;
-        emit BoostUsed(id, day, amount, amount + extra, boostBps);
-    }
-
-    /// @notice Build a purchase's ordinary entry: validate and price the order at the active
-    ///         level, consume a live boost, snapshot distress, and arm the biggest-box bounty.
-    ///         Nothing is queued here — `applyBoxOrderScore` finalizes the word and the caller
-    ///         appends it once every leg of the purchase is complete.
-    /// @dev Delegatecall entrypoint from the Mint module; runs in the Game's storage context.
-    /// @param buyerId The buyer's wallet ID.
-    /// @param boxOrder Packed purchase input: [quantity:7][kind:2][customUnits:21].
-    /// @return costWei Total wei the order costs.
-    /// @return shares Prize-pool shares packed as (future << 128) | next. One return value
-    ///         rather than two: the caller holds them across a long stretch of its body, and
-    ///         two live locals there is exactly what tips it into a Yul stack-too-deep.
-    /// @return flipCredit Any biggest-box bounty claim, to join the buyer's flip credit.
-    /// @return word The in-flight entry word, still missing its score.
-    function beginBoxOrder(uint32 buyerId, uint256 boxOrder)
-        external
-        payable
-        returns (uint256 costWei, uint256 shares, uint256 flipCredit, uint256 word)
-    {
-        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
-        (word, costWei) = _decodeBoxOrder(boxOrder, _activeTicketLevel());
-        // The boost is capped at a quarter of the spend, so the fraction fits its lane.
-        word |= uint256(buyerId) | ((_consumeBoxBoost(buyerId, costWei) * 10_000 / costWei) << LB_BOOST_SHIFT);
-        bool distress = _isDistressMode();
-        if (distress) word |= LB_DISTRESS;
-
-        // Biggest-box bounty: a CUSTOM only, and its per-box size, never the order's total.
-        // Presets are excluded outright — the bounty marks deliberately going big, and a large
-        // at a milestone price would clear the floor on its own. With presets out and the
-        // candidate a single box, no quantity of small buys can reach it.
-        if ((boxOrder >> BO_KIND_SHIFT) & 3 == BO_KIND_CUSTOM) {
-            uint256 candidate = (boxOrder >> BO_UNITS_SHIFT) * LB_VALUE_UNIT;
-            if (candidate >= BIGGEST_BOX_MIN_ETH) {
-                flipCredit = coinflip.armRecord(RECORD_KIND_LUCKBOX, buyerId, candidate);
-            }
-        }
-
-        unchecked {
-            shares = (((costWei * (distress ? 0 : BOX_SPLIT_FUTURE_BPS)) / 10_000) << 128)
-                | ((costWei * (distress ? 10_000 : BOX_SPLIT_NEXT_BPS)) / 10_000);
-        }
-    }
-
-    /// @notice Finalize a purchase's ordinary entry with its post-action activity score.
-    /// @dev Delegatecall entrypoint from the Mint module, called once the post-action score is
-    ///      known. The score is the resolver's frozen EV knob — the anti-gaming property, since
-    ///      the open level is not player-timable but the buy is. Stored as its 12-bit code
-    ///      (`_scoreCode`).
-    /// @param word The in-flight entry from `beginBoxOrder`.
-    /// @param cachedScore Caller's post-action activity score in whole points.
-    /// @return The completed ordinary fields.
-    function applyBoxOrderScore(uint256 word, uint256 cachedScore)
-        external
-        payable
-        returns (uint256)
-    {
-        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
-        return word | (_scoreCode(cachedScore) << LB_SCORE_SHIFT);
-    }
-
-    /// @dev Last activity score a queued entry stores exactly; above it the code steps by
-    ///      SCORE_CODE_STEP points, reaching ACTIVITY_EFFECTIVE_CAP_POINTS at code 4,039.
-    uint256 private constant SCORE_CODE_EXACT = 2042;
-    uint256 private constant SCORE_CODE_STEP = 14;
-
-    /// @dev 12-bit code of a queued entry's activity score: clamp to the curves' effective cap,
-    ///      then floor-encode. Exact through SCORE_CODE_EXACT and at the cap; in between it
-    ///      decodes at most 13 points low, where every curve is nearly flat.
-    function _scoreCode(uint256 score) internal pure returns (uint256) {
-        if (score > ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS) {
-            score = ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS;
-        }
-        unchecked {
-            return score <= SCORE_CODE_EXACT ? score : SCORE_CODE_EXACT + (score - SCORE_CODE_EXACT) / SCORE_CODE_STEP;
-        }
-    }
-
-    /// @dev Whole-point activity score of a 12-bit code.
-    function _scoreFromCode(uint256 code) internal pure returns (uint256) {
-        unchecked {
-            return code <= SCORE_CODE_EXACT ? code : SCORE_CODE_EXACT + (code - SCORE_CODE_EXACT) * SCORE_CODE_STEP;
-        }
-    }
 
     /// @notice Append a system-granted box entry — the pass purchases.
     ///         A grant is `count` boxes of equal value (`count == 0` is one box). Each grant is
@@ -557,7 +420,7 @@ contract DegenerusGameLootboxModule is DegenerusGameStorage {
 
     /// @dev Resolution context for one order, carried as a single memory struct rather than a
     ///      spread of locals: the box loop threads all of it, and a wide parameter list here is
-    ///      exactly what tips this module into a Yul stack-too-deep.
+    ///      enough to exceed the Yul stack limit.
     struct BoxRoll {
         uint32 id; // the entry's wallet ID: the owner input of every seed
         uint48 index; // event tag: the entry reference or the redemption batch tag

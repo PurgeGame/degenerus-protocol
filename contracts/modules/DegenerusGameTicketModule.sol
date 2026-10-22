@@ -5,7 +5,6 @@ import {GoldSixLib} from "../libraries/GoldSixLib.sol";
 
 import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol";
 
-import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {DegenerusTraitUtils} from "../DegenerusTraitUtils.sol";
 import {MineFlipGas} from "../libraries/MineFlipGas.sol";
@@ -24,27 +23,6 @@ import {IDegenerusGameFoilPackModule} from "../interfaces/IDegenerusGameModules.
 ///      of that partition. The miner dispatcher owns
 ///      admission/publication and must not replace the word before this work ends.
 contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
-    /// @notice Stable identity for wallet-bound governance and address-derived referral codes.
-    function registerWalletIdentity(address owner) external returns (uint32 id) {
-        if (msg.sender != ContractAddresses.ADMIN && msg.sender != ContractAddresses.GNRUS
-            && msg.sender != ContractAddresses.AFFILIATE) revert E();
-        id = uint32(walletIds[owner] >> 32);
-        if (id == 0) (id, ) = _registerWallet(owner, 0);
-    }
-
-    /// @notice The one wallet-ID hook for protocol contracts with their own player entry points.
-    /// @dev With `allocate = false`, return the ordinary wallet's existing ID or zero.
-    ///      Allocation carries no spend here, so it is available only through the free-ID
-    ///      threshold. Later callers must first register through a qualifying Game purchase.
-    function registerWallet(address owner, bool allocate) external returns (uint32 id) {
-        if (msg.sender != ContractAddresses.AFFILIATE && msg.sender != ContractAddresses.COINFLIP
-            && msg.sender != ContractAddresses.CRAPS
-            && msg.sender != ContractAddresses.PARIMUTUEL && msg.sender != ContractAddresses.WWXRP
-            && msg.sender != ContractAddresses.ADMIN && msg.sender != ContractAddresses.COIN
-            && msg.sender != ContractAddresses.GNRUS) revert E();
-        if (!allocate) return _walletIdOf(owner);
-        (id, ) = _registerWallet(owner, 0);
-    }
 
     // Each bound includes cold writes. TAIL covers all cursor/seat persistence,
     // queue release, completion flags and the return after the last admitted item.

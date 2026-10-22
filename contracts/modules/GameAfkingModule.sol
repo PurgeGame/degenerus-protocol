@@ -31,11 +31,7 @@ import {DegenerusGameMintStreakUtils} from "./DegenerusGameMintStreakUtils.sol";
 import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
-import {
-    IDegenerusGameLootboxModule,
-    IDegenerusGameWhaleModule,
-    IDegenerusGameDegenesisModule
-} from "../interfaces/IDegenerusGameModules.sol";
+import {IDegenerusGameLootboxModule, IDegenerusGameWhaleModule, IDegenerusGameDegenesisModule} from "../interfaces/IDegenerusGameModules.sol";
 import {IDegenerusAffiliate} from "../interfaces/IDegenerusAffiliate.sol";
 import {IDegenerusGame, MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 import {BoundedCall} from "../libraries/BoundedCall.sol";
@@ -54,10 +50,7 @@ interface ISeatToken {
 /**
  * @title GameAfkingModule
  * @author Burnie Degenerus
- * @notice Delegate-called module owning the AfKing subscription logic. The bulk of that
- *         logic sits in this module's OWN EIP-170 budget; only the thin dispatch stubs
- *         (subscribe / claimAfkingFlip / drainAffiliateBases / decurse / smite /
- *         subscriberSetLength) occupy space in the DegenerusGame image.
+ * @notice AfKing subscription logic, executed by delegatecall in Game storage.
  *
  * @dev DELEGATECALL CONTEXT: the module inherits `DegenerusGameStorage` (via
  *      `DegenerusGameMintStreakUtils`), so the subscriber set (`_subscribers` of packed
@@ -1175,38 +1168,6 @@ contract GameAfkingModule is DegenerusGameMintStreakUtils {
                 if (id == uint32(uplines >> 32)) skipU2 += base;
             }
         }
-    }
-
-    /// @notice QUESTS-only: record a secondary/level quest completion against a live afking
-    ///         run's streak, so its activity score reflects the player's own quest effort (the
-    ///         primary rides the elapsed days).
-    /// @dev No-op for a non-member and a run pending removal. Adds `amount` to the checkpoint
-    ///      streak, saturating; the checkpoint day does not move, so nothing accrued changes.
-    ///      `amount` is 1 for a daily secondary completion and LEVEL_QUEST_STREAK_BONUS for a
-    ///      level-quest completion.
-    /// @param id Wallet ID of the afking subscriber whose completion is being recorded.
-    /// @param amount The streak increment to apply.
-    function recordAfkingSecondary(uint32 id, uint16 amount) external {
-        if (msg.sender != ContractAddresses.QUESTS) revert NotApproved();
-        (uint256 lane, uint256 position1) = _subLaneOf(id);
-        if (position1 == 0 || lane & SUB_REMOVAL_BIT != 0) return;
-        _setSubLaneAt(position1 - 1, _withSubCheckpoint(lane, _subDay(lane), _subCheckpointStreak(lane) + amount));
-    }
-
-    /// @notice QUESTS-only: raise a live afking run's streak to at least `floor`, the same
-    ///         foil-pack quest-streak guarantee a manual player's streak receives.
-    /// @dev No-op for a non-member and a run pending removal. Raises the checkpoint streak by
-    ///      the shortfall of the live streak; the checkpoint day does not move, so nothing
-    ///      accrued changes.
-    /// @param id Wallet ID of the afking subscriber whose streak is floored.
-    /// @param floor The minimum live streak.
-    function floorAfkingStreakBase(uint32 id, uint16 floor) external {
-        if (msg.sender != ContractAddresses.QUESTS) revert NotApproved();
-        (uint256 lane, uint256 position1) = _subLaneOf(id);
-        if (position1 == 0 || lane & SUB_REMOVAL_BIT != 0) return;
-        uint256 live = _subStreakAt(lane, _afkingEndpoint());
-        if (live >= floor) return;
-        _setSubLaneAt(position1 - 1, _withSubCheckpoint(lane, _subDay(lane), _subCheckpointStreak(lane) + floor - live));
     }
 
     /// @dev A member whose run is live (not pending removal): immune to curse and smite.

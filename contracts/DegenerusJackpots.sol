@@ -370,10 +370,9 @@ contract DegenerusJackpots is IDegenerusJackpots {
                 uint256 round = 2 * pair + j;
                 // Each near-level band has a multiple of three rounds.
                 draws[j].trait = traits[round % 3];
-                draws[j].candidates = degenerusGame.sampleTraitEntries(
-                    band == 1, draws[j].trait, EntropyLib.hash2(base, round)
+                (winners[2 * j], winners[2 * j + 1]) = _bafNearRound(
+                    draws[j], band == 1, lvl, currentEpoch, EntropyLib.hash2(base, round)
                 );
-                (winners[2 * j], winners[2 * j + 1]) = _bafRank(draws[j].candidates, 0, lvl, currentEpoch);
             }
         } else {
             uint256 pairEntropy = EntropyLib.hash2(base, BAF_FAR_PAIR_KEY | pair);
@@ -383,6 +382,14 @@ contract DegenerusJackpots is IDegenerusJackpots {
             (winners[0], winners[1]) = _bafRank(tickets, 0, lvl, currentEpoch);
             (winners[2], winners[3]) = _bafRank(tickets, 4, lvl, currentEpoch);
         }
+    }
+
+    /// @dev Sample and rank one near-level round into its existing draw allocation.
+    function _bafNearRound(BafRound memory draw, bool nextLevel, uint24 lvl, uint64 epoch, uint256 entropy)
+        private view returns (uint32 best, uint32 second)
+    {
+        draw.candidates = degenerusGame.sampleTraitEntries(nextLevel, draw.trait, entropy);
+        return _bafRank(draw.candidates, 0, lvl, epoch);
     }
 
     /// @dev Best and second-best BAF score among the four candidate wallet IDs from `off` (fewer

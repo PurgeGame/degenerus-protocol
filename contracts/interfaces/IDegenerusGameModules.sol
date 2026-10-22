@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
 
-
 /*
  * TERMS OF INTERACTION — submitting a transaction to this contract accepts them.
  *
@@ -38,7 +37,7 @@ struct DecimatorJackpotTerms {
 }
 
 interface IDegenerusGameTicketModule {
-    function registerWallet(address owner, bool allocate) external returns (uint32 id);
+
     function runJackpotTicketAwards(TicketWorkPlan calldata plan, uint256 allowance)
         external returns (MineFlipGas.Result memory);
     function runTicketWork(uint24 anchor, uint256 gasAllowance) external returns (MineFlipGas.Result memory);
@@ -266,48 +265,6 @@ interface IDegenerusGameWhaleModule {
 /// @title IDegenerusGameMintModule
 /// @notice Interface for minting operations and purchase processing
 interface IDegenerusGameMintModule {
-    function raiseSmurfBaseAllowance(uint32 mainId, uint16 newBase) external;
-    function borrow(uint32 id, uint24 dueLevel, uint256 amount, uint256 minEthOut) external;
-    function repay(uint32 id) external payable;
-    function sweepAccounts(uint32[] calldata ids) external returns (uint256 ethCollected, uint256 flipCollected);
-
-
-
-    /// @notice Body of Game.createSmurf (raw msg.data target, identical selector; see
-    ///         IDegenerusGame for the full contract). Owner = msg.sender (must hold an ID).
-    /// @dev Requires an ordinary main and unused base-plus-score lifetime allowance.
-    ///      Resolves and locks the owner's referral from `affiliateCode` as a purchase does,
-    ///      appends the subaccount owner ID, sets its mint-word flag and emits `SmurfCreated`.
-    ///      Calls Affiliate `referSmurf(ownerId, smurfId)`, then buys one whole ticket
-    ///      for the subaccount paid by the owner (payer ID threaded
-    ///      through the payment path; fresh-ETH overpay to the owner's AFKing balance).
-    /// @param affiliateCode Referral code applied to the owner if its referral is unset.
-    /// @param payKind How the owner funds the ticket.
-    /// @return smurfId The new account's wallet ID.
-    function createSmurf(bytes32 affiliateCode, MintPaymentKind payKind)
-        external payable returns (uint32 smurfId);
-
-    /// @notice Processes a ticket and lootbox purchase
-    /// @param buyerId Address of the buyer
-    /// @param entryQuantityScaled Ticket quantity in scaled entry units (400 = one whole ticket; 2 decimals, x100)
-    /// @param boxOrder Packed box order (0 to skip): [quantity:7][kind:2][customUnits:21].
-    /// @param affiliateCode Affiliate code for referral tracking
-    /// @param payKind Payment method used for the purchase
-    function purchase(
-        uint32 buyerId,
-        uint256 entryQuantityScaled,
-        uint256 boxOrder,
-        bytes32 affiliateCode,
-        MintPaymentKind payKind
-    ) external payable;
-
-    /// @notice Explicit-ethValue ticket-buy entry: the fresh-ETH portion is the `ethValue`
-    ///         param rather than msg.value. Callers: the foil purchase, funding the
-    ///         ticket/lootbox leg with carved fresh ETH while the buyer's msg.value is in
-    ///         flight (ignored — only ethValue is spent), and createSmurf's ticket. payable so
-    ///         the carried value does not revert the delegatecall.
-    /// @param payerId Ledger the claimable/AFKing legs debit: 0 = the buyer's own, else a
-    ///        smurf's owner on its creation ticket.
     function purchaseWith(
         uint32 buyerId,
         uint256 entryQuantityScaled,
@@ -317,14 +274,6 @@ interface IDegenerusGameMintModule {
         uint256 ethValue,
         uint32 payerId
     ) external payable;
-
-    /// @notice Processes a FLIP purchase of tickets. Raw msg.data target of Game.redeemFlip.
-    /// @param id Account receiving the tickets (0 = caller; account rule); FLIP from its payee
-    /// @param entryQuantityScaled Ticket quantity in scaled entry units (400 = one whole ticket; 2 decimals, x100)
-    function redeemFlip(
-        uint32 id,
-        uint256 entryQuantityScaled
-    ) external;
 }
 
 /// @title IDegenerusGameLootboxModule
@@ -339,25 +288,6 @@ interface IDegenerusGameLootboxModule {
     function resolveHumanBoxOrder(uint48 buffer, uint256 position, uint256 entry, uint256 rngWord,
         uint24 currentLevel) external;
 
-    /// @notice Build a purchase's ordinary entry: validate and price, consume a live boost,
-    ///         snapshot distress, arm the box bounty. Nothing is queued
-    /// @param buyerId Player the entry is for
-    /// @param buyerId The buyer's wallet ID
-    /// @param boxOrder Packed input: [quantity:7][kind:2][customUnits:21]
-    /// @return costWei Total wei the order costs
-    /// @return shares Prize-pool shares packed as (future << 128) | next
-    /// @return flipCredit Biggest-box bounty claim, to join the buyer's flip credit
-    /// @return word The in-flight entry word
-    function beginBoxOrder(uint32 buyerId, uint256 boxOrder)
-        external
-        payable
-        returns (
-            uint256 costWei,
-            uint256 shares,
-            uint256 flipCredit,
-            uint256 word
-        );
-
     /// @notice Append a system-granted box entry (pass purchases)
     /// @param id Player receiving the boxes
     /// @param amountWei Box spend in wei
@@ -371,15 +301,6 @@ interface IDegenerusGameLootboxModule {
         bool boost,
         uint8 count
     ) external payable;
-
-    /// @notice Finalize a purchase's ordinary entry with its post-action score
-    /// @param word The in-flight entry from `beginBoxOrder`
-    /// @param cachedScore Caller's post-action activity score in whole points
-    /// @return The completed ordinary fields
-    function applyBoxOrderScore(
-        uint256 word,
-        uint256 cachedScore
-    ) external payable returns (uint256);
 
     /// @notice Resolves a lootbox directly with provided randomness
     /// @param id The reward account's wallet ID.
@@ -464,7 +385,6 @@ interface IDegenerusGameBoonModule {
     ///         existing account `recipientId`. Raw msg.data target of Game.issueDeityBoon.
     function issueDeityBoon(uint32 deityId, uint32 recipientId, uint8 slot) external;
 
-
     /// @notice Automatically award both protocol owners' three closed daily draws. Advance-only delegate target.
     function resolveProtocolBoonDraws(uint24 awardDay) external;
 
@@ -476,11 +396,6 @@ interface IDegenerusGameBoonModule {
     /// @param id Wallet ID of the player
     /// @return boonBps Boon value in basis points
     function consumeCoinflipBoon(uint32 id) external returns (uint16 boonBps);
-
-    /// @notice Consumes a player's purchase boost boon
-    /// @param id Wallet ID of the player (boon state key)
-    /// @return boostBps Boost value in basis points
-    function consumePurchaseBoost(uint32 id) external payable returns (uint16 boostBps);
 
     /// @notice Consumes a player's decimator boost boon
     /// @dev Delegate target of DegenerusGame.consumeDecimatorBoon(uint32). Boon state is keyed

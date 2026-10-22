@@ -25,12 +25,12 @@ pragma solidity 0.8.34;
  */
 
 import {ContractAddresses} from "../ContractAddresses.sol";
-import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
+import {GamePurchaseBoon} from "./GamePurchaseBoon.sol";
+
 import {BitPackingLib} from "../libraries/BitPackingLib.sol";
 import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {IDegenerusQuests} from "../interfaces/IDegenerusQuests.sol";
-import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
 
 /**
  * @title DegenerusGameBoonModule
@@ -40,7 +40,7 @@ import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
  *
  * @dev Rolls and delivers box-drawn boons (`rollBoxBoons`), lets a
  *      deity-pass holder issue a daily boon to another player (`issueDeityBoon`), consumes
- *      coinflip, craps, purchase, and decimator boons, and separately clears expired
+ *      coinflip, craps, WWXRP, and decimator boons, and separately clears expired
  *      coinflip, lootbox, purchase, decimator, whale, deity-pass, and lazy-pass boons.
  *      Called via `delegatecall` from DegenerusGame -- all storage reads/writes
  *      operate on the game contract's storage.
@@ -51,7 +51,7 @@ import {IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
  *      slot at all and are credited to `mintPacked_` and the quest streak the moment they
  *      are drawn or gifted. See DegenerusGameStorage for bit layout.
  */
-contract DegenerusGameBoonModule is DegenerusGameStorage {
+contract DegenerusGameBoonModule is GamePurchaseBoon {
     error AlreadyOwnsDeityPass();
     error SymbolTaken();
 
@@ -183,7 +183,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
 
     uint24 private constant COINFLIP_BOON_EXPIRY_DAYS = 2;
     uint24 private constant LOOTBOX_BOOST_EXPIRY_DAYS = 2;
-    uint24 private constant PURCHASE_BOOST_EXPIRY_DAYS = 4;
+
     uint24 private constant DEITY_PASS_BOON_EXPIRY_DAYS = 4;
 
     // =========================================================================
@@ -253,37 +253,6 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
         if (!_boonLaneLive(lane, uint24(_simulatedDayIndex()))) return 0;
         boonBps = uint16(tier) * 400;
         emit BoonConsumed(id, 7, boonBps);
-    }
-
-    /// @notice Consume a player's purchase boost and return the bonus BPS
-    /// @dev Called via nested delegatecall from MintModule during ticket purchase.
-    ///      Payable: the purchase carries its ETH as msg.value, which delegatecall
-    ///      keeps in flight through this nested dispatch.
-    /// @param id Wallet ID of the player to consume boost for
-    /// @return boostBps The bonus in basis points (0 if no boost, 500/1500/2500 otherwise)
-    function consumePurchaseBoost(uint32 id) external payable returns (uint16 boostBps) {
-        // Delegatecall-only: address(this) == GAME under the nested dispatch. A direct call on the
-        // deployed module would trap the in-flight msg.value (empty local state returns silently).
-        if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
-        BoonPacked storage bp = boonPacked[id];
-        uint256 s0 = bp.slot0;
-        uint8 tier = uint8(s0 >> BP_PURCHASE_TIER_SHIFT);
-        if (tier == 0) return 0;
-
-        uint24 currentDay = uint24(_simulatedDayIndex());
-        uint24 deityDay = uint24(s0 >> BP_DEITY_PURCHASE_DAY_SHIFT);
-        if (deityDay != 0 && deityDay != currentDay) {
-            bp.slot0 = (s0 & BP_PURCHASE_CLEAR) | BP_SLOT0_RETAINED;
-            return 0;
-        }
-        uint24 stampDay = uint24(s0 >> BP_PURCHASE_DAY_SHIFT);
-        if (stampDay > 0 && currentDay > stampDay + PURCHASE_BOOST_EXPIRY_DAYS) {
-            bp.slot0 = (s0 & BP_PURCHASE_CLEAR) | BP_SLOT0_RETAINED;
-            return 0;
-        }
-        boostBps = _purchaseTierToBps(tier);
-        bp.slot0 = (s0 & BP_PURCHASE_CLEAR) | BP_SLOT0_RETAINED;
-        emit BoonConsumed(id, 2, boostBps);
     }
 
     /// @notice Consume a player's decimator boost and return the bonus BPS
@@ -569,8 +538,7 @@ contract DegenerusGameBoonModule is DegenerusGameStorage {
     // Box-drawn boons
     // =========================================================================
     //
-    // The draw table, its weights and every delivery branch live here, not in the Lootbox
-    // module: this is the boon module, and the Lootbox module has no EIP-170 headroom for them.
+    // The draw table, its weights and every delivery branch execute in Game storage.
     // The Lootbox module reaches this through ONE delegatecall per entry — see `rollBoxBoons`,
     // which loops the entry's boxes internally rather than making the caller pay a call frame
     // per box.

@@ -709,7 +709,6 @@ abstract contract DegenerusGameStorage {
     // RNG History
     // =========================================================================
 
-
     /// @dev Exact tag authentication also serves pinned processing days older than
     ///      yesterday. A committed word cannot be overwritten before consumers finish.
     function _recordedDailyWord(uint24 day) internal view returns (uint256) {
@@ -1665,8 +1664,6 @@ abstract contract DegenerusGameStorage {
         }
     }
 
-
-
     /// @dev Raw wallet-table element for a stored, nonzero ID.
     function _walletElement(uint32 id) internal view returns (uint256 element) {
         uint256 slot = _walletSlot(id);
@@ -1743,8 +1740,6 @@ abstract contract DegenerusGameStorage {
         _requireAllocated(id);
         return id;
     }
-
-
 
     // =========================================================================
     // Whale-pass half-pass count (wallet-table bits 192..255)
@@ -2026,7 +2021,6 @@ abstract contract DegenerusGameStorage {
     function _bucketIdAtUnchecked(uint24 lvl, uint8 trait, uint256 k) internal view returns (uint32) {
         return _bucketIdFromWord(_bucketWordAtUnchecked(lvl, trait, k), k);
     }
-
 
     /// @dev Header: uint32 occurrence count, then up to seven low-first uint32 tail lanes.
     ///      Only complete words reach data storage. The practical per-level bound is below
@@ -2724,7 +2718,6 @@ abstract contract DegenerusGameStorage {
     // Degenerette Bet Queue
     // =========================================================================
 
-
     // =========================================================================
     // Operator Approvals
     // =========================================================================
@@ -2735,7 +2728,6 @@ abstract contract DegenerusGameStorage {
     // =========================================================================
     // Affiliate DGNRS Claims
     // =========================================================================
-
 
     function _levelPrizePool(uint24 lvl) internal view returns (uint256) {
         uint256 word = levelPrizePool[lvl & 3];
@@ -2856,7 +2848,6 @@ abstract contract DegenerusGameStorage {
     uint8 internal constant SDGNRS_DEITY_SYMBOL = 6;
     uint32 internal constant DEITY_PERPETUAL_ENTRIES = 4;
 
-
     // =========================================================================
     // Degenesis Settlement
     // =========================================================================
@@ -2869,7 +2860,6 @@ abstract contract DegenerusGameStorage {
     // =========================================================================
     // Internal Helpers
     // =========================================================================
-
 
     /// @dev Front-load the LEVEL mint streak by a pass's freeze delta. Contiguity-aware: if the
     ///      prior completed run reaches the pass start with no gap, extend the streak by
@@ -3179,14 +3169,6 @@ abstract contract DegenerusGameStorage {
         if (_vrfDead()) return true;
         if (lastPurchaseDay || jackpotPhaseFlag) return false;
         if (today <= _purchaseDeadlineDay()) return false;
-        return _pastDeadlineTriggered(today, idx);
-    }
-
-    /// @dev The purchase-deadline half of `_livenessTriggered`, reached only past the deadline.
-    ///      Virtual so the near-full mint module can answer it through the Game's own view
-    ///      rather than carry a copy (see the mint module's override); every other contract
-    ///      evaluates it here.
-    function _pastDeadlineTriggered(uint24 today, uint24 idx) internal view virtual returns (bool) {
         // The ending has started: irreversible.
         if (_lrRead(LR_GO_LVL_SHIFT, LR_GO_LVL_MASK) != 0) return true;
         // A met target rescues the level, exactly as _handleGameOverPath decides (the deadman
@@ -3450,7 +3432,6 @@ abstract contract DegenerusGameStorage {
     function _unpackMilliEthToWei(uint64 milli) internal pure returns (uint256) {
         return uint256(milli) * LR_ETH_SCALE;
     }
-
 
     /// @dev EV multiplier from a raw activity score (whole points).
     ///      Unchanged low anchor 90%→100% (0 to 60 points), then a steep ramp to vA
@@ -3727,7 +3708,6 @@ abstract contract DegenerusGameStorage {
         uint64 cumulativeWeight;
         uint16 scoreSnapshot;
     }
-
 
     bytes32 internal constant PROTOCOL_BOON_WINNER_TAG = keccak256("degenerus.protocol.boon.winner");
 
@@ -4260,17 +4240,13 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant SUBSCRIBER_CAP = 2000;
     uint256 internal constant SUBSCRIBER_TICKET_PHASE = 1 << 15;
 
-
     // =========================================================================
     // Foil Pack
     // =========================================================================
 
-
     /// @dev Two reusable day lanes per player, set before payout. Each 32-bit lane
     ///      stores its exact day [0..23] and four ticket claim bits [24..27].
     mapping(uint32 => uint256) internal foilMatchClaimed;
-
-
 
     /// @dev Resumable read cursor and cohort-wide generation/eligibility stamps.
     uint32 internal foilCursor;
@@ -5029,7 +5005,6 @@ abstract contract DegenerusGameStorage {
         uint32 parent = uint32(_walletElement(ownerId) >> 160);
         return parent == 0 ? ownerId : parent;
     }
-
 
     // =========================================================================
     // Degenesis Orders

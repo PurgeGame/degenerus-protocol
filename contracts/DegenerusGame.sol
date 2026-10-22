@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.34;
-import {DegenerusGamePayoutUtils} from "./modules/DegenerusGamePayoutUtils.sol";
+
+import {GamePurchase} from "./modules/GamePurchase.sol";
+import {GameHooks} from "./modules/GameHooks.sol";
 
 import {MineFlipGas} from "./libraries/MineFlipGas.sol";
 
@@ -58,20 +60,9 @@ import {MineFlipGas} from "./libraries/MineFlipGas.sol";
 
 import {IsDGNRS} from "./interfaces/IsDGNRS.sol";
 import {IStETH} from "./interfaces/IStETH.sol";
-import {
-    IDegenerusGameAdvanceModule,
-    IDegenerusGameMinerModule,
-    IDegenerusGameMintModule,
-    IDegenerusGameWhaleModule,
-    IDegenerusGameLootboxModule,
-    IDegenerusGameBoonModule,
-    IGameAfkingModule,
-    IDegenerusGameFoilPackModule
-} from "./interfaces/IDegenerusGameModules.sol";
+import {IDegenerusGameMinerModule, IDegenerusGameBoonModule, IGameAfkingModule, IDegenerusGameFoilPackModule} from "./interfaces/IDegenerusGameModules.sol";
 import {MintPaymentKind} from "./interfaces/IDegenerusGame.sol";
-import {
-    DegenerusGameMintStreakUtils
-} from "./modules/DegenerusGameMintStreakUtils.sol";
+
 import {ContractAddresses} from "./ContractAddresses.sol";
 import {BitPackingLib} from "./libraries/BitPackingLib.sol";
 import {GameTimeLib} from "./libraries/GameTimeLib.sol";
@@ -111,7 +102,7 @@ interface IDegenerusVaultOwnerGame {
  *      decimator, degenerette, foilpack, gameover, jackpot, lootbox, mint, whale).
  * @custom:security-contact burnie@degener.us
  */
-contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils {
+contract DegenerusGame is GamePurchase, GameHooks {
     /*+======================================================================+
       |                              ERRORS                                  |
       +======================================================================+
@@ -240,7 +231,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
     /*+======================================================================+
       |                           MODIFIERS                                  |
       +======================================================================+*/
-
 
     /*+========================================================================================+
       |                    ADMIN VRF FUNCTIONS                                                 |
@@ -428,7 +418,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
 
     /// @notice Read a raw storage slot. Periphery escape hatch for lens/viewer
     ///         contracts (e.g. DegenerusGameLens): rich packed-state decodes live
-    ///         off-contract where EIP-170 headroom is free, and new read surfaces
+    ///         in the lens, and new read surfaces
     ///         can deploy without touching this contract. Read-only — storage is
     ///         already public to off-chain readers via eth_getStorageAt; this
     ///         mirrors that visibility to eth_call/staticcall consumers.
@@ -439,17 +429,13 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
     }
 
     /// @notice Wallet-ID hook for trusted protocol contracts: the existing ID, or with `allocate`
-    ///         a new one (paid admission applies). The ticket module enforces the caller set.
-    function registerWallet(address, bool) external returns (uint32 id) {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_TICKET_MODULE.delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
-        id = abi.decode(data, (uint32));
+    ///         a new one (paid admission applies). The shared hook enforces the caller set.
+    function registerWallet(address owner, bool allocate) external returns (uint32 id) {
+        return _registerWallet(owner, allocate);
     }
 
-    function registerWalletIdentity(address) external returns (uint32 id) {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_TICKET_MODULE.delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
-        id = abi.decode(data, (uint32));
+    function registerWalletIdentity(address owner) external returns (uint32 id) {
+        return _registerWalletIdentity(owner);
     }
 
     /// @notice Wallet-bound identity; does not change when its gameplay account is sold.
@@ -459,14 +445,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
 
     /// @notice Borrow up to `amount` against far-future tickets; unrepaid at `dueLevel`, the
     ///         lender takes the account as a sale would.
-    function borrow(uint32, uint24, uint256, uint256) external {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
+    function borrow(uint32 id, uint24 dueLevel, uint256 amount, uint256 minEthOut) external {
+        _borrow(id, dueLevel, amount, minEthOut);
     }
 
-    function repay(uint32) external payable {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
+    function repay(uint32 id) external payable {
+        _repay(id);
     }
 
     function acquiredBuyer(uint32 id) external view returns (uint32 buyerId) {
@@ -474,10 +458,8 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
     }
 
     /// @notice Collect subaccount ETH and settled FLIP for its current owner; only sDGNRS's are permissionless.
-    function sweepAccounts(uint32[] calldata) external returns (uint256, uint256) {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
-        assembly ("memory-safe") { return(add(data, 32), mload(data)) }
+    function sweepAccounts(uint32[] calldata ids) external returns (uint256 ethCollected, uint256 flipCollected) {
+        return _sweepAccounts(ids);
     }
 
     /// @notice Deity-gated smite: add a curse stack to account `smiteeId` for 200 FLIP.
@@ -492,23 +474,15 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
     }
 
     /// @notice Record a secondary/level quest completion against an afking sub's streak base.
-    /// @dev QUESTS-only. Thin delegatecall dispatch stub into GameAfkingModule; the module impl
-    ///      enforces the QUESTS-only gate under delegatecall (msg.sender preserved).
-    ///      Signature: recordAfkingSecondary(uint32 id, uint16 amount) — matches the module selector.
-    function recordAfkingSecondary(uint32, uint16) external {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_AFKING_MODULE
-            .delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
+    /// @dev QUESTS-only; the shared hook checks the caller.
+    function recordAfkingSecondary(uint32 id, uint16 amount) external {
+        _recordAfkingSecondary(id, amount);
     }
 
-    /// @notice QUESTS-only (enforced in the afking module): floor an afking sub's streak base
+    /// @notice QUESTS-only: floor an afking sub's streak base
     ///         so a foil-pack purchase's quest-streak guarantee reaches a mid-run afker.
-    function floorAfkingStreakBase(uint32, uint16) external {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_AFKING_MODULE
-            .delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
+    function floorAfkingStreakBase(uint32 id, uint16 floor) external {
+        _floorAfkingStreakBase(id, floor);
     }
 
     /// @notice Pay the sDGNRS leg of an all-time record claim and name the record's payee.
@@ -568,20 +542,18 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
 
     /// @notice Create a smurf account owned and referred by the caller and
     ///         buy it one ticket, all in one call.
-    /// @dev Body in the mint module; the signature matches the module function exactly, so the
-    ///      calldata and msg.value forward as-is.
-    /// @return The new account's wallet ID.
-    function createSmurf(bytes32, MintPaymentKind) external payable returns (uint32) {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
-        // The trusted Mint module returns the identical one-word ABI result.
-        assembly ("memory-safe") { return(add(data, 32), mload(data)) }
+    /// @return smurfId The new account's wallet ID.
+    function createSmurf(bytes32 affiliateCode, MintPaymentKind payKind)
+        external
+        payable
+        returns (uint32 smurfId)
+    {
+        return _createSmurf(affiliateCode, payKind);
     }
 
     /// @notice Vault-owner-only permanent increase to an ordinary main ID's base smurf allowance.
-    function raiseSmurfBaseAllowance(uint32, uint16) external {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
+    function raiseSmurfBaseAllowance(uint32 mainId, uint16 newBase) external {
+        _raiseSmurfBaseAllowance(mainId, newBase);
     }
 
     /*+======================================================================+
@@ -685,7 +657,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
                 );
             if (!ok) _revertDelegate(data);
         } else {
-            _purchaseFor(
+            _purchase(
                 id,
                 entryQuantityScaled,
                 boxOrder,
@@ -693,28 +665,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
                 payKind
             );
         }
-    }
-
-    function _purchaseFor(
-        uint32 buyer,
-        uint256 entryQuantityScaled,
-        uint256 boxOrder,
-        bytes32 affiliateCode,
-        MintPaymentKind payKind
-    ) private {
-        (bool ok, bytes memory data) = ContractAddresses
-            .GAME_MINT_MODULE
-            .delegatecall(
-                abi.encodeWithSelector(
-                    IDegenerusGameMintModule.purchase.selector,
-                    buyer,
-                    entryQuantityScaled,
-                    boxOrder,
-                    affiliateCode,
-                    payKind
-                )
-            );
-        if (!ok) _revertDelegate(data);
     }
 
     /// @notice Purchase tickets with FLIP.
@@ -725,10 +675,11 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
     ///      The FLIP is burned from the account's payee.
     ///      Signature: redeemFlip(uint32 id, uint256 entryQuantityScaled) — the account receiving
     ///      the tickets (0 = caller) and the purchase units (400 = one whole ticket = 4 entries).
-    ///      The mint module resolves the account, so the calldata forwards as-is.
-    function redeemFlip(uint32, uint256) external {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
+    function redeemFlip(
+        uint32 id,
+        uint256 entryQuantityScaled
+    ) external {
+        _redeemFlip(id, entryQuantityScaled);
     }
 
     /// @notice Buy a credit-gated Degenesis box with ETH and/or claimable.
@@ -1000,21 +951,12 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
       |  • GAME_GAMEOVER_MODULE     - Game-over declaration and final sweeps                                           |
       |  • GAME_JACKPOT_MODULE      - Jackpot calculations and payouts                                                 |
       |  • GAME_LOOTBOX_MODULE      - Lootbox open, credit, and payout                                                 |
-      |  • GAME_MINT_MODULE         - Mint data recording, airdrop multipliers                                         |
+      |  • GAME_MINT_MODULE         - Explicit-value Foil purchase adapter                                            |
       |  • GAME_WHALE_MODULE        - Whale pass purchases and whale pass claims                                       |
       |                                                                                                                |
       |  SECURITY: delegatecall executes module code in this contract's                                                |
       |  context, with access to all storage. Modules are constant addresses.                                          |
       +================================================================================================================+*/
-
-    /// @dev Bubble up revert reason from delegatecall failure.
-    ///      Uses assembly to preserve original error data.
-    function _revertDelegate(bytes memory reason) private pure {
-        if (reason.length == 0) revert EmptyRevert();
-        assembly ("memory-safe") {
-            revert(add(32, reason), mload(reason))
-        }
-    }
 
     /*+========================================================================================+
       |                    DECIMATOR JACKPOT LOGIC                                             |
@@ -1119,10 +1061,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
         uint128 claimableAfter
     );
 
-    /// @notice Emitted when an account withdraws its prepaid afking ETH.
-    /// @param amount ETH amount withdrawn (wei).
-    event AfkingWithdrew(uint32 indexed player, uint256 amount);
-
     /// @notice Claim accrued ETH winnings.
     /// @dev Aggregates all winnings: affiliates, ContractAddresses.JACKPOTS, endgame payouts.
     ///      Uses pull pattern for security (CEI: check balance, update state, then transfer).
@@ -1150,7 +1088,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
 
     /// @dev Shared claim body: pull winnings (capped pre-gameOver by `maxClaim`) to the account's
     ///      payee, then set the account's cashout curse. The curse SET runs in the Game's context
-    ///      via delegatecall (hosted in GameAfkingModule to keep the Game under the EIP-170 ceiling).
+    ///      via delegatecall to GameAfkingModule.
     function _claimWinningsWithCurse(uint32 id, uint256 maxClaim) private {
         address payee;
         (id, payee) = _resolveAccountPayee(id);
@@ -1231,8 +1169,7 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
     ///      (mid-game, after cancel, post-gameOver). The claimablePool debit stays checked math.
     /// @param amount ETH amount (wei) to withdraw from the account's afkingFunding bucket.
     function withdrawAfkingFunding(uint32 id, uint256 amount) external {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_MINT_MODULE.delegatecall(msg.data);
-        if (!ok) _revertDelegate(data);
+        _withdrawAfkingFunding(id, amount);
     }
 
     /// @notice The canonical per-player prepaid afking ETH balance.
@@ -1371,10 +1308,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
             .delegatecall(msg.data);
         if (!ok) _revertDelegate(data);
     }
-
-
-
-
 
     /*+===============================================================================================+
       |                    JACKPOT PAYOUT FUNCTIONS                                                   |
@@ -1615,8 +1548,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
       |  Implements fallback logic when one asset is insufficient.           |
       +======================================================================+*/
 
-
-
     /// @dev Send stETH first, then ETH for remainder. Reached only from
     ///      claimWinningsStethFirst, which is VAULT-gated — sDGNRS and players claim
     ///      through the ETH-first path.
@@ -1692,7 +1623,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
                 _entriesOwedTotal(lvl, _walletIdOf(player));
         }
     }
-
 
     /// @notice Pinned table mirrors the authoritative zero/nonzero pending transition.
     /// @dev Separate parity flags prevent write battles from gating their own request.
@@ -2116,8 +2046,6 @@ contract DegenerusGame is DegenerusGameMintStreakUtils, DegenerusGamePayoutUtils
         if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) return 0;
         return _claimableOf(_walletIdOf(player));
     }
-
-
 
     /// @notice Game-held value reserved for sDGNRS redemption settlement.
     function redemptionReserve() external view returns (uint256) {

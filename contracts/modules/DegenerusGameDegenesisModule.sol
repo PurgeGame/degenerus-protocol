@@ -11,8 +11,8 @@ import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {FlipRoundLib} from "../libraries/FlipRoundLib.sol";
 import {GameTimeLib} from "../libraries/GameTimeLib.sol";
 import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
-import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
-import {IDegenerusGameMintModule, IDegenerusGameWhaleModule} from "../interfaces/IDegenerusGameModules.sol";
+import {MintPaymentKind, IDegenerusGame} from "../interfaces/IDegenerusGame.sol";
+import {IDegenerusGameWhaleModule} from "../interfaces/IDegenerusGameModules.sol";
 
 interface IDegenesisWwxrp {
     function creditPrize(uint32 to, uint256 amount) external;
@@ -261,9 +261,9 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
             ? ContractAddresses.GAME_WHALE_MODULE.delegatecall(abi.encodeWithSelector(
                 IDegenerusGameWhaleModule.purchaseWhalePass.selector, uint32(0), quantity, bytes32(0)
             ))
-            : ContractAddresses.GAME_MINT_MODULE.delegatecall(abi.encodeWithSelector(
-                IDegenerusGameMintModule.purchase.selector, uint32(0), quantity, boxOrder, bytes32(0),
-                MintPaymentKind.Claimable
+            : ContractAddresses.GAME.delegatecall(abi.encodeWithSelector(
+                IDegenerusGame.purchase.selector, uint32(0), quantity, boxOrder, bytes32(0),
+                MintPaymentKind.Claimable, false
             ));
         if (!ok) _revertDelegate(data);
         uint256 after_ = balancesPacked[VAULT_WALLET_ID];
