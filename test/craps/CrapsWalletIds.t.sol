@@ -122,7 +122,7 @@ contract CrapsWalletIdsTest is CrapsPins {
     }
 
     function _register(address who) internal returns (uint32) {
-        return game.registerWallet(who, true);
+        return game.registerWallet_g9539(who, true);
     }
 
 
@@ -162,7 +162,7 @@ contract CrapsWalletIdsTest is CrapsPins {
     }
 
     function _code(uint256 kind, address to, bool high, uint256 arg, uint256 count) internal view returns (uint256) {
-        return uint256(game.walletIdOf(to)) | (kind << 160) | (high ? (uint256(1) << 168) : 0) | (arg << 176) | (count << 200);
+        return uint256(game.walletIdOf_g3120(to)) | (kind << 160) | (high ? (uint256(1) << 168) : 0) | (arg << 176) | (count << 200);
     }
 
     function _customSlot(bool multiEntry) internal returns (uint64 slot) {
@@ -213,9 +213,9 @@ contract CrapsWalletIdsTest is CrapsPins {
         uint8[4] memory flags = [uint8(0x1), 0x1, 0x7, 0x2];
         for (uint256 door; door < 4; ++door) {
             address p = makeAddr(string.concat("first-contact-", vm.toString(door)));
-            assertEq(game.walletIdOf(p), 0, "fixture: fresh wallet");
+            assertEq(game.walletIdOf_g3120(p), 0, "fixture: fresh wallet");
             uint32 expected = game.walletCount() + 1;
-            vm.expectCall(address(game), abi.encodeCall(MockGame.registerWallet, (p, true)), 1);
+            vm.expectCall(address(game), abi.encodeCall(MockGame.registerWallet_g9539, (p, true)), 1);
             vm.expectCall(address(flip), abi.encodeWithSelector(MockFlip.burnCoinForCraps.selector, p, expected));
             vm.expectCall(address(quests), abi.encodeCall(MockQuests.recordCrapsAction_g14623, (expected, flags[door])));
             vm.recordLogs();
@@ -224,9 +224,9 @@ contract CrapsWalletIdsTest is CrapsPins {
             Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
             Vm.Log[] memory logs = vm.getRecordedLogs();
 
-            uint32 id = game.walletIdOf(p);
+            uint32 id = game.walletIdOf_g3120(p);
             assertEq(id, expected, "the door allocated the next wallet ID");
-            uint256 reg = _idx(acc, address(game), MockGame.registerWallet.selector);
+            uint256 reg = _idx(acc, address(game), MockGame.registerWallet_g9539.selector);
             uint256 burn = _idx(acc, address(flip), MockFlip.burnCoinForCraps.selector);
             assertTrue(reg != type(uint256).max && burn != type(uint256).max, "registration and burn both ran");
             assertLt(reg, burn, "registration precedes the burn");
@@ -269,7 +269,7 @@ contract CrapsWalletIdsTest is CrapsPins {
         vm.expectRevert(CrapsBattleStorage.NoWalletId.selector);
         c.upgradeReservedDay(0, day + 1);
 
-        assertEq(game.walletIdOf(stranger), 0, "no ID was allocated");
+        assertEq(game.walletIdOf_g3120(stranger), 0, "no ID was allocated");
     }
 
     /// @dev The paying upgrade registers first; a wallet with no ticket then reverts and the
@@ -279,7 +279,7 @@ contract CrapsWalletIdsTest is CrapsPins {
         vm.prank(stranger);
         vm.expectRevert(CrapsBattleStorage.NoSuchBet.selector);
         c.upgradeDayWindows(0, day, 1);
-        assertEq(game.walletIdOf(stranger), 0, "the failed upgrade left no wallet ID");
+        assertEq(game.walletIdOf_g3120(stranger), 0, "the failed upgrade left no wallet ID");
     }
 
 
@@ -291,7 +291,7 @@ contract CrapsWalletIdsTest is CrapsPins {
         uint24 reserved = c.deliverPasses(id, 1, 0);
         c.creditPasses(id, 21, 0);
         vm.stopPrank();
-        vm.expectCall(address(game), abi.encodeCall(MockGame.registerWallet, (alice, false)), 2);
+        vm.expectCall(address(game), abi.encodeCall(MockGame.registerWallet_g9539, (alice, false)), 2);
         vm.prank(alice);
         c.convertNormalToHigh(0, 1);
         uint256 w = c.idWord(id);
@@ -324,7 +324,7 @@ contract CrapsWalletIdsTest is CrapsPins {
         vm.prank(ContractAddresses.VAULT);
         vm.expectRevert(abi.encodeWithSignature("E()"));
         c.vaultComp(code);
-        assertEq(game.walletIdOf(stranger), 0);
+        assertEq(game.walletIdOf_g3120(stranger), 0);
     }
 
     function test_vaultCompSeatsAnUncachedRecipientByIdOnBoardZero() public {
@@ -469,7 +469,7 @@ contract CrapsWalletIdsTest is CrapsPins {
         uint64 slot = _customSlot(false);
         vm.prank(alice);
         c.enterBattle(slot, BOARD, 1);
-        uint32 id = game.walletIdOf(alice);
+        uint32 id = game.walletIdOf_g3120(alice);
         assertTrue(c.bonusSeatedOf(c.keyOfSlot(slot), id), "the seat latch is keyed by ID");
         vm.prank(alice);
         vm.expectRevert(CrapsBattleStorage.AlreadyInBonus.selector);
@@ -488,7 +488,7 @@ contract CrapsWalletIdsTest is CrapsPins {
     function test_aDeliveryOntoATakenDayBanksInstead() public {
         vm.prank(alice);
         c.buyFutureCrapsDays(day + 1, 1, false, 0);
-        uint32 id = game.walletIdOf(alice);
+        uint32 id = game.walletIdOf_g3120(alice);
         uint256 before = _normal(c.idWord(id));
         vm.prank(ContractAddresses.GAME);
         uint24 reserved = c.deliverPasses(id, 1, 0);
@@ -673,7 +673,7 @@ contract CrapsWalletIdsTest is CrapsPins {
         for (uint256 i; i < 4; ++i) {
             vm.prank(ps[i]);
             c.enterBonusBattle(1, i % 2 == 0 ? BOARD : 0, uint16(i < 2 ? h : 1));
-            ids[i] = game.walletIdOf(ps[i]);
+            ids[i] = game.walletIdOf_g3120(ps[i]);
         }
         ids[4] = 1;
         ids[5] = 2;
@@ -700,8 +700,8 @@ contract CrapsWalletIdsTest is CrapsPins {
         c.enterBonusBattle(1, BOARD, uint16(h));
         vm.prank(bob);
         c.enterBonusBattle(1, 0, 1);
-        ids[0] = game.walletIdOf(alice);
-        ids[1] = game.walletIdOf(bob);
+        ids[0] = game.walletIdOf_g3120(alice);
+        ids[1] = game.walletIdOf_g3120(bob);
         ids[2] = 1;
         ids[3] = 2;
         uint64 slot = uint64(_daySlot(day) + 2);
@@ -785,8 +785,8 @@ contract CrapsWalletIdsTest is CrapsPins {
         c.enterBonusBattle(5, 0, 1);
         vm.prank(carol);
         c.enterBonusDay(0, h);
-        uint32 aId = game.walletIdOf(alice);
-        uint32 cId = game.walletIdOf(carol);
+        uint32 aId = game.walletIdOf_g3120(alice);
+        uint32 cId = game.walletIdOf_g3120(carol);
         vm.warp(dayStart + 1 days);
         game.setRngLocked(true);
         vm.prank(ContractAddresses.GAME);
@@ -796,7 +796,7 @@ contract CrapsWalletIdsTest is CrapsPins {
 
         uint256[] memory field = new uint256[](2);
         field[0] = _entry(aId, 0);
-        field[1] = _entry(game.walletIdOf(bob), 0);
+        field[1] = _entry(game.walletIdOf_g3120(bob), 0);
         uint256 snap = vm.snapshotState();
         bool sawWin;
         bool sawMiss;
@@ -868,7 +868,7 @@ contract CrapsWalletIdsTest is CrapsPins {
             vm.prank(ContractAddresses.VAULT);
             try c.vaultComp(code) {} catch { ok = false; }
         } else if (action == 1) {
-            uint32 id = game.walletIdOf(who);
+            uint32 id = game.walletIdOf_g3120(who);
             if (id == 0) return true;
             vm.prank(ContractAddresses.GAME);
             c.deliverPasses(id, uint32((r >> 16) % 3), uint32((r >> 24) % 2));
@@ -888,14 +888,14 @@ contract CrapsWalletIdsTest is CrapsPins {
             vm.prank(who);
             try c.setPreferredBoard(0, BOARD_B) {} catch { ok = false; }
         } else if (action == 4) {
-            uint32 id = game.walletIdOf(who);
+            uint32 id = game.walletIdOf_g3120(who);
             if (id == 0) return true;
             vm.prank(ContractAddresses.GAME);
             c.creditPasses(id, 1, 0);
             vm.prank(who);
             try c.applyCrapsPasses(day + 1 + uint24((r >> 24) % 3), 1, false, 0) {} catch { ok = false; }
         } else if (action == 5 && who != address(0)) {
-            game.registerWallet(who, true);
+            game.registerWallet_g9539(who, true);
         }
     }
 
@@ -933,7 +933,7 @@ contract CrapsWalletIdsTest is CrapsPins {
         uint256[] memory field = new uint256[](6);
         for (uint256 i; i < field.length; ++i) {
             uint256 r = uint256(keccak256(abi.encode(seed, "field", i)));
-            uint32 id = r % 3 == 0 ? 0 : (r % 3 == 1 ? game.walletIdOf(_actor(r >> 8)) : uint32(r >> 32));
+            uint32 id = r % 3 == 0 ? 0 : (r % 3 == 1 ? game.walletIdOf_g3120(_actor(r >> 8)) : uint32(r >> 32));
             field[i] = uint256(id) | (uint256((r >> 64) % 4 == 0 ? 2 : 1) << 180);
         }
         vm.recordLogs();
@@ -1011,8 +1011,8 @@ contract CrapsWalletIdsTest is CrapsPins {
         uint32 cId = _register(carol);
         vm.prank(ContractAddresses.GAME);
         assertEq(c.deliverPasses(cId, 1, 0), g, "carol's delivery reserved G");
-        uint32 aId = game.walletIdOf(alice);
-        uint32 bId = game.walletIdOf(bob);
+        uint32 aId = game.walletIdOf_g3120(alice);
+        uint32 bId = game.walletIdOf_g3120(bob);
         uint256 a0 = c.idWord(aId);
         uint256 b0 = c.idWord(bId);
         uint256 c0 = c.idWord(cId);

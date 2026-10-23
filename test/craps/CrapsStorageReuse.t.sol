@@ -65,8 +65,8 @@ contract CrapsStorageReuseTest is CrapsPins {
 
     function setUp() public {
         _installPins();
-        game.registerWallet(alice, true);
-        game.registerWallet(bob, true);
+        game.registerWallet_g9539(alice, true);
+        game.registerWallet_g9539(bob, true);
         // Start beyond bank 63, so even the first round exercises physical/logical separation.
         vm.warp((ContractAddresses.DEPLOY_DAY_BOUNDARY + 100) * 1 days + 82_620);
         table = new CrapsReuseHarness();
@@ -152,7 +152,7 @@ contract CrapsStorageReuseTest is CrapsPins {
         assertEq(table.pending(index), 0);
         vm.prank(ContractAddresses.GAME); api.runCrapsReadWork(index, 9_000_000);
         vm.prank(address(table));
-        MineFlipGas.Result memory r = table.resolveRngSlot(slot, 9_000_000);
+        MineFlipGas.Result memory r = table.resolveRngSlot_g1079(slot, 9_000_000);
         assertTrue(r.done);
         assertEq(coinflip.totalCredited(), beforeCredits);
         assertEq(flip.compAccruals(), beforeComps);
@@ -165,20 +165,20 @@ contract CrapsStorageReuseTest is CrapsPins {
         (uint64 slot, uint48 index) = _arm(day);
         _setWord(index, WORD + 1);
         uint256 snap = vm.snapshotState();
-        vm.prank(address(table)); table.resolveRngSlot(slot, 9_000_000);
+        vm.prank(address(table)); table.resolveRngSlot_g1079(slot, 9_000_000);
         uint256 paid = coinflip.totalCredited();
         uint256 comps = flip.compAccruals();
         assertGt(paid, 0);
         assertTrue(vm.revertToState(snap));
         snap = vm.snapshotState();
         _warp(day + 30);
-        vm.prank(address(table)); table.resolveRngSlot(slot, 9_000_000);
+        vm.prank(address(table)); table.resolveRngSlot_g1079(slot, 9_000_000);
         assertEq(coinflip.totalCredited(), paid);
         assertEq(flip.compAccruals(), comps);
         assertTrue(vm.revertToState(snap));
         _warp(day + 31);
         vm.prank(address(table));
-        MineFlipGas.Result memory r = table.resolveRngSlot(slot, 9_000_000);
+        MineFlipGas.Result memory r = table.resolveRngSlot_g1079(slot, 9_000_000);
         assertTrue(r.done);
         assertEq(coinflip.totalCredited(), 0);
         assertEq(flip.compAccruals(), 0);
@@ -213,7 +213,7 @@ contract CrapsStorageReuseTest is CrapsPins {
         vm.warp(block.timestamp + 6 hours); table.armWindow(slot + 1);
         _setWord(index, WORD + 1); game.setRngConsumerStage(6);
         vm.expectRevert(abi.encodeWithSignature("OnlyGame()"));
-        vm.prank(alice); table.resolveRngSlot(slot + 1, 9_000_000);
+        vm.prank(alice); table.resolveRngSlot_g1079(slot + 1, 9_000_000);
         assertEq(table.pending(index), 2);
         vm.prank(ContractAddresses.GAME);
         JackpotBattle(address(table)).runCrapsReadWork(index, 9_000_000);
@@ -237,14 +237,14 @@ contract CrapsStorageReuseTest is CrapsPins {
         game.setRngConsumerStage(7);
         JackpotBattle api = JackpotBattle(address(table));
         for (uint256 i; i < 3; ++i) {
-            vm.prank(ContractAddresses.GAME); api.runCrapsMaintenance(9_000_000);
+            vm.prank(ContractAddresses.GAME); api.runCrapsMaintenance_g10712(9_000_000);
         }
         (uint256 a,) = table.passCreditsOf(alice);
         (uint256 b,) = table.passCreditsOf(bob);
         assertEq(a, 0); assertEq(b, 0);
         assertEq(coinflip.totalCredited(), 0);
         assertGe(table.minerSlot() / 8, _today() - 30);
-        assertEq(uint32(table.betWordOf(_id(day + 64, 1))), game.walletIdOf(bob));
+        assertEq(uint32(table.betWordOf(_id(day + 64, 1))), game.walletIdOf_g3120(bob));
     }
 
     function test_ExpiredJackpotCannotAppendOverNewSeatsOrPayReserve() public {
@@ -257,7 +257,7 @@ contract CrapsStorageReuseTest is CrapsPins {
         _warp(day + 34); _buy(bob, day + 64, 1);
         uint256 newWord = table.betWordOf(_id(day + 64, 1));
         uint256[] memory field = new uint256[](1);
-        field[0] = uint256(game.walletIdOf(alice)) | (uint256(1) << 160);
+        field[0] = uint256(game.walletIdOf_g3120(alice)) | (uint256(1) << 160);
         vm.startPrank(ContractAddresses.GAME);
         (,, uint256 remaining) = api.prepareJackpotBattle(2, WORD);
         assertEq(remaining, 0);

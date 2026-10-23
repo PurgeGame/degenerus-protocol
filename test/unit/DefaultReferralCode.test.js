@@ -204,9 +204,9 @@ describe("Default Referral Codes", function () {
       const code = defaultCodeFor(alice.address);
       const tx = await affiliate.connect(bob).referPlayer(code);
       const ev = await getEvent(tx, affiliate, "ReferralUpdated");
-      expect(ev.args.player).to.equal(await game.walletIdOf(bob.address));
+      expect(ev.args.player).to.equal(await game.walletIdOf_g3120(bob.address));
       expect(ev.args.code).to.equal(code);
-      expect(ev.args.referrerId).to.equal(await game.walletIdOf(alice.address));
+      expect(ev.args.referrerId).to.equal(await game.walletIdOf_g3120(alice.address));
       expect(ev.args.locked).to.equal(false);
     });
   });
@@ -243,7 +243,7 @@ describe("Default Referral Codes", function () {
       );
 
       // Alice should have affiliate score from both purchases
-      const score = await affiliate.affiliateScore(1, await game.walletIdOf(alice.address));
+      const score = await affiliate.affiliateScore(1, await game.walletIdOf_g3120(alice.address));
       expect(score).to.be.gt(0n);
     });
 
@@ -266,7 +266,7 @@ describe("Default Referral Codes", function () {
       );
 
       // Fresh ETH L1 => 25% => 250 whole FLIP
-      expect(await affiliate.affiliateScore(1, await game.walletIdOf(alice.address))).to.equal(flip(250));
+      expect(await affiliate.affiliateScore(1, await game.walletIdOf_g3120(alice.address))).to.equal(flip(250));
     });
 
     it("self-referral via default code locks to VAULT", async function () {
@@ -310,7 +310,7 @@ describe("Default Referral Codes", function () {
       );
 
       // Carol should have affiliate score
-      expect(await affiliate.affiliateScore(1, await game.walletIdOf(carol.address))).to.be.gt(0n);
+      expect(await affiliate.affiliateScore(1, await game.walletIdOf_g3120(carol.address))).to.be.gt(0n);
     });
 
     it("default code affiliate with no referral has VAULT as upline", async function () {
@@ -392,7 +392,7 @@ describe("Default Referral Codes", function () {
         hre.ethers, game, affiliate, flip(1000), code, bob.address, 1, true
       );
       expect(await affiliate.getReferrer(bob.address)).to.equal(await vault.getAddress());
-      expect(await game.walletIdOf("0x0000000000000000000000000000000000000001")).to.equal(0n);
+      expect(await game.walletIdOf_g3120("0x0000000000000000000000000000000000000001")).to.equal(0n);
     });
 
     it("invalid code in high-byte range still reverts in referPlayer", async function () {

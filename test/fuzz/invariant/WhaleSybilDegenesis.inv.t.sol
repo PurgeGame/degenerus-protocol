@@ -3,6 +3,7 @@ pragma solidity 0.8.38;
 
 import {DeployProtocol} from "../helpers/DeployProtocol.sol";
 import {DegenesisWeekOpening} from "../helpers/DegenesisWeekOpening.sol";
+import {SolvencyObligations} from "../helpers/SolvencyObligations.sol";
 import {WhaleSybilHandler} from "../handlers/WhaleSybilHandler.sol";
 import {WhaleSybilInvariant} from "./WhaleSybil.inv.t.sol";
 
@@ -25,5 +26,8 @@ contract WhaleSybilDegenesis is WhaleSybilInvariant, DegenesisWeekOpening {
 
     function test_degenesisWeekHappened() public view {
         _assertDegenesisWeekHappened();
+        assertGt(wsHandler.ghost_initialBacking(), 0, "real opening deposits precede the handler");
+        assertEq(wsHandler.ghost_initialBacking(), SolvencyObligations.backing(game));
+        assertEq(wsHandler.ghost_whaleDeposited() + wsHandler.ghost_sybilDeposited(), 0);
     }
 }

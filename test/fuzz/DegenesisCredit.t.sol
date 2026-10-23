@@ -52,7 +52,7 @@ contract DegenesisCredit is DegenesisFixture {
     }
 
     function _idOf(address p) internal view returns (uint32) {
-        return game.walletIdOf(p);
+        return game.walletIdOf_g3120(p);
     }
 
     // ------------------------------------------------------------------ Mint purchase body

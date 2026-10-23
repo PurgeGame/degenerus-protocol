@@ -86,7 +86,7 @@ contract FoilPackEV is DeployProtocol {
             try game.purchase{value: foilCost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true) {
                 r.foilSpend += foilCost;
             } catch {}
-            fid[i] = game.walletIdOf(fb[i]);
+            fid[i] = game.walletIdOf_g3120(fb[i]);
         }
         for (uint256 i = 0; i < TICKET_BUYERS; i++) {
             tb[i] = makeAddr(string(abi.encodePacked("tkt", vm.toString(i))));
@@ -133,7 +133,7 @@ contract FoilPackEV is DeployProtocol {
 
         for (uint256 i = 0; i < FOIL_BUYERS; i++) {
             r.foilValue += _realizedValue(fb[i]);
-            r.foilWwxrp += wwxrp.claimable(game.walletIdOf(fb[i]));
+            r.foilWwxrp += wwxrp.claimable(game.walletIdOf_g3120(fb[i]));
         }
         for (uint256 i = 0; i < TICKET_BUYERS; i++) {
             r.ticketValue += _realizedValue(tb[i]);

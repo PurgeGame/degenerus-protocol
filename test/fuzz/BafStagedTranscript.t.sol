@@ -1370,7 +1370,7 @@ abstract contract PlainBafTranscript is BafTranscriptFixture {
         _armWord(_word());
         assertEq(game.level(), target, "the request pre-increments the level");
         for (uint256 i; i < PLAYERS; ++i) {
-            uint32 id = game.walletIdOf(address(PLAYER_BASE + uint160(i)));
+            uint32 id = game.walletIdOf_g3120(address(PLAYER_BASE + uint160(i)));
             vm.prank(ContractAddresses.COINFLIP);
             jackpots.recordBafFlip(id, target, (i + 1) * 100 ether);
         }

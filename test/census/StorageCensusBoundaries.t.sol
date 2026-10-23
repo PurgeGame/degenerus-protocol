@@ -135,7 +135,7 @@ abstract contract CensusBoundaryBase is StorageCensus {
 
     /// @dev Borrow for player i due at `due`, when the lens quotes an eligible loan.
     function _borrow(uint256 i, uint24 due) internal returns (bool ok) {
-        uint32 id = game.walletIdOf(cast[i]);
+        uint32 id = game.walletIdOf_g3120(cast[i]);
         if (id == 0) return false;
         DegenerusGameLens.LoanQuote memory q;
         try lens.previewBorrow(address(game), id, due, type(uint256).max) returns (DegenerusGameLens.LoanQuote memory r) {
@@ -227,7 +227,7 @@ contract StorageCensusBoundariesTest is CensusBoundaryBase {
         _playToLevel(game.level() + 6, 60, 2);
         // Repay what is still open.
         for (uint256 i; i < 8; ++i) {
-            uint32 id = game.walletIdOf(cast[i]);
+            uint32 id = game.walletIdOf_g3120(cast[i]);
             DegenerusGameLens.LoanInfo memory info = lens.loanOf(address(game), id);
             if (info.principal != 0 && info.dueLevel > game.level()) {
                 _act("repay", i, address(game), info.owed + 0.01 ether, abi.encodeCall(game.repay, (id)));

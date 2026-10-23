@@ -37,7 +37,7 @@ contract V56SubHardening is DeployProtocol {
     function _aid(address a) internal returns (uint32 id) {
         id = _aidCache[a];
         if (id == 0) {
-            id = game.walletIdOf(a);
+            id = game.walletIdOf_g3120(a);
             if (id == 0) id = _giveWalletId(a);
             _aidCache[a] = id;
         }
@@ -131,7 +131,7 @@ contract V56SubHardening is DeployProtocol {
         assertGt(_subscriberIndexOf(p), 0, "unfunded run created");
         assertEq(_checkpointDayOf(p), uint32(game.currentDayView()), "checkpointed today");
         assertEq(game.afkingFundingOf(p), 0);
-        assertFalse(GameSlotKeys.afkingBoxPending(address(game), game.walletIdOf(p)), "no box at signup");
+        assertFalse(GameSlotKeys.afkingBoxPending(address(game), game.walletIdOf_g3120(p)), "no box at signup");
 
         vm.recordLogs();
         _deliverDay(_singleton(p), 0x51671);
@@ -269,7 +269,7 @@ contract V56SubHardening is DeployProtocol {
         _grantSeat(p);
         _fundPool(p, 200 ether);
         uint256 fundingBefore = game.afkingFundingOf(p);
-        uint32 id = game.walletIdOf(p);
+        uint32 id = game.walletIdOf_g3120(p);
 
         _subscribeLootbox(p, 1);
         uint32 today = uint32(game.currentDayView());
@@ -323,7 +323,7 @@ contract V56SubHardening is DeployProtocol {
         _fundPool(p, 50 ether);
         _subscribeLootbox(p, 1);
         _deliverDay(_singleton(p), 0xD4A10B); // one completed pass after signup
-        uint32 subscriberId = game.walletIdOf(p);
+        uint32 subscriberId = game.walletIdOf_g3120(p);
         uint256 cpBefore = _checkpointDayOf(p);
 
         vm.recordLogs();
@@ -350,7 +350,7 @@ contract V56SubHardening is DeployProtocol {
         _deliverDay(_singleton(p), 0xD4A106);
         uint256 cpBefore = _checkpointDayOf(p);
 
-        uint32 subscriberId = game.walletIdOf(p);
+        uint32 subscriberId = game.walletIdOf_g3120(p);
         vm.prank(makeAddr("not_affiliate"));
         vm.expectRevert(abi.encodeWithSignature("NotApproved()"));
         game.drainAffiliateBases(subscriberId, 0);
@@ -610,7 +610,7 @@ contract V56SubHardening is DeployProtocol {
 
     /// @dev Deity bit only; it confers nothing for the afking coin gate or mining participation.
     function _grantDeityPass(address who) internal {
-        bytes32 slot = keccak256(abi.encode(game.walletIdOf(who), uint256(MINTPACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(game.walletIdOf_g3120(who), uint256(MINTPACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         packed |= (uint256(1) << DEITY_SHIFT);
         vm.store(address(game), slot, bytes32(packed));
@@ -630,7 +630,7 @@ contract V56SubHardening is DeployProtocol {
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2) continue;
             if (logs[i].topics[0] != SUB_EXPIRED_SIG) continue;
-            if (uint32(uint256(logs[i].topics[1])) != game.walletIdOf(who)) continue;
+            if (uint32(uint256(logs[i].topics[1])) != game.walletIdOf_g3120(who)) continue;
             if (uint8(uint256(bytes32(logs[i].data))) == reason) count++;
         }
     }
@@ -644,7 +644,7 @@ contract V56SubHardening is DeployProtocol {
     function _flipClaimed(address who) internal returns (uint256 total) {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 sig = keccak256("AfkingFlipClaimed(uint32,uint256)");
-        uint32 id = game.walletIdOf(who);
+        uint32 id = game.walletIdOf_g3120(who);
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2 || logs[i].topics[0] != sig) continue;
             if (uint32(uint256(logs[i].topics[1])) != id) continue;
@@ -655,16 +655,16 @@ contract V56SubHardening is DeployProtocol {
     // ---- Lane reads ----
 
     function _dailyQtyOf(address who) internal view returns (uint8) {
-        return uint8(GameSlotKeys.subQuantity(address(game), game.walletIdOf(who)));
+        return uint8(GameSlotKeys.subQuantity(address(game), game.walletIdOf_g3120(who)));
     }
 
     /// @dev `who`'s set position + 1; 0 = not in the set.
     function _subscriberIndexOf(address who) internal view returns (uint256 position1) {
-        (, position1) = GameSlotKeys.subLane(address(game), game.walletIdOf(who));
+        (, position1) = GameSlotKeys.subLane(address(game), game.walletIdOf_g3120(who));
     }
 
     function _checkpointDayOf(address who) internal view returns (uint32) {
-        (uint256 lane,) = GameSlotKeys.subLane(address(game), game.walletIdOf(who));
+        (uint256 lane,) = GameSlotKeys.subLane(address(game), game.walletIdOf_g3120(who));
         return uint32((lane >> 46) & ((uint256(1) << 22) - 1));
     }
 }

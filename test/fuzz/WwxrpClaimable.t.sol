@@ -25,8 +25,8 @@ contract WwxrpClaimableTest is DeployProtocol {
 
     function test_AwardTouchesOnlyTheIdLedgerAndNoSupplyOrWallet() public {
         uint256 supply = wwxrp.totalSupply();
-        vm.expectCall(address(game), abi.encodeWithSelector(game.resolveAccount.selector), 0);
-        vm.expectCall(address(game), abi.encodeWithSelector(game.walletIdOf.selector), 0);
+        vm.expectCall(address(game), abi.encodeWithSelector(game.resolveAccount_g502.selector), 0);
+        vm.expectCall(address(game), abi.encodeWithSelector(game.walletIdOf_g3120.selector), 0);
         vm.record();
         _credit(aliceId, 100);
         (, bytes32[] memory writes) = vm.accesses(address(wwxrp));
@@ -48,7 +48,7 @@ contract WwxrpClaimableTest is DeployProtocol {
         assertEq(wwxrp.claimable(aliceId), 0);
         vm.prank(alice); assertEq(wwxrp.withdraw(0, 0), 0);
         vm.prank(bob); assertEq(wwxrp.withdraw(0, 0), 0);
-        assertEq(game.walletIdOf(bob), 0);
+        assertEq(game.walletIdOf_g3120(bob), 0);
     }
 
     function test_SmurfAndOwnerBalancesStaySeparateOperatorCannotRedirectWithdrawal() public {
@@ -118,7 +118,7 @@ contract WwxrpClaimableTest is DeployProtocol {
         _credit(aliceId, 100);
         vm.expectRevert(WWXRP.OnlyMinter.selector);
         wwxrp.burnForAccount(aliceId, 1);
-        vm.expectCall(address(game), abi.encodeWithSelector(game.resolveAccount.selector), 0);
+        vm.expectCall(address(game), abi.encodeWithSelector(game.resolveAccount_g502.selector), 0);
         vm.prank(address(game)); wwxrp.burnForAccount(aliceId, 40);
         assertEq(wwxrp.claimable(aliceId), 60);
     }

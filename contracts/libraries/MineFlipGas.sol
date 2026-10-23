@@ -64,6 +64,20 @@ library MineFlipGas {
         meter.floor = allowance >= entry ? 0 : entry - allowance;
     }
 
+    /// @dev Immutable worker calls may append one tagged budget word after their
+    /// fixed ABI head. Ordinary calls retain the default calibration and no floor.
+    /// The caller computes child() immediately before encoding this word. This is
+    /// call-local context, never storage, and cannot grant authorization/progress.
+    function fromCall(uint256 headSize) internal view returns (Meter memory meter) {
+        if (msg.data.length != headSize + 32) return meter;
+        uint256 context;
+        assembly ("memory-safe") { context := calldataload(headSize) }
+        if (context & CONTEXT_TAG == 0) return start(context);
+        uint32 multiplier = normalize(uint32(context >> 192));
+        meter = start(context);
+        meter.multiplierBps = multiplier;
+    }
+
     function consumed(uint256 beforeGas, uint256 afterGas) internal pure returns (uint256) {
         return beforeGas > afterGas ? beforeGas - afterGas : 0;
     }
@@ -75,7 +89,7 @@ library MineFlipGas {
 
     function scale(Meter memory meter, uint256 estimate) internal pure returns (uint256) {
         uint256 multiplier = meter.multiplierBps;
-        if (multiplier == 0 || multiplier == DEFAULT_MULTIPLIER) return estimate;
+        if (multiplier == DEFAULT_MULTIPLIER || multiplier == 0) return estimate;
         if (estimate > (type(uint256).max - 9_999) / multiplier) return type(uint256).max;
         // The saturation check above proves both operations fit.
         unchecked { return (estimate * multiplier + 9_999) / DEFAULT_MULTIPLIER; }
@@ -96,7 +110,9 @@ library MineFlipGas {
     /// @dev Size optional aggregation without spending the first-unit permission.
     function canRunAfterFirst(Meter memory meter, uint256 nextMax, uint256 tail) internal view returns (bool) {
         uint256 required = scale(meter, nextMax + tail + CHECK_RESERVE);
-        if (required > remaining(meter) || gasleft() < required) return false;
+        // remaining already subtracts the nonnegative floor; CHECK_RESERVE covers
+        // this check and its return. A second GAS read cannot strengthen admission.
+        if (required > remaining(meter)) return false;
         // Work admitted on an estimate is held to the floor at finish.
         if (!meter.mustProgress) meter.bounded = true;
         return true;

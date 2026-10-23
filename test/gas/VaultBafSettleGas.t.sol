@@ -32,7 +32,7 @@ import {VmSafe} from "forge-std/Vm.sol";
 contract VaultSettleSeeder is CoinflipStakeSetter {
     function seedVaultHistory(uint24 latest, uint24 gap, bool rebuy) external {
         address v = ContractAddresses.VAULT;
-        PlayerCoinflipState storage s = playerState[degenerusGame.walletIdOf(v)];
+        PlayerCoinflipState storage s = playerState[degenerusGame.walletIdOf_g3120(v)];
         uint24 last = latest - gap;
         s.claimableStored = 0;
         s.lastClaim = last;

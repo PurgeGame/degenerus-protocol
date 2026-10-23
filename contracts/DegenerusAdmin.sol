@@ -26,6 +26,7 @@ pragma solidity 0.8.38;
 
 import {IDegenerusGame} from "./interfaces/IDegenerusGame.sol";
 
+import {MineFlipGas} from "./libraries/MineFlipGas.sol";
 import {BoundedCall} from "./libraries/BoundedCall.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
 
@@ -1224,6 +1225,7 @@ contract DegenerusAdmin {
     /// @notice Cancel VRF subscription and sweep LINK to vault after GAME-over.
     /// @dev Only callable by the GAME contract (during the game-over final sweep).
     function shutdownVrf() external {
+        MineFlipGas.Meter memory meter = MineFlipGas.fromCall(4);
         if (msg.sender != ContractAddresses.GAME) revert NotAuthorized();
         uint256 subId = subscriptionId;
         if (subId == 0) return;
@@ -1231,16 +1233,16 @@ contract DegenerusAdmin {
         subscriptionId = 0;
         address target = ContractAddresses.VAULT;
 
-        (bool cancelled,) = BoundedCall.callRemaining(
+        (bool cancelled,) = BoundedCall.callRemaining(meter,
             coordinator, 450_000, 400_000,
             abi.encodeWithSelector(IVRFCoordinatorV2_5Owner.cancelSubscription.selector, subId, target), 0
         );
         if (cancelled) emit SubscriptionCancelled(subId, target);
 
-        (, uint256 bal) = BoundedCall.staticWordRemaining(
+        (, uint256 bal) = BoundedCall.staticWordRemaining(meter,
             address(linkToken), 50_000, 300_000, abi.encodeWithSelector(ILinkTokenLike.balanceOf.selector, address(this))
         );
-        if (bal != 0 && BoundedCall.callBoolRemaining(
+        if (bal != 0 && BoundedCall.callBoolRemaining(meter,
             address(linkToken), 200_000, 30_000, abi.encodeWithSelector(ILinkTokenLike.transfer.selector, target, bal)
         )) {
             emit SubscriptionShutdown(subId, target, bal);
@@ -1362,7 +1364,7 @@ contract DegenerusAdmin {
 
         if (mult == 0) return;
 
-        uint256 ethEquivalent = _linkAmountToEth(amount, feed);
+        uint256 ethEquivalent = _linkAmountToEth(amount, feed, MineFlipGas.fromCall(0), 500_000);
         if (ethEquivalent == 0) return;
 
         uint256 priceWei = gameAdmin.mintPrice();
@@ -1383,7 +1385,7 @@ contract DegenerusAdmin {
     function linkAmountToEth(
         uint256 amount
     ) external view returns (uint256 ethAmount) {
-        return _linkAmountToEth(amount, linkEthPriceFeed);
+        return _linkAmountToEth(amount, linkEthPriceFeed, MineFlipGas.fromCall(36), 40_000);
     }
 
     /// @dev Valuation core: returns 0 on a missing feed, zero amount, any feed
@@ -1394,12 +1396,14 @@ contract DegenerusAdmin {
     ///      credit beyond that ceiling.
     function _linkAmountToEth(
         uint256 amount,
-        address feed
+        address feed,
+        MineFlipGas.Meter memory meter,
+        uint256 tail
     ) private view returns (uint256) {
         if (feed == address(0) || amount == 0) return 0;
 
-        (bool ok, bytes memory data) = BoundedCall.staticcall(
-            feed, 50_000, abi.encodeWithSelector(IAggregatorV3.latestRoundData.selector), 160
+        (bool ok, bytes memory data) = BoundedCall.staticcallRemaining(meter,
+            feed, 50_000, tail, abi.encodeWithSelector(IAggregatorV3.latestRoundData.selector), 160
         );
         if (!ok) return 0;
         (uint256 roundId, int256 answer,, uint256 updatedAt, uint256 answeredInRound) =

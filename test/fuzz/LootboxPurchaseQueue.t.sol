@@ -29,7 +29,7 @@ contract CursorProbe {
     }
 
     function creditFlip_g317(uint32, uint256) external {
-        uint256 value = uint256(DegenerusGame(payable(GAME)).extsload(bytes32(SLOT)));
+        uint256 value = uint256(DegenerusGame(payable(GAME)).extsload_g8132(bytes32(SLOT)));
         uint256 base = BASE;
         assembly ("memory-safe") {
             let n := sload(base)
@@ -100,7 +100,7 @@ contract LootboxPurchaseQueueTest is DeployProtocol {
         assertEq(host.boxWriteCount(), position + 1, "one purchase, one entry");
     }
 
-    function _id(address who) internal view returns (uint32) { return host.walletIdOf(who); }
+    function _id(address who) internal view returns (uint32) { return host.walletIdOf_g3120(who); }
 
     function _drain(uint256 word) internal returns (Vm.Log[] memory logs) {
         host.sealAndPublish(word);

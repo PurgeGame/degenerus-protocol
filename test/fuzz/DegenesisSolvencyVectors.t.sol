@@ -67,7 +67,7 @@ contract DegenesisSolvencyVectors is DegenesisHarness {
             address p = buyers[i % 3];
             uint256 amount = units[i] * UNIT;
             _seedCredit(p, amount);
-            ids[i] = game.walletIdOf(p);
+            ids[i] = game.walletIdOf_g3120(p);
             int256 s0 = _surplus();
             _buy(p, amount);
             assertEq(_surplus(), s0, "a buy moves backing and obligations together");
@@ -253,7 +253,7 @@ contract DegenesisSolvencyVectors is DegenesisHarness {
         uint48 b = RecyclingState.writeBuffer(address(game));
         uint256 e = RecyclingState.boxEntry(address(game), b, RecyclingState.boxCount(address(game), b) - 1);
         uint256 boxes = q > 100 ? 100 : q;
-        assertEq(BoxOrderLib.boId(e), game.walletIdOf(w), "box entry is the buyer's");
+        assertEq(BoxOrderLib.boId(e), game.walletIdOf_g3120(w), "box entry is the buyer's");
         assertEq(BoxOrderLib.boCount(e), boxes, "folds to at most 100 boxes");
         assertEq(BoxOrderLib.boUnits(e), charged / 10 / boxes / 0.001 ether, "floored tenth per box");
     }

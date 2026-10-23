@@ -74,7 +74,7 @@ contract CrapsGlobalWorkOrderTest is CrapsPins {
         vm.expectRevert(bytes4(keccak256("OnlyGame()")));
         cohort.runCrapsReadWork(index, 9_000_000);
         vm.expectRevert(bytes4(keccak256("OnlyGame()")));
-        table.runCrapsMaintenance(9_000_000);
+        table.runCrapsMaintenance_g10712(9_000_000);
     }
 
     function test_ProtocolAllowanceReservesEntireAtomicSeat() public {
@@ -96,7 +96,7 @@ contract CrapsGlobalWorkOrderTest is CrapsPins {
         uint64 keeper = table.minerSlot();
         game.setRngConsumerStage(7);
         vm.prank(ContractAddresses.GAME);
-        result = table.runCrapsMaintenance(0);
+        result = table.runCrapsMaintenance_g10712(0);
         assertFalse(result.progressed);
         assertEq(table.minerSlot(), keeper);
         assertEq(table.bonusCursorOf(first), 0);

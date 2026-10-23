@@ -15,9 +15,9 @@ contract ProtocolWalletIdsAtConstruction is DeployProtocol {
         _deployProtocol(false); // no initProtocolDeity yet
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
-        assertEq(game.walletIdOf(ContractAddresses.VAULT), 1, "vault");
-        assertEq(game.walletIdOf(ContractAddresses.SDGNRS), 2, "sdgnrs");
-        assertEq(game.walletIdOf(ContractAddresses.GNRUS), 3, "gnrus");
+        assertEq(game.walletIdOf_g3120(ContractAddresses.VAULT), 1, "vault");
+        assertEq(game.walletIdOf_g3120(ContractAddresses.SDGNRS), 2, "sdgnrs");
+        assertEq(game.walletIdOf_g3120(ContractAddresses.GNRUS), 3, "gnrus");
 
         address[3] memory want = [ContractAddresses.VAULT, ContractAddresses.SDGNRS, ContractAddresses.GNRUS];
         uint256 seen;
@@ -50,15 +50,15 @@ contract ProtocolWalletIdsAtConstruction is DeployProtocol {
         uint32 earlyId = _giveWalletId(early);
         assertEq(earlyId, 4, "first public wallet is ID 4");
         // A level-0 buyer would take the next ID.
-        assertEq(game.walletIdOf(ContractAddresses.VAULT), 1);
-        assertEq(game.walletIdOf(ContractAddresses.SDGNRS), 2);
-        assertEq(game.walletIdOf(ContractAddresses.GNRUS), 3);
+        assertEq(game.walletIdOf_g3120(ContractAddresses.VAULT), 1);
+        assertEq(game.walletIdOf_g3120(ContractAddresses.SDGNRS), 2);
+        assertEq(game.walletIdOf_g3120(ContractAddresses.GNRUS), 3);
 
         game.initProtocolDeity();
 
-        assertEq(game.walletIdOf(ContractAddresses.VAULT), 1, "vault after init");
-        assertEq(game.walletIdOf(ContractAddresses.SDGNRS), 2, "sdgnrs after init");
-        assertEq(game.walletIdOf(ContractAddresses.GNRUS), 3, "gnrus after init");
-        assertEq(game.walletIdOf(early), 4, "early wallet keeps its ID");
+        assertEq(game.walletIdOf_g3120(ContractAddresses.VAULT), 1, "vault after init");
+        assertEq(game.walletIdOf_g3120(ContractAddresses.SDGNRS), 2, "sdgnrs after init");
+        assertEq(game.walletIdOf_g3120(ContractAddresses.GNRUS), 3, "gnrus after init");
+        assertEq(game.walletIdOf_g3120(early), 4, "early wallet keeps its ID");
     }
 }

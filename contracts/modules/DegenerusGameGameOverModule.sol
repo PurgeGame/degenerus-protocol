@@ -286,7 +286,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             }
             if (MineFlipGas.canRun(meter, GasBounds.TERMINAL_FINAL_SWEEP, GasBounds.TERMINAL_SWEEP_TAIL)) {
                 uint256 swept = _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK);
-                _handleFinalSweep();
+                _handleFinalSweep(meter);
                 work.progressed = swept != _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK);
             }
             return (true, STAGE_GAMEOVER, false);
@@ -456,7 +456,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
             work.progressed = true;
             MineFlipGas.markProgress(meter);
         }
-        (bool ok, uint256 id) = _boundedVrfRequest(VRF_REQUEST_CONFIRMATIONS);
+        (bool ok, uint256 id) = _boundedVrfRequest(VRF_REQUEST_CONFIRMATIONS, meter);
         if (!ok) {
             work.refusal = abi.encodeWithSelector(ExternalRequestRefused.selector);
             return false;
@@ -580,7 +580,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         bool dead = _lrRead(LR_GO_DEAD_SHIFT, LR_GO_DEAD_MASK) != 0;
         uint24 lvl = level;
 
-        uint256 totalFunds = address(this).balance + _boundedStethBalance();
+        uint256 totalFunds = address(this).balance + _boundedStethBalance(meter, GasBounds.TERMINAL_SETUP);
 
         // Compute available funds FIRST (before any side effects)
         // Deity pass refunds have not happened yet, so claimablePool is pre-refund.
@@ -766,7 +766,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     ///      chance for the three sinks to receive what they earned in-game.
     ///      Also shuts down the VRF subscription and sweeps LINK to vault.
     /// @custom:reverts TransferFailed When ETH or stETH transfer fails
-    function _handleFinalSweep() private {
+    function _handleFinalSweep(MineFlipGas.Meter memory meter) private {
         if (_goRead(GO_JACKPOT_PAID_SHIFT, GO_JACKPOT_PAID_MASK) == 0) return;
         uint256 goTime = _goRead(GO_TIME_SHIFT, GO_TIME_MASK);
         if (goTime == 0) return; // Game not over yet
@@ -788,7 +788,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
 
         emit FinalSwept(totalFunds);
 
-        if (totalFunds == 0) { _shutdownVrf(); return; }
+        if (totalFunds == 0) { _shutdownVrf(meter); return; }
 
         // Protocol balances are fully backed apart from the three unbacked 1-wei sentinels, so
         // totalFunds >= owedV + owedSD + owedG - 3. A game holding exactly its obligations, or an
@@ -809,15 +809,15 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
         stBal = _sendStethFirst(ContractAddresses.VAULT,  owedV  + thirdShare, stBal);
         stBal = _sendStethFirst(ContractAddresses.SDGNRS, owedSD + thirdShare, stBal);
         _sendStethFirst(ContractAddresses.GNRUS,          owedG  + gnrusExtra, stBal);
-        _shutdownVrf();
+        _shutdownVrf(meter);
     }
 
-    function _shutdownVrf() private {
+    function _shutdownVrf(MineFlipGas.Meter memory meter) private {
         // Admin needs the cancellation floor plus its LINK-read/transfer reserves.
         // A failed trusted frame must roll back GO_SWEPT and all asset transfers:
         // otherwise the live subscription cannot be recovered by retrySubCancel.
-        (bool ok,) = BoundedCall.callRemaining(ContractAddresses.ADMIN, 1_000_000, 250_000,
-            abi.encodeWithSelector(IDegenerusAdminShutdown.shutdownVrf.selector), 0);
+        (bool ok,) = BoundedCall.callRemaining(meter, ContractAddresses.ADMIN, 1_000_000, 250_000,
+            abi.encodeWithSelector(IDegenerusAdminShutdown.shutdownVrf.selector, MineFlipGas.child(meter, 250_000)), 0);
         if (!ok) revert MineFlipGas.InsufficientExecutionGas();
     }
 

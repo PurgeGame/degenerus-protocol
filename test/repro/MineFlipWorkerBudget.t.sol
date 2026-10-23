@@ -76,7 +76,7 @@ contract MineFlipHumanBudgetTest is DeployProtocol {
         game.purchase{value: 1 ether}(0, 0, BoxOrderLib.boCustoms(100, 0.01 ether), bytes32(0), MintPaymentKind.DirectEth, false);
         host.publishRead();
         assertEq(BoxOrderLib.boCount(host.order()), 100);
-        assertEq(BoxOrderLib.boId(host.order()), game.walletIdOf(BUYER));
+        assertEq(BoxOrderLib.boId(host.order()), game.walletIdOf_g3120(BUYER));
     }
     function test_PublicRouterAttemptsWideBoxAtMaximumCalibration() public {
         _queueWideBox();

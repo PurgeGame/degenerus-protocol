@@ -748,7 +748,11 @@ abstract contract DegenerusGameJackpotModule is DegenerusGameJackpotDrawModule {
     ///      the surplus split is deterministic and consumes no entropy.
     ///      23% each to sDGNRS, vault, and charity (GNRUS) claimable, 23% yield accumulator (~8% buffer).
     function distributeYieldSurplus(uint256) public {
-        uint256 stBal = _boundedStethBalance();
+        _distributeYieldSurplus(MineFlipGas.fromCall(36));
+    }
+
+    function _distributeYieldSurplus(MineFlipGas.Meter memory meter) internal {
+        uint256 stBal = _boundedStethBalance(meter, 1_200_000);
         uint256 totalBal = address(this).balance + stBal;
         (uint128 nextPool, uint128 futurePool) = _getPrizePools();
         uint128 claimablePoolCached = claimablePool;

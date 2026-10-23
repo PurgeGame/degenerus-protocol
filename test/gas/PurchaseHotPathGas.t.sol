@@ -101,7 +101,7 @@ contract PurchaseHotPathGasTest is DeployProtocol {
         PurchaseHotPathSeeder(address(game)).seedAfking(BUYER, lapsed);
         vm.etch(address(game), code);
         uint24 day = uint24(game.currentDayView());
-        uint32 buyerId = game.walletIdOf(BUYER);
+        uint32 buyerId = game.walletIdOf_g3120(BUYER);
         vm.prank(address(game));
         quests.beginAfking(buyerId, day);
     }
@@ -135,19 +135,19 @@ contract PurchaseHotPathGasTest is DeployProtocol {
             coinflip.coinflipAmount(BUYER), coinflip.coinflipAmount(REFERRER),
             coinflip.coinflipAmount(address(vault)), coinflip.coinflipAmount(address(sdgnrs)),
             vm.load(address(game), bytes32(uint256(2))), vm.load(address(game), bytes32(GameSlots.PRIZE_POOL_PENDING_PACKED)),
-            vm.load(address(quests), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), uint256(1)))),
-            vm.load(address(quests), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), uint256(2))))
+            vm.load(address(quests), keccak256(abi.encode(uint256(game.walletIdOf_g3120(BUYER)), uint256(1)))),
+            vm.load(address(quests), keccak256(abi.encode(uint256(game.walletIdOf_g3120(BUYER)), uint256(2))))
         ));
         digest = keccak256(abi.encode(digest,
-            vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), GameSlots.BALANCES_PACKED))),
+            vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf_g3120(BUYER)), GameSlots.BALANCES_PACKED))),
             game.claimablePoolView(),
-            vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), GameSlots.DEGENESIS_CREDIT))),
-            vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), GameSlots.LOOTBOX_EV_CAP_PACKED))),
-            vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), GameSlots.CENTURY_BONUS_USED))),
-            vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)) >> 2, GameSlots.SUB_META))),
+            vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf_g3120(BUYER)), GameSlots.DEGENESIS_CREDIT))),
+            vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf_g3120(BUYER)), GameSlots.LOOTBOX_EV_CAP_PACKED))),
+            vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf_g3120(BUYER)), GameSlots.CENTURY_BONUS_USED))),
+            vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf_g3120(BUYER)) >> 2, GameSlots.SUB_META))),
             vm.load(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED)),
             _newestBoxEntry(),
-            vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), bytes32(GameSlots.FOIL_RECORD + uint256((game.level() + 1) & 3)))))
+            vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf_g3120(BUYER)), bytes32(GameSlots.FOIL_RECORD + uint256((game.level() + 1) & 3)))))
         ));
         emit log_named_bytes32(string.concat(scenario, " state"), digest);
     }
@@ -214,7 +214,7 @@ contract PurchaseHotPathGasTest is DeployProtocol {
         _measure("lapsed_afking_box", 400, 1, 0, MintPaymentKind.DirectEth, _price() * 2);
     }
     function test_Gas_LevelQuestCompletion() public {
-        vm.store(address(game), keccak256(abi.encode(game.walletIdOf(BUYER), GameSlots.MINT_PACKED)), bytes32(uint256(5) << 48));
+        vm.store(address(game), keccak256(abi.encode(game.walletIdOf_g3120(BUYER), GameSlots.MINT_PACKED)), bytes32(uint256(5) << 48));
         _measure("level_quest", 4000, 0, 0, MintPaymentKind.DirectEth, _price() * 10);
     }
     function test_Gas_BiggestBuy() public {
@@ -266,7 +266,7 @@ contract PurchaseHotPathGasTest is DeployProtocol {
     }
 
     function _subSlot() private view returns (bytes32) {
-        return keccak256(abi.encode(uint256(game.walletIdOf(BUYER)) >> 2, GameSlots.SUB_META));
+        return keccak256(abi.encode(uint256(game.walletIdOf_g3120(BUYER)) >> 2, GameSlots.SUB_META));
     }
 
     function _contains(bytes32[] memory words, bytes32 word) private pure returns (bool) {
@@ -284,7 +284,7 @@ contract PurchaseHotPathGasTest is DeployProtocol {
         uint256 fresh = payment == MintPaymentKind.Claimable ? 0 : bound(freshSeed, 0, cost);
         uint256 claimable = bound(claimableSeed, 0, cost * 2);
         uint256 afking = bound(afkingSeed, 0, cost * 2);
-        bytes32 balanceSlot = keccak256(abi.encode(uint256(game.walletIdOf(BUYER)), GameSlots.BALANCES_PACKED));
+        bytes32 balanceSlot = keccak256(abi.encode(uint256(game.walletIdOf_g3120(BUYER)), GameSlots.BALANCES_PACKED));
         bytes32 beforeBalance = bytes32(claimable | (afking << 128));
         vm.store(address(game), balanceSlot, beforeBalance);
         uint256 drawn = cost - fresh;

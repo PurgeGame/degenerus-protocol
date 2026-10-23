@@ -217,7 +217,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
 
     /// @dev Grant `who` the permanent deity-pass bit (shift 184) in DegenerusGame.mintPacked_ (slot 9).
     function _grantDeityPass(address who) internal {
-        bytes32 slot = keccak256(abi.encode(game.walletIdOf(who), GameSlots.MINT_PACKED));
+        bytes32 slot = keccak256(abi.encode(game.walletIdOf_g3120(who), GameSlots.MINT_PACKED));
         uint256 packed = uint256(vm.load(address(game), slot));
         packed |= (uint256(1) << 184);
         vm.store(address(game), slot, bytes32(packed));
@@ -257,12 +257,12 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
     /// @dev Slot for `mintPacked_[_walletIdOf(who)]` (the same mapping the existing `_grantDeityPass` writes;
     ///      mapping root is slot 9 — confirmed against the existing helper at lines 479-484).
     function _mintPackedSlot(address who) internal view returns (bytes32) {
-        return keccak256(abi.encode(game.walletIdOf(who), GameSlots.MINT_PACKED));
+        return keccak256(abi.encode(game.walletIdOf_g3120(who), GameSlots.MINT_PACKED));
     }
 
     /// @dev Wallet-table element holding `who`'s half passes (bits 192..255).
     function _whalePassClaimsSlot(address who) internal view returns (bytes32) {
-        return GameSlotKeys.walletElement(game.walletIdOf(who));
+        return GameSlotKeys.walletElement(game.walletIdOf_g3120(who));
     }
 
     /// @dev Read `whalePassClaims[player]` from storage.
@@ -546,7 +546,7 @@ contract RngFreezeAndRemovalProofs is DeployProtocol {
     function _boxUnsettled(uint48 index, address who) internal view returns (uint256 total) {
         uint256 n = RecyclingState.boxCount(address(game), index);
         uint256 cursor = (uint256(vm.load(address(game), bytes32(GameSlots.BOX_CURSOR))) >> (GameSlots.BOX_CURSOR_OFFSET * 8)) & type(uint48).max;
-        uint32 id = game.walletIdOf(who);
+        uint32 id = game.walletIdOf_g3120(who);
         for (uint256 i = index == RecyclingState.readBuffer(address(game)) ? cursor : 0; i < n; ++i) {
             uint256 word = RecyclingState.boxEntry(address(game), index, i);
             if (BoxOrderLib.boId(word) != id) continue;

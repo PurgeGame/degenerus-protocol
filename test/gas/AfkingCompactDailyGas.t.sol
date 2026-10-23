@@ -120,7 +120,7 @@ contract AfkingCompactDailyGasTest is DeployProtocol {
     function test_ClaimOne() public {
         _seed(1, false);
         uint32[] memory ids = new uint32[](1);
-        ids[0] = game.walletIdOf(_member(0));
+        ids[0] = game.walletIdOf_g3120(_member(0));
         uint256 before = coinflip.coinflipAmountById(ids[0]);
         console2.log("claim one sub", _claim(ids));
         assertGt(coinflip.coinflipAmountById(ids[0]), before, "the sub was paid");
@@ -136,9 +136,9 @@ contract AfkingCompactDailyGasTest is DeployProtocol {
         for (uint256 i; i < 12; ++i) {
             vm.prank(_member(i));
             affiliate.referPlayer(bytes32("ALPHA"));
-            ids[i] = game.walletIdOf(_member(i));
+            ids[i] = game.walletIdOf_g3120(_member(i));
         }
-        uint32 ownerId = game.walletIdOf(owner);
+        uint32 ownerId = game.walletIdOf_g3120(owner);
         uint256 before = coinflip.coinflipAmountById(ownerId);
         console2.log("claim 12 subs, one affiliate", _claim(ids));
         assertGt(coinflip.coinflipAmountById(ownerId), before, "the affiliate was paid");

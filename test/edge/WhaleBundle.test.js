@@ -86,7 +86,7 @@ describe("WhaleBundle", function () {
         await giveWalletId(game, recipient.address);
         await game
           .connect(deity)
-          .issueDeityBoon(await game.walletIdOf(deity.address), await giveWalletId(game, recipient.address), slot);
+          .issueDeityBoon(await game.walletIdOf_g3120(deity.address), await giveWalletId(game, recipient.address), slot);
         return discountBps;
       }
     }
@@ -202,7 +202,7 @@ describe("WhaleBundle", function () {
         .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
       const events = await getEvents(tx, whaleModule, "LootBoxBuy");
       expect(events.length).to.be.gte(1);
-      expect(events[0].args.buyer).to.equal(await game.walletIdOf(alice.address));
+      expect(events[0].args.buyer).to.equal(await game.walletIdOf_g3120(alice.address));
     });
   });
 
@@ -231,7 +231,7 @@ describe("WhaleBundle", function () {
           .purchaseWhalePass(0, 1, hre.ethers.ZeroHash, { value: eth(2.4) });
         const events = await getEvents(tx, whaleModule, "WhalePassPurchased");
         expect(events.length).to.equal(1);
-        expect(events[0].args.buyer).to.equal(await game.walletIdOf(buyer.address));
+        expect(events[0].args.buyer).to.equal(await game.walletIdOf_g3120(buyer.address));
         expect(events[0].args.quantity).to.equal(1n);
         expect(events[0].args.weiIn).to.equal(eth(2.4), "each buyer pays the early price");
       }
@@ -513,8 +513,8 @@ describe("WhaleBundle", function () {
       // _applyWhalePassStats emits PassActivated for whoever receives it.
       const activated = await getEvents(tx, game, "PassActivated");
       const recipients = activated.map((e) => e.args.player);
-      expect(recipients).to.include(await game.walletIdOf(alice.address));
-      expect(recipients).to.not.include(await game.walletIdOf(await vault.getAddress()));
+      expect(recipients).to.include(await game.walletIdOf_g3120(alice.address));
+      expect(recipients).to.not.include(await game.walletIdOf_g3120(await vault.getAddress()));
     });
 
     it("pays NO affiliate commission — the code only binds the referrer", async function () {
@@ -622,7 +622,7 @@ describe("WhaleBundle", function () {
           .purchaseWhalePass(0, quantity, hre.ethers.ZeroHash, { value });
         const events = await getEvents(tx, whaleModule, "WhalePassPurchased");
         expect(events.length).to.equal(1);
-        expect(events[0].args.buyer).to.equal(await game.walletIdOf(buyer.address));
+        expect(events[0].args.buyer).to.equal(await game.walletIdOf_g3120(buyer.address));
         expect(events[0].args.quantity).to.equal(quantity);
         expect(events[0].args.weiIn).to.equal(value);
         expect(await game.afkingFundingOf(buyer.address)).to.equal(0n, "no overpayment");
@@ -722,7 +722,7 @@ describe("WhaleBundle", function () {
         await giveWalletId(game, recipient.address);
         await game
           .connect(deity)
-          .issueDeityBoon(await game.walletIdOf(deity.address), await giveWalletId(game, recipient.address), slot);
+          .issueDeityBoon(await game.walletIdOf_g3120(deity.address), await giveWalletId(game, recipient.address), slot);
         return discountBps;
       }
     }

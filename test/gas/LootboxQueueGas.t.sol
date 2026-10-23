@@ -202,9 +202,9 @@ contract LootboxQueueGasTest is DeployProtocol {
         _box(REG, 1, _price());
         _report(scenario);
         uint48 wb = RecyclingState.writeBuffer(address(game));
-        assertEq(BoxOrderLib.boId(RecyclingState.boxEntry(address(game), wb, before)), game.walletIdOf(REG));
+        assertEq(BoxOrderLib.boId(RecyclingState.boxEntry(address(game), wb, before)), game.walletIdOf_g3120(REG));
         for (uint256 i; i < before; ++i) {
-            assertEq(BoxOrderLib.boId(RecyclingState.boxEntry(address(game), wb, i)), game.walletIdOf(OTHER),
+            assertEq(BoxOrderLib.boId(RecyclingState.boxEntry(address(game), wb, i)), game.walletIdOf_g3120(OTHER),
                 "earlier lanes intact");
         }
     }

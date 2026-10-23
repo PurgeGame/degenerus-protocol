@@ -238,7 +238,7 @@ contract SolvencyActionHandler is Test {
             // No claimable is assumed: prefund the shortfall through the paired deposit entrypoint.
             uint256 dep = amount - value;
             if (dep + value > currentActor.balance) return;
-            uint32 actorId = game.walletIdOf(currentActor);
+            uint32 actorId = game.walletIdOf_g3120(currentActor);
             vm.prank(currentActor);
             try game.depositAfkingFunding{value: dep}(actorId) {
                 ghost_afkingDeposited += dep;
@@ -279,7 +279,7 @@ contract SolvencyActionHandler is Test {
         uint256 qty = whale ? 1 : bound(qtySeed, 400, 4000);
         uint256 cost = whale ? WHALE_PASS_PRICE : priceWei * qty / 400;
         uint256 maxCost = cost + bound(extraSeed, 0, 1 ether);
-        uint32 recipient = extraSeed % 3 == 0 ? 0 : game.walletIdOf(actors[extraSeed % actors.length]);
+        uint32 recipient = extraSeed % 3 == 0 ? 0 : game.walletIdOf_g3120(actors[extraSeed % actors.length]);
         vm.prank(ContractAddresses.VAULT);
         try game.spendDegenesis(recipient, whale, qty, 0, maxCost) {
             ghost_vaultSpends++;
@@ -306,7 +306,7 @@ contract SolvencyActionHandler is Test {
         calls_fundAfking++;
         uint256 amt = bound(amtSeed, 0.01 ether, 100 ether);
         if (amt > currentActor.balance) return;
-        uint32 actorId = game.walletIdOf(currentActor);
+        uint32 actorId = game.walletIdOf_g3120(currentActor);
         vm.prank(currentActor);
         try game.depositAfkingFunding{value: amt}(actorId) {
             ghost_afkingDeposited += amt;
@@ -425,7 +425,7 @@ contract SolvencyActionHandler is Test {
 
     /// @dev Field-isolated seed of the HAS_DEITY_PASS score bit (no balance touched ⇒ cannot move the Σ).
     function _grantDeityScoreBit(address who) internal {
-        bytes32 slot = keccak256(abi.encode(game.walletIdOf(who), uint256(MINTPACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(game.walletIdOf_g3120(who), uint256(MINTPACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         packed |= (uint256(1) << DEITY_SHIFT);
         vm.store(address(game), slot, bytes32(packed));

@@ -30,7 +30,7 @@ contract AfKingConcurrency is DeployProtocol {
     function _aid(address a) internal returns (uint32 id) {
         id = _aidCache[a];
         if (id == 0) {
-            id = game.walletIdOf(a);
+            id = game.walletIdOf_g3120(a);
             if (id == 0) id = _giveWalletId(a);
             _aidCache[a] = id;
         }
@@ -257,11 +257,11 @@ contract AfKingConcurrency is DeployProtocol {
 
     /// @dev `who`'s set position + 1; 0 = not in the set.
     function _subscriberIndexOf(address who) internal view returns (uint256 position1) {
-        (, position1) = GameSlotKeys.subLane(address(game), game.walletIdOf(who));
+        (, position1) = GameSlotKeys.subLane(address(game), game.walletIdOf_g3120(who));
     }
 
     function _dailyQtyOf(address who) internal view returns (uint8) {
-        return uint8(GameSlotKeys.subQuantity(address(game), game.walletIdOf(who)));
+        return uint8(GameSlotKeys.subQuantity(address(game), game.walletIdOf_g3120(who)));
     }
 
     /// @dev `_subscribers.length` (slot 54 holds the array length).

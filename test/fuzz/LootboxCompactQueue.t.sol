@@ -74,7 +74,7 @@ contract LootboxCompactQueueTest is DeployProtocol {
     // Helpers
     // =========================================================================
 
-    function _id(address who) internal view returns (uint32) { return host.walletIdOf(who); }
+    function _id(address who) internal view returns (uint32) { return host.walletIdOf_g3120(who); }
 
     function _buy(address who, uint256 boxOrder) internal returns (uint48 buffer, uint256 position) {
         buffer = host.writeBuffer();
@@ -638,7 +638,7 @@ contract LootboxCompactProducerBoundsTest is DeployProtocol {
     function _lastEntry(address who) private view returns (uint256 e) {
         uint48 wb = RecyclingState.writeBuffer(address(game));
         e = RecyclingState.boxEntry(address(game), wb, RecyclingState.boxCount(address(game), wb) - 1);
-        assertEq(BoxOrderLib.boId(e), game.walletIdOf(who), "the buyer's entry");
+        assertEq(BoxOrderLib.boId(e), game.walletIdOf_g3120(who), "the buyer's entry");
     }
 
     /// @notice The thirtieth sellable deity pass costs 300 ETH << 6 = 19,200 ETH; from level 10 its

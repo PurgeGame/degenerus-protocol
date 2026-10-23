@@ -44,7 +44,7 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
     function _aid(address a) internal returns (uint32 id) {
         id = _aidCache[a];
         if (id == 0) {
-            id = game.walletIdOf(a);
+            id = game.walletIdOf_g3120(a);
             if (id == 0) id = _giveWalletId(a);
             _aidCache[a] = id;
         }
@@ -113,7 +113,7 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
         // +10 takes the transient manual streak 95 -> 105, crossing the century-100 boundary.
         uint16 amount = 10;
         uint24 currentDay = uint24(game.currentDayView());
-        uint32 pId = game.walletIdOf(p);
+        uint32 pId = game.walletIdOf_g3120(p);
         vm.prank(ContractAddresses.GAME);
         quests.awardQuestStreakBonus(pId, amount, currentDay);
 
@@ -178,12 +178,12 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
 
     /// @dev The afking sub streak base: the lane's checkpoint streak.
     function _streakLatch16Of(address who) internal view returns (uint256) {
-        (uint256 lane,) = GameSlotKeys.subLane(address(game), game.walletIdOf(who));
+        (uint256 lane,) = GameSlotKeys.subLane(address(game), game.walletIdOf_g3120(who));
         return (lane >> 69) & 0xffff;
     }
 
     function _checkpointDayOf(address who) internal view returns (uint256) {
-        (uint256 lane,) = GameSlotKeys.subLane(address(game), game.walletIdOf(who));
+        (uint256 lane,) = GameSlotKeys.subLane(address(game), game.walletIdOf_g3120(who));
         return (lane >> 46) & 0x3fffff;
     }
 
@@ -202,7 +202,7 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
     // ---- questPlayerState (DegenerusQuests slot 1) reads ----
 
     function _questField(address who, uint256 off, uint256 widthBits) internal view returns (uint256) {
-        uint256 pk = uint256(vm.load(address(quests), keccak256(abi.encode(uint256(game.walletIdOf(who)), QUESTSTATE_SLOT)))) >> (off * 8);
+        uint256 pk = uint256(vm.load(address(quests), keccak256(abi.encode(uint256(game.walletIdOf_g3120(who)), QUESTSTATE_SLOT)))) >> (off * 8);
         return pk & ((uint256(1) << widthBits) - 1);
     }
 
@@ -232,7 +232,7 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
     /// @dev Park `who`'s dormant manual quest streak at `q` (lastSyncDay non-zero, day anchors 0) so
     ///      _questSyncState skips its decay branch and leaves `q` verbatim, and beginAfking snapshots `q`.
     function _setManualQuestStreak(address who, uint16 q) internal {
-        uint32 id = game.walletIdOf(who);
+        uint32 id = game.walletIdOf_g3120(who);
         if (id == 0) id = _giveWalletId(who);
         bytes32 slot = keccak256(abi.encode(uint256(id), QUESTSTATE_SLOT));
         uint256 word = (uint256(q) << (OFF_QS_STREAK * 8)) | (uint256(1) << (OFF_QS_SYNCDAY * 8));

@@ -12,7 +12,7 @@ contract GrowthFoilStorageTest is GrowthFoilFixture {
         uint24 lvl = uint24(bound(rawLevel, 0, type(uint24).max - 1));
         mintData = deity ? mintData | (uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT)
             : mintData & ~(uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT);
-        vm.mockCall(address(game), abi.encodeWithSignature("mintPackedOfId(uint32)", pid), abi.encode(mintData));
+        vm.mockCall(address(game), abi.encodeWithSignature("mintPackedOfId_g5372(uint32)", pid), abi.encode(mintData));
         vm.store(address(quests), keccak256(abi.encode(uint256(pid), QaSlots.STATE)), bytes32(uint256(afking ? 1 : 0) << 104));
         uint24 unitsLevel = uint24(mintData >> BitPackingLib.LEVEL_UNITS_LEVEL_SHIFT);
         bool activity = (unitsLevel == lvl || unitsLevel == lvl + 1) && uint16(mintData >> BitPackingLib.LEVEL_UNITS_SHIFT) >= 400;
@@ -22,7 +22,7 @@ contract GrowthFoilStorageTest is GrowthFoilFixture {
         bool liveStreak = uint24(mintData >> BitPackingLib.LEVEL_STREAK_SHIFT) >= 5
             && uint256(uint24(mintData >> BitPackingLib.MINT_STREAK_LAST_COMPLETED_SHIFT)) + 1 >= lvl;
         bool expectedReward = activePass || (activity && liveStreak) || afking;
-        (bool mayBet, bool earnsReward, uint32 gateId) = quests.marketBetGates(game.walletIdOf(PLAYER), lvl);
+        (bool mayBet, bool earnsReward, uint32 gateId) = quests.marketBetGates(game.walletIdOf_g3120(PLAYER), lvl);
         assertEq(earnsReward, expectedReward);
         assertEq(gateId, pid, "the gate preserves the selected wallet ID");
         uint256 gameplayFields = mintData & ((uint256(1) << BitPackingLib.SMURF_COUNT_SHIFT) - 1)

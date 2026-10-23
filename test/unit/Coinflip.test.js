@@ -147,7 +147,7 @@ describe("Coinflip", function () {
       await giveFlip(coin, alice, flip(500), await coinflip.getAddress());
       const tx = await deposit(coinflip, alice, flip(200));
       const ev = await getEvent(tx, coinflip, "CoinflipDeposit");
-      expect(ev.args.player).to.equal(await game.walletIdOf(alice.address));
+      expect(ev.args.player).to.equal(await game.walletIdOf_g3120(alice.address));
       expect(ev.args.creditedFlip).to.equal(flip(200));
     });
 
@@ -162,7 +162,7 @@ describe("Coinflip", function () {
       const ev = await getEvent(tx, coinflip, "CoinflipStakeUpdated");
       // Target day is currentDay + 1
       expect(ev.args.day).to.equal(currentDay + 1n);
-      expect(ev.args.id).to.equal(await game.walletIdOf(alice.address));
+      expect(ev.args.id).to.equal(await game.walletIdOf_g3120(alice.address));
     });
 
     it("records coinflipAmount for next day", async function () {
@@ -198,7 +198,7 @@ describe("Coinflip", function () {
       const aliceId = await giveWalletId(game, alice.address);
       const tx = await coinflip.connect(bob).depositCoinflip(aliceId, flip(200));
       const ev = await getEvent(tx, coinflip, "CoinflipDeposit");
-      expect(ev.args.player).to.equal(await game.walletIdOf(alice.address));
+      expect(ev.args.player).to.equal(await game.walletIdOf_g3120(alice.address));
       expect(ev.args.creditedFlip).to.equal(flip(200));
       // The stake belongs to alice, not the funder.
       expect(await coinflip.coinflipAmount(alice.address)).to.be.gte(flip(200));
@@ -322,7 +322,7 @@ describe("Coinflip", function () {
       const evs = await getEvents(tx, coinflip, "BigRecordUpdated");
       expect(evs.length).to.equal(1);
       expect(evs[0].args.kind).to.equal(0n); // RECORD_KIND_FLIP
-      expect(evs[0].args.id).to.equal(await game.walletIdOf(alice.address));
+      expect(evs[0].args.id).to.equal(await game.walletIdOf_g3120(alice.address));
       expect(evs[0].args.value).to.equal(flip(200_000));
       expect(await coinflip.biggestFlipEver()).to.equal(flip(200_000));
       // The clocks start at deploy, so the first mark has no bar to clear and draws
@@ -458,7 +458,7 @@ describe("Coinflip", function () {
       const evs = await getEvents(tx, f.coinflip, "BigRecordUpdated");
       expect(evs.length).to.equal(1);
       expect(evs[0].args.kind).to.equal(4n);
-      expect(evs[0].args.id).to.equal(await f.game.walletIdOf(f.bob.address));
+      expect(evs[0].args.id).to.equal(await f.game.walletIdOf_g3120(f.bob.address));
       expect(evs[0].args.value).to.equal(FLOOR + 1n);
       // 5% floor + half a point for the one elapsed day.
       expect(evs[0].args.paid).to.equal((poolBefore * 550n) / 10_000n);
@@ -869,7 +869,7 @@ describe("Coinflip", function () {
         .connect(alice)
         .setCoinflipAutoRebuy(0, true, flip(1000));
       const ev = await getEvent(tx, coinflip, "CoinflipAutoRebuyToggled");
-      expect(ev.args.player).to.equal(await game.walletIdOf(alice.address));
+      expect(ev.args.player).to.equal(await game.walletIdOf_g3120(alice.address));
       expect(ev.args.enabled).to.equal(true);
     });
 
@@ -1107,7 +1107,7 @@ describe("Coinflip", function () {
       // Loss: even rngWord => win=false
       await resolveDay(hre.ethers, game, coinflip, epoch, 2n);
 
-      const playerId = await game.walletIdOf(alice.address);
+      const playerId = await game.walletIdOf_g3120(alice.address);
       const claimableBefore = await wwxrp.claimable(playerId);
       const heldBefore = await wwxrp.balanceOf(alice.address);
       await coinflip.connect(alice).claimCoinflips(0, flip(999999));

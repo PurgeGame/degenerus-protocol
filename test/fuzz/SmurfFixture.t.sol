@@ -87,7 +87,7 @@ abstract contract SmurfFixture is DeployProtocol {
         smurfId = game.createSmurf{value: price}(bytes32(0), MintPaymentKind.DirectEth);
 
         assertEq((_fixtureMint(smurfId) >> BitPackingLib.SMURF_FLAG_SHIFT) & 1, 1, "fixture: smurf flag");
-        assertEq((ext.x_walletElement(smurfId) >> 160) & 0xffffffff, game.walletIdOf(owner), "fixture: owner lane");
+        assertEq((ext.x_walletElement(smurfId) >> 160) & 0xffffffff, game.walletIdOf_g3120(owner), "fixture: owner lane");
     }
 
     // ---------------------------------------------------------------------

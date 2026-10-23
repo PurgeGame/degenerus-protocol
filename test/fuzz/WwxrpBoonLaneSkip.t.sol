@@ -56,7 +56,7 @@ contract WwxrpBoonLaneSkipTest is DeployProtocol {
         (uint256 g0, uint256 g1) = IGameBoonView(address(game)).boonPacked(player);
         assertEq(g0, s0, "slot0");
         assertEq(g1, s1, "slot1");
-        assertEq(uint256(game.extsload(_slot(player, 1))), s1, "extsload");
+        assertEq(uint256(game.extsload_g8132(_slot(player, 1))), s1, "extsload");
     }
 
     /// @dev A live WWXRP boon is still found and spent: the lane is read, the consume runs,

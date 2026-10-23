@@ -849,14 +849,14 @@ describe("VRF Governance", function () {
 
       const firstVote = await admin.connect(deployer).vote(id, true);
       await expect(firstVote)
-        .to.emit(admin, "VoteCast").withArgs(id, await game.walletIdOf(deployer.address), true, hre.ethers.parseUnits("1000", 12));
+        .to.emit(admin, "VoteCast").withArgs(id, await game.walletIdOf_g3120(deployer.address), true, hre.ethers.parseUnits("1000", 12));
       const first = await admin.proposals(id);
       expect(first[4], "first vote must leave room for the opposing vote").to.equal(0n);
       expect(first[6]).to.equal(1000n);
       expect(first[7]).to.equal(0n);
       const opposingVote = await admin.connect(alice).vote(id, false);
       const opposingEvent = await getEvent(opposingVote, admin, "VoteCast");
-      expect(opposingEvent.args.voter).to.equal(await game.walletIdOf(alice.address));
+      expect(opposingEvent.args.voter).to.equal(await game.walletIdOf_g3120(alice.address));
       expect(opposingEvent.args.approve).to.equal(false);
       expect(opposingEvent.args.weight).to.equal(hre.ethers.parseUnits("1000", 12));
       expect(await admin.voteWeight(id, deployer.address)).to.equal(1000n);

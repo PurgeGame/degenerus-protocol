@@ -176,7 +176,7 @@ contract AfkingFamilyLiquidationTest is RedemptionCloseTools {
         vm.deal(outsider, 5 ether);
         vm.prank(outsider);
         game.subscribe{value: 5 ether}(0, false, 1, seat);
-        uint32 outsiderId = game.walletIdOf(outsider);
+        uint32 outsiderId = game.walletIdOf_g3120(outsider);
         _sub(root, false);
 
         _sale(root);
@@ -231,10 +231,10 @@ contract AfkingWriteTrimTest is DeployProtocol {
         }
         assertGt(calls, 1, "open walk split across calls");
         for (uint256 i; i < boxes.length; ++i) {
-            assertEq(_settledCalls[game.walletIdOf(boxes[i])], 1, "each paid box settled exactly once");
+            assertEq(_settledCalls[game.walletIdOf_g3120(boxes[i])], 1, "each paid box settled exactly once");
         }
         for (uint256 i; i < tickets.length; ++i) {
-            assertEq(_settledCalls[game.walletIdOf(tickets[i])], 0, "ticket subs have no AFKing box");
+            assertEq(_settledCalls[game.walletIdOf_g3120(tickets[i])], 0, "ticket subs have no AFKing box");
         }
 
         _drainDay(uint256(keccak256("wt_c2")) | 1);
@@ -249,7 +249,7 @@ contract AfkingWriteTrimTest is DeployProtocol {
         address[] memory a = _subs(6, "wt_pa_", false);
         address[] memory b = _subs(4, "wt_pb_", true);
         address[] memory c = _subs(4, "wt_pc_", false); // funded from claimable first, then prepaid
-        for (uint256 i; i < c.length; ++i) _seedClaimable(game.walletIdOf(c[i]), 3 ether);
+        for (uint256 i; i < c.length; ++i) _seedClaimable(game.walletIdOf_g3120(c[i]), 3 ether);
 
         _drainDay(uint256(keccak256("wt_pre")) | 1);
         vm.warp(block.timestamp + 1 days);
@@ -258,7 +258,7 @@ contract AfkingWriteTrimTest is DeployProtocol {
         assertEq(game.nextMinerAction(), 15, "preparation is next"); // PrepareSubscriptions
         uint256 poolBefore = game.claimablePoolView();
         int256 balancesBefore = _balanceSum(a, b, c);
-        int256 minerBefore = _balance(game.walletIdOf(address(this)));
+        int256 minerBefore = _balance(game.walletIdOf_g3120(address(this)));
 
         uint256 calls;
         for (; calls < 400 && game.nextMinerAction() == 15; ++calls) _stepMinimal();
@@ -266,7 +266,7 @@ contract AfkingWriteTrimTest is DeployProtocol {
         assertTrue(game.nextMinerAction() != 15, "preparation finished");
 
         int256 balanceDelta = _balanceSum(a, b, c) - balancesBefore
-            + _balance(game.walletIdOf(address(this))) - minerBefore;
+            + _balance(game.walletIdOf_g3120(address(this))) - minerBefore;
         assertLt(balanceDelta, 0, "subs paid");
         assertEq(int256(game.claimablePoolView()) - int256(poolBefore), balanceDelta, "pool moved with the accounts");
     }
@@ -283,7 +283,7 @@ contract AfkingWriteTrimTest is DeployProtocol {
             subs[i] = who;
             uint256 seat = _grantSeat(who);
             vm.deal(address(this), 20 ether);
-            uint32 id = game.walletIdOf(who);
+            uint32 id = game.walletIdOf_g3120(who);
             if (id == 0) id = _giveWalletId(who);
             game.depositAfkingFunding{value: 20 ether}(id);
             vm.prank(who);
@@ -304,13 +304,13 @@ contract AfkingWriteTrimTest is DeployProtocol {
     }
 
     function _balanceSum(address[] memory a, address[] memory b, address[] memory c) private view returns (int256 s) {
-        for (uint256 i; i < a.length; ++i) s += _balance(game.walletIdOf(a[i]));
-        for (uint256 i; i < b.length; ++i) s += _balance(game.walletIdOf(b[i]));
-        for (uint256 i; i < c.length; ++i) s += _balance(game.walletIdOf(c[i]));
+        for (uint256 i; i < a.length; ++i) s += _balance(game.walletIdOf_g3120(a[i]));
+        for (uint256 i; i < b.length; ++i) s += _balance(game.walletIdOf_g3120(b[i]));
+        for (uint256 i; i < c.length; ++i) s += _balance(game.walletIdOf_g3120(c[i]));
     }
 
     function _subWord(address who) private view returns (bytes32) {
-        (uint256 lane,) = GameSlotKeys.subLane(address(game), game.walletIdOf(who));
+        (uint256 lane,) = GameSlotKeys.subLane(address(game), game.walletIdOf_g3120(who));
         return bytes32(lane);
     }
 

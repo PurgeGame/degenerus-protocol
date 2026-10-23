@@ -64,11 +64,11 @@ contract CoinflipSeedWindowTest is DeployProtocol {
     }
 
     function _rawStake(uint24 day, address p) internal view returns (uint256) {
-        return CoinflipStorage.read(address(coinflip), game.walletIdOf(p), day);
+        return CoinflipStorage.read(address(coinflip), game.walletIdOf_g3120(p), day);
     }
 
     function _stateSlot(address p) internal view returns (bytes32) {
-        return keccak256(abi.encode(game.walletIdOf(p), uint256(2)));
+        return keccak256(abi.encode(game.walletIdOf_g3120(p), uint256(2)));
     }
 
     function _slot4() internal view returns (uint256) {
@@ -77,7 +77,7 @@ contract CoinflipSeedWindowTest is DeployProtocol {
 
     /// @dev The vault's raw BAF word for bracket 10 (level 0 records to bracket 10).
     function _bafWord(address p) internal view returns (uint256) {
-        bytes32 slot = bytes32(uint256(keccak256(abi.encode(uint256(game.walletIdOf(p)), uint256(0)))) + 1);
+        bytes32 slot = bytes32(uint256(keccak256(abi.encode(uint256(game.walletIdOf_g3120(p)), uint256(0)))) + 1);
         return uint256(vm.load(address(jackpots), slot));
     }
 
@@ -112,7 +112,7 @@ contract CoinflipSeedWindowTest is DeployProtocol {
         uint256 sdgnrsClaimable;
         uint256 sdgnrsCarry;
         uint256 allowance0 = coin.vaultMintAllowance();
-        uint256 wwxrpVault0 = wwxrp.claimable(game.walletIdOf(VAULT));
+        uint256 wwxrpVault0 = wwxrp.claimable(game.walletIdOf_g3120(VAULT));
         for (uint24 d = 1; d <= 22; ++d) {
             _warpToDay(d);
             if (d == 2 || d == 9 || d == 21) {
@@ -144,7 +144,7 @@ contract CoinflipSeedWindowTest is DeployProtocol {
         assertEq(_vaultClaim(type(uint256).max), vaultExpected, "claim pays lane + seed per winning day");
         assertEq(coin.vaultMintAllowance() - allowance0, vaultExpected, "minted into the vault allowance");
         assertEq(_bafWord(VAULT) & type(uint168).max, vaultExpected, "every winning payout is BAF credit");
-        assertEq(wwxrp.claimable(game.walletIdOf(VAULT)) - wwxrpVault0, vaultLosses * 1, "one loss prize per staked losing day");
+        assertEq(wwxrp.claimable(game.walletIdOf_g3120(VAULT)) - wwxrpVault0, vaultLosses * 1, "one loss prize per staked losing day");
         assertEq(_vaultClaim(type(uint256).max), 0, "the cursor consumed each seed once");
         assertEq(_rawStake(3, VAULT) + _rawStake(10, VAULT) + _rawStake(22, VAULT), 3 * 12_345, "retained lanes cannot be claimed twice");
 
@@ -249,7 +249,7 @@ contract CoinflipSeedWindowTest is DeployProtocol {
         assertEq(armed, 1, "the deploy window is announced once");
 
         // Day 1 and day 20 pay the seed; day 21 does not.
-        uint256 wwxrp0 = wwxrp.claimable(game.walletIdOf(VAULT));
+        uint256 wwxrp0 = wwxrp.claimable(game.walletIdOf_g3120(VAULT));
         _warpToDay(1);
         _resolve(1, true);
         assertEq(coinflip.previewClaimCoinflips(VAULT), _payout(SEED, 1), "day 1 is seeded");
@@ -263,6 +263,6 @@ contract CoinflipSeedWindowTest is DeployProtocol {
         _resolve(22, true);
         _resolve(23, true);
         assertEq(coinflip.previewClaimCoinflips(VAULT), 0, "day 21 onward carries no seed");
-        assertEq(wwxrp.claimable(game.walletIdOf(VAULT)) - wwxrp0, 19, "days 2..20 lost a seed each; day 21 had no stake");
+        assertEq(wwxrp.claimable(game.walletIdOf_g3120(VAULT)) - wwxrp0, 19, "days 2..20 lost a seed each; day 21 had no stake");
     }
 }

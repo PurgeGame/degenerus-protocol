@@ -101,7 +101,7 @@ contract OpenBountyCarry is DeployProtocol {
     ///      keeper and the execution gas the engine measured.
     function _mintFlipKeeperCredit(address keeper, uint256 allowance) internal returns (uint256 total, uint256 used) {
         // The stake ledger is keyed by wallet ID: a keeper without one does the work unpaid.
-        if (game.walletIdOf(keeper) == 0) _giveWalletId(keeper);
+        if (game.walletIdOf_g3120(keeper) == 0) _giveWalletId(keeper);
         vm.recordLogs();
         vm.prank(keeper);
         if (allowance == 0) game.mineFlip(0);
@@ -111,7 +111,7 @@ contract OpenBountyCarry is DeployProtocol {
             if (
                 logs[i].topics.length > 1 &&
                 logs[i].topics[0] == STAKE_UPDATED_SIG &&
-                uint256(logs[i].topics[1]) == game.walletIdOf(keeper)
+                uint256(logs[i].topics[1]) == game.walletIdOf_g3120(keeper)
             ) {
                 (uint256 amount, ) = abi.decode(logs[i].data, (uint256, uint256));
                 total += amount;

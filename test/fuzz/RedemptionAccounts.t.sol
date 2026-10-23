@@ -29,7 +29,7 @@ contract RedemptionAccountsTest is RedemptionFixture {
     function setUp() public override {
         super.setUp();
         _grantSmurfBase(alice, 1);
-        aliceId = game.walletIdOf(alice);
+        aliceId = game.walletIdOf_g3120(alice);
         vm.prank(alice);
         game.setOperatorApproval(0, operator, true);
     }
@@ -43,7 +43,7 @@ contract RedemptionAccountsTest is RedemptionFixture {
         vm.deal(o, o.balance + price);
         vm.prank(o);
         sid = game.createSmurf{value: price}(bytes32(0), MintPaymentKind.DirectEth);
-        (address key, address payee,) = game.resolveAccount(sid, o);
+        (address key, address payee,) = game.resolveAccount_g502(sid, o);
         require(key == address(0) && payee == o, "fixture: account owner");
     }
 
@@ -69,7 +69,7 @@ contract RedemptionAccountsTest is RedemptionFixture {
     function _claimedFor(Vm.Log[] memory logs, address player) internal view returns (uint256 n) {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(sdgnrs) || logs[i].topics[0] != CLAIMED_TOPIC) continue;
-            if (uint32(uint256(logs[i].topics[1])) == game.walletIdOf(player)) ++n;
+            if (uint32(uint256(logs[i].topics[1])) == game.walletIdOf_g3120(player)) ++n;
         }
     }
 
@@ -87,7 +87,7 @@ contract RedemptionAccountsTest is RedemptionFixture {
         uint256 before = _received(alice);
         uint256 opBefore = _received(operator);
 
-        vm.expectCall(address(game), abi.encodeCall(DegenerusGame.resolveAccount, (aliceId, operator)), 1);
+        vm.expectCall(address(game), abi.encodeCall(DegenerusGame.resolveAccount_g502, (aliceId, operator)), 1);
         vm.recordLogs();
         vm.prank(operator);
         sdgnrs.claimRedemption(aliceId, id);
@@ -188,7 +188,7 @@ contract RedemptionAccountsTest is RedemptionFixture {
         sdgnrs.claimRedemption(aliceId, id);
 
         uint256 before = _received(alice);
-        vm.expectCall(address(game), abi.encodeWithSelector(DegenerusGame.resolveAccount.selector), 0);
+        vm.expectCall(address(game), abi.encodeWithSelector(DegenerusGame.resolveAccount_g502.selector), 0);
         vm.prank(alice);
         sdgnrs.claimRedemption(0, id);
         assertGt(_received(alice), before, "self claim paid the caller");
@@ -244,7 +244,7 @@ contract RedemptionAccountsTest is RedemptionFixture {
     /// @notice A GNRUS burn its on-hand balance cannot cover pulls GNRUS's own Game claimable with
     ///         `claimWinnings(0)`.
     function test_GnrusBurn_PullsClaimableWithClaimWinningsZero() public {
-        assertEq(game.walletIdOf(address(gnrus)), 3, "GNRUS holds reserved ID 3");
+        assertEq(game.walletIdOf_g3120(address(gnrus)), 3, "GNRUS holds reserved ID 3");
         vm.deal(address(gnrus), 0);
         uint256 credit = 10 ether;
         GameFunding.credit(3, credit);

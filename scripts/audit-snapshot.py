@@ -52,6 +52,7 @@ def verification_files(build_inputs):
     paths.update(p for p in (
         "scripts/audit/post_push_inventory.py", "scripts/layout/check_recursive_layout.py",
         "scripts/lib/fork-probe-utils.js", "scripts/fork-hardhat.config.js",
+        "scripts/lib/dispatch_target.py",
         "scripts/test-fork-probe-utils.js",
         "scripts/export-decimator-abi.py", "scripts/test-decimator-sampling.py",
         "scripts/check-split-arithmetic.py", "scripts/test-split-arithmetic.py",

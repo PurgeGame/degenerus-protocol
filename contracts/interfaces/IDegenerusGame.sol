@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
-
 import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 
 /*
@@ -73,27 +72,22 @@ interface IDegenerusGame {
     ///      Repeat for later awards or a coinflip backlog. Does not resolve unclaimed prizes.
     function sweepAccounts(uint32[] calldata ids) external returns (uint256 ethCollected, uint256 flipCollected);
 
-    function registerWallet_g9539(address owner, bool allocate) external returns (uint32 id);
-
     /// @notice Wallet-ID hook for trusted protocol contracts: existing ID, or with `allocate` a new
     ///         one subject to paid admission. Non-allocating calls return zero for unregistered wallets.
-    function registerWallet(address owner, bool allocate) external returns (uint32 id);
+    function registerWallet_g9539(address owner, bool allocate) external returns (uint32 id);
     function registerWalletIdentity(address owner) external returns (uint32 id);
     function walletIdentityOf(address owner) external view returns (uint32);
     function acquiredBuyer(uint32 id) external view returns (uint32 buyerId);
-    function walletIdOf_g3120(address player) external view returns (uint32);
 
     /// @notice A wallet's current gameplay ID, or zero before registration/after liquidation.
-    function walletIdOf(address player) external view returns (uint32);
-
-    function resolveAccount_g502(uint32 id, address caller) external view returns (address key, address payee, bool authorized);
+    function walletIdOf_g3120(address player) external view returns (uint32);
 
     /// @notice Resolve an allocated account's payee and caller authorization.
     /// @dev Ordinary accounts return their address as `key`; subaccounts return zero.
     ///      Subaccounts store an owner ID, resolved to an ordinary wallet for payouts.
     ///      Authorization is the current payee, or an operator approval on an unsold account.
     ///      Authorization failure returns false; zero or unallocated IDs revert E.
-    function resolveAccount(uint32 id, address caller)
+    function resolveAccount_g502(uint32 id, address caller)
         external view returns (address key, address payee, bool authorized);
 
     /// @notice Approve or revoke `operator` for account `id` (game-wide delegated control).
@@ -141,11 +135,8 @@ interface IDegenerusGame {
     /// @dev Strictly increasing absolute value; preserves lifetime count and all other mint fields.
     function raiseSmurfBaseAllowance(uint32 mainId, uint16 newBase) external;
 
-    function extsload_g8132(bytes32 slot) external view returns (bytes32 value);
-
     /// @notice Read a raw storage slot; used for permanent identity lookups with pinned roots.
-    function extsload(bytes32 slot) external view returns (bytes32 value);
-
+    function extsload_g8132(bytes32 slot) external view returns (bytes32 value);
 
     /// @notice Allowed read consumer: 0 blocked, 1 redemption, 2 AFK, 3 boxes/bets, 4 Decimator, 5 Craps, 6 complete.
     function rngConsumerStage_g379() external view returns (uint8);
@@ -237,8 +228,6 @@ interface IDegenerusGame {
             uint8 phaseDay
         );
 
-
-
     /// @notice Consume the caller's boon lane for the next stake bonus.
     /// @dev Access: COINFLIP, COIN or WWXRP. The caller selects its own lane: coinflip,
     ///      craps or WWXRP respectively. WWXRP exposes a separate consumption hook to
@@ -296,8 +285,6 @@ interface IDegenerusGame {
     /// @notice Initialize both protocol deities in one post-deployment batch (creator only, once).
     function initProtocolDeity() external;
 
-
-
     /// @notice Get the future prize pool (single pool).
     /// @return Future prize pool amount in wei.
     function futurePrizePoolView() external view returns (uint256);
@@ -311,8 +298,6 @@ interface IDegenerusGame {
     /// @param player The player to query.
     /// @return Number of entries owed (fractional remainder resolves at batch time).
     function entriesOwedView(uint24 lvl, address player) external view returns (uint32);
-
-
 
     /// @notice Record a Decimator burn for jackpot eligibility.
     /// @param player Address of the player.
@@ -402,9 +387,6 @@ interface IDegenerusGame {
     ///                 registered wallets; a donation quotes no Game spend).
     function creditMiddayRng(address to, uint256 linkAmount) external returns (uint32 id);
 
-
-
-
     /// @notice Buy a credit-gated Degenesis box (ETH + claimable shortfall) for account `id`.
     /// @dev Authorized (account rule). The order, its credit gate and the claimable/AFKing legs are
     ///      the account's; fresh ETH comes from the caller. Overpay credits the payer's AFKing
@@ -492,7 +474,6 @@ interface IDegenerusGame {
     function sampleFarFutureTickets(uint256 entropy, uint24 fromLevel, uint24 toLevel)
         external view returns (uint32[] memory tickets);
 
-
     /// @notice Purchase a deity pass for a specific symbol (0-31) for account `id`.
     /// @dev Authorized (account rule). One deity per main wallet: the main of an account is its
     ///      payee (the owner for a smurf, itself otherwise), and the purchase reverts when any
@@ -542,12 +523,10 @@ interface IDegenerusGame {
     /// @return Raw packed uint256 containing mint counts, streak, pass status.
     function mintPackedFor(address player) external view returns (uint256);
 
-    function mintPackedOfId_g5372(uint32 id) external view returns (uint256);
-
     /// @notice Mint word keyed directly by account ID; missing IDs return zero.
     /// @param id Account ID.
     /// @return Raw packed mint word for the account.
-    function mintPackedOfId(uint32 id) external view returns (uint256);
+    function mintPackedOfId_g5372(uint32 id) external view returns (uint256);
 
     /// @notice Purchase tickets and loot boxes with ETH or claimable for account `id`.
     /// @dev Main entry point for all ETH/claimable purchases.
@@ -589,8 +568,6 @@ interface IDegenerusGame {
         uint32 id,
         uint256 entryQuantityScaled
     ) external;
-
-
 
     /// @notice Claim color-completion bingo: all 8 colors of one symbol on a level.
     /// @dev One reward per player per level, claimable until the next level starts; dispatches
@@ -834,8 +811,6 @@ interface IDegenerusGame {
     ///      to the caller's ID before its isolating self-call, whose `msg.sender` is the Game.
     /// @param ids Affiliate accounts to settle; empty = the caller only.
     function claimAffiliateDgnrs(uint32[] calldata ids) external;
-
-
 
     /// @notice Credit the direct half of an sDGNRS redemption claim to the claimant's claimable winnings.
     /// @param id Claimant wallet ID credited.

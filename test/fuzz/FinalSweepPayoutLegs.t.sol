@@ -243,9 +243,9 @@ contract FinalSweepPayoutLegs is DeployProtocol {
     function test_aShortfallSplitsWhatExistsProRata() public {
         // Afking deposits close at game over, so the sinks are funded before it.
         vm.deal(address(this), 21 ether);
-        game.depositAfkingFunding{value: 12 ether}(game.walletIdOf(ContractAddresses.VAULT));
-        game.depositAfkingFunding{value: 6 ether}(game.walletIdOf(ContractAddresses.SDGNRS));
-        game.depositAfkingFunding{value: 3 ether}(game.walletIdOf(ContractAddresses.GNRUS));
+        game.depositAfkingFunding{value: 12 ether}(game.walletIdOf_g3120(ContractAddresses.VAULT));
+        game.depositAfkingFunding{value: 6 ether}(game.walletIdOf_g3120(ContractAddresses.SDGNRS));
+        game.depositAfkingFunding{value: 3 ether}(game.walletIdOf_g3120(ContractAddresses.GNRUS));
         _driveToGameOver();
         uint256 oV = _owed(ContractAddresses.VAULT);
         uint256 oS = _owed(ContractAddresses.SDGNRS);

@@ -259,41 +259,41 @@ contract DeadVrfEndingTest is DeployProtocol {
         refs[0] = _ref(0, 3, 0);
         refs[1] = _ref(0, 3, 1);
         refs[2] = _ref(0, 3, 2);
-        game.claimDeadVrf(game.walletIdOf(alice), refs);
+        game.claimDeadVrf(game.walletIdOf_g3120(alice), refs);
         assertEq(claimableBalance(game, alice), 3 * (perTrait / 4), "alice: 3 of trait 3's four tickets");
 
         uint256[] memory one = new uint256[](1);
         one[0] = _ref(0, 3, 3);
-        uint32 aliceId = game.walletIdOf(alice);
+        uint32 aliceId = game.walletIdOf_g3120(alice);
         vm.expectRevert(bytes4(keccak256("E()")));
         game.claimDeadVrf(aliceId, one); // bob's ticket, not alice's
-        game.claimDeadVrf(game.walletIdOf(bob), one);
+        game.claimDeadVrf(game.walletIdOf_g3120(bob), one);
         assertEq(claimableBalance(game, bob), perTrait / 4, "bob: 1 of trait 3's four tickets");
-        uint32 bobId = game.walletIdOf(bob);
+        uint32 bobId = game.walletIdOf_g3120(bob);
         vm.expectRevert(bytes4(keccak256("E()")));
         game.claimDeadVrf(bobId, one); // already claimed
 
         uint256[] memory two = new uint256[](2);
         two[0] = _ref(0, 200, 0);
         two[1] = _ref(0, 200, 1);
-        game.claimDeadVrf(game.walletIdOf(carol), two);
+        game.claimDeadVrf(game.walletIdOf_g3120(carol), two);
         assertEq(claimableBalance(game, carol), 2 * (perTrait / 2), "carol: a whole trait's share");
 
         one[0] = _ref(1, TLVL | (uint24(1) << 23), davePos);
-        game.claimDeadVrf(game.walletIdOf(dave), one);
+        game.claimDeadVrf(game.walletIdOf_g3120(dave), one);
         assertEq(claimableBalance(game, dave), (pot * 450) / total, "dave: the average for 4.5 entries");
-        uint32 daveId = game.walletIdOf(dave);
+        uint32 daveId = game.walletIdOf_g3120(dave);
         vm.expectRevert(bytes4(keccak256("E()")));
         game.claimDeadVrf(daveId, one); // owed zeroed
 
         one[0] = _ref(1, TLVL, erinPos);
-        game.claimDeadVrf(game.walletIdOf(erin), one);
+        game.claimDeadVrf(game.walletIdOf_g3120(erin), one);
         assertEq(claimableBalance(game, erin), (pot * 200) / total, "erin: the average for 2 entries");
 
         one[0] = _ref(2, foilDay & 1, foilIdx);
-        game.claimDeadVrf(game.walletIdOf(frank), one);
+        game.claimDeadVrf(game.walletIdOf_g3120(frank), one);
         assertEq(claimableBalance(game, frank), (pot * 1600) / total, "frank: the average for a foil pack");
-        uint32 frankId = game.walletIdOf(frank);
+        uint32 frankId = game.walletIdOf_g3120(frank);
         vm.expectRevert(bytes4(keccak256("E()")));
         game.claimDeadVrf(frankId, one); // pack word zeroed
 
@@ -317,8 +317,8 @@ contract DeadVrfEndingTest is DeployProtocol {
         (uint256 pot, uint256 total,, uint256 uncreated,,) = _state();
         assertEq(uncreated, 1500);
         assertEq(total, 1500);
-        uint32 erinId = game.walletIdOf(erin);
-        uint32 daveId = game.walletIdOf(dave);
+        uint32 erinId = game.walletIdOf_g3120(erin);
+        uint32 daveId = game.walletIdOf_g3120(dave);
         uint256[] memory refs = new uint256[](1);
         refs[0] = _ref(1, TLVL | (uint24(1) << 23), id);
         vm.expectRevert(bytes4(keccak256("E()"))); game.claimDeadVrf(erinId, refs);
@@ -375,7 +375,7 @@ contract DeadVrfEndingTest is DeployProtocol {
         game.mineFlip(0); // final sweep
         uint256[] memory one = new uint256[](1);
         one[0] = _ref(1, TLVL | (uint24(1) << 23), davePos);
-        uint32 daveId = game.walletIdOf(dave);
+        uint32 daveId = game.walletIdOf_g3120(dave);
         vm.expectRevert(bytes4(keccak256("E()")));
         game.claimDeadVrf(daveId, one);
     }

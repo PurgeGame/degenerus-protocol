@@ -44,7 +44,7 @@ contract LootboxCrapsPasses is DeployProtocol {
     ///      non-monotonic index sequences the callers below use are each independently reachable
     ///      regardless of call order.
     function _setupLootbox(address player, uint48 index, uint256 ethAmount, uint256 vrfWord) internal {
-        uint256 word = BoxOrderLib.boEntry(game.walletIdOf(player), ethAmount / BoxOrderLib.SCALE, 1, 0, 1, false);
+        uint256 word = BoxOrderLib.boEntry(game.walletIdOf_g3120(player), ethAmount / BoxOrderLib.SCALE, 1, 0, 1, false);
         RecyclingState.seedWriteBuffer(address(game), index);
         bytes32 data = keccak256(abi.encode(bytes32(GameSlots.BOX_QUEUE + uint256(index))));
         vm.store(address(game), data, bytes32(word));

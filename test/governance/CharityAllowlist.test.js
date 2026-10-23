@@ -418,7 +418,7 @@ describe("GNRUS Charity Allowlist (v33.0)", function () {
       const ev = await getEvent(tx, charity, "Voted");
       expect(ev.args.level).to.equal(0n);
       expect(ev.args.slot).to.equal(5n);
-      expect(ev.args.voter).to.equal(await game.walletIdOf(voter1.address));
+      expect(ev.args.voter).to.equal(await game.walletIdOf_g3120(voter1.address));
       expect(ev.args.weight).to.equal(100n);
       expect(await charity.slotApproveWeight(0, 5)).to.equal(100n);
     });

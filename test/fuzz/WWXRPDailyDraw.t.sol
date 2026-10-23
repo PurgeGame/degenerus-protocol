@@ -150,12 +150,12 @@ contract WWXRPDailyDrawTest is DeployProtocol {
     function test_EnterRegistersWalletWithoutId() public {
         _bootstrap();
         address carol = makeAddr("carol");
-        assertEq(game.walletIdOf(carol), 0, "no id yet");
+        assertEq(game.walletIdOf_g3120(carol), 0, "no id yet");
         vm.prank(address(game));
         wwxrp.mintPrize(carol, 100);
         vm.prank(carol);
         wwxrp.enter(0, 100);
-        uint32 id = game.walletIdOf(carol);
+        uint32 id = game.walletIdOf_g3120(carol);
         assertGt(id, 0, "enter registered the burner");
         uint24 day = game.currentDayView();
         (uint32 entrant, uint256 cum) = wwxrp.entryAt(
@@ -236,7 +236,7 @@ contract WWXRPDailyDrawTest is DeployProtocol {
         (uint32 p2, uint256 c2) = wwxrp.entryAt(day, bucket, 2);
         assertEq(p0, aliceId);
         assertEq(c0, 200);
-        assertEq(p1, game.walletIdOf(bob2));
+        assertEq(p1, game.walletIdOf_g3120(bob2));
         assertEq(c1, 500);
         assertEq(p2, aliceId);
         assertEq(c2, 600);
@@ -543,7 +543,7 @@ contract WWXRPDailyDrawTest is DeployProtocol {
                 bucket,
                 string(abi.encodePacked("m", i))
             );
-            _entrants[game.walletIdOf(m)] = m;
+            _entrants[game.walletIdOf_g3120(m)] = m;
             _enterAs(m, (i + 1) * 75);
         }
         vm.prank(alice);

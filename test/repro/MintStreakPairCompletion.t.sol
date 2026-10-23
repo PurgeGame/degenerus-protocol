@@ -25,7 +25,7 @@ contract MintStreakPairCompletion is DeployProtocol {
     // ------------------------------------------------------------------ helpers
 
     function _streak(uint32 id) private view returns (uint256 lc, uint256 s) {
-        uint256 w = game.mintPackedOfId(id);
+        uint256 w = game.mintPackedOfId_g5372(id);
         lc = (w >> BitPackingLib.MINT_STREAK_LAST_COMPLETED_SHIFT) & BitPackingLib.MASK_24;
         s = (w >> BitPackingLib.LEVEL_STREAK_SHIFT) & BitPackingLib.MASK_24;
     }
@@ -84,7 +84,7 @@ contract MintStreakPairCompletion is DeployProtocol {
     function test_foilOnly_control_records() public {
         address p = makeAddr("foilCtl");
         _foilOnly(p);
-        uint32 id = game.walletIdOf(p);
+        uint32 id = game.walletIdOf_g3120(p);
         (bool d0, bool d1) = quests.questCompletionToday(id);
         assertTrue(d0);
         assertFalse(d1);
@@ -100,7 +100,7 @@ contract MintStreakPairCompletion is DeployProtocol {
         address p = makeAddr("foilPair");
         _bet(p);
         _foilOnly(p);
-        uint32 id = game.walletIdOf(p);
+        uint32 id = game.walletIdOf_g3120(p);
         (bool d0, bool d1) = quests.questCompletionToday(id);
         assertTrue(d0, "primary done");
         assertTrue(d1, "secondary pair-completed in the foil buy");
@@ -114,7 +114,7 @@ contract MintStreakPairCompletion is DeployProtocol {
         address p = makeAddr("ticketPair");
         _bet(p);
         _ticket(p);
-        uint32 id = game.walletIdOf(p);
+        uint32 id = game.walletIdOf_g3120(p);
         (bool d0, bool d1) = quests.questCompletionToday(id);
         assertTrue(d0, "primary done");
         assertTrue(d1, "secondary done");
@@ -147,14 +147,14 @@ contract MintStreakPairCompletion is DeployProtocol {
 
         address ctl = makeAddr("lbCtl");
         _ticket(ctl);
-        uint32 cid = game.walletIdOf(ctl);
+        uint32 cid = game.walletIdOf_g3120(ctl);
         (uint256 lc, uint256 s) = _streak(cid);
         assertEq(lc, 1, "control records");
         assertEq(s, 1);
 
         address p = makeAddr("lbPair");
         _boxesOnly(p);
-        uint32 id = game.walletIdOf(p);
+        uint32 id = game.walletIdOf_g3120(p);
         (bool d0, bool d1) = quests.questCompletionToday(id);
         assertTrue(d0, "primary done by box spend");
         assertTrue(d1, "LOOTBOX secondary done in the same call");

@@ -72,9 +72,9 @@ contract WalletIdentityPhaseATest is DeployProtocol {
     // ----- wallet table -----
 
     function test_ProtocolIdsAndElementZero() public {
-        assertEq(game.walletIdOf(ContractAddresses.VAULT), 1, "vault");
-        assertEq(game.walletIdOf(ContractAddresses.SDGNRS), 2, "sdgnrs");
-        assertEq(game.walletIdOf(ContractAddresses.GNRUS), 3, "gnrus");
+        assertEq(game.walletIdOf_g3120(ContractAddresses.VAULT), 1, "vault");
+        assertEq(game.walletIdOf_g3120(ContractAddresses.SDGNRS), 2, "sdgnrs");
+        assertEq(game.walletIdOf_g3120(ContractAddresses.GNRUS), 3, "gnrus");
         WalletIdentityProbe probe = _probe();
         assertEq(probe.element(0), 0, "element 0 never assigned");
         assertEq(address(uint160(probe.element(1))), ContractAddresses.VAULT, "id 1 key");
@@ -88,7 +88,7 @@ contract WalletIdentityPhaseATest is DeployProtocol {
         _buyTickets(buyer, 1);
         _buyTickets(buyer, 1);
         assertEq(_registeredLogs(vm.getRecordedLogs()), 1, "one WalletRegistered per wallet");
-        assertEq(game.walletIdOf(buyer), before, "ID = prior table length");
+        assertEq(game.walletIdOf_g3120(buyer), before, "ID = prior table length");
         WalletIdentityProbe probe = _probe();
         assertEq(address(uint160(probe.element(uint32(before)))), buyer, "reverse direction");
         assertEq(probe.idOf(buyer), before, "forward direction");
@@ -149,25 +149,25 @@ contract WalletIdentityPhaseATest is DeployProtocol {
         vm.deal(boxBuyer, 10 ether);
         vm.prank(boxBuyer);
         game.purchase{value: price}(0, 0, 1, 0, MintPaymentKind.DirectEth, false);
-        assertGt(game.walletIdOf(boxBuyer), 0, "box-only buyer");
+        assertGt(game.walletIdOf_g3120(boxBuyer), 0, "box-only buyer");
 
         address whale = address(0x3A1E);
         vm.deal(whale, 10 ether);
         vm.prank(whale);
         game.purchaseWhalePass{value: 4 ether}(0, 1, 0);
-        assertGt(game.walletIdOf(whale), 0, "whale pass buyer");
+        assertGt(game.walletIdOf_g3120(whale), 0, "whale pass buyer");
 
         address lazy = address(0x1A2E);
         vm.deal(lazy, 10 ether);
         vm.prank(lazy);
         game.purchaseLazyPass{value: 1 ether}(0, 0);
-        assertGt(game.walletIdOf(lazy), 0, "lazy pass buyer");
+        assertGt(game.walletIdOf_g3120(lazy), 0, "lazy pass buyer");
 
         address deity = address(0xDE17);
         vm.deal(deity, 200 ether);
         vm.prank(deity);
         game.purchaseDeityPass{value: 200 ether}(0, 3, 0);
-        assertGt(game.walletIdOf(deity), 0, "deity buyer");
+        assertGt(game.walletIdOf_g3120(deity), 0, "deity buyer");
     }
 
     function test_DegeneretteBetRegistersOwner() public {
@@ -177,7 +177,7 @@ contract WalletIdentityPhaseATest is DeployProtocol {
         vm.deal(bettor, 1 ether);
         vm.prank(bettor);
         game.placeDegeneretteBet{value: 0.01 ether}(0, 0, uint128(0.01 ether), 1, 3);
-        assertGt(game.walletIdOf(bettor), 0, "bet owner registered");
+        assertGt(game.walletIdOf_g3120(bettor), 0, "bet owner registered");
     }
 
     // ----- paid admission and exhaustion -----
@@ -196,15 +196,15 @@ contract WalletIdentityPhaseATest is DeployProtocol {
 
         uint256 tickets = (0.04 ether + price - 1) / price;
         _buyTickets(small, tickets);
-        assertEq(game.walletIdOf(small), 3_000_000_001, "qualifying spend admits");
+        assertEq(game.walletIdOf_g3120(small), 3_000_000_001, "qualifying spend admits");
 
         vm.prank(ContractAddresses.AFFILIATE);
         vm.expectRevert(DegenerusGameStorage.E.selector);
-        game.registerWallet(address(0xA77), true);
+        game.registerWallet_g9539(address(0xA77), true);
         vm.prank(ContractAddresses.AFFILIATE);
-        assertEq(game.registerWallet(address(0xA77), false), 0, "non-allocating returns zero");
+        assertEq(game.registerWallet_g9539(address(0xA77), false), 0, "non-allocating returns zero");
         vm.prank(ContractAddresses.AFFILIATE);
-        assertEq(game.registerWallet(small, true), 3_000_000_001, "existing ID keeps working");
+        assertEq(game.registerWallet_g9539(small, true), 3_000_000_001, "existing ID keeps working");
     }
 
     function test_BelowThresholdHookAllocates() public {
@@ -212,7 +212,7 @@ contract WalletIdentityPhaseATest is DeployProtocol {
         probe.setWalletsLength(3_000_000_000); // 2,999,999,999 registered
         _restore();
         vm.prank(ContractAddresses.AFFILIATE);
-        assertEq(game.registerWallet(address(0xA78), true), 3_000_000_000, "below threshold");
+        assertEq(game.registerWallet_g9539(address(0xA78), true), 3_000_000_000, "below threshold");
     }
 
     function test_Uint32Exhaustion() public {
@@ -222,7 +222,7 @@ contract WalletIdentityPhaseATest is DeployProtocol {
         address last = address(0x1A57);
         uint256 tickets = (0.04 ether + _price() - 1) / _price();
         _buyTickets(last, tickets);
-        assertEq(game.walletIdOf(last), type(uint32).max, "last valid ID");
+        assertEq(game.walletIdOf_g3120(last), type(uint32).max, "last valid ID");
         address next = address(0x2A57);
         uint256 value = _price() * tickets;
         vm.deal(next, value);
@@ -234,7 +234,7 @@ contract WalletIdentityPhaseATest is DeployProtocol {
 
     function test_HookCallerSet() public {
         vm.expectRevert(DegenerusGameStorage.E.selector);
-        game.registerWallet(address(0xA79), true);
+        game.registerWallet_g9539(address(0xA79), true);
     }
 
     // ----- non-paying paths require an existing ID -----
@@ -260,7 +260,7 @@ contract WalletIdentityPhaseATest is DeployProtocol {
         // Overpayment by a payer that is not the beneficiary needs the payer's ID; exact payment does not.
         address buyer = address(0xB1);
         _buyTickets(buyer, 1);
-        uint32 buyerId = game.walletIdOf(buyer);
+        uint32 buyerId = game.walletIdOf_g3120(buyer);
         vm.prank(buyer);
         game.setOperatorApproval(0, fresh, true);
         uint256 price = _price();
@@ -269,7 +269,7 @@ contract WalletIdentityPhaseATest is DeployProtocol {
         game.purchase{value: price * 2}(buyerId, 400, 0, 0, MintPaymentKind.DirectEth, false);
         vm.prank(fresh);
         game.purchase{value: price}(buyerId, 400, 0, 0, MintPaymentKind.DirectEth, false);
-        assertEq(game.walletIdOf(fresh), 0, "operator stays unregistered");
+        assertEq(game.walletIdOf_g3120(fresh), 0, "operator stays unregistered");
     }
 
     // ----- participation is separate from identity -----
@@ -277,9 +277,9 @@ contract WalletIdentityPhaseATest is DeployProtocol {
     function test_IdOnlyWalletIsNotParticipant() public {
         address owner = address(0xC0DE);
         vm.prank(ContractAddresses.AFFILIATE);
-        uint32 id = game.registerWallet(owner, true);
+        uint32 id = game.registerWallet_g9539(owner, true);
         assertGt(id, 0);
-        (bool mayBet,,) = quests.marketBetGates(game.walletIdOf(owner), game.level() + 1);
+        (bool mayBet,,) = quests.marketBetGates(game.walletIdOf_g3120(owner), game.level() + 1);
         assertFalse(mayBet, "registration alone does not open the markets");
     }
 

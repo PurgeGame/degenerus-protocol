@@ -6,7 +6,6 @@ import {RngTags} from "./libraries/RngTags.sol";
 
 import {DecimatorSamplingLib as Sampling} from "./libraries/DecimatorSamplingLib.sol";
 
-
 /*
  * TERMS OF INTERACTION — submitting a transaction to this contract accepts them.
  *
@@ -41,10 +40,9 @@ import {ActivityCurveLib} from "./libraries/ActivityCurveLib.sol";
 ///      the authoritative aggregate score.
 interface IDegenerusGameLensSource {
     function rngWordForDay(uint24 day) external view returns (uint256);
-    function extsload_g8132(bytes32 slot) external view returns (bytes32 value);
 
     /// @notice DegenerusGame's raw-slot reader, returning the word stored at `slot`.
-    function extsload(bytes32 slot) external view returns (bytes32 value);
+    function extsload_g8132(bytes32 slot) external view returns (bytes32 value);
 
     /// @notice DegenerusGame's aggregate activity-score read for `player`.
     function playerActivityScoreById(uint32 id) external view returns (uint256);
@@ -274,7 +272,6 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         }
         ready = true;
     }
-
 
     /*+======================================================================+
       |                          RETURN STRUCTS                              |

@@ -157,7 +157,7 @@ contract LootboxOpenGoldens is DeployProtocol {
         uint256[8] memory dPaid;
         uint256 nDgnrs;
         uint256 nPasses;
-        uint32 whaleId = game.walletIdOf(whale);
+        uint32 whaleId = game.walletIdOf_g3120(whale);
         for (uint256 i; i < logs.length; i++) {
             // The engine call also carries unindexed engine events (Advance, MinerWork, ...).
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2) continue;
@@ -226,7 +226,7 @@ contract LootboxOpenGoldens is DeployProtocol {
         Vm.Log[] memory logs = _fulfilAndOpen(uint256(keccak256(abi.encode("golden_word", uint256(3)))) | 1);
         assertTrue(game.boxIndexComplete(0), "opened");
 
-        uint32 whaleId = game.walletIdOf(whale);
+        uint32 whaleId = game.walletIdOf_g3120(whale);
         uint256 nO; uint256 nQ; uint256 nP;
         for (uint256 i; i < logs.length; i++) {
             // The engine call also carries unindexed engine events (Advance, MinerWork, ...).

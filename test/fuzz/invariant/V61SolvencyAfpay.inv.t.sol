@@ -60,7 +60,7 @@ contract V61SolvencyAfpay is DeployProtocol {
     function _aid(address a) internal returns (uint32 id) {
         id = _aidCache[a];
         if (id == 0) {
-            id = game.walletIdOf(a);
+            id = game.walletIdOf_g3120(a);
             if (id == 0) id = _giveWalletId(a);
             _aidCache[a] = id;
         }
@@ -125,7 +125,7 @@ contract V61SolvencyAfpay is DeployProtocol {
         address[] memory addrs = _unionTrackedAddrs();
         uint256 sum;
         for (uint256 i; i < addrs.length; i++) {
-            uint32 id = game.walletIdOf(addrs[i]);
+            uint32 id = game.walletIdOf_g3120(addrs[i]);
             if (id == 0) continue;
             uint256 packed = uint256(vm.load(address(game), keccak256(abi.encode(uint256(id), BALANCES_PACKED_SLOT))));
             // Claimable low half above the unpooled registration sentinel, plus the afking high half.
@@ -480,7 +480,7 @@ contract V61SolvencyAfpay is DeployProtocol {
     function _sumUnionHalves() internal view returns (uint256 sum) {
         address[] memory addrs = _unionTrackedAddrs();
         for (uint256 i; i < addrs.length; i++) {
-            uint256 packed = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(addrs[i])), BALANCES_PACKED_SLOT))));
+            uint256 packed = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf_g3120(addrs[i])), BALANCES_PACKED_SLOT))));
             sum += (uint128(packed) > 1 ? uint128(packed) - 1 : 0) + (packed >> 128);
         }
         sum += _degenesisObligations();
@@ -497,7 +497,7 @@ contract V61SolvencyAfpay is DeployProtocol {
         uint256 sum;
         for (uint256 i; i < extra.length; i++) {
             if (extra[i] == address(0)) continue;
-            uint256 packed = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(extra[i])), BALANCES_PACKED_SLOT))));
+            uint256 packed = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf_g3120(extra[i])), BALANCES_PACKED_SLOT))));
             sum += (uint128(packed) > 1 ? uint128(packed) - 1 : 0) + (packed >> 128);
         }
         address[3] memory infra = [ContractAddresses.VAULT, ContractAddresses.SDGNRS, ContractAddresses.GNRUS];
@@ -506,7 +506,7 @@ contract V61SolvencyAfpay is DeployProtocol {
             bool dup;
             for (uint256 j; j < extra.length; j++) if (extra[j] == infra[i]) dup = true;
             if (dup) continue;
-            uint256 packed = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(infra[i])), BALANCES_PACKED_SLOT))));
+            uint256 packed = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf_g3120(infra[i])), BALANCES_PACKED_SLOT))));
             sum += (uint128(packed) > 1 ? uint128(packed) - 1 : 0) + (packed >> 128);
         }
         sum += _degenesisObligations();
@@ -532,7 +532,7 @@ contract V61SolvencyAfpay is DeployProtocol {
     }
 
     function _grantDeityScoreBit(address who) internal {
-        bytes32 slot = keccak256(abi.encode(game.walletIdOf(who), uint256(MINTPACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(game.walletIdOf_g3120(who), uint256(MINTPACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         packed |= (uint256(1) << DEITY_SHIFT);
         vm.store(address(game), slot, bytes32(packed));

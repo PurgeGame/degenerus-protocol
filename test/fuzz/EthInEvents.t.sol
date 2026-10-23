@@ -109,7 +109,7 @@ contract EthInEventsTest is DeployProtocol {
             if (
                 logs[i].topics.length >= 2 &&
                 logs[i].topics[0] == sig &&
-                uint32(uint256(logs[i].topics[1])) == game.walletIdOf(player)
+                uint32(uint256(logs[i].topics[1])) == game.walletIdOf_g3120(player)
             ) {
                 (first, weiIn) = abi.decode(logs[i].data, (uint256, uint256));
                 return (first, weiIn, true);

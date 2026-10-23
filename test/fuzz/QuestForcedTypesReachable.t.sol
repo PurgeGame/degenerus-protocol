@@ -196,7 +196,7 @@ contract QuestForcedTypesReachableTest is DeployProtocol {
             }
         }
 
-        (uint8 lqType, , , , ) = quests.getPlayerLevelQuestView(game.walletIdOf(buyer));
+        (uint8 lqType, , , , ) = quests.getPlayerLevelQuestView(game.walletIdOf_g3120(buyer));
         if (lqType == QUEST_TYPE_DECIMATOR) {
             sawDecimator = true;
             if (windowOpen) sawDecimatorWhileWindowOpen = true;

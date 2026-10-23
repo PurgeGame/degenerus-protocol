@@ -96,7 +96,7 @@ contract WalletIdPhaseFGasTest is DeployProtocol {
     /// @dev Zero selects the caller; explicit IDs select another authorized account.
     function _acct(address caller, address account) private view returns (uint256) {
         if (caller == account) return 0;
-        return uint256(game.walletIdOf(account));
+        return uint256(game.walletIdOf_g3120(account));
     }
 
     function _acct(address, uint32 account) private pure returns (uint256) { return account; }
@@ -132,7 +132,7 @@ contract WalletIdPhaseFGasTest is DeployProtocol {
     /// @dev `holder` (the account's key or a smurf's owner) approves `operator` for `account`.
     function _approve(address holder, address account, address operator) private {
         bytes memory data = abi.encodeWithSignature("setOperatorApproval(uint32,address,bool)",
-                holder == account ? 0 : uint256(game.walletIdOf(account)), operator, true);
+                holder == account ? 0 : uint256(game.walletIdOf_g3120(account)), operator, true);
         _call(holder, address(game), 0, data);
     }
 

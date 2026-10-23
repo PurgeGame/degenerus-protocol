@@ -175,7 +175,7 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
         uint32 expectedId = uint32(_walletCount());
         assertEq(_gameId(p), 0);
 
-        vm.expectCall(address(game), abi.encodeCall(DegenerusGame.registerWallet, (p, true)), 1);
+        vm.expectCall(address(game), abi.encodeCall(DegenerusGame.registerWallet_g9539, (p, true)), 1);
         vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleDecimator, (expectedId, BURN)), 1);
         vm.expectCall(address(game), abi.encodeCall(DegenerusGame.consumeDecimatorBoon, (expectedId)), 1);
         vm.expectCall(address(game), abi.encodeWithSelector(DegenerusGame.recordDecBurn_g5574.selector, expectedId, lvl), 1);
@@ -202,7 +202,7 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
         vm.recordLogs();
         vm.record();
         vm.prank(address(coin));
-        uint32 got = game.registerWallet(p, true);
+        uint32 got = game.registerWallet_g9539(p, true);
         (, bytes32[] memory writes) = vm.accesses(address(game));
         assertEq(got, id);
         assertEq(writes.length, 0, "no Game write for an existing wallet");
@@ -210,7 +210,7 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
         assertEq(n, 0);
 
         uint256 walletsBefore = _walletCount();
-        vm.expectCall(address(game), abi.encodeCall(DegenerusGame.registerWallet, (p, true)), 1);
+        vm.expectCall(address(game), abi.encodeCall(DegenerusGame.registerWallet_g9539, (p, true)), 1);
         vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleDecimator, (id, BURN)), 1);
         vm.recordLogs();
         vm.prank(p);
@@ -266,7 +266,7 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
         _finishSubscriptionWindow();
         _subscribeLootbox(p, 1);
         _deliverDay(0xD3C1);
-        (, bool afking) = quests.effectiveBaseStreakAndAfking(id);
+        (, bool afking) = quests.effectiveBaseStreakAndAfking_g2654(id);
         assertTrue(afking, "fixture: mid afking run");
 
         // A fresh quest day whose slot 1 is the Decimator quest (an afker's slot 1 is never locked).
@@ -327,7 +327,7 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
         vm.recordLogs();
         vm.record();
         vm.prank(address(coin));
-        uint32 sid = game.registerWallet(SDGNRS, true);
+        uint32 sid = game.registerWallet_g9539(SDGNRS, true);
         (, bytes32[] memory writes) = vm.accesses(address(game));
         assertEq(sid, 2);
         assertEq(writes.length, 0, "the hook writes nothing for sDGNRS");
@@ -341,7 +341,7 @@ contract FlipDecimatorWalletIdsTest is DeployProtocol {
         uint24 lvl = _openWindow();
         uint256 walletsBefore = _walletCount();
 
-        vm.expectCall(address(game), abi.encodeCall(DegenerusGame.registerWallet, (SDGNRS, true)), 1);
+        vm.expectCall(address(game), abi.encodeCall(DegenerusGame.registerWallet_g9539, (SDGNRS, true)), 1);
         vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleDecimator, (uint32(2), 8_000)), 1);
         vm.expectCall(address(game), abi.encodeCall(DegenerusGame.consumeDecimatorBoon, (uint32(2))), 1);
         vm.expectCall(address(game), abi.encodeWithSelector(DegenerusGame.recordDecBurn_g5574.selector, uint32(2), lvl), 1);

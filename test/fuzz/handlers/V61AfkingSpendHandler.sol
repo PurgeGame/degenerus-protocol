@@ -137,7 +137,7 @@ contract V61AfkingSpendHandler is Test {
         if (game.gameOver()) return;
         uint256 amt = bound(amtSeed, 0.01 ether, 100 ether);
         if (amt > currentActor.balance) return;
-        uint32 actorId = game.walletIdOf(currentActor);
+        uint32 actorId = game.walletIdOf_g3120(currentActor);
         vm.prank(currentActor);
         try game.depositAfkingFunding{value: amt}(actorId) {
             ghost_afkingDeposited += amt;
@@ -208,7 +208,7 @@ contract V61AfkingSpendHandler is Test {
         vm.prank(address(game));
         try coin.mintForGame(deity, SMITE_BURN) {} catch {}
         uint256 flipBefore = coin.balanceOf(deity);
-        uint32 smiteeId = game.walletIdOf(smitee);
+        uint32 smiteeId = game.walletIdOf_g3120(smitee);
         if (smiteeId == 0) return;
         vm.prank(deity);
         try game.smite(deityId, smiteeId) {
@@ -228,7 +228,7 @@ contract V61AfkingSpendHandler is Test {
         address target = actors[bound(targetSeed, 0, actors.length - 1)];
         vm.prank(address(game));
         try coin.mintForGame(currentActor, DECURSE_BURN) {} catch {}
-        uint32 targetId = game.walletIdOf(target);
+        uint32 targetId = game.walletIdOf_g3120(target);
         if (targetId == 0) return;
         vm.prank(currentActor);
         try game.decurse(targetId) {} catch {}
@@ -271,7 +271,7 @@ contract V61AfkingSpendHandler is Test {
     // =========================================================================
 
     function _grantDeityScoreBit(address who) internal {
-        bytes32 slot = keccak256(abi.encode(game.walletIdOf(who), uint256(MINTPACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(game.walletIdOf_g3120(who), uint256(MINTPACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         packed |= (uint256(1) << DEITY_SHIFT);
         vm.store(address(game), slot, bytes32(packed));
@@ -282,7 +282,7 @@ contract V61AfkingSpendHandler is Test {
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2) continue;
             if (logs[i].topics[0] != AFKING_SPENT_SIG) continue;
-            if (logs[i].topics[1] != bytes32(uint256(game.walletIdOf(who)))) continue;
+            if (logs[i].topics[1] != bytes32(uint256(game.walletIdOf_g3120(who)))) continue;
             return abi.decode(logs[i].data, (uint256));
         }
         return 0;

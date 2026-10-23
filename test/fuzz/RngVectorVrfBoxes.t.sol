@@ -351,7 +351,7 @@ contract RngVectorCompactBoxFreeze is DegenesisHarness {
         assertEq(mockVRF.lastRequestId(), req0 + 1, "request out");
         vm.recordLogs();
         _drive(uint256(keccak256("cb-neighbours")));
-        bytes32[] memory got = _settlementsOf(vm.getRecordedLogs(), game.walletIdOf(buyers[0]));
+        bytes32[] memory got = _settlementsOf(vm.getRecordedLogs(), game.walletIdOf_g3120(buyers[0]));
         assertEq(got.length, 3, "three neighbours settled, one event each");
         assertTrue(got[0] != got[1] || got[1] != got[2], "neighbours draw distinct seeds");
     }

@@ -6,9 +6,8 @@ import {CrapsPreferenceLib} from "./libraries/CrapsPreferenceLib.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
 
 interface ICrapsStorageReader {
-    function extsload_g8132(bytes32 slot) external view returns (bytes32);
 
-    function extsload(bytes32 slot) external view returns (bytes32);
+    function extsload_g8132(bytes32 slot) external view returns (bytes32);
     function extsload(bytes32[] calldata slots) external view returns (bytes32[] memory);
 }
 

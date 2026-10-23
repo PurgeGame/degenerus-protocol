@@ -48,10 +48,8 @@ interface IDeityBoonDataSource {
     /// @notice Get the finalized RNG word for a game day (zero until available).
     function rngWordForDay(uint24 day) external view returns (uint256);
 
-    function walletIdOf_g3120(address player) external view returns (uint32);
-
     /// @notice The wallet ID of `player` (0 when unregistered).
-    function walletIdOf(address player) external view returns (uint32);
+    function walletIdOf_g3120(address player) external view returns (uint32);
 }
 
 /// @title DeityBoonViewer

@@ -154,7 +154,7 @@ contract LootboxEvLifecycleGasTest is DeployProtocol {
     }
     function test_Gas_NestedEthSpin() public {
         host.seedAccount(PLAYER, 0, true);
-        uint32 id = host.walletIdOf(PLAYER);
+        uint32 id = host.walletIdOf_g3120(PLAYER);
         uint48 buffer = host.writeBuffer();
         for (uint256 w = 2; ; ++w) {
             uint256 root = EntropyLib.hash4(0x5175657565644f72646572, w, buffer, 0);

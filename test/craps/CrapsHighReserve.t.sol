@@ -74,7 +74,7 @@ contract CrapsHighReserveTest is CrapsPins {
     function _start(uint256 word, uint256 awards) internal {
         uint256[] memory field = new uint256[](awards);
         // Repeated awards to an existing high entrant must never buy more raffle tickets.
-        for (uint256 i; i < awards; ++i) field[i] = uint256(game.registerWallet(ALICE, true)) | (uint256(1) << 180);
+        for (uint256 i; i < awards; ++i) field[i] = uint256(game.registerWallet_g9539(ALICE, true)) | (uint256(1) << 180);
         vm.startPrank(ContractAddresses.GAME);
         api.prepareJackpotBattle(2, word);
         api.appendJackpotBattle(field, 0, true);
@@ -105,7 +105,7 @@ contract CrapsHighReserveTest is CrapsPins {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(table) || logs[i].topics[0] != DRAW_EVENT) continue;
             assertEq(uint256(logs[i].topics[1]), slot);
-            assertEq(uint256(logs[i].topics[2]), uint256(winner == address(0) ? 0 : game.walletIdOf(winner)));
+            assertEq(uint256(logs[i].topics[2]), uint256(winner == address(0) ? 0 : game.walletIdOf_g3120(winner)));
             (uint32 count, uint256 paid, uint256 held) = abi.decode(logs[i].data, (uint32, uint256, uint256));
             assertEq(count, n); assertEq(paid, amount); assertEq(held, balance);
             ++seen;
@@ -172,7 +172,7 @@ contract CrapsHighReserveTest is CrapsPins {
         uint256 action = table.dayStaked(day);
         vm.recordLogs(); _finish(1);
         _assertDrawLog(vm.getRecordedLogs(), 1, ContractAddresses.VAULT, 2_500, 0);
-        assertEq(CrapsLensReader.highRollerDrawOf(address(cold), slot).nominee, game.walletIdOf(ContractAddresses.VAULT));
+        assertEq(CrapsLensReader.highRollerDrawOf(address(cold), slot).nominee, game.walletIdOf_g3120(ContractAddresses.VAULT));
         assertEq(CrapsLensReader.highRollerReserve(address(cold)), 0);
         assertGe(coinflip.staked(ContractAddresses.VAULT), 2_500);
         assertEq(flip.compLane(), comps, "reserve award generated comps");
@@ -187,7 +187,7 @@ contract CrapsHighReserveTest is CrapsPins {
         _lock(50_000); _start(_word(true), 0);
         vm.recordLogs(); _finish(WHOLE_FIELD);
         _assertDrawLog(vm.getRecordedLogs(), 1, ALICE, 2_500, 0);
-        assertEq(CrapsLensReader.highRollerDrawOf(address(cold), slot).nominee, game.walletIdOf(ALICE));
+        assertEq(CrapsLensReader.highRollerDrawOf(address(cold), slot).nominee, game.walletIdOf_g3120(ALICE));
     }
 
     function test_missAndEmptyDayCarryIntoTheNextWinner() public {
@@ -218,7 +218,7 @@ contract CrapsHighReserveTest is CrapsPins {
     }
 
     function test_consumedHighPassQualifiesWithoutAnotherPayment() public {
-        game.registerWallet(ALICE, true);
+        game.registerWallet_g9539(ALICE, true);
         table.setPassCredits(ALICE, 0, 1);
         vm.prank(ALICE); table.applyCrapsPasses(day + 1, 1, true, 0);
         table.setPassCredits(ContractAddresses.SDGNRS, 1, 0);
@@ -227,7 +227,7 @@ contract CrapsHighReserveTest is CrapsPins {
         assertEq(flip.burned(ALICE), 0);
         _lock(50_000); _start(_word(true), 0); _finish(1);
         assertEq(CrapsLensReader.highRollerDrawOf(address(cold), slot).eligible, 1);
-        assertEq(CrapsLensReader.highRollerDrawOf(address(cold), slot).nominee, game.walletIdOf(ALICE));
+        assertEq(CrapsLensReader.highRollerDrawOf(address(cold), slot).nominee, game.walletIdOf_g3120(ALICE));
     }
 
     function test_lateEntryUpgradeAndDirectHookCannotChangeEligibility() public {

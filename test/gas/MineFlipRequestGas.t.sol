@@ -13,6 +13,7 @@ import {Test} from "forge-std/Test.sol";
 import {RequestCostCoordinator, RequestStethEnvelope} from "../helpers/RequestCostCoordinator.sol";
 import {VRFRandomWordsRequest, IVRFCoordinator} from "../../contracts/interfaces/IVRFCoordinator.sol";
 import {MockStETH} from "../../contracts/mocks/MockStETH.sol";
+import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MineFlipGasBounds as Bounds} from "../../contracts/libraries/MineFlipGasBounds.sol";
 import {DegenerusGameRngUtils} from "../../contracts/modules/DegenerusGameRngUtils.sol";
 import {GameFunding} from "../helpers/GameFunding.sol";
@@ -100,7 +101,7 @@ contract RequestGameSeeder is DegenerusGame {
 
 contract RequestFlipSeeder is CoinflipStakeSetter {
     function seedBacking(uint24 latest, uint8 mode) external {
-        uint32 id = degenerusGame.walletIdOf(ContractAddresses.SDGNRS);
+        uint32 id = degenerusGame.walletIdOf_g3120(ContractAddresses.SDGNRS);
         PlayerCoinflipState storage s = playerState[id];
         s.claimableStored = mode == 0 ? 1_000_000 : mode == 1 ? 0 : 1_000;
         s.lastClaim = latest;
@@ -367,12 +368,16 @@ contract MineFlipRequestGasTest is DeployProtocol {
         assertEq(coordinator.requests(address(game)), 0);
         assertTrue(game.rngComplete(), "old read remains certified");
     }
-    function test_MultiplierDefersContinuationButNeverFirstRequest() public {
+    function test_MultiplierDefersContinuationAndScaledMinimumRequiresFundedRetry() public {
         this.configure(Scenario.Arm);
         game.mineFlip{gas: Bounds.RNG_MIDDAY_REQUEST + REQUEST_FRAME_GAS}(20_000);
         assertEq(table.binding(slot), 1);
         assertEq(coordinator.requests(address(game)), 0, "caller doubled continuation reserve");
+        vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
         game.mineFlip{gas: Bounds.RNG_MIDDAY_REQUEST + REQUEST_FRAME_GAS}(type(uint32).max);
+        assertEq(coordinator.requests(address(game)), 0);
+        assertEq(table.binding(slot), 1, "refusal preserves prior arm");
+        game.mineFlip{gas: Bounds.RNG_MIDDAY_REQUEST + REQUEST_FRAME_GAS}(0);
         _assertRequested();
     }
     function test_ExtremeMultiplierStillArmsFirst() public {
@@ -392,10 +397,14 @@ contract MineFlipRequestGasTest is DeployProtocol {
         assertEq(settling, 0);
         assertEq(escrow, burned, "unadmitted close cannot mutate escrow");
     }
-    function test_HeavyCloseCanResumeWithMaximumMultiplier() public {
+    function test_HeavyCloseScaledMinimumRefusesAtomicallyThenResumes() public {
         this.configure(Scenario.ArmRedeem);
         game.mineFlip{gas: 1_000_000}(0);
+        vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
         game.mineFlip{gas: Bounds.RNG_MIDDAY_REQUEST + Bounds.RNG_REDEMPTION_CLOSE + REQUEST_FRAME_GAS}(type(uint32).max);
+        (uint32 open, uint32 settling,, uint256 escrow) = sdgnrs.redemptionBatchState();
+        assertEq(open, 1); assertEq(settling, 0); assertEq(escrow, burned);
+        game.mineFlip{gas: Bounds.RNG_MIDDAY_REQUEST + Bounds.RNG_REDEMPTION_CLOSE + REQUEST_FRAME_GAS}(0);
         _assertRequested();
     }
     function test_FundedHeavyContinuationFits() public {

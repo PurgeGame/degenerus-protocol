@@ -241,7 +241,7 @@ contract DeadVrfClaimGas is DeployProtocol {
         for (uint256 i; i < refs.length; ++i) {
             refs[i] = i << 64;
         }
-        uint32 ownerId = game.walletIdOf(OWNER);
+        uint32 ownerId = game.walletIdOf_g3120(OWNER);
         bytes memory payload = abi.encodeCall(game.claimDeadVrf, (ownerId, refs));
         uint256 intrinsic = 21_000;
         for (uint256 i; i < payload.length; ++i) {

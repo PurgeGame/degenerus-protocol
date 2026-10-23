@@ -96,7 +96,7 @@ contract DegenesisVaultSpend is DegenesisFixture {
 
     function test_DirectGovernanceSpendUsesOnlyVaultBudgetWithoutProposal() public {
         address recipient = _player("direct-recipient", 0);
-        uint32 id = game.walletIdOf(recipient);
+        uint32 id = game.walletIdOf_g3120(recipient);
         DegenerusVaultShare token = ownerGovernance.dgve();
         uint256 amount = token.balanceOf(owner);
         vm.startPrank(owner);
@@ -261,7 +261,7 @@ contract DegenesisVaultSpend is DegenesisFixture {
 
     function _recipient() internal returns (address who, uint32 id) {
         who = _player("gift-recipient", 3 ether);
-        id = game.walletIdOf(who);
+        id = game.walletIdOf_g3120(who);
         _buyTickets(who, 1);
         _seedClaimable(id, 1 ether);
         vm.prank(who);

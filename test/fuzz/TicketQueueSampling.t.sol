@@ -25,8 +25,8 @@ contract TicketQueueSamplingTest is DeployProtocol {
             entropy = EntropyLib.hash2(entropy, p);
             uint256 a = (entropy >> 64) % COUNT;
             uint256 b = (a + 1 + (entropy >> 128) % 7) % COUNT;
-            assertEq(tickets[p], game.walletIdOf(address(uint160(1000 + a))));
-            assertEq(tickets[p + 4], game.walletIdOf(address(uint160(1000 + b))));
+            assertEq(tickets[p], game.walletIdOf_g3120(address(uint160(1000 + a))));
+            assertEq(tickets[p + 4], game.walletIdOf_g3120(address(uint160(1000 + b))));
             assertTrue(tickets[p] != tickets[p + 4], "the second lane is distinct");
         }
     }

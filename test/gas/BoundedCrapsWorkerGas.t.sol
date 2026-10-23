@@ -23,7 +23,7 @@ contract BoundedCrapsWorkerGasTest is CrapsPins, BoundedGasProbe {
         day = GameTimeLib.currentDayIndex() + 1;
         for (uint256 i; i < count; ++i) {
             address player = address(uint160(0xCA0000 + i));
-            game.registerWallet(player, true);
+            game.registerWallet_g9539(player, true);
             game.setScore(player, table.SYBIL_SCORE_FLOOR());
             vm.prank(player); table.buyFutureCrapsDays(day, 1, false, uint32(0));
         }

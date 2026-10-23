@@ -325,7 +325,7 @@ abstract contract BafBracketFixture is DeployProtocol {
 
     /// @dev The wallet ID of a fixture wallet (0 when unregistered).
     function _idOf(address wallet) internal view returns (uint32) {
-        return host.walletIdOf(wallet);
+        return host.walletIdOf_g3120(wallet);
     }
 
     function _traitHolder(uint256 i) internal pure returns (address) {

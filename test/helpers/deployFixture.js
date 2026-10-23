@@ -260,17 +260,17 @@ function getConstructorArgs(key, predicted, affiliateBootstrap, finalizeIcons) {
 
 /**
  * Register `addr` in the Game's wallet table through the Coinflip contract (an allow-listed
- * `registerWallet` caller) and return its ID; an existing ID is returned unchanged.
+ * `registerWallet_g9539` caller) and return its ID; an existing ID is returned unchanged.
  */
 export async function giveWalletId(game, addr) {
-  const existing = await game.walletIdOf(addr);
+  const existing = await game.walletIdOf_g3120(addr);
   if (existing !== 0n) return existing;
   const registrar = _registrarByGame.get((await game.getAddress()).toLowerCase());
   if (!registrar) throw new Error("Unknown Game fixture: cannot resolve its wallet registrar");
   await hre.network.provider.send("hardhat_setBalance", [registrar, "0x1000000000000000000"]);
   await hre.network.provider.send("hardhat_impersonateAccount", [registrar]);
   const signer = await hre.ethers.getSigner(registrar);
-  await game.connect(signer).registerWallet(addr, true);
+  await game.connect(signer).registerWallet_g9539(addr, true);
   await hre.network.provider.send("hardhat_stopImpersonatingAccount", [registrar]);
-  return game.walletIdOf(addr);
+  return game.walletIdOf_g3120(addr);
 }

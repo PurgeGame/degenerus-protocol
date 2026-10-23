@@ -101,7 +101,7 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
                 ++works;
             }
             if (logs[i].emitter == address(coinflip) && logs[i].topics.length > 1
-                && logs[i].topics[0] == STAKE_UPDATED && logs[i].topics[1] == bytes32(uint256(game.walletIdOf(keeper)))) {
+                && logs[i].topics[0] == STAKE_UPDATED && logs[i].topics[1] == bytes32(uint256(game.walletIdOf_g3120(keeper)))) {
                 ++credits;
             }
         }
@@ -182,14 +182,14 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         uint32 day = _openBatchId();
         address[] memory players = _newBurners(3, sdgnrs.totalSupply() * 16 / 1000);
         _resolve(day, 175, 99);
-        (uint128 thirdExpected,) = sdgnrs.pendingRedemptions(game.walletIdOf(players[2]), day);
+        (uint128 thirdExpected,) = sdgnrs.pendingRedemptions(game.walletIdOf_g3120(players[2]), day);
         // Two maximum beneficiaries fit 4M; the third's whole admission then does not.
         uint256 allowance = _oneClaimAllowance();
         (bool done, uint256 charged, uint256 quote) = _drain(allowance);
         assertFalse(done); assertLe(charged, 4_000_000);
-        (uint128 first,) = sdgnrs.pendingRedemptions(game.walletIdOf(players[0]), day);
-        (uint128 second,) = sdgnrs.pendingRedemptions(game.walletIdOf(players[1]), day);
-        (uint128 third,) = sdgnrs.pendingRedemptions(game.walletIdOf(players[2]), day);
+        (uint128 first,) = sdgnrs.pendingRedemptions(game.walletIdOf_g3120(players[0]), day);
+        (uint128 second,) = sdgnrs.pendingRedemptions(game.walletIdOf_g3120(players[1]), day);
+        (uint128 third,) = sdgnrs.pendingRedemptions(game.walletIdOf_g3120(players[2]), day);
         assertEq(first, 0); assertGt(second, 0); assertEq(third, thirdExpected); assertGt(third, 0);
         uint256 beforeReserve = sdgnrs.pendingRedemptionEthValue();
         (done, charged,) = _drain(1_000_000);
@@ -472,8 +472,8 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         address[] memory players = _newBurners(67, 1 ether);
         _resolve(day, 100, 99);
         for (uint256 j; j < 22; ++j) _settleOneClaim();
-        (uint128 settled,) = sdgnrs.pendingRedemptions(game.walletIdOf(players[21]), day);
-        (uint128 next,) = sdgnrs.pendingRedemptions(game.walletIdOf(players[22]), day);
+        (uint128 settled,) = sdgnrs.pendingRedemptions(game.walletIdOf_g3120(players[21]), day);
+        (uint128 next,) = sdgnrs.pendingRedemptions(game.walletIdOf_g3120(players[22]), day);
         assertEq(settled, 0, "harness: the first 22 claims settled in FIFO order");
         assertGt(next, 0, "harness: 45 dust claims remain");
         // A caller may fund a safe checkpoint. The remaining physical gas admits
@@ -499,7 +499,7 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
     function test_OversizedFirstBetWaitsAndNextFreshCallSettlesIt() public {
         uint32 day = _openBatchId();
         _newBurners(45, 1 ether);
-        game.placeDegeneretteBet{value: 0.125 ether}(game.walletIdOf(bob), 0, 0.005 ether, 25, 0);
+        game.placeDegeneretteBet{value: 0.125 ether}(game.walletIdOf_g3120(bob), 0, 0.005 ether, 25, 0);
         _resolve(day, 100, 99); _commitWord(99);
         uint48 index = RecyclingState.readBuffer(address(game));
         // The smallest allowance that completes the redemption cohort leaves less than the last

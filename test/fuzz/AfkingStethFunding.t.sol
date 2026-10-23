@@ -36,7 +36,7 @@ contract AfkingStethFundingTest is DeployProtocol, NativeFailureExport {
     function _aid(address a) internal returns (uint32 id) {
         id = _aidCache[a];
         if (id == 0) {
-            id = game.walletIdOf(a);
+            id = game.walletIdOf_g3120(a);
             if (id == 0) id = _giveWalletId(a);
             _aidCache[a] = id;
         }
@@ -76,8 +76,13 @@ contract AfkingStethFundingTest is DeployProtocol, NativeFailureExport {
     }
 
     function _work() internal returns (MineFlipGas.Result memory result) {
-        result = host.subWork{gas: WORK_GAS}(WORK_GAS);
-        assertTrue(result.done, "worker drains admitted cohort");
+        // A hostile token may spend the whole offered allowance. Its failed
+        // member is checkpointed; the next funded member resumes next call.
+        for (uint256 i; i < 4 && !result.done; ++i) {
+            result = host.subWork{gas: WORK_GAS}(WORK_GAS);
+            assertTrue(result.progressed || result.done, "funded retry must progress");
+        }
+        assertTrue(result.done, "bounded retries drain the cohort");
     }
 
     function _add(address player, bool tickets, uint8 quantity, uint256 prepaid, uint256 claimable) internal {
@@ -170,7 +175,7 @@ contract AfkingStethFundingTest is DeployProtocol, NativeFailureExport {
     ///         forfeited: no FLIP reaches the member or its upline.
     function test_UnfundedExpiryForfeitsUnsettledRewards() public {
         _add(PLAYER, true, 1, host.price() * 2, 0);
-        uint32 id = game.walletIdOf(PLAYER);
+        uint32 id = game.walletIdOf_g3120(PLAYER);
         _work();
         assertEq(host.stateOf(PLAYER).checkpointDay + 1, host.endpoint(), "one unsettled day is owed");
         host.setBalances(PLAYER, 0, 0);
@@ -278,6 +283,22 @@ contract AfkingStethFundingTest is DeployProtocol, NativeFailureExport {
         }
     }
 
+    function test_InnerReadUnderfundingCannotExpireMemberAndRetrySucceeds() public {
+        _add(PLAYER, false, 1, 0, 1);
+        mockStETH.mint(PLAYER, 1 ether); _authorize(PLAYER, 1 ether);
+        address implementation = address(0xF007);
+        vm.etch(implementation, address(mockStETH).code);
+        vm.etch(address(mockStETH), address(new SelectorFaultProxy(implementation, IStETH.balanceOf.selector, 12)).code);
+        vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
+        host.subWork{gas: WORK_GAS}(MineFlipGas.budget(WORK_GAS, 10_000, true));
+        assertGt(host.memberOf(PLAYER), 0, "nested underfunding preserves membership");
+        vm.etch(address(mockStETH), implementation.code);
+        assertEq(mockStETH.balanceOf(PLAYER), 1 ether);
+        _work();
+        assertGt(host.memberOf(PLAYER), 0, "funded retry keeps the subscription");
+        assertLt(mockStETH.balanceOf(PLAYER), 1 ether, "retry funds the buy");
+    }
+
     function test_OuterPullUnderfundingCannotExpireMember() public {
         _add(PLAYER, false, 1, 0, 1);
         mockStETH.mint(PLAYER, 1 ether); _authorize(PLAYER, 1 ether);
@@ -382,7 +403,7 @@ contract AfkingStethFundingTest is DeployProtocol, NativeFailureExport {
         vm.prank(source);
         mockStETH.approve(address(game), type(uint256).max);
         _expectNoTokenCalls();
-        uint32 subscriber = game.walletIdOf(PLAYER);
+        uint32 subscriber = game.walletIdOf_g3120(PLAYER);
         vm.prank(address(game));
         vm.expectRevert(abi.encodeWithSignature("AfkingStethPullFailed()"));
         game.pullAfkingSteth(subscriber, source, 1);
@@ -448,7 +469,7 @@ contract AfkingStethFundingTest is DeployProtocol, NativeFailureExport {
     function test_AtomicPullRechecksPayee() public {
         _add(PLAYER, true, 1, 0, 0);
         _authorize(NEXT, type(uint256).max);
-        uint32 subscriber = game.walletIdOf(PLAYER);
+        uint32 subscriber = game.walletIdOf_g3120(PLAYER);
         vm.prank(address(game));
         vm.expectRevert(abi.encodeWithSignature("AfkingStethPullFailed()"));
         game.pullAfkingSteth(subscriber, NEXT, 1);
@@ -465,21 +486,21 @@ contract AfkingStethFundingTest is DeployProtocol, NativeFailureExport {
         assertEq(mockStETH.balanceOf(PLAYER), 1 ether);
     }
 
-    function test_ExtremeCalibrationFundsExactlyOneSubscriberThenResumes() public {
+    function test_ExtremeCalibrationCannotBypassDependencyMinimumAndRetrySucceeds() public {
         _add(PLAYER, true, 1, 0, 0);
         _add(NEXT, true, 1, host.price(), 0);
         mockStETH.mint(PLAYER, 1 ether);
         _authorize(PLAYER, type(uint256).max);
         uint256 budget = MineFlipGas.budget(WORK_GAS, type(uint32).max, true);
         MineFlipGas.Result memory result = host.subWork{gas: WORK_GAS}(budget);
-        assertTrue(result.progressed); // empty box section -> ticket phase is a durable checkpoint
+        assertTrue(result.progressed); // Empty box section is still mandatory progress.
+        vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
+        host.subWork{gas: WORK_GAS}(budget);
+        assertGt(host.memberOf(PLAYER), 0, "underfunding cannot expire a subscriber");
+        assertEq(mockStETH.balanceOf(PLAYER), 1 ether);
         assertEq(host.entries(PLAYER), 0);
-        result = host.subWork{gas: WORK_GAS}(budget);
-        assertTrue(result.progressed);
+        _work();
         assertGt(host.entries(PLAYER), 0);
-        assertEq(host.entries(NEXT), 0);
-        result = host.subWork{gas: WORK_GAS}(budget);
-        assertTrue(result.progressed);
         assertGt(host.entries(NEXT), 0);
     }
 
@@ -515,6 +536,32 @@ contract AfkingStethFundingTest is DeployProtocol, NativeFailureExport {
             require(vm.revertToState(snap));
             vm.deleteStateSnapshot(snap);
         }
+    }
+
+    function test_NativeEveryStethFundingSite() public {
+        uint8[6] memory modes = [uint8(1), 2, 8, 9, 10, 12];
+        address implementation = address(0xF006);
+        vm.etch(implementation, address(mockStETH).code);
+        NativeFailureProbe probe = new NativeFailureProbe();
+        for (uint256 site; site < 6; ++site) for (uint256 i; i < modes.length; ++i) {
+            this.exportNativeStethFundingCase(site, modes[i], implementation, probe);
+        }
+    }
+
+    function exportNativeStethFundingCase(uint256 site, uint8 mode, address implementation, NativeFailureProbe probe) external {
+        require(msg.sender == address(this));
+        bytes4[6] memory selectors = [IStETH.balanceOf.selector, IStETH.getSharesByPooledEth.selector,
+            IStETH.getPooledEthByShares.selector, IStETH.sharesOf.selector, IStETH.allowance.selector,
+            IStETH.transferSharesFrom.selector];
+        uint256 snap = vm.snapshotState();
+        _add(PLAYER, true, 1, 0, 1);
+        _add(NEXT, true, 1, host.price(), 0);
+        mockStETH.mint(PLAYER, 1 ether); _authorize(PLAYER, 1 ether);
+        vm.etch(address(mockStETH), address(new SelectorFaultProxy(implementation, selectors[site], mode)).code);
+        _nativeCheckedFixture(string.concat("steth-fund-", vm.toString(site), "-", vm.toString(mode)),
+            address(this), address(probe), abi.encodeCall(probe.invoke,
+                (address(game), abi.encodeCall(host.subWork, (WORK_GAS)), WORK_GAS)));
+        require(vm.revertToState(snap)); vm.deleteStateSnapshot(snap);
     }
 
 }

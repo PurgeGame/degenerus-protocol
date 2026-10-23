@@ -101,18 +101,18 @@ contract CoverageGap222 is DeployProtocol {
 
     /// @notice Exercise the setOperatorApproval path and observe effect.
     /// @dev Closes gaps: setOperatorApproval (write) + resolveAccount (read).
-    ///      The approval is stored per account ID; `resolveAccount(id, operator)` reports it.
+    ///      The approval is stored per account ID; `resolveAccount_g502(id, operator)` reports it.
     function test_gap_setOperatorApproval_observable() public {
         address operator = makeAddr("operator");
-        uint32 id = game.walletIdOf(buyer);
+        uint32 id = game.walletIdOf_g3120(buyer);
         vm.prank(buyer);
         game.setOperatorApproval(0, operator, true);
-        (, , bool approved) = game.resolveAccount(id, operator);
+        (, , bool approved) = game.resolveAccount_g502(id, operator);
         assertTrue(approved, "operator approved");
 
         vm.prank(buyer);
         game.setOperatorApproval(0, operator, false);
-        (, , bool approvedAfter) = game.resolveAccount(id, operator);
+        (, , bool approvedAfter) = game.resolveAccount_g502(id, operator);
         assertFalse(approvedAfter, "operator revoked");
     }
 

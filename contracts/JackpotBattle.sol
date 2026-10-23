@@ -18,7 +18,6 @@ import {GameTimeLib} from "./libraries/GameTimeLib.sol";
 
 interface IGameCrapsPending {
 
-
     function setCrapsRngPending_g1406(uint48 index, bool pending) external;
 }
 
@@ -219,8 +218,6 @@ contract JackpotBattle is CrapsBattleStorage {
         }
         revert BadJackpotField();
     }
-
-
 
     function registerRngSlot_g709(uint48 index, uint64 slot, bytes32 key) external {
         if (msg.sender != address(this)) revert OnlyTableSelf();
@@ -567,8 +564,6 @@ contract JackpotBattle is CrapsBattleStorage {
             return day * _BONUS_SLOTS_PER_DAY;
         }
     }
-
-
 
     /// @dev Self-only finalization executes atomically inside the last seat.
     function finalizeBattle_g3665(Window calldata w, uint256 board, uint256 word) external {
@@ -1056,10 +1051,7 @@ contract JackpotBattle is CrapsBattleStorage {
         return _jackpotFinishWindowTerms(day, period, w, _highMultOf(word));
     }
 
-    // Low-selector protocol entry; the original ABI and guarded implementation remain.
-    function runCrapsMaintenance_g10712(uint256 allowance) external returns (MineFlipGas.Result memory result) { return runCrapsMaintenance(allowance); }
-
-    function runCrapsMaintenance(uint256 allowance) public returns (MineFlipGas.Result memory result) {
+    function runCrapsMaintenance_g10712(uint256 allowance) external returns (MineFlipGas.Result memory result) {
         if (msg.sender != _GAME) revert OnlyGame();
         return _keepScheduled(allowance);
     }

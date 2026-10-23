@@ -70,7 +70,7 @@ contract RedemptionAccounting is RedemptionFixture {
             if (!_retained(id)) {
                 // A retired batch finished settling before its slot was reused: nothing remains.
                 for (uint256 a; a < handler.getActorCount(); ++a) {
-                    (uint128 left,) = sdgnrs.pendingRedemptions(game.walletIdOf(handler.getActor(a)), id);
+                    (uint128 left,) = sdgnrs.pendingRedemptions(game.walletIdOf_g3120(handler.getActor(a)), id);
                     assertEq(left, 0, "retired batch leaves no claim");
                 }
                 continue;
@@ -80,7 +80,7 @@ contract RedemptionAccounting is RedemptionFixture {
             for (uint256 a; a < handler.getActorCount(); ++a) {
                 address actor = handler.getActor(a);
                 if (id != open || !handler.claimed(id, actor)) recorded += handler.submitted(id, actor);
-                (uint128 pending,uint16 score) = sdgnrs.pendingRedemptions(game.walletIdOf(actor), id);
+                (uint128 pending,uint16 score) = sdgnrs.pendingRedemptions(game.walletIdOf_g3120(actor), id);
                 if (handler.claimed(id, actor)) { assertEq(pending, 0); assertEq(score, 0); }
                 else {
                     assertEq(pending, handler.submitted(id, actor));

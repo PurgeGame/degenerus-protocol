@@ -16,13 +16,11 @@ import {GameTimeLib} from "../libraries/GameTimeLib.sol";
 
 interface IGameCrapsWorkStage {
 
-
     function rngConsumerStage_g379() external view returns (uint8);
-    function registerWallet_g9539(address owner, bool allocate) external returns (uint32);
 
     /// @notice `owner`'s Game wallet ID; with `allocate`, a new wallet is registered, otherwise
     ///         an unregistered one returns zero.
-    function registerWallet(address owner, bool allocate) external returns (uint32);
+    function registerWallet_g9539(address owner, bool allocate) external returns (uint32);
 }
 
 /// @dev Shared layout for the table and its pinned jackpot lifecycle delegate.
@@ -656,19 +654,14 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
         _storeDaySeat(daySlot, id, word | bit);
     }
 
-
-
     /// @notice Who may OPEN a custom battle. Joining one an authorized creator opened is free to
     ///         anyone who clears its terms, and the bonus windows are the protocol's own door.
     mapping(address => bool) internal _battleCreator;
-
-
 
     /// @dev A battle's high-roller sideboard — see the layout above. Written only by a field that
     ///      actually takes a high seat, so an ordinary battle never touches this mapping at all,
     ///      on entry or on settlement.
     mapping(bytes32 => uint256) internal _highField;
-
 
     /// @dev A custom battle's whole definition, one word per slot — see the layout above. The
     ///      terms are fixed for the FIELD at creation rather than restated by each entrant, which
@@ -1099,8 +1092,6 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     uint256 internal constant _RING_VALUE_MASK = (uint256(1) << 232) - 1;
     uint208 internal constant _ROUND_PREPARED = uint208(1) << 207;
 
-
-
     function _loadBattle(bytes32 key) internal view returns (uint256) {
         uint256 slot = uint256(key);
         if (slot < _CUSTOM_SLOT_BASE) {
@@ -1318,7 +1309,6 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      Nothing here records how the seat was PAID for: a bought, pass-funded and prepaid
     ///      seat are indistinguishable, which is the point.
     mapping(uint32 => uint256)[16] internal _daySeated;
-
 
     function _loadDayWord(uint256[64] storage book, uint256 day) private view returns (uint256) {
         uint256 word = book[uint24(day & 63)];

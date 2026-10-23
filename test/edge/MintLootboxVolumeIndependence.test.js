@@ -95,7 +95,7 @@ describe("Mint-lootbox routing is independent of volume", function () {
       "position",
       "amount",
     ]);
-    expect(ev.args.buyer).to.equal(await game.walletIdOf(alice.address));
+    expect(ev.args.buyer).to.equal(await game.walletIdOf_g3120(alice.address));
     expect(ev.args.amount).to.equal(eth("250"));
   });
 

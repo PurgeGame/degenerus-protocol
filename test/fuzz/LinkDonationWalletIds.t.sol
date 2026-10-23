@@ -56,7 +56,7 @@ contract LinkDonationWalletIdsTest is DeployProtocol {
     function _linkCredit(Vm.Log[] memory logs, address donor) internal view returns (uint256 credit) {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(admin) || logs[i].topics[0] != LINK_CREDIT) continue;
-            if (uint32(uint256(logs[i].topics[1])) != game.walletIdOf(donor)) continue;
+            if (uint32(uint256(logs[i].topics[1])) != game.walletIdOf_g3120(donor)) continue;
             credit = abi.decode(logs[i].data, (uint256));
         }
     }
@@ -79,7 +79,7 @@ contract LinkDonationWalletIdsTest is DeployProtocol {
         assertEq(n, 1, "exactly one WalletRegistered");
         assertEq(rid, expectedId);
         assertEq(owner, donor);
-        assertEq(game.walletIdOf(donor), expectedId);
+        assertEq(game.walletIdOf_g3120(donor), expectedId);
         assertEq(game.middayRngCredits(donor), 10 ether);
         uint256 credit = _linkCredit(logs, donor);
         assertGt(credit, 0, "the donation earned a FLIP reward");
@@ -110,7 +110,7 @@ contract LinkDonationWalletIdsTest is DeployProtocol {
     function test_PastPaidAdmission_NewDonorReverts_ExistingDonorCredited() public {
         address old = makeAddr("link_donor_existing");
         _donate(old, 2 ether);
-        uint32 oldId = game.walletIdOf(old);
+        uint32 oldId = game.walletIdOf_g3120(old);
         assertTrue(oldId != 0);
         uint24 target = _today() + 1;
         uint256 before = _lane(target, oldId);
@@ -123,7 +123,7 @@ contract LinkDonationWalletIdsTest is DeployProtocol {
         vm.prank(fresh);
         mockLINK.transferAndCall(address(admin), 5 ether, "");
         assertEq(mockLINK.balanceOf(fresh), 5 ether, "no LINK moved");
-        assertEq(game.walletIdOf(fresh), 0);
+        assertEq(game.walletIdOf_g3120(fresh), 0);
         assertEq(game.middayRngCredits(fresh), 0);
 
         mockLINK.mint(address(admin), 5 ether);

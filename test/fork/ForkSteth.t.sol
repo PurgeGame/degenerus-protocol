@@ -136,7 +136,7 @@ contract ForkStethTest is ForkDeployProtocol {
 
         // The auto-stake leaves ETH only for ETH-settled claims. Vault claimable settles in stETH,
         // so a backed Vault credit is ETH the owner may stake.
-        _seedClaimable(game.walletIdOf(ContractAddresses.VAULT), 10 ether);
+        _seedClaimable(game.walletIdOf_g3120(ContractAddresses.VAULT), 10 ether);
         uint256 amount = _stakeable() / 2;
         assertGt(amount, 1 ether, "fixture: free ETH to stake");
         uint256 eth0 = address(game).balance;
@@ -378,7 +378,7 @@ contract ForkStethTest is ForkDeployProtocol {
         // sDGNRS holds a backed game claimable (its redemption reserve source). The vault owner
         // stakes everything the guard allows — sDGNRS's claimable is stETH-settleable — and the
         // driver takes its winnings in ETH, so the game is left ETH-short for the close.
-        _seedClaimable(game.walletIdOf(ContractAddresses.SDGNRS), 500 ether);
+        _seedClaimable(game.walletIdOf_g3120(ContractAddresses.SDGNRS), 500 ether);
         if (game.claimableWinningsOf(driver) > 1) {
             vm.prank(driver);
             game.claimWinnings(0);
@@ -391,7 +391,7 @@ contract ForkStethTest is ForkDeployProtocol {
         (batch,,,) = sdgnrs.redemptionBatchState();
         vm.prank(alice);
         sdgnrs.burn(share);
-        (uint128 tokens,) = sdgnrs.pendingRedemptions(game.walletIdOf(alice), batch);
+        (uint128 tokens,) = sdgnrs.pendingRedemptions(game.walletIdOf_g3120(alice), batch);
         assertGt(tokens, 0, "alice joined the open batch");
 
         uint256 sdSt0 = lido.balanceOf(ContractAddresses.SDGNRS);
@@ -419,7 +419,7 @@ contract ForkStethTest is ForkDeployProtocol {
 
         uint256 aliceClaimable0 = game.claimableWinningsOf(alice);
         _crank(400);
-        (uint128 left,) = sdgnrs.pendingRedemptions(game.walletIdOf(alice), batch);
+        (uint128 left,) = sdgnrs.pendingRedemptions(game.walletIdOf_g3120(alice), batch);
         assertEq(left, 0, "the claim settled through the live legs");
         assertGt(game.claimableWinningsOf(alice), aliceClaimable0 + 1, "the direct half reached alice's claimable");
         assertEq(lido.balanceOf(ContractAddresses.SDGNRS), sdSt0, "live settlement moves no stETH");

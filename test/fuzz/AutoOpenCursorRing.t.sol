@@ -69,7 +69,7 @@ contract AutoOpenCursorRing is DeployProtocol {
     function _aid(address a) internal returns (uint32 id) {
         id = _aidCache[a];
         if (id == 0) {
-            id = game.walletIdOf(a);
+            id = game.walletIdOf_g3120(a);
             if (id == 0) id = _giveWalletId(a);
             _aidCache[a] = id;
         }
@@ -270,7 +270,7 @@ contract AutoOpenCursorRing is DeployProtocol {
     /// @dev Openable under the entry-gate: an unopened box of the current cohort and the cohort's
     ///      stamp-day word has landed. Mirrors the _runAfkingWork predicate.
     function _isOpenable(address who) internal view returns (bool) {
-        if (!GameSlotKeys.afkingBoxPending(address(game), game.walletIdOf(who))) return false;
+        if (!GameSlotKeys.afkingBoxPending(address(game), game.walletIdOf_g3120(who))) return false;
         uint24 stamp = uint24(uint256(vm.load(address(game), bytes32(GameSlots.AFKING_RESET_DAY))) >> (8 * GameSlots.AFKING_RESET_DAY_OFFSET));
         return game.rngWordForDay(stamp) != 0;
     }

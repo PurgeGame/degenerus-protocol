@@ -401,7 +401,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
                 logs[i].emitter == address(coinflip) &&
                 logs[i].topics.length > 1 &&
                 logs[i].topics[0] == COINFLIP_STAKE_UPDATED_SIG &&
-                logs[i].topics[1] == bytes32(uint256(game.walletIdOf(who)))
+                logs[i].topics[1] == bytes32(uint256(game.walletIdOf_g3120(who)))
             ) count++;
         }
     }
@@ -591,13 +591,13 @@ contract KeeperRouterOneCategory is DeployProtocol {
 
     /// @dev `who`'s wallet ID, registering one through the production hook when it has none.
     function _idOf(address who) internal returns (uint32 id) {
-        id = game.walletIdOf(who);
+        id = game.walletIdOf_g3120(who);
         if (id == 0) id = _giveWalletId(who);
     }
 
     /// @dev Grant `who` the permanent deity bit (mintPacked_ is slot 9).
     function _grantDeityPass(address who) internal {
-        bytes32 slot = keccak256(abi.encode(game.walletIdOf(who), uint256(MINTPACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(game.walletIdOf_g3120(who), uint256(MINTPACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         packed |= (uint256(1) << DEITY_SHIFT);
         vm.store(address(game), slot, bytes32(packed));
@@ -654,7 +654,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
         uint256 n = RecyclingState.boxCount(address(game), index);
         uint256 cursor = (uint256(vm.load(address(game), bytes32(GameSlots.BOX_CURSOR))) >> (GameSlots.BOX_CURSOR_OFFSET * 8)) & type(uint48).max;
         bool sealed_ = index == RecyclingState.readBuffer(address(game));
-        uint32 id = game.walletIdOf(who);
+        uint32 id = game.walletIdOf_g3120(who);
         for (uint256 i = sealed_ ? cursor : 0; i < n; ++i) {
             uint256 word = RecyclingState.boxEntry(address(game), index, i);
             if (BoxOrderLib.boId(word) != id) continue;

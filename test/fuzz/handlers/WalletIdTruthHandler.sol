@@ -996,7 +996,7 @@ contract WalletIdTruthHandler is Test {
     function _createSmurf(address p, bytes32 code, uint256 kindSel) internal returns (bool ok, uint32 smurfId) {
         (uint256 value, bytes memory data) = _smurfData(code, kindSel);
         uint256 before = smurfIds.length;
-        uint32 mainId = game.walletIdOf(p);
+        uint32 mainId = game.walletIdOf_g3120(p);
         uint256 limit = uint256(smurfBase[mainId]) + game.playerActivityScoreById(mainId) / 120;
         if (limit > 65_535) limit = 65_535;
         uint256 created = lifetimeSmurfs[mainId];

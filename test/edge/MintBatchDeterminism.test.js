@@ -68,7 +68,7 @@ async function drainFixture() {
     revealed.push(...inventory.revealed);
     if (!(await game.rngLocked()) && i > 4) break;
   }
-  const aliceId = Number(await fixture.game.walletIdOf(alice.address));
+  const aliceId = Number(await fixture.game.walletIdOf_g3120(alice.address));
   const samePlayer = (v) => v.walletId === aliceId;
   return { ...fixture, streams: streams.filter(samePlayer), revealed: revealed.filter(samePlayer) };
 }

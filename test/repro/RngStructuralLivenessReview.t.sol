@@ -117,7 +117,7 @@ contract RngStructuralLivenessReviewTest is DeployProtocol {
     }
 
     function _balances(uint32 id) private view returns (bytes32) {
-        return keccak256(abi.encode(game.extsload(GameSlotKeys.balances(id)),
+        return keccak256(abi.encode(game.extsload_g8132(GameSlotKeys.balances(id)),
             coinflip.coinflipAmountById(id), wwxrp.claimable(id), coin.balanceOf(owner), sdgnrs.balanceOf(owner)));
     }
 
@@ -180,10 +180,10 @@ contract RngStructuralLivenessReviewTest is DeployProtocol {
         vm.etch(address(game), address(new RngReviewSeizer()).code);
         RngReviewSeizer(address(game)).seizeDueInPlace(due);
         vm.etch(address(game), runtime);
-        (, address payee, bool authorized) = game.resolveAccount(sellerChild, seller);
+        (, address payee, bool authorized) = game.resolveAccount_g502(sellerChild, seller);
         assertEq(payee, address(sdgnrs));
         assertFalse(authorized);
-        assertEq(game.walletIdOf(seller), 0);
+        assertEq(game.walletIdOf_g3120(seller), 0);
         // Allocate a different ID after delivery: queued seeds and credits must retain the old ID.
         uint32 replacement = _giveWalletId(seller);
         assertNotEq(replacement, sellerRoot);

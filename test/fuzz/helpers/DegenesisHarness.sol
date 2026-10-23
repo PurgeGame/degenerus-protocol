@@ -110,7 +110,7 @@ abstract contract DegenesisHarness is DegenesisDeployProtocol {
     /// @dev Write `credit` straight into degenesisCredit[id] (vm.store). Used only where a real
     ///      purchase of 4x the credit is impractical (per-order bound tests, multi-million ETH).
     function _seedCredit(address p, uint256 credit) internal {
-        uint32 id = game.walletIdOf(p);
+        uint32 id = game.walletIdOf_g3120(p);
         if (id == 0) id = _giveWalletId(p);
         vm.store(address(game), keccak256(abi.encode(uint256(id), GameSlots.DEGENESIS_CREDIT)), bytes32(credit));
         assertEq(game.degenesisCreditOf(p), credit, "seedCredit: slot mismatch");

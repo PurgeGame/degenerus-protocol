@@ -272,9 +272,9 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
             stage = inJackpot ? STAGE_JACKPOT_BATTLE : STAGE_PURCHASE_BATTLE;
         } else if (phaseTransitionActive) {
             if (!MineFlipGas.canRun(meter, GasBounds.TRANSITION_CLOSE, GasBounds.DAILY_PHASE_TAIL)) return result;
-            _processPhaseTransition(purchaseLevel);
+            _processPhaseTransition(purchaseLevel, meter);
             phaseTransitionActive = false;
-            _unlockRng(day);
+            _unlockRng(day, meter);
             purchaseStartDay = day;
             jackpotPhaseFlag = false;
             if (lvl % 100 == 0) dgnrs.recycleCentury(lvl, word);
@@ -290,19 +290,19 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
             // Pricing can set ticket-leg flags before the ETH quadrants have finished.
             result = runDailyJackpot(inJackpot, inJackpot ? lvl : purchaseLevel, word, MineFlipGas.child(meter, sealTail));
             if (result.done && !inJackpot && !_purchaseTicketLegPending()) {
-                _sealPurchaseDay(purchaseLevel, day, _simulatedDayIndex(), purchaseStartDay);
+                _sealPurchaseDay(purchaseLevel, day, _simulatedDayIndex(), purchaseStartDay, meter);
             }
             stage = inJackpot ? STAGE_JACKPOT_DAILY_STARTED : STAGE_PURCHASE_DAILY;
         } else if (!inJackpot) {
             if (_purchaseTicketLegPending()) {
                 result = runPurchaseDailyTickets(word, MineFlipGas.child(meter, sealTail));
-                if (result.done) _sealPurchaseDay(purchaseLevel, day, _simulatedDayIndex(), purchaseStartDay);
+                if (result.done) _sealPurchaseDay(purchaseLevel, day, _simulatedDayIndex(), purchaseStartDay, meter);
                 stage = STAGE_PURCHASE_DAILY_TICKETS;
             } else if (!lastPurchase && purchaseLevel == 1 && day < GameTimeLib.MAIN_LAUNCH_DAY) {
                 // A Degenesis day, keyed on the processed day: no level-1 FLIP draw, no foil draw
                 // record and no last-purchase latch. Randomness still unlocks.
                 if (!MineFlipGas.canRun(meter, GasBounds.DEGENESIS_DAY_CLOSE, GasBounds.DAILY_PHASE_TAIL)) return result;
-                _unlockRng(day);
+                _unlockRng(day, meter);
                 result.progressed = true;
                 MineFlipGas.markProgress(meter);
                 result.done = true;
@@ -319,7 +319,7 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
                     result = runDailyJackpot(false, purchaseLevel, word, MineFlipGas.child(meter, sealTail));
                 }
                 if (result.done && !_purchaseTicketLegPending()) {
-                    _sealPurchaseDay(purchaseLevel, day, _simulatedDayIndex(), purchaseStartDay);
+                    _sealPurchaseDay(purchaseLevel, day, _simulatedDayIndex(), purchaseStartDay, meter);
                 }
                 stage = STAGE_PURCHASE_DAILY;
             } else {
@@ -335,7 +335,7 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
                         _growthOver(_growthRatchet(purchaseLevel - 2), _growthRatchet(purchaseLevel - 1), achieved))) {
                     _setGrowthSettlePending(true);
                 }
-                distributeYieldSurplus(word);
+                _distributeYieldSurplus(meter);
                 _consolidatePoolsAndRewardJackpots(lvl, purchaseLevel, day, word, purchaseStartDay);
                 jackpotPhaseFlag = true;
                 lastPurchaseDay = false;
@@ -355,7 +355,7 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
                     _endPhase(lvl);
                     stage = STAGE_JACKPOT_PHASE_ENDED;
                 } else {
-                    _unlockRng(day);
+                    _unlockRng(day, meter);
                     stage = STAGE_JACKPOT_COIN_TICKETS;
                 }
             } else stage = STAGE_JACKPOT_COIN_TICKETS;
@@ -654,7 +654,7 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
         if (!ok) _revertDelegate(data);
         bool unlock;
         (shouldReturn, stage, unlock, progressed) = abi.decode(data, (bool, uint8, bool, bool));
-        if (unlock) { _unlockRng(day); progressed = true; }
+        if (unlock) { _unlockRng(day, MineFlipGas.start(allowance)); progressed = true; }
     }
 
     function _endPhase(uint24 lvl) private {
@@ -923,7 +923,7 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
         if (day > vaultFlipSettledDay) vaultFlipSettledDay = day;
     }
 
-    function _sealPurchaseDay(uint24 purchaseLevel, uint24 day, uint24 wallDay, uint24 psd) private {
+    function _sealPurchaseDay(uint24 purchaseLevel, uint24 day, uint24 wallDay, uint24 psd, MineFlipGas.Meter memory meter) private {
         // No Degenesis day latches, however late it is cranked.
         if (day >= GameTimeLib.MAIN_LAUNCH_DAY && day == wallDay && day >= psd
             && _getNextPrizePool() > _prizePoolTarget(purchaseLevel)) {
@@ -957,7 +957,7 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
                 jackpotFlags = JACKPOT_TURBO;
             }
         }
-        _unlockRng(day);
+        _unlockRng(day, meter);
     }
 
     function _activateNextTickets() private returns (bool activated) {
@@ -1005,7 +1005,7 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
         return uint16(bps > 10_000 ? 10_000 : bps);
     }
 
-    function _processPhaseTransition(uint24 purchaseLevel) private {
+    function _processPhaseTransition(uint24 purchaseLevel, MineFlipGas.Meter memory meter) private {
         (bool ok, bytes memory data) = ContractAddresses.GAME_TICKET_MODULE.delegatecall(
             abi.encodeWithSelector(IDegenerusGameFoilWorkerModule.queuePerpetualTickets.selector, purchaseLevel + 99)
         );
@@ -1013,16 +1013,16 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
 
         // Auto-stake all non-claimable ETH into stETH for yield generation.
         // Non-blocking: if stETH contract fails, game continues normally.
-        _autoStakeExcessEth();
+        _autoStakeExcessEth(meter);
     }
 
-    function _autoStakeExcessEth() private {
+    function _autoStakeExcessEth(MineFlipGas.Meter memory meter) private {
         uint256 ethBal = address(this).balance;
         uint256 reserve = claimablePool;
         if (ethBal <= reserve) return;
         uint256 stakeable = ethBal - reserve;
-        (bool ok, bytes memory reason) = ContractAddresses.GAME_ADVANCE_MODULE.delegatecall(
-            abi.encodeWithSelector(IDegenerusGameAdvanceModule.stakeExcessEth.selector, stakeable));
+        (bool ok, bytes memory reason) = ContractAddresses.GAME_ADVANCE_MODULE.delegatecall{gas: MineFlipGas.forwardable(meter, 200_000)}(
+            abi.encodeWithSelector(IDegenerusGameAdvanceModule.stakeExcessEth.selector, stakeable, MineFlipGas.child(meter, 200_000)));
         if (!ok) {
             // This trusted frame rolls back value sent with an invalid receipt.
             if (reason.length != 4 || bytes4(reason) != StEthStakeRefused.selector) _revertDelegate(reason);
@@ -1033,7 +1033,7 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
     /// @dev Private dispatch surface: no Game facade; only the transition delegates here.
     function stakeExcessEth(uint256 amount) external {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
-        (bool ok, bytes memory receipt) = BoundedCall.call(ContractAddresses.STETH_TOKEN, amount, 300_000,
+        (bool ok, bytes memory receipt) = BoundedCall.callValueRemaining(MineFlipGas.fromCall(36), ContractAddresses.STETH_TOKEN, amount, 300_000, 30_000,
             abi.encodeWithSelector(IStETH.submit.selector, address(0)), 32);
         if (!ok || abi.decode(receipt, (uint256)) == 0) revert StEthStakeRefused();
     }
@@ -1057,7 +1057,7 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
         prizePoolFrozen = false;
     }
 
-    function _unlockRng(uint24 day) private {
+    function _unlockRng(uint24 day, MineFlipGas.Meter memory meter) private {
         // Game-over keeps its stale dailyIdx: the deadman reads currentDay - dailyIdx, so
         // advancing it here would retire the very staleness that declared the game dead and
         // let _livenessTriggered read false again while gameOver stays true — reopening every
@@ -1082,7 +1082,7 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
                 futureP,
                 _getCurrentPrizePool(),
                 claimablePool,
-                address(this).balance + _boundedStethBalance(),
+                address(this).balance + _boundedStethBalance(meter, 150_000),
                 yieldAccumulator,
                 day
             );

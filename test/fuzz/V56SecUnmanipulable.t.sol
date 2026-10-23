@@ -30,7 +30,7 @@ contract V56SecUnmanipulable is DeployProtocol {
     function _aid(address a) internal returns (uint32 id) {
         id = _aidCache[a];
         if (id == 0) {
-            id = game.walletIdOf(a);
+            id = game.walletIdOf_g3120(a);
             if (id == 0) id = _giveWalletId(a);
             _aidCache[a] = id;
         }
@@ -112,7 +112,7 @@ contract V56SecUnmanipulable is DeployProtocol {
         uint32 cpBefore = _checkpointDayOf(p);
         assertGt(owedBefore, 0, "non-vacuity: base owed");
 
-        uint32 subscriberId = game.walletIdOf(p);
+        uint32 subscriberId = game.walletIdOf_g3120(p);
         vm.prank(makeAddr("not_affiliate"));
         vm.expectRevert(bytes4(keccak256("NotApproved()")));
         IGameAfkingModule(address(game)).drainAffiliateBases(subscriberId, 0);
@@ -333,7 +333,7 @@ contract V56SecUnmanipulable is DeployProtocol {
         uint256 count;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2
-                || uint32(uint256(logs[i].topics[1])) != game.walletIdOf(ledger.player)) continue;
+                || uint32(uint256(logs[i].topics[1])) != game.walletIdOf_g3120(ledger.player)) continue;
             if (logs[i].topics[0] == spent) {
                 (uint256 leg,,,) = abi.decode(logs[i].data, (uint256, uint256, uint8, uint256));
                 claimableLeg += leg;
@@ -491,7 +491,7 @@ contract V56SecUnmanipulable is DeployProtocol {
         vm.warp(_t);
         for (uint256 i; i < 64 && !game.rngLocked(); ++i) game.mineFlip(0);
         assertTrue(game.rngLocked());
-        uint32 id = game.walletIdOf(p);
+        uint32 id = game.walletIdOf_g3120(p);
         assertTrue(GameSlotKeys.afkingBoxPending(address(game), id), "the day's box is paid and pending");
         _drainAllFunding(p);
         _t += 1 days;
@@ -600,14 +600,14 @@ contract V56SecUnmanipulable is DeployProtocol {
     }
 
     function _owed(address who) internal view returns (DegenerusGameLens.SubFull memory) {
-        return lens.subInfoFullById(address(game), game.walletIdOf(who));
+        return lens.subInfoFullById(address(game), game.walletIdOf_g3120(who));
     }
 
     /// @dev Whole FLIP the AfkingFlipClaimed events recorded since the last vm.recordLogs() paid `who`.
     function _flipClaimed(address who) internal returns (uint256 total) {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 sig = keccak256("AfkingFlipClaimed(uint32,uint256)");
-        uint32 id = game.walletIdOf(who);
+        uint32 id = game.walletIdOf_g3120(who);
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2 || logs[i].topics[0] != sig) continue;
             if (uint32(uint256(logs[i].topics[1])) != id) continue;
@@ -638,7 +638,7 @@ contract V56SecUnmanipulable is DeployProtocol {
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2) continue;
             if (logs[i].topics[0] != SUB_EXPIRED_SIG) continue;
-            if (uint32(uint256(logs[i].topics[1])) != game.walletIdOf(who)) continue;
+            if (uint32(uint256(logs[i].topics[1])) != game.walletIdOf_g3120(who)) continue;
             if (uint8(uint256(bytes32(logs[i].data))) == reason) count++;
         }
     }
@@ -649,7 +649,7 @@ contract V56SecUnmanipulable is DeployProtocol {
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2) continue;
             if (logs[i].topics[0] != SUB_EXPIRED_SIG) continue;
-            if (uint32(uint256(logs[i].topics[1])) != game.walletIdOf(who)) continue;
+            if (uint32(uint256(logs[i].topics[1])) != game.walletIdOf_g3120(who)) continue;
             count++;
         }
     }
@@ -665,7 +665,7 @@ contract V56SecUnmanipulable is DeployProtocol {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint24 found;
         bool any;
-        uint32 whoId = game.walletIdOf(who);
+        uint32 whoId = game.walletIdOf_g3120(who);
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].topics.length < 2 || logs[i].topics[0] != sig) continue;
             if (uint32(uint256(logs[i].topics[1])) != whoId) continue;
@@ -693,16 +693,16 @@ contract V56SecUnmanipulable is DeployProtocol {
     // ---- Lane reads ----
 
     function _dailyQtyOf(address who) internal view returns (uint8) {
-        return uint8(GameSlotKeys.subQuantity(address(game), game.walletIdOf(who)));
+        return uint8(GameSlotKeys.subQuantity(address(game), game.walletIdOf_g3120(who)));
     }
 
     /// @dev `who`'s set position + 1; 0 = not in the set.
     function _subscriberIndexOf(address who) internal view returns (uint256 position1) {
-        (, position1) = GameSlotKeys.subLane(address(game), game.walletIdOf(who));
+        (, position1) = GameSlotKeys.subLane(address(game), game.walletIdOf_g3120(who));
     }
 
     function _checkpointDayOf(address who) internal view returns (uint32) {
-        (uint256 lane,) = GameSlotKeys.subLane(address(game), game.walletIdOf(who));
+        (uint256 lane,) = GameSlotKeys.subLane(address(game), game.walletIdOf_g3120(who));
         return uint32((lane >> 46) & ((uint256(1) << 22) - 1));
     }
 }

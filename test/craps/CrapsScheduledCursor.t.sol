@@ -40,8 +40,8 @@ contract CrapsScheduledCursorTest is CrapsPins {
 
     function setUp() public {
         _installPins();
-        game.registerWallet(alice, true);
-        game.registerWallet(bob, true);
+        game.registerWallet_g9539(alice, true);
+        game.registerWallet_g9539(bob, true);
         _warpToTableGenesis();
         craps = new CursorHarness();
         // The deployment day is a Craps warm-up day with no windows; every fixture plays
@@ -88,16 +88,16 @@ contract CrapsScheduledCursorTest is CrapsPins {
     }
 
     function test_MinerMaintenancePendingTracksOnlyActionableHead() public {
-        assertFalse(craps.minerMaintenancePending(), "current unopened separator waits for daily hook");
+        assertFalse(craps.minerMaintenancePending_g11976(), "current unopened separator waits for daily hook");
         _openDay();
-        assertTrue(craps.minerMaintenancePending(), "opened separator is maintenance work");
+        assertTrue(craps.minerMaintenancePending_g11976(), "opened separator is maintenance work");
         _crank(craps);
         uint64 head = craps.minerSlot();
         assertGt(craps.slotIndexOf(head), 0, "closed scheduled head registered");
-        assertFalse(craps.minerMaintenancePending(), "committed read field owns the earlier settlement stage");
+        assertFalse(craps.minerMaintenancePending_g11976(), "committed read field owns the earlier settlement stage");
         _setWord(craps.slotIndexOf(head) - 1, 0xC105ED);
         _crank(craps);
-        assertTrue(craps.minerMaintenancePending(), "finished head owes bounded cursor cleanup");
+        assertTrue(craps.minerMaintenancePending_g11976(), "finished head owes bounded cursor cleanup");
         _crank(craps);
         assertGt(craps.minerSlot(), head);
     }
@@ -314,7 +314,7 @@ contract CrapsScheduledCursorTest is CrapsPins {
         vm.prank(ContractAddresses.GAME);
         craps.openBonusDay();
         vm.prank(ContractAddresses.GAME);
-        MineFlipGas.Result memory result = craps.runCrapsMaintenance(900_000);
+        MineFlipGas.Result memory result = craps.runCrapsMaintenance_g10712(900_000);
         assertTrue(result.progressed, "partial refunds must report progress");
         uint256 refunded;
         for (uint256 i; i < owners.length; ++i) {

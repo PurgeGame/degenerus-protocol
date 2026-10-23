@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+
+// Exercises GameMiner._mineFlip through the public Game.mineFlip entry, including
+// the pinned external-worker dispatch and its progress/rollback behavior.
 import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";

@@ -162,7 +162,7 @@ contract VaultAccountWrappersTest is SeatFixture {
         )), 0), (bytes));
 
         assertEq(uint256(vm.load(address(game), slot)), 1, "operatorApprovals[1][op]");
-        (address key, address payee, bool authorized) = game.resolveAccount(VAULT_ID, op);
+        (address key, address payee, bool authorized) = game.resolveAccount_g502(VAULT_ID, op);
         assertEq(key, address(vault));
         assertEq(payee, address(vault));
         assertTrue(authorized, "the operator acts for the vault");

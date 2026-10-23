@@ -110,7 +110,7 @@ contract CrapsWalletIdsProtocolTest is DeployProtocol {
         internal
         view
     {
-        uint32 id = game.walletIdOf(who);
+        uint32 id = game.walletIdOf_g3120(who);
         assertTrue(id > 3, "a fresh player wallet ID");
         uint256 reg = _logIndex(logs, address(game), WALLET_REGISTERED);
         uint256 burn = _logIndex(logs, address(coin), TRANSFER);
@@ -120,7 +120,7 @@ contract CrapsWalletIdsProtocolTest is DeployProtocol {
         assertTrue(burn != type(uint256).max, "FLIP burned");
         assertLt(reg, burn, "registration precedes the burn");
 
-        (uint256 regCall,) = _call(acc, address(game), bytes4(keccak256("registerWallet(address,bool)")));
+        (uint256 regCall,) = _call(acc, address(game), bytes4(keccak256("registerWallet_g9539(address,bool)")));
         (uint256 burnCall, bytes memory burnArgs) = _call(acc, address(coin), bytes4(keccak256("burnCoinForCraps(address,uint32,uint256)")));
         assertLt(regCall, burnCall, "registerWallet is called before burnCoinForCraps");
         (address burner, uint32 burnId,) = abi.decode(burnArgs, (address, uint32, uint256));
@@ -143,7 +143,7 @@ contract CrapsWalletIdsProtocolTest is DeployProtocol {
         uint16 goal = uint16(crapsBattle.MIN_BATTLE_GOAL_MULT());
         vm.prank(ContractAddresses.OWNER_GOVERNANCE);
         uint64 slot = JackpotBattle(address(crapsBattle)).createBattle(600, 10, goal, 0, uint40(block.timestamp + 1 hours), true, 0);
-        assertEq(game.walletIdOf(alice), 0, "fixture: fresh wallet");
+        assertEq(game.walletIdOf_g3120(alice), 0, "fixture: fresh wallet");
         vm.recordLogs();
         vm.startStateDiffRecording();
         vm.prank(alice);
@@ -168,7 +168,7 @@ contract CrapsWalletIdsProtocolTest is DeployProtocol {
         vm.prank(carol);
         vm.expectRevert(CrapsBattleStorage.NoWalletId.selector);
         crapsBattle.setPreferredBoard(0, BOARD);
-        assertEq(game.walletIdOf(carol), 0, "a non-paying door allocates nothing");
+        assertEq(game.walletIdOf_g3120(carol), 0, "a non-paying door allocates nothing");
         uint32 id = _giveWalletId(carol);
         vm.prank(carol);
         crapsBattle.setPreferredBoard(0, BOARD);
@@ -273,7 +273,7 @@ contract CrapsWalletIdsGasTest is DeployProtocol {
         vm.prank(a);
         crapsBattle.enterBattle(slot, BOARD, 1);
         _gas("enterBattle cached, same board");
-        uint32 aId = game.walletIdOf(a);
+        uint32 aId = game.walletIdOf_g3120(a);
         vm.prank(ContractAddresses.GAME);
         crapsBattle.creditPasses(aId, 1, 0);
         vm.prank(a);
@@ -328,8 +328,8 @@ contract CrapsWalletIdsGasTest is DeployProtocol {
         _giveWalletId(k);
         vm.prank(k);
         crapsBattle.setPreferredBoard(0, BOARD);
-        uint256 uCode = uint256(game.walletIdOf(u)) | (uint256(4) << 160) | (uint256(1) << 200);
-        uint256 kCode = uint256(game.walletIdOf(k)) | (uint256(4) << 160) | (uint256(1) << 200);
+        uint256 uCode = uint256(game.walletIdOf_g3120(u)) | (uint256(4) << 160) | (uint256(1) << 200);
+        uint256 kCode = uint256(game.walletIdOf_g3120(k)) | (uint256(4) << 160) | (uint256(1) << 200);
         vm.prank(ContractAddresses.VAULT);
         crapsBattle.vaultComp(uCode);
         _gas("vaultComp kind 4 uncached recipient");

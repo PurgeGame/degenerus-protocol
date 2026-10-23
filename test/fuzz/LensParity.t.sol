@@ -23,7 +23,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 ///         shifts and the real layout fails here.
 contract LensStorageHarness is DegenerusGameMintStreakUtils, WalletSeed {
     /// @dev Same body as DegenerusGame.extsload — the lens's read path.
-    function extsload(bytes32 slot) external view returns (bytes32 value) {
+    function extsload_g8132(bytes32 slot) external view returns (bytes32 value) {
         assembly {
             value := sload(slot)
         }
@@ -175,7 +175,7 @@ contract LensParityTest is Test {
     function _mockQuests(uint32 id, uint32 manualStreak, bool afking) internal {
         vm.mockCall(
             ContractAddresses.QUESTS,
-            abi.encodeWithSelector(IDegenerusQuests.effectiveBaseStreakAndAfking.selector, id),
+            abi.encodeWithSelector(IDegenerusQuests.effectiveBaseStreakAndAfking_g2654.selector, id),
             abi.encode(manualStreak, afking)
         );
     }
@@ -478,7 +478,7 @@ contract LensSettlementParity is DeployProtocol {
     function _subscribe(string memory name, bool tickets, uint8 quantity) private returns (address who, uint32 id) {
         who = makeAddr(name);
         uint256 seat = _grantSeat(who);
-        id = game.walletIdOf(who);
+        id = game.walletIdOf_g3120(who);
         vm.deal(address(this), 5 ether);
         game.depositAfkingFunding{value: 5 ether}(id);
         vm.prank(who);

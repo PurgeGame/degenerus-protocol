@@ -31,7 +31,7 @@ contract DegenesisTerminal is DegenesisFixture {
         vm.prank(alice);
         game.purchaseWhalePass{value: 48 ether}(0, 20, bytes32(0)); // 12 ETH of credit
         bob = _player("bob", 1 ether);
-        bobId = game.walletIdOf(bob);
+        bobId = game.walletIdOf_g3120(bob);
         vm.prank(bob);
         game.depositAfkingFunding{value: 1 ether}(bobId);
         _seedClaimable(bobId, 0.5 ether);

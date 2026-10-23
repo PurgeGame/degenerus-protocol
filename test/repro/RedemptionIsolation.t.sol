@@ -107,7 +107,7 @@ contract RedemptionIsolationTest is RedemptionFixture {
         _fundLedger(100 ether);
         uint256 beforeClaimable = game.claimableWinningsOf(address(sdgnrs));
         uint256 beforeAlice = game.claimableWinningsOf(alice);
-        uint32 aliceId = game.walletIdOf(alice);
+        uint32 aliceId = game.walletIdOf_g3120(alice);
         _reserveLedger(10 ether);
         uint256 beforePool = _pool();
         vm.prank(address(sdgnrs));

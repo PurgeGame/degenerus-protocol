@@ -79,7 +79,7 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
         _drainUntilUnlocked();
         assertFalse(game.rngLocked());
         vm.prank(buyer); crapsBattle.setPreferredBoard(0, 0);
-        assertEq(crapsBattle.preferredBoardOf(game.walletIdOf(buyer)), 0);
+        assertEq(crapsBattle.preferredBoardOf(game.walletIdOf_g3120(buyer)), 0);
         // The unprocessed wall day must not inherit the revealed pending-battle word. The drain
         // runs on to the wall day's own request (the engine composes actions, 60d31f775), so
         // day + 1 is now a skipped gap day whose word derives from that fresh request.
@@ -88,7 +88,7 @@ contract RngReuseJackpotStraddleTest is DeployProtocol {
 
     function _assertPreferenceFrozen() private {
         assertTrue(game.rngLocked());
-        uint32 saved = crapsBattle.preferredBoardOf(game.walletIdOf(buyer));
+        uint32 saved = crapsBattle.preferredBoardOf(game.walletIdOf_g3120(buyer));
         vm.prank(buyer); vm.expectRevert(CrapsBattleStorage.BetLocked.selector);
         crapsBattle.setPreferredBoard(0, saved == 0 ? 3 : 0);
         // A fresh wallet cannot initialize even the random board during the commitment.

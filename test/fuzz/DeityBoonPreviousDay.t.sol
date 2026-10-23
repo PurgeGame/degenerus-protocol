@@ -39,8 +39,8 @@ contract DeityBoonPreviousDayTest is DeployProtocol {
         _warp(TODAY);
         _seed(TODAY - 1, YESTERDAY_WORD, false);
         _seed(TODAY, TODAY_WORD, false);
-        deityId = game.walletIdOf(DEITY);
-        recipientId = game.walletIdOf(RECIPIENT);
+        deityId = game.walletIdOf_g3120(DEITY);
+        recipientId = game.walletIdOf_g3120(RECIPIENT);
     }
 
     function _warp(uint24 day) private {
@@ -55,14 +55,14 @@ contract DeityBoonPreviousDayTest is DeployProtocol {
     }
 
     function _expected(uint256 word, uint24 day, uint8 slot) private view returns (uint8) {
-        uint256 roll = uint256(keccak256(abi.encode(word, uint256(game.walletIdOf(DEITY)), day, slot))) % 2766;
+        uint256 roll = uint256(keccak256(abi.encode(word, uint256(game.walletIdOf_g3120(DEITY)), day, slot))) % 2766;
         if (roll >= 982) roll += 50;
         if (roll >= 1072) roll += 40;
         return viewer.tree(roll);
     }
 
     function _issue(address recipient, uint8 slot, uint24 day, uint8 expectedType) private {
-        uint32 recipientIdOf = game.walletIdOf(recipient);
+        uint32 recipientIdOf = game.walletIdOf_g3120(recipient);
         vm.recordLogs();
         vm.prank(DEITY);
         game.issueDeityBoon(deityId, recipientIdOf, slot);
@@ -70,8 +70,8 @@ contract DeityBoonPreviousDayTest is DeployProtocol {
         uint256 issued;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] != ISSUED) continue;
-            assertEq(uint32(uint256(logs[i].topics[1])), game.walletIdOf(DEITY));
-            assertEq(uint32(uint256(logs[i].topics[2])), game.walletIdOf(recipient));
+            assertEq(uint32(uint256(logs[i].topics[1])), game.walletIdOf_g3120(DEITY));
+            assertEq(uint32(uint256(logs[i].topics[2])), game.walletIdOf_g3120(recipient));
             assertEq(uint256(logs[i].topics[3]), day, "stamp the issuance day, not the seed day");
             (uint8 actualSlot, uint8 actualType) = abi.decode(logs[i].data, (uint8, uint8));
             assertEq(actualSlot, slot);
@@ -176,7 +176,7 @@ contract DeityBoonPreviousDayTest is DeployProtocol {
 
     function test_RecipientCanUseAnotherSlotButUsedSlotStillReverts() public {
         _issue(RECIPIENT, 0, TODAY, _expected(YESTERDAY_WORD, TODAY, 0));
-        uint32 otherId = game.walletIdOf(address(0xB002));
+        uint32 otherId = game.walletIdOf_g3120(address(0xB002));
         vm.expectRevert(DegenerusGameBoonModule.SlotAlreadyUsed.selector);
         vm.prank(DEITY);
         game.issueDeityBoon(deityId, otherId, 0);

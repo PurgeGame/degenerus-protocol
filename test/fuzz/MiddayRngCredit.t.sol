@@ -199,7 +199,7 @@ contract MiddayRngCreditTest is DeployProtocol {
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 42);
         assertEq(RecyclingState.currentWord(address(game)), 42, "midday word is unchanged");
         assertEq(RecyclingState.nudgeCount(address(game)), 5, "daily nudge remains pending");
-        assertEq(uint256(game.extsload(bytes32(uint256(3)))), 42, "shared unchanged payload");
+        assertEq(uint256(game.extsload_g8132(bytes32(uint256(3)))), 42, "shared unchanged payload");
     }
 
     /// @notice A delivered mid-day word is published only by the keeper, exactly once, with the
@@ -209,17 +209,17 @@ contract MiddayRngCreditTest is DeployProtocol {
         // Finish the fixture's primed day through production stages, including the
         // empty ticket frontier; marking only dailyIdx would leave genesis tickets pending.
         uint24 day = game.currentDayView();
-        for (uint256 i; i < 100 && (uint24(uint256(game.extsload(bytes32(0))) >> 24) != day || game.rngLocked()); ++i) {
+        for (uint256 i; i < 100 && (uint24(uint256(game.extsload_g8132(bytes32(0))) >> 24) != day || game.rngLocked()); ++i) {
             game.mineFlip(0);
         }
-        assertEq(uint24(uint256(game.extsload(bytes32(0))) >> 24), day, "real daily stage completed");
+        assertEq(uint24(uint256(game.extsload_g8132(bytes32(0))) >> 24), day, "real daily stage completed");
         _idleRequestRouter();
         _purchaseBelowThreshold();
         _grantCredit(donor, _expectedCharge() * 5);
         uint256 id = _mineRequest(donor);
-        bytes32 requestSlot = game.extsload(bytes32(uint256(4)));
-        uint256 requestTime = (uint256(game.extsload(bytes32(0))) >> 48) & type(uint48).max;
-        bytes32 packed = game.extsload(bytes32(GameSlots.LOOTBOX_RNG_PACKED));
+        bytes32 requestSlot = game.extsload_g8132(bytes32(uint256(4)));
+        uint256 requestTime = (uint256(game.extsload_g8132(bytes32(0))) >> 48) & type(uint48).max;
+        bytes32 packed = game.extsload_g8132(bytes32(GameSlots.LOOTBOX_RNG_PACKED));
         vm.recordLogs();
         mockVRF.fulfillRandomWords(id, 42);
         Vm.Log[] memory delivered = vm.getRecordedLogs();
@@ -228,9 +228,9 @@ contract MiddayRngCreditTest is DeployProtocol {
             assertFalse(delivered[i].emitter == address(game) && delivered[i].topics[0] == applied,
                 "callback must not pay for publication");
         }
-        assertEq(uint256(game.extsload(bytes32(GameSlots.LOOTBOX_RNG_PACKED))), uint256(packed),
+        assertEq(uint256(game.extsload_g8132(bytes32(GameSlots.LOOTBOX_RNG_PACKED))), uint256(packed),
             "callback writes no lootbox RNG state");
-        assertEq(game.extsload(bytes32(uint256(4))), requestSlot, "callback retains request ID");
+        assertEq(game.extsload_g8132(bytes32(uint256(4))), requestSlot, "callback retains request ID");
         assertFalse(game.rngComplete(), "delivery alone cannot complete the session");
         assertTrue(game.advanceDue(), "the delivered cohort owes a keeper publication");
         assertTrue(game.isRngFulfilled());
@@ -247,8 +247,8 @@ contract MiddayRngCreditTest is DeployProtocol {
         }
         assertEq(count, 1, "keeper publishes exactly once");
         assertFalse(game.isRngFulfilled(), "keeper retires callback authority");
-        assertEq(game.extsload(bytes32(uint256(4))), requestSlot, "keeper retains nonzero request ID");
-        assertEq((uint256(game.extsload(bytes32(0))) >> 48) & type(uint48).max, requestTime, "keeper retains timestamp");
+        assertEq(game.extsload_g8132(bytes32(uint256(4))), requestSlot, "keeper retains nonzero request ID");
+        assertEq((uint256(game.extsload_g8132(bytes32(0))) >> 48) & type(uint48).max, requestTime, "keeper retains timestamp");
         mockVRF.fulfillRandomWordsRaw(id, address(game), 99);
         assertEq(RecyclingState.currentWord(address(game)), 42, "retained ID cannot authorize a duplicate");
         // The real daily stage also awards tickets. Drain those through the required

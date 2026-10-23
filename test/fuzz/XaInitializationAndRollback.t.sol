@@ -70,7 +70,7 @@ contract XaInitializationAndRollbackTest is DeployProtocol {
         }
     }
     function _ready() private returns (uint32 id,bytes32 stateSlot) {
-        vm.prank(address(coinflip));id=game.registerWallet(PLAYER,true);
+        vm.prank(address(coinflip));id=game.registerWallet_g9539(PLAYER,true);
         vm.prank(address(game));coin.mintForGame(PLAYER,10000);
         uint256 day=GameTimeLib.currentDayIndexAt(vm.getBlockTimestamp());
         vm.store(address(coinflip),bytes32(QaTrace.QUESTS),bytes32((day|(1<<24))|((day|(2<<24))<<64)));

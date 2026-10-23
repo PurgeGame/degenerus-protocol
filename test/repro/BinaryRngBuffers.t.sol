@@ -46,7 +46,7 @@ contract BinaryRngBuffersTest is DeployProtocol {
         mockVRF.fundSubscription(1, 1000 ether);
         uint24 today = game.currentDayView();
         for (uint256 i; i < 1024; ++i) {
-            if (uint24(uint256(game.extsload(bytes32(0))) >> 24) == today && !game.rngLocked()) break;
+            if (uint24(uint256(game.extsload_g8132(bytes32(0))) >> 24) == today && !game.rngLocked()) break;
             game.mineFlip(0);
             if (game.rngLocked() && !game.isRngFulfilled()) mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 0xB0B5);
         }
@@ -94,7 +94,7 @@ contract BinaryRngBuffersTest is DeployProtocol {
         vm.prank(buyer);
         uint8 action = game.minerAction();
         assertTrue(action != 17 && action != 18, "the engine selects no fresh request");
-        bytes32 state = game.extsload(bytes32(0));
+        bytes32 state = game.extsload_g8132(bytes32(0));
         uint256 credit = game.middayRngCredits(buyer);
         bytes memory production = address(game).code;
         vm.etch(address(game), address(new MiddayRequestWorker()).code);
@@ -102,7 +102,7 @@ contract BinaryRngBuffersTest is DeployProtocol {
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
         MiddayRequestWorker(payable(address(game))).requestMidday();
         vm.etch(address(game), production);
-        assertEq(game.extsload(bytes32(0)), state, "blocked request changed session state");
+        assertEq(game.extsload_g8132(bytes32(0)), state, "blocked request changed session state");
         assertEq(game.middayRngCredits(buyer), credit, "blocked request charged donor");
         assertEq(mockVRF.lastRequestId(), id, "blocked request reached coordinator");
     }
@@ -132,20 +132,20 @@ contract BinaryRngBuffersTest is DeployProtocol {
         game.updateVrfCoordinatorAndSub(address(observer), 1, bytes32(uint256(1)));
         vm.prank(buyer); game.mineFlip(0);
         assertFalse(game.rngComplete());
-        assertEq(uint256(game.extsload(bytes32(uint256(4)))), 90001);
+        assertEq(uint256(game.extsload_g8132(bytes32(uint256(4)))), 90001);
     }
     function test_CoordinatorFailureRollsBackSealAndCredit() public {
         _buy();
-        bytes32 state = game.extsload(bytes32(0));
-        bytes32 cursor = game.extsload(bytes32(GameSlots.LOOTBOX_RNG_PACKED));
+        bytes32 state = game.extsload_g8132(bytes32(0));
+        bytes32 cursor = game.extsload_g8132(bytes32(GameSlots.LOOTBOX_RNG_PACKED));
         uint256 credit = game.middayRngCredits(buyer);
         uint256 id = mockVRF.lastRequestId();
         vm.mockCallRevert(address(mockVRF), abi.encodeWithSelector(IVRFCoordinator.requestRandomWords.selector), "coordinator unavailable");
         // A refused request rolls back its own preparation; with nothing else done the call
         // returns without progress or reward.
         vm.prank(buyer); game.mineFlip(0);
-        assertEq(game.extsload(bytes32(0)), state, "failed request changed buffer or completion");
-        assertEq(game.extsload(bytes32(GameSlots.LOOTBOX_RNG_PACKED)), cursor, "failed request changed pending commitments");
+        assertEq(game.extsload_g8132(bytes32(0)), state, "failed request changed buffer or completion");
+        assertEq(game.extsload_g8132(bytes32(GameSlots.LOOTBOX_RNG_PACKED)), cursor, "failed request changed pending commitments");
         assertEq(game.middayRngCredits(buyer), credit);
         assertEq(mockVRF.lastRequestId(), id);
     }
@@ -157,11 +157,11 @@ contract BinaryRngBuffersTest is DeployProtocol {
             _buy();
             // The low 48 bits of lootboxRngPacked hold the hero ring and the basefee gate; a
             // request must leave them untouched, so no request-epoch counter lives there.
-            uint48 lowBits = uint48(uint256(game.extsload(bytes32(GameSlots.LOOTBOX_RNG_PACKED))));
+            uint48 lowBits = uint48(uint256(game.extsload_g8132(bytes32(GameSlots.LOOTBOX_RNG_PACKED))));
             uint256 id = _request();
             assertEq(RecyclingState.readBuffer(address(game)), write);
             assertEq(RecyclingState.writeBuffer(address(game)), write ^ 1);
-            assertEq(uint48(uint256(game.extsload(bytes32(GameSlots.LOOTBOX_RNG_PACKED)))), lowBits, "no increasing epoch counter");
+            assertEq(uint48(uint256(game.extsload_g8132(bytes32(GameSlots.LOOTBOX_RNG_PACKED)))), lowBits, "no increasing epoch counter");
             assertFalse(game.rngComplete()); assertEq(RecyclingState.currentWord(address(game)), 0);
             mockVRF.fulfillRandomWords(id, cycle + 42);
             assertFalse(game.rngComplete(), "delivery cannot skip settlement");

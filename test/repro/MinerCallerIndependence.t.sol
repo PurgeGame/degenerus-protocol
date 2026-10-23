@@ -105,9 +105,9 @@ contract MinerCallerIndependenceTest is DeployProtocol {
     }
 
     function _commitmentDigest() private view returns (bytes32) {
-        return keccak256(abi.encode(mockVRF.lastRequestId(), game.extsload(bytes32(0)),
-            game.extsload(bytes32(uint256(3))), game.extsload(bytes32(uint256(4))),
-            game.extsload(bytes32(uint256(5))), game.extsload(bytes32(GameSlots.LOOTBOX_RNG_PACKED)),
+        return keccak256(abi.encode(mockVRF.lastRequestId(), game.extsload_g8132(bytes32(0)),
+            game.extsload_g8132(bytes32(uint256(3))), game.extsload_g8132(bytes32(uint256(4))),
+            game.extsload_g8132(bytes32(uint256(5))), game.extsload_g8132(bytes32(GameSlots.LOOTBOX_RNG_PACKED)),
             RecyclingState.readBuffer(address(game)), RecyclingState.writeBuffer(address(game)),
             game.rngComplete()));
     }

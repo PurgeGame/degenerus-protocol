@@ -106,7 +106,7 @@ interface IDegenerusQuests {
     /// @notice Records player decimator activity and checks quest completion
     /// @dev Called by FLIP when a player burns into the decimator (onlyCoin admits COIN, COINFLIP, GAME and AFFILIATE).
     ///      FLIP obtains the burner's ID first (Game `playerActivityScoreCached`, then
-    ///      `registerWallet(caller, true)` on zero). Quests credits the reward itself by ID.
+    ///      `registerWallet_g9539(caller, true)` on zero). Quests credits the reward itself by ID.
     /// @param id Wallet ID of the burner
     /// @param burnAmount The amount of tokens burned in the decimator
     /// @return reward The quest reward amount earned (0 if quest not completed)
@@ -173,8 +173,6 @@ interface IDegenerusQuests {
         external
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed);
 
-
-
     /// @notice Records combined purchase-path activity (mint tickets + lootbox) and checks quest completion
     /// @dev Called by MintModule for the unified purchase path. Combines the mint + lootbox
     ///      quest legs into a single cross-contract call. Returns streak for compute-once
@@ -206,8 +204,6 @@ interface IDegenerusQuests {
     /// @param amount The number of bonus streak days to award
     /// @param currentDay The caller's current calendar day; quest state pins to the newest rolled day
     function awardQuestStreakBonus(uint32 id, uint16 amount, uint24 currentDay) external;
-
-
 
     /// @notice Record a paid craps action: quest progress and the whole-day streak credit.
     /// @dev Access: COIN only. FLIP is the single reporter for the whole craps surface, so no
@@ -328,13 +324,11 @@ interface IDegenerusQuests {
     /// @return The effective (decay-applied) reward streak.
     function effectiveBaseStreak(uint32 id) external view returns (uint32);
 
-    function effectiveBaseStreakAndAfking_g2654(uint32 id) external view returns (uint32 streak, bool afking);
-
     /// @notice effectiveBaseStreak plus the player's afking-run flag, from one quest-state read.
     /// @dev Game's activity score passes the ID from the mint word it already holds.
     /// @param id Wallet ID of the player to query (0 returns (0, false)).
     /// @return streak The effective (decay-applied) reward streak.
     /// @return afking True while the player is mid afking-run.
-    function effectiveBaseStreakAndAfking(uint32 id) external view returns (uint32 streak, bool afking);
+    function effectiveBaseStreakAndAfking_g2654(uint32 id) external view returns (uint32 streak, bool afking);
 
 }

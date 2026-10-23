@@ -50,10 +50,10 @@ contract BoundedMappingGasTest is BoundedDeployProtocol {
         vm.deal(DEITY, 1_000 ether);
         vm.prank(DEITY);
         game.purchaseDeityPass{value: 24 ether}(0, 1, bytes32(0));
-        deityId = game.walletIdOf(DEITY);
+        deityId = game.walletIdOf_g3120(DEITY);
         vm.warp(block.timestamp + 20 days);
         _seed(abi.encodeCall(BoundedGameSeeder.seed, (PLAYER)));
-        playerId = game.walletIdOf(PLAYER);
+        playerId = game.walletIdOf_g3120(PLAYER);
         vm.deal(PLAYER, 1_000 ether);
         vm.deal(address(game), 1_000 ether);
     }

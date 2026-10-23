@@ -459,7 +459,7 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
             abi.encodeCall(game.purchaseDeityPass, (uint32(0), uint8(7), bytes32(0))));
         _crank(1);
         _buy("first-registration", cast[0], 400, 0, MintPaymentKind.DirectEth, game.mintPrice());
-        uint32 id = game.walletIdOf(cast[0]);
+        uint32 id = game.walletIdOf_g3120(cast[0]);
         // A live production subscription makes both quest-to-Game hooks mutate real state.
         uint256 seat = _grantSeat(cast[0]);
         _success("subscribe-for-hooks", cast[0], address(game), 1 ether,
@@ -500,7 +500,7 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
         _success("sweep-accounts", cast[0], address(game), 0, abi.encodeCall(game.sweepAccounts, (children)));
         _success("withdraw-afking", cast[0], address(game), 0,
             abi.encodeCall(game.withdrawAfkingFunding, (id, uint256(0.1 ether))));
-        (bool denied,) = _ctx("unauthorized-hook", false, cast[2], address(game), 0, abi.encodeCall(game.registerWallet, (cast[2], true)));
+        (bool denied,) = _ctx("unauthorized-hook", false, cast[2], address(game), 0, abi.encodeCall(game.registerWallet_g9539, (cast[2], true)));
         assertFalse(denied);
         bytes memory runtime = address(game).code;
         ConsolidationSeed seed = new ConsolidationSeed();
@@ -542,8 +542,8 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
         _buy("hot-funder", cast[1], 400, 0, MintPaymentKind.DirectEth, game.mintPrice());
         _success("hot-deity", cast[2], address(game), 24 ether,
             abi.encodeCall(game.purchaseDeityPass, (uint32(0), uint8(1), bytes32(0))));
-        uint32 id = game.walletIdOf(cast[0]);
-        uint32 issuer = game.walletIdOf(cast[2]);
+        uint32 id = game.walletIdOf_g3120(cast[0]);
+        uint32 issuer = game.walletIdOf_g3120(cast[2]);
         _warpDay(20, 5 minutes);
         bytes memory runtime = address(game).code;
         vm.etch(address(game), type(ConsolidationSeed).runtimeCode);

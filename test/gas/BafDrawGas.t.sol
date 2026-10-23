@@ -162,7 +162,7 @@ contract BafDrawGas is DeployProtocol {
         _mint(alice, 1000);
         uint256 used = _measuredDeposit(alice);
         emit log_named_uint("deposit_gas_first_ever_with_registration", used);
-        assertGt(game.walletIdOf(alice), 0, "the first deposit registers the wallet");
+        assertGt(game.walletIdOf_g3120(alice), 0, "the first deposit registers the wallet");
         // 218,905 measured after storage reuse phase 2 (ceiling was 200,000).
         assertLe(used, 230_000, "first-ever deposit with registration ceiling");
     }

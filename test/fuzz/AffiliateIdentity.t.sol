@@ -296,7 +296,7 @@ contract AffiliateIdentityTest is DeployProtocol {
     function test_UnauthorizedAllocationCannotConsumeAnId() public {
         address fresh = address(0xD11);
         vm.expectRevert(bytes4(keccak256("E()")));
-        game.registerWallet(fresh, false);
+        game.registerWallet_g9539(fresh, false);
         assertEq(_id(fresh), 0);
     }
 

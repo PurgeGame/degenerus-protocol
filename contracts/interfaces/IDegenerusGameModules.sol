@@ -402,41 +402,18 @@ interface IDegenerusGameBoonModule {
         uint256 nonceBase
     ) external payable;
 
-    /// @notice Issues a deity boon from deity account `deityId` (0 = caller; account rule) to the
-    ///         existing account `recipientId`. Raw msg.data target of Game.issueDeityBoon.
-    function issueDeityBoon(uint32 deityId, uint32 recipientId, uint8 slot) external;
+
 
     /// @notice Automatically award both protocol owners' three closed daily draws. Advance-only delegate target.
     function resolveProtocolBoonDraws(uint24 awardDay) external;
 
 
 
-    /// @notice Consumes a player's coinflip, craps or WWXRP boon and returns its value
-    /// @dev The Game façade authorizes COINFLIP, COIN and WWXRP and forwards its calldata
-    ///      unchanged (identical selector to DegenerusGame.consumeCoinflipBoon(uint32)). Each
-    ///      caller selects only its own lane; delegatecall preserves the caller for the
-    ///      module's dispatch. Boon state is keyed by wallet ID; `id == 0` returns 0.
-    /// @param id Wallet ID of the player
-    /// @return boonBps Boon value in basis points
-    function consumeCoinflipBoon_g2902(uint32 id) external returns (uint16 boonBps);
 
-    /// @notice Consumes a player's decimator boost boon
-    /// @dev Delegate target of DegenerusGame.consumeDecimatorBoon(uint32). Boon state is keyed
-    ///      by wallet ID; `id == 0` returns 0.
-    /// @param id Wallet ID of the player
-    /// @return boostBps Boost value in basis points
-    function consumeDecimatorBoost(uint32 id) external returns (uint16 boostBps);
 
-    /// @notice Consumes a player's degenerette stake boon for a bet in `currency`
-    /// @dev Each currency has its own independent boon lane; only the bet currency's
-    ///      lane is read and spent.
-    /// @param id Wallet ID of the player (boon state key)
-    /// @param currency Bet currency (0=ETH, 1=FLIP)
-    /// @return boostBps Stake bonus in basis points (0 if the lane is empty or expired)
-    function consumeDegeneretteBoon(
-        uint32 id,
-        uint8 currency
-    ) external payable returns (uint16 boostBps);
+
+
+
 
     /// @notice Clear all expired boons for a player
     /// @param id Wallet ID of the player (boon state key)
@@ -450,22 +427,7 @@ interface IDegenerusGameDegeneretteModule {
 
 
     function runDegeneretteWork_g670(uint256 gasAllowance) external returns (MineFlipGas.Result memory);
-    /// @notice Places single-symbol bets
-    /// @dev Raw msg.data target of Game.placeDegeneretteBet (identical selector). Gift door: an
-    ///      authorized caller funds from the account (FLIP from its payee, quest to the account);
-    ///      any other caller funds the bet itself as a gift to the existing account `id`.
-    /// @param id The betting account (0 = caller; otherwise allocated, else E)
-    /// @param currency Currency type (0=ETH, 1=FLIP; all other values unsupported)
-    /// @param amountPerSpin Bet amount per ticket
-    /// @param spinCount Number of spins (1..25 ETH, 1..15 FLIP). Each spin resolves independently.
-    /// @param symbol Chosen hero symbol (0..23: Crypto, Zodiac, Cards); quadrant = symbol >> 3.
-    function placeDegeneretteBet(
-        uint32 id,
-        uint8 currency,
-        uint128 amountPerSpin,
-        uint8 spinCount,
-        uint8 symbol
-    ) external payable;
+
 
     /// @notice Resolve a lootbox WWXRP roll as a single WWXRP Degenerette spin.
     /// @param playerId The reward account's wallet ID.
@@ -525,17 +487,15 @@ interface IDegenerusGameDegeneretteModule {
 interface IDegenerusGameBingoModule {
     /// @notice Claim color-completion bingo: all 8 colors of one symbol on a level.
     /// @dev Each player may claim one bingo reward per level.
-    ///      Raw msg.data target of Game.claimBingo (identical selector); DGNRS to the payee.
+    ///      Game-hosted public entry; DGNRS to the payee.
     /// @param id Bingo owner to claim for (0 = caller; otherwise allocated, else E); permissionless.
     /// @param level The level to claim on (uint24 storage-key width).
     /// @param symbol Symbol 0-31 (quadrant = symbol >> 3, symInQ = symbol & 7).
     /// @param slots Per-color positions in lvlTraitEntry[(level) & 1][traitId] the owner occupies.
     function claimBingo(uint32 id, uint24 level, uint8 symbol, uint32[8] calldata slots) external;
 
-    /// @notice Claim DGNRS affiliate rewards for the current level. The Game retains a
-    ///         thin delegatecall dispatch stub that targets this selector; the body must
-    ///         run in the Game's context for the onlyGame / onlyFlipCreditors external
-    ///         calls, which is what that stub provides.
+    /// @notice Claim DGNRS affiliate rewards for the current level. Implemented directly
+    ///         on Game; its internal body preserves the onlyGame / onlyFlipCreditors calls.
     ///      Permissionless; DGNRS to the account's payee, FLIP bonus by ID.
     /// @param id Affiliate account to claim for (0 = caller; otherwise allocated, else E).
     function claimAffiliateDgnrs(uint32 id) external;
@@ -592,19 +552,9 @@ interface IGameAfkingModule {
     ///      non-member settles nothing and does not revert.
     function claimAfkingFlip(uint32[] calldata ids) external;
 
-    /// @notice Affiliate-only settlement of up to eight subs sharing one direct affiliate: pays
-    ///         each sub its own reward and returns their summed affiliate base (whole FLIP). Each
-    ///         settlement moves its checkpoint first, so a duplicate sub settles nothing the second time.
-    /// @param ids Up to eight subscriber IDs, 32 bits each from the low end (zero lanes skipped).
-    /// @param uplines The run's two upline IDs packed low/high 32 bits (zero for no referrer).
-    /// @return sumB The settled affiliate base.
-    /// @return skipU1 The part of `sumB` from subs that are themselves the first upline.
-    /// @return skipU2 The part of `sumB` from subs that are themselves the second upline.
-    function drainAffiliateBases(uint256 ids, uint256 uplines)
-        external returns (uint256 sumB, uint256 skipU1, uint256 skipU2);
 
-    /// @notice Cashout-curse SET hook, delegatecalled from the Game's claimWinnings.
-    function maybeCurse(uint32 player) external;
+
+
 
     /// @notice Permissionless paid cure: clear account `id`'s cashout/smite curse for 100 FLIP
     ///         burned from the caller's own wallet (0 = caller; otherwise allocated, else E).

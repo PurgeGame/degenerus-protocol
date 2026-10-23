@@ -51,8 +51,8 @@ contract CrapsDayUpgradeTest is CrapsPins {
 
     function setUp() public {
         _installPins();
-        game.registerWallet(alice, true);
-        game.registerWallet(bob, true);
+        game.registerWallet_g9539(alice, true);
+        game.registerWallet_g9539(bob, true);
         craps = new UpgradeHarness();
         // The deployment day is a Craps warm-up day with no windows; every fixture plays
         // from genesis + 1, the first day the table opens.

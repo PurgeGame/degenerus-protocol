@@ -306,7 +306,7 @@ describe("DegenerusGame", function () {
       const mintPrice = await game.mintPrice();
 
       // alice holds no wallet ID before her first purchase, so no quest state exists for her.
-      expect(await game.walletIdOf(alice.address)).to.equal(0n);
+      expect(await game.walletIdOf_g3120(alice.address)).to.equal(0n);
       const [, , beforeProgress, beforeCompleted] = await quests.playerQuestStates(0);
       expect(beforeProgress[0]).to.equal(0n);
       expect(beforeCompleted[0]).to.equal(false);
@@ -323,7 +323,7 @@ describe("DegenerusGame", function () {
       ).to.not.be.reverted;
 
       const [, , progress, completed] = await quests.playerQuestStates(
-        await game.walletIdOf(alice.address)
+        await game.walletIdOf_g3120(alice.address)
       );
       expect(progress[0]).to.equal(mintPrice);
       expect(completed[0]).to.equal(true);

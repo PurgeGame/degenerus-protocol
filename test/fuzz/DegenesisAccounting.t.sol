@@ -20,7 +20,7 @@ contract DegenesisAccounting is DegenesisFixture {
     function setUp() public override {
         super.setUp();
         alice = _player("alice", 0);
-        aliceId = game.walletIdOf(alice);
+        aliceId = game.walletIdOf_g3120(alice);
         _earnCredit(alice, 50 ether);
         _drain();
         _driveDay(2);
@@ -145,7 +145,7 @@ contract DegenesisAccounting is DegenesisFixture {
     /// @notice An operator buying for a player: overpay goes to the operator (the payer).
     function test_OperatorOverpay_CreditsOperatorAfking() public {
         address op = _player("operator", 1 ether);
-        uint32 opId = game.walletIdOf(op);
+        uint32 opId = game.walletIdOf_g3120(op);
         vm.prank(alice);
         game.setOperatorApproval(0, op, true);
         uint256 credit = game.degenesisCreditOf(alice);

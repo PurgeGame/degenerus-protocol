@@ -25,8 +25,8 @@ contract RedemptionBackingCapTest is RedemptionFixture {
         uint128 second = uint128(packed >> 128);
         assertEq(uint80(first), 1e18 + 1);
         assertEq(uint80(second), 2e18 + 3);
-        assertEq(uint32(first >> 80), game.walletIdOf(alice));
-        assertEq(uint32(second >> 80), game.walletIdOf(bob));
+        assertEq(uint32(first >> 80), game.walletIdOf_g3120(alice));
+        assertEq(uint32(second >> 80), game.walletIdOf_g3120(bob));
         assertEq(uint256(vm.load(address(sdgnrs), keccak256(abi.encode(uint256(1), PeripheralSlots.SD_BATCH_PLAYERS + 1)))), 0);
         _burn(alice, 3e18 + 5);
         uint256 afterPacked = uint256(vm.load(address(sdgnrs), data));
@@ -53,7 +53,7 @@ contract RedemptionBackingCapTest is RedemptionFixture {
         bytes32 key = keccak256(abi.encode(uint256(0), PeripheralSlots.SD_BATCH_PLAYERS + 1));
         uint256 entry = uint256(vm.load(address(sdgnrs), key));
         assertEq(uint80(entry), 3e18);
-        assertEq(uint32(entry >> 80), game.walletIdOf(carol), "replaces previous beneficiary");
+        assertEq(uint32(entry >> 80), game.walletIdOf_g3120(carol), "replaces previous beneficiary");
         assertEq(_claimTokens(alice, first), 0, "stale locator cannot read new owner");
         assertEq(_claimTokens(carol, first + 2), 3e18);
         assertEq(uint256(vm.load(address(sdgnrs), bytes32(PeripheralSlots.SD_BATCH_PLAYERS + 0))), 0, "no array length");
@@ -86,7 +86,7 @@ contract RedemptionBackingCapTest is RedemptionFixture {
         uint256 balance = sdgnrs.balanceOf(alice);
         uint256 supply = sdgnrs.totalSupply();
         uint32 id = _openBatchId();
-        uint32 walletId = game.walletIdOf(alice);
+        uint32 walletId = game.walletIdOf_g3120(alice);
         vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScore.selector, alice),
             abi.encode(uint256(123), walletId));
         _burn(alice, 1e18 + 999_999);

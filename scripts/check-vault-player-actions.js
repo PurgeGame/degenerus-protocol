@@ -24,7 +24,7 @@ const excluded = {
     "creditMiddayRng", "creditRedemptionDirect", "drainAffiliateBases", "emitDailyWinningTraits",
     "floorAfkingStreakBase", "initProtocolDeity", "minerAction", "payRecordSdgnrs",
     "playerActivityScoreCached", "playerActivityScoreCachedById", "pullAfkingSteth",
-    "rawFulfillRandomWords", "recordAfkingSecondary", "recordDecBurn", "registerWallet",
+    "rawFulfillRandomWords", "recordAfkingSecondary", "recordDecBurn", "registerWallet_g9539",
     "registerWalletIdentity", "resolveRedemptionLootbox", "retryRng", "runBafJackpot",
     "runDecimatorJackpot", "runTerminalJackpotWork", "setCrapsRngPending",
     "updateVrfCoordinatorAndSub", "wireVrf",
@@ -46,7 +46,7 @@ const excluded = {
   ],
   CRAPS: [
     "vaultComp", "donate", // Dedicated Vault batch/delegate-budget controls.
-    "creditPasses", "deliverPasses", "resolveRngSlot",
+    "creditPasses", "deliverPasses", "resolveRngSlot_g1079",
     "setBattleCreator", // DGVE owner calls this directly, including to authorize the Vault.
   ],
   PARIMUTUEL: ["recordGrowth", "runGrowthWork"],

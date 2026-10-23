@@ -30,7 +30,7 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
     function _aid(address a) internal returns (uint32 id) {
         id = _aidCache[a];
         if (id == 0) {
-            id = game.walletIdOf(a);
+            id = game.walletIdOf_g3120(a);
             if (id == 0) id = _giveWalletId(a);
             _aidCache[a] = id;
         }
@@ -102,7 +102,7 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
         address p = makeAddr("clamp_p");
         _fundPool(p, 50 ether);
         _subscribeLootbox(p, 1);
-        uint32 pId = game.walletIdOf(p);
+        uint32 pId = game.walletIdOf_g3120(p);
         assertGt(_positionOf(p), 0, "non-vacuity: a live run grounds the bump path");
 
         _setCheckpointStreak(p, STREAK_LATCH_CEILING);
@@ -139,7 +139,7 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
         _fundPool(p, 50 ether);
         _subscribeLootbox(p, 1);
         _deliverDay(_singleton(p), 0xF100);
-        uint32 pId = game.walletIdOf(p);
+        uint32 pId = game.walletIdOf_g3120(p);
         DegenerusGameLens.SubFull memory before = lens.subInfoFullById(address(game), pId);
         assertEq(before.effectiveStreak, 1, "one credited day on a zero base");
 
@@ -177,7 +177,7 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
         // Deliver a day; the snapshot stays, and the live streak adds the credited day.
         _deliverDay(_singleton(who), uint256(keccak256(abi.encode("snap_dd", who))) | 1);
         assertEq(_checkpointStreakOf(who), streakValue, "mid-run: the checkpoint streak is unchanged until settlement");
-        uint256 earned = lens.subInfoFullById(address(game), game.walletIdOf(who)).effectiveStreak;
+        uint256 earned = lens.subInfoFullById(address(game), game.walletIdOf_g3120(who)).effectiveStreak;
         assertEq(earned, uint256(streakValue) + 1, "the live streak is the snapshot plus the credited day");
 
         // Finalize via explicit cancel: the manual streak is handed back EXACTLY the earned value.
@@ -201,13 +201,13 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
         _subscribeLootbox(p, 1);
         _deliverDay(_singleton(p), 0xC1AAA1);
         _deliverDay(_singleton(p), 0xC1AAA2);
-        DegenerusGameLens.SubFull memory owed = lens.subInfoFullById(address(game), game.walletIdOf(p));
+        DegenerusGameLens.SubFull memory owed = lens.subInfoFullById(address(game), game.walletIdOf_g3120(p));
         assertEq(owed.owedFlip, 2 * SLOT0_FLIP_PER_BUY, "two elapsed days are owed");
 
         vm.recordLogs();
         game.claimAfkingFlip(_aids(_singleton(p)));
         assertEq(_flipClaimed(p), 2 * SLOT0_FLIP_PER_BUY, "settle pays exactly the elapsed days");
-        assertEq(lens.subInfoFullById(address(game), game.walletIdOf(p)).owedFlip, 0, "nothing left owed");
+        assertEq(lens.subInfoFullById(address(game), game.walletIdOf_g3120(p)).owedFlip, 0, "nothing left owed");
         vm.recordLogs();
         game.claimAfkingFlip(_aids(_singleton(p)));
         assertEq(_flipClaimed(p), 0, "a re-claim finds 0");
@@ -225,7 +225,7 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
         _deliverDay(_singleton(p), 0xC1AAA5);
         game.claimAfkingFlip(_aids(_singleton(p)));
         assertEq(_checkpointStreakOf(p), STREAK_LATCH_CEILING, "three folded days saturate at 65535, never wrap");
-        assertGe(lens.subInfoFullById(address(game), game.walletIdOf(p)).effectiveStreak, STREAK_LATCH_CEILING);
+        assertGe(lens.subInfoFullById(address(game), game.walletIdOf_g3120(p)).effectiveStreak, STREAK_LATCH_CEILING);
     }
 
     // =========================================================================
@@ -233,17 +233,17 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
     // =========================================================================
 
     function _positionOf(address who) internal view returns (uint256 position1) {
-        (, position1) = GameSlotKeys.subLane(address(game), game.walletIdOf(who));
+        (, position1) = GameSlotKeys.subLane(address(game), game.walletIdOf_g3120(who));
     }
 
     function _checkpointStreakOf(address who) internal view returns (uint256) {
-        (uint256 lane,) = GameSlotKeys.subLane(address(game), game.walletIdOf(who));
+        (uint256 lane,) = GameSlotKeys.subLane(address(game), game.walletIdOf_g3120(who));
         return (lane >> 69) & 0xffff;
     }
 
     /// @dev Write the 16-bit checkpoint streak (lane bits 69-84) directly, leaving the rest of the word intact.
     function _setCheckpointStreak(address who, uint256 value) internal {
-        (, uint256 position1) = GameSlotKeys.subLane(address(game), game.walletIdOf(who));
+        (, uint256 position1) = GameSlotKeys.subLane(address(game), game.walletIdOf_g3120(who));
         require(position1 != 0, "not a member");
         uint256 position = position1 - 1;
         bytes32 slot = bytes32(uint256(keccak256(abi.encode(GameSlots.SUBSCRIBERS))) + position / 3);
@@ -257,7 +257,7 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
     function _flipClaimed(address who) internal returns (uint256 total) {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 sig = keccak256("AfkingFlipClaimed(uint32,uint256)");
-        uint32 id = game.walletIdOf(who);
+        uint32 id = game.walletIdOf_g3120(who);
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2 || logs[i].topics[0] != sig) continue;
             if (uint32(uint256(logs[i].topics[1])) != id) continue;
@@ -267,14 +267,14 @@ contract StreakSnapshotAndPendingFlipClampTest is DeployProtocol {
 
     /// @dev The manual quest streak handed back to `who` after finalize.
     function _manualStreakOf(address who) internal view returns (uint256 streak) {
-        (streak, ) = quests.effectiveBaseStreakAndAfking(game.walletIdOf(who));
+        (streak, ) = quests.effectiveBaseStreakAndAfking_g2654(game.walletIdOf_g3120(who));
     }
 
     /// @dev Drive `player`'s dormant manual quest streak to `q` by writing `questPlayerState[player]` directly:
     ///      `state.streak = q` with `lastSyncDay` non-zero and the day anchors 0, so `_questSyncState` skips its
     ///      decay branch and `beginAfking` snapshots `q` verbatim.
     function _setManualQuestStreak(address player, uint16 q) internal {
-        uint32 id = game.walletIdOf(player);
+        uint32 id = game.walletIdOf_g3120(player);
         if (id == 0) id = _giveWalletId(player);
         bytes32 slot = keccak256(abi.encode(uint256(id), QUESTSTATE_SLOT));
         uint256 word = (uint256(q) << (OFF_QS_STREAK * 8)) | (uint256(1) << (OFF_QS_SYNCDAY * 8));

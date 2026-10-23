@@ -5,7 +5,7 @@ import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 
 contract TicketLensHarness is DegenerusGameStorage {
-    function extsload(bytes32 slot) external view returns (bytes32 value) {
+    function extsload_g8132(bytes32 slot) external view returns (bytes32 value) {
         assembly { value := sload(slot) }
     }
     function append(uint24 lvl, uint8 trait, uint32 ownerIdx, uint32 count) external {

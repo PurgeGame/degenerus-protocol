@@ -146,10 +146,10 @@ contract DegeneretteGiftByAccountTest is SmurfFixture {
     function test_UnregisteredGiverRegistersAndEarnsTheQuest() public {
         address fresh = makeAddr("gift_fresh_giver");
         vm.deal(fresh, 1 ether);
-        assertEq(game.walletIdOf(fresh), 0, "fixture: unregistered giver");
+        assertEq(game.walletIdOf_g3120(fresh), 0, "fixture: unregistered giver");
         vm.expectCall(address(quests), abi.encodeWithSelector(IDegenerusQuests.handleDegenerette.selector, recipientId), 0);
         (uint256 bet,) = _bet(fresh, recipientId, CURRENCY_ETH, 0.01 ether, 2, 0.02 ether);
-        uint32 freshId = game.walletIdOf(fresh);
+        uint32 freshId = game.walletIdOf_g3120(fresh);
         assertGt(freshId, 0, "the paying funder registered");
         assertEq(uint32(bet), recipientId, "the bet belongs to the recipient");
     }
@@ -234,6 +234,6 @@ contract DegeneretteGiftByAccountTest is SmurfFixture {
         assertEq(coin.balanceOf(operator), 9_000, "the gifting operator's FLIP burned");
         assertEq(coin.balanceOf(owner), 10_000, "the owner's FLIP is untouched");
         assertEq(_lane(smurfId, CURRENCY_FLIP), boonLane, "the smurf's boon is untouched");
-        assertGt(game.walletIdOf(operator), 0, "the gifting operator registered as the funder");
+        assertGt(game.walletIdOf_g3120(operator), 0, "the gifting operator registered as the funder");
     }
 }

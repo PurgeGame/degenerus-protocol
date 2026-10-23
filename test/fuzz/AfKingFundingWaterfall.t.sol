@@ -30,7 +30,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
     function _aid(address a) internal returns (uint32 id) {
         id = _aidCache[a];
         if (id == 0) {
-            id = game.walletIdOf(a);
+            id = game.walletIdOf_g3120(a);
             if (id == 0) id = _giveWalletId(a);
             _aidCache[a] = id;
         }
@@ -191,7 +191,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
     }
 
     function _claimable(address who) internal view returns (uint256) {
-        return uint128(uint256(vm.load(address(game), GameSlotKeys.balances(game.walletIdOf(who)))));
+        return uint128(uint256(vm.load(address(game), GameSlotKeys.balances(game.walletIdOf_g3120(who)))));
     }
 
     /// @dev Set `who`'s claimable and credit `claimablePool` in tandem so the pool still backs it.
@@ -213,7 +213,7 @@ contract AfKingFundingWaterfall is DeployProtocol {
     }
 
     function _subscriberIndexOf(address who) internal view returns (uint256) {
-        return _position1(game.walletIdOf(who));
+        return _position1(game.walletIdOf_g3120(who));
     }
 
     function _lens(uint32 id) internal view returns (DegenerusGameLens.SubFull memory) {

@@ -26,7 +26,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 
 /// @dev Game storage with the Game's own flag setters. Etched at the GAME pin so LootboxCraps reads it.
 contract ChainPinGameFlags is DegenerusGameStorage {
-    function extsload(bytes32 s) external view returns (bytes32 v) {
+    function extsload_g8132(bytes32 s) external view returns (bytes32 v) {
         assembly { v := sload(s) }
     }
     function setPublished(bool on) external { _setRngSessionPublished(on); }
@@ -180,8 +180,8 @@ contract ChainPinCrapsMockTest is CrapsPins {
 
     function setUp() public {
         _installPins();
-        game.registerWallet(alice, true);
-        game.registerWallet(bob, true);
+        game.registerWallet_g9539(alice, true);
+        game.registerWallet_g9539(bob, true);
         _warpToTableGenesis();
         craps = new ChainPinTable();
         vm.warp(vm.getBlockTimestamp() + 1 days);
@@ -251,7 +251,7 @@ contract ChainPinCrapsMockTest is CrapsPins {
     ///      the worker progresses exactly when the predicate says maintenance is owed.
     function _agree(string memory row) internal returns (bool pred) {
         assertEq(uint256(game.rngConsumerStage_g379()), 7, row);
-        pred = craps.minerMaintenancePending();
+        pred = craps.minerMaintenancePending_g11976();
         bool progressed = _maintain(craps).progressed;
         assertEq(progressed, pred, row);
     }
@@ -322,11 +322,11 @@ contract ChainPinCrapsMockTest is CrapsPins {
     // ── F12 / S2 F-C3: saved boards never exceed seven named chips ──────────────────────────
 
     function _boardKey(address who) internal view returns (bytes32) {
-        return keccak256(abi.encode(uint256(game.walletIdOf(who)), CrapsPreferenceLib.PASS_SLOT));
+        return keccak256(abi.encode(uint256(game.walletIdOf_g3120(who)), CrapsPreferenceLib.PASS_SLOT));
     }
 
     function _word(address who) internal view returns (uint256) {
-        return uint256(craps.extsload(_boardKey(who)));
+        return uint256(craps.extsload_g8132(_boardKey(who)));
     }
 
     /// @dev A board of up to twelve chips, at most three a leg, starting at a random leg. Leg 0 is the
@@ -375,7 +375,7 @@ contract ChainPinCrapsMockTest is CrapsPins {
         (, uint256 placed) = CrapsPreferenceLib.decode(_word(alice));
         assertLe(placed, 7, "a saved board names more than seven chips");
         if (d == 0 && !wild && count <= 7) {
-            assertEq(craps.preferredBoardOf(game.walletIdOf(alice)), chips, "a valid board was not saved");
+            assertEq(craps.preferredBoardOf(game.walletIdOf_g3120(alice)), chips, "a valid board was not saved");
         }
     }
 
@@ -388,7 +388,7 @@ contract ChainPinCrapsMockTest is CrapsPins {
         vm.prank(alice);
         craps.setPreferredBoard(0, chips);
         uint256 saved = (_word(alice) >> CrapsPreferenceLib.SHIFT) & 0x1FFFFF;
-        uint32 aliceId = game.walletIdOf(alice);
+        uint32 aliceId = game.walletIdOf_g3120(alice);
         uint24 today = craps.currentDayIndex();
         for (uint256 i; i < 8; ++i) {
             uint256 o = uint256(keccak256(abi.encode(ops, i)));
@@ -469,10 +469,10 @@ contract ChainPinCrapsFsmTest is DeployProtocol {
         uint256 flags = uint256(vm.load(address(game), bytes32(0)));
         assertEq((flags >> 254) & 1, 0, "F5b: complete with a live request");
         assertEq((flags >> 253) & 1, 0, "F5b: complete with the terminal flag");
-        bool pred = crapsBattle.minerMaintenancePending();
+        bool pred = crapsBattle.minerMaintenancePending_g11976();
         uint256 snap = vm.snapshotState();
         vm.prank(address(game));
-        MineFlipGas.Result memory res = crapsBattle.runCrapsMaintenance(gasleft());
+        MineFlipGas.Result memory res = crapsBattle.runCrapsMaintenance_g10712(gasleft());
         vm.revertToState(snap);
         assertEq(res.progressed, pred, "F5a: maintenance predicate and worker disagree");
     }
@@ -602,8 +602,8 @@ contract ChainPinCrapsMiscTest is DeployProtocol {
     function test_F6_craps_reservedIdsAreTheGamesProtocolIds() public {
         ChainPinTableProbe probe = new ChainPinTableProbe{salt: keccak256("chainpin-misc-probe")}();
         (uint32 vaultId, uint32 sdgnrsId) = probe.reservedIds();
-        assertEq(vaultId, game.walletIdOf(ContractAddresses.VAULT), "vault id");
-        assertEq(sdgnrsId, game.walletIdOf(ContractAddresses.SDGNRS), "sDGNRS id");
+        assertEq(vaultId, game.walletIdOf_g3120(ContractAddresses.VAULT), "vault id");
+        assertEq(sdgnrsId, game.walletIdOf_g3120(ContractAddresses.SDGNRS), "sDGNRS id");
         assertEq(vaultId, 1);
         assertEq(sdgnrsId, 2);
     }
@@ -626,7 +626,7 @@ contract ChainPinCrapsMiscTest is DeployProtocol {
 
         uint32 n;
         for (uint32 id = 1;; ++id) {
-            try game.resolveAccount(id, address(0)) returns (address, address payee, bool) {
+            try game.resolveAccount_g502(id, address(0)) returns (address, address payee, bool) {
                 assertTrue(payee != address(0), "an allocated id resolves to a zero payee");
                 n = id;
             } catch {
@@ -641,7 +641,7 @@ contract ChainPinCrapsMiscTest is DeployProtocol {
             uint256 score = 1_000_000 * (uint256(id) + 1);
             vm.prank(ContractAddresses.CRAPS);
             coinflip.armDiceRunRecord(id, score);
-            (, address payee,) = game.resolveAccount(id, address(0));
+            (, address payee,) = game.resolveAccount_g502(id, address(0));
             (address holder, uint128 mark,,) = recordBounty.recordInfo(4);
             assertEq(holder, payee, "record holder is not the winner's payee");
             assertEq(uint256(mark), score);
@@ -669,14 +669,14 @@ contract ChainPinCrapsMiscTest is DeployProtocol {
         uint24 today = crapsBattle.currentDayIndex();
         assertTrue(uint256(crapsBattle.minerSlot()) / 8 < today, "fixture: the cursor does not lag");
 
-        assertTrue(crapsBattle.minerMaintenancePending(), "a lagging cursor is owed maintenance");
+        assertTrue(crapsBattle.minerMaintenancePending_g11976(), "a lagging cursor is owed maintenance");
         assertFalse(sdgnrs.redemptionSettlementPending(), "no redemption batch is settling");
         assertLe(uint256(game.nextMinerAction()), 21);
         assertLe(uint256(game.minerAction()), 21);
         assertTrue(game.nextMinerAction() != 1, "the idle gap tripped the terminal path");
 
         uint256 calls;
-        for (uint256 i; i < 150 && crapsBattle.minerMaintenancePending(); ++i) {
+        for (uint256 i; i < 150 && crapsBattle.minerMaintenancePending_g11976(); ++i) {
             try game.mineFlip(0) {
                 ++calls;
             } catch (bytes memory reason) {
@@ -688,7 +688,7 @@ contract ChainPinCrapsMiscTest is DeployProtocol {
             }
         }
         assertGt(calls, 0, "mineFlip never succeeded after the idle gap");
-        assertFalse(crapsBattle.minerMaintenancePending(), "mineFlip never cleared the idle-gap maintenance");
+        assertFalse(crapsBattle.minerMaintenancePending_g11976(), "mineFlip never cleared the idle-gap maintenance");
     }
 
     /// @dev Past the deadman the selector goes terminal, but the same views must still return for any
@@ -697,7 +697,7 @@ contract ChainPinCrapsMiscTest is DeployProtocol {
     function testFuzz_F7_viewsReturnForAnyGap(uint256 gapRaw) public {
         uint256 gap = bound(gapRaw, 1, 400);
         vm.warp(vm.getBlockTimestamp() + gap * 1 days);
-        bool pending = crapsBattle.minerMaintenancePending();
+        bool pending = crapsBattle.minerMaintenancePending_g11976();
         uint24 today = crapsBattle.currentDayIndex();
         if (uint256(crapsBattle.minerSlot()) / 8 + 30 < today) assertTrue(pending, "an expired cursor is owed maintenance");
         assertFalse(sdgnrs.redemptionSettlementPending());

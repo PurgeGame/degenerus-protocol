@@ -21,7 +21,7 @@ contract AfKingSubscription is DeployProtocol {
     function _aid(address a) internal returns (uint32 id) {
         id = _aidCache[a];
         if (id == 0) {
-            id = game.walletIdOf(a);
+            id = game.walletIdOf_g3120(a);
             if (id == 0) id = _giveWalletId(a);
             _aidCache[a] = id;
         }
@@ -252,12 +252,12 @@ contract AfKingSubscription is DeployProtocol {
     // ---- Lane reads ----
 
     function _dailyQtyOf(address who) internal view returns (uint8) {
-        return uint8(GameSlotKeys.subQuantity(address(game), game.walletIdOf(who)));
+        return uint8(GameSlotKeys.subQuantity(address(game), game.walletIdOf_g3120(who)));
     }
 
     /// @dev `who`'s set position + 1; 0 = not in the set.
     function _subscriberIndexOf(address who) internal view returns (uint256 position1) {
-        (, position1) = GameSlotKeys.subLane(address(game), game.walletIdOf(who));
+        (, position1) = GameSlotKeys.subLane(address(game), game.walletIdOf_g3120(who));
     }
 
     // ---- Event drain (emitter == address(game) — the game-resident module emits via delegatecall) ----
@@ -288,7 +288,7 @@ contract AfKingSubscription is DeployProtocol {
                 _logsCache[i].emitter == emitter &&
                 _logsCache[i].topics.length >= 2 &&
                 _logsCache[i].topics[0] == sig &&
-                uint32(uint256(_logsCache[i].topics[1])) == game.walletIdOf(who)
+                uint32(uint256(_logsCache[i].topics[1])) == game.walletIdOf_g3120(who)
             ) count++;
         }
     }
@@ -301,7 +301,7 @@ contract AfKingSubscription is DeployProtocol {
                 _logsCache[i].emitter == address(coinflip) &&
                 _logsCache[i].topics.length >= 2 &&
                 _logsCache[i].topics[0] == COINFLIP_STAKE_UPDATED_SIG &&
-                uint256(_logsCache[i].topics[1]) == game.walletIdOf(to)
+                uint256(_logsCache[i].topics[1]) == game.walletIdOf_g3120(to)
             ) count++;
         }
     }

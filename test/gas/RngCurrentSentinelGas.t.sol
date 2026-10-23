@@ -10,7 +10,7 @@ import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 contract RngCurrentSentinelGasTest is DeployProtocol {
     function setUp() public { _deployProtocol(); vm.warp(vm.getBlockTimestamp() + 1 days); }
     function _sealed(uint24 day) private view returns (bool) {
-        return uint24(uint256(game.extsload(bytes32(uint256(0)))) >> 24) == day && !game.rngLocked();
+        return uint24(uint256(game.extsload_g8132(bytes32(uint256(0)))) >> 24) == day && !game.rngLocked();
     }
     function _coldDailyNudgeCallback(uint256 nudges) private {
         RecyclingState.seedNudges(address(game), nudges);
@@ -18,11 +18,11 @@ contract RngCurrentSentinelGasTest is DeployProtocol {
         uint256 id = mockVRF.lastRequestId();
         assertGt(id, 0); assertTrue(game.rngLocked());
         uint256[] memory words = new uint256[](1); words[0] = 1_000_000;
-        bytes32 state = game.extsload(bytes32(0));
+        bytes32 state = game.extsload_g8132(bytes32(0));
         vm.prank(address(mockVRF));
         game.rawFulfillRandomWords(id, words);
         uint256 used = vm.snapshotGasLastCall("cold-nudge-callback");
-        assertEq(game.extsload(bytes32(0)), state, "nudge and flags are never written in fulfillment");
+        assertEq(game.extsload_g8132(bytes32(0)), state, "nudge and flags are never written in fulfillment");
         assertEq(RecyclingState.currentWord(address(game)), 1_000_000 + nudges);
         emit log_named_uint("daily nudges", nudges);
         emit log_named_uint("cold daily callback transaction gas", used);

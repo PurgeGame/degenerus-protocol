@@ -26,7 +26,7 @@ contract EntryRevealHarness is DegenerusGameStorage, WalletSeed {
         }
     }
 
-    function walletIdOf(address owner) external view returns (uint32) { return _walletIdOf(owner); }
+    function walletIdOf_g3120(address owner) external view returns (uint32) { return _walletIdOf(owner); }
 
     /// @dev Owed entries left queued for `n` seeded buyers, and which buyers' fractional
     ///      remainder has been consumed (its stored remainder byte is zero).
@@ -177,7 +177,7 @@ contract EntryRevealGas is Test {
         for (uint256 i; i < amounts.length; ++i) {
             expected += amounts[i];
             if (rem != 0 && consumed & (uint256(1) << i) != 0 && TicketEntropy.remainder(
-                TicketEntropy.identity(7, 7, i, h.walletIdOf(address(uint160(0x123400 + i)))), entropy, rem
+                TicketEntropy.identity(7, 7, i, h.walletIdOf_g3120(address(uint160(0x123400 + i)))), entropy, rem
             )) ++expected;
         }
         assertEq(b.entries + owedLeft, expected, "revealed plus still-owed entries equal whole entries plus winning fractions");

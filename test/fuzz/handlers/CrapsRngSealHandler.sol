@@ -210,7 +210,7 @@ contract CrapsRngSealHandler is Test {
             vm.deal(a, 2_000 ether);
             // A wallet that bought through the Game holds an ID before it reaches the non-paying doors.
             vm.prank(ContractAddresses.AFFILIATE);
-            game.registerWallet(a, true);
+            game.registerWallet_g9539(a, true);
         }
     }
 
@@ -1017,7 +1017,7 @@ contract CrapsRngSealHandler is Test {
             } catch {}
         } else {
             vm.prank(address(game));
-            try JackpotBattle(address(craps)).runCrapsMaintenance(gasleft()) returns (MineFlipGas.Result memory r) {
+            try JackpotBattle(address(craps)).runCrapsMaintenance_g10712(gasleft()) returns (MineFlipGas.Result memory r) {
                 ok = true;
                 progressed = r.progressed;
             } catch {}
@@ -1062,7 +1062,7 @@ contract CrapsRngSealHandler is Test {
         address[] memory tos = new address[](n);
         for (uint256 i; i < n; i++) {
             address to = actors[(seed + i) % actors.length];
-            uint32 toId = game.walletIdOf(to);
+            uint32 toId = game.walletIdOf_g3120(to);
             if (toId == 0) return;
             tos[i] = to;
             reqs[i] = uint256(toId) | (4 << 160) | (uint256(countEach) << 200);

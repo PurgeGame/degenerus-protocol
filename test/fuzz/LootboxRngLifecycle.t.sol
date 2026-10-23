@@ -204,7 +204,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         );
         assertEq(RecyclingState.boxCount(address(game), index), position + 1, "one appended entry per purchase");
         uint256 entry = _entry(index, position);
-        assertEq(BoxOrderLib.boId(entry), game.walletIdOf(buyer), "the entry holds the buyer's wallet ID");
+        assertEq(BoxOrderLib.boId(entry), game.walletIdOf_g3120(buyer), "the entry holds the buyer's wallet ID");
         assertEq(BoxOrderLib.boCount(entry), 1, "one box");
         assertEq(BoxOrderLib.boSizeWei(entry), lootboxAmount, "of the purchased size");
     }
@@ -579,9 +579,9 @@ contract LootboxRngLifecycle is DeployProtocol {
         assertEq(_entry(purchaseIndex, pos2), entry2, "settlement leaves the entry word untouched");
 
         uint256 entropy1 = uint256(keccak256(abi.encode(
-            _rootWord(storedWord, purchaseIndex, pos1), uint256(game.walletIdOf(buyer1)), BOX_OPEN_TAG, uint256(1))));
+            _rootWord(storedWord, purchaseIndex, pos1), uint256(game.walletIdOf_g3120(buyer1)), BOX_OPEN_TAG, uint256(1))));
         uint256 entropy2 = uint256(keccak256(abi.encode(
-            _rootWord(storedWord, purchaseIndex, pos2), uint256(game.walletIdOf(buyer2)), BOX_OPEN_TAG, uint256(1))));
+            _rootWord(storedWord, purchaseIndex, pos2), uint256(game.walletIdOf_g3120(buyer2)), BOX_OPEN_TAG, uint256(1))));
 
         assertTrue(entropy1 != entropy2, "Different players must produce different entropy");
     }
@@ -600,7 +600,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         _completeDay(vrfWord);
         uint256 storedWord = _readLootboxWord(index);
         assertTrue(_settled(index, pos1) && _settled(index, pos2), "both entries settled");
-        uint256 id = game.walletIdOf(buyer);
+        uint256 id = game.walletIdOf_g3120(buyer);
         uint256 seed1 = uint256(keccak256(abi.encode(_rootWord(storedWord, index, pos1), id, BOX_OPEN_TAG, uint256(1))));
         uint256 seed2 = uint256(keccak256(abi.encode(_rootWord(storedWord, index, pos2), id, BOX_OPEN_TAG, uint256(1))));
         assertTrue(seed1 != seed2, "same wallet, same cohort: the position separates the draws");
@@ -632,7 +632,7 @@ contract LootboxRngLifecycle is DeployProtocol {
         uint256 word2 = _readLootboxWord(index2);
 
         // Compute entropy for each
-        uint256 id = game.walletIdOf(buyer);
+        uint256 id = game.walletIdOf_g3120(buyer);
         uint256 entropy1 = uint256(keccak256(abi.encode(_rootWord(word1, index1, pos1), id, BOX_OPEN_TAG, uint256(1))));
         uint256 entropy2 = uint256(keccak256(abi.encode(_rootWord(word2, index2, pos2), id, BOX_OPEN_TAG, uint256(1))));
 
@@ -665,7 +665,7 @@ contract LootboxRngLifecycle is DeployProtocol {
 
         // The boon root binds each stored order index.
         assertNotEq(index1, index2, "fixture must advance the order index");
-        uint256 id = game.walletIdOf(buyer);
+        uint256 id = game.walletIdOf_g3120(buyer);
         uint256 entropy1 = uint256(keccak256(abi.encode(_rootWord(word1, index1, pos1), id, BOX_BOON_TAG, uint256(index1))));
         uint256 entropy2 = uint256(keccak256(abi.encode(_rootWord(word2, index2, pos2), id, BOX_BOON_TAG, uint256(index2))));
 

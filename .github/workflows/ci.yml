@@ -67,10 +67,10 @@ jobs:
         run: npx mocha test/deploy/OptionalConfig.test.js
 
       - name: Build production contracts
-        run: forge build --skip test --out forge-out-production --cache-path .foundry-cache-production
+        run: forge build --skip test --threads 4 --out forge-out-production --cache-path .foundry-cache-production
 
-      - name: Contract size ceiling (EIP-170)
-        run: node scripts/check-deployment-sizes.js forge-out-production
+      - name: Contract size ceilings (Glamsterdam / EIP-7954)
+        run: node scripts/check-deployment-sizes.js --schedule glamsterdam forge-out-production
 
       - name: Owner and Vault player action coverage
         run: |
@@ -84,6 +84,7 @@ jobs:
       # every module and the separate CrapsBattle/JackpotBattle delegate pair.
       - name: Storage-layout oracle (MECH-02)
         env:
+          CHECK_ARTIFACTS: forge-out-production
           FOUNDRY_OUT: forge-out-production
           FOUNDRY_CACHE_PATH: .foundry-cache-production
         run: bash scripts/layout/storage_layout_oracle.sh
@@ -94,7 +95,7 @@ jobs:
       # Run all source-drift gates, including the newer crank, randomness,
       # shared-storage, arithmetic and simulation parity registries.
       - name: Source-drift gates
-        run: make check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete check-advance-calls check-rng-taint check-unchecked check-write-owners check-gasleft
+        run: make CHECK_ARTIFACTS=forge-out-production check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete check-advance-calls check-rng-taint check-rng-shape check-unchecked check-write-owners check-gasleft check-memory-guard check-recipient-calls
 
       - name: Preserve structural evidence
         if: always()

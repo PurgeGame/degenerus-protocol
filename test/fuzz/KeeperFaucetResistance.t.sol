@@ -587,13 +587,13 @@ contract KeeperFaucetResistance is DeployProtocol {
 
     /// @dev `who`'s wallet ID, registering one through the production hook when it has none.
     function _idOf(address who) internal returns (uint32 id) {
-        id = game.walletIdOf(who);
+        id = game.walletIdOf_g3120(who);
         if (id == 0) id = _giveWalletId(who);
     }
 
     /// @dev Grant `who` the permanent deity bit (mintPacked_ is slot 9).
     function _grantDeityPass(address who) internal {
-        bytes32 slot = keccak256(abi.encode(game.walletIdOf(who), uint256(MINTPACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(game.walletIdOf_g3120(who), uint256(MINTPACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         packed |= (uint256(1) << DEITY_SHIFT);
         vm.store(address(game), slot, bytes32(packed));
@@ -606,6 +606,6 @@ contract KeeperFaucetResistance is DeployProtocol {
 
     /// @dev True while `who` holds an unopened box of the current cohort.
     function _isPending(address who) internal view returns (bool) {
-        return GameSlotKeys.afkingBoxPending(address(game), game.walletIdOf(who));
+        return GameSlotKeys.afkingBoxPending(address(game), game.walletIdOf_g3120(who));
     }
 }

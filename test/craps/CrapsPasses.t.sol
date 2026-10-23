@@ -39,8 +39,8 @@ contract CrapsPassesTest is CrapsPins {
         uint256 floor_ = craps.SYBIL_SCORE_FLOOR();
         game.setScore(alice, floor_);
         game.setScore(bob, floor_);
-        game.registerWallet(alice, true);
-        game.registerWallet(bob, true);
+        game.registerWallet_g9539(alice, true);
+        game.registerWallet_g9539(bob, true);
     }
 
     function _today() internal view returns (uint24) {
@@ -1013,8 +1013,8 @@ contract CrapsAwardSplitTest is CrapsPins {
 
     function setUp() public {
         _installPins();
-        game.registerWallet(alice, true);
-        game.registerWallet(bob, true);
+        game.registerWallet_g9539(alice, true);
+        game.registerWallet_g9539(bob, true);
         craps = new CrapsViews();
         vm.warp(block.timestamp + 1 days);
         _setIndex(0);
@@ -1026,7 +1026,7 @@ contract CrapsAwardSplitTest is CrapsPins {
     ///      conservation `liquid + banked == gross` that every case below must close.
     function _grade(uint256 gross, uint256 wantNormal, uint256 wantHigh) internal {
         address player = makeAddr(string(abi.encodePacked("grade", gross)));
-        game.registerWallet(player, true);
+        game.registerWallet_g9539(player, true);
         uint256 banked = craps.splitAward(KEY, player, 1, gross);
         (uint256 n, uint256 h) = craps.passCreditsOf(player);
         assertEq(n, wantNormal, "the normal pass count is wrong");

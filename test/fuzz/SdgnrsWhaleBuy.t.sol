@@ -18,7 +18,7 @@ import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 ///      sees the live level, claimable, boon lane and RNG state.
 contract WhaleModuleForwarder {
     /// @dev The Game's raw storage read, which the affiliate calls back into during the purchase.
-    function extsload(bytes32 slot) external view returns (bytes32 value) {
+    function extsload_g8132(bytes32 slot) external view returns (bytes32 value) {
         assembly ("memory-safe") {
             value := sload(slot)
         }

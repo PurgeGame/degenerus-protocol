@@ -102,7 +102,11 @@ for host in json.loads((a.after / 'sizes.json').read_text()):
         expected = [e for e in expected if e.get('name') != row['alias']]
         if row['mode'] == 'rename':
             for entry in expected:
-                if entry.get('name') == row['original']:
+                # Match the exact overload: extsload(bytes32[]) keeps its ABI.
+                if entry.get('type') != 'function':
+                    continue
+                signature = entry['name'] + '(' + ','.join(v['type'] for v in entry['inputs']) + ')'
+                if artifacts['before'][host]['evm']['methodIdentifiers'].get(signature) == row['selector']:
                     entry['name'] = row['alias']
     canonical = lambda entries: {json.dumps(e, sort_keys=True) for e in entries}
     assert canonical(expected) == canonical(artifacts['after'][host]['abi']), ('Unexpected ABI drift', host,

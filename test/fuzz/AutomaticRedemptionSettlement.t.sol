@@ -69,8 +69,8 @@ contract AutomaticRedemptionSettlementTest is RedemptionFixture {
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0, "open burns reserve nothing");
         vm.warp(vm.getBlockTimestamp() + 1 days);
         _complete(38_402); // 175% roll, losing escrow flip
-        (uint128 a,) = sdgnrs.pendingRedemptions(game.walletIdOf(alice), day);
-        (uint128 b,) = sdgnrs.pendingRedemptions(game.walletIdOf(bob), day);
+        (uint128 a,) = sdgnrs.pendingRedemptions(game.walletIdOf_g3120(alice), day);
+        (uint128 b,) = sdgnrs.pendingRedemptions(game.walletIdOf_g3120(bob), day);
         assertEq(a, 0);
         assertEq(b, 0);
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
@@ -84,8 +84,8 @@ contract AutomaticRedemptionSettlementTest is RedemptionFixture {
         _burn(bob, sdgnrs.totalSupply() / 1000);
         _resolve(day, 100, 99);
         _settleOneClaim();
-        (uint128 a,) = sdgnrs.pendingRedemptions(game.walletIdOf(alice), day);
-        (uint128 b,) = sdgnrs.pendingRedemptions(game.walletIdOf(bob), day);
+        (uint128 a,) = sdgnrs.pendingRedemptions(game.walletIdOf_g3120(alice), day);
+        (uint128 b,) = sdgnrs.pendingRedemptions(game.walletIdOf_g3120(bob), day);
         assertEq(a, 0, "the first burner heads the queue");
         assertGt(b, 0, "the second waits for the next step");
         uint256 aliceCredit = game.claimableWinningsOf(alice);

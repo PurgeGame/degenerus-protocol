@@ -29,7 +29,7 @@ contract BoundedDeitySeizureGasTest is LoanSeizureGasBase, BoundedGasProbe {
         _measureBounded("G4_seize_symbol31", address(game), address(this), 0,
             abi.encodeCall(SeizureGasSeeder.seize, ()), false);
         _unetch();
-        (, address payee,) = game.resolveAccount(root, address(0));
+        (, address payee,) = game.resolveAccount_g502(root, address(0));
         assertEq(payee, address(sdgnrs));
     }
 }

@@ -49,7 +49,7 @@ contract KeeperNonBrick is DeployProtocol {
     function _aid(address a) internal returns (uint32 id) {
         id = _aidCache[a];
         if (id == 0) {
-            id = game.walletIdOf(a);
+            id = game.walletIdOf_g3120(a);
             if (id == 0) id = _giveWalletId(a);
             _aidCache[a] = id;
         }
@@ -242,7 +242,7 @@ contract KeeperNonBrick is DeployProtocol {
     }
 
     function _grantDeityPass(address who) internal {
-        bytes32 slot = keccak256(abi.encode(game.walletIdOf(who), uint256(MINTPACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(game.walletIdOf_g3120(who), uint256(MINTPACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         packed |= (uint256(1) << DEITY_SHIFT);
         vm.store(address(game), slot, bytes32(packed));
@@ -252,7 +252,7 @@ contract KeeperNonBrick is DeployProtocol {
     ///      351-02 test-infra reality) so a claimable-funded slice's `claimablePool -=` does not underflow.
     ///      `claimableWinnings` is `internal` (no getter) — read/write it via the RE-DERIVED mapping slot.
     function _setClaimable(address who, uint256 amount) internal {
-        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(CLAIMABLE_WINNINGS_SLOT)));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf_g3120(who)), uint256(CLAIMABLE_WINNINGS_SLOT)));
         uint256 cur = uint256(vm.load(address(game), slot));
         vm.store(address(game), slot, bytes32(cur + amount));
         _bumpClaimablePool(amount);
@@ -307,7 +307,7 @@ contract KeeperNonBrick is DeployProtocol {
                 logs[i].emitter == address(game) &&
                 logs[i].topics.length >= 2 &&
                 logs[i].topics[0] == SUB_EXPIRED_SIG &&
-                uint32(uint256(logs[i].topics[1])) == game.walletIdOf(who) &&
+                uint32(uint256(logs[i].topics[1])) == game.walletIdOf_g3120(who) &&
                 uint8(uint256(bytes32(logs[i].data))) == reason
             ) count++;
         }

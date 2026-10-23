@@ -34,7 +34,6 @@ import {EntropyLib} from "./libraries/EntropyLib.sol";
 import {FlipRoundLib} from "./libraries/FlipRoundLib.sol";
 import {MineFlipGas} from "./libraries/MineFlipGas.sol";
 
-
 /// @notice Interface for game contract player-facing functions used by sDGNRS.
 interface IDegenerusGamePlayer {
     /// @notice Crank the unified miner router (advance + box opens), paying any earned bounty.
@@ -56,26 +55,23 @@ interface IDegenerusGamePlayer {
 
     function redemptionReserve() external view returns (uint256);
 
-
     /// @notice Current ordered RNG consumer stage (1 = redemption settlement).
     function rngConsumerStage_g379() external view returns (uint8);
     /// @notice Check if game is over.
     function gameOver() external view returns (bool);
-    function resolveAccount_g502(uint32 id, address caller) external view returns (address key, address payee, bool authorized);
 
     /// @notice Resolve account `id` for `caller`: key, payee and whether `caller` may act for it
     ///         (its key, a smurf's owner, or an approved operator). Reverts for an unallocated
     ///         or zero `id`; never reverts on authorization.
-    function resolveAccount(uint32 id, address caller)
+    function resolveAccount_g502(uint32 id, address caller)
         external view returns (address key, address payee, bool authorized);
     /// @notice Check if the liveness-timeout game-over trigger is active (fires before gameOver latches).
     function livenessTriggered() external view returns (bool);
     /// @notice Get player's activity score and permanent Game wallet ID (0 = none).
     function playerActivityScore(address player) external view returns (uint256 scorePoints, uint32 walletId);
-    function walletIdOf_g3120(address player) external view returns (uint32);
 
     /// @notice `player`'s current default Game account (0 = none; never allocates).
-    function walletIdOf(address player) external view returns (uint32);
+    function walletIdOf_g3120(address player) external view returns (uint32);
     function acquiredBuyer(uint32 id) external view returns (uint32 buyer);
     /// @notice Resolve a redemption lootbox, drawn from the Game's redemption reserve.
     function resolveRedemptionLootbox(
@@ -96,7 +92,6 @@ interface ICoinflipPlayer {
     function withdrawRedeemedFlip(uint256 base) external returns (uint256 removed);
     /// @notice Read a player's auto-rebuy config; `carry` is the rolling FLIP bankroll.
     function coinflipAutoRebuyInfo(address player) external view returns (bool enabled, uint256 stop, uint256 carry, uint24 startDay);
-
 
     /// @notice Credit a FLIP flip stake to wallet `id` (sDGNRS is an authorized flip creditor;
     ///         0 is a no-op).
@@ -168,7 +163,6 @@ contract sDGNRS {
     /// @notice Thrown when a gambling burn's beneficiary has no Game wallet ID (a burn never
     ///         registers one).
     error NoWalletId();
-
 
     // =====================================================================
     //                              EVENTS
@@ -724,7 +718,6 @@ contract sDGNRS {
     //                          CONSTRUCTOR
     // =====================================================================
 
-
     /// @notice Initializes token supply and distributes to pools
     /// @dev Mints the vault allocation to the DGNRS wrapper address and pool allocations to this contract
     constructor() {
@@ -1269,7 +1262,6 @@ contract sDGNRS {
         }
     }
 
-
     /// @notice Get FLIP backing available for new burns (seed claimable + auto-rebuy carry).
     /// @dev No reserve subtraction: a batch close removes its escrowed slice from this backing,
     ///      so these live reads are already net of closed batches. sDGNRS holds no wallet
@@ -1402,7 +1394,6 @@ contract sDGNRS {
     function _poolIndex(Pool pool) private pure returns (uint8) {
         return uint8(pool);
     }
-
 
     /// @dev Internal mint implementation
     /// @param to Recipient address

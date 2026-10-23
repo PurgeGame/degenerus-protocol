@@ -24,7 +24,7 @@ contract RedemptionFlipCreditWalletIdTest is RedemptionFixture {
 
     function test_RedemptionWin_CreditsFlipToClaimWalletId() public {
         _seedFlipBacking(1_000_000);
-        uint32 aliceId = game.walletIdOf(alice);
+        uint32 aliceId = game.walletIdOf_g3120(alice);
         assertTrue(aliceId != 0);
 
         uint32 batchId = _openBatchId();

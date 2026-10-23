@@ -182,7 +182,7 @@ describe("GameLifecycle", function () {
       // The box joins the lootbox queue at the requested size, credited to alice.
       const boxes = await getEvents(tx, mintModule, "LootBoxBuy");
       expect(boxes.length).to.equal(1);
-      expect(boxes[0].args.buyer).to.equal(await game.walletIdOf(alice.address));
+      expect(boxes[0].args.buyer).to.equal(await game.walletIdOf_g3120(alice.address));
       expect(boxes[0].args.amount).to.equal(eth("0.01"));
     });
 

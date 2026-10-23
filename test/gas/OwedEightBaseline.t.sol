@@ -25,7 +25,7 @@ contract OwedEightPurchaseBaselineTest is DeployProtocol {
     }
 
     function test_ColdWhaleClaim100Levels() public {
-        uint32 id = game.walletIdOf(BUYER);
+        uint32 id = game.walletIdOf_g3120(BUYER);
         vm.cool(address(game));
         uint256 beforeGas = gasleft();
         game.claimWhalePass(id);

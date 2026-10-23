@@ -56,7 +56,7 @@ contract PermissionlessGiftAndApproval is DeployProtocol {
 
     /// @dev A bet word's low 32 bits are the owner's permanent wallet ID.
     function _assertOwnedBy(uint256 bet, address who, string memory err) internal view {
-        uint32 id = game.walletIdOf(who);
+        uint32 id = game.walletIdOf_g3120(who);
         assertTrue(id != 0, err);
         assertEq(uint32(bet), id, err);
     }

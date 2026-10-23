@@ -28,14 +28,14 @@ NC=$'\033[0m'
 MAPPINGS=(
   "contracts/interfaces/ILiquidation.sol:IDeityPassSeize|contracts/DegenerusDeityPass.sol:DegenerusDeityPass"
   "contracts/interfaces/ICoinflip.sol:ICoinflip|contracts/Coinflip.sol:Coinflip"
-  "contracts/interfaces/IDegenerusAffiliate.sol:IDegenerusAffiliate|contracts/DegenerusAffiliate.sol:DegenerusAffiliate"
+  "contracts/interfaces/IDegenerusAffiliate.sol:IDegenerusAffiliate|contracts/Coinflip.sol:Coinflip"
   "contracts/interfaces/IDegenerusCoin.sol:IDegenerusCoin|contracts/FLIP.sol:FLIP"
   "contracts/interfaces/IDegenerusGame.sol:IDegenerusGame|contracts/DegenerusGame.sol:DegenerusGame"
   "contracts/interfaces/IDegenerusJackpots.sol:IDegenerusJackpots|contracts/DegenerusJackpots.sol:DegenerusJackpots"
   "contracts/interfaces/IDegenerusParimutuel.sol:IDegenerusParimutuel|contracts/DegenerusParimutuel.sol:DegenerusParimutuel"
-  "contracts/interfaces/IDegenerusQuests.sol:IDegenerusQuests|contracts/DegenerusQuests.sol:DegenerusQuests"
-  # CRAPS serves settlement itself and delegates lifecycle/views through its fallback.
-  "contracts/interfaces/IJackpotBattle.sol:IJackpotBattle|contracts/CrapsBattle.sol:CrapsBattle+contracts/JackpotBattle.sol:JackpotBattle"
+  "contracts/interfaces/IDegenerusQuests.sol:IDegenerusQuests|contracts/Coinflip.sol:Coinflip"
+  # CrapsBattle directly inherits lifecycle and engine implementations.
+  "contracts/interfaces/IJackpotBattle.sol:IJackpotBattle|contracts/CrapsBattle.sol:CrapsBattle"
   "contracts/interfaces/IsDGNRS.sol:IsDGNRS|contracts/sDGNRS.sol:sDGNRS"
   "contracts/interfaces/IVaultCoin.sol:IVaultCoin|contracts/FLIP.sol:FLIP"
   "contracts/interfaces/IOwnerActions.sol:IOwnerVault|contracts/DegenerusVault.sol:DegenerusVault"
@@ -44,12 +44,10 @@ MAPPINGS=(
   "contracts/interfaces/IVaultPlayerActions.sol:IVaultPartialWinnings|contracts/DegenerusGame.sol:DegenerusGame"
   "contracts/interfaces/IVaultPlayerActions.sol:IVaultAffiliateClaim|contracts/DegenerusGame.sol:DegenerusGame"
   "contracts/interfaces/IVaultPlayerActions.sol:IVaultBatchAffiliateClaim|contracts/DegenerusGame.sol:DegenerusGame"
-  # IDegenerusGameModules.sol contains the module interfaces. Each module is deployed
-  # as a separate contract that DegenerusGame delegatecalls into. Check the module
-  # contract itself (code runs from the module, storage lives on DegenerusGame via
-  # shared DegenerusGameStorage inheritance).
+  # Module interfaces map to the deployed bundles; Miner/Bingo run directly on Game.
+  # Validate each actual host ABI, never the retired adapter that happened to inherit it.
   "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameAdvanceModule|contracts/modules/DegenerusGameDailyModule.sol:DegenerusGameDailyModule"
-  "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameMinerModule|contracts/modules/DegenerusGameMinerModule.sol:DegenerusGameMinerModule"
+  "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameMinerModule|contracts/DegenerusGame.sol:DegenerusGame"
   "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameRngModule|contracts/modules/DegenerusGameDailyModule.sol:DegenerusGameDailyModule"
   "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameTicketModule|contracts/modules/DegenerusGamePassModule.sol:DegenerusGamePassModule"
   "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameJackpotDrawModule|contracts/modules/DegenerusGameDailyModule.sol:DegenerusGameDailyModule"
@@ -57,11 +55,15 @@ MAPPINGS=(
   "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameJackpotModule|contracts/modules/DegenerusGameDailyModule.sol:DegenerusGameDailyModule"
   "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameDecimatorModule|contracts/modules/DegenerusGameEndgameModule.sol:DegenerusGameEndgameModule"
   "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameWhaleModule|contracts/modules/DegenerusGamePassModule.sol:DegenerusGamePassModule"
+  # The undeployed Mint adapter remains a fixture/base fallback interface.
+  # Endgame overrides _foilPurchaseWith and _degenesisPurchaseWith internally;
+  # neither deployed route calls purchaseWith. Keep the legacy adapter checked
+  # while standalone component fixtures still use its interface.
   "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameMintModule|contracts/modules/DegenerusGameMintModule.sol:DegenerusGameMintModule"
   "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameLootboxModule|contracts/modules/DegenerusGameBoxModule.sol:DegenerusGameBoxModule"
   "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameBoonModule|contracts/modules/DegenerusGameBoxModule.sol:DegenerusGameBoxModule"
   "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameDegeneretteModule|contracts/modules/DegenerusGameBoxModule.sol:DegenerusGameBoxModule"
-  "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameBingoModule|contracts/modules/DegenerusGameBingoModule.sol:DegenerusGameBingoModule"
+  "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameBingoModule|contracts/DegenerusGame.sol:DegenerusGame"
   "contracts/interfaces/IDegenerusGameModules.sol:IGameAfkingModule|contracts/modules/DegenerusGameBoxModule.sol:DegenerusGameBoxModule"
   "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameFoilPackModule|contracts/modules/DegenerusGameEndgameModule.sol:DegenerusGameEndgameModule"
   "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameFoilWorkerModule|contracts/modules/DegenerusGamePassModule.sol:DegenerusGamePassModule"

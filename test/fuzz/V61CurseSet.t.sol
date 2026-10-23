@@ -41,7 +41,7 @@ contract V61CurseSet is DeployProtocol {
     function _aid(address a) internal returns (uint32 id) {
         id = _aidCache[a];
         if (id == 0) {
-            id = game.walletIdOf(a);
+            id = game.walletIdOf_g3120(a);
             if (id == 0) id = _giveWalletId(a);
             _aidCache[a] = id;
         }
@@ -426,12 +426,12 @@ contract V61CurseSet is DeployProtocol {
     }
 
     function _dailyQtyOf(address who) internal view returns (uint8) {
-        return uint8(GameSlotKeys.subQuantity(address(game), game.walletIdOf(who)));
+        return uint8(GameSlotKeys.subQuantity(address(game), game.walletIdOf_g3120(who)));
     }
 
     /// @dev The activity-score code frozen into the lane (exact below 500).
     function _frozenScoreOf(address who) internal view returns (uint256) {
-        (uint256 lane,) = GameSlotKeys.subLane(address(game), game.walletIdOf(who));
+        (uint256 lane,) = GameSlotKeys.subLane(address(game), game.walletIdOf_g3120(who));
         return (lane >> 36) & 0x3ff;
     }
 

@@ -12,7 +12,7 @@ import {activityScoreOf} from "../helpers/ActivityScoreOf.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 
 contract ActivityCacheQuestStub {
-    function effectiveBaseStreakAndAfking(uint32) external pure returns (uint32, bool) { return (17, false); }
+    function effectiveBaseStreakAndAfking_g2654(uint32) external pure returns (uint32, bool) { return (17, false); }
 }
 
 contract ActivityAffiliateCacheTest is ActivityAffiliateCacheFixture {
@@ -134,7 +134,7 @@ contract ActivityAffiliateCacheTest is ActivityAffiliateCacheFixture {
     function testFuzz_PermissionlessCacheCannotOpenGrowthGate(uint8 curse) public {
         uint256 packed = (uint256(curse) & BitPackingLib.MASK_5) << BitPackingLib.CURSE_COUNT_SHIFT;
         (DegenerusGame game, DegenerusQuests quests) = _productionGame(packed);
-        (bool mayBet, bool rewarded,) = quests.marketBetGates(game.walletIdOf(PLAYER), 24);
+        (bool mayBet, bool rewarded,) = quests.marketBetGates(game.walletIdOf_g3120(PLAYER), 24);
         assertFalse(mayBet); assertFalse(rewarded);
         (uint256 expected,) = game.playerActivityScore(PLAYER);
         vm.startStateDiffRecording();
@@ -144,7 +144,7 @@ contract ActivityAffiliateCacheTest is ActivityAffiliateCacheFixture {
         (,uint256 stores) = _cacheAccesses(vm.stopAndReturnStateDiff(), address(game));
         assertEq(stores, 0);
         assertEq(game.mintPackedFor(PLAYER), packed);
-        (mayBet, rewarded,) = quests.marketBetGates(game.walletIdOf(PLAYER), 24);
+        (mayBet, rewarded,) = quests.marketBetGates(game.walletIdOf_g3120(PLAYER), 24);
         assertFalse(mayBet); assertFalse(rewarded);
     }
 

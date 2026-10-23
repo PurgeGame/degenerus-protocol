@@ -10,7 +10,7 @@ contract DecimatorBattleHarness is DegenerusGameDecimatorModule, WalletSeed {
         return recordDecBurn_g5574(id, lvl, amount, mult, chips);
     }
 
-    function extsload(bytes32 slot) external view returns (bytes32 value) {
+    function extsload_g8132(bytes32 slot) external view returns (bytes32 value) {
         assembly { value := sload(slot) }
     }
 

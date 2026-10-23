@@ -170,7 +170,7 @@ contract LiquidationAccessAuditTest is DeployProtocol {
         address[2] memory callers = [borrower, operator];
         for (uint256 i; i < ids.length; ++i) {
             for (uint256 j; j < callers.length; ++j) {
-                (, address payee, bool authorized) = game.resolveAccount(ids[i], callers[j]);
+                (, address payee, bool authorized) = game.resolveAccount_g502(ids[i], callers[j]);
                 assertEq(payee, address(sdgnrs));
                 assertFalse(authorized);
                 vm.startPrank(callers[j]);
@@ -189,9 +189,9 @@ contract LiquidationAccessAuditTest is DeployProtocol {
         }
         uint32 replacement = _giveWalletId(borrower);
         assertNotEq(replacement, root);
-        (,, bool allowed) = game.resolveAccount(replacement, borrower);
+        (,, bool allowed) = game.resolveAccount_g502(replacement, borrower);
         assertTrue(allowed, "new main is usable");
-        (,, allowed) = game.resolveAccount(replacement, operator);
+        (,, allowed) = game.resolveAccount_g502(replacement, operator);
         assertFalse(allowed, "old approval does not migrate to new main");
     }
 
@@ -223,12 +223,12 @@ contract LiquidationAccessAuditTest is DeployProtocol {
         host.collateral(child);
         _default(child);
 
-        assertEq(game.walletIdOf(borrower), root, "main account remains current");
-        (,, bool allowed) = game.resolveAccount(child, operator);
+        assertEq(game.walletIdOf_g3120(borrower), root, "main account remains current");
+        (,, bool allowed) = game.resolveAccount_g502(child, operator);
         assertFalse(allowed, "approval on seized child is dead");
-        (,, allowed) = game.resolveAccount(root, operator);
+        (,, allowed) = game.resolveAccount_g502(root, operator);
         assertTrue(allowed, "unseized main approval survives");
-        (,, allowed) = game.resolveAccount(sibling, operator);
+        (,, allowed) = game.resolveAccount_g502(sibling, operator);
         assertTrue(allowed, "unseized sibling approval survives");
         uint256 before = borrower.balance;
         vm.prank(operator);

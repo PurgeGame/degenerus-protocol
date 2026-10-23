@@ -98,7 +98,7 @@ contract QuestShieldCrossDayDoubleConsume is DeployProtocol {
     // --------------------------------------------------------------------- helpers
 
     function _qid(address who) private returns (uint32 id) {
-        id = game.walletIdOf(who);
+        id = game.walletIdOf_g3120(who);
         if (id == 0) id = _giveWalletId(who);
     }
 
@@ -130,7 +130,7 @@ contract QuestShieldCrossDayDoubleConsume is DeployProtocol {
     }
 
     function _questWord(address player) private view returns (uint256) {
-        return uint256(vm.load(address(quests), keccak256(abi.encode(uint256(game.walletIdOf(player)), QUEST_STATE_SLOT))));
+        return uint256(vm.load(address(quests), keccak256(abi.encode(uint256(game.walletIdOf_g3120(player)), QUEST_STATE_SLOT))));
     }
 
     function _streak(address player) private view returns (uint256) {

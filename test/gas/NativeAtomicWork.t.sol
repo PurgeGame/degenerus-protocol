@@ -38,7 +38,7 @@ contract NativeAtomicDegeneretteTest is DeployProtocol {
     }
 
     function _winningWord(uint32 index, uint8 minimum, bool flip) private view returns (uint256 word) {
-        uint32 playerId = game.walletIdOf(PLAYER);
+        uint32 playerId = game.walletIdOf_g3120(PLAYER);
         for (uint256 nonce;; ++nonce) {
             word = uint256(keccak256(abi.encode("native atomic bet", nonce)));
             (uint8 score,) = Ref.score(Ref.player(word, index, 9, 0, false), Ref.house(word, index, 0, false));

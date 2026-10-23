@@ -27,7 +27,7 @@ contract AffiliateLeaderPacking is DeployProtocol {
             codes[i] = bytes32(bytes.concat("AFF", bytes1(uint8(0x41 + i))));
             vm.prank(affs[i]);
             affiliate.createAffiliateCode(codes[i], 0);
-            ids[i] = game.walletIdOf(affs[i]);
+            ids[i] = game.walletIdOf_g3120(affs[i]);
             assertGt(ids[i], 0);
         }
     }

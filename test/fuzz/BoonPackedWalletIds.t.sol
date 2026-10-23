@@ -222,8 +222,8 @@ contract BoonPackedWalletIds is DeployProtocol {
             if (i == 29) last = deity;
         }
         (, uint32 rid) = _wallet("ordinal_recipient");
-        uint32 firstId = game.walletIdOf(first);
-        uint32 lastId = game.walletIdOf(last);
+        uint32 firstId = game.walletIdOf_g3120(first);
+        uint32 lastId = game.walletIdOf_g3120(last);
         bytes32 firstMeta = keccak256(abi.encode(firstId, GameSlots.DEITY_BOON_PACKED));
         bytes32 lastMeta = keccak256(abi.encode(lastId, GameSlots.DEITY_BOON_PACKED));
         assertEq(uint256(vm.load(address(game), firstMeta)) >> 32, 2);
@@ -256,7 +256,7 @@ contract BoonPackedWalletIds is DeployProtocol {
         bool applied;
         for (uint8 slot; slot < 3; ++slot) {
             (address recipient, uint32 rid) = _wallet(string(abi.encodePacked("gift_recipient_", vm.toString(slot))));
-            uint32 deityId = game.walletIdOf(deity);
+            uint32 deityId = game.walletIdOf_g3120(deity);
             vm.recordLogs();
             vm.prank(deity);
             game.issueDeityBoon(deityId, rid, slot);
@@ -297,7 +297,7 @@ contract BoonPackedWalletIds is DeployProtocol {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter == address(game) && logs[i].topics[0] == PROTOCOL_BOON_AWARDED) {
                 ++awards;
-                assertEq(uint32(uint256(logs[i].topics[2])), game.walletIdOf(player), "the only entrant wins");
+                assertEq(uint32(uint256(logs[i].topics[2])), game.walletIdOf_g3120(player), "the only entrant wins");
             }
             if (logs[i].emitter == address(game) && logs[i].topics[0] == BOON_CONSUMED) {
                 assertEq(uint32(uint256(logs[i].topics[1])), id, "activity award keyed by the winner ID");
@@ -488,7 +488,7 @@ contract BoonPackedWalletIds is DeployProtocol {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter == address(game) && logs[i].topics[0] == BOOST_USED) {
                 ++n;
-                assertEq(uint32(uint256(logs[i].topics[1])), game.walletIdOf(player), "boost used by the buyer ID");
+                assertEq(uint32(uint256(logs[i].topics[1])), game.walletIdOf_g3120(player), "boost used by the buyer ID");
             }
         }
         assertEq(n, 1, "one BoostUsed");
@@ -648,8 +648,8 @@ contract BoonPackedWalletIds is DeployProtocol {
             }
         }
         assertEq(n, 1, "registered exactly once");
-        assertEq(game.walletIdOf(who), id, "walletIdOf");
-        assertEq(game.walletIdOf(who), id, "mint word carries the ID");
+        assertEq(game.walletIdOf_g3120(who), id, "walletIdOf");
+        assertEq(game.walletIdOf_g3120(who), id, "mint word carries the ID");
         assertEq(address(uint160(uint256(vm.load(address(game), GameSlotKeys.walletElement(id))))), who, "element holds the key");
     }
 

@@ -126,9 +126,9 @@ contract DailyRngStallRecovery is DeployProtocol {
     function testAdminRetryOwnsAuthorityAndPreservesTheFrozenSession() public {
         _driveDay();
         uint256 oldId = _stallDailyRequest();
-        bytes32 state = game.extsload(bytes32(0));
-        bytes32 dayAndEpochs = game.extsload(bytes32(uint256(5)));
-        bytes32 buffer = game.extsload(bytes32(GameSlots.LOOTBOX_RNG_PACKED));
+        bytes32 state = game.extsload_g8132(bytes32(0));
+        bytes32 dayAndEpochs = game.extsload_g8132(bytes32(uint256(5)));
+        bytes32 buffer = game.extsload_g8132(bytes32(GameSlots.LOOTBOX_RNG_PACKED));
         uint48 sent = uint48(uint256(state) >> 48);
         vm.warp(uint256(sent) + 20 hours);
 
@@ -159,33 +159,33 @@ contract DailyRngStallRecovery is DeployProtocol {
         admin.retryGameRng();
         assertGt(mockVRF.lastRequestId(), oldId, "Admin route issued the sole replacement");
         // rngFlagsAndNudges bit 10 (slot-0 bit 250) is the request's retry-spent flag.
-        assertEq(uint256(game.extsload(bytes32(0))), uint256(state) | (uint256(1) << 250),
+        assertEq(uint256(game.extsload_g8132(bytes32(0))), uint256(state) | (uint256(1) << 250),
             "only the spent bit changes in lifecycle state; timeout origin stays fixed");
-        assertEq(game.extsload(bytes32(uint256(5))), dayAndEpochs, "logical day and ticket epochs stay frozen");
-        assertEq(game.extsload(bytes32(GameSlots.LOOTBOX_RNG_PACKED)), buffer, "buffer identity and pending metadata stay frozen");
-        assertEq(uint256(game.extsload(bytes32(uint256(3)))), 1, "replacement still awaits entropy");
+        assertEq(game.extsload_g8132(bytes32(uint256(5))), dayAndEpochs, "logical day and ticket epochs stay frozen");
+        assertEq(game.extsload_g8132(bytes32(GameSlots.LOOTBOX_RNG_PACKED)), buffer, "buffer identity and pending metadata stay frozen");
+        assertEq(uint256(game.extsload_g8132(bytes32(uint256(3)))), 1, "replacement still awaits entropy");
         assertEq(coinflip.coinflipAmount(owner), credit, "administrative retry pays no miner reward");
     }
 
     function testAdminRetryRejectsDeliveredUnpublishedEntropy() public {
         _driveDay();
         uint256 id = _stallDailyRequest();
-        uint48 sent = uint48(uint256(game.extsload(bytes32(0))) >> 48);
+        uint48 sent = uint48(uint256(game.extsload_g8132(bytes32(0))) >> 48);
         mockVRF.fulfillRandomWords(id, 0xF00D);
-        bytes32 word = game.extsload(bytes32(uint256(3)));
+        bytes32 word = game.extsload_g8132(bytes32(uint256(3)));
         assertGt(uint256(word), 1, "word delivered without a publication call");
         vm.warp(uint256(sent) + 20 hours);
         vm.prank(owner);
         vm.expectRevert(bytes4(keccak256("RngNotReady()")));
         admin.retryGameRng();
         assertEq(mockVRF.lastRequestId(), id);
-        assertEq(game.extsload(bytes32(uint256(3))), word, "delivered entropy cannot be replaced");
+        assertEq(game.extsload_g8132(bytes32(uint256(3))), word, "delivered entropy cannot be replaced");
     }
 
     function testAdminRetryRejectsTerminalAndLivenessExpiredSessions() public {
         _driveDay();
         uint256 id = _stallDailyRequest();
-        bytes32 state = game.extsload(bytes32(0));
+        bytes32 state = game.extsload_g8132(bytes32(0));
         uint48 sent = uint48(uint256(state) >> 48);
         vm.warp(uint256(sent) + 20 hours);
         // Isolate the explicit terminal guard while every retry-readiness predicate is true.

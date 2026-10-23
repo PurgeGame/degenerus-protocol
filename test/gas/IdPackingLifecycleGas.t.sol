@@ -26,7 +26,7 @@ contract IdPackingLifecycleGasTest is DeployProtocol {
         vm.warp(block.timestamp + 1 days);
         for (uint256 i; i < 3; ++i) {
             address player = address(uint160(A) + uint160(i));
-            vm.prank(address(coin)); game.registerWallet(player, true);
+            vm.prank(address(coin)); game.registerWallet_g9539(player, true);
             vm.prank(address(game)); coin.mintForGame(player, 100_000_000);
         }
     }
@@ -113,7 +113,7 @@ contract IdPackingLifecycleGasTest is DeployProtocol {
         RecyclingState.seedWord(address(game), buffer, bytes32(WORD));
         for (uint256 i; i < 5; ++i) {
             vm.record(); vm.prank(address(table));
-            table.resolveRngSlot(uint64(uint256(day) * 8 + i + 1), 20_000_000);
+            table.resolveRngSlot_g1079(uint64(uint256(day) * 8 + i + 1), 20_000_000);
             total += _sample(string.concat(prefix, "-resolve-window-", vm.toString(i + 1)), address(table));
         }
         emit log_named_uint(string.concat(prefix, "-lifecycle"), total);

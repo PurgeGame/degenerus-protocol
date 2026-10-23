@@ -149,7 +149,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
     function _burned(Vm.Log[] memory logs) private view returns (uint256 amount, uint256 count) {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter == address(coin) && logs[i].topics[0] == BURN_EVENT) {
-                assertEq(uint32(uint256(logs[i].topics[1])), game.walletIdOf(HOUSE));
+                assertEq(uint32(uint256(logs[i].topics[1])), game.walletIdOf_g3120(HOUSE));
                 (uint256 spent,) = abi.decode(logs[i].data, (uint256, uint64));
                 amount += spent;
                 ++count;
@@ -198,7 +198,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         assertEq(coin.balanceOf(HOUSE), 0);
         (, bool secondary) = quests.questCompletionToday(HOUSE_ID);
         assertTrue(secondary, "opening day's decimator quest completes");
-        (, bool afking) = quests.effectiveBaseStreakAndAfking(HOUSE_ID);
+        (, bool afking) = quests.effectiveBaseStreakAndAfking_g2654(HOUSE_ID);
         assertTrue(afking, "activity reads the active afking run");
         uint256 questReward = coinflip.coinflipAmount(HOUSE);
         assertGt(questReward, 0, "quest pays a next-day flip credit");

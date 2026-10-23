@@ -102,7 +102,7 @@ contract SmurfCreation is DeployProtocol {
     function _referrerCode(bytes32 code) private returns (uint32 refId) {
         vm.prank(referrer);
         affiliate.createAffiliateCode(code, 0);
-        refId = game.walletIdOf(referrer);
+        refId = game.walletIdOf_g3120(referrer);
         assertTrue(refId != 0, "fixture: code creation registers its owner");
     }
 
@@ -183,7 +183,7 @@ contract SmurfCreation is DeployProtocol {
     ///         and emits SmurfCreated.
     function test_RegistersSmurf_ElementMintWordAndEvents() public {
         _buyTicket(owner, bytes32(0));
-        uint32 ownerId = game.walletIdOf(owner);
+        uint32 ownerId = game.walletIdOf_g3120(owner);
         uint256 ownerWordBefore = _mintWord(owner);
         uint32 expectedId = uint32(_walletsLength());
         uint32 expectedKey = expectedId;
@@ -212,7 +212,7 @@ contract SmurfCreation is DeployProtocol {
         assertEq(loggedSmurf, smurfId);
 
 
-        (address key, address payee, bool authorized) = game.resolveAccount(smurfId, owner);
+        (address key, address payee, bool authorized) = game.resolveAccount_g502(smurfId, owner);
         assertEq(key, address(0));
         assertEq(payee, owner);
         assertTrue(authorized);
@@ -224,7 +224,7 @@ contract SmurfCreation is DeployProtocol {
     function test_OneWholeTicket_HistoryAndQuestFollowTheSmurf() public {
         _buyTicket(owner, bytes32(0));
         _buyTicket(control, bytes32(0));
-        uint32 ownerId = game.walletIdOf(owner);
+        uint32 ownerId = game.walletIdOf_g3120(owner);
         uint256 ownerWordBefore = _mintWord(owner);
         uint256 ownerOwedBefore = _fixtureEntries(1, owner);
         uint32 expectedId = uint32(_walletsLength());
@@ -272,7 +272,7 @@ contract SmurfCreation is DeployProtocol {
     /// @notice DirectEth with no ETH: the owner's AFKing covers the ticket (the smurf has none).
     function test_DirectEth_NoValue_DebitsOwnerAfking() public {
         _buyTicket(owner, bytes32(0));
-        uint32 ownerId = game.walletIdOf(owner);
+        uint32 ownerId = game.walletIdOf_g3120(owner);
         _fundAfking(ownerId, 1 ether);
         vm.expectEmit(true, false, false, true, address(game));
         emit AfkingSpent(ownerId, price);
@@ -284,7 +284,7 @@ contract SmurfCreation is DeployProtocol {
     /// @notice Claimable: the owner's claimable pays; ETH sent with it credits the owner's AFKing.
     function test_Claimable_DebitsOwnerClaimable_ValueToOwnerAfking() public {
         _buyTicket(owner, bytes32(0));
-        uint32 ownerId = game.walletIdOf(owner);
+        uint32 ownerId = game.walletIdOf_g3120(owner);
         _seedClaimable(ownerId, 1 ether);
         uint256 afkBefore = _fixtureAfking(owner);
         uint256 ethBefore = owner.balance;
@@ -299,7 +299,7 @@ contract SmurfCreation is DeployProtocol {
     /// @notice Combined: the owner's ETH first, the owner's claimable for the rest.
     function test_Combined_OwnerEthThenOwnerClaimable() public {
         _buyTicket(owner, bytes32(0));
-        uint32 ownerId = game.walletIdOf(owner);
+        uint32 ownerId = game.walletIdOf_g3120(owner);
         _seedClaimable(ownerId, 1 ether);
         uint256 half = price / 2;
         uint256 ethBefore = owner.balance;
@@ -313,7 +313,7 @@ contract SmurfCreation is DeployProtocol {
     /// @notice Fresh ETH above the price credits the owner's AFKing balance, never the smurf's.
     function test_Overpay_CreditsOwnerAfking() public {
         _buyTicket(owner, bytes32(0));
-        uint32 ownerId = game.walletIdOf(owner);
+        uint32 ownerId = game.walletIdOf_g3120(owner);
         uint256 afkBefore = _fixtureAfking(owner);
         vm.expectEmit(true, false, false, true, address(game));
         emit AfkingFunded(ownerId, 0.5 ether);
@@ -346,7 +346,7 @@ contract SmurfCreation is DeployProtocol {
         vm.expectRevert(E.selector);
         game.createSmurf{value: price}(code, MintPaymentKind.Internal);
         assertEq(_walletsLength(), len, "no table push");
-        assertEq(game.walletIdOf(codeOwner), 0, "the code owner's registration rolled back");
+        assertEq(game.walletIdOf_g3120(codeOwner), 0, "the code owner's registration rolled back");
         assertEq(_refWord(owner), bytes32(0), "the owner's referral stays unset");
         assertEq(_refWord(uint32(len + 1)), bytes32(0), "no smurf referral");
     }
@@ -358,7 +358,7 @@ contract SmurfCreation is DeployProtocol {
     function test_Referral_OwnerWithReferrer_SmurfUsesMain() public {
         uint32 refId = _referrerCode(bytes32("SMURF_REF_ONE"));
         _buyTicket(owner, bytes32("SMURF_REF_ONE"));
-        uint32 ownerId = game.walletIdOf(owner);
+        uint32 ownerId = game.walletIdOf_g3120(owner);
         uint256 scoreBefore = affiliate.affiliateScore(1, ownerId);
         (, uint32 child) = _createSmurf(owner, bytes32("IGNORED"), MintPaymentKind.DirectEth, price);
         assertEq(affiliate.getReferrerIdById(ownerId), refId);
@@ -374,20 +374,20 @@ contract SmurfCreation is DeployProtocol {
         uint32 refId = _referrerCode(bytes32("SMURF_REF_ONE"));
         assertEq(_refWord(owner), bytes32(0));
         (, uint32 child) = _createSmurf(owner, bytes32("SMURF_REF_ONE"), MintPaymentKind.DirectEth, price);
-        assertEq(affiliate.getReferrerIdById(game.walletIdOf(owner)), refId);
-        assertEq(affiliate.getReferrerIdById(child), game.walletIdOf(owner));
+        assertEq(affiliate.getReferrerIdById(game.walletIdOf_g3120(owner)), refId);
+        assertEq(affiliate.getReferrerIdById(child), game.walletIdOf_g3120(owner));
         assertEq(_refWord(owner), bytes32("SMURF_REF_ONE"));
     }
 
     function test_Referral_BlankOwner_ChildStillRefersMain() public {
         (, uint32 child) = _createSmurf(owner, bytes32(0), MintPaymentKind.DirectEth, price);
         assertEq(_refWord(owner), REF_LOCKED);
-        assertEq(affiliate.getReferrerIdById(child), game.walletIdOf(owner));
-        assertEq(affiliate.getReferrerIdById(game.walletIdOf(owner)), VAULT_ID);
+        assertEq(affiliate.getReferrerIdById(child), game.walletIdOf_g3120(owner));
+        assertEq(affiliate.getReferrerIdById(game.walletIdOf_g3120(owner)), VAULT_ID);
     }
 
     function test_Referral_MainSelfReferralRejected_ChildRefersMain() public {
-        uint32 ownerId = game.walletIdOf(owner);
+        uint32 ownerId = game.walletIdOf_g3120(owner);
         (, uint32 child) = _createSmurf(owner, bytes32(uint256(uint160(owner))), MintPaymentKind.DirectEth, price);
         assertEq(_refWord(owner), REF_LOCKED);
         assertEq(affiliate.getReferrerIdById(child), ownerId);
@@ -399,7 +399,7 @@ contract SmurfCreation is DeployProtocol {
     function test_Referral_UnregisteredDefaultCode_RegistersCodeOwnerFirst() public {
         uint32 ownerId = _giveWalletId(owner);
         address codeOwner = makeAddr("smurf_default_code_owner");
-        assertEq(game.walletIdOf(codeOwner), 0, "fixture: code owner unregistered");
+        assertEq(game.walletIdOf_g3120(codeOwner), 0, "fixture: code owner unregistered");
         uint32 len = uint32(_walletsLength());
 
         vm.recordLogs();
@@ -407,7 +407,7 @@ contract SmurfCreation is DeployProtocol {
         uint32 smurfId = game.createSmurf{value: price}(bytes32(uint256(uint160(codeOwner))), MintPaymentKind.DirectEth);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
-        assertEq(game.walletIdOf(codeOwner), len, "code owner takes the first new ID");
+        assertEq(game.walletIdOf_g3120(codeOwner), len, "code owner takes the first new ID");
         assertEq(smurfId, len + 1, "smurf ID taken after the code owner's");
         uint32 key = smurfId;
         assertEq(_element(smurfId), uint256(ownerId) << 160, "key derives from the later ID");
@@ -459,7 +459,7 @@ contract SmurfCreation is DeployProtocol {
 
     function test_PaidAdmission_At3B_Admits() public {
         _buyTicket(owner, bytes32(0));
-        uint32 ownerId = game.walletIdOf(owner);
+        uint32 ownerId = game.walletIdOf_g3120(owner);
         vm.store(address(game), bytes32(GameSlots.WALLETS), bytes32(PAID_ADMISSION_WALLETS));
         (uint32 smurfId, uint32 key) = _createSmurf(owner, bytes32(0), MintPaymentKind.DirectEth, price);
         assertEq(smurfId, uint32(PAID_ADMISSION_WALLETS));
@@ -470,15 +470,15 @@ contract SmurfCreation is DeployProtocol {
     /// @notice Two smurfs of one owner are distinct accounts with distinct keys, both owned.
     function test_TwoSmurfs_DistinctKeysSameOwner() public {
         _buyTicket(owner, bytes32(0));
-        uint32 ownerId = game.walletIdOf(owner);
+        uint32 ownerId = game.walletIdOf_g3120(owner);
         (uint32 a, uint32 ka) = _createSmurf(owner, bytes32(0), MintPaymentKind.DirectEth, price);
         (uint32 b, uint32 kb) = _createSmurf(owner, bytes32(0), MintPaymentKind.DirectEth, price);
         assertEq(b, a + 1);
         assertTrue(ka != kb);
         assertEq(_element(a) >> 160 & type(uint32).max, ownerId);
         assertEq(_element(b) >> 160 & type(uint32).max, ownerId);
-        (, address pa, bool oka) = game.resolveAccount(a, owner);
-        (, address pb, bool okb) = game.resolveAccount(b, owner);
+        (, address pa, bool oka) = game.resolveAccount_g502(a, owner);
+        (, address pb, bool okb) = game.resolveAccount_g502(b, owner);
         assertTrue(oka && okb);
         assertEq(pa, owner);
         assertEq(pb, owner);

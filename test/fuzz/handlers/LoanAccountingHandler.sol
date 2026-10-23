@@ -567,7 +567,7 @@ contract LoanAccountingHandler is Test {
             Acct memory ac = accts[s[k].idx];
             if (!s[k].auto_ && !ac.smurf) {
                 address seller = actors[ac.actor];
-                if (game.walletIdOf(seller) == s[k].id) _flag(5, "main seizure kept the seller's default ID");
+                if (game.walletIdOf_g3120(seller) == s[k].id) _flag(5, "main seizure kept the seller's default ID");
                 if (sdgnrsToken.balanceOf(seller) != 0) _flag(5, "main seizure left the seller's sDGNRS");
             }
         }
@@ -715,7 +715,7 @@ contract LoanAccountingHandler is Test {
     function _newMain(uint256 actor) internal {
         address who = actors[actor];
         vm.prank(ContractAddresses.AFFILIATE);
-        uint32 id = game.registerWallet(who, true);
+        uint32 id = game.registerWallet_g9539(who, true);
         vm.prank(ContractAddresses.OWNER_GOVERNANCE);
         game.raiseSmurfBaseAllowance(id, 8);
         vm.prank(address(game));
@@ -830,7 +830,7 @@ contract LoanAccountingHandler is Test {
             uint32 id = accts[i].id;
             uint32 lender = _lenderOf(i);
             assertEq(game.acquiredBuyer(id), lender, "acquiredBuyer != model owner");
-            (, address payee,) = game.resolveAccount(id, address(0));
+            (, address payee,) = game.resolveAccount_g502(id, address(0));
             address expected = lender == VAULT_ID ? address(vault)
                 : lender == SDGNRS_ID ? address(sdgnrsToken) : actors[accts[i].actor];
             assertEq(payee, expected, "payee != model owner");

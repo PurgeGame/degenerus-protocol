@@ -16,9 +16,8 @@ import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
 
 interface IMinerCrapsWork {
     function runCrapsReadWork(uint48 index, uint256 allowance) external returns (MineFlipGas.Result memory);
-    function runCrapsMaintenance_g10712(uint256 allowance) external returns (MineFlipGas.Result memory);
 
-    function runCrapsMaintenance(uint256 allowance) external returns (MineFlipGas.Result memory);
+    function runCrapsMaintenance_g10712(uint256 allowance) external returns (MineFlipGas.Result memory);
 }
 
 /// @notice The single permissionless state engine. Workers never choose global priority.
@@ -57,7 +56,8 @@ abstract contract GameMiner is DegenerusGameMintStreakUtils {
         if (address(this) != ContractAddresses.GAME) revert E();
         gasMultiplierBps = MineFlipGas.normalize(gasMultiplierBps);
         uint256 rewardStart = gasleft();
-        MinerAction first = _nextMinerAction(msg.sender);
+        MineFlipGas.Meter memory meter = MineFlipGas.start(MineFlipGas.budget(gasleft(), gasMultiplierBps, true));
+        MinerAction first = _nextMinerAction(msg.sender, meter);
         if (first == MinerAction.Idle) revert NoWork();
         if (first == MinerAction.Wait) revert RngNotReady();
         bool rewardEligible = first != MinerAction.Terminal;
@@ -65,20 +65,19 @@ abstract contract GameMiner is DegenerusGameMintStreakUtils {
         uint256 rewardDueAt = _minerRewardDueAt();
         // Read before work, like the clock: the call that releases the lock still earns the locked rate.
         bool lockedAtStart = rngLockedFlag;
-        MineFlipGas.Meter memory meter = MineFlipGas.start(MineFlipGas.budget(gasleft(), gasMultiplierBps, true));
         bool moved;
         bool requestRefused;
         uint256 unpaidAttemptGas;
 
         // There are fewer than 32 category transitions. Workers own all unbounded queues.
         for (uint256 transitions; transitions < 32; ++transitions) {
-            // Selection itself can read LINK through an unscaled forwarding floor.
-            // Protect the committed prefix before that read, even at 0.25x calibration.
-            // A first selection has no prefix and remains a retryable mandatory step.
-            if (transitions != 0 && MineFlipGas.remaining(meter) < GasBounds.ENGINE_SELECTION + RETURN_RESERVE) break;
+            // Selection can read LINK and its price. Scale its complete admission
+            // with the dependency minima, preserving any committed prefix.
+            if (transitions != 0 && MineFlipGas.remaining(meter)
+                < MineFlipGas.scale(meter, GasBounds.ENGINE_SELECTION + RETURN_RESERVE)) break;
             // Only reads separate the initial selection from the first dispatch.
             // Every later iteration must reselect after the preceding worker's changes.
-            MinerAction action = transitions == 0 ? first : _nextMinerAction(msg.sender);
+            MinerAction action = transitions == 0 ? first : _nextMinerAction(msg.sender, meter);
             if (action == MinerAction.Idle || action == MinerAction.Wait) break;
             if (moved) MineFlipGas.markProgress(meter);
             if (!MineFlipGas.canRun(meter, WORKER_BOUNDARY, RETURN_RESERVE)) break;
@@ -135,9 +134,9 @@ abstract contract GameMiner is DegenerusGameMintStreakUtils {
             } else if (request) {
                 target = ContractAddresses.GAME_RNG_MODULE;
                 if (action == MinerAction.RequestDaily) {
-                    callData = abi.encodeWithSelector(IDegenerusGameRngModule.requestDailyRng_g8190.selector, _afkingResetDay);
+                    callData = abi.encodeWithSelector(IDegenerusGameRngModule.requestDailyRng_g8190.selector, _afkingResetDay, allowance);
                 } else {
-                    callData = abi.encodeWithSelector(IDegenerusGameRngModule.requestMinerRng_g4954.selector);
+                    callData = abi.encodeWithSelector(IDegenerusGameRngModule.requestMinerRng_g4954.selector, allowance);
                 }
                 uint256 requestMax = action == MinerAction.RequestDaily
                     ? GasBounds.RNG_DAILY_REQUEST : GasBounds.RNG_MIDDAY_REQUEST;

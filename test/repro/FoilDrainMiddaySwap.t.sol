@@ -220,7 +220,7 @@ contract FoilDrainMiddaySwap is DeployProtocol {
                 foilAt < 0 &&
                 l.topics[0] == traitsSig &&
                 l.topics.length > 1 &&
-                uint32(uint256(l.topics[1])) == game.walletIdOf(p)
+                uint32(uint256(l.topics[1])) == game.walletIdOf_g3120(p)
             ) {
                 foilAt = int256(i);
             }
@@ -422,7 +422,7 @@ contract FoilDrainMiddaySwap is DeployProtocol {
     // =====================================================================
 
     function _packedFoilRecord(uint24 lvl, address who) internal view returns (uint256) {
-        uint256 packed = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), bytes32(SLOT_FOIL_RECORD + uint256(lvl & 3))))));
+        uint256 packed = uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf_g3120(who)), bytes32(SLOT_FOIL_RECORD + uint256(lvl & 3))))));
         return uint24(packed >> 208) == lvl ? packed : 0;
     }
 

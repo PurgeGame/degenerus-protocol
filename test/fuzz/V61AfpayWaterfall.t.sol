@@ -47,7 +47,7 @@ contract V61AfpayWaterfall is DeployProtocol {
     function _aid(address a) internal returns (uint32 id) {
         id = _aidCache[a];
         if (id == 0) {
-            id = game.walletIdOf(a);
+            id = game.walletIdOf_g3120(a);
             if (id == 0) id = _giveWalletId(a);
             _aidCache[a] = id;
         }
@@ -425,7 +425,7 @@ contract V61AfpayWaterfall is DeployProtocol {
         uint256 spentEvents;
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter == address(game) && logs[i].topics.length >= 2 && logs[i].topics[0] == AFKING_SPENT_SIG) {
-                if (logs[i].topics[1] == bytes32(uint256(game.walletIdOf(p)))) spentEvents++;
+                if (logs[i].topics[1] == bytes32(uint256(game.walletIdOf_g3120(p)))) spentEvents++;
             }
         }
         assertEq(spentEvents, 0, "no-double-draw: the afking auto-buy never routes through _processMintPayment (no AfkingSpent)");
@@ -513,7 +513,7 @@ contract V61AfpayWaterfall is DeployProtocol {
         uint256 afkingEvents;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2
-                || logs[i].topics[1] != bytes32(uint256(game.walletIdOf(buyer)))) continue;
+                || logs[i].topics[1] != bytes32(uint256(game.walletIdOf_g3120(buyer)))) continue;
             assertTrue(logs[i].topics[0] != CLAIMABLE_SPENT_SIG, "unused claimable emits no debit log");
             if (logs[i].topics[0] == AFKING_SPENT_SIG) {
                 assertEq(abi.decode(logs[i].data, (uint256)), expectedDraw, "afking event names the exact draw");
@@ -528,7 +528,7 @@ contract V61AfpayWaterfall is DeployProtocol {
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2) continue;
             if (logs[i].topics[0] != AFKING_SPENT_SIG) continue;
-            if (logs[i].topics[1] != bytes32(uint256(game.walletIdOf(who)))) continue;
+            if (logs[i].topics[1] != bytes32(uint256(game.walletIdOf_g3120(who)))) continue;
             if (abi.decode(logs[i].data, (uint256)) == amount) return true;
         }
         return false;

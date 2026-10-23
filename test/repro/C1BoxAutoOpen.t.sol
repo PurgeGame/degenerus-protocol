@@ -100,7 +100,7 @@ contract C1BoxAutoOpen is DeployProtocol {
         uint256 tag = (uint256(1) << 46) | (pos << 1) | index;
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter == address(game) && logs[i].topics.length == 3 && logs[i].topics[0] == sig
-                && uint32(uint256(logs[i].topics[1])) == game.walletIdOf(who) && uint256(logs[i].topics[2]) == tag) ++n;
+                && uint32(uint256(logs[i].topics[1])) == game.walletIdOf_g3120(who) && uint256(logs[i].topics[2]) == tag) ++n;
         }
     }
 
@@ -180,7 +180,7 @@ contract C1BoxAutoOpen is DeployProtocol {
         assertEq(_entryCount(N), position + 1, "fixture: the purchase appended one entry to buffer N");
         base = _base(N, position);
         assertGt(base, 0, "fixture: a human lootbox box persisted at index N (base != 0)");
-        assertEq(BoxOrderLib.boId(base), game.walletIdOf(actor), "fixture: the entry at N is the buyer's");
+        assertEq(BoxOrderLib.boId(base), game.walletIdOf_g3120(actor), "fixture: the entry at N is the buyer's");
         assertEq(_idx(), N, "fixture: LR_INDEX is still N right after the box was enqueued");
     }
 

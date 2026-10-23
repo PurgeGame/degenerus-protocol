@@ -49,7 +49,7 @@ contract AffiliateDgnrsClaim is DeployProtocol {
 
     function test_CombinedScoreReadMatchesBothExistingViews() public {
         _buyOne(CODE_ALICE);
-        uint32 id = game.walletIdOf(alice);
+        uint32 id = game.walletIdOf_g3120(alice);
         uint24[5] memory levels = [uint24(0), uint24(1), uint24(2), uint24(3), type(uint24).max];
         for (uint256 i; i < levels.length; ++i) {
             (uint256 score, uint256 total) = affiliate.affiliateScoreAndTotal_g4013(levels[i], id);
@@ -138,8 +138,8 @@ contract AffiliateDgnrsClaim is DeployProtocol {
         assertEq(game.level(), 0);
         _buyOne(CODE_ALICE);
 
-        assertEq(affiliate.affiliateScore(0, game.walletIdOf(alice)), 0, "No score at level 0");
-        assertTrue(affiliate.affiliateScore(1, game.walletIdOf(alice)) > 0, "Score at level 1");
+        assertEq(affiliate.affiliateScore(0, game.walletIdOf_g3120(alice)), 0, "No score at level 0");
+        assertTrue(affiliate.affiliateScore(1, game.walletIdOf_g3120(alice)) > 0, "Score at level 1");
     }
 
     /// @notice totalAffiliateScore accumulates across multiple buyers
@@ -147,8 +147,8 @@ contract AffiliateDgnrsClaim is DeployProtocol {
         for (uint256 i = 0; i < 5; i++) _buyOne(CODE_ALICE);
         for (uint256 i = 0; i < 3; i++) _buyOne(CODE_BOB);
 
-        uint256 a = affiliate.affiliateScore(1, game.walletIdOf(alice));
-        uint256 b = affiliate.affiliateScore(1, game.walletIdOf(bob));
+        uint256 a = affiliate.affiliateScore(1, game.walletIdOf_g3120(alice));
+        uint256 b = affiliate.affiliateScore(1, game.walletIdOf_g3120(bob));
         uint256 total = affiliate.totalAffiliateScore(1);
 
         assertTrue(a > 0 && b > 0, "Both have scores");
@@ -190,7 +190,7 @@ contract AffiliateDgnrsClaim is DeployProtocol {
         _setLevel(1);
         _setAllocation(1, 1_000_000e12);
 
-        uint256 bobScore = affiliate.affiliateScore(1, game.walletIdOf(bob));
+        uint256 bobScore = affiliate.affiliateScore(1, game.walletIdOf_g3120(bob));
         assertTrue(bobScore < 10, "Score below min");
 
         vm.expectRevert(bytes4(keccak256("ScoreTooLow()")));
@@ -228,8 +228,8 @@ contract AffiliateDgnrsClaim is DeployProtocol {
         // Alice: 40 buyers (~20 ETH score), Bob: 25 buyers (~12.5 ETH score)
         uint24 lvl = _buildScoresAndSetupClaim(CODE_ALICE, 40, CODE_BOB, 25);
 
-        uint256 aliceScore = affiliate.affiliateScore(lvl, game.walletIdOf(alice));
-        uint256 bobScore   = affiliate.affiliateScore(lvl, game.walletIdOf(bob));
+        uint256 aliceScore = affiliate.affiliateScore(lvl, game.walletIdOf_g3120(alice));
+        uint256 bobScore   = affiliate.affiliateScore(lvl, game.walletIdOf_g3120(bob));
 
         assertTrue(aliceScore > 10, "Alice above min");
         assertTrue(bobScore > 10, "Bob above min");
@@ -259,8 +259,8 @@ contract AffiliateDgnrsClaim is DeployProtocol {
     function test_orderIndependence() public {
         uint24 lvl = _buildScoresAndSetupClaim(CODE_ALICE, 30, CODE_BOB, 30);
 
-        uint256 aliceScore = affiliate.affiliateScore(lvl, game.walletIdOf(alice));
-        uint256 bobScore   = affiliate.affiliateScore(lvl, game.walletIdOf(bob));
+        uint256 aliceScore = affiliate.affiliateScore(lvl, game.walletIdOf_g3120(alice));
+        uint256 bobScore   = affiliate.affiliateScore(lvl, game.walletIdOf_g3120(bob));
 
         // Bob claims FIRST
         uint256 bobBefore = sdgnrs.balanceOf(bob);
@@ -392,9 +392,9 @@ contract AffiliateDgnrsClaim is DeployProtocol {
         _setLevel(lvl);
         _setAllocation(lvl, 1_000_000e12);
 
-        uint256 aScore = affiliate.affiliateScore(lvl, game.walletIdOf(alice));
-        uint256 bScore = affiliate.affiliateScore(lvl, game.walletIdOf(bob));
-        uint256 cScore = affiliate.affiliateScore(lvl, game.walletIdOf(carol));
+        uint256 aScore = affiliate.affiliateScore(lvl, game.walletIdOf_g3120(alice));
+        uint256 bScore = affiliate.affiliateScore(lvl, game.walletIdOf_g3120(bob));
+        uint256 cScore = affiliate.affiliateScore(lvl, game.walletIdOf_g3120(carol));
         uint256 total  = affiliate.totalAffiliateScore(lvl);
 
         assertEq(total, aScore + bScore + cScore, "Total = sum (no other affiliates)");

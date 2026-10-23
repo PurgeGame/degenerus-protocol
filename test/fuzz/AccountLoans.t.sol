@@ -140,7 +140,7 @@ contract AccountLoansTest is RedemptionCloseTools {
     }
 
     function _payee(uint32 id) private view returns (address payee) {
-        (, payee, ) = game.resolveAccount(id, address(0));
+        (, payee, ) = game.resolveAccount_g502(id, address(0));
     }
 
     function _pool() private view returns (uint256) {
@@ -697,7 +697,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         _endGame();
         vm.prank(seller); vm.expectRevert(bytes4(keccak256("E()"))); game.repay{value: 10 ether}(root);
         assertEq(_payee(root), seller);
-        assertEq(game.walletIdOf(seller), root);
+        assertEq(game.walletIdOf_g3120(seller), root);
         assertGt(p, 0);
     }
 
@@ -960,7 +960,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         _default(child);
         assertEq(sdgnrs.balanceOf(seller), 10e12);
         assertEq(sdgnrs.totalSupply(), supply);
-        assertEq(game.walletIdOf(seller), root);
+        assertEq(game.walletIdOf_g3120(seller), root);
         assertEq(_payee(child), address(sdgnrs));
         assertEq(_payee(root), seller);
         _default(root);
@@ -975,7 +975,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         _default(root);
         assertEq(sdgnrs.balanceOf(seller), 0);
         assertEq(sdgnrs.totalSupply(), supply - 10e12 - 1);
-        assertEq(game.walletIdOf(seller), 0);
+        assertEq(game.walletIdOf_g3120(seller), 0);
     }
 
     function test_PreviouslySubmittedRedemptionRemainsWithSeizedAccount() public {
@@ -1037,8 +1037,8 @@ contract AccountLoansTest is RedemptionCloseTools {
         assertEq(_payee(root), address(sdgnrs));
         assertEq(_payee(child), address(sdgnrs));
         assertEq(vm.load(address(game), bytes32(table + child)), childElement);
-        assertEq(game.walletIdOf(seller), 0);
-        (, , bool authorized) = game.resolveAccount(child, seller);
+        assertEq(game.walletIdOf_g3120(seller), 0);
+        (, , bool authorized) = game.resolveAccount_g502(child, seller);
         assertFalse(authorized);
     }
 
@@ -1073,7 +1073,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         game.setOperatorApproval(child, operator, true);
         vm.stopPrank();
         _default(root);
-        (, , bool allowed) = game.resolveAccount(child, operator);
+        (, , bool allowed) = game.resolveAccount_g502(child, operator);
         assertFalse(allowed);
     }
 
@@ -1145,7 +1145,7 @@ contract AccountLoansTest is RedemptionCloseTools {
         vm.prank(seller); game.repay{value: owed}(root);
         _seize(due);
         assertEq(_payee(root), seller);
-        assertEq(game.walletIdOf(seller), root);
+        assertEq(game.walletIdOf_g3120(seller), root);
         _child();
     }
 
@@ -1331,12 +1331,12 @@ contract AccountLoansTest is RedemptionCloseTools {
         vm.warp(block.timestamp + 6 days);
         // Seed after advancing time so dailyIdx, the cashout staleness clock, advances too.
         _seed(child, 0, 1 ether + 1, 0);
-        uint256 before = game.mintPackedOfId(child);
+        uint256 before = game.mintPackedOfId_g5372(child);
         vm.prank(seller); game.sweepAccounts(_one(child));
-        uint256 after_ = game.mintPackedOfId(child);
+        uint256 after_ = game.mintPackedOfId_g5372(child);
         assertEq((after_ >> 203) & 31, ((before >> 203) & 31) + 2);
         vm.prank(seller); game.sweepAccounts(_one(child));
-        assertEq(game.mintPackedOfId(child), after_, "empty repeat cannot add a curse");
+        assertEq(game.mintPackedOfId_g5372(child), after_, "empty repeat cannot add a curse");
     }
 
     function testFuzz_SweepConservesBalances(uint96 winnings, uint96 prepaid, bool acquired) public {

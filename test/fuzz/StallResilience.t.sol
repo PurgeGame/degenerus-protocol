@@ -289,14 +289,14 @@ contract StallResilience is DeployProtocol {
         assertGt(_dailyIdx(), sealedBefore, "the stalled day sealed");
         uint256 entry = RecyclingState.boxEntry(address(game), orphanedIndex & 1, 0);
         assertTrue(entry != 0, "the stalled cohort's box entry exists");
-        assertEq(BoxOrderLib.boId(entry), game.walletIdOf(buyer), "the entry belongs to the buyer");
+        assertEq(BoxOrderLib.boId(entry), game.walletIdOf_g3120(buyer), "the entry belongs to the buyer");
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bool opened;
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter == address(game) && logs[i].topics.length > 1
                 && (logs[i].topics[0] == keccak256("LootBoxOpened(uint32,uint48,uint256,uint24,uint32,uint256,bool)")
                     || logs[i].topics[0] == keccak256("BoxSpin(uint32,uint64,uint256,uint256,uint256)"))
-                && uint32(uint256(logs[i].topics[1])) == game.walletIdOf(buyer)) opened = true;
+                && uint32(uint256(logs[i].topics[1])) == game.walletIdOf_g3120(buyer)) opened = true;
         }
         assertTrue(opened, "the stalled cohort's box opened on the reissued word");
     }

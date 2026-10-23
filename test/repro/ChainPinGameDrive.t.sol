@@ -558,7 +558,7 @@ contract ChainPinGameDrive is DeployProtocol {
     ///      any producer sends and must fit the 21-bit units field and LB_UNITS_MAX.
     function _maxDeity() private {
         address buyer = actors[9];
-        uint32 id = game.walletIdOf(buyer);
+        uint32 id = game.walletIdOf_g3120(buyer);
         vm.etch(address(game), probeCode);
         ChainPinProbe(address(game)).setDeitySales(29);
         vm.etch(address(game), realCode);
@@ -618,7 +618,7 @@ contract ChainPinGameDrive is DeployProtocol {
             }
             if (subscribed[i]) {
                 if (game.afkingFundingOf(p) < 40 ether) {
-                    uint32 pid = game.walletIdOf(p);
+                    uint32 pid = game.walletIdOf_g3120(p);
                     vm.prank(p);
                     try game.depositAfkingFunding{value: 400 ether}(pid) {} catch {}
                 }
@@ -628,7 +628,7 @@ contract ChainPinGameDrive is DeployProtocol {
             vm.prank(p);
             try game.subscribe{value: 400 ether}(0, tickets, uint8(1 + (i + d) % 8), seat) {
                 subscribed[i] = true;
-                if (tickets) _trackTicketSub(game.walletIdOf(p));
+                if (tickets) _trackTicketSub(game.walletIdOf_g3120(p));
             } catch {}
         }
     }

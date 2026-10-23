@@ -219,7 +219,7 @@ contract HumanOrderNativeGasTest is DeployProtocol {
         }
         (uint256 normal, uint256 high) = crapsBattle.passCreditsOf(PLAYER);
         digest = keccak256(abi.encode(digest, coinflip.coinflipAmount(PLAYER), sdgnrs.balanceOf(PLAYER),
-            wwxrp.claimable(game.walletIdOf(PLAYER)), normal, high));
+            wwxrp.claimable(game.walletIdOf_g3120(PLAYER)), normal, high));
         vm.etch(address(game), type(HumanOrderGasSeed).runtimeCode);
         HumanOrderGasSeed host = HumanOrderGasSeed(payable(address(game)));
         assertEq(host.entriesLeft(), 0, "engine admitted and completed the order");

@@ -28,7 +28,7 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
         uint256 amount = bound(size, 20 ether, 120_000_000 ether);
         GameFunding.reserve(amount);
         uint256 word = uint256(keccak256(abi.encode(seed))) | 2;
-        uint32 aliceId = game.walletIdOf(alice);
+        uint32 aliceId = game.walletIdOf_g3120(alice);
         _coolSettlementState();
         uint256 before = gasleft();
         vm.prank(address(sdgnrs));
@@ -61,7 +61,7 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
 
     function _burnAtMaximumActivity(uint256 amount) private {
         vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScore.selector, alice),
-            abi.encode(uint256(30_000), game.walletIdOf(alice)));
+            abi.encode(uint256(30_000), game.walletIdOf_g3120(alice)));
         _burn(alice, amount);
         vm.clearMockedCalls();
     }
@@ -210,7 +210,7 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
         _resolve(day, 175, 99);
         // A 7M call admits its mandatory first beneficiary, then defers the remaining orders.
         emit log_named_uint("cold_two_maximum_router_gas", _coldRouterGasWith(7_000_000));
-        (uint128 base,) = sdgnrs.pendingRedemptions(game.walletIdOf(players[2]), day);
+        (uint128 base,) = sdgnrs.pendingRedemptions(game.walletIdOf_g3120(players[2]), day);
         assertGt(base, 0, "next beneficiary remains whole");
         assertTrue(sdgnrs.redemptionSettlementPending());
         emit log_named_uint("cold_maximum_continuation_router_gas", _coldRouterGas());

@@ -312,12 +312,12 @@ contract BafConsolationWalletIdsTest is DeployProtocol {
         assertEq(jackpots.bafConsolationOf(p, BRACKET), 5);
 
         address runner = makeAddr("consolation_runner");
-        uint256 before = wwxrp.claimable(game.walletIdOf(p));
+        uint256 before = wwxrp.claimable(game.walletIdOf_g3120(p));
         vm.recordLogs();
         vm.prank(runner);
         jackpots.claimBafConsolation(id, BRACKET);
-        assertEq(wwxrp.claimable(game.walletIdOf(p)) - before, 5 * wwxrp.gameMintScale(), "minted to the player's address");
-        assertEq(wwxrp.claimable(game.walletIdOf(runner)), 0);
+        assertEq(wwxrp.claimable(game.walletIdOf_g3120(p)) - before, 5 * wwxrp.gameMintScale(), "minted to the player's address");
+        assertEq(wwxrp.claimable(game.walletIdOf_g3120(runner)), 0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bool seen;
         for (uint256 i; i < logs.length; ++i) {
@@ -356,6 +356,6 @@ contract BafConsolationWalletIdsTest is DeployProtocol {
         jackpots.claimBafConsolation(emptyId, BRACKET);
 
         jackpots.claimBafConsolation(id, BRACKET);
-        assertEq(wwxrp.claimable(game.walletIdOf(scorer)), 2 * wwxrp.gameMintScale());
+        assertEq(wwxrp.claimable(game.walletIdOf_g3120(scorer)), 2 * wwxrp.gameMintScale());
     }
 }

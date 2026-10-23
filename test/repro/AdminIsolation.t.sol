@@ -39,6 +39,17 @@ contract AdminHostileTarget {
                 mstore(0, 1)
                 return(0, 32)
             }
+            case 11 {
+                let start := gas()
+                for {} lt(sub(start, gas()), 1200000) {} {}
+                let ptr := mload(64)
+                mstore(ptr, 1)
+                mstore(add(ptr, 32), 4000000000000000)
+                mstore(add(ptr, 64), timestamp())
+                mstore(add(ptr, 96), timestamp())
+                mstore(add(ptr, 128), 1)
+                return(ptr, 160)
+            }
             case 9 { revert(0, 32) }
             case 10 { for {} 1 {} {} }
             case 7 {
@@ -153,6 +164,23 @@ contract AdminIsolationTest is DeployProtocol, NativeFailureExport {
             assertEq(admin.subscriptionId(), 0);
             require(vm.revertToState(snap));
             vm.deleteStateSnapshot(snap);
+        }
+    }
+
+    function testExpensiveFeedSucceedsBeyondFormerBudget() public {
+        _etch(address(mockFeed), IAggregatorV3.latestRoundData.selector, 11);
+        assertEq(admin.linkAmountToEth{gas: 3_000_000}(1 ether), 0.004 ether);
+    }
+
+    function test_NativeFeedFailures() public {
+        NativeFailureProbe probe = new NativeFailureProbe();
+        uint256[6] memory modes = [uint256(0), 1, 4, 8, 9, 10];
+        for (uint256 i; i < modes.length; ++i) {
+            uint256 snap = vm.snapshotState();
+            _etch(address(mockFeed), IAggregatorV3.latestRoundData.selector, modes[i]);
+            _nativeCheckedFixture(string.concat("feed-", vm.toString(modes[i])), address(this), address(probe),
+                abi.encodeCall(probe.invoke, (address(admin), abi.encodeCall(admin.linkAmountToEth, (1 ether)), 5_000_000)));
+            require(vm.revertToState(snap)); vm.deleteStateSnapshot(snap);
         }
     }
 

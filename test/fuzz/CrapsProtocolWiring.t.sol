@@ -252,7 +252,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
             abi.encodeWithSignature("setPreferredBoard(uint32,uint32)", 0, board),
             0
         );
-        assertEq(crapsBattle.preferredBoardOf(game.walletIdOf(address(vault))), 0);
+        assertEq(crapsBattle.preferredBoardOf(game.walletIdOf_g3120(address(vault))), 0);
 
         vm.prank(ContractAddresses.CREATOR);
         abi.decode(OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (
@@ -260,8 +260,8 @@ contract CrapsProtocolWiringTest is DeployProtocol {
             abi.encodeWithSignature("setPreferredBoard(uint32,uint32)", 0, board),
             0
         )), 0), (bytes));
-        assertEq(crapsBattle.preferredBoardOf(game.walletIdOf(address(vault))), board);
-        assertEq(crapsBattle.preferredBoardOf(game.walletIdOf(ContractAddresses.CREATOR)), 0);
+        assertEq(crapsBattle.preferredBoardOf(game.walletIdOf_g3120(address(vault))), board);
+        assertEq(crapsBattle.preferredBoardOf(game.walletIdOf_g3120(ContractAddresses.CREATOR)), 0);
 
         vm.mockCall(address(game), abi.encodeWithSignature("rngLocked()"), abi.encode(true));
         vm.prank(ContractAddresses.CREATOR);
@@ -271,7 +271,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
             abi.encodeWithSignature("setPreferredBoard(uint32,uint32)", 0, 0),
             0
         )), 0), (bytes));
-        assertEq(crapsBattle.preferredBoardOf(game.walletIdOf(address(vault))), board);
+        assertEq(crapsBattle.preferredBoardOf(game.walletIdOf_g3120(address(vault))), board);
         vm.clearMockedCalls();
 
         vm.prank(ContractAddresses.CREATOR);
@@ -280,7 +280,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
             abi.encodeWithSignature("setPreferredBoard(uint32,uint32)", 0, 0),
             0
         )), 0), (bytes));
-        assertEq(crapsBattle.preferredBoardOf(game.walletIdOf(address(vault))), 0);
+        assertEq(crapsBattle.preferredBoardOf(game.walletIdOf_g3120(address(vault))), 0);
     }
 
     /// @dev THE CRANK REACHES THE TABLE. The table's scheduled work runs only inside `mineFlip`,

@@ -301,7 +301,7 @@ contract DegenesisSolvencyInvariant is DegenesisDeployProtocol {
     /// @notice The identity sees an unpaired claimable credit and an unpaired budget write.
     function test_IdentityIsFalsifiable() public {
         invariant_claimablePoolIdentity();
-        uint32 id = game.walletIdOf(handler.actors(0));
+        uint32 id = game.walletIdOf_g3120(handler.actors(0));
         bytes32 slot = GameSlotKeys.balances(id);
         bytes32 before = vm.load(address(game), slot);
         vm.store(address(game), slot, bytes32(uint256(before) + 1));

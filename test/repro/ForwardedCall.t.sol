@@ -12,14 +12,14 @@ contract ForwardedCallHarness {
     function available() external view returns (uint256) { return gasleft(); }
 
     function readGas(uint256 minimum, uint256 reserve) external view returns (uint256 supplied) {
-        (bool ok, uint256 word) = BoundedCall.staticWordRemaining(address(this), minimum, reserve,
+        (bool ok, uint256 word) = BoundedCall.staticWordRemaining(MineFlipGas.fromCall(0), address(this), minimum, reserve,
             abi.encodeCall(this.available, ()));
         require(ok);
         return word;
     }
 
     function callGas(uint256 minimum, uint256 reserve) external returns (uint256 supplied) {
-        (bool ok, bytes memory data) = BoundedCall.callRemaining(address(this), minimum, reserve,
+        (bool ok, bytes memory data) = BoundedCall.callRemaining(MineFlipGas.fromCall(0), address(this), minimum, reserve,
             abi.encodeCall(this.available, ()), 32);
         require(ok);
         return abi.decode(data, (uint256));
@@ -46,7 +46,7 @@ contract ForwardedCallHarness {
     function scenario(uint8 mode) external returns (bool ok, uint256 retained) {
         prefix = 1;
         marker = 1;
-        (ok,) = BoundedCall.callRemaining(address(this), 50_000, 100_000,
+        (ok,) = BoundedCall.callRemaining(MineFlipGas.fromCall(0), address(this), 50_000, 100_000,
             abi.encodeCall(this.child, (mode)), 0);
         // Admission is before the call; this is only a test assertion about the
         // promised tail, never a failure classification used by production code.

@@ -108,7 +108,7 @@ contract WalletIdPhaseEGasTest is DeployProtocol {
     }
 
     function _key(address player) private view returns (uint32) {
-        return game.walletIdOf(player);
+        return game.walletIdOf_g3120(player);
     }
 
     function _credit(address player, uint256 amount) private {

@@ -608,7 +608,7 @@ describe("JackpotDuration", function () {
       expect(await game.level()).to.equal(levelBefore + 1n, "Level should advance by 1");
       expect(await game.jackpotPhase()).to.equal(false, "Should be back in purchase phase");
       expect(await game.jackpotDuration()).to.equal(3);
-      expect((BigInt(await game.extsload(ZERO_BYTES32)) >> 184n) & 2n).to.equal(2n, "Turbo bonus remains owed");
+      expect((BigInt(await game.extsload_g8132(ZERO_BYTES32)) >> 184n) & 2n).to.equal(2n, "Turbo bonus remains owed");
 
       // Drain completed without any day-boundary crossing (timestamp stayed within 24h window).
       expect(tsAfter - tsBefore).to.be.lessThan(86400,

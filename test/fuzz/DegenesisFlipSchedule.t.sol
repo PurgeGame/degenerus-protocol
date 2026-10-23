@@ -162,7 +162,7 @@ contract DegenesisFlipSchedule is DegenesisHarness {
         for (uint256 j; j < 4; ++j) {
             vm.warp(_dayStart(3) + at[j]);
             _buy(who[j], 0.5 ether);
-            ids[j] = game.walletIdOf(who[j]);
+            ids[j] = game.walletIdOf_g3120(who[j]);
         }
         uint256[] memory secs = _secsOf(vm.getRecordedLogs());
         assertEq(secs[0], 0, "opening s = 0");
@@ -187,7 +187,7 @@ contract DegenesisFlipSchedule is DegenesisHarness {
     ///         bonus and V; an order at a day's first second takes the full bonus in the new
     ///         cohort, the second before belongs to the previous cohort with no bonus.
     function test_DrivenDayScheduleAndBoundaries() public {
-        uint32 ida = game.walletIdOf(a);
+        uint32 ida = game.walletIdOf_g3120(a);
         uint32[] memory one = new uint32[](1);
         one[0] = ida;
         // Last second of index 2 (cohort 1, s capped) and first second of index 3 (cohort 2, s = 0).
@@ -224,7 +224,7 @@ contract DegenesisFlipSchedule is DegenesisHarness {
     function test_DrivenVolumeFactorAcrossVolumes() public {
         uint256[4] memory vols = [uint256(0.01 ether), 46 ether, 92 ether, 460 ether];
         _earnCredit(a, 400 ether);
-        uint32 ida = game.walletIdOf(a);
+        uint32 ida = game.walletIdOf_g3120(a);
         uint32[] memory one = new uint32[](1);
         one[0] = ida;
         for (uint256 k; k < 4; ++k) {
@@ -247,7 +247,7 @@ contract DegenesisFlipSchedule is DegenesisHarness {
         vm.deal(a, 2_000_001 ether);
         _buy(a, 2_000_000 ether);
         _buy(b, 0.01 ether);
-        uint32 idb = game.walletIdOf(b);
+        uint32 idb = game.walletIdOf_g3120(b);
         uint256 word = _searchCategory(1, 1, idb, 0, 0);
         uint256 q = _refQ(1, _degPool());
         assertEq(_refFlipRaw(100, 143_204, 1, 21_600, _volumeUnits(1)), 0, "even the top ladder roll is < 1 FLIP");

@@ -653,14 +653,14 @@ contract SdgnrsWhaleUnderfundedRevert is DeployProtocol {
     }
 
     function _clearPending(address holder) internal {
-        uint32 id = game.walletIdOf(holder);
+        uint32 id = game.walletIdOf_g3120(holder);
         if (id != 0) vm.store(address(game), keccak256(abi.encode(uint256(id), GameSlots.TICKET_PENDING)), bytes32(0));
     }
 
     /// @dev sDGNRS claimable `amount` with AFKing 0, claimablePool moved with it: the top-up
     ///      writes and the 1,000-pass cap is bought.
     function _fundSdgnrs(uint256 amount) internal {
-        bytes32 cw = keccak256(abi.encode(uint256(game.walletIdOf(ContractAddresses.SDGNRS)), GameSlots.BALANCES_PACKED));
+        bytes32 cw = keccak256(abi.encode(uint256(game.walletIdOf_g3120(ContractAddresses.SDGNRS)), GameSlots.BALANCES_PACKED));
         uint256 prev = uint256(vm.load(address(game), cw));
         vm.store(address(game), cw, bytes32(amount));
         bytes32 cp = bytes32(GameSlots.CLAIMABLE_POOL);

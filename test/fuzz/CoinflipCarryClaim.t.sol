@@ -357,7 +357,7 @@ contract CoinflipCarryClaim is DeployProtocol {
     }
     function testUnlimitedRebuyRetainsBothWordsAcrossWinLossAndStopOne() public {
         _enterRebuyWithStake();
-        uint32 id = game.walletIdOf(player);
+        uint32 id = game.walletIdOf_g3120(player);
         bytes32 base = keccak256(abi.encode(uint256(id), uint256(2)));
         _resolveDay(3, true);
         vm.prank(player); coinflip.depositCoinflip(0, 0);

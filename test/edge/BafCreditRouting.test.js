@@ -234,7 +234,7 @@ describe("BafCreditRouting", function () {
         .claimCoinflips(0, flip(10000));
       expect(await coin.balanceOf(alice.address)).to.be.gt(balBefore);
       const events = await getEvents(tx, fixture.jackpots, "BafFlipRecorded");
-      const aliceId = await fixture.game.walletIdOf(alice.address);
+      const aliceId = await fixture.game.walletIdOf_g3120(alice.address);
       const aliceEvents = events.filter(
         (e) => e.args.id === aliceId
       );
@@ -362,7 +362,7 @@ describe("BafCreditRouting", function () {
       const events = await getEvents(tx, jackpots, "BafFlipRecorded");
 
       // Expect at least one BafFlipRecorded for alice into bracket 10.
-      const aliceId = await fixture.game.walletIdOf(alice.address);
+      const aliceId = await fixture.game.walletIdOf_g3120(alice.address);
       const aliceEvents = events.filter(
         (e) => e.args.id === aliceId
       );
@@ -399,7 +399,7 @@ describe("BafCreditRouting", function () {
         .claimCoinflips(0, flip(10000));
       const events = await getEvents(tx, jackpots, "BafFlipRecorded");
 
-      const aliceId = await fixture.game.walletIdOf(alice.address);
+      const aliceId = await fixture.game.walletIdOf_g3120(alice.address);
       const aliceEvents = events.filter(
         (e) => e.args.id === aliceId
       );
@@ -426,7 +426,7 @@ describe("BafCreditRouting", function () {
         .connect(alice)
         .claimCoinflips(0, flip(10000));
       const events = await getEvents(tx, jackpots, "BafFlipRecorded");
-      const aliceId = await fixture.game.walletIdOf(alice.address);
+      const aliceId = await fixture.game.walletIdOf_g3120(alice.address);
       const aliceEvents = events.filter(
         (e) => e.args.id === aliceId
       );
@@ -455,7 +455,7 @@ describe("BafCreditRouting", function () {
         .connect(alice)
         .claimCoinflips(0, flip(10000));
       const events = await getEvents(tx, jackpots, "BafFlipRecorded");
-      const aliceId = await fixture.game.walletIdOf(alice.address);
+      const aliceId = await fixture.game.walletIdOf_g3120(alice.address);
       const aliceEvents = events.filter(
         (e) => e.args.id === aliceId
       );
@@ -480,7 +480,7 @@ describe("BafCreditRouting", function () {
         .connect(alice)
         .claimCoinflips(0, flip(10000));
       const events = await getEvents(tx, jackpots, "BafFlipRecorded");
-      const aliceId = await fixture.game.walletIdOf(alice.address);
+      const aliceId = await fixture.game.walletIdOf_g3120(alice.address);
       const aliceEvents = events.filter(
         (e) => e.args.id === aliceId
       );
@@ -517,7 +517,7 @@ describe("BafCreditRouting", function () {
         .connect(alice)
         .claimCoinflips(0, flip(10000));
       const events = await getEvents(tx, jackpots, "BafFlipRecorded");
-      const aliceId = await fixture.game.walletIdOf(alice.address);
+      const aliceId = await fixture.game.walletIdOf_g3120(alice.address);
       const aliceEvents = events.filter(
         (e) => e.args.id === aliceId
       );
@@ -549,7 +549,7 @@ describe("BafCreditRouting", function () {
         .connect(alice)
         .claimCoinflips(0, flip(10000));
       const events = await getEvents(tx, jackpots, "BafFlipRecorded");
-      const aliceId = await fixture.game.walletIdOf(alice.address);
+      const aliceId = await fixture.game.walletIdOf_g3120(alice.address);
       const aliceEvents = events.filter(
         (e) => e.args.id === aliceId
       );
@@ -611,7 +611,7 @@ describe("BafCreditRouting", function () {
         .connect(alice)
         .claimCoinflips(0, flip(10000));
       const events = await getEvents(tx, jackpots, "BafFlipRecorded");
-      const aliceId = await fixture.game.walletIdOf(alice.address);
+      const aliceId = await fixture.game.walletIdOf_g3120(alice.address);
       const aliceEvents = events.filter(
         (e) => e.args.id === aliceId
       );
@@ -661,7 +661,7 @@ describe("BafCreditRouting", function () {
         .connect(alice)
         .claimCoinflips(0, flip(10000));
       const events = await getEvents(tx, jackpots, "BafFlipRecorded");
-      const aliceId = await fixture.game.walletIdOf(alice.address);
+      const aliceId = await fixture.game.walletIdOf_g3120(alice.address);
       const aliceEvents = events.filter(
         (e) => e.args.id === aliceId
       );

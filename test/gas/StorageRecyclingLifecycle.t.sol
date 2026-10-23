@@ -109,7 +109,7 @@ contract StorageRecyclingLifecycleTest is DeployProtocol {
     function _snapshotInventory(uint24 lvl) private {
         if (lvl >= 32) return;
         if (recycled) {
-            uint256 packed = uint256(game.extsload(bytes32(uint256(5))));
+            uint256 packed = uint256(game.extsload_g8132(bytes32(uint256(5))));
             if (uint24(packed >> (80 + (lvl & 1) * 24)) != lvl
                 || packed & (uint256(1) << (GameSlots.TRAIT_BUCKET_STALE_OFFSET * 8 + (lvl & 1))) != 0) return;
         }
@@ -117,8 +117,8 @@ contract StorageRecyclingLifecycleTest is DeployProtocol {
             : uint256(keccak256(abi.encode(uint256(lvl), uint256(8))));
         uint256 occurrences; uint256 words;
         for (uint256 trait; trait < 256; ++trait) {
-            uint256 header = uint256(game.extsload(bytes32(base + trait)));
-            uint256 bits = uint256(game.extsload(bytes32(GameSlots.TRAIT_BUCKET_LIVE + (lvl & 1))));
+            uint256 header = uint256(game.extsload_g8132(bytes32(base + trait)));
+            uint256 bits = uint256(game.extsload_g8132(bytes32(GameSlots.TRAIT_BUCKET_LIVE + (lvl & 1))));
             uint256 count = recycled ? ((bits >> trait) & 1 != 0 ? uint32(header) : 0) : header;
             occurrences += count;
             words += (count + 7) / 8;
@@ -134,7 +134,7 @@ contract StorageRecyclingLifecycleTest is DeployProtocol {
             vm.warp(vm.getBlockTimestamp() + 1 days);
             _drive(day);
             if (recycled) {
-                uint48 stamps = uint48(uint256(game.extsload(bytes32(uint256(5)))) >> 80);
+                uint48 stamps = uint48(uint256(game.extsload_g8132(bytes32(uint256(5)))) >> 80);
                 for (uint256 slot; slot < 2; ++slot) {
                     uint24 stamp = uint24(stamps >> (slot * 24));
                     if (lastStamp[slot] != 0 && stamp > lastStamp[slot]) ++retirements;

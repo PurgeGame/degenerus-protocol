@@ -19,7 +19,7 @@ contract ResolutionCleanupGasTest is DeployProtocol {
         vm.warp(block.timestamp + 1 days);
         for (uint256 i; i < 3; ++i) {
             address player = address(uint160(0xCA1101 + i));
-            vm.prank(address(coin)); game.registerWallet(player, true);
+            vm.prank(address(coin)); game.registerWallet_g9539(player, true);
             vm.prank(address(game)); coin.mintForGame(player, 100_000_000);
         }
     }

@@ -42,18 +42,16 @@ interface IVaultOwnership {
 
 /// @dev Mint-history entry pricing, account resolution and the daily RNG lock.
 interface IGameCraps {
-    function mintPackedOfId_g5372(uint32 id) external view returns (uint256);
 
     /// @notice Raw mint history: lifetime count, last mint level and deity ownership. Read for
     ///         the account ID (newcomer pricing follows its own mint history).
-    function mintPackedOfId(uint32 id) external view returns (uint256);
-    function resolveAccount_g502(uint32 id, address caller) external view returns (address key, address payee, bool authorized);
+    function mintPackedOfId_g5372(uint32 id) external view returns (uint256);
 
     /// @notice Resolve account `id` for `caller`: key, payee and whether `caller` may act for it
     ///         (its key, a smurf's owner, or an approved operator). Reverts for an unallocated
     ///         or zero `id`; never reverts on authorization. Player doors require `authorized`;
     ///         `vaultComp` uses only the key.
-    function resolveAccount(uint32 id, address caller)
+    function resolveAccount_g502(uint32 id, address caller)
         external view returns (address key, address payee, bool authorized);
     function level() external view returns (uint24);
     /// @notice Daily request through final day seal, including a fulfilled, pending jackpot battle.
@@ -67,7 +65,6 @@ interface IHighRollerReserve {
 /// @dev Run winnings and competitive battle pots pay as next-day coinflip stake. The batch lane
 ///      lets a slot settle many entrants with one external call.
 interface ICoinflipStake {
-
 
     /// @notice Coinflip's credit of `amount` FLIP stake to wallet `id` (0 is a no-op).
     function creditFlip_g317(uint32 id, uint256 amount) external;
@@ -92,12 +89,9 @@ interface ICoinflipStake {
 interface IReadCohortLifecycle {
     function admitCustom(uint64 slot) external;
 
-
     function registerRngSlot_g709(uint48 index, uint64 slot, bytes32 key) external;
+
     function resolveRngSlot_g1079(uint64 slot, uint256 allowance) external returns (MineFlipGas.Result memory);
-
-    function resolveRngSlot(uint64 slot, uint256 allowance) external returns (MineFlipGas.Result memory);
-
 
     function finalizeBattle_g3665(CrapsBattleStorage.Window calldata w, uint256 board, uint256 word) external;
     function payBattlePot(uint64 slot, bytes32 key, uint256 winnerId, uint256 pot, uint256 boost, uint256 word) external;

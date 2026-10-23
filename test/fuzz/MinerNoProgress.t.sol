@@ -78,7 +78,7 @@ contract MinerProgressHarness is DegenerusGameMinerModule {
         MinerAction action = _nextMinerAction(address(0));
         return action != MinerAction.Idle && action != MinerAction.Wait;
     }
-    function extsload(bytes32 slot) external view returns (bytes32 value) {
+    function extsload_g8132(bytes32 slot) external view returns (bytes32 value) {
         assembly ("memory-safe") { value := sload(slot) }
     }
     function setCrapsRngPending_g1406(uint48 index, bool pending) external {
@@ -145,7 +145,7 @@ contract MinerNoProgressTest is Test {
         vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
         vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionBatchState()"),
             abi.encode(uint32(1), uint32(0), uint32(0), uint256(0)));
-        vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("minerMaintenancePending()"), abi.encode(false));
+        vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("minerMaintenancePending_g11976()"), abi.encode(false));
         vm.mockCall(ContractAddresses.COINFLIP, abi.encodeWithSignature("creditFlip_g317(uint32,uint256)"), bytes(""));
     }
 
@@ -155,7 +155,7 @@ contract MinerNoProgressTest is Test {
             vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(true));
         }
         if (action == DegenerusGameStorage.MinerAction.Maintenance) {
-            vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("minerMaintenancePending()"), abi.encode(true));
+            vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("minerMaintenancePending_g11976()"), abi.encode(true));
         }
         if (action == DegenerusGameStorage.MinerAction.RequestMidday) _fundCoordinator(100 ether);
         assertEq(game.minerAction(), uint8(action), "fixture action");
@@ -206,7 +206,7 @@ contract MinerNoProgressTest is Test {
         _seed(DegenerusGameStorage.MinerAction.Maintenance);
         assertTrue(game.advanceDue());
         assertEq(game.rngConsumerStage_g379(), 7);
-        bytes memory selector = abi.encodeWithSignature("runCrapsMaintenance(uint256)");
+        bytes memory selector = abi.encodeWithSignature("runCrapsMaintenance_g10712(uint256)");
         vm.mockCall(ContractAddresses.CRAPS, selector, abi.encode(false, true, uint256(0)));
         vm.expectCall(ContractAddresses.CRAPS, selector, uint64(1));
         assertLt(_expectFailure(GameMiner.NoWork.selector, 16_700_000), 200_000);
@@ -224,7 +224,7 @@ contract MinerNoProgressTest is Test {
         if (action == DegenerusGameStorage.MinerAction.Craps) return (ContractAddresses.CRAPS, abi.encodeWithSignature("runCrapsReadWork(uint48,uint256)"));
         if (action == DegenerusGameStorage.MinerAction.PrepareSubscriptions) return (ContractAddresses.GAME_AFKING_MODULE, abi.encodeWithSignature("runSubscriberWork_g6352(uint24,uint256)"));
         if (action == DegenerusGameStorage.MinerAction.SeizeLoans) return (ContractAddresses.GAME_ADVANCE_MODULE, abi.encodeWithSignature("runLoanSeizureWork(uint256)"));
-        return (ContractAddresses.CRAPS, abi.encodeWithSignature("runCrapsMaintenance(uint256)"));
+        return (ContractAddresses.CRAPS, abi.encodeWithSignature("runCrapsMaintenance_g10712(uint256)"));
     }
 
     function test_EveryResultWorkerStopsOnUnchangedDoneOrGasCheckpoint() public {
@@ -241,7 +241,7 @@ contract MinerNoProgressTest is Test {
             vm.revertToState(snap);
             // Mock state is not reverted with EVM snapshots.
             vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
-            vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("minerMaintenancePending()"), abi.encode(false));
+            vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("minerMaintenancePending_g11976()"), abi.encode(false));
         }
     }
 
@@ -284,7 +284,7 @@ contract MinerNoProgressTest is Test {
         assertEq(game.minerAction(), uint8(DegenerusGameStorage.MinerAction.RequestDaily), "the daily request runs first");
         game.seed(DegenerusGameStorage.MinerAction.Maintenance);
         game.setGrowthPending(true);
-        vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("minerMaintenancePending()"), abi.encode(true));
+        vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("minerMaintenancePending_g11976()"), abi.encode(true));
         assertEq(game.minerAction(), uint8(DegenerusGameStorage.MinerAction.Maintenance), "maintenance runs first");
     }
 
@@ -360,7 +360,7 @@ contract MinerNoProgressTest is Test {
 
     function test_UsefulCertificationCommitsWhenNextWorkerDeclines() public {
         _seed(DegenerusGameStorage.MinerAction.Maintenance);
-        bytes memory selector = abi.encodeWithSignature("runCrapsMaintenance(uint256)");
+        bytes memory selector = abi.encodeWithSignature("runCrapsMaintenance_g10712(uint256)");
         for (uint256 mode; mode < 6; ++mode) {
             game.uncertify();
             if (mode < 2) vm.mockCall(ContractAddresses.CRAPS, selector, abi.encode(false, mode == 0, uint256(0)));
@@ -379,7 +379,7 @@ contract MinerNoProgressTest is Test {
         _seed(DegenerusGameStorage.MinerAction.Maintenance);
         game.uncertify();
         bytes4 invariant = bytes4(keccak256("InvariantBroken()"));
-        vm.mockCallRevert(ContractAddresses.CRAPS, abi.encodeWithSignature("runCrapsMaintenance(uint256)"),
+        vm.mockCallRevert(ContractAddresses.CRAPS, abi.encodeWithSignature("runCrapsMaintenance_g10712(uint256)"),
             abi.encodeWithSelector(invariant));
         _expectFailure(invariant, 16_700_000);
         assertFalse(game.rngComplete());
@@ -387,14 +387,14 @@ contract MinerNoProgressTest is Test {
 
     function test_WorkGasBoundWithoutPrefixStillReverts() public {
         _seed(DegenerusGameStorage.MinerAction.Maintenance);
-        vm.mockCallRevert(ContractAddresses.CRAPS, abi.encodeWithSignature("runCrapsMaintenance(uint256)"),
+        vm.mockCallRevert(ContractAddresses.CRAPS, abi.encodeWithSignature("runCrapsMaintenance_g10712(uint256)"),
             abi.encodeWithSelector(MineFlipGas.WorkGasBound.selector));
         _expectFailure(MineFlipGas.WorkGasBound.selector, 16_700_000);
     }
 
     function test_ExhaustedWorkerGasRevertsWithoutWorkAndKeepsAUsefulPrefix() public {
         _seed(DegenerusGameStorage.MinerAction.Maintenance);
-        bytes memory selector = abi.encodeWithSignature("runCrapsMaintenance(uint256)");
+        bytes memory selector = abi.encodeWithSignature("runCrapsMaintenance_g10712(uint256)");
         vm.mockCallRevert(ContractAddresses.CRAPS, selector, bytes(""));
         _expectFailure(MineFlipGas.InsufficientExecutionGas.selector, 800_000);
         game.uncertify();
@@ -431,19 +431,19 @@ contract MinerNoProgressTest is Test {
             game.seed(DegenerusGameStorage.MinerAction.Idle);
             table.seedHead(DAY, p + 1, 1, true);
             vm.warp(start + closes[p] - 1);
-            assertFalse(table.minerMaintenancePending());
+            assertFalse(table.minerMaintenancePending_g11976());
             _expectFailure(GameMiner.NoWork.selector, 16_700_000);
             // Direct idle maintenance reports no progress, even without an eligible clock step.
             vm.prank(address(game));
-            MineFlipGas.Result memory idle = JackpotBattle(address(table)).runCrapsMaintenance(3_000_000);
+            MineFlipGas.Result memory idle = JackpotBattle(address(table)).runCrapsMaintenance_g10712(3_000_000);
             assertFalse(idle.progressed);
             assertTrue(idle.done);
             vm.warp(start + closes[p]);
-            assertTrue(table.minerMaintenancePending());
+            assertTrue(table.minerMaintenancePending_g11976());
             vm.recordLogs();
             game.mineFlip{gas: 16_700_000}(0);
             assertEq(table.binding(uint64(uint256(DAY) * 8 + p + 1)), 1);
-            assertFalse(table.minerMaintenancePending(), "armed unresolved battle awaits RNG");
+            assertFalse(table.minerMaintenancePending_g11976(), "armed unresolved battle awaits RNG");
             _assertWorkUnpaid();
             vm.revertToState(snap);
         }
@@ -454,10 +454,10 @@ contract MinerNoProgressTest is Test {
         game.seed(DegenerusGameStorage.MinerAction.Idle);
         table.seedHead(DAY, 6, 1, true);
         vm.warp(start + 1 days - 1);
-        assertFalse(table.minerMaintenancePending());
+        assertFalse(table.minerMaintenancePending_g11976());
         _expectFailure(GameMiner.NoWork.selector, 16_700_000);
         vm.prank(address(game));
-        assertFalse(JackpotBattle(address(table)).runCrapsMaintenance(3_000_000).progressed);
+        assertFalse(JackpotBattle(address(table)).runCrapsMaintenance_g10712(3_000_000).progressed);
         table.seedHead(DAY + 1, 0, 0, false);
         vm.warp(start + 2 days);
         game.seed(DegenerusGameStorage.MinerAction.Idle);
@@ -472,7 +472,7 @@ contract MinerNoProgressTest is Test {
         MinerMaintenanceTable table = _realTable();
         game.seed(DegenerusGameStorage.MinerAction.Wait);
         table.seedHead(DAY, 1, 1, true);
-        assertTrue(table.minerMaintenancePending());
+        assertTrue(table.minerMaintenancePending_g11976());
         _expectFailure(GameMiner.RngNotReady.selector, 16_700_000);
         assertEq(table.binding(uint64(uint256(DAY) * 8 + 1)), 0);
     }

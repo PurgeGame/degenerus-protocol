@@ -120,38 +120,28 @@ interface IDrawGame {
     /// @notice Activity score for an existing account; may refresh its affiliate-score cache.
     function playerActivityScoreCachedById(uint32 id) external returns (uint256 score);
 
-    function registerWallet_g9539(address owner, bool allocate) external returns (uint32 id);
-
     /// @notice Game's wallet-ID hook: the existing ID, or with `allocate` a new one (paid
     ///         admission applies; a non-ETH token burn cannot bypass the free-ID threshold).
-    function registerWallet(address owner, bool allocate) external returns (uint32 id);
-
-    function walletIdOf_g3120(address player) external view returns (uint32);
+    function registerWallet_g9539(address owner, bool allocate) external returns (uint32 id);
 
     /// @notice `player`'s permanent Game wallet ID (0 = none; never allocates).
-    function walletIdOf(address player) external view returns (uint32);
-
-    function resolveAccount_g502(uint32 id, address caller) external view returns (address key, address payee, bool authorized);
+    function walletIdOf_g3120(address player) external view returns (uint32);
 
     /// @notice Resolve account `id` for `caller`: key, payee and whether `caller` may act for it
     ///         (its key, a smurf's owner, or an approved operator). Reverts for an unallocated
     ///         or zero `id`; never reverts on authorization. `enter` requires `authorized`.
-    function resolveAccount(uint32 id, address caller)
+    function resolveAccount_g502(uint32 id, address caller)
         external view returns (address key, address payee, bool authorized);
 
     /// @notice DegenerusGame's current level.
     function level() external view returns (uint24);
 
-
-
     /// @notice Consume wallet `id`'s WWXRP boon through the caller-specific Game dispatch
     ///         (0 returns 0).
     function consumeCoinflipBoon_g2902(uint32 id) external returns (uint16);
 
-    function extsload_g8132(bytes32 slot) external view returns (bytes32);
-
     /// @notice DegenerusGame's raw storage read (read-only).
-    function extsload(bytes32 slot) external view returns (bytes32);
+    function extsload_g8132(bytes32 slot) external view returns (bytes32);
 }
 
 /// @dev DGVE governance executor check for the trusted-minter registry.
@@ -163,7 +153,6 @@ interface IDrawVaultOwner {
 /// @dev Coinflip stake-credit channel for draw prizes (WWXRP is an authorized
 ///      flip creditor alongside game/quests/affiliate/admin/sDGNRS).
 interface IDrawCoinflip {
-
 
     /// @notice Coinflip's credit of `amount` FLIP stake to wallet `id` (0 is a no-op).
     function creditFlip_g317(uint32 id, uint256 amount) external;
@@ -440,7 +429,6 @@ contract WWXRP {
       |  score endpoint; the previous entry's endpoint is the interval start.|
       +======================================================================+*/
 
-
     /// @dev Entry per (day, bucket, index):
     ///      bits [0..95]    cumulative effective score endpoint (exclusive,
     ///                      whole-WWXRP units)
@@ -470,7 +458,6 @@ contract WWXRP {
     ///      whole-token uint96 bound can be guaranteed. uint192 for the
     ///      bracket total (~6.3e57 whole tokens at a 3x activity ceiling) is safe for
     ///      any reachable supply, and entry endpoints share it.
-
 
     /// @notice One incinerator interval entry in one slot: the endpoint (the bracket total
     ///         saturates at uint192.max, so every endpoint fits) and the entrant's wallet ID.

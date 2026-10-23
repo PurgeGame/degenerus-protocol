@@ -144,7 +144,7 @@ contract SweepWorstCaseDrain is DeployProtocol {
 
     /// @dev Position of `who`'s first entry in `index`.
     function _entryPos(uint48 index, address who) internal view returns (uint256 pos) {
-        uint32 id = game.walletIdOf(who);
+        uint32 id = game.walletIdOf_g3120(who);
         uint256 n = _queueLen(index);
         for (; pos < n; ++pos) {
             if (BoxOrderLib.boId(RecyclingState.boxEntry(address(game), index, pos)) == id) return pos;

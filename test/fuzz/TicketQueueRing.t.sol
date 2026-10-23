@@ -37,7 +37,7 @@ contract TicketQueueRingHarness is TicketLevelPrep, WalletSeed {
         require(i < _bucketLength(lvl, trait), "outside");
         return _bucketOwnerAt(lvl, trait, i);
     }
-    function extsload(bytes32 slot) external view returns (bytes32 value) {
+    function extsload_g8132(bytes32 slot) external view returns (bytes32 value) {
         assembly ("memory-safe") { value := sload(slot) }
     }
 }

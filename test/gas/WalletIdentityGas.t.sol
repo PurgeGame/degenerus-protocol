@@ -95,7 +95,7 @@ contract WalletIdentityGasTest is DeployProtocol {
     function _price() private view returns (uint256) { return PriceLookupLib.priceForLevel(game.level() + 1); }
 
     function _ticket(address caller, address buyer, uint256 quantity, uint256 value) private {
-        uint32 id = caller == buyer ? 0 : game.walletIdOf(buyer);
+        uint32 id = caller == buyer ? 0 : game.walletIdOf_g3120(buyer);
         vm.prank(caller);
         game.purchase{value: value}(id, quantity, 0, 0, MintPaymentKind.DirectEth, false);
     }
@@ -183,7 +183,7 @@ contract WalletIdentityGasTest is DeployProtocol {
     }
 
     function test_Gas_DepositAfkingRegisteredBeneficiary() public {
-        uint32 regId = game.walletIdOf(REG);
+        uint32 regId = game.walletIdOf_g3120(REG);
         vm.prank(FUNDER);
         game.depositAfkingFunding{value: 1 ether}(regId);
         _report("deposit_afking_registered_beneficiary");
@@ -220,26 +220,26 @@ contract WalletIdentityGasTest is DeployProtocol {
     function test_Gas_WhalePassClaimOnePass() public {
         _seeder().seedWhalePassClaims(REG, 2);
         _restoreGame();
-        game.claimWhalePass(game.walletIdOf(REG));
+        game.claimWhalePass(game.walletIdOf_g3120(REG));
         _report("whale_pass_claim_2_half_passes");
     }
 
     function test_Gas_WhalePassClaimFiveHalfPasses() public {
         _seeder().seedWhalePassClaims(REG, 5);
         _restoreGame();
-        game.claimWhalePass(game.walletIdOf(REG));
+        game.claimWhalePass(game.walletIdOf_g3120(REG));
         _report("whale_pass_claim_5_half_passes");
     }
 
     function test_Gas_WhalePassCreditFresh() public {
-        uint32 id = game.walletIdOf(REG);
+        uint32 id = game.walletIdOf_g3120(REG);
         _seeder().creditWhalePass(id, 4.5 ether + 0.01 ether);
         _report("whale_pass_credit_fresh");
         _restoreGame();
     }
 
     function test_Gas_WhalePassCreditExisting() public {
-        uint32 id = game.walletIdOf(REG);
+        uint32 id = game.walletIdOf_g3120(REG);
         WalletIdentityGasSeeder seeder = _seeder();
         seeder.seedWhalePassClaims(REG, 2);
         seeder.seedBalances(REG, 1, 0);

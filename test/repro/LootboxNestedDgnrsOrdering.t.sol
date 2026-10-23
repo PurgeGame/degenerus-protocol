@@ -104,7 +104,7 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
         vm.prank(PLAYER);
         game.purchase{value: 30 ether}(0, 0, BOX_ORDER, bytes32(0), MintPaymentKind.DirectEth, false);
         assertEq(RecyclingState.boxCount(address(game), PARENT_BUFFER), _parentPos + 1, "one parent entry");
-        assertEq(game.walletIdOf(PLAYER), 5, "RNG_WORD was derived for wallet ID 5");
+        assertEq(game.walletIdOf_g3120(PLAYER), 5, "RNG_WORD was derived for wallet ID 5");
         assertEq(_parentPos, 0, "RNG_WORD was derived for position 0");
     }
 
@@ -169,7 +169,7 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
         for (uint256 i; i < logs.length; ++i) {
             VmSafe.Log memory entry = logs[i];
             if (entry.emitter != address(game) || entry.topics.length < 2) continue;
-            if (entry.topics[1] != bytes32(uint256(game.walletIdOf(PLAYER)))) continue;
+            if (entry.topics[1] != bytes32(uint256(game.walletIdOf_g3120(PLAYER)))) continue;
 
             if (entry.topics[0] == DGNRS_BATCH_SIG) {
                 assertLt(r.batchCount, 3, "unexpected extra DGNRS settlement batch");
@@ -189,7 +189,7 @@ contract LootboxNestedDgnrsOrdering is DeployProtocol {
     /// @dev Box three's DGNRS award priced from the live pool after the first two batches, and
     ///      from the entry's stale opening snapshot.
     function _thirdRoll(NestedOpen memory r) private view returns (uint256 fresh, uint256 stale) {
-        uint256 seed3 = EntropyLib.hash4(_parentRoot(), uint256(game.walletIdOf(PLAYER)), 0x426f784f70656e, 3);
+        uint256 seed3 = EntropyLib.hash4(_parentRoot(), uint256(game.walletIdOf_g3120(PLAYER)), 0x426f784f70656e, 3);
         uint256 boonBudget = r.parentAmount / 10;
         if (boonBudget > 1 ether) boonBudget = 1 ether;
         uint256 rollAmount = r.parentAmount - boonBudget;

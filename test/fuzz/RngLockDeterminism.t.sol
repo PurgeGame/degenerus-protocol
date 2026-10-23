@@ -441,7 +441,7 @@ contract RngLockDeterminism is DeployProtocol {
         if (action == 18) {
             // game.claimWhalePass is permissionless and settles to the address passed in,
             // so the vault's claim is driven directly (no vault-side wrapper).
-            uint32 vaultId = game.walletIdOf(address(vault));
+            uint32 vaultId = game.walletIdOf_g3120(address(vault));
             vm.prank(ContractAddresses.OWNER_GOVERNANCE);
             try game.claimWhalePass(vaultId) {} catch { return; }
             return;
@@ -589,7 +589,7 @@ contract RngLockDeterminism is DeployProtocol {
         vm.recordLogs();
         vm.prank(holder);
         sdgnrs.burn(burnAmount);
-        uint32 holderId = game.walletIdOf(holder);
+        uint32 holderId = game.walletIdOf_g3120(holder);
         uint32 batchId;
         Vm.Log[] memory submitted = vm.getRecordedLogs();
         for (uint256 i; i < submitted.length; ++i) {
@@ -837,7 +837,7 @@ contract RngLockDeterminism is DeployProtocol {
     ///      `halfPasses == 0` and never reaches the rngLock-gated `_queueEntryRange` body).
     function _preloadWhalePassClaims(address claimant, uint256 halfPasses) internal {
         // Half passes live in the claimant's wallet-table element, bits 192..255.
-        bytes32 slot = GameSlotKeys.walletElement(game.walletIdOf(claimant));
+        bytes32 slot = GameSlotKeys.walletElement(game.walletIdOf_g3120(claimant));
         uint256 element = uint256(vm.load(address(game), slot));
         vm.store(address(game), slot, bytes32((element & ((uint256(1) << 192) - 1)) | (halfPasses << 192)));
     }
@@ -846,7 +846,7 @@ contract RngLockDeterminism is DeployProtocol {
     ///      oracle that the structurally-expected rngLock revert (per WHALE-04 §2 far-future
     ///      band) preserved the pending-claim accumulator untouched.
     function _readWhalePassClaims(address claimant) internal view returns (uint256) {
-        return uint256(vm.load(address(game), GameSlotKeys.walletElement(game.walletIdOf(claimant)))) >> 192;
+        return uint256(vm.load(address(game), GameSlotKeys.walletElement(game.walletIdOf_g3120(claimant)))) >> 192;
     }
 
     /// @notice TST-01 freeze leg — `claimWhalePass()` during rngLock perturbs ZERO bytes of
@@ -1060,7 +1060,7 @@ contract RngLockDeterminism is DeployProtocol {
     /// @dev Position of `who`'s first queue entry in physical buffer `index` (within that buffer's
     ///      write count or sealed read count); (false, 0) when it holds none.
     function _boxPosition(uint48 index, address who) internal view returns (bool found, uint256 pos) {
-        uint32 id = game.walletIdOf(who);
+        uint32 id = game.walletIdOf_g3120(who);
         uint256 n = RecyclingState.boxCount(address(game), index);
         for (; pos < n; ++pos) {
             if (id != 0 && BoxOrderLib.boId(RecyclingState.boxEntry(address(game), index, pos)) == id) return (true, pos);
@@ -1082,7 +1082,7 @@ contract RngLockDeterminism is DeployProtocol {
             if (logs[i].emitter == address(game) && logs[i].topics.length > 1
                 && (logs[i].topics[0] == keccak256("LootBoxOpened(uint32,uint48,uint256,uint24,uint32,uint256,bool)")
                     || logs[i].topics[0] == keccak256("BoxSpin(uint32,uint64,uint256,uint256,uint256)"))
-                && uint32(uint256(logs[i].topics[1])) == game.walletIdOf(who)) return true;
+                && uint32(uint256(logs[i].topics[1])) == game.walletIdOf_g3120(who)) return true;
         }
         return false;
     }

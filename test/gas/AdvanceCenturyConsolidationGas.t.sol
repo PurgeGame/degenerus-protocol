@@ -333,11 +333,11 @@ library CenturyBafScores {
 
     function _register(address game, address wallet) private returns (uint32 id) {
         VM.prank(ContractAddresses.AFFILIATE);
-        id = IDegenerusGame(game).registerWallet(wallet, true);
+        id = IDegenerusGame(game).registerWallet_g9539(wallet, true);
     }
 
     function _score(address jackpots, address game, bytes32 bracket, uint256 who, uint256 epochBits) private {
-        uint256 id = IDegenerusGame(game).walletIdOf(address(uint160(who)));
+        uint256 id = IDegenerusGame(game).walletIdOf_g3120(address(uint160(who)));
         VM.store(jackpots, keccak256(abi.encode(id, bracket)), bytes32(epochBits | (100 ether + (who % 1009) * 1 ether)));
     }
 }

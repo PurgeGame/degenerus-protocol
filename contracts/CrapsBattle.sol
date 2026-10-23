@@ -57,10 +57,7 @@ contract CrapsBattle is JackpotBattle, CrapsEngine {
         uint256 high;
     }
 
-    // Low-selector protocol entry; the original ABI and guarded implementation remain.
-    function resolveRngSlot_g1079(uint64 slot, uint256 allowance) external returns (MineFlipGas.Result memory result) { return resolveRngSlot(slot, allowance); }
-
-    function resolveRngSlot(uint64 slot, uint256 allowance) public returns (MineFlipGas.Result memory result) {
+    function resolveRngSlot_g1079(uint64 slot, uint256 allowance) external returns (MineFlipGas.Result memory result) {
         if (msg.sender != address(this)) revert OnlyGame();
         return _resolveSlotRange(slot, allowance, _RESOLVE_MAX_SEATS);
     }
@@ -569,12 +566,9 @@ contract CrapsBattle is JackpotBattle, CrapsEngine {
         }
     }
 
-    // Low-selector protocol entry; the original ABI and guarded implementation remain.
-    function minerMaintenancePending_g11976() external view returns (bool) { return minerMaintenancePending(); }
-
     /// @notice Constant-time predicate for the next scheduled maintenance step.
     /// @dev Read settlement and the dedicated daily battle have their own earlier stages.
-    function minerMaintenancePending() public view returns (bool) {
+    function minerMaintenancePending_g11976() external view returns (bool) {
         uint64 cur = _minerSlot;
         if (_scheduledExpired(cur)) return true;
         uint24 day = uint24(uint256(cur) / _BONUS_SLOTS_PER_DAY);
@@ -614,16 +608,13 @@ contract CrapsBattle is JackpotBattle, CrapsEngine {
         if (high != 0) _credit(id, high != 0, high);
     }
 
-    // Low-selector protocol entry; the original ABI and guarded implementation remain.
-    function extsload_g8132(bytes32 slot) external view returns (bytes32 value) { return extsload(slot); }
-
     /// @notice Read a raw storage slot. Periphery escape hatch for lens/viewer contracts, the
     ///         same read surface `DegenerusGame.extsload` gives the game: packed-state decodes
     ///         and client replay live off-contract, and new read
     ///         surfaces deploy without touching this contract. Read-only — storage is already
     ///         public to off-chain readers via eth_getStorageAt; this mirrors that visibility to
     ///         eth_call/staticcall consumers.
-    function extsload(bytes32 slot) public view returns (bytes32 value) {
+    function extsload_g8132(bytes32 slot) external view returns (bytes32 value) {
         assembly {
             value := sload(slot)
         }

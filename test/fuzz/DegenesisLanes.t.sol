@@ -58,7 +58,7 @@ contract DegenesisLanes is DegenesisHarness {
         assertEq(buys.length, 7, "seven buys");
         for (uint256 i; i < 7; ++i) {
             uint256 lane = _lane(1, i);
-            uint32 id = game.walletIdOf(who[i]);
+            uint32 id = game.walletIdOf_g3120(who[i]);
             uint256 capped = secs[i] > BONUS_WINDOW ? BONUS_WINDOW : secs[i];
             assertEq(uint32(lane), id, "lane id");
             assertEq((lane >> 32) & MAX_UNITS, amt[i] / UNIT, "lane units");
@@ -142,7 +142,7 @@ contract DegenesisLanes is DegenesisHarness {
         assertEq(_volumeUnits(1), MAX_UNITS, "header V");
         _buy(who[2], 0.01 ether); // lane 1 after a full lane 0
         assertEq((_lane(1, 0) >> 32) & MAX_UNITS, MAX_UNITS, "lane 0 intact after merge");
-        assertEq(uint32(_lane(1, 1)), game.walletIdOf(who[2]), "lane 1 id");
+        assertEq(uint32(_lane(1, 1)), game.walletIdOf_g3120(who[2]), "lane 1 id");
 
         uint256 word = uint256(keccak256("lanes-max"));
         uint256 q = _refQ(1, _degPool());

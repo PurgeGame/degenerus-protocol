@@ -328,7 +328,7 @@ contract ChainPinWorkers is DeployProtocol {
         address buyer = address(0xB04B0001);
         vm.deal(buyer, 100_000 ether);
         _giveWalletId(buyer);
-        uint32 id = game.walletIdOf(buyer);
+        uint32 id = game.walletIdOf_g3120(buyer);
 
         // Whale pass: quantities across the fold into 100 boxes, up to the 1,000 maximum.
         uint256[5] memory quantities = [uint256(1), 99, 100, 101, 1000];
@@ -357,7 +357,7 @@ contract ChainPinWorkers is DeployProtocol {
         address whale = address(0xB04B0002);
         vm.deal(whale, 60_000 ether);
         _giveWalletId(whale);
-        uint32 whaleId = game.walletIdOf(whale);
+        uint32 whaleId = game.walletIdOf_g3120(whale);
         vm.etch(address(game), boxProbeCode);
         ChainPinBoxProbe(address(game)).setDeitySales(29);
         vm.etch(address(game), realCode);

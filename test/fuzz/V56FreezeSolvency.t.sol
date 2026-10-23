@@ -36,7 +36,7 @@ contract V56FreezeSolvency is DeployProtocol {
     function _aid(address a) internal returns (uint32 id) {
         id = _aidCache[a];
         if (id == 0) {
-            id = game.walletIdOf(a);
+            id = game.walletIdOf_g3120(a);
             if (id == 0) id = _giveWalletId(a);
             _aidCache[a] = id;
         }
@@ -192,7 +192,7 @@ contract V56FreezeSolvency is DeployProtocol {
         _t += 1 days;
         vm.warp(_t);
 
-        uint32 id = game.walletIdOf(p);
+        uint32 id = game.walletIdOf_g3120(p);
         uint256 fundingDebit;
         uint256 poolDebit;
         uint256 delivered;
@@ -230,7 +230,7 @@ contract V56FreezeSolvency is DeployProtocol {
         _subscribeLootbox(p, 1);
         _deliverDay(0xB04E0FF);
 
-        DegenerusGameLens.SubFull memory owed = lens.subInfoFullById(address(game), game.walletIdOf(p));
+        DegenerusGameLens.SubFull memory owed = lens.subInfoFullById(address(game), game.walletIdOf_g3120(p));
         assertEq(owed.owedFlip, SLOT0_FLIP_PER_BUY, "non-vacuity: one delivered day owes the member reward");
         assertEq(owed.owedAffiliateBase, 70, "and the affiliate base");
 
@@ -260,7 +260,7 @@ contract V56FreezeSolvency is DeployProtocol {
         _fundPool(p, 50 ether);
         _subscribeLootbox(p, 1);
         assertEq(_countLootBoxOpened(p), 0, "no LootBoxOpened at signup");
-        assertFalse(GameSlotKeys.afkingBoxPending(address(game), game.walletIdOf(p)), "signup stamps no box");
+        assertFalse(GameSlotKeys.afkingBoxPending(address(game), game.walletIdOf_g3120(p)), "signup stamps no box");
         _settleGame(0x57A10);
         vm.recordLogs();
         _stampNewDay(0x57A11);
@@ -268,7 +268,7 @@ contract V56FreezeSolvency is DeployProtocol {
 
         // The box WAS stamped (pending), so the absence of a resolve above is non-vacuous.
         uint32 stampDay = _resetDay();
-        assertTrue(GameSlotKeys.afkingBoxPending(address(game), game.walletIdOf(p)), "non-vacuity: a box was stamped and is pending");
+        assertTrue(GameSlotKeys.afkingBoxPending(address(game), game.walletIdOf_g3120(p)), "non-vacuity: a box was stamped and is pending");
         assertTrue(_lastOpenedDayOf(p) < stampDay, "the opened day trails the stamp day");
 
         // And the open DOES emit LootBoxOpened — the materialization is reached only at the (deferred) open.
@@ -290,7 +290,7 @@ contract V56FreezeSolvency is DeployProtocol {
         _stampNewDay(0xF00D01);
 
         uint32 stampDay = _resetDay();
-        assertTrue(GameSlotKeys.afkingBoxPending(address(game), game.walletIdOf(afk)), "non-vacuity: the afking box was stamped");
+        assertTrue(GameSlotKeys.afkingBoxPending(address(game), game.walletIdOf_g3120(afk)), "non-vacuity: the afking box was stamped");
         assertTrue(_lastOpenedDayOf(afk) < stampDay, "box pending (opened day trails the stamp day)");
 
         // Snapshot the SHARED pre-open state (stamp taken, its day's request in flight) so both opens
@@ -324,7 +324,7 @@ contract V56FreezeSolvency is DeployProtocol {
         _stampNewDay(0xACE5EED);
 
         uint32 stampDay = _resetDay();
-        assertTrue(GameSlotKeys.afkingBoxPending(address(game), game.walletIdOf(afk)), "non-vacuity: stamped");
+        assertTrue(GameSlotKeys.afkingBoxPending(address(game), game.walletIdOf_g3120(afk)), "non-vacuity: stamped");
         assertTrue(_lastOpenedDayOf(afk) < stampDay, "stamp pending its day's word");
 
         // Keep both opens inside the same level/day window (< ~6h each) so the live level is unchanged; the
@@ -382,7 +382,7 @@ contract V56FreezeSolvency is DeployProtocol {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2
-                || logs[i].topics[1] != bytes32(uint256(game.walletIdOf(who)))) continue;
+                || logs[i].topics[1] != bytes32(uint256(game.walletIdOf_g3120(who)))) continue;
             bytes32 topic = logs[i].topics[0];
             if (topic != LOOTBOX_OPENED_SIG
                 && topic != keccak256("BoxSpin(uint32,uint64,uint256,uint256,uint256)")) continue;
@@ -404,7 +404,7 @@ contract V56FreezeSolvency is DeployProtocol {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2) continue;
             if (logs[i].topics[0] != LOOTBOX_OPENED_SIG &&
                 logs[i].topics[0] != keccak256("BoxSpin(uint32,uint64,uint256,uint256,uint256)")) continue;
-            if (logs[i].topics[1] == bytes32(uint256(game.walletIdOf(who)))) count++;
+            if (logs[i].topics[1] == bytes32(uint256(game.walletIdOf_g3120(who)))) count++;
         }
     }
 
@@ -541,23 +541,23 @@ contract V56FreezeSolvency is DeployProtocol {
     }
 
     function _lastOpenedDayOf(address who) internal view returns (uint32) {
-        return GameSlotKeys.afkingOpenedDay(address(game), game.walletIdOf(who));
+        return GameSlotKeys.afkingOpenedDay(address(game), game.walletIdOf_g3120(who));
     }
 
     /// @dev `who`'s set position + 1; 0 = not in the set.
     function _subscriberIndexOf(address who) internal view returns (uint256 position1) {
-        (, position1) = GameSlotKeys.subLane(address(game), game.walletIdOf(who));
+        (, position1) = GameSlotKeys.subLane(address(game), game.walletIdOf_g3120(who));
     }
 
     function _owedFlip(address who) internal view returns (uint256) {
-        return lens.subInfoFullById(address(game), game.walletIdOf(who)).owedFlip;
+        return lens.subInfoFullById(address(game), game.walletIdOf_g3120(who)).owedFlip;
     }
 
     /// @dev Whole FLIP the AfkingFlipClaimed events recorded since the last vm.recordLogs() paid `who`.
     function _flipClaimed(address who) internal returns (uint256 total) {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 sig = keccak256("AfkingFlipClaimed(uint32,uint256)");
-        uint32 id = game.walletIdOf(who);
+        uint32 id = game.walletIdOf_g3120(who);
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2 || logs[i].topics[0] != sig) continue;
             if (uint32(uint256(logs[i].topics[1])) != id) continue;

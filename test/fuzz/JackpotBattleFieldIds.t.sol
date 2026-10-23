@@ -5,12 +5,17 @@ import {Test} from "forge-std/Test.sol";
 import {Vm, VmSafe} from "forge-std/Vm.sol";
 import {JackpotBattleFieldLib} from "../../contracts/libraries/JackpotBattleFieldLib.sol";
 import {CrapsPreferenceLib} from "../../contracts/libraries/CrapsPreferenceLib.sol";
+import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @dev Stands in for the table's raw reader at `ContractAddresses.CRAPS`: both `extsload` forms
 ///      over its own storage, so a fixture plants pass words with `vm.store`.
+contract CrapsPassRootProbe is CrapsBattleStorage {
+    function passRoot() external pure returns (uint256 slot) { assembly { slot := _passCreditsById.slot } }
+}
+
 contract CrapsReaderStub {
-    function extsload(bytes32 slot) external view returns (bytes32 value) {
+    function extsload_g8132(bytes32 slot) external view returns (bytes32 value) {
         assembly ("memory-safe") { value := sload(slot) }
     }
 
@@ -28,15 +33,19 @@ contract CrapsReaderStub {
 /// @title The jackpot battle field under wallet IDs
 /// @notice `JackpotBattleFieldLib.prepare(uint32[] ids)` builds one word per drawn entry,
 ///         `id | board << 160 | 1 << 180`, reading each distinct wallet's saved board from the
-///         ID-keyed pass word (`_passCreditsById`, slot 14) in one batched `extsload`.
+///         ID-keyed pass word (`_passCreditsById`, pinned by CrapsPreferenceLib.PASS_SLOT) in one batched `extsload`.
 contract JackpotBattleFieldIdsTest is Test {
-    uint256 internal constant ID_SLOT = 14;
+    uint256 internal constant ID_SLOT = CrapsPreferenceLib.PASS_SLOT;
     bytes4 internal constant BATCH_SEL = bytes4(keccak256("extsload(bytes32[])"));
     uint32 internal constant BOARD_A = 3 | (3 << 12) | (1 << 15);
     uint32 internal constant BOARD_B = 2 | (1 << 3);
 
     function setUp() public {
         vm.etch(ContractAddresses.CRAPS, address(new CrapsReaderStub()).code);
+    }
+
+    function test_PassRootMatchesCompiledStorage() public {
+        assertEq(new CrapsPassRootProbe().passRoot(), ID_SLOT);
     }
 
     function _idKey(uint32 id) internal pure returns (bytes32) {

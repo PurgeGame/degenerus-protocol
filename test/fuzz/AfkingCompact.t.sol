@@ -41,7 +41,7 @@ contract AfkingCompactTest is DeployProtocol {
         vm.deal(who, deposit);
         vm.prank(who);
         game.subscribe{value: deposit}(0, tickets, qty, seat);
-        id = game.walletIdOf(who);
+        id = game.walletIdOf_g3120(who);
     }
 
     /// @dev Advance one day and run its work through the real crank to the subscription window.
@@ -150,7 +150,7 @@ contract AfkingCompactTest is DeployProtocol {
         _finishSubscriptionWindow();
         vm.prank(ALICE);
         game.subscribe{value: 1 ether}(0, false, 1, seat);
-        assertEq(_info(game.walletIdOf(ALICE)).checkpointDay, game.currentDayView());
+        assertEq(_info(game.walletIdOf_g3120(ALICE)).checkpointDay, game.currentDayView());
     }
 
     function test_QuantityAboveEightReverts() public {
@@ -202,7 +202,7 @@ contract AfkingCompactTest is DeployProtocol {
         assertEq(_flip(id) - before, 100, "cancel settles the player");
         assertEq(game.subscriberSetLength(), members - 1, "and removes the entry");
         assertFalse(_info(id).member);
-        (, bool afking) = quests.effectiveBaseStreakAndAfking(id);
+        (, bool afking) = quests.effectiveBaseStreakAndAfking_g2654(id);
         assertFalse(afking, "the streak handed back to Quests");
 
         // A same-day restart burns another seat and credits nothing.
@@ -363,7 +363,7 @@ contract AfkingCompactTest is DeployProtocol {
         affiliate.referPlayer(bytes32("ALPHA"));
         _nextDay();
 
-        uint32 ownerId = game.walletIdOf(AFFILIATE_OWNER);
+        uint32 ownerId = game.walletIdOf_g3120(AFFILIATE_OWNER);
         uint256 ownerBefore = _flip(ownerId);
         uint32[] memory ids = new uint32[](3);
         (ids[0], ids[1], ids[2]) = (a, b, c);

@@ -125,7 +125,7 @@ async function fundGameBacking(sdgnrs, game, amount) {
   const balanceRoot = layout.storage.find((entry) => entry.label === "balancesPacked");
   const pool = layout.storage.find((entry) => entry.label === "claimablePool");
   const gameAddr = await game.getAddress();
-  const id = await game.walletIdOf(await sdgnrs.getAddress());
+  const id = await game.walletIdOf_g3120(await sdgnrs.getAddress());
   const balanceSlot = hre.ethers.keccak256(hre.ethers.AbiCoder.defaultAbiCoder()
     .encode(["uint256", "uint256"], [id, BigInt(balanceRoot.slot)]));
   const poolSlot = hre.ethers.toBeHex(BigInt(pool.slot), 32);
@@ -577,7 +577,7 @@ describe("DGNRS (DGNRS Liquid Token)", function () {
       // (a non-owner) can settle sDGNRS's claim directly — no sDGNRS-side wrapper needed.
       // She reaches the claim logic and reverts with NothingToClaim (empty claim), not an
       // authorization error.
-      await expect(game.connect(alice).claimWhalePass(await game.walletIdOf(sdgnrs.target)))
+      await expect(game.connect(alice).claimWhalePass(await game.walletIdOf_g3120(sdgnrs.target)))
         .to.be.revertedWithCustomError(game, "NothingToClaim");
     });
 

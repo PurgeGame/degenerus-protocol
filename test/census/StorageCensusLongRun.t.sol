@@ -299,12 +299,12 @@ contract StorageCensusLongRunTest is StorageCensus {
                 abi.encodeCall(game.purchaseDeityPass, (uint32(0), uint8(9), bytes32(0))));
             if (ok) {
                 deityHolder = i + 1;
-                deityId = game.walletIdOf(cast[i]);
+                deityId = game.walletIdOf_g3120(cast[i]);
             }
         }
         if (deityHolder != 0) {
             for (uint8 slot; slot < 3; ++slot) {
-                uint32 recipient = game.walletIdOf(cast[(uint256(d) * 3 + slot * 7) % (PLAYERS - 1)]);
+                uint32 recipient = game.walletIdOf_g3120(cast[(uint256(d) * 3 + slot * 7) % (PLAYERS - 1)]);
                 if (recipient == 0) continue;
                 _act("issueDeityBoon", deityHolder - 1, address(game), 0,
                     abi.encodeCall(game.issueDeityBoon, (deityId, recipient, slot)));
@@ -322,7 +322,7 @@ contract StorageCensusLongRunTest is StorageCensus {
     function _loans(uint24 d, uint24 lvl) internal {
         for (uint256 j; j < 2; ++j) {
             uint256 i = (uint256(d) / 2 + j * 15) % PLAYERS;
-            uint32 id = game.walletIdOf(cast[i]);
+            uint32 id = game.walletIdOf_g3120(cast[i]);
             if (id == 0) continue;
             DegenerusGameLens.LoanInfo memory info = _loanOf(id);
             if (info.principal != 0) {
@@ -513,14 +513,14 @@ contract StorageCensusLongRunTest is StorageCensus {
         }
         if (d % 3 == 1) {
             uint256 k = 18 + (uint256(d) / 3) % 12;
-            uint32 kid = game.walletIdOf(cast[k]);
+            uint32 kid = game.walletIdOf_g3120(cast[k]);
             if (kid != 0) {
                 _act("depositAfkingFunding", k, address(game), 0.5 ether, abi.encodeCall(game.depositAfkingFunding, (kid)));
             }
         }
         if (d % 5 == 2) {
             uint32[] memory ids = new uint32[](3);
-            for (uint256 j; j < 3; ++j) ids[j] = game.walletIdOf(cast[18 + (uint256(d) + j * 4) % 12]);
+            for (uint256 j; j < 3; ++j) ids[j] = game.walletIdOf_g3120(cast[18 + (uint256(d) + j * 4) % 12]);
             _act("claimAfkingFlip", 18 + uint256(d) % 12, address(game), 0, abi.encodeCall(game.claimAfkingFlip, (ids)));
         }
     }

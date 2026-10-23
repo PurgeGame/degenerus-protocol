@@ -95,8 +95,8 @@ abstract contract SeatFixture is DeployProtocol {
             uint256(vm.load(address(game), bytes32(GameSlots.SUBSCRIBERS))) == game.subscriberSetLength(),
             "_subscribers root"
         );
-        require(game.walletIdOf(address(vault)) == VAULT_ID, "vault wallet ID");
-        require(game.walletIdOf(address(sdgnrs)) == SDGNRS_ID, "sdgnrs wallet ID");
+        require(game.walletIdOf_g3120(address(vault)) == VAULT_ID, "vault wallet ID");
+        require(game.walletIdOf_g3120(address(sdgnrs)) == SDGNRS_ID, "sdgnrs wallet ID");
         require(_inSet(VAULT_ID) && _inSet(SDGNRS_ID), "_subMeta root");
         require(_qty(VAULT_ID) == 1 && _qty(SDGNRS_ID) == 1, "lane quantity");
     }
@@ -108,7 +108,7 @@ abstract contract SeatFixture is DeployProtocol {
     }
 
     function _active(address who) internal view returns (bool) {
-        uint32 id = game.walletIdOf(who);
+        uint32 id = game.walletIdOf_g3120(who);
         return id != 0 && _activeId(id);
     }
 
@@ -216,7 +216,7 @@ abstract contract SeatFixture is DeployProtocol {
     /// @dev Strip account `id`'s funding (afking and claimable) as `caller` and drive days until
     ///      the subscriber pass expires it.
     function _evict(address caller, uint32 id) internal {
-        (address key,,) = game.resolveAccount(id, caller);
+        (address key,,) = game.resolveAccount_g502(id, caller);
         for (uint256 d; d < 8 && _pos(id) != 0; ++d) {
             uint256 rem = game.afkingFundingOf(key);
             if (rem != 0) {
@@ -322,7 +322,7 @@ contract SeatConsumptionTest is SeatFixture {
 
     function test_operatorSubscribingAWalletBurnsItsSeatWithoutErc721Approval() public {
         (address x, uint256 seat) = _passBuyer("op-wallet");
-        uint32 xId = game.walletIdOf(x);
+        uint32 xId = game.walletIdOf_g3120(x);
         uint256 f0 = game.afkingFundingOf(x);
         vm.prank(x);
         game.setOperatorApproval(0, op, true);
@@ -348,7 +348,7 @@ contract SeatConsumptionTest is SeatFixture {
 
         address fresh = makeAddr("fresh-no-id");
         (address registered,) = _passBuyer("registered");
-        uint32 regId = game.walletIdOf(registered);
+        uint32 regId = game.walletIdOf_g3120(registered);
         uint256 never = uint256(afkingSubToken.nextSerial()) + 50;
         uint256[4] memory bad = [otherSeat, burnSeat, never, uint256(0)];
 
@@ -365,7 +365,7 @@ contract SeatConsumptionTest is SeatFixture {
             vm.expectRevert(AFKingSubscriptionToken.InvalidToken.selector);
             game.subscribe{value: SUB_FUND}(0, false, 1, bad[i]);
         }
-        assertEq(game.walletIdOf(fresh), 0, "registration unwound");
+        assertEq(game.walletIdOf_g3120(fresh), 0, "registration unwound");
         assertEq(game.afkingFundingOf(fresh), 0, "no funding credit (fresh)");
         assertEq(_pos(regId), 0, "no lane");
         assertEq(game.afkingFundingOf(registered), regFunding, "no funding credit (registered)");
@@ -379,7 +379,7 @@ contract SeatConsumptionTest is SeatFixture {
     function test_liveRunChangeWithGarbageSeatBurnsNothing() public {
         (address p, uint256 seat) = _passBuyer("changer");
         _subscribe(p, 0, seat);
-        uint32 id = game.walletIdOf(p);
+        uint32 id = game.walletIdOf_g3120(p);
         uint256 l0 = _L();
         uint256 s0 = _S();
 
@@ -396,7 +396,7 @@ contract SeatConsumptionTest is SeatFixture {
         (address p, uint256 seat) = _passBuyer("canceller");
         uint256 spare = _giveSeat(p);
         _subscribe(p, 0, seat);
-        uint32 id = game.walletIdOf(p);
+        uint32 id = game.walletIdOf_g3120(p);
         uint256 l0 = _L();
         uint256 s0 = _S();
 
@@ -419,7 +419,7 @@ contract SeatConsumptionTest is SeatFixture {
         _subscribe(p, 0, seat);
         uint256 sLive = _S();
         _cancel(p, 0);
-        uint32 id = game.walletIdOf(p);
+        uint32 id = game.walletIdOf_g3120(p);
         assertEq(_S(), sLive - 1, "the cancel removed the entry");
         uint256 l0 = _L();
 
@@ -457,7 +457,7 @@ contract SeatConsumptionTest is SeatFixture {
         (address p, uint256 seat) = _passBuyer("evict-rerun");
         uint256 second = _giveSeat(p);
         _subscribe(p, 0, seat);
-        uint32 id = game.walletIdOf(p);
+        uint32 id = game.walletIdOf_g3120(p);
         uint256 sLive = _S();
         _evict(p, id);
         assertEq(_S(), sLive - 1, "eviction removed the entry");
@@ -602,8 +602,8 @@ contract SeatConsumptionTest is SeatFixture {
         vm.deal(b, 10 ether);
         vm.prank(b);
         game.subscribe{value: 1 ether}(0, false, 1, seatB);
-        uint32 idA = game.walletIdOf(a);
-        uint32 idB = game.walletIdOf(b);
+        uint32 idA = game.walletIdOf_g3120(a);
+        uint32 idB = game.walletIdOf_g3120(b);
         _fillFreeTrancheTo(1000);
         address to = makeAddr("freed-grantee");
         _mintToCap(to, 0);
@@ -679,7 +679,7 @@ contract SeatConsumptionTest is SeatFixture {
         assertEq(afkingSubToken.balanceOf(p), 0, "holds no seat");
         assertTrue(_active(p), "still subscribed");
 
-        uint32 id = game.walletIdOf(p);
+        uint32 id = game.walletIdOf_g3120(p);
         _driveDay();
         _driveDay();
         assertTrue(_active(p) && _pos(id) != 0, "the run keeps running without a seat");

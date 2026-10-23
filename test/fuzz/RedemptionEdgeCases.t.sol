@@ -69,7 +69,7 @@ contract RedemptionEdgeCasesTest is RedemptionFixture {
         uint32 id = _openBatchId(); _closeAsGame();
         vm.expectRevert(sDGNRS.NotResolved.selector); vm.prank(alice); sdgnrs.claimRedemption(0, id);
         _terminalize();
-        uint32 aliceId = game.walletIdOf(alice);
+        uint32 aliceId = game.walletIdOf_g3120(alice);
         vm.expectRevert(sDGNRS.Unauthorized.selector);
         vm.prank(bob); sdgnrs.claimRedemption(aliceId, id);
     }
@@ -98,12 +98,12 @@ contract RedemptionEdgeCasesTest is RedemptionFixture {
         assertEq(sdgnrs.pendingRedemptionEthValue(), 0);
     }
     function test_ActivityScoreFrozenOnFirstBurn() public {
-        vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScore.selector, alice), abi.encode(uint256(100), game.walletIdOf(alice)));
+        vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScore.selector, alice), abi.encode(uint256(100), game.walletIdOf_g3120(alice)));
         uint32 id = _openBatchId();
         _burn(alice, 1e18);
-        vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScore.selector, alice), abi.encode(uint256(200), game.walletIdOf(alice)));
+        vm.mockCall(address(game), abi.encodeWithSelector(game.playerActivityScore.selector, alice), abi.encode(uint256(200), game.walletIdOf_g3120(alice)));
         _burn(alice, 1e18);
-        (,uint16 score) = sdgnrs.pendingRedemptions(game.walletIdOf(alice), id);
+        (,uint16 score) = sdgnrs.pendingRedemptions(game.walletIdOf_g3120(alice), id);
         assertEq(score, 101);
     }
     function testFuzz_TerminalClaimPaysExactlyOnce(uint16 seed) public {
@@ -121,7 +121,7 @@ contract RedemptionEdgeCasesTest is RedemptionFixture {
     function test_OperatorCanClaimTerminalForOwnerOnly() public {
         _burn(alice, sdgnrs.totalSupply() / 1000);
         uint32 id = _resolveLive(100); _terminalize();
-        uint32 aliceId = game.walletIdOf(alice);
+        uint32 aliceId = game.walletIdOf_g3120(alice);
         vm.prank(alice); game.setOperatorApproval(0, bob, true);
         uint256 before = _received(alice); uint256 opBefore = _received(bob);
         vm.prank(bob); sdgnrs.claimRedemption(aliceId, id);

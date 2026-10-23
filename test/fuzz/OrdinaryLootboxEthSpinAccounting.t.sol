@@ -316,7 +316,7 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2) continue;
             bytes32 topic = logs[i].topics[0];
             if (topic != SPIN && topic != OPENED && topic != DGNRS_BATCH && topic != CAPPED) continue;
-            assertEq(uint32(uint256(logs[i].topics[1])), game.walletIdOf(PLAYER), "all rewards belong to purchaser");
+            assertEq(uint32(uint256(logs[i].topics[1])), game.walletIdOf_g3120(PLAYER), "all rewards belong to purchaser");
             if (topic == SPIN) {
                 (uint64 id, uint256 packed, uint256 gross, uint256 cash) =
                     abi.decode(logs[i].data, (uint64, uint256, uint256, uint256));
@@ -358,7 +358,7 @@ contract OrdinaryLootboxEthSpinAccountingTest is DeployProtocol {
         uint48 index = _index();
         position = RecyclingState.boxCount(address(game), index);
         _buy(1 ether);
-        uint32 id = game.walletIdOf(PLAYER);
+        uint32 id = game.walletIdOf_g3120(PLAYER);
         uint256 committed = uint256(id) | (uint256(1000) << 32) | (uint256(1) << 53) | (uint256(1) << 77);
         assertEq(_entry(index, position), committed, "real purchase committed score one, one unboosted 1 ETH box");
         // The purchase's pending ETH clears the threshold: the engine's mid-day request.

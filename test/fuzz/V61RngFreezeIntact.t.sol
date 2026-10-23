@@ -54,7 +54,7 @@ contract V61RngFreezeIntact is DeployProtocol {
     function _aid(address a) internal returns (uint32 id) {
         id = _aidCache[a];
         if (id == 0) {
-            id = game.walletIdOf(a);
+            id = game.walletIdOf_g3120(a);
             if (id == 0) id = _giveWalletId(a);
             _aidCache[a] = id;
         }
@@ -415,7 +415,7 @@ contract V61RngFreezeIntact is DeployProtocol {
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2) continue;
             if (logs[i].topics[0] != AFKING_SPENT_SIG) continue;
-            if (logs[i].topics[1] != bytes32(uint256(game.walletIdOf(who)))) continue;
+            if (logs[i].topics[1] != bytes32(uint256(game.walletIdOf_g3120(who)))) continue;
             return abi.decode(logs[i].data, (uint256));
         }
         return 0;

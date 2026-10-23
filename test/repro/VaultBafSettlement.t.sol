@@ -175,11 +175,11 @@ abstract contract VaultBafRig is DeployProtocol {
 
 
     function _stateSlot(address p) internal view returns (bytes32) {
-        return keccak256(abi.encode(game.walletIdOf(p), uint256(2)));
+        return keccak256(abi.encode(game.walletIdOf_g3120(p), uint256(2)));
     }
 
     function _scoreSlot(address p, uint24 lvl) internal view returns (bytes32) {
-        return bytes32(uint256(keccak256(abi.encode(uint256(game.walletIdOf(p)), uint256(0)))) + ((lvl / 10) & 1));
+        return bytes32(uint256(keccak256(abi.encode(uint256(game.walletIdOf_g3120(p)), uint256(0)))) + ((lvl / 10) & 1));
     }
 
     /// @dev The claimer takes the vault's whole coinflip position: state words and every stake
@@ -195,8 +195,8 @@ abstract contract VaultBafRig is DeployProtocol {
 
     /// @dev One day's lane, masked so the claimer's other days are untouched.
     function _mirrorLane(uint24 day) internal {
-        uint256 amount = CoinflipStorage.read(address(coinflip), game.walletIdOf(VAULT), day) + _seedUnits(day);
-        CoinflipStorage.set(address(coinflip), game.walletIdOf(REF), day, amount);
+        uint256 amount = CoinflipStorage.read(address(coinflip), game.walletIdOf_g3120(VAULT), day) + _seedUnits(day);
+        CoinflipStorage.set(address(coinflip), game.walletIdOf_g3120(REF), day, amount);
     }
 
     /// @dev The vault's seed stake for `day` in whole FLIP. Coinflip adds it on read for a seed
@@ -206,7 +206,7 @@ abstract contract VaultBafRig is DeployProtocol {
     }
 
     function _addSeed(uint24 day) internal {
-        uint32 id = game.walletIdOf(REF);
+        uint32 id = game.walletIdOf_g3120(REF);
         uint256 seed = _seedUnits(day);
         if (seed != 0) CoinflipStorage.set(address(coinflip), id, day, CoinflipStorage.read(address(coinflip), id, day) + seed);
     }
@@ -216,7 +216,7 @@ abstract contract VaultBafRig is DeployProtocol {
     }
 
     function _stake(address p, uint24 day) internal view returns (uint256) {
-        uint256 units = CoinflipStorage.read(address(coinflip), game.walletIdOf(p), day);
+        uint256 units = CoinflipStorage.read(address(coinflip), game.walletIdOf_g3120(p), day);
         return units + (p == VAULT ? _seedUnits(day) : 0);
     }
 
@@ -268,7 +268,7 @@ abstract contract VaultBafRig is DeployProtocol {
 
     function _isRecorded(Vm.Log memory l, address player, uint24 lvl) internal view returns (bool) {
         return l.emitter == address(jackpots) && l.topics.length == 3 && l.topics[0] == BAF_RECORDED
-            && l.topics[1] == bytes32(uint256(game.walletIdOf(player))) && l.topics[2] == bytes32(uint256(lvl));
+            && l.topics[1] == bytes32(uint256(game.walletIdOf_g3120(player))) && l.topics[2] == bytes32(uint256(lvl));
     }
 
     function _logIndex(Vm.Log[] memory logs, address emitter, bytes32 sig, bytes32 topic1)
@@ -475,8 +475,8 @@ contract VaultBafSettlement is VaultBafRig {
         assertEq(_score(VAULT, 10), frozen, "the settled score is frozen by the skip");
         assertEq(jackpots.bafConsolationOf(VAULT, 10), frozen / 1000, "the vault's settled score is its consolation");
 
-        uint256 wwxrpBefore = wwxrp.claimable(game.walletIdOf(VAULT));
+        uint256 wwxrpBefore = wwxrp.claimable(game.walletIdOf_g3120(VAULT));
         jackpots.claimBafConsolation(1, 10);
-        assertEq(wwxrp.claimable(game.walletIdOf(VAULT)) - wwxrpBefore, frozen / 1000, "the consolation pays the vault");
+        assertEq(wwxrp.claimable(game.walletIdOf_g3120(VAULT)) - wwxrpBefore, frozen / 1000, "the consolation pays the vault");
     }
 }

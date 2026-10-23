@@ -158,7 +158,7 @@ contract SmurfDeityGroupTest is SmurfFixture {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(game) || logs[i].topics[0] != DEITY_BOON_ISSUED) continue;
             assertEq(uint32(uint256(logs[i].topics[1])), _fixtureId(smurfId), "the deity is the smurf account");
-            assertEq(uint32(uint256(logs[i].topics[2])), game.walletIdOf(stranger), "the recipient");
+            assertEq(uint32(uint256(logs[i].topics[2])), game.walletIdOf_g3120(stranger), "the recipient");
             assertEq(uint256(logs[i].topics[3]), day, "today");
             issued = true;
         }
@@ -242,7 +242,7 @@ contract SmurfDeityGroupTest is SmurfFixture {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(game) || logs[i].topics[0] != DEITY_BOON_ISSUED) continue;
             assertEq(uint32(uint256(logs[i].topics[1])), _fixtureId(smurfId), "the deity is the smurf account");
-            assertEq(uint32(uint256(logs[i].topics[2])), game.walletIdOf(owner), "the owner receives the boon");
+            assertEq(uint32(uint256(logs[i].topics[2])), game.walletIdOf_g3120(owner), "the owner receives the boon");
             issued = true;
         }
         assertTrue(issued, "the smurf deity boons its owner");

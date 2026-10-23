@@ -457,10 +457,10 @@ contract DegenesisBusyWeekIntegration is DegenesisHarness {
         assertEq(game.claimablePoolView(), claimable0 + amount, "the whole amount held in claimablePool");
         assertEq(game.degenesisCreditOf(p), credit0 - amount, "credit consumed 1:1");
         uint256 lane = _lane(c, index);
-        assertEq(uint32(lane), game.walletIdOf(p), "lane id");
+        assertEq(uint32(lane), game.walletIdOf_g3120(p), "lane id");
         assertEq(((lane >> 32) & MAX_UNITS) * UNIT, amount, "lane amount");
         assertEq(lane >> 70, secs > BONUS_WINDOW ? BONUS_WINDOW : secs, "lane seconds");
-        lanes[(c << 32) | index] = uint256(game.walletIdOf(p)) | (amount << 32);
+        lanes[(c << 32) | index] = uint256(game.walletIdOf_g3120(p)) | (amount << 32);
         ++bought[c];
         boughtVol[c] += amount;
         if (secs < BONUS_WINDOW) ++earlyOrders[c];
@@ -531,7 +531,7 @@ contract DegenesisBusyWeekIntegration is DegenesisHarness {
         uint256 n = pool.length;
         for (uint256 i; i < n; ++i) {
             address p = pool[i];
-            uint32 id = game.walletIdOf(p);
+            uint32 id = game.walletIdOf_g3120(p);
             assertGe(sdgnrs.balanceOf(p), degDgnrs[id], "Degenesis sDGNRS reached the buyer");
             uint256 claimable = game.claimableWinningsOf(p);
             if (claimable > 1) {

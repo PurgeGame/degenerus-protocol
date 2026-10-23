@@ -36,7 +36,7 @@ contract DegenesisSettlementInventory is DegenesisHarness {
     ///         result pays WWXRP, no sDGNRS moves.
     function test_EmptyPoolAtPricingPaysWwxrp() public {
         _buy(a, 1 ether);
-        uint32 id = game.walletIdOf(a);
+        uint32 id = game.walletIdOf_g3120(a);
         uint256 word = _searchCategory(1, 0, id, 1, 0);
         _setDegPool(0);
         _warpTo(3, 1 hours);
@@ -57,7 +57,7 @@ contract DegenesisSettlementInventory is DegenesisHarness {
     ///         and the order pays WWXRP instead.
     function test_PoolEmptyAtPaymentPaysWwxrp() public {
         _buy(a, 1 ether);
-        uint32 id = game.walletIdOf(a);
+        uint32 id = game.walletIdOf_g3120(a);
         uint256 word = _searchCategory(1, 0, id, 1, 0);
         _warpTo(3, 1 hours);
         _requestOnly(word);
@@ -77,8 +77,8 @@ contract DegenesisSettlementInventory is DegenesisHarness {
     function test_ShortPoolClampsThenConsoles() public {
         _buy(a, 1 ether);
         _buy(b, 1 ether);
-        uint32 ida = game.walletIdOf(a);
-        uint32 idb = game.walletIdOf(b);
+        uint32 ida = game.walletIdOf_g3120(a);
+        uint32 idb = game.walletIdOf_g3120(b);
         uint256 word;
         for (uint256 i;; ++i) {
             word = uint256(keccak256(abi.encode("inv-short", i)));
@@ -107,8 +107,8 @@ contract DegenesisSettlementInventory is DegenesisHarness {
     function test_DustAwardPaysWwxrp() public {
         _buy(a, 1 ether);
         _buy(b, 0.01 ether);
-        uint32 ida = game.walletIdOf(a);
-        uint32 idb = game.walletIdOf(b);
+        uint32 ida = game.walletIdOf_g3120(a);
+        uint32 idb = game.walletIdOf_g3120(b);
         uint256 word;
         for (uint256 i;; ++i) {
             word = uint256(keccak256(abi.encode("inv-dust", i)));

@@ -89,13 +89,13 @@ contract RedemptionConsumerOrderingTest is RedemptionCloseTools {
     }
 
     function _owed(address owner) private view returns (uint128 base) {
-        (base,) = sdgnrs.pendingRedemptions(game.walletIdOf(owner), burnDay);
+        (base,) = sdgnrs.pendingRedemptions(game.walletIdOf_g3120(owner), burnDay);
     }
 
     function _claimsHash() private view returns (bytes32) {
-        (uint128 a, uint16 ascore) = sdgnrs.pendingRedemptions(game.walletIdOf(ALICE), burnDay);
-        (uint128 b, uint16 bscore) = sdgnrs.pendingRedemptions(game.walletIdOf(BOB), burnDay);
-        (uint128 c, uint16 cscore) = sdgnrs.pendingRedemptions(game.walletIdOf(CAROL), burnDay);
+        (uint128 a, uint16 ascore) = sdgnrs.pendingRedemptions(game.walletIdOf_g3120(ALICE), burnDay);
+        (uint128 b, uint16 bscore) = sdgnrs.pendingRedemptions(game.walletIdOf_g3120(BOB), burnDay);
+        (uint128 c, uint16 cscore) = sdgnrs.pendingRedemptions(game.walletIdOf_g3120(CAROL), burnDay);
         return keccak256(abi.encode(a, ascore, b, bscore, c, cscore,
             sdgnrs.pendingRedemptionEthValue(), game.claimableWinningsOf(ALICE),
             game.claimableWinningsOf(BOB), game.claimableWinningsOf(CAROL)));
@@ -172,7 +172,7 @@ contract RedemptionConsumerOrderingTest is RedemptionCloseTools {
         vm.prank(ALICE);
         sdgnrs.burn(nextBurn);
         assertEq(_openBatch(), burnDay + 1, "next open batch accepts burns");
-        (uint80 nextTokens,) = sdgnrs.pendingRedemptions(game.walletIdOf(ALICE), burnDay + 1);
+        (uint80 nextTokens,) = sdgnrs.pendingRedemptions(game.walletIdOf_g3120(ALICE), burnDay + 1);
         assertEq(uint256(nextTokens), nextBurn, "next batch records the new claim");
     }
 }

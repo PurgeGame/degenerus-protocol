@@ -75,7 +75,7 @@ contract AfKingSeatToken is SeatFixture {
         uint256 seat = _giveSeat(player);
         _subscribe(player, 0, seat);
 
-        uint32 id = game.walletIdOf(player);
+        uint32 id = game.walletIdOf_g3120(player);
         (uint256 lane,) = _laneOf(id);
         assertTrue(_active(player), "sub active");
         assertEq(_qty(id), 1, "daily quantity stored");
@@ -204,7 +204,7 @@ contract AfKingSeatToken is SeatFixture {
         vm.prank(owner);
         game.purchaseLazyPass{value: 0.24 ether}(smurfId, bytes32(0));
         assertEq(afkingSubToken.balanceOf(owner), 1, "the smurf's seat mints to the owner");
-        assertEq((game.mintPackedOfId(smurfId) >> BitPackingLib.SEAT_CLAIMED_SHIFT) & 1, 1, "subaccount latch");
+        assertEq((game.mintPackedOfId_g5372(smurfId) >> BitPackingLib.SEAT_CLAIMED_SHIFT) & 1, 1, "subaccount latch");
         assertFalse(_isEligible(owner), "owner's own latch untouched");
         assertEq(afkingSubToken.freeClaims(), 1);
 
@@ -299,7 +299,7 @@ contract AfKingSeatToken is SeatFixture {
         assertFalse(_active(player), "cancel reads inactive");
         assertEq(afkingSubToken.totalSupply(), live, "a cancel burns nothing");
         assertEq(game.subscriberSetLength(), 2, "no tombstone stays in the set");
-        assertEq(_pos(game.walletIdOf(player)), 0, "and no record");
+        assertEq(_pos(game.walletIdOf_g3120(player)), 0, "and no record");
     }
 
     /// @notice A re-subscribe after a cancel is a new run: it needs another seat (the first

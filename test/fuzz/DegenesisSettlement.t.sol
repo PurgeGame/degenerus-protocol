@@ -154,7 +154,7 @@ contract DegenesisSettlement is DegenesisHarness {
         _buy(x, 1 ether);
         vm.warp(block.timestamp + 1 hours);
         _buy(whale, 45 ether);
-        uint32 xid = game.walletIdOf(x);
+        uint32 xid = game.walletIdOf_g3120(x);
         uint256 word = _searchFlipCoin(1, 0, xid);
         uint256 q = _refQ(1, _degPool());
         _warpTo(3, 1 hours);

@@ -125,8 +125,8 @@ contract TicketRecyclingProgressTest is DeployProtocol {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2 || logs[i].topics[0] != topic) continue;
             uint32 playerId = uint32(uint256(logs[i].topics[1]));
-            if (playerId == game.walletIdOf(first) && firstAt == type(uint256).max) firstAt = i;
-            if (playerId == game.walletIdOf(second) && secondAt == type(uint256).max) secondAt = i;
+            if (playerId == game.walletIdOf_g3120(first) && firstAt == type(uint256).max) firstAt = i;
+            if (playerId == game.walletIdOf_g3120(second) && secondAt == type(uint256).max) secondAt = i;
         }
         assertTrue(firstAt != type(uint256).max, "first owner generated traits");
         assertTrue(secondAt != type(uint256).max, "second owner generated traits");

@@ -152,7 +152,7 @@ abstract contract AffiliateIdFixture is DeployProtocol {
     }
 
     function _refSlot(address player) internal view returns (bytes32) {
-        return keccak256(abi.encode(game.walletIdOf(player), REFERRAL_ROOT));
+        return keccak256(abi.encode(game.walletIdOf_g3120(player), REFERRAL_ROOT));
     }
 
     function _earnSlot(uint24 lvl, uint32 id) internal pure returns (bytes32) {
@@ -186,11 +186,11 @@ abstract contract AffiliateIdFixture is DeployProtocol {
     }
 
     function _id(address a) internal view returns (uint32) {
-        return game.walletIdOf(a);
+        return game.walletIdOf_g3120(a);
     }
 
     function _keyOf(uint32 id) internal view returns (address) {
-        return address(uint160(uint256(game.extsload(GameSlotKeys.walletElement(id)))));
+        return address(uint160(uint256(game.extsload_g8132(GameSlotKeys.walletElement(id)))));
     }
 
     function _nextId() internal view returns (uint32) {
@@ -258,7 +258,7 @@ abstract contract AffiliateIdFixture is DeployProtocol {
         id = _id(sender);
         if (id == 0) {
             vm.prank(address(coinflip));
-            id = game.registerWallet(sender, true);
+            id = game.registerWallet_g9539(sender, true);
         }
         if (hint == 0 || hint == id) return id;
         uint256 stored = _refWord(sender);
@@ -389,11 +389,11 @@ abstract contract AffiliateIdFixture is DeployProtocol {
     }
 
     function _extsloads(Vm.AccountAccess[] memory acc) internal view returns (uint256) {
-        return _calls(acc, address(affiliate), address(game), game.extsload.selector).length;
+        return _calls(acc, address(affiliate), address(game), game.extsload_g8132.selector).length;
     }
 
     function _registrations(Vm.AccountAccess[] memory acc) internal view returns (uint256) {
-        return _calls(acc, address(affiliate), address(game), game.registerWallet.selector).length;
+        return _calls(acc, address(affiliate), address(game), game.registerWallet_g9539.selector).length;
     }
 
     /// @dev The Game's paired purchase credit: (buyer leg ID, buyer amount, winner ID, winner amount).
@@ -473,7 +473,7 @@ abstract contract AffiliateIdFixture is DeployProtocol {
         for (uint256 i; i < logs.length; ++i) {
             Vm.Log memory l = logs[i];
             if (l.emitter != emitter || l.topics.length != 4 || l.topics[0] != REFERRAL_UPDATED) continue;
-            if (l.topics[1] != bytes32(uint256(game.walletIdOf(player)))) continue;
+            if (l.topics[1] != bytes32(uint256(game.walletIdOf_g3120(player)))) continue;
             ++found;
             assertEq(l.topics[2], code, "ReferralUpdated.code");
             assertEq(uint256(l.topics[3]), uint256(referrerId), "ReferralUpdated.referrerId");
@@ -1058,8 +1058,8 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
 
     function test_SdgnrsWhalePassAffiliateIsTraversalFree() public {
         bool[3] memory seen;
-        vm.expectCall(address(game), abi.encodeWithSelector(game.extsload.selector), 0);
-        vm.expectCall(address(game), abi.encodeWithSelector(game.registerWallet.selector), 0);
+        vm.expectCall(address(game), abi.encodeWithSelector(game.extsload_g8132.selector), 0);
+        vm.expectCall(address(game), abi.encodeWithSelector(game.registerWallet_g9539.selector), 0);
         vm.startStateDiffRecording();
         for (uint256 d; d < 400 && !(seen[0] && seen[1] && seen[2]); ++d) {
             seen[_class(2, VAULT_CODE)] = true;

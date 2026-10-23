@@ -33,7 +33,7 @@ contract CrapsConsolidationTest is Test {
         vm.expectRevert(JackpotBattle.OnlyTableSelf.selector);
         table.registerRngSlot_g709(0, 0, bytes32(0));
         vm.expectRevert(CrapsBattleStorage.OnlyGame.selector);
-        table.resolveRngSlot(0, 1_000_000);
+        table.resolveRngSlot_g1079(0, 1_000_000);
         CrapsBattleStorage.Window memory w;
         vm.expectRevert(JackpotBattle.OnlyTableSelf.selector);
         table.finalizeBattle_g3665(w, 0, 0);

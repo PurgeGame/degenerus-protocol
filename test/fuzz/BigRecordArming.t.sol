@@ -468,7 +468,7 @@ contract BigRecordArmingTest is DeployProtocol {
     function _boxOf(address who) internal view returns (uint256 total) {
         uint48 buffer = RecyclingState.writeBuffer(address(game));
         uint256 n = RecyclingState.boxCount(address(game), buffer);
-        uint32 id = game.walletIdOf(who);
+        uint32 id = game.walletIdOf_g3120(who);
         for (uint256 i; i < n; ++i) {
             uint256 word = RecyclingState.boxEntry(address(game), buffer, i);
             if (BoxOrderLib.boId(word) != id) continue;
@@ -481,7 +481,7 @@ contract BigRecordArmingTest is DeployProtocol {
     function _presetBox(address who, uint256 amount) internal {
         uint48 buffer = RecyclingState.writeBuffer(address(game));
         uint256 n = RecyclingState.boxCount(address(game), buffer);
-        uint256 word = BoxOrderLib.boEntry(game.walletIdOf(player), amount / BoxOrderLib.SCALE, 0, 0, 1, false);
+        uint256 word = BoxOrderLib.boEntry(game.walletIdOf_g3120(player), amount / BoxOrderLib.SCALE, 0, 0, 1, false);
         RecyclingState.storeBoxEntry(address(game), buffer, n, word);
         uint256 lr = uint256(vm.load(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED)));
         vm.store(address(game), bytes32(GameSlots.LOOTBOX_RNG_PACKED), bytes32(lr + (uint256(1) << 120)));

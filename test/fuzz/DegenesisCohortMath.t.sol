@@ -115,7 +115,7 @@ contract DegenesisCohortMath is DegenesisHarness {
     ///         the 2/3 R inventory cap.
     function test_MaxWinPaysExactlyLAndCapBindsNext() public {
         _buy(a, 3 ether);
-        uint32 id = game.walletIdOf(a);
+        uint32 id = game.walletIdOf_g3120(a);
         uint256 word = _searchCategory(1, 0, id, 1, 15_000);
         assertEq(_refMultBps(word, 1, 0, id), 15_000, "max multiplier");
         uint256 q = _refQ(1, _degPool());
@@ -204,8 +204,8 @@ contract DegenesisCohortMath is DegenesisHarness {
     function test_NineToOneNoNormalizationByWinners() public {
         _buy(a, 9 ether);
         _buy(b, 1 ether);
-        uint32 ida = game.walletIdOf(a);
-        uint32 idb = game.walletIdOf(b);
+        uint32 ida = game.walletIdOf_g3120(a);
+        uint32 idb = game.walletIdOf_g3120(b);
         uint256 q = _refQ(1, _degPool());
         uint256 snap = vm.snapshotState();
 

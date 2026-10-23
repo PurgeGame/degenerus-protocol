@@ -154,7 +154,7 @@ describe("DegenerusGame simple bingo", function () {
       BigInt(
         await hre.ethers.provider.getStorage(
           gameAddress,
-          wordHex(bingoClaimLeaf(level, await game.walletIdOf(alice.address)))
+          wordHex(bingoClaimLeaf(level, await game.walletIdOf_g3120(alice.address)))
         )
       )
     ).to.equal(BigInt(level + 1) << (BigInt(level & 1) * 25n));
@@ -162,7 +162,7 @@ describe("DegenerusGame simple bingo", function () {
     const events = bingoEvents(receipt, bingo);
     expect(events).to.have.length(1);
     const [event] = events;
-    expect(event.player).to.equal(await game.walletIdOf(alice.address));
+    expect(event.player).to.equal(await game.walletIdOf_g3120(alice.address));
     expect(event.level).to.equal(BigInt(level));
     expect(event.symbol).to.equal(BigInt(symbol));
     expect(event.flipReward).to.equal(BINGO_FLIP);
@@ -452,7 +452,7 @@ describe("DegenerusGame simple bingo", function () {
       BigInt(
         await hre.ethers.provider.getStorage(
           gameAddress,
-          wordHex(bingoClaimLeaf(expiredLevel, await game.walletIdOf(alice.address)))
+          wordHex(bingoClaimLeaf(expiredLevel, await game.walletIdOf_g3120(alice.address)))
         )
       )
     ).to.equal(0n);

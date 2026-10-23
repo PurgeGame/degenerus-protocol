@@ -188,7 +188,7 @@ abstract contract PoolConsolidationFixture is FreshWordLeg {
 
     /// @dev Balance slot (`balancesPacked`, keyed by wallet ID) of a yield surplus recipient.
     function _balanceSlot(address who) private view returns (bytes32) {
-        return keccak256(abi.encode(uint256(game.walletIdOf(who)), GameSlots.BALANCES_PACKED));
+        return keccak256(abi.encode(uint256(game.walletIdOf_g3120(who)), GameSlots.BALANCES_PACKED));
     }
 
     /// @dev How many of the three yield surplus recipients hold an empty balance slot (a credit to one
@@ -196,7 +196,7 @@ abstract contract PoolConsolidationFixture is FreshWordLeg {
     function _emptyRecipientSlots() private view returns (uint256 n) {
         address[3] memory who = [ContractAddresses.VAULT, ContractAddresses.SDGNRS, ContractAddresses.GNRUS];
         for (uint256 i; i < 3; ++i) {
-            if (game.extsload(_balanceSlot(who[i])) == bytes32(0)) ++n;
+            if (game.extsload_g8132(_balanceSlot(who[i])) == bytes32(0)) ++n;
         }
     }
 

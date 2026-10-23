@@ -140,7 +140,7 @@ contract AnyInputSafety is DeployProtocol {
         // ---------------- bystander: normal flows only, then it never acts again ----------------
         vm.startPrank(BYSTANDER);
         game.purchaseWhalePass{value: 2.4 ether}(0, 1, bytes32(0));
-        game.depositAfkingFunding{value: 5 ether}(game.walletIdOf(BYSTANDER));
+        game.depositAfkingFunding{value: 5 ether}(game.walletIdOf_g3120(BYSTANDER));
         game.purchaseDeityPass{value: 45 ether}(0, 5, bytes32(0)); // overpay lands in its own afking
         (,,,, uint256 priceWei) = game.purchaseInfo();
         game.purchase{value: priceWei * 10}(0, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
@@ -160,7 +160,7 @@ contract AnyInputSafety is DeployProtocol {
         // Account loans: sDGNRS lends only from its own claimable (empty this early), so the
         // vault owner enables the vault fallback and an actor funds the vault's prepaid afking
         // (permissionless depositAfkingFunding). Both are ordinary flows.
-        uint32 vaultId = game.walletIdOf(address(vault));
+        uint32 vaultId = game.walletIdOf_g3120(address(vault));
         vm.prank(actors[5]);
         game.depositAfkingFunding{value: 20 ether}(vaultId);
         vm.prank(ContractAddresses.CREATOR);
@@ -466,7 +466,7 @@ contract AnyInputSafety is DeployProtocol {
     /// @dev Seed a backed claim through the authenticated sDGNRS award hook.
     function _bystanderClaimable() internal {
         // Seed a deterministic backed claim straight into the Game ledger.
-        uint32 bystanderId = game.walletIdOf(BYSTANDER);
+        uint32 bystanderId = game.walletIdOf_g3120(BYSTANDER);
         GameFunding.credit(bystanderId, 0.1 ether);
         assertGe(game.claimableWinningsOf(BYSTANDER), 0.1 ether, "fixture: bystander claim missing");
     }
@@ -616,14 +616,14 @@ contract AnyInputSafety is DeployProtocol {
 
     /// @notice Minimized campaign regression: a seized root remains valid in its ticket queues.
     function test_queueOracleAcceptsSeizedRoot() public {
-        uint32 id = game.walletIdOf(actors[1]);
+        uint32 id = game.walletIdOf_g3120(actors[1]);
         uint24 due = game.level() + 1;
         handler.gd_borrow(1, 0, 0);
         bytes memory runtime = address(game).code;
         vm.etch(address(game), address(new AnyInputSeizer()).code);
         AnyInputSeizer(address(game)).seizeDueInPlace(due);
         vm.etch(address(game), runtime);
-        (, address payee, bool authorized) = game.resolveAccount(id, actors[1]);
+        (, address payee, bool authorized) = game.resolveAccount_g502(id, actors[1]);
         assertTrue(payee == address(vault) || payee == address(sdgnrs), "fixture must sell the account");
         assertFalse(authorized, "seller loses authority");
         _checkSolvency();
@@ -646,7 +646,7 @@ contract AnyInputSafety is DeployProtocol {
         assertGt(h[9], 0, "DGVF");
         assertGt(h[10], 0, "WWXRP");
         assertGt(h[11], 0, "deity pass");
-        (,, bool authorized) = game.resolveAccount(game.walletIdOf(BYSTANDER), actors[0]);
+        (,, bool authorized) = game.resolveAccount_g502(game.walletIdOf_g3120(BYSTANDER), actors[0]);
         assertFalse(authorized, "bystander approves nobody");
     }
 

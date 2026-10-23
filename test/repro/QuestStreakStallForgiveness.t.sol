@@ -364,7 +364,7 @@ contract QuestStreakStallForgiveness is DeployProtocol {
         assertEq(_endpoint() - startDay, 3, "the resume credits the three elapsed days");
 
         uint32[] memory ids = new uint32[](1);
-        ids[0] = game.walletIdOf(player);
+        ids[0] = game.walletIdOf_g3120(player);
         game.claimAfkingFlip(ids);
         assertEq(_laneField(player, LANE_DAY_SHIFT, 22), _endpoint(), "settled through the endpoint");
         assertEq(_laneField(player, LANE_STREAK_SHIFT, 16), 13, "the elapsed days fold into the streak");
@@ -388,7 +388,7 @@ contract QuestStreakStallForgiveness is DeployProtocol {
             streak + (_endpoint() - day),
             "the settled days fold into the checkpoint streak"
         );
-        (uint256 lane,) = GameSlotKeys.subLane(address(game), game.walletIdOf(player));
+        (uint256 lane,) = GameSlotKeys.subLane(address(game), game.walletIdOf_g3120(player));
         assertEq(((lane >> 32) & 7) + 1, 2, "new quantity applies");
     }
 
@@ -417,7 +417,7 @@ contract QuestStreakStallForgiveness is DeployProtocol {
     }
 
     function _qid(address who) private returns (uint32 id) {
-        id = game.walletIdOf(who);
+        id = game.walletIdOf_g3120(who);
         if (id == 0) id = _giveWalletId(who);
     }
 
@@ -465,7 +465,7 @@ contract QuestStreakStallForgiveness is DeployProtocol {
         _roll(today);
         _award(player, streak, today);
         uint256 seat = _grantSeat(player);
-        uint32 id = game.walletIdOf(player);
+        uint32 id = game.walletIdOf_g3120(player);
         if (id == 0) id = _giveWalletId(player);
         vm.deal(address(this), 50 ether);
         game.depositAfkingFunding{value: 50 ether}(id);
@@ -505,7 +505,7 @@ contract QuestStreakStallForgiveness is DeployProtocol {
     }
 
     function _questWord(address player) private view returns (uint256) {
-        return uint256(vm.load(address(quests), keccak256(abi.encode(uint256(game.walletIdOf(player)), QUEST_STATE_SLOT))));
+        return uint256(vm.load(address(quests), keccak256(abi.encode(uint256(game.walletIdOf_g3120(player)), QUEST_STATE_SLOT))));
     }
 
     function _questField(address player, uint256 offset, uint256 width) private view returns (uint256) {
@@ -518,7 +518,7 @@ contract QuestStreakStallForgiveness is DeployProtocol {
     }
 
     function _laneField(address player, uint256 shift, uint256 width) private view returns (uint256) {
-        (uint256 lane,) = GameSlotKeys.subLane(address(game), game.walletIdOf(player));
+        (uint256 lane,) = GameSlotKeys.subLane(address(game), game.walletIdOf_g3120(player));
         return (lane >> shift) & ((uint256(1) << width) - 1);
     }
 

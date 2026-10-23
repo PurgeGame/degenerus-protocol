@@ -230,7 +230,7 @@ describe("MintCleanupRegression — Phase 291 v42.0 MINTCLN regression fixture",
       const { events, reveals } = await drainViaAdvanceGame(game, deployer, storage, fixture.deployDayBoundary, 300);
       const ticketWriteSlotAfter = await readTicketWriteSlot(gameAddr);
 
-      const aliceId = Number(await game.walletIdOf(alice.address));
+      const aliceId = Number(await game.walletIdOf_g3120(alice.address));
       const aliceEvents = events.filter((e) => e.walletId === aliceId);
 
       return {

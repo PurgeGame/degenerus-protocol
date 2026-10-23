@@ -56,7 +56,7 @@ contract CrapsPassAwards is DeployProtocol {
 
     function testWhaleAwardPerPassBelowLevel10() public {
         vm.expectEmit(address(crapsBattle));
-        emit CrapsPassesCredited(game.walletIdOf(buyer), false, 3);
+        emit CrapsPassesCredited(game.walletIdOf_g3120(buyer), false, 3);
         _buyWhale(buyer, 3, WHALE_EARLY_PRICE);
 
         (uint256 normal, uint256 high) = crapsBattle.passCreditsOf(buyer);
@@ -88,7 +88,7 @@ contract CrapsPassAwards is DeployProtocol {
         vm.expectEmit(true, false, false, true, address(game));
         emit LootBoxBuy(_fixtureId(buyer), 0, 0, DEITY_FIRST_PRICE / 20);
         vm.expectEmit(address(crapsBattle));
-        emit CrapsPassesCredited(game.walletIdOf(buyer), true, 1);
+        emit CrapsPassesCredited(game.walletIdOf_g3120(buyer), true, 1);
         _buyDeity(buyer, 4);
 
         (uint256 normal, uint256 high) = crapsBattle.passCreditsOf(buyer);
@@ -110,7 +110,7 @@ contract CrapsPassAwards is DeployProtocol {
         vm.expectEmit(true, false, false, true, address(game));
         emit LootBoxBuy(_fixtureId(buyer), 0, 0, DEITY_FIRST_PRICE / 10);
         vm.expectEmit(address(crapsBattle));
-        emit CrapsPassesCredited(game.walletIdOf(buyer), false, 1);
+        emit CrapsPassesCredited(game.walletIdOf_g3120(buyer), false, 1);
         _buyDeity(buyer, 7);
 
         (uint256 normal, uint256 high) = crapsBattle.passCreditsOf(buyer);
@@ -121,7 +121,7 @@ contract CrapsPassAwards is DeployProtocol {
     // ── Saturation: a full lane drops the excess, the purchase still lands ───
 
     function testSaturatedLaneDropsExcessAndPurchaseSucceeds() public {
-        uint32 buyerId = game.walletIdOf(buyer);
+        uint32 buyerId = game.walletIdOf_g3120(buyer);
         vm.prank(address(game));
         crapsBattle.creditPasses(buyerId, type(uint32).max, 0);
 

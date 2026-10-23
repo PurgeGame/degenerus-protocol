@@ -60,7 +60,7 @@ contract LootboxBoonCoexistence is DeployProtocol {
 
     /// @dev Compute the storage slot for boonPacked[player].slot0
     function _boonSlot0(address player) internal view returns (bytes32) {
-        return keccak256(abi.encode(uint256(game.walletIdOf(player)), SLOT_BOON_PACKED));
+        return keccak256(abi.encode(uint256(game.walletIdOf_g3120(player)), SLOT_BOON_PACKED));
     }
 
     /// @dev Inject a coinflip boon (tier 1, day = currentDay) into boonPacked[player].slot0.

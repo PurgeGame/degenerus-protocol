@@ -9,10 +9,9 @@ import {ContractAddresses} from "./ContractAddresses.sol";
 ///      `internal` storage with no typed getter — the same escape hatch `DegenerusGameLens` uses.
 interface IGameSlotReader {
     function rngWordForDay(uint24 day) external view returns (uint256);
-    function extsload_g8132(bytes32 slot) external view returns (bytes32 value);
 
     /// @notice DegenerusGame's raw-slot reader, returning the word stored at `slot`.
-    function extsload(bytes32 slot) external view returns (bytes32 value);
+    function extsload_g8132(bytes32 slot) external view returns (bytes32 value);
 }
 
 /// @title LootboxCraps

@@ -395,7 +395,7 @@ contract BoxCreationHandler is Test {
         if (RecyclingState.boxCount(address(game), pre.wb) != pre.count + 1) return "a purchase did not append exactly one entry";
 
         uint256 word = RecyclingState.boxEntry(address(game), pre.wb, pre.count);
-        uint32 id = game.walletIdOf(currentActor);
+        uint32 id = game.walletIdOf_g3120(currentActor);
         if (id == 0 || word.boId() != id) return "entry wallet ID is not the buyer's";
         if (word.boHighBits() != 0) return "entry high bits set";
         if (word.boCount() != x.custom) return "entry box count does not match the action";
@@ -422,7 +422,7 @@ contract BoxCreationHandler is Test {
     {
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 3 || logs[i].topics[0] != LOOTBOX_BUY) continue;
-            if (uint32(uint256(logs[i].topics[1])) != game.walletIdOf(currentActor)) continue;
+            if (uint32(uint256(logs[i].topics[1])) != game.walletIdOf_g3120(currentActor)) continue;
             if (uint256(logs[i].topics[2]) != pre.wb) continue;
             (uint32 position, uint256 amt) = abi.decode(logs[i].data, (uint32, uint256));
             if (position == pre.count) return (true, amt);
@@ -456,7 +456,7 @@ contract BoxCreationHandler is Test {
             if (!sealed_ && position >= post.cursor) _fifoViolation("an entry resolved ahead of the stored cursor");
             last = position;
             address owner = ownerAt[keccak256(abi.encode(buffer, gen[buffer], position))];
-            if (owner != address(0) && uint32(uint256(logs[i].topics[1])) != game.walletIdOf(owner)) {
+            if (owner != address(0) && uint32(uint256(logs[i].topics[1])) != game.walletIdOf_g3120(owner)) {
                 _fifoViolation("an entry resolved to a wallet other than its buyer");
             }
         }
@@ -468,7 +468,7 @@ contract BoxCreationHandler is Test {
 
     /// @dev Field-isolated HAS_DEITY_PASS score-bit seed in mintPacked_. No balance touched.
     function _grantDeityScoreBit(address who) internal {
-        bytes32 slot = keccak256(abi.encode(game.walletIdOf(who), uint256(MINTPACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(game.walletIdOf_g3120(who), uint256(MINTPACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         packed |= (uint256(1) << DEITY_SHIFT);
         vm.store(address(game), slot, bytes32(packed));

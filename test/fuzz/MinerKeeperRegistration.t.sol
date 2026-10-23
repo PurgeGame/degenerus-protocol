@@ -92,8 +92,8 @@ contract MinerKeeperRegistration is DeployProtocol {
 
     function _assertIdTruth(address who, uint32 id) private view {
         assertGt(id, 0, "registered");
-        assertEq(game.walletIdOf(who), id, "walletIdOf");
-        assertEq(game.walletIdOf(who), id, "mint word carries the ID");
+        assertEq(game.walletIdOf_g3120(who), id, "walletIdOf");
+        assertEq(game.walletIdOf_g3120(who), id, "mint word carries the ID");
         assertEq(address(uint160(_element(id))), who, "wallet-table element holds the key");
     }
 
@@ -132,7 +132,7 @@ contract MinerKeeperRegistration is DeployProtocol {
 
     function test_IdlessMinerIsNeitherPaidNorRegistered() public {
         vm.revertToState(snapshot);
-        assertEq(game.walletIdOf(keeper), 0, "fixture: keeper starts without an ID");
+        assertEq(game.walletIdOf_g3120(keeper), 0, "fixture: keeper starts without an ID");
         uint256 lengthBefore = _walletsLength();
 
         Outcome memory o = _mine(keeper);
@@ -142,7 +142,7 @@ contract MinerKeeperRegistration is DeployProtocol {
         assertEq(o.bounties, 0, "no MinerBounty");
         assertEq(o.registrations, 0, "mineFlip registers nobody");
         assertEq(o.stakeEvents, 0, "nothing credited");
-        assertEq(game.walletIdOf(keeper), 0, "keeper still has no ID");
+        assertEq(game.walletIdOf_g3120(keeper), 0, "keeper still has no ID");
         assertEq(_walletsLength(), lengthBefore, "table unchanged");
     }
 
@@ -185,8 +185,8 @@ contract MinerKeeperRegistration is DeployProtocol {
 
         assertGt(o.used, MineFlipGas.MIN_REWARDED_GAS, "the paid-size work ran");
         assertEq(o.registrations, 0, "nothing registered");
-        assertEq(game.walletIdOf(keeper), 0, "keeper still has no ID");
-        assertEq(game.walletIdOf(keeper), 0, "no ID in the mint word");
+        assertEq(game.walletIdOf_g3120(keeper), 0, "keeper still has no ID");
+        assertEq(game.walletIdOf_g3120(keeper), 0, "no ID in the mint word");
         assertEq(_walletsLength(), full, "table unchanged");
         assertEq(o.bounties, 0, "no MinerBounty");
         assertEq(o.reward, 0, "MinerWork reports a zero reward");
@@ -222,7 +222,7 @@ contract MinerKeeperRegistration is DeployProtocol {
         assertGt(o.used, MineFlipGas.MIN_REWARDED_GAS, "the work is paid-eligible");
         assertEq(o.reward, 0, "zero reward");
         assertEq(o.registrations, 0, "nothing registered");
-        assertEq(game.walletIdOf(keeper), 0, "keeper still has no ID");
+        assertEq(game.walletIdOf_g3120(keeper), 0, "keeper still has no ID");
         assertEq(_walletsLength(), lengthBefore, "table unchanged");
         assertEq(o.stakeEvents, 0, "nothing credited");
     }
@@ -238,7 +238,7 @@ contract MinerKeeperRegistration is DeployProtocol {
             Outcome memory o = _mine(caller);
             if (o.used <= MineFlipGas.MIN_REWARDED_GAS) sawUnpaid = true;
             assertEq(o.registrations, 0, "mineFlip registers nobody");
-            assertEq(game.walletIdOf(caller), 0, "the caller has no ID");
+            assertEq(game.walletIdOf_g3120(caller), 0, "the caller has no ID");
             assertEq(_walletsLength(), lengthBefore, "table unchanged");
         }
         assertTrue(sawUnpaid, "non-vacuity: a call measured inside the unpaid million");
@@ -279,7 +279,7 @@ contract MinerKeeperRegistration is DeployProtocol {
                     assertEq(reward, 0, "terminal work pays no bounty");
                 }
             }
-            assertEq(game.walletIdOf(caller), 0, "terminal caller has no ID");
+            assertEq(game.walletIdOf_g3120(caller), 0, "terminal caller has no ID");
         }
         assertGt(terminalCalls, 0, "non-vacuity: terminal calls ran");
         assertTrue(game.gameOver(), "fixture: the terminal path reached game over");
@@ -288,6 +288,6 @@ contract MinerKeeperRegistration is DeployProtocol {
         address late = address(0x7E3A2000);
         vm.prank(late);
         try game.mineFlip(0) {} catch {}
-        assertEq(game.walletIdOf(late), 0, "game-over caller has no ID");
+        assertEq(game.walletIdOf_g3120(late), 0, "game-over caller has no ID");
     }
 }

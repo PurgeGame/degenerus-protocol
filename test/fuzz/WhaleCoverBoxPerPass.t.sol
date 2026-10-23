@@ -27,7 +27,7 @@ contract WhaleCoverBoxPerPass is DeployProtocol {
         uint256 n = RecyclingState.boxCount(address(game), wb);
         require(n != 0, "no entry appended");
         word = RecyclingState.boxEntry(address(game), wb, n - 1);
-        require(word.boId() == game.walletIdOf(who), "the last entry is the buyer's");
+        require(word.boId() == game.walletIdOf_g3120(who), "the last entry is the buyer's");
     }
 
     function _buyWhale(address who, uint256 q) private {

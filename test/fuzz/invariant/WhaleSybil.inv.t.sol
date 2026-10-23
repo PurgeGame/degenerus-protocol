@@ -44,17 +44,19 @@ contract WhaleSybilInvariant is DeployProtocol {
         );
     }
 
-    /// @notice Ghost: total deposits >= total claims
-    /// @dev Combined whale + sybil deposits must always exceed claims
+    /// @notice Opening Game backing plus subsequent deposits covers the handler's claims.
+    /// @dev A Degenesis opening contains real deposits from other actors before the
+    ///      handler starts. Winners can claim those prizes as well as newly deposited funds.
+    ///      The independent live-obligation and post-game solvency assertions stay unchanged.
     function invariant_depositsExceedClaims() public view {
         uint256 totalDeposited = wsHandler.ghost_whaleDeposited()
             + wsHandler.ghost_sybilDeposited();
         uint256 totalClaimed = wsHandler.ghost_totalClaimed();
 
         assertGe(
-            totalDeposited,
+            wsHandler.ghost_initialBacking() + totalDeposited,
             totalClaimed,
-            "WhaleSybil: more claimed than deposited"
+            "WhaleSybil: claims exceed opening backing plus deposits"
         );
     }
 

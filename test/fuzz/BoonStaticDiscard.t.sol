@@ -83,7 +83,7 @@ contract BoonStaticDiscard is DeployProtocol {
     }
 
     function _boonSlot(address player, uint256 offset) internal view returns (bytes32) {
-        return bytes32(uint256(keccak256(abi.encode(game.walletIdOf(player), SLOT_BOON_PACKED))) + offset);
+        return bytes32(uint256(keccak256(abi.encode(game.walletIdOf_g3120(player), SLOT_BOON_PACKED))) + offset);
     }
 
     /// @notice At a level with the decimator window SHUT, dec-tier draws must still be
@@ -164,8 +164,8 @@ contract BoonStaticDiscard is DeployProtocol {
         for (uint8 s2 = 0; s2 < 3; s2++) {
             address recipient = makeAddr(string(abi.encodePacked("parityRecipient", s2)));
             _giveWalletId(recipient);
-            uint32 deityId = game.walletIdOf(deity);
-            uint32 recipientId = game.walletIdOf(recipient);
+            uint32 deityId = game.walletIdOf_g3120(deity);
+            uint32 recipientId = game.walletIdOf_g3120(recipient);
             vm.recordLogs();
             vm.prank(deity);
             game.issueDeityBoon(deityId, recipientId, s2);

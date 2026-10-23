@@ -383,10 +383,10 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
         // The synthetic 200-day jump leaves scheduled empty Craps days to retire.
         // Finish that real maintenance before buying boxes so it cannot send the
         // intended explicit midday request on our behalf.
-        for (uint256 i; i < 256 && crapsBattle.minerMaintenancePending(); ++i) {
+        for (uint256 i; i < 256 && crapsBattle.minerMaintenancePending_g11976(); ++i) {
             game.mineFlip{gas: 16_777_216}(0);
         }
-        assertFalse(crapsBattle.minerMaintenancePending(), "fixture scheduled maintenance completed");
+        assertFalse(crapsBattle.minerMaintenancePending_g11976(), "fixture scheduled maintenance completed");
         _requestPaidMidday();
         uint256 oldId = mockVRF.lastRequestId();
         uint256 sent = vm.getBlockTimestamp();
@@ -520,13 +520,13 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
         assertTrue(saw, "ending fixed its deterministic pot");
         // A queued claim names the owner's wallet ID and carries the queue key holding the
         // entries in bits 32..55 (GameOverModule.claimDeadVrf).
-        uint256 pos = game.walletIdOf(alice);
+        uint256 pos = game.walletIdOf_g3120(alice);
         uint24 aliceKey = _owed(_writeKey(CURRENT), alice) != 0 ? _writeKey(CURRENT) : _readKey(CURRENT);
         assertEq(_owed(aliceKey, alice), 4, "alice's current entries are still queued at the ending");
         uint256[] memory refs = new uint256[](1);
         refs[0] = (uint256(1) << 248) | (uint256(aliceKey) << 32) | pos;
         uint256 before = game.claimableWinningsOf(alice);
-        game.claimDeadVrf(game.walletIdOf(alice), refs);
+        game.claimDeadVrf(game.walletIdOf_g3120(alice), refs);
         assertGt(game.claimableWinningsOf(alice), before, "current ticket holder can claim the ending pot");
     }
 
@@ -539,10 +539,10 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
     }
 
     function _finishMaintenance() private {
-        for (uint256 i; i < 512 && crapsBattle.minerMaintenancePending(); ++i) {
+        for (uint256 i; i < 512 && crapsBattle.minerMaintenancePending_g11976(); ++i) {
             game.mineFlip{gas: 16_777_216}(0);
         }
-        assertFalse(crapsBattle.minerMaintenancePending(), "fixture scheduled maintenance completed");
+        assertFalse(crapsBattle.minerMaintenancePending_g11976(), "fixture scheduled maintenance completed");
     }
 
     function _overlay() private returns (PreJackpotMintSeeder) {
@@ -713,7 +713,7 @@ contract PreJackpotNextLevelMintTest is DeployProtocol {
     ///      the stream identity, bits 224..247) or an anonymous EntryTraitsRevealed round (topic j is
     ///      (level << 160) | walletId; presence bit 128 + 4j + q per quadrant).
     function _materializedIn(Vm.Log memory l, address player, uint24 lvl) private view returns (uint256 n) {
-        uint32 playerId = game.walletIdOf(player);
+        uint32 playerId = game.walletIdOf_g3120(player);
         if (l.topics.length == 2 && l.topics[0] == TRAITS_GENERATED) {
             if (uint32(uint256(l.topics[1])) != playerId) return 0;
             (uint256 baseKey, uint32 take) = abi.decode(l.data, (uint256, uint32));

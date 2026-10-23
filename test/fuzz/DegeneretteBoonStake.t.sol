@@ -84,7 +84,7 @@ contract DegeneretteBoonStake is DeployProtocol {
     // =========================================================================
 
     function _boonSlot1(address who) internal view returns (bytes32) {
-        return bytes32(uint256(keccak256(abi.encode(uint256(game.walletIdOf(who)), SLOT_BOON_PACKED))) + 1);
+        return bytes32(uint256(keccak256(abi.encode(uint256(game.walletIdOf_g3120(who)), SLOT_BOON_PACKED))) + 1);
     }
 
     function _laneShift(uint8 currency) internal pure returns (uint256) {
@@ -151,7 +151,7 @@ contract DegeneretteBoonStake is DeployProtocol {
         address forPlayer,
         uint128 perSpin
     ) internal returns (uint256 stakePerSpin) {
-        uint32 forId = game.walletIdOf(forPlayer);
+        uint32 forId = game.walletIdOf_g3120(forPlayer);
         vm.recordLogs();
         vm.prank(caller);
         game.placeDegeneretteBet{value: perSpin}(forId, CURRENCY_ETH, perSpin, 1, (uint8((uint32(0x01020304) >> (uint256(1) * 8)) & 7) | (uint8(1) << 3)));

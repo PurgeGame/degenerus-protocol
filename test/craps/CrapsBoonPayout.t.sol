@@ -48,8 +48,8 @@ contract CrapsBoonPayoutTest is CrapsPins {
 
     function setUp() public {
         _installPins();
-        game.registerWallet(alice, true);
-        game.registerWallet(bob, true);
+        game.registerWallet_g9539(alice, true);
+        game.registerWallet_g9539(bob, true);
         craps = new BoonPayoutHarness();
         vm.warp(block.timestamp + 1 days);
         _setIndex(0);

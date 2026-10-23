@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {GameFunding} from "../helpers/GameFunding.sol";
 import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -25,8 +26,9 @@ contract DgnrsWrapperPaths is DeployProtocol {
         assertEq(dgnrs.decimals(), 12);
         assertEq(sdgnrs.totalSupply(), 1e24);
         address owner = ContractAddresses.VAULT; // holds the deploy-time DGNRS and has wallet ID 1
-        assertEq(game.walletIdOf(owner), 1, "the vault is a protocol wallet");
-        vm.deal(address(sdgnrs), 100 ether);
+        assertEq(game.walletIdOf_g3120(owner), 1, "the vault is a protocol wallet");
+        // Live redemption value is backed by the Game ledger, including its sentinel.
+        GameFunding.setClaimable(2, 100 ether + 1);
         uint256 amount = 1e21 + 1;
         (uint256 burnValue,) = sdgnrs.previewBurnValue(amount);
         assertGe(burnValue, sdgnrs.MIN_REDEMPTION_VALUE(), "fixture: wrapped burn meets minimum");
@@ -37,7 +39,7 @@ contract DgnrsWrapperPaths is DeployProtocol {
         assertEq(before - dgnrs.balanceOf(owner), amount);
         assertEq(supply - dgnrs.totalSupply(), amount);
         assertEq(sdgnrs.balanceOf(ContractAddresses.DGNRS), dgnrs.totalSupply());
-        (uint80 pending,) = sdgnrs.pendingRedemptions(game.walletIdOf(owner), batchId);
+        (uint80 pending,) = sdgnrs.pendingRedemptions(game.walletIdOf_g3120(owner), batchId);
         assertEq(pending, amount, "the last raw unit is included in the packed claim");
     }
 
@@ -213,7 +215,8 @@ contract DgnrsWrapperPaths is DeployProtocol {
     ///         triggers it through `dgnrsBurnWrapped` and nobody else can.
     function test_vaultBurnWrappedFilesAClaimInGame() public {
         uint256 amount = 1e21 + 1;
-        vm.deal(address(sdgnrs), 100 ether);
+        // Live redemption value is backed by the Game ledger, including its sentinel.
+        GameFunding.setClaimable(2, 100 ether + 1);
         (uint256 burnValue,) = sdgnrs.previewBurnValue(amount);
         assertGe(burnValue, sdgnrs.MIN_REDEMPTION_VALUE(), "fixture: burn meets the minimum");
         uint256 before = dgnrs.balanceOf(ContractAddresses.VAULT);
@@ -225,7 +228,7 @@ contract DgnrsWrapperPaths is DeployProtocol {
 
         OwnerTargetCall.call(address(vault), abi.encodeCall(vault.playerAction, (ContractAddresses.SDGNRS, abi.encodeWithSignature("burnWrapped(uint256)", amount), 0)), 0);
         assertEq(before - dgnrs.balanceOf(ContractAddresses.VAULT), amount, "vault DGNRS -= amount");
-        (uint80 pending,) = sdgnrs.pendingRedemptions(game.walletIdOf(ContractAddresses.VAULT), batchId);
+        (uint80 pending,) = sdgnrs.pendingRedemptions(game.walletIdOf_g3120(ContractAddresses.VAULT), batchId);
         assertEq(pending, amount, "the claim is recorded for the vault's wallet");
     }
 

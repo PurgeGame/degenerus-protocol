@@ -143,7 +143,7 @@ contract CustomerFollowupGasTest is DeployProtocol {
                 value &= ~bytes32(uint256((1 << 30) - 1));
                 previous &= ~bytes32(uint256((1 << 30) - 1));
             }
-            if (a.account == address(game) && a.slot == keccak256(abi.encode(game.walletIdOf(PLAYER), GameSlots.MINT_PACKED))) {
+            if (a.account == address(game) && a.slot == keccak256(abi.encode(game.walletIdOf_g3120(PLAYER), GameSlots.MINT_PACKED))) {
                 bytes32 mask = bytes32(((uint256(1) << 30) - 1) << 185);
                 value &= ~mask;
                 previous &= ~mask;
@@ -179,7 +179,7 @@ contract CustomerFollowupGasTest is DeployProtocol {
     }
 
     function _bank(uint128 amount) private {
-        uint32 id = game.walletIdOf(PLAYER);
+        uint32 id = game.walletIdOf_g3120(PLAYER);
         require(id != 0, "bank fixture requires a registered player");
         bytes32 slot = keccak256(abi.encode(uint256(id), uint256(2)));
         uint256 word = uint256(vm.load(address(coinflip), slot));
@@ -222,7 +222,7 @@ contract CustomerFollowupGasTest is DeployProtocol {
 
 
     function _existingMint() private {
-        bytes32 slot = keccak256(abi.encode(game.walletIdOf(PLAYER), GameSlots.MINT_PACKED));
+        bytes32 slot = keccak256(abi.encode(game.walletIdOf_g3120(PLAYER), GameSlots.MINT_PACKED));
         vm.store(address(game), slot, vm.load(address(game), slot) | bytes32(uint256(1)));
     }
     function test_Gas_DegeneretteExistingMint() public {
@@ -236,7 +236,7 @@ contract CustomerFollowupGasTest is DeployProtocol {
         vm.etch(address(game), code);
     }
     function _decBoon(bool expired) private {
-        uint32 id = game.walletIdOf(PLAYER);
+        uint32 id = game.walletIdOf_g3120(PLAYER);
         bytes memory code = address(game).code;
         vm.etch(address(game), type(CustomerFollowupSeeder).runtimeCode);
         CustomerFollowupSeeder(address(game)).decimatorBoon(id, expired);
@@ -259,7 +259,7 @@ contract CustomerFollowupGasTest is DeployProtocol {
         _prepareDecimator(); _decBoon(true); _begin(); _dec(); _end("decimator_expired_boon");
     }
     function test_Gas_EmptyDecimatorDispatch() public {
-        uint32 id = game.walletIdOf(PLAYER);
+        uint32 id = game.walletIdOf_g3120(PLAYER);
         _begin(); vm.prank(address(coin)); game.consumeDecimatorBoon(id); _end("decimator_empty_dispatch");
     }
     function _fundWwxrp() private { vm.prank(address(game)); wwxrp.mintPrize(PLAYER, 10_000); }

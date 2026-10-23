@@ -71,7 +71,7 @@ contract CoinflipPackedStake is DeployProtocol {
 
     /// @dev Raw lane read against the production contract: slot 0, wallet ring of tagged seven-day pages.
     function _rawStake(uint24 day, address p) internal view returns (uint256) {
-        return CoinflipStorage.read(address(coinflip), game.walletIdOf(p), day);
+        return CoinflipStorage.read(address(coinflip), game.walletIdOf_g3120(p), day);
     }
 
     function _whole(uint256 x) internal pure returns (uint256) {
@@ -95,7 +95,7 @@ contract CoinflipPackedStake is DeployProtocol {
         for (uint256 i; i < logs.length; ++i) {
             if (
                 logs[i].emitter == address(coinflip) && logs[i].topics[0] == STAKE_SIG
-                    && uint32(uint256(logs[i].topics[1])) == game.walletIdOf(p)
+                    && uint32(uint256(logs[i].topics[1])) == game.walletIdOf_g3120(p)
             ) {
                 day = uint24(uint256(logs[i].topics[2]));
                 (amount, total) = abi.decode(logs[i].data, (uint256, uint256));

@@ -2,6 +2,7 @@
 pragma solidity 0.8.38;
 
 import {DegenerusGameAdvanceModule} from "./DegenerusGameAdvanceModule.sol";
+import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 
 /// @notice Commitment boundary, publication and transport-only recovery.
@@ -32,6 +33,7 @@ abstract contract DegenerusGameRngModule is DegenerusGameAdvanceModule {
 
     /// @notice Final normal action: prepare, seal and request a fresh daily commitment.
     function requestDailyRng_g8190(uint24 day) external {
+        MineFlipGas.Meter memory meter = MineFlipGas.fromCall(36);
         if (address(this) != ContractAddresses.GAME || !_lootboxReadComplete() || _minerMaintenancePending()
             || _livenessTriggered() || day != _afkingResetDay || day <= dailyIdx || !subsFullyProcessed) revert RngNotReady();
         prepareRequestBoundary(day);
@@ -46,7 +48,7 @@ abstract contract DegenerusGameRngModule is DegenerusGameAdvanceModule {
         _rearmRngRetry();
         rngWordCurrent = RNG_WORD_WAITING;
         _setRngRequestActive(false);
-        uint256 id = _requestVrfWord(VRF_REQUEST_CONFIRMATIONS);
+        uint256 id = _requestVrfWord(VRF_REQUEST_CONFIRMATIONS, meter);
         vrfRequestId = id;
         _setRngRequestActive(true);
         emit Advance(STAGE_RNG_REQUESTED, level);
@@ -58,7 +60,7 @@ abstract contract DegenerusGameRngModule is DegenerusGameAdvanceModule {
         if (gameOver || _livenessTriggered() || !_rngRetryDue(uint48(block.timestamp))) revert RngNotReady();
         _setRngRequestActive(false);
         _spendRngRetry();
-        uint256 id = _requestVrfWord(rngLockedFlag ? VRF_REQUEST_CONFIRMATIONS : VRF_MIDDAY_CONFIRMATIONS);
+        uint256 id = _requestVrfWord(rngLockedFlag ? VRF_REQUEST_CONFIRMATIONS : VRF_MIDDAY_CONFIRMATIONS, MineFlipGas.fromCall(4));
         vrfRequestId = id;
         _setRngRequestActive(true);
         emit Advance(STAGE_RNG_REQUESTED, level);
@@ -70,10 +72,10 @@ abstract contract DegenerusGameRngModule is DegenerusGameAdvanceModule {
     ///         The caller's donated credit pays the threshold gate when pending work sits
     ///         below it.
     function requestMinerRng_g4954() external {
-        _requestLootboxRng(msg.sender);
+        _requestLootboxRng(msg.sender, MineFlipGas.fromCall(4));
     }
 
-    function _requestLootboxRng(address caller) private {
+    function _requestLootboxRng(address caller, MineFlipGas.Meter memory meter) private {
         if (address(this) != ContractAddresses.GAME || _simulatedDayIndex() != dailyIdx
             || _minerMaintenancePending() || _livenessTriggered()) revert RngNotReady();
         // Completion already requires no daily lock, active request or mid-day ticket latch.
@@ -103,7 +105,7 @@ abstract contract DegenerusGameRngModule is DegenerusGameAdvanceModule {
         bool crapsWork = (lootboxRngPacked >> (LR_CRAPS_PENDING_SHIFT + _rngWriteBuffer())) & 1 != 0;
 
         // LINK balance check
-        (bool readable, uint256 linkBal) = _vrfLinkBalance();
+        (bool readable, uint256 linkBal) = _vrfLinkBalance(meter);
         if (!readable) revert ExternalRequestRefused();
         if (linkBal < (crapsWork ? MIN_LINK_FOR_CRAPS_RNG : MIN_LINK_FOR_LOOTBOX_RNG)) {
             revert InsufficientLink();
@@ -125,7 +127,7 @@ abstract contract DegenerusGameRngModule is DegenerusGameAdvanceModule {
             // charged after the LINK floor so credit is never spent on a request the
             // subscription cannot pay for.
             uint256 threshold = _unpackMilliEthToWei(uint64(_lrRead(LR_THRESHOLD_SHIFT, LR_THRESHOLD_MASK)));
-            if (threshold != 0 && pendingEth < threshold && !_tryChargeMiddayCredit(caller)) {
+            if (threshold != 0 && pendingEth < threshold && !_tryChargeMiddayCredit(caller, meter)) {
                 revert BelowThreshold();
             }
         }
@@ -192,7 +194,7 @@ abstract contract DegenerusGameRngModule is DegenerusGameAdvanceModule {
         rngWordCurrent = RNG_WORD_WAITING;
         rngRequestTime = uint48(block.timestamp);
         _rearmRngRetry();
-        uint256 id = _requestVrfWord(VRF_MIDDAY_CONFIRMATIONS);
+        uint256 id = _requestVrfWord(VRF_MIDDAY_CONFIRMATIONS, meter);
         vrfRequestId = id;
         _setRngRequestActive(true);
     }
@@ -214,8 +216,8 @@ abstract contract DegenerusGameRngModule is DegenerusGameAdvanceModule {
         emit MiddayRngCredited(to, linkAmount, balance);
     }
 
-    function _tryChargeMiddayCredit(address caller) private returns (bool charged) {
-        (bool covered, uint256 charge, uint256 balance, uint32 id) = _middayCreditCharge(caller);
+    function _tryChargeMiddayCredit(address caller, MineFlipGas.Meter memory meter) private returns (bool charged) {
+        (bool covered, uint256 charge, uint256 balance, uint32 id) = _middayCreditCharge(caller, meter);
         if (!covered) return false;
         unchecked {
             balance -= charge;
@@ -243,9 +245,9 @@ abstract contract DegenerusGameRngModule is DegenerusGameAdvanceModule {
             && uint256(ts) >= uint256(rngRequestTime) + RNG_RETRY_TIMEOUT;
     }
 
-    function _requestVrfWord(uint16 confirmations) private returns (uint256 id) {
+    function _requestVrfWord(uint16 confirmations, MineFlipGas.Meter memory meter) private returns (uint256 id) {
         bool ok;
-        (ok, id) = _boundedVrfRequest(confirmations);
+        (ok, id) = _boundedVrfRequest(confirmations, meter);
         // Roll back the request's own swaps, credit charge and redemption close.
         // The miner catches this trusted worker refusal without discarding its prefix.
         if (!ok) revert ExternalRequestRefused();

@@ -16,7 +16,7 @@ contract HeroWagerCommitmentIntegrationTest is RedemptionFixture {
         game.placeDegeneretteBet{value: amount}(0, 0, amount, 1, symbol);
     }
     function _metadata() private view returns (uint256) {
-        return uint256(game.extsload(bytes32(GameSlots.LOOTBOX_RNG_PACKED))) & HERO_MASK;
+        return uint256(game.extsload_g8132(bytes32(GameSlots.LOOTBOX_RNG_PACKED))) & HERO_MASK;
     }
     function _retry() private {
         vm.prank(ContractAddresses.OWNER_GOVERNANCE);

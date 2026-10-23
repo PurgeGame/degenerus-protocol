@@ -160,7 +160,7 @@ contract DegradeTerminalRetiredStampTest is DeployProtocol {
 
         uint256[] memory refs = new uint256[](1);
         refs[0] = (uint256(1) << 248) | (uint256(tlvl | (uint24(1) << 23)) << 32) | davePos;
-        game.claimDeadVrf(game.walletIdOf(dave), refs);
+        game.claimDeadVrf(game.walletIdOf_g3120(dave), refs);
         assertEq(claimableBalance(game, dave), pot, "the queued holder claims the tallied weight");
 
         refs[0] = uint256(3) << 64; // alice's created ticket: the bucket is unreadable

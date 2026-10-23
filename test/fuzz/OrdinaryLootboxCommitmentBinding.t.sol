@@ -250,8 +250,8 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         // code 1, no boost or distress. The fresh purchase supplies this score; it is not
         // injected by the test.
         uint256 lanes = (uint256(1000) << 32) | (uint256(1) << 53) | (count << 77);
-        assertEq(orders[0], uint256(game.walletIdOf(ALICE)) | lanes, "Alice's exact committed entry fields");
-        assertEq(orders[1], uint256(game.walletIdOf(BOB)) | lanes, "Bob's exact committed entry fields");
+        assertEq(orders[0], uint256(game.walletIdOf_g3120(ALICE)) | lanes, "Alice's exact committed entry fields");
+        assertEq(orders[1], uint256(game.walletIdOf_g3120(BOB)) | lanes, "Bob's exact committed entry fields");
         assertEq(_word(index), 0, "purchase must precede word revelation");
         assertGt(_pool(), 0, "funded reward inventory");
     }
@@ -278,8 +278,8 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         vm.prank(BOB);
         crapsBattle.setPreferredBoard(0, uint32(1 << 9));
         assertEq(RecyclingState.boxCount(address(game), index ^ 1), next + 2, "two next-index entries really appended");
-        assertEq(BoxOrderLib.boId(_entry(index ^ 1, next)), game.walletIdOf(ALICE), "next-index Alice entry");
-        assertEq(BoxOrderLib.boId(_entry(index ^ 1, next + 1)), game.walletIdOf(BOB), "next-index Bob entry");
+        assertEq(BoxOrderLib.boId(_entry(index ^ 1, next)), game.walletIdOf_g3120(ALICE), "next-index Alice entry");
+        assertEq(BoxOrderLib.boId(_entry(index ^ 1, next + 1)), game.walletIdOf_g3120(BOB), "next-index Bob entry");
         assertGt(
             address(game).balance + mockStETH.balanceOf(address(game)), ethBefore, "public mutation moved real backing"
         );
@@ -386,8 +386,8 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
     ///      distinguishes live from stale inventory; with one box each, Alice's flat FLIP and Bob's
     ///      normal passes. Every box stays inside the reference's scope.
     function _findWord(uint48 index, uint256 count) private view returns (uint256 word) {
-        uint32 idA = game.walletIdOf(ALICE);
-        uint32 idB = game.walletIdOf(BOB);
+        uint32 idA = game.walletIdOf_g3120(ALICE);
+        uint32 idB = game.walletIdOf_g3120(BOB);
         uint256 inventory = _pool();
         for (uint256 k;; ++k) {
             word = uint256(keccak256(abi.encode("commitment-binding", count, k)));
@@ -584,9 +584,9 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
         _assertOrders(index, orders, false);
 
         uint256 inventory = _pool();
-        (Outcome memory alice, bool okA) = _reference(word, index, posA, game.walletIdOf(ALICE), count, inventory);
+        (Outcome memory alice, bool okA) = _reference(word, index, posA, game.walletIdOf_g3120(ALICE), count, inventory);
         (Outcome memory bob, bool okB) =
-            _reference(word, index, posB, game.walletIdOf(BOB), count, inventory - alice.dgnrs);
+            _reference(word, index, posB, game.walletIdOf_g3120(BOB), count, inventory - alice.dgnrs);
         assertTrue(okA && okB, "every committed box stays inside the reference's scope");
         if (count == 2) {
             assertGt(alice.entries[3], 0, "known Alice ticket roll exercised");
@@ -595,7 +595,7 @@ contract OrdinaryLootboxCommitmentBindingTest is DeployProtocol {
             assertGt(bob.dgnrs, 0, "second owner sDGNRS roll exercised");
             assertNotEq(
                 bob.dgnrs,
-                _dgnrs(_seed(word, index, posB, game.walletIdOf(BOB), 1), inventory),
+                _dgnrs(_seed(word, index, posB, game.walletIdOf_g3120(BOB), 1), inventory),
                 "fixture distinguishes live from stale inventory"
             );
         } else {

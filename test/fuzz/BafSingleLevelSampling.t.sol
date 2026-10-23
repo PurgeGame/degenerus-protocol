@@ -74,7 +74,7 @@ contract BafSingleLevelSamplingTest is Test {
         uint32[] memory players = h.sampleFarFutureTickets(entropy, fromLevel, toLevel);
         assertEq(players.length, 8, "two rounds of four candidate slots");
         address[8] memory expected = _model(entropy, fromLevel, toLevel, selected, len, fallbackLength);
-        for (uint256 i; i < 8; ++i) assertEq(players[i], h.walletIdOf(expected[i]), "slot matches the uniform-lane replica");
+        for (uint256 i; i < 8; ++i) assertEq(players[i], h.walletIdOf_g3120(expected[i]), "slot matches the uniform-lane replica");
     }
 
     function testFuzz_MatchesReplicaWideBand(uint256 entropy, uint16 length) public {
@@ -105,7 +105,7 @@ contract BafSingleLevelSamplingTest is Test {
         h.seed(150, 1);
         uint32[] memory players = h.sampleFarFutureTickets(11, 150, 150);
         for (uint256 p; p < 4; ++p) {
-            assertEq(players[p], h.walletIdOf(_owner(150, 0)), "the lone holder takes every even slot");
+            assertEq(players[p], h.walletIdOf_g3120(_owner(150, 0)), "the lone holder takes every even slot");
             assertEq(players[p + 4], 0, "no distinct partner, odd slot stays empty");
         }
     }
@@ -132,8 +132,8 @@ contract BafSingleLevelSamplingTest is Test {
     function test_ProtocolOwnersPairInEveryPack() public {
         h.seedProtocolRange(102, 105);
         uint32[] memory players = h.sampleFarFutureTickets(1, 102, 105);
-        uint32 sdgnrs = h.walletIdOf(ContractAddresses.SDGNRS);
-        uint32 vault = h.walletIdOf(ContractAddresses.VAULT);
+        uint32 sdgnrs = h.walletIdOf_g3120(ContractAddresses.SDGNRS);
+        uint32 vault = h.walletIdOf_g3120(ContractAddresses.VAULT);
         for (uint256 p; p < 4; ++p) {
             assertTrue(players[p] != players[p + 4], "a pack's two lanes are distinct");
             assertTrue(

@@ -46,8 +46,8 @@ contract CoinflipCarryHindsight is DeployProtocol {
         coinflip.setCoinflipAutoRebuy(0, true, 0);
         vm.prank(control);
         coinflip.setCoinflipAutoRebuy(0, true, 0);
-        dormantId = game.walletIdOf(dormant);
-        controlId = game.walletIdOf(control);
+        dormantId = game.walletIdOf_g3120(dormant);
+        controlId = game.walletIdOf_g3120(control);
         assertTrue(dormantId != 0 && controlId != 0, "arming registered both accounts");
         assertEq(_lastClaim(dormantId), ARM_DAY);
         assertEq(_lastClaim(controlId), ARM_DAY);

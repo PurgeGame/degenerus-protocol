@@ -12,7 +12,7 @@ import {VaultBafRig} from "./VaultBafSettlement.t.sol";
 ///      x0 seal's vault settlement walks a full 90-day window.
 contract SweepVaultSeeder is CoinflipStakeSetter {
     function seedVaultHistory(uint24 latest, uint24 gap, bool rebuy) external {
-        PlayerCoinflipState storage s = playerState[degenerusGame.walletIdOf(ContractAddresses.VAULT)];
+        PlayerCoinflipState storage s = playerState[degenerusGame.walletIdOf_g3120(ContractAddresses.VAULT)];
         uint24 last = latest - gap;
         s.claimableStored = 0;
         s.lastClaim = last;

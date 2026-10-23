@@ -169,11 +169,11 @@ contract WwxrpTrustedMintersTest is DeployProtocol {
     }
 
     function _slot0Key(address who) private view returns (bytes32) {
-        return keccak256(abi.encode(uint256(game.walletIdOf(who)), SLOT_BOON_PACKED));
+        return keccak256(abi.encode(uint256(game.walletIdOf_g3120(who)), SLOT_BOON_PACKED));
     }
 
     function _slot1Key(address who) private view returns (bytes32) {
-        return bytes32(uint256(keccak256(abi.encode(uint256(game.walletIdOf(who)), SLOT_BOON_PACKED))) + 1);
+        return bytes32(uint256(keccak256(abi.encode(uint256(game.walletIdOf_g3120(who)), SLOT_BOON_PACKED))) + 1);
     }
 
     /// @dev Write a lootbox-rolled (non-deity) lane stamped today; other lanes are kept.

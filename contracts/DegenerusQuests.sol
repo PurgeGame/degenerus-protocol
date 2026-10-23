@@ -352,7 +352,6 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @dev Reference to the coinflip contract for crediting flip stakes.
     ICoinflip internal constant coinflip = ICoinflip(ContractAddresses.COINFLIP);
 
-
     // =========================================================================
     //                                 STRUCTS
     // =========================================================================
@@ -424,10 +423,8 @@ contract DegenerusQuests is IDegenerusQuests {
     ///         version occupy bits 128-135 and 136-143, sharing the daily handlers' warm word.
     ///         Read/written via `_loadActiveQuests` / `_storeActiveQuests` (one SLOAD/SSTORE per pair).
 
-
     /// @notice Per-wallet quest state including progress, streak, and streak shields, keyed by
     ///         wallet ID.
-
 
     uint256 private constant LEVEL_QUEST_TYPE_SHIFT = 128;
     uint256 private constant LEVEL_QUEST_VERSION_SHIFT = 136;
@@ -436,12 +433,10 @@ contract DegenerusQuests is IDegenerusQuests {
     /// @notice Per-wallet level quest state, keyed by wallet ID.
     ///         Packed: version (8b) | progress (128b) | completed (1b at bit 136).
 
-
     /// @notice Bitmap of calendar days on which a daily quest was actually published.
     /// @dev Keyed by day / 256; bit day % 256. Decay scans only the words spanning the
     ///      player's calendar gap and caps at shields + 1 actual misses, so skipped VRF
     ///      days cost no per-day iteration and can never be mistaken for playable days.
-
 
     constructor() {
         // Seed the level-1 quest at deploy so a level quest is ALWAYS active.
@@ -985,8 +980,6 @@ contract DegenerusQuests is IDegenerusQuests {
     uint16 private constant CRAPS_DAY_STREAK = 1;
     uint16 private constant CRAPS_DAY_STREAK_HIGH = 5;
 
-
-
     /**
      * @notice Record a paid craps action: quest progress and the whole-day streak credit.
      * @dev Access: COIN (FLIP) only — the burn lane is the single reporter, so the quest surface
@@ -1200,8 +1193,6 @@ contract DegenerusQuests is IDegenerusQuests {
         }
         return _questCompleteWithPair(id, state, quests, slotIndex, quest, currentDay, 0);
     }
-
-
 
     /**
      * @notice Handle combined purchase-path activity (mint tickets + lootbox) in a single call.
@@ -1620,16 +1611,13 @@ contract DegenerusQuests is IDegenerusQuests {
         );
     }
 
-    // Low-selector protocol entry; the original ABI and guarded implementation remain.
-    function effectiveBaseStreakAndAfking_g2654(uint32 id) external view returns (uint32 streak, bool afking) { return effectiveBaseStreakAndAfking(id); }
-
     /// @notice effectiveBaseStreak plus the player's afking-run flag, from the single quest-state
     ///         read, so a Game-side caller can skip its Sub-slot lookup for the common (non-afking)
     ///         player and only an afking player pays the extra Sub read.
     /// @param id Wallet ID of the player to query.
     /// @return streak The effective (decay-applied) reward streak.
     /// @return afking True while the player is mid afking-run.
-    function effectiveBaseStreakAndAfking(uint32 id) public questsContext view returns (uint32 streak, bool afking) {
+    function effectiveBaseStreakAndAfking_g2654(uint32 id) external questsContext view returns (uint32 streak, bool afking) {
         PlayerQuestState memory state = _questsStorage().questPlayerState[id];
         streak = _effectiveBaseStreak(state, _currentQuestDayFast());
         afking = state.afkingActive;

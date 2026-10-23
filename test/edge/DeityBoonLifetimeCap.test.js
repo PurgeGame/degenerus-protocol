@@ -70,14 +70,14 @@ describe("Deity boon per-(deity, recipient) lifetime cap", function () {
     for (let i = 0; i < PAIR_CAP; i++) {
       await settleRngDay(game, deployer, mockVRF, BigInt(1000 + i * 7));
       await expect(
-        game.connect(alice).issueDeityBoon(await game.walletIdOf(alice.address), await giveWalletId(game, bob.address), 0)
+        game.connect(alice).issueDeityBoon(await game.walletIdOf_g3120(alice.address), await giveWalletId(game, bob.address), 0)
       ).to.not.be.reverted;
     }
 
     // 11th boon from alice to bob on a fresh day: pair cap reached.
     await settleRngDay(game, deployer, mockVRF, 9001n);
     await expect(
-      game.connect(alice).issueDeityBoon(await game.walletIdOf(alice.address), await giveWalletId(game, bob.address), 0)
+      game.connect(alice).issueDeityBoon(await game.walletIdOf_g3120(alice.address), await giveWalletId(game, bob.address), 0)
     ).to.be.revertedWithCustomError(boonModule, "RecipientBoonCapReached");
   });
 
@@ -94,17 +94,17 @@ describe("Deity boon per-(deity, recipient) lifetime cap", function () {
     await settleRngDay(game, deployer, mockVRF, 777n);
     for (let i = 0; i < PAIR_CAP; i++) {
       await settleRngDay(game, deployer, mockVRF, BigInt(2000 + i * 7));
-      await game.connect(alice).issueDeityBoon(await game.walletIdOf(alice.address), await giveWalletId(game, bob.address), 0);
+      await game.connect(alice).issueDeityBoon(await game.walletIdOf_g3120(alice.address), await giveWalletId(game, bob.address), 0);
     }
 
     await settleRngDay(game, deployer, mockVRF, 9002n);
     // alice->bob is capped...
     await expect(
-      game.connect(alice).issueDeityBoon(await game.walletIdOf(alice.address), await giveWalletId(game, bob.address), 0)
+      game.connect(alice).issueDeityBoon(await game.walletIdOf_g3120(alice.address), await giveWalletId(game, bob.address), 0)
     ).to.be.revertedWithCustomError(boonModule, "RecipientBoonCapReached");
     // ...but alice->carol (fresh recipient) still receives on the same day.
     await expect(
-      game.connect(alice).issueDeityBoon(await game.walletIdOf(alice.address), await giveWalletId(game, carol.address), 1)
+      game.connect(alice).issueDeityBoon(await game.walletIdOf_g3120(alice.address), await giveWalletId(game, carol.address), 1)
     ).to.not.be.reverted;
   });
 
@@ -126,18 +126,18 @@ describe("Deity boon per-(deity, recipient) lifetime cap", function () {
     await settleRngDay(game, deployer, mockVRF, 777n);
     for (let i = 0; i < PAIR_CAP; i++) {
       await settleRngDay(game, deployer, mockVRF, BigInt(3000 + i * 7));
-      await game.connect(alice).issueDeityBoon(await game.walletIdOf(alice.address), await giveWalletId(game, bob.address), 0);
+      await game.connect(alice).issueDeityBoon(await game.walletIdOf_g3120(alice.address), await giveWalletId(game, bob.address), 0);
     }
 
     await settleRngDay(game, deployer, mockVRF, 9003n);
     // alice->bob is capped...
     await expect(
-      game.connect(alice).issueDeityBoon(await game.walletIdOf(alice.address), await giveWalletId(game, bob.address), 0)
+      game.connect(alice).issueDeityBoon(await game.walletIdOf_g3120(alice.address), await giveWalletId(game, bob.address), 0)
     ).to.be.revertedWithCustomError(boonModule, "RecipientBoonCapReached");
     // ...but dan->bob is a fresh pair, so dan can still boon bob the same day
     // The failed Alice attempt did not consume the other deity's daily slot.
     await expect(
-      game.connect(dan).issueDeityBoon(await game.walletIdOf(dan.address), await giveWalletId(game, bob.address), 0)
+      game.connect(dan).issueDeityBoon(await game.walletIdOf_g3120(dan.address), await giveWalletId(game, bob.address), 0)
     ).to.not.be.reverted;
   });
 });

@@ -100,7 +100,7 @@ contract LoanSeizureTest is DeployProtocol {
     }
 
     function _payee(uint32 id) private view returns (address payee) {
-        (, payee, ) = game.resolveAccount(id, address(0));
+        (, payee, ) = game.resolveAccount_g502(id, address(0));
     }
 
     function _borrow(address who, uint32 id, uint24 due) private returns (uint256 principal) {
@@ -203,7 +203,7 @@ contract LoanSeizureTest is DeployProtocol {
         assertEq(_payee(root), address(sdgnrs), "the lender took the account");
         assertEq(game.acquiredBuyer(root), 2);
         assertEq(sdgnrs.balanceOf(borrower), 0, "burnForLiquidation burned the borrower wallet's sDGNRS");
-        assertEq(game.walletIdOf(borrower), 0);
+        assertEq(game.walletIdOf_g3120(borrower), 0);
         (on, ) = _pending();
         assertFalse(on);
         assertEq(game.nextMinerAction(), ACTION_WAIT, "back to waiting for the word");
@@ -322,7 +322,7 @@ contract LoanSeizureTest is DeployProtocol {
         game.mineFlip(0);
         assertEq(deityPass.ownerOf(4), address(sdgnrs));
         assertEq(_payee(root), borrower, "the main stays with its owner");
-        assertEq(game.walletIdOf(borrower), root);
+        assertEq(game.walletIdOf_g3120(borrower), root);
     }
 
     function test_DeityBoughtDuringLoanStillMoves() public {
@@ -425,7 +425,7 @@ contract LoanSeizureTest is DeployProtocol {
         assertEq(repaid, 1);
         assertEq(_payee(root), borrower, "the account stays with its owner");
         assertEq(game.acquiredBuyer(root), 0);
-        assertEq(game.walletIdOf(borrower), root, "default ID kept");
+        assertEq(game.walletIdOf_g3120(borrower), root, "default ID kept");
         assertEq(sdgnrs.balanceOf(borrower), 5e12, "no liquidation burn");
         assertEq(lens.loanOf(address(game), root).principal, 0, "loan closed");
         (uint128 lenderAfter, ) = lens.accountBalances(address(game), 2);

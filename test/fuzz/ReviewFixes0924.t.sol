@@ -424,7 +424,7 @@ contract RedemptionEndingPendingTest is RedemptionCloseTools {
 
         // Game ETH + sDGNRS claimable back the reservation (RedemptionStethFallback (a) shape).
         vm.deal(address(game), 100 ether);
-        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(address(sdgnrs))), GameSlots.BALANCES_PACKED));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf_g3120(address(sdgnrs))), GameSlots.BALANCES_PACKED));
         uint256 word = uint256(vm.load(address(game), slot));
         vm.store(address(game), slot, bytes32((word & (type(uint256).max << 128)) | uint256(100 ether)));
         uint256 s1 = uint256(vm.load(address(game), bytes32(uint256(1))));
@@ -449,14 +449,14 @@ contract RedemptionEndingPendingTest is RedemptionCloseTools {
     }
 
     function test_claimWaitsWhileLivenessReadsTrueThenSettlesTerminal() public {
-        (uint128 owed,) = sdgnrs.pendingRedemptions(game.walletIdOf(playerA), burnDay);
+        (uint128 owed,) = sdgnrs.pendingRedemptions(game.walletIdOf_g3120(playerA), burnDay);
         assertGt(owed, 0, "harness: a claim is pending");
 
         _mockEnding(false);
         vm.prank(playerA);
         vm.expectRevert(NOT_GAME_OVER);
         sdgnrs.claimRedemption(0, burnDay);
-        (uint128 still,) = sdgnrs.pendingRedemptions(game.walletIdOf(playerA), burnDay);
+        (uint128 still,) = sdgnrs.pendingRedemptions(game.walletIdOf_g3120(playerA), burnDay);
         assertEq(still, owed, "nothing settled while pending");
 
         _mockEnding(true);
@@ -467,7 +467,7 @@ contract RedemptionEndingPendingTest is RedemptionCloseTools {
         sdgnrs.claimRedemption(0, burnDay);
         uint256 got = (playerA.balance - eth0) + (mockStETH.balanceOf(playerA) - st0);
         assertApproxEqAbs(got, expected, 2, "terminal after game over: the whole flat-roll value paid direct");
-        (uint128 cleared,) = sdgnrs.pendingRedemptions(game.walletIdOf(playerA), burnDay);
+        (uint128 cleared,) = sdgnrs.pendingRedemptions(game.walletIdOf_g3120(playerA), burnDay);
         assertEq(cleared, 0, "claim consumed");
     }
 }

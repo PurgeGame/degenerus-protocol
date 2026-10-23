@@ -85,10 +85,10 @@ contract CrapsFlowHandler {
             game.setScore(a, 400 + i * 900);
             // Every actor already holds a Game wallet ID, as one that bought elsewhere does; the
             // non-paying doors refuse a wallet without one.
-            game.registerWallet(a, true);
+            game.registerWallet_g9539(a, true);
         }
         game.setScore(creator, 5_000);
-        game.registerWallet(creator, true);
+        game.registerWallet_g9539(creator, true);
     }
 
     // ── Internals ───────────────────────────────────────────────────────────
@@ -297,7 +297,7 @@ contract CrapsFlowHandler {
     ///      is affordable.
     function deliverPasses(uint256 actorSeed, uint256 normalSeed, uint256 highSeed) external {
         address who = _actor(actorSeed);
-        uint32 id = game.walletIdOf(who);
+        uint32 id = game.walletIdOf_g3120(who);
         uint32 normal = uint32(normalSeed % (3 * CrapsPriceLib.HIGH_EV));
         uint32 high = uint32(highSeed % 3);
         if (normal == 0 && high == 0) normal = 1;
@@ -467,7 +467,7 @@ contract CrapsFlowHandler {
             } catch {}
         } else {
             vm.prank(ContractAddresses.GAME);
-            try JackpotBattle(address(craps)).runCrapsMaintenance(gasleft()) returns (MineFlipGas.Result memory) {
+            try JackpotBattle(address(craps)).runCrapsMaintenance_g10712(gasleft()) returns (MineFlipGas.Result memory) {
                 ok = true;
             } catch {}
         }

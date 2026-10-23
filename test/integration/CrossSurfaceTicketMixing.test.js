@@ -209,7 +209,7 @@ describe("Cross-surface ticket events and remainder preservation", function () {
       await game.connect(alice).purchase(0, 0n, boCustom(eth(1)), ZERO_BYTES32, 0, false, { value: eth(1) });
       // 1 ETH of pending box value meets the mid-day threshold: an ordinary mineFlip requests.
       const request = await requestMiddayRng(game, deployer, mockVRF);
-      const aliceId = await game.walletIdOf(alice.address);
+      const aliceId = await game.walletIdOf_g3120(alice.address);
       const artifact = await hre.artifacts.readArtifact("DegenerusGameLootboxModule");
       const iface = new hre.ethers.Interface(artifact.abi);
       // Choose a ticket-paying outcome, reverting each trial. The regression must
@@ -387,7 +387,7 @@ describe("Cross-surface ticket events and remainder preservation", function () {
       );
       const lbIface = new hre.ethers.Interface(lbArtifact.abi);
       let opened = null;
-      const aliceId = await game.walletIdOf(alice.address);
+      const aliceId = await game.walletIdOf_g3120(alice.address);
       for (const log of receipts.flatMap((receipt) => receipt.logs)) {
         try {
           const parsed = lbIface.parseLog(log);

@@ -30,6 +30,7 @@ import {GoldSixLib} from "../libraries/GoldSixLib.sol";
  */
 
 import {ContractAddresses} from "../ContractAddresses.sol";
+import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 import {BoundedCall} from "../libraries/BoundedCall.sol";
 import {IStETH} from "../interfaces/IStETH.sol";
 import {IVRFCoordinator, VRFRandomWordsRequest} from "../interfaces/IVRFCoordinator.sol";
@@ -47,9 +48,8 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 
 interface IGameMinerMaintenance {
-    function minerMaintenancePending_g11976() external view returns (bool);
 
-    function minerMaintenancePending() external view returns (bool);
+    function minerMaintenancePending_g11976() external view returns (bool);
 }
 
 interface IAdminLinkValue {
@@ -1077,6 +1077,11 @@ abstract contract DegenerusGameStorage {
     /// @dev `caller` is the account whose donated credit may pay the mid-day threshold gate;
     ///      address(0) selects as a creditless caller.
     function _nextMinerAction(address caller) internal view returns (MinerAction) {
+        MineFlipGas.Meter memory meter;
+        return _nextMinerAction(caller, meter);
+    }
+
+    function _nextMinerAction(address caller, MineFlipGas.Meter memory meter) internal view returns (MinerAction) {
         if (gameOver) {
             if (_goRead(GO_JACKPOT_PAID_SHIFT, GO_JACKPOT_PAID_MASK) == 0) return MinerAction.Terminal;
             uint256 ended = _goRead(GO_TIME_SHIFT, GO_TIME_MASK);
@@ -1124,7 +1129,7 @@ abstract contract DegenerusGameStorage {
         // the optional mid-day request, which would otherwise starve it.
         if (_growthSettlePending()) return MinerAction.GrowthSettle;
         if (_degenesisSettlePending()) return MinerAction.DegenesisSettle;
-        return _minerMiddayEligible(caller) ? MinerAction.RequestMidday : MinerAction.Idle;
+        return _minerMiddayEligible(caller, meter) ? MinerAction.RequestMidday : MinerAction.Idle;
     }
 
     error ExternalRequestRefused();
@@ -1136,22 +1141,22 @@ abstract contract DegenerusGameStorage {
     uint256 internal constant VRF_READ_RESERVE = 200_000;
 
     /// @dev Only the first, static uint96 field is used; no dynamic tuple is decoded.
-    function _vrfLinkBalance() internal view returns (bool ok, uint256 balance) {
-        (ok, balance) = BoundedCall.staticWordRemaining(address(vrfCoordinator), EXTERNAL_READ_GAS, VRF_READ_RESERVE,
+    function _vrfLinkBalance(MineFlipGas.Meter memory meter) internal view returns (bool ok, uint256 balance) {
+        (ok, balance) = BoundedCall.staticWordRemaining(meter, address(vrfCoordinator), EXTERNAL_READ_GAS, VRF_READ_RESERVE,
             abi.encodeWithSelector(IVRFCoordinator.getSubscription.selector, vrfSubscriptionId));
         ok = ok && balance <= type(uint96).max;
     }
 
     /// @dev Impossible reported balances are refused before they can overflow fund arithmetic.
-    function _boundedStethBalance() internal view returns (uint256 balance) {
-        (bool ok, uint256 value) = BoundedCall.staticWord(ContractAddresses.STETH_TOKEN, EXTERNAL_READ_GAS,
+    function _boundedStethBalance(MineFlipGas.Meter memory meter, uint256 tail) internal view returns (uint256 balance) {
+        (bool ok, uint256 value) = BoundedCall.staticWordRemaining(meter, ContractAddresses.STETH_TOKEN, EXTERNAL_READ_GAS, tail,
             abi.encodeWithSelector(IStETH.balanceOf.selector, address(this)));
         if (ok && value <= type(uint128).max) balance = value;
     }
 
-    function _boundedVrfRequest(uint16 confirmations) internal returns (bool ok, uint256 id) {
+    function _boundedVrfRequest(uint16 confirmations, MineFlipGas.Meter memory meter) internal returns (bool ok, uint256 id) {
         bytes memory result;
-        (ok, result) = BoundedCall.callRemaining(address(vrfCoordinator), VRF_REQUEST_MIN_GAS, VRF_REQUEST_RESERVE,
+        (ok, result) = BoundedCall.callRemaining(meter, address(vrfCoordinator), VRF_REQUEST_MIN_GAS, VRF_REQUEST_RESERVE,
             abi.encodeWithSelector(IVRFCoordinator.requestRandomWords.selector, VRFRandomWordsRequest({
                 keyHash: vrfKeyHash, subId: vrfSubscriptionId, requestConfirmations: confirmations,
                 callbackGasLimit: 300_000, numWords: 1, extraArgs: hex""
@@ -1170,7 +1175,7 @@ abstract contract DegenerusGameStorage {
     ///      is never eligible, and a queue below the threshold is eligible only when `caller`'s
     ///      donated credit covers the charge, priced last so the Admin feed is read only when
     ///      every other gate passes.
-    function _minerMiddayEligible(address caller) internal view returns (bool) {
+    function _minerMiddayEligible(address caller, MineFlipGas.Meter memory meter) internal view returns (bool) {
         bool crapsWork = (lootboxRngPacked >> (LR_CRAPS_PENDING_SHIFT + _rngWriteBuffer())) & 1 != 0;
         bool needsCredit;
         if (!crapsWork) {
@@ -1189,10 +1194,10 @@ abstract contract DegenerusGameStorage {
         if (_recordedDailyWord(_simulatedDayIndex()) == 0) return false;
         // No coordinator is wired before VRF setup, so nothing can be requested yet.
         if (address(vrfCoordinator) == address(0)) return false;
-        (bool ok, uint256 linkBal) = _vrfLinkBalance();
+        (bool ok, uint256 linkBal) = _vrfLinkBalance(meter);
         if (!ok || linkBal < (crapsWork ? MIN_LINK_FOR_CRAPS_RNG : MIN_LINK_FOR_LOOTBOX_RNG)) return false;
         if (!needsCredit) return true;
-        (bool covered,,,) = _middayCreditCharge(caller);
+        (bool covered,,,) = _middayCreditCharge(caller, meter);
         return covered;
     }
 
@@ -1200,14 +1205,17 @@ abstract contract DegenerusGameStorage {
     ///      MIDDAY_RNG_CHARGE_MULT times the billed gas, converted to juels at the Admin's
     ///      LINK/ETH price. `covered` is false for a zero balance or an unpriced feed, so the
     ///      selector and the RNG module's charge always agree within a transaction.
-    function _middayCreditCharge(address caller)
+    function _middayCreditCharge(address caller, MineFlipGas.Meter memory meter)
         internal view returns (bool covered, uint256 charge, uint256 balance, uint32 id)
     {
         id = _walletIdOf(caller);
         balance = middayRngCredit[id];
         // A zero balance never qualifies, even where basefee (and so the charge) is zero.
         if (balance == 0) return (false, 0, 0, id);
-        uint256 weiPerLink = IAdminLinkValue(ContractAddresses.ADMIN).linkAmountToEth(1 ether);
+        (bool priced, uint256 weiPerLink) = BoundedCall.staticWordRemaining(meter, ContractAddresses.ADMIN,
+            120_000, 200_000, abi.encodeWithSelector(IAdminLinkValue.linkAmountToEth.selector,
+                1 ether, MineFlipGas.child(meter, 200_000)));
+        if (!priced) return (false, 0, balance, id);
         if (weiPerLink == 0) return (false, 0, balance, id);
         charge = (MIDDAY_RNG_BILLED_GAS * block.basefee * MIDDAY_RNG_CHARGE_MULT * 1 ether) / weiPerLink;
         covered = balance >= charge;

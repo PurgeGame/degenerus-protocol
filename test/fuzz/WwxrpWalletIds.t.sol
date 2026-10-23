@@ -137,7 +137,7 @@ contract WwxrpWalletIdsTest is DeployProtocol {
         uint32 expectedId = uint32(_walletCount());
         uint24 day = _today();
 
-        vm.expectCall(address(game), abi.encodeCall(DegenerusGame.registerWallet, (p, true)), 1);
+        vm.expectCall(address(game), abi.encodeCall(DegenerusGame.registerWallet_g9539, (p, true)), 1);
         vm.recordLogs();
         vm.prank(p);
         wwxrp.enter(0, 100);
@@ -226,7 +226,7 @@ contract WwxrpWalletIdsTest is DeployProtocol {
 
         vm.expectCall(address(game), abi.encodeCall(DegenerusGame.consumeCoinflipBoon_g2902, (pid)), 1);
         vm.expectCall(address(game), abi.encodeCall(DegenerusGame.consumeCoinflipBoon_g2902, (qid)), 0);
-        vm.expectCall(address(game), abi.encodeWithSelector(DegenerusGame.registerWallet.selector), 0);
+        vm.expectCall(address(game), abi.encodeWithSelector(DegenerusGame.registerWallet_g9539.selector), 0);
         (uint256 pScore,) = game.playerActivityScore(p);
         (uint256 qScore,) = game.playerActivityScore(q);
         vm.recordLogs();

@@ -142,11 +142,11 @@ contract QuestsWalletIdsTest is DeployProtocol {
         vm.deal(buyer, buyer.balance + price);
         vm.prank(buyer);
         game.purchase{value: price}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
-        return game.walletIdOf(buyer);
+        return game.walletIdOf_g3120(buyer);
     }
 
     function _canonicalSenderFor(address buyer, bytes32 code, uint8 cls) private returns (uint32 id) {
-        id = game.walletIdOf(buyer);
+        id = game.walletIdOf_g3120(buyer);
         if (id == 0) id = _giveWalletId(buyer);
         for (;;) {
             uint24 day = GameTimeLib.currentDayIndexAt(vm.getBlockTimestamp());
@@ -253,7 +253,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         coinflip.depositCoinflip(0, 1_000);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         (, bytes32[] memory writes) = vm.accesses(address(quests));
-        uint32 id = game.walletIdOf(p);
+        uint32 id = game.walletIdOf_g3120(p);
         assertGt(id, 0, "the deposit registers the depositor");
         assertEq(_onlyId(acc, address(coinflip), quests.handleFlip.selector), id);
         _assertWritesUnder(writes, id);
@@ -272,7 +272,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         coinflip.depositCoinflip(rid, 1_000);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         (, bytes32[] memory writes) = vm.accesses(address(quests));
-        uint32 gid = game.walletIdOf(g);
+        uint32 gid = game.walletIdOf_g3120(g);
         assertGt(gid, 0, "the paying funder registers");
         assertEq(_onlyId(acc, address(coinflip), quests.handleFlip.selector), gid, "quest goes to the funder");
         _assertWritesUnder(writes, gid);
@@ -292,11 +292,11 @@ contract QuestsWalletIdsTest is DeployProtocol {
         coin.decimatorBurn(0, 2_000, 0);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         (, bytes32[] memory writes) = vm.accesses(address(quests));
-        uint32 id = game.walletIdOf(p);
+        uint32 id = game.walletIdOf_g3120(p);
         assertGt(id, 0, "the burn registers the burner");
         assertEq(_onlyId(acc, address(coin), quests.handleDecimator.selector), id);
         assertLt(
-            _firstIndex(acc, address(coin), address(game), game.registerWallet.selector),
+            _firstIndex(acc, address(coin), address(game), game.registerWallet_g9539.selector),
             _firstIndex(acc, address(coin), address(quests), quests.handleDecimator.selector),
             "registration precedes the quest"
         );
@@ -333,7 +333,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         game.purchase{value: 1 ether}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         (, bytes32[] memory writes) = vm.accesses(address(quests));
-        uint32 id = game.walletIdOf(b);
+        uint32 id = game.walletIdOf_g3120(b);
         assertGt(id, 0);
         assertEq(_onlyId(acc, address(game), quests.handleFoilPurchase.selector), id);
         _assertWritesUnder(writes, id);
@@ -352,7 +352,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         affiliate.createAffiliateCode(bytes32("QA_CODE"), 0);
         vm.prank(b);
         affiliate.referPlayer(bytes32("QA_CODE"));
-        uint32[2] memory expected = [game.walletIdOf(o), upid];
+        uint32[2] memory expected = [game.walletIdOf_g3120(o), upid];
         for (uint8 cls; cls < 2; ++cls) {
             uint32 sid = _canonicalSenderFor(b, bytes32("QA_CODE"), cls);
             vm.record();
@@ -375,7 +375,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         game.placeDegeneretteBet{value: 0.01 ether}(0, 0, 0.01 ether, 1, 9);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         (, bytes32[] memory writes) = vm.accesses(address(quests));
-        uint32 pid = game.walletIdOf(p);
+        uint32 pid = game.walletIdOf_g3120(p);
         assertGt(pid, 0);
         assertEq(_onlyId(acc, address(game), quests.handleDegenerette.selector), pid);
         _assertWritesUnder(writes, pid);
@@ -390,7 +390,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         game.placeDegeneretteBet{value: 0.01 ether}(rid, 0, 0.01 ether, 1, 9);
         acc = vm.stopAndReturnStateDiff();
         (, writes) = vm.accesses(address(quests));
-        uint32 gid = game.walletIdOf(g);
+        uint32 gid = game.walletIdOf_g3120(g);
         assertGt(gid, 0, "the paying funder registers");
         assertEq(_onlyId(acc, address(game), quests.handleDegenerette.selector), gid, "quest goes to the funder");
         _assertWritesUnder(writes, gid);
@@ -481,9 +481,9 @@ contract QuestsWalletIdsTest is DeployProtocol {
         _as(address(affiliate), abi.encodeCall(quests.handleAffiliate, (id, 6_000)));
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        bytes[] memory ext = _calls(acc, address(quests), address(game), game.extsload.selector);
+        bytes[] memory ext = _calls(acc, address(quests), address(game), game.extsload_g8132.selector);
         assertEq(ext.length, 0, "ID history needs no wallet-table read");
-        bytes[] memory mp = _calls(acc, address(quests), address(game), game.mintPackedOfId.selector);
+        bytes[] memory mp = _calls(acc, address(quests), address(game), game.mintPackedOfId_g5372.selector);
         assertEq(mp.length, 1, "one mint-word read");
         assertEq(abi.decode(mp[0], (uint32)), id);
         assertEq(_calls(acc, address(quests), address(game), game.hasDeityPass.selector).length, 0, "no hasDeityPass");
@@ -499,8 +499,8 @@ contract QuestsWalletIdsTest is DeployProtocol {
             vm.startStateDiffRecording();
             _as(address(affiliate), abi.encodeCall(quests.handleAffiliate, (id, 6_000)));
             Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
-            assertEq(_calls(acc, address(quests), address(game), game.extsload.selector).length, 0, "no extsload");
-            bytes[] memory mp = _calls(acc, address(quests), address(game), game.mintPackedOfId.selector);
+            assertEq(_calls(acc, address(quests), address(game), game.extsload_g8132.selector).length, 0, "no extsload");
+            bytes[] memory mp = _calls(acc, address(quests), address(game), game.mintPackedOfId_g5372.selector);
             assertEq(mp.length, 1);
             assertEq(abi.decode(mp[0], (uint32)), id, "protocol account ID");
         }
@@ -513,7 +513,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         vm.startStateDiffRecording();
         _as(address(affiliate), abi.encodeCall(quests.handleAffiliate, (id, 6_000)));
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
-        assertEq(_calls(acc, address(quests), address(game), game.extsload.selector).length, 0);
+        assertEq(_calls(acc, address(quests), address(game), game.extsload_g8132.selector).length, 0);
         assertEq(_calls(acc, address(quests), address(coinflip), coinflip.creditFlip_g317.selector).length, 0, "no credit");
         assertEq((_lq(id) >> 136) & 1, 0, "not completed");
         assertEq(uint128(_lq(id) >> 8), 6_000, "progress kept");
@@ -713,15 +713,15 @@ contract QuestsWalletIdsTest is DeployProtocol {
     function test_MarketBetGatesReturnsTheMintWordId() public {
         address p = makeAddr("mbgBuyer");
         uint32 id = _buy(p);
-        (bool may,, uint32 gid) = quests.marketBetGates(game.walletIdOf(p), game.level() + 1);
+        (bool may,, uint32 gid) = quests.marketBetGates(game.walletIdOf_g3120(p), game.level() + 1);
         assertTrue(may);
         assertEq(gid, id);
-        assertEq(gid, uint32(game.walletIdOf(p)));
+        assertEq(gid, uint32(game.walletIdOf_g3120(p)));
     }
 
     function _smite(address target, uint8 symbol) private {
         address d = makeAddr(string(abi.encodePacked("mbgDeity", symbol)));
-        uint32 targetId = game.walletIdOf(target);
+        uint32 targetId = game.walletIdOf_g3120(target);
         vm.deal(d, 200 ether);
         vm.prank(d);
         game.purchaseDeityPass{value: 100 ether}(0, symbol, bytes32(0));
@@ -734,7 +734,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
     function test_RegistrationOnlyAndSmiteOnlyWordsCannotBet() public {
         address r = makeAddr("mbgReg");
         uint32 rid = _giveWalletId(r);
-        (bool may, bool earns, uint32 id) = quests.marketBetGates(game.walletIdOf(r), 1);
+        (bool may, bool earns, uint32 id) = quests.marketBetGates(game.walletIdOf_g3120(r), 1);
         assertFalse(may, "registration alone");
         assertFalse(earns);
         assertEq(id, rid);
@@ -747,8 +747,8 @@ contract QuestsWalletIdsTest is DeployProtocol {
         uint256 w = game.mintPackedFor(s);
         assertGt(w, 0, "the smite wrote the word");
         assertEq(w >> 224, 0, "identity does not occupy mint history");
-        assertEq(game.walletIdOf(s), sid);
-        (may,, id) = quests.marketBetGates(game.walletIdOf(s), 1);
+        assertEq(game.walletIdOf_g3120(s), sid);
+        (may,, id) = quests.marketBetGates(game.walletIdOf_g3120(s), 1);
         assertFalse(may, "curse plus registration");
         assertEq(id, sid);
     }
@@ -759,8 +759,8 @@ contract QuestsWalletIdsTest is DeployProtocol {
         _door(door % 9, p);
         uint24 lvl = game.level();
         for (uint24 l = lvl; l <= lvl + 1; ++l) {
-            (bool may,, uint32 id) = quests.marketBetGates(game.walletIdOf(p), l);
-            assertEq(id, game.walletIdOf(p), "the gate's ID is the canonical ID");
+            (bool may,, uint32 id) = quests.marketBetGates(game.walletIdOf_g3120(p), l);
+            assertEq(id, game.walletIdOf_g3120(p), "the gate's ID is the canonical ID");
             if (may) assertGt(id, 0, "mayBet implies a wallet ID");
         }
     }
@@ -817,10 +817,10 @@ contract QuestsWalletIdsTest is DeployProtocol {
         assertEq((_lq(pid) >> 137) & 1, 1, "recorded under the ID");
         _assertQuestCredit(acc, pid, 50);
         assertEq(_countTopic(logs, E_GROWTH, pid), 1);
-        bytes[] memory mp = _calls(acc, address(quests), address(game), game.mintPackedOfId.selector);
+        bytes[] memory mp = _calls(acc, address(quests), address(game), game.mintPackedOfId_g5372.selector);
         assertEq(mp.length, 1);
         assertEq(abi.decode(mp[0], (uint32)), pid, "eligibility from the same account's word");
-        assertEq(_calls(acc, address(quests), address(game), game.extsload.selector).length, 0, "no table read");
+        assertEq(_calls(acc, address(quests), address(game), game.extsload_g8132.selector).length, 0, "no table read");
 
         // An unrelated ID cannot borrow another account's eligibility.
         uint32 other = 7_777_777;
@@ -882,7 +882,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         PlayerQuestView memory v = quests.getPlayerQuestView(id);
         assertTrue(v.completed[0]);
         assertEq(v.baseStreak, quests.effectiveBaseStreak(id));
-        (uint32 eff, bool afk) = quests.effectiveBaseStreakAndAfking(id);
+        (uint32 eff, bool afk) = quests.effectiveBaseStreakAndAfking_g2654(id);
         assertEq(eff, quests.effectiveBaseStreak(id));
         assertFalse(afk);
         _as(address(game), abi.encodeCall(quests.awardQuestStreakShield, (id, 1)));
@@ -908,7 +908,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         assertEq(v.baseStreak, 0);
         assertEq(v.progress[0] + v.progress[1], 0);
         assertEq(quests.effectiveBaseStreak(id), 0);
-        (uint32 eff, bool afk) = quests.effectiveBaseStreakAndAfking(id);
+        (uint32 eff, bool afk) = quests.effectiveBaseStreakAndAfking_g2654(id);
         assertEq(eff, 0);
         assertFalse(afk);
         (uint8 shields, uint8 high) = quests.shieldsOf(id);

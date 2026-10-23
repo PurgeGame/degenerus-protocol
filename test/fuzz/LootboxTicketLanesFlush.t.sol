@@ -104,10 +104,10 @@ contract LootboxTicketLanesFlush is DeployProtocol {
         internal
         returns (uint256[64] memory announced, uint256[64] memory queued, uint256 boxes)
     {
-        uint32 actorId = game.walletIdOf(actor);
+        uint32 actorId = game.walletIdOf_g3120(actor);
         for (uint256 i; i < logs.length; i++) {
             if (logs[i].emitter != address(game) || logs[i].topics.length < 2) continue;
-            if (logs[i].topics[0] == OPENED && uint32(uint256(logs[i].topics[1])) == game.walletIdOf(actor)
+            if (logs[i].topics[0] == OPENED && uint32(uint256(logs[i].topics[1])) == game.walletIdOf_g3120(actor)
                 && uint48(uint256(logs[i].topics[2])) == ref) {
                 (, uint24 lvl, uint32 scaled,, bool up) = abi.decode(logs[i].data, (uint256, uint24, uint32, uint256, bool));
                 uint256 whole = scaled / 100 + (up ? 1 : 0);

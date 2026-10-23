@@ -410,7 +410,7 @@ contract RedemptionForwardBatchesTest is RedemptionFixture {
         uint256 reserveBefore = game.redemptionReserve();
         uint256 poolBefore = game.claimablePoolView();
         uint256 futureBefore = game.futurePrizePoolView();
-        uint32 aliceId = game.walletIdOf(alice);
+        uint32 aliceId = game.walletIdOf_g3120(alice);
         vm.recordLogs();
         vm.prank(address(sdgnrs));
         uint256 g0 = gasleft();

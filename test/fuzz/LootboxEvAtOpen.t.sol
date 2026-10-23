@@ -290,7 +290,7 @@ contract LootboxEvAtOpenTest is DeployProtocol {
         host.resolveRedemptionLootbox(id, 1 ether, word, 30_000, 1);
         assertEq(_capWrites(vm.stopAndReturnStateDiff()), 1, "redemption is not charged twice");
         assertEq(host.evUsed(id, key), 1 ether);
-        uint32 protocolId = host.walletIdOf(address(sdgnrs));
+        uint32 protocolId = host.walletIdOf_g3120(address(sdgnrs));
         uint256 before = host.evUsed(protocolId, key);
         word = 2;
         while (uint16(EntropyLib.hash4(word, protocolId, 0x41666b696e67426f78, 1) >> 40) % 20 >= 8) ++word;

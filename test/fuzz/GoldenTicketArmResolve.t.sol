@@ -83,7 +83,7 @@ contract GoldenTicketHarness is DegenerusGameJackpotModule, BucketSeed {
         return _walletKey(id);
     }
 
-    function walletIdOf(address who) external view returns (uint32) {
+    function walletIdOf_g3120(address who) external view returns (uint32) {
         return _walletIdOf(who);
     }
 
@@ -357,7 +357,7 @@ contract GoldenTicketArmResolve is Test {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] == topic) {
                 found = true;
-                assertEq(uint32(uint256(logs[i].topics[1])), h.walletIdOf(winner), "event winner");
+                assertEq(uint32(uint256(logs[i].topics[1])), h.walletIdOf_g3120(winner), "event winner");
                 (uint8 q, uint8 s) = abi.decode(logs[i].data, (uint8, uint8));
                 assertEq(q, quadrant, "event quadrant");
                 assertEq(s, symbol, "event symbol");
@@ -423,7 +423,7 @@ contract GoldenTicketArmResolve is Test {
         );
         assertEq(golds, 0, "0 golds on resolve board");
         assertFalse(grand);
-        assertEq(wwxrpRec.lastTo(), h.walletIdOf(winner), "wwxrp consolation to armed winner");
+        assertEq(wwxrpRec.lastTo(), h.walletIdOf_g3120(winner), "wwxrp consolation to armed winner");
     }
 
     function testNoDoubleFire() public {
@@ -457,7 +457,7 @@ contract GoldenTicketArmResolve is Test {
         assertEq(flip, 0);
         assertEq(wwxrp, 100, "0 golds = 100 WWXRP");
         assertEq(wwxrpRec.calls(), 1);
-        assertEq(wwxrpRec.lastTo(), h.walletIdOf(winner));
+        assertEq(wwxrpRec.lastTo(), h.walletIdOf_g3120(winner));
         assertEq(wwxrpRec.lastAmount(), 100);
         assertEq(h.claimableOf(winner), claimBefore, "no ETH leg");
         assertEq(h.whalePassOf(winner), passBefore, "no pass leg");
@@ -520,7 +520,7 @@ contract GoldenTicketArmResolve is Test {
         expFlip = (expFlip / 100) * 100;
         assertEq(flip, expFlip, "5% fp as flip credit at ticket rate");
         assertEq(flipRec.calls(), 1);
-        assertEq(flipRec.lastPlayer(), h.walletIdOf(winner));
+        assertEq(flipRec.lastPlayer(), h.walletIdOf_g3120(winner));
         assertEq(flipRec.lastAmount(), expFlip);
     }
 

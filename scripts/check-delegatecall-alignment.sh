@@ -191,7 +191,7 @@ self_test_transform() {
 collect_sites() {
   local dir="$1" file lineno sel_line
   # Uppercase members are custom errors, not function dispatch selectors.
-  grep -rn --include='*.sol' -E 'I(DegenerusGame|Game)[A-Za-z]+Module\.[a-z_][a-zA-Z_]*\.selector' "$dir" 2>/dev/null \
+  grep -rn --include='*.sol' -E 'I(DegenerusGame|Game)[A-Za-z]+Module\.[a-z_][a-zA-Z0-9_]*\.selector' "$dir" 2>/dev/null \
     | grep -v "^${dir}/interfaces/" | grep -v "^${dir}/mocks/" \
     | awk -F: '{ print $1 "\t" $2 }'
   grep -rn --include='*.sol' -E '^[[:space:]]*I(DegenerusGame|Game)[A-Za-z]+Module[[:space:]]*$' "$dir" 2>/dev/null \
@@ -251,10 +251,10 @@ while IFS=$'\t' read -r file lineno; do
   # as the target.
   if printf '%s\n' "$window" | grep -Eq '\.delegatecall[[:space:]]*(\{[^}]*\}[[:space:]]*)?\('; then
     target=$(printf '%s\n' "$window" | grep -oE '\.GAME_[A-Z_]+_MODULE' | tail -1 | sed -E 's/^\.//')
-  elif [[ "${file##*/}" == "DegenerusGameMinerModule.sol" ]]; then
-    # The dispatcher pairs its branch-local target assignment with calldata,
-    # then performs one shared target.delegatecall below the branch chain.
-    target=$(printf '%s\n' "$window" | sed -nE 's/.*target = ContractAddresses\.(GAME_[A-Z_]+_MODULE);.*/\1/p' | tail -1)
+  elif [[ "${file##*/}" == "GameMiner.sol" || "${file##*/}" == "DegenerusGameMinerModule.sol" ]]; then
+    # Resolve the enclosing branch, including parent targets for nested request
+    # selectors. Never inherit a sibling branch's assignment or trust distance.
+    target=$(python3 scripts/lib/dispatch_target.py "$file" "$lineno")
   else
     target=""
   fi

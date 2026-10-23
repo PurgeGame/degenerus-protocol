@@ -43,7 +43,7 @@ contract PassBoxAutoOpenEnqueue is DeployProtocol {
             "WHALE-01: the pass-bundled lootbox must be appended to the auto-open queue"
         );
         uint256 word = RecyclingState.boxEntry(address(game), idx, before);
-        assertEq(word.boId(), game.walletIdOf(buyer), "the queued entry is the buyer's");
+        assertEq(word.boId(), game.walletIdOf_g3120(buyer), "the queued entry is the buyer's");
         assertEq(word.boCount(), 1, "one box for one pass");
         assertEq(word.boSizeWei(), 0.24 ether, "the box is 10% of the pass");
     }

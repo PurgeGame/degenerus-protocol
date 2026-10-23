@@ -11,7 +11,7 @@ describe("Smurf allowance vault-owner control", function () {
     it("grants a uint16 base by main ID and follows transferred vault ownership", async function () {
       const { game, vault, deployer, alice, bob } = await loadFixture(deployFullProtocol);
       await game.connect(bob).purchase(0, 400, 0, ZERO_BYTES32, 0, false, { value: eth("0.01") });
-      const main = await game.walletIdOf(bob.address);
+      const main = await game.walletIdOf_g3120(bob.address);
       await expect(game.connect(alice).raiseSmurfBaseAllowance(main, 300))
         .to.be.revertedWithCustomError(game, "OnlyVault");
       await expect(ownerAction(game.connect(deployer), "raiseSmurfBaseAllowance", [main, 300]))

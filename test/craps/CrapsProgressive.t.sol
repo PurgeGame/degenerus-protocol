@@ -210,8 +210,8 @@ contract CrapsProgressiveTest is CrapsPins {
 
     function setUp() public {
         _installPins();
-        game.registerWallet(alice, true);
-        game.registerWallet(bob, true);
+        game.registerWallet_g9539(alice, true);
+        game.registerWallet_g9539(bob, true);
         _warpToTableGenesis();
         craps = new ProgHarness();
         // The deployment day is a Craps warm-up day with no windows; every fixture plays
@@ -1558,7 +1558,7 @@ contract CrapsProgressiveTest is CrapsPins {
     function _splitValueTo(Vm.Log[] memory logs, address who) internal view returns (uint256 total) {
         for (uint256 i = 0; i < logs.length; ++i) {
             if (logs[i].topics[0] != _SPLIT_SIG) continue;
-            if (uint256(logs[i].topics[2]) != uint256(game.walletIdOf(who))) continue;
+            if (uint256(logs[i].topics[2]) != uint256(game.walletIdOf_g3120(who))) continue;
             (uint256 g, uint256 l) = abi.decode(logs[i].data, (uint256, uint256));
             total += g - l;
         }

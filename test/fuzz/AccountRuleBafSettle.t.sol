@@ -14,7 +14,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 /// @title AccountRuleBafSettle -- the BAF-level seal settles the vault's coinflips by ID
 /// @notice At an x0 level's last-purchase-day seal the advance calls
 ///         `coinflip.depositCoinflip(VAULT_WALLET_ID = 1, 0)`. Coinflip resolves ID 1 through
-///         `Game.resolveAccount(1, GAME)`: unapproved, the zero-amount call is a gift that only
+///         `Game.resolveAccount_g502(1, GAME)`: unapproved, the zero-amount call is a gift that only
 ///         settles the vault's own claims; approved (`operatorApprovals[1][GAME]`), it is an
 ///         authorized zero deposit. Either way the advance must not revert. The drive turbo-chains
 ///         from genesis to the level-10 latch day (the shape of TurboBafTicketFloor's drive).
@@ -41,7 +41,7 @@ contract AccountRuleBafSettle is DeployProtocol {
     }
 
     function test_BafSeal_SettlesVaultById_Unapproved() public {
-        (, , bool authorized) = game.resolveAccount(1, address(game));
+        (, , bool authorized) = game.resolveAccount_g502(1, address(game));
         assertFalse(authorized, "fixture: GAME is not an operator of the vault's account");
         _driveAndAssert();
     }
@@ -49,7 +49,7 @@ contract AccountRuleBafSettle is DeployProtocol {
     function test_BafSeal_SettlesVaultById_GameApprovedForVault() public {
         bytes32 slot = keccak256(abi.encode(address(game), keccak256(abi.encode(uint256(1), GameSlots.OPERATOR_APPROVALS))));
         vm.store(address(game), slot, bytes32(uint256(1)));
-        (address key, address payee, bool authorized) = game.resolveAccount(1, address(game));
+        (address key, address payee, bool authorized) = game.resolveAccount_g502(1, address(game));
         assertTrue(authorized, "fixture: operatorApprovals[1][GAME] set");
         assertEq(key, ContractAddresses.VAULT);
         assertEq(payee, ContractAddresses.VAULT);
@@ -61,7 +61,7 @@ contract AccountRuleBafSettle is DeployProtocol {
         vm.expectCall(
             address(coinflip), abi.encodeWithSignature("depositCoinflip(uint32,uint256)", uint32(1), uint256(0)), 1
         );
-        vm.expectCall(address(game), abi.encodeCall(game.resolveAccount, (uint32(1), address(game))));
+        vm.expectCall(address(game), abi.encodeCall(game.resolveAccount_g502, (uint32(1), address(game))));
         _driveToLevelTenLatchDay();
         emit log_named_uint("most mining calls in one driven day", maxDayCalls);
         assertLt(maxDayCalls, MAX_MINE_CALLS, "harness: every driven day drains before its cap");

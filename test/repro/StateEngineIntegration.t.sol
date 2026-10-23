@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+// Exercises GameMiner._mineFlip through the public Game.mineFlip entry, including
+// the pinned external-worker dispatch and its progress/rollback behavior.
+
 import {IJackpotBattle} from "../../contracts/interfaces/IJackpotBattle.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";

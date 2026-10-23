@@ -135,7 +135,7 @@ contract AnyInputHandler is Test {
     ///      resolves to the caller), sometimes an arbitrary small ID so unallocated IDs are probed too.
     function _id(uint256 seed) internal view returns (uint32) {
         if (seed % 8 == 7) return uint32((seed >> 8) % 64);
-        return game.walletIdOf(_p(seed));
+        return game.walletIdOf_g3120(_p(seed));
     }
 
     /// @dev Like `_id` but never 0, for doors where 0 reverts (third-party recipients).

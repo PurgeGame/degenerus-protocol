@@ -519,19 +519,19 @@ contract TerminalJackpotCohortIsolation is DeployProtocol {
         _decideEnding();
         vm.mockCallRevert(address(mockVRF), bytes4(keccak256("requestRandomWords((bytes32,uint256,uint16,uint32,uint32,bytes))")), abi.encodeWithSignature("Error(string)", "refused"));
         game.mineFlip(0); // arms and asks; the refusal is recorded
-        uint256 state = uint256(game.extsload(bytes32(0)));
+        uint256 state = uint256(game.extsload_g8132(bytes32(0)));
         uint256 stamp = (state >> 48) & type(uint48).max;
         assertGt(stamp, 1, "first attempt arms a real refusal timer");
         assertEq((state >> 254) & 1, 0, "failed request has no callback authority");
         assertEq((state >> 255) & 1, 0, "terminal session remains unpublished");
-        assertEq(uint256(game.extsload(bytes32(uint256(4)))), 1, "nonzero idle ID is retained");
+        assertEq(uint256(game.extsload_g8132(bytes32(uint256(4)))), 1, "nonzero idle ID is retained");
         mockVRF.fulfillRandomWordsRaw(1, address(game), 42);
         assertEq(RecyclingState.currentWord(address(game)), 0, "idle ID cannot authorize a terminal callback");
         for (uint256 i; i < 3; ++i) {
             vm.warp(vm.getBlockTimestamp() + 1 hours);
             // A refused request with nothing else to do returns without progress or reward.
             game.mineFlip(0);
-            state = uint256(game.extsload(bytes32(0)));
+            state = uint256(game.extsload_g8132(bytes32(0)));
             assertEq((state >> 48) & type(uint48).max, stamp, "refusal cannot reset the timeout");
             assertEq((state >> 254) & 1, 0, "refused request has no callback authority");
         }

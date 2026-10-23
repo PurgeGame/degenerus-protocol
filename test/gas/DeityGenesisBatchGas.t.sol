@@ -81,8 +81,8 @@ contract DeityGenesisBatchGasTest is DeployProtocol {
         assertEq(registryWrites, 0, "wallet table length untouched by genesis");
         assertEq(vaultWrites, 0, "Vault identity stored at construction, not genesis");
         assertEq(sdgnrsWrites, 0, "sDGNRS identity stored at construction, not genesis");
-        assertEq(game.walletIdOf(address(vault)), 1);
-        assertEq(game.walletIdOf(address(sdgnrs)), 2);
+        assertEq(game.walletIdOf_g3120(address(vault)), 1);
+        assertEq(game.walletIdOf_g3120(address(sdgnrs)), 2);
         assertEq(deityPass.ownerOf(0), address(vault));
         assertEq(deityPass.ownerOf(6), address(sdgnrs));
     }

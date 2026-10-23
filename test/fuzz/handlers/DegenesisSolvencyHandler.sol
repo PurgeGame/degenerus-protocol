@@ -235,7 +235,7 @@ contract DegenesisSolvencyHandler is Test {
         uint256 mode = modeSeed % 4;
         uint256 value = mode == 0 ? amount : mode == 1 ? amount + bound(modeSeed >> 8, 1, 1 ether) : mode == 2
             ? amount / 3 : 0;
-        uint32 id = game.walletIdOf(a);
+        uint32 id = game.walletIdOf_g3120(a);
         if (mode >= 2) {
             uint256 have = uint128(_balancesOf(id)) - 1 + (_balancesOf(id) >> 128);
             if (have < amount - value) {
@@ -311,7 +311,7 @@ contract DegenesisSolvencyHandler is Test {
     function fundAfking(uint256 actorSeed, uint256 amtSeed) external {
         address a = _actor(actorSeed);
         uint256 amt = bound(amtSeed, 0.01 ether, 20 ether);
-        uint32 id = game.walletIdOf(a);
+        uint32 id = game.walletIdOf_g3120(a);
         if (id == 0) return;
         vm.prank(a);
         try game.depositAfkingFunding{value: amt}(id) {
@@ -345,7 +345,7 @@ contract DegenesisSolvencyHandler is Test {
         uint256 poolBefore = game.claimablePoolView();
         int256 surplusBefore = surplus();
         vm.recordLogs();
-        uint32 recipient = extraSeed % 3 == 0 ? 0 : game.walletIdOf(_actor(extraSeed));
+        uint32 recipient = extraSeed % 3 == 0 ? 0 : game.walletIdOf_g3120(_actor(extraSeed));
         vm.prank(ContractAddresses.VAULT);
         try game.spendDegenesis(recipient, false, qty, box == 0 ? 0 : BoxOrderLib.boCustom(box), maxCost) {
             ++ghost_vaultSpends;

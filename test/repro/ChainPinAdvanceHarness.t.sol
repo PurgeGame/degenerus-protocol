@@ -63,7 +63,7 @@ contract ChainPinDecimatorHarness is DeployProtocol {
     function _burnedBy(Vm.Log[] memory logs) private view returns (uint256 amount) {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter == address(coin) && logs[i].topics[0] == BURN_EVENT) {
-                assertEq(uint32(uint256(logs[i].topics[1])), game.walletIdOf(HOUSE));
+                assertEq(uint32(uint256(logs[i].topics[1])), game.walletIdOf_g3120(HOUSE));
                 (uint256 spent,) = abi.decode(logs[i].data, (uint256, uint64));
                 amount += spent;
             }
@@ -80,7 +80,7 @@ contract ChainPinDecimatorHarness is DeployProtocol {
         _prepare(21, 4, 3, true);
         uint64 start = uint64(uint256(type(uint64).max) - room0);
         harness.setRoundTotal(5, start);
-        uint32 id = game.walletIdOf(HOUSE);
+        uint32 id = game.walletIdOf_g3120(HOUSE);
         vm.mockCall(
             address(game),
             abi.encodeWithSelector(IDegenerusGame.playerActivityScoreCachedById.selector, id),
@@ -301,7 +301,7 @@ contract ChainPinAfking is DeployProtocol {
         vm.deal(who, 1 ether);
         vm.prank(who);
         game.subscribe{value: 1 ether}(0, false, 1, seat);
-        id = game.walletIdOf(who);
+        id = game.walletIdOf_g3120(who);
     }
 
     /// forge-config: default.fuzz.runs = 24

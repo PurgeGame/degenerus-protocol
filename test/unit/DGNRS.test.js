@@ -476,7 +476,7 @@ describe("DGNRS", function () {
       // and emits RedemptionSubmitted, not Burn (Burn is only emitted post-gameOver)
       const tx = await sdgnrs.connect(alice).burn(amount);
       const ev = await getEvent(tx, sdgnrs, "RedemptionSubmitted");
-      expect(ev.args.player).to.equal(await game.walletIdOf(alice.address));
+      expect(ev.args.player).to.equal(await game.walletIdOf_g3120(alice.address));
       expect(ev.args.sdgnrsAmount).to.equal(amount);
     });
 
@@ -515,11 +515,11 @@ describe("DGNRS", function () {
       const tx = await sdgnrs.connect(alice).burn(sdgnrsAmount);
 
       const ev = await getEvent(tx, sdgnrs, "RedemptionSubmitted");
-      expect(ev.args.player).to.equal(await game.walletIdOf(alice.address));
+      expect(ev.args.player).to.equal(await game.walletIdOf_g3120(alice.address));
       expect(ev.args.sdgnrsAmount).to.equal(sdgnrsAmount);
       // Pricing and reservation happen when the next live request closes this batch.
       expect(ev.args.batchId).to.equal((await sdgnrs.redemptionBatchState()).openBatch);
-      const pending = await sdgnrs.pendingRedemptions(await game.walletIdOf(alice.address), ev.args.batchId);
+      const pending = await sdgnrs.pendingRedemptions(await game.walletIdOf_g3120(alice.address), ev.args.batchId);
       expect(pending.tokens).to.equal(sdgnrsAmount);
       expect(await sdgnrs.pendingRedemptionEthValue()).to.equal(0n);
     });
@@ -535,7 +535,7 @@ describe("DGNRS", function () {
       // The Burn event is only emitted on the deterministic post-gameOver path.
       const tx = await sdgnrs.connect(alice).burn(amount);
       const ev = await getEvent(tx, sdgnrs, "RedemptionSubmitted");
-      expect(ev.args.player).to.equal(await game.walletIdOf(alice.address));
+      expect(ev.args.player).to.equal(await game.walletIdOf_g3120(alice.address));
       expect(ev.args.sdgnrsAmount).to.equal(amount);
     });
 
@@ -590,11 +590,11 @@ describe("DGNRS", function () {
       await assertBurnAdmitted(sdgnrs, sdgnrsAmount);
       const tx = await sdgnrs.connect(alice).burn(sdgnrsAmount);
       const ev = await getEvent(tx, sdgnrs, "RedemptionSubmitted");
-      expect(ev.args.player).to.equal(await game.walletIdOf(alice.address));
+      expect(ev.args.player).to.equal(await game.walletIdOf_g3120(alice.address));
       expect(ev.args.sdgnrsAmount).to.equal(sdgnrsAmount);
       // The burn retains its holder share until request close.
       expect(ev.args.batchId).to.equal((await sdgnrs.redemptionBatchState()).openBatch);
-      const pending = await sdgnrs.pendingRedemptions(await game.walletIdOf(alice.address), ev.args.batchId);
+      const pending = await sdgnrs.pendingRedemptions(await game.walletIdOf_g3120(alice.address), ev.args.batchId);
       expect(pending.tokens).to.equal(sdgnrsAmount);
       expect(await sdgnrs.pendingRedemptionEthValue()).to.equal(0n);
       // No immediate stETH transfer on the gambling path

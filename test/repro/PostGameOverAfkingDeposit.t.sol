@@ -65,7 +65,7 @@ contract PostGameOverAfkingDeposit is DeployProtocol {
 
     function test_depositAfterFinalSweepReverts() public {
         uint32 sid = _giveWalletId(stranger);
-        uint32 vaultId = game.walletIdOf(address(vault));
+        uint32 vaultId = game.walletIdOf_g3120(address(vault));
         _driveToFinalSweep();
         uint256 gameBal0 = address(game).balance;
 

@@ -84,10 +84,10 @@ contract CrapsAccountsTest is CrapsPins {
         vm.prank(ContractAddresses.GAME);
         c.openBonusDay();
 
-        ownerId = game.registerWallet(owner, true);
-        walletId = game.registerWallet(wallet, true);
-        selfId = game.registerWallet(self, true);
-        game.registerWallet(stranger, true);
+        ownerId = game.registerWallet_g9539(owner, true);
+        walletId = game.registerWallet_g9539(wallet, true);
+        selfId = game.registerWallet_g9539(self, true);
+        game.registerWallet_g9539(stranger, true);
         smurfId = game.registerSmurf(ownerId);
         smurfBId = game.registerSmurf(ownerId);
         game.setOperatorApproval(walletId, operator, true);
@@ -227,7 +227,7 @@ contract CrapsAccountsTest is CrapsPins {
     function _succeeds(uint8 door, address caller, uint32 idArg, uint32 id, address payee, uint256 arg)
         internal
     {
-        uint32 callerId = game.walletIdOf(caller);
+        uint32 callerId = game.walletIdOf_g3120(caller);
         Before memory b = Before({
             callerIdWord: callerId == 0 ? 0 : c.idWord(callerId),
             accountWord: c.idWord(id),
@@ -361,14 +361,14 @@ contract CrapsAccountsTest is CrapsPins {
         // register it (the upgrade then finds no ticket and unwinds the registration).
         if (!_paying(door)) {
             _reverts(door, fresh, 0, CrapsBattleStorage.NoWalletId.selector, "unregistered self on a non-paying door");
-            assertEq(game.walletIdOf(fresh), 0, "no ID allocated");
+            assertEq(game.walletIdOf_g3120(fresh), 0, "no ID allocated");
         } else if (door == UPGRADE) {
             _reverts(door, fresh, 0, CrapsBattleStorage.NoSuchBet.selector, "unregistered self has no ticket");
-            assertEq(game.walletIdOf(fresh), 0, "the failed upgrade allocated nothing");
+            assertEq(game.walletIdOf_g3120(fresh), 0, "the failed upgrade allocated nothing");
         } else {
             (bool ok,) = _call(door, fresh, 0, 0);
             assertTrue(ok, "a paying self door registers the caller");
-            assertGt(game.walletIdOf(fresh), 0);
+            assertGt(game.walletIdOf_g3120(fresh), 0);
         }
     }
 
@@ -716,7 +716,7 @@ contract CrapsAccountsTest is CrapsPins {
             [uint32(0), smurfId, walletId, ownerId, smurfBId, game.walletCount() + 1 + (rawId % 1000), rawId];
         uint32 id = ids[idSeed % 7];
         uint8 door = doorSeed % 11;
-        uint32 account = door == 10 ? id : (id != 0 ? id : game.walletIdOf(caller));
+        uint32 account = door == 10 ? id : (id != 0 ? id : game.walletIdOf_g3120(caller));
         uint256 arg;
         // Protocol IDs 1..3 hold the house and vault seats the day opened with; prep only players.
         if (account > 3 && account <= game.walletCount() && door < 10) arg = _prep(door, account);

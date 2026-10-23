@@ -30,7 +30,7 @@ contract MockGame {
     mapping(uint32 => uint256) private accountMintHistory;
     mapping(uint32 => bool) private hasAccountMintHistory;
     function setMintHistoryById(uint32 id, uint256 value) external { accountMintHistory[id] = value; hasAccountMintHistory[id] = true; }
-    function mintPackedOfId(uint32 id) external view returns (uint256) {
+    function mintPackedOfId_g5372(uint32 id) external view returns (uint256) {
         if (hasAccountMintHistory[id]) return accountMintHistory[id];
         address player = ownerOfId[id];
         return hasMintHistory[player] ? mintHistory[player] : uint256(3) << 24;
@@ -65,8 +65,8 @@ contract MockGame {
     /// @dev Stable wallet IDs. By default every contact is an existing Game player and gets an ID;
     ///      strict mode applies the Game's rule (the first paying contact allocates, a non-paying
     ///      contact returns the existing ID or zero).
-    mapping(address => uint32) public walletIdOf;
-    function walletIdRoot() external pure returns (uint256 root) { assembly { root := walletIdOf.slot } }
+    mapping(address => uint32) public walletIdOf_g3120;
+    function walletIdRoot() external pure returns (uint256 root) { assembly { root := walletIdOf_g3120.slot } }
     /// @dev The reverse direction, also mirrored into the wallet-table slots `extsload` serves, so
     ///      `WalletTableLib.ownerOf` resolves a mock ID exactly as it resolves a Game ID.
     mapping(uint32 => address) public ownerOfId;
@@ -75,11 +75,11 @@ contract MockGame {
 
     function setStrictWalletIds(bool on) external { strictWalletIds = on; }
 
-    function registerWallet(address owner, bool allocate) external returns (uint32 id) {
-        id = walletIdOf[owner];
+    function registerWallet_g9539(address owner, bool allocate) external returns (uint32 id) {
+        id = walletIdOf_g3120[owner];
         if (id == 0 && (allocate || !strictWalletIds)) {
             id = ++walletCount;
-            walletIdOf[owner] = id;
+            walletIdOf_g3120[owner] = id;
             ownerOfId[id] = owner;
             slots[GameSlotKeys.walletElement(id)] = bytes32(uint256(uint160(owner)));
         }
@@ -109,7 +109,7 @@ contract MockGame {
 
     /// @dev The Game's account resolution: key, payee (the owner's key for a smurf) and whether
     ///      `caller` is the payee or an operator approved for `id`. Reverts `E` for 0 or unallocated.
-    function resolveAccount(uint32 id, address caller)
+    function resolveAccount_g502(uint32 id, address caller)
         external
         view
         returns (address key, address payee, bool authorized)
@@ -122,7 +122,7 @@ contract MockGame {
     }
 
 
-    function extsload(bytes32 slot) external view returns (bytes32) {
+    function extsload_g8132(bytes32 slot) external view returns (bytes32) {
         return slots[slot];
     }
 
@@ -384,7 +384,7 @@ abstract contract CrapsPins is Test {
     /// @dev mineFlip's Maintenance stage, isolated: the scheduled-cursor worker, called as the Game.
     function _maintain(CrapsViews c) internal returns (MineFlipGas.Result memory) {
         vm.prank(ContractAddresses.GAME);
-        return JackpotBattle(address(c)).runCrapsMaintenance(gasleft());
+        return JackpotBattle(address(c)).runCrapsMaintenance_g10712(gasleft());
     }
 
     /// @dev ONE CRAPS STEP, dispatched the way mineFlip selects it: while the read cohort is the
@@ -406,13 +406,13 @@ abstract contract CrapsPins is Test {
     address internal vaultOwner = makeAddr("vaultOwner");
     uint256 private mockWalletIdRoot;
 
-    /// @dev The Game-mock wallet ID of `who`, read straight from storage (`walletIdOf` is the
+    /// @dev The Game-mock wallet ID of `who`, read straight from storage (`walletIdOf_g3120` is the
     ///      mapping root obtained from the mock compiler layout) so a pending `vm.prank` / `vm.expectRevert` still reaches the next
     ///      real call. An unregistered wallet is registered first, which does consume them: register
     ///      actors in `setUp` when the id is read between a prank and its call.
     function _idFor(address who) internal returns (uint32 id) {
         id = uint32(uint256(vm.load(address(game), keccak256(abi.encode(who, mockWalletIdRoot)))));
-        if (id == 0) id = game.registerWallet(who, true);
+        if (id == 0) id = game.registerWallet_g9539(who, true);
     }
 
     uint256 internal constant PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
@@ -434,9 +434,9 @@ abstract contract CrapsPins is Test {
         game = MockGame(ContractAddresses.GAME);
         mockWalletIdRoot = game.walletIdRoot();
         // Protocol wallets hold IDs 1..3 from deployment, as in the Game.
-        game.registerWallet(ContractAddresses.VAULT, true);
-        game.registerWallet(ContractAddresses.SDGNRS, true);
-        game.registerWallet(ContractAddresses.GNRUS, true);
+        game.registerWallet_g9539(ContractAddresses.VAULT, true);
+        game.registerWallet_g9539(ContractAddresses.SDGNRS, true);
+        game.registerWallet_g9539(ContractAddresses.GNRUS, true);
         flip = MockFlip(ContractAddresses.COIN);
         coinflip = MockCoinflip(ContractAddresses.COINFLIP);
         vault = MockVault(ContractAddresses.VAULT);

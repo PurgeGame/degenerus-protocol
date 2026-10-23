@@ -27,7 +27,7 @@ contract FoilAfkingFunding is DeployProtocol {
     function _aid(address a) internal returns (uint32 id) {
         id = _aidCache[a];
         if (id == 0) {
-            id = game.walletIdOf(a);
+            id = game.walletIdOf_g3120(a);
             if (id == 0) id = _giveWalletId(a);
             _aidCache[a] = id;
         }
@@ -303,7 +303,7 @@ contract FoilAfkingFundingDegenesis is DegenesisDeployProtocol {
         assertEq(game.degenesisCreditOf(freshBuyer), cost / 4, "fresh-funded foil accrues 25% of the gross premium");
 
         address afkBuyer = _player("foilCreditAfk");
-        uint32 afkId = game.walletIdOf(afkBuyer);
+        uint32 afkId = game.walletIdOf_g3120(afkBuyer);
         vm.prank(afkBuyer);
         game.depositAfkingFunding{value: cost}(afkId);
         vm.prank(afkBuyer);

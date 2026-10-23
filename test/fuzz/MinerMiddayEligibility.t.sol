@@ -32,7 +32,7 @@ contract MinerMiddayEligibilityTest is Test {
         vm.etch(ContractAddresses.GAME, address(new MinerMiddayEligibilityHarness()).code);
         game = MinerMiddayEligibilityHarness(ContractAddresses.GAME);
         vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
-        vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("minerMaintenancePending()"), abi.encode(false));
+        vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("minerMaintenancePending_g11976()"), abi.encode(false));
         vm.mockCall(ContractAddresses.COINFLIP, abi.encodeWithSignature("creditFlip_g317(uint32,uint256)"), bytes(""));
         vm.mockCall(ContractAddresses.VRF_COORDINATOR, abi.encodeWithSelector(IVRFCoordinator.getSubscription.selector),
             abi.encode(uint96(100 ether), uint96(0), uint64(0), address(0), new address[](0)));

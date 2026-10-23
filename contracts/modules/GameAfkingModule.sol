@@ -338,11 +338,13 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
     function _tryFundAfkingSteth(
         uint32 subscriber,
         uint256 ethValue,
-        uint256 funding
+        uint256 funding,
+        MineFlipGas.Meter memory meter
     ) private returns (uint256) {
         if (subscriber == VAULT_WALLET_ID || subscriber == SDGNRS_WALLET_ID) return funding;
-        (bool ok, bytes memory result) = BoundedCall.callRemaining(address(this), 1_000_000, 300_000,
-            abi.encodeWithSelector(IDegenerusGame.pullAfkingSteth.selector, subscriber, _payee(_walletElement(subscriber)), ethValue - funding), 32);
+        (bool ok, bytes memory result) = BoundedCall.callRemaining(meter, address(this), 1_000_000, 300_000,
+            abi.encodeWithSelector(IDegenerusGame.pullAfkingSteth.selector, subscriber, _payee(_walletElement(subscriber)), ethValue - funding, MineFlipGas.child(meter, 300_000)), 32);
+        if (!ok) BoundedCall.rethrowTrustedGasFailure();
         return ok ? funding + abi.decode(result, (uint256)) : funding;
     }
 
@@ -361,22 +363,23 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
                 || source != _payee(_walletElement(subId))
         ) revert AfkingStethPullFailed();
 
-        uint256 balanceBefore = _stethFundingWord(abi.encodeWithSelector(IStETH.balanceOf.selector, address(this)));
-        uint256 shares = _stethFundingWord(abi.encodeWithSelector(IStETH.getSharesByPooledEth.selector, shortfall));
+        MineFlipGas.Meter memory meter = MineFlipGas.fromCall(100);
+        uint256 balanceBefore = _stethFundingWord(meter, abi.encodeWithSelector(IStETH.balanceOf.selector, address(this)));
+        uint256 shares = _stethFundingWord(meter, abi.encodeWithSelector(IStETH.getSharesByPooledEth.selector, shortfall));
         // Lido floors both conversions; include the one rounding share if needed.
-        if (_stethFundingWord(abi.encodeWithSelector(IStETH.getPooledEthByShares.selector, shares)) < shortfall) ++shares;
-        uint256 quote = _stethFundingWord(abi.encodeWithSelector(IStETH.getPooledEthByShares.selector, shares));
-        if (_stethFundingWord(abi.encodeWithSelector(IStETH.sharesOf.selector, source)) < shares) return 0;
+        if (_stethFundingWord(meter, abi.encodeWithSelector(IStETH.getPooledEthByShares.selector, shares)) < shortfall) ++shares;
+        uint256 quote = _stethFundingWord(meter, abi.encodeWithSelector(IStETH.getPooledEthByShares.selector, shares));
+        if (_stethFundingWord(meter, abi.encodeWithSelector(IStETH.sharesOf.selector, source)) < shares) return 0;
         // Unlimited allowances are valid; this word is only compared, never added or multiplied.
-        (bool allowanceOk, uint256 allowance) = BoundedCall.staticWord(ContractAddresses.STETH_TOKEN,
-            EXTERNAL_READ_GAS, abi.encodeWithSelector(IStETH.allowance.selector, source, address(this)));
+        (bool allowanceOk, uint256 allowance) = BoundedCall.staticWordRemaining(meter, ContractAddresses.STETH_TOKEN,
+            EXTERNAL_READ_GAS, 100_000, abi.encodeWithSelector(IStETH.allowance.selector, source, address(this)));
         if (!allowanceOk) revert AfkingStethPullFailed();
         if (allowance < quote) return 0;
-        (bool ok, bytes memory result) = BoundedCall.call(ContractAddresses.STETH_TOKEN, 0, 300_000,
+        (bool ok, bytes memory result) = BoundedCall.callRemaining(meter, ContractAddresses.STETH_TOKEN, 300_000, 200_000,
             abi.encodeWithSelector(IStETH.transferSharesFrom.selector, source, address(this), shares), 32);
         if (!ok) revert AfkingStethPullFailed();
         uint256 transferred = abi.decode(result, (uint256));
-        uint256 afterBalance = _stethFundingWord(abi.encodeWithSelector(IStETH.balanceOf.selector, address(this)));
+        uint256 afterBalance = _stethFundingWord(meter, abi.encodeWithSelector(IStETH.balanceOf.selector, address(this)));
         if (afterBalance < balanceBefore) revert AfkingStethPullFailed();
         received = afterBalance - balanceBefore;
 
@@ -395,9 +398,9 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
         emit AfkingStethFunded(subId, shortfall, received);
     }
 
-    function _stethFundingWord(bytes memory input) private view returns (uint256 value) {
+    function _stethFundingWord(MineFlipGas.Meter memory meter, bytes memory input) private view returns (uint256 value) {
         bool ok;
-        (ok, value) = BoundedCall.staticWord(ContractAddresses.STETH_TOKEN, EXTERNAL_READ_GAS, input);
+        (ok, value) = BoundedCall.staticWordRemaining(meter, ContractAddresses.STETH_TOKEN, EXTERNAL_READ_GAS, 100_000, input);
         if (!ok || value > type(uint128).max) revert AfkingStethPullFailed();
     }
 
@@ -640,6 +643,7 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
     }
 
     struct SubscriberWork {
+        MineFlipGas.Meter meter;
         uint256 processed;
         uint256 mp;
         uint256 cursor;
@@ -653,7 +657,7 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
         private returns (MineFlipGas.Result memory result)
     {
         SubscriberWork memory c;
-        MineFlipGas.Meter memory meter = MineFlipGas.start(gasAllowance);
+        c.meter = MineFlipGas.start(gasAllowance);
         if (processDay != _afkingResetDay || processDay <= dailyIdx) revert E();
         if (subsFullyProcessed) { result.done = true; return result; }
         if (!_rngComplete() || rngLockedFlag || _rngRequestActive() || _livenessTriggered()) return result;
@@ -693,7 +697,7 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
         // items use the remaining caller budget. The attempted-level latch makes even a no-buy
         // probe resumable.
         if (!swept && currentLevel > _sdgnrsBonusLevel) {
-            if (!MineFlipGas.canRun(meter, SUBSCRIBER_WHALE_GAS, SUBSCRIBER_TAIL_GAS)) return result;
+            if (!MineFlipGas.canRun(c.meter, SUBSCRIBER_WHALE_GAS, SUBSCRIBER_TAIL_GAS)) return result;
             _sdgnrsBonusLevel = currentLevel;
             // Before the whale module sizes its budget, sDGNRS AFKing funding is topped up to its
             // target, kept whether or not a group is bought. The STAGE gate above already
@@ -710,7 +714,7 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
             if (!ok) _revertDelegate(data);
             abi.decode(data, (uint256)); // Authenticate the pinned worker's return shape.
             result.progressed = true;
-            MineFlipGas.markProgress(meter);
+            MineFlipGas.markProgress(c.meter);
         }
 
         c.cursor = _subCursor;
@@ -731,8 +735,8 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
                 ? c.cursor : SUBSCRIBER_CAP - (c.cursor - SUBSCRIBER_TICKET_PHASE);
             uint256 lane = _subLaneAt(position);
             uint32 element = uint32(lane);
-            if (!MineFlipGas.canRun(meter, element == 0 ? 0 : SUBSCRIBER_ITEM_GAS, SUBSCRIBER_TAIL_GAS)) break;
-            MineFlipGas.markProgress(meter);
+            if (!MineFlipGas.canRun(c.meter, element == 0 ? 0 : SUBSCRIBER_ITEM_GAS, SUBSCRIBER_TAIL_GAS)) break;
+            MineFlipGas.markProgress(c.meter);
             if (element == 0) {
                 result.progressed = true;
                 if (c.cursor < SUBSCRIBER_TICKET_PHASE) {
@@ -766,7 +770,7 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
                 _resolveBuy(lane, c.mp, swept ? 0 : uint128(balances));
             uint256 funding = balances >> 128;
             if (funding < ethValue) {
-                funding = _tryFundAfkingSteth(element, ethValue, funding);
+                funding = _tryFundAfkingSteth(element, ethValue, funding, c.meter);
                 // A stETH pull credits the prepaid half.
                 balances = balancesPacked[element];
             }
@@ -852,9 +856,9 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
             subsFullyProcessed = true;
             _afkingEndpointDay = processDay;
             result.progressed = true;
-            MineFlipGas.markProgress(meter);
+            MineFlipGas.markProgress(c.meter);
         }
-        MineFlipGas.finish(meter);
+        MineFlipGas.finish(c.meter);
     }
 
     /// @dev Route a chunk's batched afking spend to the prize pools, mirroring the normal-buy

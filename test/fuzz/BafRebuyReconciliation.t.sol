@@ -184,7 +184,7 @@ contract BafRebuyReconciliationTest is DeployProtocol {
         emit log_named_uint("BAF reservation", reserve);
 
         uint256 word = host.brWord();
-        assertEq(jackpots.bafHeadWinner(10, word, 0), game.walletIdOf(buyer), "the injected bettor tops the board");
+        assertEq(jackpots.bafHeadWinner(10, word, 0), game.walletIdOf_g3120(buyer), "the injected bettor tops the board");
         assertEq(jackpots.bafHeadWinner(10, word, 1), 0, "nobody deposited on the armed day");
         assertEq(jackpots.bafHeadWinner(10, word, 2), 0, "the board has no third or fourth place");
 
@@ -217,7 +217,7 @@ contract BafRebuyReconciliationTest is DeployProtocol {
         bool topPaid;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics.length == 4 && logs[i].topics[0] == ETH_SIG
-                && logs[i].topics[1] == bytes32(uint256(game.walletIdOf(buyer)))
+                && logs[i].topics[1] == bytes32(uint256(game.walletIdOf_g3120(buyer)))
                 && logs[i].topics[3] == bytes32(uint256(BAF_TRAIT_SENTINEL))
                 && keccak256(logs[i].data) == keccak256(abi.encode((uint256(pool) / 10) / 2, uint256(0)))) {
                 topPaid = true;

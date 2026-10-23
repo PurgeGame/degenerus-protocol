@@ -120,7 +120,7 @@ contract FoilSnapPayout is DeployProtocol {
             ) {
                 bought++;
             } catch {}
-            _fid[i] = game.walletIdOf(_fb[i]);
+            _fid[i] = game.walletIdOf_g3120(_fb[i]);
         }
         emit log_named_uint("foil packs bought", bought);
         // The ticket cohort is part of the cloned trajectory: it moves the pools and the
@@ -181,7 +181,7 @@ contract FoilSnapPayout is DeployProtocol {
             // fired ("re-seed the run") no matter which draw was replayed — 30 foil buyers still
             // produced zero. Re-seeding was never the remedy; reading the right lane is.
             flip += coinflip.coinflipAmount(_fb[i]);
-            wx += wwxrp.claimable(game.walletIdOf(_fb[i]));
+            wx += wwxrp.claimable(game.walletIdOf_g3120(_fb[i]));
         }
     }
 

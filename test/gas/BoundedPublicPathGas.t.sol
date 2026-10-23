@@ -43,7 +43,7 @@ contract BoundedPublicPathGasTest is BoundedDeployProtocol, BoundedGasProbe {
         vm.etch(address(crapsBattle), vm.getDeployedCode("CrapsBattle.sol:CrapsBattle"));
         vm.warp(block.timestamp + 20 days);
         _seed(abi.encodeCall(BoundedPublicSeeder.seed, (PLAYER)));
-        playerId = game.walletIdOf(PLAYER);
+        playerId = game.walletIdOf_g3120(PLAYER);
         vm.deal(PLAYER, 1000 ether);
         vm.deal(address(game), 1000 ether);
         vm.prank(address(game)); coin.mintForGame(PLAYER, 10_000_000);

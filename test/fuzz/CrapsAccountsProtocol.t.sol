@@ -26,7 +26,7 @@ contract CrapsAccountsProtocolTest is DeployProtocol {
     bytes4 internal constant GAME_E = bytes4(keccak256("E()"));
     bytes4 internal constant BURN_FOR_CRAPS = bytes4(keccak256("burnCoinForCraps(address,uint32,uint256)"));
     bytes4 internal constant RECORD_CRAPS = bytes4(keccak256("recordCrapsAction_g14623(uint32,uint8)"));
-    bytes4 internal constant RESOLVE_ACCOUNT = bytes4(keccak256("resolveAccount(uint32,address)"));
+    bytes4 internal constant RESOLVE_ACCOUNT = bytes4(keccak256("resolveAccount_g502(uint32,address)"));
     bytes32 internal constant COMP_SPENT = keccak256("CrapsCompSpent(uint32,uint256)");
 
     address internal owner = makeAddr("pacct-owner");
@@ -83,7 +83,7 @@ contract CrapsAccountsProtocolTest is DeployProtocol {
         vm.prank(o);
         id = game.createSmurf{value: price}(bytes32(0), MintPaymentKind.DirectEth);
         bool authorized;
-        (,, authorized) = game.resolveAccount(id, o);
+        (,, authorized) = game.resolveAccount_g502(id, o);
         account = id;
         assertTrue(authorized, "fixture: the owner may act for its smurf");
     }
@@ -95,7 +95,7 @@ contract CrapsAccountsProtocolTest is DeployProtocol {
 
 
     function _idWord(uint32 id) internal view returns (uint256) {
-        return uint256(crapsBattle.extsload(keccak256(abi.encode(uint256(id), crapsBattle.passCreditsByIdSlot()))));
+        return uint256(crapsBattle.extsload_g8132(keccak256(abi.encode(uint256(id), crapsBattle.passCreditsByIdSlot()))));
     }
 
 
@@ -134,7 +134,7 @@ contract CrapsAccountsProtocolTest is DeployProtocol {
         bytes32 s = GameSlotKeys.mintPacked(who);
         uint256 w = uint256(vm.load(address(game), s));
         vm.store(address(game), s, bytes32((w & ~uint256(type(uint48).max)) | lastLevel | (levelCount << 24)));
-        assertEq(uint24(game.mintPackedOfId(who) >> 24), levelCount, "fixture: mint word slot");
+        assertEq(uint24(game.mintPackedOfId_g5372(who) >> 24), levelCount, "fixture: mint word slot");
     }
 
     // ── tests ────────────────────────────────────────────────────────────────

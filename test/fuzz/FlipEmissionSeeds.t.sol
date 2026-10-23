@@ -39,7 +39,7 @@ contract FlipEmissionSeeds is DeployProtocol {
     ///      (tagged seven-day pages, 32-bit whole-FLIP lanes). Read the packed word
     ///      and decode `day`'s lane back to wei.
     function _stakeOf(uint24 day, address player) internal view returns (uint256) {
-        return CoinflipStorage.read(address(coinflip), game.walletIdOf(player), day);
+        return CoinflipStorage.read(address(coinflip), game.walletIdOf_g3120(player), day);
     }
 
     /// @dev Resolve day `epoch` as the GAME with a win (bit 0 = 1) or loss (bit 0 = 0) word.

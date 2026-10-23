@@ -94,7 +94,7 @@ describe("WhaleBoonDeityLapse", function () {
   }
 
   async function readWhaleLane(game, player) {
-    const [slot0] = await game.boonPacked(await game.walletIdOf(player));
+    const [slot0] = await game.boonPacked(await game.walletIdOf_g3120(player));
     const whaleDay = (slot0 >> BP_WHALE_DAY_SHIFT) & 0xffffffn;
     const deityWhaleDay = (slot0 >> BP_DEITY_WHALE_DAY_SHIFT) & 0xffffffn;
     const tier = (slot0 >> BP_WHALE_TIER_SHIFT) & 3n;
@@ -166,7 +166,7 @@ describe("WhaleBoonDeityLapse", function () {
     expect(before.deityWhaleDay).to.equal(0n, "seeded lane must be lootbox-rolled (deityWhaleDay 0)");
 
     // Before the fix this would be a silent no-op: newTier(1) <= existingTier(3).
-    await game.connect(alice).issueDeityBoon(await game.walletIdOf(alice.address), await giveWalletId(game, bob.address), slot);
+    await game.connect(alice).issueDeityBoon(await game.walletIdOf_g3120(alice.address), await giveWalletId(game, bob.address), slot);
 
     const after_ = await readWhaleLane(game, bob.address);
     expect(after_.tier).to.equal(1n, "dead lane must accept the fresh (lower) deity gift, tier 1");
@@ -190,7 +190,7 @@ describe("WhaleBoonDeityLapse", function () {
     const before = await readWhaleLane(game, bob.address);
     expect(before.tier).to.equal(3n, "seeded tier must start at 3");
 
-    await game.connect(alice).issueDeityBoon(await game.walletIdOf(alice.address), await giveWalletId(game, bob.address), slot);
+    await game.connect(alice).issueDeityBoon(await game.walletIdOf_g3120(alice.address), await giveWalletId(game, bob.address), slot);
 
     const after_ = await readWhaleLane(game, bob.address);
     expect(after_.tier).to.equal(3n, "live tier-3 lane must reject the lower (tier 1) gift");

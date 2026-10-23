@@ -180,7 +180,7 @@ const forbidden = [
   ['mod:Mint', 'withdrawAfkingFunding(uint32,uint256)'],
   ['mod:Boon', 'consumePurchaseBoost(uint32)'],
   ['mod:Lootbox', 'beginBoxOrder(uint32,uint256)'], ['mod:Lootbox', 'applyBoxOrderScore(uint256,uint256)'],
-  ['mod:Ticket', 'registerWallet(address,bool)'], ['mod:Ticket', 'registerWalletIdentity(address)'],
+  ['mod:Ticket', 'registerWallet(address,bool)'], ['mod:Ticket', 'registerWallet_g9539(address,bool)'], ['mod:Ticket', 'registerWalletIdentity(address)'],
   ['mod:Afking', 'recordAfkingSecondary(uint32,uint16)'], ['mod:Afking', 'floorAfkingStreakBase(uint32,uint16)'],
 ];
 const edges = forbidden.map(([name, sig]) => {

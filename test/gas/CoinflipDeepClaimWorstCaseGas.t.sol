@@ -100,7 +100,7 @@ contract CoinflipDeepClaimWorstCaseGas is DeployProtocol {
 
     /// @dev A stake on every day in [0, n] for `p`. Whole-slot writes for speed.
     function _installStakes(address p, uint24 n) internal {
-        uint32 id = game.walletIdOf(p);
+        uint32 id = game.walletIdOf_g3120(p);
         uint24 first = n >= WINDOW ? n - WINDOW + 1 : 0;
         for (uint256 day = first; day <= n; ++day) CoinflipStorage.set(address(coinflip), id, uint24(day), STAKE);
     }
@@ -111,7 +111,7 @@ contract CoinflipDeepClaimWorstCaseGas is DeployProtocol {
     function _installPlayerState(address p, uint24 lastClaim, uint24 startDay, bool rebuyEnabled, uint128 takeProfit)
         internal
     {
-        bytes32 base = keccak256(abi.encode(game.walletIdOf(p), uint256(2)));
+        bytes32 base = keccak256(abi.encode(game.walletIdOf_g3120(p), uint256(2)));
         uint256 w0 = (uint256(lastClaim) << 128) | (uint256(startDay) << 152);
         if (rebuyEnabled) w0 |= uint256(1) << 176;
         vm.store(address(coinflip), base, bytes32(w0));
@@ -182,7 +182,7 @@ contract CoinflipDeepClaimWorstCaseGas is DeployProtocol {
             uint256(WINDOW - 1) * _winPayout(),
             "settled & minted exactly 89 win payouts (proves all 90 days walked)"
         );
-        bytes32 base = keccak256(abi.encode(game.walletIdOf(p), uint256(2)));
+        bytes32 base = keccak256(abi.encode(game.walletIdOf_g3120(p), uint256(2)));
         assertEq(uint24(uint256(vm.load(address(coinflip), base)) >> 128), COLD_LATEST, "cursor at the frontier");
         (bool enAfter,,,) = coinflip.coinflipAutoRebuyInfo(p);
         assertFalse(enAfter, "rebuy off after the walk");

@@ -122,7 +122,7 @@ abstract contract RedemptionFixture is DeployProtocol {
     }
 
     function _burn(address player, uint256 amount) internal {
-        if (game.walletIdOf(player) == 0) _giveWalletId(player);
+        if (game.walletIdOf_g3120(player) == 0) _giveWalletId(player);
         vm.prank(player);
         sdgnrs.burn(amount);
     }
@@ -139,7 +139,7 @@ abstract contract RedemptionFixture is DeployProtocol {
     }
 
     function _claimTokens(address player, uint32 id) internal view returns (uint256 tokens) {
-        (tokens,) = sdgnrs.pendingRedemptions(game.walletIdOf(player), id);
+        (tokens,) = sdgnrs.pendingRedemptions(game.walletIdOf_g3120(player), id);
     }
 
     function _batch(uint32 id)
@@ -192,7 +192,7 @@ abstract contract RedemptionFixture is DeployProtocol {
     {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(sdgnrs) || logs[i].topics[0] != CLAIMED_TOPIC) continue;
-            if (uint32(uint256(logs[i].topics[1])) != game.walletIdOf(player)) continue;
+            if (uint32(uint256(logs[i].topics[1])) != game.walletIdOf_g3120(player)) continue;
             if (uint32(uint256(logs[i].topics[2])) != id) continue;
             (, direct, lootbox,) = abi.decode(logs[i].data, (uint16, uint256, uint256, uint256));
             return (true, direct, lootbox);

@@ -61,7 +61,7 @@ abstract contract GrowthFoilFixture is DeployProtocol {
         GrowthFoilGasSeeder(address(game)).seed(PLAYER, mintData);
         mintSlot = GrowthFoilGasSeeder(address(game)).mintSlot(PLAYER);
         vm.etch(address(game), code);
-        pid = game.walletIdOf(PLAYER);
+        pid = game.walletIdOf_g3120(PLAYER);
     }
 
     function _daily(bool foil) internal {

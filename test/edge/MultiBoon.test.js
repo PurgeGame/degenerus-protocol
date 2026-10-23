@@ -117,7 +117,7 @@ describe("Multi-category boon coexistence", function () {
         await giveWalletId(game, recipient.address);
         const tx = await game
           .connect(deity)
-          .issueDeityBoon(await game.walletIdOf(deity.address), await giveWalletId(game, recipient.address), slot);
+          .issueDeityBoon(await game.walletIdOf_g3120(deity.address), await giveWalletId(game, recipient.address), slot);
         // DeityBoonIssued emitted via delegatecall -- decode with lootboxModule ABI
         const events = await getEvents(tx, lootboxModule, "DeityBoonIssued");
         expect(events.length).to.equal(1);
@@ -293,7 +293,7 @@ describe("Multi-category boon coexistence", function () {
         await giveWalletId(game, bob.address);
         await game
           .connect(alice)
-          .issueDeityBoon(await game.walletIdOf(alice.address), await giveWalletId(game, bob.address), slot);
+          .issueDeityBoon(await game.walletIdOf_g3120(alice.address), await giveWalletId(game, bob.address), slot);
         deityBoonType = Number(slots[slot]);
         break;
       }
@@ -353,7 +353,7 @@ describe("Multi-category boon coexistence", function () {
           await giveWalletId(game, bob.address);
           const tx = await game
             .connect(alice)
-            .issueDeityBoon(await game.walletIdOf(alice.address), await giveWalletId(game, bob.address), slot);
+            .issueDeityBoon(await game.walletIdOf_g3120(alice.address), await giveWalletId(game, bob.address), slot);
           const events = await getEvents(tx, lootboxModule, "DeityBoonIssued");
           if (events.length > 0) {
             const emittedType = Number(events[0].args.boonType);

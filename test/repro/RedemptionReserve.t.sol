@@ -36,7 +36,7 @@ contract RedemptionReserveHarness is DegenerusGameRngUtils {
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
         return abi.decode(data, (uint256));
     }
-    function extsload(bytes32 slot) external view returns (bytes32 value) {
+    function extsload_g8132(bytes32 slot) external view returns (bytes32 value) {
         assembly ("memory-safe") { value := sload(slot) }
     }
     function pools() external view returns (uint256) {
@@ -84,7 +84,7 @@ contract RedemptionReserveTest is RedemptionFixture {
         vm.warp(vm.getBlockTimestamp() + 1 days);
         _fundOrdinary(1_000 ether);
         mockStETH.mint(address(game), 1_000 ether);
-        _callHarness(abi.encodeCall(RedemptionReserveHarness.seedBorrower, (game.walletIdOf(bob))));
+        _callHarness(abi.encodeCall(RedemptionReserveHarness.seedBorrower, (game.walletIdOf_g3120(bob))));
         uint256 burnAmount = sdgnrs.totalSupply() / 100;
         _burn(alice, burnAmount);
         _burn(bob, burnAmount);
@@ -103,7 +103,7 @@ contract RedemptionReserveTest is RedemptionFixture {
         assertLt(game.claimableWinningsOf(address(sdgnrs)), ordinary);
         ordinary = game.claimableWinningsOf(address(sdgnrs));
         DegenerusGameLens lens = new DegenerusGameLens();
-        uint32 borrower = game.walletIdOf(bob);
+        uint32 borrower = game.walletIdOf_g3120(bob);
         uint24 due = game.level() + 1;
         DegenerusGameLens.LoanQuote memory q = lens.previewBorrow(address(game), borrower, due, ordinary - 1 ether);
         assertTrue(q.eligible, "borrow actually eligible");

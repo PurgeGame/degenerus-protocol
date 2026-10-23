@@ -103,7 +103,7 @@ contract AnyInputSafetyDegenesis is AnyInputSafety, DegenesisWeekOpening {
         // ---------------- bystander: normal flows only, then it never acts again ----------------
         vm.startPrank(BYSTANDER);
         game.purchaseWhalePass{value: 2.4 ether}(0, 1, bytes32(0));
-        game.depositAfkingFunding{value: 5 ether}(game.walletIdOf(BYSTANDER));
+        game.depositAfkingFunding{value: 5 ether}(game.walletIdOf_g3120(BYSTANDER));
         game.purchaseDeityPass{value: 45 ether}(0, 5, bytes32(0)); // overpay lands in its own afking
         (,,,, uint256 priceWei) = game.purchaseInfo();
         game.purchase{value: priceWei * 10}(0, 4000, 0, bytes32(0), MintPaymentKind.DirectEth, false);
@@ -123,7 +123,7 @@ contract AnyInputSafetyDegenesis is AnyInputSafety, DegenesisWeekOpening {
         // Account loans: sDGNRS lends only from its own claimable (empty this early), so the
         // vault owner enables the vault fallback and an actor funds the vault's prepaid afking
         // (permissionless depositAfkingFunding). Both are ordinary flows.
-        uint32 vaultId = game.walletIdOf(address(vault));
+        uint32 vaultId = game.walletIdOf_g3120(address(vault));
         vm.prank(actors[5]);
         game.depositAfkingFunding{value: 20 ether}(vaultId);
         vm.prank(ContractAddresses.CREATOR);

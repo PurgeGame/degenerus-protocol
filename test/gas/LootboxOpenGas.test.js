@@ -152,7 +152,7 @@ async function measureOpen(f, state, player, position, count, allowance = OPEN_G
   expect(await entryAt(f.game, state.index ^ 1n, 0), "unrevealed next-index order survives").to.equal(state.nextOrder);
   const summaries = boxResolutions(f, [receipt], (await f.game.getAddress()).toLowerCase());
   expect(summaries.length, "every consumed box publishes its actual resolution").to.be.gte(Number(count));
-  const playerId = await f.game.walletIdOf(player.address);
+  const playerId = await f.game.walletIdOf_g3120(player.address);
   for (const event of summaries) expect(event.args[0]).to.equal(playerId);
   console.log(`      [OPEN-BOXES] boxes=${count} gas=${receipt.gasUsed} declared-entry-bound=${declared} allowance=${allowance}`);
   return receipt;

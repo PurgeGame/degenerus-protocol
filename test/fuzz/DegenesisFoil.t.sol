@@ -52,7 +52,7 @@ contract DegenesisFoilMatch is DegenesisFixture {
 
     function test_NoFoilMatchBeforeFirstPostDegenesisDraw() public {
         address alice = _player("alice", 10 ether);
-        uint32 id = game.walletIdOf(alice);
+        uint32 id = game.walletIdOf_g3120(alice);
         _drain();
         uint256 draws;
         for (uint256 d = 2; d <= 8; ++d) {

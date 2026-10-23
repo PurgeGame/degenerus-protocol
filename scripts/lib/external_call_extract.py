@@ -34,6 +34,7 @@ syntactic call is reported and the manifest records the reviewed reachability ju
 """
 
 import os
+from pathlib import Path
 import re
 import sys
 
@@ -76,6 +77,10 @@ DEFAULT_SCOPE = [
     "modules/DegenerusGameDegeneretteModule.sol",
     "modules/DegenerusGameDegenesisModule.sol",
 ]
+
+# New consolidated components cannot silently escape the source census.
+DEFAULT_SCOPE = sorted(set(DEFAULT_SCOPE) | {"modules/" + p.name for p in Path(CONTRACTS_DIR, "modules").glob("*.sol")}
+                       | {"libraries/BoundedCall.sol"})
 
 SCOPE_FILES = DEFAULT_SCOPE
 if os.environ.get("SCOPE_FILES"):
@@ -264,6 +269,8 @@ def main():
                 if inst_re:
                     for m in inst_re.finditer(line):
                         found.append((m.start(), f"{instances[m.group(1)]}.{m.group(2)}"))
+                for m in re.finditer(r"\bBoundedCall\.(callRemaining|callValueRemaining|callBoolRemaining|staticcallRemaining|staticWordRemaining)\s*\(", line):
+                    found.append((m.start(), "bounded:" + m.group(1)))
                 for m in LOWLEVEL_RE.finditer(line):
                     kind = m.group(1)
                     # Selector-bound delegatecall: look ahead within the statement for I*.fn.selector.

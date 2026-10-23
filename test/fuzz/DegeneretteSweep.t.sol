@@ -248,7 +248,7 @@ contract DegeneretteSweep is DeployProtocol {
         assertEq(seen, 2, "two placements");
 
         uint256 a = game.degeneretteBetInfo(IDX, 1);
-        assertEq(uint32(a), game.walletIdOf(alice), "owner id");
+        assertEq(uint32(a), game.walletIdOf_g3120(alice), "owner id");
         assertEq((a >> 32) & 0x1F, SYMBOL, "symbol");
         assertEq((a >> 37) & 0x1F, 3, "spins");
         assertEq((a >> 42) & 1, ETH, "currency");
@@ -257,7 +257,7 @@ contract DegeneretteSweep is DeployProtocol {
         assertEq(a >> 124, 0, "reserved bits");
 
         uint256 b = game.degeneretteBetInfo(IDX, 2);
-        assertEq(uint32(b), game.walletIdOf(bob), "second owner id");
+        assertEq(uint32(b), game.walletIdOf_g3120(bob), "second owner id");
         assertEq((b >> 42) & 1, FLIP, "FLIP currency");
         assertEq((b >> 60) & type(uint64).max, 200, "FLIP stake in whole FLIP");
         bytes32 base = keccak256(abi.encode(bytes32(QUEUE_SLOT + uint256(IDX))));
@@ -344,7 +344,7 @@ contract DegeneretteSweep is DeployProtocol {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] != RESOLVED_SIG) continue;
             found = true;
-            assertEq(uint32(uint256(logs[i].topics[1])), game.walletIdOf(alice), "owner topic");
+            assertEq(uint32(uint256(logs[i].topics[1])), game.walletIdOf_g3120(alice), "owner topic");
             assertEq(uint256(logs[i].topics[2]), IDX, "index topic");
             assertEq(uint256(logs[i].topics[3]), 1, "bet id topic");
             (, uint32 resultTraits, bytes memory spins) = abi.decode(logs[i].data, (uint256, uint32, bytes));
@@ -482,7 +482,7 @@ contract DegeneretteSweep is DeployProtocol {
     /// @dev Run mineFlip as `keeper`; return bets resolved, the bounty paid and the measured gas.
     function _crank(address keeper) private returns (uint256 resolved, uint256 bounty, uint256 used) {
         // The stake ledger is keyed by wallet ID: a keeper without one does the work unpaid.
-        if (game.walletIdOf(keeper) == 0) _giveWalletId(keeper);
+        if (game.walletIdOf_g3120(keeper) == 0) _giveWalletId(keeper);
         vm.recordLogs();
         this.crankAtBasefee(keeper);
         Vm.Log[] memory logs = vm.getRecordedLogs();

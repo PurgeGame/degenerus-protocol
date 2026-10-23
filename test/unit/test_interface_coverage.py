@@ -1,4 +1,4 @@
-"""Control tests for fail-closed interface inventory and delegated selector coverage."""
+"""Control tests for fail-closed interface inventory and deployed host selector coverage."""
 
 import os
 from pathlib import Path
@@ -32,11 +32,11 @@ if target == "IJackpotBattle":
     methods = [("settle()", "00000002"), ("lock()", "00000003")]
 elif target == "CrapsBattle":
     methods = [("settle()", "00000002")]
-elif target == "JackpotBattle" and mode != "missing_delegate":
-    methods = [("lock()", "00000003")]
+    if mode != "missing_delegate":
+        methods.append(("lock()", "00000003"))
 elif target == "IDegenerusParimutuel" and mode == "unused_missing":
     methods.append(("externalOnly()", "00000004"))
-if target == "JackpotBattle" and mode == "empty_delegate":
+if target == "CrapsBattle" and mode == "empty_delegate":
     methods = []
 for signature, selector in methods:
     print(f"| {signature} | {selector} |")
@@ -54,7 +54,7 @@ for signature, selector in methods:
         result = self.run_gate()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("IDegenerusParimutuel", result.stdout)
-        self.assertIn("CrapsBattle+JackpotBattle", result.stdout)
+        self.assertIn("CrapsBattle", result.stdout)
         self.assertIn("(2 fns covered)", result.stdout)
 
     def test_new_interface_cannot_silently_escape_the_map(self):

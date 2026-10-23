@@ -291,7 +291,7 @@ contract V56QuestNonPerturb is DeployProtocol {
 
     /// @dev The wallet ID the quest handlers take for `who`, registered on first use.
     function _qid(address who) internal returns (uint32 id) {
-        id = game.walletIdOf(who);
+        id = game.walletIdOf_g3120(who);
         if (id == 0) id = _giveWalletId(who);
     }
 
@@ -392,7 +392,7 @@ contract V56QuestNonPerturb is DeployProtocol {
     // ---- PlayerQuestState reads (slot 2 mapping; single packed word) ----
 
     function _questStateWord(address who) internal view returns (uint256) {
-        return uint256(vm.load(ContractAddresses.QUESTS, keccak256(abi.encode(uint256(game.walletIdOf(who)), QUEST_PLAYER_STATE_SLOT))));
+        return uint256(vm.load(ContractAddresses.QUESTS, keccak256(abi.encode(uint256(game.walletIdOf_g3120(who)), QUEST_PLAYER_STATE_SLOT))));
     }
 
     function _streakOf(address who) internal view returns (uint16) {
@@ -409,7 +409,7 @@ contract V56QuestNonPerturb is DeployProtocol {
 
     /// @dev The streak as the public view reports it (cross-checks the direct slot read).
     function _streakViewOf(address who) internal view returns (uint16) {
-        (uint32 streak, , , ) = quests.playerQuestStates(game.walletIdOf(who));
+        (uint32 streak, , , ) = quests.playerQuestStates(game.walletIdOf_g3120(who));
         return uint16(streak);
     }
 }

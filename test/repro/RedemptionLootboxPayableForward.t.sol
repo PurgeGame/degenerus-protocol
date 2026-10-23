@@ -99,7 +99,7 @@ contract RedemptionLootboxReserveLeg is RedemptionCloseTools {
     // =====================================================================
 
     function _setGameClaimableSdgnrs(uint256 amount) internal {
-        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(address(sdgnrs))), GAME_CLAIMABLE_SLOT));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf_g3120(address(sdgnrs))), GAME_CLAIMABLE_SLOT));
         uint256 word = uint256(vm.load(address(game), slot));
         word = (word & (type(uint256).max << 128)) | uint128(amount);
         vm.store(address(game), slot, bytes32(word));
@@ -191,7 +191,7 @@ contract RedemptionLootboxReserveLeg is RedemptionCloseTools {
         uint256 gameValueBefore = address(game).balance + mockStETH.balanceOf(address(game));
         uint256 sdgnrsEthBefore = address(sdgnrs).balance;
         _settleCohort();
-        (uint128 owed,) = sdgnrs.pendingRedemptions(game.walletIdOf(player), dayD);
+        (uint128 owed,) = sdgnrs.pendingRedemptions(game.walletIdOf_g3120(player), dayD);
         assertEq(uint256(owed), 0, "the claim settled rather than parking");
 
         assertEq(
@@ -215,7 +215,7 @@ contract RedemptionLootboxReserveLeg is RedemptionCloseTools {
 
         uint256 gameValueBefore = address(game).balance + mockStETH.balanceOf(address(game));
         _settleCohort();
-        (uint128 owed,) = sdgnrs.pendingRedemptions(game.walletIdOf(player), dayD);
+        (uint128 owed,) = sdgnrs.pendingRedemptions(game.walletIdOf_g3120(player), dayD);
         assertEq(uint256(owed), 0, "the claim settled rather than parking");
 
         assertEq(

@@ -17,7 +17,7 @@ contract SubscriptionUpdateGasTest is DeployProtocol {
         _deployProtocol();
         vm.warp(block.timestamp + 1 days);
         seatId = _grantSeat(PLAYER);
-        playerId = game.walletIdOf(PLAYER);
+        playerId = game.walletIdOf_g3120(PLAYER);
         vm.deal(address(this), 100 ether);
         game.depositAfkingFunding{value: 100 ether}(playerId);
         _finishSubscriptionWindow();

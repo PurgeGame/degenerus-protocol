@@ -77,11 +77,11 @@ contract BafWeightedDrawTest is DeployProtocol {
         assertEq(count, 1, "one entry recorded");
 
         (uint32 p, uint96 cum) = coinflip.bafDrawEntryAt(3, 0);
-        assertEq(p, game.walletIdOf(alice), "the entry belongs to the depositor");
+        assertEq(p, game.walletIdOf_g3120(alice), "the entry belongs to the depositor");
         assertEq(cum, 100, "cumulative endpoint equals the sole weight");
 
         assertEq(
-            coinflip.bafDrawWinner(uint256(keccak256("any_word"))), game.walletIdOf(alice),
+            coinflip.bafDrawWinner(uint256(keccak256("any_word"))), game.walletIdOf_g3120(alice),
             "a 100-FLIP entry can win"
         );
     }
@@ -112,10 +112,10 @@ contract BafWeightedDrawTest is DeployProtocol {
         (, uint96 total, ) = coinflip.bafDrawInfo();
         assertEq(total, 400, "total weight");
 
-        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 0)), game.walletIdOf(alice), "roll 0");
-        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 99)), game.walletIdOf(alice), "roll 99");
-        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 100)), game.walletIdOf(bob), "roll 100");
-        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 399)), game.walletIdOf(bob), "roll 399");
+        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 0)), game.walletIdOf_g3120(alice), "roll 0");
+        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 99)), game.walletIdOf_g3120(alice), "roll 99");
+        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 100)), game.walletIdOf_g3120(bob), "roll 100");
+        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 399)), game.walletIdOf_g3120(bob), "roll 399");
     }
 
     /// @notice Alice 100, Bob 100, Alice 200: three separate intervals, and alice's
@@ -131,12 +131,12 @@ contract BafWeightedDrawTest is DeployProtocol {
         assertEq(count, 3, "repeat deposits append separate intervals");
         assertEq(total, 400, "total weight");
 
-        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 0)), game.walletIdOf(alice), "[0,100) alice");
-        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 99)), game.walletIdOf(alice), "[0,100) alice hi");
-        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 100)), game.walletIdOf(bob), "[100,200) bob");
-        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 199)), game.walletIdOf(bob), "[100,200) bob hi");
-        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 200)), game.walletIdOf(alice), "[200,400) alice");
-        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 399)), game.walletIdOf(alice), "[200,400) alice hi");
+        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 0)), game.walletIdOf_g3120(alice), "[0,100) alice");
+        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 99)), game.walletIdOf_g3120(alice), "[0,100) alice hi");
+        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 100)), game.walletIdOf_g3120(bob), "[100,200) bob");
+        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 199)), game.walletIdOf_g3120(bob), "[100,200) bob hi");
+        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 200)), game.walletIdOf_g3120(alice), "[200,400) alice");
+        assertEq(coinflip.bafDrawWinner(_wordForRoll(3, 400, 399)), game.walletIdOf_g3120(alice), "[200,400) alice hi");
     }
 
     /// @notice Binary search agrees with a linear reference walk over the recorded
@@ -204,7 +204,7 @@ contract BafWeightedDrawTest is DeployProtocol {
         assertEq(total, 100, "no late weight joined");
         _assertNoDrawEnteredLog();
         assertEq(
-            coinflip.bafDrawWinner(uint256(keccak256("boundary_word"))), game.walletIdOf(alice),
+            coinflip.bafDrawWinner(uint256(keccak256("boundary_word"))), game.walletIdOf_g3120(alice),
             "the sole in-window entry still wins"
         );
     }
@@ -330,7 +330,7 @@ contract BafWeightedDrawTest is DeployProtocol {
         _arm(3);
         _selfDeposit(alice, 100);
         uint256 word = uint256(keccak256("sole_word"));
-        assertEq(jackpots.bafHeadWinner(10, word, 1), game.walletIdOf(alice), "the sole entrant wins the draw slot");
+        assertEq(jackpots.bafHeadWinner(10, word, 1), game.walletIdOf_g3120(alice), "the sole entrant wins the draw slot");
         _assertAllSlotsEmpty(word, false);
     }
 

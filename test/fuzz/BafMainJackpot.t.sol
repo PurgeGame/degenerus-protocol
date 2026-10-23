@@ -143,7 +143,7 @@ contract BafMainJackpotTest is BafBracketFixture {
         (uint32[4] memory winners, IDegenerusJackpots.BafRound[2] memory draws) = jackpots.bafPairWinners(LVL, WORD, 0, 48, [uint8(0), 64, 128]);
         assertEq(draws[0].candidates.length, 0);
         assertEq(draws[1].candidates.length, 1);
-        assertEq(draws[1].candidates[0], game.walletIdOf(lone));
+        assertEq(draws[1].candidates[0], game.walletIdOf_g3120(lone));
         for (uint256 i; i < 4; ++i) assertEq(winners[i], 0, "empty or zero-score entries do not win");
     }
 

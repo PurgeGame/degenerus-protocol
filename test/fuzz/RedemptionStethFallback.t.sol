@@ -11,7 +11,7 @@ contract RedemptionStethFallbackTest is RedemptionFixture {
     function _fundGameBacking(uint256 liquid, uint256 credit) internal {
         vm.deal(address(game), liquid);
         mockStETH.mint(address(game), credit - liquid);
-        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(address(sdgnrs))), GameSlots.BALANCES_PACKED));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf_g3120(address(sdgnrs))), GameSlots.BALANCES_PACKED));
         uint256 packed = uint256(vm.load(address(game), slot));
         vm.store(address(game), slot, bytes32((packed & (type(uint256).max << 128)) | uint128(credit + 1)));
         uint256 pools = uint256(vm.load(address(game), bytes32(uint256(1))));

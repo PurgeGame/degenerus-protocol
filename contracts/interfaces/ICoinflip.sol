@@ -66,7 +66,7 @@ interface ICoinflip {
     /// @dev Processes any pending claims, funds the stake, applies quest and recycling bonuses,
     ///      then adds stake for the next day's flip.
     ///      Gift door. `id == 0` is the caller: a self deposit, with no Game resolution call. For
-    ///      a nonzero `id` Coinflip calls Game `resolveAccount(id, msg.sender)` (reverts `E` for
+    ///      a nonzero `id` Coinflip calls Game `resolveAccount_g502(id, msg.sender)` (reverts `E` for
     ///      an unallocated ID). An authorized caller (the account's key, a smurf's owner, or an
     ///      approved operator) acts as the account: the deposit is funded from the account's
     ///      settled coinflip winnings first and the remainder burns from the account's PAYEE's
@@ -92,7 +92,7 @@ interface ICoinflip {
     /// @notice Claim an exact amount of account `id`'s coinflip winnings as FLIP tokens.
     /// @dev Processes pending daily claims, then mints up to the requested amount.
     ///      Authorized: `id == 0` is the caller; a nonzero `id` needs Game
-    ///      `resolveAccount(id, msg.sender).authorized` (the key, a smurf's owner or an approved
+    ///      `resolveAccount_g502(id, msg.sender).authorized` (the key, a smurf's owner or an approved
     ///      operator). The FLIP and any loss-streak WWXRP mint to the account's PAYEE (the
     ///      caller for `id == 0`, a smurf's owner, or an ordinary account's own key).
     ///      A self caller with no wallet ID has no stake and claims 0.

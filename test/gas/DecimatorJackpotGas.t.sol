@@ -36,7 +36,7 @@ contract DecimatorGeneratedEngineMeter {
 }
 
 contract DecimatorGeneratedFlatEngine {
-    function extsload(bytes32 slot) external view returns (bytes32 value) {
+    function extsload_g8132(bytes32 slot) external view returns (bytes32 value) {
         assembly ("memory-safe") { value := sload(slot) }
     }
 
@@ -159,7 +159,7 @@ contract DecimatorJackpotGasTest is Test {
         vm.etch(ContractAddresses.COINFLIP, type(DecimatorGasCoinflip).runtimeCode);
         vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
         vm.mockCall(ContractAddresses.STETH_TOKEN, abi.encodeWithSignature("balanceOf(address)"), abi.encode(uint256(0)));
-        vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("minerMaintenancePending()"), abi.encode(false));
+        vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("minerMaintenancePending_g11976()"), abi.encode(false));
         h = DecimatorGasHost(ContractAddresses.GAME);
         h.seedProtocolWallets();
         vm.etch(address(0xDEC18), type(DecimatorGeneratedWorkMeter).runtimeCode);
@@ -279,7 +279,7 @@ contract DecimatorJackpotGasTest is Test {
         DecimatorJackpotTerms memory terms;
         terms.word = word;
         vm.cool(address(h)); vm.cool(ContractAddresses.CRAPS);
-        vm.mockCallRevert(ContractAddresses.CRAPS, abi.encodeWithSignature("extsload(bytes32)"), hex"12345678");
+        vm.mockCallRevert(ContractAddresses.CRAPS, abi.encodeWithSignature("extsload_g8132(bytes32)"), hex"12345678");
         vm.recordLogs();
         (uint256 used, MineFlipGas.Result memory r) = workMeter.run(h, terms, 150_000);
         assertEq(vm.getRecordedLogs().length, 0, "natural strata do not emit generated receipts");

@@ -178,7 +178,7 @@ abstract contract DeployProtocol is Test {
     function _quietCrapsTable() internal {
         for (uint256 i = 0; i < 64; ++i) {
             vm.prank(address(game));
-            if (!JackpotBattle(address(crapsBattle)).runCrapsMaintenance(gasleft() / 2).progressed) return;
+            if (!JackpotBattle(address(crapsBattle)).runCrapsMaintenance_g10712(gasleft() / 2).progressed) return;
         }
     }
 
@@ -186,12 +186,12 @@ abstract contract DeployProtocol is Test {
     ///      in another contract would. Non-paying doors (Craps board saves) require one.
     function _giveWalletId(address who) internal returns (uint32 id) {
         vm.prank(ContractAddresses.AFFILIATE);
-        id = game.registerWallet(who, true);
+        id = game.registerWallet_g9539(who, true);
     }
 
     /// @dev Explicit fixture eligibility without changing player score or bypassing creation.
     function _grantSmurfBase(address owner, uint16 base) internal {
-        uint32 mainId = game.walletIdOf(owner);
+        uint32 mainId = game.walletIdOf_g3120(owner);
         vm.prank(ContractAddresses.CREATOR);
         OwnerTargetCall.call(address(game), abi.encodeCall(game.raiseSmurfBaseAllowance, (mainId, base)), 0);
     }
@@ -201,16 +201,16 @@ abstract contract DeployProtocol is Test {
     }
     function _fixtureId(uint32 id) internal pure returns (uint32) { return id; }
     function _fixturePayee(uint32 id) internal view returns (address payee) {
-        if (id != 0) (, payee,) = game.resolveAccount(id, address(0));
+        if (id != 0) (, payee,) = game.resolveAccount_g502(id, address(0));
     }
 
 
     function _fixtureMint(address probe) internal view returns (uint256) {
-        return game.mintPackedOfId(_fixtureId(probe));
+        return game.mintPackedOfId_g5372(_fixtureId(probe));
     }
 
     function _fixtureMint(uint32 probe) internal view returns (uint256) {
-        return game.mintPackedOfId(_fixtureId(probe));
+        return game.mintPackedOfId_g5372(_fixtureId(probe));
     }
 
     function _fixtureHasDeity(address probe) internal view returns (bool) {

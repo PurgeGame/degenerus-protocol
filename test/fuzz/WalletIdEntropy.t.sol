@@ -116,7 +116,7 @@ contract DeityMenuSource {
         return (seed, today, 0, false, false);
     }
     function rngWordForDay(uint24 d) external view returns (uint256) { return words[d]; }
-    function walletIdOf(address who) external view returns (uint32) { return ids[who]; }
+    function walletIdOf_g3120(address who) external view returns (uint32) { return ids[who]; }
 }
 
 /// @title WalletIdEntropy — exact seed preimages after the wallet-ID swap

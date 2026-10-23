@@ -27,7 +27,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     function _aid(address a) internal returns (uint32 id) {
         id = _aidCache[a];
         if (id == 0) {
-            id = game.walletIdOf(a);
+            id = game.walletIdOf_g3120(a);
             if (id == 0) id = _giveWalletId(a);
             _aidCache[a] = id;
         }
@@ -1040,7 +1040,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
 
     /// @dev True while `who` holds an unopened box of the current cohort.
     function _isPending(address who) internal view returns (bool) {
-        return GameSlotKeys.afkingBoxPending(address(game), game.walletIdOf(who));
+        return GameSlotKeys.afkingBoxPending(address(game), game.walletIdOf_g3120(who));
     }
 
     /// @dev The last day whose subscriber pass completed.
@@ -1058,7 +1058,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
 
     /// @dev `who`'s lane word in the subscriber set (0 when not a member).
     function _laneOf(address who) internal view returns (uint256 lane) {
-        (lane,) = GameSlotKeys.subLane(address(game), game.walletIdOf(who));
+        (lane,) = GameSlotKeys.subLane(address(game), game.walletIdOf_g3120(who));
     }
 
     function _subscriberCount() internal view returns (uint256) {

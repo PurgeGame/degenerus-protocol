@@ -210,7 +210,7 @@ contract DegenesisPostSaleHooks is DegenesisFixture {
             assertEq(_dailyIdx(), d, "the ordinary day sealed");
         }
         assertEq(purchases, 8, "non-vacuity: purchases ran");
-        assertEq(_creditOfId(game.walletIdOf(alice)), 0, "no credit accrued after the window");
+        assertEq(_creditOfId(game.walletIdOf_g3120(alice)), 0, "no credit accrued after the window");
     }
 }
 
@@ -241,7 +241,7 @@ contract DegenesisOneTypePerBuy is DegenesisFixture {
         uint256 price = game.mintPrice();
         uint256[4] memory good = [BoxOrderLib.boSmalls(3), BoxOrderLib.boMeds(2), BoxOrderLib.boLarges(1), BoxOrderLib.boCustom(0.37 ether)];
         uint256[4] memory cost = [3 * price, 2 * 5 * price, 25 * price, 0.37 ether];
-        uint32 id = game.walletIdOf(alice);
+        uint32 id = game.walletIdOf_g3120(alice);
         for (uint256 i; i < 4; ++i) {
             uint256 credit0 = _creditOfId(id);
             uint256 pool0 = _claimablePool();

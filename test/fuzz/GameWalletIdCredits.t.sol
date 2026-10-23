@@ -147,7 +147,7 @@ contract GameWalletIdCredits is DeployProtocol {
 
         vm.record();
         vm.recordLogs();
-        game.claimBingo(game.walletIdOf(player), lvl, 0, slots);
+        game.claimBingo(game.walletIdOf_g3120(player), lvl, 0, slots);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         (uint256 credited, uint256 others) = _credits(logs, id);
@@ -177,7 +177,7 @@ contract GameWalletIdCredits is DeployProtocol {
 
         vm.record();
         vm.recordLogs();
-        game.claimAffiliateDgnrs(game.walletIdOf(player));
+        game.claimAffiliateDgnrs(game.walletIdOf_g3120(player));
         (uint256 credited, uint256 others) = _credits(vm.getRecordedLogs(), id);
 
         assertEq(credited, expected, "deity bonus credited by ID");
@@ -199,12 +199,12 @@ contract GameWalletIdCredits is DeployProtocol {
             abi.encodeWithSelector(IDegenerusQuests.handleFoilPurchase.selector),
             abi.encode(uint256(0), uint8(0), false, uint32(0), false)
         );
-        assertEq(game.walletIdOf(buyer), 0, "fixture: unregistered buyer");
+        assertEq(game.walletIdOf_g3120(buyer), 0, "fixture: unregistered buyer");
 
         vm.recordLogs();
         vm.prank(buyer);
         game.purchase{value: cost}(0, 0, 0, bytes32(0), MintPaymentKind.DirectEth, true);
-        uint32 id = game.walletIdOf(buyer);
+        uint32 id = game.walletIdOf_g3120(buyer);
         assertGt(id, 0, "the foil purchase registered the buyer");
         (uint256 credited, uint256 others) = _credits(vm.getRecordedLogs(), id);
 
@@ -243,7 +243,7 @@ contract GameWalletIdCredits is DeployProtocol {
             uint256 before = _lane(id);
             vm.record();
             vm.recordLogs();
-            game.claimFoilMatch(game.walletIdOf(player), day, 0);
+            game.claimFoilMatch(game.walletIdOf_g3120(player), day, 0);
             (uint256 credited, uint256 others) = _credits(vm.getRecordedLogs(), id);
             if (credited == 0) {
                 vm.revertToState(snap); // the spin's survival flip lost: try another payout seed
@@ -272,7 +272,7 @@ contract GameWalletIdCredits is DeployProtocol {
 
         vm.record();
         vm.recordLogs();
-        game.claimGoldenTicket(game.walletIdOf(player), L);
+        game.claimGoldenTicket(game.walletIdOf_g3120(player), L);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         uint256 flipCredit;
@@ -420,12 +420,12 @@ contract GameWalletIdCredits is DeployProtocol {
             abi.encodeWithSelector(IDegenerusQuests.handlePurchase_g4831.selector),
             abi.encode(uint256(4_321), uint8(2), uint32(0), true, false)
         );
-        assertEq(game.walletIdOf(buyer), 0, "fixture: unregistered buyer");
+        assertEq(game.walletIdOf_g3120(buyer), 0, "fixture: unregistered buyer");
 
         vm.recordLogs();
         vm.prank(buyer);
         game.redeemFlip(0, 4_000);
-        uint32 id = game.walletIdOf(buyer);
+        uint32 id = game.walletIdOf_g3120(buyer);
         assertGt(id, 0, "the FLIP payer registered");
         (uint256 credited, uint256 others) = _credits(vm.getRecordedLogs(), id);
 
@@ -494,7 +494,7 @@ contract GameWalletIdCredits is DeployProtocol {
         vm.recordLogs();
         vm.prank(buyer);
         game.purchaseWhalePass{value: 4 ether}(0, 1, bytes32(0));
-        uint32 id = game.walletIdOf(buyer);
+        uint32 id = game.walletIdOf_g3120(buyer);
         assertGt(id, 0, "buyer registered");
         (uint256 credited,) = _credits(vm.getRecordedLogs(), id);
 
@@ -510,7 +510,7 @@ contract GameWalletIdCredits is DeployProtocol {
         vm.recordLogs();
         vm.prank(buyer);
         game.purchaseLazyPass{value: 1 ether}(0, bytes32(0));
-        uint32 id = game.walletIdOf(buyer);
+        uint32 id = game.walletIdOf_g3120(buyer);
         assertGt(id, 0, "buyer registered");
         (uint256 credited,) = _credits(vm.getRecordedLogs(), id);
 
@@ -526,7 +526,7 @@ contract GameWalletIdCredits is DeployProtocol {
         _finishSubscriptionWindow();
         (address player,) = _wallet("afking_pending");
         uint256 seat = _grantSeat(player);
-        uint32 id = game.walletIdOf(player);
+        uint32 id = game.walletIdOf_g3120(player);
         vm.deal(address(this), 5 ether);
         game.depositAfkingFunding{value: 5 ether}(id);
         vm.prank(player);
@@ -563,7 +563,7 @@ contract GameWalletIdCredits is DeployProtocol {
         (address p,) = _wallet("sub_draw_player");
         uint256 seat = _grantSeat(p);
         vm.deal(address(this), 5 ether);
-        uint32 pid = game.walletIdOf(p);
+        uint32 pid = game.walletIdOf_g3120(p);
         game.depositAfkingFunding{value: 5 ether}(pid);
         vm.prank(p);
         game.subscribe(0, false, 1, seat);
@@ -615,7 +615,7 @@ contract GameWalletIdCredits is DeployProtocol {
     }
 
     function _seedClaimable(address who, uint256 amt) private {
-        bytes32 slot = GameSlotKeys.balances(game.walletIdOf(who));
+        bytes32 slot = GameSlotKeys.balances(game.walletIdOf_g3120(who));
         uint256 word = uint256(vm.load(address(game), slot));
         uint256 prev = uint128(word);
         vm.store(address(game), slot, bytes32((word & ~uint256(type(uint128).max)) | amt));

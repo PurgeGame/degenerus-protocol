@@ -57,7 +57,7 @@ contract SdgnrsReserveUnderpullDoS is RedemptionCloseTools {
     }
 
     function _setGameClaimableSdgnrs(uint256 amount) internal {
-        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(address(sdgnrs))), GAME_CLAIMABLE_SLOT));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf_g3120(address(sdgnrs))), GAME_CLAIMABLE_SLOT));
         uint256 word = uint256(vm.load(address(game), slot));
         word = (word & (type(uint256).max << 128)) | uint128(amount);
         vm.store(address(game), slot, bytes32(word));

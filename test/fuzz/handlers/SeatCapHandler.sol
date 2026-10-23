@@ -244,7 +244,7 @@ contract SeatCapHandler is Test {
         if (i < N_WALLETS) {
             a.key = wallets[i];
             a.payee = a.key;
-            a.id = game.walletIdOf(a.key);
+            a.id = game.walletIdOf_g3120(a.key);
             a.caller = a.key;
             a.callId = ((seed >> 16) & 1 == 0) ? 0 : a.id;
             if (viaOp && a.id != 0 && opApproved[a.id]) {
@@ -335,7 +335,7 @@ contract SeatCapHandler is Test {
         ++calls[A_SMURF];
         if (smurfIds.length >= MAX_SMURFS) return;
         address owner = wallets[seed % N_WALLETS];
-        if (game.walletIdOf(owner) == 0) return;
+        if (game.walletIdOf_g3120(owner) == 0) return;
         uint256 price = game.mintPrice();
         _fund(owner, price);
         vm.prank(owner);
@@ -477,7 +477,7 @@ contract SeatCapHandler is Test {
                 return;
             }
             ++oks[A_SUB];
-            uint32 id = a.id == 0 ? game.walletIdOf(a.key) : a.id;
+            uint32 id = a.id == 0 ? game.walletIdOf_g3120(a.key) : a.id;
             try token.ownerOf(seat) returns (address) {
                 _violate("the named seat survived a new run");
                 return;

@@ -593,7 +593,7 @@ describe("SecurityEconHardening", function () {
       const middayBefore = await game.middayRngCredits(alice.address);
 
       const tx = await mockLINK.connect(alice).transferAndCall(adminAddr, amount, "0x");
-      await expect(tx).to.emit(admin, "LinkCreditRecorded").withArgs(await game.walletIdOf(alice.address), reward);
+      await expect(tx).to.emit(admin, "LinkCreditRecorded").withArgs(await game.walletIdOf_g3120(alice.address), reward);
       expect(await coinflip.coinflipAmount(alice.address), "actual donor reward").to.equal(reward);
       expect(await mockLINK.balanceOf(alice.address)).to.equal(0n);
       expect(await mockLINK.balanceOf(adminAddr)).to.equal(0n);

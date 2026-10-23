@@ -11,7 +11,7 @@ import {CrapsPreferenceLib} from "../../contracts/libraries/CrapsPreferenceLib.s
 import {WalletTableLib} from "../../contracts/libraries/WalletTableLib.sol";
 
 interface ICrapsWalletIdView {
-    function walletIdOf(address player) external view returns (uint32);
+    function walletIdOf_g3120(address player) external view returns (uint32);
 }
 
 /// @title The reader surface production no longer ships
@@ -45,7 +45,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle, JackpotBattleViews {
 
     /// @dev Canonical Game wallet ID, or zero before registration.
     function _idOf(address player) internal view returns (uint32 id) {
-        id = ICrapsWalletIdView(_GAME).walletIdOf(player);
+        id = ICrapsWalletIdView(_GAME).walletIdOf_g3120(player);
     }
 
     /// @dev The account key of a stored bet owner ID (the Game's wallet table).
@@ -696,7 +696,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle, JackpotBattleViews {
         if (allowance == 0) return result;
         MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
         if (!MineFlipGas.canRun(meter, _SEAT_GAS_MAX, _SETTLE_TAIL_GAS + _CREDIT_GAS_MAX + _WORK_TAIL_GAS)) return result;
-        result = this.resolveRngSlot(slot, MineFlipGas.child(meter, _WORK_TAIL_GAS + 30_000));
+        result = this.resolveRngSlot_g1079(slot, MineFlipGas.child(meter, _WORK_TAIL_GAS + 30_000));
         MineFlipGas.finish(meter);
     }
 

@@ -75,7 +75,7 @@ contract RedemptionHandler is Test {
         try sdgnrs.burn(amount) {
             if (!batchSeen[id]) { batchSeen[id] = true; batches.push(id); }
             submitted[id][actor] += amount;
-            (, uint16 score) = sdgnrs.pendingRedemptions(game.walletIdOf(actor), id);
+            (, uint16 score) = sdgnrs.pendingRedemptions(game.walletIdOf_g3120(actor), id);
             if (frozenScore[id][actor] == 0) frozenScore[id][actor] = score;
             ++successfulBurns;
         } catch {}
@@ -179,7 +179,7 @@ contract RedemptionHandler is Test {
             uint32 walletId = uint32(uint256(e.topics[1]));
             address actor;
             for (uint256 a; a < actors.length; ++a) {
-                if (game.walletIdOf(actors[a]) == walletId) { actor = actors[a]; break; }
+                if (game.walletIdOf_g3120(actors[a]) == walletId) { actor = actors[a]; break; }
             }
             assertTrue(actor != address(0), "claim belongs to a tracked ID");
             if (claimed[id][actor]) ++ghost_doubleClaim;

@@ -95,7 +95,7 @@ abstract contract TerminalLoanBase is DeployProtocol {
     }
 
     function _payee(uint32 id) internal view returns (address payee) {
-        (, payee, ) = game.resolveAccount(id, address(0));
+        (, payee, ) = game.resolveAccount_g502(id, address(0));
     }
 
     function _open(uint32 id) internal view returns (bool) {
@@ -344,7 +344,7 @@ contract TerminalLoanSettlementTest is TerminalLoanBase {
         _assertRepaid(logs, a, alice, owedA, "alice repays at the current price");
         _assertSeized(logs, b, "bob defaults one wei short");
         assertEq(sdgnrs.balanceOf(bob), 0, "bob's native sDGNRS burned");
-        assertEq(game.walletIdOf(bob), 0, "bob's default gameplay ID cleared");
+        assertEq(game.walletIdOf_g3120(bob), 0, "bob's default gameplay ID cleared");
         _assertSeized(logs, c, "carol's main defaults");
         for (uint256 i; i < 5; ++i) assertEq(_payee(kids[i]), address(sdgnrs), "carol's family moves with her");
         assertEq(deityPass.ownerOf(31), address(sdgnrs), "the deity pass follows its account");

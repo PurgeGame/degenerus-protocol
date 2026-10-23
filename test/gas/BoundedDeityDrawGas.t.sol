@@ -41,8 +41,8 @@ contract BoundedDeityDrawGasTest is BoundedDeployProtocol, BoundedGasProbe {
         uint256 total;
         uint24 day = game.currentDayView() + 1;
         for (uint8 q; q < 4; ++q) {
-            total += CoinflipStorage.read(address(coinflip), game.walletIdOf(address(uint160(0xA000 + q))), day);
-            if (deities) total += CoinflipStorage.read(address(coinflip), game.walletIdOf(address(uint160(0xD000 + q))), day);
+            total += CoinflipStorage.read(address(coinflip), game.walletIdOf_g3120(address(uint160(0xA000 + q))), day);
+            if (deities) total += CoinflipStorage.read(address(coinflip), game.walletIdOf_g3120(address(uint160(0xD000 + q))), day);
         }
         assertEq(total, repeat ? 20_000 : 10_000, "50 equal production FLIP awards per draw");
     }

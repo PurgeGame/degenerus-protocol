@@ -196,7 +196,7 @@ abstract contract ChainPinBase is DeployProtocol {
         vm.deal(boxer, 500_000 ether);
         mockVRF.fundSubscription(1, 1_000 ether);
         deal(address(coin), buyer, 5_000_000 ether, true);
-        sdgnrsId = game.walletIdOf(address(sdgnrs));
+        sdgnrsId = game.walletIdOf_g3120(address(sdgnrs));
         if (spies) _installSpies();
         vm.recordLogs();
     }

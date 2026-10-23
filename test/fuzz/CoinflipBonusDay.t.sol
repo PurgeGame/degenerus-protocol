@@ -11,7 +11,7 @@ interface IGameSnapshot {
 
     function jackpotPhase() external view returns (bool);
 
-    function extsload(bytes32 slot) external view returns (bytes32);
+    function extsload_g8132(bytes32 slot) external view returns (bytes32);
 }
 
 /// @dev Recorder proxy etched at the COINFLIP address. For every
@@ -44,7 +44,7 @@ contract CoinflipBonusRecorder {
             // bit 40: jackpotPhase at settlement
             uint256 stamped = (uint256(bonus) + 1) |
                 (uint256(g.level()) << 8) |
-                (((uint256(g.extsload(bytes32(0))) >> 184) & 3) << 32) |
+                (((uint256(g.extsload_g8132(bytes32(0))) >> 184) & 3) << 32) |
                 (g.jackpotPhase() ? (uint256(1) << 40) : 0);
             bytes32 slot = keccak256(abi.encode("cf.bonus.recorder", epoch));
             assembly {

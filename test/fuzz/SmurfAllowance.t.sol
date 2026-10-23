@@ -37,7 +37,7 @@ contract SmurfAllowanceTest is DeployProtocol {
 
     // Control one input of the real internal score calculation, not the external Game getter.
     function _score(uint16 points) private {
-        vm.mockCall(address(quests), abi.encodeCall(IDegenerusQuests.effectiveBaseStreakAndAfking, (main)),
+        vm.mockCall(address(quests), abi.encodeCall(IDegenerusQuests.effectiveBaseStreakAndAfking_g2654, (main)),
             abi.encode(uint32(points) * 2, false));
         assertEq(game.playerActivityScoreById(main), points);
     }
@@ -95,7 +95,7 @@ contract SmurfAllowanceTest is DeployProtocol {
         OwnerTargetCall.call(address(game), abi.encodeCall(game.raiseSmurfBaseAllowance, (main, 3)), 0);
         _create();
         uint256 w = _quotaWord();
-        assertEq(game.walletIdOf(owner), main);
+        assertEq(game.walletIdOf_g3120(owner), main);
         assertEq(game.walletIdentityOf(owner), main);
         assertEq(uint16(w >> 224), 5);
         assertEq(uint16(w >> 240), 3);
@@ -142,7 +142,7 @@ contract SmurfAllowanceTest is DeployProtocol {
         uint256 w = _quotaWord();
         assertEq(uint16(w >> 224), uint256(count) + 1);
         assertEq(uint16(w >> 240), base);
-        assertEq(game.walletIdOf(owner), main);
+        assertEq(game.walletIdOf_g3120(owner), main);
         assertEq(game.walletIdentityOf(owner), main);
     }
 

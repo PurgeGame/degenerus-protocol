@@ -28,7 +28,7 @@ contract CombinedDegenesisBoxFunding is DegenesisDeployProtocol {
         bool found;
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] != DEGENESIS_BUY) continue;
-            assertEq(uint32(uint256(logs[i].topics[1])), game.walletIdOf(buyer), "the event names the buyer");
+            assertEq(uint32(uint256(logs[i].topics[1])), game.walletIdOf_g3120(buyer), "the event names the buyer");
             (day, index, amount,) = abi.decode(logs[i].data, (uint8, uint32, uint256, uint256));
             found = true;
         }

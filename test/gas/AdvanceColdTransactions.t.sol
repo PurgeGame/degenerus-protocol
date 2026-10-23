@@ -106,7 +106,7 @@ abstract contract ColdSubscriberFixture is DeployProtocol {
                 afkingSubToken.vaultMintSeats(player, 1);
                 seat = _seatOf(player);
             }
-            game.depositAfkingFunding{value: 50 ether}(game.walletIdOf(player));
+            game.depositAfkingFunding{value: 50 ether}(game.walletIdOf_g3120(player));
             vm.prank(player);
             game.subscribe(0, mode == 1, 1, seat);
         }

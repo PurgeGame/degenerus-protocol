@@ -64,27 +64,27 @@ contract BoundedCallHarness {
     function run(address target, uint256 value, uint256 budget, bytes memory input, uint256 expected)
         external returns (bool, bytes memory)
     {
-        return BoundedCall.call(target, value, budget, input, expected);
+        return BoundedCall.callValueRemaining(MineFlipGas.fromCall(0), target, value, budget, 50_000, input, expected);
     }
 
     function read(address target, uint256 budget, bytes memory input, uint256 expected)
         external view returns (bool, bytes memory)
     {
-        return BoundedCall.staticcall(target, budget, input, expected);
+        return BoundedCall.staticcallRemaining(MineFlipGas.fromCall(0), target, budget, 50_000, input, expected);
     }
 
     function flag(address target, uint256 budget, bytes memory input) external returns (bool) {
-        return BoundedCall.callBool(target, budget, input);
+        return BoundedCall.callBoolRemaining(MineFlipGas.fromCall(0), target, budget, 50_000, input);
     }
 
     function word(address target, uint256 budget, bytes memory input) external view returns (bool, uint256) {
-        return BoundedCall.staticWord(target, budget, input);
+        return BoundedCall.staticWordRemaining(MineFlipGas.fromCall(0), target, budget, 50_000, input);
     }
 
     function firstUnit(address target, uint256 budget) external returns (bool, bytes memory) {
         MineFlipGas.Meter memory meter = MineFlipGas.start(MineFlipGas.budget(0, 10_000, true));
         require(MineFlipGas.canRun(meter, budget, 0));
-        return BoundedCall.call(target, 0, budget, abi.encode(uint256(1)), 32);
+        return BoundedCall.callRemaining(meter, target, budget, 50_000, abi.encode(uint256(1)), 32);
     }
 }
 
@@ -100,11 +100,11 @@ contract BoundedCallTest is Test {
     }
 
     function _call(uint256 mode) private returns (bool, bytes memory) {
-        return harness.run(address(target), 0, BUDGET, abi.encode(mode), 32);
+        return harness.run{gas: 2_000_000}(address(target), 0, BUDGET, abi.encode(mode), 32);
     }
 
     function _read(uint256 mode) private view returns (bool, bytes memory) {
-        return harness.read(address(target), BUDGET, abi.encode(mode), 32);
+        return harness.read{gas: 2_000_000}(address(target), BUDGET, abi.encode(mode), 32);
     }
 
     function _failure(uint256 mode) private {
@@ -150,10 +150,10 @@ contract BoundedCallTest is Test {
         ];
         for (uint256 i; i < selectors.length; ++i) {
             bytes memory input = abi.encode(uint256(5), selectors[i]);
-            (bool ok, bytes memory output) = harness.run(address(target), 0, BUDGET, input, 32);
+            (bool ok, bytes memory output) = harness.run{gas: 2_000_000}(address(target), 0, BUDGET, input, 32);
             assertFalse(ok);
             assertEq(output.length, 0);
-            (ok, output) = harness.read(address(target), BUDGET, input, 32);
+            (ok, output) = harness.read{gas: 2_000_000}(address(target), BUDGET, input, 32);
             assertFalse(ok);
             assertEq(output.length, 0);
         }
@@ -172,19 +172,19 @@ contract BoundedCallTest is Test {
     }
 
     function testStaticStateChangeFails() public view {
-        (bool ok, bytes memory output) = harness.read(address(target), BUDGET, abi.encode(uint256(7)), 0);
+        (bool ok, bytes memory output) = harness.read{gas: 2_000_000}(address(target), BUDGET, abi.encode(uint256(7)), 0);
         assertFalse(ok);
         assertEq(output.length, 0);
     }
 
     function testSelectorCopiesFourBytes() public view {
-        (bool ok, bytes memory output) = harness.read(address(target), BUDGET, abi.encode(uint256(8)), 4);
+        (bool ok, bytes memory output) = harness.read{gas: 2_000_000}(address(target), BUDGET, abi.encode(uint256(8)), 4);
         assertTrue(ok);
         assertEq(output, hex"deadbeef");
     }
 
     function testNoReturnCall() public {
-        (bool ok, bytes memory output) = harness.run(address(target), 0, BUDGET, abi.encode(uint256(9)), 0);
+        (bool ok, bytes memory output) = harness.run{gas: 2_000_000}(address(target), 0, BUDGET, abi.encode(uint256(9)), 0);
         assertTrue(ok);
         assertEq(output.length, 0);
     }
@@ -211,19 +211,20 @@ contract BoundedCallTest is Test {
         assertEq(output, abi.encodeWithSelector(MineFlipGas.InsufficientExecutionGas.selector));
     }
 
-    function testValueTransferUsesSameFixedBudget() public {
-        (bool ok, bytes memory output) = harness.run(address(target), 0, BUDGET, abi.encode(uint256(10)), 32);
+    function testValueTransferRetainsItsLargerTail() public {
+        (bool ok, bytes memory output) = harness.run{gas: 2_000_000}(address(target), 0, BUDGET, abi.encode(uint256(10)), 32);
         assertTrue(ok);
         uint256 noValueGas = abi.decode(output, (uint256));
-        (ok, output) = harness.run(address(target), 1, BUDGET, abi.encode(uint256(10)), 32);
+        (ok, output) = harness.run{gas: 2_000_000}(address(target), 1, BUDGET, abi.encode(uint256(10)), 32);
         assertTrue(ok);
-        assertEq(abi.decode(output, (uint256)), noValueGas);
+        assertLt(abi.decode(output, (uint256)), noValueGas);
+        assertGt(abi.decode(output, (uint256)), BUDGET);
         assertEq(address(target).balance, 1);
     }
 
     function testValueTransferColdNewAccount() public {
         address recipient = address(0x12345678);
-        (bool ok, ) = harness.run(recipient, 1, BUDGET, "", 0);
+        (bool ok, ) = harness.run{gas: 2_000_000}(recipient, 1, BUDGET, "", 0);
         assertTrue(ok);
         assertEq(recipient.balance, 1);
     }
@@ -236,7 +237,7 @@ contract BoundedCallTest is Test {
         assertEq(address(target).balance, 0);
     }
 
-    function testFuzzAdmittedCallGetsFullBudget(uint32 supplied) public {
+    function testFuzzAdmittedCallGetsAtLeastMinimum(uint32 supplied) public {
         uint256 callGas = bound(supplied, BUDGET - 5_000, BUDGET + 80_000);
         (bool referenceOk, bytes memory referenceOutput) = _call(10);
         assertTrue(referenceOk);
@@ -248,6 +249,6 @@ contract BoundedCallTest is Test {
         }
         (bool callOk, bytes memory result) = abi.decode(output, (bool, bytes));
         assertTrue(callOk);
-        assertEq(result, referenceOutput);
+        assertGe(abi.decode(result, (uint256)), BUDGET - 100);
     }
 }

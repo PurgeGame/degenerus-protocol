@@ -43,7 +43,7 @@ contract PariSettleMockGame {
         return (0, 0, 0, round, open, 0);
     }
 
-    function resolveAccount(uint32 id, address caller) external view returns (address key, address payee, bool authorized) {
+    function resolveAccount_g502(uint32 id, address caller) external view returns (address key, address payee, bool authorized) {
         require(id != 0, "E");
         key = idKey[id];
         require(key != address(0), "E");
@@ -51,7 +51,7 @@ contract PariSettleMockGame {
         authorized = caller == key;
     }
 
-    function walletIdOf(address a) external view returns (uint32) {
+    function walletIdOf_g3120(address a) external view returns (uint32) {
         return ids[a];
     }
 }
@@ -960,7 +960,7 @@ contract ParimutuelSettlementSelectorTest is Test {
     }
 
     function _mockMaintenance(bool pending) private {
-        vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("minerMaintenancePending()"), abi.encode(pending));
+        vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("minerMaintenancePending_g11976()"), abi.encode(pending));
     }
 
     function test_GrowthSettleIsValueNineteen() public pure {
@@ -1466,7 +1466,7 @@ contract ParimutuelSettlementProtocolTest is PariSettlementProtocolBase {
         vm.prank(who);
         game.purchase{value: price}(0, 400, 0, 0, MintPaymentKind.DirectEth, false);
         bool mayBet;
-        (mayBet, , id) = quests.marketBetGates(game.walletIdOf(who), round);
+        (mayBet, , id) = quests.marketBetGates(game.walletIdOf_g3120(who), round);
         assertTrue(mayBet, "a buyer may bet");
         assertTrue(id != 0, "mayBet carries the buyer's ID");
         vm.prank(address(game));
@@ -1591,9 +1591,9 @@ contract ParimutuelBetGateDoorsTest is DeployProtocol {
     function _assertGate(address who) private view {
         uint24 lvl = game.level();
         for (uint24 k; k < 2; ++k) {
-            (bool mayBet, , uint32 id) = quests.marketBetGates(game.walletIdOf(who), lvl + k);
+            (bool mayBet, , uint32 id) = quests.marketBetGates(game.walletIdOf_g3120(who), lvl + k);
             assertTrue(!mayBet || id != 0, "mayBet implies a wallet ID");
-            assertEq(id, game.walletIdOf(who), "gate ID is the mint-word ID");
+            assertEq(id, game.walletIdOf_g3120(who), "gate ID is the mint-word ID");
         }
     }
 
@@ -1602,13 +1602,13 @@ contract ParimutuelBetGateDoorsTest is DeployProtocol {
         _assertGate(OPERATOR);
         _assertGate(DEITY);
         _assertGate(FRESH);
-        (bool freshMay, bool freshEarns, uint32 freshId) = quests.marketBetGates(game.walletIdOf(FRESH), game.level());
+        (bool freshMay, bool freshEarns, uint32 freshId) = quests.marketBetGates(game.walletIdOf_g3120(FRESH), game.level());
         assertFalse(freshMay || freshEarns, "an untouched wallet may not bet");
         assertEq(freshId, 0);
     }
 
     function _idOrRegister(address who) private returns (uint32 id) {
-        id = game.walletIdOf(who);
+        id = game.walletIdOf_g3120(who);
         if (id == 0) id = _giveWalletId(who);
     }
 
@@ -1626,7 +1626,7 @@ contract ParimutuelBetGateDoorsTest is DeployProtocol {
             ok = _call(who, price, abi.encodeCall(DegenerusGame.purchase, (uint32(0), 0, 1, bytes32(0), MintPaymentKind.DirectEth, false)));
         } else if (kind == 2) {
             // An operator acts only for an allocated account; a wallet with no ID is bought for by its own caller.
-            uint32 whoId = game.walletIdOf(who);
+            uint32 whoId = game.walletIdOf_g3120(who);
             if (whoId != 0) {
                 vm.prank(who);
                 game.setOperatorApproval(0, OPERATOR, true);
@@ -1642,7 +1642,7 @@ contract ParimutuelBetGateDoorsTest is DeployProtocol {
         } else if (kind == 6) {
             ok = _call(who, 0.01 ether, abi.encodeCall(DegenerusGame.placeDegeneretteBet, (uint32(0), 0, uint128(0.01 ether), 1, 3)));
         } else if (kind == 7) {
-            ok = _call(who, 0.01 ether, abi.encodeCall(DegenerusGame.placeDegeneretteBet, (game.walletIdOf(other), 0, uint128(0.01 ether), 1, 3)));
+            ok = _call(who, 0.01 ether, abi.encodeCall(DegenerusGame.placeDegeneretteBet, (game.walletIdOf_g3120(other), 0, uint128(0.01 ether), 1, 3)));
         } else if (kind == 8) {
             ok = _call(DEITY, 0, abi.encodeCall(DegenerusGame.smite, (uint256(DEITY_SYMBOL), _idOrRegister(who))));
         } else if (kind == 9) {
@@ -1711,8 +1711,8 @@ contract ParimutuelBetGateDoorsTest is DeployProtocol {
         vm.prank(DEITY);
         game.smite(DEITY_SYMBOL, targetId);
         assertGt(game.curseCountOf(target), 0, "fixture: smitten");
-        assertEq(game.walletIdOf(target), targetId, "a smite allocates no new ID");
-        (bool mayBet, bool earns, uint32 id) = quests.marketBetGates(game.walletIdOf(target), game.level());
+        assertEq(game.walletIdOf_g3120(target), targetId, "a smite allocates no new ID");
+        (bool mayBet, bool earns, uint32 id) = quests.marketBetGates(game.walletIdOf_g3120(target), game.level());
         assertFalse(mayBet || earns);
         assertEq(id, targetId);
         _openRound();
@@ -1730,7 +1730,7 @@ contract ParimutuelBetGateDoorsTest is DeployProtocol {
         address hooked = _actor(1);
         uint32 id = _giveWalletId(hooked);
         assertGt(id, 0);
-        (bool mayBet, , uint32 gateId) = quests.marketBetGates(game.walletIdOf(hooked), game.level());
+        (bool mayBet, , uint32 gateId) = quests.marketBetGates(game.walletIdOf_g3120(hooked), game.level());
         assertFalse(mayBet, "an ID alone is not participation");
         assertEq(gateId, id);
 
@@ -1739,8 +1739,8 @@ contract ParimutuelBetGateDoorsTest is DeployProtocol {
         coin.mintForGame(flipper, STAKE_UNITS * 2);
         vm.prank(flipper);
         coinflip.depositCoinflip(0, STAKE_UNITS);
-        assertGt(game.walletIdOf(flipper), 0, "a deposit registers");
-        (mayBet, , ) = quests.marketBetGates(game.walletIdOf(flipper), game.level());
+        assertGt(game.walletIdOf_g3120(flipper), 0, "a deposit registers");
+        (mayBet, , ) = quests.marketBetGates(game.walletIdOf_g3120(flipper), game.level());
         assertFalse(mayBet, "a Coinflip registration is not participation");
 
         _openRound();
@@ -1758,7 +1758,7 @@ contract ParimutuelBetGateDoorsTest is DeployProtocol {
         uint256 price = game.mintPrice();
         vm.prank(buyer);
         game.purchase{value: price}(0, 400, 0, 0, MintPaymentKind.DirectEth, false);
-        uint32 id = game.walletIdOf(buyer);
+        uint32 id = game.walletIdOf_g3120(buyer);
         assertGt(id, 0);
         uint24 round = _openRound();
         vm.prank(address(game));

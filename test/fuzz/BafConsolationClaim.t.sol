@@ -87,8 +87,8 @@ contract BafConsolationClaimTest is DeployProtocol {
         emit BafConsolationClaimed(ids[alice], 10, 5000, 5);
         vm.prank(keeper);
         jackpots.claimBafConsolation(ids[alice], 10);
-        assertEq(wwxrp.claimable(game.walletIdOf(alice)), 5, "alice minted score/1000");
-        assertEq(wwxrp.claimable(game.walletIdOf(keeper)), 0, "keeper gets nothing");
+        assertEq(wwxrp.claimable(game.walletIdOf_g3120(alice)), 5, "alice minted score/1000");
+        assertEq(wwxrp.claimable(game.walletIdOf_g3120(keeper)), 0, "keeper gets nothing");
         assertEq(jackpots.bafConsolationOf(alice, 10), 0, "claim consumed score");
 
         // Double claim reverts.
@@ -101,7 +101,7 @@ contract BafConsolationClaimTest is DeployProtocol {
         emit BafConsolationClaimed(ids[bob], 10, 250, 1);
         vm.prank(bob);
         jackpots.claimBafConsolation(ids[bob], 10);
-        assertEq(wwxrp.claimable(game.walletIdOf(bob)), 1);
+        assertEq(wwxrp.claimable(game.walletIdOf_g3120(bob)), 1);
         assertEq(jackpots.bafConsolationOf(bob, 10), 0);
         vm.expectRevert(NothingToClaim.selector);
         jackpots.claimBafConsolation(ids[bob], 10);
@@ -121,10 +121,10 @@ contract BafConsolationClaimTest is DeployProtocol {
         jackpots.claimBafConsolation(ids[bob], 10);
         jackpots.claimBafConsolation(ids[keeper], 10);
         jackpots.claimBafConsolation(ids[buyer], 10);
-        assertEq(wwxrp.claimable(game.walletIdOf(alice)), 1);
-        assertEq(wwxrp.claimable(game.walletIdOf(bob)), 1);
-        assertEq(wwxrp.claimable(game.walletIdOf(keeper)), 1);
-        assertEq(wwxrp.claimable(game.walletIdOf(buyer)), 2);
+        assertEq(wwxrp.claimable(game.walletIdOf_g3120(alice)), 1);
+        assertEq(wwxrp.claimable(game.walletIdOf_g3120(bob)), 1);
+        assertEq(wwxrp.claimable(game.walletIdOf_g3120(keeper)), 1);
+        assertEq(wwxrp.claimable(game.walletIdOf_g3120(buyer)), 2);
     }
 
     function testResolvedBracketPaysNothing() public {
@@ -140,7 +140,7 @@ contract BafConsolationClaimTest is DeployProtocol {
         jackpots.claimBafConsolation(ids[alice], 20);
         (uint32 best,) = BafViews.round(address(jackpots), 20, uint256(keccak256("resolved_word")), 0, 48);
         assertEq(best, 0, "no sampled entry holds a bracket score");
-        assertEq(jackpots.bafHeadWinner(20, uint256(keccak256("resolved_word")), 0), game.walletIdOf(alice),
+        assertEq(jackpots.bafHeadWinner(20, uint256(keccak256("resolved_word")), 0), game.walletIdOf_g3120(alice),
             "the frozen board still names the top bettor mid-stage");
         vm.prank(address(game));
         jackpots.finalizeBaf(20);
@@ -165,12 +165,12 @@ contract BafConsolationClaimTest is DeployProtocol {
 
         assertEq(jackpots.bafConsolationOf(ContractAddresses.VAULT, 10), 5, "vault claimable");
 
-        uint256 balanceBefore = wwxrp.claimable(game.walletIdOf(ContractAddresses.VAULT));
+        uint256 balanceBefore = wwxrp.claimable(game.walletIdOf_g3120(ContractAddresses.VAULT));
         uint256 supplyBefore = wwxrp.totalSupply();
         vm.prank(keeper);
         jackpots.claimBafConsolation(ids[ContractAddresses.VAULT], 10);
 
-        assertEq(wwxrp.claimable(game.walletIdOf(ContractAddresses.VAULT)), balanceBefore + 5, "vault prize balance");
+        assertEq(wwxrp.claimable(game.walletIdOf_g3120(ContractAddresses.VAULT)), balanceBefore + 5, "vault prize balance");
         assertEq(wwxrp.totalSupply(), supplyBefore, "unminted rewards do not circulate");
 
         vm.expectRevert(NothingToClaim.selector);
@@ -189,7 +189,7 @@ contract BafConsolationClaimTest is DeployProtocol {
         _record(bob, 10, 1);
         assertEq(jackpots.bafConsolationOf(bob, 10), 1, "smallest positive score pays one");
         jackpots.claimBafConsolation(ids[bob], 10);
-        assertEq(wwxrp.claimable(game.walletIdOf(bob)), 1);
+        assertEq(wwxrp.claimable(game.walletIdOf_g3120(bob)), 1);
         vm.expectRevert(NothingToClaim.selector);
         jackpots.claimBafConsolation(ids[bob], 10);
         assertEq(jackpots.bafConsolationOf(bob, 10), 0, "small score consumed once");
@@ -203,11 +203,11 @@ contract BafConsolationClaimTest is DeployProtocol {
         OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.setGameMintScale, (7)), 0);
         assertEq(jackpots.bafConsolationOf(alice, 10), 1, "view reports the unscaled award");
         jackpots.claimBafConsolation(ids[alice], 10);
-        assertEq(wwxrp.claimable(game.walletIdOf(alice)), 7);
+        assertEq(wwxrp.claimable(game.walletIdOf_g3120(alice)), 7);
         vm.prank(ContractAddresses.CREATOR);
         OwnerTargetCall.call(address(wwxrp), abi.encodeCall(wwxrp.setGameMintScale, (0)), 0);
         jackpots.claimBafConsolation(ids[bob], 10);
-        assertEq(wwxrp.claimable(game.walletIdOf(bob)), 0, "zero mint scale still disables emission");
+        assertEq(wwxrp.claimable(game.walletIdOf_g3120(bob)), 0, "zero mint scale still disables emission");
         assertEq(jackpots.bafConsolationOf(bob, 10), 0, "disabled mint still consumes the claim");
     }
 
@@ -219,7 +219,7 @@ contract BafConsolationClaimTest is DeployProtocol {
         assertEq(jackpots.bafConsolationOf(alice, 10), expected);
         vm.prank(keeper);
         jackpots.claimBafConsolation(ids[alice], 10);
-        assertEq(wwxrp.claimable(game.walletIdOf(alice)), expected);
+        assertEq(wwxrp.claimable(game.walletIdOf_g3120(alice)), expected);
         assertEq(jackpots.bafConsolationOf(alice, 10), 0);
         vm.expectRevert(NothingToClaim.selector);
         jackpots.claimBafConsolation(ids[alice], 10);
@@ -232,9 +232,9 @@ contract BafConsolationClaimTest is DeployProtocol {
         _skip(20);
 
         jackpots.claimBafConsolation(ids[alice], 10);
-        assertEq(wwxrp.claimable(game.walletIdOf(alice)), 3, "bracket 10 minted");
+        assertEq(wwxrp.claimable(game.walletIdOf_g3120(alice)), 3, "bracket 10 minted");
         jackpots.claimBafConsolation(ids[alice], 20);
-        assertEq(wwxrp.claimable(game.walletIdOf(alice)), 10, "bracket 20 minted on top");
+        assertEq(wwxrp.claimable(game.walletIdOf_g3120(alice)), 10, "bracket 20 minted on top");
     }
 
     // ==================== Driven e2e (forced-even VRF words) ====================
@@ -297,7 +297,7 @@ contract BafConsolationClaimTest is DeployProtocol {
             // Permissionless keeper claim, mint to the score owner.
             vm.prank(keeper);
             jackpots.claimBafConsolation(ids[players[i]], 10);
-            assertEq(wwxrp.claimable(game.walletIdOf(players[i])), score / 1000, "minted score/1000");
+            assertEq(wwxrp.claimable(game.walletIdOf_g3120(players[i])), score / 1000, "minted score/1000");
 
             vm.expectRevert(NothingToClaim.selector);
             jackpots.claimBafConsolation(ids[players[i]], 10);

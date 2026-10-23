@@ -80,7 +80,7 @@ contract RecycleBonusClaimablePurchase is DeployProtocol {
             if (
                 logs[i].topics.length > 1 &&
                 logs[i].topics[0] == STAKE_UPDATED_SIG &&
-                uint256(logs[i].topics[1]) == game.walletIdOf(buyer)
+                uint256(logs[i].topics[1]) == game.walletIdOf_g3120(buyer)
             ) {
                 (uint256 amount, ) = abi.decode(logs[i].data, (uint256, uint256));
                 total += amount;
@@ -89,7 +89,7 @@ contract RecycleBonusClaimablePurchase is DeployProtocol {
     }
 
     function _pokeClaimable(address who, uint256 amount) internal {
-        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(BALANCES_PACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(uint256(game.walletIdOf_g3120(who)), uint256(BALANCES_PACKED_SLOT)));
         uint256 w = uint256(vm.load(address(game), slot));
         w = (w & ~uint256(type(uint128).max)) | amount;
         vm.store(address(game), slot, bytes32(w));

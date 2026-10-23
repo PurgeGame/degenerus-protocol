@@ -69,7 +69,7 @@ contract FoilCohortHarness is DegenerusGameFoilPackModule, WalletSeed {
         rngWordCurrent = word;
         _setRngSessionPublished(true);
     }
-    function walletIdOf(address who) external view returns (uint32) { return _walletIdOf(who); }
+    function walletIdOf_g3120(address who) external view returns (uint32) { return _walletIdOf(who); }
     function record(address player) external view returns (uint256) { return _foilRecordWord(_walletIdOf(player), 1); }
     function lines(address player) external view returns (uint32[4] memory) { return _foilStoredLines(_walletIdOf(player), 1); }
     function pending() external view returns (bool) { return _foilDrainPending(); }
@@ -249,8 +249,8 @@ contract FoilGenerationCohortTest is Test {
         vm.warp(vm.getBlockTimestamp() + 1 days);
         h.live();
         h.claimGoldenTicket(idB, 1);
-        assertGt(FoilCohortCreditStub(ContractAddresses.COINFLIP).credited(h.walletIdOf(A)), 0);
-        assertGt(FoilCohortCreditStub(ContractAddresses.COINFLIP).credited(h.walletIdOf(B)), 0);
+        assertGt(FoilCohortCreditStub(ContractAddresses.COINFLIP).credited(h.walletIdOf_g3120(A)), 0);
+        assertGt(FoilCohortCreditStub(ContractAddresses.COINFLIP).credited(h.walletIdOf_g3120(B)), 0);
         vm.expectRevert(bytes4(keccak256("NoGoldenTicket()")));
         h.claimGoldenTicket(idA, 1);
     }

@@ -20,6 +20,8 @@ contract WhaleSybilHandler is Test {
     MockVRFCoordinator public vrf;
 
     // --- Ghost variables ---
+    // The handler can start after a funded Degenesis week, not only at genesis.
+    uint256 public immutable ghost_initialBacking;
     uint256 public ghost_whaleDeposited;
     uint256 public ghost_sybilDeposited;
     uint256 public ghost_whaleSuccessful;
@@ -59,6 +61,7 @@ contract WhaleSybilHandler is Test {
     constructor(DegenerusGame game_, MockVRFCoordinator vrf_, uint256 numWhales, uint256 numSybils) {
         game = game_;
         vrf = vrf_;
+        ghost_initialBacking = SolvencyObligations.backing(game_);
         ghost_minObligationRatio = type(uint256).max;
 
         // Whales: few actors with massive ETH
@@ -156,8 +159,20 @@ contract WhaleSybilHandler is Test {
         try game.claimWinnings(0) {
             uint256 balAfter = currentActor.balance;
             if (balAfter > balBefore) {
+                uint256 beforeClaimed = ghost_totalClaimed;
                 ghost_totalClaimed += balAfter - balBefore;
                 ghost_claims++;
+                uint256 deposits = ghost_whaleDeposited + ghost_sybilDeposited;
+                if (beforeClaimed <= deposits && ghost_totalClaimed > deposits) {
+                    // A concrete witness for the old false-positive bound: these
+                    // payouts also draw on prizes funded before this handler began.
+                    emit log_string("WhaleSybil opening-backed claim");
+                    emit log_named_uint("initial backing", ghost_initialBacking);
+                    emit log_named_uint("new deposits", deposits);
+                    emit log_named_uint("total claimed", ghost_totalClaimed);
+                    emit log_named_uint("remaining backing", SolvencyObligations.backing(game));
+                    emit log_named_uint("remaining obligations", SolvencyObligations.obligations(game));
+                }
             }
         } catch {}
     }

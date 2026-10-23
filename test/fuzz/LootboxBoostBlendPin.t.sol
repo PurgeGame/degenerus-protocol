@@ -51,7 +51,7 @@ contract LootboxBoostBlendPin is DeployProtocol {
     }
 
     function _giveLootboxBoon(address who) internal {
-        uint32 id = game.walletIdOf(who);
+        uint32 id = game.walletIdOf_g3120(who);
         if (id == 0) id = _giveWalletId(who);
         bytes32 slot = keccak256(abi.encode(uint256(id), SLOT_BOON_PACKED));
         uint256 s0 = uint256(vm.load(address(game), slot));

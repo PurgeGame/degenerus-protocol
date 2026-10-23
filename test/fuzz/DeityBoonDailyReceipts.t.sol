@@ -30,8 +30,8 @@ contract DeityBoonDailyReceiptsTest is DeployProtocol {
         game.purchaseDeityPass{value: 24 ether}(0, 1, bytes32(0));
         vm.prank(DEITY_B);
         game.purchaseDeityPass{value: 25 ether}(0, 2, bytes32(0));
-        a = game.walletIdOf(DEITY_A);
-        b = game.walletIdOf(DEITY_B);
+        a = game.walletIdOf_g3120(DEITY_A);
+        b = game.walletIdOf_g3120(DEITY_B);
         recipient = _giveWalletId(RECIPIENT);
         other = _giveWalletId(OTHER);
         _day(41);

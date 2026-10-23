@@ -342,7 +342,7 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
     function _foilResolved() internal view returns (bool) {
         uint24 lvl = currentKey & ~TICKET_SLOT_BIT;
         uint256 packed = uint256(vm.load(address(game),
-            keccak256(abi.encode(uint256(game.walletIdOf(buyer)), bytes32(GameSlots.FOIL_RECORD + uint256(lvl & 3))))));
+            keccak256(abi.encode(uint256(game.walletIdOf_g3120(buyer)), bytes32(GameSlots.FOIL_RECORD + uint256(lvl & 3))))));
         assertEq(uint24(packed >> 208), lvl, "foil record retains the purchased level");
         return packed >> 255 != 0;
     }

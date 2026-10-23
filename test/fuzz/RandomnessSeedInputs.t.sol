@@ -70,7 +70,7 @@ contract RandomnessSeedInputsTest is DeployProtocol {
         if (route == 0) game.mineFlip(0);
         else if (route == 1) host.afking(PLAYER, amount, word);
         else {
-            uint32 id = game.walletIdOf(PLAYER);
+            uint32 id = game.walletIdOf_g3120(PLAYER);
             GameFunding.reserve(amount);
             vm.prank(address(sdgnrs));
             game.resolveRedemptionLootbox(id, amount, word, 0, 1);
@@ -103,7 +103,7 @@ contract RandomnessSeedInputsTest is DeployProtocol {
         {
             // First-box seeds: queued position 0, the subscriber ID, and redemption box 1.
             // Each root already identifies its request cohort and fixed owner.
-            uint256 id = game.walletIdOf(PLAYER);
+            uint256 id = game.walletIdOf_g3120(PLAYER);
             uint256 seed = route == 0
                 ? uint256(keccak256(abi.encode(
                     RngTags.BOX_OPEN, uint256(keccak256(abi.encode(RngTags.BOX_ORDER, word, uint256(0)))), uint256(1))))

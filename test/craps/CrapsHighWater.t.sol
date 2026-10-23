@@ -716,7 +716,7 @@ contract CrapsCustomBoundaryTest is CrapsPins {
     function _stand(string memory tag, uint64 slot, uint256 bankrollFlip, uint256 score) internal {
         bytes32 key = keccak256(abi.encode(tag));
         craps.writeBattleWord(key, 1);
-        game.registerWallet(alice, true);
+        game.registerWallet_g9539(alice, true);
         craps.writeBet((uint256(slot) << 64) | 1, alice, craps.SYBIL_SCORE_FLOOR());
         craps.scoreAt(key, score, 1, slot, bankrollFlip);
     }

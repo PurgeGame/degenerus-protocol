@@ -83,7 +83,7 @@ contract BafDrawArming is DeployProtocol {
         assertTrue(word != 0, "harness: the transition word must be recorded");
         assertEq(
             coinflip.bafDrawWinner(word),
-            game.walletIdOf(minnow),
+            game.walletIdOf_g3120(minnow),
             "the sole sealed-window entrant wins Slice A2's draw"
         );
     }

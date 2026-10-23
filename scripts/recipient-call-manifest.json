@@ -1233,19 +1233,11 @@
   },
   {
     "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle.resolveRngSlot",
+    "scope": "CrapsBattle.resolveRngSlot_g1079",
     "kind": "recipient-helper",
     "expression": "_resolveSlotRange(slot, allowance, _RESOLVE_MAX_SEATS)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle.resolveRngSlot_g1079",
-    "kind": "recipient-helper",
-    "expression": "resolveRngSlot(slot, allowance)",
-    "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "P7A selector migration: same callee and behavior under the single low selector. TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/CrapsBattle.sol",
@@ -1787,9 +1779,9 @@
     "path": "contracts/DegenerusAdmin.sol",
     "scope": "DegenerusAdmin._linkAmountToEth",
     "kind": "bounded-wrapper",
-    "expression": "BoundedCall.staticcall( feed, 50_000, abi.encodeWithSelector(IAggregatorV3.latestRoundData.selector), 160 )",
+    "expression": "BoundedCall.staticcallRemaining(meter, feed, 50_000, tail, abi.encodeWithSelector(IAggregatorV3.latestRoundData.selector), 160 )",
     "count": 1,
-    "review": "ISOLATED: F0 fixed budget, unconditional gas admission and capped return copy; site defines refusal/drop/zero."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: ISOLATED: F0 fixed budget, unconditional gas admission and capped return copy; site defines refusal/drop/zero."
   },
   {
     "path": "contracts/DegenerusAdmin.sol",
@@ -1891,9 +1883,9 @@
     "path": "contracts/DegenerusAdmin.sol",
     "scope": "DegenerusAdmin.linkAmountToEth",
     "kind": "recipient-helper",
-    "expression": "_linkAmountToEth(amount, linkEthPriceFeed)",
+    "expression": "_linkAmountToEth(amount, linkEthPriceFeed, MineFlipGas.fromCall(36), 40_000)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/DegenerusAdmin.sol",
@@ -1947,9 +1939,9 @@
     "path": "contracts/DegenerusAdmin.sol",
     "scope": "DegenerusAdmin.onTokenTransfer",
     "kind": "recipient-helper",
-    "expression": "_linkAmountToEth(amount, feed)",
+    "expression": "_linkAmountToEth(amount, feed, MineFlipGas.fromCall(0), 500_000)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review. EXTERNAL_SERVICE: pinned Lido/Chainlink dependency; chain reachability and isolation are tracked in external-call-census.md. Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged. TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/DegenerusAdmin.sol",
@@ -2139,25 +2131,25 @@
     "path": "contracts/DegenerusAdmin.sol",
     "scope": "DegenerusAdmin.shutdownVrf",
     "kind": "bounded-wrapper",
-    "expression": "BoundedCall.callBoolRemaining( address(linkToken), 200_000, 30_000, abi.encodeWithSelector(ILinkTokenLike.transfer.selector, target, bal) )",
+    "expression": "BoundedCall.callBoolRemaining(meter, address(linkToken), 200_000, 30_000, abi.encodeWithSelector(ILinkTokenLike.transfer.selector, target, bal) )",
     "count": 1,
-    "review": "Optimization item 2 external-boundary review: Immutable protocol target, governance-selected coordinator, or immutable LINK; the numeric minimum rejects caller underfunding and is not a ceiling. Failure policy and bounded return prefix remain at the caller."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: Optimization item 2 external-boundary review: Immutable protocol target, governance-selected coordinator, or immutable LINK; the numeric minimum rejects caller underfunding and is not a ceiling. Failure policy and bounded return prefix remain at the caller."
   },
   {
     "path": "contracts/DegenerusAdmin.sol",
     "scope": "DegenerusAdmin.shutdownVrf",
     "kind": "bounded-wrapper",
-    "expression": "BoundedCall.callRemaining( coordinator, 450_000, 400_000, abi.encodeWithSelector(IVRFCoordinatorV2_5Owner.cancelSubscription.selector, subId, target), 0 )",
+    "expression": "BoundedCall.callRemaining(meter, coordinator, 450_000, 400_000, abi.encodeWithSelector(IVRFCoordinatorV2_5Owner.cancelSubscription.selector, subId, target), 0 )",
     "count": 1,
-    "review": "Optimization item 2 external-boundary review: Immutable protocol target, governance-selected coordinator, or immutable LINK; the numeric minimum rejects caller underfunding and is not a ceiling. Failure policy and bounded return prefix remain at the caller."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: Optimization item 2 external-boundary review: Immutable protocol target, governance-selected coordinator, or immutable LINK; the numeric minimum rejects caller underfunding and is not a ceiling. Failure policy and bounded return prefix remain at the caller."
   },
   {
     "path": "contracts/DegenerusAdmin.sol",
     "scope": "DegenerusAdmin.shutdownVrf",
     "kind": "bounded-wrapper",
-    "expression": "BoundedCall.staticWordRemaining( address(linkToken), 50_000, 300_000, abi.encodeWithSelector(ILinkTokenLike.balanceOf.selector, address(this)) )",
+    "expression": "BoundedCall.staticWordRemaining(meter, address(linkToken), 50_000, 300_000, abi.encodeWithSelector(ILinkTokenLike.balanceOf.selector, address(this)) )",
     "count": 1,
-    "review": "Optimization item 2 external-boundary review: Immutable protocol target, governance-selected coordinator, or immutable LINK; the numeric minimum rejects caller underfunding and is not a ceiling. Failure policy and bounded return prefix remain at the caller."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: Optimization item 2 external-boundary review: Immutable protocol target, governance-selected coordinator, or immutable LINK; the numeric minimum rejects caller underfunding and is not a ceiling. Failure policy and bounded return prefix remain at the caller."
   },
   {
     "path": "contracts/DegenerusAdmin.sol",
@@ -6257,19 +6249,11 @@
   },
   {
     "path": "contracts/JackpotBattle.sol",
-    "scope": "JackpotBattle.runCrapsMaintenance",
+    "scope": "JackpotBattle.runCrapsMaintenance_g10712",
     "kind": "recipient-helper",
     "expression": "_keepScheduled(allowance)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/JackpotBattle.sol",
-    "scope": "JackpotBattle.runCrapsMaintenance_g10712",
-    "kind": "recipient-helper",
-    "expression": "runCrapsMaintenance(allowance)",
-    "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "P7A selector migration: same callee and behavior under the single low selector. TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/JackpotBattle.sol",
@@ -6585,83 +6569,43 @@
   },
   {
     "path": "contracts/libraries/BoundedCall.sol",
-    "scope": "BoundedCall.call",
+    "scope": "BoundedCall.callBoolRemaining",
+    "kind": "bounded-wrapper",
+    "expression": "callRemaining(meter, target, minimum, reserve, input, 32)",
+    "count": 1,
+    "review": "P7A: forwards only gas above meter.floor and scaled tail/overhead; minimum is scaled admission, not a ceiling. External errors are discarded; copies only expected bytes; invalid receipt rollback remains the caller's responsibility."
+  },
+  {
+    "path": "contracts/libraries/BoundedCall.sol",
+    "scope": "BoundedCall.callRemaining",
+    "kind": "bounded-wrapper",
+    "expression": "callValueRemaining(meter, target, 0, minimum, reserve, input, expected)",
+    "count": 1,
+    "review": "P7A: forwards only gas above meter.floor and scaled tail/overhead; minimum is scaled admission, not a ceiling. External errors are discarded; copies only expected bytes; invalid receipt rollback remains the caller's responsibility."
+  },
+  {
+    "path": "contracts/libraries/BoundedCall.sol",
+    "scope": "BoundedCall.callValueRemaining",
     "kind": "assembly",
     "expression": "call(operand, target, value, add(input, 32), mload(input), 0, 0)",
     "count": 1,
-    "review": "PRIMITIVE: F0 opcode boundary; admission precedes forwarding and output copy is bounded."
+    "review": "P7A: forwards only gas above meter.floor and scaled tail/overhead; minimum is scaled admission, not a ceiling. External errors are discarded; copies only expected bytes; invalid receipt rollback remains the caller's responsibility."
   },
   {
     "path": "contracts/libraries/BoundedCall.sol",
-    "scope": "BoundedCall.call",
+    "scope": "BoundedCall.callValueRemaining",
     "kind": "bounded-wrapper",
-    "expression": "_requireGas(budget, overhead)",
+    "expression": "_remaining(meter, minimum, reserve, value == 0 ? CALL_OVERHEAD : VALUE_CALL_OVERHEAD)",
     "count": 1,
-    "review": "ISOLATED: fixed 30k transfer of available reserve ETH to the pinned sDGNRS; refusal retains reserve and pool, successful send debits both."
-  },
-  {
-    "path": "contracts/libraries/BoundedCall.sol",
-    "scope": "BoundedCall.callBool",
-    "kind": "bounded-wrapper",
-    "expression": "call(target, 0, budget, input, 32)",
-    "count": 1,
-    "review": "ISOLATED: fixed 30k transfer of available reserve ETH to the pinned sDGNRS; refusal retains reserve and pool, successful send debits both."
-  },
-  {
-    "path": "contracts/libraries/BoundedCall.sol",
-    "scope": "BoundedCall.callBoolRemaining",
-    "kind": "bounded-wrapper",
-    "expression": "callRemaining(target, minimum, reserve, input, 32)",
-    "count": 1,
-    "review": "Optimization item 2 external-boundary review: Target-specific policy is at each library caller; remaining-gas helpers retain a pre-admitted reserve and bounded return copying, fixed helpers retain the upgradeable-dependency ceiling."
-  },
-  {
-    "path": "contracts/libraries/BoundedCall.sol",
-    "scope": "BoundedCall.callRemaining",
-    "kind": "assembly",
-    "expression": "call(operand, target, 0, add(input, 32), mload(input), 0, 0)",
-    "count": 1,
-    "review": "Optimization item 2 external-boundary review: Target-specific policy is at each library caller; remaining-gas helpers retain a pre-admitted reserve and bounded return copying, fixed helpers retain the upgradeable-dependency ceiling."
-  },
-  {
-    "path": "contracts/libraries/BoundedCall.sol",
-    "scope": "BoundedCall.callRemaining",
-    "kind": "bounded-wrapper",
-    "expression": "_remaining(minimum, reserve)",
-    "count": 1,
-    "review": "Optimization item 2 external-boundary review: Target-specific policy is at each library caller; remaining-gas helpers retain a pre-admitted reserve and bounded return copying, fixed helpers retain the upgradeable-dependency ceiling."
-  },
-  {
-    "path": "contracts/libraries/BoundedCall.sol",
-    "scope": "BoundedCall.staticWord",
-    "kind": "bounded-wrapper",
-    "expression": "staticcall(target, budget, input, 32)",
-    "count": 1,
-    "review": "ISOLATED: fixed 30k transfer of available reserve ETH to the pinned sDGNRS; refusal retains reserve and pool, successful send debits both."
+    "review": "P7A: forwards only gas above meter.floor and scaled tail/overhead; minimum is scaled admission, not a ceiling. External errors are discarded; copies only expected bytes; invalid receipt rollback remains the caller's responsibility."
   },
   {
     "path": "contracts/libraries/BoundedCall.sol",
     "scope": "BoundedCall.staticWordRemaining",
     "kind": "bounded-wrapper",
-    "expression": "staticcallRemaining(target, minimum, reserve, input, 32)",
+    "expression": "staticcallRemaining(meter, target, minimum, reserve, input, 32)",
     "count": 1,
-    "review": "Optimization item 2 external-boundary review: Target-specific policy is at each library caller; remaining-gas helpers retain a pre-admitted reserve and bounded return copying, fixed helpers retain the upgradeable-dependency ceiling."
-  },
-  {
-    "path": "contracts/libraries/BoundedCall.sol",
-    "scope": "BoundedCall.staticcall",
-    "kind": "assembly",
-    "expression": "staticcall(budget, target, add(input, 32), mload(input), 0, 0)",
-    "count": 1,
-    "review": "PRIMITIVE: F0 opcode boundary; admission precedes forwarding and output copy is bounded."
-  },
-  {
-    "path": "contracts/libraries/BoundedCall.sol",
-    "scope": "BoundedCall.staticcall",
-    "kind": "bounded-wrapper",
-    "expression": "_requireGas(budget, CALL_OVERHEAD)",
-    "count": 1,
-    "review": "ISOLATED: fixed 30k transfer of available reserve ETH to the pinned sDGNRS; refusal retains reserve and pool, successful send debits both."
+    "review": "P7A: forwards only gas above meter.floor and scaled tail/overhead; minimum is scaled admission, not a ceiling. External errors are discarded; copies only expected bytes; invalid receipt rollback remains the caller's responsibility."
   },
   {
     "path": "contracts/libraries/BoundedCall.sol",
@@ -6675,9 +6619,9 @@
     "path": "contracts/libraries/BoundedCall.sol",
     "scope": "BoundedCall.staticcallRemaining",
     "kind": "bounded-wrapper",
-    "expression": "_remaining(minimum, reserve)",
+    "expression": "_remaining(meter, minimum, reserve, CALL_OVERHEAD)",
     "count": 1,
-    "review": "Optimization item 2 external-boundary review: Target-specific policy is at each library caller; remaining-gas helpers retain a pre-admitted reserve and bounded return copying, fixed helpers retain the upgradeable-dependency ceiling."
+    "review": "P7A: forwards only gas above meter.floor and scaled tail/overhead; minimum is scaled admission, not a ceiling. External errors are discarded; copies only expected bytes; invalid receipt rollback remains the caller's responsibility."
   },
   {
     "path": "contracts/libraries/JackpotBattleFieldLib.sol",
@@ -6739,9 +6683,9 @@
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule._autoStakeExcessEth",
     "kind": "opcode-or-value",
-    "expression": "ContractAddresses.GAME_ADVANCE_MODULE.delegatecall( abi.encodeWithSelector(IDegenerusGameAdvanceModule.stakeExcessEth.selector, stakeable))",
+    "expression": "ContractAddresses.GAME_ADVANCE_MODULE.delegatecall{gas: MineFlipGas.forwardable(meter, 200_000)}( abi.encodeWithSelector(IDegenerusGameAdvanceModule.stakeExcessEth.selector, stakeable, MineFlipGas.child(meter, 200_000)))",
     "count": 1,
-    "review": "PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target."
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
@@ -6803,9 +6747,9 @@
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule._handleGameOverPath",
     "kind": "recipient-helper",
-    "expression": "_unlockRng(day)",
+    "expression": "_unlockRng(day, MineFlipGas.start(allowance))",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: PROTOCOL: fixed protocol module delegation; alignment and advance-call gates track its target. TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
@@ -6819,9 +6763,9 @@
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule._processPhaseTransition",
     "kind": "recipient-helper",
-    "expression": "_autoStakeExcessEth()",
+    "expression": "_autoStakeExcessEth(meter)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: P5: perpetual-ticket worker selector targets the Pass alias GAME_TICKET_MODULE. Same Game storage, level argument, delegatecall context and bubbled failure; no opcode cap was removed. TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
@@ -6867,9 +6811,9 @@
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule._sealPurchaseDay",
     "kind": "recipient-helper",
-    "expression": "_unlockRng(day)",
+    "expression": "_unlockRng(day, meter)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review. TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
@@ -6931,9 +6875,9 @@
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule._unlockRng",
     "kind": "recipient-helper",
-    "expression": "_boundedStethBalance()",
+    "expression": "_boundedStethBalance(meter, 150_000)",
     "count": 1,
-    "review": "ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning. Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged. TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
@@ -7067,6 +7011,14 @@
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule.runDailyPhase_g2582",
     "kind": "recipient-helper",
+    "expression": "_distributeYieldSurplus(meter)",
+    "count": 1,
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review. OPTFIX4: symbol-only migration; body/authorization proof unchanged. Internal daily-bundle forwarding to the existing guarded jackpot/draw body in Game storage; caller/value and frozen word are preserved. Ticket and Decimator gas caps, external-state calls, and payout/cursor checkpoints remain in the implementation. OPTFIX4: symbol-only migration; body/authorization proof unchanged. TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. OPTFIX4: symbol-only migration; body/authorization proof unchanged."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
+    "scope": "DegenerusGameAdvanceModule.runDailyPhase_g2582",
+    "kind": "recipient-helper",
     "expression": "_endPhase(lvl)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. OPTFIX4: symbol-only migration; body/authorization proof unchanged."
@@ -7075,17 +7027,17 @@
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule.runDailyPhase_g2582",
     "kind": "recipient-helper",
-    "expression": "_processPhaseTransition(purchaseLevel)",
+    "expression": "_processPhaseTransition(purchaseLevel, meter)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. OPTFIX4: symbol-only migration; body/authorization proof unchanged."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review. OPTFIX4: symbol-only migration; body/authorization proof unchanged. Internal daily-bundle forwarding to the existing guarded jackpot/draw body in Game storage; caller/value and frozen word are preserved. Ticket and Decimator gas caps, external-state calls, and payout/cursor checkpoints remain in the implementation. OPTFIX4: symbol-only migration; body/authorization proof unchanged. TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. OPTFIX4: symbol-only migration; body/authorization proof unchanged."
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule.runDailyPhase_g2582",
     "kind": "recipient-helper",
-    "expression": "_sealPurchaseDay(purchaseLevel, day, _simulatedDayIndex(), purchaseStartDay)",
+    "expression": "_sealPurchaseDay(purchaseLevel, day, _simulatedDayIndex(), purchaseStartDay, meter)",
     "count": 3,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. OPTFIX4: symbol-only migration; body/authorization proof unchanged."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review. OPTFIX4: symbol-only migration; body/authorization proof unchanged. Internal daily-bundle forwarding to the existing guarded jackpot/draw body in Game storage; caller/value and frozen word are preserved. Ticket and Decimator gas caps, external-state calls, and payout/cursor checkpoints remain in the implementation. OPTFIX4: symbol-only migration; body/authorization proof unchanged. TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. OPTFIX4: symbol-only migration; body/authorization proof unchanged."
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
@@ -7099,17 +7051,9 @@
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule.runDailyPhase_g2582",
     "kind": "recipient-helper",
-    "expression": "_unlockRng(day)",
+    "expression": "_unlockRng(day, meter)",
     "count": 3,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. OPTFIX4: symbol-only migration; body/authorization proof unchanged."
-  },
-  {
-    "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
-    "scope": "DegenerusGameAdvanceModule.runDailyPhase_g2582",
-    "kind": "recipient-helper",
-    "expression": "distributeYieldSurplus(word)",
-    "count": 1,
-    "review": "Internal daily-bundle forwarding to the existing guarded jackpot/draw body in Game storage; caller/value and frozen word are preserved. Ticket and Decimator gas caps, external-state calls, and payout/cursor checkpoints remain in the implementation. OPTFIX4: symbol-only migration; body/authorization proof unchanged."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review. OPTFIX4: symbol-only migration; body/authorization proof unchanged. Internal daily-bundle forwarding to the existing guarded jackpot/draw body in Game storage; caller/value and frozen word are preserved. Ticket and Decimator gas caps, external-state calls, and payout/cursor checkpoints remain in the implementation. OPTFIX4: symbol-only migration; body/authorization proof unchanged. TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. OPTFIX4: symbol-only migration; body/authorization proof unchanged."
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
@@ -7211,9 +7155,9 @@
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule.stakeExcessEth",
     "kind": "bounded-wrapper",
-    "expression": "BoundedCall.call(ContractAddresses.STETH_TOKEN, amount, 300_000, abi.encodeWithSelector(IStETH.submit.selector, address(0)), 32)",
+    "expression": "BoundedCall.callValueRemaining(MineFlipGas.fromCall(36), ContractAddresses.STETH_TOKEN, amount, 300_000, 30_000, abi.encodeWithSelector(IStETH.submit.selector, address(0)), 32)",
     "count": 1,
-    "review": "ISOLATED: F0 fixed 200k stETH submit inside a trusted rollback frame; refusal or zero shares reverts the frame and keeps the ETH."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: ISOLATED: F0 fixed 200k stETH submit inside a trusted rollback frame; refusal or zero shares reverts the frame and keeps the ETH."
   },
   {
     "path": "contracts/modules/DegenerusGameBoonModule.sol",
@@ -7955,9 +7899,9 @@
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
     "scope": "DegenerusGameGameOverModule._handleFinalSweep",
     "kind": "recipient-helper",
-    "expression": "_shutdownVrf()",
+    "expression": "_shutdownVrf(meter)",
     "count": 2,
-    "review": "ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review. CHAIN: existing terminal protocol-sink payout; isolation conversion owned by lane G and reconciled at integration. EXTERNAL_SERVICE: pinned Lido/Chainlink dependency; chain reachability and isolation are tracked in external-call-census.md. ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
   },
   {
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
@@ -7971,9 +7915,9 @@
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
     "scope": "DegenerusGameGameOverModule._handleGameOverAdvance",
     "kind": "recipient-helper",
-    "expression": "_handleFinalSweep()",
+    "expression": "_handleFinalSweep(meter)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
@@ -8027,9 +7971,9 @@
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
     "scope": "DegenerusGameGameOverModule._handleGameOverDrain",
     "kind": "recipient-helper",
-    "expression": "_boundedStethBalance()",
+    "expression": "_boundedStethBalance(meter, GasBounds.TERMINAL_SETUP)",
     "count": 1,
-    "review": "ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review. ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning. P5: terminal cohort split becomes ordinary internal forwarding in Endgame, preserving Game context and split-before-budget ordering. Standalone GameOver retains its delegate helper; caught terminal Ticket work is unchanged. TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
@@ -8051,9 +7995,9 @@
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
     "scope": "DegenerusGameGameOverModule._requestTerminalRng",
     "kind": "recipient-helper",
-    "expression": "_boundedVrfRequest(VRF_REQUEST_CONFIRMATIONS)",
+    "expression": "_boundedVrfRequest(VRF_REQUEST_CONFIRMATIONS, meter)",
     "count": 1,
-    "review": "ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
   },
   {
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
@@ -8115,9 +8059,9 @@
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
     "scope": "DegenerusGameGameOverModule._shutdownVrf",
     "kind": "bounded-wrapper",
-    "expression": "BoundedCall.callRemaining(ContractAddresses.ADMIN, 1_000_000, 250_000, abi.encodeWithSelector(IDegenerusAdminShutdown.shutdownVrf.selector), 0)",
+    "expression": "BoundedCall.callRemaining(meter, ContractAddresses.ADMIN, 1_000_000, 250_000, abi.encodeWithSelector(IDegenerusAdminShutdown.shutdownVrf.selector, MineFlipGas.child(meter, 250_000)), 0)",
     "count": 1,
-    "review": "OPTFIX1: trusted Admin shutdown forwards all gas minus 250k with a 1M minimum covering nested reserves; any failed Admin frame reverts the entire sweep as retryable InsufficientExecutionGas."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: OPTFIX1: trusted Admin shutdown forwards all gas minus 250k with a 1M minimum covering nested reserves; any failed Admin frame reverts the entire sweep as retryable InsufficientExecutionGas."
   },
   {
     "path": "contracts/modules/DegenerusGameGameOverModule.sol",
@@ -8337,6 +8281,14 @@
   },
   {
     "path": "contracts/modules/DegenerusGameJackpotModule.sol",
+    "scope": "DegenerusGameJackpotModule._distributeYieldSurplus",
+    "kind": "recipient-helper",
+    "expression": "_boundedStethBalance(meter, 1_200_000)",
+    "count": 1,
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
+  },
+  {
+    "path": "contracts/modules/DegenerusGameJackpotModule.sol",
     "scope": "DegenerusGameJackpotModule._payEthQuadrant",
     "kind": "recipient-helper",
     "expression": "_awardWhalePass(lvl, trait, passShare, seed, false)",
@@ -8435,9 +8387,9 @@
     "path": "contracts/modules/DegenerusGameJackpotModule.sol",
     "scope": "DegenerusGameJackpotModule.distributeYieldSurplus",
     "kind": "recipient-helper",
-    "expression": "_boundedStethBalance()",
+    "expression": "_distributeYieldSurplus(MineFlipGas.fromCall(36))",
     "count": 1,
-    "review": "ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
   },
   {
     "path": "contracts/modules/DegenerusGameJackpotModule.sol",
@@ -8907,9 +8859,9 @@
     "path": "contracts/modules/DegenerusGameRngModule.sol",
     "scope": "DegenerusGameRngModule._requestLootboxRng",
     "kind": "recipient-helper",
-    "expression": "_requestVrfWord(VRF_MIDDAY_CONFIRMATIONS)",
+    "expression": "_requestVrfWord(VRF_MIDDAY_CONFIRMATIONS, meter)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning. TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/modules/DegenerusGameRngModule.sol",
@@ -8923,25 +8875,25 @@
     "path": "contracts/modules/DegenerusGameRngModule.sol",
     "scope": "DegenerusGameRngModule._requestLootboxRng",
     "kind": "recipient-helper",
-    "expression": "_tryChargeMiddayCredit(caller)",
+    "expression": "_tryChargeMiddayCredit(caller, meter)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning. TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/modules/DegenerusGameRngModule.sol",
     "scope": "DegenerusGameRngModule._requestLootboxRng",
     "kind": "recipient-helper",
-    "expression": "_vrfLinkBalance()",
+    "expression": "_vrfLinkBalance(meter)",
     "count": 1,
-    "review": "ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning. TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/modules/DegenerusGameRngModule.sol",
     "scope": "DegenerusGameRngModule._requestVrfWord",
     "kind": "recipient-helper",
-    "expression": "_boundedVrfRequest(confirmations)",
+    "expression": "_boundedVrfRequest(confirmations, meter)",
     "count": 1,
-    "review": "ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
   },
   {
     "path": "contracts/modules/DegenerusGameRngModule.sol",
@@ -8955,9 +8907,9 @@
     "path": "contracts/modules/DegenerusGameRngModule.sol",
     "scope": "DegenerusGameRngModule._tryChargeMiddayCredit",
     "kind": "recipient-helper",
-    "expression": "_middayCreditCharge(caller)",
+    "expression": "_middayCreditCharge(caller, meter)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/modules/DegenerusGameRngModule.sol",
@@ -8971,9 +8923,9 @@
     "path": "contracts/modules/DegenerusGameRngModule.sol",
     "scope": "DegenerusGameRngModule.requestDailyRng_g8190",
     "kind": "recipient-helper",
-    "expression": "_requestVrfWord(VRF_REQUEST_CONFIRMATIONS)",
+    "expression": "_requestVrfWord(VRF_REQUEST_CONFIRMATIONS, meter)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. OPTFIX4: symbol-only migration; body/authorization proof unchanged."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: Internal daily-bundle request preparation; existing Game-context, sealed-read, day and liveness guards remain. Degenesis, Craps and recipient-owning external calls keep their frames; any failure rolls back the request atomically. OPTFIX4: symbol-only migration; body/authorization proof unchanged. TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. OPTFIX4: symbol-only migration; body/authorization proof unchanged."
   },
   {
     "path": "contracts/modules/DegenerusGameRngModule.sol",
@@ -8995,17 +8947,17 @@
     "path": "contracts/modules/DegenerusGameRngModule.sol",
     "scope": "DegenerusGameRngModule.requestMinerRng_g4954",
     "kind": "recipient-helper",
-    "expression": "_requestLootboxRng(msg.sender)",
+    "expression": "_requestLootboxRng(msg.sender, MineFlipGas.fromCall(4))",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. OPTFIX4: symbol-only migration; body/authorization proof unchanged."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review. OPTFIX4: symbol-only migration; body/authorization proof unchanged."
   },
   {
     "path": "contracts/modules/DegenerusGameRngModule.sol",
     "scope": "DegenerusGameRngModule.retryRng",
     "kind": "recipient-helper",
-    "expression": "_requestVrfWord(rngLockedFlag ? VRF_REQUEST_CONFIRMATIONS : VRF_MIDDAY_CONFIRMATIONS)",
+    "expression": "_requestVrfWord(rngLockedFlag ? VRF_REQUEST_CONFIRMATIONS : VRF_MIDDAY_CONFIRMATIONS, MineFlipGas.fromCall(4))",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/modules/DegenerusGameRngUtils.sol",
@@ -9483,9 +9435,9 @@
     "path": "contracts/modules/GameAfkingModule.sol",
     "scope": "GameAfkingModule._runSubscriberWork",
     "kind": "recipient-helper",
-    "expression": "_tryFundAfkingSteth(element, ethValue, funding)",
+    "expression": "_tryFundAfkingSteth(element, ethValue, funding, c.meter)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged. TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/modules/GameAfkingModule.sol",
@@ -9499,17 +9451,25 @@
     "path": "contracts/modules/GameAfkingModule.sol",
     "scope": "GameAfkingModule._stethFundingWord",
     "kind": "bounded-wrapper",
-    "expression": "BoundedCall.staticWord(ContractAddresses.STETH_TOKEN, EXTERNAL_READ_GAS, input)",
+    "expression": "BoundedCall.staticWordRemaining(meter, ContractAddresses.STETH_TOKEN, EXTERNAL_READ_GAS, 100_000, input)",
     "count": 1,
-    "review": "ISOLATED: F0 fixed stETH read/transfer inside the atomic AFKing frame; failure reverts that frame only."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: ISOLATED: F0 fixed stETH read/transfer inside the atomic AFKing frame; failure reverts that frame only."
   },
   {
     "path": "contracts/modules/GameAfkingModule.sol",
     "scope": "GameAfkingModule._tryFundAfkingSteth",
     "kind": "bounded-wrapper",
-    "expression": "BoundedCall.callRemaining(address(this), 1_000_000, 300_000, abi.encodeWithSelector(IDegenerusGame.pullAfkingSteth.selector, subscriber, _payee(_walletElement(subscriber)), ethValue - funding), 32)",
+    "expression": "BoundedCall.callRemaining(meter, address(this), 1_000_000, 300_000, abi.encodeWithSelector(IDegenerusGame.pullAfkingSteth.selector, subscriber, _payee(_walletElement(subscriber)), ethValue - funding, MineFlipGas.child(meter, 300_000)), 32)",
     "count": 1,
-    "review": "Optimization item 2 external-boundary review: Immutable protocol target, governance-selected coordinator, or immutable LINK; the numeric minimum rejects caller underfunding and is not a ceiling. Failure policy and bounded return prefix remain at the caller."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: Optimization item 2 external-boundary review: Immutable protocol target, governance-selected coordinator, or immutable LINK; the numeric minimum rejects caller underfunding and is not a ceiling. Failure policy and bounded return prefix remain at the caller."
+  },
+  {
+    "path": "contracts/modules/GameAfkingModule.sol",
+    "scope": "GameAfkingModule._tryFundAfkingSteth",
+    "kind": "bounded-wrapper",
+    "expression": "BoundedCall.rethrowTrustedGasFailure()",
+    "count": 1,
+    "review": "P7A: immediately after the immutable Game funding self-call; propagates trusted gas refusals so underfunding never expires a subscriber. Token errors are wrapped as AfkingStethPullFailed inside the rollback frame; no external error can spoof the retry classification."
   },
   {
     "path": "contracts/modules/GameAfkingModule.sol",
@@ -9547,49 +9507,49 @@
     "path": "contracts/modules/GameAfkingModule.sol",
     "scope": "GameAfkingModule.pullAfkingSteth",
     "kind": "bounded-wrapper",
-    "expression": "BoundedCall.call(ContractAddresses.STETH_TOKEN, 0, 300_000, abi.encodeWithSelector(IStETH.transferSharesFrom.selector, source, address(this), shares), 32)",
+    "expression": "BoundedCall.callRemaining(meter, ContractAddresses.STETH_TOKEN, 300_000, 200_000, abi.encodeWithSelector(IStETH.transferSharesFrom.selector, source, address(this), shares), 32)",
     "count": 1,
-    "review": "ISOLATED: F0 fixed stETH read/transfer inside the atomic AFKing frame; failure reverts that frame only."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: ISOLATED: F0 fixed stETH read/transfer inside the atomic AFKing frame; failure reverts that frame only. ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
   },
   {
     "path": "contracts/modules/GameAfkingModule.sol",
     "scope": "GameAfkingModule.pullAfkingSteth",
     "kind": "bounded-wrapper",
-    "expression": "BoundedCall.staticWord(ContractAddresses.STETH_TOKEN, EXTERNAL_READ_GAS, abi.encodeWithSelector(IStETH.allowance.selector, source, address(this)))",
+    "expression": "BoundedCall.staticWordRemaining(meter, ContractAddresses.STETH_TOKEN, EXTERNAL_READ_GAS, 100_000, abi.encodeWithSelector(IStETH.allowance.selector, source, address(this)))",
     "count": 1,
-    "review": "ISOLATED: F0 fixed stETH read/transfer inside the atomic AFKing frame; failure reverts that frame only."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: ISOLATED: F0 fixed stETH read/transfer inside the atomic AFKing frame; failure reverts that frame only. ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
   },
   {
     "path": "contracts/modules/GameAfkingModule.sol",
     "scope": "GameAfkingModule.pullAfkingSteth",
     "kind": "recipient-helper",
-    "expression": "_stethFundingWord(abi.encodeWithSelector(IStETH.balanceOf.selector, address(this)))",
+    "expression": "_stethFundingWord(meter, abi.encodeWithSelector(IStETH.balanceOf.selector, address(this)))",
     "count": 2,
-    "review": "ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: ISOLATED: F0 fixed stETH read/transfer inside the atomic AFKing frame; failure reverts that frame only. ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
   },
   {
     "path": "contracts/modules/GameAfkingModule.sol",
     "scope": "GameAfkingModule.pullAfkingSteth",
     "kind": "recipient-helper",
-    "expression": "_stethFundingWord(abi.encodeWithSelector(IStETH.getPooledEthByShares.selector, shares))",
+    "expression": "_stethFundingWord(meter, abi.encodeWithSelector(IStETH.getPooledEthByShares.selector, shares))",
     "count": 2,
-    "review": "ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: ISOLATED: F0 fixed stETH read/transfer inside the atomic AFKing frame; failure reverts that frame only. ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
   },
   {
     "path": "contracts/modules/GameAfkingModule.sol",
     "scope": "GameAfkingModule.pullAfkingSteth",
     "kind": "recipient-helper",
-    "expression": "_stethFundingWord(abi.encodeWithSelector(IStETH.getSharesByPooledEth.selector, shortfall))",
+    "expression": "_stethFundingWord(meter, abi.encodeWithSelector(IStETH.getSharesByPooledEth.selector, shortfall))",
     "count": 1,
-    "review": "ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: ISOLATED: F0 fixed stETH read/transfer inside the atomic AFKing frame; failure reverts that frame only. ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
   },
   {
     "path": "contracts/modules/GameAfkingModule.sol",
     "scope": "GameAfkingModule.pullAfkingSteth",
     "kind": "recipient-helper",
-    "expression": "_stethFundingWord(abi.encodeWithSelector(IStETH.sharesOf.selector, source))",
+    "expression": "_stethFundingWord(meter, abi.encodeWithSelector(IStETH.sharesOf.selector, source))",
     "count": 1,
-    "review": "ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: ISOLATED: F0 fixed stETH read/transfer inside the atomic AFKing frame; failure reverts that frame only. ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
   },
   {
     "path": "contracts/modules/GameAfkingModule.sol",
@@ -9867,9 +9827,9 @@
     "path": "contracts/modules/GameMiner.sol",
     "scope": "GameMiner._mineFlip",
     "kind": "recipient-helper",
-    "expression": "_nextMinerAction(msg.sender)",
+    "expression": "_nextMinerAction(msg.sender, meter)",
     "count": 2,
-    "review": "Optimization item 2: internal helper edge; transitive actual external boundaries are individually classified in opt/item2/external-call-classification.json. Preserve existing caller authorization, settlement ordering and rollback."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: Optimization item 2 external-boundary review: Allowance is current checkpoint sizing, not a target-specific fixed cap. Preserve gas admission, rollback, retry and parent tail. Optimization item 2 external-boundary review: Pinned protocol implementation; no independently upgradeable target. Preserve authorization, caller context and atomic failure propagation. Optimization item 2: internal helper edge; transitive actual external boundaries are individually classified in opt/item2/external-call-classification.json. Preserve existing caller authorization, settlement ordering and rollback. Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
   },
   {
     "path": "contracts/modules/GameMiner.sol",
@@ -10627,17 +10587,17 @@
     "path": "contracts/storage/DegenerusGameStorage.sol",
     "scope": "DegenerusGameStorage._boundedStethBalance",
     "kind": "bounded-wrapper",
-    "expression": "BoundedCall.staticWord(ContractAddresses.STETH_TOKEN, EXTERNAL_READ_GAS, abi.encodeWithSelector(IStETH.balanceOf.selector, address(this)))",
+    "expression": "BoundedCall.staticWordRemaining(meter, ContractAddresses.STETH_TOKEN, EXTERNAL_READ_GAS, tail, abi.encodeWithSelector(IStETH.balanceOf.selector, address(this)))",
     "count": 1,
-    "review": "ISOLATED: F0 fixed balance read; failure or an impossible value counts as zero, which only under-counts."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: ISOLATED: F0 fixed balance read; failure or an impossible value counts as zero, which only under-counts."
   },
   {
     "path": "contracts/storage/DegenerusGameStorage.sol",
     "scope": "DegenerusGameStorage._boundedVrfRequest",
     "kind": "bounded-wrapper",
-    "expression": "BoundedCall.callRemaining(address(vrfCoordinator), VRF_REQUEST_MIN_GAS, VRF_REQUEST_RESERVE, abi.encodeWithSelector(IVRFCoordinator.requestRandomWords.selector, VRFRandomWordsRequest({ keyHash: vrfKeyHash, subId: vrfSubscriptionId, requestConfirmations: confirmations, callbackGasLimit: 300_000, numWords: 1, extraArgs: hex\"\" })), 32)",
+    "expression": "BoundedCall.callRemaining(meter, address(vrfCoordinator), VRF_REQUEST_MIN_GAS, VRF_REQUEST_RESERVE, abi.encodeWithSelector(IVRFCoordinator.requestRandomWords.selector, VRFRandomWordsRequest({ keyHash: vrfKeyHash, subId: vrfSubscriptionId, requestConfirmations: confirmations, callbackGasLimit: 300_000, numWords: 1, extraArgs: hex\"\" })), 32)",
     "count": 1,
-    "review": "Optimization item 2 external-boundary review: Immutable protocol target, governance-selected coordinator, or immutable LINK; the numeric minimum rejects caller underfunding and is not a ceiling. Failure policy and bounded return prefix remain at the caller."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: Optimization item 2 external-boundary review: Immutable protocol target, governance-selected coordinator, or immutable LINK; the numeric minimum rejects caller underfunding and is not a ceiling. Failure policy and bounded return prefix remain at the caller."
   },
   {
     "path": "contracts/storage/DegenerusGameStorage.sol",
@@ -10650,10 +10610,10 @@
   {
     "path": "contracts/storage/DegenerusGameStorage.sol",
     "scope": "DegenerusGameStorage._middayCreditCharge",
-    "kind": "external",
-    "expression": "IAdminLinkValue(ContractAddresses.ADMIN).linkAmountToEth(1 ether)",
+    "kind": "bounded-wrapper",
+    "expression": "BoundedCall.staticWordRemaining(meter, ContractAddresses.ADMIN, 120_000, 200_000, abi.encodeWithSelector(IAdminLinkValue.linkAmountToEth.selector, 1 ether, MineFlipGas.child(meter, 200_000)))",
     "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
   {
     "path": "contracts/storage/DegenerusGameStorage.sol",
@@ -10667,41 +10627,49 @@
     "path": "contracts/storage/DegenerusGameStorage.sol",
     "scope": "DegenerusGameStorage._minerMiddayEligible",
     "kind": "recipient-helper",
-    "expression": "_middayCreditCharge(caller)",
+    "expression": "_middayCreditCharge(caller, meter)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning. TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/storage/DegenerusGameStorage.sol",
     "scope": "DegenerusGameStorage._minerMiddayEligible",
     "kind": "recipient-helper",
-    "expression": "_vrfLinkBalance()",
+    "expression": "_vrfLinkBalance(meter)",
     "count": 1,
-    "review": "ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: ISOLATED: calls an F0-bounded helper; the helper defines the non-reverting failure meaning. TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/storage/DegenerusGameStorage.sol",
-    "scope": "DegenerusGameStorage._nextMinerAction",
+    "scope": "DegenerusGameStorage._nextMinerAction(address:default)",
+    "kind": "recipient-helper",
+    "expression": "_nextMinerAction(caller, meter)",
+    "count": 1,
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+  },
+  {
+    "path": "contracts/storage/DegenerusGameStorage.sol",
+    "scope": "DegenerusGameStorage._nextMinerAction(address:default,struct MineFlipGas.Meter:memory)",
     "kind": "recipient-helper",
     "expression": "_minerMaintenancePending()",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/storage/DegenerusGameStorage.sol",
-    "scope": "DegenerusGameStorage._nextMinerAction",
+    "scope": "DegenerusGameStorage._nextMinerAction(address:default,struct MineFlipGas.Meter:memory)",
     "kind": "recipient-helper",
-    "expression": "_minerMiddayEligible(caller)",
+    "expression": "_minerMiddayEligible(caller, meter)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/storage/DegenerusGameStorage.sol",
-    "scope": "DegenerusGameStorage._nextMinerAction",
+    "scope": "DegenerusGameStorage._nextMinerAction(address:default,struct MineFlipGas.Meter:memory)",
     "kind": "recipient-helper",
     "expression": "_rngConsumerStage()",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/storage/DegenerusGameStorage.sol",
@@ -10731,8 +10699,8 @@
     "path": "contracts/storage/DegenerusGameStorage.sol",
     "scope": "DegenerusGameStorage._vrfLinkBalance",
     "kind": "bounded-wrapper",
-    "expression": "BoundedCall.staticWordRemaining(address(vrfCoordinator), EXTERNAL_READ_GAS, VRF_READ_RESERVE, abi.encodeWithSelector(IVRFCoordinator.getSubscription.selector, vrfSubscriptionId))",
+    "expression": "BoundedCall.staticWordRemaining(meter, address(vrfCoordinator), EXTERNAL_READ_GAS, VRF_READ_RESERVE, abi.encodeWithSelector(IVRFCoordinator.getSubscription.selector, vrfSubscriptionId))",
     "count": 1,
-    "review": "Optimization item 2 external-boundary review: Immutable protocol target, governance-selected coordinator, or immutable LINK; the numeric minimum rejects caller underfunding and is not a ceiling. Failure policy and bounded return prefix remain at the caller."
+    "review": "P7A: explicit call-local meter and scaled admission/tail; target, value, bounded return prefix, authorization and rollback policy retained. Prior scope review: Optimization item 2 external-boundary review: Immutable protocol target, governance-selected coordinator, or immutable LINK; the numeric minimum rejects caller underfunding and is not a ceiling. Failure policy and bounded return prefix remain at the caller."
   }
 ]

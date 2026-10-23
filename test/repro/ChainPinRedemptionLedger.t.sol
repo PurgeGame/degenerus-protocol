@@ -332,7 +332,7 @@ contract ChainPinRedemptionLedger is RedemptionFixture {
         (uint256 tokens, uint256 payout,,,,) = sdgnrs.redemptionBatches(id);
         if (tokens == 0) return 0;
         for (uint256 i; i < holders.length; ++i) {
-            (uint256 t,) = sdgnrs.pendingRedemptions(game.walletIdOf(holders[i]), id);
+            (uint256 t,) = sdgnrs.pendingRedemptions(game.walletIdOf_g3120(holders[i]), id);
             sum += payout * t / tokens;
         }
     }
@@ -491,7 +491,7 @@ contract ChainPinRedemptionLedger is RedemptionFixture {
             } else if (op == 5) {
                 uint256 vaultBal = dgnrs.balanceOf(ContractAddresses.VAULT);
                 uint256 minBurn = _liveMinBurn();
-                if (vaultBal >= minBurn && game.walletIdOf(ContractAddresses.VAULT) != 0) {
+                if (vaultBal >= minBurn && game.walletIdOf_g3120(ContractAddresses.VAULT) != 0) {
                     vm.prank(ContractAddresses.VAULT);
                     try sdgnrs.burnWrapped(minBurn + (r >> 16) % (vaultBal / 20 + 1)) {} catch {}
                 }

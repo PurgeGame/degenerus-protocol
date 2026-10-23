@@ -32,7 +32,7 @@ contract SeatTenureDraw is DeployProtocol {
     function _aid(address a) internal returns (uint32 id) {
         id = _aidCache[a];
         if (id == 0) {
-            id = game.walletIdOf(a);
+            id = game.walletIdOf_g3120(a);
             if (id == 0) id = _giveWalletId(a);
             _aidCache[a] = id;
         }
@@ -113,12 +113,12 @@ contract SeatTenureDraw is DeployProtocol {
     }
 
     function _metaSlot(address who) internal view returns (bytes32) {
-        return keccak256(abi.encode(uint256(game.walletIdOf(who) >> 2), GameSlots.SUB_META));
+        return keccak256(abi.encode(uint256(game.walletIdOf_g3120(who) >> 2), GameSlots.SUB_META));
     }
 
     /// @dev The run-start day of `who` (reverse-lookup lane bits 11..32).
     function _runStart(address who) internal view returns (uint24) {
-        uint256 meta = uint256(vm.load(address(game), _metaSlot(who))) >> ((game.walletIdOf(who) & 3) * 64);
+        uint256 meta = uint256(vm.load(address(game), _metaSlot(who))) >> ((game.walletIdOf_g3120(who) & 3) * 64);
         return uint24((meta >> 11) & ((uint256(1) << 22) - 1));
     }
 
@@ -224,8 +224,8 @@ contract SeatTenureDraw is DeployProtocol {
     function _assertProtocolPositions() private view {
         bytes32 root = keccak256(abi.encode(GameSlots.SUBSCRIBERS));
         uint256 ids = uint256(vm.load(address(game), root));
-        assertEq(uint32(ids), game.walletIdOf(ContractAddresses.VAULT), "Vault stays first");
-        assertEq(uint32(ids >> 85), game.walletIdOf(ContractAddresses.SDGNRS), "sDGNRS stays second");
+        assertEq(uint32(ids), game.walletIdOf_g3120(ContractAddresses.VAULT), "Vault stays first");
+        assertEq(uint32(ids >> 85), game.walletIdOf_g3120(ContractAddresses.SDGNRS), "sDGNRS stays second");
     }
 
     function test_ProtocolTicketModeRevertsForSelfAndApprovedVaultOperator() public {
@@ -244,7 +244,7 @@ contract SeatTenureDraw is DeployProtocol {
             abi.encodeWithSignature("setOperatorApproval(uint32,address,bool)", 0, operator, true),
             0
         )), 0), (bytes));
-        uint32 vaultId = game.walletIdOf(ContractAddresses.VAULT);
+        uint32 vaultId = game.walletIdOf_g3120(ContractAddresses.VAULT);
         vm.prank(operator);
         vm.expectRevert(abi.encodeWithSignature("E()"));
         game.subscribe(vaultId, true, 1, 0);

@@ -45,8 +45,8 @@ contract CrapsLapsedDayArmTest is CrapsPins {
 
     function setUp() public {
         _installPins();
-        game.registerWallet(alice, true);
-        game.registerWallet(dave, true);
+        game.registerWallet_g9539(alice, true);
+        game.registerWallet_g9539(dave, true);
         _warpToTableGenesis();
         craps = new LapseArmHarness();
         vm.warp(vm.getBlockTimestamp() + 1 days);
@@ -86,7 +86,7 @@ contract CrapsLapsedDayArmTest is CrapsPins {
         bytes32 sig = keccak256("CrapsPassesCredited(uint32,bool,uint256)");
         for (uint256 i = 0; i < logs.length; ++i) {
             if (logs[i].topics.length != 2 || logs[i].topics[0] != sig) continue;
-            if (uint256(logs[i].topics[1]) != uint256(game.walletIdOf(who))) continue;
+            if (uint256(logs[i].topics[1]) != uint256(game.walletIdOf_g3120(who))) continue;
             (, uint256 count) = abi.decode(logs[i].data, (bool, uint256));
             n += count;
         }
@@ -308,7 +308,7 @@ contract CrapsLapsedDayArmTest is CrapsPins {
         while (craps.minerSlot() < daySlotG + 8) {
             vm.cool(address(craps));
             vm.prank(ContractAddresses.GAME);
-            MineFlipGas.Result memory step = JackpotBattle(address(craps)).runCrapsMaintenance{gas: 800_000}(800_000);
+            MineFlipGas.Result memory step = JackpotBattle(address(craps)).runCrapsMaintenance_g10712{gas: 800_000}(800_000);
             assertTrue(step.progressed, "sufficient supplied gas must advance frozen refund frontier");
             uint256 refunded = flip.compLane() - laneBefore;
             assertGe(refunded, priorRefunds, "refund checkpoints cannot debit earlier credits");

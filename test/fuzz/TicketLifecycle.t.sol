@@ -996,7 +996,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // Credit the claimant's pending half-passes directly (wallet-table element, bits 192..255).
         _creditHalfPasses(claimant, 2);
 
-        game.claimWhalePass(game.walletIdOf(claimant));
+        game.claimWhalePass(game.walletIdOf_g3120(claimant));
 
         // h=2 -> one whole ticket (4 entries) every 2nd level from startLevel 1: odd
         // levels covered, even levels empty. Only level 1 is within the mint ceiling
@@ -1056,7 +1056,7 @@ contract TicketLifecycleTest is DeployProtocol {
         // Credit the claimant's pending half-passes directly (wallet-table element, bits 192..255).
         _creditHalfPasses(claimant, 400);
 
-        game.claimWhalePass(game.walletIdOf(claimant));
+        game.claimWhalePass(game.walletIdOf_g3120(claimant));
 
         // h=400 -> dense base leg only: 400 entries on every level of the span.
         assertEq(_ticketsOwed(_writeKeyForLevel(1), claimant), 400,
@@ -2357,7 +2357,7 @@ contract TicketLifecycleTest is DeployProtocol {
             from = (uint256(vm.load(host, bytes32(GameSlots.BOX_CURSOR))) >> (GameSlots.BOX_CURSOR_OFFSET * 8))
                 & type(uint48).max;
         }
-        uint32 id = game.walletIdOf(who);
+        uint32 id = game.walletIdOf_g3120(who);
         if (id == 0) return 0;
         for (uint256 p = from; p < end; ++p) {
             uint256 word = RecyclingState.boxEntry(host, buffer, p);
@@ -2442,7 +2442,7 @@ contract TicketLifecycleTest is DeployProtocol {
     ///      hash4(hash4(QUEUED_ORDER_DOMAIN, word, buffer, position), walletId, BOX_OPEN_TAG, nonce),
     ///      where the nonce is the box's 1-based position in the entry (LootboxModule._rollBoxes).
     function _boxSeed(uint256 word, uint48 buffer, address player, uint256 nonce) internal view returns (uint256) {
-        uint32 id = game.walletIdOf(player);
+        uint32 id = game.walletIdOf_g3120(player);
         uint256 n = RecyclingState.boxCount(address(game), buffer);
         uint256 position;
         for (; position < n; ++position) {

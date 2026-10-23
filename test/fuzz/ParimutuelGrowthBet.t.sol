@@ -404,7 +404,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         _fund(alice, STAKE);
         _mockOpenAt(50, 0, true);
 
-        uint32 aliceId = game.walletIdOf(alice);
+        uint32 aliceId = game.walletIdOf_g3120(alice);
         vm.prank(bob);
         vm.expectRevert(DegenerusParimutuel.NotApproved.selector);
         parimutuel.placeBet(aliceId, true);
@@ -415,7 +415,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         _fund(alice, STAKE);
         _mockOpenAt(50, 0, true);
 
-        uint32 aliceId = game.walletIdOf(alice);
+        uint32 aliceId = game.walletIdOf_g3120(alice);
         vm.prank(alice);
         game.setOperatorApproval(0, bob, true);
         uint256 aliceBefore = _flipReach(alice);
@@ -643,7 +643,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         vm.mockCall(
             address(game),
             abi.encodeWithSelector(
-                bytes4(keccak256("mintPackedOfId(uint32)")),
+                bytes4(keccak256("mintPackedOfId_g5372(uint32)")),
                 _giveWalletId(alice)
             ),
             abi.encode(uint256(20) << BitPackingLib.CURSE_COUNT_SHIFT)
@@ -788,14 +788,14 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         vm.mockCall(
             address(game),
             abi.encodeWithSelector(
-                bytes4(keccak256("mintPackedOfId(uint32)")),
+                bytes4(keccak256("mintPackedOfId_g5372(uint32)")),
                 _giveWalletId(alice)
             ),
             abi.encode(packedMint)
         );
 
         _fund(alice, STAKE);
-        assertEq(quests.effectiveBaseStreak(game.walletIdOf(alice)), 0, "harness: fresh streak");
+        assertEq(quests.effectiveBaseStreak(game.walletIdOf_g3120(alice)), 0, "harness: fresh streak");
         _bet(alice, true);
 
         // Two full protocol days pass with no daily quest from alice, then one read
@@ -806,7 +806,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
         _driveDay();
         _driveDay();
         assertEq(
-            quests.effectiveBaseStreak(game.walletIdOf(alice)),
+            quests.effectiveBaseStreak(game.walletIdOf_g3120(alice)),
             1,
             "the bet must add one streak day that carries no daily-quest protection"
         );

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {RngTags} from "../../contracts/libraries/RngTags.sol";
 import {PeripheralSlots} from "../helpers/PeripheralSlots.sol";
 
 import {Test} from "forge-std/Test.sol";
@@ -13,18 +14,18 @@ contract WwxrpRecyclingGameMock {
     mapping(uint32 => uint256) public playerActivityScore;
     uint24 public level;
     function setWord(uint24 day, uint256 word) external { rngWordForDay[day] = word; }
-    function setActivity(address player, uint256 score) external { playerActivityScore[walletIdOf[player]] = score; }
-    mapping(address => uint32) public walletIdOf;
-    function setId(address player, uint32 id) external { walletIdOf[player] = id; }
-    function registerWallet(address player, bool) external view returns (uint32 id) {
-        id = walletIdOf[player];
+    function setActivity(address player, uint256 score) external { playerActivityScore[walletIdOf_g3120[player]] = score; }
+    mapping(address => uint32) public walletIdOf_g3120;
+    function setId(address player, uint32 id) external { walletIdOf_g3120[player] = id; }
+    function registerWallet_g9539(address player, bool) external view returns (uint32 id) {
+        id = walletIdOf_g3120[player];
         require(id != 0, "fixture actor must be registered");
     }
     function playerActivityScoreCachedById(uint32 id) external view returns (uint256) {
         return playerActivityScore[id];
     }
     function setLevel(uint24 value) external { level = value; }
-    function extsload(bytes32) external pure returns (bytes32) { return bytes32(0); }
+    function extsload_g8132(bytes32) external pure returns (bytes32) { return bytes32(0); }
 }
 
 contract WwxrpRecyclingCoinflipMock {
@@ -65,7 +66,7 @@ contract WWXRPRecyclingTest is Test {
     }
 
     function _id(address player) private view returns (uint32) {
-        return game.walletIdOf(player);
+        return game.walletIdOf_g3120(player);
     }
 
     function _mint(address player, uint256 amount) private {
@@ -79,15 +80,15 @@ contract WWXRPRecyclingTest is Test {
         token.enter(0, amount);
     }
 
-    function _hash(bytes32 domain, uint24 day, uint256 word) private view returns (uint256) {
-        return uint256(keccak256(abi.encodePacked(domain, address(token), day, word)));
+    function _hash(uint256 domain, uint256 word) private pure returns (uint256) {
+        return uint256(keccak256(abi.encode(domain, word)));
     }
 
-    function _winningWord(uint24 day, uint8 bucket) private view returns (uint256 word) {
+    function _winningWord(uint24, uint8 bucket) private pure returns (uint256 word) {
         for (word = 1; ; ++word) {
-            if (_hash("WWXRP_DRAW_BIG", day, word) % 365 != 0
-                && _hash("WWXRP_DRAW_SMALL", day, word) % 30 == 0
-                && _hash("WWXRP_DRAW_WIN_BUCKET", day, word) % 10 == bucket) return word;
+            if (_hash(RngTags.WWXRP_BIG, word) % 365 != 0
+                && _hash(RngTags.WWXRP_SMALL, word) % 30 == 0
+                && _hash(RngTags.WWXRP_BUCKET, word) % 10 == bucket) return word;
         }
     }
 

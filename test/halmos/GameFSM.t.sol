@@ -39,7 +39,7 @@ contract FSMEmptyDependencies {
         return true;
     }
 
-    function minerMaintenancePending() external pure returns (bool) { return false; }
+    function minerMaintenancePending_g11976() external pure returns (bool) { return false; }
 
     /// @dev sDGNRS read-consumer probe (`_rngConsumerStage`): no live redemption.
     function redemptionSettlementPending() external pure returns (bool) { return false; }

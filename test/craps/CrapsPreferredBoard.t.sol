@@ -30,16 +30,16 @@ contract CrapsPreferredBoardTest is CrapsPins {
         _setDailyWord(c.currentDayIndex(), 40 << 8);
         game.setScore(alice, c.SYBIL_SCORE_FLOOR());
         game.setScore(bob, c.SYBIL_SCORE_FLOOR());
-        aliceId = game.registerWallet(alice, true);
-        bobId = game.registerWallet(bob, true);
+        aliceId = game.registerWallet_g9539(alice, true);
+        bobId = game.registerWallet_g9539(bob, true);
     }
 
     /// @dev Pass balances and preference share the sole ID-keyed word.
     function _key(address p) private view returns (bytes32) { return _idKey(p); }
     function _idKey(address p) private view returns (bytes32) {
-        return keccak256(abi.encode(uint256(game.walletIdOf(p)), CrapsPreferenceLib.PASS_SLOT));
+        return keccak256(abi.encode(uint256(game.walletIdOf_g3120(p)), CrapsPreferenceLib.PASS_SLOT));
     }
-    function _word(address p) private view returns (uint256) { return uint256(c.extsload(_idKey(p))); }
+    function _word(address p) private view returns (uint256) { return uint256(c.extsload_g8132(_idKey(p))); }
     function _raw(address p) private view returns (uint256) { return _word(p); }
     function _save(address p, uint32 b) private { vm.prank(p); c.setPreferredBoard(0, b); }
     function _dayChips(uint24 day, address p) private view returns (uint256) {
@@ -56,7 +56,7 @@ contract CrapsPreferredBoardTest is CrapsPins {
 
     function test_SlotSentinelOwnershipAndNoop() public {
         assertEq(c.passCreditsByIdSlot(), CrapsPreferenceLib.PASS_SLOT, "raw reader slot drift");
-        assertEq(c.preferredBoardOf(game.walletIdOf(alice)), 0);
+        assertEq(c.preferredBoardOf(game.walletIdOf_g3120(alice)), 0);
         vm.recordLogs();
         _save(alice, 0);
         assertEq(_word(alice), INIT);
@@ -95,7 +95,7 @@ contract CrapsPreferredBoardTest is CrapsPins {
         vm.store(address(c), _idKey(alice), bytes32(base | uint256(balances)));
         _save(alice, board);
         assertEq(_word(alice), base | uint256(balances) | INIT | compact << 64);
-        assertEq(c.preferredBoardOf(game.walletIdOf(alice)), board);
+        assertEq(c.preferredBoardOf(game.walletIdOf_g3120(alice)), board);
         (uint256 n, uint256 h) = c.passCreditsOf(alice);
         assertEq(n, uint32(balances)); assertEq(h, balances >> 32);
     }
@@ -123,7 +123,7 @@ contract CrapsPreferredBoardTest is CrapsPins {
         _save(alice, BOARD);
         game.setRngLocked(true);
         _save(alice, BOARD);
-        assertEq(c.preferredBoardOf(game.walletIdOf(alice)), BOARD);
+        assertEq(c.preferredBoardOf(game.walletIdOf_g3120(alice)), BOARD);
         vm.prank(alice); vm.expectRevert(CrapsBattleStorage.BetLocked.selector); c.setPreferredBoard(0, 0);
         vm.prank(alice); vm.expectRevert(CrapsBattleStorage.BetLocked.selector); c.setPreferredBoard(0, 2);
         vm.prank(bob); vm.expectRevert(CrapsBattleStorage.BetLocked.selector); c.setPreferredBoard(0, 0);
@@ -170,7 +170,7 @@ contract CrapsPreferredBoardTest is CrapsPins {
         vm.recordLogs();
         vm.prank(alice); c.buyFutureCrapsDays(day, 3, false, BOARD);
         assertEq(_events(), 1, "batch must save once");
-        assertEq(c.preferredBoardOf(game.walletIdOf(alice)), BOARD);
+        assertEq(c.preferredBoardOf(game.walletIdOf_g3120(alice)), BOARD);
         vm.prank(alice); c.buyFutureCrapsDays(day + 3, 1, false, 0);
         assertEq(_dayChips(day + 3, alice), 0);
         assertEq(_word(alice), INIT);
@@ -183,9 +183,9 @@ contract CrapsPreferredBoardTest is CrapsPins {
         game.setRngLocked(false);
         uint256 bet = (uint256(day) * 8 << 64) | c.daySeatNumberOf(day, bob);
         vm.prank(bob); c.amendSlip(bet, BOARD);
-        assertEq(c.preferredBoardOf(game.walletIdOf(bob)), BOARD);
+        assertEq(c.preferredBoardOf(game.walletIdOf_g3120(bob)), BOARD);
         vm.prank(bob); vm.expectRevert(bytes4(keccak256("DayNotReservable()"))); c.buyFutureCrapsDays(day, 1, false, 0);
-        assertEq(c.preferredBoardOf(game.walletIdOf(bob)), BOARD, "failed entry saved");
+        assertEq(c.preferredBoardOf(game.walletIdOf_g3120(bob)), BOARD, "failed entry saved");
     }
 
     function test_CompKindsSnapshotAndUpgradeRetainsBoard() public {
@@ -207,7 +207,7 @@ contract CrapsPreferredBoardTest is CrapsPins {
     function test_PaidWindowAndCustomSaveExplicitBoard() public {
         _openToday();
         vm.prank(alice); c.enterBonusBattle(5, BOARD, 1);
-        assertEq(c.preferredBoardOf(game.walletIdOf(alice)), BOARD);
+        assertEq(c.preferredBoardOf(game.walletIdOf_g3120(alice)), BOARD);
         uint64 slot = _openFar(c, 300, 5, 1);
         vm.prank(alice); uint256 bet = c.enterBattle(slot, uint32(0), 1);
         assertEq(c.betOf(bet).chips, 0);
@@ -229,7 +229,7 @@ contract CrapsPreferredBoardTest is CrapsPins {
         assertEq(_word(alice), INIT);
         vm.prank(bob); c.enterBonusDay(BOARD, 1);
         assertEq(_dayChips(day, bob), BOARD);
-        assertEq(c.preferredBoardOf(game.walletIdOf(bob)), BOARD);
+        assertEq(c.preferredBoardOf(game.walletIdOf_g3120(bob)), BOARD);
         vm.prank(ContractAddresses.VAULT);
         c.vaultComp(uint256(bobId) | (uint256(5) << 160) | (uint256(day + 1) << 176) | (uint256(2) << 200));
         _save(bob, 0);
@@ -248,11 +248,11 @@ contract CrapsPreferredBoardTest is CrapsPins {
         game.setRngLocked(true);
         vm.prank(bob); c.applyCrapsPasses(day, 1, false, 0);
         assertEq(_dayChips(day, bob), 0);
-        assertEq(c.preferredBoardOf(game.walletIdOf(bob)), BOARD);
+        assertEq(c.preferredBoardOf(game.walletIdOf_g3120(bob)), BOARD);
         uint256 bet = (uint256(day) * 8 << 64) | c.daySeatNumberOf(day, bob);
         vm.prank(bob); c.amendSlip(bet, uint32(2));
         assertEq(_dayChips(day, bob), 2);
-        assertEq(c.preferredBoardOf(game.walletIdOf(bob)), BOARD);
+        assertEq(c.preferredBoardOf(game.walletIdOf_g3120(bob)), BOARD);
     }
 
     function test_EqualPaidBoardHasNoPreferenceWriteEventOrLockRead() public {
@@ -303,7 +303,7 @@ contract CrapsPreferredBoardTest is CrapsPins {
         _openToday();
         assertFalse(c.daySeatIsHigh(c.currentDayIndex(), ContractAddresses.VAULT));
         assertEq(_dayChips(c.currentDayIndex(), ContractAddresses.VAULT), BOARD);
-        assertEq(c.preferredBoardOf(game.walletIdOf(ContractAddresses.VAULT)), BOARD);
+        assertEq(c.preferredBoardOf(game.walletIdOf_g3120(ContractAddresses.VAULT)), BOARD);
         assertEq(_word(ContractAddresses.VAULT) & type(uint64).max, 0);
         assertEq(_word(ContractAddresses.SDGNRS), INIT | CrapsPreferenceLib.RETAINED);
     }
@@ -328,7 +328,7 @@ contract CrapsPreferredBoardTest is CrapsPins {
     function test_FreeDoorFillsExistingIdWithoutAllocating() public {
         game.setStrictWalletIds(true);
         address dave = makeAddr("preferred-dave");
-        uint32 id = game.registerWallet(dave, true);
+        uint32 id = game.registerWallet_g9539(dave, true);
         uint32 count = game.walletCount();
         _save(dave, BOARD);
         assertEq(game.walletCount(), count, "fill must not allocate");
@@ -345,9 +345,9 @@ contract CrapsPreferredBoardTest is CrapsPins {
         address erin = makeAddr("preferred-erin");
         game.setScore(erin, c.SYBIL_SCORE_FLOOR());
         _openToday();
-        assertEq(game.walletIdOf(erin), 0);
+        assertEq(game.walletIdOf_g3120(erin), 0);
         vm.prank(erin); c.enterBonusBattle(5, BOARD, 1);
-        uint32 id = game.walletIdOf(erin);
+        uint32 id = game.walletIdOf_g3120(erin);
         assertGt(id, 0, "paid door allocates");
 
         assertEq(c.preferredBoardOf(id), BOARD);

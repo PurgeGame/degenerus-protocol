@@ -122,7 +122,7 @@ contract QueuePackingWhaleClaimGas is DeployProtocol {
     }
 
     function test_WhaleClaim_All100Levels_Cold() public {
-        uint32 id = game.walletIdOf(BUYER);
+        uint32 id = game.walletIdOf_g3120(BUYER);
         uint256 beforeGas = gasleft();
         game.claimWhalePass(id);
         emit log_named_uint("QUEUE_WHALE_CLAIM_100_LEVELS", beforeGas - gasleft());

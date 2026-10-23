@@ -39,9 +39,8 @@ import {Craps} from "../Craps.sol";
 import {DecimatorJackpotTerms} from "../interfaces/IDegenerusGameModules.sol";
 
 interface IDecimatorBoardPreference {
-    function extsload_g8132(bytes32 slot) external view returns (bytes32 value);
 
-    function extsload(bytes32 slot) external view returns (bytes32 value);
+    function extsload_g8132(bytes32 slot) external view returns (bytes32 value);
 }
 
 /// @dev Pinned stateless engine. The pure ABI ensures a STATICCALL from the Game context.
@@ -121,8 +120,6 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
     event DecimatorClaimed(
         uint32 indexed walletId, uint24 indexed lvl, uint64 indexed entryId, uint256 amountWei, uint256 halfPasses
     );
-
-
 
     /// @param chips The entry's board as a normal battle takes it: ten three-bit leg counts naming
     ///        zero to seven chips; the dice scatter the rest of the ten. Each burn sets it.

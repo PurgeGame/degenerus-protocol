@@ -314,7 +314,7 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
             _grantSeat(p);           // the AFKing Subscription Token is the sole subscribe credential
             _fundPool(p, 200 ether); // generous: covers every daily buy across the test
             _subscribeLootbox(p, 1);
-            (, uint256 position1) = GameSlotKeys.subLane(address(game), game.walletIdOf(p));
+            (, uint256 position1) = GameSlotKeys.subLane(address(game), game.walletIdOf_g3120(p));
             require(position1 > 0, "fixture: the sub joined the set");
             subs[i] = p;
         }
@@ -325,7 +325,7 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
     uint256 private constant BOUNDED_OPEN_ALLOWANCE = 2_000_000;
 
     function _isPending(address who) internal view returns (bool) {
-        return GameSlotKeys.afkingBoxPending(address(game), game.walletIdOf(who));
+        return GameSlotKeys.afkingBoxPending(address(game), game.walletIdOf_g3120(who));
     }
 
     /// @dev The day the current cohort's boxes are stamped for.
@@ -336,7 +336,7 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
     /// @dev AfkingDelivered events for `who` on `day` among `logs`.
     function _deliveries(Vm.Log[] memory logs, address who, uint24 day) internal view returns (uint256 c) {
         bytes32 sig = keccak256("AfkingDelivered(uint32,uint256)");
-        uint32 id = game.walletIdOf(who);
+        uint32 id = game.walletIdOf_g3120(who);
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(game) || logs[i].topics.length != 2 || logs[i].topics[0] != sig) continue;
             if (uint32(uint256(logs[i].topics[1])) != id) continue;
@@ -522,12 +522,12 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
 
     /// @dev `who`'s wallet ID, registering one through the production hook when it has none.
     function _idOf(address who) internal returns (uint32 id) {
-        id = game.walletIdOf(who);
+        id = game.walletIdOf_g3120(who);
         if (id == 0) id = _giveWalletId(who);
     }
 
     function _grantDeityPass(address who) internal {
-        bytes32 slot = keccak256(abi.encode(game.walletIdOf(who), uint256(MINTPACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(game.walletIdOf_g3120(who), uint256(MINTPACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         packed |= (uint256(1) << DEITY_SHIFT);
         vm.store(address(game), slot, bytes32(packed));

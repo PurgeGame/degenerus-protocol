@@ -49,7 +49,7 @@ contract QuestRetryDoubleRoll is DeployProtocol {
     // ==================== Tests ====================
 
     function _generationStart(uint24 lvl) private view returns (uint256) {
-        uint256 word = uint256(game.extsload(bytes32(GameSlots.TICKET_GENERATION_START_BLOCK)));
+        uint256 word = uint256(game.extsload_g8132(bytes32(GameSlots.TICKET_GENERATION_START_BLOCK)));
         return uint24(word) == lvl ? word >> 24 : 0;
     }
 

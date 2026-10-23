@@ -265,7 +265,7 @@ contract PendingBoxCountInvariant is DeployProtocol {
     }
 
     function _boxPending(address who) internal view returns (bool) {
-        return GameSlotKeys.afkingBoxPending(address(game), game.walletIdOf(who));
+        return GameSlotKeys.afkingBoxPending(address(game), game.walletIdOf_g3120(who));
     }
 
     function _countPendingMarkers() internal view returns (uint256 pending) {
@@ -300,7 +300,7 @@ contract PendingBoxCountInvariant is DeployProtocol {
 
     function _fundPool(address who, uint256 amount) internal {
         vm.deal(address(this), amount);
-        uint32 id = game.walletIdOf(who);
+        uint32 id = game.walletIdOf_g3120(who);
         if (id == 0) id = _giveWalletId(who);
         game.depositAfkingFunding{value: amount}(id);
     }

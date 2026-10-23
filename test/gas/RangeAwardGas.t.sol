@@ -30,7 +30,7 @@ contract RangeAwardGasTest is DeployProtocol {
 
     function _claim(uint256 passes, bool topup, string memory name) private {
         if (passes != 4 || topup) _prepare(passes, topup);
-        uint32 id = game.walletIdOf(BUYER);
+        uint32 id = game.walletIdOf_g3120(BUYER);
         game.claimWhalePass(id);
         emit log_named_uint(name, vm.snapshotGasLastCall("range-award", name));
         for (uint24 lvl = 1; lvl <= 100; ++lvl) {

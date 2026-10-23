@@ -71,7 +71,7 @@ contract VaultPlayerActionsTest is SeatFixture {
         vm.expectRevert(DegenerusVault.NotVaultOwner.selector);
         vault.playerAction(address(game), data, 0);
         _approved(stranger, abi.encodeCall(vault.playerAction, (address(game), data, 0)));
-        (, address payee, bool approved) = game.resolveAccount(VAULT_ID, stranger);
+        (, address payee, bool approved) = game.resolveAccount_g502(VAULT_ID, stranger);
         assertEq(payee, address(vault));
         assertTrue(approved);
     }
@@ -85,7 +85,7 @@ contract VaultPlayerActionsTest is SeatFixture {
         address successor = makeAddr("successor");
         DegenerusVaultShare dgve = DegenerusVaultShare(computeCreateAddress(address(vault), 2));
         dgve.transfer(successor, dgve.balanceOf(owner)); // CREATOR is this test contract.
-        (,, bool approved) = game.resolveAccount(VAULT_ID, stranger);
+        (,, bool approved) = game.resolveAccount_g502(VAULT_ID, stranger);
         assertTrue(approved, "game approval survives the majority change");
         assertTrue(afkingSubToken.isApprovedForAll(address(vault), stranger), "seat operator survives");
 
@@ -96,7 +96,7 @@ contract VaultPlayerActionsTest is SeatFixture {
         _approved(successor, abi.encodeCall(vault.playerAction, (
             ContractAddresses.AFKING_SUB_TOKEN, abi.encodeWithSignature("approve(address,uint256)", address(0), 2), 0
         )));
-        (,, approved) = game.resolveAccount(VAULT_ID, stranger);
+        (,, approved) = game.resolveAccount_g502(VAULT_ID, stranger);
         assertFalse(approved, "game approval revoked");
         assertFalse(afkingSubToken.isApprovedForAll(address(vault), stranger), "seat operator revoked");
         assertEq(afkingSubToken.getApproved(2), address(0), "seat approval revoked");

@@ -267,7 +267,7 @@ contract DegenesisLivenessHandler is Test {
         uint256 mode = modeSeed % 3;
         uint256 value = mode == 0 ? amount : mode == 1 ? amount + bound(modeSeed >> 8, 1, 1 ether) : 0;
         if (mode == 2) {
-            uint32 id = game.walletIdOf(a);
+            uint32 id = game.walletIdOf_g3120(a);
             vm.prank(a);
             try game.depositAfkingFunding{value: amount}(id) {} catch { return; }
         }
@@ -301,7 +301,7 @@ contract DegenesisLivenessHandler is Test {
         bool whale = whaleSeed % 4 == 0;
         uint256 qty = whale ? 1 : bound(qtySeed, 400, 4000);
         uint256 cost = whale ? 2.4 ether : price * qty / 400;
-        uint32 recipient = qtySeed % 3 == 0 ? 0 : game.walletIdOf(_actor(qtySeed));
+        uint32 recipient = qtySeed % 3 == 0 ? 0 : game.walletIdOf_g3120(_actor(qtySeed));
         vm.prank(ContractAddresses.VAULT);
         try game.spendDegenesis(recipient, whale, qty, 0, cost + 0.5 ether) {
             ++ghost_vaultSpends;

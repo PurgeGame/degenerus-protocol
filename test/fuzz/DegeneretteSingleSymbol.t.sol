@@ -82,7 +82,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] != DQ.RESOLVED_SIG) continue;
             if (uint256(logs[i].topics[3]) != id) continue;
-            assertEq(uint32(uint256(logs[i].topics[1])), game.walletIdOf(who), "bet owner");
+            assertEq(uint32(uint256(logs[i].topics[1])), game.walletIdOf_g3120(who), "bet owner");
             bytes memory spins;
             (, firstHouse, spins) = abi.decode(logs[i].data, (uint256, uint32, bytes));
             tickets = new uint32[](spins.length / 5);
@@ -149,7 +149,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         wwxrp.mintPrize(alice, 123);
         vm.prank(address(game));
         coin.mintForGame(alice, 456);
-        uint32 aliceId = game.walletIdOf(alice);
+        uint32 aliceId = game.walletIdOf_g3120(alice);
         bytes32 boonSlot = bytes32(uint256(keccak256(abi.encode(uint256(aliceId), GameSlots.BOON_PACKED))) + 1);
         uint256 lane = (uint256(game.currentDayView()) << 3) | 3;
         vm.store(address(game), boonSlot, bytes32((lane << 184) | (lane << 208)));
@@ -200,7 +200,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         coin.mintForGame(alice, 1000);
         vm.prank(address(game));
         coin.mintForGame(gifter, 1000);
-        uint32 aliceId = game.walletIdOf(alice);
+        uint32 aliceId = game.walletIdOf_g3120(alice);
         bytes32 boonSlot = bytes32(uint256(keccak256(abi.encode(uint256(aliceId), GameSlots.BOON_PACKED))) + 1);
         address[3] memory callers = [alice, bob, gifter];
         for (uint256 route; route < callers.length; ++route) {
@@ -437,7 +437,7 @@ contract DegeneretteSingleSymbolTest is DeployProtocol {
         vm.etch(facadeCopy, facade);
         vm.etch(address(game), address(new DegeneretteEthAwardRouter(facadeCopy)).code);
         vm.recordLogs();
-        IDegenerusGameDegeneretteModule(address(game)).resolveEthSpinFromBox(game.walletIdOf(alice), 0.01 ether, uint16(30_000), seed, uint8(15)
+        IDegenerusGameDegeneretteModule(address(game)).resolveEthSpinFromBox(game.walletIdOf_g3120(alice), 0.01 ether, uint16(30_000), seed, uint8(15)
         );
         Vm.Log[] memory logs = vm.getRecordedLogs();
         vm.etch(address(game), facade);

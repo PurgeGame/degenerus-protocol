@@ -331,7 +331,7 @@ contract V62GasBrickCompose is DeployProtocol {
 
     function _fundPool(address who, uint256 amount) internal {
         vm.deal(address(this), amount);
-        uint32 id = game.walletIdOf(who);
+        uint32 id = game.walletIdOf_g3120(who);
         if (id == 0) id = _giveWalletId(who);
         game.depositAfkingFunding{value: amount}(id);
     }

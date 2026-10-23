@@ -65,7 +65,7 @@ contract WhaleBoonExpiry is DeployProtocol {
 
     /// @dev Compute the storage slot for boonPacked[player].slot0
     function _boonSlot0(address player) internal view returns (bytes32) {
-        return keccak256(abi.encode(uint256(game.walletIdOf(player)), SLOT_BOON_PACKED));
+        return keccak256(abi.encode(uint256(game.walletIdOf_g3120(player)), SLOT_BOON_PACKED));
     }
 
     /// @dev Compute the storage slot for a nested mapping: base[index][player]
@@ -116,12 +116,12 @@ contract WhaleBoonExpiry is DeployProtocol {
     /// @dev Set up a lootbox ready to open: one queued entry of one `ethAmount` box, score=1, at
     ///      the live level -- identical shape to LootboxBoonCoexistence.t.sol's _setupLootbox.
     function _setupLootbox(address player, uint48 index, uint256 ethAmount) internal {
-        if (game.walletIdOf(player) == 0) {
+        if (game.walletIdOf_g3120(player) == 0) {
             (, , , , uint256 priceWei) = game.purchaseInfo();
             vm.prank(player);
             game.purchase{value: priceWei}(0, 400, 0, bytes32(0), MintPaymentKind.DirectEth, false);
         }
-        uint256 entry = BoxOrderLib.boEntry(game.walletIdOf(player), ethAmount / BoxOrderLib.SCALE, 1, 0, 1, false);
+        uint256 entry = BoxOrderLib.boEntry(game.walletIdOf_g3120(player), ethAmount / BoxOrderLib.SCALE, 1, 0, 1, false);
         bytes32 dataBase = keccak256(abi.encode(bytes32(SLOT_BOX_QUEUE + uint256(index))));
         vm.store(address(game), dataBase, bytes32(entry)); // position 0: previous case was fully consumed
 

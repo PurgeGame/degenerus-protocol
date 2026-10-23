@@ -70,22 +70,22 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
     }
 
     function _pending() private view returns (uint256) {
-        return (uint256(game.extsload(bytes32(GameSlots.PENDING_BOX_COUNT))) >> (GameSlots.PENDING_BOX_COUNT_OFFSET * 8)) & 0xFFFF;
+        return (uint256(game.extsload_g8132(bytes32(GameSlots.PENDING_BOX_COUNT))) >> (GameSlots.PENDING_BOX_COUNT_OFFSET * 8)) & 0xFFFF;
     }
 
     function _openedDay() private view returns (uint24) {
-        return uint24(GameSlotKeys.afkingOpenedDay(address(game), game.walletIdOf(PLAYER)));
+        return uint24(GameSlotKeys.afkingOpenedDay(address(game), game.walletIdOf_g3120(PLAYER)));
     }
 
     function _humanComplete() private view returns (bool) {
-        return uint8(uint256(game.extsload(bytes32(GameSlots.HUMAN_READ_COMPLETE))) >> (GameSlots.HUMAN_READ_COMPLETE_OFFSET * 8)) != 0;
+        return uint8(uint256(game.extsload_g8132(bytes32(GameSlots.HUMAN_READ_COMPLETE))) >> (GameSlots.HUMAN_READ_COMPLETE_OFFSET * 8)) != 0;
     }
 
     function _expectStampedResolve(uint24 day) private {
         vm.expectCall(
             ContractAddresses.GAME_LOOTBOX_MODULE,
             abi.encodeWithSelector(
-                IDegenerusGameLootboxModule.resolveAfkingBox.selector, game.walletIdOf(PLAYER), uint256(0.01 ether), day, SESSION_WORD, uint16(1140)
+                IDegenerusGameLootboxModule.resolveAfkingBox.selector, game.walletIdOf_g3120(PLAYER), uint256(0.01 ether), day, SESSION_WORD, uint16(1140)
             )
         );
     }
@@ -222,7 +222,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
             bool expired;
             for (uint256 i; i < logs.length; ++i) {
                 if (logs[i].topics.length > 1 && logs[i].topics[0] == keccak256("SubscriptionExpired(uint32,uint8)")
-                    && uint32(uint256(logs[i].topics[1])) == game.walletIdOf(PLAYER)) expired = true;
+                    && uint32(uint256(logs[i].topics[1])) == game.walletIdOf_g3120(PLAYER)) expired = true;
             }
             assertTrue(expired, "opened with its stamp day, or expired afterwards");
         }
@@ -232,7 +232,7 @@ contract UnpushedRewardRngSafetyTest is DeployProtocol {
     }
 
     function _dailyIdx() private view returns (uint24) {
-        return uint24(uint256(game.extsload(bytes32(0))) >> 24);
+        return uint24(uint256(game.extsload_g8132(bytes32(0))) >> 24);
     }
 
     function test_NewWriteBoxesDoNotKeepCompletedReadSessionOpen() public {

@@ -43,20 +43,20 @@ contract AccountIdOnlyTest is DeployProtocol {
             uint256 element = uint256(vm.load(address(game), bytes32(base + id)));
             assertEq(uint160(element), 0);
             assertEq(uint32(element >> 160), ownerId);
-            (address key, address payee, bool authorized) = game.resolveAccount(id, owner);
+            (address key, address payee, bool authorized) = game.resolveAccount_g502(id, owner);
             assertEq(key, address(0));
             assertEq(payee, owner);
             assertTrue(authorized);
-            assertEq(game.mintPackedOfId(id) >> 224, 0);
+            assertEq(game.mintPackedOfId_g5372(id) >> 224, 0);
         }
-        assertEq(game.walletIdOf(owner), ownerId);
-        assertEq(game.mintPackedOfId(ownerId), (uint256(2) << 224) | (uint256(2) << 240),
+        assertEq(game.walletIdOf_g3120(owner), ownerId);
+        assertEq(game.mintPackedOfId_g5372(ownerId), (uint256(2) << 224) | (uint256(2) << 240),
             "creating subaccounts changes only the owner's quota");
     }
 
     function test_PurchasesAuthorizeAndKeepSiblingHistorySeparate() public {
-        uint256 beforeA = game.mintPackedOfId(a);
-        uint256 beforeB = game.mintPackedOfId(b);
+        uint256 beforeA = game.mintPackedOfId_g5372(a);
+        uint256 beforeB = game.mintPackedOfId_g5372(b);
         uint256 price = game.mintPrice();
         address operator = makeAddr("id-only-operator");
         vm.deal(operator, price * 2);
@@ -67,9 +67,9 @@ contract AccountIdOnlyTest is DeployProtocol {
         game.setOperatorApproval(a, operator, true);
         vm.prank(operator);
         game.purchase{value: price}(a, 400, 0, 0, MintPaymentKind.DirectEth, false);
-        assertNotEq(game.mintPackedOfId(a), beforeA);
-        assertEq(game.mintPackedOfId(b), beforeB);
-        assertEq(game.mintPackedOfId(ownerId), (uint256(2) << 224) | (uint256(2) << 240));
+        assertNotEq(game.mintPackedOfId_g5372(a), beforeA);
+        assertEq(game.mintPackedOfId_g5372(b), beforeB);
+        assertEq(game.mintPackedOfId_g5372(ownerId), (uint256(2) << 224) | (uint256(2) << 240));
         vm.prank(owner);
         game.setOperatorApproval(a, operator, false);
         vm.prank(operator);

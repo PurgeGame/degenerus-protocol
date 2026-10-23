@@ -361,27 +361,21 @@ contract DegenerusGame is GamePurchase, GameHooks, GameMiner, GameDegeneretteBet
         return _subscribers.length;
     }
 
-    // Low-selector protocol entry; the original ABI and guarded implementation remain.
-    function extsload_g8132(bytes32 slot) external view returns (bytes32 value) { return extsload(slot); }
-
     /// @notice Read a raw storage slot. Periphery escape hatch for lens/viewer
     ///         contracts (e.g. DegenerusGameLens): rich packed-state decodes live
     ///         in the lens, and new read surfaces
     ///         can deploy without touching this contract. Read-only — storage is
     ///         already public to off-chain readers via eth_getStorageAt; this
     ///         mirrors that visibility to eth_call/staticcall consumers.
-    function extsload(bytes32 slot) public view returns (bytes32 value) {
+    function extsload_g8132(bytes32 slot) external view returns (bytes32 value) {
         assembly {
             value := sload(slot)
         }
     }
 
-    // Low-selector protocol entry; the original ABI and guarded implementation remain.
-    function registerWallet_g9539(address owner, bool allocate) external returns (uint32 id) { return registerWallet(owner, allocate); }
-
     /// @notice Wallet-ID hook for trusted protocol contracts: the existing ID, or with `allocate`
     ///         a new one (paid admission applies). The shared hook enforces the caller set.
-    function registerWallet(address owner, bool allocate) public returns (uint32 id) {
+    function registerWallet_g9539(address owner, bool allocate) external returns (uint32 id) {
         return _registerWallet(owner, allocate);
     }
 
@@ -479,15 +473,12 @@ contract DegenerusGame is GamePurchase, GameHooks, GameMiner, GameDegeneretteBet
         emit OperatorApproval(id, operator, approved);
     }
 
-    // Low-selector protocol entry; the original ABI and guarded implementation remain.
-    function resolveAccount_g502(uint32 id, address caller) external view returns (address key, address payee, bool authorized) { return resolveAccount(id, caller); }
-
     /// @notice Resolve account `id` for `caller`: its key, its payee and whether `caller` may
     ///         act for it (the key, a smurf's owner, or an operator approved for `id`). Never
     ///         reverts on authorization.
     /// @custom:reverts E If `id == 0` or `id` is unallocated.
-    function resolveAccount(uint32 id, address caller)
-        public
+    function resolveAccount_g502(uint32 id, address caller)
+        external
         view
         returns (address key, address payee, bool authorized)
     {
@@ -636,8 +627,6 @@ contract DegenerusGame is GamePurchase, GameHooks, GameMiner, GameDegeneretteBet
         _redeemFlip(id, entryQuantityScaled);
     }
 
-
-
     /// @notice Buy a credit-gated Degenesis box with ETH and/or claimable.
     /// @dev Gated by degenesisCredit (25% of qualifying spend), consumed 1:1; the order joins
     ///      today's cohort and settles after the cohort is priced.
@@ -761,8 +750,6 @@ contract DegenerusGame is GamePurchase, GameHooks, GameMiner, GameDegeneretteBet
         _placeBet(id, currency, amountPerSpin, spinCount, symbol);
     }
 
-
-
     /// @notice Consume the trusted caller's coinflip, craps or WWXRP boon lane.
     function consumeCoinflipBoon_g2902(uint32 id) external returns (uint16 boostBps) {
         if (msg.sender != ContractAddresses.COIN && msg.sender != ContractAddresses.COINFLIP
@@ -841,8 +828,6 @@ contract DegenerusGame is GamePurchase, GameHooks, GameMiner, GameDegeneretteBet
     /*+========================================================================================+
       |                    DECIMATOR JACKPOT LOGIC                                             |
       +========================================================================================+*/
-
-
 
     /// @notice Add chips to a wallet's accumulated Decimator battle entry (COIN only).
     function recordDecBurn_g5574(uint32, uint24, uint256, uint256, uint32) external returns (uint64) {
@@ -1487,8 +1472,6 @@ contract DegenerusGame is GamePurchase, GameHooks, GameMiner, GameDegeneretteBet
         }
     }
 
-
-
     /// @notice Pinned table mirrors the authoritative zero/nonzero pending transition.
     /// @dev Separate parity flags prevent write battles from gating their own request.
     function setCrapsRngPending_g1406(uint48 index, bool pending) external {
@@ -1504,8 +1487,6 @@ contract DegenerusGame is GamePurchase, GameHooks, GameMiner, GameDegeneretteBet
             _tryCompleteRng();
         }
     }
-
-
 
     /// @notice Current allowed read-consumer category for the ordered miner chain.
     function rngConsumerStage_g379() external view returns (uint8) {
@@ -1929,11 +1910,8 @@ contract DegenerusGame is GamePurchase, GameHooks, GameMiner, GameDegeneretteBet
         return mintPacked_[_walletIdOf(player)] >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0;
     }
 
-    // Low-selector protocol entry; the original ABI and guarded implementation remain.
-    function walletIdOf_g3120(address player) external view returns (uint32) { return walletIdOf(player); }
-
     /// @notice A wallet's permanent ID (its wallet-table position), or zero if unregistered.
-    function walletIdOf(address player) public view returns (uint32) {
+    function walletIdOf_g3120(address player) external view returns (uint32) {
         return _walletIdOf(player);
     }
 
@@ -1945,14 +1923,11 @@ contract DegenerusGame is GamePurchase, GameHooks, GameMiner, GameDegeneretteBet
         return mintPacked_[_walletIdOf(player)];
     }
 
-    // Low-selector protocol entry; the original ABI and guarded implementation remain.
-    function mintPackedOfId_g5372(uint32 id) external view returns (uint256) { return mintPackedOfId(id); }
-
     /// @dev Mint word of an allocated wallet ID, resolved through the wallet table here so a
     ///      caller holding only the ID needs one call (DegenerusQuests level-quest eligibility).
     /// @param id Allocated wallet ID.
     /// @return Raw packed uint256 from mintPacked_ for the ID's account key.
-    function mintPackedOfId(uint32 id) public view returns (uint256) {
+    function mintPackedOfId_g5372(uint32 id) external view returns (uint256) {
         return mintPacked_[id];
     }
 

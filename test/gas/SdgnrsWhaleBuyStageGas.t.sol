@@ -151,7 +151,7 @@ contract SdgnrsWhaleBuyStageGas is DeployProtocol {
     }
 
     function _sdgnrsDelivered(VmSafe.Log[] memory logs) internal view returns (uint256 weiIn) {
-        bytes32 id = bytes32(uint256(game.walletIdOf(ContractAddresses.SDGNRS)));
+        bytes32 id = bytes32(uint256(game.walletIdOf_g3120(ContractAddresses.SDGNRS)));
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter == address(game) && logs[i].topics.length == 2
                 && logs[i].topics[0] == AFKING_DELIVERED_SIG && logs[i].topics[1] == id) {
@@ -181,14 +181,14 @@ contract SdgnrsWhaleBuyStageGas is DeployProtocol {
         }
         address[2] memory holders = [ContractAddresses.SDGNRS, ContractAddresses.VAULT];
         for (uint256 i; i < 2; ++i) {
-            uint32 id = game.walletIdOf(holders[i]);
+            uint32 id = game.walletIdOf_g3120(holders[i]);
             if (id != 0) vm.store(address(game), keccak256(abi.encode(uint256(id), TICKET_PENDING_SLOT)), bytes32(0));
         }
     }
 
     function _setClaimable(address who, uint256 amount) internal {
         uint256 mask128 = (uint256(1) << 128) - 1;
-        bytes32 cwSlot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(GAME_CLAIMABLE_SLOT)));
+        bytes32 cwSlot = keccak256(abi.encode(uint256(game.walletIdOf_g3120(who)), uint256(GAME_CLAIMABLE_SLOT)));
         uint256 packed = uint256(vm.load(address(game), cwSlot));
         uint256 prev = packed & mask128;
         uint256 high = packed & ~mask128;
@@ -207,7 +207,7 @@ contract SdgnrsWhaleBuyStageGas is DeployProtocol {
     /// @dev Set `who`'s AFKing half of its balance word, moving claimablePool with it.
     function _setAfking(address who, uint256 amount) internal {
         uint256 mask128 = (uint256(1) << 128) - 1;
-        bytes32 cwSlot = keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(GAME_CLAIMABLE_SLOT)));
+        bytes32 cwSlot = keccak256(abi.encode(uint256(game.walletIdOf_g3120(who)), uint256(GAME_CLAIMABLE_SLOT)));
         uint256 packed = uint256(vm.load(address(game), cwSlot));
         uint256 prev = packed >> 128;
         vm.store(address(game), cwSlot, bytes32((packed & mask128) | (amount << 128)));
@@ -218,7 +218,7 @@ contract SdgnrsWhaleBuyStageGas is DeployProtocol {
     }
 
     function _claimableOf(address who) internal view returns (uint256) {
-        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf(who)), uint256(GAME_CLAIMABLE_SLOT))))) & ((uint256(1) << 128) - 1);
+        return uint256(vm.load(address(game), keccak256(abi.encode(uint256(game.walletIdOf_g3120(who)), uint256(GAME_CLAIMABLE_SLOT))))) & ((uint256(1) << 128) - 1);
     }
 
     function _sdgnrsBonusLevel() internal view returns (uint24) {

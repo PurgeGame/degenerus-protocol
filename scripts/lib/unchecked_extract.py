@@ -18,6 +18,7 @@ Scope: SCOPE_FILES (env, comma-separated) or the default main-contract set. Comm
 are masked before matching.
 """
 import os
+from pathlib import Path
 import re
 import sys
 
@@ -56,6 +57,10 @@ DEFAULT_SCOPE = [
     "modules/DegenerusGameBingoModule.sol",
     "modules/DegenerusGameDegenesisModule.sol",
 ]
+# New consolidated components cannot silently escape the source census.
+DEFAULT_SCOPE = sorted(set(DEFAULT_SCOPE) | {"modules/" + p.name for p in Path(CONTRACTS_DIR, "modules").glob("*.sol")}
+                       | {"libraries/BoundedCall.sol", "libraries/MineFlipGas.sol"})
+
 SCOPE = [s.strip() for s in os.environ.get("SCOPE_FILES", "").split(",") if s.strip()] or DEFAULT_SCOPE
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

@@ -42,6 +42,11 @@ contract SelectorFaultProxy {
         }
         (bool ok, bytes memory result) = implementation.delegatecall(msg.data);
         if (!ok) assembly ("memory-safe") { revert(add(result, 32), mload(result)) }
+        if (fault && mode == 12) {
+            // Valid result with almost all forwarded gas spent: the next nested
+            // dependency minimum must refuse atomically, never expire an account.
+            while (gasleft() > 1_000) {}
+        }
         if (fault && mode == 4) {
             // Valid prefix followed by 64 KiB; callers must never copy the tail.
             bytes memory large = new bytes(0x10000);
@@ -99,9 +104,9 @@ contract GameIsolationHost is DegenerusGame {
     function requestIdentity() external view returns (uint24, uint48, bool) {
         return (rngRequestDay, rngRequestTime, _rngRequestActive());
     }
-    function linkBalance() external view returns (bool, uint256) { return _vrfLinkBalance(); }
-    function observedSteth() external view returns (uint256) { return _boundedStethBalance(); }
-    function requestProbe() external returns (bool, uint256) { return _boundedVrfRequest(6); }
+    function linkBalance() external view returns (bool, uint256) { return _vrfLinkBalance(MineFlipGas.fromCall(4)); }
+    function observedSteth() external view returns (uint256) { return _boundedStethBalance(MineFlipGas.fromCall(4), 100_000); }
+    function requestProbe() external returns (bool, uint256) { return _boundedVrfRequest(6, MineFlipGas.fromCall(4)); }
     function swept() external view returns (bool) { return _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0; }
 }
 
@@ -400,8 +405,8 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
             bytes32((tableWord & ~uint256(type(uint64).max)) | (uint256(game.currentDayView()) * 8)));
         NativeFailureProbe probe = new NativeFailureProbe();
         uint8[6] memory modes = [uint8(1), 2, 5, 8, 9, 10];
-        for (uint256 site; site < 5; ++site) for (uint256 i; i < modes.length; ++i) {
-            if (site >= 3 && i != 0) continue;
+        for (uint256 site; site < 9; ++site) for (uint256 i; i < modes.length; ++i) {
+            if ((site == 3 || site == 4) && i != 0) continue;
             this.exportNativeGameCase(site, modes[i], probe);
         }
     }
@@ -424,6 +429,21 @@ contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
                 input = abi.encodeCall(host.invoke, (ContractAddresses.GAME_GAMEOVER_MODULE,
                     abi.encodeCall(IDegenerusGameGameOverModule.runGameOverAdvance,
                         (game.currentDayView(), uint24(10), uint256(10_000_000)))));
+            }
+            if (site >= 5) {
+                bool terminal = site == 8;
+                if (terminal) host.seedTerminal(true); else host.seedPhase();
+                vm.deal(address(game), site == 6 ? 30 ether : 0);
+                if (site != 6) mockStETH.mint(address(game), 30 ether);
+                _fault(address(mockStETH), tokenImplementation,
+                    site == 6 ? IStETH.submit.selector : IStETH.balanceOf.selector, mode);
+                bytes memory worker = terminal
+                    ? abi.encodeCall(IDegenerusGameGameOverModule.runGameOverAdvance,
+                        (game.currentDayView(), uint24(10), uint256(10_000_000)))
+                    : site == 7 ? abi.encodeCall(IDegenerusGameJackpotModule.distributeYieldSurplus, (uint256(777)))
+                    : abi.encodeCall(IDegenerusGameAdvanceModule.runDailyPhase_g2582, (uint256(10_000_000)));
+                input = abi.encodeCall(host.invoke,
+                    (terminal ? ContractAddresses.GAME_GAMEOVER_MODULE : ContractAddresses.GAME_ADVANCE_MODULE, worker));
             }
             if (site == 3) { input = abi.encodeCall(host.requestProbe, ()); supplied = 500_000; }
             if (site == 4) { input = abi.encodeCall(host.linkBalance, ()); supplied = 50_000; }

@@ -105,7 +105,7 @@ contract CrapsNewcomerTest is CrapsPins {
 
     function test_compedEntitlementHasNoNewcomerSurcharge() public {
         vm.mockCallRevert(
-            ContractAddresses.GAME, abi.encodeWithSignature("mintPackedOfId(uint32)", _idFor(player)), "unnecessary history read"
+            ContractAddresses.GAME, abi.encodeWithSignature("mintPackedOfId_g5372(uint32)", _idFor(player)), "unnecessary history read"
         );
         uint24 tomorrow = table.currentDayIndex() + 1;
         flip.setCompLane(25_000);

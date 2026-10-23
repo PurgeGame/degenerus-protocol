@@ -36,7 +36,7 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
     ///      A box buy appends one entry at the LIVE buffer, so a nonzero total proves the box
     ///      bound to that exact buffer.
     function _boxEth(uint48 index, address player) internal view returns (uint256 total) {
-        uint32 id = game.walletIdOf(player);
+        uint32 id = game.walletIdOf_g3120(player);
         uint256 n = RecyclingState.boxCount(address(game), index & 1);
         for (uint256 p; p < n; ++p) {
             uint256 word = RecyclingState.boxEntry(address(game), index & 1, p);
@@ -220,7 +220,7 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
         //    1-ether mid-day threshold) and keys itself at the LIVE index N.
         _purchase(400, 1 ether);
         uint48 idxN = _lrIndex();
-        assertEq(_boxIdAt0(idxN), game.walletIdOf(buyer), "box A not keyed at live LR_INDEX");
+        assertEq(_boxIdAt0(idxN), game.walletIdOf_g3120(buyer), "box A not keyed at live LR_INDEX");
         assertEq(_boxEth(idxN, buyer), 1 ether, "box A applied-ETH mis-keyed");
         assertEq(_lootboxWord(idxN), 0, "live index already worded before request");
 
@@ -250,7 +250,7 @@ contract RngIndexDrainBindingTest is DeployProtocol, RngIndexDrainOracle {
         game.purchase{value: ticketCost + 1 ether}(
             0, 400, BoxOrderLib.boCustomFloor(1 ether), bytes32(0), MintPaymentKind.DirectEth, false
         );
-        assertEq(_boxIdAt0(idxLive), game.walletIdOf(buyerB), "box B not keyed at the LIVE post-request index");
+        assertEq(_boxIdAt0(idxLive), game.walletIdOf_g3120(buyerB), "box B not keyed at the LIVE post-request index");
         assertEq(_boxEth(idxLive, buyerB), 1 ether, "box B applied-ETH not at live index");
         assertEq(_boxEth(idxN, buyerB), 0, "box B leaked onto the in-flight index N");
 

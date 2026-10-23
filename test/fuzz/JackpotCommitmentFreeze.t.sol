@@ -117,7 +117,7 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
         uint16 highMultiple = uint16(crapsBattle.highMultForDay(paidDay));
         vm.prank(ATTACKER);
         paidBet = crapsBattle.enterBonusBattle(5, BOARD, highMultiple);
-        uint32 attackerId = game.walletIdOf(ATTACKER);
+        uint32 attackerId = game.walletIdOf_g3120(ATTACKER);
         vm.prank(address(game));
         crapsBattle.creditPasses(attackerId, 21, 1);
         // A day seat exercises the distinct paid-day-header path and its upgrade gate.
@@ -165,7 +165,7 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
         vm.prank(ATTACKER);
         vm.expectRevert(CrapsBattleStorage.OnlyGame.selector);
         JackpotBattle(address(crapsBattle)).runDailyBattleWork(10_000_000);
-        assertEq(crapsBattle.preferredBoardOf(game.walletIdOf(ATTACKER)), BOARD);
+        assertEq(crapsBattle.preferredBoardOf(game.walletIdOf_g3120(ATTACKER)), BOARD);
     }
 
     function _run(uint256 word, bool perturb) private returns (Result memory result) {
@@ -212,7 +212,7 @@ contract JackpotCommitmentFreezeTest is DeployProtocol {
                 bytes32 topic = logs[j].topics[0];
                 if (topic == ENTRY) {
                     ++result.entries;
-                    if (uint32(uint256(logs[j].topics[3])) == game.walletIdOf(ATTACKER)) {
+                    if (uint32(uint256(logs[j].topics[3])) == game.walletIdOf_g3120(ATTACKER)) {
                         (, uint32 chips) = abi.decode(logs[j].data, (uint256, uint32));
                         assertEq(chips, BOARD, "awarded seat lost its committed saved board");
                         ++result.attackerAwards;

@@ -68,7 +68,7 @@ contract ChainPinLoansTest is LoanSeizureGasBase {
     }
 
     function _payeeOf(uint32 id) private view returns (address payee) {
-        (, payee, ) = game.resolveAccount(id, address(0));
+        (, payee, ) = game.resolveAccount_g502(id, address(0));
     }
 
     function _open(uint32 id) private view returns (bool) {

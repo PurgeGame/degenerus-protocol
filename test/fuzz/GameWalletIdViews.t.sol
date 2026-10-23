@@ -14,6 +14,7 @@ import {IDegenerusQuests} from "../../contracts/interfaces/IDegenerusQuests.sol"
 import {ICoinflip} from "../../contracts/interfaces/ICoinflip.sol";
 import {IsDGNRS} from "../../contracts/interfaces/IsDGNRS.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
+import {RngTags} from "../../contracts/libraries/RngTags.sol";
 import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 import {PackedTicketSampleLib} from "../../contracts/libraries/PackedTicketSampleLib.sol";
 import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
@@ -196,8 +197,8 @@ contract GameWalletIdViews is DeployProtocol {
 
     function _assertIdTruth(address who, uint32 id) private view {
         assertGt(id, 0, "registered");
-        assertEq(game.walletIdOf(who), id, "walletIdOf");
-        assertEq(game.walletIdOf(who), id, "mint word carries the ID");
+        assertEq(game.walletIdOf_g3120(who), id, "walletIdOf");
+        assertEq(game.walletIdOf_g3120(who), id, "mint word carries the ID");
         assertEq(
             address(uint160(uint256(vm.load(address(game), GameSlotKeys.walletElement(id))))),
             who,
@@ -290,7 +291,7 @@ contract GameWalletIdViews is DeployProtocol {
         t = new uint32[](8);
         uint256 packs;
         for (uint256 attempt; packs < 4 && attempt < 12; ++attempt) {
-            entropy = EntropyLib.hash2(entropy, attempt);
+            entropy = uint256(keccak256(abi.encode(RngTags.BAF_FUTURE_ATTEMPT, entropy, attempt)));
             uint24 target = uint24(fromLevel + entropy % span);
             uint24 key = ext.x_ffKey(target);
             uint256 len = ext.x_tqLen(key);
@@ -513,7 +514,7 @@ contract GameWalletIdViews is DeployProtocol {
         assertEq(id0, 0, "unregistered wallet: ID 0");
         assertEq(_allRegistrations(vm.getRecordedLogs()), 0, "no registration");
         assertEq(_walletsLength(), lengthBefore, "table unchanged");
-        assertEq(game.walletIdOf(stranger), 0, "still unregistered");
+        assertEq(game.walletIdOf_g3120(stranger), 0, "still unregistered");
         (uint256 v0,) = game.playerActivityScore(stranger);
         assertEq(s0, v0, "score matches the view");
 
@@ -533,7 +534,7 @@ contract GameWalletIdViews is DeployProtocol {
         uint256 value = 4 * PriceLookupLib.priceForLevel(game.level() + 1);
         vm.prank(buyer);
         game.purchase{value: value}(0, 1_600, 0, bytes32(0), MintPaymentKind.DirectEth, false);
-        uint32 buyerId = game.walletIdOf(buyer);
+        uint32 buyerId = game.walletIdOf_g3120(buyer);
         bytes32 mintSlot = GameSlotKeys.mintPacked(buyer);
         uint256 word = uint256(vm.load(address(game), mintSlot));
         uint256 levelMask = BitPackingLib.MASK_24 << BitPackingLib.AFFILIATE_BONUS_LEVEL_SHIFT;
@@ -547,7 +548,7 @@ contract GameWalletIdViews is DeployProtocol {
         assertEq(id2, buyerId, "cold path returns the ID");
         (uint256 v2,) = game.playerActivityScore(buyer);
         assertEq(s2, v2, "cold path score");
-        assertEq(game.walletIdOf(buyer), buyerId, "ID survives the refresh");
+        assertEq(game.walletIdOf_g3120(buyer), buyerId, "ID survives the refresh");
 
         // Hot path cache hit after the refresh.
         vm.record();
@@ -605,7 +606,7 @@ contract GameWalletIdViews is DeployProtocol {
     // =====================================================================
 
     function _place(address caller, address player, uint8 currency, uint128 perSpin, uint8 spins, uint256 value) private {
-        uint32 id = (player == address(0) || player == caller) ? 0 : game.walletIdOf(player);
+        uint32 id = (player == address(0) || player == caller) ? 0 : game.walletIdOf_g3120(player);
         vm.prank(caller);
         game.placeDegeneretteBet{value: value}(id, currency, perSpin, spins, SYMBOL);
     }
@@ -732,7 +733,7 @@ contract GameWalletIdViews is DeployProtocol {
         vm.store(address(game), bytes32(GameSlots.WALLETS), bytes32(PAID_ADMISSION_WALLETS + 1));
         address small = makeAddr("gift3_small_funder");
         vm.deal(small, 10 ether);
-        uint32 playerId = game.walletIdOf(player);
+        uint32 playerId = game.walletIdOf_g3120(player);
         vm.prank(small);
         vm.expectRevert(DegenerusGameStorage.E.selector);
         game.placeDegeneretteBet{value: 0.01 ether}(playerId, ETH, 0.01 ether, 1, SYMBOL);
@@ -740,7 +741,7 @@ contract GameWalletIdViews is DeployProtocol {
         address large = makeAddr("gift3_large_funder");
         vm.deal(large, 10 ether);
         _place(large, player, ETH, 0.01 ether, 4, 0.04 ether);
-        assertEq(game.walletIdOf(large), PAID_ADMISSION_WALLETS + 1, "an admission-sized gift registers");
+        assertEq(game.walletIdOf_g3120(large), PAID_ADMISSION_WALLETS + 1, "an admission-sized gift registers");
     }
 
     function test_SelfBetRegistersOnceAndQuestsById() public {
@@ -869,7 +870,7 @@ contract GameWalletIdViews is DeployProtocol {
         _assertIdTruth(owner, ownerId);
         (n,) = _registrations(logs, buyer);
         assertEq(n, 1, "the buyer registered");
-        _assertIdTruth(buyer, game.walletIdOf(buyer));
+        _assertIdTruth(buyer, game.walletIdOf_g3120(buyer));
         if (kind == 4) {
             // The deity pass confers its whale pass on the owner's ID and key.
             assertGt(
@@ -938,19 +939,21 @@ contract GameWalletIdViews is DeployProtocol {
     }
 
     // =====================================================================
-    // 16. registerWallet refuses JACKPOT_BATTLE
+    // 16. registerWallet rejects outsiders and accepts the consolidated Craps host
     // =====================================================================
 
-    function test_RegisterWalletRefusesJackpotBattle() public {
-        vm.prank(ContractAddresses.JACKPOT_BATTLE);
+    function test_RegisterWalletRejectsOutsidersAndAcceptsCrapsHost() public {
+        assertEq(ContractAddresses.JACKPOT_BATTLE, ContractAddresses.CRAPS, "one consolidated host");
+        address outsider = makeAddr("untrusted_register_caller");
+        vm.prank(outsider);
         vm.expectRevert(DegenerusGameStorage.E.selector);
-        game.registerWallet(makeAddr("jb_target"), true);
-        vm.prank(ContractAddresses.JACKPOT_BATTLE);
+        game.registerWallet_g9539(makeAddr("jb_target"), true);
+        vm.prank(outsider);
         vm.expectRevert(DegenerusGameStorage.E.selector);
-        game.registerWallet(makeAddr("jb_target"), false);
+        game.registerWallet_g9539(makeAddr("jb_target"), false);
 
         vm.prank(ContractAddresses.CRAPS);
-        uint32 id = game.registerWallet(makeAddr("jb_target"), true);
+        uint32 id = game.registerWallet_g9539(makeAddr("jb_target"), true);
         assertGt(id, 0, "an allow-listed caller still registers");
     }
 
@@ -973,7 +976,7 @@ contract GameWalletIdViews is DeployProtocol {
         vm.store(address(game), mintSlot, bytes32(word));
         vm.mockCall(
             address(quests),
-            abi.encodeWithSelector(IDegenerusQuests.effectiveBaseStreakAndAfking.selector, id),
+            abi.encodeWithSelector(IDegenerusQuests.effectiveBaseStreakAndAfking_g2654.selector, id),
             abi.encode(uint32(5), true)
         );
         vm.mockCall(

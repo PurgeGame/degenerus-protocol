@@ -144,7 +144,7 @@ contract PurchaseBattleStagesTest is PurchaseBattleStagesBase {
         assertEq(tickets.stage, STAGE_PURCHASE_DAILY_TICKETS);
         assertFalse(game.rngLocked());
         vm.prank(address(0xBEEF)); crapsBattle.setPreferredBoard(0, 3);
-        assertEq(crapsBattle.preferredBoardOf(game.walletIdOf(address(0xBEEF))), 3);
+        assertEq(crapsBattle.preferredBoardOf(game.walletIdOf_g3120(address(0xBEEF))), 3);
     }
 
     function test_FailedBattleStepRetainsLockAndRetries() public {

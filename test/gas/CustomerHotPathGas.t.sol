@@ -167,7 +167,7 @@ contract CustomerHotPathGasTest is DeployProtocol {
 
     function _deposit(uint256 amount) private { vm.prank(PLAYER); coinflip.depositCoinflip(0, amount); }
     function _boon(bool craps, bool expired) private {
-        uint32 id = game.walletIdOf(PLAYER);
+        uint32 id = game.walletIdOf_g3120(PLAYER);
         bytes memory code = address(game).code;
         vm.etch(address(game), type(CustomerHotPathSeeder).runtimeCode);
         CustomerHotPathSeeder(address(game)).seedBoon(id, craps, expired);
@@ -183,14 +183,14 @@ contract CustomerHotPathGasTest is DeployProtocol {
         _deposit(1000); _bank(1_000_000); _begin(); _deposit(1000); _end("flip_rebet");
     }
     function _bank(uint128 amount) private {
-        bytes32 slot = keccak256(abi.encode(game.walletIdOf(PLAYER), uint256(2)));
+        bytes32 slot = keccak256(abi.encode(game.walletIdOf_g3120(PLAYER), uint256(2)));
         uint256 word = uint256(vm.load(address(coinflip), slot));
         vm.store(address(coinflip), slot, bytes32((word & ~uint256(type(uint128).max)) | amount));
     }
     function _claims(uint24 days_, bool rebuy) private {
         uint24 start = 31;
         uint24 last = start + days_;
-        bytes32 state = keccak256(abi.encode(game.walletIdOf(PLAYER), uint256(2)));
+        bytes32 state = keccak256(abi.encode(game.walletIdOf_g3120(PLAYER), uint256(2)));
         vm.store(address(coinflip), state, bytes32((uint256(start) << 128)
             | (uint256(start) << 152) | (uint256(rebuy ? 1 : 0) << 176)));
         vm.store(address(coinflip), bytes32(uint256(state) + 1), bytes32(uint256(5000)));
@@ -200,7 +200,7 @@ contract CustomerHotPathGasTest is DeployProtocol {
             bytes32 slot = keccak256(abi.encode(d >> 5, uint256(1)));
             uint256 word = uint256(vm.load(address(coinflip), slot));
             vm.store(address(coinflip), slot, bytes32(word | ((d % 3 == 0 ? uint256(1) : 100) << ((d & 31) * 8))));
-            CoinflipStorage.set(address(coinflip), game.walletIdOf(PLAYER), uint24(d), 1000);
+            CoinflipStorage.set(address(coinflip), game.walletIdOf_g3120(PLAYER), uint24(d), 1000);
         }
         vm.warp((uint256(last - 1) + ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621);
     }
@@ -279,7 +279,7 @@ contract CustomerHotPathGasTest is DeployProtocol {
         _bank(1_000_000); _future("craps_banked_flip", 1);
     }
     function test_Gas_CrapsPass() public {
-        uint32 id = game.walletIdOf(PLAYER);
+        uint32 id = game.walletIdOf_g3120(PLAYER);
         vm.prank(address(game)); crapsBattle.creditPasses(id, 5, 0);
         uint24 day = uint24(game.currentDayView()) + 1;
         _begin(); vm.prank(PLAYER); crapsBattle.applyCrapsPasses(0, day, 1, false, BOARD); _end("craps_pass");
@@ -290,7 +290,7 @@ contract CustomerHotPathGasTest is DeployProtocol {
         bytes32 resultSlot = keccak256(abi.encode(uint256(1), uint256(1)));
         uint256 results = uint256(vm.load(address(coinflip), resultSlot));
         vm.store(address(coinflip), resultSlot, bytes32(results & ~(uint256(255) << 8))); // gap day 33
-        uint32 id = game.walletIdOf(PLAYER);
+        uint32 id = game.walletIdOf_g3120(PLAYER);
         bytes32 stakeSlot = CoinflipStorage.ringSlot(id, uint24(32) / 7);
         bytes32 futureSlot = CoinflipStorage.ringSlot(id, 35 / 7);
         uint256 stakes = uint256(vm.load(address(coinflip), stakeSlot));

@@ -139,7 +139,7 @@ contract ActivityScorePointFloorTest is DeployProtocol {
     ///      player is a non-afker (afkingActive == 0), so `_effectiveQuestStreak` returns this manual streak
     ///      with no Sub-slot read — the score's sole contributor.
     function _setManualQuestStreak(address player, uint16 q) internal {
-        uint32 id = game.walletIdOf(player);
+        uint32 id = game.walletIdOf_g3120(player);
         if (id == 0) id = _giveWalletId(player);
         bytes32 slot = keccak256(abi.encode(uint256(id), QUESTSTATE_SLOT));
         // baseStreak carries q as well as streak: _effectiveBaseStreak returns baseStreak
@@ -155,7 +155,7 @@ contract ActivityScorePointFloorTest is DeployProtocol {
     /// @dev The effective quest streak the activity score reads for `player` — the same value
     ///      `_effectiveQuestStreak` resolves (manual for a non-afker, live compute-on-read for an afker).
     function _effectiveStreakSeenByScore(address player) internal view returns (uint32 streak) {
-        (streak, ) = quests.effectiveBaseStreakAndAfking(game.walletIdOf(player));
+        (streak, ) = quests.effectiveBaseStreakAndAfking_g2654(game.walletIdOf_g3120(player));
     }
 
     // =========================================================================
@@ -200,7 +200,7 @@ contract ActivityScorePointFloorTest is DeployProtocol {
         _skipDaysNoDelivery(p, 0x0DECA3);
         assertEq(_liveAfkingStreakOf(p), 0, "the run decayed (live afking streak read is 0 after a missed funded day)");
 
-        (uint32 manualAfter, bool afking) = quests.effectiveBaseStreakAndAfking(game.walletIdOf(p));
+        (uint32 manualAfter, bool afking) = quests.effectiveBaseStreakAndAfking_g2654(game.walletIdOf_g3120(p));
         assertFalse(afking, "the underfunded run handed back to manual quests");
         uint256 postScore = activityScoreOf(address(game), p);
         assertEq(postScore - DEITY_BASELINE_POINTS, uint256(manualAfter) / 2,
@@ -248,7 +248,7 @@ contract ActivityScorePointFloorTest is DeployProtocol {
     /// @dev The live afking streak the score reads for `player`: the lane's checkpoint streak plus the
     ///      credited days past its checkpoint, 0 for a non-member.
     function _liveAfkingStreakOf(address player) internal view returns (uint32) {
-        (uint256 lane, uint256 position1) = GameSlotKeys.subLane(address(game), game.walletIdOf(player));
+        (uint256 lane, uint256 position1) = GameSlotKeys.subLane(address(game), game.walletIdOf_g3120(player));
         if (position1 == 0) return 0;
         uint256 day = (lane >> 46) & 0x3fffff;
         uint256 endpoint = (uint256(vm.load(address(game), bytes32(GameSlots.AFKING_ENDPOINT_DAY)))
@@ -257,7 +257,7 @@ contract ActivityScorePointFloorTest is DeployProtocol {
     }
 
     function _isMember(address player) internal view returns (bool) {
-        (, uint256 position1) = GameSlotKeys.subLane(address(game), game.walletIdOf(player));
+        (, uint256 position1) = GameSlotKeys.subLane(address(game), game.walletIdOf_g3120(player));
         return position1 != 0;
     }
 
@@ -342,13 +342,13 @@ contract ActivityScorePointFloorTest is DeployProtocol {
 
     function _fundPool(address who, uint256 amount) internal {
         vm.deal(address(this), amount);
-        uint32 id = game.walletIdOf(who);
+        uint32 id = game.walletIdOf_g3120(who);
         if (id == 0) id = _giveWalletId(who);
         game.depositAfkingFunding{value: amount}(id);
     }
 
     function _grantDeityPass(address who) internal {
-        bytes32 slot = keccak256(abi.encode(game.walletIdOf(who), uint256(MINTPACKED_SLOT)));
+        bytes32 slot = keccak256(abi.encode(game.walletIdOf_g3120(who), uint256(MINTPACKED_SLOT)));
         uint256 packed = uint256(vm.load(address(game), slot));
         vm.store(address(game), slot, bytes32(packed | (uint256(1) << DEITY_SHIFT)));
     }
