@@ -381,7 +381,7 @@ contract RngWindowFreezeHandler is Test {
     // =========================================================================
     // MID-DAY LOOTBOX WINDOW — the second freeze window shape.
     //
-    // mineFlip's mid-day request (RngModule `requestMinerRng`) opens a lootbox-only VRF window that sets NEITHER
+    // mineFlip's mid-day request (RngModule `requestMinerRng_g4954`) opens a lootbox-only VRF window that sets NEITHER
     // rngLockedFlag NOR prizePoolFrozen: the in-flight marker is rngRequestTime != 0 with
     // rngLocked() == false. The pending consumption is the mid-day rawFulfillRandomWords branch —
     // it reads the LR_INDEX cursor (landing index = LR_INDEX - 1), writes the reserved

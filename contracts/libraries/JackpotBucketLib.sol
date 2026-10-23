@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {RngTags} from "./RngTags.sol";
+
 import {EntropyLib} from "./EntropyLib.sol";
 
 /*
@@ -152,7 +154,7 @@ library JackpotBucketLib {
     ///      Quadrant offsets: 0, 64, 128, 192.
     function getRandomTraits(uint256 rw) internal pure returns (uint8[4] memory w) {
         // Keep the shared board independent of the raw daily flip and redemption bits.
-        rw = EntropyLib.hash2(rw, uint256(TRAIT_BOARD_TAG));
+        rw = EntropyLib.hash2(RngTags.JACKPOT_BOARD, rw);
         w[0] = uint8(rw & 0x3F); // Quadrant 0: 0-63
         w[1] = 64 + uint8((rw >> 6) & 0x3F); // Quadrant 1: 64-127
         w[2] = 128 + uint8((rw >> 12) & 0x3F); // Quadrant 2: 128-191

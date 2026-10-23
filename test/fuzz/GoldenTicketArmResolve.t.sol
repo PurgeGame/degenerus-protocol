@@ -112,13 +112,13 @@ contract GoldenTicketHarness is DegenerusGameJackpotModule, BucketSeed {
     }
 }
 
-/// @dev Recorder etched at ContractAddresses.COINFLIP: captures creditFlip calls.
+/// @dev Recorder etched at ContractAddresses.COINFLIP: captures creditFlip_g317 calls.
 contract CoinflipRecorder {
     uint32 public lastPlayer;
     uint256 public lastAmount;
     uint256 public calls;
 
-    function creditFlip(uint32 p, uint256 a) external {
+    function creditFlip_g317(uint32 p, uint256 a) external {
         lastPlayer = p;
         lastAmount = a;
         ++calls;

@@ -70,7 +70,7 @@ contract LinkDonationWalletIdsTest is DeployProtocol {
         uint24 target = _today() + 1;
 
         vm.expectCall(address(game), abi.encodeCall(DegenerusGame.creditMiddayRng, (donor, 10 ether)), 1);
-        vm.expectCall(address(coinflip), abi.encodeWithSelector(Coinflip.creditFlip.selector, expectedId), 2);
+        vm.expectCall(address(coinflip), abi.encodeWithSelector(Coinflip.creditFlip_g317.selector, expectedId), 2);
         vm.recordLogs();
         _donate(donor, 10 ether);
         Vm.Log[] memory logs = vm.getRecordedLogs();

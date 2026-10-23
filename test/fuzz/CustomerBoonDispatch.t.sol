@@ -10,7 +10,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///      return/revert forwarding. Both sides use the same production boon module.
 contract CustomerBoonReferenceFacade {
     error Unauthorized();
-    function consumeCoinflipBoon(uint32) external returns (uint16) {
+    function consumeCoinflipBoon_g2902(uint32) external returns (uint16) {
         if (msg.sender != ContractAddresses.COIN && msg.sender != ContractAddresses.COINFLIP
             && msg.sender != ContractAddresses.WWXRP) revert Unauthorized();
         (bool ok, bytes memory data) = ContractAddresses.GAME_BOON_MODULE.delegatecall(msg.data);
@@ -34,7 +34,7 @@ contract CustomerBoonDispatchTest is DeployProtocol {
     function _run(address caller, uint32 player, bytes32 slot) private returns (bytes32) {
         vm.recordLogs();
         vm.prank(caller);
-        (bool ok, bytes memory data) = address(game).call(abi.encodeCall(game.consumeCoinflipBoon, (player)));
+        (bool ok, bytes memory data) = address(game).call(abi.encodeCall(game.consumeCoinflipBoon_g2902, (player)));
         return keccak256(abi.encode(ok, data, vm.getRecordedLogs(), vm.load(address(game), slot),
             vm.load(address(game), bytes32(uint256(slot) + 1))));
     }

@@ -27,12 +27,12 @@ contract RedemptionReserveHarness is DegenerusGameRngUtils {
     }
     function topUp() external {
         (bool ok, bytes memory data) = ContractAddresses.GAME_DEGENESIS_MODULE.delegatecall(
-            abi.encodeWithSignature("topUpSdgnrsAfking()"));
+            abi.encodeWithSignature("topUpSdgnrsAfking_g318()"));
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
     }
     function whale(uint24 day) external returns (uint256 paid) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_WHALE_MODULE.delegatecall(
-            abi.encodeWithSignature("purchaseWhalePassForSdgnrs(uint24)", day));
+            abi.encodeWithSignature("purchaseWhalePassForSdgnrs_g470(uint24)", day));
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
         return abi.decode(data, (uint256));
     }
@@ -67,7 +67,7 @@ contract RedemptionReserveTest is RedemptionFixture {
     }
     function _start(uint16 roll) private {
         settlementWord = _wordForRoll(roll);
-        vm.mockCall(address(game), abi.encodeWithSelector(game.rngConsumerStage.selector), abi.encode(uint8(1)));
+        vm.mockCall(address(game), abi.encodeWithSelector(game.rngConsumerStage_g379.selector), abi.encode(uint8(1)));
         assertFalse(_work(RESOLVE_ONLY_ALLOWANCE));
     }
     function _settlePaid(address who, uint32 batch) private {

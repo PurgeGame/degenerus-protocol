@@ -34,7 +34,7 @@ contract ActivityAffiliateCacheTest is ActivityAffiliateCacheFixture {
         }
         else {
             assertEq((afterPacked >> 173) & 0xffffff, lvl);
-            assertEq((afterPacked >> 197) & 63, affiliate.affiliateBonusPointsBest(lvl, id));
+            assertEq((afterPacked >> 197) & 63, affiliate.affiliateBonusPointsBest_g3878(lvl, id));
         }
         assertEq(host.score(player, streak, basis), expected);
     }
@@ -81,8 +81,8 @@ contract ActivityAffiliateCacheTest is ActivityAffiliateCacheFixture {
         host.record(PLAYER, 25, 400);
         uint256 packed = host.packedOf(PLAYER);
         assertEq((packed >> 173) & 0xffffff, 24, "actual game level, not target25");
-        assertEq((packed >> 197) & 63, affiliate.affiliateBonusPointsBest(24, PLAYER_ID));
-        assertTrue(affiliate.affiliateBonusPointsBest(25, PLAYER_ID) != ((packed >> 197) & 63));
+        assertEq((packed >> 197) & 63, affiliate.affiliateBonusPointsBest_g3878(24, PLAYER_ID));
+        assertTrue(affiliate.affiliateBonusPointsBest_g3878(25, PLAYER_ID) != ((packed >> 197) & 63));
         uint256 expected = host.score(PLAYER, 10, 25);
         vm.startStateDiffRecording();
         uint256 actual = host.scoreCached(PLAYER, 10, 25);

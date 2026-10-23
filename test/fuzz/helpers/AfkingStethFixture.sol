@@ -77,7 +77,7 @@ contract AfkingStethHost is DegenerusGame, WalletSeed {
 
     function subWork(uint256 allowance_) external returns (MineFlipGas.Result memory) {
         (bool ok, bytes memory result) = ContractAddresses.GAME_AFKING_MODULE
-            .delegatecall(abi.encodeWithSignature("runSubscriberWork(uint24,uint256)", _afkingResetDay, allowance_));
+            .delegatecall(abi.encodeWithSignature("runSubscriberWork_g6352(uint24,uint256)", _afkingResetDay, allowance_));
         if (!ok) assembly ("memory-safe") { revert(add(result, 32), mload(result)) }
         return abi.decode(result, (MineFlipGas.Result));
     }

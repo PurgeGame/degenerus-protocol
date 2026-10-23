@@ -108,7 +108,7 @@ contract RngTransportCommitmentModelTest is Test {
         if (expected != 0) {
             _deliver(address(coordinator), id, expected == 42 ? 43 : 42);
             assertEq(_word(), expected, "duplicate cannot selectively replace entropy");
-            game.publishRng();
+            game.publishRng_g4514();
             assertEq(game.visible(read), expected, "publication makes exactly the committed buffer readable");
             assertEq(game.visible(write ? 1 : 0), 0, "future write buffer never sees this word");
             assertEq(game.commitment(), fixedInputs, "publication preserves frozen inputs");

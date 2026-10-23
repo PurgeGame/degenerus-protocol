@@ -94,7 +94,7 @@ ACCESSOR	rngWordCurrent	isRngFulfilled	DegenerusGame.sol	READ
 CURSOR	_nudgeCount	reverseFlip	DegenerusGame.sol	READ	Quote-gated counter update before daily lock; cap-255 admission.
 ACCESSOR	_nudgeCount	rngNudgeQuote	DegenerusGame.sol	READ	View of pending/frozen nudge receipt; no RNG consumer.
 ACCESSOR	_retainedDailyWord	rngWordForDay	DegenerusGame.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
-CURSOR	lootboxRngPacked	setCrapsRngPending	DegenerusGame.sol	WRITE	CRAPS-only assembly RMW of parity pending bits 250/251, never entropy/index/readiness slices.
+CURSOR	lootboxRngPacked	setCrapsRngPending_g1406	DegenerusGame.sol	WRITE	CRAPS-only assembly RMW of parity pending bits 250/251, never entropy/index/readiness slices.
 ACCESSOR	rngFlagsAndNudges	_decActiveWordOf	DegenerusGameLens.sol	READ
 ACCESSOR	rngWordCurrent	_decActiveWordOf	DegenerusGameLens.sol	READ
 CONSUMER-SEALED	_wordAt	_keepRngCohort	JackpotBattle.sol	READ	registered slot index is closed before the word exists; exact field key and bounded cursor; pending count discharges only after payout
@@ -103,21 +103,21 @@ GATE	_dailyWordAt	donate	JackpotBattle.sol	READ	Unfrozen scheduled donations req
 CONSUMER-SEALED	_dailyWordAt	_jackpotWindowTerms	JackpotBattle.sol	READ
 ACCESSOR	_dailyWordAt	_dailyWordAt	LootboxCraps.sol	READ
 ACCESSOR	_wordAt	_wordAt	LootboxCraps.sol	READ
-EXEMPT-ADVANCE	_recordedDailyWord	runSubDraw	modules/GameAfkingModule.sol	READ	exact tag authenticates processing word; reached only by the AdvanceModule seal delegatecall
+EXEMPT-ADVANCE	_recordedDailyWord	runSubDraw_g1232	modules/GameAfkingModule.sol	READ	exact tag authenticates processing word; reached only by the AdvanceModule seal delegatecall
 EXEMPT-ADVANCE	_currentRngWord	applyDailyGap	modules/DegenerusGameAdvanceModule.sol	READ	Decoded delivered entropy; waiting1 returns absence; accepted final words are >=2. Same locked daily/terminal consumption as before.
 EXEMPT-ADVANCE	_rawDailyRngWord	applyDailyGap	modules/DegenerusGameAdvanceModule.sol	READ	Gap days use the exact original raw word before daily nudge.
 EXEMPT-ADVANCE	_recordedDailyWord	applyDailyGap	modules/DegenerusGameAdvanceModule.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
 EXEMPT-ADVANCE	rngRequestDay	applyDailyGap	modules/DegenerusGameAdvanceModule.sol	READ	Logical commitment/application identity: set only on fresh normal/terminal boundary, preserved by callback/retry and all consumer checkpoints.
-EXEMPT-ADVANCE	_currentRngWord	applyDailyWord	modules/DegenerusGameAdvanceModule.sol	READ	Decoded delivered entropy; waiting1 returns absence; accepted final words are >=2. Same locked daily/terminal consumption as before.
-EXEMPT-ADVANCE	_recordedDailyWord	applyDailyWord	modules/DegenerusGameAdvanceModule.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
-EXEMPT-ADVANCE	rngRequestDay	applyDailyWord	modules/DegenerusGameAdvanceModule.sol	READ	Logical commitment/application identity: set only on fresh normal/terminal boundary, preserved by callback/retry and all consumer checkpoints.
-EXEMPT-ADVANCE	_recordedDailyWord	runDailyPhase	modules/DegenerusGameAdvanceModule.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
-EXEMPT-ADVANCE	rngRequestDay	runDailyPhase	modules/DegenerusGameAdvanceModule.sol	READ	Logical commitment/application identity: set only on fresh normal/terminal boundary, preserved by callback/retry and all consumer checkpoints.
-CONSUMER-SEALED	_recordedDailyWord	issueDeityBoon	modules/DegenerusGameBoonModule.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
+EXEMPT-ADVANCE	_currentRngWord	applyDailyWord_g1652	modules/DegenerusGameAdvanceModule.sol	READ	Decoded delivered entropy; waiting1 returns absence; accepted final words are >=2. Same locked daily/terminal consumption as before.
+EXEMPT-ADVANCE	_recordedDailyWord	applyDailyWord_g1652	modules/DegenerusGameAdvanceModule.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
+EXEMPT-ADVANCE	rngRequestDay	applyDailyWord_g1652	modules/DegenerusGameAdvanceModule.sol	READ	Logical commitment/application identity: set only on fresh normal/terminal boundary, preserved by callback/retry and all consumer checkpoints.
+EXEMPT-ADVANCE	_recordedDailyWord	runDailyPhase_g2582	modules/DegenerusGameAdvanceModule.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
+EXEMPT-ADVANCE	rngRequestDay	runDailyPhase_g2582	modules/DegenerusGameAdvanceModule.sol	READ	Logical commitment/application identity: set only on fresh normal/terminal boundary, preserved by callback/retry and all consumer checkpoints.
+CONSUMER-SEALED	_recordedDailyWord	_issueDeityBoon	modules/GameBoonActions.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
 CONSUMER-SEALED	_recordedDailyWord	resolveProtocolBoonDraws	modules/DegenerusGameBoonModule.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
 CONSUMER-SEALED	_lootboxWord	_runDecimatorWork	modules/DegenerusGameDecimatorModule.sol	READ
-CURSOR	lootboxRngPacked	_collectBetFunds	modules/DegenerusGameDegeneretteModule.sol	READ	ETH bet merges accumulating hero-buffer validity bits (24..29) and pending ETH, FLIP bet pending FLIP; both commit the bet write count in the same write. Neither is entropy, a buffer index or a readiness flag; the count only positions the write-buffer append.
-PRODUCER	lootboxRngPacked	_collectBetFunds	modules/DegenerusGameDegeneretteModule.sol	WRITE	Writes accumulating hero-buffer validity, pending ETH/FLIP and the write-buffer bet count +1; the daily request alone swaps hero buffers, so a bet cannot change the sealed pool. The sealed read count lives in degeneretteReadCount, which bets never write.
+CURSOR	lootboxRngPacked	_collectBetFunds	modules/GameDegeneretteBet.sol	READ	ETH bet merges accumulating hero-buffer validity bits (24..29) and pending ETH, FLIP bet pending FLIP; both commit the bet write count in the same write. Neither is entropy, a buffer index or a readiness flag; the count only positions the write-buffer append.
+PRODUCER	lootboxRngPacked	_collectBetFunds	modules/GameDegeneretteBet.sol	WRITE	Writes accumulating hero-buffer validity, pending ETH/FLIP and the write-buffer bet count +1; the daily request alone swaps hero buffers, so a bet cannot change the sealed pool. The sealed read count lives in degeneretteReadCount, which bets never write.
 GATE	_lootboxWord	runDecimatorJackpot	modules/DegenerusGameDecimatorModule.sol	READ
 CONSUMER-SEALED	_lootboxWord	_runDegeneretteWork	modules/DegenerusGameDegeneretteModule.sol	READ
 CONSUMER-SEALED	_lootboxWord	_runFoilWork	modules/DegenerusGameFoilCore.sol	READ	normal frozen read cohort generates and stores all foil lines once
@@ -139,12 +139,12 @@ EXEMPT-ADVANCE	rngWordCurrent	updateVrfCoordinatorAndSub	modules/DegenerusGameGa
 EXEMPT-ADVANCE	dailyFoilDraw	_emitDailyWinningTraits	modules/DegenerusGameJackpotModule.sol	READ	Same-day retries and stale writes against a newer stored day are idempotent no-ops.
 PRODUCER	dailyFoilDraw	_emitDailyWinningTraits	modules/DegenerusGameJackpotModule.sol	WRITE	Seal the committed logical-day board/level/seed with its exact day tag; recycle only an older parity slot.
 GATE	rngWordCurrent	_rngRetryDue	modules/DegenerusGameRngModule.sol	READ	Retry only an active unanswered request; retained delivered payload cannot be discarded.
-EXEMPT-ADVANCE	_currentRngWord	publishRng	modules/DegenerusGameRngModule.sol	READ
+EXEMPT-ADVANCE	_currentRngWord	publishRng_g4514	modules/DegenerusGameRngModule.sol	READ
 PRODUCER	rngFlagsAndNudges	rawFulfillRandomWords	DegenerusGame.sol	READ	One slot0 SLOAD authenticates activity, identifies daily lock and supplies frozen nudge; callback never writes it.
 EXEMPT-ADVANCE	rngWordCurrent	rawFulfillRandomWords	DegenerusGame.sol	READ
 PRODUCER	rngWordCurrent	rawFulfillRandomWords	DegenerusGame.sol	WRITE	Coordinator, active-bit, request-ID and waiting checks authenticate the final encoded payload.
-PRODUCER	rngRequestDay	requestDailyRng	modules/DegenerusGameRngModule.sol	WRITE	Logical commitment/application identity: set only on fresh normal/terminal boundary, preserved by callback/retry and all consumer checkpoints.
-PRODUCER	rngWordCurrent	requestDailyRng	modules/DegenerusGameRngModule.sol	WRITE
+PRODUCER	rngRequestDay	requestDailyRng_g8190	modules/DegenerusGameRngModule.sol	WRITE	Logical commitment/application identity: set only on fresh normal/terminal boundary, preserved by callback/retry and all consumer checkpoints.
+PRODUCER	rngWordCurrent	requestDailyRng_g8190	modules/DegenerusGameRngModule.sol	WRITE
 EXEMPT-ADVANCE	_recordedDailyWord	_requestLootboxRng	modules/DegenerusGameRngModule.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
 GATE	lootboxRngPacked	_requestLootboxRng	modules/DegenerusGameRngModule.sol	READ	write-buffer Craps pending bit marks a closed window as request work; selects LINK floor and pending-value waiver, never a word
 PRODUCER	rngRequestDay	_requestLootboxRng	modules/DegenerusGameRngModule.sol	WRITE	Logical commitment/application identity: set only on fresh normal/terminal boundary, preserved by callback/retry and all consumer checkpoints.
@@ -152,7 +152,7 @@ PRODUCER	rngWordCurrent	_requestLootboxRng	modules/DegenerusGameRngModule.sol	WR
 EXEMPT-ADVANCE	_nudgeCount	_applyDailyRng	modules/DegenerusGameRngUtils.sol	READ	Recorder logs/clears the frozen receipt and never adds it again.
 EXEMPT-ADVANCE	_rawDailyRngWord	_applyDailyRng	modules/DegenerusGameRngUtils.sol	READ	Recorder emits original raw word without changing finalized payload.
 CONSUMER-SEALED	_lootboxWord	_runTicketWork	modules/DegenerusGameTicketModule.sol	READ
-EXEMPT-ADVANCE	_recordedDailyWord	purchaseWhalePassForSdgnrs	modules/DegenerusGameWhaleModule.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
+EXEMPT-ADVANCE	_recordedDailyWord	purchaseWhalePassForSdgnrs_g470	modules/DegenerusGameWhaleModule.sol	READ	exact tag authenticates processing word; public claims additionally enforce calendar age
 CONSUMER-SEALED	_lootboxWord	_runAfkingWork	modules/GameAfkingModule.sol	READ	Active published word; stampDay <= dailyIdx excludes pre-seal stamps; pending AFKing count prevents reuse until final open.
 CONSUMER-SEALED	_lootboxWord	_runHumanBoxWork	modules/GameAfkingModule.sol	READ
 DECL	dailyFoilDraw	<file-scope>	storage/DegenerusGameStorage.sol	DECL	Two reusable parity slots store board/level/payout seed and exact day tag.
@@ -209,8 +209,8 @@ EXEMPT-ADVANCE	rngFlagsAndNudges	_swapRngBuffers	storage/DegenerusGameStorage.so
 GATE	_dailyWordAt	_reservableDay	storage/CrapsBattleStorage.sol	READ
 GATE	degenesisWord	_degenesisSettlePending	storage/DegenerusGameStorage.sol	READ	Existence test (word != 0) selecting the DegenesisSettle stage; no value decision.
 GATE	rngFlagsAndNudges	_degenesisSettlePending	storage/DegenerusGameStorage.sol	READ	Terminal-bit test (bit 13) so the stage never runs once the terminal word is applied; no entropy consumed.
-CONSUMER-SEALED	_lootboxWord	mineFlip	modules/DegenerusGameMinerModule.sol	READ	Stage 1 passes the published read word to the batch closed by its request; every later request waits for that stage to drain.
-CONSUMER-SEALED	degenesisWord	runDegenesisWork	modules/DegenerusGameDegenesisModule.sol	READ	DegenesisSettle miner stage: loads the bound word once into the frozen cohort and derives every outcome from it; the order list closed with the sale day and the cohort was split and priced at the word-free request boundary, so nothing a player can still change reaches the derivation.
+CONSUMER-SEALED	_lootboxWord	_mineFlip	modules/GameMiner.sol	READ	Stage 1 passes the published read word to the batch closed by its request; every later request waits for that stage to drain.
+CONSUMER-SEALED	degenesisWord	runDegenesisWork_g1860	modules/DegenerusGameDegenesisModule.sol	READ	DegenesisSettle miner stage: loads the bound word once into the frozen cohort and derives every outcome from it; the order list closed with the sale day and the cohort was split and priced at the word-free request boundary, so nothing a player can still change reaches the derivation.
 
 # Decimator jackpot integration (2026-10-05)
 
@@ -220,7 +220,7 @@ PRODUCER	lootboxRngPacked	_appendBoxEntry	storage/DegenerusGameStorage.sol	WRITE
 PRODUCER	degenesisWord	_recordDailyRng	storage/DegenerusGameStorage.sol	WRITE	Copies the landed daily word, in the same exempt recorder that writes the ring, only when the day is the active cohort's bound request day and the cohort is not yet closed; no actor writes it.
 PRODUCER	degenesisWord	_closeDegenesisCohort	modules/DegenerusGameDegenesisModule.sol	WRITE	Clears the bound word when the cohort closes, from the DegenesisSettle stage; runs after the last order pays.
 ACCESSOR	lootboxRngPacked	degeneretteBetInfo	DegenerusGame.sol	READ	View bound for a write-buffer bet id (the write count); no RNG consumer.
-CURSOR	lootboxRngPacked	_placeDegeneretteBetCore	modules/DegenerusGameDegeneretteModule.sol	READ	Reads the write-buffer bet count to fix the bet id (position + 1) before the buffer is sealed; _collectBetFunds commits the increment.
+CURSOR	lootboxRngPacked	_placeDegeneretteBetCore	modules/GameDegeneretteBet.sol	READ	Reads the write-buffer bet count to fix the bet id (position + 1) before the buffer is sealed; _collectBetFunds commits the increment.
 EXEMPT-ADVANCE	lootboxRngPacked	_swapRngBuffers	storage/DegenerusGameStorage.sol	READ	Seal (normal request or terminal request): latches the write counts into the read lengths. Retry never swaps.
 EXEMPT-ADVANCE	lootboxRngPacked	_swapRngBuffers	storage/DegenerusGameStorage.sol	WRITE	Seal clears pending ETH/FLIP and both write counts in one write; the new write buffer starts empty. Retry never swaps.
 

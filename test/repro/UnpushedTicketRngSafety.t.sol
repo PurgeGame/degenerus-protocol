@@ -75,7 +75,7 @@ contract UnpushedTicketRngSafetyTest is Test {
                 // is allowed because the jackpot samples membership, not balance.
                 h.creditWhole(_player(0), 6, topup);
             }
-            bool done = h.runTicketWork(2, gasleft()).done;
+            bool done = h.runTicketWork_g1150(2, gasleft()).done;
             ++calls;
             trajectory = keccak256(abi.encode(trajectory, h.cursorState(), done));
             require(calls < 100, "bounded drain progress");

@@ -735,7 +735,7 @@ contract CrapsViews is CrapsSeedViews, CrapsBattle, JackpotBattleViews {
         }
         // The shut window joins the write buffer's RNG round like any other consumer: the next
         // request, daily or mid-day, settles it. Its pending bit counts as work for that request.
-        IReadCohortLifecycle(address(this)).registerRngSlot(index, slot, w.key);
+        IReadCohortLifecycle(address(this)).registerRngSlot_g709(index, slot, w.key);
         emit CrapsBonusArmed(w.key, uint48(slot), index);
     }
 

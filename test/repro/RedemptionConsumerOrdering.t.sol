@@ -60,13 +60,13 @@ contract RedemptionConsumerOrderingTest is RedemptionCloseTools {
         // redemption stage stops there, whatever its remaining allowance would admit.
         vm.mockCall(address(sdgnrs), abi.encodeWithSignature("runRedemptionWork(uint256,uint256)"),
             abi.encode(false, false, uint256(0)));
-        for (uint256 i; i < 100 && game.rngConsumerStage() != 1; ++i) {
+        for (uint256 i; i < 100 && game.rngConsumerStage_g379() != 1; ++i) {
             try game.mineFlip{gas: 10_000_000}(0) {} catch {
-                assertEq(game.rngConsumerStage(), 1, "only the held worker may stop progress");
+                assertEq(game.rngConsumerStage_g379(), 1, "only the held worker may stop progress");
             }
         }
         vm.clearMockedCalls();
-        assertEq(game.rngConsumerStage(), 1, "redemption is next after daily work");
+        assertEq(game.rngConsumerStage_g379(), 1, "redemption is next after daily work");
         vm.prank(address(game)); sdgnrs.runRedemptionWork(7419, 200_000);
     }
 
@@ -104,7 +104,7 @@ contract RedemptionConsumerOrderingTest is RedemptionCloseTools {
     function test_PinnedWordCannotBypassUnfinishedDailyWork() public {
         _publish();
         assertTrue(game.rngLocked(), "publication precedes daily unlock");
-        assertEq(game.rngConsumerStage(), 0);
+        assertEq(game.rngConsumerStage_g379(), 0);
         bytes32 beforeClaims = _claimsHash();
         assertTrue(game.nextMinerAction() != 8, "the engine finishes daily work before MinerAction.Redemption");
         // A live game has no self-claim door: the resolved claim waits for the engine.
@@ -154,7 +154,7 @@ contract RedemptionConsumerOrderingTest is RedemptionCloseTools {
         uint128 carol = _owed(CAROL);
         assertGt(carol, 0, "the last beneficiary is still owed");
         assertTrue(sdgnrs.redemptionSettlementPending(), "the unfinished cohort stays live");
-        assertEq(game.rngConsumerStage(), 1, "the cohort keeps its stage until its last claim settles");
+        assertEq(game.rngConsumerStage_g379(), 1, "the cohort keeps its stage until its last claim settles");
         assertFalse(game.rngComplete());
         assertEq(game.nextMinerAction(), 8, "no request can cut in ahead of MinerAction.Redemption");
         vm.prank(address(game));

@@ -354,7 +354,7 @@ abstract contract ChainPinBase is DeployProtocol {
 
     function _fundSdgnrsFlip() internal {
         vm.prank(address(game));
-        coinflip.creditFlip(sdgnrsId, 100_000);
+        coinflip.creditFlip_g317(sdgnrsId, 100_000);
     }
 
     /// @dev Register thirty more deities (32 in all) through the production allocator, without paying: a paid
@@ -567,7 +567,7 @@ contract ChainPinAdvanceDriven is ChainPinBase {
         assertEq(uint256(game.level()), 3);
     }
 
-    /// F3: the real arming block at level 4 (window open, decDayOne, entries level) lets applyDailyWord burn
+    /// F3: the real arming block at level 4 (window open, decDayOne, entries level) lets applyDailyWord_g1652 burn
     /// sDGNRS's backing into level 5's decimator round.
     function test_F3_openingBurnAfterRealArming() public {
         _driveTurbo(4, 0);

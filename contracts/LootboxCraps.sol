@@ -9,6 +9,8 @@ import {ContractAddresses} from "./ContractAddresses.sol";
 ///      `internal` storage with no typed getter — the same escape hatch `DegenerusGameLens` uses.
 interface IGameSlotReader {
     function rngWordForDay(uint24 day) external view returns (uint256);
+    function extsload_g8132(bytes32 slot) external view returns (bytes32 value);
+
     /// @notice DegenerusGame's raw-slot reader, returning the word stored at `slot`.
     function extsload(bytes32 slot) external view returns (bytes32 value);
 }
@@ -116,6 +118,6 @@ contract LootboxCraps is Craps {
         // A zero GAME — the un-pinned placeholder this repo ships on `main` — has no code, so this
         // high-level call reverts on its extcodesize check: every read fails closed until CRAPS is
         // deployed against a pinned game.
-        return IGameSlotReader(_GAME).extsload(slot);
+        return IGameSlotReader(_GAME).extsload_g8132(slot);
     }
 }

@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {EntropyLib} from "../libraries/EntropyLib.sol";
+import {RngTags} from "../libraries/RngTags.sol";
+
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
 import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
@@ -69,7 +72,7 @@ abstract contract DegenerusGameRngUtils is DegenerusGameStorage {
         // Retain just the last derived word in the two-slot ring.
         if (endDay > startDay) {
             uint24 yesterday = endDay - 1;
-            uint256 word = uint256(keccak256(abi.encodePacked(vrfWord, yesterday)));
+            uint256 word = uint256(EntropyLib.hash3(RngTags.GAP_DAY, vrfWord, yesterday));
             _recordDailyRng(yesterday, word == 0 ? 1 : word);
         }
     }

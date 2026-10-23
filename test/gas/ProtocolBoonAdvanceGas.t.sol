@@ -34,10 +34,10 @@ contract ProtocolDrawGasSeeder is DegenerusGameStorage {
 ///      the exact native phase selected by Miner. No production cost is mocked.
 contract ProtocolDailyGasHost is DegenerusGame {
     function publishOnly() external {
-        _callPhase(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("publishRng()"));
+        _callPhase(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("publishRng_g4514()"));
     }
     function applyOnly() external {
-        _callPhase(ContractAddresses.GAME_ADVANCE_MODULE, abi.encodeWithSignature("applyDailyWord()"));
+        _callPhase(ContractAddresses.GAME_ADVANCE_MODULE, abi.encodeWithSignature("applyDailyWord_g1652()"));
     }
     function _callPhase(address target, bytes memory data) private {
         (bool ok, bytes memory reason) = target.delegatecall(data);

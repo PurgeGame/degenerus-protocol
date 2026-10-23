@@ -44,7 +44,7 @@ contract RedemptionStethFallbackTest is RedemptionFixture {
         assertEq(game.redemptionReserve(), reserved, "the whole pull is the reserve");
         _solvent();
         settlementWord = _wordForRoll(175);
-        vm.mockCall(address(game), abi.encodeWithSignature("rngConsumerStage()"), abi.encode(uint8(1)));
+        vm.mockCall(address(game), abi.encodeWithSignature("rngConsumerStage_g379()"), abi.encode(uint8(1)));
         uint256 gameBefore = address(game).balance + mockStETH.balanceOf(address(game));
         uint256 future = game.futurePrizePoolView();
         assertTrue(_work(9_000_000));
@@ -78,7 +78,7 @@ contract RedemptionStethFallbackTest is RedemptionFixture {
         assertEq(_claimBase(alice, 1), 10 ether);
         uint256 beneficiaryBefore = game.claimableWinningsOf(alice);
         settlementWord = _wordForRoll(175);
-        vm.mockCall(address(game), abi.encodeWithSignature("rngConsumerStage()"), abi.encode(uint8(1)));
+        vm.mockCall(address(game), abi.encodeWithSignature("rngConsumerStage_g379()"), abi.encode(uint8(1)));
         assertTrue(_work(9_000_000));
         assertGe(game.claimableWinningsOf(alice), beneficiaryBefore + 17.5 ether / 2,
             "token donation cannot make a funded live claim drop");
@@ -103,7 +103,7 @@ contract RedemptionStethFallbackTest is RedemptionFixture {
         assertEq(game.redemptionReserve(), max, "the whole maximum is isolated");
         uint256 future = game.futurePrizePoolView();
         settlementWord = _wordForRoll(175);
-        vm.mockCall(address(game), abi.encodeWithSignature("rngConsumerStage()"), abi.encode(uint8(1)));
+        vm.mockCall(address(game), abi.encodeWithSignature("rngConsumerStage_g379()"), abi.encode(uint8(1)));
         assertTrue(_work(9_000_000));
         assertEq(_claimTokens(alice, id), 0, "claim settled");
         assertApproxEqAbs(game.claimableWinningsOf(alice), max / 2, 1, "direct half paid");

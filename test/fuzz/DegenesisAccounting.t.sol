@@ -263,7 +263,7 @@ contract DegenesisAccounting is DegenesisFixture {
     function _isolatedSplit(uint24 day) internal {
         bytes memory code = address(game).code;
         vm.etch(address(game), address(degenesisModule).code);
-        IDegenerusGameDegenesisModule(address(game)).prepareDegenesis(day);
+        IDegenerusGameDegenesisModule(address(game)).prepareDegenesis_g47(day);
         vm.etch(address(game), code);
     }
 

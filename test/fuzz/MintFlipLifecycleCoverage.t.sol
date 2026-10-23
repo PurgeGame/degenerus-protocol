@@ -17,11 +17,11 @@ import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 ///     UNCONDITIONAL per-day reset (`_afkingResetDay != day -> _subCursor = 0; subsFullyProcessed =
 ///     false`) then a weight-budgeted walk of the FULL `[0, len)` set until `subsFullyProcessed`. So
 ///     every in-set sub is stamped each day.
-///   - OPEN leg (mineFlip's Afking stage, GameAfkingModule `runAfkingWork`, cursor `_subOpenCursor`):
+///   - OPEN leg (mineFlip's Afking stage, GameAfkingModule `runAfkingWork_g8553`, cursor `_subOpenCursor`):
 ///     a FULL-RING scan that visits up to `len` subs from the cursor, wrapping mid-scan, admitting
 ///     each box against the call's gas allowance and resuming mid-ring across calls. The stage is
 ///     complete only once the WHOLE set is drained, never just the suffix `[cursor, len)`. The
-///     HumanBoxes stage (`runHumanBoxWork`) follows it in the fixed engine order.
+///     HumanBoxes stage (`runHumanBoxWork_g315`) follows it in the fixed engine order.
 ///   - `mineFlip()` reverts `NoWork()` ONLY when no stage has work — i.e. advance, afking, and
 ///     human boxes all fully drained.
 ///
@@ -102,7 +102,7 @@ contract MintFlipLifecycleCoverage is DeployProtocol {
         // checkpoints (the call that releases the lock opens what its leftover admits), then
         // realistic-allowance keeper calls drain the AFKing backlog, resuming mid-ring.
         address keeper = makeAddr("life_keeper");
-        _grantDeityPass(keeper); // bounty-eligible so the full creditFlip path runs end-to-end
+        _grantDeityPass(keeper); // bounty-eligible so the full creditFlip_g317 path runs end-to-end
         uint256 openCalls = _drainDay(subs, keeper, uint256(keccak256("life_stampc")) | 1, false);
         assertGt(openCalls, 1, "load-bearing: draining the set spanned MULTIPLE open calls (cursor resumed mid-ring)");
 

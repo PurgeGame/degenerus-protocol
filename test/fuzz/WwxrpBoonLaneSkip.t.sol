@@ -7,11 +7,11 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 
 interface IGameBoonView {
     function boonPacked(uint32 id) external view returns (uint256 slot0, uint256 slot1);
-    function consumeCoinflipBoon(uint32 id) external returns (uint16);
+    function consumeCoinflipBoon_g2902(uint32 id) external returns (uint16);
 }
 
 /// @title WwxrpBoonLaneSkip -- WWXRP.enter reads the Game's WWXRP boon lane before consuming
-/// @notice enter() dispatches the Game's consumeCoinflipBoon only when the player's WWXRP lane
+/// @notice enter() dispatches the Game's consumeCoinflipBoon_g2902 only when the player's WWXRP lane
 ///         (Game slot 46 mapping, second word, bits 232..255) has a nonzero tier. These tests pin
 ///         that slot against the Game's own getter and prove the skipped dispatch is a no-op.
 contract WwxrpBoonLaneSkipTest is DeployProtocol {
@@ -64,7 +64,7 @@ contract WwxrpBoonLaneSkipTest is DeployProtocol {
     function testLiveWwxrpBoonIsSpent() public {
         uint256 others = uint256(0xABCDEF) << 184;
         _write(aliceId, 0, others | (_lane(3, false, _today()) << WWXRP_LANE_SHIFT));
-        vm.expectCall(address(game), abi.encodeCall(IGameBoonView.consumeCoinflipBoon, (aliceId)), 1);
+        vm.expectCall(address(game), abi.encodeCall(IGameBoonView.consumeCoinflipBoon_g2902, (aliceId)), 1);
         vm.expectEmit(true, false, false, true, address(game));
         emit BoonConsumed(aliceId, 7, 1200);
         vm.prank(alice);
@@ -79,7 +79,7 @@ contract WwxrpBoonLaneSkipTest is DeployProtocol {
         vm.warp(vm.getBlockTimestamp() + 12 days);
         uint24 d = _today();
         _write(aliceId, 0, _lane(2, false, d - 10) << WWXRP_LANE_SHIFT);
-        vm.expectCall(address(game), abi.encodeCall(IGameBoonView.consumeCoinflipBoon, (aliceId)), 1);
+        vm.expectCall(address(game), abi.encodeCall(IGameBoonView.consumeCoinflipBoon_g2902, (aliceId)), 1);
         vm.prank(alice);
         wwxrp.enter(0, 25);
         (, uint256 s1) = IGameBoonView(address(game)).boonPacked(aliceId);
@@ -100,7 +100,7 @@ contract WwxrpBoonLaneSkipTest is DeployProtocol {
 
         _write(aliceId, 0, _lane(3, true, d) << WWXRP_LANE_SHIFT);
         vm.warp(vm.getBlockTimestamp() + 1 days);
-        vm.expectCall(address(game), abi.encodeCall(IGameBoonView.consumeCoinflipBoon, (aliceId)), 1);
+        vm.expectCall(address(game), abi.encodeCall(IGameBoonView.consumeCoinflipBoon_g2902, (aliceId)), 1);
         vm.recordLogs();
         vm.prank(alice);
         wwxrp.enter(0, 25);
@@ -125,7 +125,7 @@ contract WwxrpBoonLaneSkipTest is DeployProtocol {
             vm.recordLogs();
             vm.startStateDiffRecording();
             vm.prank(address(wwxrp));
-            uint16 bps = IGameBoonView(address(game)).consumeCoinflipBoon(aliceId);
+            uint16 bps = IGameBoonView(address(game)).consumeCoinflipBoon_g2902(aliceId);
             Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
             assertEq(bps, 0, "skipped consume would have paid");
             assertEq(vm.getRecordedLogs().length, 0, "skipped consume would have logged");
@@ -141,7 +141,7 @@ contract WwxrpBoonLaneSkipTest is DeployProtocol {
         }
 
         vm.expectCall(
-            address(game), abi.encodeCall(IGameBoonView.consumeCoinflipBoon, (aliceId)), nonzeroTier ? 1 : 0
+            address(game), abi.encodeCall(IGameBoonView.consumeCoinflipBoon_g2902, (aliceId)), nonzeroTier ? 1 : 0
         );
         vm.recordLogs();
         vm.prank(alice);

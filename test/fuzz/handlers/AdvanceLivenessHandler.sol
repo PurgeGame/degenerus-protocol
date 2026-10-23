@@ -20,7 +20,7 @@ import {GameSlots} from "../../helpers/GameSlots.sol";
 contract LivenessRequestWorker is DegenerusGame {
     function requestMidday() external {
         (bool ok, bytes memory reason) = ContractAddresses.GAME_RNG_MODULE.delegatecall(
-            abi.encodeWithSelector(IDegenerusGameRngModule.requestMinerRng.selector));
+            abi.encodeWithSelector(IDegenerusGameRngModule.requestMinerRng_g4954.selector));
         if (!ok) assembly ("memory-safe") { revert(add(reason, 32), mload(reason)) }
     }
 }
@@ -43,7 +43,7 @@ contract LivenessRequestWorker is DegenerusGame {
 ///              NotTimeYet, today's word exists, rngLocked is false, LR_MID_DAY == 0,
 ///              ticketsFullyProcessed is true (nothing staged without a worker), and
 ///              advanceDue() agrees (false) with the reverting advance.
-///           3. The mid-day request worker (RngModule requestMinerRng, the one mineFlip's
+///           3. The mid-day request worker (RngModule requestMinerRng_g4954, the one mineFlip's
 ///              RequestMidday stage dispatches), called alone for a fresh account, must not
 ///              revert RngNotReady or any other liveness gate (only the legitimate
 ///              economic/timing refusals).

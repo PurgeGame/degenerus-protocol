@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {EntropyLib} from "./EntropyLib.sol";
+import {RngTags} from "./RngTags.sol";
+
 /// @dev Replayable bounded survivor field, shared by settlement and the Lens.
 library DecimatorSamplingLib {
     bytes32 internal constant SAMPLE_TAG = keccak256("decimator.battle.sample.v1");
@@ -27,7 +30,7 @@ library DecimatorSamplingLib {
     }
 
     function rotation(uint256 word, uint24 lvl, uint256 entries) internal pure returns (uint256) {
-        return uint256(keccak256(abi.encode(SAMPLE_TAG, word, lvl))) % entries;
+        return uint256(EntropyLib.hash2(RngTags.DECIMATOR_ROTATION, word)) % entries;
     }
 
     /// @dev Disjoint strata give distinct positions; the common rotation preserves uniqueness
@@ -38,7 +41,7 @@ library DecimatorSamplingLib {
     {
         uint256 lo = stratum * entries / count;
         uint256 hi = (stratum + 1) * entries / count;
-        uint256 pos = lo + uint256(keccak256(abi.encode(SAMPLE_TAG, word, lvl, stratum))) % (hi - lo);
+        uint256 pos = lo + uint256(EntropyLib.hash3(RngTags.DECIMATOR_SAMPLE, word, stratum)) % (hi - lo);
         return uint64((pos + rotate) % entries + 1);
     }
 }

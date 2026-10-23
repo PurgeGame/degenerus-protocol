@@ -789,7 +789,7 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
     ) private returns (uint256 spent) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_WHALE_MODULE.delegatecall(
             abi.encodeWithSelector(
-                IDegenerusGameWhaleModule.awardWhalePass.selector,
+                IDegenerusGameWhaleModule.awardWhalePass_g5502.selector,
                 lvl, trait, amount, randWord, ticketLeg
             )
         );
@@ -1272,7 +1272,7 @@ contract QueuedJackpotReference is DegenerusGamePayoutUtils, DegenerusGameJackpo
                 (flipCredit / FlipRoundLib.FLIP_ROUND_UNIT) *
                 FlipRoundLib.FLIP_ROUND_UNIT;
             if (flipCredit != 0) {
-                coinflip.creditFlip(_seedWallet(winner), flipCredit);
+                coinflip.creditFlip_g317(_seedWallet(winner), flipCredit);
             }
         }
         if (wwxrpAward != 0) {

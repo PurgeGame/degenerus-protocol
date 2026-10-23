@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {RngTags} from "../libraries/RngTags.sol";
+
 import {GameBoonActions} from "./GameBoonActions.sol";
 import {GameBoxInternals} from "./GameBoxInternals.sol";
 
@@ -154,16 +156,12 @@ abstract contract DegenerusGameBoonModule is GameBoxInternals, GamePurchaseBoon,
         if (totalWeight == 0 || pool.awardedMask != 0) return;
         // Seal once before applying any reward. No retry or reroll after a collision.
         pool.awardedMask = 7;
-        // Preserve the deployed-address seed domain; storage identity is the protocol ID.
-        address issuer = issuerId == VAULT_WALLET_ID ? ContractAddresses.VAULT : ContractAddresses.SDGNRS;
         deityBoonPacked[issuerId] = (deityBoonPacked[issuerId] & ~uint64(type(uint32).max))
             | uint64(awardDay) | (uint64(7) << 24);
         if (count == 0) return;
         mapping(uint32 => ProtocolBoonEntry) storage entries = protocolBoonEntries[_protocolBoonIndex(issuerId)][day & 1];
         for (uint8 slot; slot < DEITY_DAILY_BOON_COUNT; ++slot) {
-            uint256 roll = uint256(keccak256(abi.encode(
-                PROTOCOL_BOON_WINNER_TAG, issuer, day, slot, winnerWord
-            ))) % totalWeight;
+            uint256 roll = uint256(EntropyLib.hash4(RngTags.PROTOCOL_BOON_WINNER, winnerWord, issuerId, slot)) % totalWeight;
             // uint32-bounded entry count: at most 32 interval reads per award.
             uint32 lo;
             uint32 hi = count;
@@ -521,7 +519,7 @@ abstract contract DegenerusGameBoonModule is GameBoxInternals, GamePurchaseBoon,
         if (totalChance == 0) return;
 
         for (uint256 i; i < boxCount; ) {
-            uint256 roll = uint32(EntropyLib.hash2(seed, nonceBase + i) >> 120) %
+            uint256 roll = uint32(EntropyLib.hash3(RngTags.BOX_BOON_LANE, seed, nonceBase + i) >> 120) %
                 BOON_PPM_SCALE;
             if (roll < totalChance) {
                 _deliverBoon(

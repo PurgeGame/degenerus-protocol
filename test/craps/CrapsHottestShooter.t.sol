@@ -50,7 +50,7 @@ contract CrapsHottestShooterTest is CrapsPins {
         table.setBetWord(id, uint256(_idFor(player)) | (high ? 1 << 65 : 0));
     }
 
-    // payBattlePot must creditFlip exactly the two conserved liquid shares.
+    // payBattlePot must creditFlip_g317 exactly the two conserved liquid shares.
     function test_tenPercentGoesToHottestAndHighLaneIsUntouched() public {
         uint256 winner = _bet(SLOT, 1, alice, false);
         _bet(SLOT, 2, bob, true);

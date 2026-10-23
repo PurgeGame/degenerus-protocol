@@ -22,20 +22,20 @@ contract RingSingleStepFixture is DegenerusGame {
         bytes memory input;
         if (action == MinerAction.Publish) {
             target = ContractAddresses.GAME_RNG_MODULE;
-            input = abi.encodeWithSelector(IDegenerusGameRngModule.publishRng.selector);
+            input = abi.encodeWithSelector(IDegenerusGameRngModule.publishRng_g4514.selector);
         } else if (action == MinerAction.Tickets) {
             target = ContractAddresses.GAME_TICKET_MODULE;
             uint24 anchor = !jackpotPhaseFlag && lastPurchaseDay && rngLockedFlag ? level : level + 1;
-            input = abi.encodeWithSelector(IDegenerusGameTicketModule.runTicketWork.selector, anchor, uint256(10_000_000));
+            input = abi.encodeWithSelector(IDegenerusGameTicketModule.runTicketWork_g1150.selector, anchor, uint256(10_000_000));
         } else if (action == MinerAction.DailyGap) {
             target = ContractAddresses.GAME_ADVANCE_MODULE;
             input = abi.encodeWithSelector(IDegenerusGameAdvanceModule.applyDailyGap.selector);
         } else if (action == MinerAction.DailyApply) {
             target = ContractAddresses.GAME_ADVANCE_MODULE;
-            input = abi.encodeWithSelector(IDegenerusGameAdvanceModule.applyDailyWord.selector);
+            input = abi.encodeWithSelector(IDegenerusGameAdvanceModule.applyDailyWord_g1652.selector);
         } else if (action == MinerAction.DailyPhase) {
             target = ContractAddresses.GAME_ADVANCE_MODULE;
-            input = abi.encodeWithSelector(IDegenerusGameAdvanceModule.runDailyPhase.selector, uint256(10_000_000));
+            input = abi.encodeWithSelector(IDegenerusGameAdvanceModule.runDailyPhase_g2582.selector, uint256(10_000_000));
         } else revert("unexpected pre-AFK checkpoint");
         (bool ok, bytes memory reason) = target.delegatecall(input);
         if (!ok) assembly ("memory-safe") { revert(add(reason, 32), mload(reason)) }
@@ -53,7 +53,7 @@ contract RingSingleStepFixture is DegenerusGame {
     ///      same allowance shape. Returns the boxes it opened (its reward basis).
     function runAfkOnce(uint32 factor) external returns (uint256 opened) {
         (bool ok, bytes memory ret) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(
-            abi.encodeWithSelector(IGameAfkingModule.runAfkingWork.selector, MineFlipGas.budget(10_000_000, MineFlipGas.normalize(factor), true)));
+            abi.encodeWithSelector(IGameAfkingModule.runAfkingWork_g8553.selector, MineFlipGas.budget(10_000_000, MineFlipGas.normalize(factor), true)));
         if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
         opened = abi.decode(ret, (MineFlipGas.Result)).rewardBasis;
     }
@@ -178,7 +178,7 @@ contract AutoOpenCursorRing is DeployProtocol {
         require(_isOpenable(p), "fixture: a fresh sealed openable box was stamped");
     }
 
-    /// @dev One call of the production AFK open worker (GameAfkingModule.runAfkingWork, the worker
+    /// @dev One call of the production AFK open worker (GameAfkingModule.runAfkingWork_g8553, the worker
     ///      mineFlip dispatches for the Afking stage), run in the Game's context through the checkpoint
     ///      fixture. Returns the afking ring boxes it opened.
     function _openAfkRing() internal returns (uint256 opened) {

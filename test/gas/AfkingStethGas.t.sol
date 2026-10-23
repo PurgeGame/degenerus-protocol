@@ -38,7 +38,7 @@ contract AfkingStethGasHost is SubscriberNativeGasHost {
     function measuredSubWork(uint256 allowance)
         external returns (MineFlipGas.Result memory result, uint256 grossGas)
     {
-        bytes memory data = abi.encodeWithSignature("runSubscriberWork(uint24,uint256)", _afkingResetDay, allowance);
+        bytes memory data = abi.encodeWithSignature("runSubscriberWork_g6352(uint24,uint256)", _afkingResetDay, allowance);
         uint256 beforeGas = gasleft();
         (bool ok, bytes memory returned) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(data);
         if (!ok) assembly ("memory-safe") { revert(add(returned, 32), mload(returned)) }

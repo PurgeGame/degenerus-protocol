@@ -28,7 +28,7 @@ import {
  *                  kickback returned, 3-tier chain
  *  - consumeDegeneretteCredit: game-only, partial and full consumption
  *  - pendingDegeneretteCreditOf: Degenerette payout mode
- *  - affiliateTop / affiliateScore / affiliateBonusPointsBest
+ *  - affiliateTop / affiliateScore / affiliateBonusPointsBest_g3878
  *  - Events
  */
 
@@ -74,7 +74,7 @@ async function payAffiliateAsGame(
 }
 
 /**
- * Call payAffiliateCombined as the game contract (impersonation).
+ * Call payAffiliateCombined_g978 as the game contract (impersonation).
  */
 async function payAffiliateCombinedAsGame(
   hreEthers,
@@ -95,7 +95,7 @@ async function payAffiliateCombinedAsGame(
   const senderId = await giveWalletId(game, sender);
   const tx = await affiliate
     .connect(gameSigner)
-    .payAffiliateCombined(code, senderId, lvl, tktFresh, tktRecycled, lbFresh, lbRecycled, lbFreshScore);
+    .payAffiliateCombined_g978(code, senderId, lvl, tktFresh, tktRecycled, lbFresh, lbRecycled, lbFreshScore);
   await hreEthers.provider.send("hardhat_stopImpersonatingAccount", [gameAddr]);
   return tx;
 }
@@ -654,7 +654,7 @@ describe("DegenerusAffiliate", function () {
       expect(lockedEv).to.not.be.undefined;
     });
 
-    it("upline tier 1 (20%) is distributed via creditFlip", async function () {
+    it("upline tier 1 (20%) is distributed via creditFlip_g317", async function () {
       // Alice has code; Bob refers to Alice; Carol refers to Bob.
       // When Carol pays, Bob and Alice should be in the distribution batch.
       const { affiliate, game, coin, alice, bob, carol } = await loadFixture(
@@ -687,7 +687,7 @@ describe("DegenerusAffiliate", function () {
   // =========================================================================
   // 8. View Functions
   // =========================================================================
-  describe("affiliateTop / affiliateScore / affiliateBonusPointsBest", function () {
+  describe("affiliateTop / affiliateScore / affiliateBonusPointsBest_g3878", function () {
     it("affiliateTop returns wallet ID 0 for level with no activity", async function () {
       const { affiliate } = await loadFixture(deployFullProtocol);
       const [player, score] = await affiliate.affiliateTop(1);
@@ -770,26 +770,26 @@ describe("DegenerusAffiliate", function () {
       expect(evs[0].args.affiliateId).to.equal(await game.walletIdOf(alice.address));
     });
 
-    it("affiliateBonusPointsBest returns 0 for new player", async function () {
+    it("affiliateBonusPointsBest_g3878 returns 0 for new player", async function () {
       const { affiliate, game, alice } = await loadFixture(deployFullProtocol);
       expect(
-        await affiliate.affiliateBonusPointsBest(5, await game.walletIdOf(alice.address))
+        await affiliate.affiliateBonusPointsBest_g3878(5, await game.walletIdOf(alice.address))
       ).to.equal(0n);
     });
 
-    it("affiliateBonusPointsBest returns 0 for wallet ID 0 or zero level", async function () {
+    it("affiliateBonusPointsBest_g3878 returns 0 for wallet ID 0 or zero level", async function () {
       const { affiliate, game, alice } = await loadFixture(deployFullProtocol);
       expect(
-        await affiliate.affiliateBonusPointsBest(0, 0)
+        await affiliate.affiliateBonusPointsBest_g3878(0, 0)
       ).to.equal(0n);
       // Also test zero level with a valid ID
 
       expect(
-        await affiliate.affiliateBonusPointsBest(0, await game.walletIdOf(alice.address))
+        await affiliate.affiliateBonusPointsBest_g3878(0, await game.walletIdOf(alice.address))
       ).to.equal(0n);
     });
 
-    it("affiliateBonusPointsBest accumulates over previous 5 levels", async function () {
+    it("affiliateBonusPointsBest_g3878 accumulates over previous 5 levels", async function () {
       const { affiliate, game, coin, alice, bob, carol, dan, eve } =
         await loadFixture(deployFullProtocol);
       const code = toBytes32("BONUS5");
@@ -823,11 +823,11 @@ describe("DegenerusAffiliate", function () {
         }
       }
 
-      const points = await affiliate.affiliateBonusPointsBest(6, await game.walletIdOf(alice.address));
+      const points = await affiliate.affiliateBonusPointsBest_g3878(6, await game.walletIdOf(alice.address));
       expect(points).to.equal(29n);
     });
 
-    it("affiliateBonusPointsBest calibrates to referred ETH volume (dust ~ 0, 25 ETH fresh = cap)", async function () {
+    it("affiliateBonusPointsBest_g3878 calibrates to referred ETH volume (dust ~ 0, 25 ETH fresh = cap)", async function () {
       const { affiliate, game, alice, bob } =
         await loadFixture(deployFullProtocol);
       const code = toBytes32("VOLCAL");
@@ -849,7 +849,7 @@ describe("DegenerusAffiliate", function () {
         1,
         true
       );
-      expect(await affiliate.affiliateBonusPointsBest(2, await game.walletIdOf(alice.address))).to.equal(0n);
+      expect(await affiliate.affiliateBonusPointsBest_g3878(2, await game.walletIdOf(alice.address))).to.equal(0n);
 
       // 25 ETH fresh referred spend at a 0.04-price level (20% rate) is the exact
       // 50-point cap. Level 10 sits outside the level-2 window used above.
@@ -864,7 +864,7 @@ describe("DegenerusAffiliate", function () {
         10,
         true
       );
-      expect(await affiliate.affiliateBonusPointsBest(11, await game.walletIdOf(alice.address))).to.equal(50n);
+      expect(await affiliate.affiliateBonusPointsBest_g3878(11, await game.walletIdOf(alice.address))).to.equal(50n);
     });
   });
 
@@ -1258,7 +1258,7 @@ describe("DegenerusAffiliate", function () {
       expect(b.newTotal - a.newTotal).to.equal(flip(50000)); // recycled 5%
     });
 
-    it("payAffiliateCombined pools its four legs into ONE emit", async function () {
+    it("payAffiliateCombined_g978 pools its four legs into ONE emit", async function () {
       const { affiliate, game, bob, code } = await setup();
       const tx = await payAffiliateCombinedAsGame(
         hre.ethers, game, affiliate, code, bob.address, 1,

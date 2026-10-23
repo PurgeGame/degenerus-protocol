@@ -150,7 +150,7 @@ contract FlipEmissionSeeds is DeployProtocol {
         );
         uint256 credit = 100_000;
         vm.prank(GAME);
-        coinflip.creditFlip(2, credit);
+        coinflip.creditFlip_g317(2, credit);
 
         // Day 21 WIN: the payout settles into the rolling carry (plus the flat
         // recycle bonus on the roll) - nothing mints, nothing becomes claimable.

@@ -533,8 +533,8 @@ contract DegenesisVaultSpend is DegenesisFixture {
         uint256 credit = _credit(id);
         uint256 cost = 100 * game.mintPrice();
         Snap memory before = _snap();
-        vm.expectCall(address(quests), abi.encodeWithSelector(IDegenerusQuests.handlePurchase.selector, id));
-        vm.expectCall(address(affiliate), abi.encodeWithSelector(affiliate.payAffiliateCombined.selector, bytes32(0), id));
+        vm.expectCall(address(quests), abi.encodeWithSelector(IDegenerusQuests.handlePurchase_g4831.selector, id));
+        vm.expectCall(address(affiliate), abi.encodeWithSelector(affiliate.payAffiliateCombined_g978.selector, bytes32(0), id));
         vm.expectCall(address(coinflip), abi.encodeWithSelector(coinflip.armRecord.selector, RECORD_KIND_BUY, id, uint256(100)));
         _spendFor(id, false, 40_000, 0, budget);
         assertGt(coinflip.coinflipAmount(who), stake, "normal FLIP reward retained");

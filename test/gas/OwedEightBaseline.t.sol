@@ -110,7 +110,7 @@ contract OwedEightDrainBaselineTest is Test {
         while (!done && calls < 100) {
             vm.cool(address(h));
             uint256 beforeGas = gasleft();
-            MineFlipGas.Result memory result = h.runTicketWork(LVL - 1, 9_000_000);
+            MineFlipGas.Result memory result = h.runTicketWork_g1150(LVL - 1, 9_000_000);
             uint256 used = beforeGas - gasleft();
             emit log_named_uint("OWED8_DRAIN_CALL_EXECUTION", used);
             totalGas += used;
@@ -136,7 +136,7 @@ contract OwedEightPremiseTest is Test {
         h.credit(player, 3, 819_204);
         assertEq(uint8(h.owed(player, 3)), 0);
         h.commit(3, 3);
-        MineFlipGas.Result memory result = h.runTicketWork(2, 9_000_000);
+        MineFlipGas.Result memory result = h.runTicketWork_g1150(2, 9_000_000);
         uint80 pending = h.owed(player, 3);
         assertTrue(result.progressed);
         assertFalse(result.done);

@@ -51,6 +51,17 @@ library EntropyLib {
         }
     }
 
+    /// @dev Fixed-width three-word hash; temporary memory never escapes this call.
+    function hash3(uint256 a, uint256 b, uint256 c) internal pure returns (uint256 r) {
+        assembly ("memory-safe") {
+            let p := mload(0x40)
+            mstore(p, a)
+            mstore(add(p, 0x20), b)
+            mstore(add(p, 0x40), c)
+            r := keccak256(p, 0x60)
+        }
+    }
+
     /**
      * @notice Keccak mix of four ABI words without allocating an encoded bytes buffer.
      * @dev Byte-identical to `uint256(keccak256(abi.encode(a, b, c, d)))`. Four words do not

@@ -40,7 +40,7 @@ contract NearQueueParityLifecycleTest is Test {
 
     function drain(uint24 anchor) private {
         for (uint256 i; i < 20; ++i) {
-            MineFlipGas.Result memory result = h.runTicketWork(anchor, 9_000_000);
+            MineFlipGas.Result memory result = h.runTicketWork_g1150(anchor, 9_000_000);
             if (result.done) return;
         }
         fail("ticket sweep must finish");

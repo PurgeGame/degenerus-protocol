@@ -40,7 +40,7 @@ contract BafStageHost is DegenerusGame, BucketSeed {
     }
 
     /// @dev A delivered, published daily session on today's word with every queue read
-    ///      certified: the state `runDailyPhase` requires. `jackpot` selects the jackpot phase
+    ///      certified: the state `runDailyPhase_g2582` requires. `jackpot` selects the jackpot phase
     ///      (BAF stage) or the locked last-purchase day (consolidation).
     function seedSession(uint24 lvl, uint256 word, bool jackpot) external {
         uint24 day = _simulatedDayIndex();
@@ -146,7 +146,7 @@ contract BafStageHost is DegenerusGame, BucketSeed {
 
     function daily(uint256 allowance) external returns (MineFlipGas.Result memory) {
         return abi.decode(
-            _native(ContractAddresses.GAME_ADVANCE_MODULE, abi.encodeWithSignature("runDailyPhase(uint256)", allowance)),
+            _native(ContractAddresses.GAME_ADVANCE_MODULE, abi.encodeWithSignature("runDailyPhase_g2582(uint256)", allowance)),
             (MineFlipGas.Result)
         );
     }

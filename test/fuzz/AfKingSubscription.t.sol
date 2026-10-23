@@ -9,7 +9,7 @@ import {GameSlotKeys} from "../helpers/GameSlots.sol";
 /// @title AfKingSubscription -- the game-resident AFKing subscription acceptance properties: a seat is
 ///        the only credential and a passless holder is processed with no eviction (AFSUB-02/03), subscribe
 ///        charges no FLIP and buys nothing (AFSUB-01), a mineFlip whose advance runs the subscriber pass
-///        emits one creditFlip bounty (REW-02), and subscribe authorization follows the account rule
+///        emits one creditFlip_g317 bounty (REW-02), and subscribe authorization follows the account rule
 ///        while third parties may only add to a subscriber's own prepaid bucket (OPENE-04).
 contract AfKingSubscription is DeployProtocol {
 
@@ -27,7 +27,7 @@ contract AfKingSubscription is DeployProtocol {
         }
     }
 
-    /// @dev keccak256("CoinflipStakeUpdated(uint32,uint24,uint256,uint256)") — one per creditFlip.
+    /// @dev keccak256("CoinflipStakeUpdated(uint32,uint24,uint256,uint256)") — one per creditFlip_g317.
     bytes32 private constant COINFLIP_STAKE_UPDATED_SIG =
         keccak256("CoinflipStakeUpdated(uint32,uint24,uint256,uint256)");
 
@@ -98,12 +98,12 @@ contract AfKingSubscription is DeployProtocol {
     }
 
     // =========================================================================
-    // Task 3c — Single-creditFlip mineFlip bounty (REW-02 / PLACE-02)
+    // Task 3c — Single-creditFlip_g317 mineFlip bounty (REW-02 / PLACE-02)
     // =========================================================================
 
     /// @notice REW-02 (PLACE-02 bounty folded into advance): the REWARDED entrypoint is the
     ///         parameterless `mineFlip()` router. A mineFlip() whose advance leg runs the buy STAGE
-    ///         emits AT MOST ONE creditFlip to the caller (never per-item) — the one-bounty-per-tx
+    ///         emits AT MOST ONE creditFlip_g317 to the caller (never per-item) — the one-bounty-per-tx
     ///         property. (The advance leg pays `unit·2·mult`; a `mult==0` gameover advance pays none.)
     function testMintFlipEmitsAtMostOneBuyBounty() public {
         // Enough buying subscribers that one call's buy STAGE measures above the unpaid first 1M
@@ -147,7 +147,7 @@ contract AfKingSubscription is DeployProtocol {
             assertLt(game.afkingFundingOf(subs[i]), 1 ether, "the call ran the buy STAGE for every subscriber");
         }
         assertGt(reward, 0, "nonvacuity: the call measured above the unpaid 1M at a nonzero base fee");
-        assertEq(credits, 1, "exactly one bounty creditFlip per mineFlip tx, never per item (REW-02)");
+        assertEq(credits, 1, "exactly one bounty creditFlip_g317 per mineFlip tx, never per item (REW-02)");
     }
 
     // =========================================================================

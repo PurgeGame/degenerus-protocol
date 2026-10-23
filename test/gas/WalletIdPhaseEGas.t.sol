@@ -114,7 +114,7 @@ contract WalletIdPhaseEGasTest is DeployProtocol {
     function _credit(address player, uint256 amount) private {
         uint32 id = _key(player);
         vm.prank(address(game));
-        coinflip.creditFlip(id, amount);
+        coinflip.creditFlip_g317(id, amount);
     }
 
     function _creditPasses(address player, uint32 normal) private {
@@ -167,7 +167,7 @@ contract WalletIdPhaseEGasTest is DeployProtocol {
         uint32 a = _key(_wallet(1));
         uint32 b = _key(_wallet(2));
         vm.prank(address(game));
-        coinflip.creditFlipPair(a, 1000, b, 1000);
+        coinflip.creditFlipPair_g578(a, 1000, b, 1000);
         _report("credit_pair_fresh");
     }
 

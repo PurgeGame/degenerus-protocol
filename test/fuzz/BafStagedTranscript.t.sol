@@ -23,12 +23,12 @@ import {CrapsSlots} from "../helpers/GameSlots.sol";
 ///      run the production modules by delegatecall; nothing here replaces production logic.
 contract BafTranscriptHost is DegenerusGame, WalletSeed {
     function btPublish() external {
-        _btNative(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("publishRng()"));
+        _btNative(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("publishRng_g4514()"));
     }
 
     function btPrepareTickets() external returns (bool done) {
         MineFlipGas.Result memory result = abi.decode(_btNative(ContractAddresses.GAME_TICKET_MODULE,
-            abi.encodeWithSignature("runTicketWork(uint24,uint256)", level, uint256(9_000_000))),
+            abi.encodeWithSignature("runTicketWork_g1150(uint24,uint256)", level, uint256(9_000_000))),
             (MineFlipGas.Result));
         done = result.done;
         if (done) {
@@ -39,13 +39,13 @@ contract BafTranscriptHost is DegenerusGame, WalletSeed {
     }
 
     function btApply() external {
-        _btNative(ContractAddresses.GAME_ADVANCE_MODULE, abi.encodeWithSignature("applyDailyWord()"));
+        _btNative(ContractAddresses.GAME_ADVANCE_MODULE, abi.encodeWithSignature("applyDailyWord_g1652()"));
     }
 
-    /// @dev One `runDailyPhase` call under a caller-chosen allowance.
+    /// @dev One `runDailyPhase_g2582` call under a caller-chosen allowance.
     function btDaily(uint256 allowance) external returns (MineFlipGas.Result memory) {
         return abi.decode(_btNative(ContractAddresses.GAME_ADVANCE_MODULE,
-            abi.encodeWithSignature("runDailyPhase(uint256)", allowance)), (MineFlipGas.Result));
+            abi.encodeWithSignature("runDailyPhase_g2582(uint256)", allowance)), (MineFlipGas.Result));
     }
 
     function btDailyWord() external view returns (uint256) {

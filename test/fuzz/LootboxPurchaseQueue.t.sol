@@ -28,7 +28,7 @@ contract CursorProbe {
         SLOT = slot;
     }
 
-    function creditFlip(uint32, uint256) external {
+    function creditFlip_g317(uint32, uint256) external {
         uint256 value = uint256(DegenerusGame(payable(GAME)).extsload(bytes32(SLOT)));
         uint256 base = BASE;
         assembly ("memory-safe") {

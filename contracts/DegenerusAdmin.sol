@@ -194,10 +194,12 @@ interface IGameMiddayCredit {
 
 /// @dev Coinflip interface for LINK donation flip credits.
 interface ICoinflipLinkReward {
+
+
     /// @notice Credit FLIP stake to a wallet as a LINK donation reward.
     /// @param id Recipient wallet ID (the ID `creditMiddayRng` returned; 0 is a no-op).
     /// @param amount Amount of FLIP-denominated flip stake to credit (whole FLIP).
-    function creditFlip(uint32 id, uint256 amount) external;
+    function creditFlip_g317(uint32 id, uint256 amount) external;
 }
 
 /// @dev Chainlink price feed interface (AggregatorV3).
@@ -1229,17 +1231,17 @@ contract DegenerusAdmin {
         subscriptionId = 0;
         address target = ContractAddresses.VAULT;
 
-        (bool cancelled,) = BoundedCall.call(
-            coordinator, 0, 450_000,
+        (bool cancelled,) = BoundedCall.callRemaining(
+            coordinator, 450_000, 400_000,
             abi.encodeWithSelector(IVRFCoordinatorV2_5Owner.cancelSubscription.selector, subId, target), 0
         );
         if (cancelled) emit SubscriptionCancelled(subId, target);
 
-        (, uint256 bal) = BoundedCall.staticWord(
-            address(linkToken), 50_000, abi.encodeWithSelector(ILinkTokenLike.balanceOf.selector, address(this))
+        (, uint256 bal) = BoundedCall.staticWordRemaining(
+            address(linkToken), 50_000, 300_000, abi.encodeWithSelector(ILinkTokenLike.balanceOf.selector, address(this))
         );
-        if (bal != 0 && BoundedCall.callBool(
-            address(linkToken), 200_000, abi.encodeWithSelector(ILinkTokenLike.transfer.selector, target, bal)
+        if (bal != 0 && BoundedCall.callBoolRemaining(
+            address(linkToken), 200_000, 30_000, abi.encodeWithSelector(ILinkTokenLike.transfer.selector, target, bal)
         )) {
             emit SubscriptionShutdown(subId, target, bal);
             return;
@@ -1369,7 +1371,7 @@ contract DegenerusAdmin {
         uint256 credit = (baseCredit * mult) / 1e18;
         if (credit == 0) return;
 
-        coinflipReward.creditFlip(donorId, credit);
+        coinflipReward.creditFlip_g317(donorId, credit);
         emit LinkCreditRecorded(donorId, credit);
     }
 

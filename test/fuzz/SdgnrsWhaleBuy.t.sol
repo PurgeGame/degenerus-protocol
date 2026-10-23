@@ -12,7 +12,7 @@ import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
 
 /// @dev Test-only stand-in for the Game facade's code at the pinned GAME address: forwards every
-///      call by delegatecall into the real whale module, so `purchaseWhalePassForSdgnrs` runs in
+///      call by delegatecall into the real whale module, so `purchaseWhalePassForSdgnrs_g470` runs in
 ///      the Game's storage context (`address(this) == GAME`) exactly as the afking STAGE nests it,
 ///      without the STAGE's own gate in front. `vm.etch` keeps the Game's storage, so the module
 ///      sees the live level, claimable, boon lane and RNG state.
@@ -35,14 +35,14 @@ contract WhaleModuleForwarder {
 
 /// @title SdgnrsWhaleBuy -- sDGNRS's once-per-level automatic whale-pass purchase.
 /// @notice Replaces the sDGNRS 5%-of-claimable level-start box. On the first afking process
-///         STAGE pass of each new level, `DegenerusGameWhaleModule.purchaseWhalePassForSdgnrs`
+///         STAGE pass of each new level, `DegenerusGameWhaleModule.purchaseWhalePassForSdgnrs_g470`
 ///         buys the largest whole group of five paid passes whose canonical quote fits a quarter
 ///         of sDGNRS's game-side claimable (cap 1,000 paid passes), nothing below one group. The
 ///         proof of firing is the `WhalePassPurchased(SDGNRS, qty, price)` log plus the claimable
 ///         debit, the aggregate ticket shape across the 100-level span, and the batched DGNRS
 ///         minter reward (poolBalance read once, ONE transferFromPool, per-pass 1% rounding kept).
 ///         Pins every external callee the automatic purchase reaches on the crank
-///         (payAffiliate / creditFlip / creditPasses / poolBalance / transferFromPool /
+///         (payAffiliate / creditFlip_g317 / creditPasses / poolBalance / transferFromPool /
 ///         recordCoverBox / mintSeatFor) under the adversarial states the STAGE can meet.
 ///         Test-only: ZERO contracts/*.sol mutation.
 contract SdgnrsWhaleBuy is DeployProtocol {
@@ -262,7 +262,7 @@ contract SdgnrsWhaleBuy is DeployProtocol {
 
         uint24 day = game.currentDayView();
         _prepareDirectEntry(1, 48 ether);
-        uint256 paid = IDegenerusGameWhaleModule(address(game)).purchaseWhalePassForSdgnrs(day);
+        uint256 paid = IDegenerusGameWhaleModule(address(game)).purchaseWhalePassForSdgnrs_g470(day);
         assertEq(paid, 5, "fixture: five paid passes");
         // The forwarder only knows the whale module; restore the facade to read the queues back.
         vm.etch(address(game), _facadeCode);
@@ -341,7 +341,7 @@ contract SdgnrsWhaleBuy is DeployProtocol {
         _setRngLocked(true);
         _prepareDirectEntry(4, 1_000 ether);
         uint256 before = _claimableOf(ContractAddresses.SDGNRS);
-        uint256 paid = IDegenerusGameWhaleModule(address(game)).purchaseWhalePassForSdgnrs(day);
+        uint256 paid = IDegenerusGameWhaleModule(address(game)).purchaseWhalePassForSdgnrs_g470(day);
         assertEq(paid, 0, "locked: nothing");
         assertEq(_claimableOf(ContractAddresses.SDGNRS), before, "locked: no debit");
     }
@@ -353,7 +353,7 @@ contract SdgnrsWhaleBuy is DeployProtocol {
         _injectWhaleBoon(ContractAddresses.SDGNRS, day, 3);
         uint256 before = _claimableOf(ContractAddresses.SDGNRS);
         uint256 boon0 = uint256(vm.load(address(game), _boonSlot0(ContractAddresses.SDGNRS)));
-        uint256 paid = IDegenerusGameWhaleModule(address(game)).purchaseWhalePassForSdgnrs(day);
+        uint256 paid = IDegenerusGameWhaleModule(address(game)).purchaseWhalePassForSdgnrs_g470(day);
         assertEq(paid, 0, "public word: nothing");
         assertEq(_claimableOf(ContractAddresses.SDGNRS), before, "public word: no debit");
         assertEq(uint256(vm.load(address(game), _boonSlot0(ContractAddresses.SDGNRS))), boon0, "public word: boon not consumed");
@@ -364,7 +364,7 @@ contract SdgnrsWhaleBuy is DeployProtocol {
         _prepareDirectEntry(4, 1_000 ether);
         uint256 before = _claimableOf(ContractAddresses.SDGNRS);
         vm.recordLogs();
-        uint256 paid = IDegenerusGameWhaleModule(address(game)).purchaseWhalePassForSdgnrs(day);
+        uint256 paid = IDegenerusGameWhaleModule(address(game)).purchaseWhalePassForSdgnrs_g470(day);
         assertEq(paid, 60, "1,000 ETH / 4 = 250 -> 12 groups = 60 paid passes");
         (bool bought, uint256 qty, uint256 price) = _lastWhalePurchase();
         assertTrue(bought && qty == 60 && price == 240 ether, "event: 60 passes, 240 ETH");

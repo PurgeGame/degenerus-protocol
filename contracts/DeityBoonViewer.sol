@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {EntropyLib} from "./libraries/EntropyLib.sol";
+import {RngTags} from "./libraries/RngTags.sol";
+
 /*
  * TERMS OF INTERACTION — submitting a transaction to this contract accepts them.
  *
@@ -44,6 +47,8 @@ interface IDeityBoonDataSource {
 
     /// @notice Get the finalized RNG word for a game day (zero until available).
     function rngWordForDay(uint24 day) external view returns (uint256);
+
+    function walletIdOf_g3120(address player) external view returns (uint32);
 
     /// @notice The wallet ID of `player` (0 when unregistered).
     function walletIdOf(address player) external view returns (uint32);
@@ -115,7 +120,7 @@ contract DeityBoonViewer {
         address game,
         address deity
     ) external view returns (uint8[3] memory slots, uint8 usedMask, uint24 day) {
-        return deityBoonSlotsById(game, IDeityBoonDataSource(game).walletIdOf(deity));
+        return deityBoonSlotsById(game, IDeityBoonDataSource(game).walletIdOf_g3120(deity));
     }
 
     function deityBoonSlotsById(
@@ -146,7 +151,7 @@ contract DeityBoonViewer {
         address game,
         address deity
     ) external view returns (uint8[3] memory slots, uint24 day) {
-        return deityBoonSlotsTomorrowById(game, IDeityBoonDataSource(game).walletIdOf(deity));
+        return deityBoonSlotsTomorrowById(game, IDeityBoonDataSource(game).walletIdOf_g3120(deity));
     }
 
     function deityBoonSlotsTomorrowById(
@@ -168,7 +173,7 @@ contract DeityBoonViewer {
         if (dailySeed == 0 || deityId == 0) return slots;
         // Decimator and deity-pass families are excluded from deity gifts.
         for (uint8 i = 0; i < DEITY_DAILY_BOON_COUNT; ) {
-            uint256 seed = uint256(keccak256(abi.encode(dailySeed, uint256(deityId), day, i)));
+            uint256 seed = uint256(EntropyLib.hash4(RngTags.DEITY_MENU, dailySeed, (uint256(deityId) << 24) | day, i));
             uint256 roll = seed % (W_TOTAL - W_DECIMATOR_ALL - W_DEITY_PASS_ALL);
             if (roll >= W_PRE_DECIMATOR) roll += W_DECIMATOR_ALL;
             if (roll >= W_PRE_DEITY_PASS) roll += W_DEITY_PASS_ALL;

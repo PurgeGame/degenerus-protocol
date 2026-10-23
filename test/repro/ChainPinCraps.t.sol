@@ -250,7 +250,7 @@ contract ChainPinCrapsMockTest is CrapsPins {
     /// @dev The predicate the selector reads and the worker the stage runs, from the same state:
     ///      the worker progresses exactly when the predicate says maintenance is owed.
     function _agree(string memory row) internal returns (bool pred) {
-        assertEq(uint256(game.rngConsumerStage()), 7, row);
+        assertEq(uint256(game.rngConsumerStage_g379()), 7, row);
         pred = craps.minerMaintenancePending();
         bool progressed = _maintain(craps).progressed;
         assertEq(progressed, pred, row);
@@ -268,8 +268,8 @@ contract ChainPinCrapsMockTest is CrapsPins {
 
         uint64 head = craps.minerSlot();
         _setWord(craps.slotIndexOf(head) - 1, 0xC105ED);
-        for (uint256 i; i < 8 && game.rngConsumerStage() == 6; ++i) _readWork(craps, craps.currentIndex() ^ 1);
-        assertEq(uint256(game.rngConsumerStage()), 7, "fixture: the read cohort did not drain");
+        for (uint256 i; i < 8 && game.rngConsumerStage_g379() == 6; ++i) _readWork(craps, craps.currentIndex() ^ 1);
+        assertEq(uint256(game.rngConsumerStage_g379()), 7, "fixture: the read cohort did not drain");
         assertTrue(_agree("D: armed, fully resolved"));
 
         assertFalse(_agree("E: unarmed, still taking bets"));
@@ -313,7 +313,7 @@ contract ChainPinCrapsMockTest is CrapsPins {
                 uint48 b = craps.currentIndex();
                 if (!craps.rngCohortComplete(b) && craps.rngCohortComplete(b ^ 1)) _setWord(b, (r >> 8) | 2);
             }
-            uint8 stage = game.rngConsumerStage();
+            uint8 stage = game.rngConsumerStage_g379();
             if (stage == 6) _readWork(craps, craps.currentIndex() ^ 1);
             else if (stage == 7) _agree("random history");
         }
@@ -464,7 +464,7 @@ contract ChainPinCrapsFsmTest is DeployProtocol {
         }
         if (game.nextMinerAction() == 16) assertTrue(game.rngComplete(), "F5b: Maintenance selected while incomplete");
         if (!game.rngComplete() || game.gameOver()) return;
-        assertEq(uint256(game.rngConsumerStage()), 7, "F5b: RNG complete but the consumer stage is not 7");
+        assertEq(uint256(game.rngConsumerStage_g379()), 7, "F5b: RNG complete but the consumer stage is not 7");
         assertFalse(game.rngLocked(), "F5b: complete while locked");
         uint256 flags = uint256(vm.load(address(game), bytes32(0)));
         assertEq((flags >> 254) & 1, 0, "F5b: complete with a live request");

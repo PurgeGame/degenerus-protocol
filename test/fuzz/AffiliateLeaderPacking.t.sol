@@ -5,7 +5,7 @@ import {PeripheralSlots} from "../helpers/PeripheralSlots.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 
 /// @title AffiliateLeaderPacking -- the level total and the leader's score share one word
-/// @notice Drives payAffiliate and payAffiliateCombined as the Game, then checks the public
+/// @notice Drives payAffiliate and payAffiliateCombined_g978 as the Game, then checks the public
 ///         views against a reference model, the tie rule (an equal score keeps the earlier
 ///         leader), the packed layout (total, leader score and leader ID in one word), the
 ///         saturating total, and that an earning which does not take the lead leaves the
@@ -45,7 +45,7 @@ contract AffiliateLeaderPacking is DeployProtocol {
     function _earnCombined(uint256 k, uint256 tktFresh, uint256 lbFresh) internal {
         vm.prank(address(game));
         address buyer = _buyer();
-        affiliate.payAffiliateCombined(codes[k], uint32(uint160(buyer)), LVL, tktFresh, 0, lbFresh, 0, 0);
+        affiliate.payAffiliateCombined_g978(codes[k], uint32(uint160(buyer)), LVL, tktFresh, 0, lbFresh, 0, 0);
     }
 
     function _slot(uint256 base) internal pure returns (bytes32) {

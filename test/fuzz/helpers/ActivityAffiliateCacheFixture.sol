@@ -68,7 +68,7 @@ abstract contract ActivityAffiliateCacheFixture is Test {
         internal pure returns (uint256 affiliateCalls, uint256 stores)
     {
         for (uint256 i; i < accesses.length; ++i) {
-            if (accesses[i].account == ContractAddresses.AFFILIATE && accesses[i].data.length >= 4 && bytes4(accesses[i].data) == DegenerusAffiliate.affiliateBonusPointsBest.selector) ++affiliateCalls;
+            if (accesses[i].account == ContractAddresses.AFFILIATE && accesses[i].data.length >= 4 && bytes4(accesses[i].data) == DegenerusAffiliate.affiliateBonusPointsBest_g3878.selector) ++affiliateCalls;
             for (uint256 j; j < accesses[i].storageAccesses.length; ++j) {
                 Vm.StorageAccess memory access = accesses[i].storageAccesses[j];
                 if (access.account == target && access.isWrite) ++stores;

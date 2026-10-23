@@ -137,7 +137,7 @@ contract CrapsBoonLane is Test {
         for (uint8 tier = 1; tier <= 3; ++tier) {
             module_.writeSlot1(PLAYER, _lane(tier, false, d));
             vm.prank(ContractAddresses.COIN);
-            uint16 bps = module_.consumeCoinflipBoon(PLAYER);
+            uint16 bps = module_.consumeCoinflipBoon_g2902(PLAYER);
             assertEq(bps, expected[tier], "craps tier decoded off the wrong table");
             assertEq(module_.slot1Of(PLAYER) & LANE_MASK, 0, "lane not cleared on consume");
         }
@@ -148,7 +148,7 @@ contract CrapsBoonLane is Test {
         uint256 others = ~LANE_MASK;
         module_.writeSlot1(PLAYER, others | _lane(3, false, d));
         vm.prank(ContractAddresses.COIN);
-        module_.consumeCoinflipBoon(PLAYER);
+        module_.consumeCoinflipBoon_g2902(PLAYER);
         assertEq(module_.slot1Of(PLAYER), others, "consume disturbed a neighbouring lane");
     }
 
@@ -157,12 +157,12 @@ contract CrapsBoonLane is Test {
         module_.writeSlot1(PLAYER, _lane(3, false, d));
         vm.warp(block.timestamp + uint256(EXPIRY_DAYS) * 1 days);
         vm.prank(ContractAddresses.COIN);
-        assertEq(module_.consumeCoinflipBoon(PLAYER), 2500, "lane died inside its window");
+        assertEq(module_.consumeCoinflipBoon_g2902(PLAYER), 2500, "lane died inside its window");
 
         module_.writeSlot1(PLAYER, _lane(3, false, d));
         vm.warp(block.timestamp + 1 days);
         vm.prank(ContractAddresses.COIN);
-        assertEq(module_.consumeCoinflipBoon(PLAYER), 0, "expired lane still paid");
+        assertEq(module_.consumeCoinflipBoon_g2902(PLAYER), 0, "expired lane still paid");
         assertEq(module_.slot1Of(PLAYER) & LANE_MASK, 0, "expired lane not cleared");
     }
 
@@ -170,12 +170,12 @@ contract CrapsBoonLane is Test {
         uint24 d = module_.today();
         module_.writeSlot1(PLAYER, _lane(2, true, d));
         vm.prank(ContractAddresses.COIN);
-        assertEq(module_.consumeCoinflipBoon(PLAYER), 1000, "deity lane dead on its award day");
+        assertEq(module_.consumeCoinflipBoon_g2902(PLAYER), 1000, "deity lane dead on its award day");
 
         module_.writeSlot1(PLAYER, _lane(2, true, d));
         vm.warp(block.timestamp + 1 days);
         vm.prank(ContractAddresses.COIN);
-        assertEq(module_.consumeCoinflipBoon(PLAYER), 0, "deity lane outlived its day");
+        assertEq(module_.consumeCoinflipBoon_g2902(PLAYER), 0, "deity lane outlived its day");
     }
 
     // ---------------------------------------------------------------------
@@ -189,7 +189,7 @@ contract CrapsBoonLane is Test {
         // No coinflip boon held: slot0 is empty, so COINFLIP must come away with nothing and
         // must not have spent the craps lane sitting in slot1.
         vm.prank(ContractAddresses.COINFLIP);
-        assertEq(module_.consumeCoinflipBoon(PLAYER), 0, "coinflip caller paid off the craps lane");
+        assertEq(module_.consumeCoinflipBoon_g2902(PLAYER), 0, "coinflip caller paid off the craps lane");
         assertEq(module_.slot1Of(PLAYER), lane, "coinflip caller spent the craps lane");
     }
 
@@ -199,7 +199,7 @@ contract CrapsBoonLane is Test {
         uint256 s0 = (uint256(3) << 48) | uint256(d);
         module_.writeSlot0(PLAYER, s0);
         vm.prank(ContractAddresses.COIN);
-        assertEq(module_.consumeCoinflipBoon(PLAYER), 0, "craps caller paid off the coinflip lane");
+        assertEq(module_.consumeCoinflipBoon_g2902(PLAYER), 0, "craps caller paid off the coinflip lane");
         assertEq(module_.slot0Of(PLAYER), s0, "craps caller spent the coinflip lane");
     }
 
@@ -215,9 +215,9 @@ contract CrapsBoonLane is Test {
 
         // The coinflip and craps callers cannot reach the WWXRP lane.
         vm.prank(ContractAddresses.COINFLIP);
-        assertEq(gameModule.consumeCoinflipBoon(PLAYER), 0, "coinflip caller paid off the WWXRP lane");
+        assertEq(gameModule.consumeCoinflipBoon_g2902(PLAYER), 0, "coinflip caller paid off the WWXRP lane");
         vm.prank(ContractAddresses.COIN);
-        assertEq(gameModule.consumeCoinflipBoon(PLAYER), 0, "craps caller paid off the WWXRP lane");
+        assertEq(gameModule.consumeCoinflipBoon_g2902(PLAYER), 0, "craps caller paid off the WWXRP lane");
         assertEq(gameModule.slot1Of(PLAYER), wwxrpLane, "another caller spent the WWXRP lane");
 
         // An ETH bet spends only its own lane; the WWXRP boon stays live beside it.
@@ -228,7 +228,7 @@ contract CrapsBoonLane is Test {
 
         // The WWXRP caller spends it once at tier x 400.
         vm.prank(ContractAddresses.WWXRP);
-        assertEq(gameModule.consumeCoinflipBoon(PLAYER), 1200, "WWXRP caller missed its lane");
+        assertEq(gameModule.consumeCoinflipBoon_g2902(PLAYER), 1200, "WWXRP caller missed its lane");
         assertEq(gameModule.slot1Of(PLAYER), 1 << 24, "WWXRP lane not spent");
         assertFalse(gameModule.checkAndClearExpiredBoon(PLAYER), "spent WWXRP lane still live");
     }
@@ -245,12 +245,12 @@ contract CrapsBoonLane is Test {
         gameModule.writeSlot1(PLAYER, others | (tier == 0 ? 0 : wwxrpLane));
 
         vm.prank(ContractAddresses.WWXRP);
-        assertEq(gameModule.consumeCoinflipBoon(PLAYER), uint16(tier) * 400, "WWXRP lane bps");
+        assertEq(gameModule.consumeCoinflipBoon_g2902(PLAYER), uint16(tier) * 400, "WWXRP lane bps");
         assertEq(gameModule.slot0Of(PLAYER), s0, "WWXRP caller touched slot0 boons");
         assertEq(gameModule.slot1Of(PLAYER), others, "WWXRP caller touched another slot1 lane");
 
         vm.prank(ContractAddresses.WWXRP);
-        assertEq(gameModule.consumeCoinflipBoon(PLAYER), 0, "WWXRP boon spent twice");
+        assertEq(gameModule.consumeCoinflipBoon_g2902(PLAYER), 0, "WWXRP boon spent twice");
         assertEq(gameModule.slot0Of(PLAYER), s0, "empty WWXRP lane touched slot0 boons");
         assertEq(gameModule.slot1Of(PLAYER), others, "empty WWXRP lane touched another slot1 lane");
     }

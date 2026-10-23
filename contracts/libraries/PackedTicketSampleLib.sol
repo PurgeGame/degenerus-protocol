@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {RngTags} from "./RngTags.sol";
+
 import {EntropyLib} from "./EntropyLib.sol";
 
 /// @dev Samples a uniformly chosen packed word with a random lane rotation, eight draws at a time.
@@ -35,7 +37,7 @@ library PackedTicketSampleLib {
         if (length <= 8) return ((c.start + used) % length, false);
         index = (c.start & ~uint256(7)) | ((c.start + used) & 7);
         if (index >= length) {
-            index = EntropyLib.hash2(c.entropy, used) % length;
+            index = EntropyLib.hash3(RngTags.SAMPLE_PADDING, c.entropy, used) % length;
             redrawn = true;
         }
     }

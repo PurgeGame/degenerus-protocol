@@ -9,12 +9,12 @@ import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 
-/// @dev Production facade plus a native `runDailyPhase` seam (one daily stage per call) and
+/// @dev Production facade plus a native `runDailyPhase_g2582` seam (one daily stage per call) and
 ///      read-only views of the BAF work record and pools.
 contract BafRebuyHost is DegenerusGame {
     function brDaily(uint256 allowance) external returns (MineFlipGas.Result memory) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_ADVANCE_MODULE.delegatecall(
-            abi.encodeWithSignature("runDailyPhase(uint256)", allowance));
+            abi.encodeWithSignature("runDailyPhase_g2582(uint256)", allowance));
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
         return abi.decode(data, (MineFlipGas.Result));
     }
@@ -55,7 +55,7 @@ contract BafRebuyHost is DegenerusGame {
 ///         slot (the residue) to the pending future pool (the stage runs inside the daily
 ///         request's pool freeze) and closes the bracket (`finalizeBaf`). This test drives the real game to the level-10 transition with
 ///         an injected top BAF bettor, runs the consolidation and the award stage as separate
-///         `runDailyPhase` calls, and checks: the reservation equals the schedule term; the
+///         `runDailyPhase_g2582` calls, and checks: the reservation equals the schedule term; the
 ///         stage moves no pool but the residue; credits plus residue equal the reservation; the
 ///         top bettor takes head slot 0 (half its 10% as claimable ETH); the game then completes
 ///         the level and the future pool keeps its value.
@@ -145,7 +145,7 @@ contract BafRebuyReconciliationTest is DeployProtocol {
     /// @dev From the level-10 last-purchase lock: advance one engine step at a time until the
     ///      next step would enter the jackpot phase (that step is rolled back), run the daily
     ///      legs ahead of the consolidation, then the consolidation and the award stage as one
-    ///      `runDailyPhase` call each.
+    ///      `runDailyPhase_g2582` call each.
     function _checkLevelTenBaf() internal {
         for (uint256 i; i < 256; ++i) {
             _fulfillVrfIfPending();

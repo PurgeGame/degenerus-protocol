@@ -74,7 +74,7 @@ contract GameSeeder is DegenerusGame, BucketSeed {
         rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((uint48(0) + 1) & 1) << 12);
         rngWordCurrent = rngWord | 1; _setRngSessionPublished(true); _setRngComplete(false);
 
-        uint24 pl = lvl + 1; // purchaseLevel the drain processes (drain calls runTicketWork for lvl+1)
+        uint24 pl = lvl + 1; // purchaseLevel the drain processes (drain calls runTicketWork_g1150 for lvl+1)
 
         // Historical two-slot fixture: the read slot is the committed heavy batch. The populated
         // write slot is later work that the terminal path must not promote into this entropy outcome.

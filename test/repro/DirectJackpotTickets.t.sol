@@ -62,7 +62,7 @@ abstract contract DirectTicketFixture is BucketSeed {
     }
     function drain(uint256 allowance) external returns (MineFlipGas.Result memory result) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_TICKET_MODULE.delegatecall(
-            abi.encodeWithSelector(DegenerusGameTicketModule.runTicketWork.selector, uint24(42), allowance));
+            abi.encodeWithSelector(DegenerusGameTicketModule.runTicketWork_g1150.selector, uint24(42), allowance));
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
         return abi.decode(data, (MineFlipGas.Result));
     }

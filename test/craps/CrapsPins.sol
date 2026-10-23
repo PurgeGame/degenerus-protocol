@@ -39,7 +39,7 @@ contract MockGame {
 
     uint8 private consumerStageOverride;
     function setRngConsumerStage(uint8 stage) external { consumerStageOverride = stage + 1; }
-    function rngConsumerStage() external view returns (uint8) {
+    function rngConsumerStage_g379() external view returns (uint8) {
         if (rngLocked) return 0;
         if (consumerStageOverride != 0) return consumerStageOverride - 1;
         uint256 read = ((uint256(slots[bytes32(0)]) >> 252) & 1) ^ 1;
@@ -55,7 +55,7 @@ contract MockGame {
         slots[slot] = value;
     }
 
-    function setCrapsRngPending(uint48 index, bool pending) external {
+    function setCrapsRngPending_g1406(uint48 index, bool pending) external {
         bytes32 root = bytes32(GameSlots.LOOTBOX_RNG_PACKED);
         uint256 packed = uint256(slots[root]);
         uint256 mask = uint256(1) << (250 + (index & 1));
@@ -231,7 +231,7 @@ contract MockFlip {
         nextBoonMask = 0;
         // The table no longer writes to the quest ledger itself: the burn lane reports the action,
         // so the mock forwards it the same way real FLIP does.
-        if (lastCrapsFlags != 0) MockQuests(ContractAddresses.QUESTS).recordCrapsAction(id, lastCrapsFlags);
+        if (lastCrapsFlags != 0) MockQuests(ContractAddresses.QUESTS).recordCrapsAction_g14623(id, lastCrapsFlags);
     }
 }
 
@@ -244,7 +244,7 @@ contract MockCoinflip {
     uint256 public credits;
     uint256 public totalCredited;
 
-    function creditFlip(uint32 id, uint256 amount) external {
+    function creditFlip_g317(uint32 id, uint256 amount) external {
         if (id != 0 && amount != 0) _credit(id, amount);
     }
 
@@ -339,7 +339,7 @@ contract MockQuests {
     uint256 public crapsActions;
     uint8 public lastCrapsFlags;
 
-    function recordCrapsAction(uint32 id, uint8 actionFlags) external {
+    function recordCrapsAction_g14623(uint32 id, uint8 actionFlags) external {
         address player = MockGame(ContractAddresses.GAME).ownerOfId(id);
         ++crapsActions;
         lastCrapsFlags = actionFlags;
@@ -352,6 +352,10 @@ contract MockQuests {
         }
     }
 }
+
+// Coinflip and Quests share the production host after consolidation. Both interfaces
+// must be installed together; etching the second mock over the first loses selectors.
+contract MockCoinflipQuests is MockCoinflip, MockQuests {}
 
 abstract contract CrapsPins is Test {
     function _startDailyBattle(CrapsViews table, uint24 requestDay, uint256 word, uint256 added) internal {
@@ -388,7 +392,7 @@ abstract contract CrapsPins is Test {
     ///      maintenance worker steps the scheduled cursor. Returns whether the worker moved and the
     ///      maintenance cursor after the step.
     function _crank(CrapsViews c) internal returns (bool progressed, uint64 cursor) {
-        MineFlipGas.Result memory r = game.rngConsumerStage() == 6
+        MineFlipGas.Result memory r = game.rngConsumerStage_g379() == 6
             ? _readWork(c, c.currentIndex() ^ 1)
             : _maintain(c);
         return (r.progressed, c.minerSlot());
@@ -419,9 +423,11 @@ abstract contract CrapsPins is Test {
         vm.etch(ContractAddresses.GAME, address(new MockGame()).code);
         vm.etch(ContractAddresses.COIN, address(new MockFlip()).code);
         MockFlip(ContractAddresses.COIN).setCompLane(1);
-        vm.etch(ContractAddresses.COINFLIP, address(new MockCoinflip()).code);
+        vm.etch(ContractAddresses.COINFLIP, address(new MockCoinflipQuests()).code);
         vm.etch(ContractAddresses.VAULT, address(new MockVault()).code);
-        vm.etch(ContractAddresses.QUESTS, address(new MockQuests()).code);
+        if (ContractAddresses.QUESTS != ContractAddresses.COINFLIP) {
+            vm.etch(ContractAddresses.QUESTS, address(new MockQuests()).code);
+        }
         vm.etch(ContractAddresses.CRAPS, type(CrapsBattle).runtimeCode);
         vm.etch(address(0xC6A6), type(CrapsEngine).runtimeCode);
         quests = MockQuests(ContractAddresses.QUESTS);

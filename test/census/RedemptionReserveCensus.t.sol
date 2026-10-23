@@ -29,7 +29,7 @@ contract RedemptionReserveCensus is StorageCensus, RedemptionFixture {
     }
     function testCensusProtectedReserveGenerations() public {
         _censusBegin("lane-p-reserve-generations");
-        vm.mockCall(address(game), abi.encodeWithSelector(game.rngConsumerStage.selector), abi.encode(uint8(1)));
+        vm.mockCall(address(game), abi.encodeWithSelector(game.rngConsumerStage_g379.selector), abi.encode(uint8(1)));
         for (uint32 batch = 1; batch <= 6; ++batch) {
             uint256 amount = sdgnrs.totalSupply() / 1000;
             _must("reserve-burn", alice, address(sdgnrs), abi.encodeCall(sdgnrs.burn, (amount)));

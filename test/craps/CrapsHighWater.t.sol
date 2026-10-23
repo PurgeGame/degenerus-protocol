@@ -102,7 +102,7 @@ contract WaterHarness is CrapsViews {
         // Synthetic scheduled fields must enter the real completion registry.
         _setSlotIndex(slot, 1);
         (bool registered,) = address(this).call(
-            abi.encodeWithSignature("registerRngSlot(uint48,uint64,bytes32)", uint48(0), slot, key)
+            abi.encodeWithSignature("registerRngSlot_g709(uint48,uint64,bytes32)", uint48(0), slot, key)
         );
         require(registered, "synthetic field registration");
         _scoreBattle(w, score, seat, 0);

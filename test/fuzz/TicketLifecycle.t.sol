@@ -34,7 +34,7 @@ contract TLKeyComputer is DegenerusGameStorage {
 contract TLHumanBoxWorker is DegenerusGame {
     function runHumanBoxes() external returns (uint256 opened, bool progressed) {
         (bool ok, bytes memory ret) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(
-            abi.encodeWithSelector(IGameAfkingModule.runHumanBoxWork.selector, uint256(10_000_000)));
+            abi.encodeWithSelector(IGameAfkingModule.runHumanBoxWork_g315.selector, uint256(10_000_000)));
         if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
         MineFlipGas.Result memory result = abi.decode(ret, (MineFlipGas.Result));
         return (result.rewardBasis, result.progressed);
@@ -1486,7 +1486,7 @@ contract TicketLifecycleTest is DeployProtocol {
     /// @notice Purchase lootboxes before locking, land their word, then set rngLocked and
     ///         attempt to open. The human-box worker's entry gate must no-op every open while locked.
     /// @dev RNG-03: rngLocked blocks FF key writes from lootbox open paths.
-    ///      The worker mineFlip dispatches for its HumanBoxes stage (runHumanBoxWork) is gated on
+    ///      The worker mineFlip dispatches for its HumanBoxes stage (runHumanBoxWork_g315) is gated on
     ///      the read-consumer stage, which rngLockedFlag closes: a locked call opens nothing and
     ///      reverts nothing, so it never reaches the deep near/far-future write-buffer routing.
     ///      What is provable: the entry gate uniformly blocks every open while locked, with no
@@ -1535,7 +1535,7 @@ contract TicketLifecycleTest is DeployProtocol {
             uint256 rngWord = _lootboxRngWord(indices[i]);
             if (rngWord == 0) continue;
 
-            assertEq(game.rngConsumerStage(), 0, "RNG-03b: the lock closes the read-consumer stage");
+            assertEq(game.rngConsumerStage_g379(), 0, "RNG-03b: the lock closes the read-consumer stage");
             (uint256 opened, bool progressed) = _runHumanBoxWorker();
             assertEq(opened, 0, "RNG-03b: the worker's entry gate must no-op every open while rngLocked");
             assertFalse(progressed, "RNG-03b: the locked worker reports no progress");

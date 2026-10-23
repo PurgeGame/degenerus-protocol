@@ -462,7 +462,7 @@ contract RedemptionForwardBatchesTest is RedemptionFixture {
         _burn(alice, sdgnrs.totalSupply() / 1000);
         (uint32 id,) = _state();
         _closeAsGame();
-        vm.mockCall(address(game), abi.encodeWithSignature("rngConsumerStage()"), abi.encode(uint8(1)));
+        vm.mockCall(address(game), abi.encodeWithSignature("rngConsumerStage_g379()"), abi.encode(uint8(1)));
         uint256[4] memory steps = [uint256(0), 154, 155, 77];
         uint16[4] memory expected = [uint16(21), 175, 21, 98];
         uint256 sum;
@@ -488,7 +488,7 @@ contract RedemptionForwardBatchesTest is RedemptionFixture {
         _burn(alice, sdgnrs.totalSupply() / 1000);
         (uint32 id,) = _state();
         _closeAsGame();
-        vm.mockCall(address(game), abi.encodeWithSignature("rngConsumerStage()"), abi.encode(uint8(1)));
+        vm.mockCall(address(game), abi.encodeWithSignature("rngConsumerStage_g379()"), abi.encode(uint8(1)));
 
         uint256 agree;
         uint256 differ;

@@ -13,7 +13,7 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 contract DrawHost is DegenerusGame {
     function drawFor(uint24 day) external {
         (bool ok, bytes memory data) =
-            ContractAddresses.GAME_AFKING_MODULE.delegatecall(abi.encodeWithSignature("runSubDraw(uint24)", day));
+            ContractAddresses.GAME_AFKING_MODULE.delegatecall(abi.encodeWithSignature("runSubDraw_g1232(uint24)", day));
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
     }
 }
@@ -21,7 +21,7 @@ contract DrawHost is DegenerusGame {
 /// @title SeatTenureDraw — integration tests for the daily seat-tenure drawing:
 ///        one uniform draw over logical box/ticket order at each day-seal (_unlockRng),
 ///        VAULT excluded by position, prize = 10 whole FLIP per day of run age (endpoint minus
-///        run-start day) capped at 4,000, credited via coinflip.creditFlip. A paused protocol
+///        run-start day) capped at 4,000, credited via coinflip.creditFlip_g317. A paused protocol
 ///        seat sits out as a silent dud. The winner is fully deterministic from the sealed day's
 ///        word, so each day's SubDrawWon (or its dud absence) is asserted exactly.
 contract SeatTenureDraw is DeployProtocol {
@@ -175,14 +175,14 @@ contract SeatTenureDraw is DeployProtocol {
                 assertTrue(winner != ContractAddresses.VAULT, "vault never drawn");
                 assertEq(span, expectedSpan, "event carries the funded span");
                 assertEq(flipAmount, uint256(expectedSpan) * 10, "10 FLIP per tenure day");
-                // creditFlip credits a coinflip STAKE (rides the next day's
+                // creditFlip_g317 credits a coinflip STAKE (rides the next day's
                 // flip). Assert the exact landing only from a clean stake —
                 // a prior win's resolution muddies later days' deltas.
                 if (winner == p && playerStakeBefore == 0) {
                     assertEq(
                         coinflip.coinflipAmount(p),
                         flipAmount,
-                        "creditFlip landed the prize as next-day stake"
+                        "creditFlip_g317 landed the prize as next-day stake"
                     );
                     playerWinChecked = true;
                 }

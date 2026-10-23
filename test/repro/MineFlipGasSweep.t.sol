@@ -32,13 +32,13 @@ contract SweepVaultSeeder is CoinflipStakeSetter {
 /// @dev Production Game plus native seams to stop the daily cycle at a chosen first action.
 contract SweepHost is DegenerusGame {
     function publishOnly() external {
-        _native(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("publishRng()"));
+        _native(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("publishRng_g4514()"));
     }
 
     function ticketsOnly() external returns (bool done) {
         uint24 anchor = !jackpotPhaseFlag && lastPurchaseDay && rngLockedFlag ? level : level + 1;
         MineFlipGas.Result memory result = abi.decode(_native(ContractAddresses.GAME_TICKET_MODULE,
-            abi.encodeWithSignature("runTicketWork(uint24,uint256)", anchor, uint256(9_000_000))),
+            abi.encodeWithSignature("runTicketWork_g1150(uint24,uint256)", anchor, uint256(9_000_000))),
             (MineFlipGas.Result));
         done = result.done;
         if (done) {
@@ -48,7 +48,7 @@ contract SweepHost is DegenerusGame {
     }
 
     function applyOnly() external {
-        _native(ContractAddresses.GAME_ADVANCE_MODULE, abi.encodeWithSignature("applyDailyWord()"));
+        _native(ContractAddresses.GAME_ADVANCE_MODULE, abi.encodeWithSignature("applyDailyWord_g1652()"));
     }
 
     function _native(address target, bytes memory data) private returns (bytes memory result) {

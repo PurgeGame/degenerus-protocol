@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {EntropyLib} from "./libraries/EntropyLib.sol";
+import {RngTags} from "./libraries/RngTags.sol";
+
 import {DecimatorSamplingLib as Sampling} from "./libraries/DecimatorSamplingLib.sol";
 
 
@@ -38,6 +41,8 @@ import {ActivityCurveLib} from "./libraries/ActivityCurveLib.sol";
 ///      the authoritative aggregate score.
 interface IDegenerusGameLensSource {
     function rngWordForDay(uint24 day) external view returns (uint256);
+    function extsload_g8132(bytes32 slot) external view returns (bytes32 value);
+
     /// @notice DegenerusGame's raw-slot reader, returning the word stored at `slot`.
     function extsload(bytes32 slot) external view returns (bytes32 value);
 
@@ -255,9 +260,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
             return (false, winners, indices, rolls);
         }
         for (uint8 slot; slot < 3; ++slot) {
-            uint64 roll = uint64(uint256(keccak256(abi.encode(
-                PROTOCOL_BOON_WINNER_TAG, issuer, day, slot, word
-            ))) % pool.totalWeight);
+            uint64 roll = uint64(uint256(EntropyLib.hash4(RngTags.PROTOCOL_BOON_WINNER, word, issuer == ContractAddresses.VAULT ? VAULT_WALLET_ID : SDGNRS_WALLET_ID, slot)) % pool.totalWeight);
             uint32 lo;
             uint32 hi = pool.entryCount;
             while (lo < hi) {
@@ -344,7 +347,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
 
     /// @dev One extsload read, as uint256.
     function _sload(address game, bytes32 slot) private view returns (uint256) {
-        return uint256(IDegenerusGameLensSource(game).extsload(slot));
+        return uint256(IDegenerusGameLensSource(game).extsload_g8132(slot));
     }
 
     /// @dev Current default gameplay ID from the registry's low 32 bits.
@@ -469,7 +472,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         uint256 position1,
         uint24 endpoint
     ) private view returns (uint32) {
-        (uint32 manualStreak, bool afking) = quests.effectiveBaseStreakAndAfking(id);
+        (uint32 manualStreak, bool afking) = quests.effectiveBaseStreakAndAfking_g2654(id);
         if (!afking || position1 == 0 || lane & SUB_REMOVAL_BIT != 0) return manualStreak;
         uint256 a = _subStreakAt(lane, endpoint);
         if (a == 0) return manualStreak;
@@ -635,7 +638,7 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
                     (packed >> BitPackingLib.AFFILIATE_BONUS_POINTS_SHIFT) &
                     BitPackingLib.MASK_6;
             } else {
-                b.affiliatePoints = affiliate.affiliateBonusPointsBest(currLevel, id);
+                b.affiliatePoints = affiliate.affiliateBonusPointsBest_g3878(currLevel, id);
             }
         }
 
@@ -753,9 +756,8 @@ contract DegenerusGameLens is DegenerusGameMintStreakUtils {
         if (rngWord == 0) revert E();
         uint256 stored = _sload(game, bytes32(root + uint256(index)));
         uint64 id = uint64(stored);
-        bytes32 tag = keccak256("decimator.battle.tie.v1");
         node.score = stored >> 64;
-        node.key = (uint256(keccak256(abi.encode(tag, rngWord, lvl, id)))
+        node.key = (uint256(EntropyLib.hash3(RngTags.DECIMATOR_TIE, rngWord, id))
             & ~uint256(type(uint64).max)) | id;
         if (id > r.count) {
             assembly { root := decGeneratedOwners.slot }

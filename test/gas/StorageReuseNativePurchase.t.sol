@@ -10,7 +10,7 @@ import {Vm} from "forge-std/Vm.sol";
 contract StorageReusePurchaseHost is DegenerusGame {
     function phaseOnly() external returns (bytes memory) {
         (bool ok, bytes memory result) = ContractAddresses.GAME_ADVANCE_MODULE.delegatecall(
-            abi.encodeWithSignature("runDailyPhase(uint256)", uint256(9_000_000)));
+            abi.encodeWithSignature("runDailyPhase_g2582(uint256)", uint256(9_000_000)));
         if (!ok) assembly ("memory-safe") { revert(add(result, 32), mload(result)) }
         return result;
     }

@@ -86,9 +86,9 @@ contract CenturySeedWindow is DeployProtocol {
     function testCreditAfterTheWindowCarriesNoSeed() public {
         _warpToDay(300);
         vm.prank(address(game));
-        coinflip.creditFlip(1, 12_345);
+        coinflip.creditFlip_g317(1, 12_345);
         vm.prank(address(game));
-        coinflip.creditFlip(2, 6_789);
+        coinflip.creditFlip_g317(2, 6_789);
         assertEq(coinflip.coinflipAmount(ContractAddresses.VAULT), 12_345, "vault stake without a seed");
         assertEq(coinflip.coinflipAmount(ContractAddresses.SDGNRS), 6_789, "sDGNRS stake without a seed");
     }
@@ -101,7 +101,7 @@ contract CenturySeedWindow is DeployProtocol {
         // Give sDGNRS a standing stake on a window day, the way auto-rebuy would.
         _warpToDay(4);
         vm.prank(address(game));
-        coinflip.creditFlip(2, 12_345);
+        coinflip.creditFlip_g317(2, 12_345);
         assertEq(
             coinflip.coinflipAmount(ContractAddresses.SDGNRS),
             12_345 + SEED_FLIP_DAILY,
@@ -132,12 +132,12 @@ contract CenturySeedWindow is DeployProtocol {
     ///      rides on top of the stored lane on window days only.
     function testFlipLaneSaturatesRatherThanReverting() public {
         vm.prank(address(game));
-        coinflip.creditFlip(1, type(uint128).max);
+        coinflip.creditFlip_g317(1, type(uint128).max);
         uint256 cap = uint256(type(uint32).max);
         assertEq(coinflip.coinflipAmount(ContractAddresses.VAULT), cap + SEED_FLIP_DAILY, "deploy seed on a capped lane");
 
         vm.prank(address(game));
-        coinflip.creditFlip(1, type(uint128).max);
+        coinflip.creditFlip_g317(1, type(uint128).max);
         assertEq(coinflip.coinflipAmount(ContractAddresses.VAULT), cap + SEED_FLIP_DAILY, "the lane stays clamped");
     }
 

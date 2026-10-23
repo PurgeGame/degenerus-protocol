@@ -68,7 +68,7 @@ contract GoldSixGasTest is Test {
         if (goldSixTaken) h.seedGoldSix();
         vm.cool(address(h));
         uint256 beforeGas = gasleft();
-        MineFlipGas.Result memory r = h.runTicketWork{gas: 9_000_000}(2, 9_000_000);
+        MineFlipGas.Result memory r = h.runTicketWork_g1150{gas: 9_000_000}(2, 9_000_000);
         uint256 used = beforeGas - gasleft();
         assertTrue(r.progressed && r.done, "bounded transaction completes this fixed cohort");
         assertLt(used, 9_000_000);

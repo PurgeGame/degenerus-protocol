@@ -73,7 +73,7 @@ contract RecycleBonusClaimablePurchase is DeployProtocol {
     // ---- helpers ----
 
     /// @dev Sum this buyer's CoinflipStakeUpdated credits from the recorded logs (the purchase
-    ///      routes the buyer's flip credit through one creditFlipPair call).
+    ///      routes the buyer's flip credit through one creditFlipPair_g578 call).
     function _buyerStakeCredit(address buyer) internal returns (uint256 total) {
         VmSafe.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {

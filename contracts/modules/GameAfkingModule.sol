@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {EntropyLib} from "../libraries/EntropyLib.sol";
+import {RngTags} from "../libraries/RngTags.sol";
+
 import {GameAfkingClaims} from "./GameAfkingClaims.sol";
 import {GameBoxInternals} from "./GameBoxInternals.sol";
 
@@ -327,7 +330,8 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
 
     /// @dev Keep the purchase's claimable/prepaid split: top up its prepaid residual only
     ///      (the caller reaches it only while `funding < ethValue`). A refused token top-up uses the ordinary insufficient-funding policy.
-    ///      The fixed outer budget covers every inner call and the receipt/credit tail;
+    ///      The outer minimum admits the inner calls and the receipt/credit tail;
+    ///      all gas beyond the caller's 300k tail reserve is forwarded, without a fixed cap.
     ///      caller starvation fails admission before the atomic attempt. Protocol custody is never pulled: sDGNRS
     ///      preapproves GAME for redemptions whose stETH backing must remain segregated.
     /// @param subscriber The subscriber's wallet ID.
@@ -337,7 +341,7 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
         uint256 funding
     ) private returns (uint256) {
         if (subscriber == VAULT_WALLET_ID || subscriber == SDGNRS_WALLET_ID) return funding;
-        (bool ok, bytes memory result) = BoundedCall.call(address(this), 0, 1_000_000,
+        (bool ok, bytes memory result) = BoundedCall.callRemaining(address(this), 1_000_000, 300_000,
             abi.encodeWithSelector(IDegenerusGame.pullAfkingSteth.selector, subscriber, _payee(_walletElement(subscriber)), ethValue - funding), 32);
         return ok ? funding + abi.decode(result, (uint256)) : funding;
     }
@@ -613,6 +617,8 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
     /*------------------------------------------------------------------
               The REQUIRED-PATH process STAGE (stamp + debit)
     ------------------------------------------------------------------*/
+
+
     /// @notice Prepare the pinned day's subscriptions, boxes first and tickets second.
     /// @dev The previous read cohort completes before this pass. Public subscription changes
     ///      remain locked from daily due through the last AFKing open, so each member is visited
@@ -627,7 +633,7 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
     /// @dev NO error-swallowing valve: a funded slice is revert-free by construction; the
     ///      chunk-end `claimablePool -=` FAILS LOUD (class B, must propagate).
     /// @notice Stage the pinned daily subscription cohort before its request is sealed.
-    function runSubscriberWork(uint24 processDay, uint256 gasAllowance)
+    function runSubscriberWork_g6352(uint24 processDay, uint256 gasAllowance)
         external returns (MineFlipGas.Result memory)
     {
         return _runSubscriberWork(processDay, gasAllowance);
@@ -693,12 +699,12 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
             // target, kept whether or not a group is bought. The STAGE gate above already
             // excludes every state the whale module refuses.
             (bool ok, bytes memory data) = ContractAddresses.GAME_DEGENESIS_MODULE.delegatecall(
-                abi.encodeWithSelector(IDegenerusGameDegenesisModule.topUpSdgnrsAfking.selector)
+                abi.encodeWithSelector(IDegenerusGameDegenesisModule.topUpSdgnrsAfking_g318.selector)
             );
             if (!ok) _revertDelegate(data);
             (ok, data) = ContractAddresses.GAME_WHALE_MODULE.delegatecall(
                 abi.encodeWithSelector(
-                    IDegenerusGameWhaleModule.purchaseWhalePassForSdgnrs.selector, processDay
+                    IDegenerusGameWhaleModule.purchaseWhalePassForSdgnrs_g470.selector, processDay
                 )
             );
             if (!ok) _revertDelegate(data);
@@ -905,12 +911,11 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
     }
 
     /// @dev Materialize ONE subscriber's stamped afking box (the freeze-critical open).
-    ///      The box uses the published active session word; the stamp day stays in its
-    ///      seed domain. The level reads live inside `resolveAfkingBox`. Each stamp opens
+    ///      The box uses the published active session word and subscriber ID; the stamp
+    ///      day identifies the cohort, not the seed. The level reads live inside `resolveAfkingBox`. Each stamp opens
     ///      exactly once because the opener walks the box section in order and its cursor
     ///      only moves forward. `resolveAfkingBox` is the one freeze-correct seam (the public
-    ///      `resolveLootboxDirect` derives its seed from the live day and would NOT freeze the
-    ///      seed `day`).
+    ///      `resolveLootboxDirect` uses a different action tag).
     /// @param element The subscriber ID whose stamped box is materialized.
     /// @param amount The box spend in wei: the cohort's unit price times the member's quantity.
     /// @param day The cohort's stamp day.
@@ -920,8 +925,10 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
         _boxResolveAfkingBox(element, amount, day, word, score);
     }
 
+
+
     /// @notice Open stamped boxes belonging to the unlocked active session.
-    function runAfkingWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory) {
+    function runAfkingWork_g8553(uint256 gasAllowance) external returns (MineFlipGas.Result memory) {
         return _runAfkingWork(gasAllowance);
     }
 
@@ -980,8 +987,10 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
         MineFlipGas.finish(meter);
     }
 
+
+
     /// @notice Settle the active session's box entries in FIFO order, after AFKing.
-    function runHumanBoxWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory) {
+    function runHumanBoxWork_g315(uint256 gasAllowance) external returns (MineFlipGas.Result memory) {
         return _runHumanBoxWork(gasAllowance);
     }
 
@@ -1033,19 +1042,21 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
     /*------------------------------------------------------------------
                               Daily subscriber draw
     ------------------------------------------------------------------*/
+
+
     /// @notice One member wins FLIP by the age of its run: 10 per day since its run started,
     ///         capped at 4,000. Reached only by AdvanceModule's delegatecall when a day's word
     ///         lands after that day's lock.
     /// @dev The Vault (box position 0) is never drawn; sDGNRS (position 1) is. A seized run and
     ///      a paused protocol seat sit out; a resumed protocol seat's age restarts at its resume.
     /// @param day The day whose recorded word picks the winner.
-    function runSubDraw(uint24 day) external {
+    function runSubDraw_g1232(uint24 day) external {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         uint256 len = _subscribers.length;
         uint256 word = _recordedDailyWord(day);
         if (len < 2 || word == 0) return;
         uint256 boxes = _subBoxCount;
-        uint256 idx = 1 + uint256(keccak256(abi.encodePacked("SEATDRAW", word))) % (len - 1);
+        uint256 idx = 1 + uint256(EntropyLib.hash2(RngTags.SUBSCRIBER_DRAW, word)) % (len - 1);
         uint256 lane = _subLaneAt(idx < boxes ? idx : SUBSCRIBER_CAP - (idx - boxes));
         uint32 winner = uint32(lane);
         if (lane & SUB_REMOVAL_BIT != 0 || _protocolPaused(winner)) return;
@@ -1058,7 +1069,7 @@ abstract contract GameAfkingModule is GameBoxInternals, DegenerusGameMintStreakU
         }
         uint256 prize = spanDays * SEAT_DRAW_FLIP_PER_DAY;
         if (prize > SEAT_DRAW_MAX_FLIP) prize = SEAT_DRAW_MAX_FLIP;
-        coinflip.creditFlip(winner, prize);
+        coinflip.creditFlip_g317(winner, prize);
         emit SubDrawWon(winner, day, uint24(spanDays), prize);
     }
 

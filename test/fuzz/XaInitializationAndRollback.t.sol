@@ -19,7 +19,7 @@ contract XaCallbackSnapshot {
     bytes32 private constant ENTERED=keccak256("xa.test.callback.entered");
     constructor(address impl,address p,uint32 key,address gift_) { original=impl;player=p;id=key;gift=gift_; }
     fallback() external payable {
-        if (msg.sig == bytes4(keccak256("consumeCoinflipBoon(uint32)"))) {
+        if (msg.sig == bytes4(keccak256("consumeCoinflipBoon_g2902(uint32)"))) {
             require(msg.sender==ContractAddresses.COINFLIP,"callback sender");
             (,bool done)=Coinflip(ContractAddresses.COINFLIP).questCompletionToday(id);
             require(done,"quest completion visible at callback");
@@ -79,7 +79,7 @@ contract XaInitializationAndRollbackTest is DeployProtocol {
     }
     function test_RewardCallbackFailureRollsBackFundingQuestAndStakeThenRetriesOnce() public {
         (uint32 id,bytes32 slot)=_ready();bytes32 before_=vm.load(address(coinflip),slot);
-        vm.mockCallRevert(address(game),abi.encodeWithSignature("consumeCoinflipBoon(uint32)",id),hex"deadbeef");
+        vm.mockCallRevert(address(game),abi.encodeWithSignature("consumeCoinflipBoon_g2902(uint32)",id),hex"deadbeef");
         vm.expectRevert(bytes4(0xdeadbeef));vm.prank(PLAYER);coinflip.depositCoinflip(0,2000);
         assertEq(coin.balanceOf(PLAYER),10000);assertEq(vm.load(address(coinflip),slot),before_);
         assertEq(coinflip.coinflipAmountById(id),0);

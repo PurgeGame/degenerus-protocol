@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {RngTags} from "./libraries/RngTags.sol";
+
 /*
  * TERMS OF INTERACTION — submitting a transaction to this contract accepts them.
  *
@@ -346,7 +348,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
     function bafHeadWinner(uint24 lvl, uint256 rngWord, uint8 slot) external view returns (uint32 winnerId) {
         if (slot == 0) (winnerId, ) = _bafTop(lvl, 0);
         else if (slot == 1) winnerId = coin.bafDrawWinner(rngWord);
-        else (winnerId, ) = _bafTop(lvl, 2 + uint8(EntropyLib.hash2(_bafEntropyBase(rngWord), BAF_HEAD_PICK_KEY) & 1));
+        else (winnerId, ) = _bafTop(lvl, 2 + uint8(EntropyLib.hash2(RngTags.BAF_HEAD_SIDE, rngWord) & 1));
     }
 
     /// @notice Scatter rounds 2 * pair and 2 * pair + 1 of the bracket: each round's best and
@@ -362,7 +364,6 @@ contract DegenerusJackpots is IDegenerusJackpots {
         external view returns (uint32[4] memory winners, BafRound[2] memory draws)
     {
         if (rounds < 48 || rounds > 1536 || rounds % 48 != 0 || pair >= rounds / 2) revert InvalidBafDraw();
-        uint256 base = _bafEntropyBase(rngWord);
         uint256 band = (pair * 8) / rounds;
         uint64 currentEpoch = bafLevel[lvl].epoch;
         if (band < 2) {
@@ -371,11 +372,11 @@ contract DegenerusJackpots is IDegenerusJackpots {
                 // Each near-level band has a multiple of three rounds.
                 draws[j].trait = traits[round % 3];
                 (winners[2 * j], winners[2 * j + 1]) = _bafNearRound(
-                    draws[j], band == 1, lvl, currentEpoch, EntropyLib.hash2(base, round)
+                    draws[j], band == 1, lvl, currentEpoch, EntropyLib.hash3(RngTags.BAF_NEAR_ROUND, rngWord, round)
                 );
             }
         } else {
-            uint256 pairEntropy = EntropyLib.hash2(base, BAF_FAR_PAIR_KEY | pair);
+            uint256 pairEntropy = EntropyLib.hash3(RngTags.BAF_FAR_PAIR, rngWord, pair);
             uint32[] memory tickets = band == 2
                 ? degenerusGame.sampleFarFutureTickets(pairEntropy, lvl + 2, lvl + 5)
                 : degenerusGame.sampleFarFutureTickets(pairEntropy, lvl + 6, lvl + 99);
@@ -423,9 +424,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
     }
 
     /// @dev The bracket's winner stream, separate from the craps schedule's (word, ordinal) stream.
-    function _bafEntropyBase(uint256 rngWord) private pure returns (uint256) {
-        return EntropyLib.hash2(rngWord, uint256(BAF_WINNERS_TAG));
-    }
+
 
     /// @notice Mark a BAF bracket as skipped because the daily flip lost.
     /// @dev Bumps lastBafResolvedDay so pre-skip winning-flip credit is filtered
@@ -477,7 +476,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
     function claimBafConsolation(uint32 id, uint24 lvl) external {
         BafLevel memory lv = bafLevel[lvl];
         if (!lv.skipped) revert NothingToClaim();
-        if (id == 0) id = degenerusGame.walletIdOf(msg.sender);
+        if (id == 0) id = degenerusGame.walletIdOf_g3120(msg.sender);
         BafPlayer memory ps = bafPlayer[id][(lvl / 10) & 1];
         if (ps.bracket != lvl || ps.epoch != lv.epoch) revert NothingToClaim();
         uint256 amount = _bafConsolationAmount(ps.total);
@@ -493,7 +492,7 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @return Zero unless the bracket is skipped and the player holds an
     ///         unclaimed score with matching bracket and epoch tags.
     function bafConsolationOf(address player, uint24 lvl) external view returns (uint256) {
-        return bafConsolationOfId(degenerusGame.walletIdOf(player), lvl);
+        return bafConsolationOfId(degenerusGame.walletIdOf_g3120(player), lvl);
     }
 
     /// @notice Claimable consolation of an account, including a subaccount.

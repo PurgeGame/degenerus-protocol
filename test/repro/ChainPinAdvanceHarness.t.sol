@@ -22,7 +22,7 @@ contract PinDecimatorGameHarness is AutoDecimatorGameHarness {
 }
 
 /// @notice Pins on the opening-day decimator entry (C7, F3) and the sDGNRS pool decrement (F10), run through
-///         the real `applyDailyWord` on the harnessed Game.
+///         the real `applyDailyWord_g1652` on the harnessed Game.
 contract ChainPinDecimatorHarness is DeployProtocol {
     address private constant HOUSE = ContractAddresses.SDGNRS;
     uint32 private constant HOUSE_ID = 2;
@@ -52,7 +52,7 @@ contract ChainPinDecimatorHarness is DeployProtocol {
 
     function _fund(uint256 amount) private {
         vm.prank(address(game));
-        coinflip.creditFlip(HOUSE_ID, amount);
+        coinflip.creditFlip_g317(HOUSE_ID, amount);
     }
 
     function _prepare(uint24 day, uint24 lvl, uint256 word, bool opening) private {
@@ -111,7 +111,7 @@ contract ChainPinDecimatorHarness is DeployProtocol {
             assertEq(credited, 0, "C7: no room, no entry");
             assertEq(spent, 0);
         }
-        assertGt(game.rngWordForDay(21), 0, "C7: applyDailyWord completed");
+        assertGt(game.rngWordForDay(21), 0, "C7: applyDailyWord_g1652 completed");
     }
 
     /// forge-config: default.fuzz.runs = 48
@@ -259,7 +259,7 @@ contract ChainPinAfking is DeployProtocol {
     }
 
     /// @dev Both protocol seats bought for two days, then cannot pay on the same pass: each is paused and settled
-    ///      through `Affiliate.claim` -> `drainAffiliateBases` -> `Coinflip.creditFlip`, and the pass completes.
+    ///      through `Affiliate.claim` -> `drainAffiliateBases` -> `Coinflip.creditFlip_g317`, and the pass completes.
     function test_FA6_bothProtocolSeatsUnfundedOnTheSameDay() public {
         game.depositAfkingFunding{value: 10 ether}(VAULT_ID);
         game.depositAfkingFunding{value: 10 ether}(SDGNRS_ID);

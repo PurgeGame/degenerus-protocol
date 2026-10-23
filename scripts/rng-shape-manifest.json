@@ -1,0 +1,1657 @@
+{
+  "base": "67f8b9582",
+  "sites": [
+    {
+      "file": "AFKingSubscriptionToken.sol",
+      "function": "_mintDefaultSeat",
+      "expression": "keccak256(abi.encode(to,nextSerial))",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "Coinflip.sol",
+      "function": "bafDrawWinner",
+      "expression": "EntropyLib.hash2(RngTags.BAF_HEAD,rngWord)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "Craps.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"degenerus.lootbox.craps.v1\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "Craps.sol",
+      "function": "handSeed",
+      "expression": "EntropyLib.hash3(RngTags.CRAPS_HAND,uint256(seed),i)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "Craps.sol",
+      "function": "_runSettlement",
+      "expression": "EntropyLib.hash3(RngTags.CRAPS_ROLL,uint256(seed),i)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "Craps.sol",
+      "function": "_runSideSettlement",
+      "expression": "EntropyLib.hash3(RngTags.CRAPS_ROLL,uint256(seed),i)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "Craps.sol",
+      "function": "_survived",
+      "expression": "EntropyLib.hash4(RngTags.CRAPS_SURVIVAL,uint256(seed),n,salt)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "Craps.sol",
+      "function": "_scatterInto",
+      "expression": "EntropyLib.hash3(RngTags.CRAPS_SCATTER_CHIP,word,i)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "CrapsBattle.sol",
+      "function": "_bonusRoll",
+      "expression": "EntropyLib.hash3(RngTags.CRAPS_SCHEDULE,word,period==_BONUS_PERIODS_PER_DAY-2?0:period)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "CrapsBattle.sol",
+      "function": "_battleKey",
+      "expression": "keccak256(ptr,0xC0)",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "CrapsBattle.sol",
+      "function": "_tieBreak",
+      "expression": "EntropyLib.hash3(RngTags.CRAPS_TIE,word,field|challenger)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "CrapsBattle.sol",
+      "function": "_tieBreak",
+      "expression": "EntropyLib.hash3(RngTags.CRAPS_TIE,word,field|leader)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "CrapsBattle.sol",
+      "function": "_boostMult",
+      "expression": "EntropyLib.hash3(RngTags.CRAPS_BOOST,word,bound)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "CrapsEngine.sol",
+      "function": "settleBattle",
+      "expression": "EntropyLib.hash3(RngTags.CRAPS_AWARDED,word,betId)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "CrapsEngine.sol",
+      "function": "settleBattle",
+      "expression": "EntropyLib.hash3(RngTags.CRAPS_DICE,word,bound)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "CrapsEngine.sol",
+      "function": "settleBattle",
+      "expression": "EntropyLib.hash2(RngTags.CRAPS_SHOOTER,uint256(seed))",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "CrapsEngine.sol",
+      "function": "settleBattle",
+      "expression": "EntropyLib.hash3(RngTags.CRAPS_BOARD,word,key)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "CrapsEngine.sol",
+      "function": "settleBattle",
+      "expression": "EntropyLib.hash3(RngTags.CRAPS_ROUND,word,betId)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "CrapsLens.sol",
+      "function": "mapped",
+      "expression": "keccak256(abi.encode(key,root))",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "CrapsLens.sol",
+      "function": "battleKey",
+      "expression": "keccak256(abi.encode(uint256(0x4372617073426174746c65),uint48(slot),bank,goal,played,stakeAndHigh))",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "DegenerusAffiliate.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"affiliate-payout-roll-v1\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "DegenerusAffiliate.sol",
+      "function": "_purchaseWinner",
+      "expression": "keccak256(abi.encodePacked(AFFILIATE_ROLL_TAG,GameTimeLib.currentDayIndex(),buyerId,code))",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "DegenerusGame.sol",
+      "function": "sampleTraitEntries",
+      "expression": "keccak256(0,32)",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "DegenerusGame.sol",
+      "function": "sampleFarFutureTickets",
+      "expression": "EntropyLib.hash3(RngTags.BAF_FUTURE_ATTEMPT,entropy,attempt)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "DegenerusGameLens.sol",
+      "function": "smurfCreationInfo",
+      "expression": "keccak256(abi.encode(base))",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "DegenerusGameLens.sol",
+      "function": "deityOwnerAt",
+      "expression": "keccak256(abi.encode(base))",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "DegenerusGameLens.sol",
+      "function": "findProtocolBoonWinners",
+      "expression": "EntropyLib.hash4(RngTags.PROTOCOL_BOON_WINNER,word,issuer==ContractAddresses.VAULT?VAULT_WALLET_ID:SDGNRS_WALLET_ID,slot)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "DegenerusGameLens.sol",
+      "function": "_walletAddress",
+      "expression": "keccak256(abi.encode(base))",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "DegenerusGameLens.sol",
+      "function": "_mapSlot",
+      "expression": "keccak256(abi.encode(key,base))",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "DegenerusGameLens.sol",
+      "function": "_mapSlot",
+      "expression": "keccak256(abi.encode(key,base))",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "DegenerusGameLens.sol",
+      "function": "_subLaneMirror",
+      "expression": "keccak256(abi.encode(setSlot))",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "DegenerusGameLens.sol",
+      "function": "decWinnerAt",
+      "expression": "EntropyLib.hash3(RngTags.DECIMATOR_TIE,rngWord,id)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "DegenerusGameLens.sol",
+      "function": "accountInfo",
+      "expression": "keccak256(abi.encode(tableRoot))",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "DegenerusGameLens.sol",
+      "function": "_borrowableMirror",
+      "expression": "keccak256(abi.encode(base))",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "DegenerusGameLens.sol",
+      "function": "_findPackedIndex",
+      "expression": "keccak256(abi.encode(slot))",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "DegenerusJackpots.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"degenerus.baf.winners\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "DegenerusJackpots.sol",
+      "function": "bafHeadWinner",
+      "expression": "EntropyLib.hash2(RngTags.BAF_HEAD_SIDE,rngWord)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "DegenerusJackpots.sol",
+      "function": "bafPairWinners",
+      "expression": "EntropyLib.hash3(RngTags.BAF_NEAR_ROUND,rngWord,round)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "DegenerusJackpots.sol",
+      "function": "bafPairWinners",
+      "expression": "EntropyLib.hash3(RngTags.BAF_FAR_PAIR,rngWord,pair)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "DegenerusOwnerGovernance.sol",
+      "function": "propose",
+      "expression": "keccak256(data)",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "DegenerusOwnerGovernance.sol",
+      "function": "propose",
+      "expression": "keccak256(abi.encode(block.chainid,address(this),proposalId,target,value,data,p.expiresAt))",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "DegenerusOwnerGovernance.sol",
+      "function": "execute",
+      "expression": "keccak256(data)",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "DegenerusQuests.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"degenerus.quest.daily\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "DegenerusQuests.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"degenerus.quest.level\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "DegenerusQuests.sol",
+      "function": "rollDailyQuest",
+      "expression": "EntropyLib.hash2(RngTags.QUEST_DAILY,entropy)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "DegenerusQuests.sol",
+      "function": "rollLevelQuest",
+      "expression": "EntropyLib.hash2(RngTags.QUEST_LEVEL,entropy)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "DeityBoonViewer.sol",
+      "function": "_slotsForDay",
+      "expression": "EntropyLib.hash4(RngTags.DEITY_MENU,dailySeed,(uint256(deityId)<<24)|day,i)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "JackpotBattle.sol",
+      "function": "payBattlePot",
+      "expression": "EntropyLib.hash3(RngTags.CRAPS_DICE,word,uint256(slot))",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "JackpotBattle.sol",
+      "function": "payBattlePot",
+      "expression": "EntropyLib.hash2(RngTags.CRAPS_SHOOTER,seed)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "JackpotBattle.sol",
+      "function": "_rngBattleKey",
+      "expression": "keccak256(abi.encode(BATTLE_TAG,uint48(slot),bank,goal,played,terms))",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "JackpotBattle.sol",
+      "function": "_prepare",
+      "expression": "EntropyLib.hash2(RngTags.CRAPS_JACKPOT_MULT,word)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "JackpotBattle.sol",
+      "function": "_prepare",
+      "expression": "EntropyLib.hash2(RngTags.CRAPS_SUBSIDY,word)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "JackpotBattle.sol",
+      "function": "_settleHighRollerReserve",
+      "expression": "EntropyLib.hash3(RngTags.CRAPS_RESERVE_WINNER,r.drawWord,(uint256(slot)<<32)|draw.eligible)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "JackpotBattle.sol",
+      "function": "_settleHighRollerReserve",
+      "expression": "EntropyLib.hash3(RngTags.CRAPS_RESERVE_DRAW,r.drawWord,slot)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "JackpotBattle.sol",
+      "function": "_jackpotBonusRoll",
+      "expression": "EntropyLib.hash3(RngTags.CRAPS_SCHEDULE,word,period==_BONUS_PERIODS_PER_DAY-2?0:period)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "JackpotBattle.sol",
+      "function": "_jackpotBoostMult",
+      "expression": "EntropyLib.hash3(RngTags.CRAPS_BOOST,word,bound)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "WWXRP.sol",
+      "function": "_holdsWwxrpBoon",
+      "expression": "keccak256(abi.encode(id,GAME_BOON_PACKED_SLOT))",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "WWXRP.sol",
+      "function": "_bucketOf",
+      "expression": "keccak256(abi.encodePacked(DOM_BUCKET,block.chainid,address(this),day,id))",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "WWXRP.sol",
+      "function": "previewOutcome",
+      "expression": "EntropyLib.hash2(RngTags.WWXRP_BIG,word)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "WWXRP.sol",
+      "function": "previewOutcome",
+      "expression": "EntropyLib.hash2(RngTags.WWXRP_SMALL,word)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "WWXRP.sol",
+      "function": "previewOutcome",
+      "expression": "EntropyLib.hash2(RngTags.WWXRP_BUCKET,word)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "WWXRP.sol",
+      "function": "previewOutcome",
+      "expression": "EntropyLib.hash2(RngTags.WWXRP_WINNER,word)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "WWXRP.sol",
+      "function": "findWinningEntry",
+      "expression": "EntropyLib.hash2(RngTags.WWXRP_BIG,word)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "WWXRP.sol",
+      "function": "findWinningEntry",
+      "expression": "EntropyLib.hash2(RngTags.WWXRP_SMALL,word)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "WWXRP.sol",
+      "function": "findWinningEntry",
+      "expression": "EntropyLib.hash2(RngTags.WWXRP_BUCKET,word)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "WWXRP.sol",
+      "function": "findWinningEntry",
+      "expression": "EntropyLib.hash2(RngTags.WWXRP_WINNER,word)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "WWXRP.sol",
+      "function": "resolveIncinerator",
+      "expression": "EntropyLib.hash2(RngTags.WWXRP_INCINERATOR,rngWord)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "WWXRP.sol",
+      "function": "_outcome",
+      "expression": "EntropyLib.hash2(RngTags.WWXRP_BIG,word)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "WWXRP.sol",
+      "function": "_outcome",
+      "expression": "EntropyLib.hash2(RngTags.WWXRP_SMALL,word)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "WWXRP.sol",
+      "function": "_outcome",
+      "expression": "EntropyLib.hash2(RngTags.WWXRP_BUCKET,word)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "WWXRP.sol",
+      "function": "_outcome",
+      "expression": "EntropyLib.hash2(RngTags.WWXRP_WINNER,word)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "libraries/DecimatorSamplingLib.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"decimator.battle.sample.v1\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "libraries/DecimatorSamplingLib.sol",
+      "function": "rotation",
+      "expression": "EntropyLib.hash2(RngTags.DECIMATOR_ROTATION,word)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "libraries/DecimatorSamplingLib.sol",
+      "function": "sample",
+      "expression": "EntropyLib.hash3(RngTags.DECIMATOR_SAMPLE,word,stratum)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "libraries/EntropyLib.sol",
+      "function": "hash2",
+      "expression": "keccak256(0x00,0x40)",
+      "class": "HASH-IMPLEMENTATION",
+      "reason": "Fixed-width hashing primitive, all production callers independently registered"
+    },
+    {
+      "file": "libraries/EntropyLib.sol",
+      "function": "hash3",
+      "expression": "keccak256(p,0x60)",
+      "class": "HASH-IMPLEMENTATION",
+      "reason": "Fixed-width hashing primitive, all production callers independently registered"
+    },
+    {
+      "file": "libraries/EntropyLib.sol",
+      "function": "hash4",
+      "expression": "keccak256(p,0x80)",
+      "class": "HASH-IMPLEMENTATION",
+      "reason": "Fixed-width hashing primitive, all production callers independently registered"
+    },
+    {
+      "file": "libraries/EntropyLib.sol",
+      "function": "hash1",
+      "expression": "keccak256(0x00,0x20)",
+      "class": "HASH-IMPLEMENTATION",
+      "reason": "Fixed-width hashing primitive, all production callers independently registered"
+    },
+    {
+      "file": "libraries/FlipRoundLib.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"degenerus.coinflip.reward-percent\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "libraries/FlipRoundLib.sol",
+      "function": "coinflipRewardPercent",
+      "expression": "EntropyLib.hash2(RngTags.FLIP_REWARD,rngWord)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "libraries/GoldSixLib.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"GOLD_SIX_REPLACEMENT_V1\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "libraries/GoldSixLib.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"GOLD_SIX_DAILY_V1\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "libraries/GoldSixLib.sol",
+      "function": "replacement",
+      "expression": "EntropyLib.hash2(RngTags.GOLD_REPLACEMENT,seed)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "libraries/GoldSixLib.sol",
+      "function": "daily",
+      "expression": "EntropyLib.hash2(RngTags.GOLD_DAILY,word)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "libraries/JackpotBattleFieldLib.sol",
+      "function": "prepare",
+      "expression": "keccak256(abi.encode(id,CrapsPreferenceLib.PASS_SLOT))",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "libraries/JackpotBucketLib.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"degenerus.jackpot.trait-board\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "libraries/JackpotBucketLib.sol",
+      "function": "getRandomTraits",
+      "expression": "EntropyLib.hash2(RngTags.JACKPOT_BOARD,rw)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "libraries/PackedTicketSampleLib.sol",
+      "function": "next",
+      "expression": "EntropyLib.hash3(RngTags.SAMPLE_PADDING,c.entropy,used)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "libraries/TicketEntropy.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"DEGENERUS_TICKET_ROTATION_V1\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "libraries/TicketEntropy.sol",
+      "function": "queueStart",
+      "expression": "EntropyLib.hash3(RngTags.TICKET_ROTATION,entropy,queueKey)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "libraries/TicketEntropy.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"DEGENERUS_TICKET_REMAINDER_V2\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "libraries/TicketEntropy.sol",
+      "function": "remainder",
+      "expression": "EntropyLib.hash3(RngTags.TICKET_REMAINDER,entropy,stream&~(uint256(type(uint32).max)<<ID_SHIFT))",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "libraries/WalletTableLib.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(abi.encode(OWNERS_SLOT))",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "modules/DegenerusGameAdvanceModule.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"future-keep\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "modules/DegenerusGameAdvanceModule.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"degenerus.skim.bps\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "modules/DegenerusGameAdvanceModule.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"degenerus.skim.variance\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "modules/DegenerusGameAdvanceModule.sol",
+      "function": "_consolidatePoolsAndRewardJackpots",
+      "expression": "EntropyLib.hash2(RngTags.POOL_SKIM,rngWord)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameAdvanceModule.sol",
+      "function": "_consolidatePoolsAndRewardJackpots",
+      "expression": "EntropyLib.hash2(RngTags.POOL_VARIANCE_A,rngWord)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameAdvanceModule.sol",
+      "function": "_consolidatePoolsAndRewardJackpots",
+      "expression": "EntropyLib.hash2(RngTags.POOL_VARIANCE_B,rngWord)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameAdvanceModule.sol",
+      "function": "_consolidatePoolsAndRewardJackpots",
+      "expression": "EntropyLib.hash2(RngTags.BAF_GATE,rngWord)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameAdvanceModule.sol",
+      "function": "_consolidatePoolsAndRewardJackpots",
+      "expression": "EntropyLib.hash2(RngTags.POOL_FUTURE_KEEP,rngWord)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameBoonModule.sol",
+      "function": "_drawProtocolBoons",
+      "expression": "EntropyLib.hash4(RngTags.PROTOCOL_BOON_WINNER,winnerWord,issuerId,slot)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameBoonModule.sol",
+      "function": "_rollBoxBoonLane",
+      "expression": "EntropyLib.hash3(RngTags.BOX_BOON_LANE,seed,nonceBase+i)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameDecimatorModule.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"decimator.battle.dice.v1\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "modules/DegenerusGameDecimatorModule.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"decimator.battle.board.v1\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "modules/DegenerusGameDecimatorModule.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"decimator.battle.tie.v1\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "modules/DegenerusGameDecimatorModule.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"decimator.battle.generated.player.v1\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "modules/DegenerusGameDecimatorModule.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"decimator.battle.generated.recipient.v1\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "modules/DegenerusGameDecimatorModule.sol",
+      "function": "_runGenerated",
+      "expression": "EntropyLib.hash3(RngTags.DECIMATOR_OWNER,word,id)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameDecimatorModule.sol",
+      "function": "_runGenerated",
+      "expression": "keccak256(abi.encode(owner,CrapsPreferenceLib.PASS_SLOT))",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "modules/DegenerusGameDecimatorModule.sol",
+      "function": "_runGenerated",
+      "expression": "EntropyLib.hash3(RngTags.DECIMATOR_BOARD,word,id)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameDecimatorModule.sol",
+      "function": "_runGenerated",
+      "expression": "EntropyLib.hash2(RngTags.DECIMATOR_DICE,word)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameDecimatorModule.sol",
+      "function": "_runGenerated",
+      "expression": "EntropyLib.hash3(RngTags.DECIMATOR_GENERATED,word,id)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameDecimatorModule.sol",
+      "function": "_runDecimatorWork",
+      "expression": "EntropyLib.hash2(RngTags.DECIMATOR_DICE,word)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameDecimatorModule.sol",
+      "function": "_run",
+      "expression": "EntropyLib.hash3(RngTags.DECIMATOR_BOARD,word,id)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameDecimatorModule.sol",
+      "function": "_tieKey",
+      "expression": "EntropyLib.hash3(RngTags.DECIMATOR_TIE,word,id)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameDegeneretteModule.sol",
+      "function": "_resolveBet",
+      "expression": "EntropyLib.hash3(RngTags.BET_SURVIVAL,rngWord,betId)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameDegeneretteModule.sol",
+      "function": "_resolveBet",
+      "expression": "EntropyLib.hash3(RngTags.BET_ROUND,rngWord,betId)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameDegeneretteModule.sol",
+      "function": "_resolveBet",
+      "expression": "EntropyLib.hash3(RngTags.BET_BOX,rngWord,betId)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameDegeneretteModule.sol",
+      "function": "_resolveBet",
+      "expression": "EntropyLib.hash3(RngTags.BET_RECORD,rngWord,betId)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameDegeneretteModule.sol",
+      "function": "_rollBetSpin",
+      "expression": "EntropyLib.hash3(RngTags.BET_HOUSE,rngWord,spinIdx)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameDegeneretteModule.sol",
+      "function": "_rollBetSpin",
+      "expression": "EntropyLib.hash4(RngTags.BET_PLAYER,rngWord,symbol,spinIdx)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameDegeneretteModule.sol",
+      "function": "_rollSpin",
+      "expression": "EntropyLib.hash2(RngTags.SPIN_RIG,seed)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameDegeneretteModule.sol",
+      "function": "_playerTicket",
+      "expression": "EntropyLib.hash2(RngTags.SPIN_PLAYER,seed)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameDegeneretteModule.sol",
+      "function": "_spinSymbol",
+      "expression": "EntropyLib.hash2(RngTags.SPIN_HERO,seed)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameDegeneretteModule.sol",
+      "function": "_rigWwxrpResult",
+      "expression": "EntropyLib.hash2(RngTags.SPIN_RIG_PICK,rigSeed)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameDegeneretteModule.sol",
+      "function": "_boxResolveWwxrpSpinFromBox",
+      "expression": "EntropyLib.hash2(RngTags.SPIN_HOUSE,seed)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameDegeneretteModule.sol",
+      "function": "_flipSpinChain",
+      "expression": "EntropyLib.hash3(RngTags.SPIN_FLIP_ROUND,seed,i)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameDegeneretteModule.sol",
+      "function": "_flipSpinChain",
+      "expression": "EntropyLib.hash2(RngTags.SPIN_HOUSE,ss)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameDegeneretteModule.sol",
+      "function": "_flipSpinChain",
+      "expression": "EntropyLib.hash2(RngTags.SPIN_SURVIVAL,seed)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameDegeneretteModule.sol",
+      "function": "_flipSpinChain",
+      "expression": "EntropyLib.hash2(RngTags.SPIN_ROUND,seed)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameDegeneretteModule.sol",
+      "function": "_boxResolveEthSpinFromBox",
+      "expression": "EntropyLib.hash2(RngTags.SPIN_HOUSE,seed)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameDegeneretteModule.sol",
+      "function": "_boxResolveEthSpinFromBox",
+      "expression": "EntropyLib.hash2(RngTags.SPIN_RECIRC,seed)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameDegenesisModule.sol",
+      "function": "_degenesisOutcome",
+      "expression": "EntropyLib.hash3(RngTags.DEGENESIS_ORDER,g.word,index)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameDegenesisModule.sol",
+      "function": "_degenesisOutcome",
+      "expression": "EntropyLib.hash2(RngTags.DEGENESIS_CATEGORY,seed)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameDegenesisModule.sol",
+      "function": "_degenesisOutcome",
+      "expression": "EntropyLib.hash2(RngTags.DEGENESIS_SIZE,seed)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameDegenesisModule.sol",
+      "function": "_degenesisOutcome",
+      "expression": "EntropyLib.hash2(RngTags.DEGENESIS_ROUND,seed)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameDegenesisModule.sol",
+      "function": "_degenesisOutcome",
+      "expression": "EntropyLib.hash2(RngTags.DEGENESIS_PASS,seed)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameDegenesisModule.sol",
+      "function": "_degenesisOutcome",
+      "expression": "EntropyLib.hash2(RngTags.DEGENESIS_PASS_ROUND,seed)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameFoilCore.sol",
+      "function": "_deriveFoilLines",
+      "expression": "EntropyLib.hash4(RngTags.FOIL_LINES,entropy,(uint256(buyerId)<<24)|lvl,i)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameFoilCore.sol",
+      "function": "_payFoilTier",
+      "expression": "EntropyLib.hash3(RngTags.FOIL_CURRENCY,entropy,ticketIndex)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameFoilCore.sol",
+      "function": "_payFoilTier",
+      "expression": "EntropyLib.hash3(RngTags.FOIL_SPIN,entropy,ticketIndex)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameGameOverModule.sol",
+      "function": "_deadTallyCheckpoint",
+      "expression": "keccak256(abi.encode(deadTallyStage,deadTallyPos,deadTallyFoilDay,deadTallyFoilIdx))",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "modules/DegenerusGameJackpotDrawModule.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"coin-level\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "modules/DegenerusGameJackpotDrawModule.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"far-future-coin\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "modules/DegenerusGameJackpotDrawModule.sol",
+      "function": "_drawCoinEntry",
+      "expression": "EntropyLib.hash3(RngTags.FLIP_LEVEL,randomWord,pull)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameJackpotDrawModule.sol",
+      "function": "_runPurchaseJackpotBattle",
+      "expression": "EntropyLib.hash2(RngTags.FUTURE_BATTLE,rngWord)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameJackpotDrawModule.sol",
+      "function": "_collectJackpotChunkWithLevels",
+      "expression": "EntropyLib.hash3(RngTags.FUTURE_BATTLE_VISIT,word,walk.ordinal++)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameJackpotDrawModule.sol",
+      "function": "_payBafAward",
+      "expression": "EntropyLib.hash3(RngTags.BAF_TICKET,word,i)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameJackpotDrawModule.sol",
+      "function": "_payBafAward",
+      "expression": "EntropyLib.hash3(RngTags.BAF_TICKET,word,i)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameJackpotDrawModule.sol",
+      "function": "_jackpotTicketRoll",
+      "expression": "EntropyLib.hash2(RngTags.JACKPOT_TICKET_ROLL,entropy)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameJackpotDrawUtils.sol",
+      "function": "_drawBucketEntry",
+      "expression": "EntropyLib.hash4(RngTags.BUCKET_SAMPLE,randomWord,salt,pull)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameJackpotModule.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"degenerus.jackpot.hero-symbol\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "modules/DegenerusGameJackpotModule.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"daily-current-bps\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "modules/DegenerusGameJackpotModule.sol",
+      "function": "_resumeEth",
+      "expression": "EntropyLib.hash3(RngTags.JACKPOT_ALLOCATION,word,work.lvl)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameJackpotModule.sol",
+      "function": "_resumeEth",
+      "expression": "EntropyLib.hash3(RngTags.JACKPOT_QUADRANT,entropy,q)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameJackpotModule.sol",
+      "function": "_resumeDecimatorEth",
+      "expression": "EntropyLib.hash3(RngTags.JACKPOT_QUADRANT,entropy,d.solo)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameJackpotModule.sol",
+      "function": "_ticketWorkPlan",
+      "expression": "EntropyLib.hash3(RngTags.JACKPOT_ALLOCATION,word,work.lvl)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameJackpotModule.sol",
+      "function": "_ticketWorkPlan",
+      "expression": "EntropyLib.hash3(RngTags.JACKPOT_ALLOCATION,word,level)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameJackpotModule.sol",
+      "function": "_awardTicketPasses",
+      "expression": "EntropyLib.hash3(RngTags.JACKPOT_QUADRANT,plan.entropy,q)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameJackpotModule.sol",
+      "function": "_rollHeroSymbol",
+      "expression": "EntropyLib.hash2(RngTags.JACKPOT_HERO,entropy)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameJackpotModule.sol",
+      "function": "_dailyCurrentPoolBps",
+      "expression": "EntropyLib.hash2(RngTags.JACKPOT_DAILY_BPS,randWord)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameJackpotModule.sol",
+      "function": "runBafAwards",
+      "expression": "EntropyLib.hash3(RngTags.JACKPOT_ALLOCATION,word,level)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameLootboxModule.sol",
+      "function": "_rollOrder",
+      "expression": "EntropyLib.hash2(RngTags.BOX_BOON,c.rootWord)",
+      "class": "RNG",
+      "reason": "One boon stream per order root. The root fixes queued position or redemption beneficiary; the physical buffer/batch and owner add no discriminator. Per-box boon nonces remain in BOX_BOON_LANE."
+    },
+    {
+      "file": "modules/DegenerusGameLootboxModule.sol",
+      "function": "_rollBoxes",
+      "expression": "EntropyLib.hash3(RngTags.BOX_OPEN,c.rootWord,++c.nonce)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameLootboxModule.sol",
+      "function": "_boxResolveHumanBoxOrder",
+      "expression": "EntropyLib.hash3(RngTags.BOX_ORDER,rngWord,position)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameLootboxModule.sol",
+      "function": "_boxResolveLootboxDirect",
+      "expression": "EntropyLib.hash2(RngTags.BOX_DIRECT,rngWord)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameLootboxModule.sol",
+      "function": "_boxResolveAfkingBox",
+      "expression": "EntropyLib.hash3(RngTags.BOX_AFKING,rngWord,uint256(id))",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameLootboxModule.sol",
+      "function": "_settleLootboxRoll",
+      "expression": "EntropyLib.hash2(RngTags.BOX_ROUND,rollSeed)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameLootboxModule.sol",
+      "function": "_resolveLootboxRoll",
+      "expression": "EntropyLib.hash2(RngTags.BOX_WWXRP_SPIN,seed)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameLootboxModule.sol",
+      "function": "_resolveLootboxRoll",
+      "expression": "EntropyLib.hash2(RngTags.BOX_FLIP_SPIN,seed)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameLootboxModule.sol",
+      "function": "_resolveLootboxRoll",
+      "expression": "EntropyLib.hash2(RngTags.BOX_ETH_SPIN,seed)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameLootboxModule.sol",
+      "function": "_rollCrapsPasses",
+      "expression": "EntropyLib.hash2(RngTags.BOX_PASS_ROUND,seed)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameLootboxModule.sol",
+      "function": "_rollCrapsPasses",
+      "expression": "EntropyLib.hash2(RngTags.BOX_PASS_SPIN,seed)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameRngUtils.sol",
+      "function": "_backfillGapDays",
+      "expression": "EntropyLib.hash3(RngTags.GAP_DAY,vrfWord,yesterday)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameTicketModule.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"DEGENERUS_DIRECT_JACKPOT_TICKETS_V1\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "modules/DegenerusGameTicketModule.sol",
+      "function": "runJackpotTicketAwards",
+      "expression": "EntropyLib.hash4(RngTags.TICKET_DIRECT,plan.entropy,(uint256(q)<<32)|i,round)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameTicketModule.sol",
+      "function": "_resumeQueuedJackpotTickets",
+      "expression": "EntropyLib.hash3(RngTags.JACKPOT_QUADRANT,plan.entropy,q)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameTicketModule.sol",
+      "function": "_directTicketGroup",
+      "expression": "EntropyLib.hash3(RngTags.JACKPOT_QUADRANT,plan.entropy,q)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameTicketModule.sol",
+      "function": "_directTicketGroup",
+      "expression": "EntropyLib.hash4(RngTags.BUCKET_SAMPLE,seed,uint8(plan.salt+q),start+j)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameTicketModule.sol",
+      "function": "_materializeJackpotRound",
+      "expression": "EntropyLib.hash3(RngTags.TICKET_SHUFFLE,seed,q)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameTicketModule.sol",
+      "function": "_materializeJackpotRound",
+      "expression": "EntropyLib.hash3(RngTags.TICKET_SHUFFLE_STEP,entropy,left)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameTicketModule.sol",
+      "function": "_materializeJackpotRound",
+      "expression": "EntropyLib.hash3(RngTags.TICKET_GROUP,seed,base/8)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameTicketModule.sol",
+      "function": "_generateTraitRun",
+      "expression": "EntropyLib.hash4(RngTags.TICKET_TRAITS,entropyWord,baseKey&~(uint256(type(uint32).max)<<TicketEntropy.ID_SHIFT),groupIdx)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameTicketModule.sol",
+      "function": "_roundPhase",
+      "expression": "keccak256(0,32)",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "modules/DegenerusGameTicketModule.sol",
+      "function": "_runRound",
+      "expression": "EntropyLib.hash4(RngTags.TICKET_ROUND,entropy,lvl,round)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/DegenerusGameWhaleModule.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"ticket-jackpot-whale\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "modules/DegenerusGameWhaleModule.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"jackpot-quadrant-whale\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "modules/DegenerusGameWhaleModule.sol",
+      "function": "_drawWhalePassWinner",
+      "expression": "EntropyLib.hash2(ticketLeg?RngTags.WHALE_TICKET:RngTags.WHALE_QUADRANT,randWord)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/GameAfkingModule.sol",
+      "function": "runSubDraw_g1232",
+      "expression": "EntropyLib.hash2(RngTags.SUBSCRIBER_DRAW,word)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "modules/GameBoonActions.sol",
+      "function": "_deityBoonForSlot",
+      "expression": "EntropyLib.hash4(RngTags.DEITY_MENU,rngWord,(uint256(deityId)<<24)|day,slot)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "sDGNRS.sol",
+      "function": "_rollFromWord",
+      "expression": "EntropyLib.hash2(RngTags.REDEMPTION_AMOUNT,word)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "sDGNRS.sol",
+      "function": "_runRedemptionWork",
+      "expression": "EntropyLib.hash2(RngTags.REDEMPTION_FLIP,word)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "sDGNRS.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"sdgnrs.century.refill\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "sDGNRS.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"sdgnrs.redemption.synthetic-flip\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "sDGNRS.sol",
+      "function": "recycleCentury",
+      "expression": "EntropyLib.hash2(RngTags.CENTURY_REFILL,rngWord)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "sDGNRS.sol",
+      "function": "_claimRedemptionFor",
+      "expression": "EntropyLib.hash3(RngTags.REDEMPTION_BOX,word,uint256(walletId))",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "storage/CrapsBattleStorage.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"CrapsHighReserveDraw\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "storage/CrapsBattleStorage.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"CrapsHighReserveWinner\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "storage/CrapsBattleStorage.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"CrapsJackpotSubsidy\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "storage/CrapsBattleStorage.sol",
+      "function": "_highMultOf",
+      "expression": "EntropyLib.hash2(RngTags.CRAPS_HIGH,word)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "storage/DegenerusGameStorage.sol",
+      "function": "_queueEntryRangeStridedCore",
+      "expression": "keccak256(0,64)",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "storage/DegenerusGameStorage.sol",
+      "function": "_queueEntryRangeStridedCore",
+      "expression": "keccak256(0,64)",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "storage/DegenerusGameStorage.sol",
+      "function": "_walletSlot",
+      "expression": "keccak256(0,32)",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "storage/DegenerusGameStorage.sol",
+      "function": "_ticketQueueLength",
+      "expression": "keccak256(0,64)",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "storage/DegenerusGameStorage.sol",
+      "function": "_bindTicketQueue",
+      "expression": "keccak256(0,64)",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "storage/DegenerusGameStorage.sol",
+      "function": "_farFutureLane",
+      "expression": "keccak256(0,64)",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "storage/DegenerusGameStorage.sol",
+      "function": "_farFutureLane",
+      "expression": "keccak256(0,64)",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "storage/DegenerusGameStorage.sol",
+      "function": "_entryPacked",
+      "expression": "keccak256(0,64)",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "storage/DegenerusGameStorage.sol",
+      "function": "_setEntryOwed",
+      "expression": "keccak256(0,64)",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "storage/DegenerusGameStorage.sol",
+      "function": "_bucketWordAtUnchecked",
+      "expression": "keccak256(0,32)",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "storage/DegenerusGameStorage.sol",
+      "function": "_bucketAppendRun",
+      "expression": "keccak256(0,32)",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "storage/DegenerusGameStorage.sol",
+      "function": "_bucketAppendLanes",
+      "expression": "keccak256(0,32)",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "storage/DegenerusGameStorage.sol",
+      "function": "_tqAppend",
+      "expression": "keccak256(0x00,0x20)",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "storage/DegenerusGameStorage.sol",
+      "function": "_tqAppendLanes",
+      "expression": "keccak256(0,32)",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "storage/DegenerusGameStorage.sol",
+      "function": "_tqWordAt",
+      "expression": "keccak256(0x00,0x20)",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "storage/DegenerusGameStorage.sol",
+      "function": "_tqPositionAt",
+      "expression": "keccak256(0x00,0x20)",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "storage/DegenerusGameStorage.sol",
+      "function": "_releaseTicketQueue",
+      "expression": "keccak256(0,64)",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "storage/DegenerusGameStorage.sol",
+      "function": "_appendBoxEntry",
+      "expression": "keccak256(0x00,0x20)",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "storage/DegenerusGameStorage.sol",
+      "function": "_boxEntryAt",
+      "expression": "keccak256(0x00,0x20)",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "storage/DegenerusGameStorage.sol",
+      "function": "_deityWord",
+      "expression": "keccak256(0,32)",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "storage/DegenerusGameStorage.sol",
+      "function": "_pushDeityId",
+      "expression": "keccak256(0,32)",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "storage/DegenerusGameStorage.sol",
+      "function": "_pushDeityId",
+      "expression": "keccak256(0,64)",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "storage/DegenerusGameStorage.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"degenerus.protocol.boon.winner\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "storage/DegenerusGameStorage.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"foil-payout-seed\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "storage/DegenerusGameStorage.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"foil-seed\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "storage/DegenerusGameStorage.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"foil-currency\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "storage/DegenerusGameStorage.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"foil-spin\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "storage/DegenerusGameStorage.sol",
+      "function": "_foilSlot",
+      "expression": "keccak256(0x00,0x20)",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "storage/DegenerusGameStorage.sol",
+      "function": "_packFoilDraw",
+      "expression": "EntropyLib.hash2(RngTags.FOIL_PAYOUT,rngWord)",
+      "class": "RNG",
+      "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
+    },
+    {
+      "file": "storage/DegenerusGameStorage.sol",
+      "function": "<file-scope>",
+      "expression": "keccak256(\"degenerus.degenerette.active.cursor\")",
+      "class": "CONSTANT",
+      "reason": "Compile-time tag or storage root, no VRF input"
+    },
+    {
+      "file": "storage/DegenerusGameStorage.sol",
+      "function": "_betSlot",
+      "expression": "keccak256(0x00,0x20)",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "storage/DegenerusGameStorage.sol",
+      "function": "_subscriberWordAt",
+      "expression": "keccak256(0,32)",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    },
+    {
+      "file": "storage/DegenerusGameStorage.sol",
+      "function": "_setSubLaneAt",
+      "expression": "keccak256(0,32)",
+      "class": "NON-RNG",
+      "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
+    }
+  ],
+  "rawBitExceptions": [
+    {
+      "file": "Coinflip.sol",
+      "function": "processCoinflipPayouts",
+      "expression": "boolwin=(rngWord&1)==1;",
+      "reason": "Owner 2026-10-22: each reverse flip adds one to the raw daily word and must reverse its win bit."
+    },
+    {
+      "file": "Coinflip.sol",
+      "function": "processCoinflipGap",
+      "expression": "uint32wins=uint32(root>>(1+uint256(start)-originalStart));",
+      "reason": "Owner 2026-10-22: preserve baseline 67f8b9582 raw gap win bits 1..31, including settled-prefix offsets."
+    }
+  ]
+}

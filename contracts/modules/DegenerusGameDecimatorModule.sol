@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {EntropyLib} from "../libraries/EntropyLib.sol";
+import {RngTags} from "../libraries/RngTags.sol";
+
 import {CrapsPreferenceLib} from "../libraries/CrapsPreferenceLib.sol";
 
 import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol";
@@ -36,6 +39,8 @@ import {Craps} from "../Craps.sol";
 import {DecimatorJackpotTerms} from "../interfaces/IDegenerusGameModules.sol";
 
 interface IDecimatorBoardPreference {
+    function extsload_g8132(bytes32 slot) external view returns (bytes32 value);
+
     function extsload(bytes32 slot) external view returns (bytes32 value);
 }
 
@@ -117,9 +122,11 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         uint32 indexed walletId, uint24 indexed lvl, uint64 indexed entryId, uint256 amountWei, uint256 halfPasses
     );
 
+
+
     /// @param chips The entry's board as a normal battle takes it: ten three-bit leg counts naming
     ///        zero to seven chips; the dice scatter the rest of the ten. Each burn sets it.
-    function recordDecBurn(uint32 playerId, uint24 lvl, uint256 baseAmount, uint256 multBps, uint32 chips)
+    function recordDecBurn_g5574(uint32 playerId, uint24 lvl, uint256 baseAmount, uint256 multBps, uint32 chips)
         public
         returns (uint64 id)
     {
@@ -313,18 +320,18 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         uint256 effectiveLen = len + _deityVirtualCount(trait, len, deity);
         // Allocation selects a nonempty cohort; the daily lock preserves it through every entry.
         uint64 id = uint64(round.count) + ordinal;
-        uint256 index = uint256(keccak256(abi.encode(GEN_DRAW_TAG, word, lvl, id, q, trait))) % effectiveLen;
+        uint256 index = uint256(EntropyLib.hash3(RngTags.DECIMATOR_OWNER, word, id)) % effectiveLen;
         uint32 owner = index < len ? _bucketIdAtUnchecked(lvl, trait, index) : deity;
         // Every lane and deity holds a nonzero wallet ID; Craps validates boards when saving them.
         bytes32 preferenceSlot = keccak256(abi.encode(owner, CrapsPreferenceLib.PASS_SLOT));
         (uint32 chips,) = CrapsPreferenceLib.decode(uint256(
-            IDecimatorBoardPreference(ContractAddresses.CRAPS).extsload(preferenceSlot)
+            IDecimatorBoardPreference(ContractAddresses.CRAPS).extsload_g8132(preferenceSlot)
         ));
         // A generated entry is not a wallet: its survival salt is a 160-bit hash of its own id.
         Craps.SlipResult memory run = _settleRun(
-            chips, uint256(keccak256(abi.encode(BOARD_TAG, word, lvl, id))),
-            keccak256(abi.encode(DICE_TAG, word, lvl)),
-            uint160(uint256(keccak256(abi.encode(GEN_PLAYER_TAG, word, lvl, id))))
+            chips, uint256(EntropyLib.hash3(RngTags.DECIMATOR_BOARD, word, id)),
+            bytes32(EntropyLib.hash2(RngTags.DECIMATOR_DICE, word)),
+            uint160(uint256(EntropyLib.hash3(RngTags.DECIMATOR_GENERATED, word, id)))
         );
         uint256 score = uint256(round.totalCreditedStack) * run.peakBankroll / round.count;
         (uint256 winners, bool retained) = _insert(lvl, word, round.capacity, round.winners, (score << 64) | id);
@@ -353,7 +360,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
                 uint256 capacity = round.capacity;
                 uint256 winners = round.winners;
                 uint256 winnersBefore = winners;
-                bytes32 seed = keccak256(abi.encode(DICE_TAG, word, lvl));
+                bytes32 seed = bytes32(EntropyLib.hash2(RngTags.DECIMATOR_DICE, word));
                 uint256 free;
                 assembly ("memory-safe") { free := mload(0x40) }
                 while (cursor < field.count) {
@@ -463,7 +470,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
         // wallet ID, committed with the burn, salts the survival coin.
         uint256 chips = (entry >> CHIPS_SHIFT) & 0x3FFFFFFF;
         Craps.SlipResult memory run = _settleRun(
-            chips, uint256(keccak256(abi.encode(BOARD_TAG, word, lvl, id))), seed, uint32(entry)
+            chips, uint256(EntropyLib.hash3(RngTags.DECIMATOR_BOARD, word, id)), seed, uint32(entry)
         );
         emit DecimatorRun(lvl, id, run.peakBankroll);
         uint256 score = (entry >> STACK_SHIFT) * run.peakBankroll;
@@ -539,7 +546,7 @@ contract DegenerusGameDecimatorModule is DegenerusGameStorage {
     }
 
     function _tieKey(uint256 word, uint24 lvl, uint64 id) private pure returns (uint256) {
-        return (uint256(keccak256(abi.encode(TIE_TAG, word, lvl, id))) & ~uint256(type(uint64).max)) | id;
+        return (uint256(EntropyLib.hash3(RngTags.DECIMATOR_TIE, word, id)) & ~uint256(type(uint64).max)) | id;
     }
 
     function _rank(uint24 lvl, DecBattleRound storage round, uint256 word) private {

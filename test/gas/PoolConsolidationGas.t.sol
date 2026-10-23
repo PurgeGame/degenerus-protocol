@@ -37,7 +37,7 @@ contract ConsolidationLevelSeeder is DegenerusGame {
 }
 
 /// @title PoolConsolidationGas — the consolidation chunk of every level kind, cold.
-/// @notice The chunk is `runDailyPhase`'s last-purchase-day branch: level prize pool record, the
+/// @notice The chunk is `runDailyPhase_g2582`'s last-purchase-day branch: level prize pool record, the
 ///         century prize pool push at x00, the growth round seal, the yield surplus distribution,
 ///         `_consolidatePoolsAndRewardJackpots` (skim, x00 yield dump, BAF arming on a winning x0
 ///         flip or the skip mark plus the x00 incinerator resolve on a losing one, the Decimator

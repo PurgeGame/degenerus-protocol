@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {RngTags} from "./libraries/RngTags.sol";
+
 import {MineFlipGasBounds as GasBounds} from "./libraries/MineFlipGasBounds.sol";
 
 /*
@@ -53,10 +55,14 @@ interface IDegenerusGamePlayer {
     function claimableWinningsOf(address player) external view returns (uint256);
 
     function redemptionReserve() external view returns (uint256);
+
+
     /// @notice Current ordered RNG consumer stage (1 = redemption settlement).
-    function rngConsumerStage() external view returns (uint8);
+    function rngConsumerStage_g379() external view returns (uint8);
     /// @notice Check if game is over.
     function gameOver() external view returns (bool);
+    function resolveAccount_g502(uint32 id, address caller) external view returns (address key, address payee, bool authorized);
+
     /// @notice Resolve account `id` for `caller`: key, payee and whether `caller` may act for it
     ///         (its key, a smurf's owner, or an approved operator). Reverts for an unallocated
     ///         or zero `id`; never reverts on authorization.
@@ -66,6 +72,8 @@ interface IDegenerusGamePlayer {
     function livenessTriggered() external view returns (bool);
     /// @notice Get player's activity score and permanent Game wallet ID (0 = none).
     function playerActivityScore(address player) external view returns (uint256 scorePoints, uint32 walletId);
+    function walletIdOf_g3120(address player) external view returns (uint32);
+
     /// @notice `player`'s current default Game account (0 = none; never allocates).
     function walletIdOf(address player) external view returns (uint32);
     function acquiredBuyer(uint32 id) external view returns (uint32 buyer);
@@ -88,9 +96,11 @@ interface ICoinflipPlayer {
     function withdrawRedeemedFlip(uint256 base) external returns (uint256 removed);
     /// @notice Read a player's auto-rebuy config; `carry` is the rolling FLIP bankroll.
     function coinflipAutoRebuyInfo(address player) external view returns (bool enabled, uint256 stop, uint256 carry, uint24 startDay);
+
+
     /// @notice Credit a FLIP flip stake to wallet `id` (sDGNRS is an authorized flip creditor;
     ///         0 is a no-op).
-    function creditFlip(uint32 id, uint256 amount) external;
+    function creditFlip_g317(uint32 id, uint256 amount) external;
 }
 
 /// @notice Interface for DGNRS wrapper contract used by sDGNRS.
@@ -486,7 +496,7 @@ contract sDGNRS {
     /// @dev Roll in [MIN_ROLL, MAX_ROLL] = [21, 175], 155 values with mean exactly 98, from bits
     ///      above the word's lowest byte (bit 0 is the daily coinflip).
     function _rollFromWord(uint256 word) private pure returns (uint16) {
-        return uint16(((word >> 8) % (MAX_ROLL - MIN_ROLL + 1)) + MIN_ROLL);
+        return uint16((EntropyLib.hash2(RngTags.REDEMPTION_AMOUNT, word) % (MAX_ROLL - MIN_ROLL + 1)) + MIN_ROLL);
     }
 
     // Admission bounds cover the complete beneficiary: the claim and its ETH/ledger funding,
@@ -510,7 +520,7 @@ contract sDGNRS {
         uint32 id = _settlingBatch;
         if (id == 0) { result.done = true; return result; }
         // Stage 1 is never selected under liveness or game over, so this also excludes both.
-        if (game.rngConsumerStage() != 1) revert RedemptionStageBlocked();
+        if (game.rngConsumerStage_g379() != 1) revert RedemptionStageBlocked();
         if (word <= 1) revert NotResolved();
         if (!MineFlipGas.canRun(meter, REDEMPTION_TAIL_GAS, 0)) return result;
 
@@ -522,7 +532,7 @@ contract sDGNRS {
             // word's raw bit 0 (on a daily word that bit is the real coinflip day). Odds match a
             // coinflip day with no bonus; a win pays through creditFlip, whose stake then rides
             // the real flip.
-            uint256 synth = uint256(keccak256(abi.encodePacked(SYNTH_FLIP_TAG, word, id)));
+            uint256 synth = uint256(EntropyLib.hash2(RngTags.REDEMPTION_FLIP, word));
             uint16 flipReward = (synth & 1) == 1 ? FlipRoundLib.coinflipRewardPercent(0, synth, uint24(id)) : 0;
             reserveLeft = _resolveBatch(id, batch, _rollFromWord(word), flipReward);
             result.progressed = true;
@@ -917,7 +927,7 @@ contract sDGNRS {
         // move the refill. Escrowed tokens count as burned once their batch closes, and a close
         // happens inside a request, before its word exists.
         uint256 burned = uint256(centurySupplyCheckpoint) - (uint256(_totalSupply) + _escrowedSupply - 1);
-        uint256 refillPercent = 25 + EntropyLib.hash2(rngWord, uint256(CENTURY_REFILL_TAG) ^ completedLevel) % 51;
+        uint256 refillPercent = 25 + EntropyLib.hash2(RngTags.CENTURY_REFILL, rngWord) % 51;
         uint256 minted = burned * refillPercent / 100;
         uint256 whale = minted / 7;
         uint256 affiliate = (minted * 3) / 7;
@@ -1186,7 +1196,7 @@ contract sDGNRS {
             uint256 principal = (uint256(batch.flipEscrow) * tokens) / batch.tokens;
             if (principal != 0) {
                 flipPaid = principal + (principal * uint256(batch.flipReward)) / 100;
-                coinflip.creditFlip(walletId, flipPaid);
+                coinflip.creditFlip_g317(walletId, flipPaid);
             }
         }
 
@@ -1207,7 +1217,7 @@ contract sDGNRS {
             // with the request that word answers. Live callers pass that word (the miner's
             // session word).
             // The claim's beneficiary ID, committed at the burn, is the owner input.
-            uint256 entropy = EntropyLib.hash2(word, uint256(walletId));
+            uint256 entropy = EntropyLib.hash3(RngTags.REDEMPTION_BOX, word, uint256(walletId));
             game.resolveRedemptionLootbox(walletId, lootboxEth, entropy, actScore, batchId);
         }
 
@@ -1343,10 +1353,10 @@ contract sDGNRS {
     /// @dev Authentication and terminal recipient resolution are outside the miner's ID-only path.
     function _claimant(uint32 id) private view returns (address payee, uint32 walletId) {
         if (id == 0) {
-            return (msg.sender, game.walletIdOf(msg.sender));
+            return (msg.sender, game.walletIdOf_g3120(msg.sender));
         }
         bool authorized;
-        (, payee, authorized) = game.resolveAccount(id, msg.sender);
+        (, payee, authorized) = game.resolveAccount_g502(id, msg.sender);
         if (!authorized) {
             uint32 buyer = game.acquiredBuyer(id);
             if (buyer == 0) revert Unauthorized();

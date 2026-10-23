@@ -13,8 +13,8 @@ import {PriceLookupLib} from "../../contracts/libraries/PriceLookupLib.sol";
 /// @notice The compact AFKing subscription on the deployed protocol: signup without a purchase,
 ///         rewards derived from the checkpoint through the last completed subscriber pass,
 ///         settlement on both sides (the affiliate `claim` drains each sub, whose settlement pays
-///         the sub through `creditFlip`), forfeiture on expiry, the protocol-seat pauses, the
-///         quest hooks, the EV-allowance bypass and the daily draw (`runSubDraw`).
+///         the sub through `creditFlip_g317`), forfeiture on expiry, the protocol-seat pauses, the
+///         quest hooks, the EV-allowance bypass and the daily draw (`runSubDraw_g1232`).
 contract AfkingCompactTest is DeployProtocol {
     DegenerusGameLens private lens;
 
@@ -399,7 +399,7 @@ contract AfkingCompactTest is DeployProtocol {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter != address(game) || logs[i].topics[0] != topic) continue;
             ++draws;
-            assertTrue(uint32(uint256(logs[i].topics[1])) != VAULT_ID, "runSubDraw never picks the Vault");
+            assertTrue(uint32(uint256(logs[i].topics[1])) != VAULT_ID, "runSubDraw_g1232 never picks the Vault");
             (, uint24 span, uint256 prize) = abi.decode(logs[i].data, (uint24, uint24, uint256));
             assertEq(prize, uint256(span) * 10 > 4000 ? 4000 : uint256(span) * 10);
             assertGt(span, 0);

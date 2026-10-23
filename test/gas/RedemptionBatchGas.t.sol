@@ -80,7 +80,7 @@ contract RedemptionBatchGasTest is AutomaticRedemptionSettlementTest {
                     flipPaid = flip != 0;
                 }
             }
-            assertTrue(flipPaid, "winning escrow executes creditFlip");
+            assertTrue(flipPaid, "winning escrow executes creditFlip_g317");
         }
     }
 

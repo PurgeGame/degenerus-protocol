@@ -25,7 +25,7 @@ contract CrapsAccountsProtocolTest is DeployProtocol {
     uint256 internal constant DAY_HIGH_MASK = uint256(0x3F) << 65;
     bytes4 internal constant GAME_E = bytes4(keccak256("E()"));
     bytes4 internal constant BURN_FOR_CRAPS = bytes4(keccak256("burnCoinForCraps(address,uint32,uint256)"));
-    bytes4 internal constant RECORD_CRAPS = bytes4(keccak256("recordCrapsAction(uint32,uint8)"));
+    bytes4 internal constant RECORD_CRAPS = bytes4(keccak256("recordCrapsAction_g14623(uint32,uint8)"));
     bytes4 internal constant RESOLVE_ACCOUNT = bytes4(keccak256("resolveAccount(uint32,address)"));
     bytes32 internal constant COMP_SPENT = keccak256("CrapsCompSpent(uint32,uint256)");
 

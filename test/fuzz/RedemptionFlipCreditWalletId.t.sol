@@ -8,7 +8,7 @@ import {Coinflip} from "../../contracts/Coinflip.sol";
 /// @title RedemptionFlipCreditWalletId -- a redemption win credits FLIP to the claim's wallet ID
 /// @notice The claim already holds the beneficiary's wallet ID (committed at the burn); a batch
 ///         whose synthetic flip wins credits `principal + principal * reward / 100` to that ID
-///         through `creditFlip(id, …)`. The beneficiary never touched Coinflip, so the stake is
+///         through `creditFlip_g317(id, …)`. The beneficiary never touched Coinflip, so the stake is
 ///         visible through walletIdOf without another registration.
 contract RedemptionFlipCreditWalletIdTest is RedemptionFixture {
     bytes32 private constant WALLET_REGISTERED = keccak256("WalletRegistered(uint32,address)");
@@ -31,7 +31,7 @@ contract RedemptionFlipCreditWalletIdTest is RedemptionFixture {
         _burn(alice, sdgnrs.totalSupply() / 1000);
         _closeAsGame();
         settlementWord = _winningWord(100, batchId);
-        vm.mockCall(address(game), abi.encodeWithSignature("rngConsumerStage()"), abi.encode(uint8(1)));
+        vm.mockCall(address(game), abi.encodeWithSignature("rngConsumerStage_g379()"), abi.encode(uint8(1)));
         vm.prank(address(game));
         sdgnrs.runRedemptionWork(settlementWord, 200_000);
 
@@ -44,7 +44,7 @@ contract RedemptionFlipCreditWalletIdTest is RedemptionFixture {
         uint256 flipPaid = principal + (principal * reward) / 100;
         uint256 before = coinflip.coinflipAmount(alice);
 
-        vm.expectCall(address(coinflip), abi.encodeCall(Coinflip.creditFlip, (aliceId, flipPaid)), 1);
+        vm.expectCall(address(coinflip), abi.encodeCall(Coinflip.creditFlip_g317, (aliceId, flipPaid)), 1);
         vm.recordLogs();
         assertTrue(_work(9_000_000), "settlement drains");
         Vm.Log[] memory logs = vm.getRecordedLogs();

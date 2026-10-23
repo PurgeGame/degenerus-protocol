@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {EntropyLib} from "../libraries/EntropyLib.sol";
+import {RngTags} from "../libraries/RngTags.sol";
+
 import {GoldSixLib} from "../libraries/GoldSixLib.sol";
 
 /*
@@ -44,6 +47,8 @@ import {PriceLookupLib} from "../libraries/PriceLookupLib.sol";
 import {MintPaymentKind} from "../interfaces/IDegenerusGame.sol";
 
 interface IGameMinerMaintenance {
+    function minerMaintenancePending_g11976() external view returns (bool);
+
     function minerMaintenancePending() external view returns (bool);
 }
 
@@ -1066,7 +1071,7 @@ abstract contract DegenerusGameStorage {
     }
 
     function _minerMaintenancePending() internal view returns (bool) {
-        return IGameMinerMaintenance(ContractAddresses.CRAPS).minerMaintenancePending();
+        return IGameMinerMaintenance(ContractAddresses.CRAPS).minerMaintenancePending_g11976();
     }
 
     /// @dev `caller` is the account whose donated credit may pay the mid-day threshold gate;
@@ -1124,11 +1129,15 @@ abstract contract DegenerusGameStorage {
 
     error ExternalRequestRefused();
     uint256 internal constant EXTERNAL_READ_GAS = 50_000;
-    uint256 internal constant VRF_REQUEST_GAS = 500_000;
+    uint256 internal constant VRF_REQUEST_MIN_GAS = 500_000;
+    // A request may create its id slot and seal packed state before returning to
+    // the checkpoint caller. These are caller reserves, never coordinator caps.
+    uint256 internal constant VRF_REQUEST_RESERVE = 500_000;
+    uint256 internal constant VRF_READ_RESERVE = 200_000;
 
     /// @dev Only the first, static uint96 field is used; no dynamic tuple is decoded.
     function _vrfLinkBalance() internal view returns (bool ok, uint256 balance) {
-        (ok, balance) = BoundedCall.staticWord(address(vrfCoordinator), EXTERNAL_READ_GAS,
+        (ok, balance) = BoundedCall.staticWordRemaining(address(vrfCoordinator), EXTERNAL_READ_GAS, VRF_READ_RESERVE,
             abi.encodeWithSelector(IVRFCoordinator.getSubscription.selector, vrfSubscriptionId));
         ok = ok && balance <= type(uint96).max;
     }
@@ -1142,7 +1151,7 @@ abstract contract DegenerusGameStorage {
 
     function _boundedVrfRequest(uint16 confirmations) internal returns (bool ok, uint256 id) {
         bytes memory result;
-        (ok, result) = BoundedCall.call(address(vrfCoordinator), 0, VRF_REQUEST_GAS,
+        (ok, result) = BoundedCall.callRemaining(address(vrfCoordinator), VRF_REQUEST_MIN_GAS, VRF_REQUEST_RESERVE,
             abi.encodeWithSelector(IVRFCoordinator.requestRandomWords.selector, VRFRandomWordsRequest({
                 keyHash: vrfKeyHash, subId: vrfSubscriptionId, requestConfirmations: confirmations,
                 callbackGasLimit: 300_000, numWords: 1, extraArgs: hex""
@@ -4132,7 +4141,7 @@ abstract contract DegenerusGameStorage {
         // Most players are not afking subs, so learn the afking flag from the quest-streak read we
         // make anyway: a non-afker returns here with no subscriber lookup. ID 0 has no quest
         // state: (0, false).
-        (uint32 manualStreak, bool afking) = quests.effectiveBaseStreakAndAfking(id);
+        (uint32 manualStreak, bool afking) = quests.effectiveBaseStreakAndAfking_g2654(id);
         if (!afking) return manualStreak;
         (bool live, uint32 a) = _liveAfkingStreak(id);
         return live ? a : manualStreak;
@@ -4425,7 +4434,7 @@ abstract contract DegenerusGameStorage {
     function _packFoilDraw(uint32 mainSet, uint24 lvl, uint24 day, uint256 rngWord)
         internal pure returns (uint256)
     {
-        uint256 seed = uint128(uint256(keccak256(abi.encode(rngWord, day, FOIL_PAYOUT_SEED_TAG))));
+        uint256 seed = uint128(uint256(EntropyLib.hash2(RngTags.FOIL_PAYOUT, rngWord)));
         return uint256(mainSet) | (uint256(lvl) << _FOIL_DRAW_LEVEL_SHIFT)
             | (seed << _FOIL_DRAW_SEED_SHIFT) | _FOIL_DRAW_SEEDED
             | (uint256(day) << _FOIL_DRAW_DAY_SHIFT);

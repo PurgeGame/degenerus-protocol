@@ -54,7 +54,7 @@ contract LiquidationAuditHost is DegenerusGame {
         _setRngRequestActive(false);
         _sdgnrsBonusLevel = level;
         (bool ok, bytes memory result) = ContractAddresses.GAME_AFKING_MODULE
-            .delegatecall(abi.encodeWithSignature("runSubscriberWork(uint24,uint256)", day, uint256(10_000_000)));
+            .delegatecall(abi.encodeWithSignature("runSubscriberWork_g6352(uint24,uint256)", day, uint256(10_000_000)));
         if (!ok) assembly ("memory-safe") { revert(add(result, 32), mload(result)) }
         require(abi.decode(result, (MineFlipGas.Result)).done, "preparation incomplete");
     }

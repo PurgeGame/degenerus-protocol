@@ -24,7 +24,7 @@ import {
  *    - slot 1 is different from slot 0
  *    - emits QuestSlotRolled for both slots
  *  - awardQuestStreakBonus (onlyGame, happy path, clamping)
- *  - handlePurchase (onlyCoin, progress, completion, reward)
+ *  - handlePurchase_g4831 (onlyCoin, progress, completion, reward)
  *  - handleFlip (onlyCoin, progress, completion)
  *  - handleDecimator (onlyCoin, access)
  *  - handleAffiliate (onlyCoin, access)
@@ -354,20 +354,20 @@ describe("DegenerusQuests", function () {
   });
 
   // =========================================================================
-  // 5. handlePurchase - Access Control
+  // 5. handlePurchase_g4831 - Access Control
   // =========================================================================
-  describe("handlePurchase - access control", function () {
+  describe("handlePurchase_g4831 - access control", function () {
     it("reverts OnlyCoin when called by EOA", async function () {
       const { quests, alice } = await loadFixture(questFixture);
       await expect(
-        quests.connect(alice).handlePurchase(ALICE, 2, 0, 0, 0, 0)
+        quests.connect(alice).handlePurchase_g4831(ALICE, 2, 0, 0, 0, 0)
       ).to.be.revertedWithCustomError(quests, "OnlyCoin");
     });
 
     it("succeeds when called by coin contract", async function () {
       const { quests, coin, game, alice } = await loadFixture(questFixture);
       await expect(
-        callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase", [
+        callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase_g4831", [
           ALICE,
           2,
           0,
@@ -380,9 +380,9 @@ describe("DegenerusQuests", function () {
   });
 
   // =========================================================================
-  // 6. handlePurchase - Progress and Completion
+  // 6. handlePurchase_g4831 - Progress and Completion
   // =========================================================================
-  describe("handlePurchase - progress and completion", function () {
+  describe("handlePurchase_g4831 - progress and completion", function () {
     it("returns (0, type, 0, false) when no active quest for player/type", async function () {
       const { quests, coin, game, alice } = await loadFixture(questFixture);
       // The constructor seeds MINT_ETH + DEGENERETTE_ETH for the deploy day, so a
@@ -405,7 +405,7 @@ describe("DegenerusQuests", function () {
         hre.ethers,
         coin,
         quests,
-        "handlePurchase", [ALICE, 1, 0, 0, 0, 0]
+        "handlePurchase_g4831", [ALICE, 1, 0, 0, 0, 0]
       );
       const evs = await getEvents(tx, quests, "QuestProgressUpdated");
       expect(evs.length).to.be.gte(1);
@@ -419,7 +419,7 @@ describe("DegenerusQuests", function () {
         hre.ethers,
         coin,
         quests,
-        "handlePurchase", [ALICE, 2, 0, 0, 0, 0]
+        "handlePurchase_g4831", [ALICE, 2, 0, 0, 0, 0]
       );
       const evs = await getEvents(tx, quests, "QuestCompleted");
       expect(evs.length).to.be.gte(1);
@@ -434,7 +434,7 @@ describe("DegenerusQuests", function () {
         hre.ethers,
         coin,
         quests,
-        "handlePurchase", [ALICE, 2, 0, 0, 0, 0]
+        "handlePurchase_g4831", [ALICE, 2, 0, 0, 0, 0]
       );
       const [reward, , streak, completed] = result;
       expect(completed, "slot 0 must complete").to.be.true;
@@ -449,7 +449,7 @@ describe("DegenerusQuests", function () {
         hre.ethers,
         coin,
         quests,
-        "handlePurchase", [ALICE, 0, 0, 0, 0, 0]
+        "handlePurchase_g4831", [ALICE, 0, 0, 0, 0, 0]
       );
       const [, , , completed] = result;
       expect(completed).to.equal(false);
@@ -459,7 +459,7 @@ describe("DegenerusQuests", function () {
       const { quests, coin, game } = await loadFixture(questFixture);
       await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
       await expect(
-        callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase", [
+        callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase_g4831", [
           0,
           2,
           0,
@@ -473,7 +473,7 @@ describe("DegenerusQuests", function () {
     it("playerQuestStates reflects completion after a successful purchase", async function () {
       const { quests, coin, game, alice } = await loadFixture(questFixture);
       await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
-      await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase", [
+      await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase_g4831", [
         ALICE,
         2,
         0,
@@ -550,7 +550,7 @@ describe("DegenerusQuests", function () {
       );
 
       // First complete slot 0 (MINT_ETH)
-      await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase", [
+      await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase_g4831", [
         ALICE,
         2,
         0,
@@ -707,7 +707,7 @@ describe("DegenerusQuests", function () {
     it("streak increments to 1 on first quest completion", async function () {
       const { quests, coin, game, alice } = await loadFixture(questFixture);
       await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
-      await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase", [
+      await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase_g4831", [
         ALICE,
         2,
         0,
@@ -723,7 +723,7 @@ describe("DegenerusQuests", function () {
       const { quests, coin, game, alice } = await loadFixture(questFixture);
       await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
       // Complete slot 0 twice (second should be no-op for streak)
-      await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase", [
+      await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase_g4831", [
         ALICE,
         2,
         0,
@@ -731,7 +731,7 @@ describe("DegenerusQuests", function () {
       0,
       0,
       ]);
-      await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase", [
+      await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase_g4831", [
         ALICE,
         2,
         0,
@@ -748,7 +748,7 @@ describe("DegenerusQuests", function () {
 
       // Day 1: complete quest (streak = 1)
       await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
-      await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase", [
+      await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase_g4831", [
         ALICE,
         2,
         0,
@@ -767,7 +767,7 @@ describe("DegenerusQuests", function () {
         hre.ethers,
         coin,
         quests,
-        "handlePurchase", [ALICE, 1, 0, 0, 0, 0]
+        "handlePurchase_g4831", [ALICE, 1, 0, 0, 0, 0]
       );
       const evs = await getEvents(tx, quests, "QuestStreakReset");
       expect(evs.length).to.be.gte(1);
@@ -778,7 +778,7 @@ describe("DegenerusQuests", function () {
 
       // Day 1: complete slot 0 (MINT_ETH, target = 1 ticket at current mintPrice)
       await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
-      await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase", [
+      await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase_g4831", [
         ALICE,
         2,
         0,
@@ -793,14 +793,14 @@ describe("DegenerusQuests", function () {
 
       // Days 2-4 each roll a quest alice never completes (real rolled misses — unrolled
       // days would be stall-forgiven instead), then day 5 rolls.
-      // QuestStreakReset fires during the next sync action (handlePurchase triggers syncState).
+      // QuestStreakReset fires during the next sync action (handlePurchase_g4831 triggers syncState).
       await rollQuestAsGame(hre.ethers, game, quests, 2n, 22n);
       await rollQuestAsGame(hre.ethers, game, quests, 3n, 33n);
       await rollQuestAsGame(hre.ethers, game, quests, 4n, 44n);
       await rollQuestAsGame(hre.ethers, game, quests, 5n, 88n);
-      // Call handlePurchase on day 5 - this triggers _questSyncState which fires QuestStreakReset
+      // Call handlePurchase_g4831 on day 5 - this triggers _questSyncState which fires QuestStreakReset
       // Note: slot 0 target is 1 * mintPrice, so 1 ticket completes it, resetting then re-incrementing streak
-      const { tx } = await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase", [
+      const { tx } = await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase_g4831", [
         ALICE,
         1,
         0,
@@ -831,7 +831,7 @@ describe("DegenerusQuests", function () {
       // Roll day 1
       await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
       // Partial progress on day 1
-      await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase", [
+      await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase_g4831", [
         ALICE,
         1,
         0,
@@ -885,7 +885,7 @@ describe("DegenerusQuests", function () {
     it("getPlayerQuestView reflects completed slots", async function () {
       const { quests, coin, game, alice } = await loadFixture(questFixture);
       await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
-      await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase", [
+      await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase_g4831", [
         ALICE,
         2,
         0,
@@ -902,7 +902,7 @@ describe("DegenerusQuests", function () {
     it("playerQuestStates streak matches completed count", async function () {
       const { quests, coin, game, alice } = await loadFixture(questFixture);
       await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
-      await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase", [
+      await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase_g4831", [
         ALICE,
         2,
         0,
@@ -932,7 +932,7 @@ describe("DegenerusQuests", function () {
         hre.ethers,
         coin,
         quests,
-        "handlePurchase", [ALICE, 2, 0, 0, 0, 0]
+        "handlePurchase_g4831", [ALICE, 2, 0, 0, 0, 0]
       );
       const evs = await getEvents(tx, quests, "QuestCompleted");
       expect(evs.length).to.be.gte(1);
@@ -953,7 +953,7 @@ describe("DegenerusQuests", function () {
       await rollQuestAsGame(hre.ethers, game, quests, 1n, 99n);
 
       // Alice completes slot 0
-      await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase", [
+      await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase_g4831", [
         ALICE,
         2,
         0,
@@ -1320,7 +1320,7 @@ describe("DegenerusQuests", function () {
       expect(day, "rolled a daily whose slot 1 is AFFILIATE").to.not.equal(0n);
 
       // Slot 1 cannot settle before slot 0 (always MINT_ETH), so clear it first.
-      await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase", [
+      await callHandlerAsCoin(hre.ethers, coin, quests, "handlePurchase_g4831", [
         ALICE,
         eth(1),
         0,

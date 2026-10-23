@@ -73,7 +73,7 @@ contract CompactOrderGasSeed is DegenerusGame {
 
     function work(uint256 allowance) external returns (bool progressed, bool done) {
         (bool ok, bytes memory returned) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(
-            abi.encodeWithSignature("runHumanBoxWork(uint256)", allowance));
+            abi.encodeWithSignature("runHumanBoxWork_g315(uint256)", allowance));
         if (!ok) assembly ("memory-safe") { revert(add(returned, 32), mload(returned)) }
         (progressed, done,) = abi.decode(returned, (bool, bool, uint256));
     }

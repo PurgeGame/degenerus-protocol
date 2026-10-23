@@ -54,7 +54,7 @@ contract StorageReuseNativeTest is DeployProtocol, NativeGasExport {
     }
 
     function _credit(string memory label, uint256 amount) private {
-        _nativeFixture(label, address(game), address(coinflip), abi.encodeCall(coinflip.creditFlip, (id, amount)));
+        _nativeFixture(label, address(game), address(coinflip), abi.encodeCall(coinflip.creditFlip_g317, (id, amount)));
     }
 
     function test_nativeCreditBranches() public {
@@ -155,14 +155,14 @@ contract StorageReuseNativeTest is DeployProtocol, NativeGasExport {
         uint32 buyer = 100_000;
         while (uint256(keccak256(abi.encodePacked(keccak256("affiliate-payout-roll-v1"),
             GameTimeLib.currentDayIndex(), buyer, code))) % 20 >= 15) ++buyer;
-        bytes memory input = abi.encodeCall(affiliate.payAffiliateCombined, (code, buyer, 8, 10000, 0, 0, 0, 0));
+        bytes memory input = abi.encodeCall(affiliate.payAffiliateCombined_g978, (code, buyer, 8, 10000, 0, 0, 0, 0));
         _nativeFixture("affiliate_fresh", address(game), address(affiliate), input);
-        vm.prank(address(game)); affiliate.payAffiliateCombined(code, buyer, 8, 10000, 0, 0, 0, 0);
+        vm.prank(address(game)); affiliate.payAffiliateCombined_g978(code, buyer, 8, 10000, 0, 0, 0, 0);
         _nativeFixture("affiliate_same_level", address(game), address(affiliate), input);
         _nativeFixture("affiliate_next_level", address(game), address(affiliate),
-            abi.encodeCall(affiliate.payAffiliateCombined, (code, buyer, 9, 10000, 0, 0, 0, 0)));
+            abi.encodeCall(affiliate.payAffiliateCombined_g978, (code, buyer, 9, 10000, 0, 0, 0, 0)));
         _nativeFixture("affiliate_gap_7", address(game), address(affiliate),
-            abi.encodeCall(affiliate.payAffiliateCombined, (code, buyer, 15, 10000, 0, 0, 0, 0)));
+            abi.encodeCall(affiliate.payAffiliateCombined_g978, (code, buyer, 15, 10000, 0, 0, 0, 0)));
         AffiliateStorage.set(address(affiliate), id, 8, (uint256(1) << 35) - 1);
         _nativeFixture("affiliate_capped", address(game), address(affiliate), input);
     }

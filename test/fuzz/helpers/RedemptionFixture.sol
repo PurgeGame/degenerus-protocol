@@ -238,7 +238,7 @@ abstract contract RedemptionFixture is DeployProtocol {
     }
     /// @dev The Game reports the RNG consumer stage that lets the redemption worker run.
     function _mockSettlingStage() internal {
-        vm.mockCall(address(game), abi.encodeWithSignature("rngConsumerStage()"), abi.encode(uint8(1)));
+        vm.mockCall(address(game), abi.encodeWithSignature("rngConsumerStage_g379()"), abi.encode(uint8(1)));
     }
     /// @dev Every redemption-state value a settlement step can move: the batch cursors, the
     ///      reserve and custody figures, the batch terms, sDGNRS's FLIP backing, and each

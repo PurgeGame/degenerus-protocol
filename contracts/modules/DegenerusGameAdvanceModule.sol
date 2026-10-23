@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {RngTags} from "../libraries/RngTags.sol";
+
 /*
  * TERMS OF INTERACTION — submitting a transaction to this contract accepts them.
  *
@@ -126,8 +128,10 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
         emit Advance(STAGE_GAP_BACKFILLED, level);
     }
 
+
+
     /// @notice Game-only daily setup, after publication and complete ticket materialization.
-    function applyDailyWord() external {
+    function applyDailyWord_g1652() external {
         if (address(this) != ContractAddresses.GAME || !rngLockedFlag || !_rngSessionPublished()
             || !ticketsFullyProcessed || !_rngRequestActive() || _livenessTriggered()) revert E();
         uint24 day = rngRequestDay;
@@ -226,8 +230,10 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
         emit Advance(gapDays == 0 ? STAGE_DAILY_WORD_APPLIED : STAGE_GAP_BACKFILLED, lvl);
     }
 
+
+
     /// @notice One ordered daily phase. Every partial payout retains the daily lock.
-    function runDailyPhase(uint256 allowance) external returns (MineFlipGas.Result memory result) {
+    function runDailyPhase_g2582(uint256 allowance) external returns (MineFlipGas.Result memory result) {
         MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
         if (address(this) != ContractAddresses.GAME || !rngLockedFlag || !ticketsFullyProcessed
             || !_rngSessionPublished() || _livenessTriggered()) revert E();
@@ -304,7 +310,7 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
             } else if (!lastPurchase) {
                 if (purchaseLevel == 1) {
                     if (!MineFlipGas.canRun(meter, GasBounds.LEVEL_ONE_DRAW, GasBounds.DAILY_PHASE_TAIL)) return result;
-                    IDegenerusGame(address(this)).emitDailyWinningTraits(word);
+                    _emitLevelOneWinningTraits(word);
                     payDailyFlipJackpot(1, word, 1, 1);
                     result.progressed = true;
                     MineFlipGas.markProgress(meter);
@@ -511,7 +517,7 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
         // the call that closes it, so once the seventh closes no call is made.
         if (degenesisClosed < DEGENESIS_DAYS) {
             (bool okDeg, bytes memory degData) = ContractAddresses.GAME_DEGENESIS_MODULE.delegatecall(
-                abi.encodeWithSelector(IDegenerusGameDegenesisModule.prepareDegenesis.selector, day)
+                abi.encodeWithSelector(IDegenerusGameDegenesisModule.prepareDegenesis_g47.selector, day)
             );
             if (!okDeg) _revertDelegate(degData);
         }
@@ -752,7 +758,7 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
             }
 
             // Additive random 0–10%
-            bps += EntropyLib.hash2(rngWord, uint256(SKIM_BPS_TAG)) % (ADDITIVE_RANDOM_BPS + 1);
+            bps += EntropyLib.hash2(RngTags.POOL_SKIM, rngWord) % (ADDITIVE_RANDOM_BPS + 1);
 
             // Compute take
             uint256 take = (p.next * bps) / 10_000;
@@ -767,9 +773,9 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
                 if (halfWidth > take) halfWidth = take;
 
                 uint256 range = halfWidth * 2 + 1;
-                uint256 varianceWord = EntropyLib.hash2(rngWord, uint256(SKIM_VARIANCE_TAG));
+                uint256 varianceWord = EntropyLib.hash2(RngTags.POOL_VARIANCE_A, rngWord);
                 uint256 roll1 = varianceWord % range;
-                uint256 roll2 = EntropyLib.hash1(varianceWord) % range;
+                uint256 roll2 = EntropyLib.hash2(RngTags.POOL_VARIANCE_B, rngWord) % range;
                 uint256 combined = (roll1 + roll2) / 2;
 
                 if (combined >= halfWidth) {
@@ -806,8 +812,8 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
         uint24 prevMod100 = lvl % 100;
 
 
-        // BAF Jackpot (every 10 levels) — only if the daily flip won (bit 0 of
-        // rngWord = 1). Arming returns the ETH term of the award schedule, a function
+        // BAF Jackpot (every 10 levels) — only if the independent tagged BAF gate wins.
+        // Arming returns the ETH term of the award schedule, a function
         // of the pool alone; that sum leaves futurePool and is reserved in claimablePool
         // here, so every later step reads the settled values. The award stage then
         // draws and pays from the reservation and returns what no candidate took to
@@ -816,7 +822,7 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
         // pre-skip winning-flip credit is filtered out of future claims via the
         // lastBafResolvedDay bump.
         if (prevMod10 == 0) {
-            if ((rngWord & 1) == 1) {
+            if ((EntropyLib.hash2(RngTags.BAF_GATE, rngWord) & 1) == 1) {
                 uint256 bafPct = prevMod100 == 0 ? 20 : (lvl == 50 ? 20 : 10);
                 uint256 bafPoolWei = (baseMemFuture * bafPct) / 100;
 
@@ -856,7 +862,7 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
         // --- x00 keep roll (5d4 dice: 50-80% keep, avg 65%) ---
         // Operates on post-jackpot p.future — all reward jackpots drew first.
         if ((lvl % 100) == 0) {
-            uint256 seed = EntropyLib.hash2(rngWord, uint256(FUTURE_KEEP_TAG));
+            uint256 seed = EntropyLib.hash2(RngTags.POOL_FUTURE_KEEP, rngWord);
             uint256 total;
             unchecked {
                 total = (seed % 4) + ((seed >> 16) % 4) + ((seed >> 32) % 4) + ((seed >> 48) % 4) + ((seed >> 64) % 4);
@@ -1082,7 +1088,7 @@ abstract contract DegenerusGameAdvanceModule is DegenerusGameJackpotModule, Dege
             );
             if (wasLocked) {
                 (bool ok, bytes memory data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(
-                    abi.encodeWithSelector(IGameAfkingModule.runSubDraw.selector, day)
+                    abi.encodeWithSelector(IGameAfkingModule.runSubDraw_g1232.selector, day)
                 );
                 if (!ok) _revertDelegate(data);
             }

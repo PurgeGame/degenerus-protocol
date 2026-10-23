@@ -71,8 +71,8 @@ contract RequestGameSeeder is DegenerusGame {
         claimablePool += uint128(amount);
     }
     function requestOnly(bool daily) external {
-        bytes memory data = daily ? abi.encodeWithSignature("requestDailyRng(uint24)", _afkingResetDay)
-            : abi.encodeWithSignature("requestMinerRng()");
+        bytes memory data = daily ? abi.encodeWithSignature("requestDailyRng_g8190(uint24)", _afkingResetDay)
+            : abi.encodeWithSignature("requestMinerRng_g4954()");
         (bool ok, bytes memory reason) = ContractAddresses.GAME_RNG_MODULE.delegatecall(data);
         if (!ok) assembly ("memory-safe") { revert(add(reason, 32), mload(reason)) }
     }
@@ -361,7 +361,7 @@ contract MineFlipRequestGasTest is DeployProtocol {
     }
     function test_LowGasKeepsArmWithoutAttemptingRequest() public {
         this.configure(Scenario.Arm);
-        vm.expectCall(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("requestMinerRng()"), uint64(0));
+        vm.expectCall(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("requestMinerRng_g4954()"), uint64(0));
         game.mineFlip{gas: 500_000}(0);
         assertEq(table.binding(slot), 1);
         assertEq(coordinator.requests(address(game)), 0);
@@ -372,7 +372,7 @@ contract MineFlipRequestGasTest is DeployProtocol {
         game.mineFlip{gas: Bounds.RNG_MIDDAY_REQUEST + REQUEST_FRAME_GAS}(20_000);
         assertEq(table.binding(slot), 1);
         assertEq(coordinator.requests(address(game)), 0, "caller doubled continuation reserve");
-        game.mineFlip{gas: 1_000_000}(type(uint32).max);
+        game.mineFlip{gas: Bounds.RNG_MIDDAY_REQUEST + REQUEST_FRAME_GAS}(type(uint32).max);
         _assertRequested();
     }
     function test_ExtremeMultiplierStillArmsFirst() public {
@@ -383,7 +383,7 @@ contract MineFlipRequestGasTest is DeployProtocol {
     }
     function test_HeavyCloseWaitsAfterArmWithoutRequestAttempt() public {
         this.configure(Scenario.ArmRedeem);
-        vm.expectCall(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("requestMinerRng()"), uint64(0));
+        vm.expectCall(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("requestMinerRng_g4954()"), uint64(0));
         game.mineFlip{gas: 1_000_000}(0);
         assertEq(table.binding(slot), 1);
         assertEq(coordinator.requests(address(game)), 0);
@@ -395,7 +395,7 @@ contract MineFlipRequestGasTest is DeployProtocol {
     function test_HeavyCloseCanResumeWithMaximumMultiplier() public {
         this.configure(Scenario.ArmRedeem);
         game.mineFlip{gas: 1_000_000}(0);
-        game.mineFlip{gas: 1_000_000}(type(uint32).max);
+        game.mineFlip{gas: Bounds.RNG_MIDDAY_REQUEST + Bounds.RNG_REDEMPTION_CLOSE + REQUEST_FRAME_GAS}(type(uint32).max);
         _assertRequested();
     }
     function test_FundedHeavyContinuationFits() public {
@@ -406,7 +406,7 @@ contract MineFlipRequestGasTest is DeployProtocol {
     }
     function test_DailyBudgetPreservesCertificationAtLowGas() public {
         this.configure(Scenario.CertifyDailyRedeem);
-        vm.expectCall(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("requestDailyRng(uint24)", DAY), uint64(0));
+        vm.expectCall(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("requestDailyRng_g8190(uint24)", DAY), uint64(0));
         game.mineFlip{gas: 1_000_000}(0);
         assertTrue(game.rngComplete());
         assertEq(coordinator.requests(address(game)), 0);
@@ -424,7 +424,7 @@ contract MineFlipRequestGasTest is DeployProtocol {
 
     function test_DailyWithoutRedemptionAlsoUsesItsOwnBudget() public {
         this.configure(Scenario.CertifyDaily);
-        vm.expectCall(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("requestDailyRng(uint24)", DAY), uint64(0));
+        vm.expectCall(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("requestDailyRng_g8190(uint24)", DAY), uint64(0));
         game.mineFlip{gas: 1_000_000}(0);
         assertTrue(game.rngComplete());
         assertEq(coordinator.requests(address(game)), 0);

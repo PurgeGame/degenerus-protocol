@@ -20,7 +20,7 @@ contract TicketOptimizationGas is RoundDrainChunkGas {
         while (!done && calls < 1000) {
             _cool();
             uint256 beforeGas = gasleft();
-            MineFlipGas.Result memory r = h.runTicketWork{gas: GAS_TARGET}(LVL + 1, GAS_TARGET);
+            MineFlipGas.Result memory r = h.runTicketWork_g1150{gas: GAS_TARGET}(LVL + 1, GAS_TARGET);
             done = r.done;
             bool worked = r.progressed;
             uint256 used = beforeGas - gasleft();

@@ -15,7 +15,7 @@ contract AutoDecimatorAdvanceHarness is DegenerusGameAdvanceModule {
     function applyOpeningWord(uint24 day) external {
         if (_recordedDailyWord(day) != 0) return;
         (bool ok, bytes memory err) = ContractAddresses.GAME_ADVANCE_MODULE.delegatecall(
-            abi.encodeWithSelector(DegenerusGameAdvanceModule.applyDailyWord.selector)
+            abi.encodeWithSelector(DegenerusGameAdvanceModule.applyDailyWord_g1652.selector)
         );
         if (!ok) assembly ("memory-safe") { revert(add(err, 32), mload(err)) }
     }
@@ -120,7 +120,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
 
     function _fund(uint256 amount) private {
         vm.prank(address(game));
-        coinflip.creditFlip(HOUSE_ID, amount);
+        coinflip.creditFlip_g317(HOUSE_ID, amount);
     }
 
     function _prepare(uint24 day, uint24 lvl, uint256 word, bool opening) private {
@@ -253,7 +253,7 @@ contract SdgnrsAutoDecimatorTest is DeployProtocol {
         // level(4)+1 = 5, and level 5's far-future pool (2 owners) is exactly the "latched
         // last purchase day's frozen next-level pool" the daily drain gate now mints inside
         // the unified sweep BEFORE rngGate — one full budget per call, one thing per advance
-        // (see runTicketWork's far-future continuation block). That first call resolves
+        // (see runTicketWork_g1150's far-future continuation block). That first call resolves
         // the pool and returns early (STAGE_TICKETS_WORKING); the second call finds the gate
         // clear and reaches rngGate, where the opening-day decimator burn fires.
         game.mineFlip(0);

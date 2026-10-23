@@ -37,7 +37,7 @@ contract BudgetReadFixture is DegenerusGame {
     }
     function workHuman(uint256 allowance) external returns (MineFlipGas.Result memory) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(
-            abi.encodeWithSignature("runHumanBoxWork(uint256)", allowance)
+            abi.encodeWithSignature("runHumanBoxWork_g315(uint256)", allowance)
         );
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
         return abi.decode(data, (MineFlipGas.Result));
@@ -45,7 +45,7 @@ contract BudgetReadFixture is DegenerusGame {
     function workBet(uint256 allowance) external returns (MineFlipGas.Result memory) {
         humanReadComplete = true;
         (bool ok, bytes memory data) = ContractAddresses.GAME_DEGENERETTE_MODULE.delegatecall(
-            abi.encodeWithSignature("runDegeneretteWork(uint256)", allowance)
+            abi.encodeWithSignature("runDegeneretteWork_g670(uint256)", allowance)
         );
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
         return abi.decode(data, (MineFlipGas.Result));

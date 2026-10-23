@@ -15,7 +15,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 contract MiddayRequestWorker is DegenerusGame {
     function requestMidday() external {
         (bool ok, bytes memory reason) = ContractAddresses.GAME_RNG_MODULE.delegatecall(
-            abi.encodeWithSelector(IDegenerusGameRngModule.requestMinerRng.selector));
+            abi.encodeWithSelector(IDegenerusGameRngModule.requestMinerRng_g4954.selector));
         if (!ok) assembly ("memory-safe") { revert(add(reason, 32), mload(reason)) }
     }
 }

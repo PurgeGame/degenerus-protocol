@@ -3,7 +3,7 @@ pragma solidity 0.8.38;
 
 import {Test} from "forge-std/Test.sol";
 import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
-import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
+import {DegenerusGamePassModule} from "../../contracts/modules/DegenerusGamePassModule.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {TicketEntropy} from "../../contracts/libraries/TicketEntropy.sol";
@@ -115,7 +115,7 @@ contract TicketCheckpointDeterminismTest is Test {
         vm.etch(ContractAddresses.GAME, address(new TicketCheckpointHarness()).code);
         h = TicketCheckpointHarness(ContractAddresses.GAME);
         h.initialize(1);
-        vm.etch(ContractAddresses.GAME_FOILPACK_MODULE, address(new DegenerusGameFoilPackModule()).code);
+        vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGamePassModule()).code);
     }
     function player(uint256 i) private pure returns (address) { return address(uint160(0x10000 + i)); }
 
@@ -125,7 +125,7 @@ contract TicketCheckpointDeterminismTest is Test {
         for (; calls < 600; ++calls) {
             bool isLow = !(alternating && calls % 2 == 1);
             uint256 budget = isLow ? low : FULL;
-            MineFlipGas.Result memory r = h.runTicketWork(anchor, budget);
+            MineFlipGas.Result memory r = h.runTicketWork_g1150(anchor, budget);
             if (isLow) {
                 ++lowCalls;
                 if (r.progressed) ++lowProgressed;
@@ -177,7 +177,7 @@ contract TicketCheckpointDeterminismTest is Test {
         vm.revertToStateAndDelete(snap);
         uint256 budget = MineFlipGas.budget(9_000_000, type(uint32).max, true);
         for (uint256 calls; calls < 100; ++calls) {
-            MineFlipGas.Result memory result = h.runTicketWork{gas: 10_000_000}(2, budget);
+            MineFlipGas.Result memory result = h.runTicketWork_g1150{gas: 10_000_000}(2, budget);
             assertTrue(result.progressed || result.done, "mandatory ticket progress");
             if (result.done) {
                 (bytes32 actual, uint256 actualCount) = h.digest(1);
@@ -201,7 +201,7 @@ contract TicketCheckpointDeterminismTest is Test {
         assertTrue(vm.revertToStateAndDelete(snap));
         vm.recordLogs();
         uint256 beforeGas = gasleft();
-        MineFlipGas.Result memory result = h.runTicketWork{gas: 30_000_000}(2, 30_000_000);
+        MineFlipGas.Result memory result = h.runTicketWork_g1150{gas: 30_000_000}(2, 30_000_000);
         uint256 used = beforeGas - gasleft();
         assertTrue(result.done && result.progressed);
         assertLt(used, 30_000_000, "execution fits the supplied gas");
@@ -238,7 +238,7 @@ contract TicketCheckpointDeterminismTest is Test {
         h.commit(WORD, false);
         uint256 snap = vm.snapshotState();
         vm.recordLogs();
-        MineFlipGas.Result memory result = h.runTicketWork{gas: 30_000_000}(2, 30_000_000);
+        MineFlipGas.Result memory result = h.runTicketWork_g1150{gas: 30_000_000}(2, 30_000_000);
         assertTrue(result.done && result.progressed);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 chunks;
@@ -288,14 +288,14 @@ contract TicketCheckpointDeterminismTest is Test {
     function test_terminalSwapNeverResumesStaleCheckpointOnNewQueue() public {
         h.credit(player(0), 1, 600_075);
         h.commit(WORD, false);
-        h.runTicketWork(1, SOLO_CHUNK_ALLOWANCE);
+        h.runTicketWork_g1150(1, SOLO_CHUNK_ALLOWANCE);
         assertEq(h.offset(), ALIGNED_SOLO_ENTRIES, "fixture: solo run left part-drained after one aligned chunk");
         for (uint256 i = 1; i <= 6; ++i) h.credit(player(i), 1, 400);
         h.flipSlot();
         h.terminal(1);
         uint24 anchor = uint24(1 | (1 << 23));
         for (uint256 calls; calls < 50; ++calls) {
-            MineFlipGas.Result memory r = h.runTicketWork(anchor, FULL);
+            MineFlipGas.Result memory r = h.runTicketWork_g1150(anchor, FULL);
             assertTrue(r.progressed || r.done, "terminal drain made no progress");
             if (r.done) return;
         }
@@ -416,14 +416,14 @@ contract TicketCheckpointDeterminismTest is Test {
         h.commit(WORD, false);
         uint256 snap = vm.snapshotState();
         (bool ok, bytes memory first) = address(h).call{gas: 10_000_000}(
-            abi.encodeCall(h.runTicketWork, (uint24(2), FULL))
+            abi.encodeCall(h.runTicketWork_g1150, (uint24(2), FULL))
         );
         assertTrue(ok);
         bytes32 control = h.control();
         (bytes32 inventory,) = h.digest(1);
         uint80 pending = h.owed(player(0), 1, false);
         assertTrue(vm.revertToStateAndDelete(snap));
-        (ok, first) = address(h).call{gas: 20_000_000}(abi.encodeCall(h.runTicketWork, (uint24(2), FULL)));
+        (ok, first) = address(h).call{gas: 20_000_000}(abi.encodeCall(h.runTicketWork_g1150, (uint24(2), FULL)));
         assertTrue(ok);
         assertEq(h.control(), control, "tx gas only must not select a different prefix");
         (bytes32 other,) = h.digest(1);
@@ -434,7 +434,7 @@ contract TicketCheckpointDeterminismTest is Test {
         h.initialize(0);
         h.credit(player(0), 1, 600_075);
         h.commit(WORD, false);
-        h.runTicketWork(1, SOLO_CHUNK_ALLOWANCE);
+        h.runTicketWork_g1150(1, SOLO_CHUNK_ALLOWANCE);
         assertEq(h.offset(), ALIGNED_SOLO_ENTRIES, "actual partial owner after one aligned chunk");
         uint256 snap = vm.snapshotState();
         finish(1, FULL, false);
@@ -476,7 +476,7 @@ contract TicketCheckpointDeterminismTest is Test {
         uint256 calls;
         for (; calls < 600 && !done; ++calls) {
             (bool ok, bytes memory data) = address(h).call{gas: SOLO_CHUNK_ALLOWANCE}(
-                abi.encodeCall(h.runTicketWork, (uint24(2), FULL))
+                abi.encodeCall(h.runTicketWork_g1150, (uint24(2), FULL))
             );
             assertTrue(ok, "low-gas transaction returns at an admitted checkpoint");
             MineFlipGas.Result memory result = abi.decode(data, (MineFlipGas.Result));
@@ -503,7 +503,7 @@ contract TicketCheckpointDeterminismTest is Test {
         bool done;
         for (uint256 calls; calls < 300 && !done; ++calls) {
             (bool ok, bytes memory data) = address(h).call{gas: FOIL_STEP_ALLOWANCE}(
-                abi.encodeCall(h.runTicketWork, (uint24(3), FULL))
+                abi.encodeCall(h.runTicketWork_g1150, (uint24(3), FULL))
             );
             assertTrue(ok, "foil checkpoint must reserve the return tail");
             MineFlipGas.Result memory result = abi.decode(data, (MineFlipGas.Result));

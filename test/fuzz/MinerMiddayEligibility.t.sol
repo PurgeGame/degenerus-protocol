@@ -33,7 +33,7 @@ contract MinerMiddayEligibilityTest is Test {
         game = MinerMiddayEligibilityHarness(ContractAddresses.GAME);
         vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
         vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("minerMaintenancePending()"), abi.encode(false));
-        vm.mockCall(ContractAddresses.COINFLIP, abi.encodeWithSignature("creditFlip(uint32,uint256)"), bytes(""));
+        vm.mockCall(ContractAddresses.COINFLIP, abi.encodeWithSignature("creditFlip_g317(uint32,uint256)"), bytes(""));
         vm.mockCall(ContractAddresses.VRF_COORDINATOR, abi.encodeWithSelector(IVRFCoordinator.getSubscription.selector),
             abi.encode(uint96(100 ether), uint96(0), uint64(0), address(0), new address[](0)));
         game.seed(DegenerusGameStorage.MinerAction.Idle);
@@ -44,7 +44,7 @@ contract MinerMiddayEligibilityTest is Test {
         game.seedValue(99, 100, 1, false);
         assertEq(game.minerAction(), uint8(DegenerusGameStorage.MinerAction.Idle));
         assertFalse(game.advanceDue());
-        vm.expectCall(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("requestMinerRng()"), uint64(0));
+        vm.expectCall(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("requestMinerRng_g4954()"), uint64(0));
         vm.expectRevert(DegenerusGameMinerModule.NoWork.selector);
         game.mineFlip{gas: 16_700_000}(0);
     }
@@ -52,9 +52,9 @@ contract MinerMiddayEligibilityTest is Test {
     function test_BelowThresholdKeepsTicketProgressWithoutRequestAttempt() public {
         game.seed(DegenerusGameStorage.MinerAction.Tickets);
         game.seedValue(99, 100, 1, false);
-        vm.mockCall(ContractAddresses.GAME_TICKET_MODULE, abi.encodeWithSignature("runTicketWork(uint24,uint256)"),
+        vm.mockCall(ContractAddresses.GAME_TICKET_MODULE, abi.encodeWithSignature("runTicketWork_g1150(uint24,uint256)"),
             abi.encode(true, true, uint256(65)));
-        vm.expectCall(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("requestMinerRng()"), uint64(0));
+        vm.expectCall(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("requestMinerRng_g4954()"), uint64(0));
         vm.recordLogs();
         game.mineFlip{gas: 16_700_000}(0);
         assertTrue(game.rngComplete());

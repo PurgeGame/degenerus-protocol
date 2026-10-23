@@ -60,7 +60,7 @@ abstract contract GameAfkingClaims is DegenerusGameMintStreakUtils {
             base = elapsed * AFFILIATE_BASE_PER_UNIT * quantity;
         }
         emit AfkingFlipClaimed(id, owed);
-        coinflip.creditFlip(id, owed); // whole → base units
+        coinflip.creditFlip_g317(id, owed); // whole → base units
         emit AffiliateBaseDrained(id, base);
     }
 

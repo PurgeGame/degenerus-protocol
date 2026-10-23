@@ -174,7 +174,7 @@ contract AutomaticRedemptionSettlementTest is RedemptionFixture {
 
     function test_RevertedFlipCreditRevertsWholeSettlement() public {
         uint32 day = _resolveWinningFlip();
-        vm.mockCallRevert(address(coinflip), abi.encodeWithSelector(coinflip.creditFlip.selector), hex"12345678");
+        vm.mockCallRevert(address(coinflip), abi.encodeWithSelector(coinflip.creditFlip_g317.selector), hex"12345678");
         _assertWorkRevertsUnchanged(day, 9_000_000);
         assertGt(_claimTokens(alice, day), 0);
         assertGt(_claimTokens(bob, day), 0);

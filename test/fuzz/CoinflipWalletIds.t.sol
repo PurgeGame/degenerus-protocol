@@ -320,7 +320,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         uint32 id = _giveWalletId(p);
         uint24 day = _today() + 1;
         vm.prank(GAME);
-        coinflip.creditFlip(id, 5000);
+        coinflip.creditFlip_g317(id, 5000);
         _warpToDay(day);
         _resolve(day, true);
         uint256 owed = coinflip.previewClaimCoinflips(p);
@@ -341,7 +341,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         uint32 id = _giveWalletId(p);
         uint24 d = _today();
         vm.prank(GAME);
-        coinflip.creditFlip(id, 5_000);
+        coinflip.creditFlip_g317(id, 5_000);
         assertEq(coinflip.coinflipAmount(p), 5_000, "view resolves the ID through the Game");
 
         _warpToDay(d + 1);
@@ -448,7 +448,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         assertEq(_gameId(q), 0);
     }
 
-    /// @notice creditFlip / creditFlipBatch / creditFlipPair skip ID 0 and amount 0 with no
+    /// @notice creditFlip_g317 / creditFlipBatch / creditFlipPair_g578 skip ID 0 and amount 0 with no
     ///         storage write and no event; mixed batches credit only the valid legs.
     function test_CreditApis_SkipZeroIdAndZeroAmount() public {
         address a = makeAddr("credit_a");
@@ -460,8 +460,8 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         vm.recordLogs();
         vm.record();
         vm.startPrank(GAME);
-        coinflip.creditFlip(0, 1_000);
-        coinflip.creditFlip(ida, 0);
+        coinflip.creditFlip_g317(0, 1_000);
+        coinflip.creditFlip_g317(ida, 0);
         uint32[] memory ids = new uint32[](2);
         uint256[] memory amts = new uint256[](2);
         ids[0] = 0;
@@ -469,7 +469,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         ids[1] = idb;
         amts[1] = 0;
         coinflip.creditFlipBatch(ids, amts);
-        coinflip.creditFlipPair(0, 7, ida, 0);
+        coinflip.creditFlipPair_g578(0, 7, ida, 0);
         vm.stopPrank();
         (, bytes32[] memory writes) = vm.accesses(address(coinflip));
         assertEq(writes.length, 0, "zero legs write nothing");
@@ -493,13 +493,13 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         assertEq(_lane(target, 0), 0);
 
         vm.prank(GAME);
-        coinflip.creditFlipPair(idb, 7, 0, 9);
+        coinflip.creditFlipPair_g578(idb, 7, 0, 9);
         assertEq(_lane(target, idb), 7);
         assertEq(_lane(target, 0), 0);
 
         vm.expectRevert(Coinflip.OnlyFlipCreditors.selector);
         vm.prank(a);
-        coinflip.creditFlip(ida, 1);
+        coinflip.creditFlip_g317(ida, 1);
     }
 
     /// @notice Any mix of IDs (zero and repeats included) and amounts across the three credit
@@ -520,8 +520,8 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         vm.record();
         vm.startPrank(GAME);
         coinflip.creditFlipBatch(batchIds, batchAmts);
-        coinflip.creditFlipPair(ids[0], amounts[1], ids[2], amounts[3]);
-        coinflip.creditFlip(ids[3], amounts[0]);
+        coinflip.creditFlipPair_g578(ids[0], amounts[1], ids[2], amounts[3]);
+        coinflip.creditFlip_g317(ids[3], amounts[0]);
         vm.stopPrank();
         (, bytes32[] memory writes) = vm.accesses(address(coinflip));
         _assertNoKeyZeroWrite(writes, target);
@@ -553,7 +553,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         uint24 target = _today() + 1;
 
         vm.prank(GAME);
-        coinflip.creditFlip(id, STAKE_LANE_MAX - 150);
+        coinflip.creditFlip_g317(id, STAKE_LANE_MAX - 150);
         assertEq(_lane(target, id), STAKE_LANE_MAX - 50);
 
         vm.expectRevert(Coinflip.StakeAboveDailyCap.selector);
@@ -562,7 +562,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(GAME);
-        coinflip.creditFlip(id, 1_000);
+        coinflip.creditFlip_g317(id, 1_000);
         assertEq(_lane(target, id), STAKE_LANE_MAX, "credit saturates");
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bool seen;
@@ -576,7 +576,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         }
         assertTrue(seen);
         vm.prank(GAME);
-        coinflip.creditFlip(id, 1);
+        coinflip.creditFlip_g317(id, 1);
         assertEq(_lane(target, id), STAKE_LANE_MAX);
     }
 
@@ -604,7 +604,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         assertEq(coinflip.coinflipAmountById(1), SEED + _lane(target, 1), "vault seed on its own ID");
         assertEq(coinflip.coinflipAmountById(2), SEED + _lane(target, 2), "sDGNRS seed on its own ID");
         vm.prank(GAME);
-        coinflip.creditFlip(1, 3_000);
+        coinflip.creditFlip_g317(1, 3_000);
         assertEq(coinflip.coinflipAmountById(1), SEED + 3_000, "a credit to ID 1 is the vault's");
         (uint256 n,,) = _registrations(vm.getRecordedLogs());
         assertEq(n, 0);

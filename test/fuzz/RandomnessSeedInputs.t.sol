@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {RngTags} from "../../contracts/libraries/RngTags.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
@@ -100,15 +101,15 @@ contract RandomnessSeedInputsTest is DeployProtocol {
         word = word < 2 ? word + 2 : word;
         uint8 route = routeSeed % 3;
         {
-            // First-box seeds by route, keyed by the wallet ID: the queued entry at (buffer 1,
-            // position 0), the AFKing box at its frozen day 100, the redemption order's box 1.
+            // First-box seeds: queued position 0, the subscriber ID, and redemption box 1.
+            // Each root already identifies its request cohort and fixed owner.
             uint256 id = game.walletIdOf(PLAYER);
             uint256 seed = route == 0
                 ? uint256(keccak256(abi.encode(
-                    uint256(keccak256(abi.encode(QUEUED_ORDER_DOMAIN, word, uint256(1), uint256(0)))), id, BOX_OPEN_TAG, uint256(1))))
+                    RngTags.BOX_OPEN, uint256(keccak256(abi.encode(RngTags.BOX_ORDER, word, uint256(0)))), uint256(1))))
                 : route == 1
-                    ? uint256(keccak256(abi.encode(word, id, AFKING_BOX_TAG, uint256(100))))
-                    : uint256(keccak256(abi.encode(word, id, BOX_OPEN_TAG, uint256(1))));
+                    ? uint256(keccak256(abi.encode(RngTags.BOX_AFKING, word, id)))
+                    : uint256(keccak256(abi.encode(RngTags.BOX_OPEN, word, uint256(1))));
             uint256 rewardRoll = uint16(seed >> 40) % 20;
             // Pass denomination intentionally chooses passes or a fallback spin from
             // the award size. Compare identity only when both sizes take the same branch.

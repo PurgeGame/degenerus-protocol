@@ -224,8 +224,8 @@ contract WwxrpWalletIdsTest is DeployProtocol {
         assertEq(uint256(vm.load(address(game), _boonSlot1(pid))), slot1, "raw key = boonPacked(id).slot1");
         assertEq((slot1 >> WWXRP_LANE_SHIFT) & 3, 1);
 
-        vm.expectCall(address(game), abi.encodeCall(DegenerusGame.consumeCoinflipBoon, (pid)), 1);
-        vm.expectCall(address(game), abi.encodeCall(DegenerusGame.consumeCoinflipBoon, (qid)), 0);
+        vm.expectCall(address(game), abi.encodeCall(DegenerusGame.consumeCoinflipBoon_g2902, (pid)), 1);
+        vm.expectCall(address(game), abi.encodeCall(DegenerusGame.consumeCoinflipBoon_g2902, (qid)), 0);
         vm.expectCall(address(game), abi.encodeWithSelector(DegenerusGame.registerWallet.selector), 0);
         (uint256 pScore,) = game.playerActivityScore(p);
         (uint256 qScore,) = game.playerActivityScore(q);
@@ -258,8 +258,8 @@ contract WwxrpWalletIdsTest is DeployProtocol {
         uint32 pid = _giveWalletId(p);
         _seedWwxrpLane(pid, 2);
 
-        vm.expectCall(address(game), abi.encodeCall(DegenerusGame.consumeCoinflipBoon, (uint32(0))), 1);
-        vm.expectCall(address(game), abi.encodeCall(DegenerusGame.consumeCoinflipBoon, (pid)), 1);
+        vm.expectCall(address(game), abi.encodeCall(DegenerusGame.consumeCoinflipBoon_g2902, (uint32(0))), 1);
+        vm.expectCall(address(game), abi.encodeCall(DegenerusGame.consumeCoinflipBoon_g2902, (pid)), 1);
         vm.prank(app);
         assertEq(wwxrp.consumeBoon(0), 0);
         vm.prank(app);
@@ -294,7 +294,7 @@ contract WwxrpWalletIdsTest is DeployProtocol {
         assertEq(wid, id, "winning entry view returns the ID");
 
         address runner = makeAddr("claim_runner");
-        vm.expectCall(address(coinflip), abi.encodeCall(Coinflip.creditFlip, (id, 10_000)), 1);
+        vm.expectCall(address(coinflip), abi.encodeCall(Coinflip.creditFlip_g317, (id, 10_000)), 1);
         vm.recordLogs();
         vm.prank(runner);
         wwxrp.claim(day, 0);
@@ -369,7 +369,7 @@ contract WwxrpWalletIdsTest is DeployProtocol {
         uint256 roll = uint256(keccak256(abi.encodePacked(DOM_INCIN_WINNER, address(wwxrp), uint24(200), word))) % total;
         uint32 expected = c1 > roll ? id1 : id2;
 
-        vm.expectCall(address(coinflip), abi.encodeCall(Coinflip.creditFlip, (expected, 100_000)), 1);
+        vm.expectCall(address(coinflip), abi.encodeCall(Coinflip.creditFlip_g317, (expected, 100_000)), 1);
         vm.recordLogs();
         vm.prank(address(game));
         uint32 winner = wwxrp.resolveIncinerator(200, word);

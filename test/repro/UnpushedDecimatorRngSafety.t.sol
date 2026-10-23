@@ -59,7 +59,7 @@ contract UnpushedDecimatorSessionSeeder is DegenerusGameStorage {
     /// @dev The RequestMidday stage worker, the engine's only mid-day request path, for the caller.
     function requestMidday() external {
         (bool ok, bytes memory data) = ContractAddresses.GAME_RNG_MODULE.delegatecall(
-            abi.encodeWithSelector(IDegenerusGameRngModule.requestMinerRng.selector)
+            abi.encodeWithSelector(IDegenerusGameRngModule.requestMinerRng_g4954.selector)
         );
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
     }
@@ -112,7 +112,7 @@ contract UnpushedDecimatorRngSafety is DeployProtocol {
         for (uint64 id = 1; id <= COUNT; ++id) {
             uint32 playerId = _giveWalletId(address(uint160(0xD000 + id)));
             vm.prank(ContractAddresses.COIN);
-            game.recordDecBurn(playerId, LVL, 2000, 10_000, 0);
+            game.recordDecBurn_g5574(playerId, LVL, 2000, 10_000, 0);
         }
         _seed(abi.encodeCall(UnpushedDecimatorSessionSeeder.closeWindow, ()));
         vm.prank(address(game));

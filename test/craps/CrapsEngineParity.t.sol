@@ -98,6 +98,9 @@ contract CrapsEngineParity is Test {
                 )
             );
         }
-        assertEq(bytes32(acc), INLINE_ENGINE_DIGEST, "duration engine regression digest changed");
+        // Deliberately repinned after the tagged RNG migration. The per-case engine,
+        // inline reference and uncapped-prefix parity assertions above remain unchanged.
+        assertEq(bytes32(acc), bytes32(0x5de2d4c4e55ced1a8867755ee9c7a7bb0b436e43932b6c2d073d08260d44bacd),
+            "duration engine regression digest changed");
     }
 }

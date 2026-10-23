@@ -22,7 +22,7 @@ import {
  *  - processCoinflipPayouts (onlyGame, win/loss outcomes, record pool drip)
  *  - claimCoinflips (happy path, rngLocked guard)
  *  - claimCoinflipsFromFlip / consumeCoinflipsForBurn (onlyFlip)
- *  - creditFlip / creditFlipBatch (onlyFlipCreditors)
+ *  - creditFlip_g317 / creditFlipBatch (onlyFlipCreditors)
  *  - setCoinflipAutoRebuy (enable, disable, rngLocked guard)
  *  - setCoinflipAutoRebuyTakeProfit
  *  - Record system (BigRecordUpdated: bootstrap, ratchet, and pool-share claim on the
@@ -656,13 +656,13 @@ describe("Coinflip", function () {
   });
 
   // =========================================================================
-  // 7. creditFlip / creditFlipBatch (onlyFlipCreditors)
+  // 7. creditFlip_g317 / creditFlipBatch (onlyFlipCreditors)
   // =========================================================================
-  describe("creditFlip / creditFlipBatch", function () {
-    it("creditFlip reverts when called by unauthorized address", async function () {
+  describe("creditFlip_g317 / creditFlipBatch", function () {
+    it("creditFlip_g317 reverts when called by unauthorized address", async function () {
       const { coinflip, alice, bob } = await loadFixture(deployFullProtocol);
       await expect(
-        coinflip.connect(alice).creditFlip(1, flip(100))
+        coinflip.connect(alice).creditFlip_g317(1, flip(100))
       ).to.be.revertedWithCustomError(coinflip, "OnlyFlipCreditors");
     });
 
@@ -678,7 +678,7 @@ describe("Coinflip", function () {
       ).to.be.revertedWithCustomError(coinflip, "OnlyFlipCreditors");
     });
 
-    it("creditFlip from game contract emits CoinflipStakeUpdated", async function () {
+    it("creditFlip_g317 from game contract emits CoinflipStakeUpdated", async function () {
       const { coinflip, game, alice } = await loadFixture(deployFullProtocol);
       const aliceId = await giveWalletId(game, alice.address);
       const gameAddr = await game.getAddress();
@@ -691,7 +691,7 @@ describe("Coinflip", function () {
 
       const tx = await coinflip
         .connect(gameSigner)
-        .creditFlip(aliceId, flip(500));
+        .creditFlip_g317(aliceId, flip(500));
       await hre.ethers.provider.send("hardhat_stopImpersonatingAccount", [gameAddr]);
 
       const evs = await getEvents(tx, coinflip, "CoinflipStakeUpdated");
@@ -700,7 +700,7 @@ describe("Coinflip", function () {
       expect(evs[0].args.amount).to.equal(flip(500));
     });
 
-    it("creditFlip ignores wallet ID 0 and zero amount silently", async function () {
+    it("creditFlip_g317 ignores wallet ID 0 and zero amount silently", async function () {
       const { coinflip, game, alice } = await loadFixture(deployFullProtocol);
       const aliceId = await giveWalletId(game, alice.address);
       const gameAddr = await game.getAddress();
@@ -714,14 +714,14 @@ describe("Coinflip", function () {
       // wallet ID 0: should not emit CoinflipStakeUpdated
       const tx1 = await coinflip
         .connect(gameSigner)
-        .creditFlip(0, flip(500));
+        .creditFlip_g317(0, flip(500));
       const evs1 = await getEvents(tx1, coinflip, "CoinflipStakeUpdated");
       expect(evs1.length).to.equal(0);
 
       // zero amount: should not emit CoinflipStakeUpdated
       const tx2 = await coinflip
         .connect(gameSigner)
-        .creditFlip(aliceId, 0n);
+        .creditFlip_g317(aliceId, 0n);
       const evs2 = await getEvents(tx2, coinflip, "CoinflipStakeUpdated");
       expect(evs2.length).to.equal(0);
 
@@ -774,18 +774,18 @@ describe("Coinflip", function () {
       expect(evs.length).to.equal(1);
     });
 
-    it("creditFlipPair reverts when called by unauthorized address", async function () {
+    it("creditFlipPair_g578 reverts when called by unauthorized address", async function () {
       const { coinflip, alice, bob, carol } = await loadFixture(
         deployFullProtocol
       );
       await expect(
         coinflip
           .connect(alice)
-          .creditFlipPair(1, flip(100), 2, flip(200))
+          .creditFlipPair_g578(1, flip(100), 2, flip(200))
       ).to.be.revertedWithCustomError(coinflip, "OnlyFlipCreditors");
     });
 
-    it("creditFlipPair credits both non-zero legs identically to creditFlipBatch", async function () {
+    it("creditFlipPair_g578 credits both non-zero legs identically to creditFlipBatch", async function () {
       const { coinflip, game, alice, bob } = await loadFixture(
         deployFullProtocol
       );
@@ -801,7 +801,7 @@ describe("Coinflip", function () {
 
       const txPair = await coinflip
         .connect(gameSigner)
-        .creditFlipPair(aliceId, flip(100), bobId, flip(200));
+        .creditFlipPair_g578(aliceId, flip(100), bobId, flip(200));
       const pairEvs = await getEvents(txPair, coinflip, "CoinflipStakeUpdated");
 
       const txBatch = await coinflip
@@ -818,7 +818,7 @@ describe("Coinflip", function () {
       }
     });
 
-    it("creditFlipPair skips a zero-ID leg and a zero-amount leg", async function () {
+    it("creditFlipPair_g578 skips a zero-ID leg and a zero-amount leg", async function () {
       const { coinflip, game, alice, bob } = await loadFixture(
         deployFullProtocol
       );
@@ -835,7 +835,7 @@ describe("Coinflip", function () {
       // Zero-address second leg: only the first credits.
       const tx1 = await coinflip
         .connect(gameSigner)
-        .creditFlipPair(aliceId, flip(100), 0, flip(200));
+        .creditFlipPair_g578(aliceId, flip(100), 0, flip(200));
       const evs1 = await getEvents(tx1, coinflip, "CoinflipStakeUpdated");
       expect(evs1.length).to.equal(1);
       expect(evs1[0].args.id).to.equal(aliceId);
@@ -843,7 +843,7 @@ describe("Coinflip", function () {
       // Zero-amount first leg: only the second credits.
       const tx2 = await coinflip
         .connect(gameSigner)
-        .creditFlipPair(aliceId, 0n, bobId, flip(50));
+        .creditFlipPair_g578(aliceId, 0n, bobId, flip(50));
       const evs2 = await getEvents(tx2, coinflip, "CoinflipStakeUpdated");
       expect(evs2.length).to.equal(1);
       expect(evs2[0].args.id).to.equal(bobId);
@@ -851,7 +851,7 @@ describe("Coinflip", function () {
       // Both legs zero: nothing credits, no revert.
       const tx3 = await coinflip
         .connect(gameSigner)
-        .creditFlipPair(0, 0n, 0, 0n);
+        .creditFlipPair_g578(0, 0n, 0, 0n);
       await hre.ethers.provider.send("hardhat_stopImpersonatingAccount", [gameAddr]);
       const evs3 = await getEvents(tx3, coinflip, "CoinflipStakeUpdated");
       expect(evs3.length).to.equal(0);

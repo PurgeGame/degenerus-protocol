@@ -30,12 +30,12 @@ contract FFKeyHarness is DegenerusGameStorage {
 /// reported execution gas and capped base fee, independently of the supplied gas limit.
 contract KeeperRewardRoutingSameResults is DeployProtocol {
     // -------------------------------------------------------------------------
-    // creditFlip-count / amount oracle — the recipient-isolated DIFFERENTIAL instrument
+    // creditFlip_g317-count / amount oracle — the recipient-isolated DIFFERENTIAL instrument
     // (PRESERVED VERBATIM: 351-04/05/08 port this topic-decode).
     // -------------------------------------------------------------------------
 
     /// @dev keccak256("CoinflipStakeUpdated(uint32,uint24,uint256,uint256)") — emitted once per
-    ///      creditFlip. topics[1] is the indexed player (recipient isolation); the non-indexed
+    ///      creditFlip_g317. topics[1] is the indexed player (recipient isolation); the non-indexed
     ///      `amount` is the first 32 bytes of `data`.
     bytes32 private constant COINFLIP_STAKE_UPDATED_SIG =
         keccak256("CoinflipStakeUpdated(uint32,uint24,uint256,uint256)");
@@ -302,7 +302,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     ///         predicate stays true forever, but the only remaining advance work is the one-time 30-day
     ///         final sweep. With no sweep pending (GO_TIME==0 here, mirroring the real within-30-day /
     ///         already-swept states) mineFlip refuses the idle crank with NoWork() rather than running the
-    ///         gameover advance leg as a free unrewarded no-op. Zero creditFlip either way.
+    ///         gameover advance leg as a free unrewarded no-op. Zero creditFlip_g317 either way.
     function testGameoverAdvanceUnrewarded() public {
         // Settle, then make a fresh day-advance due.
         _settleGame(0x90E00004);
@@ -324,7 +324,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         assertEq(
             _countCoinflipStakeUpdated(),
             0,
-            "GAMEOVER: zero creditFlip emissions on the idle-crank NoWork revert"
+            "GAMEOVER: zero creditFlip_g317 emissions on the idle-crank NoWork revert"
         );
     }
 
@@ -392,7 +392,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
 
     /// @notice GASOPT-01 (per-entry owed drain) same-results: a MULTI-PLAYER far-future ticket backlog
     ///         drains every player's owed to ZERO through the engine's ticket worker
-    ///         (TicketModule `runTicketWork`, mineFlip's Tickets stage) on its far-future drain. A broken drain would skip / double-process a player, leaving
+    ///         (TicketModule `runTicketWork_g1150`, mineFlip's Tickets stage) on its far-future drain. A broken drain would skip / double-process a player, leaving
     ///         non-zero owed or mis-decrementing it; the
     ///         per-player owed RESULTS are byte-identical to the expected per-player accounting (full drain).
     function testGasopt01OwedMapHoistSameResults() public {
@@ -412,7 +412,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
         assertGe(queuedBefore, M, "pre: the far-future queue holds at least the M seeded players");
 
         // Drive the protocol through the advance cycle past the FF-processing range for level L. The
-        // engine's ticket worker (runTicketWork) drains the multi-player queue.
+        // engine's ticket worker (runTicketWork_g1150) drains the multi-player queue.
         _driveAdvanceThroughFarFutureProcessing(L);
 
         // SAME-RESULTS: every seeded player's owed drained to ZERO (the rk-loop-invariant pointer processed
@@ -434,7 +434,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
     }
 
     // =========================================================================
-    // creditFlip-count / amount oracle (recipient-isolated — the DIFFERENTIAL instrument)
+    // creditFlip_g317-count / amount oracle (recipient-isolated — the DIFFERENTIAL instrument)
     // =========================================================================
 
     function _countCoinflipStakeUpdated() internal returns (uint256 count) {
@@ -627,7 +627,7 @@ contract KeeperRewardRoutingSameResults is DeployProtocol {
 
     /// @dev Drive the protocol through enough advance cycles that the far-future queue for level L is
     ///      processed (the constructor + seeded multi-player FF entries drain through the engine's
-    ///      ticket worker, runTicketWork).
+    ///      ticket worker, runTicketWork_g1150).
     function _driveAdvanceThroughFarFutureProcessing(uint24 L) internal {
         uint256 simTime = block.timestamp;
         address poolFiller = makeAddr("ff_pool_filler");

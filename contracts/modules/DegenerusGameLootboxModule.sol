@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {RngTags} from "../libraries/RngTags.sol";
+
 import {GameBoxInternals} from "./GameBoxInternals.sol";
 
 import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol";
@@ -398,12 +400,11 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
     /// @dev Draw the order's EV allowance, then resolve its `count` boxes of `size` wei each for
     ///      wallet `c.id` off `c.rootWord`, then settle the order. The caller fills the order's
     ///      identity, level, frozen score, boost and distress into `c`. Box `n` (1-based) seeds
-    ///      from hash4(rootWord, id, BOX_OPEN_TAG, n) and the order's boon draws from
-    ///      hash4(rootWord, id, BOX_BOON_TAG, boonIndex). Queued entries pass their order root
-    ///      and physical buffer; the sDGNRS redemption order passes its ID-mixed word and its
-    ///      tagged batch, which no buffer can equal. Every box resolves as its OWN roll.
-    function _rollOrder(BoxRoll memory c, uint256 boonIndex, uint256 count, uint256 size) private {
-        c.boonSeed = EntropyLib.hash4(c.rootWord, uint256(c.id), BOX_BOON_TAG, boonIndex);
+    ///      from hash3(BOX_OPEN, rootWord, n) and the order's boon draws from
+    ///      hash2(BOX_BOON, rootWord). The queued position or redemption beneficiary is
+    ///      already bound in that root. Every box resolves as its OWN roll.
+    function _rollOrder(BoxRoll memory c, uint256 count, uint256 size) private {
+        c.boonSeed = EntropyLib.hash2(RngTags.BOX_BOON, c.rootWord);
         // The EV multiplier stays FROZEN at buy (`score`) — that is the anti-gaming knob. The
         // box rolls from the LIVE level at open, which the holder cannot steer: the
         // permissionless bounty opens every ready box as soon as it can. One allowance draw
@@ -476,7 +477,7 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
             // read as box ETH.
             if (paid != 0) emit LootBoxDgnrsBatch(id, acc.dgnrs, paid);
         }
-        if (acc.flip != 0) coinflip.creditFlip(id, acc.flip);
+        if (acc.flip != 0) coinflip.creditFlip_g317(id, acc.flip);
         if (acc.wwxrp != 0) wwxrp.creditPrize(id, acc.wwxrp);
         if ((acc.passNormal | acc.passHigh) != 0) _deliverPasses(id, acc);
     }
@@ -538,7 +539,7 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
                 // Seed = the entry's committed root (fixed before the buffer's word is requested,
                 // unknowable at buy) + wallet ID + domain + this box's position in the order.
                 // Size only prices the award; the nonce already distinguishes every box.
-                uint256 seed = EntropyLib.hash4(c.rootWord, uint256(c.id), BOX_OPEN_TAG, ++c.nonce);
+                uint256 seed = EntropyLib.hash3(RngTags.BOX_OPEN, c.rootWord, ++c.nonce);
                 _resolveLootboxCommon(
                     c.id,
                     c.index,
@@ -559,7 +560,7 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
         _boxRollBoxBoons(c.id, _lootboxBoonBudget(scaled), count, scaled, c.currentLevel, c.boonSeed, 0);
     }
 
-    /// @dev Domain of a queued entry's root: hash4(QUEUED_ORDER_DOMAIN, word, buffer, position).
+    /// @dev Domain of a queued entry's root: hash3(BOX_ORDER, word, position).
     uint256 private constant QUEUED_ORDER_DOMAIN = 0x5175657565644f72646572; // "QueuedOrder"
 
     /// @dev Event-tag bit of a queued entry: QUEUED_ENTRY_TAG | position << 1 | buffer. It keeps
@@ -590,14 +591,14 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
         BoxRoll memory c;
         c.id = uint32(entry);
         c.acc.id = c.id;
-        c.rootWord = EntropyLib.hash4(QUEUED_ORDER_DOMAIN, rngWord, buffer, position);
+        c.rootWord = EntropyLib.hash3(RngTags.BOX_ORDER, rngWord, position);
         c.index = QUEUED_ENTRY_TAG | (uint48(position) << 1) | buffer;
         c.currentLevel = currentLevel;
         c.score = uint16(_scoreFromCode((entry >> LB_SCORE_SHIFT) & LB_SCORE_MASK));
         c.boostBps = (entry >> LB_BOOST_SHIFT) & LB_BOOST_MASK;
         if (entry & LB_DISTRESS != 0) c.distressBps = 10_000;
         _rollOrder(
-            c, buffer, _boxEntryCount(entry), ((entry >> LB_UNITS_SHIFT) & LB_UNITS_MASK) * LB_VALUE_UNIT
+            c, _boxEntryCount(entry), ((entry >> LB_UNITS_SHIFT) & LB_UNITS_MASK) * LB_VALUE_UNIT
         );
     }
 
@@ -638,7 +639,7 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
         // ID, committed with that bet, feed it. No live, post-word-reveal input enters the seed,
         // so neither claim timing nor a futurePrizePool nudge can re-roll the outcome. No live
         // day is read here either — boon expiry uses the boon path's own currentDay.
-        uint256 seed = EntropyLib.hash2(rngWord, uint256(id));
+        uint256 seed = EntropyLib.hash2(RngTags.BOX_DIRECT, rngWord);
         uint24 targetLevel = _rollTargetLevel(currentLevel, seed);
 
         uint256 evMultiplierBps = _lootboxEvMultiplierFromScore(uint256(activityScore));
@@ -696,8 +697,8 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
         // nonzero size. Never queued, so no queued-entry width or cap applies.
         uint256 boxes = (amount - 1) / GasBounds.REDEMPTION_BOX_UNIT + 1;
         if (boxes > GasBounds.REDEMPTION_BOXES_MAX) boxes = GasBounds.REDEMPTION_BOXES_MAX;
-        // No queue position: the ID-mixed redemption word is the root and the tagged batch keys
-        // the boon draw.
+        // No queue position: the beneficiary-tagged redemption word identifies this order.
+        // The batch remains an event tag; it does not select a second random stream.
         BoxRoll memory c;
         c.id = id;
         c.acc.id = id;
@@ -707,7 +708,7 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
         c.score = activityScore > ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS
             ? uint16(ActivityCurveLib.ACTIVITY_EFFECTIVE_CAP_POINTS)
             : activityScore;
-        _rollOrder(c, c.index, boxes, amount / boxes / 1 gwei * 1 gwei);
+        _rollOrder(c, boxes, amount / boxes / 1 gwei * 1 gwei);
     }
 
     /// @notice Credit the direct half of an sDGNRS redemption claim to `id`'s claimable winnings.
@@ -730,9 +731,9 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
     ///
     ///        1. the RNG `rngWord` is a CALLER-PASSED param (the GameAfkingModule open-leg
     ///           passes the frozen stamp day's word), NOT read from any index-keyed map; and
-    ///        2. the seed `day` is the FROZEN stamped process day (a passed param), NOT the
-    ///           live `_simulatedDayIndex()` — the day MUST stay frozen in the seed or a
-    ///           self-mining id could grind the seed by open-timing; and
+    ///        2. the seed uses that committed word and subscriber ID. Exactly one stamped
+    ///           open per subscriber consumes a session word, so the stamp day adds no
+    ///           discriminator and the live clock never enters the seed; and
     ///        3. the per-level EV allowance is neither read nor drawn: the subscription's 1-8
     ///           unit daily cap bounds these boxes instead.
     ///
@@ -764,7 +765,7 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
     ///      passes — the Degenerette's betId-mixed word).
     /// @param id Box owner (resolved by the GameAfkingModule open-leg from the sub).
     /// @param amount The stamped spend in wei (boons OFF ⇒ amount == spend).
-    /// @param day The boundary-pinned PROCESS day stamped at process (frozen in the seed).
+    /// @param day The boundary-pinned process day retained in the call ABI and emitted entry tag.
     /// @param rngWord The active published session word, retained until all pending boxes finish.
     /// @param activityScore The stamped activity score in whole points (the FROZEN EV input).
     function resolveAfkingBox(uint32 id, uint256 amount, uint24 day, uint256 rngWord, uint16 activityScore)
@@ -778,10 +779,9 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
     {
         if (amount == 0) return;
 
-        // Seed = the CALLER-PASSED active session word + the subscriber's wallet ID + the FROZEN
-        // stamped `day` (prevents seed-grinding by open-timing) + this route's domain.
+        // The action tag, committed session word and subscriber ID identify this open.
         // The amount sizes the award and never selects the outcome.
-        uint256 seed = EntropyLib.hash4(rngWord, uint256(id), AFKING_BOX_TAG, day);
+        uint256 seed = EntropyLib.hash3(RngTags.BOX_AFKING, rngWord, uint256(id));
 
         // LIVE level, exactly like resolveLootboxDirect: auto-open removes the
         // id's ability to time the level, so the box rolls from the live level with
@@ -860,13 +860,11 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
     /// @param currentLevel Open level (`level + 1`, the level new tickets route to); the
     ///        target-level roll's base and the FLIP legs' price basis.
     /// @param seed Per-resolution 256-bit keccak seed (single-source-of-entropy threaded through all sub-rolls and bit-sliced per-consumer)
-    /// @dev One keccak seed per box, derived by the caller from the committed word and the
-    ///      box's immutable identity, with the owner's wallet ID as the owner input — queued
-    ///      entry: hash4(orderRoot, id, BOX_OPEN_TAG, nonce) where orderRoot =
-    ///      hash4(QUEUED_ORDER_DOMAIN, word, buffer, position); sDGNRS redemption order:
-    ///      hash4(redemptionWord, id, BOX_OPEN_TAG, nonce), the redemption word being already
-    ///      ID-mixed; direct auto-resolve: hash2(rngWord, id); afking:
-    ///      hash4(rngWord, id, AFKING_BOX_TAG, frozenDay) — and bit-sliced per consumer:
+    /// @dev One tagged seed per box. Queued entries use hash3(BOX_OPEN, orderRoot, nonce),
+    ///      with orderRoot = hash3(BOX_ORDER, word, position). Redemption orders use
+    ///      hash3(BOX_OPEN, redemptionWord, nonce), with the beneficiary already keyed in
+    ///      redemptionWord. Direct opens use hash2(BOX_DIRECT, callerSeed); AFKing uses
+    ///      hash3(BOX_AFKING, word, subscriberId). The resulting seed is bit-sliced:
     ///        bits[0..15]    rangeRoll % 100         (_rollTargetLevel)
     ///        bits[16..23]   near-offset % 5         (_rollTargetLevel)
     ///        bits[24..39]   far-offset % 46         (_rollTargetLevel)
@@ -877,11 +875,10 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
     ///        bits[224..255] fracRoundUp % 100      (_settleLootboxRoll ticket whole-collapse;
     ///        uint32 window, bias ~2e-8)
     ///      One box, one roll: no split and no second chunk. The boon draw is not sliced from
-    ///      this seed — the Boon module rolls it from hash2(boonSeed, nonce) >> 120 (queued
-    ///      entry: boonSeed = hash4(orderRoot, id, BOX_BOON_TAG, buffer); redemption order:
-    ///      hash4(redemptionWord, id, BOX_BOON_TAG, taggedBatch); single-box resolvers pass the
-    ///      box seed at nonce 0). The Degenerette-spin rolls (WWXRP / FLIP-spins / ETH-spin) derive
-    ///      their sub-seeds via hash2(seed, BOX_*_SPIN_TAG) and consume no primary bits.
+    ///      this seed: the Boon module uses hash3(BOX_BOON_LANE, boonSeed, nonce) >> 120.
+    ///      Orders use hash2(BOX_BOON, orderRoot); single-box resolvers pass
+    ///      their independently keyed box seed. Spin sub-actions use their named RngTags
+    ///      constants and consume no primary bits.
     /// @param payColdBustConsolation Whether a ticket-path cold-bust (`whole == 0`) pays the
     ///        roll's `_boxWwxrpStake` in WWXRP; `true` for every box order (queued entries and
     ///        the redemption order, through `_rollBoxes`) and `resolveAfkingBox`, `false` only
@@ -991,7 +988,7 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
         // to nothing. The roll keys on a domain-separated hash of this roll's own seed,
         // consuming none of the primary chunk's documented bit windows.
         uint256 flipAmount = flipOut > FlipRoundLib.FLIP_ROUND_THRESHOLD
-            ? FlipRoundLib.roundFlipToHundreds(flipOut, EntropyLib.hash2(rollSeed, FLIP_ROUND_TAG))
+            ? FlipRoundLib.roundFlipToHundreds(flipOut, EntropyLib.hash2(RngTags.BOX_ROUND, rollSeed))
             : FlipRoundLib.floorWholeFlip(flipOut);
 
         bool roundedUp;
@@ -1111,7 +1108,7 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
         } else if (roll < 14) {
             // 15% chance: one WWXRP Degenerette spin staking the roll's size-scaled WWXRP.
             wwxrpOut = _callWwxrpSpin(
-                id, _boxWwxrpSpinStake(amount), activityScore, EntropyLib.hash2(seed, BOX_WWXRP_SPIN_TAG)
+                id, _boxWwxrpSpinStake(amount), activityScore, EntropyLib.hash2(RngTags.BOX_WWXRP_SPIN, seed)
             );
             wasSpin = true;
         } else if (roll == 14) {
@@ -1135,7 +1132,7 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
             // (no pool / recirc) → safe on every box path.
             uint256 stake = (_largeFlipOut(amount, seed, currentLevel) * LOOTBOX_FLIP_SPINS_STAKE_BPS) / 10_000;
             if (stake != 0) {
-                flipOut = _callFlipSpins(id, stake, activityScore, EntropyLib.hash2(seed, BOX_FLIP_SPIN_TAG));
+                flipOut = _callFlipSpins(id, stake, activityScore, EntropyLib.hash2(RngTags.BOX_FLIP_SPIN, seed));
                 wasSpin = true;
             }
         } else {
@@ -1157,7 +1154,7 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
                         uint256 paid = _creditDgnrsReward(acc, pendingDgnrs);
                         if (paid != 0) emit LootBoxDgnrsBatch(id, pendingDgnrs, paid);
                     }
-                    _callEthSpin(id, ethStake, activityScore, EntropyLib.hash2(seed, BOX_ETH_SPIN_TAG));
+                    _callEthSpin(id, ethStake, activityScore, EntropyLib.hash2(RngTags.BOX_ETH_SPIN, seed));
                     // The child may have changed Pool.Lootbox even when the parent had nothing
                     // pending. Force any later parent DGNRS roll to observe the live balance.
                     acc.dgnrsPoolLoaded = false;
@@ -1230,7 +1227,7 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
             // The fractional pass, decided on its own extractor: the chance of the extra one is
             // exactly the fraction left over. The modulo bias from reducing a 256-bit uniform by
             // a ~2.48e22 unit is far below any threshold that could matter here.
-            if (remainder != 0 && EntropyLib.hash2(seed, BOX_PASS_ROUND_TAG) % unit < remainder) {
+            if (remainder != 0 && EntropyLib.hash2(RngTags.BOX_PASS_ROUND, seed) % unit < remainder) {
                 ++count;
             }
         }
@@ -1238,7 +1235,7 @@ abstract contract DegenerusGameLootboxModule is GameBoxInternals, GamePurchaseBo
             // Rounded away — take the consolation spin instead. Additive by design: it is not
             // deducted from the budget and not netted off anywhere else.
             acc.wwxrp += _callWwxrpSpin(
-                id, _boxWwxrpSpinStake(amount), activityScore, EntropyLib.hash2(seed, BOX_PASS_SPIN_TAG)
+                id, _boxWwxrpSpinStake(amount), activityScore, EntropyLib.hash2(RngTags.BOX_PASS_SPIN, seed)
             );
             return true;
         }

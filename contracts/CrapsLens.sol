@@ -6,6 +6,8 @@ import {CrapsPreferenceLib} from "./libraries/CrapsPreferenceLib.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
 
 interface ICrapsStorageReader {
+    function extsload_g8132(bytes32 slot) external view returns (bytes32);
+
     function extsload(bytes32 slot) external view returns (bytes32);
     function extsload(bytes32[] calldata slots) external view returns (bytes32[] memory);
 }
@@ -26,7 +28,7 @@ library CrapsLensReader {
     error RngNotReady();
 
     function read(address table, uint256 slot) internal view returns (uint256) {
-        return uint256(ICrapsStorageReader(table).extsload(bytes32(slot)));
+        return uint256(ICrapsStorageReader(table).extsload_g8132(bytes32(slot)));
     }
 
     function mapped(address table, uint256 root, uint256 key) internal view returns (uint256) {

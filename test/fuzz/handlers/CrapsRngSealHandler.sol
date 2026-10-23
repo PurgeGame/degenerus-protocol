@@ -456,7 +456,7 @@ contract CrapsRngSealHandler is Test {
     ///      through the measured Craps step, the read-cohort worker mineFlip calls.
     function _settleReadCrapsMeasured() internal {
         for (uint256 i; i < 96; i++) {
-            if (game.rngConsumerStage() == 6) {
+            if (game.rngConsumerStage_g379() == 6) {
                 if (!_keep()) return;
                 continue;
             }
@@ -1008,7 +1008,7 @@ contract CrapsRngSealHandler is Test {
     ///      live RNG consumer (stage 6), otherwise the maintenance worker.
     function _callCrapsStep() internal returns (bool progressed) {
         bool ok;
-        if (game.rngConsumerStage() == 6) {
+        if (game.rngConsumerStage_g379() == 6) {
             uint48 read = RecyclingState.readBuffer(address(game));
             vm.prank(address(game));
             try JackpotBattle(address(craps)).runCrapsReadWork(read, gasleft()) returns (MineFlipGas.Result memory r) {

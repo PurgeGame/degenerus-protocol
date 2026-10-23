@@ -649,7 +649,7 @@ contract GameWalletIdViews is DeployProtocol {
             abi.encodeWithSelector(IDegenerusAffiliate.getReferrerIdById.selector),
             abi.encode(rid)
         );
-        vm.expectCall(address(coinflip), abi.encodeWithSelector(ICoinflip.creditFlip.selector, rid));
+        vm.expectCall(address(coinflip), abi.encodeWithSelector(ICoinflip.creditFlip_g317.selector, rid));
         (Vm.Log[] memory logs,) = _referrerCase(1);
         (uint256 credited, uint256 events) = _credited(logs, rid);
         assertEq(events, 1, "one referrer credit");
@@ -659,7 +659,7 @@ contract GameWalletIdViews is DeployProtocol {
     }
 
     function test_DegeneretteUnreferredLegCreditsVaultId() public {
-        vm.expectCall(address(coinflip), abi.encodeWithSelector(ICoinflip.creditFlip.selector, uint32(1)));
+        vm.expectCall(address(coinflip), abi.encodeWithSelector(ICoinflip.creditFlip_g317.selector, uint32(1)));
         (Vm.Log[] memory logs,) = _referrerCase(1);
         (uint256 credited,) = _credited(logs, 1);
         assertGt(credited, 0, "unreferred: VAULT (ID 1) credited");
@@ -671,7 +671,7 @@ contract GameWalletIdViews is DeployProtocol {
             abi.encodeWithSelector(IDegenerusAffiliate.getReferrerIdById.selector),
             abi.encode(uint32(0))
         );
-        vm.expectCall(address(coinflip), abi.encodeWithSelector(ICoinflip.creditFlip.selector, uint32(0)));
+        vm.expectCall(address(coinflip), abi.encodeWithSelector(ICoinflip.creditFlip_g317.selector, uint32(0)));
         (Vm.Log[] memory logs,) = _referrerCase(1);
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].emitter == address(coinflip) && logs[i].topics[0] == STAKE_UPDATED) {
@@ -887,7 +887,7 @@ contract GameWalletIdViews is DeployProtocol {
     function test_H6_DeityPassOwnerKeepsIdTruth() public { _assertOwnerRegisteredMidPurchase(4); }
 
     // =====================================================================
-    // 15. Mint: creditFlipPair by IDs; redeemFlip quest and queue by the new ID
+    // 15. Mint: creditFlipPair_g578 by IDs; redeemFlip quest and queue by the new ID
     // =====================================================================
 
     function test_PurchaseCreditsPairByIds() public {
@@ -896,17 +896,17 @@ contract GameWalletIdViews is DeployProtocol {
         vm.deal(buyer, 10 ether);
         vm.mockCall(
             address(quests),
-            abi.encodeWithSelector(IDegenerusQuests.handlePurchase.selector),
+            abi.encodeWithSelector(IDegenerusQuests.handlePurchase_g4831.selector),
             abi.encode(uint256(0), uint8(0), uint32(0), false, false)
         );
         vm.mockCall(
             address(affiliate),
-            abi.encodeWithSelector(IDegenerusAffiliate.payAffiliateCombined.selector),
+            abi.encodeWithSelector(IDegenerusAffiliate.payAffiliateCombined_g978.selector),
             abi.encode(winnerId, uint256(500), uint256(300))
         );
         // The call carries the buyer ID first and the returned winner ID with its credit.
         uint256 value = 4 * PriceLookupLib.priceForLevel(game.level() + 1);
-        vm.expectCall(address(coinflip), abi.encodeWithSelector(ICoinflip.creditFlipPair.selector, buyerId));
+        vm.expectCall(address(coinflip), abi.encodeWithSelector(ICoinflip.creditFlipPair_g578.selector, buyerId));
         vm.recordLogs();
         vm.prank(buyer);
         game.purchase{value: value}(0, 1_600, 0, bytes32(0), MintPaymentKind.DirectEth, false);
@@ -923,7 +923,7 @@ contract GameWalletIdViews is DeployProtocol {
         uint32 expectedId = uint32(_walletsLength());
         vm.expectCall(
             address(quests),
-            abi.encodeWithSelector(IDegenerusQuests.handlePurchase.selector, expectedId, uint256(0))
+            abi.encodeWithSelector(IDegenerusQuests.handlePurchase_g4831.selector, expectedId, uint256(0))
         );
         vm.recordLogs();
         vm.prank(buyer);
@@ -978,7 +978,7 @@ contract GameWalletIdViews is DeployProtocol {
         );
         vm.mockCall(
             address(affiliate),
-            abi.encodeWithSelector(IDegenerusAffiliate.affiliateBonusPointsBest.selector, game.level(), id),
+            abi.encodeWithSelector(IDegenerusAffiliate.affiliateBonusPointsBest_g3878.selector, game.level(), id),
             abi.encode(uint256(6))
         );
 

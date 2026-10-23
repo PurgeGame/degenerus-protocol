@@ -139,24 +139,24 @@ contract GameCrapsPendingMirrorTest is DeployProtocol {
         assertTrue(game.boxesPending(), "empty read frontier must be traversed");
         game.mineFlip(0);
         assertFalse(game.boxesPending());
-        vm.prank(ContractAddresses.CRAPS); game.setCrapsRngPending(0, true);
+        vm.prank(ContractAddresses.CRAPS); game.setCrapsRngPending_g1406(0, true);
         assertTrue(game.boxesPending(), "Craps-only work is discoverable");
-        vm.prank(ContractAddresses.CRAPS); game.setCrapsRngPending(0, false);
+        vm.prank(ContractAddresses.CRAPS); game.setCrapsRngPending_g1406(0, false);
         assertFalse(game.boxesPending());
         RecyclingState.seedWord(address(game), 0, bytes32(uint256(1)));
         assertFalse(game.boxesPending(), "missing word cannot be opened");
     }
     function test_OnlyPinnedCrapsCanMutateIndependentPendingBits() public {
         uint256 before = uint256(game.extsload(bytes32(GameSlots.LOOTBOX_RNG_PACKED)));
-        vm.expectRevert(DegenerusGameStorage.E.selector); game.setCrapsRngPending(0, true);
-        vm.prank(ContractAddresses.CRAPS); game.setCrapsRngPending(0, true);
-        vm.prank(ContractAddresses.CRAPS); game.setCrapsRngPending(1, true);
+        vm.expectRevert(DegenerusGameStorage.E.selector); game.setCrapsRngPending_g1406(0, true);
+        vm.prank(ContractAddresses.CRAPS); game.setCrapsRngPending_g1406(0, true);
+        vm.prank(ContractAddresses.CRAPS); game.setCrapsRngPending_g1406(1, true);
         assertEq(uint256(game.extsload(bytes32(GameSlots.LOOTBOX_RNG_PACKED))), before | (uint256(3) << 250));
-        vm.prank(ContractAddresses.CRAPS); game.setCrapsRngPending(1, false);
+        vm.prank(ContractAddresses.CRAPS); game.setCrapsRngPending_g1406(1, false);
         assertEq(uint256(game.extsload(bytes32(GameSlots.LOOTBOX_RNG_PACKED))), before | (uint256(1) << 250));
-        vm.prank(ContractAddresses.CRAPS); game.setCrapsRngPending(0, false);
+        vm.prank(ContractAddresses.CRAPS); game.setCrapsRngPending_g1406(0, false);
         assertEq(uint256(game.extsload(bytes32(GameSlots.LOOTBOX_RNG_PACKED))), before);
         vm.prank(ContractAddresses.CRAPS); vm.expectRevert(DegenerusGameStorage.E.selector);
-        game.setCrapsRngPending(2, true);
+        game.setCrapsRngPending_g1406(2, true);
     }
 }

@@ -174,7 +174,7 @@ contract DegenesisSettleBoundsFuzz is DegenesisGasBase {
 /// @title DegenesisPrepareBoundsFuzz -- the request's split and pricing never revert, and fit
 /// @notice Any subset of the seven cohorts nonempty (zero-volume days included), any split flags,
 ///         volumes from one unit to 2^46, any number already closed, an active cohort or none,
-///         the inventory full or drained, and any request day: prepareDegenesis returns, and its
+///         the inventory full or drained, and any request day: prepareDegenesis_g47 returns, and its
 ///         cold cost fits DEGENESIS_REQUEST_GAS on Osaka and on the no-reservoir Glamsterdam total.
 contract DegenesisPrepareBoundsFuzz is DegenesisGasBase {
     function setUp() public {

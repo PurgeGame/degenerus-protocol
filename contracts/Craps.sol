@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {EntropyLib} from "./libraries/EntropyLib.sol";
+import {RngTags} from "./libraries/RngTags.sol";
+
 /// @title Craps
 /// @notice A self-contained, stateless resolver for one craps shooter's hand.
 ///
@@ -496,36 +499,16 @@ contract Craps {
     /// @dev Exposed so a single hand of a run can be pulled out and replayed on its own, and so a
     ///      whole run can be checked off-chain from the one word.
     function handSeed(bytes32 seed, uint256 i) internal pure returns (bytes32 h) {
-        // keccak256(abi.encodePacked(seed, i)) computed over the EVM scratch space: the 64-byte
-        // preimage fits in 0x00..0x3F exactly, so the digest is identical and nothing is allocated.
-        assembly ("memory-safe") {
-            mstore(0x00, seed)
-            mstore(0x20, i)
-            h := keccak256(0x00, 0x40)
-        }
+        return bytes32(EntropyLib.hash3(RngTags.CRAPS_HAND, uint256(seed), i));
     }
 
     /// @dev Exact `keccak256(abi.encode(a, b))` over the EVM scratch space. Kept here because
     ///      table seeding, mapping-slot reads and several settlement draws all share this shape.
-    function _hash2(uint256 a, uint256 b) internal pure returns (uint256 h) {
-        assembly ("memory-safe") {
-            mstore(0x00, a)
-            mstore(0x20, b)
-            h := keccak256(0x00, 0x40)
-        }
-    }
+
 
     /// @dev Exact `keccak256(abi.encode(a, b, c))`, using temporary free memory without moving
     ///      its pointer. Three words do not fit in the EVM's 64-byte scratch region.
-    function _hash3(uint256 a, uint256 b, uint256 c) internal pure returns (uint256 h) {
-        assembly ("memory-safe") {
-            let ptr := mload(0x40)
-            mstore(ptr, a)
-            mstore(add(ptr, 0x20), b)
-            mstore(add(ptr, 0x40), c)
-            h := keccak256(ptr, 0x60)
-        }
-    }
+
 
     // ---------------------------------------------------------------------------------------
     // Core
@@ -563,12 +546,7 @@ contract Craps {
                 if (i == (wins[1] & 0xFF)) {
                     wins[2] = returned - (st & ST_DONT_WON == 0 ? 0 : uint256(b.dontPass) * FLIP);
                 }
-                uint256 w;
-                assembly ("memory-safe") {
-                    mstore(0x00, seed)
-                    mstore(0x20, i)
-                    w := keccak256(0x00, 0x40)
-                }
+                uint256 w = EntropyLib.hash3(RngTags.CRAPS_ROLL, uint256(seed), i);
                 uint256 t = (uint256(uint32(w)) % 6) + (uint256(uint32(w >> 32)) % 6) + 2;
 
                 uint256 point = st & ST_POINT_MASK;
@@ -690,12 +668,7 @@ contract Craps {
                 if (i == (wins[1] & 0xFF)) {
                     wins[2] = returned - (st & ST_DONT_WON == 0 ? 0 : uint256(b.dontPass) * FLIP);
                 }
-                uint256 w;
-                assembly ("memory-safe") {
-                    mstore(0x00, seed)
-                    mstore(0x20, i)
-                    w := keccak256(0x00, 0x40)
-                }
+                uint256 w = EntropyLib.hash3(RngTags.CRAPS_ROLL, uint256(seed), i);
                 uint256 t = (uint256(uint32(w)) % 6) + (uint256(uint32(w >> 32)) % 6) + 2;
 
                 uint256 point = st & ST_POINT_MASK;
@@ -790,21 +763,12 @@ contract Craps {
     ///      — so settlement order cannot change the result. It is the same salt the board scatter
     ///      already uses, so a player's whole run is decorrelated from the field by one key.
     function _survived(bytes32 seed, uint256 n, uint256 salt) internal pure returns (bool) {
-        return _playerDraw(SURVIVAL_TAG, seed, n, salt) & 1 == 1;
+        return EntropyLib.hash4(RngTags.CRAPS_SURVIVAL, uint256(seed), n, salt) & 1 == 1;
     }
 
     /// @dev Exact `abi.encode(tag, seed, n, salt)` digest without allocating or advancing the
     ///      free-memory pointer. The survival draw uses this four-word preimage layout.
-    function _playerDraw(uint256 tag, bytes32 seed, uint256 n, uint256 salt) private pure returns (uint256 draw) {
-        assembly ("memory-safe") {
-            let ptr := mload(0x40)
-            mstore(ptr, tag)
-            mstore(add(ptr, 0x20), seed)
-            mstore(add(ptr, 0x40), n)
-            mstore(add(ptr, 0x60), salt)
-            draw := keccak256(ptr, 0x80)
-        }
-    }
+
 
     /// @dev THE MERIT VERDICT as one lexicographic scalar, so the common fold is one comparison.
     ///      Built by `_rankOf`. One hundred and five
@@ -924,10 +888,9 @@ contract Craps {
                 // ten bettable legs are exactly fields 0..9, the dark side last. The draw hashes
                 // the same two words `abi.encode(word, i)` would, out of scratch space so the loop
                 // allocates none.
+                uint256 draw = EntropyLib.hash3(RngTags.CRAPS_SCATTER_CHIP, word, i);
                 assembly ("memory-safe") {
-                    mstore(0x00, word)
-                    mstore(0x20, i)
-                    let p := add(b, mul(mod(keccak256(0x00, 0x40), 10), 0x20))
+                    let p := add(b, mul(mod(draw, 10), 0x20))
                     mstore(p, add(mload(p), chipFlip))
                 }
             }

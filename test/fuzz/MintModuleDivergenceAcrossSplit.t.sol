@@ -21,7 +21,7 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 // per-player trait-id occurrence digest, read from storage via vm.load, must
 // match across the two paths.
 //
-// Host: the ticket worker `runTicketWork` (the one mineFlip's Tickets stage
+// Host: the ticket worker `runTicketWork_g1150` (the one mineFlip's Tickets stage
 // delegatecalls) is called directly on the deployed TicketModule, so its own
 // storage (identical DegenerusGameStorage layout) hosts the queue, owed lanes and
 // trait buffers; the Game's storage is not perturbed. No contracts/*.sol is mutated.
@@ -144,16 +144,16 @@ contract MintModuleDivergenceAcrossSplitTest is DeployProtocol {
         return uint32(uint256(vm.load(host, bytes32(SLOT_TICKET_CURSOR_LEVEL))) >> SOLO_OFFSET_SHIFT);
     }
 
-    /// @dev One `runTicketWork` call on the host, its allowance the gas it is sent;
+    /// @dev One `runTicketWork_g1150` call on the host, its allowance the gas it is sent;
     ///      `gasLimit == 0` forwards all gas.
     function _callBatch(address host, uint24 lvl, uint256 gasLimit)
         private returns (bool finished, bool didWork)
     {
         bytes memory callData = abi.encodeWithSelector(
-            IDegenerusGameTicketModule.runTicketWork.selector, lvl, gasLimit == 0 ? gasleft() : gasLimit
+            IDegenerusGameTicketModule.runTicketWork_g1150.selector, lvl, gasLimit == 0 ? gasleft() : gasLimit
         );
         (bool ok, bytes memory data) = gasLimit == 0 ? host.call(callData) : host.call{gas: gasLimit}(callData);
-        require(ok, "TST-03: runTicketWork reverted");
+        require(ok, "TST-03: runTicketWork_g1150 reverted");
         MineFlipGas.Result memory r = abi.decode(data, (MineFlipGas.Result));
         (finished, didWork) = (r.done, r.progressed);
     }

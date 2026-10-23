@@ -13,7 +13,7 @@ import {MineFlipGasBounds as GasBounds} from "../../contracts/libraries/MineFlip
 ///         far-future queues, a full top-four board, an armed depositor draw) and the kind-7 record
 ///         consolidation leaves (cursor 0, 2R + 3 positions for the pool's round count, `paid` = the
 ///         schedule's reserved ETH term, counted in claimablePool) are paid through
-///         `runDailyPhase`. Pinned: an allowance below one group plus tails changes nothing; every
+///         `runDailyPhase_g2582`. Pinned: an allowance below one group plus tails changes nothing; every
 ///         admitted group moves the cursor by exactly eight (the head group by three) and `paid` by
 ///         exactly the ETH it credited; every award goes to the winner drawn when its pair starts:
 ///         `bafPairWinners` read at the group start for the group's first pair and for trait pairs,
@@ -28,7 +28,7 @@ abstract contract BafStagedResumeFixture is BafBracketFixture {
     uint24 internal constant LVL = 20;
     uint256 internal constant WORD = uint256(keccak256("baf-staged-resume")) | 1;
 
-    /// @dev runDailyPhase keeps DAILY_PHASE_TAIL for itself; the stage then needs one group plus
+    /// @dev runDailyPhase_g2582 keeps DAILY_PHASE_TAIL for itself; the stage then needs one group plus
     ///      its tail. This allowance leaves strictly less than that for the stage.
     uint256 internal constant BELOW_ONE_GROUP =
         GasBounds.BAF_AWARD_GROUP + GasBounds.BAF_AWARD_TAIL + GasBounds.DAILY_PHASE_TAIL;

@@ -63,6 +63,33 @@ contract RngCurrentSentinelTest is DeployProtocol {
         assertEq(RecyclingState.nudgeCount(address(game)), 0, "nudge receipt cleared after one recording");
     }
 
+    function _resolvedCoinResult(uint256 word, bool reverse) private returns (bool win) {
+        if (reverse) {
+            (, uint256 cost) = game.rngNudgeQuote();
+            vm.prank(address(game));
+            coin.mintForGame(address(this), cost);
+            game.reverseFlip(cost);
+        }
+        uint256 id = _request();
+        mockVRF.fulfillRandomWords(id, word);
+        uint256 finalWord = RecyclingState.currentWord(address(game));
+        assertEq(finalWord, word + (reverse ? 1 : 0));
+        uint24 day = game.currentDayView();
+        vm.prank(address(game));
+        coinflip.processCoinflipPayouts(0, finalWord, day);
+        (, win) = coinflip.getCoinflipDayResult(day);
+    }
+
+    function testFuzz_OnePaidReverseAlwaysFlipsTheDailyCoin(uint256 word) public {
+        // The callback deliberately retries final sentinel values 0 and 1.
+        word = bound(word, 2, type(uint256).max - 1);
+        uint256 snap = vm.snapshotState();
+        bool original = _resolvedCoinResult(word, false);
+        assertTrue(vm.revertToState(snap));
+        bool reversed = _resolvedCoinResult(word, true);
+        assertTrue(original != reversed, "one paid reverse always toggles the day's result");
+    }
+
     function test_ZeroFinalWordRemainsPending() public { _check(0, 0); }
     function test_OneRawWordWithNudgesIsStoredWithoutNormalization() public { _check(1, 3); }
     function test_NudgedZeroRemainsPending() public { _check(type(uint256).max, 1); }

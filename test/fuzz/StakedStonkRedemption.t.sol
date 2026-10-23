@@ -65,7 +65,7 @@ contract StakedStonkRedemptionTest is RedemptionFixture {
         uint32 id = _openBatchId();
         _closeAsGame();
         settlementWord = uint256(keccak256(abi.encode(seed))) | 2;
-        vm.mockCall(address(game), abi.encodeWithSignature("rngConsumerStage()"), abi.encode(uint8(1)));
+        vm.mockCall(address(game), abi.encodeWithSignature("rngConsumerStage_g379()"), abi.encode(uint8(1)));
         _work(200_000);
         (,,,uint96 escrow,,uint16 reward) = sdgnrs.redemptionBatches(id);
         assertEq(reward, _synthReward(settlementWord, id));

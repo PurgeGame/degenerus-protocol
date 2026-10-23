@@ -24,7 +24,7 @@ import {RecyclingState} from "../helpers/RecyclingState.sol";
 // worker's lastPurchaseDay continuation) and the read-window release.
 //
 // Execution mechanic (same as MintModuleDivergenceAcrossSplit.t.sol): the ticket
-// worker `runTicketWork` runs via delegatecall from DegenerusGame's mineFlip in
+// worker `runTicketWork_g1150` runs via delegatecall from DegenerusGame's mineFlip in
 // production; here it is invoked directly on the deployed TicketModule, whose own
 // storage is a valid host because every module inherits the identical
 // DegenerusGameStorage layout.
@@ -85,13 +85,13 @@ contract TicketQueueReleaseGasTest is DeployProtocol {
     }
 
     function _armEntropy(address host) private {
-        // Entropy word for runTicketWork's _lootboxWord(lrIndex-1)
+        // Entropy word for runTicketWork_g1150's _lootboxWord(lrIndex-1)
         // read (lrIndex defaults to 1 → index 0).
         RecyclingState.seedWord(host, uint48(0), bytes32(uint256(keccak256("ticket-queue-release-gas-entropy"))));
     }
 
     /// @dev Finishing call of the frozen-pool drain on a fully-processed 3,000-entry
-    ///      far-future queue, reached through `runTicketWork`'s lastPurchaseDay continuation.
+    ///      far-future queue, reached through `runTicketWork_g1150`'s lastPurchaseDay continuation.
     ///      Pins level=49 with lastPurchaseDay latched and RNG locked, so
     ///      `_mintCeiling()` (= level + 1) lands on far-future target level 50 — a level far
     ///      outside any protocol constructor pre-seeding, so the committed 3,000-entry count
@@ -130,7 +130,7 @@ contract TicketQueueReleaseGasTest is DeployProtocol {
         // anchor = level + 1; the read window [anchor-1..ceiling] = [49..50] scans only
         // empty read-side queues, so the FF continuation is reached with no near-side work.
         // A bounded, realistic call (see the read-window test below).
-        MineFlipGas.Result memory r = ticketModule.runTicketWork{gas: REALISTIC_GAS}(50, REALISTIC_GAS);
+        MineFlipGas.Result memory r = ticketModule.runTicketWork_g1150{gas: REALISTIC_GAS}(50, REALISTIC_GAS);
         (bool finished, bool didWork) = (r.done, r.progressed);
         uint256 gasUsed = g0 - gasleft();
         emit log_named_uint("future_batch_finishing_call_gas", gasUsed);
@@ -177,7 +177,7 @@ contract TicketQueueReleaseGasTest is DeployProtocol {
         // A bounded, realistic call: an O(len) release of 3,000 committed slots (~15M) could
         // not fit in it, and the O(1) release must cost far less than the ceiling.
         uint256 g0 = gasleft();
-        bool finished = ticketModule.runTicketWork{gas: REALISTIC_GAS}(LVL, REALISTIC_GAS).done;
+        bool finished = ticketModule.runTicketWork_g1150{gas: REALISTIC_GAS}(LVL, REALISTIC_GAS).done;
         uint256 gasUsed = g0 - gasleft();
         emit log_named_uint("ticket_batch_finishing_call_gas", gasUsed);
 

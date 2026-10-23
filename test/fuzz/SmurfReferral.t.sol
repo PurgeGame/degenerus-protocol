@@ -30,7 +30,7 @@ contract SmurfReferralTest is DeployProtocol {
     bytes32 internal constant SMURF_CREATED = keccak256("SmurfCreated(uint32,uint32)");
     bytes32 internal constant EARNINGS_RECORDED = keccak256("AffiliateEarningsRecorded(uint32,uint256)");
     bytes32 internal constant TOP_REWARD_SIG = keccak256("AffiliateDgnrsReward(address,uint24,uint256)");
-    bytes4 internal constant CREDIT_PAIR = bytes4(keccak256("creditFlipPair(uint32,uint256,uint32,uint256)"));
+    bytes4 internal constant CREDIT_PAIR = bytes4(keccak256("creditFlipPair_g578(uint32,uint256,uint32,uint256)"));
     uint256 internal constant PRIZE_POOLS_PACKED_SLOT = GameSlots.PRIZE_POOLS_PACKED;
     uint256 internal constant POOL_HALF_MASK = (uint256(1) << 128) - 1;
 

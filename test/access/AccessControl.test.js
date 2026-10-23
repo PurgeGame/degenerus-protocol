@@ -41,7 +41,7 @@ describe("AccessControl", function () {
   // ---------------------------------------------------------------------------
 
   describe("FLIP", function () {
-    // creditFlip, creditFlipBatch, creditCoin removed from FLIP in Phase 146 ABI cleanup
+    // creditFlip_g317, creditFlipBatch, creditCoin removed from FLIP in Phase 146 ABI cleanup
 
     // rollDailyQuest removed from FLIP — moved to DegenerusQuests (v13.0)
 
@@ -83,11 +83,11 @@ describe("AccessControl", function () {
       ).to.be.revertedWithCustomError(coinflip, "OnlyFLIP");
     });
 
-    it("creditFlip: reverts when called by alice (OnlyFlipCreditors)", async function () {
+    it("creditFlip_g317: reverts when called by alice (OnlyFlipCreditors)", async function () {
       const { coinflip, alice, bob } = await loadFixture(deployFullProtocol);
 
       await expect(
-        coinflip.connect(alice).creditFlip(1, eth("100"))
+        coinflip.connect(alice).creditFlip_g317(1, eth("100"))
       ).to.be.revertedWithCustomError(coinflip, "OnlyFlipCreditors");
     });
 
@@ -240,11 +240,11 @@ describe("AccessControl", function () {
       ).to.be.revertedWithCustomError(quests, "OnlyGame");
     });
 
-    it("handlePurchase: reverts when called by alice (onlyCoin → OnlyCoin)", async function () {
+    it("handlePurchase_g4831: reverts when called by alice (onlyCoin → OnlyCoin)", async function () {
       const { quests, alice } = await loadFixture(deployFullProtocol);
 
       await expect(
-        quests.connect(alice).handlePurchase(1, 1, 0, 0, 0, 0)
+        quests.connect(alice).handlePurchase_g4831(1, 1, 0, 0, 0, 0)
       ).to.be.revertedWithCustomError(quests, "OnlyCoin");
     });
 
@@ -402,14 +402,14 @@ describe("AccessControl", function () {
       ).to.be.revertedWithCustomError(game, "OnlyAdmin");
     });
 
-    it("alice cannot call game.consumeCoinflipBoon (only trusted contracts)", async function () {
+    it("alice cannot call game.consumeCoinflipBoon_g2902 (only trusted contracts)", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
 
-      // consumeCoinflipBoon is guarded — only specific callers can invoke it
+      // consumeCoinflipBoon_g2902 is guarded — only specific callers can invoke it
       // (it reads from game storage on behalf of a player; direct calls from
       // random signers should revert with E() since it checks msg.sender).
       await expect(
-        game.connect(alice).consumeCoinflipBoon(1)
+        game.connect(alice).consumeCoinflipBoon_g2902(1)
       ).to.be.revertedWithCustomError(errorAbi("Unauthorized()"), "Unauthorized");
     });
 

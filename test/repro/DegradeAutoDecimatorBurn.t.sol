@@ -10,7 +10,7 @@ import {DegenerusQuests} from "../../contracts/DegenerusQuests.sol";
 
 /// @notice Daily-spine degrade (DAILY-2): the opening-day protocol Decimator entry skips the
 ///         window when the settled consume lands below the entry minimum, instead of handing the
-///         battle an amount it refuses (which would revert `applyDailyWord` for every caller).
+///         battle an amount it refuses (which would revert `applyDailyWord_g1652` for every caller).
 /// @dev The seeded state is unreachable (the preview and the consume sum the same components);
 ///      it is produced by mocking the two coinflip legs so the preview clears the floor and the
 ///      consume does not. Run: forge test --match-path test/repro/DegradeAutoDecimatorBurn.t.sol -vv
@@ -53,7 +53,7 @@ contract DegradeAutoDecimatorBurnTest is DeployProtocol {
     function test_DustConsumeSkipsTheWindow() public {
         _mockLegs(5_000, 1999);
         uint256 supply = coin.totalSupply();
-        vm.expectCall(address(game), abi.encodeWithSelector(DegenerusGame.recordDecBurn.selector), 0);
+        vm.expectCall(address(game), abi.encodeWithSelector(DegenerusGame.recordDecBurn_g5574.selector), 0);
         vm.recordLogs();
 
         uint256 amount = _autoBurn();
@@ -74,10 +74,10 @@ contract DegradeAutoDecimatorBurnTest is DeployProtocol {
         );
         vm.mockCall(
             address(game),
-            abi.encodeWithSelector(DegenerusGame.recordDecBurn.selector),
+            abi.encodeWithSelector(DegenerusGame.recordDecBurn_g5574.selector),
             abi.encode(uint64(1))
         );
-        vm.expectCall(address(game), abi.encodeWithSelector(DegenerusGame.recordDecBurn.selector), 1);
+        vm.expectCall(address(game), abi.encodeWithSelector(DegenerusGame.recordDecBurn_g5574.selector), 1);
         vm.recordLogs();
 
         uint256 amount = _autoBurn();

@@ -257,7 +257,7 @@ contract ChainPinRedemptionBoxLeg is DeployProtocol {
             }
             if (act == 8) {
                 ++nRedemptionSteps;
-                assertEq(game.rngConsumerStage(), 1, "A-F1: a selected Redemption action meets RedemptionStageBlocked");
+                assertEq(game.rngConsumerStage_g379(), 1, "A-F1: a selected Redemption action meets RedemptionStageBlocked");
             }
             if (rj % 3 != 0) _probe(rj);
             uint256 gas_ = [uint256(900_000), 1_500_000, 3_000_000, 6_000_000][(rj >> 8) & 3];
@@ -307,7 +307,7 @@ contract ChainPinRedemptionBoxLeg is DeployProtocol {
     }
 
     function _probe(uint256 r) internal {
-        uint8 stage = game.rngConsumerStage();
+        uint8 stage = game.rngConsumerStage_g379();
         if (stage == 0 || stage == 7) return; // no consumer open: stage 1 cannot run here
         uint32 id = ids[(r >> 3) % ids.length];
         uint256 amount = _amount(r >> 11);

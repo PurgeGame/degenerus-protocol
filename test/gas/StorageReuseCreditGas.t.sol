@@ -7,7 +7,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {GlamsterdamReprice} from "../helpers/GlamsterdamReprice.sol";
 import {VmSafe} from "forge-std/Vm.sol";
 
-/// @dev Full production creditFlip call, including authorization and day calculation.
+/// @dev Full production creditFlip_g317 call, including authorization and day calculation.
 ///      These are recorded-access estimates, not native Glamsterdam measurements.
 contract StorageReuseCreditGasTest is DeployProtocol {
     uint32 private id;
@@ -24,7 +24,7 @@ contract StorageReuseCreditGasTest is DeployProtocol {
     function _call() private returns (uint256 used) {
         vm.cool(address(coinflip));
         vm.prank(ContractAddresses.GAME);
-        coinflip.creditFlip(id, 1000);
+        coinflip.creditFlip_g317(id, 1000);
         // Gross gas avoids treating a capped Osaka refund as Glamsterdam execution.
         used = vm.lastCallGas().gasTotalUsed + uint64(vm.lastCallGas().gasRefunded);
     }

@@ -15,8 +15,6 @@ from rng_window_extract import enclosing_functions, strip_comments_and_strings
 # Accounting reads measure deltas, including the minimum work needed for a reward.
 # Admission reads select deterministic checkpoints/forwarding.
 REVIEWED = {
-    ("DegenerusGame.sol", "minerAction"): [
-        "let ok := delegatecall(gas(), target, ptr, calldatasize(), 0, 0)"],
     ("libraries/MineFlipGas.sol", "start"): [
         "uint256 entry = gasleft();"],
     ("libraries/MineFlipGas.sol", "remaining"): ["uint256 current = gasleft();"],
@@ -24,8 +22,10 @@ REVIEWED = {
     ("libraries/MineFlipGas.sol", "canRunAfterFirst"): [
         "if (required > remaining(meter) || gasleft() < required) return false;"],
     ("libraries/MineFlipGas.sol", "forwardable"): ["if (meter.mustProgress) return gasleft();"],
+    # Pre-call minimum and tail reservation; never classifies a callee failure.
+    ("libraries/BoundedCall.sol", "_remaining"): ["available = gasleft();"],
     ("libraries/BoundedCall.sol", "_requireGas"): ["uint256 available = gasleft();"],
-    ("modules/DegenerusGameMinerModule.sol", "mineFlip"): [
+    ("modules/GameMiner.sol", "_mineFlip"): [
         "uint256 rewardStart = gasleft();",
         "MineFlipGas.Meter memory meter = MineFlipGas.start(MineFlipGas.budget(gasleft(), gasMultiplierBps, true));",
         "uint256 beforeCall = gasleft();",

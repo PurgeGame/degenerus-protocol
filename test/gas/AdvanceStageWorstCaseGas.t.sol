@@ -80,7 +80,7 @@ contract TicketBatchStageHarness is MintBucketSeed {
         external
     {
         _seedQueue(lvl, n, owedEach, base);
-        // Pin level == lvl so runTicketWork does NOT reset the cursor, and start at a non-zero cursor
+        // Pin level == lvl so runTicketWork_g1150 does NOT reset the cursor, and start at a non-zero cursor
         // so the worker resumes after earlier retired entries.
         ticketLevel = lvl;
         ticketCursor = startCursor;
@@ -92,9 +92,9 @@ contract TicketBatchStageHarness is MintBucketSeed {
 
     /// @dev The metered ticket worker exactly as the miner dispatches it: a delegatecall into the
     ///      production ticket module (etched at its pinned address) in THIS contract's storage.
-    function runTicketWork(uint24 anchor, uint256 allowance) external returns (MineFlipGas.Result memory) {
+    function runTicketWork_g1150(uint24 anchor, uint256 allowance) external returns (MineFlipGas.Result memory) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_TICKET_MODULE.delegatecall(
-            abi.encodeWithSelector(DegenerusGameTicketModule.runTicketWork.selector, anchor, allowance)
+            abi.encodeWithSelector(DegenerusGameTicketModule.runTicketWork_g1150.selector, anchor, allowance)
         );
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
         return abi.decode(data, (MineFlipGas.Result));
@@ -127,11 +127,11 @@ contract AdvanceStageWorstCaseGas is Test {
             ContractAddresses.GAME_FOILPACK_MODULE,
             address(new DegenerusGameFoilPackModule()).code
         );
-        // The ticket harness delegates runTicketWork to the ticket module at its pinned address.
+        // The ticket harness delegates runTicketWork_g1150 to the ticket module at its pinned address.
         vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);
     }
 
-    /// @dev runTicketWork admits ticket checkpoints while its allowance covers the next declared
+    /// @dev runTicketWork_g1150 admits ticket checkpoints while its allowance covers the next declared
     ///      bound, so each chunk is driven with a realistic bounded allowance and checked for
     ///      progress, never bounded by a ceiling.
     uint256 internal constant CHUNK_GAS = 10_000_000;
@@ -263,7 +263,7 @@ contract AdvanceStageWorstCaseGas is Test {
         assertEq(tb.queueLen(TARGET_LVL), 1, "fixture: one deep-owed player queued");
 
         uint256 g0 = gasleft();
-        MineFlipGas.Result memory r = tb.runTicketWork{gas: CHUNK_GAS}(TARGET_LVL, CHUNK_GAS);
+        MineFlipGas.Result memory r = tb.runTicketWork_g1150{gas: CHUNK_GAS}(TARGET_LVL, CHUNK_GAS);
         (bool finished, bool worked) = (r.done, r.progressed);
         uint256 gasUsed = g0 - gasleft();
         assertTrue(worked, "non-vacuity: a realistic allowance must mint the seeded queue");
@@ -281,7 +281,7 @@ contract AdvanceStageWorstCaseGas is Test {
         assertEq(tb.cursor(), 1, "fixture: cursor starts at index 1");
 
         uint256 g0 = gasleft();
-        MineFlipGas.Result memory r = tb.runTicketWork{gas: CHUNK_GAS}(TARGET_LVL, CHUNK_GAS);
+        MineFlipGas.Result memory r = tb.runTicketWork_g1150{gas: CHUNK_GAS}(TARGET_LVL, CHUNK_GAS);
         (bool finished, bool worked) = (r.done, r.progressed);
         uint256 gasUsed = g0 - gasleft();
         assertTrue(worked, "non-vacuity: a realistic allowance must mint the seeded queue");
@@ -302,14 +302,14 @@ contract AdvanceStageWorstCaseGas is Test {
         uint256 snap = vm.snapshotState();
         tb.seedTicketQueue(TARGET_LVL, 1, mHi, uint160(0x30000));
         uint256 gHi0 = gasleft();
-        bool finishedHi = tb.runTicketWork{gas: 16_700_000}(TARGET_LVL, 16_700_000).done;
+        bool finishedHi = tb.runTicketWork_g1150{gas: 16_700_000}(TARGET_LVL, 16_700_000).done;
         uint256 gasHi = gHi0 - gasleft();
         assertTrue(finishedHi, "non-vacuity: the 200-owed drain completed in the call");
         vm.revertToState(snap);
 
         tb.seedTicketQueue(TARGET_LVL, 1, mLo, uint160(0x30000));
         uint256 gLo0 = gasleft();
-        bool finishedLo = tb.runTicketWork{gas: 16_700_000}(TARGET_LVL, 16_700_000).done;
+        bool finishedLo = tb.runTicketWork_g1150{gas: 16_700_000}(TARGET_LVL, 16_700_000).done;
         uint256 gasLo = gLo0 - gasleft();
         assertTrue(finishedLo, "non-vacuity: the 100-owed drain completed in the call");
 

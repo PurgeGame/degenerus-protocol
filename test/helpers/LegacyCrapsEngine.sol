@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {RngTags} from "../../contracts/libraries/RngTags.sol";
+import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 
 // Frozen pre-packing engine wrapper from 4071c79cc; do not update its header/seed derivation.
 
@@ -105,11 +107,11 @@ contract LegacyCrapsEngine is Craps, CrapsCustomTerms {
     {
         uint256 key = header >> 224 == 0
             ? uint160(header)
-            : uint160(_hash3(word, JACKPOT_AWARDED_TAG, betId));
+            : uint160(EntropyLib.hash3(RngTags.CRAPS_AWARDED, word, betId));
         uint256 chips = (header >> 160) & 0x3fffffff;
         uint256 placed;
         for (uint256 i; i < 30; i += 3) placed += (chips >> i) & 7;
-        bytes32 seed = bytes32(_hash3(uint256(_CRAPS_SEED_DOMAIN), word, bound));
+        bytes32 seed = bytes32(EntropyLib.hash3(RngTags.CRAPS_DICE, word, bound));
         uint256 boost;
         if (bound < 1 << 40) {
             boost = _shooterBoostTerms(placed);
@@ -117,11 +119,11 @@ contract LegacyCrapsEngine is Craps, CrapsCustomTerms {
             if (n != 0) {
                 uint256 seat = uint64(field);
                 if (seat == 0) seat = uint64(betId);
-                uint256 offset = (seat + n - 1 - (_hash2(ROTATING_SHOOTER_TAG, uint256(seed)) % n)) % n;
+                uint256 offset = (seat + n - 1 - (EntropyLib.hash2(RngTags.CRAPS_SHOOTER, uint256(seed)) % n)) % n;
                 if (offset < _MAX_SLIP_HANDS) boost |= (offset + 1) << _BOOST_TURN_SHIFT;
             }
         }
-        r = _play(chips, chipFlip, _hash3(word, SCATTER_TAG, key),
+        r = _play(chips, chipFlip, EntropyLib.hash3(RngTags.CRAPS_BOARD, word, key),
             10 - placed, seed, bankroll * FLIP, goal * FLIP, key, boost);
         r.unitsPlayed = _rankOf(r);
         // The existing final-award policy discards sub-FLIP dust before its hundreds roll.
@@ -130,7 +132,7 @@ contract LegacyCrapsEngine is Craps, CrapsCustomTerms {
         r.peakBankroll /= FLIP;
         uint256 paid = r.stop == SlipStop.Bust ? 0 : r.bankrollOut;
         r.bankrollIn = paid > FlipRoundLib.FLIP_ROUND_THRESHOLD
-            ? FlipRoundLib.roundFlipToHundreds(paid, _hash3(word, CRAPS_ROUND_TAG, betId))
+            ? FlipRoundLib.roundFlipToHundreds(paid, EntropyLib.hash3(RngTags.CRAPS_ROUND, word, betId))
             : FlipRoundLib.floorWholeFlip(paid);
     }
 

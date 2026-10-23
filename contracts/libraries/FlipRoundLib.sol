@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {EntropyLib} from "./EntropyLib.sol";
+import {RngTags} from "./RngTags.sol";
+
 /*
  * TERMS OF INTERACTION — submitting a transaction to this contract accepts them.
  *
@@ -46,7 +49,7 @@ library FlipRoundLib {
     function coinflipRewardPercent(uint8 bonus, uint256 rngWord, uint24 epoch)
         internal pure returns (uint16 rewardPercent)
     {
-        uint256 seedWord = uint256(keccak256(abi.encodePacked(REWARD_PERCENT_TAG, rngWord, epoch)));
+        uint256 seedWord = uint256(EntropyLib.hash2(RngTags.FLIP_REWARD, rngWord));
         uint256 roll = seedWord % 20;
         if (roll == 0) {
             rewardPercent = 50;

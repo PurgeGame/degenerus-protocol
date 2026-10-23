@@ -456,7 +456,7 @@ contract QuestStreakStallForgiveness is DeployProtocol {
     {
         uint32 qid6 = _qid(player);
         vm.prank(ContractAddresses.COIN);
-        (reward, questType, streak, completed, ) = quests.handlePurchase(qid6, MINT_PRICE, 0, 0, MINT_PRICE, MINT_PRICE);
+        (reward, questType, streak, completed, ) = quests.handlePurchase_g4831(qid6, MINT_PRICE, 0, 0, MINT_PRICE, MINT_PRICE);
     }
 
     function _startAfkingPlayer(string memory label, uint16 streak) private returns (address player) {

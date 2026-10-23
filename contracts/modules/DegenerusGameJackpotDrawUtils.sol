@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {RngTags} from "../libraries/RngTags.sol";
+
 import {DegenerusGameStorage} from "../storage/DegenerusGameStorage.sol";
 import {EntropyLib} from "../libraries/EntropyLib.sol";
 import {PackedTicketSampleLib} from "../libraries/PackedTicketSampleLib.sol";
@@ -23,7 +25,7 @@ abstract contract DegenerusGameJackpotDrawUtils is DegenerusGameStorage {
     ) internal view returns (uint32 winner, uint256 index) {
         if (cursor.used == 0) {
             uint256 base = PackedTicketSampleLib.begin(
-                cursor, effectiveLen, EntropyLib.hash4(randomWord, trait, salt, pull)
+                cursor, effectiveLen, EntropyLib.hash4(RngTags.BUCKET_SAMPLE, randomWord, salt, pull)
             );
             if (base < len) cursor.word = _bucketWordAtUnchecked(lvl, trait, base);
         }

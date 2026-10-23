@@ -16,6 +16,8 @@ import {IsDGNRS} from "../interfaces/IsDGNRS.sol";
 
 interface IMinerCrapsWork {
     function runCrapsReadWork(uint48 index, uint256 allowance) external returns (MineFlipGas.Result memory);
+    function runCrapsMaintenance_g10712(uint256 allowance) external returns (MineFlipGas.Result memory);
+
     function runCrapsMaintenance(uint256 allowance) external returns (MineFlipGas.Result memory);
 }
 
@@ -70,6 +72,10 @@ abstract contract GameMiner is DegenerusGameMintStreakUtils {
 
         // There are fewer than 32 category transitions. Workers own all unbounded queues.
         for (uint256 transitions; transitions < 32; ++transitions) {
+            // Selection itself can read LINK through an unscaled forwarding floor.
+            // Protect the committed prefix before that read, even at 0.25x calibration.
+            // A first selection has no prefix and remains a retryable mandatory step.
+            if (transitions != 0 && MineFlipGas.remaining(meter) < GasBounds.ENGINE_SELECTION + RETURN_RESERVE) break;
             // Only reads separate the initial selection from the first dispatch.
             // Every later iteration must reselect after the preceding worker's changes.
             MinerAction action = transitions == 0 ? first : _nextMinerAction(msg.sender);
@@ -117,21 +123,21 @@ abstract contract GameMiner is DegenerusGameMintStreakUtils {
                 if (!MineFlipGas.canRun(meter, applyMax, RETURN_RESERVE + WORKER_BOUNDARY)) break;
                 target = ContractAddresses.GAME_ADVANCE_MODULE;
                 callData = abi.encodeWithSelector(
-                    gap ? IDegenerusGameAdvanceModule.applyDailyGap.selector : IDegenerusGameAdvanceModule.applyDailyWord.selector
+                    gap ? IDegenerusGameAdvanceModule.applyDailyGap.selector : IDegenerusGameAdvanceModule.applyDailyWord_g1652.selector
                 );
             } else if (action == MinerAction.DailyPhase) {
                 basicResult = true;
                 target = ContractAddresses.GAME_ADVANCE_MODULE;
-                callData = abi.encodeWithSelector(IDegenerusGameAdvanceModule.runDailyPhase.selector, allowance);
+                callData = abi.encodeWithSelector(IDegenerusGameAdvanceModule.runDailyPhase_g2582.selector, allowance);
             } else if (action == MinerAction.Publish) {
                 target = ContractAddresses.GAME_RNG_MODULE;
-                callData = abi.encodeWithSelector(IDegenerusGameRngModule.publishRng.selector);
+                callData = abi.encodeWithSelector(IDegenerusGameRngModule.publishRng_g4514.selector);
             } else if (request) {
                 target = ContractAddresses.GAME_RNG_MODULE;
                 if (action == MinerAction.RequestDaily) {
-                    callData = abi.encodeWithSelector(IDegenerusGameRngModule.requestDailyRng.selector, _afkingResetDay);
+                    callData = abi.encodeWithSelector(IDegenerusGameRngModule.requestDailyRng_g8190.selector, _afkingResetDay);
                 } else {
-                    callData = abi.encodeWithSelector(IDegenerusGameRngModule.requestMinerRng.selector);
+                    callData = abi.encodeWithSelector(IDegenerusGameRngModule.requestMinerRng_g4954.selector);
                 }
                 uint256 requestMax = action == MinerAction.RequestDaily
                     ? GasBounds.RNG_DAILY_REQUEST : GasBounds.RNG_MIDDAY_REQUEST;
@@ -152,26 +158,26 @@ abstract contract GameMiner is DegenerusGameMintStreakUtils {
                 if (action == MinerAction.Tickets) {
                     target = ContractAddresses.GAME_TICKET_MODULE;
                     uint24 anchor = !jackpotPhaseFlag && lastPurchaseDay && rngLockedFlag ? level : level + 1;
-                    callData = abi.encodeWithSelector(IDegenerusGameTicketModule.runTicketWork.selector, anchor, allowance);
+                    callData = abi.encodeWithSelector(IDegenerusGameTicketModule.runTicketWork_g1150.selector, anchor, allowance);
                 } else if (action == MinerAction.DegenesisSettle) {
                     // Not an RNG consumer: a Degenesis backlog never gates completion or requests.
                     target = ContractAddresses.GAME_DEGENESIS_MODULE;
-                    callData = abi.encodeWithSelector(IDegenerusGameDegenesisModule.runDegenesisWork.selector, allowance);
+                    callData = abi.encodeWithSelector(IDegenerusGameDegenesisModule.runDegenesisWork_g1860.selector, allowance);
                 } else if (action == MinerAction.SeizeLoans) {
                     target = ContractAddresses.GAME_ADVANCE_MODULE;
                     callData = abi.encodeWithSelector(IDegenerusGameAdvanceModule.runLoanSeizureWork.selector, allowance);
                 } else if (action == MinerAction.PrepareSubscriptions) {
                     target = ContractAddresses.GAME_AFKING_MODULE;
-                    callData = abi.encodeWithSelector(IGameAfkingModule.runSubscriberWork.selector, _afkingResetDay, allowance);
+                    callData = abi.encodeWithSelector(IGameAfkingModule.runSubscriberWork_g6352.selector, _afkingResetDay, allowance);
                 } else if (action == MinerAction.Afking) {
                     target = ContractAddresses.GAME_AFKING_MODULE;
-                    callData = abi.encodeWithSelector(IGameAfkingModule.runAfkingWork.selector, allowance);
+                    callData = abi.encodeWithSelector(IGameAfkingModule.runAfkingWork_g8553.selector, allowance);
                 } else if (action == MinerAction.HumanBoxes) {
                     target = ContractAddresses.GAME_AFKING_MODULE;
-                    callData = abi.encodeWithSelector(IGameAfkingModule.runHumanBoxWork.selector, allowance);
+                    callData = abi.encodeWithSelector(IGameAfkingModule.runHumanBoxWork_g315.selector, allowance);
                 } else if (action == MinerAction.Degenerette) {
                     target = ContractAddresses.GAME_DEGENERETTE_MODULE;
-                    callData = abi.encodeWithSelector(IDegenerusGameDegeneretteModule.runDegeneretteWork.selector, allowance);
+                    callData = abi.encodeWithSelector(IDegenerusGameDegeneretteModule.runDegeneretteWork_g670.selector, allowance);
                 } else if (action == MinerAction.Decimator) {
                     target = ContractAddresses.GAME_DECIMATOR_MODULE;
                     callData = abi.encodeWithSelector(IDegenerusGameDecimatorModule.runDecimatorWork.selector, allowance);
@@ -194,7 +200,7 @@ abstract contract GameMiner is DegenerusGameMintStreakUtils {
                     externalWorker = true;
                     callData = action == MinerAction.Craps
                         ? abi.encodeWithSelector(IMinerCrapsWork.runCrapsReadWork.selector, _rngReadBuffer(), allowance)
-                        : abi.encodeWithSelector(IMinerCrapsWork.runCrapsMaintenance.selector, allowance);
+                        : abi.encodeWithSelector(IMinerCrapsWork.runCrapsMaintenance_g10712.selector, allowance);
                 }
             }
 
@@ -290,7 +296,7 @@ abstract contract GameMiner is DegenerusGameMintStreakUtils {
                 // larger rewards floor to whole FLIP. Applied after the gas measurement, so
                 // the normalization cannot price itself. Both events report this figure;
                 // below the daily stake cap it is exactly what Coinflip credits.
-                coinflip.creditFlip(minerId, reward);
+                coinflip.creditFlip_g317(minerId, reward);
                 emit MinerBounty(MINER_BOUNTY_ADVANCE, msg.sender, reward);
             }
         }

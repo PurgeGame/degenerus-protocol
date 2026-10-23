@@ -69,11 +69,15 @@ interface IDegenerusQuestsAffiliate {
 
 /// @notice Interface for crediting FLIP stakes directly via the affiliateCoinflip contract.
 interface ICoinflipAffiliate {
+
+
     /// @notice Credit FLIP to a single wallet.
-    function creditFlip(uint32 id, uint256 amount) external;
+    function creditFlip_g317(uint32 id, uint256 amount) external;
+
+
 
     /// @notice Credit FLIP to two wallets (zero-ID and zero-amount legs are skipped).
-    function creditFlipPair(uint32 id1, uint256 amount1, uint32 id2, uint256 amount2) external;
+    function creditFlipPair_g578(uint32 id1, uint256 amount1, uint32 id2, uint256 amount2) external;
 }
 
 /// @notice Game-side accessor for the afking settlement.
@@ -321,7 +325,7 @@ contract DegenerusAffiliate {
         }
         if (uint256(code) >> 32 == ACCOUNT_CODE_TAG >> 32) {
             ownerId = uint32(uint256(code));
-            if (ownerId == 0 || uint256(game.extsload(bytes32(WalletTableLib.OWNERS_SLOT))) <= ownerId) return (address(0), 0, 0);
+            if (ownerId == 0 || uint256(game.extsload_g8132(bytes32(WalletTableLib.OWNERS_SLOT))) <= ownerId) return (address(0), 0, 0);
             return (WalletTableLib.ownerOf(ownerId), ownerId, 0);
         }
         AffiliateCodeInfo storage info = _affiliateStorage()._affiliateCode[code];
@@ -448,7 +452,7 @@ contract DegenerusAffiliate {
     function referPlayer(bytes32 code_) external affiliateContext {
         // A referral allocates an ID under the same free-admission threshold as other
         // nonpaying hooks. Above it, the caller must already have a qualifying paid entry.
-        uint32 playerId = game.registerWallet(msg.sender, true);
+        uint32 playerId = game.registerWallet_g9539(msg.sender, true);
         // SECURITY: Every assigned referral is permanent.
         if (_affiliateStorage().playerReferralCode[playerId] != bytes32(0)) revert Insufficient();
         // SECURITY: Prevent invalid codes and self-referral.
@@ -468,7 +472,7 @@ contract DegenerusAffiliate {
      * @return The referrer's address (the VAULT when the player has no real referrer).
      */
     function getReferrer(address player) external affiliateContext view returns (address) {
-        (uint32 id, bytes32 code) = _referrerView(game.walletIdOf(player));
+        (uint32 id, bytes32 code) = _referrerView(game.walletIdOf_g3120(player));
         return _ownerKey(code, id);
     }
 
@@ -479,7 +483,7 @@ contract DegenerusAffiliate {
      * @return id The referrer's wallet ID.
      */
     function getReferrerId(address player) external affiliateContext view returns (uint32 id) {
-        (id, ) = _referrerView(game.walletIdOf(player));
+        (id, ) = _referrerView(game.walletIdOf_g3120(player));
     }
 
     /**
@@ -497,7 +501,7 @@ contract DegenerusAffiliate {
         returns (uint32 affiliate, uint32 upline1, uint32 upline2)
     {
         bytes32 code;
-        (affiliate, code) = _referrerView(game.walletIdOf(player));
+        (affiliate, code) = _referrerView(game.walletIdOf_g3120(player));
         if (affiliate == 0) return (0, 0, 0);
         (upline1, code) = _referrerView(affiliate);
         if (upline1 == 0) return (affiliate, 0, 0);
@@ -654,6 +658,8 @@ contract DegenerusAffiliate {
         emit Affiliate(amount, routeCode, senderId);
     }
 
+
+
     /**
      * @notice Purchase-path affiliate settlement for all of a buy's legs in ONE call.
      * @dev GAME-only. Folds the up-to-four per-leg payAffiliate calls (ticket fresh/recycled +
@@ -682,7 +688,7 @@ contract DegenerusAffiliate {
      * @return playerKickback FLIP kickback owed the buyer (summed across legs).
      * @custom:reverts OnlyAuthorized When caller is not the GAME contract.
      */
-    function payAffiliateCombined(
+    function payAffiliateCombined_g978(
         bytes32 code,
         uint32 senderId,
         uint24 lvl,
@@ -834,7 +840,7 @@ contract DegenerusAffiliate {
         }
         if (c >> 32 == ACCOUNT_CODE_TAG >> 32) {
             uint32 id = uint32(c);
-            if (id == 0 || id == senderId || uint256(game.extsload(bytes32(WalletTableLib.OWNERS_SLOT))) <= id) return (0, 0);
+            if (id == 0 || id == senderId || uint256(game.extsload_g8132(bytes32(WalletTableLib.OWNERS_SLOT))) <= id) return (0, 0);
             return (id, bytes32(DEFAULT_ID_TAG | id));
         }
         AffiliateCodeInfo storage info = _affiliateStorage()._affiliateCode[code];
@@ -987,6 +993,15 @@ contract DegenerusAffiliate {
         return AffiliateEarningsLib.score(_affiliateStorage().affiliateCoinEarned[id], lvl);
     }
 
+    /// @notice Read both inputs to a score-proportional affiliate claim in one call.
+    /// @dev The late selector leaves the existing hot-entry comparison order intact.
+    function affiliateScoreAndTotal_g4013(uint24 lvl, uint32 id) external affiliateContext view
+        returns (uint256 score, uint256 total)
+    {
+        score = AffiliateEarningsLib.score(_affiliateStorage().affiliateCoinEarned[id], lvl);
+        total = _readLevelScore(lvl) & TOTAL_SCORE_MASK;
+    }
+
     /**
      * @notice Get the total affiliate score across all affiliates for a level.
      * @dev Sum of accepted capped scores for a retained level; zero once its tagged bank is reused.
@@ -997,6 +1012,8 @@ contract DegenerusAffiliate {
     function totalAffiliateScore(uint24 lvl) external affiliateContext view returns (uint256 total) {
         return _readLevelScore(lvl) & TOTAL_SCORE_MASK;
     }
+
+
 
     /**
      * @notice Calculate the affiliate bonus points for a player.
@@ -1012,7 +1029,7 @@ contract DegenerusAffiliate {
      * @param id Wallet ID of the player to calculate bonus for (0 returns 0).
      * @return points Bonus points (0 to AFFILIATE_BONUS_MAX).
      */
-    function affiliateBonusPointsBest(uint24 currLevel, uint32 id) external affiliateContext view returns (uint256 points) {
+    function affiliateBonusPointsBest_g3878(uint24 currLevel, uint32 id) external affiliateContext view returns (uint256 points) {
         if (currLevel == 0) return 0;
         // Σ score[lvl] × priceForLevel(lvl): ETH-volume product still carrying the
         // PRICE_COIN_UNIT and fresh-rate scale factors (normalized out below). Bounded
@@ -1164,7 +1181,7 @@ contract DegenerusAffiliate {
         AffiliateCodeInfo storage info = _affiliateStorage()._affiliateCode[code_];
         // SECURITY: First-come-first-served; codes cannot be overwritten.
         if (info.ownerId != 0) revert Insufficient();
-        uint32 ownerId = game.registerWallet(owner, true);
+        uint32 ownerId = game.registerWallet_g9539(owner, true);
         (, uint256 cache) = _payoutUpline(code_, ownerId, true, 0);
         uint8 flags = uint8(cache >> 64) << 1;
         _affiliateStorage()._affiliateCode[code_] = AffiliateCodeInfo({
@@ -1183,7 +1200,7 @@ contract DegenerusAffiliate {
         if (player == address(0)) revert Zero();
         uint32 referrerId = _affiliateStorage()._affiliateCode[code_].ownerId;
         if (referrerId == 0) revert Insufficient();
-        uint32 playerId = game.registerWallet(player, true);
+        uint32 playerId = game.registerWallet_g9539(player, true);
         if (referrerId == playerId || _affiliateStorage().playerReferralCode[playerId] != bytes32(0)) revert Insufficient();
         _setReferral(playerId, code_, code_, referrerId);
         emit Affiliate(0, code_, playerId);
@@ -1263,10 +1280,10 @@ contract DegenerusAffiliate {
     }
 
     function _affiliateCreditFlip(uint32 id, uint256 amount) internal virtual {
-        affiliateCoinflip.creditFlip(id, amount);
+        affiliateCoinflip.creditFlip_g317(id, amount);
     }
 
     function _affiliateCreditFlipPair(uint32 a, uint256 amountA, uint32 b, uint256 amountB) internal virtual {
-        affiliateCoinflip.creditFlipPair(a, amountA, b, amountB);
+        affiliateCoinflip.creditFlipPair_g578(a, amountA, b, amountB);
     }
 }

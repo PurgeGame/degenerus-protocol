@@ -213,7 +213,7 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
         address payee = msg.sender;
         if (id != 0) {
             bool authorized;
-            (, payee, authorized) = game.resolveAccount(id, msg.sender);
+            (, payee, authorized) = game.resolveAccount_g502(id, msg.sender);
             if (!authorized) revert NotApproved();
         }
 
@@ -228,7 +228,7 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
         // implies a nonzero ID (for a resolved account, `id` itself).
         bool mayBet;
         bool earnsReward;
-        if (id == 0) id = game.walletIdOf(msg.sender);
+        if (id == 0) id = game.walletIdOf_g3120(msg.sender);
         (mayBet, earnsReward, ) = quests.marketBetGates(id, round);
         if (!mayBet) revert NotEligible();
         _recordBet(id, round, over);
@@ -462,7 +462,7 @@ contract DegenerusParimutuel is IDegenerusParimutuel {
             uint256 payout
         )
     {
-        return marketStateById(game.walletIdOf(player), round);
+        return marketStateById(game.walletIdOf_g3120(player), round);
     }
 
     function marketStateById(

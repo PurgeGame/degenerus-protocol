@@ -22,7 +22,7 @@ import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
 
 contract DecimatorGasCoinflip {
     mapping(uint32 => uint256) public credited;
-    function creditFlip(uint32 owner, uint256 amount) external { credited[owner] += amount; }
+    function creditFlip_g317(uint32 owner, uint256 amount) external { credited[owner] += amount; }
 }
 
 contract DecimatorGeneratedEngineMeter {

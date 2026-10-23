@@ -27,7 +27,7 @@ contract TicketChunkRepricer {
 }
 
 /// @dev Extends the production mint module so the ticket worker runs in THIS contract's
-///      storage through the metered `runTicketWork` entry the miner uses; adds queue seeders
+///      storage through the metered `runTicketWork_g1150` entry the miner uses; adds queue seeders
 ///      only.
 contract ChunkHarness is MintBucketSeed {
     /// @dev Pin `level` so `lvl` sits inside the minted read window the drain walks: the sweep
@@ -94,7 +94,7 @@ contract ChunkHarness is MintBucketSeed {
     ///      `level` to lvl - 1, lastPurchaseDay is latched, so _mintCeiling() = level + 1 = lvl
     ///      and _frozenPoolDue() holds. The measured call passes anchor = level = lvl - 1 (the
     ///      purchase level while the last-purchase lock is held); the read window
-    ///      [lvl - 2 .. lvl] is empty, so the call reaches runTicketWork's frozen-pool
+    ///      [lvl - 2 .. lvl] is empty, so the call reaches runTicketWork_g1150's frozen-pool
     ///      continuation. `warm` pins the FF marker and cursor 1 (logical index 0 drained) so the
     ///      chunk exercises continuation from a nonzero cursor. Requires lvl >= 2. Far-future
     ///      lanes hold whole entries only, so `entriesScaled` must be a multiple of QTY_SCALE.
@@ -185,9 +185,9 @@ contract ChunkHarness is MintBucketSeed {
 
     /// @dev The metered ticket worker exactly as the miner calls it: `allowance` bounds the
     ///      admitted steps and their complete checkpoint tail.
-    function runTicketWork(uint24 anchor, uint256 allowance) external returns (MineFlipGas.Result memory) {
+    function runTicketWork_g1150(uint24 anchor, uint256 allowance) external returns (MineFlipGas.Result memory) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_TICKET_MODULE.delegatecall(
-            abi.encodeWithSelector(DegenerusGameTicketModule.runTicketWork.selector, anchor, allowance)
+            abi.encodeWithSelector(DegenerusGameTicketModule.runTicketWork_g1150.selector, anchor, allowance)
         );
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
         return abi.decode(data, (MineFlipGas.Result));
@@ -280,7 +280,7 @@ abstract contract TicketChunkProbe is Test {
         uint32 roundBefore = h.round();
         vm.recordLogs();
         uint256 g0 = gasleft();
-        MineFlipGas.Result memory r = h.runTicketWork{gas: allowance + 1_000_000}(anchor, allowance);
+        MineFlipGas.Result memory r = h.runTicketWork_g1150{gas: allowance + 1_000_000}(anchor, allowance);
         used = g0 - gasleft();
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
@@ -369,7 +369,7 @@ abstract contract TicketChunkProbe is Test {
         _cool();
         vm.recordLogs();
         uint256 g0 = gasleft();
-        MineFlipGas.Result memory r = h.runTicketWork(anchor, EIP7825_TX_GAS_CAP);
+        MineFlipGas.Result memory r = h.runTicketWork_g1150(anchor, EIP7825_TX_GAS_CAP);
         used = g0 - gasleft();
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
@@ -437,7 +437,7 @@ contract RoundDrainChunkGas is TicketChunkProbe {
     function _chunkCall(uint24 lvl, uint256 gasLimit, string memory tag) internal returns (uint256 g) {
         _cool();
         uint256 g0 = gasleft();
-        bool worked = h.runTicketWork{gas: gasLimit}(lvl + 1, gasLimit).progressed;
+        bool worked = h.runTicketWork_g1150{gas: gasLimit}(lvl + 1, gasLimit).progressed;
         g = g0 - gasleft();
         emit log_named_uint(tag, g);
         // Non-vacuity: the call must drain the seeded queue, not walk an empty window.
@@ -471,7 +471,7 @@ contract RoundDrainChunkGas is TicketChunkProbe {
         h.recycleBacking(LVL, 1);
         h.seed(LVL, 3, 50000, uint160(0x110000), true);
         for (uint256 i; i < 32; ++i) {
-            bool worked = h.runTicketWork{gas: GAS_TARGET}(LVL + 1, GAS_TARGET).progressed;
+            bool worked = h.runTicketWork_g1150{gas: GAS_TARGET}(LVL + 1, GAS_TARGET).progressed;
             assertTrue(worked, "record prefix must still drain paid entries");
         }
         assertGt(h.grownTraits(LVL, 1), 96, "prefix must grow beyond old words across common traits");
@@ -482,7 +482,7 @@ contract RoundDrainChunkGas is TicketChunkProbe {
         h.recycleBacking(LVL, 1);
         h.seed(LVL, 8, 20000, uint160(0x120000), true);
         for (uint256 i; i < 32; ++i) {
-            bool worked = h.runTicketWork{gas: GAS_TARGET}(LVL + 1, GAS_TARGET).progressed;
+            bool worked = h.runTicketWork_g1150{gas: GAS_TARGET}(LVL + 1, GAS_TARGET).progressed;
             assertTrue(worked, "record prefix must still drain paid entries");
         }
         assertGt(h.grownTraits(LVL, 1), 96, "prefix must grow beyond old words across common traits");
@@ -526,7 +526,7 @@ contract RoundDrainChunkGas is TicketChunkProbe {
         h.seedDust(LVL, 3000, uint160(0x80000), true);
         uint256 snap = vm.snapshotState();
         _cool();
-        bool worked = h.runTicketWork{gas: GAS_TARGET}(LVL + 1, GAS_TARGET).progressed;
+        bool worked = h.runTicketWork_g1150{gas: GAS_TARGET}(LVL + 1, GAS_TARGET).progressed;
         assertTrue(worked, "dust walk makes progress");
         emit log_named_uint("chunk_dust_skips_cursor_after_10m", h.cursor());
         assertGt(h.cursor(), 1, "dust walk advances the cursor");
@@ -653,7 +653,7 @@ contract RoundDrainChunkGas is TicketChunkProbe {
         h.seed(LVL, 1, DISTINCT_SOLO_ENTRIES, uint160(0x51000), false);
         h.seedHeaderTails(LVL);
         (uint256 sixteen, uint256 take) = _whole(LVL + 1);
-        h.runTicketWork(LVL + 1, EIP7825_TX_GAS_CAP);
+        h.runTicketWork_g1150(LVL + 1, EIP7825_TX_GAS_CAP);
         assertEq(h.bucketsTouched(LVL, 7), DISTINCT_SOLO_ENTRIES, "fixture: sixteen distinct traits");
         assertEq(take, 16);
         assertTrue(vm.revertToState(snap));
@@ -790,7 +790,7 @@ contract RoundDrainChunkGas is TicketChunkProbe {
         h.seed(LVL, 8, 20000, uint160(0xC0000), false);
         h.seedHeaderTails(LVL);
         h.setRound(ALL_RARE_ROUND);
-        h.runTicketWork(LVL + 1, 1_000_000);
+        h.runTicketWork_g1150(LVL + 1, 1_000_000);
         assertTrue(h.seats() != 0, "fixture: eight seats persisted");
         (, uint256 lo) = _stepGas(LVL + 1, Step.Round);
         uint256 withReload = _usedAt(LVL + 1, lo, Step.Round);

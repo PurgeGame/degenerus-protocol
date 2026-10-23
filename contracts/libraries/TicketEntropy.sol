@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {RngTags} from "./RngTags.sol";
+
 import {EntropyLib} from "./EntropyLib.sol";
 
 /// @notice Versioned identities for deterministic ticket streams and replay.
@@ -17,7 +19,7 @@ library TicketEntropy {
 
     /// @dev The committed queue length and word remain frozen across every checkpoint.
     function queueStart(uint24 queueKey, uint256 total, uint256 entropy) internal pure returns (uint256) {
-        return total < 2 ? 0 : EntropyLib.hash4(ROTATION_DOMAIN, queueKey, total, entropy) % total;
+        return total < 2 ? 0 : EntropyLib.hash3(RngTags.TICKET_ROTATION, entropy, queueKey) % total;
     }
 
     function queueIndex(uint256 logical, uint256 start, uint256 total) internal pure returns (uint256 physical) {
@@ -40,6 +42,6 @@ library TicketEntropy {
     }
 
     function remainder(uint256 stream, uint256 entropy, uint8 fraction) internal pure returns (bool) {
-        return uint256(keccak256(abi.encode(REMAINDER_DOMAIN, stream, entropy))) % 100 < fraction;
+        return uint256(EntropyLib.hash3(RngTags.TICKET_REMAINDER, entropy, stream & ~(uint256(type(uint32).max) << ID_SHIFT))) % 100 < fraction;
     }
 }

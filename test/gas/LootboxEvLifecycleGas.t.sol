@@ -25,7 +25,7 @@ contract EvLifecycleGasHost is QueueHost {
                 _walletIdOf(player), uint256(1 ether), uint24(1), word, uint16(400)));
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
         (ok, data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(
-            abi.encodeWithSignature("runHumanBoxWork(uint256)", uint256(25_000_000)));
+            abi.encodeWithSignature("runHumanBoxWork_g315(uint256)", uint256(25_000_000)));
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
         result = abi.decode(data, (MineFlipGas.Result));
     }

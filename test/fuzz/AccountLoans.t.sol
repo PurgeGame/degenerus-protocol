@@ -893,7 +893,7 @@ contract AccountLoansTest is RedemptionCloseTools {
             _awardEth(child, 2 ether);
             _awardEth(root, 1 ether);
             vm.prank(address(game)); wwxrp.creditPrize(child, 77);
-            vm.prank(address(game)); coinflip.creditFlip(child, 10_000);
+            vm.prank(address(game)); coinflip.creditFlip_g317(child, 10_000);
             _resolve(day, true);
             uint256 lenderBefore = game.claimableWinningsOf(payee);
             // The root was explicitly seeded at zero; the created child already has its sentinel.

@@ -158,10 +158,10 @@ contract SubscriberNativeGasHost is DegenerusGame, WalletSeed {
     }
 
     function subWork(uint256 allowance) external returns (MineFlipGas.Result memory) {
-        return _work(abi.encodeWithSignature("runSubscriberWork(uint24,uint256)", _afkingResetDay, allowance));
+        return _work(abi.encodeWithSignature("runSubscriberWork_g6352(uint24,uint256)", _afkingResetDay, allowance));
     }
     function openWork(uint256 allowance) external returns (MineFlipGas.Result memory) {
-        return _work(abi.encodeWithSignature("runAfkingWork(uint256)", allowance));
+        return _work(abi.encodeWithSignature("runAfkingWork_g8553(uint256)", allowance));
     }
     function pendingBoxes() external view returns (uint256) { return _pendingBoxCount; }
     function memberCount() external view returns (uint256) { return _subscribers.length; }

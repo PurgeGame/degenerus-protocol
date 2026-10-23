@@ -183,7 +183,7 @@ contract LensParityTest is Test {
     function _mockAffiliate(uint24 currLevel, uint32 id, uint256 points) internal {
         vm.mockCall(
             ContractAddresses.AFFILIATE,
-            abi.encodeWithSelector(IDegenerusAffiliate.affiliateBonusPointsBest.selector, currLevel, id),
+            abi.encodeWithSelector(IDegenerusAffiliate.affiliateBonusPointsBest_g3878.selector, currLevel, id),
             abi.encode(points)
         );
     }

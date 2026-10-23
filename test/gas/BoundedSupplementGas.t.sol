@@ -81,10 +81,10 @@ contract BoundedSupplementGasTest is BoundedDeployProtocol, BoundedGasProbe {
         uint64 second = _field(2);
         _clear(index);
         JackpotBattle table = JackpotBattle(address(crapsBattle));
-        if (populated) { vm.prank(address(crapsBattle)); table.registerRngSlot(index, first, bytes32(uint256(first))); }
+        if (populated) { vm.prank(address(crapsBattle)); table.registerRngSlot_g709(index, first, bytes32(uint256(first))); }
         assertEq(_pending(index), populated ? 1 : 0);
         _measureBounded(label, address(table), address(table), 0,
-            abi.encodeCall(table.registerRngSlot, (index, second, bytes32(uint256(second)))), false);
+            abi.encodeCall(table.registerRngSlot_g709, (index, second, bytes32(uint256(second)))), false);
         assertEq(_pending(index), populated ? 2 : 1, "registration appended exactly one field");
     }
     function test_C3_ActualFirstRegistration() public { _register("C3_actual_first", 1, false); }

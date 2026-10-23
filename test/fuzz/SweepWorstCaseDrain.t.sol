@@ -55,7 +55,7 @@ contract SweepViewer is DegenerusGame {
     ///      without starting the human-box stage it measures.
     function runAfkingStage(uint256 allowance) external {
         (bool ok, bytes memory data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(
-            abi.encodeWithSelector(IGameAfkingModule.runAfkingWork.selector, allowance)
+            abi.encodeWithSelector(IGameAfkingModule.runAfkingWork_g8553.selector, allowance)
         );
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
     }

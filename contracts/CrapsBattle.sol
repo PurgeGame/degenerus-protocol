@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {EntropyLib} from "./libraries/EntropyLib.sol";
+import {RngTags} from "./libraries/RngTags.sol";
+
 import {MineFlipGas} from "./libraries/MineFlipGas.sol";
 import {BitPackingLib} from "./libraries/BitPackingLib.sol";
 import {Craps} from "./Craps.sol";
@@ -54,7 +57,10 @@ contract CrapsBattle is JackpotBattle, CrapsEngine {
         uint256 high;
     }
 
-    function resolveRngSlot(uint64 slot, uint256 allowance) external returns (MineFlipGas.Result memory result) {
+    // Low-selector protocol entry; the original ABI and guarded implementation remain.
+    function resolveRngSlot_g1079(uint64 slot, uint256 allowance) external returns (MineFlipGas.Result memory result) { return resolveRngSlot(slot, allowance); }
+
+    function resolveRngSlot(uint64 slot, uint256 allowance) public returns (MineFlipGas.Result memory result) {
         if (msg.sender != address(this)) revert OnlyGame();
         return _resolveSlotRange(slot, allowance, _RESOLVE_MAX_SEATS);
     }
@@ -317,7 +323,7 @@ contract CrapsBattle is JackpotBattle, CrapsEngine {
 
     /// @dev The Game's `resolveAccount` for the caller: key, payee and authorization of `id`.
     function _resolveAccount(uint32 id) private view returns (address, address, bool) {
-        return IGameCraps(_GAME).resolveAccount(id, msg.sender);
+        return IGameCraps(_GAME).resolveAccount_g502(id, msg.sender);
     }
 
     /// @dev A paying door's prologue: its account (`_door`, allocating for a new caller) and the
@@ -563,9 +569,12 @@ contract CrapsBattle is JackpotBattle, CrapsEngine {
         }
     }
 
+    // Low-selector protocol entry; the original ABI and guarded implementation remain.
+    function minerMaintenancePending_g11976() external view returns (bool) { return minerMaintenancePending(); }
+
     /// @notice Constant-time predicate for the next scheduled maintenance step.
     /// @dev Read settlement and the dedicated daily battle have their own earlier stages.
-    function minerMaintenancePending() external view returns (bool) {
+    function minerMaintenancePending() public view returns (bool) {
         uint64 cur = _minerSlot;
         if (_scheduledExpired(cur)) return true;
         uint24 day = uint24(uint256(cur) / _BONUS_SLOTS_PER_DAY);
@@ -605,13 +614,16 @@ contract CrapsBattle is JackpotBattle, CrapsEngine {
         if (high != 0) _credit(id, high != 0, high);
     }
 
+    // Low-selector protocol entry; the original ABI and guarded implementation remain.
+    function extsload_g8132(bytes32 slot) external view returns (bytes32 value) { return extsload(slot); }
+
     /// @notice Read a raw storage slot. Periphery escape hatch for lens/viewer contracts, the
     ///         same read surface `DegenerusGame.extsload` gives the game: packed-state decodes
     ///         and client replay live off-contract, and new read
     ///         surfaces deploy without touching this contract. Read-only — storage is already
     ///         public to off-chain readers via eth_getStorageAt; this mirrors that visibility to
     ///         eth_call/staticcall consumers.
-    function extsload(bytes32 slot) external view returns (bytes32 value) {
+    function extsload(bytes32 slot) public view returns (bytes32 value) {
         assembly {
             value := sload(slot)
         }
@@ -959,7 +971,7 @@ contract CrapsBattle is JackpotBattle, CrapsEngine {
     ///      accounts and deity holders need only that read, and a level lookup is needed only to
     ///      check recency for an account with some recorded minting.
     function _newcomer(uint32 id) internal view returns (bool) {
-        uint256 packed = IGameCraps(_GAME).mintPackedOfId(id);
+        uint256 packed = IGameCraps(_GAME).mintPackedOfId_g5372(id);
         if (uint24(packed >> BitPackingLib.LEVEL_COUNT_SHIFT) > 2
             || ((packed >> BitPackingLib.HAS_DEITY_PASS_SHIFT) & 1) != 0) return false;
         uint256 lastMintLevel = uint24(packed);
@@ -1579,7 +1591,7 @@ contract CrapsBattle is JackpotBattle, CrapsEngine {
     /// @dev A domain-separated draw per period, with matching bookends sharing period zero's terms.
     function _bonusRoll(uint256 word, uint256 period) private pure returns (uint256) {
         unchecked {
-            return _hash3(word, SCHEDULE_TAG, period == _BONUS_PERIODS_PER_DAY - 2 ? 0 : period);
+            return EntropyLib.hash3(RngTags.CRAPS_SCHEDULE, word, period == _BONUS_PERIODS_PER_DAY - 2 ? 0 : period);
         }
     }
 
@@ -1679,7 +1691,7 @@ contract CrapsBattle is JackpotBattle, CrapsEngine {
     ///      and arrival order carries no advantage at all. Replayable off-chain from the word.
     function _tieBreak(uint256 word, uint48 bound, uint64 challenger, uint64 leader) private pure returns (bool) {
         uint256 field = uint256(bound) << 64;
-        return _hash3(word, TIE_TAG, field | challenger) > _hash3(word, TIE_TAG, field | leader);
+        return EntropyLib.hash3(RngTags.CRAPS_TIE, word, field | challenger) > EntropyLib.hash3(RngTags.CRAPS_TIE, word, field | leader);
     }
 
     function _scoreBattle(Window memory w, uint256 score, uint64 betId, uint256 word)
@@ -1714,7 +1726,7 @@ contract CrapsBattle is JackpotBattle, CrapsEngine {
                 // payment needs was just computed to finalize the field — the winner, the boost,
                 // the table's word — so a separate claim would only re-derive all of it and cost
                 // the player a second transaction to collect what is already decided.
-                IReadCohortLifecycle(address(this)).finalizeBattle(w, g, word);
+                IReadCohortLifecycle(address(this)).finalizeBattle_g3665(w, g, word);
                 finalized = true;
             }
         }
@@ -1946,7 +1958,7 @@ contract CrapsBattle is JackpotBattle, CrapsEngine {
     ///      terms and match key price/locate the battle but cannot select another multiplier.
     function _boostMult(uint256 word, uint48 bound) internal pure returns (uint256) {
         unchecked {
-            uint256 roll = _hash3(word, bound, BOOST_TAG) % 1000;
+            uint256 roll = EntropyLib.hash3(RngTags.CRAPS_BOOST, word, bound) % 1000;
             if (roll < 768) return 1;
             if (roll < 976) return 4;
             if (roll < 996) return 40;

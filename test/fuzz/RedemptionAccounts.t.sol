@@ -174,7 +174,7 @@ contract RedemptionAccountsTest is RedemptionFixture {
         sdgnrs.claimRedemption(aliceId, id);
 
         settlementWord = _wordForRoll(100);
-        vm.mockCall(address(game), abi.encodeWithSignature("rngConsumerStage()"), abi.encode(uint8(1)));
+        vm.mockCall(address(game), abi.encodeWithSignature("rngConsumerStage_g379()"), abi.encode(uint8(1)));
         vm.prank(address(game));
         sdgnrs.runRedemptionWork(settlementWord, 200_000);
         assertEq(_rollOf(id), 100);

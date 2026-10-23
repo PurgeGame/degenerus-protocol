@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {EntropyLib} from "./libraries/EntropyLib.sol";
+import {RngTags} from "./libraries/RngTags.sol";
+
 /*
  * TERMS OF INTERACTION — submitting a transaction to this contract accepts them.
  *
@@ -117,12 +120,18 @@ interface IDrawGame {
     /// @notice Activity score for an existing account; may refresh its affiliate-score cache.
     function playerActivityScoreCachedById(uint32 id) external returns (uint256 score);
 
+    function registerWallet_g9539(address owner, bool allocate) external returns (uint32 id);
+
     /// @notice Game's wallet-ID hook: the existing ID, or with `allocate` a new one (paid
     ///         admission applies; a non-ETH token burn cannot bypass the free-ID threshold).
     function registerWallet(address owner, bool allocate) external returns (uint32 id);
 
+    function walletIdOf_g3120(address player) external view returns (uint32);
+
     /// @notice `player`'s permanent Game wallet ID (0 = none; never allocates).
     function walletIdOf(address player) external view returns (uint32);
+
+    function resolveAccount_g502(uint32 id, address caller) external view returns (address key, address payee, bool authorized);
 
     /// @notice Resolve account `id` for `caller`: key, payee and whether `caller` may act for it
     ///         (its key, a smurf's owner, or an approved operator). Reverts for an unallocated
@@ -133,9 +142,13 @@ interface IDrawGame {
     /// @notice DegenerusGame's current level.
     function level() external view returns (uint24);
 
+
+
     /// @notice Consume wallet `id`'s WWXRP boon through the caller-specific Game dispatch
     ///         (0 returns 0).
-    function consumeCoinflipBoon(uint32 id) external returns (uint16);
+    function consumeCoinflipBoon_g2902(uint32 id) external returns (uint16);
+
+    function extsload_g8132(bytes32 slot) external view returns (bytes32);
 
     /// @notice DegenerusGame's raw storage read (read-only).
     function extsload(bytes32 slot) external view returns (bytes32);
@@ -150,8 +163,10 @@ interface IDrawVaultOwner {
 /// @dev Coinflip stake-credit channel for draw prizes (WWXRP is an authorized
 ///      flip creditor alongside game/quests/affiliate/admin/sDGNRS).
 interface IDrawCoinflip {
+
+
     /// @notice Coinflip's credit of `amount` FLIP stake to wallet `id` (0 is a no-op).
-    function creditFlip(uint32 id, uint256 amount) external;
+    function creditFlip_g317(uint32 id, uint256 amount) external;
     /// @notice The armed BAF draw day and its book: the whole-FLIP sum of every direct
     ///         self-funded deposit that staked the armed day, and the entry count.
     function bafDrawInfo() external view returns (uint24 day, uint96 totalWeight, uint32 entryCount);
@@ -638,11 +653,11 @@ contract WWXRP {
     function withdraw(uint32 id, uint256 amount) external returns (uint256 withdrawn) {
         address payee = msg.sender;
         if (id == 0) {
-            id = game.walletIdOf(msg.sender);
+            id = game.walletIdOf_g3120(msg.sender);
             if (id == 0) return 0;
         } else {
             bool authorized;
-            (, payee, authorized) = game.resolveAccount(id, msg.sender);
+            (, payee, authorized) = game.resolveAccount_g502(id, msg.sender);
             if (!authorized) revert NotApproved();
         }
         return _withdrawPrize(id, payee, amount);
@@ -686,7 +701,7 @@ contract WWXRP {
         if (id == 0) revert InsufficientBalance();
         uint256 shortfall = _consumePrize(id, amount);
         if (shortfall != 0) {
-            (, address payee, ) = game.resolveAccount(id, address(0));
+            (, address payee, ) = game.resolveAccount_g502(id, address(0));
             _burn(payee, shortfall);
         }
     }
@@ -733,7 +748,7 @@ contract WWXRP {
     /// @custom:reverts OnlyMinter When the caller is not currently a trusted minter.
     function consumeBoon(uint32 playerId) external returns (uint16 boonBps) {
         if (!trustedMinter[msg.sender]) revert OnlyMinter();
-        return game.consumeCoinflipBoon(playerId);
+        return game.consumeCoinflipBoon_g2902(playerId);
     }
 
     /// @notice Mint any amount of WWXRP for free (a zero recipient mints nothing).
@@ -793,7 +808,7 @@ contract WWXRP {
         address payee = msg.sender;
         if (id != 0) {
             bool authorized;
-            (, payee, authorized) = game.resolveAccount(id, msg.sender);
+            (, payee, authorized) = game.resolveAccount_g502(id, msg.sender);
             if (!authorized) revert NotApproved();
         }
 
@@ -804,14 +819,14 @@ contract WWXRP {
         // Self entrants resolve or register through the canonical Game registry before
         // activity and reward records use the ID. Registration follows the free-ID policy;
         // this token burn does not provide a qualifying ETH quote beyond that limit.
-        if (id == 0) id = game.registerWallet(msg.sender, true);
+        if (id == 0) id = game.registerWallet_g9539(msg.sender, true);
         uint256 score = game.playerActivityScoreCachedById(id);
         // Consume once for the whole burn. Both draws share the same activity/boon snapshot;
         // both daily and century weights floor to whole WWXRP at the same BPS boundaries.
         // The Game's consume returns 0 with no write and no event when the WWXRP lane's tier is
         // 0, so reading the lane first and skipping the dispatch for an empty lane is exact.
         uint16 boonBps;
-        if (_holdsWwxrpBoon(id)) boonBps = game.consumeCoinflipBoon(id);
+        if (_holdsWwxrpBoon(id)) boonBps = game.consumeCoinflipBoon_g2902(id);
         uint8 bucket = _bucketOf(day, id);
         uint256 multBps = drawMultBps(score);
         uint256 fullWeight = _entryWeight(amount, multBps, boonBps);
@@ -866,7 +881,7 @@ contract WWXRP {
             // Struct member addressing wraps, as Solidity's own does.
             slot = bytes32(uint256(keccak256(abi.encode(id, GAME_BOON_PACKED_SLOT))) + 1);
         }
-        return (uint256(game.extsload(slot)) >> GAME_WWXRP_LANE_SHIFT) & GAME_LANE_TIER_MASK != 0;
+        return (uint256(game.extsload_g8132(slot)) >> GAME_WWXRP_LANE_SHIFT) & GAME_LANE_TIER_MASK != 0;
     }
 
     /// @dev Both multipliers are at least 1x. Amounts above the century's uint192 cap can
@@ -919,7 +934,7 @@ contract WWXRP {
         _dayClaimed[day >> 8] |= uint256(1) << (day & 255);
         uint32 winner = uint32(entry >> 96);
         uint256 prize = big ? BIG_PRIZE : SMALL_PRIZE;
-        coinflip.creditFlip(winner, prize);
+        coinflip.creditFlip_g317(winner, prize);
 
         emit DrawClaimed(day, winner, big, prize, bucket, entryIndex);
     }
@@ -1029,12 +1044,12 @@ contract WWXRP {
         if (word == 0) return (false, false, false, 0, 0, 0, dayClaimed(day));
         wordAvailable = true;
         claimed = dayClaimed(day);
-        big = _drawHash(DOM_BIG, day, word) % BIG_GATE == 0;
+        big = EntropyLib.hash2(RngTags.WWXRP_BIG, word) % BIG_GATE == 0;
         bool small = !big &&
-            _drawHash(DOM_SMALL, day, word) % SMALL_GATE == 0;
+            EntropyLib.hash2(RngTags.WWXRP_SMALL, word) % SMALL_GATE == 0;
         if (!big && !small) return (true, false, false, 0, 0, 0, claimed);
         winningBucket = uint8(
-            _drawHash(DOM_WIN_BUCKET, day, word) % BUCKET_COUNT
+            EntropyLib.hash2(RngTags.WWXRP_BUCKET, word) % BUCKET_COUNT
         );
         uint256 header = _readDrawHeader(day, winningBucket);
         totalScore = (header >> 96) & type(uint96).max;
@@ -1043,7 +1058,7 @@ contract WWXRP {
             return (true, false, big, winningBucket, 0, 0, claimed);
         }
         prize = true;
-        roll = _drawHash(DOM_WINNER, day, word) % totalScore;
+        roll = EntropyLib.hash2(RngTags.WWXRP_WINNER, word) % totalScore;
     }
 
     /// @notice Locate the winning entry for a prize day by binary search over
@@ -1059,17 +1074,17 @@ contract WWXRP {
         if (!_drawClaimOpen(day)) return (false, 0, 0);
         uint256 word = game.rngWordForDay(day + 1);
         if (word == 0) return (false, 0, 0);
-        bool big = _drawHash(DOM_BIG, day, word) % BIG_GATE == 0;
-        if (!big && _drawHash(DOM_SMALL, day, word) % SMALL_GATE != 0) {
+        bool big = EntropyLib.hash2(RngTags.WWXRP_BIG, word) % BIG_GATE == 0;
+        if (!big && EntropyLib.hash2(RngTags.WWXRP_SMALL, word) % SMALL_GATE != 0) {
             return (false, 0, 0);
         }
         uint8 bucket = uint8(
-            _drawHash(DOM_WIN_BUCKET, day, word) % BUCKET_COUNT
+            EntropyLib.hash2(RngTags.WWXRP_BUCKET, word) % BUCKET_COUNT
         );
         uint256 header = _readDrawHeader(day, bucket);
         uint256 total = (header >> 96) & type(uint96).max;
         if (total == 0) return (false, 0, 0);
-        uint256 roll = _drawHash(DOM_WINNER, day, word) % total;
+        uint256 roll = EntropyLib.hash2(RngTags.WWXRP_WINNER, word) % total;
 
         // Smallest index whose cumulative endpoint exceeds the roll.
         uint32 lo = 0;
@@ -1106,7 +1121,7 @@ contract WWXRP {
     ///      amount by the same activity/boon multipliers the carrying entry
     ///      snapshotted (no whole-token truncation). The level increments to
     ///      x00 in the same transaction that requests the VRF word whose
-    ///      bit 0 decides the BAF fire gate, so enter()'s level check alone
+    ///      tagged daily flip decides the BAF fire gate, so enter()'s level check alone
     ///      closes entries before the deciding word can exist — no separate
     ///      rng-lock gate is needed. On a fired (won) BAF the bracket's
     ///      entries are simply never resolved: the burn was the losing side
@@ -1176,14 +1191,7 @@ contract WWXRP {
         if (total == 0) return 0;
 
         uint256 roll = uint256(
-            keccak256(
-                abi.encodePacked(
-                    DOM_INCIN_WINNER,
-                    address(this),
-                    bracket,
-                    rngWord
-                )
-            )
+            EntropyLib.hash2(RngTags.WWXRP_INCINERATOR, rngWord)
         ) % total;
 
         // Smallest index whose cumulative endpoint exceeds the roll.
@@ -1210,7 +1218,7 @@ contract WWXRP {
         uint256 flipAward = (!armedWin && rewardPercent != 0)
             ? (uint256(lostFlip) * INCINERATOR_FLIP_BPS) / 10_000
             : 0;
-        if (flipAward != 0) coinflip.creditFlip(winnerId, flipAward);
+        if (flipAward != 0) coinflip.creditFlip_g317(winnerId, flipAward);
 
         emit IncineratorResolved(bracket, winnerId, flipAward, roll, total);
     }
@@ -1259,16 +1267,16 @@ contract WWXRP {
         if (!_drawClaimOpen(day)) revert WordUnavailable();
         uint256 word = game.rngWordForDay(day + 1);
         if (word == 0) revert WordUnavailable();
-        big = _drawHash(DOM_BIG, day, word) % BIG_GATE == 0;
-        if (!big && _drawHash(DOM_SMALL, day, word) % SMALL_GATE != 0) {
+        big = EntropyLib.hash2(RngTags.WWXRP_BIG, word) % BIG_GATE == 0;
+        if (!big && EntropyLib.hash2(RngTags.WWXRP_SMALL, word) % SMALL_GATE != 0) {
             revert NoPrize();
         }
-        bucket = uint8(_drawHash(DOM_WIN_BUCKET, day, word) % BUCKET_COUNT);
+        bucket = uint8(EntropyLib.hash2(RngTags.WWXRP_BUCKET, word) % BUCKET_COUNT);
         uint256 header = _readDrawHeader(day, bucket);
         total = (header >> 96) & type(uint96).max;
         count = uint32(header >> 192);
         if (total != 0) {
-            roll = _drawHash(DOM_WINNER, day, word) % total;
+            roll = EntropyLib.hash2(RngTags.WWXRP_WINNER, word) % total;
         }
     }
 
@@ -1293,20 +1301,6 @@ contract WWXRP {
         uint256 today = GameTimeLib.currentDayIndex();
         uint256 resolves = uint256(participationDay) + 1;
         return resolves <= today && today - resolves <= 1;
-    }
-
-    /// @dev Domain-separated outcome hash over the immutable next-day word.
-    ///      The word is game-global; this address keys the derivation away
-    ///      from every other consumer of the same word.
-    function _drawHash(
-        bytes32 domain,
-        uint24 day,
-        uint256 word
-    ) private view returns (uint256) {
-        return
-            uint256(
-                keccak256(abi.encodePacked(domain, address(this), day, word))
-            );
     }
 
     function _drawEntryKey(

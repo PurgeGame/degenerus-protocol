@@ -21,7 +21,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 /// @dev The real deployed protocol (DeployProtocol). Days resolve through the GAME's own
 ///      `processCoinflipPayouts(bonus, word, day)` with the wall clock on that day, as the daily
 ///      advance does; word parity is forced only on the key days. FLIP funding uses
-///      `mintForGame` as GAME and credits use `creditFlip` as GAME, the routes every ordinary
+///      `mintForGame` as GAME and credits use `creditFlip_g317` as GAME, the routes every ordinary
 ///      award takes. No storage writes; lastClaim is read with vm.load and cross-checked against
 ///      the public startDay getter.
 contract CoinflipCarryHindsight is DeployProtocol {
@@ -116,7 +116,7 @@ contract CoinflipCarryHindsight is DeployProtocol {
 
     function _credit(uint32 id) internal {
         vm.prank(GAME);
-        coinflip.creditFlip(id, STAKE);
+        coinflip.creditFlip_g317(id, STAKE);
     }
 
     /// @dev The account's walk reached the resolved frontier.
@@ -332,7 +332,7 @@ contract CoinflipCarryHindsight is DeployProtocol {
         address plain = makeAddr("hindsight_plain");
         uint32 plainId = _giveWalletId(plain);
         vm.prank(GAME);
-        coinflip.creditFlip(plainId, STAKE);
+        coinflip.creditFlip_g317(plainId, STAKE);
         _resolveDay(3, true);
         uint256 p3 = _payout(STAKE, 3);
         _resolveRange(4, 2 + WINDOW);

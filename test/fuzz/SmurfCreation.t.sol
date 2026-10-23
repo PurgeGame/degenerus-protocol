@@ -230,8 +230,8 @@ contract SmurfCreation is DeployProtocol {
         uint32 expectedId = uint32(_walletsLength());
         uint32 expectedKey = expectedId;
 
-        vm.expectCall(address(quests), abi.encodeWithSelector(quests.handlePurchase.selector, expectedId), 1);
-        vm.expectCall(address(quests), abi.encodeWithSelector(quests.handlePurchase.selector, ownerId), 0);
+        vm.expectCall(address(quests), abi.encodeWithSelector(quests.handlePurchase_g4831.selector, expectedId), 1);
+        vm.expectCall(address(quests), abi.encodeWithSelector(quests.handlePurchase_g4831.selector, ownerId), 0);
         vm.expectEmit(true, false, false, true, address(game));
         emit EntriesBought(expectedId, 400, price);
         (uint32 smurfId, uint32 key) = _createSmurf(owner, bytes32(0), MintPaymentKind.DirectEth, price);

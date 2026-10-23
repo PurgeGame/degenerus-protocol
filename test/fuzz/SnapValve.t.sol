@@ -12,7 +12,7 @@ import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTi
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
-/// @title SnapValveHarness — drives the REAL runTicketWork drain (delegated to the production
+/// @title SnapValveHarness — drives the REAL runTicketWork_g1150 drain (delegated to the production
 ///        ticket module etched at its pinned address) with a non-zero snapShift. Test-only; NO contracts/*.sol is mutated. Adds only
 ///        seeders, setters, and inspection views over the inherited module.
 contract SnapValveHarness is MintBucketSeed {
@@ -39,7 +39,7 @@ contract SnapValveHarness is MintBucketSeed {
     }
 
     /// @dev Drives `_mintCeiling()` for the drivers below: near-key tests pin `level` so
-    ///      `runTicketWork`'s read window covers the seeded LVL; the far-future test also
+    ///      `runTicketWork_g1150`'s read window covers the seeded LVL; the far-future test also
     ///      latches `lastPurchaseDay` under the lock so the ticket module's frozen-pool branch
     ///      selects the far-future key of `_mintCeiling()` = LVL.
     function setLevel(uint24 lvl_) external {
@@ -54,7 +54,7 @@ contract SnapValveHarness is MintBucketSeed {
         rngLockedFlag = v;
     }
 
-    /// @dev Arms the lootbox RNG word runTicketWork lazily reads as its sweep entropy
+    /// @dev Arms the lootbox RNG word runTicketWork_g1150 lazily reads as its sweep entropy
     ///      (mirrors the setup seedQueue already performs for the near-key tests).
     function armEntropy(uint256 word) external {
         rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((1) & 1) << 12);
@@ -64,9 +64,9 @@ contract SnapValveHarness is MintBucketSeed {
 
     /// @dev The metered ticket worker exactly as the miner dispatches it: a delegatecall into the
     ///      production ticket module (etched at its pinned address) in THIS contract's storage.
-    function runTicketWork(uint24 anchor, uint256 allowance) external returns (MineFlipGas.Result memory) {
+    function runTicketWork_g1150(uint24 anchor, uint256 allowance) external returns (MineFlipGas.Result memory) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_TICKET_MODULE.delegatecall(
-            abi.encodeWithSelector(DegenerusGameTicketModule.runTicketWork.selector, anchor, allowance)
+            abi.encodeWithSelector(DegenerusGameTicketModule.runTicketWork_g1150.selector, anchor, allowance)
         );
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
         return abi.decode(data, (MineFlipGas.Result));
@@ -118,7 +118,7 @@ contract SnapValveTest is Test {
     uint24 constant LVL = 7;
     uint160 constant BASE = 0xA000;
     bytes32 constant TRAITS_SIG = keccak256("TraitsGenerated(uint32,uint256,uint32)");
-    /// @dev `runTicketWork` admits checkpoints while its allowance covers the next declared
+    /// @dev `runTicketWork_g1150` admits checkpoints while its allowance covers the next declared
     ///      bound; drive it with a realistic allowance.
     uint256 constant CHUNK_GAS = 10_000_000;
 
@@ -151,9 +151,9 @@ contract SnapValveTest is Test {
             ContractAddresses.GAME_TICKET_MODULE,
             address(new DegenerusGameTicketModule()).code
         );
-        // _mintCeiling() = level + 1 by default; pin level so runTicketWork's read
+        // _mintCeiling() = level + 1 by default; pin level so runTicketWork_g1150's read
         // window [anchor-1 .. _mintCeiling()] covers LVL when every _drainAll() caller
-        // below anchors at runTicketWork(LVL, ...). _drainAllFuture() overrides this
+        // below anchors at runTicketWork_g1150(LVL, ...). _drainAllFuture() overrides this
         // locally for its own far-future routing.
         h.setLevel(LVL - 1);
     }
@@ -180,7 +180,7 @@ contract SnapValveTest is Test {
 
     /// @dev One bounded worker chunk; an unfinished chunk must have made progress.
     function _batch(uint24 anchor) internal returns (bool finished) {
-        MineFlipGas.Result memory r = h.runTicketWork{gas: CHUNK_GAS}(anchor, CHUNK_GAS);
+        MineFlipGas.Result memory r = h.runTicketWork_g1150{gas: CHUNK_GAS}(anchor, CHUNK_GAS);
         finished = r.done;
         assertTrue(finished || r.progressed, "bounded worker chunk made no progress");
     }

@@ -171,7 +171,7 @@ contract CoinflipAccountsTest is DeployProtocol {
     function _bankSmurfWinnings(uint256 credit) internal returns (uint256 bank) {
         uint24 d = _today();
         vm.prank(GAME);
-        coinflip.creditFlip(smurfId, credit);
+        coinflip.creditFlip_g317(smurfId, credit);
         _warpToDay(d + 1);
         _resolveDay(d + 1, true);
         vm.prank(owner);
@@ -185,7 +185,7 @@ contract CoinflipAccountsTest is DeployProtocol {
     function _pendingSmurfLoss() internal {
         uint24 d = _today();
         vm.prank(GAME);
-        coinflip.creditFlip(smurfId, 300);
+        coinflip.creditFlip_g317(smurfId, 300);
         _warpToDay(d + 1);
         _resolveDay(d + 1, false);
     }
@@ -232,7 +232,7 @@ contract CoinflipAccountsTest is DeployProtocol {
         vm.expectCall(GAME, abi.encodeCall(DegenerusGame.resolveAccount, (smurfId, owner)), 1);
         vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.registerWallet.selector), 0);
         _expectedQuestId = smurfId;
-        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.consumeCoinflipBoon, (smurfId)), 1);
+        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.consumeCoinflipBoon_g2902, (smurfId)), 1);
         vm.expectCall(address(coin), abi.encodeWithSignature("burnForCoinflip(address,uint256)", owner, 1_000), 1);
         vm.recordLogs();
         vm.prank(owner);
@@ -337,7 +337,7 @@ contract CoinflipAccountsTest is DeployProtocol {
         vm.expectCall(GAME, abi.encodeCall(DegenerusGame.registerWallet, (stranger, true)), 1);
         _expectedQuestId = funderId;
         vm.expectCall(address(quests), abi.encodeWithSelector(DegenerusQuests.handleFlip.selector, smurfId), 0);
-        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.consumeCoinflipBoon.selector), 0);
+        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.consumeCoinflipBoon_g2902.selector), 0);
         vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.payRecordSdgnrs.selector), 0);
         vm.prank(stranger);
         coinflip.depositCoinflip(smurfId, 250_000);
@@ -376,7 +376,7 @@ contract CoinflipAccountsTest is DeployProtocol {
         vm.expectCall(GAME, abi.encodeCall(DegenerusGame.resolveAccount, (aid, operator)), 1);
         _expectedQuestId = aid;
         vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.registerWallet.selector), 0);
-        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.consumeCoinflipBoon.selector), 0);
+        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.consumeCoinflipBoon_g2902.selector), 0);
         vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.payRecordSdgnrs.selector), 0);
         vm.prank(operator);
         coinflip.depositCoinflip(aid, 250_000);
@@ -404,7 +404,7 @@ contract CoinflipAccountsTest is DeployProtocol {
         vm.expectCall(GAME, abi.encodeCall(DegenerusGame.resolveAccount, (smurfId, operator)), 1);
         vm.expectCall(address(coin), abi.encodeWithSignature("burnForCoinflip(address,uint256)", owner, 250_000), 1);
         _expectedQuestId = smurfId;
-        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.consumeCoinflipBoon.selector), 0);
+        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.consumeCoinflipBoon_g2902.selector), 0);
         vm.prank(operator);
         coinflip.depositCoinflip(smurfId, 250_000);
         _checkExpectedQuest();
@@ -464,13 +464,13 @@ contract CoinflipAccountsTest is DeployProtocol {
     function test_ZeroAmountGift_SettlesSmurf_MintsNothingToCaller() public {
         uint24 d = _today();
         vm.prank(GAME);
-        coinflip.creditFlip(smurfId, 400);
+        coinflip.creditFlip_g317(smurfId, 400);
         _warpToDay(d + 1);
         _resolveDay(d + 1, true);
         uint256 payout = coinflip.previewClaimCoinflipsById(_fixtureId(smurfId));
         assertGt(payout, 0);
         vm.prank(GAME);
-        coinflip.creditFlip(smurfId, 300);
+        coinflip.creditFlip_g317(smurfId, 300);
         _warpToDay(d + 2);
         _resolveDay(d + 2, false);
         uint256 ownerWwxrp = wwxrp.claimable(smurfId);

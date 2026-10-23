@@ -784,7 +784,7 @@ contract DegeneretteFreezeResolutionTest is DeployProtocol {
 
         // Bets resolve only as an engine read consumer. Once liveness triggers, no read stage
         // is eligible: the engine's only work is the terminal path, which resolves no pending bet.
-        assertEq(game.rngConsumerStage(), 0, "no read consumer runs once liveness triggers");
+        assertEq(game.rngConsumerStage_g379(), 0, "no read consumer runs once liveness triggers");
         assertEq(game.nextMinerAction(), uint8(DegenerusGameStorage.MinerAction.Terminal), "only the terminal path remains");
         vm.recordLogs();
         game.mineFlip(0);

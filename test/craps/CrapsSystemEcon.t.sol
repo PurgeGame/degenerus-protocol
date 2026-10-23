@@ -27,7 +27,7 @@ contract SysHarness is CrapsViews {
 /// @dev Three quantities, kept apart because they are not the same money:
 ///
 ///        burned     `IFlipCoin.burnCoin` — liquid FLIP destroyed at the door, at once.
-///        credited   `ICoinflipStake.creditFlip` — a coinflip STAKE, not a mint. It becomes
+///        credited   `ICoinflipStake.creditFlip_g317` — a coinflip STAKE, not a mint. It becomes
 ///                   liquid FLIP only if its holder later cashes out of that game, and the
 ///                   coinflip carries its own edge on the way.
 ///        minted     `IFlipCoin.mintForGame` — liquid FLIP created. Craps is burn-only, so any

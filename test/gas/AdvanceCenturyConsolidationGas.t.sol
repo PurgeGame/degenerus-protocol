@@ -434,11 +434,11 @@ contract CenturyConsolidationSeeder is DegenerusGame, BucketSeed {
 /// not seed progress or replace any production work inside the measured phase.
 contract CenturyNativeGasHost is DegenerusGame, WalletSeed {
     function publishOnly() external {
-        _native(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("publishRng()"));
+        _native(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("publishRng_g4514()"));
     }
     function prepareTicketsOnly() external returns (bool done) {
         MineFlipGas.Result memory result = abi.decode(_native(ContractAddresses.GAME_TICKET_MODULE,
-            abi.encodeWithSignature("runTicketWork(uint24,uint256)", level, uint256(9_000_000))),
+            abi.encodeWithSignature("runTicketWork_g1150(uint24,uint256)", level, uint256(9_000_000))),
             (MineFlipGas.Result));
         done = result.done;
         if (done) {
@@ -448,7 +448,7 @@ contract CenturyNativeGasHost is DegenerusGame, WalletSeed {
         }
     }
     function applyOnly() external {
-        _native(ContractAddresses.GAME_ADVANCE_MODULE, abi.encodeWithSignature("applyDailyWord()"));
+        _native(ContractAddresses.GAME_ADVANCE_MODULE, abi.encodeWithSignature("applyDailyWord_g1652()"));
     }
     function vaultStamp() external view returns (uint24) { return vaultFlipSettledDay; }
     function dailyOnly() external returns (MineFlipGas.Result memory) {
@@ -456,7 +456,7 @@ contract CenturyNativeGasHost is DegenerusGame, WalletSeed {
     }
     function dailyWith(uint256 allowance) public returns (MineFlipGas.Result memory) {
         return abi.decode(_native(ContractAddresses.GAME_ADVANCE_MODULE,
-            abi.encodeWithSignature("runDailyPhase(uint256)", allowance)), (MineFlipGas.Result));
+            abi.encodeWithSignature("runDailyPhase_g2582(uint256)", allowance)), (MineFlipGas.Result));
     }
     function bafWork() external view returns (uint8 kind, uint16 cursor, uint32 count, uint128 reserved) {
         JackpotWork storage work = jackpotWork;
@@ -488,7 +488,7 @@ abstract contract CenturyConsolidationFixture is FreshWordLeg {
     uint8 internal constant STAGE_JACKPOT_BAF_AWARDS = 19;
     uint256 internal constant BAF_GROUP = BafSchedule.GROUP;
     /// @dev Admits exactly one award group per call: the group bound, its tail, the phase tail and
-    ///      check reserve, plus the runDailyPhase preamble and module hops before the group check.
+    ///      check reserve, plus the runDailyPhase_g2582 preamble and module hops before the group check.
     uint256 internal constant ONE_GROUP_ALLOWANCE = GasBounds.BAF_AWARD_GROUP + GasBounds.BAF_AWARD_TAIL
         + GasBounds.DAILY_PHASE_TAIL + MineFlipGas.CHECK_RESERVE + 100_000;
     /// @dev The allowance the native daily phase runs at elsewhere in this fixture.

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {RngTags} from "../../contracts/libraries/RngTags.sol";
 
 import {Vm} from "forge-std/Vm.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
@@ -9,11 +10,8 @@ import {DegeneretteMathHarness} from "../../contracts/mocks/DegeneretteMathHarne
 import {FlipRoundLib} from "../../contracts/libraries/FlipRoundLib.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 
-/// @title WalletIdEntropyDegenerette — a FLIP bet's survival and rounding seeds take its wallet ID
-/// @notice A FLIP bet's payout survives `hash4(word, walletId, betId, BET_SURVIVAL_TAG) & 1` and then
-///         rounds on `hash4(word, walletId, betId, FLIP_ROUND_TAG)`. The fixtures pick resolution
-///         words where the owner's address in the same position would have decided otherwise, and
-///         the settled payout is checked against the exact ID preimages.
+/// @notice A bet ID uniquely identifies its owner within a sealed cohort. Compare
+/// the tagged bet preimages against the former address-dependent derivations.
 contract WalletIdEntropyDegeneretteTest is DeployProtocol {
     uint256 private constant BET_SURVIVAL_TAG = 0x446567656e537572766976616c; // "DegenSurvival"
     uint256 private constant FLIP_ROUND_TAG = 0x466c6970526f756e64; // "FlipRound"
@@ -97,47 +95,46 @@ contract WalletIdEntropyDegeneretteTest is DeployProtocol {
         assertTrue(found, "the bet resolved");
     }
 
-    /// @dev First word from `start` whose payout is positive, whose ID-keyed survival is
+    /// @dev First word from `start` whose payout is positive, whose bet-keyed survival is
     ///      `idSurvives`, whose address-keyed survival is the opposite and, for a survivor, whose
-    ///      ID-keyed and address-keyed roundings differ.
+    ///      bet-keyed and address-keyed roundings differ.
     function _word(uint256 start, uint64 betId, uint16 activity, bool idSurvives) private view returns (uint256 word) {
         for (word = start; ; ++word) {
             uint256 p = _payout(word, activity);
             if (p == 0) continue;
-            bool idBit = _hash4(word, playerId, betId, BET_SURVIVAL_TAG) & 1 == 1;
+            bool idBit = uint256(keccak256(abi.encode(RngTags.BET_SURVIVAL, word, uint256(betId)))) & 1 == 1;
             bool addrBit = _hash4(word, uint160(player), betId, BET_SURVIVAL_TAG) & 1 == 1;
             if (idBit != idSurvives || addrBit == idSurvives) continue;
             if (!idSurvives) return word;
             uint256 doubled = 2 * p;
             if (doubled <= FlipRoundLib.FLIP_ROUND_THRESHOLD) continue;
-            if (FlipRoundLib.roundFlipToHundreds(doubled, _hash4(word, playerId, betId, FLIP_ROUND_TAG))
+            if (FlipRoundLib.roundFlipToHundreds(doubled, uint256(keccak256(abi.encode(RngTags.BET_ROUND, word, uint256(betId)))))
                 != FlipRoundLib.roundFlipToHundreds(doubled, _hash4(word, uint160(player), betId, FLIP_ROUND_TAG))) {
                 return word;
             }
         }
     }
 
-    function test_SurvivorDoublesAndRoundsOnWalletIdSeeds() public {
+    function test_SurvivorDoublesAndRoundsOnBetIdentity() public {
         (uint64 betId, uint16 activity) = _place();
         uint256 word = _word(uint256(keccak256("id-survives")), betId, activity, true);
         uint256 doubled = 2 * _payout(word, activity);
-        uint256 expected = FlipRoundLib.roundFlipToHundreds(doubled, _hash4(word, playerId, betId, FLIP_ROUND_TAG));
+        uint256 expected = FlipRoundLib.roundFlipToHundreds(doubled, uint256(keccak256(abi.encode(RngTags.BET_ROUND, word, uint256(betId)))));
         uint256 before = coin.balanceOf(player);
-        assertEq(_resolve(word, betId), expected, "survival and rounding keyed by the wallet ID");
+        assertEq(_resolve(word, betId), expected, "survival and rounding keyed by the unique bet ID");
         assertGe(coin.balanceOf(player) - before, expected, "the survivor's payout minted");
     }
 
-    function test_LoserOnWalletIdSeedPaysNothing() public {
+    function test_LoserOnBetIdentityPaysNothing() public {
         (uint64 betId, uint16 activity) = _place();
         uint256 word = _word(uint256(keccak256("id-loses")), betId, activity, false);
-        assertEq(_resolve(word, betId), 0, "the ID-keyed survival flip lost");
+        assertEq(_resolve(word, betId), 0, "the bet-keyed survival flip lost");
     }
 
-    /// @dev The record-bounty spin chain shares the bet's committed ID and bet id.
-    function test_RecordSpinSeedTakesTheWalletId() public view {
+    /// @dev The record-bounty spin chain shares the bet's committed bet ID.
+    function test_RecordSpinSeedUsesOnlyTheBetIdentity() public view {
         string memory src = vm.readFile("contracts/modules/DegenerusGameDegeneretteModule.sol");
-        assertTrue(_contains(src, "EntropyLib.hash4(rngWord, playerId, betId, RECORD_SPIN_TAG)"));
-        assertTrue(_contains(src, "uint32 playerId = uint32(bet);"));
+        assertTrue(_contains(src, "EntropyLib.hash3(RngTags.BET_RECORD, rngWord, betId)"));
         assertFalse(_contains(src, "uint160(player), betId"));
     }
 

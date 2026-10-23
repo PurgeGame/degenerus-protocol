@@ -83,7 +83,7 @@ abstract contract VaultBafRig is DeployProtocol {
     /// @dev One day's player and protocol actions, before the day boundary.
     function _stageDay() internal {
         vm.prank(address(game));
-        coinflip.creditFlip(1, VAULT_CREDIT);
+        coinflip.creditFlip_g317(1, VAULT_CREDIT);
         if (!game.jackpotPhase()) {
             (uint24 lvl, , , , ) = game.purchaseInfo();
             if (lvl != heldLevel) (heldLevel, heldDays) = (lvl, 0);

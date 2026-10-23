@@ -10,7 +10,9 @@ import {IVRFCoordinator} from "../../contracts/interfaces/IVRFCoordinator.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {IDegenerusGameAdvanceModule, IDegenerusGameJackpotModule, IDegenerusGameGameOverModule, IDegenerusGameRngModule}
     from "../../contracts/interfaces/IDegenerusGameModules.sol";
+import {NativeFailureExport, NativeFailureProbe} from "../helpers/NativeFailureExport.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @dev Preserve dependency storage and normal behavior except the selected selector.
 contract SelectorFaultProxy {
@@ -30,6 +32,13 @@ contract SelectorFaultProxy {
             if (m == 5) revert MineFlipGas.InsufficientExecutionGas();
             if (m == 6) assembly ("memory-safe") { mstore(0, not(0)) return(0, 32) }
             if (m == 7) assembly ("memory-safe") { mstore(0, 0) return(0, 32) }
+            if (m == 9) revert("plain refusal");
+            if (m == 10) assembly ("memory-safe") { for {} 1 {} {} }
+            if (m == 8) {
+                // A healthy coordinator upgrade can cost well above the former 500k cap.
+                uint256 start = gasleft();
+                while (start - gasleft() < 1_200_000) {}
+            }
         }
         (bool ok, bytes memory result) = implementation.delegatecall(msg.data);
         if (!ok) assembly ("memory-safe") { revert(add(result, 32), mload(result)) }
@@ -96,11 +105,21 @@ contract GameIsolationHost is DegenerusGame {
     function swept() external view returns (bool) { return _goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0; }
 }
 
-contract GameExternalIsolationTest is DeployProtocol {
+contract GameExternalIsolationTest is DeployProtocol, NativeFailureExport {
     GameIsolationHost private host;
     address private tokenImplementation;
     address private vrfImplementation;
     address private adminImplementation;
+    address private nativeAdmissionProbe;
+
+    function _nativeExtraStorage(string memory key, address account) internal override {
+        if (account != address(game) || nativeAdmissionProbe == address(0)) return;
+        // A gas-limited native continuation can finish at the miner reward lookup
+        // that the unlimited Foundry export does not visit. Export its actual
+        // prestate value, including zero, rather than assuming an omitted slot.
+        bytes32 slot = keccak256(abi.encode(nativeAdmissionProbe, GameSlots.WALLET_IDS));
+        vm.serializeBytes32(key, vm.toString(slot), vm.load(account, slot));
+    }
 
     function setUp() public {
         _deployProtocol();
@@ -113,7 +132,7 @@ contract GameExternalIsolationTest is DeployProtocol {
         vm.etch(tokenImplementation, address(mockStETH).code);
         vm.etch(vrfImplementation, address(mockVRF).code);
         vm.etch(adminImplementation, ContractAddresses.ADMIN.code);
-        vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("minerMaintenancePending()"), abi.encode(false));
+        vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("minerMaintenancePending_g11976()"), abi.encode(false));
         mockVRF.fundSubscription(1, uint96(100 ether));
     }
     function _fault(address target, address implementation, bytes4 selector, uint8 mode) private {
@@ -121,7 +140,7 @@ contract GameExternalIsolationTest is DeployProtocol {
     }
     function _phase() private returns (MineFlipGas.Result memory) {
         return abi.decode(host.invoke{gas: 10_000_000}(ContractAddresses.GAME_ADVANCE_MODULE,
-            abi.encodeCall(IDegenerusGameAdvanceModule.runDailyPhase, (uint256(10_000_000)))), (MineFlipGas.Result));
+            abi.encodeCall(IDegenerusGameAdvanceModule.runDailyPhase_g2582, (uint256(10_000_000)))), (MineFlipGas.Result));
     }
     function _terminal() private {
         host.invoke{gas: 10_000_000}(ContractAddresses.GAME_GAMEOVER_MODULE,
@@ -212,6 +231,20 @@ contract GameExternalIsolationTest is DeployProtocol {
         }
     }
 
+    function test_ExpensiveCoordinatorRequestSucceedsBeyondFormerCap() public {
+        host.seedRng(true, true);
+        _fault(address(mockVRF), vrfImplementation, IVRFCoordinator.requestRandomWords.selector, 8);
+        game.mineFlip{gas: 16_000_000}(0);
+        (uint24 day,, bool active) = host.requestIdentity();
+        assertGt(day, 0); assertTrue(active);
+    }
+
+    function test_ExpensiveTrustedSubscriptionReadSucceedsBeyondFormerCap() public {
+        _fault(address(mockVRF), vrfImplementation, IVRFCoordinator.getSubscription.selector, 8);
+        (bool ok, uint256 balance) = host.linkBalance{gas: 3_000_000}();
+        assertTrue(ok); assertGt(balance, 0);
+    }
+
     function test_SelectorFailuresPreserveCertificationAndRefuseEligibility() public {
         for (uint8 mode = 1; mode <= 6; ++mode) {
             uint256 snap = vm.snapshotState();
@@ -231,7 +264,7 @@ contract GameExternalIsolationTest is DeployProtocol {
             _fault(address(mockVRF), vrfImplementation, IVRFCoordinator.getSubscription.selector, mode);
             if (mode != 4) vm.expectRevert(DegenerusGameStorage.ExternalRequestRefused.selector);
             host.invoke(ContractAddresses.GAME_RNG_MODULE,
-                abi.encodeCall(IDegenerusGameRngModule.requestMinerRng, ()));
+                abi.encodeCall(IDegenerusGameRngModule.requestMinerRng_g4954, ()));
             (uint24 day,, bool active) = host.requestIdentity();
             if (mode == 4) assertTrue(active);
             else { assertFalse(active); assertEq(day, 0); }
@@ -261,17 +294,72 @@ contract GameExternalIsolationTest is DeployProtocol {
         }
     }
 
-    function test_ShutdownFailureCannotUndoSweepOrSpendReserveOnOtherSinks() public {
-        for (uint8 mode = 1; mode <= 5; ++mode) {
+    function test_ShutdownFailureRollsBackSweepAndRemainsRetryable() public {
+        uint8[5] memory modes = [uint8(1), 2, 5, 9, 10];
+        for (uint256 i; i < modes.length; ++i) {
             uint256 snap = vm.snapshotState();
             host.seedSweep(9 ether); vm.deal(address(game), 9 ether);
-            _fault(ContractAddresses.ADMIN, adminImplementation, bytes4(keccak256("shutdownVrf()")), mode);
+            _fault(ContractAddresses.ADMIN, adminImplementation, bytes4(keccak256("shutdownVrf()")), modes[i]);
             uint256 beforeSD = ContractAddresses.SDGNRS.balance;
+            uint256 sub = admin.subscriptionId();
+            bytes memory sweep = abi.encodeCall(IDegenerusGameGameOverModule.runGameOverAdvance,
+                (game.currentDayView(), uint24(10), uint256(10_000_000)));
+            vm.expectRevert(MineFlipGas.InsufficientExecutionGas.selector);
+            host.invoke{gas: 10_000_000}(ContractAddresses.GAME_GAMEOVER_MODULE, sweep);
+            assertFalse(host.swept()); assertEq(game.redemptionReserve(), 9 ether);
+            assertEq(address(game).balance, 9 ether);
+            assertEq(ContractAddresses.SDGNRS.balance, beforeSD);
+            assertEq(admin.subscriptionId(), sub);
+            vm.etch(ContractAddresses.ADMIN, adminImplementation.code);
             _terminal();
             assertTrue(host.swept()); assertEq(game.redemptionReserve(), 0);
+            assertEq(admin.subscriptionId(), 0);
             assertEq(address(game).balance, 0);
             assertGe(ContractAddresses.SDGNRS.balance - beforeSD, 9 ether - 3);
             vm.revertToState(snap);
+        }
+    }
+
+    function test_FinalSweepGasBoundaryNeverStrandsLiveSubscription() public {
+        host.seedSweep(9 ether); vm.deal(address(game), 9 ether);
+        uint256 sub = admin.subscriptionId();
+        uint256 beforeSD = ContractAddresses.SDGNRS.balance;
+        uint256 firstSuccess;
+        for (uint256 supplied = 750_000; supplied <= 2_800_000; supplied += 5_000) {
+            uint256 snap = vm.snapshotState();
+            (bool ok,) = address(game).call{gas: supplied}(abi.encodeCall(game.mineFlip, (uint32(0))));
+            if (ok) {
+                assertTrue(host.swept()); assertEq(admin.subscriptionId(), 0);
+                if (firstSuccess == 0) firstSuccess = supplied;
+            } else {
+                assertFalse(host.swept()); assertEq(admin.subscriptionId(), sub);
+                assertEq(game.redemptionReserve(), 9 ether);
+                assertEq(address(game).balance, 9 ether);
+                assertEq(ContractAddresses.SDGNRS.balance, beforeSD);
+            }
+            assertTrue(vm.revertToState(snap)); vm.deleteStateSnapshot(snap);
+        }
+        assertGt(firstSuccess, 750_000); assertLt(firstSuccess, 2_800_000);
+        emit log_named_uint("final_sweep_first_success_5k_grid", firstSuccess);
+    }
+
+    function test_RequestGasSweepPreservesCertificationAtBaselineAndFloor() public {
+        for (uint256 kind; kind < 2; ++kind) for (uint256 calibration; calibration < 2; ++calibration) {
+            for (uint256 supplied = 450_000; supplied <= 3_000_000; supplied += 25_000) {
+                uint256 snap = vm.snapshotState();
+                host.seedRng(kind == 0, true);
+                uint32 multiplier = calibration == 0 ? 10_000 : 2_500;
+                (bool ok,) = address(game).call{gas: supplied}(abi.encodeCall(game.mineFlip, (multiplier)));
+                assertTrue(ok, "certification prefix must survive a declined request or re-selection");
+                (,, bool active) = host.requestIdentity();
+                if (!active) {
+                    assertTrue(game.rngComplete(), "refusal cannot lose the certified read");
+                    game.mineFlip{gas: 6_000_000}(multiplier);
+                    (,, active) = host.requestIdentity();
+                }
+                assertTrue(active, "a refused request succeeds on a funded retry");
+                assertTrue(vm.revertToState(snap)); vm.deleteStateSnapshot(snap);
+            }
         }
     }
 
@@ -300,6 +388,82 @@ contract GameExternalIsolationTest is DeployProtocol {
         assertEq(game.redemptionReserve(), 9 ether);
         assertEq(address(game).balance, 9 ether);
         assertEq(ContractAddresses.SDGNRS.balance, beforeSD);
+    }
+
+    function test_NativeChangedGameBoundaries() public {
+        vm.clearMockedCalls();
+        // Seed the real table cursor at an empty current day; the ordinary fixture
+        // mocked this predicate, which would hide the intended VRF boundary on native replay.
+        bytes32 tableSlot = bytes32(uint256(11)); // CrapsBattleStorage._minerSlot, checked by layout oracle.
+        uint256 tableWord = uint256(vm.load(ContractAddresses.CRAPS, tableSlot));
+        vm.store(ContractAddresses.CRAPS, tableSlot,
+            bytes32((tableWord & ~uint256(type(uint64).max)) | (uint256(game.currentDayView()) * 8)));
+        NativeFailureProbe probe = new NativeFailureProbe();
+        uint8[6] memory modes = [uint8(1), 2, 5, 8, 9, 10];
+        for (uint256 site; site < 5; ++site) for (uint256 i; i < modes.length; ++i) {
+            if (site >= 3 && i != 0) continue;
+            this.exportNativeGameCase(site, modes[i], probe);
+        }
+    }
+
+    function exportNativeGameCase(uint256 site, uint8 mode, NativeFailureProbe probe) external {
+            uint256 snap = vm.snapshotState();
+            bytes memory input;
+            uint256 supplied = 10_000_000;
+            if (site == 0) {
+                host.seedRng(true, true);
+                vm.expectCall(address(mockVRF), abi.encodeWithSelector(IVRFCoordinator.requestRandomWords.selector));
+                _fault(address(mockVRF), vrfImplementation, IVRFCoordinator.requestRandomWords.selector, mode);
+                input = abi.encodeCall(game.mineFlip, (uint32(0)));
+            } else if (site == 1) {
+                _fault(address(mockVRF), vrfImplementation, IVRFCoordinator.getSubscription.selector, mode);
+                input = abi.encodeCall(host.linkBalance, ());
+            } else if (site == 2) {
+                host.seedSweep(9 ether); vm.deal(address(game), 9 ether);
+                _fault(ContractAddresses.ADMIN, adminImplementation, bytes4(keccak256("shutdownVrf()")), mode);
+                input = abi.encodeCall(host.invoke, (ContractAddresses.GAME_GAMEOVER_MODULE,
+                    abi.encodeCall(IDegenerusGameGameOverModule.runGameOverAdvance,
+                        (game.currentDayView(), uint24(10), uint256(10_000_000)))));
+            }
+            if (site == 3) { input = abi.encodeCall(host.requestProbe, ()); supplied = 500_000; }
+            if (site == 4) { input = abi.encodeCall(host.linkBalance, ()); supplied = 50_000; }
+            _nativeCheckedFixture(string.concat("game-", vm.toString(site), "-", vm.toString(mode)),
+                address(this), address(probe), abi.encodeCall(probe.invoke, (address(game), input, supplied)));
+            require(vm.revertToState(snap));
+            vm.deleteStateSnapshot(snap);
+    }
+
+    function test_NativeOptfixAdmissionBoundaries() public {
+        vm.clearMockedCalls();
+        bytes32 tableSlot = bytes32(uint256(11));
+        uint256 tableWord = uint256(vm.load(ContractAddresses.CRAPS, tableSlot));
+        vm.store(ContractAddresses.CRAPS, tableSlot,
+            bytes32((tableWord & ~uint256(type(uint64).max)) | (uint256(game.currentDayView()) * 8)));
+        NativeFailureProbe probe = new NativeFailureProbe();
+        for (uint256 kind; kind < 3; ++kind) this.exportNativeAdmissionCase(kind, probe);
+    }
+
+    function exportNativeAdmissionCase(uint256 kind, NativeFailureProbe probe) external {
+        require(msg.sender == address(this));
+        nativeAdmissionProbe = address(probe);
+        uint256 snap = vm.snapshotState();
+        if (kind == 0) {
+            host.seedSweep(9 ether); vm.deal(address(game), 9 ether);
+        } else {
+            host.seedRng(kind == 1, true);
+        }
+        bytes memory input = abi.encodeCall(game.mineFlip, (uint32(10_000)));
+        string memory label = kind == 0 ? "optfix-sweep" : kind == 1 ? "optfix-daily" : "optfix-midday";
+        _nativeCheckedFixture(label, address(this), address(probe),
+            abi.encodeCall(probe.invoke, (address(game), input, 6_000_000)));
+        (bool ok,) = probe.invoke(address(game), input, 6_000_000);
+        assertTrue(ok);
+        if (kind == 0) {
+            assertTrue(host.swept()); assertEq(admin.subscriptionId(), 0);
+        } else {
+            (,, bool active) = host.requestIdentity(); assertTrue(active);
+        }
+        assertTrue(vm.revertToState(snap)); vm.deleteStateSnapshot(snap);
     }
 
 }

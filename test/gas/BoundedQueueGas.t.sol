@@ -36,7 +36,7 @@ contract BoundedQueueHost is DegenerusGame, WalletSeed {
     }
     function work(bool bets, uint256 allowance) external returns (MineFlipGas.Result memory result) {
         address module = bets ? ContractAddresses.GAME_DEGENERETTE_MODULE : ContractAddresses.GAME_AFKING_MODULE;
-        bytes memory input = abi.encodeWithSignature(bets ? "runDegeneretteWork(uint256)" : "runHumanBoxWork(uint256)", allowance);
+        bytes memory input = abi.encodeWithSignature(bets ? "runDegeneretteWork_g670(uint256)" : "runHumanBoxWork_g315(uint256)", allowance);
         (bool ok, bytes memory data) = module.delegatecall(input);
         if (!ok) assembly ("memory-safe") { revert(add(data,32),mload(data)) }
         result = abi.decode(data,(MineFlipGas.Result));

@@ -29,12 +29,12 @@ contract TicketDrainProbe is ModuleSpy {
     }
 
     function _enter() internal override {
-        if (msg.sig != IDegenerusGameTicketModule.runTicketWork.selector) return;
+        if (msg.sig != IDegenerusGameTicketModule.runTicketWork_g1150.selector) return;
         emit TWPre(ticketLevel, ticketCursor, ticketSeats, _ticketQueueLength(ticketLevel), ticketSoloOffset, _owedSum(), gasleft());
     }
 
     function _leave(bytes memory ret) internal override {
-        if (msg.sig != IDegenerusGameTicketModule.runTicketWork.selector) return;
+        if (msg.sig != IDegenerusGameTicketModule.runTicketWork_g1150.selector) return;
         (bool progressed, bool done,) = abi.decode(ret, (bool, bool, uint256));
         emit TWPost(ticketLevel, ticketCursor, ticketSeats, ticketSoloOffset, _owedSum(), gasleft(), progressed, done);
     }

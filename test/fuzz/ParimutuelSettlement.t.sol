@@ -946,7 +946,7 @@ contract ParimutuelSettlementSelectorTest is Test {
         game = GrowthSelectorHarness(ContractAddresses.GAME);
         _mockSdgnrs(false);
         _mockMaintenance(false);
-        vm.mockCall(ContractAddresses.COINFLIP, abi.encodeWithSignature("creditFlip(uint32,uint256)"), bytes(""));
+        vm.mockCall(ContractAddresses.COINFLIP, abi.encodeWithSignature("creditFlip_g317(uint32,uint256)"), bytes(""));
         vm.mockCall(
             ContractAddresses.VRF_COORDINATOR,
             abi.encodeWithSelector(IVRFCoordinator.getSubscription.selector),
@@ -1029,7 +1029,7 @@ contract ParimutuelSettlementSelectorTest is Test {
         game.setGrowthPending(true);
         vm.etch(ContractAddresses.PARIMUTUEL, hex"00");
         vm.mockCall(ContractAddresses.PARIMUTUEL, _settleCall(), abi.encode(true, false, uint256(1)));
-        vm.expectCall(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("requestMinerRng()"), 0);
+        vm.expectCall(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("requestMinerRng_g4954()"), 0);
         game.mineFlip{gas: 4_400_000}(0);
         assertTrue(game.growthPending(), "not done keeps the bit");
         assertEq(game.select(), GROWTH_SETTLE, "still ahead of the eligible mid-day request");

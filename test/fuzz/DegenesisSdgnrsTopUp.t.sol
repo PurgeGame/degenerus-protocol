@@ -8,7 +8,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 
 /// @dev Test-only stand-in for the Game facade's code at the GAME address: forwards by delegatecall
-///      into the real Degenesis module, so `topUpSdgnrsAfking` runs in the Game's storage exactly
+///      into the real Degenesis module, so `topUpSdgnrsAfking_g318` runs in the Game's storage exactly
 ///      as the AFKing STAGE nests it. `vm.etch` keeps the Game's storage.
 contract DegenesisModuleForwarder {
     fallback() external payable {
@@ -21,7 +21,7 @@ contract DegenesisModuleForwarder {
 }
 
 interface IDegenesisTopUp {
-    function topUpSdgnrsAfking() external;
+    function topUpSdgnrsAfking_g318() external;
 }
 
 /// @title DegenesisSdgnrsTopUp -- sDGNRS AFKing top-up before the once-per-level whale attempt (check 10)
@@ -55,7 +55,7 @@ contract DegenesisSdgnrsTopUp is DegenesisFixture {
     function _topUpDirect() internal {
         bytes memory code = address(game).code;
         vm.etch(address(game), address(new DegenesisModuleForwarder()).code);
-        IDegenesisTopUp(address(game)).topUpSdgnrsAfking();
+        IDegenesisTopUp(address(game)).topUpSdgnrsAfking_g318();
         vm.etch(address(game), code);
     }
 

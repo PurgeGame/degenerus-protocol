@@ -134,7 +134,7 @@ abstract contract GameBingo is DegenerusGameStorage {
         );
 
         // FLIP credit is always paid, even when the Reward pool is empty.
-        coinflip.creditFlip(playerId, BINGO_FLIP);
+        coinflip.creditFlip_g317(playerId, BINGO_FLIP);
 
         emit BingoClaimed(playerId, lvl, symbol, BINGO_FLIP, dgnrsPaid);
     }
@@ -165,11 +165,10 @@ abstract contract GameBingo is DegenerusGameStorage {
         if (playerId == 0) revert ScoreTooLow();
         if (_affiliateDgnrsClaimed(currLevel, playerId)) revert AlreadyClaimed();
 
-        uint256 score = affiliate.affiliateScore(currLevel, playerId);
+        (uint256 score, uint256 denominator) = affiliate.affiliateScoreAndTotal_g4013(currLevel, playerId);
         bool isDeityHolder = word >> BitPackingLib.HAS_DEITY_PASS_SHIFT & 1 != 0;
         if (!isDeityHolder && score < AFFILIATE_DGNRS_MIN_SCORE) revert ScoreTooLow();
 
-        uint256 denominator = affiliate.totalAffiliateScore(currLevel);
         if (denominator == 0) revert ZeroValue();
 
         (uint256 allocation, ) = _getLevelDgnrs(currLevel);
@@ -199,7 +198,7 @@ abstract contract GameBingo is DegenerusGameStorage {
                 bonus = cap;
             }
             if (bonus != 0) {
-                coinflip.creditFlip(playerId, bonus);
+                coinflip.creditFlip_g317(playerId, bonus);
             }
         }
 

@@ -10,7 +10,7 @@ import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 
 /// @dev Seeds every storage field the miner selector and the Game's `_rngConsumerStage` read. Inherits the Game,
-///      so `rngConsumerStage()` runs the Game's compiled copy while `nextMinerAction()` delegates to the
+///      so `rngConsumerStage_g379()` runs the Game's compiled copy while `nextMinerAction()` delegates to the
 ///      deployed MinerModule, whose compiled copy of the same source is the one the selector used.
 contract ChainPinStageHarness is DegenerusGame {
     struct Seed {
@@ -90,7 +90,7 @@ contract ChainPinFundHarness is DegenerusGame {
 }
 
 /// @notice A-F1: the Game's compiled `_rngConsumerStage` (read by `sDGNRS.runRedemptionWork` through
-///         `game.rngConsumerStage()`) must agree with the MinerModule copy the selector used. A selected
+///         `game.rngConsumerStage_g379()`) must agree with the MinerModule copy the selector used. A selected
 ///         Redemption action must never meet `RedemptionStageBlocked`, which would stop stage 1 for good.
 contract ChainPinConsumerStage is DeployProtocol {
     uint256 internal redemptionHits;
@@ -152,7 +152,7 @@ contract ChainPinConsumerStage is DeployProtocol {
         vm.etch(address(game), original);
         vm.mockCall(address(sdgnrs), abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(pending));
         uint8 action = game.nextMinerAction();
-        uint8 stage = game.rngConsumerStage();
+        uint8 stage = game.rngConsumerStage_g379();
         // Redemption = 8 ... CertifyRead = 14: the consumer branch maps stage n to action n + 7.
         if (action >= 8 && action <= 14) assertEq(stage, action - 7, "selected consumer action != Game stage");
         // A Game stage 1 must have been selected as Redemption (no loan seizure is pending in these states).

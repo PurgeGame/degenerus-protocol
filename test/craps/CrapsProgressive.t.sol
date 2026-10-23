@@ -38,7 +38,7 @@ contract ProgHarness is CrapsViews {
         // its first score so finalization has the same obligation as an armed field.
         if (uint32(_loadBattle(key) >> _BG_RESOLVED_SHIFT) == 0 && uint32(_loadBattle(key)) != 0) {
             _setSlotIndex(w.bound, 1);
-            IReadCohortLifecycle(address(this)).registerRngSlot(0, w.bound, key);
+            IReadCohortLifecycle(address(this)).registerRngSlot_g709(0, w.bound, key);
         }
         _scoreBattle(w, score, seat, 0);
     }
@@ -1847,7 +1847,7 @@ contract PoolWatcher {
         table = t;
     }
 
-    function creditFlip(uint32, uint256) external {
+    function creditFlip_g317(uint32, uint256) external {
         seen = ICrapsPool(table).progressivePool();
     }
 

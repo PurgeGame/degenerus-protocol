@@ -345,7 +345,7 @@ contract RedemptionBatchingTest is AutomaticRedemptionSettlementTest {
         assertEq(keccak256(abi.encode(game.claimableWinningsOf(alice), game.claimableWinningsOf(bob),
             game.futurePrizePoolView(), address(sdgnrs).balance, sdgnrs.pendingRedemptionEthValue())), stepBalances);
     }
-    // Pins coinflip.creditFlip in the router: external keeper gets the exact single credit.
+    // Pins coinflip.creditFlip_g317 in the router: external keeper gets the exact single credit.
     // The miner pays measured gas above each call's unpaid first 1M at the capped base fee, so the
     // fixture settles real lootbox claims (above that threshold) at a nonzero base fee.
     function test_MineFlipPaysExternalKeeperOnceAndNoBoxesStillCommits() public {

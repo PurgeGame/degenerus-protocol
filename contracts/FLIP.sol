@@ -692,14 +692,14 @@ contract FLIP {
         // pick the lane, so arriving here as COIN spends the CRAPS boon and can never reach the
         // coinflip one. The bps come back off the coinflip table the family mirrors; the table
         // stores a one-hot tier, not a rate, so translate here.
-        uint16 boonBps = degenerusGame.consumeCoinflipBoon(id);
+        uint16 boonBps = degenerusGame.consumeCoinflipBoon_g2902(id);
         if (boonBps == 500) boonMask = 1;
         else if (boonBps == 1000) boonMask = 2;
         else if (boonBps == 2500) boonMask = 4;
 
         // Quest progress and the day-streak credit only. No value is computed or forwarded here —
         // the boon's whole effect is the mask returned above.
-        if (flags != 0) questModule.recordCrapsAction(id, flags);
+        if (flags != 0) questModule.recordCrapsAction_g14623(id, flags);
     }
 
     /// @notice The craps comp lane's live balance, in FLIP whole tokens.
@@ -768,7 +768,7 @@ contract FLIP {
         address payee = msg.sender;
         if (id != 0) {
             bool authorized;
-            (key, payee, authorized) = degenerusGame.resolveAccount(id, msg.sender);
+            (key, payee, authorized) = degenerusGame.resolveAccount_g502(id, msg.sender);
             if (!authorized) revert NotApproved();
         }
 
@@ -793,7 +793,7 @@ contract FLIP {
     ///      write finds the ID already in place. The activity score is read after the quest, so a
     ///      quest this burn completes counts toward its multiplier.
     function _recordDecimatorBurn(address key, uint32 id, uint256 amount, uint24 lvl, uint32 chips) private {
-        if (id == 0) id = degenerusGame.registerWallet(key, true);
+        if (id == 0) id = degenerusGame.registerWallet_g9539(key, true);
 
         // Quest processing (reward creditFlipped internally; bonus boosts decimator weight)
         (uint256 questReward,,, bool completed) = questModule.handleDecimator(id, amount);
@@ -811,7 +811,7 @@ contract FLIP {
             baseAmount += boost;
         }
 
-        uint64 entryId = degenerusGame.recordDecBurn(id, lvl, baseAmount, decBurnMultBps, chips);
+        uint64 entryId = degenerusGame.recordDecBurn_g5574(id, lvl, baseAmount, decBurnMultBps, chips);
 
         emit DecimatorBurn(id, amount, entryId);
     }

@@ -173,6 +173,8 @@ interface IDegenerusQuests {
         external
         returns (uint256 reward, uint8 questType, uint32 streak, bool completed);
 
+
+
     /// @notice Records combined purchase-path activity (mint tickets + lootbox) and checks quest completion
     /// @dev Called by MintModule for the unified purchase path. Combines the mint + lootbox
     ///      quest legs into a single cross-contract call. Returns streak for compute-once
@@ -189,7 +191,7 @@ interface IDegenerusQuests {
     /// @return streak The player's current quest streak (for score forwarding)
     /// @return completed Whether a quest was completed by this action
     /// @return afking Whether the buyer has an afking run (live streak resolved by Game)
-    function handlePurchase(
+    function handlePurchase_g4831(
         uint32 id,
         uint256 ethMintSpendWei,
         uint32 flipMintQty,
@@ -205,6 +207,8 @@ interface IDegenerusQuests {
     /// @param currentDay The caller's current calendar day; quest state pins to the newest rolled day
     function awardQuestStreakBonus(uint32 id, uint16 amount, uint24 currentDay) external;
 
+
+
     /// @notice Record a paid craps action: quest progress and the whole-day streak credit.
     /// @dev Access: COIN only. FLIP is the single reporter for the whole craps surface, so no
     ///      other quest handler gains a caller comparison. Carries no boon value — a craps boon
@@ -214,7 +218,7 @@ interface IDegenerusQuests {
     /// @param id Wallet ID of the player who paid for the action.
     /// @param actionFlags Bit 0 paid join, bit 1 paid day pass, bit 2 normal day streak,
     ///        bit 3 high day streak.
-    function recordCrapsAction(uint32 id, uint8 actionFlags) external;
+    function recordCrapsAction_g14623(uint32 id, uint8 actionFlags) external;
 
     /// @notice Grant quest streak shields to a player (each absorbs one missed day)
     /// @dev GAME-only. Used by the lootbox quest-shield boon.
@@ -323,6 +327,8 @@ interface IDegenerusQuests {
     /// @param id Wallet ID of the player to query (0 returns 0).
     /// @return The effective (decay-applied) reward streak.
     function effectiveBaseStreak(uint32 id) external view returns (uint32);
+
+    function effectiveBaseStreakAndAfking_g2654(uint32 id) external view returns (uint32 streak, bool afking);
 
     /// @notice effectiveBaseStreak plus the player's afking-run flag, from one quest-state read.
     /// @dev Game's activity score passes the ID from the mint word it already holds.

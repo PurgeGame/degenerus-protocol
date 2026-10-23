@@ -499,7 +499,7 @@ contract MiddayRngCreditTest is DeployProtocol {
     /// @dev Mark a craps window pending on the current WRITE buffer, as a shut window does.
     function _pendCrapsWindow() internal {
         vm.prank(address(crapsBattle));
-        game.setCrapsRngPending(RecyclingState.writeBuffer(address(game)), true);
+        game.setCrapsRngPending_g1406(RecyclingState.writeBuffer(address(game)), true);
     }
 
     /// @notice A shut craps window waiting on the write buffer clears an entirely empty queue for

@@ -135,7 +135,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
     }
 
     function _primary(uint32 id) private {
-        _as(address(game), abi.encodeCall(quests.handlePurchase, (id, price, 0, 0, price, price)));
+        _as(address(game), abi.encodeCall(quests.handlePurchase_g4831, (id, price, 0, 0, price, price)));
     }
 
     function _buy(address buyer) private returns (uint32) {
@@ -284,7 +284,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         vm.prank(address(game));
         coin.mintForGame(p, 10_000);
         vm.mockCall(address(game), abi.encodeWithSelector(game.decWindow.selector), abi.encode(true));
-        vm.mockCall(address(game), abi.encodeWithSelector(game.recordDecBurn.selector), abi.encode(uint64(1)));
+        vm.mockCall(address(game), abi.encodeWithSelector(game.recordDecBurn_g5574.selector), abi.encode(uint64(1)));
         _setLevelQuest(QT_DECIMATOR);
         vm.record();
         vm.startStateDiffRecording();
@@ -310,7 +310,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
             abi.encode(uint256(5_000))
         );
         vm.mockCall(address(coinflip), abi.encodeWithSelector(coinflip.consumeFlipBacking.selector), abi.encode(uint256(5_000)));
-        vm.mockCall(address(game), abi.encodeWithSelector(game.recordDecBurn.selector), abi.encode(uint64(1)));
+        vm.mockCall(address(game), abi.encodeWithSelector(game.recordDecBurn_g5574.selector), abi.encode(uint64(1)));
         // sDGNRS's daily state already synced at deploy; the level-quest leg writes its record.
         _setLevelQuest(QT_DECIMATOR);
         vm.record();
@@ -404,7 +404,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         uint32 id = _buy(b);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         (, bytes32[] memory writes) = vm.accesses(address(quests));
-        assertEq(_onlyId(acc, address(game), quests.handlePurchase.selector), id);
+        assertEq(_onlyId(acc, address(game), quests.handlePurchase_g4831.selector), id);
         _assertWritesUnder(writes, id);
         (,,, bool[2] memory done) = quests.playerQuestStates(id);
         assertTrue(done[0], "primary completed under the buyer's ID");
@@ -434,7 +434,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         coin.burnCoinForCraps(p, id, (uint256(100) << 8) | 0x1 | 0x4);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         (, bytes32[] memory writes) = vm.accesses(address(quests));
-        bytes[] memory c = _calls(acc, address(coin), address(quests), quests.recordCrapsAction.selector);
+        bytes[] memory c = _calls(acc, address(coin), address(quests), quests.recordCrapsAction_g14623.selector);
         assertEq(c.length, 1);
         (uint32 cid, uint8 flags) = abi.decode(c[0], (uint32, uint8));
         assertEq(cid, id);
@@ -514,7 +514,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         _as(address(affiliate), abi.encodeCall(quests.handleAffiliate, (id, 6_000)));
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         assertEq(_calls(acc, address(quests), address(game), game.extsload.selector).length, 0);
-        assertEq(_calls(acc, address(quests), address(coinflip), coinflip.creditFlip.selector).length, 0, "no credit");
+        assertEq(_calls(acc, address(quests), address(coinflip), coinflip.creditFlip_g317.selector).length, 0, "no credit");
         assertEq((_lq(id) >> 136) & 1, 0, "not completed");
         assertEq(uint128(_lq(id) >> 8), 6_000, "progress kept");
         _eligible(o, false, 5);
@@ -648,7 +648,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         _setDaily(11, QT_CRAPS_JOIN);
         _primary(id);
         vm.startStateDiffRecording();
-        _as(address(coin), abi.encodeCall(quests.recordCrapsAction, (id, 0x1)));
+        _as(address(coin), abi.encodeCall(quests.recordCrapsAction_g14623, (id, 0x1)));
         _assertQuestCredit(vm.stopAndReturnStateDiff(), id, 100);
 
         _setDaily(12, QT_FOIL);
@@ -831,7 +831,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         logs = vm.getRecordedLogs();
         assertEq(abi.decode(ret, (uint256)), 0);
         assertEq(_lq(other), 0);
-        assertEq(_calls(acc, address(quests), address(coinflip), coinflip.creditFlip.selector).length, 0);
+        assertEq(_calls(acc, address(quests), address(coinflip), coinflip.creditFlip_g317.selector).length, 0);
         assertEq(_countTopic(logs, E_GROWTH, other), 0);
 
         address q = makeAddr("growthNo");
@@ -986,7 +986,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
         _as(address(game), abi.encodeCall(quests.handleDegenerette, (id, amount, amount & 1 == 0, price)));
         _as(
             address(game),
-            abi.encodeCall(quests.handlePurchase, (id, amount % 10 ether, uint32(amount % 50), amount % 5 ether, price, price))
+            abi.encodeCall(quests.handlePurchase_g4831, (id, amount % 10 ether, uint32(amount % 50), amount % 5 ether, price, price))
         );
         _as(
             address(game),
@@ -995,7 +995,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
             )
         );
         _as(address(game), abi.encodeCall(quests.awardQuestStreakBonus, (id, uint16(amount), wallDay)));
-        _as(address(coin), abi.encodeCall(quests.recordCrapsAction, (id, uint8(amount) & 0x1F)));
+        _as(address(coin), abi.encodeCall(quests.recordCrapsAction_g14623, (id, uint8(amount) & 0x1F)));
         _as(address(game), abi.encodeCall(quests.awardQuestStreakShield, (id, uint16(amount >> 16))));
         _as(
             address(parimutuel),

@@ -1,8 +1,8 @@
 # Contract<TAB>maximum entry pointer<TAB>measured reason for retaining the spill
-DegenerusGameEndgameModule	0x1c0	Integrated solc 0.8.38 runtime re-measurement; 61166 runtime bytes. At or below the accepted phase ceiling 0x1c0; retained frame and differential evidence: .planning/consolidation/INTEGRATION-REPORT.md.
-DegenerusGameDailyModule	0x180	Integrated solc 0.8.38 runtime re-measurement; 63959 runtime bytes. At or below the accepted phase ceiling 0x180; retained frame and differential evidence: .planning/consolidation/INTEGRATION-REPORT.md.
-DegenerusGamePassModule	0x320	Integrated solc 0.8.38 runtime re-measurement; 45815 runtime bytes. At or below the accepted phase ceiling 0x320; retained frame and differential evidence: .planning/consolidation/INTEGRATION-REPORT.md.
-DegenerusGameBoxModule	0x100	Integrated solc 0.8.38 runtime re-measurement; 55401 runtime bytes. At or below the accepted phase ceiling 0x100; retained frame and differential evidence: .planning/consolidation/INTEGRATION-REPORT.md.
-DegenerusParimutuel	0x140	Integrated solc 0.8.38 runtime re-measurement; 5967 runtime bytes. At or below the accepted phase ceiling 0x140; retained frame and differential evidence: .planning/consolidation/INTEGRATION-REPORT.md.
-CrapsBattle	0xc0	Lane A solc 0.8.38 re-measurement: one additional 32-byte spill after QA address co-location; Craps source is unchanged. Native/runtime and replay evidence: .planning/consolidation/XA-REPORT.md.
-Coinflip	0x160	QA host retains the largest member ceiling (Quests 0x160); measured solc 0.8.38 host 56452 bytes. Lane A evidence: .planning/consolidation/XA-REPORT.md.
+DegenerusGameEndgameModule	0x1a0	Cold spend accounting record reduces 0x1c0 to 0x1a0; equal native pairs and no hot regression. Optimization evidence: .planning/consolidation/OPT-REPORT.md item 4.
+DegenerusGameDailyModule	0x180	Quadrant and BAF award live values; retain checked per-checkpoint bounds. Optimization evidence: .planning/consolidation/OPT-REPORT.md item 4.
+DegenerusGamePassModule	0x320	Cold record reduced reservation but regressed ticket mining; rejected. Capacity extraction gave identical code/cost. Optimization evidence: .planning/consolidation/OPT-REPORT.md item 4.
+DegenerusGameBoxModule	0xe0	RNG normalization reduces 0x100 to 0xe0; measured native/replay evidence. Optimization evidence: .planning/consolidation/OPT-REPORT.md item 4.
+DegenerusParimutuel	0x140	Growth settlement winner batching owns the spill; preserve admitted winner and credit-flush accounting. Optimization evidence: .planning/consolidation/OPT-REPORT.md item 4.
+CrapsBattle	0xa0	RNG normalization reduces 0xc0 to 0xa0; bonus-day/window native gains. Optimization evidence: .planning/consolidation/OPT-REPORT.md item 4.
+Coinflip	0x160	Quests purchase path owns the spill; prior aggregate-record experiment regressed purchases. Optimization evidence: .planning/consolidation/OPT-REPORT.md item 4.

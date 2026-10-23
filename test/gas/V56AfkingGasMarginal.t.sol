@@ -686,7 +686,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
         emit log_named_uint("live01_total_opened", totalOpened);
     }
 
-    /// @notice LIVE-01 (e) selector isolation: the AFKing stage worker (runAfkingWork) runs on the Game's
+    /// @notice LIVE-01 (e) selector isolation: the AFKing stage worker (runAfkingWork_g8553) runs on the Game's
     ///         storage ONLY through mineFlip's delegatecall. Calling it DIRECTLY on the GameAfkingModule
     ///         contract address operates on the MODULE's OWN storage — an empty _subscribers set — so it
     ///         cannot touch the Game's subscribers. The afking open is never a re-exposed standalone selector
@@ -706,12 +706,12 @@ contract V56AfkingGasMarginal is DeployProtocol {
         _toAfkingStageWithPending(subject, 0xE0F2);
         require(_isPending(afk), "fixture: afking box pending");
 
-        // Call runAfkingWork DIRECTLY on the module address — it hits the MODULE's empty storage, not the
+        // Call runAfkingWork_g8553 DIRECTLY on the module address — it hits the MODULE's empty storage, not the
         // Game's (selector isolation: it reaches the Game only through mineFlip's delegatecall). Whether the
         // module-local call returns or refuses, it must open no Game box.
         uint256 laneBefore = _laneOf(afk);
-        try IGameAfkingModule(ContractAddresses.GAME_AFKING_MODULE).runAfkingWork(1_000_000) returns (MineFlipGas.Result memory direct) {
-            assertEq(direct.rewardBasis, 0, "LIVE-01(e): direct runAfkingWork on the module opens nothing (selector-isolated)");
+        try IGameAfkingModule(ContractAddresses.GAME_AFKING_MODULE).runAfkingWork_g8553(1_000_000) returns (MineFlipGas.Result memory direct) {
+            assertEq(direct.rewardBasis, 0, "LIVE-01(e): direct runAfkingWork_g8553 on the module opens nothing (selector-isolated)");
         } catch {}
         // The Game's afking box is UNTOUCHED by the direct module call (still pending, Sub word unchanged).
         assertEq(_laneOf(afk), laneBefore, "LIVE-01(e): the Game's lane untouched by the direct module call");
@@ -966,13 +966,13 @@ contract V56AfkingGasMarginal is DeployProtocol {
     }
 
     /// @dev Deliver the in-flight word and advance with bounded allowances until the session's AFKing
-    ///      stage (rngConsumerStage 2) is open with every subject box still pending. The engine admits
+    ///      stage (rngConsumerStage_g379 2) is open with every subject box still pending. The engine admits
     ///      chunks while the allowance covers the next declared bound, so the call that finishes the
     ///      daily work opens queue-head boxes with its spare gas: padding subs ahead of the subjects in
     ///      the ring absorb that, and a step reaching a subject is replayed with a smaller allowance.
     function _toAfkingStageWithPending(address[] memory subjects, uint256 vrfWord) internal {
         _fulfillPending(vrfWord);
-        for (uint256 i; i < 200 && game.rngConsumerStage() != 2; ++i) {
+        for (uint256 i; i < 200 && game.rngConsumerStage_g379() != 2; ++i) {
             uint256 snap = vm.snapshotState();
             bool stepped;
             for (uint256 g = 9_000_000; g >= 400_000 && !stepped; g -= 100_000) {
@@ -985,7 +985,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
             }
             require(stepped, "fixture: a bounded allowance stops at the AFKing stage");
         }
-        require(game.rngConsumerStage() == 2, "fixture: the AFKing stage is open");
+        require(game.rngConsumerStage_g379() == 2, "fixture: the AFKing stage is open");
         require(_allPending(subjects), "fixture: every subject box pending at the AFKing stage");
     }
 
@@ -1105,7 +1105,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     }
 
     /// @dev Read the afking-open cursor `_subOpenCursor` (slot 56, byte 2, uint16) — the afking-side open
-    ///      walk (mineFlip's AFKing stage, runAfkingWork). Distinct from the human boxCursor (byte 7) —
+    ///      walk (mineFlip's AFKing stage, runAfkingWork_g8553). Distinct from the human boxCursor (byte 7) —
     ///      LIVE-01 cursor independence.
     function _subOpenCursor() internal view returns (uint256) {
         return (uint256(vm.load(address(game), bytes32(uint256(SUBCURSOR_SLOT)))) >> 16) & 0xFFFF;
@@ -1130,7 +1130,7 @@ contract V56AfkingGasMarginal is DeployProtocol {
     }
 
     /// @dev Read the human-box cursor `boxCursor` (slot 56, byte 7, uint48) — the human open walk
-    ///      (mineFlip's HumanBoxes stage, runHumanBoxWork over boxQueue[read buffer]). Distinct from
+    ///      (mineFlip's HumanBoxes stage, runHumanBoxWork_g315 over boxQueue[read buffer]). Distinct from
     ///      _subOpenCursor (byte 2).
     function _boxCursor() internal view returns (uint256) {
         return (uint256(vm.load(address(game), bytes32(uint256(SUBCURSOR_SLOT)))) >> 56) & 0xFFFFFFFFFFFF;

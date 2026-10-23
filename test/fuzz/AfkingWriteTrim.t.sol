@@ -213,16 +213,16 @@ contract AfkingWriteTrimTest is DeployProtocol {
         for (uint256 i; i < tickets.length; ++i) before[boxes.length + i] = _subWord(tickets[i]);
 
         // Answer the request and run the engine to the AFKing read consumer.
-        for (uint256 i; i < 200 && game.rngConsumerStage() != 2; ++i) {
+        for (uint256 i; i < 200 && game.rngConsumerStage_g379() != 2; ++i) {
             _fulfill(uint256(keccak256("wt_c1")) + i);
             _stepMinimal();
         }
-        assertEq(game.rngConsumerStage(), 2, "AFKing consumer reached");
+        assertEq(game.rngConsumerStage_g379(), 2, "AFKing consumer reached");
 
         // Settlement evidence independent of the counter and cursor: step the open walk in
         // minimal calls and record which accounts emitted a box-settlement record in each.
         uint256 calls;
-        while (game.rngConsumerStage() == 2) {
+        while (game.rngConsumerStage_g379() == 2) {
             require(++calls < 200, "harness: open walk never finished");
             uint256 gasCap = _minimalGas();
             vm.recordLogs();

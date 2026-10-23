@@ -8,7 +8,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
 
-/// @dev Extends the production ticket module so the live `runTicketWork` drains into THIS
+/// @dev Extends the production ticket module so the live `runTicketWork_g1150` drains into THIS
 ///      contract's packed buckets; adds lane-level seeders and decoders only.
 contract BucketLaneHarness is DegenerusGameTicketModule, WalletSeed {
     /// @dev Seed a queue owner's locator and positional owed field without weakening owner identity.
@@ -62,7 +62,7 @@ contract BucketLaneHarness is DegenerusGameTicketModule, WalletSeed {
     /// @dev One player owing `owed` entries in the read-slot queue for `lvl`, cursor reset.
     function seedQueue(uint24 lvl, address p, uint32 owed) external {
         // The live mint window ends at game level + 1. Put this queue at its
-        // edge so runTicketWork(lvl + 1, ...) exercises the real sweep.
+        // edge so runTicketWork_g1150(lvl + 1, ...) exercises the real sweep.
         level = lvl - 1;
         rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((1) & 1) << 12);
         rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((uint48(0) + 1) & 1) << 12);
@@ -171,7 +171,7 @@ contract BucketLanePacking is Test {
         uint256 calls;
         bool finished;
         while (!finished) {
-            finished = h.runTicketWork{gas: SOLO_RUN_GAS}(lvl + 1, SOLO_RUN_GAS).done;
+            finished = h.runTicketWork_g1150{gas: SOLO_RUN_GAS}(lvl + 1, SOLO_RUN_GAS).done;
             ++calls;
             assertLt(calls, MAX_DRAIN_CALLS, "drain did not finish");
         }

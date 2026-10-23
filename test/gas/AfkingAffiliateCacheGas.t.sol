@@ -42,7 +42,7 @@ contract AfkingAffiliateCacheHost is DegenerusGame, WalletSeed {
 
     function buy() external returns (MineFlipGas.Result memory result) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(
-            abi.encodeWithSignature("runSubscriberWork(uint24,uint256)", _afkingResetDay, uint256(12_000_000))
+            abi.encodeWithSignature("runSubscriberWork_g6352(uint24,uint256)", _afkingResetDay, uint256(12_000_000))
         );
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
         return abi.decode(data, (MineFlipGas.Result));

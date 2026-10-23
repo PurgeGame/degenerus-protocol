@@ -86,7 +86,7 @@ contract CoinflipPackedStake is DeployProtocol {
     function _credit(address p, uint256 amount) internal {
         uint32 id = _giveWalletId(p);
         vm.prank(GAME);
-        coinflip.creditFlip(id, amount);
+        coinflip.creditFlip_g317(id, amount);
     }
 
     /// @dev The single CoinflipStakeUpdated for `p` in the recorded logs.
@@ -226,7 +226,7 @@ contract CoinflipPackedStake is DeployProtocol {
 
         vm.recordLogs();
         vm.prank(GAME);
-        coinflip.creditFlipPair(players[0], 1, players[0], 1);
+        coinflip.creditFlipPair_g578(players[0], 1, players[0], 1);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 events;
         for (uint256 i; i < logs.length; ++i) {

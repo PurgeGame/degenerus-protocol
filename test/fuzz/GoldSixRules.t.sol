@@ -59,7 +59,7 @@ contract GoldSixRulesTest is Test {
     /// @dev Commit `word` as the cohort's entropy and drain it through the live ticket worker.
     function drain(uint256 word, uint24 anchor) private {
         h.commit(word);
-        MineFlipGas.Result memory r = h.runTicketWork(anchor, 9_000_000);
+        MineFlipGas.Result memory r = h.runTicketWork_g1150(anchor, 9_000_000);
         assertTrue(r.done, "the queued solo run drains in one call");
     }
     /// @dev One owner queued alone at `lvl` owing 16 whole entries drains as a single solo trait
@@ -127,7 +127,7 @@ contract GoldSixRulesTest is Test {
         for (uint256 preclaimed; preclaimed < 2; ++preclaimed) {
             if (preclaimed != 0) h.seedGold(1, owner);
             h.commit(word);
-            MineFlipGas.Result memory r = h.runTicketWork(2, 9_000_000);
+            MineFlipGas.Result memory r = h.runTicketWork_g1150(2, 9_000_000);
             assertTrue(r.done);
             assertEq(h.count(1, 253), 1);
             uint256 total;

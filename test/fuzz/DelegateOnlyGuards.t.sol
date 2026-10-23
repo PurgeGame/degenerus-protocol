@@ -19,7 +19,7 @@ contract DelegateOnlyGuards is DeployProtocol {
 
     function test_buyDegenesisBox_directCallReverts() public {
         vm.expectRevert(bytes4(keccak256("E()")));
-        degenesisModule.buyDegenesisBox{value: 1 ether}(0, 1 ether);
+        degenesisModule.buyDegenesisBox_g1442{value: 1 ether}(0, 1 ether);
     }
 
     function test_purchaseLazyPass_directCallReverts() public {

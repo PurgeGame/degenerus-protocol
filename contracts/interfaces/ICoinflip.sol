@@ -204,6 +204,8 @@ interface ICoinflip {
       |                       CREDIT SYSTEM                                  |
       +======================================================================+*/
 
+
+
     /// @notice Credit flip stake to wallet `id` without burning tokens.
     /// @dev Called by authorized creditors (GAME, QUESTS, AFFILIATE, ADMIN, SDGNRS, WWXRP,
     ///      PARIMUTUEL, CRAPS) for rewards. Keyed by wallet ID only: writes the ID-keyed stake
@@ -217,7 +219,7 @@ interface ICoinflip {
     /// @param id Wallet ID receiving the credit (0 = no wallet: no-op).
     /// @param amount Amount of flip credit to add to next day's stake, whole FLIP.
     /// @custom:reverts OnlyFlipCreditors If caller is not an authorized creditor.
-    function creditFlip(uint32 id, uint256 amount) external;
+    function creditFlip_g317(uint32 id, uint256 amount) external;
 
     /// @notice Credit flips to multiple wallets in a single call.
     /// @dev Batch version of creditFlip for gas efficiency. Legs with a zero ID or a zero
@@ -231,6 +233,8 @@ interface ICoinflip {
         uint256[] calldata amounts
     ) external;
 
+
+
     /// @notice Credit flips to exactly two wallets in a single call.
     /// @dev Fixed-arity variant of creditFlipBatch — spares the caller the two array
     ///      allocations and the dynamic ABI encode. Legs with a zero ID or a zero amount
@@ -240,7 +244,7 @@ interface ICoinflip {
     /// @param id2 Second recipient wallet ID (0 = skipped).
     /// @param amount2 Second credit amount, whole FLIP.
     /// @custom:reverts OnlyFlipCreditors If caller is not an authorized creditor.
-    function creditFlipPair(
+    function creditFlipPair_g578(
         uint32 id1,
         uint256 amount1,
         uint32 id2,

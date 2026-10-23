@@ -102,14 +102,14 @@ async function prepare(f, buyers, count, singleCustom) {
   // The buyers' real tickets were frozen into the read cohort by the mid-day request. Their
   // drain is a keeper-only checkpoint that precedes every box stage; a bounded allowance
   // admits a ticket round but not a 100-box entry (declared 15.7M), so it stays unopened.
-  for (let i = 0; i < 10 && (await f.game.rngConsumerStage()) === 0n; i++) {
+  for (let i = 0; i < 10 && (await f.game.rngConsumerStage_g379()) === 0n; i++) {
     expect(await f.game.nextMinerAction(), "only the ticket checkpoint precedes the boxes").to.equal(MINER_TICKETS);
     await f.game.mineFlip(0, { gasLimit: TICKET_CHECKPOINT_GAS });
   }
-  expect(await f.game.rngConsumerStage(), "box consumers are next").to.be.oneOf([2n, 3n]);
+  expect(await f.game.rngConsumerStage_g379(), "box consumers are next").to.be.oneOf([2n, 3n]);
   // The AFKing stage precedes the human orders. A bounded allowance clears it without
   // admitting a human entry, so every measured call starts at the human-box stage.
-  for (let i = 0; i < 5 && (await f.game.rngConsumerStage()) === 2n; i++) {
+  for (let i = 0; i < 5 && (await f.game.rngConsumerStage_g379()) === 2n; i++) {
     await f.game.mineFlip(0, { gasLimit: AFKING_STAGE_GAS });
   }
   expect(await f.game.nextMinerAction(), "measured calls start at the human-box stage").to.equal(MINER_HUMAN_BOXES);

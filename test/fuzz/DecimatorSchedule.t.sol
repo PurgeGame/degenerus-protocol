@@ -75,7 +75,7 @@ contract DecimatorScheduleTest is Test {
             // x00's ordinary seal also arms its existing coinflip BAF draw and settles the vault.
             vm.mockCall(ContractAddresses.COINFLIP, abi.encodeWithSignature("armBafDraw(uint24)"), "");
             vm.mockCall(ContractAddresses.COINFLIP, abi.encodeWithSignature("depositCoinflip(uint32,uint256)"), "");
-            MineFlipGas.Result memory result = h.runDailyPhase(5_000_000);
+            MineFlipGas.Result memory result = h.runDailyPhase_g2582(5_000_000);
             assertTrue(result.done);
             assertTrue(h.closed());
             assertEq(h.flags(), i < 2 ? 3 : 2);

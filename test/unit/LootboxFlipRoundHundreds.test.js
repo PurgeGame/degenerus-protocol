@@ -35,7 +35,7 @@
 //
 // What survives from the old file, restated for the new expression: the collapse is
 // applied ONCE per roll from that roll's raw `flipOut` (no cross-roll accumulator), it
-// precedes both the `!= 0` guard and the `creditFlip` call, and the emitted event carries
+// precedes both the `!= 0` guard and the `creditFlip_g317` call, and the emitted event carries
 // the post-collapse figure — the number the player actually receives.
 //
 // TEST STRATEGY:
@@ -136,11 +136,11 @@ describe("LootboxFlipRoundHundreds — threshold-gated 100-FLIP collapse (§3c)"
 
 
 
-    it("[01c] index-ordering: the collapse precedes the per-roll accumulation; the `!= 0` guard + `creditFlip` flush once per entry", function () {
+    it("[01c] index-ordering: the collapse precedes the per-roll accumulation; the `!= 0` guard + `creditFlip_g317` flush once per entry", function () {
       // Box-order rework: `_settleLootboxRoll` no longer credits FLIP
       // immediately — it accumulates `acc.flip += flipAmount;` unconditionally
       // (adding zero is harmless, so no per-roll guard is needed). The `!= 0`
-      // guard + `coinflip.creditFlip` call moved to `_flushBoxAcc`, flushing
+      // guard + `coinflip.creditFlip_g317` call moved to `_flushBoxAcc`, flushing
       // the entry's total ONCE (rewards settle once per entry).
       const body = loadBody(SIG);
       const collapseIdx = body.search(/uint256\s+flipAmount\s*=\s*flipOut\s*>/);
@@ -159,10 +159,10 @@ describe("LootboxFlipRoundHundreds — threshold-gated 100-FLIP collapse (§3c)"
       ).to.be.lessThan(accIdx);
 
       const source = fs.readFileSync(MODULE_SOURCE_PATH, "utf8");
-      const flushLine = "if (acc.flip != 0) coinflip.creditFlip(id, acc.flip);";
+      const flushLine = "if (acc.flip != 0) coinflip.creditFlip_g317(id, acc.flip);";
       expect(
         source.includes(flushLine),
-        "the per-entry `if (acc.flip != 0) coinflip.creditFlip(id, acc.flip);` flush not found"
+        "the per-entry `if (acc.flip != 0) coinflip.creditFlip_g317(id, acc.flip);` flush not found"
       ).to.equal(true);
     });
 

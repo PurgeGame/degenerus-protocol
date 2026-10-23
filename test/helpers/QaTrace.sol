@@ -51,7 +51,7 @@ library QaTrace {
                 // in this Call record. Resume records can group later parent writes, so
                 // attribute those by StorageAccess.account rather than AccountAccess.account.
                 bytes4 sel=bytes4(acc[i].data);
-                if (sel==bytes4(keccak256("creditFlip(uint32,uint256)")) || sel==bytes4(keccak256("creditFlipPair(uint32,uint256,uint32,uint256)")) || sel==bytes4(keccak256("creditFlipBatch(uint32[],uint256[])"))) continue;
+                if (sel==bytes4(keccak256("creditFlip_g317(uint32,uint256)")) || sel==bytes4(keccak256("creditFlipPair_g578(uint32,uint256,uint32,uint256)")) || sel==bytes4(keccak256("creditFlipBatch(uint32[],uint256[])"))) continue;
             }
             for (uint256 j; j < acc[i].storageAccesses.length; ++j) _recordCredit(acc[i].storageAccesses[j],host,sink);
         }

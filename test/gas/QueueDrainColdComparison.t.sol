@@ -47,7 +47,7 @@ abstract contract QueueDrainColdFixture is TicketChunkProbe {
         // anchor = level = TARGET_LVL - 1 (the purchase level under the last-purchase lock); the
         // read window [TARGET_LVL-2 .. TARGET_LVL] is empty, so the call reaches the frozen-pool
         // continuation and mints TARGET_LVL's far-future queue on the supplied gas.
-        MineFlipGas.Result memory r = h.runTicketWork{gas: gasLimit}(TARGET_LVL - 1, gasLimit);
+        MineFlipGas.Result memory r = h.runTicketWork_g1150{gas: gasLimit}(TARGET_LVL - 1, gasLimit);
         (bool finishedOuter, bool worked) = (r.done, r.progressed);
         uint256 used = beforeGas - gasleft();
         uint256 cursorAfter = h.cursor();

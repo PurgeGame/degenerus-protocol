@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {RngTags} from "../libraries/RngTags.sol";
+
 import {GoldSixLib} from "../libraries/GoldSixLib.sol";
 
 import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol";
@@ -379,7 +381,7 @@ abstract contract DegenerusGameJackpotModule is DegenerusGameJackpotDrawModule {
         d.terminal = work.kind == 3;
         d.jackpotPhase = work.kind == 2;
         d.traits = JackpotBucketLib.unpackWinningTraits(work.traits);
-        uint256 entropy = _soloAdjustedEntropy(d.traits, EntropyLib.hash2(word, work.lvl));
+        uint256 entropy = _soloAdjustedEntropy(d.traits, EntropyLib.hash3(RngTags.JACKPOT_ALLOCATION, word, work.lvl));
         if (work.budget != 0) {
             d.counts = d.terminal
                 ? JackpotBucketLib.terminalWinnerCounts(entropy)
@@ -411,7 +413,7 @@ abstract contract DegenerusGameJackpotModule is DegenerusGameJackpotDrawModule {
                 uint256 liability;
                 (pos, paid, liability) = _payEthQuadrant(
                     d.lvl, q, d.traits[q], count, perWinner, converts ? d.shares[q] : 0,
-                    EntropyLib.hash2(entropy, q), armGold && q == d.solo, pos, meter
+                    EntropyLib.hash3(RngTags.JACKPOT_QUADRANT, entropy, q), armGold && q == d.solo, pos, meter
                 );
                 if (pos != start) { result.progressed = true; MineFlipGas.markProgress(meter); }
                 if (paid != 0) {
@@ -461,7 +463,7 @@ abstract contract DegenerusGameJackpotModule is DegenerusGameJackpotDrawModule {
             uint256 liability;
             (pos, paid, liability) = _payEthQuadrant(
                 d.lvl, d.solo, d.traits[d.solo], 1, soloEth, passShare,
-                EntropyLib.hash2(entropy, d.solo), _allGold(d.traits), work.winner, meter
+                EntropyLib.hash3(RngTags.JACKPOT_QUADRANT, entropy, d.solo), _allGold(d.traits), work.winner, meter
             );
             if (pos == work.winner) return;
             work.winner = uint16(pos);
@@ -670,7 +672,7 @@ abstract contract DegenerusGameJackpotModule is DegenerusGameJackpotDrawModule {
         plan.sourceLvl = work.lvl;
         plan.queueLvl = work.kind == 6 ? work.lvl + 1 : work.lvl;
         plan.salt = work.kind == 4 ? 242 : work.kind == 5 ? 239 : 241;
-        plan.entropy = EntropyLib.hash2(word, work.lvl);
+        plan.entropy = EntropyLib.hash3(RngTags.JACKPOT_ALLOCATION, word, work.lvl);
         plan.traits = JackpotBucketLib.unpackWinningTraits(work.traits);
         uint256 tickets = work.budget / ENTRIES_PER_TICKET;
         if (tickets == 0) return plan;
@@ -689,7 +691,7 @@ abstract contract DegenerusGameJackpotModule is DegenerusGameJackpotDrawModule {
                 plan.fullPasses = fullPasses;
             }
         }
-        uint256 soloEntropy = work.kind == 5 ? EntropyLib.hash2(word, level) : plan.entropy;
+        uint256 soloEntropy = work.kind == 5 ? EntropyLib.hash3(RngTags.JACKPOT_ALLOCATION, word, level) : plan.entropy;
         uint8 active;
         (plan.counts, active, plan.lens, plan.deities) = _computeBucketCounts(
             work.lvl, plan.traits, uint16(cap), plan.entropy, _pickSoloQuadrant(plan.traits, soloEntropy)
@@ -717,7 +719,7 @@ abstract contract DegenerusGameJackpotModule is DegenerusGameJackpotDrawModule {
         }
         for (uint8 q; q < 4; ++q) {
             if (passes[q] != 0) {
-                _awardWhalePass(lvl, plan.traits[q], passes[q] * 2, EntropyLib.hash2(plan.entropy, q), true);
+                _awardWhalePass(lvl, plan.traits[q], passes[q] * 2, EntropyLib.hash3(RngTags.JACKPOT_QUADRANT, plan.entropy, q), true);
             }
         }
     }
@@ -730,7 +732,7 @@ abstract contract DegenerusGameJackpotModule is DegenerusGameJackpotDrawModule {
     ) private returns (uint256 spent) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_WHALE_MODULE.delegatecall(
             abi.encodeWithSelector(
-                IDegenerusGameWhaleModule.awardWhalePass.selector,
+                IDegenerusGameWhaleModule.awardWhalePass_g5502.selector,
                 lvl, trait, amount, randWord, ticketLeg
             )
         );
@@ -1173,7 +1175,7 @@ abstract contract DegenerusGameJackpotModule is DegenerusGameJackpotDrawModule {
     ///      amounts, accumulates the total, and tracks
     ///      the largest-amount slot (first-seen on ties to match the scan order).
     ///      Pass 2 walks the cached weights with a cumulative cursor against
-    ///      `pick = uint64(uint256(keccak256(abi.encode(entropy, HERO_SYMBOL_TAG, day))) % effectiveTotal)`
+    ///      `pick = uint64(uint256(EntropyLib.hash2(RngTags.JACKPOT_HERO, entropy)) % effectiveTotal)`
     ///      and applies a `leaderBonus = maxAmount / 2` add at the largest-amount slot —
     ///      effective ×1.5 weight on the leader, no min-wager floor on any other slot.
     ///      Returns `(false, 0, 0)` when no slot has any wagers.
@@ -1234,7 +1236,7 @@ abstract contract DegenerusGameJackpotModule is DegenerusGameJackpotDrawModule {
         uint64 leaderBonus = uint64(maxAmount) / 2;
         uint64 effectiveTotal = total + leaderBonus;
         uint64 pick = uint64(
-            uint256(keccak256(abi.encode(entropy, HERO_SYMBOL_TAG, day))) % effectiveTotal
+            uint256(EntropyLib.hash2(RngTags.JACKPOT_HERO, entropy)) % effectiveTotal
         );
 
         uint64 cumulative;
@@ -1276,6 +1278,11 @@ abstract contract DegenerusGameJackpotModule is DegenerusGameJackpotDrawModule {
     /// @param randWord VRF entropy for the board.
     function emitDailyWinningTraits(uint256 randWord) external {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
+        _emitLevelOneWinningTraits(randWord);
+    }
+
+    /// @dev Daily processing already runs in the guarded Game storage context.
+    function _emitLevelOneWinningTraits(uint256 randWord) internal {
         // The sealed day, matching runDailyJackpot: dailyIdx + 1, never the wall clock.
         _emitDailyWinningTraits(dailyIdx + 1, _rollMainTraits(randWord), 1, randWord);
     }
@@ -1316,9 +1323,7 @@ abstract contract DegenerusGameJackpotModule is DegenerusGameJackpotDrawModule {
     ) private pure returns (uint16 bps) {
         uint16 range = DAILY_CURRENT_BPS_MAX - DAILY_CURRENT_BPS_MIN + 1;
         uint256 seed = uint256(
-            keccak256(
-                abi.encodePacked(randWord, DAILY_CURRENT_BPS_TAG, counter)
-            )
+            EntropyLib.hash2(RngTags.JACKPOT_DAILY_BPS, randWord)
         );
         return uint16(DAILY_CURRENT_BPS_MIN + (seed % range));
     }
@@ -1327,7 +1332,7 @@ abstract contract DegenerusGameJackpotModule is DegenerusGameJackpotDrawModule {
         // The same locked word, hero pool and golden-ticket ban feed the later main draw.
         // Both paths use this calculation, so BAF needs no separate board state or ordering.
         uint8[4] memory main = JackpotBucketLib.unpackWinningTraits(_rollMainTraits(word));
-        uint8 solo = _pickSoloQuadrant(main, EntropyLib.hash2(word, level));
+        uint8 solo = _pickSoloQuadrant(main, EntropyLib.hash3(RngTags.JACKPOT_ALLOCATION, word, level));
         uint8[3] memory traits;
         for (uint256 q; q < 3; ++q) traits[q] = main[q < solo ? q : q + 1];
         return runBafAwards(word, allowance, traits);

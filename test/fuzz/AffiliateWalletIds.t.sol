@@ -280,7 +280,7 @@ abstract contract AffiliateIdFixture is DeployProtocol {
         senderId = _settlementId(sender, code, senderId);
         vm.prank(address(game));
         (winnerId, credit, kickback) =
-            affiliate.payAffiliateCombined(code, senderId, lvl, freshFlip, 0, 0, 0, 0);
+            affiliate.payAffiliateCombined_g978(code, senderId, lvl, freshFlip, 0, 0, 0, 0);
     }
 
     function _pay(uint256 amount, bytes32 code, address sender, uint32 senderId, uint24 lvl)
@@ -402,7 +402,7 @@ abstract contract AffiliateIdFixture is DeployProtocol {
         view
         returns (uint32 id1, uint256 a1, uint32 id2, uint256 a2)
     {
-        bytes[] memory p = _calls(acc, address(game), address(coinflip), coinflip.creditFlipPair.selector);
+        bytes[] memory p = _calls(acc, address(game), address(coinflip), coinflip.creditFlipPair_g578.selector);
         assertEq(p.length, 1, "one paired credit");
         (id1, a1, id2, a2) = abi.decode(p[0], (uint32, uint256, uint32, uint256));
     }
@@ -1238,7 +1238,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         _pay(4000, bytes32(0), s, sid, 1);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         assertEq(_calls(acc, address(affiliate), address(quests), quests.handleAffiliate.selector).length, 0);
-        assertEq(_calls(acc, address(affiliate), address(coinflip), coinflip.creditFlip.selector).length, 0);
+        assertEq(_calls(acc, address(affiliate), address(coinflip), coinflip.creditFlip_g317.selector).length, 0);
         assertEq(affiliate.affiliateScore(1, oid), 1000, "earnings still booked");
         (uint32 w, uint256 c,) = _payCombined(bytes32(0), s, sid, 1, 4000);
         assertEq(w, sid, "the winner is the sender");
@@ -1259,7 +1259,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         Vm.Log[] memory logs = vm.getRecordedLogs();
         assertEq(
-            _calls(acc, address(game), address(affiliate), affiliate.payAffiliateCombined.selector).length, 1
+            _calls(acc, address(game), address(affiliate), affiliate.payAffiliateCombined_g978.selector).length, 1
         );
         (uint32 id1, uint256 a1, uint32 id2, uint256 a2) = _pair(acc);
         uint256 total = _earnedTotal(logs, oid);
@@ -1538,7 +1538,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
             uint32 sid = uint32(20_000_000 + step);
             address expWinner = _refWinner(codes[k], owners[k], sid);
             vm.prank(address(game));
-            (uint32 w,,) = affiliate.payAffiliateCombined(
+            (uint32 w,,) = affiliate.payAffiliateCombined_g978(
                 codes[k], sid, lvl, fresh, recycled, lbFresh, 0, score
             );
             assertEq(w, _id(expWinner), "winner");
@@ -1560,9 +1560,9 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         }
         for (uint24 curr; curr <= 9; ++curr) {
             for (uint256 k; k < 3; ++k) {
-                assertEq(affiliate.affiliateBonusPointsBest(curr, _id(owners[k])), _refBonus(curr, owners[k]), "bonus");
+                assertEq(affiliate.affiliateBonusPointsBest_g3878(curr, _id(owners[k])), _refBonus(curr, owners[k]), "bonus");
             }
-            assertEq(affiliate.affiliateBonusPointsBest(curr, 0), 0, "ID 0 reads zero");
+            assertEq(affiliate.affiliateBonusPointsBest_g3878(curr, 0), 0, "ID 0 reads zero");
         }
         assertGt(_refBonus(7, o1), 0, "history reaches the bonus curve");
     }
@@ -1823,7 +1823,7 @@ contract AffiliateDegeneretteReferrerTest is AffiliateIdFixture {
         assertEq(_calls(acc, address(game), address(affiliate), affiliate.getReferrer.selector).length, 0);
         uint256 at = _firstIndex(acc, address(game), address(affiliate), affiliate.getReferrerIdById.selector);
         for (uint256 i = at + 1; i < acc.length; ++i) {
-            if (_match(acc[i], address(game), address(coinflip), coinflip.creditFlip.selector)) {
+            if (_match(acc[i], address(game), address(coinflip), coinflip.creditFlip_g317.selector)) {
                 (id, amount) = abi.decode(_args(acc[i].data), (uint32, uint256));
                 return (id, amount, logs);
             }

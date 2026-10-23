@@ -530,7 +530,7 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     function _terminalDrainBatch(uint24 drainLevel, MineFlipGas.Meter memory meter, TerminalWork memory work) private returns (bool ran) {
         uint256 allowance = MineFlipGas.child(meter, 100_000);
         (bool ok, bytes memory data) = ContractAddresses.GAME_TICKET_MODULE.delegatecall(
-            abi.encodeWithSelector(IDegenerusGameTicketModule.runTicketWork.selector,
+            abi.encodeWithSelector(IDegenerusGameTicketModule.runTicketWork_g1150.selector,
                 drainLevel | TICKET_SLOT_BIT, allowance)
         );
         if (!ok) {
@@ -813,8 +813,12 @@ contract DegenerusGameGameOverModule is DegenerusGameRngUtils {
     }
 
     function _shutdownVrf() private {
-        BoundedCall.call(ContractAddresses.ADMIN, 0, 800_000,
+        // Admin needs the cancellation floor plus its LINK-read/transfer reserves.
+        // A failed trusted frame must roll back GO_SWEPT and all asset transfers:
+        // otherwise the live subscription cannot be recovered by retrySubCancel.
+        (bool ok,) = BoundedCall.callRemaining(ContractAddresses.ADMIN, 1_000_000, 250_000,
             abi.encodeWithSelector(IDegenerusAdminShutdown.shutdownVrf.selector), 0);
+        if (!ok) revert MineFlipGas.InsufficientExecutionGas();
     }
 
     /// @dev Zero a sink's packed balance — claimable (low half) and prepaid afking (high half),

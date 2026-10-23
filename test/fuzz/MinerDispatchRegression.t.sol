@@ -38,7 +38,7 @@ contract DispatchTicketWorker is DegenerusGameStorage {
 
     constructor(uint8 mode_) { mode = mode_; }
 
-    function runTicketWork(uint24, uint256) external returns (MineFlipGas.Result memory) {
+    function runTicketWork_g1150(uint24, uint256) external returns (MineFlipGas.Result memory) {
         if (ticketsFullyProcessed || ticketCursor != 0) revert RepeatedTicketDispatch();
         if (mode >= 1 && mode <= 3) {
             _pendingBoxCount = 123;
@@ -68,7 +68,7 @@ contract DispatchTicketWorker is DegenerusGameStorage {
 contract DispatchAfkingWorker is DegenerusGameStorage {
     error WrongConsumerOrder();
 
-    function runHumanBoxWork(uint256) external returns (MineFlipGas.Result memory) {
+    function runHumanBoxWork_g315(uint256) external returns (MineFlipGas.Result memory) {
         if (!ticketsFullyProcessed || humanReadComplete || _rngComplete()
             || _lrRead(LR_MID_DAY_SHIFT, LR_MID_DAY_MASK) != 0) revert WrongConsumerOrder();
         humanReadComplete = true;
@@ -76,7 +76,7 @@ contract DispatchAfkingWorker is DegenerusGameStorage {
         return MineFlipGas.Result(true, true, 1);
     }
 
-    function runSubscriberWork(uint24 day, uint256) external returns (MineFlipGas.Result memory) {
+    function runSubscriberWork_g6352(uint24 day, uint256) external returns (MineFlipGas.Result memory) {
         if (!_rngComplete() || day != _afkingResetDay || day <= dailyIdx || subsFullyProcessed) {
             revert WrongConsumerOrder();
         }
@@ -88,7 +88,7 @@ contract DispatchAfkingWorker is DegenerusGameStorage {
 contract DispatchRequestWorker is DegenerusGameStorage {
     error RequestBeforeCompletion();
 
-    function requestDailyRng(uint24 day) external {
+    function requestDailyRng_g8190(uint24 day) external {
         if (!_rngComplete() || !subsFullyProcessed || day != _afkingResetDay || day <= dailyIdx) {
             revert RequestBeforeCompletion();
         }

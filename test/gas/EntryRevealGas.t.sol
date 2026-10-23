@@ -63,7 +63,7 @@ contract EntryRevealHarness is DegenerusGameStorage, WalletSeed {
     ///      it at anchor level + 1; the gas the call is sent bounds it.
     function runCurrent() external returns (MineFlipGas.Result memory) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_TICKET_MODULE.delegatecall(
-            abi.encodeWithSelector(DegenerusGameTicketModule.runTicketWork.selector, uint24(8), gasleft())
+            abi.encodeWithSelector(DegenerusGameTicketModule.runTicketWork_g1150.selector, uint24(8), gasleft())
         );
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
         return abi.decode(data, (MineFlipGas.Result));

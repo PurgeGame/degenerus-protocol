@@ -48,7 +48,7 @@ class GasMeterGateTest(unittest.TestCase):
         }''')
         self.assertTrue(mutated - original)
 
-    def test_identity_auth_guard_does_not_exempt_other_ambient_inputs(self):
+    def test_removed_identity_adapter_has_no_ambient_exception(self):
         source = '''contract T {
           function registerAffiliateOwner(address owner, bool required) external {
             if (msg.sender != ContractAddresses.AFFILIATE) revert E();
@@ -56,7 +56,9 @@ class GasMeterGateTest(unittest.TestCase):
         }'''
         path = "modules/DegenerusGameTicketModule.sol"
         _, bad = scan_source(path, source)
-        self.assertFalse(bad)
+        # The identity adapter moved out of the ticket worker before this phase.
+        # No caller exception remains anywhere in ticket entropy code.
+        self.assertEqual(len(bad), 1)
         for mutation in (
             "if (msg.sender != ContractAddresses.VAULT) revert E();",
             "if (msg.sender != ContractAddresses.AFFILIATE) revert E(); uint256 x = block.timestamp;",

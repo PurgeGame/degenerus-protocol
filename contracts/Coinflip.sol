@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {EntropyLib} from "./libraries/EntropyLib.sol";
+import {RngTags} from "./libraries/RngTags.sol";
+
 /*
  * TERMS OF INTERACTION — submitting a transaction to this contract accepts them.
  *
@@ -758,11 +761,11 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
     ///      allocating only when requested and permitted by Game's registration policy.
     function _walletId(address key, uint32 id, bool allocate) private returns (uint32) {
         if (id != 0) return id;
-        return allocate ? degenerusGame.registerWallet(key, true) : degenerusGame.walletIdOf(key);
+        return allocate ? degenerusGame.registerWallet_g9539(key, true) : degenerusGame.walletIdOf_g3120(key);
     }
 
     function _viewWalletId(address player) private view returns (uint32) {
-        return degenerusGame.walletIdOf(player);
+        return degenerusGame.walletIdOf_g3120(player);
     }
 
     /// @dev Claim state retained across the cached result and stake-page walk.
@@ -985,7 +988,7 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
             // Max bonuses: 5% = 5k, 10% = 10k, 25% = 25k. The game handle is read HERE rather than
             // at the top of the frame: every credit path passes recordAmount 0, and only this
             // branch consults the game, so a credit must not pay for the storage read.
-            uint16 boonBps = degenerusGame.consumeCoinflipBoon(id);
+            uint16 boonBps = degenerusGame.consumeCoinflipBoon_g2902(id);
             if (boonBps > 0) {
                 uint256 maxDeposit = 100_000; // Cap at 100k FLIP for boost calc
                 uint256 cappedDeposit = coinflipDeposit > maxDeposit
@@ -1375,7 +1378,7 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
     function sweepAccountCoinflips(uint32 id) external questsContext onlyDegenerusGameContract returns (uint256) {
         uint32 buyer = degenerusGame.acquiredBuyer(id);
         if (buyer != 0) return _claimAcquiredCoinflips(id, buyer);
-        (address key, address payee,) = degenerusGame.resolveAccount(id, address(this));
+        (address key, address payee,) = degenerusGame.resolveAccount_g502(id, address(this));
         return _claimCoinflipsAmount(key, payee, id, type(uint256).max, true);
     }
 
@@ -1559,8 +1562,8 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
     }
 
     /// @notice Resolve at most 31 skipped days at double-or-nothing payouts.
-    /// @dev Raw root bits 1..31 supply wins in the caller's original day order; bit 0
-    ///      stays separate for the recovery day. Every gap reward is fixed at 100% profit.
+    /// @dev Raw word bits 1..31 supply wins in the caller's original day order;
+    ///      bit 0 belongs to the recovery day. Every gap reward is fixed at 100% profit.
     ///      Skipping an already-settled prefix must not restart the bit sequence.
     ///      The Game's shared recovery caller caps the range to 31 days before this call.
     function processCoinflipGap(uint256 root, uint24 start, uint24 end) external questsContext onlyDegenerusGameContract {
@@ -1652,6 +1655,8 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
       |                    FLIP CREDITING                                    |
       +======================================================================+*/
 
+
+
     /// @notice Credit flip to wallet `id` through the authorized protocol/game creditor lane.
     /// @dev Keyed by wallet ID alone: writes the ID-keyed stake lane without reading the
     ///      claim state on an ordinary matching-page append. Reuse first checks the
@@ -1660,7 +1665,7 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
     ///      accepted amount. A zero ID or amount is a no-op.
     /// @param id The wallet ID receiving the flip credit (0 = no wallet: skipped).
     /// @param amount Amount of FLIP-denominated flip stake to credit.
-    function creditFlip(
+    function creditFlip_g317(
         uint32 id,
         uint256 amount
     ) external questsContext onlyFlipCreditors {
@@ -1693,6 +1698,8 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
         }
     }
 
+
+
     /// @notice Credit flips to exactly two wallets (called by the GAME purchase path).
     /// @dev Fixed-arity variant of creditFlipBatch for the purchase hot path — spares the
     ///      caller the two array allocations and the dynamic ABI encode. Zero-ID and
@@ -1701,7 +1708,7 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
     /// @param amount1 First FLIP-denominated flip stake amount (0 entries are skipped).
     /// @param id2 Second recipient wallet ID (0 entries are skipped).
     /// @param amount2 Second FLIP-denominated flip stake amount (0 entries are skipped).
-    function creditFlipPair(
+    function creditFlipPair_g578(
         uint32 id1,
         uint256 amount1,
         uint32 id2,
@@ -1861,7 +1868,7 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
         uint256 total = header & type(uint96).max;
         if (total == 0) return 0;
         uint256 roll = uint256(
-            keccak256(abi.encodePacked(BAF_DRAW_TAG, address(this), day, rngWord))
+            EntropyLib.hash2(RngTags.BAF_HEAD, rngWord)
         ) % total;
 
         // Smallest index whose cumulative endpoint exceeds the roll.
@@ -2135,7 +2142,7 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
     ///      call); any other ID resolves through Game `resolveAccount` (reverts `E` when unallocated).
     function _resolve(uint32 id) private view returns (address key, address payee, bool authorized) {
         if (id == 0) return (msg.sender, msg.sender, true);
-        return degenerusGame.resolveAccount(id, msg.sender);
+        return degenerusGame.resolveAccount_g502(id, msg.sender);
     }
 
     /// @dev Account `id` for an authorized action: reverts NotApproved unless the caller is the

@@ -235,7 +235,7 @@ contract BafWeightedDrawTest is DeployProtocol {
 
         // Protocol flip credit (quest-reward shape).
         vm.prank(ContractAddresses.QUESTS);
-        coinflip.creditFlip(aliceId, 1_000);
+        coinflip.creditFlip_g317(aliceId, 1_000);
 
         // sDGNRS backing credit (FLIP de-circulation shape).
         vm.prank(ContractAddresses.COIN);
@@ -256,7 +256,7 @@ contract BafWeightedDrawTest is DeployProtocol {
         _arm(3);
         vm.mockCall(
             GAME,
-            abi.encodeWithSelector(IDegenerusGame.consumeCoinflipBoon.selector),
+            abi.encodeWithSelector(IDegenerusGame.consumeCoinflipBoon_g2902.selector),
             abi.encode(uint16(2500))
         );
         _selfDeposit(alice, 1_000);

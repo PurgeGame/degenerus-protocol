@@ -236,7 +236,7 @@ contract CrapsAccountsTest is CrapsPins {
         });
         if (_paying(door) && door != UPGRADE) {
             vm.expectCall(address(flip), abi.encodeWithSelector(MockFlip.burnCoinForCraps.selector, payee, id));
-            vm.expectCall(address(quests), abi.encodeWithSelector(MockQuests.recordCrapsAction.selector, id));
+            vm.expectCall(address(quests), abi.encodeWithSelector(MockQuests.recordCrapsAction_g14623.selector, id));
         }
         if (door == UPGRADE) {
             vm.expectCall(address(flip), abi.encodeWithSelector(MockFlip.burnCoin.selector, payee));

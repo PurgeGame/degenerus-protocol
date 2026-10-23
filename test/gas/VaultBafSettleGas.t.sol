@@ -23,7 +23,7 @@ import {VmSafe} from "forge-std/Vm.sol";
 ///           typical 10-level gap (70 days) and the full 90-day window, whose first day opens
 ///           a fresh result and stake word so the walk crosses the most words a window can.
 ///           Each stays under BAF_VAULT_SETTLE, and the Glamsterdam re-pricing is logged.
-///         - The real sealing chunk, cold: the runDailyPhase call that finishes the latch day's
+///         - The real sealing chunk, cold: the runDailyPhase_g2582 call that finishes the latch day's
 ///           purchase legs and seals, in a turbo game (short gap) and in a slow game whose
 ///           vault walks the full 90-day window, each beside a pre-settled control. Each chunk
 ///           stays at or under 10M.
@@ -53,13 +53,13 @@ contract VaultSettleSeeder is CoinflipStakeSetter {
 /// @dev Production facade plus native seams for the daily cycle after the request.
 contract VaultSettleHost is DegenerusGame {
     function publishOnly() external {
-        _native(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("publishRng()"));
+        _native(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("publishRng_g4514()"));
     }
 
     function ticketsOnly() external returns (bool done) {
         uint24 anchor = !jackpotPhaseFlag && lastPurchaseDay && rngLockedFlag ? level : level + 1;
         MineFlipGas.Result memory result = abi.decode(_native(ContractAddresses.GAME_TICKET_MODULE,
-            abi.encodeWithSignature("runTicketWork(uint24,uint256)", anchor, uint256(9_000_000))),
+            abi.encodeWithSignature("runTicketWork_g1150(uint24,uint256)", anchor, uint256(9_000_000))),
             (MineFlipGas.Result));
         done = result.done;
         if (done) {
@@ -70,12 +70,12 @@ contract VaultSettleHost is DegenerusGame {
     }
 
     function applyOnly() external {
-        _native(ContractAddresses.GAME_ADVANCE_MODULE, abi.encodeWithSignature("applyDailyWord()"));
+        _native(ContractAddresses.GAME_ADVANCE_MODULE, abi.encodeWithSignature("applyDailyWord_g1652()"));
     }
 
     function dailyWith(uint256 allowance) external returns (MineFlipGas.Result memory) {
         return abi.decode(_native(ContractAddresses.GAME_ADVANCE_MODULE,
-            abi.encodeWithSignature("runDailyPhase(uint256)", allowance)), (MineFlipGas.Result));
+            abi.encodeWithSignature("runDailyPhase_g2582(uint256)", allowance)), (MineFlipGas.Result));
     }
 
     function _native(address target, bytes memory data) private returns (bytes memory result) {

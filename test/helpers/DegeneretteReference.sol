@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {RngTags} from "../../contracts/libraries/RngTags.sol";
 
 /// @dev Independent reference for the public ticket-stream contract and score.
 library DegeneretteReference {
     function randomHero(uint256 seed) internal pure returns (uint8 symbol) {
-        uint256 roll = uint256(keccak256(abi.encode(seed, uint256(0x446567656e4865726f))));
+        uint256 roll = uint256(keccak256(abi.encode(RngTags.SPIN_HERO, seed)));
         symbol = uint8(roll % 24);
     }
 
@@ -27,22 +28,19 @@ library DegeneretteReference {
     }
 
     function drawWord(uint256 word, bool wwxrp) internal pure returns (uint256) {
-        return wwxrp ? uint256(keccak256(abi.encode(word, uint256(0x575758525044726177)))) : word;
+        return word; // The action tag separates the shared reel; no preliminary rehash.
     }
 
     function player(uint256 word, uint32 index, uint8 symbol, uint8 spin, bool wwxrp) internal pure returns (uint32 t) {
         uint256 seed =
-            uint256(keccak256(abi.encode(drawWord(word, wwxrp), uint256(index), uint256(symbol), uint256(spin))));
-        t = ordinary(uint256(keccak256(abi.encode(seed, uint256(0x446567656e506c61796572)))));
+            uint256(keccak256(abi.encode(RngTags.BET_PLAYER, word, uint256(symbol), uint256(spin))));
+        t = ordinary(uint256(keccak256(abi.encode(RngTags.SPIN_PLAYER, seed))));
         uint8 shift = (symbol >> 3) * 8;
         t = (t & ~(uint32(0xFF) << shift)) | (uint32(0x40 | (symbol & 7)) << shift);
     }
 
     function house(uint256 word, uint32 index, uint8 spin, bool wwxrp) internal pure returns (uint32) {
-        word = drawWord(word, wwxrp);
-        uint256 seed = spin == 0
-            ? uint256(keccak256(abi.encodePacked(word, index, bytes1(0x51))))
-            : uint256(keccak256(abi.encodePacked(word, index, spin, bytes1(0x51))));
+        uint256 seed = uint256(keccak256(abi.encode(RngTags.BET_HOUSE, word, uint256(spin))));
         return traits(seed);
     }
 

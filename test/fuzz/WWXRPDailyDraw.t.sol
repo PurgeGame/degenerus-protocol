@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {RngTags} from "../../contracts/libraries/RngTags.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 
@@ -10,10 +11,10 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 ///         outcome from rngWordForDay(d+1).
 contract WWXRPDailyDrawTest is DeployProtocol {
     // Mirror of the contract's domain tags (compile-time constants there).
-    bytes32 private constant DOM_BIG = "WWXRP_DRAW_BIG";
-    bytes32 private constant DOM_SMALL = "WWXRP_DRAW_SMALL";
-    bytes32 private constant DOM_WIN_BUCKET = "WWXRP_DRAW_WIN_BUCKET";
-    bytes32 private constant DOM_WINNER = "WWXRP_DRAW_WINNER";
+    uint256 private constant DOM_BIG = RngTags.WWXRP_BIG;
+    uint256 private constant DOM_SMALL = RngTags.WWXRP_SMALL;
+    uint256 private constant DOM_WIN_BUCKET = RngTags.WWXRP_BUCKET;
+    uint256 private constant DOM_WINNER = RngTags.WWXRP_WINNER;
 
     address internal alice;
     address internal bob;
@@ -67,13 +68,13 @@ contract WWXRPDailyDrawTest is DeployProtocol {
 
     /// @dev Mirror of the contract's outcome hash derivation.
     function _h(
-        bytes32 dom,
+        uint256 dom,
         uint24 day,
         uint256 word
     ) internal view returns (uint256) {
         return
             uint256(
-                keccak256(abi.encodePacked(dom, address(wwxrp), day, word))
+                keccak256(abi.encode(dom, word))
             );
     }
 
@@ -762,7 +763,7 @@ contract WWXRPDailyDrawTest is DeployProtocol {
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSignature("OnlyGame()"));
         coin.mintForGame(alice, 1);
-        // Prizes flow through creditFlip — WWXRP holds NO FLIP mint authority.
+        // Prizes flow through creditFlip_g317 — WWXRP holds NO FLIP mint authority.
         vm.prank(address(wwxrp));
         vm.expectRevert(abi.encodeWithSignature("OnlyGame()"));
         coin.mintForGame(alice, 1);
@@ -771,7 +772,7 @@ contract WWXRPDailyDrawTest is DeployProtocol {
     function test_CreditFlipRejectsArbitraryCallers() public {
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSignature("OnlyFlipCreditors()"));
-        coinflip.creditFlip(aliceId, 1);
+        coinflip.creditFlip_g317(aliceId, 1);
     }
 
     function test_BurnForGameStillGameOnly() public {

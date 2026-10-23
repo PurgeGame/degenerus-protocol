@@ -24,7 +24,7 @@ contract FoilHeroSpinStub {
 
 contract FoilCohortCreditStub {
     mapping(uint32 => uint256) public credited;
-    function creditFlip(uint32 player, uint256 amount) external { credited[player] += amount; }
+    function creditFlip_g317(uint32 player, uint256 amount) external { credited[player] += amount; }
 }
 
 /// @dev Seed commitment state only; generation, storage and gold claims are production code.

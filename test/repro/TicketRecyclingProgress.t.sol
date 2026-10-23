@@ -65,7 +65,7 @@ contract RecyclingProgressSeeder is DeadVrfSeeder {
     ///      dispatches it, with all remaining gas as its allowance.
     function runProductionTickets(uint24 anchor) external returns (bool finished, bool worked) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_TICKET_MODULE.delegatecall(
-            abi.encodeWithSelector(IDegenerusGameTicketModule.runTicketWork.selector, anchor, gasleft())
+            abi.encodeWithSelector(IDegenerusGameTicketModule.runTicketWork_g1150.selector, anchor, gasleft())
         );
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
         MineFlipGas.Result memory r = abi.decode(data, (MineFlipGas.Result));

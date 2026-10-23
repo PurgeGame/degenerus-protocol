@@ -16,7 +16,7 @@ import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 ///               zero TraitsGenerated emits (vacuous / nothing to drain).
 ///         The path-isolation claim (original D-05) that game-over NEVER
 ///         runs the daily-drain body is superseded: game-over now opportunistically
-///         runs the ticket work (`runTicketWork`) via delegatecall to maximise terminal
+///         runs the ticket work (`runTicketWork_g1150`) via delegatecall to maximise terminal
 ///         jackpot eligibility. Catastrophic drain reverts (e.g., queue that
 ///         exceeds the block gas limit) are swallowed by the low-level
 ///         delegatecall in _handleGameOverPath so game-over continues to

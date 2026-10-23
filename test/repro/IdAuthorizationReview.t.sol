@@ -249,7 +249,7 @@ contract IdAuthorizationReviewTest is DeployProtocol {
         assertFalse(ok);
         (ok,) = address(game).call(abi.encodeCall(game.drainAffiliateBases, (uint256(child), 0)));
         assertFalse(ok);
-        (ok,) = address(coinflip).call(abi.encodeCall(coinflip.creditFlip, (child, 100_000)));
+        (ok,) = address(coinflip).call(abi.encodeCall(coinflip.creditFlip_g317, (child, 100_000)));
         assertFalse(ok);
         (ok,) = address(wwxrp).call(abi.encodeCall(wwxrp.creditPrize, (child, 100_000)));
         assertFalse(ok);

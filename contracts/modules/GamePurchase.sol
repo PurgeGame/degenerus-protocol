@@ -412,7 +412,7 @@ abstract contract GamePurchase is
                     cachedLevel + 1
                 );
                 (uint256 questReward, , , bool questCompleted, ) = quests
-                    .handlePurchase(
+                    .handlePurchase_g4831(
                         buyerId,
                         0,
                         uint32(entryQuantityScaled / (4 * QTY_SCALE)),
@@ -421,7 +421,7 @@ abstract contract GamePurchase is
                         nextLevelPrice
                     );
                 if (questCompleted && questReward != 0) {
-                    coinflip.creditFlip(buyerId, questReward);
+                    coinflip.creditFlip_g317(buyerId, questReward);
                 }
             }
 
@@ -832,7 +832,7 @@ abstract contract GamePurchase is
                 uint32 streak,
                 bool questCompleted,
                 bool afking
-            ) = quests.handlePurchase(
+            ) = quests.handlePurchase_g4831(
                     buyerId,
                     totalCost,
                     0, // This body funds tickets with ETH, claimable or AFKing balances.
@@ -920,7 +920,7 @@ abstract contract GamePurchase is
                 ? _ethToFlipValue(lootboxClaimableUsed, quote.priceWei)
                 : 0;
             uint256 affKickback;
-            (affWinnerId, affWinnerCredit, affKickback) = affiliate.payAffiliateCombined(
+            (affWinnerId, affWinnerCredit, affKickback) = affiliate.payAffiliateCombined_g978(
                 affiliateCode,
                 buyerId,
                 quote.cachedLevel + 1,
@@ -952,7 +952,7 @@ abstract contract GamePurchase is
         // One Coinflip write for the buyer credit + the rolled affiliate winner. winner != buyer
         // (winner == sender credits nothing), so no slot collision; the pair call skips zero legs.
         if (lootboxFlipCredit != 0 || affWinnerCredit != 0) {
-            coinflip.creditFlipPair(
+            coinflip.creditFlipPair_g578(
                 buyerId,
                 lootboxFlipCredit,
                 affWinnerId,

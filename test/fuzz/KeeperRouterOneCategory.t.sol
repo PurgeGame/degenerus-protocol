@@ -21,22 +21,22 @@ import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 //      (DegenerusGameMinerModule) selects one action at a time from storage, composes as many as its
 //      allowance admits, and credits the caller ONCE per call, after the loop, on measured gas above
 //      an unpaid first MIN_REWARDED_GAS. The no-stacking proof is unchanged in form: count the
-//      keeper's creditFlip per call (exactly one on a paid call, zero on NoWork). The source attest
+//      keeper's creditFlip_g317 per call (exactly one on a paid call, zero on NoWork). The source attest
 //      now targets the engine module. The history below is kept for the requirement IDs.
 /// @title KeeperRouterOneCategory -- TST-02 (Phase 351, v55.0 game-resident): one-rewarded-category-per-tx
-///        (no bounty-stacking) on `mineFlip()` + the router->game->creditFlip double-pay disposition.
+///        (no bounty-stacking) on `mineFlip()` + the router->game->creditFlip_g317 double-pay disposition.
 ///
 /// @notice The v55 router (`game.mineFlip(0)`, GameAfkingModule.sol:985) is a STRUCTURAL one-category
 ///         early-return: `if (advanceDue) {advance leg} else {open leg}` (GameAfkingModule.sol:993 vs :1000).
 ///         There are exactly TWO router categories — advance (the buy folded into mineFlip's required-path
 ///         STAGE, so it rides the advance bounty) and the box open (afking boxes first, then human boxes with
 ///         the leftover budget — one combined open bounty). The else-if XOR is the mitigation
-///         for bounty-stacking; the single CEI-last `creditFlip(msg.sender, total)`
+///         for bounty-stacking; the single CEI-last `creditFlip_g317(msg.sender, total)`
 ///         (GameAfkingModule.sol:1014-1016) is the mitigation for a composed reentrant double-pay. Security
 ///         is the HARD FLOOR.
 ///
-///   D-02 (no-stacking proven by COUNTING `creditFlip`, NOT exact amounts): each `mineFlip()` tx fires
-///   EXACTLY ONE `coinflip.creditFlip` across both category branches (advance / open), ZERO on the
+///   D-02 (no-stacking proven by COUNTING `creditFlip_g317`, NOT exact amounts): each `mineFlip()` tx fires
+///   EXACTLY ONE `coinflip.creditFlip_g317` across both category branches (advance / open), ZERO on the
 ///   `bountyEarned==0` skip (the sweep-pending gameover advance, or an ineligible keeper's advance, runs
 ///   the category but credits nothing, still no revert), and ZERO + `revert NoWork()` when there is no
 ///   work — BOTH O(1) predicates empty, OR a post-gameover idle crank with no final sweep pending. The count is taken via the
@@ -51,7 +51,7 @@ import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 ///   `ContractAddresses.GAME_LOOTBOX_MODULE` delegatecall (the afking + human box-open legs — both
 ///   pull-only: no callee on those paths hands control to player code). There is no untrusted call to
 ///   re-enter through, so a synthetic reentrant attacker has no hook. The disposition is satisfied by a
-///   comment-stripped source grep-attestation: (a) the single `creditFlip(msg.sender, total)`
+///   comment-stripped source grep-attestation: (a) the single `creditFlip_g317(msg.sender, total)`
 ///   occurrence (==1, CEI-last), and (b) ZERO low-level ETH-push primitives in the mineFlip legs (the
 ///   module pushes no ETH at all — funding withdraw moved to DegenerusGame). NO attacker/reentrant mock
 ///   exists in this file (User verbatim: "reentrancy is not an issue, nothing here pays eth and this only
@@ -73,11 +73,11 @@ import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 ///   Pinned slots RE-DERIVED via `forge inspect storage DegenerusGame`. Zero contracts/*.sol mutation.
 contract KeeperRouterOneCategory is DeployProtocol {
     // -------------------------------------------------------------------------
-    // creditFlip-count oracle (recipient-isolated)
+    // creditFlip_g317-count oracle (recipient-isolated)
     // -------------------------------------------------------------------------
 
     /// @dev keccak256("CoinflipStakeUpdated(uint32,uint24,uint256,uint256)") — emitted once per
-    ///      creditFlip. The indexed `player` is topics[1] (recipient isolation).
+    ///      creditFlip_g317. The indexed `player` is topics[1] (recipient isolation).
     bytes32 private constant COINFLIP_STAKE_UPDATED_SIG =
         keccak256("CoinflipStakeUpdated(uint32,uint24,uint256,uint256)");
 
@@ -173,7 +173,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
     }
 
     // =========================================================================
-    // Task 1 — D-02 one-category creditFlip COUNT across both branches + skip + NoWork
+    // Task 1 — D-02 one-category creditFlip_g317 COUNT across both branches + skip + NoWork
     // =========================================================================
 
     /// @notice ADVANCE branch: a new day's processing is ONE engine call composing many actions
@@ -228,14 +228,14 @@ contract KeeperRouterOneCategory is DeployProtocol {
         assertGt(measured, 1_000_000, "non-vacuity: the advance call measured past the unpaid first million");
         assertGt(reward, 0, "non-vacuity: the advance call earned a bounty");
         // The composed actions credited exactly once.
-        assertEq(_countFor(logs, keeper), 1, "ADVANCE branch: exactly one mineFlip creditFlip to the keeper");
+        assertEq(_countFor(logs, keeper), 1, "ADVANCE branch: exactly one mineFlip creditFlip_g317 to the keeper");
     }
 
     /// @notice GAMEOVER idle crank reverts: post-gameover the advance predicate stays true (dailyIdx
     ///         freezes) but the only remaining advance work is the one-time 30-day final sweep. With no
     ///         sweep pending (GO_TIME==0 here == the real within-30-day / already-swept states) mineFlip
     ///         reverts NoWork() rather than running the gameover advance leg as a free unrewarded no-op.
-    ///         Zero creditFlip either way.
+    ///         Zero creditFlip_g317 either way.
     function testGameoverIdleCrankRevertsNoWork() public {
         _settleGame(0x5C1F0001);
         assertFalse(game.advanceDue(), "pre: settled");
@@ -255,7 +255,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
         game.mineFlip(0);
 
         // ZERO creditFlips — the idle crank reverted before any bounty could pay.
-        assertEq(_countCoinflipStakeUpdated(), 0, "GAMEOVER idle: zero creditFlip emissions on the NoWork revert");
+        assertEq(_countCoinflipStakeUpdated(), 0, "GAMEOVER idle: zero creditFlip_g317 emissions on the NoWork revert");
     }
 
     /// @notice NoWork: BOTH O(1) predicates empty -> `mineFlip()` reverts `NoWork()` and credits
@@ -281,7 +281,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
         game.mineFlip(0);
 
         // Nothing credited (the revert rolls back, but assert the count is zero regardless).
-        assertEq(_countCoinflipStakeUpdated(), 0, "NoWork: zero creditFlip emissions on the empty-work revert");
+        assertEq(_countCoinflipStakeUpdated(), 0, "NoWork: zero creditFlip_g317 emissions on the empty-work revert");
     }
 
     // =========================================================================
@@ -300,12 +300,12 @@ contract KeeperRouterOneCategory is DeployProtocol {
         assertGt(bytes(dispatch).length, 0, "D-01: shared dispatcher extracted");
         assertEq(_countOccurrences(dispatch, "for (uint256 transitions; transitions < 32; ++transitions) {"), 1, "one bounded dispatch loop");
         assertEq(_countOccurrences(dispatch, "MinerAction action = transitions == 0 ? first : _nextMinerAction(msg.sender);"), 1, "every dispatch reselects from storage");
-        assertEq(_countOccurrences(dispatch, "coinflip.creditFlip(minerId, reward);"), 1, "single credit in the dispatcher");
-        assertEq(_countOccurrences(miner, "creditFlip("), 1, "sole keeper-credit site in the engine");
-        assertEq(_countOccurrences(afking, "creditFlip(minerId,"), 0, "the retired router credit site stays gone");
+        assertEq(_countOccurrences(dispatch, "coinflip.creditFlip_g317(minerId, reward);"), 1, "single credit in the dispatcher");
+        assertEq(_countOccurrences(miner, "creditFlip_g317("), 1, "sole keeper-credit site in the engine");
+        assertEq(_countOccurrences(afking, "creditFlip_g317(minerId,"), 0, "the retired router credit site stays gone");
         assertEq(_countOccurrences(dispatch, "if (numerator >= (denominator - 1) / 1e18 + 1) {"), 1, "zero credit is skipped");
         // CEI-last: the credit follows the loop's exit check and the gas measurement.
-        uint256 credit = _indexOf(dispatch, "coinflip.creditFlip(minerId, reward);");
+        uint256 credit = _indexOf(dispatch, "coinflip.creditFlip_g317(minerId, reward);");
         uint256 measured = _indexOf(dispatch, "uint256 used = MineFlipGas.consumed(rewardStart, gasleft());");
         // The no-progress exit: a refused randomness request returns before any measurement or credit;
         // otherwise a failed admission check reverts.
@@ -379,7 +379,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
     }
 
     // =========================================================================
-    // creditFlip-count oracle
+    // creditFlip_g317-count oracle
     // =========================================================================
 
     function _countCoinflipStakeUpdated() internal returns (uint256 count) {
@@ -393,7 +393,7 @@ contract KeeperRouterOneCategory is DeployProtocol {
         }
     }
 
-    /// @dev Recipient-isolated creditFlip count over already-captured logs: isolates the router
+    /// @dev Recipient-isolated creditFlip_g317 count over already-captured logs: isolates the router
     ///      bounty (to the keeper) from a box-owner's winnings credit.
     function _countFor(Vm.Log[] memory logs, address who) internal view returns (uint256 count) {
         for (uint256 i; i < logs.length; i++) {

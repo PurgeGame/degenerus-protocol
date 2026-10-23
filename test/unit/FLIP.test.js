@@ -609,8 +609,8 @@ describe("FLIP", function () {
     });
   });
 
-  // creditFlip() and creditFlipBatch() removed from FLIP in Phase 146 ABI cleanup
-  // (forwarding wrappers; callers now call coinflip.creditFlip / coinflip.creditFlipBatch directly)
+  // creditFlip_g317() and creditFlipBatch() removed from FLIP in Phase 146 ABI cleanup
+  // (forwarding wrappers; callers now call coinflip.creditFlip_g317 / coinflip.creditFlipBatch directly)
 
   // ---------------------------------------------------------------------------
   // View helpers — claimableCoin, balanceOfWithClaimable, etc.

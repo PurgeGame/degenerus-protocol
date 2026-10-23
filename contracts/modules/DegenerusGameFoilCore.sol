@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {EntropyLib} from "../libraries/EntropyLib.sol";
+import {RngTags} from "../libraries/RngTags.sol";
+
 import {GoldSixLib} from "../libraries/GoldSixLib.sol";
 
 import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol";
@@ -440,7 +443,7 @@ abstract contract DegenerusGameFoilCore is
             kickback += (claimableUsed * PRICE_COIN_UNIT * 10) / (priceWei * 100);
         }
 
-        if (kickback != 0) coinflip.creditFlip(buyerId, kickback);
+        if (kickback != 0) coinflip.creditFlip_g317(buyerId, kickback);
 
         // Boost freeze off the buyer's post-action activity score (units + the streak the
         // primary just advanced are reflected via streakSnapshot). Mirror the mint path's
@@ -719,7 +722,7 @@ abstract contract DegenerusGameFoilCore is
         uint256[7] memory cut = DegenerusTraitUtils.foilCuts(multBps);
         for (uint256 i; i < 4; ++i) {
             uint256 seed = uint256(
-                keccak256(abi.encode(entropy, uint256(buyerId), lvl, FOIL_SEED_TAG, i))
+                EntropyLib.hash4(RngTags.FOIL_LINES, entropy, (uint256(buyerId) << 24) | lvl, i)
             );
             uint8 tA = DegenerusTraitUtils.foilTrait(uint64(seed), cut);
             uint8 tB = DegenerusTraitUtils.foilTrait(uint64(seed >> 64), cut) | 64;
@@ -774,10 +777,10 @@ abstract contract DegenerusGameFoilCore is
         // Currency and spin use disjoint lanes of the seed saved with this draw.
         // Zero is a valid seed; the caller authenticated the record's presence flag.
         uint256 c = uint256(
-            keccak256(abi.encode(entropy, day, ticketIndex, FOIL_CCY_TAG))
+            EntropyLib.hash3(RngTags.FOIL_CURRENCY, entropy, ticketIndex)
         ) % 100;
         uint256 seed = uint256(
-            keccak256(abi.encode(entropy, day, ticketIndex, FOIL_SPIN_TAG))
+            EntropyLib.hash3(RngTags.FOIL_SPIN, entropy, ticketIndex)
         );
 
         // activityScore is the buyer's score frozen at buy (passed in), not a live read:
@@ -844,7 +847,7 @@ abstract contract DegenerusGameFoilCore is
         // routed by selector.
         if (selector == IDegenerusGameDegeneretteModule.resolveFlipSpinsFromBox.selector) {
             uint256 flipOut = abi.decode(data, (uint256));
-            if (flipOut != 0) coinflip.creditFlip(id, flipOut);
+            if (flipOut != 0) coinflip.creditFlip_g317(id, flipOut);
         } else if (
             selector == IDegenerusGameDegeneretteModule.resolveWwxrpSpinFromBox.selector
         ) {
@@ -1069,7 +1072,7 @@ abstract contract DegenerusGameFoilCore is
     ) internal {
         uint256 flipCredit = _goldLadderFlip(golds);
         if (allGold == 1) flipCredit += GOLDEN_TICKET_FLIP;
-        coinflip.creditFlip(id, flipCredit);
+        coinflip.creditFlip_g317(id, flipCredit);
         emit GoldenTicketFoil(id, lvl, golds, allGold, flipCredit);
     }
 

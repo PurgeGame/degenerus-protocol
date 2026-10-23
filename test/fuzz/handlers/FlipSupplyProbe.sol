@@ -31,7 +31,7 @@ interface ICoinflipClaim {
 ///         event stream, then cross-checks it against FLIP's storage getters.
 ///
 /// @dev WHY ACTIVE FLIP MOVERS: at low levels the game only ACCRUES coinflip claimable (via
-///      creditFlip on purchases + the day-1..20 seed stakes to VAULT/sDGNRS); FLIP does not MINT
+///      creditFlip_g317 on purchases + the day-1..20 seed stakes to VAULT/sDGNRS); FLIP does not MINT
 ///      until that claimable is claimed. Without claim/transfer actions the conservation identity
 ///      would sit at 0 == 0 and prove nothing. `crankAdvance` resolves coinflip days so the
 ///      claimable accrues, `claimFlip` mints it, and the transfer actions exercise the burn/escrow

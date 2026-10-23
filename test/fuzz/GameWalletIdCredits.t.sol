@@ -417,7 +417,7 @@ contract GameWalletIdCredits is DeployProtocol {
         vm.store(address(game), bytes32(uint256(2)), bytes32((pools & ~uint256(type(uint128).max)) | 60 ether));
         vm.mockCall(
             address(quests),
-            abi.encodeWithSelector(IDegenerusQuests.handlePurchase.selector),
+            abi.encodeWithSelector(IDegenerusQuests.handlePurchase_g4831.selector),
             abi.encode(uint256(4_321), uint8(2), uint32(0), true, false)
         );
         assertEq(game.walletIdOf(buyer), 0, "fixture: unregistered buyer");
@@ -443,7 +443,7 @@ contract GameWalletIdCredits is DeployProtocol {
         vm.deal(buyer, 10 ether);
         vm.mockCall(
             address(quests),
-            abi.encodeWithSelector(IDegenerusQuests.handlePurchase.selector),
+            abi.encodeWithSelector(IDegenerusQuests.handlePurchase_g4831.selector),
             abi.encode(uint256(0), uint8(0), uint32(0), false, false)
         );
 
@@ -451,7 +451,7 @@ contract GameWalletIdCredits is DeployProtocol {
         uint256 snap = vm.snapshotState();
         vm.mockCall(
             address(affiliate),
-            abi.encodeWithSelector(IDegenerusAffiliate.payAffiliateCombined.selector),
+            abi.encodeWithSelector(IDegenerusAffiliate.payAffiliateCombined_g978.selector),
             abi.encode(uint32(0), uint256(0), uint256(0))
         );
         uint256 b0 = _lane(buyerId);
@@ -462,7 +462,7 @@ contract GameWalletIdCredits is DeployProtocol {
 
         vm.mockCall(
             address(affiliate),
-            abi.encodeWithSelector(IDegenerusAffiliate.payAffiliateCombined.selector),
+            abi.encodeWithSelector(IDegenerusAffiliate.payAffiliateCombined_g978.selector),
             abi.encode(winnerId, uint256(500), uint256(300))
         );
         uint256 buyerBefore = _lane(buyerId);

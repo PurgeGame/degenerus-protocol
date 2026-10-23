@@ -168,14 +168,14 @@ contract AfkingSectionsTest is Test {
         uint256 budget = MineFlipGas.budget(16_000_000, type(uint32).max, true);
         bytes32 ticketSlot = h.ticketWordSlot();
         vm.record();
-        MineFlipGas.Result memory result = h.runAfkingWork(budget);
+        MineFlipGas.Result memory result = h.runAfkingWork_g8553(budget);
         (bytes32[] memory reads,) = vm.accesses(address(h));
         for (uint256 i; i < reads.length; ++i) assertTrue(reads[i] != ticketSlot);
         assertTrue(result.progressed);
         assertFalse(result.done);
         assertEq(result.rewardBasis, 0);
         assertEq(h.cursor(), 1);
-        result = h.runAfkingWork(budget);
+        result = h.runAfkingWork_g8553(budget);
         assertTrue(result.done);
         assertEq(result.rewardBasis, 1);
         assertEq(h.pending(), 0);

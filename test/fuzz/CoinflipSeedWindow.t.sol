@@ -50,7 +50,7 @@ contract CoinflipSeedWindowTest is DeployProtocol {
 
     function _creditVault(uint256 amount) internal {
         vm.prank(GAME);
-        coinflip.creditFlip(1, amount);
+        coinflip.creditFlip_g317(1, amount);
     }
 
     function _creditSdgnrs(uint256 amount) internal {
@@ -175,7 +175,7 @@ contract CoinflipSeedWindowTest is DeployProtocol {
         _creditVault(1_234);
         uint32 aliceId = _giveWalletId(alice);
         vm.prank(GAME);
-        coinflip.creditFlip(aliceId, 1_234);
+        coinflip.creditFlip_g317(aliceId, 1_234);
         assertEq(coinflip.coinflipAmount(VAULT), 1_234 + SEED, "seed joins the stored stake");
         assertEq(coinflip.coinflipAmount(alice), 1_234);
 

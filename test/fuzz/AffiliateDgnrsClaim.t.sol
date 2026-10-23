@@ -5,6 +5,7 @@ import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {MintPaymentKind} from "../../contracts/interfaces/IDegenerusGame.sol";
 import {sDGNRS} from "../../contracts/sDGNRS.sol";
 import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
+import {IDegenerusAffiliate} from "../../contracts/interfaces/IDegenerusAffiliate.sol";
 import {GameSlots} from "../helpers/GameSlots.sol";
 
 /// @title AffiliateDgnrsClaim -- Tests for segregated affiliate DGNRS claim system
@@ -44,6 +45,21 @@ contract AffiliateDgnrsClaim is DeployProtocol {
         affiliate.createAffiliateCode(CODE_BOB, 0);
         vm.prank(carol);
         affiliate.createAffiliateCode(CODE_CAROL, 0);
+    }
+
+    function test_CombinedScoreReadMatchesBothExistingViews() public {
+        _buyOne(CODE_ALICE);
+        uint32 id = game.walletIdOf(alice);
+        uint24[5] memory levels = [uint24(0), uint24(1), uint24(2), uint24(3), type(uint24).max];
+        for (uint256 i; i < levels.length; ++i) {
+            (uint256 score, uint256 total) = affiliate.affiliateScoreAndTotal_g4013(levels[i], id);
+            assertEq(score, affiliate.affiliateScore(levels[i], id));
+            assertEq(total, affiliate.totalAffiliateScore(levels[i]));
+        }
+        address foreign = address(0xBAD);
+        vm.etch(foreign, address(affiliate).code);
+        vm.expectRevert(bytes4(keccak256("DegenerusAffiliateForeignContext()")));
+        IDegenerusAffiliate(foreign).affiliateScoreAndTotal_g4013(1, id);
     }
 
     // =========================================================================

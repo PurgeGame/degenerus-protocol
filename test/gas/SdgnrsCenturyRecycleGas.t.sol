@@ -23,7 +23,7 @@ contract RecycleSessionSeeder is DegenerusGame {
 
     /// @dev Gross gas of one production daily-phase checkpoint (the century close) in isolation.
     function measuredDailyPhase(uint256 allowance) external returns (bool done, uint256 grossGas) {
-        bytes memory data = abi.encodeWithSelector(IDegenerusGameAdvanceModule.runDailyPhase.selector, allowance);
+        bytes memory data = abi.encodeWithSelector(IDegenerusGameAdvanceModule.runDailyPhase_g2582.selector, allowance);
         uint256 beforeGas = gasleft();
         (bool ok, bytes memory returned) = ContractAddresses.GAME_ADVANCE_MODULE.delegatecall(data);
         grossGas = beforeGas - gasleft();

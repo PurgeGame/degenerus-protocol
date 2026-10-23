@@ -232,7 +232,7 @@ contract WalletIdEntropyTest is Test {
         assertEq(id, nextId, "fixture wallet ID");
         h.commit(entropy, false);
         vm.recordLogs();
-        MineFlipGas.Result memory r = h.runTicketWork(2, FULL);
+        MineFlipGas.Result memory r = h.runTicketWork_g1150(2, FULL);
         assertTrue(r.done, "one call drains the solo owner");
         (keyed, take) = _soloRuns(vm.getRecordedLogs(), id);
     }
@@ -304,7 +304,7 @@ contract WalletIdEntropyTest is Test {
         h.commit(entropy, false);
         (uint256 invBefore, uint256 entriesBefore) = h.inventory(1);
         vm.recordLogs();
-        h.runTicketWork(2, FULL);
+        h.runTicketWork_g1150(2, FULL);
         (uint256[] memory keyed, uint32[] memory take) = _soloRuns(vm.getRecordedLogs(), id);
         uint256 stream = TicketEntropy.identity(h.readKey(1), 1, 0, id);
         for (uint256 r; r < keyed.length; ++r) {
@@ -393,7 +393,7 @@ contract WalletIdEntropyTest is Test {
         assertEq(h.word(), entropy, "committed cohort word");
         vm.recordLogs();
         for (uint256 calls; calls < 40; ++calls) {
-            MineFlipGas.Result memory r = h.runTicketWork(future ? 0 : lvl + 1, FULL);
+            MineFlipGas.Result memory r = h.runTicketWork_g1150(future ? 0 : lvl + 1, FULL);
             if (r.done || !r.progressed) break;
         }
         uint256[] memory counts = _countReveals(vm.getRecordedLogs(), ids, lvl);
@@ -421,14 +421,14 @@ contract WalletIdEntropyTest is Test {
         for (uint256 i; i < 11; ++i) h.credit(_player(i), 1, uint32(1_200 + i * 437));
         h.commit(uint256(keccak256("resume-ids")), false);
         uint256 snap = vm.snapshotState();
-        h.runTicketWork(2, FULL);
+        h.runTicketWork_g1150(2, FULL);
         (bytes32 full, uint256 count) = h.digest(1);
         assertTrue(vm.revertToStateAndDelete(snap));
         uint256 calls;
         uint256 maxCalls = 400;
         bool done;
         for (; calls < maxCalls && !done; ++calls) {
-            MineFlipGas.Result memory r = h.runTicketWork(2, ROUND_ALLOWANCE);
+            MineFlipGas.Result memory r = h.runTicketWork_g1150(2, ROUND_ALLOWANCE);
             assertTrue(r.progressed, "each bounded call progresses");
             done = r.done;
         }
@@ -454,7 +454,7 @@ contract WalletIdEntropyTest is Test {
         h.commit(uint256(keccak256("foil-id-word")), false);
         uint256 entropy = h.word();
         vm.recordLogs();
-        h.runTicketWork(3, FULL);
+        h.runTicketWork_g1150(3, FULL);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bool seen;
         for (uint256 i; i < logs.length; ++i) {

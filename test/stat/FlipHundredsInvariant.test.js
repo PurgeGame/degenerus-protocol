@@ -127,7 +127,7 @@ describe("FlipHundredsInvariant (stat-suite) — seven-site 100-FLIP granule gat
       const truncIdx = body.indexOf(
         "flipCredit / FlipRoundLib.FLIP_ROUND_UNIT"
       );
-      const creditIdx = body.indexOf("coinflip.creditFlip(winner, flipCredit)");
+      const creditIdx = body.indexOf("coinflip.creditFlip_g317(winner, flipCredit)");
       const emitIdx = body.indexOf("emit GoldenTicketWin(");
       expect(truncIdx).to.be.greaterThan(-1);
       expect(creditIdx).to.be.greaterThan(-1);

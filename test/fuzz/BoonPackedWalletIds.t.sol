@@ -614,17 +614,17 @@ contract BoonPackedWalletIds is DeployProtocol {
         vm.record();
 
         vm.prank(ContractAddresses.COINFLIP);
-        assertEq(game.consumeCoinflipBoon(0), 0, "coinflip lane");
+        assertEq(game.consumeCoinflipBoon_g2902(0), 0, "coinflip lane");
         vm.prank(ContractAddresses.COIN);
-        assertEq(game.consumeCoinflipBoon(0), 0, "craps lane");
+        assertEq(game.consumeCoinflipBoon_g2902(0), 0, "craps lane");
         vm.prank(ContractAddresses.WWXRP);
-        assertEq(game.consumeCoinflipBoon(0), 0, "WWXRP lane");
+        assertEq(game.consumeCoinflipBoon_g2902(0), 0, "WWXRP lane");
         vm.prank(ContractAddresses.COIN);
         assertEq(game.consumeDecimatorBoon(0), 0, "decimator");
 
         // The module bodies themselves (past the façade's tier early-out).
         address boon = ContractAddresses.GAME_BOON_MODULE;
-        assertEq(abi.decode(ext.x_delegate(boon, abi.encodeCall(DegenerusGameBoonModule.consumeCoinflipBoon, (0))), (uint16)), 0);
+        assertEq(abi.decode(ext.x_delegate(boon, abi.encodeCall(DegenerusGameBoonModule.consumeCoinflipBoon_g2902, (0))), (uint16)), 0);
         assertEq(abi.decode(ext.x_delegate(boon, abi.encodeCall(DegenerusGameBoonModule.consumeDecimatorBoost, (0))), (uint16)), 0);
         assertEq(abi.decode(ext.x_delegate(boon, abi.encodeCall(DegenerusGameBoonModule.consumeDegeneretteBoon, (0, 0))), (uint16)), 0);
         assertEq(abi.decode(ext.x_delegate(boon, abi.encodeCall(DegenerusGameBoonModule.consumeDegeneretteBoon, (0, 1))), (uint16)), 0);

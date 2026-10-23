@@ -125,7 +125,7 @@ contract RedemptionLootboxReserveLeg is RedemptionCloseTools {
         RecyclingState.seedWord(address(game), RecyclingState.readBuffer(address(game)), bytes32(word));
         uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
         vm.store(address(game), bytes32(0), bytes32(slot0 | (uint256(1) << 192))); // ticketsFullyProcessed
-        assertEq(game.rngConsumerStage(), 1, "fixture: redemption consumer stage open");
+        assertEq(game.rngConsumerStage_g379(), 1, "fixture: redemption consumer stage open");
     }
 
     /// @dev The Redemption-stage worker, called as the Game the way mineFlip dispatches it,

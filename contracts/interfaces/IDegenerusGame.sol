@@ -73,14 +73,20 @@ interface IDegenerusGame {
     ///      Repeat for later awards or a coinflip backlog. Does not resolve unclaimed prizes.
     function sweepAccounts(uint32[] calldata ids) external returns (uint256 ethCollected, uint256 flipCollected);
 
+    function registerWallet_g9539(address owner, bool allocate) external returns (uint32 id);
+
     /// @notice Wallet-ID hook for trusted protocol contracts: existing ID, or with `allocate` a new
     ///         one subject to paid admission. Non-allocating calls return zero for unregistered wallets.
     function registerWallet(address owner, bool allocate) external returns (uint32 id);
     function registerWalletIdentity(address owner) external returns (uint32 id);
     function walletIdentityOf(address owner) external view returns (uint32);
     function acquiredBuyer(uint32 id) external view returns (uint32 buyerId);
+    function walletIdOf_g3120(address player) external view returns (uint32);
+
     /// @notice A wallet's current gameplay ID, or zero before registration/after liquidation.
     function walletIdOf(address player) external view returns (uint32);
+
+    function resolveAccount_g502(uint32 id, address caller) external view returns (address key, address payee, bool authorized);
 
     /// @notice Resolve an allocated account's payee and caller authorization.
     /// @dev Ordinary accounts return their address as `key`; subaccounts return zero.
@@ -135,10 +141,14 @@ interface IDegenerusGame {
     /// @dev Strictly increasing absolute value; preserves lifetime count and all other mint fields.
     function raiseSmurfBaseAllowance(uint32 mainId, uint16 newBase) external;
 
+    function extsload_g8132(bytes32 slot) external view returns (bytes32 value);
+
     /// @notice Read a raw storage slot; used for permanent identity lookups with pinned roots.
     function extsload(bytes32 slot) external view returns (bytes32 value);
+
+
     /// @notice Allowed read consumer: 0 blocked, 1 redemption, 2 AFK, 3 boxes/bets, 4 Decimator, 5 Craps, 6 complete.
-    function rngConsumerStage() external view returns (uint8);
+    function rngConsumerStage_g379() external view returns (uint8);
 
     /// @notice Get the current jackpot level.
     /// @return Current jackpot level (starts at 0).
@@ -227,6 +237,8 @@ interface IDegenerusGame {
             uint8 phaseDay
         );
 
+
+
     /// @notice Consume the caller's boon lane for the next stake bonus.
     /// @dev Access: COINFLIP, COIN or WWXRP. The caller selects its own lane: coinflip,
     ///      craps or WWXRP respectively. WWXRP exposes a separate consumption hook to
@@ -235,7 +247,7 @@ interface IDegenerusGame {
     /// @param id Wallet ID of the player consuming the boon.
     /// @return boostBps Boost amount in basis points.
     /// @custom:reverts Unauthorized If caller is not COINFLIP, COIN or WWXRP.
-    function consumeCoinflipBoon(uint32 id) external returns (uint16 boostBps);
+    function consumeCoinflipBoon_g2902(uint32 id) external returns (uint16 boostBps);
 
     /// @notice Consume decimator boon for burn boost.
     /// @dev Access: COIN only. Grants bonus to next decimator burn. Boon state is keyed by
@@ -300,6 +312,8 @@ interface IDegenerusGame {
     /// @return Number of entries owed (fractional remainder resolves at batch time).
     function entriesOwedView(uint24 lvl, address player) external view returns (uint32);
 
+
+
     /// @notice Record a Decimator burn for jackpot eligibility.
     /// @param player Address of the player.
     /// @param lvl Resolution level (current game level + 1).
@@ -307,7 +321,7 @@ interface IDegenerusGame {
     /// @param multBps Multiplier in basis points (10000 = 1x).
     /// @param chips The entry's board: zero to seven named chips, as a normal battle takes them.
     /// @return entryId The wallet's accumulated battle entry.
-    function recordDecBurn(
+    function recordDecBurn_g5574(
         uint32 player,
         uint24 lvl,
         uint256 baseAmount,
@@ -387,6 +401,8 @@ interface IDegenerusGame {
     /// @custom:reverts E If the donor is new past paid admission (PAID_ADMISSION_WALLETS
     ///                 registered wallets; a donation quotes no Game spend).
     function creditMiddayRng(address to, uint256 linkAmount) external returns (uint32 id);
+
+
 
 
     /// @notice Buy a credit-gated Degenesis box (ETH + claimable shortfall) for account `id`.
@@ -525,6 +541,8 @@ interface IDegenerusGame {
     /// @param player Player address to query.
     /// @return Raw packed uint256 containing mint counts, streak, pass status.
     function mintPackedFor(address player) external view returns (uint256);
+
+    function mintPackedOfId_g5372(uint32 id) external view returns (uint256);
 
     /// @notice Mint word keyed directly by account ID; missing IDs return zero.
     /// @param id Account ID.

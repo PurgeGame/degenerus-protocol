@@ -61,7 +61,7 @@ contract LootboxQueueGasHost is DegenerusGame {
 
     function work(uint256 allowance) external returns (MineFlipGas.Result memory result) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(
-            abi.encodeWithSignature("runHumanBoxWork(uint256)", allowance)
+            abi.encodeWithSignature("runHumanBoxWork_g315(uint256)", allowance)
         );
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
         result = abi.decode(data, (MineFlipGas.Result));

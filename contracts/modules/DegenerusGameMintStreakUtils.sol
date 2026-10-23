@@ -244,7 +244,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
                 if (cachedLevel == uint256(currLevel)) {
                     affPoints = (packed >> BitPackingLib.AFFILIATE_BONUS_POINTS_SHIFT) & BitPackingLib.MASK_6;
                 } else {
-                    affPoints = affiliate.affiliateBonusPointsBest(
+                    affPoints = affiliate.affiliateBonusPointsBest_g3878(
                         currLevel, player
                     );
                 }
@@ -284,7 +284,7 @@ abstract contract DegenerusGameMintStreakUtils is DegenerusGameStorage {
         if (((packed >> BitPackingLib.AFFILIATE_BONUS_LEVEL_SHIFT) & BitPackingLib.MASK_24) == currLevel) {
             return packed;
         }
-        uint256 points = affiliate.affiliateBonusPointsBest(
+        uint256 points = affiliate.affiliateBonusPointsBest_g3878(
             currLevel, player
         );
         packed = BitPackingLib.setPacked(

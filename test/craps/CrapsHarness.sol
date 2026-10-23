@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {RngTags} from "../../contracts/libraries/RngTags.sol";
+import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
 
 import {Craps} from "../../contracts/Craps.sol";
 import {CrapsBattle} from "../../contracts/CrapsBattle.sol";
@@ -55,7 +57,7 @@ contract CrapsHarness is CrapsSeedViews, CrapsBattle {
         (, placed) = _packChips(uint32(packed));
         board = _boardFrom(packed, chipFlip);
         // audit ed035463: the scatter draw has its own domain — `_hash3(word, SCATTER_TAG, owner)`.
-        _scatterInto(board, _hash3(word, SCATTER_TAG, uint256(uint160(owner))), chipFlip, 10 - placed);
+        _scatterInto(board, EntropyLib.hash3(RngTags.CRAPS_BOARD, word, uint256(uint160(owner))), chipFlip, 10 - placed);
     }
 
     /// @notice `_settleSlip` — the whole multi-shooter run.

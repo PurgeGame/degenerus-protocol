@@ -556,14 +556,14 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
         address[3] memory consumers = [address(coinflip), address(coin), address(wwxrp)];
         for (uint256 i; i < consumers.length; ++i) {
             (bool ok, bytes memory result) = _ctx(string.concat("hot-consume-", vm.toString(i)), false,
-                consumers[i], address(game), 0, abi.encodeCall(game.consumeCoinflipBoon, (id)));
+                consumers[i], address(game), 0, abi.encodeCall(game.consumeCoinflipBoon_g2902, (id)));
             assertTrue(ok); assertGt(abi.decode(result, (uint16)), 0);
         }
         (bool consumed, bytes memory boost) = _ctx("hot-decimator-boon", false, address(coin), address(game), 0,
             abi.encodeCall(game.consumeDecimatorBoon, (id)));
         assertTrue(consumed); assertEq(abi.decode(boost, (uint16)), 5000);
         (bool denied,) = _ctx("hot-unauthorized-boon", false, cast[1], address(game), 0,
-            abi.encodeCall(game.consumeCoinflipBoon, (id)));
+            abi.encodeCall(game.consumeCoinflipBoon_g2902, (id)));
         assertFalse(denied);
         vm.prank(address(game)); coin.mintForGame(cast[0], 1000);
         _success("hot-eth-bet", cast[0], address(game), 0.01 ether,

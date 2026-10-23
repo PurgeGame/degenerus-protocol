@@ -212,7 +212,7 @@ contract CoinflipCompactGapTest is CoinflipRngSpineBehavioral {
         uint256 stake = 100 + 7;
         uint32 playerId = _giveWalletId(player);
         vm.prank(GAME);
-        coinflip.creditFlip(playerId, stake);
+        coinflip.creditFlip_g317(playerId, stake);
         // All 107 raw units are whole tokens and survive the credit.
         assertEq(coinflip.coinflipAmount(player), stake, "actual funded next-day stake");
         uint256 snapshot = vm.snapshotState();

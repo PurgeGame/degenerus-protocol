@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {RngTags} from "../libraries/RngTags.sol";
+
 import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol";
 import {MineFlipGas} from "../libraries/MineFlipGas.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
@@ -131,6 +133,8 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
     uint256 private constant FLIP_ROUND_TAG = 0x466c6970526f756e64; // "FlipRound"
     uint256 private constant BOX_PASS_ROUND_TAG = 0x50617373526f756e64; // "PassRound"
 
+
+
     /// @notice Buy a credit-gated Degenesis box, funded by msg.value, then the buyer's claimable,
     ///         then prepaid AFKing balance; overpay credits the payer's AFKing.
     /// @dev Sale-day, size and Vault gates, 1:1 credit consume, payment, then the whole amount is
@@ -139,7 +143,7 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
     /// @param id Account receiving the order (0 = caller; account rule).
     /// @param amount Degenesis ETH: at least 0.01 ETH in whole 0.0001-ETH units, within the
     ///        per-order bound.
-    function buyDegenesisBox(uint32 id, uint256 amount) external payable {
+    function buyDegenesisBox_g1442(uint32 id, uint256 amount) external payable {
         // Delegatecall-only: a direct call on the deployed module would trap msg.value.
         if (address(this) != ContractAddresses.GAME) revert E();
         uint32 buyerId = _registerCallerAccount(_resolveAccountId(id), amount);
@@ -188,13 +192,15 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
         return day >= GameTimeLib.DEGENESIS_START_DAY && day < GameTimeLib.MAIN_LAUNCH_DAY;
     }
 
+
+
     /// @notice Daily-request step: split every sealed cohort, then close sealed empty cohorts and
     ///         price the next sealed one once the previous cohort has settled, binding it to this
     ///         request's word.
     /// @dev Delegatecalled by the Advance module's request boundary only while degenesisClosed < 7.
     ///      Every input (V, the pool balance, the orders) is fixed before the request.
     /// @param day The request day.
-    function prepareDegenesis(uint24 day) external {
+    function prepareDegenesis_g47(uint24 day) external {
         if (address(this) != ContractAddresses.GAME) revert E();
         _splitDegenesisCohorts(day);
         if (degenesisActive != 0) return;
@@ -214,12 +220,14 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
         }
     }
 
+
+
     /// @notice Top sDGNRS AFKing funding up to SDGNRS_AFKING_TARGET from its claimable above the
     ///         1-wei sentinel, before each once-per-level bulk whale attempt.
     /// @dev Delegatecalled by the AFKing STAGE ahead of the whale purchase, which then sizes its
     ///      budget on the remaining claimable. A reclassification inside claimablePool, kept
     ///      whether or not a group is bought.
-    function topUpSdgnrsAfking() external {
+    function topUpSdgnrsAfking_g318() external {
         uint256 packed = balancesPacked[SDGNRS_WALLET_ID];
         uint256 afking = packed >> 128;
         uint256 claimable = uint128(packed);
@@ -242,6 +250,13 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
         _splitDegenesisCohorts(type(uint24).max);
     }
 
+    /// @dev Cold accounting values retained across the inlined claimable purchase.
+    struct DegenesisSpend {
+        uint256 budget;
+        uint256 funded;
+        uint256 maxCost;
+    }
+
     /// @notice Spend the Vault's Degenesis budget on a recipient's tickets
     ///         and lootboxes, or whale passes, at their normal price.
     /// @dev Vault-only, reached through the facade's delegatecall so msg.sender stays the Vault.
@@ -256,14 +271,16 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
     /// @param boxOrder Packed lootbox order (ignored with whale passes).
     /// @param maxCost Budget moved in for the purchase.
     function spendDegenesis(uint32 recipientId, bool whalePass, uint256 quantity, uint256 boxOrder, uint256 maxCost) external {
-        uint256 budget = degenesisVaultBudget;
-        if (address(this) != ContractAddresses.GAME || msg.sender != ContractAddresses.VAULT || maxCost > budget) {
+        DegenesisSpend memory spend;
+        spend.budget = degenesisVaultBudget;
+        spend.maxCost = maxCost;
+        if (address(this) != ContractAddresses.GAME || msg.sender != ContractAddresses.VAULT || maxCost > spend.budget) {
             revert E();
         }
         if (recipientId == 0) recipientId = VAULT_WALLET_ID;
         _requireAllocated(recipientId);
-        uint256 funded = balancesPacked[VAULT_WALLET_ID] + maxCost;
-        balancesPacked[VAULT_WALLET_ID] = funded;
+        spend.funded = balancesPacked[VAULT_WALLET_ID] + maxCost;
+        balancesPacked[VAULT_WALLET_ID] = spend.funded;
         if (whalePass) {
             (bool ok, bytes memory data) = ContractAddresses.GAME_WHALE_MODULE.delegatecall(abi.encodeWithSelector(
                 IDegenerusGameWhaleModule.purchaseWhalePassForDegenesis.selector, recipientId, quantity
@@ -274,10 +291,10 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
         }
         uint256 after_ = balancesPacked[VAULT_WALLET_ID];
         // Checked: a word that grew, an AFKing draw or a draw above maxCost reverts.
-        uint256 cost = funded - after_;
-        uint256 unspent = maxCost - cost;
+        uint256 cost = spend.funded - after_;
+        uint256 unspent = spend.maxCost - cost;
         balancesPacked[VAULT_WALLET_ID] = after_ - unspent;
-        degenesisVaultBudget = uint128(budget - cost);
+        degenesisVaultBudget = uint128(spend.budget - cost);
         emit DegenesisVaultSpent(recipientId, cost);
     }
 
@@ -366,6 +383,8 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
         bool wwxrp; // the consolation
     }
 
+
+
     /// @notice Settle the active Degenesis cohort's orders in order, then close the cohort.
     /// @dev Miner stage, not an RNG consumer. Each order's outcome is a pure function of the bound
     ///      word and the frozen cohort, derived before admission, so each admits against its own
@@ -373,7 +392,7 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
     ///      order pays. Coin credits pay in one batch per chunk: nothing acts between orders of
     ///      one call. Revert-free except gas: every callee is a revert-free credit or the
     ///      clamping pool transfer.
-    function runDegenesisWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory result) {
+    function runDegenesisWork_g1860(uint256 gasAllowance) external returns (MineFlipGas.Result memory result) {
         MineFlipGas.Meter memory meter = MineFlipGas.start(gasAllowance);
         if (!_degenesisSettlePending()) {
             result.done = true;
@@ -438,7 +457,7 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
     }
 
     /// @dev Outcome of order `index` with lane `lane`: 50% FLIP-valued, 40% sDGNRS, 10% WWXRP,
-    ///      each from its own extractor of hash4(DEGENESIS_ORDER_DOMAIN, word, day << 32 | index, id).
+    ///      each from its own tagged extractor of hash3(DEGENESIS_ORDER, word, index).
     ///      FLIP: the ladder scaled by the day schedule, the early bonus and the cohort's volume
     ///      factor in one multiply-then-divide, converted at the level-1 price, then collapsed and
     ///      denominated as an ordinary box's; below one whole FLIP pays WWXRP. sDGNRS:
@@ -450,9 +469,9 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
     {
         o.id = uint32(lane);
         o.units = (lane >> DEGENESIS_AMOUNT_SHIFT) & DEGENESIS_AMOUNT_MASK;
-        uint256 seed = EntropyLib.hash4(DEGENESIS_ORDER_DOMAIN, g.word, (g.day << 32) | index, o.id);
-        uint256 category = EntropyLib.hash2(seed, DEGENESIS_CATEGORY_TAG) % 100;
-        uint256 size = EntropyLib.hash2(seed, DEGENESIS_SIZE_TAG);
+        uint256 seed = EntropyLib.hash3(RngTags.DEGENESIS_ORDER, g.word, index);
+        uint256 category = EntropyLib.hash2(RngTags.DEGENESIS_CATEGORY, seed) % 100;
+        uint256 size = EntropyLib.hash2(RngTags.DEGENESIS_SIZE, seed);
         if (category < 50) {
             uint256 roll = size % 20;
             uint256 flipBps = roll < 16
@@ -464,11 +483,11 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
             // Collapse onto a whole 100-FLIP multiple above the threshold, EV-preserving;
             // smaller awards keep the whole-FLIP floor.
             flipOut = flipOut > FlipRoundLib.FLIP_ROUND_THRESHOLD
-                ? FlipRoundLib.roundFlipToHundreds(flipOut, EntropyLib.hash2(seed, FLIP_ROUND_TAG))
+                ? FlipRoundLib.roundFlipToHundreds(flipOut, EntropyLib.hash2(RngTags.DEGENESIS_ROUND, seed))
                 : FlipRoundLib.floorWholeFlip(flipOut);
             if (flipOut == 0) {
                 o.wwxrp = true;
-            } else if (EntropyLib.hash2(seed, DEGENESIS_PASS_TAG) & 1 == 1) {
+            } else if (EntropyLib.hash2(RngTags.DEGENESIS_PASS, seed) & 1 == 1) {
                 // Half the results denominate the whole roll into Craps day passes at the box
                 // pass units, switching wholly to high-roller passes above HIGH_SWITCH. The
                 // fractional pass is Bernoulli-rounded; from the twelve-high cap up the count pins
@@ -482,7 +501,7 @@ contract DegenerusGameDegenesisModule is DegenerusGameStorage {
                     flipRest = flipOut - DEGENESIS_HIGH_PASS_CAP * HIGH_ROLLER_DAY_PASS_VALUE;
                 } else {
                     uint256 rem = flipOut % passUnit;
-                    if (rem != 0 && EntropyLib.hash2(seed, BOX_PASS_ROUND_TAG) % passUnit < rem) ++passCount;
+                    if (rem != 0 && EntropyLib.hash2(RngTags.DEGENESIS_PASS_ROUND, seed) % passUnit < rem) ++passCount;
                 }
                 flipOut = flipRest;
                 if (passCount == 0) o.wwxrp = true;

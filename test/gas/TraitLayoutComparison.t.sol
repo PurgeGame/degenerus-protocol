@@ -150,7 +150,7 @@ contract TraitLayoutComparisonTest is Test {
         ticket.seedViaPurchase(lvl, 8, 800, 0x70000, false);
         if (reused) ticket.recycleBacking(lvl, 32);
         _measure(string.concat("ticket_", lvl == 42 ? "even" : "odd", reused ? "_reused" : "_fresh"),
-            address(ticket), abi.encodeCall(ticket.runTicketWork, (lvl + 1, 10_000_000)));
+            address(ticket), abi.encodeCall(ticket.runTicketWork_g1150, (lvl + 1, 10_000_000)));
     }
     function test_Layout_TicketEvenFresh() public { _ticket(42, false); }
     function test_Layout_TicketOddFresh() public { _ticket(43, false); }

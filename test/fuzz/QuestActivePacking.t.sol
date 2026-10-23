@@ -55,7 +55,7 @@ contract QuestActivePackingTest is Test {
 
     function test_DailyRollDoesNotResetLevelProgress() public {
         vm.prank(ContractAddresses.GAME);
-        quests.handlePurchase(PLAYER, 0.01 ether, 0, 0, 0.04 ether, 0.04 ether);
+        quests.handlePurchase_g4831(PLAYER, 0.01 ether, 0, 0, 0.04 ether, 0.04 ether);
         bytes32 progressSlot = keccak256(abi.encode(uint256(PLAYER), QaSlots.LEVEL));
         uint256 progress = uint256(vm.load(address(quests), progressSlot));
         assertEq(uint128(progress >> 8), 0.01 ether);
@@ -63,7 +63,7 @@ contract QuestActivePackingTest is Test {
         vm.prank(ContractAddresses.GAME);
         quests.rollDailyQuest(day, 123, true, false, false);
         vm.prank(ContractAddresses.GAME);
-        quests.handlePurchase(PLAYER, 0.01 ether, 0, 0, 0.04 ether, 0.04 ether);
+        quests.handlePurchase_g4831(PLAYER, 0.01 ether, 0, 0, 0.04 ether, 0.04 ether);
         progress = uint256(vm.load(address(quests), progressSlot));
         assertEq(uint8(progress), 1);
         assertEq(uint128(progress >> 8), 0.02 ether, "daily roll keeps level accumulation");
@@ -71,18 +71,18 @@ contract QuestActivePackingTest is Test {
 
     function test_PurchaseReturnsAfkingFlagFromQuestWord() public {
         vm.prank(ContractAddresses.GAME);
-        (,,,, bool afking) = quests.handlePurchase(PLAYER, 0.01 ether, 0, 0, 0.04 ether, 0.04 ether);
+        (,,,, bool afking) = quests.handlePurchase_g4831(PLAYER, 0.01 ether, 0, 0, 0.04 ether, 0.04 ether);
         assertFalse(afking);
         uint24 day = uint24(uint256(vm.load(address(quests), bytes32(QaSlots.ACTIVE))));
         vm.prank(ContractAddresses.GAME);
         quests.beginAfking(PLAYER, day);
         vm.prank(ContractAddresses.GAME);
-        (,,,, afking) = quests.handlePurchase(PLAYER, 0.01 ether, 0, 0, 0.04 ether, 0.04 ether);
+        (,,,, afking) = quests.handlePurchase_g4831(PLAYER, 0.01 ether, 0, 0, 0.04 ether, 0.04 ether);
         assertTrue(afking);
         vm.prank(ContractAddresses.GAME);
         quests.finalizeAfking(PLAYER, 0, day, day);
         vm.prank(ContractAddresses.GAME);
-        (,,,, afking) = quests.handlePurchase(PLAYER, 0.01 ether, 0, 0, 0.04 ether, 0.04 ether);
+        (,,,, afking) = quests.handlePurchase_g4831(PLAYER, 0.01 ether, 0, 0, 0.04 ether, 0.04 ether);
         assertFalse(afking);
     }
 }

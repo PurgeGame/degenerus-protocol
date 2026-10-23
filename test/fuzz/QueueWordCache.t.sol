@@ -99,7 +99,7 @@ contract QueueWordCacheHarness is DegenerusGameStorage, WalletSeed {
     ///      it; the gas the call is sent bounds it.
     function run(uint24 anchor) external returns (MineFlipGas.Result memory) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_TICKET_MODULE.delegatecall(
-            abi.encodeWithSelector(DegenerusGameTicketModule.runTicketWork.selector, anchor, gasleft())
+            abi.encodeWithSelector(DegenerusGameTicketModule.runTicketWork_g1150.selector, anchor, gasleft())
         );
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
         return abi.decode(data, (MineFlipGas.Result));

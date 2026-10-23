@@ -15,7 +15,7 @@ contract ColdSubscriberSeeder is DegenerusGame, WalletSeed {
         require(!rngLockedFlag, "setup daily still locked");
         for (uint256 i; i < 100 && !humanReadComplete; ++i) {
             (bool ok, bytes memory ret) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(
-                abi.encodeWithSelector(IGameAfkingModule.runHumanBoxWork.selector, gasleft())
+                abi.encodeWithSelector(IGameAfkingModule.runHumanBoxWork_g315.selector, gasleft())
             );
             if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
         }
@@ -29,8 +29,8 @@ contract ColdSubscriberSeeder is DegenerusGame, WalletSeed {
         for (uint256 i; i < 100; ++i) {
             uint8 stage = _rngConsumerStage();
             bytes4 selector;
-            if (stage == 2) selector = IGameAfkingModule.runAfkingWork.selector;
-            else if (stage == 3) selector = IGameAfkingModule.runHumanBoxWork.selector;
+            if (stage == 2) selector = IGameAfkingModule.runAfkingWork_g8553.selector;
+            else if (stage == 3) selector = IGameAfkingModule.runHumanBoxWork_g315.selector;
             else return;
             (bool ok, bytes memory ret) =
                 ContractAddresses.GAME_AFKING_MODULE.delegatecall(abi.encodeWithSelector(selector, gasleft()));

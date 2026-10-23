@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {NativeFailureExport, NativeFailureProbe} from "../helpers/NativeFailureExport.sol";
 import {SelectorFaultProxy} from "./GameExternalIsolation.t.sol";
 import {IStETH} from "../../contracts/interfaces/IStETH.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -27,7 +28,7 @@ contract SmurfHost is AfkingStethHost {
     }
 }
 
-contract AfkingStethFundingTest is DeployProtocol {
+contract AfkingStethFundingTest is DeployProtocol, NativeFailureExport {
 
     mapping(address => uint32) private _aidCache;
 
@@ -495,4 +496,25 @@ contract AfkingStethFundingTest is DeployProtocol {
         _work();
         assertGt(host.entries(PLAYER), 0);
     }
+    function test_NativeOuterFundingRollbackBoundary() public {
+        NativeFailureProbe probe = new NativeFailureProbe();
+        address implementation = address(0xF005);
+        vm.etch(implementation, address(game).code);
+        uint8[7] memory modes = [uint8(0), 1, 2, 5, 8, 9, 10];
+        for (uint256 i; i < modes.length; ++i) {
+            uint256 snap = vm.snapshotState();
+            _add(PLAYER, true, 1, 0, 1);
+            _add(NEXT, true, 1, host.price(), 0);
+            mockStETH.mint(PLAYER, 1 ether); _authorize(PLAYER, 1 ether);
+            vm.etch(address(game), address(new SelectorFaultProxy(implementation,
+                bytes4(keccak256("pullAfkingSteth(uint32,address,uint256)")), modes[i])).code);
+            if (i == 0) _nativeCheckedFixture("afking-low", address(this), address(probe),
+                abi.encodeCall(probe.invoke, (address(game), abi.encodeCall(host.subWork, (WORK_GAS)), 900_000)));
+            _nativeCheckedFixture(string.concat("afking-", vm.toString(modes[i])), address(this), address(probe),
+                abi.encodeCall(probe.invoke, (address(game), abi.encodeCall(host.subWork, (WORK_GAS)), WORK_GAS)));
+            require(vm.revertToState(snap));
+            vm.deleteStateSnapshot(snap);
+        }
+    }
+
 }

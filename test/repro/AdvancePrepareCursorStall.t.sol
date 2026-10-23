@@ -20,7 +20,7 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///         cohort larger than one write budget), each next call's `_prepareFutureTickets` probes the
 ///         empty future levels lvl+1..lvl+4; the empty-queue path of `processFutureTicketBatch`
 ///         (MintModule:325-328) does `ticketCursor = 0; ticketLevel = 0`, erasing the in-flight
-///         current-level cursor. `runTicketWork(lvl)` then re-inits (MintModule:630-632) and
+///         current-level cursor. `runTicketWork_g1150(lvl)` then re-inits (MintModule:630-632) and
 ///         rescans from index 0, re-skipping the already-minted prefix at 1 budget unit each. New
 ///         progress per call decays 32, 29, 27, ... to zero once the skip prefix saturates the
 ///         358-unit cold budget: the mint cursor plateaus below the cohort size, the tail never
@@ -33,9 +33,9 @@ import {GameSlots} from "../helpers/GameSlots.sol";
 ///         levels are processed after the current drain clears the marker.
 ///
 ///         CURRENT: `_prepareFutureTickets` and the near-window drain are one function,
-///         `runTicketWork`. There is no standalone future-ticket prep step — the
+///         `runTicketWork_g1150`. There is no standalone future-ticket prep step — the
 ///         far-future continuation (the private `_processFutureTicketBatch`, reachable only
-///         through `runTicketWork`) is structurally unreachable until the near-window loop
+///         through `runTicketWork_g1150`) is structurally unreachable until the near-window loop
 ///         has returned (idx >= total for every windowed level), so the shared cursor can never
 ///         be clobbered mid-drain by construction. This test still exercises that invariant end
 ///         to end via real `game.purchase`/`mineFlip` calls, so it needed no changes here.

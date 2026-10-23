@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {RngTags} from "../libraries/RngTags.sol";
+
 import {GameBoxInternals} from "./GameBoxInternals.sol";
 import {ContractAddresses} from "../ContractAddresses.sol";
 import {GamePurchaseBoon} from "./GamePurchaseBoon.sol";
@@ -863,7 +865,7 @@ abstract contract GameBoonActions is GamePurchaseBoon {
         uint8 slot,
         uint256 rngWord
     ) internal pure returns (uint8 boonType) {
-        uint256 seed = uint256(keccak256(abi.encode(rngWord, uint256(deityId), day, slot)));
+        uint256 seed = uint256(EntropyLib.hash4(RngTags.DEITY_MENU, rngWord, (uint256(deityId) << 24) | day, slot));
         uint256 roll = seed %
             (BOON_WEIGHT_TOTAL - BOON_WEIGHT_DECIMATOR_ALL - BOON_WEIGHT_DEITY_PASS_ALL);
         if (roll >= BOON_WEIGHT_PRE_DECIMATOR) roll += BOON_WEIGHT_DECIMATOR_ALL;

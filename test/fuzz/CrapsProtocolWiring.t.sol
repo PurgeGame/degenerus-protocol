@@ -94,7 +94,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
     /// @dev Both payout lanes, with a stranger refused at each.
     function test_coinflipHonoursTheCrapsAddressForBothCreditLanes() public {
         vm.prank(ContractAddresses.CRAPS);
-        coinflip.creditFlip(CREDIT_ID, 100);
+        coinflip.creditFlip_g317(CREDIT_ID, 100);
 
         uint32[] memory players = new uint32[](1);
         uint256[] memory amounts = new uint256[](1);
@@ -105,7 +105,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
 
         vm.prank(STRANGER);
         vm.expectRevert(bytes4(keccak256("OnlyFlipCreditors()")));
-        coinflip.creditFlip(CREDIT_ID, 100);
+        coinflip.creditFlip_g317(CREDIT_ID, 100);
 
         vm.prank(STRANGER);
         vm.expectRevert(bytes4(keccak256("OnlyFlipCreditors()")));
@@ -173,8 +173,8 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         // consumers (tickets, boxes, bets, Decimator) have finished: the read-cohort gate
         // (6d0e64b09). Small engine calls run those stages and stop before the first whole seat,
         // leaving the field to the read stage itself.
-        for (uint256 i; i < 32 && game.rngConsumerStage() != 6; ++i) game.mineFlip{gas: 800_000}(0);
-        assertEq(game.rngConsumerStage(), 6, "the cohort reached its Craps read stage");
+        for (uint256 i; i < 32 && game.rngConsumerStage_g379() != 6; ++i) game.mineFlip{gas: 800_000}(0);
+        assertEq(game.rngConsumerStage_g379(), 6, "the cohort reached its Craps read stage");
         assertEq(crapsBattle.bonusCursorOf(slot), 0, "the field is still unsettled for the read stage");
 
         // Any caller's mineFlip runs the read stage; the money goes to the slip's owner.
@@ -182,7 +182,7 @@ contract CrapsProtocolWiringTest is DeployProtocol {
         vm.prank(STRANGER);
         game.mineFlip(0);
 
-        // The win ships as next-day coinflip stake, not liquid FLIP: `creditFlip` against the
+        // The win ships as next-day coinflip stake, not liquid FLIP: `creditFlip_g317` against the
         // REAL Coinflip is the payout lane now, so the balance must stay at zero and the stake
         // must carry the whole award.
         assertEq(coinflip.coinflipAmount(PLAYER) - stakeBefore, paid, "the real credit missed the owner");

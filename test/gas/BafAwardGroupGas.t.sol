@@ -18,7 +18,7 @@ import {
 } from "./AdvanceCenturyConsolidationGas.t.sol";
 import {WalletSeed} from "../helpers/WalletSeed.sol";
 
-/// @dev Production game facade plus a native runDailyPhase seam. `seedBafStage` writes the state
+/// @dev Production game facade plus a native runDailyPhase_g2582 seam. `seedBafStage` writes the state
 ///      the x00 consolidation leaves behind, positioned at a group boundary: a kind-7 work record
 ///      (pool, positions, cursor) whose `paid` is the reserved ETH still owed (also held in
 ///      claimablePool), the daily lock of a published session with the day's word recorded, and the
@@ -62,7 +62,7 @@ contract BafGroupGasHost is DegenerusGame, WalletSeed {
 
     function dailyWith(uint256 allowance) external returns (MineFlipGas.Result memory) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_ADVANCE_MODULE.delegatecall(
-            abi.encodeWithSignature("runDailyPhase(uint256)", allowance)
+            abi.encodeWithSignature("runDailyPhase_g2582(uint256)", allowance)
         );
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
         return abi.decode(data, (MineFlipGas.Result));
@@ -117,7 +117,7 @@ abstract contract BafAwardGroupFixture is DeployProtocol {
     uint256 internal constant SEARCH = 2048;
     uint24 internal constant DAY = 400;
     /// @dev Admits exactly one group: the group bound, its tail, the phase tail and check reserve,
-    ///      plus the runDailyPhase preamble and module hops before the group check.
+    ///      plus the runDailyPhase_g2582 preamble and module hops before the group check.
     uint256 internal constant ONE_GROUP_ALLOWANCE = GasBounds.BAF_AWARD_GROUP + GasBounds.BAF_AWARD_TAIL
         + GasBounds.DAILY_PHASE_TAIL + MineFlipGas.CHECK_RESERVE + 100_000;
     bytes32 internal constant ADVANCE_SIG = keccak256("Advance(uint8,uint24)");

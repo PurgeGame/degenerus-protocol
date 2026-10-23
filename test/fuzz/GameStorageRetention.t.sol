@@ -43,7 +43,7 @@ contract GameRetentionHarness is DegenerusGameRngUtils {
     }
     function closeSeventh() external {
         (bool ok, bytes memory data) = ContractAddresses.GAME_DEGENESIS_MODULE.delegatecall(
-            abi.encodeWithSignature("prepareDegenesis(uint24)", GameTimeLib.MAIN_LAUNCH_DAY)
+            abi.encodeWithSignature("prepareDegenesis_g47(uint24)", GameTimeLib.MAIN_LAUNCH_DAY)
         );
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
     }
@@ -82,7 +82,7 @@ contract GameRetentionTest is Test {
         RetainedBoonHarness boon = RetainedBoonHarness(ContractAddresses.GAME);
         uint24 day = boon.today();
         boon.seed(RETAINED | day | (uint256(3) << 48));
-        assertEq(boon.consumeCoinflipBoon(7), 2500);
+        assertEq(boon.consumeCoinflipBoon_g2902(7), 2500);
         (uint256 s0,) = boon.boonPacked(7);
         assertEq(s0, RETAINED);
         assertFalse(boon.checkAndClearExpiredBoon(7), "sentinel is not a live boon");

@@ -199,7 +199,7 @@ contract PendingBoxCountInvariant is DeployProtocol {
     /// @dev One mineFlip; a call made while AFKing opens are the next read work has its settlement
     ///      records tallied, each account counted once per call.
     function _trackedFlip(address caller, uint256 gasCap) internal {
-        bool afking = game.rngConsumerStage() == 2;
+        bool afking = game.rngConsumerStage_g379() == 2;
         if (afking) vm.recordLogs();
         if (caller != address(this)) vm.prank(caller);
         game.mineFlip{gas: gasCap}(0);

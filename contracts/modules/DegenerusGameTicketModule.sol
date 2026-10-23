@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {RngTags} from "../libraries/RngTags.sol";
+
 import {GoldSixLib} from "../libraries/GoldSixLib.sol";
 
 import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol";
@@ -132,8 +134,7 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
                 // All randomness keys off the frozen word, source group and award round.
                 // In particular neither the global queue round nor caller gas is an input.
                 do {
-                    uint256 seed = EntropyLib.hash4(DIRECT_TICKET_DOMAIN, plan.entropy,
-                        (uint256(q) << 32) | i, round);
+                    uint256 seed = EntropyLib.hash4(RngTags.TICKET_DIRECT, plan.entropy, (uint256(q) << 32) | i, round);
                     // The round retains no allocated memory and makes no external calls.
                     uint256 free;
                     assembly ("memory-safe") { free := mload(0x40) }
@@ -185,7 +186,7 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
             uint256 len = plan.lens[q];
             uint32 deity = plan.deities[q];
             uint256 effectiveLen = len + _deityVirtualCount(trait, len, deity);
-            uint256 seed = EntropyLib.hash2(plan.entropy, q);
+            uint256 seed = EntropyLib.hash3(RngTags.JACKPOT_QUADRANT, plan.entropy, q);
             uint8 salt = uint8(plan.salt + q);
             PackedTicketSampleLib.Cursor memory cursor;
             while (i < count) {
@@ -241,12 +242,12 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
         uint256 len = plan.lens[q];
         uint32 deity = plan.deities[q];
         uint256 effectiveLen = len + _deityVirtualCount(trait, len, deity);
-        uint256 seed = EntropyLib.hash2(plan.entropy, q);
+        uint256 seed = EntropyLib.hash3(RngTags.JACKPOT_QUADRANT, plan.entropy, q);
         PackedTicketSampleLib.Cursor memory cursor;
         for (uint256 j; j < n; ++j) {
             if (cursor.used == 0) {
                 uint256 base = PackedTicketSampleLib.begin(cursor, effectiveLen,
-                    EntropyLib.hash4(seed, trait, uint8(plan.salt + q), start + j));
+                    EntropyLib.hash4(RngTags.BUCKET_SAMPLE, seed, uint8(plan.salt + q), start + j));
                 if (base < len) cursor.word = _bucketWordAtUnchecked(plan.sourceLvl, trait, base);
             }
             (uint256 index, bool redrawn) = PackedTicketSampleLib.next(cursor, effectiveLen);
@@ -279,12 +280,12 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
         uint256 levelSlot = _traitBufferBase(lvl);
         for (uint256 q; q < 4; ++q) {
             if (q != 0) {
-                uint256 entropy = EntropyLib.hash2(seed, q + 4);
+                uint256 entropy = EntropyLib.hash3(RngTags.TICKET_SHUFFLE, seed, q);
                 if (count == 32) order = PackedTicketShuffle.shuffle(mixed, order, entropy);
                 else {
                     // Shuffle only valid positions in a smaller final batch.
                     for (uint256 left = count; left > 1; --left) {
-                        entropy = EntropyLib.hash2(entropy, left);
+                        entropy = EntropyLib.hash3(RngTags.TICKET_SHUFFLE_STEP, entropy, left);
                         uint256 a = 8 * (left - 1);
                         uint256 b = 8 * (entropy % left);
                         uint256 diff = ((order >> a) ^ (order >> b)) & 0xff;
@@ -301,7 +302,7 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
                 uint256 n = count - base;
                 if (n > 8) n = 8;
                 uint256 traits = _directQuadrant(lvl, levelSlot, mixed[base >> 3], n,
-                    EntropyLib.hash2(seed, base / 8), q);
+                    EntropyLib.hash3(RngTags.TICKET_GROUP, seed, base / 8), q);
                 for (uint256 j; j < n; ++j) {
                     uint256 pos = uint8(order >> (8 * (base + j)));
                     reveals[pos >> 3] |= uint256(uint32(traits >> (32 * j))) << (32 * (pos & 7));
@@ -331,7 +332,9 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
         (traits,) = _runQuadrant(st, levelSlot, seed, q);
     }
 
-    function runTicketWork(uint24 anchor, uint256 allowance) external returns (MineFlipGas.Result memory) {
+
+
+    function runTicketWork_g1150(uint24 anchor, uint256 allowance) external returns (MineFlipGas.Result memory) {
         return _runTicketWork(anchor, allowance);
     }
 
@@ -628,7 +631,7 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
             // independence, so the category bucket — derived from the low 32
             // bits of s — inherits whatever entropy the seed's low bits carry.
             uint256 seed = uint256(
-                keccak256(abi.encode(baseKey, entropyWord, groupIdx))
+                EntropyLib.hash4(RngTags.TICKET_TRAITS, entropyWord, baseKey & ~(uint256(type(uint32).max) << TicketEntropy.ID_SHIFT), groupIdx)
             );
             uint64 s = uint64(seed) | 1;
             uint8 offset = uint8(i & 15);
@@ -831,7 +834,7 @@ contract DegenerusGameTicketModule is DegenerusGameJackpotDrawUtils {
         uint32 round,
         uint256 entropy
     ) private {
-        uint256 seed = uint256(keccak256(abi.encode(lvl, round, entropy)));
+        uint256 seed = uint256(EntropyLib.hash4(RngTags.TICKET_ROUND, entropy, lvl, round));
         uint256 seated = st.seated;
         uint256 seatTraits;
         uint32 seatMask;

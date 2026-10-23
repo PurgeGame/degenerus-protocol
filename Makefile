@@ -80,6 +80,10 @@ check-advance-calls:
 check-rng-taint:
 	@bash scripts/check-rng-taint.sh
 
+.PHONY: check-rng-shape
+check-rng-shape:
+	@python3 scripts/check-rng-shape.py
+
 check-unchecked:
 	@bash scripts/check-unchecked.sh
 
@@ -107,7 +111,7 @@ check-recipient-calls:
 
 # Run all Foundry fuzz tests (patch → test → restore)
 # forge test handles its own compilation with the patched addresses in place.
-test-foundry: check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete check-advance-calls check-rng-taint check-unchecked check-write-owners check-gasleft check-recipient-calls
+test-foundry: check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete check-advance-calls check-rng-taint check-rng-shape check-unchecked check-write-owners check-gasleft check-recipient-calls
 	@python3 scripts/test-foundry-groups.py $(ARGS)
 
 # Run the mainnet-fork suite (test/fork) against the REAL Lido stETH, LINK, Chainlink VRF v2.5
@@ -122,7 +126,7 @@ test-fork:
 
 # Run Hardhat in fresh file batches, record actual compiler inputs, and restore
 # the exact original address pins on completion, failure or handled interruption.
-test-hardhat: check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete check-advance-calls check-rng-taint check-unchecked check-write-owners check-gasleft check-recipient-calls
+test-hardhat: check-interfaces check-delegatecall check-raw-selectors check-rng-window check-pool-writes check-array-delete check-advance-calls check-rng-taint check-rng-shape check-unchecked check-write-owners check-gasleft check-recipient-calls
 	@python3 scripts/test-hardhat-groups.py $(ARGS)
 
 # Run both suites

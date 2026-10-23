@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {EntropyLib} from "../libraries/EntropyLib.sol";
+import {RngTags} from "../libraries/RngTags.sol";
+
 import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol";
 
 import {Craps} from "../Craps.sol";
@@ -12,7 +15,11 @@ import {CrapsPreferenceLib} from "../libraries/CrapsPreferenceLib.sol";
 import {GameTimeLib} from "../libraries/GameTimeLib.sol";
 
 interface IGameCrapsWorkStage {
-    function rngConsumerStage() external view returns (uint8);
+
+
+    function rngConsumerStage_g379() external view returns (uint8);
+    function registerWallet_g9539(address owner, bool allocate) external returns (uint32);
+
     /// @notice `owner`'s Game wallet ID; with `allocate`, a new wallet is registered, otherwise
     ///         an unregistered one returns zero.
     function registerWallet(address owner, bool allocate) external returns (uint32);
@@ -174,7 +181,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     uint256 internal constant _SWEEP_TAIL_GAS = GasBounds.CRAPS_SWEEP_TAIL_GAS;
 
     function _readCrapsStage() internal view returns (uint8) {
-        return IGameCrapsWorkStage(_GAME).rngConsumerStage();
+        return IGameCrapsWorkStage(_GAME).rngConsumerStage_g379();
     }
 
     /// @notice How many days of action a budget is drawn from.
@@ -1199,7 +1206,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
     ///      from the Game: `allocate` registers a new wallet (a paying action); otherwise an
     ///      unregistered wallet reverts. The ID is never persisted here.
     function _walletWord(address who, bool allocate) internal returns (uint256 word) {
-        uint32 id = IGameCrapsWorkStage(_GAME).registerWallet(who, allocate);
+        uint32 id = IGameCrapsWorkStage(_GAME).registerWallet_g9539(who, allocate);
         if (id == 0) revert NoWalletId();
         word = (_passCreditsById[id] & ~(uint256(type(uint32).max) << CrapsPreferenceLib.ID_SHIFT)) | (uint256(id) << CrapsPreferenceLib.ID_SHIFT);
     }
@@ -1272,7 +1279,7 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
 
     function _highMultOf(uint256 word) internal pure returns (uint256) {
         if (word == 0) return 0;
-        return CrapsPriceLib.highMultiple(_hash2(word, HIGH_TAG));
+        return CrapsPriceLib.highMultiple(EntropyLib.hash2(RngTags.CRAPS_HIGH, word));
     }
 
     /// @dev How many DAY TICKETS a protocol day sold, with the per-period high counts above the

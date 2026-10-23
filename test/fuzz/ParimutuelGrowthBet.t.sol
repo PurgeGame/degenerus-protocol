@@ -136,7 +136,7 @@ contract ParimutuelGrowthBetTest is DeployProtocol {
     }
 
     /// @dev Total FLIP a player can currently reach: wallet balance, settled coinflip
-    ///      winnings, and the stake still riding on an unsettled flip. creditFlip books a
+    ///      winnings, and the stake still riding on an unsettled flip. creditFlip_g317 books a
     ///      payout as that third term, which balanceOfWithClaimable does not span — it
     ///      counts only what previewClaimCoinflips already resolved.
     function _flipReach(address who) internal view returns (uint256) {

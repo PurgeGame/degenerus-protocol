@@ -33,7 +33,7 @@ import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 ///        (1) the purchase-gate (an item must already be a real, purchased, RNG-ready bet/box/stamp),
 ///        (2) the flat-per-tx LIVE-unit reward judged against the REAL prevailing gas of the identical
 ///            work at the >=1 gwei market floor (never measured gas, never the peg ref), and
-///        (3) the coinflip-credit illiquidity (creditFlip = pending stake, not liquid FLIP).
+///        (3) the coinflip-credit illiquidity (creditFlip_g317 = pending stake, not liquid FLIP).
 ///
 /// @notice A self-keeper / Sybil round-trip is net-zero-or-negative across the v55 router legs: the
 ///         `mineFlip()` open-leg pro-rated below-knee reward (`unit * min(opened, OPEN_KNEE) / OPEN_KNEE`,
@@ -407,7 +407,7 @@ contract KeeperFaucetResistance is DeployProtocol {
 
     /// @dev Place a degenerette ETH bet engineered to LOSE (0 matches) against the FIXED_WORD spin-0
     ///      result, so resolution runs (slot deleted) but pays no winnings — isolating the crank reward as
-    ///      the only creditFlip. Returns the betId (per-player nonce).
+    ///      the only creditFlip_g317. Returns the betId (per-player nonce).
     function _placeLosingBet(address better) internal returns (uint64 betId) {
         uint32 customTraits = _losingTicketFor(INDEX, FIXED_WORD);
         uint128 betAmount = 0.01 ether; // >= MIN_BET_ETH (0.005 ether)

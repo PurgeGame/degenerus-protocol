@@ -165,7 +165,7 @@ contract RedemptionIsolationTest is RedemptionFixture {
         _closeFunded();
         assertEq(game.claimableWinningsOf(address(sdgnrs)) + game.redemptionReserve(), beforeClaimable);
         settlementWord = _wordForRoll(100);
-        vm.mockCall(address(game), abi.encodeWithSelector(game.rngConsumerStage.selector), abi.encode(uint8(1)));
+        vm.mockCall(address(game), abi.encodeWithSelector(game.rngConsumerStage_g379.selector), abi.encode(uint8(1)));
         uint256 beforeAlice = game.claimableWinningsOf(alice);
         assertTrue(_work(9_000_000));
         assertGt(game.claimableWinningsOf(alice), beforeAlice);

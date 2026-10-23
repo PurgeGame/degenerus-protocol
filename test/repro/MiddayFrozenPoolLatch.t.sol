@@ -140,7 +140,7 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
         _fulfillPending();
         // The window's cohort drains on the delivered word: clear its pending bit as the table does.
         vm.prank(ContractAddresses.CRAPS);
-        game.setCrapsRngPending(crapsWindowBuffer, false);
+        game.setCrapsRngPending_g1406(crapsWindowBuffer, false);
         bytes4 last = _crankAdvance(200);
 
         _assertReleased(ffKey, day, last);
@@ -179,7 +179,7 @@ contract MiddayFrozenPoolLatch is DeployProtocol {
             // A shut craps window waiting on the write buffer; an ordinary caller requests.
             crapsWindowBuffer = uint48(RecyclingState.writeBuffer(address(game)));
             vm.prank(ContractAddresses.CRAPS);
-            game.setCrapsRngPending(crapsWindowBuffer, true);
+            game.setCrapsRngPending_g1406(crapsWindowBuffer, true);
             uint256 priorReq = mockVRF.lastRequestId();
             vm.prank(crank);
             game.mineFlip(0);

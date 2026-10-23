@@ -22,7 +22,7 @@ contract StoredBoardHarness is DegenerusGameJackpotModule {
     }
 
     function replaceHeroAfterSeal() external {
-        // Test-only fault injection: a reroll would change quadrant 1 from 101 to 103.
+        // Test-only fault injection: a reroll would change quadrant 1 from 93 to 95 (tagged JACKPOT_BOARD vector).
         dailyHeroWagers[((lootboxRngPacked >> HERO_WRITE_SHIFT) & 1) ^ 1][1] = uint256(1000) << (7 * 32);
     }
 
@@ -65,7 +65,7 @@ contract JackpotStoredBoardTest is Test {
         (bool present, uint32 sealedBoard, uint24 sourceLevel) = h.draw();
         assertTrue(present);
         assertEq(sourceLevel, 4);
-        assertEq(uint8(sealedBoard >> 8), 101, "recorded board contains the sealed hero");
+        assertEq(uint8(sealedBoard >> 8), 93, "recorded board contains the sealed hero");
 
         h.replaceHeroAfterSeal();
         vm.warp((uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) + 101 + stalledDays) * 1 days);

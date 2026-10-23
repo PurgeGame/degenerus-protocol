@@ -41,7 +41,7 @@ contract DeityTransitionQueueSeeder is DegenerusGameStorage, WalletSeed {
 /// @dev The transition close used to carry the 32 cold deity perpetual grants AND the first chunk
 ///      of the far-future level crossing into the +5 mint window, resuming the drain on later
 ///      advances. That drain is gone: the transition closes in one advance and mints nothing; a
-///      level's unminted queue mints once, as the frozen pool, in runTicketWork's continuation
+///      level's unminted queue mints once, as the frozen pool, in runTicketWork_g1150's continuation
 ///      after the previous level's last purchase day. The two halves of the old worst case are now
 ///      separate transactions and are measured separately: the grants here, the drain chunk (same
 ///      eight deep survivors) in DeityFrozenPoolDrainGasTest below.
@@ -104,7 +104,7 @@ contract DeityTransitionDrainGasTest is BoundaryGasFixture {
 }
 
 /// @dev The drain half of the old test on the path that now exists: the same eight survivors
-///      owing 1,000,000 entries each, minted as a frozen pool through runTicketWork's
+///      owing 1,000,000 entries each, minted as a frozen pool through runTicketWork_g1150's
 ///      continuation. setUp is a separate transaction, so the first chunk is cold; the chunk
 ///      resumes on the next call without re-minting what the first one consumed.
 contract DeityFrozenPoolDrainGasTest is Test {
@@ -115,7 +115,7 @@ contract DeityFrozenPoolDrainGasTest is Test {
     function setUp() public {
         h = new ChunkHarness();
         vm.etch(ContractAddresses.GAME_FOILPACK_MODULE, address(new DegenerusGameFoilPackModule()).code);
-        // The harness delegates runTicketWork to the ticket module at its pinned address.
+        // The harness delegates runTicketWork_g1150 to the ticket module at its pinned address.
         vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);
         // 1,000,000 entries each = 100,000,000 scaled. Cold start: no marker, cursor 0.
         h.seedFrozenPool(POOL_LVL, 8, 100_000_000, BASE, false);
@@ -129,10 +129,10 @@ contract DeityFrozenPoolDrainGasTest is Test {
         uint256 owed0 = _owedSum();
         assertEq(owed0, 8_000_000, "fixture: eight deep survivors");
 
-        // runTicketWork spends the allowance it is given, so each chunk is driven with a realistic
+        // runTicketWork_g1150 spends the allowance it is given, so each chunk is driven with a realistic
         // bounded allowance and checked for progress, not bounded.
         uint256 g0 = gasleft();
-        MineFlipGas.Result memory r = h.runTicketWork{gas: 10_000_000}(POOL_LVL - 1, 10_000_000);
+        MineFlipGas.Result memory r = h.runTicketWork_g1150{gas: 10_000_000}(POOL_LVL - 1, 10_000_000);
         (bool finished1, bool worked1) = (r.done, r.progressed);
         uint256 cold = g0 - gasleft();
         uint256 owed1 = _owedSum();
@@ -142,7 +142,7 @@ contract DeityFrozenPoolDrainGasTest is Test {
         assertLt(owed1, owed0, "cold chunk consumes owed entries");
 
         g0 = gasleft();
-        r = h.runTicketWork{gas: 10_000_000}(POOL_LVL - 1, 10_000_000);
+        r = h.runTicketWork_g1150{gas: 10_000_000}(POOL_LVL - 1, 10_000_000);
         (bool finished2, bool worked2) = (r.done, r.progressed);
         uint256 warm = g0 - gasleft();
         uint256 owed2 = _owedSum();

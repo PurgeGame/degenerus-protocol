@@ -171,7 +171,7 @@ contract StateEngineIntegrationTest is RedemptionCloseTools {
         bool observed;
         for (uint256 i; i < 100; ++i) {
             _fulfillPending();
-            uint8 stage = game.rngConsumerStage();
+            uint8 stage = game.rngConsumerStage_g379();
             if (stage >= 1 && stage <= 6) {
                 observed = true;
                 uint256 request = mockVRF.lastRequestId();
@@ -234,7 +234,7 @@ contract StateEngineIntegrationTest is RedemptionCloseTools {
                     ++checkpoints;
                     assertTrue(game.rngLocked(), "daily payout cursor outlived its RNG lock");
                     assertEq(mockVRF.lastRequestId(), request, "payout checkpoint requested a replacement word");
-                    assertEq(game.rngConsumerStage(), 0, "basic read consumers bypassed daily payout");
+                    assertEq(game.rngConsumerStage_g379(), 0, "basic read consumers bypassed daily payout");
                 }
                 (, jackpot,,,) = game.purchaseInfo();
                 entered = entered || jackpot;

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
@@ -190,7 +191,7 @@ abstract contract ColdTerminalFixture is DeployProtocol {
         for (uint24 i; i < gap; ++i) {
             bool expectedWin = (WORD >> (1 + i)) & 1 != 0;
             (uint16 reward, bool win) = coinflip.getCoinflipDayResult(firstGap + i);
-            assertEq(win, expectedWin, "stored gap outcomes keep the original word bits");
+            assertEq(win, expectedWin, "stored gap outcomes keep the tagged gap bits");
             assertEq(reward, expectedWin ? 100 : 1, "stored gap payout or loss sentinel");
         }
         assertLt(used, 11_500_000, "terminal word application exceeds review target");

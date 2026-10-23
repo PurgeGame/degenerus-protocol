@@ -30,7 +30,7 @@ contract WwxrpRecyclingGameMock {
 contract WwxrpRecyclingCoinflipMock {
     mapping(uint32 => uint256) public credited;
     uint256 public totalCredited;
-    function creditFlip(uint32 id, uint256 amount) external {
+    function creditFlip_g317(uint32 id, uint256 amount) external {
         credited[id] += amount;
         totalCredited += amount;
     }

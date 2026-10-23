@@ -199,7 +199,7 @@ contract ExternalDoorAccountsTest is DeployProtocol {
         vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleDecimator, (smurfId, BURN)), 1);
         vm.expectCall(GAME, abi.encodeCall(DegenerusGame.playerActivityScoreCachedById, (smurfId)), 1);
         vm.expectCall(GAME, abi.encodeCall(DegenerusGame.consumeDecimatorBoon, (smurfId)), 1);
-        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.recordDecBurn.selector, smurfId, lvl), 1);
+        vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.recordDecBurn_g5574.selector, smurfId, lvl), 1);
         vm.recordLogs();
         vm.prank(owner);
         coin.decimatorBurn(smurfId, BURN, 0);
@@ -216,8 +216,8 @@ contract ExternalDoorAccountsTest is DeployProtocol {
     function test_DecimatorBurn_ShortWallet_UsesOwnerCoinflipNotSmurfs() public {
         uint24 d = _today();
         vm.startPrank(GAME);
-        coinflip.creditFlip(ownerId, 5_000);
-        coinflip.creditFlip(smurfId, 5_000);
+        coinflip.creditFlip_g317(ownerId, 5_000);
+        coinflip.creditFlip_g317(smurfId, 5_000);
         vm.stopPrank();
         _warpToDay(d + 1);
         _resolveDay(d + 1, true);
@@ -366,7 +366,7 @@ contract ExternalDoorAccountsTest is DeployProtocol {
         vm.expectCall(GAME, abi.encodeCall(DegenerusGame.resolveAccount, (smurfId, owner)), 1);
         vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.registerWallet.selector), 0);
         vm.expectCall(GAME, abi.encodeCall(DegenerusGame.playerActivityScoreCachedById, (smurfId)), 1);
-        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.consumeCoinflipBoon, (smurfId)), 1);
+        vm.expectCall(GAME, abi.encodeCall(DegenerusGame.consumeCoinflipBoon_g2902, (smurfId)), 1);
         vm.recordLogs();
         vm.prank(owner);
         wwxrp.enter(smurfId, 100);

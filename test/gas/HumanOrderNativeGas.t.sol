@@ -76,7 +76,7 @@ contract HumanOrderGasSeed is DegenerusGame {
 
     /// @dev Gross gas of the production human-box worker over the seeded queue (one entry).
     function measuredWork(uint256 allowance) external returns (bool done, uint256 grossGas) {
-        bytes memory data = abi.encodeWithSignature("runHumanBoxWork(uint256)", allowance);
+        bytes memory data = abi.encodeWithSignature("runHumanBoxWork_g315(uint256)", allowance);
         uint256 beforeGas = gasleft();
         (bool ok, bytes memory returned) = ContractAddresses.GAME_AFKING_MODULE.delegatecall(data);
         grossGas = beforeGas - gasleft();

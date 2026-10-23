@@ -15,7 +15,7 @@ import {DegenerusGameLens} from "../../contracts/DegenerusGameLens.sol";
 ///
 /// @notice Leg 1. The ETH/claimablePool debit happens at exactly one in-context site -- the funded
 ///   delivery in the subscriber pass -- and the pool moves by the delivered value EXACTLY. Rewards are
-///   derived from checkpoints and paid as FLIP (creditFlip) at settlement, OFF the ETH/claimablePool
+///   derived from checkpoints and paid as FLIP (creditFlip_g317) at settlement, OFF the ETH/claimablePool
 ///   path: claiming FLIP leaves claimablePool byte-unchanged.
 ///
 /// @notice Leg 2. The master invariant the Game maintains is
@@ -238,7 +238,7 @@ contract V56FreezeSolvency is DeployProtocol {
         vm.recordLogs();
         game.claimAfkingFlip(_aids(_singleton(p)));
         assertEq(_claimablePool(), poolBefore, "FLIP claim: claimablePool byte-unchanged (OFF the ETH path)");
-        assertEq(_flipClaimed(p), owed.owedFlip, "FLIP claim paid via creditFlip (not an ETH move)");
+        assertEq(_flipClaimed(p), owed.owedFlip, "FLIP claim paid via creditFlip_g317 (not an ETH move)");
         assertEq(_owedFlip(p), 0, "owed zeroed (paid exactly once)");
         _assertSolvent("post-flip-claim");
     }

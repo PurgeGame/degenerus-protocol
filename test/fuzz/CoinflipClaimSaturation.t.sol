@@ -64,7 +64,7 @@ contract CoinflipClaimSaturation is DeployProtocol {
 
     function _creditAndWin() internal {
         vm.prank(GAME);
-        coinflip.creditFlip(id, STAKE);
+        coinflip.creditFlip_g317(id, STAKE);
         _resolveDay(3, true);
     }
 

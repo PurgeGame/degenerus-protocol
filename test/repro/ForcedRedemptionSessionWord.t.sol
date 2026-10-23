@@ -69,7 +69,7 @@ contract ForcedRedemptionSessionWordTest is RedemptionCloseTools {
     }
 
     function _toRedemptionStage(uint32 day) private {
-        for (uint256 i; i < 200 && game.rngConsumerStage() != 1; ++i) {
+        for (uint256 i; i < 200 && game.rngConsumerStage_g379() != 1; ++i) {
             uint256 snap = vm.snapshotState();
             bool stepped;
             for (uint256 g = 9_000_000; g >= 400_000 && !stepped; g -= 100_000) {
@@ -83,7 +83,7 @@ contract ForcedRedemptionSessionWordTest is RedemptionCloseTools {
             }
             assertTrue(stepped, "harness: a bounded allowance stops at the redemption stage");
         }
-        assertEq(game.rngConsumerStage(), 1, "redemption stage reached after daily work");
+        assertEq(game.rngConsumerStage_g379(), 1, "redemption stage reached after daily work");
     }
 
     function _run(bool stalled, bool terminal) private {

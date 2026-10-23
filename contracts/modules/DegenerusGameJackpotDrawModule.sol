@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {RngTags} from "../libraries/RngTags.sol";
+
 import {MineFlipGasBounds as GasBounds} from "../libraries/MineFlipGasBounds.sol";
 
 import {DegenerusGamePayoutUtils} from "./DegenerusGamePayoutUtils.sol";
@@ -104,7 +106,7 @@ abstract contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, De
                 (flipCredit / FlipRoundLib.FLIP_ROUND_UNIT) *
                 FlipRoundLib.FLIP_ROUND_UNIT;
             if (flipCredit != 0) {
-                coinflip.creditFlip(winner, flipCredit);
+                coinflip.creditFlip_g317(winner, flipCredit);
             }
         }
         if (wwxrpAward != 0) {
@@ -236,7 +238,7 @@ abstract contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, De
         uint256 pull,
         PackedTicketSampleLib.Cursor[] memory cursors
     ) private view returns (uint32 winner, uint24 lvl, uint256 index) {
-        uint24 offset = uint24(uint256(keccak256(abi.encode(randomWord, FLIP_LEVEL_TAG, pull))) % range);
+        uint24 offset = uint24(uint256(EntropyLib.hash3(RngTags.FLIP_LEVEL, randomWord, pull)) % range);
         lvl = minLevel + offset;
         uint256 len = _bucketLength(lvl, trait);
         uint256 effectiveLen = len + _deityVirtualCount(trait, len, deity);
@@ -278,7 +280,7 @@ abstract contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, De
         // Each checkpoint appends at most 50 seats. The bound includes all cold
         // recipient writes, the collision-heavy board dedupe, seal and credits.
         if (!MineFlipGas.canRun(meter, GasBounds.JACKPOT_BATTLE_DRAW, GasBounds.DAILY_PHASE_TAIL)) return result;
-        uint256 battleWord = uint256(keccak256(abi.encode(rngWord, lvl, FAR_FUTURE_FLIP_TAG)));
+        uint256 battleWord = uint256(EntropyLib.hash2(RngTags.FUTURE_BATTLE, rngWord));
         (uint256 word, uint256 cursor, uint256 remaining) = battle.prepareJackpotBattle(lvl, battleWord);
         if (remaining == 0) {
             // No awarded seats to draw (a paid-field-only round): seal without the level scan.
@@ -370,7 +372,7 @@ abstract contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, De
         while (i < wanted) {
             uint256 entropy;
             if (walk.left == 0) {
-                entropy = EntropyLib.hash2(word, walk.ordinal++);
+                entropy = EntropyLib.hash3(RngTags.FUTURE_BATTLE_VISIT, word, walk.ordinal++);
                 walk.offset = snapshot.levels[entropy % snapshot.count] - lvl - 1;
             }
             uint24 candidate = lvl + 1 + uint24(walk.offset);
@@ -609,7 +611,7 @@ abstract contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, De
             if (lootboxPortion <= LOOTBOX_CLAIM_THRESHOLD) {
                 uint256 cd;
                 (, cd) = _awardJackpotTickets(
-                    winner, lootboxPortion, floorLvl, EntropyLib.hash4(word, lvl, BAF_TICKET_TAG, i)
+                    winner, lootboxPortion, floorLvl, EntropyLib.hash3(RngTags.BAF_TICKET, word, i)
                 );
                 credited += cd;
             } else {
@@ -622,7 +624,7 @@ abstract contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, De
             emit JackpotEthWin(winner, lvl, BAF_TRAIT_SENTINEL, amount, 0);
         } else {
             (, credited) = _awardJackpotTickets(
-                winner, amount, floorLvl, EntropyLib.hash4(word, lvl, BAF_TICKET_TAG, i)
+                winner, amount, floorLvl, EntropyLib.hash3(RngTags.BAF_TICKET, word, i)
             );
         }
     }
@@ -725,7 +727,7 @@ abstract contract DegenerusGameJackpotDrawModule is DegenerusGamePayoutUtils, De
         uint24 minTargetLevel,
         uint256 entropy
     ) private returns (uint256) {
-        entropy = EntropyLib.hash2(entropy, entropy);
+        entropy = EntropyLib.hash2(RngTags.JACKPOT_TICKET_ROLL, entropy);
 
         // Roll for outcome (0-99 for percentage-based probabilities)
         uint256 entropyDiv100 = entropy / 100;

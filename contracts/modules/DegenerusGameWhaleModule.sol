@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {RngTags} from "../libraries/RngTags.sol";
+
 /*
  * TERMS OF INTERACTION — submitting a transaction to this contract accepts them.
  *
@@ -278,6 +280,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         unchecked { totalPrice = firstPrice + restPrice * (quantity - 1); }
     }
 
+
+
     /**
      * @notice sDGNRS's once-per-level automatic whale purchase, driven from the afking process
      *         STAGE (GameAfkingModule.runSubscriberWork) — never a player entry.
@@ -309,7 +313,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
      * @param processDay The STAGE's boundary-pinned process day (the word key checked live).
      * @return paidPasses Paid passes bought this call (a multiple of five), 0 when nothing was.
      */
-    function purchaseWhalePassForSdgnrs(uint24 processDay) external returns (uint256 paidPasses) {
+    function purchaseWhalePassForSdgnrs_g470(uint24 processDay) external returns (uint256 paidPasses) {
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (rngLockedFlag || _recordedDailyWord(processDay) != 0) return 0;
         if (_livenessTriggered()) return 0;
@@ -535,7 +539,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                     0
                 );
             }
-            if (kickback != 0) coinflip.creditFlip(buyerId, kickback);
+            if (kickback != 0) coinflip.creditFlip_g317(buyerId, kickback);
         }
 
         _rewardWhalePassDgnrs(buyerId, quantity);
@@ -740,7 +744,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
                     0
                 );
             }
-            if (kickback != 0) coinflip.creditFlip(buyerId, kickback);
+            if (kickback != 0) coinflip.creditFlip_g317(buyerId, kickback);
         }
 
         _activate10LevelPass(buyerId, startLevel, LAZY_PASS_ENTRIES_PER_LEVEL);
@@ -1154,6 +1158,8 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     bytes32 private constant TICKET_WHALE_TAG = keccak256("ticket-jackpot-whale");
     bytes32 private constant QUADRANT_WHALE_TAG = keccak256("jackpot-quadrant-whale");
 
+
+
     /// @notice Nested jackpot award against GAME storage, with deferred delivery.
     /// @dev One recipient from one quadrant's bucket. A ticket leg supplies half-pass units
     ///      and never moves pools: its ETH already backs nextPrizePool. An ETH quadrant
@@ -1161,7 +1167,7 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
     ///      exact cost credited to futurePrizePool. JackpotModule includes that spend in its
     ///      matching current-pool debit, and pays all remaining ETH.
     /// @return spent Award value credited (a ticket leg ignores this return).
-    function awardWhalePass(
+    function awardWhalePass_g5502(
         uint24 lvl,
         uint8 trait,
         uint256 amount,
@@ -1196,16 +1202,14 @@ contract DegenerusGameWhaleModule is DegenerusGameMintStreakUtils {
         uint256 randWord,
         bool ticketLeg
     ) private view returns (uint32) {
-        uint256 entropy = EntropyLib.hash4(
-            randWord, uint256(ticketLeg ? TICKET_WHALE_TAG : QUADRANT_WHALE_TAG), dailyIdx, lvl
-        );
+        uint256 entropy = EntropyLib.hash2(ticketLeg ? RngTags.WHALE_TICKET : RngTags.WHALE_QUADRANT, randWord);
         uint256 len = _bucketLength(lvl, trait);
         uint32 deity = _deityOfTrait(trait);
         uint256 effectiveLen = len + _deityVirtualCount(trait, len, deity);
         if (effectiveLen == 0) return 0;
         // A single recipient needs no packed-word group/cursor. Sample directly
         // over the same real-plus-virtual entries and resolve the packed owner.
-        uint256 index = EntropyLib.hash2(entropy, 1) % effectiveLen;
+        uint256 index = entropy % effectiveLen;
         return index < len ? _bucketIdAtUnchecked(lvl, trait, index) : deity;
     }
 

@@ -459,7 +459,7 @@ contract CrapsFlowHandler {
     ///      (stage 6), otherwise the maintenance worker. The seed picks the next words.
     function keep(uint64 seed) external {
         bool ok;
-        if (game.rngConsumerStage() == 6) {
+        if (game.rngConsumerStage_g379() == 6) {
             uint48 read = craps.currentIndex() ^ 1;
             vm.prank(ContractAddresses.GAME);
             try JackpotBattle(address(craps)).runCrapsReadWork(read, gasleft()) returns (MineFlipGas.Result memory) {

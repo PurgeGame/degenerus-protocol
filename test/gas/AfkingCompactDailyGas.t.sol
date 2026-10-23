@@ -24,7 +24,7 @@ contract AfkingDailyGasHost is AfkingStethHost {
 
     function openWork(uint256 allowance_) external returns (MineFlipGas.Result memory) {
         (bool ok, bytes memory result) = ContractAddresses.GAME_AFKING_MODULE
-            .delegatecall(abi.encodeWithSignature("runAfkingWork(uint256)", allowance_));
+            .delegatecall(abi.encodeWithSignature("runAfkingWork_g8553(uint256)", allowance_));
         if (!ok) assembly ("memory-safe") { revert(add(result, 32), mload(result)) }
         return abi.decode(result, (MineFlipGas.Result));
     }

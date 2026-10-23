@@ -533,13 +533,13 @@ describe("DegenerusGame", function () {
   // ---------------------------------------------------------------------------
 
   // ---------------------------------------------------------------------------
-  // 23. consumeCoinflipBoon / consumeDecimatorBoon access control
+  // 23. consumeCoinflipBoon_g2902 / consumeDecimatorBoon access control
   // ---------------------------------------------------------------------------
-  describe("consumeCoinflipBoon access control", function () {
+  describe("consumeCoinflipBoon_g2902 access control", function () {
     it("reverts when called by non-coin/non-coinflip address", async function () {
       const { game, alice } = await loadFixture(deployFullProtocol);
       await expect(
-        game.connect(alice).consumeCoinflipBoon(1)
+        game.connect(alice).consumeCoinflipBoon_g2902(1)
       ).to.be.revertedWithCustomError(errorAbi("Unauthorized()"), "Unauthorized");
     });
   });

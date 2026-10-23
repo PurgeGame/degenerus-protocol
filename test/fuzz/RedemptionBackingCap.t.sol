@@ -146,7 +146,7 @@ contract RedemptionBackingCapTest is RedemptionFixture {
         // New backing cannot enlarge this already-committed batch's maximum.
         vm.deal(address(sdgnrs), address(sdgnrs).balance + 123 ether);
         settlementWord = _wordForRoll(175);
-        vm.mockCall(address(game), abi.encodeWithSignature("rngConsumerStage()"), abi.encode(uint8(1)));
+        vm.mockCall(address(game), abi.encodeWithSignature("rngConsumerStage_g379()"), abi.encode(uint8(1)));
         vm.prank(address(game)); sdgnrs.runRedemptionWork(settlementWord, 200_000);
         (,uint96 payout,,,,) = sdgnrs.redemptionBatches(id);
         assertEq(payout, backing);

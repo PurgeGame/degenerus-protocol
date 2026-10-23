@@ -52,8 +52,8 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         assertGt(mockVRF.lastRequestId(), prior, "real request seals the custom field");
         mockVRF.fulfillRandomWords(mockVRF.lastRequestId(), 0xBADC0DE);
         // Publish and empty preceding categories, stopping safely before the first whole seat.
-        for (uint256 i; i < 100 && game.rngConsumerStage() != 6; ++i) game.mineFlip{gas: 800_000}(0);
-        assertEq(game.rngConsumerStage(), 6);
+        for (uint256 i; i < 100 && game.rngConsumerStage_g379() != 6; ++i) game.mineFlip{gas: 800_000}(0);
+        assertEq(game.rngConsumerStage_g379(), 6);
         assertEq(RecyclingState.readBuffer(address(game)), index);
         assertEq(crapsBattle.bonusCursorOf(slot), 0);
     }
@@ -186,8 +186,8 @@ contract CrapsKeeperBudgetGasTest is DeployProtocol {
         _finish(14_000_000, true);
         (uint256 request, uint64 finalSlot) = _requestSingleSeatField();
         mockVRF.fulfillRandomWords(request, 0xC002);
-        for (uint256 i; i < 100 && game.rngConsumerStage() != 6; ++i) game.mineFlip{gas: 800_000}(0);
-        assertEq(game.rngConsumerStage(), 6);
+        for (uint256 i; i < 100 && game.rngConsumerStage_g379() != 6; ++i) game.mineFlip{gas: 800_000}(0);
+        assertEq(game.rngConsumerStage_g379(), 6);
         assertEq(crapsBattle.bonusCursorOf(finalSlot), 0);
         assertFalse(game.rngComplete(), "one final seat remains");
         uint256 prior = coinflip.coinflipAmount(MINER);

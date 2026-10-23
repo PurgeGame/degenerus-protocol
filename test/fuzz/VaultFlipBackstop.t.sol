@@ -31,7 +31,7 @@ contract VaultBackstopHost is DegenerusGame {
 
     function phase(uint256 allowance) external returns (MineFlipGas.Result memory) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_ADVANCE_MODULE.delegatecall(
-            abi.encodeWithSignature("runDailyPhase(uint256)", allowance)
+            abi.encodeWithSignature("runDailyPhase_g2582(uint256)", allowance)
         );
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
         return abi.decode(data, (MineFlipGas.Result));

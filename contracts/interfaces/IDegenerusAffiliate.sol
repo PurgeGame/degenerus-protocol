@@ -64,6 +64,8 @@ interface IDegenerusAffiliate {
     ///      rolled among the stored owner and upline IDs, so nothing is decoded.
     /// @param code Referral code supplied with the buy (resolved + locked once).
 
+
+
     /// @param senderId The buyer's wallet ID (seeds the winner roll).
     /// @param lvl Leaderboard level for all legs (ticket and lootbox both freeze at level + 1).
     /// @param tktFreshFlip Ticket-leg fresh spend in FLIP base units.
@@ -78,7 +80,7 @@ interface IDegenerusAffiliate {
     ///         winnerId == senderId.
     /// @return playerKickback FLIP kickback owed the buyer (summed across legs).
     /// @custom:reverts OnlyAuthorized If caller is not GAME.
-    function payAffiliateCombined(
+    function payAffiliateCombined_g978(
         bytes32 code,
         uint32 senderId,
         uint24 lvl,
@@ -123,12 +125,16 @@ interface IDegenerusAffiliate {
     /// @param lvl The game level to query.
     /// @param id Wallet ID of the affiliate to query (0 returns 0).
     /// @return score The base affiliate score (0 decimals).
+    function affiliateScoreAndTotal_g4013(uint24 lvl, uint32 id) external view returns (uint256 score, uint256 total);
+
     function affiliateScore(uint24 lvl, uint32 id) external view returns (uint256 score);
 
     /// @notice Get the total affiliate score across all affiliates for a level.
     /// @param lvl The game level to query.
     /// @return total The total affiliate score (0 decimals).
     function totalAffiliateScore(uint24 lvl) external view returns (uint256 total);
+
+
 
     /// @notice Calculate the affiliate bonus points for a player.
     /// @dev Sums the player's affiliate scores for the previous 5 levels, converted to
@@ -140,7 +146,7 @@ interface IDegenerusAffiliate {
     /// @param currLevel The current game level.
     /// @param id Wallet ID of the player to calculate bonus for (0 returns 0).
     /// @return points Bonus points (0 to 50).
-    function affiliateBonusPointsBest(uint24 currLevel, uint32 id) external view returns (uint256 points);
+    function affiliateBonusPointsBest_g3878(uint24 currLevel, uint32 id) external view returns (uint256 points);
 
     /// @notice Get the referrer address for a player.
     /// @dev Never returns address(0): resolves to the VAULT when the player has no valid

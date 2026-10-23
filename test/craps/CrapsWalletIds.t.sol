@@ -54,7 +54,7 @@ contract WalletIdTable is CrapsViews {
         w.tier = 1;
         _setSlotIndex(slot, 1);
         (bool ok,) = address(this).call(
-            abi.encodeWithSignature("registerRngSlot(uint48,uint64,bytes32)", uint48(0), slot, key)
+            abi.encodeWithSignature("registerRngSlot_g709(uint48,uint64,bytes32)", uint48(0), slot, key)
         );
         require(ok, "synthetic field registration");
         _scoreBattle(w, score, 1, 0);
@@ -217,7 +217,7 @@ contract CrapsWalletIdsTest is CrapsPins {
             uint32 expected = game.walletCount() + 1;
             vm.expectCall(address(game), abi.encodeCall(MockGame.registerWallet, (p, true)), 1);
             vm.expectCall(address(flip), abi.encodeWithSelector(MockFlip.burnCoinForCraps.selector, p, expected));
-            vm.expectCall(address(quests), abi.encodeCall(MockQuests.recordCrapsAction, (expected, flags[door])));
+            vm.expectCall(address(quests), abi.encodeCall(MockQuests.recordCrapsAction_g14623, (expected, flags[door])));
             vm.recordLogs();
             vm.startStateDiffRecording();
             uint256 betId = _payingDoor(p, door, custom);
@@ -566,7 +566,7 @@ contract CrapsWalletIdsTest is CrapsPins {
             bytes4 sel = bytes4(d);
             bytes memory args = new bytes(d.length - 4);
             for (uint256 j; j < args.length; ++j) args[j] = d[j + 4];
-            if (sel == MockCoinflip.creditFlip.selector) {
+            if (sel == MockCoinflip.creditFlip_g317.selector) {
                 (uint32 id, uint256 amount) = abi.decode(args, (uint32, uint256));
                 out[n++] = Credit(id, amount);
             } else if (sel == MockCoinflip.creditFlipBatch.selector) {
@@ -829,7 +829,7 @@ contract CrapsWalletIdsTest is CrapsPins {
             assertEq(drawn, 1);
             (Credit[] memory single, uint256 ns,,) = _credits(acc);
             if (d.won) {
-                assertTrue(_hasCredit(single, ns, d.nominee, reserve), "creditFlip(nomineeId, reserve)");
+                assertTrue(_hasCredit(single, ns, d.nominee, reserve), "creditFlip_g317(nomineeId, reserve)");
                 uint256 gained = d.nominee == aId ? coinflip.stakedById(aId) - stakeA : coinflip.stakedById(cId) - stakeC;
                 assertGe(gained, reserve);
                 sawWin = true;

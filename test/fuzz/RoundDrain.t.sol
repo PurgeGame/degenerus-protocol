@@ -11,7 +11,7 @@ import {MintBucketSeed} from "../helpers/MintBucketSeed.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 
-/// @dev Extends the production mint module so the live `runTicketWork` worker, delegated to the
+/// @dev Extends the production mint module so the live `runTicketWork_g1150` worker, delegated to the
 ///      production ticket module (etched at its pinned address), runs the seated round drain in
 ///      THIS contract's storage; adds queue seeders and bucket decoders only.
 contract RoundDrainHarness is MintBucketSeed {
@@ -19,7 +19,7 @@ contract RoundDrainHarness is MintBucketSeed {
         external
     {
         // _mintCeiling() = level + 1 by default (lastPurchaseDay false): pin `level` to `lvl`
-        // so the caller's `runTicketWork(lvl + 1, ...)` window [lvl .. lvl+1] actually covers
+        // so the caller's `runTicketWork_g1150(lvl + 1, ...)` window [lvl .. lvl+1] actually covers
         // the seeded read key, matching the old anchor-relative [anchor-1..anchor+4] window.
         level = lvl;
         rngFlagsAndNudges = (rngFlagsAndNudges & ~(uint16(1) << 12)) | (uint16((1) & 1) << 12);
@@ -54,9 +54,9 @@ contract RoundDrainHarness is MintBucketSeed {
 
     /// @dev The metered ticket worker exactly as the miner dispatches it: a delegatecall into the
     ///      production ticket module (etched at its pinned address) in THIS contract's storage.
-    function runTicketWork(uint24 anchor, uint256 allowance) external returns (MineFlipGas.Result memory) {
+    function runTicketWork_g1150(uint24 anchor, uint256 allowance) external returns (MineFlipGas.Result memory) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_TICKET_MODULE.delegatecall(
-            abi.encodeWithSelector(DegenerusGameTicketModule.runTicketWork.selector, anchor, allowance)
+            abi.encodeWithSelector(DegenerusGameTicketModule.runTicketWork_g1150.selector, anchor, allowance)
         );
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
         return abi.decode(data, (MineFlipGas.Result));
@@ -100,7 +100,7 @@ contract RoundDrainHarness is MintBucketSeed {
 contract RoundDrain is Test {
     RoundDrainHarness internal h;
     uint24 internal constant LVL = 9;
-    /// @dev `runTicketWork` admits checkpoints while its allowance covers the next declared
+    /// @dev `runTicketWork_g1150` admits checkpoints while its allowance covers the next declared
     ///      bound, so every call is driven with a realistic bounded allowance and must make
     ///      progress.
     uint256 internal constant CHUNK_GAS = 10_000_000;
@@ -124,7 +124,7 @@ contract RoundDrain is Test {
 
     /// @dev One bounded worker chunk; an unfinished chunk must have made progress.
     function _batch(uint24 anchor) internal returns (bool finished) {
-        MineFlipGas.Result memory r = h.runTicketWork{gas: CHUNK_GAS}(anchor, CHUNK_GAS);
+        MineFlipGas.Result memory r = h.runTicketWork_g1150{gas: CHUNK_GAS}(anchor, CHUNK_GAS);
         finished = r.done;
         assertTrue(finished || r.progressed, "bounded worker chunk made no progress");
     }

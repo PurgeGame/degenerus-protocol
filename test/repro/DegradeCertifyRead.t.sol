@@ -67,7 +67,7 @@ contract DegradeCertifyReadTest is DeployProtocol {
         _restore();
 
         assertTrue(consumersComplete, "fixture: the read cohort is drained");
-        assertEq(game.rngConsumerStage(), 7, "fixture: stage 7");
+        assertEq(game.rngConsumerStage_g379(), 7, "fixture: stage 7");
         assertFalse(game.rngComplete(), "fixture: no certificate yet");
         assertEq(game.minerAction(), CERTIFY_READ, "fixture: selector picks CertifyRead");
 

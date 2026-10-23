@@ -163,7 +163,7 @@ contract CrapsHighReserveTest is CrapsPins {
         assertEq(CrapsLensReader.highRollerReserve(address(cold)), 2_500);
     }
 
-    /// @dev The cold delegate must pay the reserve through creditFlip in the table context.
+    /// @dev The cold delegate must pay the reserve through creditFlip_g317 in the table context.
     function test_vaultCanTriggerAndWinAloneEvenWhenSdgnrsIsHighToo() public {
         _enter(ContractAddresses.SDGNRS, true, true);
         _enter(ContractAddresses.VAULT, true, false);

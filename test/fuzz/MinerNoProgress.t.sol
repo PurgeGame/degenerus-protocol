@@ -71,7 +71,7 @@ contract MinerProgressHarness is DegenerusGameMinerModule {
     }
     function uncertify() external { _setRngComplete(false); }
     function rngComplete() external view returns (bool) { return _rngComplete(); }
-    function rngConsumerStage() external view returns (uint8) { return _rngConsumerStage(); }
+    function rngConsumerStage_g379() external view returns (uint8) { return _rngConsumerStage(); }
     function rngLocked() external view returns (bool) { return rngLockedFlag; }
     /// @dev The Game's creditless `advanceDue()` view: any selected action but Idle or Wait.
     function advanceDue() external view returns (bool) {
@@ -81,7 +81,7 @@ contract MinerProgressHarness is DegenerusGameMinerModule {
     function extsload(bytes32 slot) external view returns (bytes32 value) {
         assembly ("memory-safe") { value := sload(slot) }
     }
-    function setCrapsRngPending(uint48 index, bool pending) external {
+    function setCrapsRngPending_g1406(uint48 index, bool pending) external {
         require(msg.sender == ContractAddresses.CRAPS);
         uint256 mask = uint256(1) << (LR_CRAPS_PENDING_SHIFT + index);
         if (pending) lootboxRngPacked |= mask;
@@ -146,7 +146,7 @@ contract MinerNoProgressTest is Test {
         vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionBatchState()"),
             abi.encode(uint32(1), uint32(0), uint32(0), uint256(0)));
         vm.mockCall(ContractAddresses.CRAPS, abi.encodeWithSignature("minerMaintenancePending()"), abi.encode(false));
-        vm.mockCall(ContractAddresses.COINFLIP, abi.encodeWithSignature("creditFlip(uint32,uint256)"), bytes(""));
+        vm.mockCall(ContractAddresses.COINFLIP, abi.encodeWithSignature("creditFlip_g317(uint32,uint256)"), bytes(""));
     }
 
     function _seed(DegenerusGameStorage.MinerAction action) private {
@@ -205,7 +205,7 @@ contract MinerNoProgressTest is Test {
     function test_ObservedMaintenanceDoneWithoutProgressStopsAfterOneDispatch() public {
         _seed(DegenerusGameStorage.MinerAction.Maintenance);
         assertTrue(game.advanceDue());
-        assertEq(game.rngConsumerStage(), 7);
+        assertEq(game.rngConsumerStage_g379(), 7);
         bytes memory selector = abi.encodeWithSignature("runCrapsMaintenance(uint256)");
         vm.mockCall(ContractAddresses.CRAPS, selector, abi.encode(false, true, uint256(0)));
         vm.expectCall(ContractAddresses.CRAPS, selector, uint64(1));
@@ -215,14 +215,14 @@ contract MinerNoProgressTest is Test {
 
     function _worker(DegenerusGameStorage.MinerAction action) private pure returns (address, bytes memory) {
         if (action == DegenerusGameStorage.MinerAction.Terminal) return (ContractAddresses.GAME_ADVANCE_MODULE, abi.encodeWithSignature("runTerminalPhase(uint256)"));
-        if (action == DegenerusGameStorage.MinerAction.DailyPhase) return (ContractAddresses.GAME_ADVANCE_MODULE, abi.encodeWithSignature("runDailyPhase(uint256)"));
+        if (action == DegenerusGameStorage.MinerAction.DailyPhase) return (ContractAddresses.GAME_ADVANCE_MODULE, abi.encodeWithSignature("runDailyPhase_g2582(uint256)"));
         if (action == DegenerusGameStorage.MinerAction.Redemption) return (ContractAddresses.SDGNRS, abi.encodeWithSignature("runRedemptionWork(uint256,uint256)"));
-        if (action == DegenerusGameStorage.MinerAction.Afking) return (ContractAddresses.GAME_AFKING_MODULE, abi.encodeWithSignature("runAfkingWork(uint256)"));
-        if (action == DegenerusGameStorage.MinerAction.HumanBoxes) return (ContractAddresses.GAME_AFKING_MODULE, abi.encodeWithSignature("runHumanBoxWork(uint256)"));
-        if (action == DegenerusGameStorage.MinerAction.Degenerette) return (ContractAddresses.GAME_DEGENERETTE_MODULE, abi.encodeWithSignature("runDegeneretteWork(uint256)"));
+        if (action == DegenerusGameStorage.MinerAction.Afking) return (ContractAddresses.GAME_AFKING_MODULE, abi.encodeWithSignature("runAfkingWork_g8553(uint256)"));
+        if (action == DegenerusGameStorage.MinerAction.HumanBoxes) return (ContractAddresses.GAME_AFKING_MODULE, abi.encodeWithSignature("runHumanBoxWork_g315(uint256)"));
+        if (action == DegenerusGameStorage.MinerAction.Degenerette) return (ContractAddresses.GAME_DEGENERETTE_MODULE, abi.encodeWithSignature("runDegeneretteWork_g670(uint256)"));
         if (action == DegenerusGameStorage.MinerAction.Decimator) return (ContractAddresses.GAME_DECIMATOR_MODULE, abi.encodeWithSignature("runDecimatorWork(uint256)"));
         if (action == DegenerusGameStorage.MinerAction.Craps) return (ContractAddresses.CRAPS, abi.encodeWithSignature("runCrapsReadWork(uint48,uint256)"));
-        if (action == DegenerusGameStorage.MinerAction.PrepareSubscriptions) return (ContractAddresses.GAME_AFKING_MODULE, abi.encodeWithSignature("runSubscriberWork(uint24,uint256)"));
+        if (action == DegenerusGameStorage.MinerAction.PrepareSubscriptions) return (ContractAddresses.GAME_AFKING_MODULE, abi.encodeWithSignature("runSubscriberWork_g6352(uint24,uint256)"));
         if (action == DegenerusGameStorage.MinerAction.SeizeLoans) return (ContractAddresses.GAME_ADVANCE_MODULE, abi.encodeWithSignature("runLoanSeizureWork(uint256)"));
         return (ContractAddresses.CRAPS, abi.encodeWithSignature("runCrapsMaintenance(uint256)"));
     }
@@ -316,7 +316,7 @@ contract MinerNoProgressTest is Test {
             IDegenerusGameRngModule.NoPendingLootbox.selector, IDegenerusGameRngModule.BelowThreshold.selector];
         _seed(DegenerusGameStorage.MinerAction.RequestMidday);
         for (uint256 i; i < reasons.length; ++i) {
-            vm.mockCallRevert(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("requestMinerRng()"), abi.encodeWithSelector(reasons[i]));
+            vm.mockCallRevert(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("requestMinerRng_g4954()"), abi.encodeWithSelector(reasons[i]));
             _expectFailure(reasons[i], 16_700_000);
             game.uncertify();
             vm.recordLogs();
@@ -332,7 +332,7 @@ contract MinerNoProgressTest is Test {
     function test_IneligibleOptionalRequestIsNeverAttempted() public {
         _seed(DegenerusGameStorage.MinerAction.RequestMidday);
         assertEq(game.minerAction(), uint8(DegenerusGameStorage.MinerAction.RequestMidday), "fixture: eligible");
-        bytes memory request = abi.encodeWithSignature("requestMinerRng()");
+        bytes memory request = abi.encodeWithSignature("requestMinerRng_g4954()");
         game.setMiddayThreshold(500);
         assertEq(game.minerAction(), uint8(DegenerusGameStorage.MinerAction.Idle), "below threshold is idle");
         vm.expectCall(ContractAddresses.GAME_RNG_MODULE, request, 0);
@@ -351,7 +351,7 @@ contract MinerNoProgressTest is Test {
         _seed(DegenerusGameStorage.MinerAction.RequestMidday);
         game.setMiddayThreshold(500);
         game.uncertify();
-        vm.expectCall(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("requestMinerRng()"), 0);
+        vm.expectCall(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("requestMinerRng_g4954()"), 0);
         vm.recordLogs();
         game.mineFlip{gas: 16_700_000}(0);
         assertTrue(game.rngComplete(), "earlier work commits without a request attempt");
@@ -416,7 +416,7 @@ contract MinerNoProgressTest is Test {
         vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionSettlementPending()"), abi.encode(false));
         vm.mockCall(ContractAddresses.SDGNRS, abi.encodeWithSignature("redemptionBatchState()"),
             abi.encode(uint32(1), uint32(0), uint32(0), uint256(0)));
-        vm.mockCall(ContractAddresses.COINFLIP, abi.encodeWithSignature("creditFlip(uint32,uint256)"), bytes(""));
+        vm.mockCall(ContractAddresses.COINFLIP, abi.encodeWithSignature("creditFlip_g317(uint32,uint256)"), bytes(""));
         vm.etch(ContractAddresses.CRAPS, address(new MinerMaintenanceTable()).code);
 
         return MinerMaintenanceTable(ContractAddresses.CRAPS);

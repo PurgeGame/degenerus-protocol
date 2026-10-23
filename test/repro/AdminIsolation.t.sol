@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {NativeFailureExport, NativeFailureProbe} from "../helpers/NativeFailureExport.sol";
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {MineFlipGas} from "../../contracts/libraries/MineFlipGas.sol";
 import {DegenerusAdmin, ILinkTokenLike, IAggregatorV3, IVRFCoordinatorV2_5Owner}
@@ -32,6 +33,14 @@ contract AdminHostileTarget {
                 mstore(0, shl(80, 1))
                 return(0, 160)
             }
+            case 8 {
+                let start := gas()
+                for {} lt(sub(start, gas()), 1200000) {} {}
+                mstore(0, 1)
+                return(0, 32)
+            }
+            case 9 { revert(0, 32) }
+            case 10 { for {} 1 {} {} }
             case 7 {
                 for {} gt(gas(), 1000) {} {}
                 mstore(0, 1)
@@ -51,7 +60,7 @@ contract AdminHostileTarget {
     }
 }
 
-contract AdminIsolationTest is DeployProtocol {
+contract AdminIsolationTest is DeployProtocol, NativeFailureExport {
     function setUp() public { _deployProtocol(); }
 
     function _etch(address target, bytes4 selector, uint256 mode) private {
@@ -108,7 +117,7 @@ contract AdminIsolationTest is DeployProtocol {
         }
     }
 
-    function testShutdownUnderfundingAtEachBoundaryRollsBackRetirement() public {
+    function testShutdownUnderfundingRollsBackRetirement() public {
         uint256 sub = admin.subscriptionId();
         uint256 snapshot = vm.snapshotState();
         uint256[3] memory gasLimits = [uint256(250_000), 350_000, 480_000];
@@ -125,4 +134,26 @@ contract AdminIsolationTest is DeployProtocol {
             assertTrue(vm.revertToState(snapshot));
         }
     }
+    function test_NativeTrustedShutdownBoundaries() public {
+        vm.etch(address(game), type(NativeFailureProbe).runtimeCode);
+        NativeFailureProbe probe = NativeFailureProbe(address(game));
+        _nativeCheckedFixture("admin-low", address(this), address(probe), abi.encodeCall(probe.invoke,
+            (address(admin), abi.encodeCall(admin.shutdownVrf, ()), 800_000)));
+        bytes4[3] memory selectors = [IVRFCoordinatorV2_5Owner.cancelSubscription.selector,
+            ILinkTokenLike.balanceOf.selector, ILinkTokenLike.transfer.selector];
+        uint256[6] memory modes = [uint256(0), 1, 4, 8, 9, 10];
+        for (uint256 site; site < 3; ++site) for (uint256 i; i < modes.length; ++i) {
+            uint256 snap = vm.snapshotState();
+            _etch(site == 0 ? address(mockVRF) : address(mockLINK), selectors[site], modes[i]);
+            _nativeCheckedFixture(string.concat("admin-", vm.toString(site), "-", vm.toString(modes[i])),
+                address(this), address(probe), abi.encodeCall(probe.invoke,
+                    (address(admin), abi.encodeCall(admin.shutdownVrf, ()), 5_000_000)));
+            (bool ok,) = probe.invoke(address(admin), abi.encodeCall(admin.shutdownVrf, ()), 5_000_000);
+            assertTrue(ok);
+            assertEq(admin.subscriptionId(), 0);
+            require(vm.revertToState(snap));
+            vm.deleteStateSnapshot(snap);
+        }
+    }
+
 }

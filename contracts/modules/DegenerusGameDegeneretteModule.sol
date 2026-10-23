@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {RngTags} from "../libraries/RngTags.sol";
+
 import {GameDegeneretteBet} from "./GameDegeneretteBet.sol";
 import {GameBoxInternals} from "./GameBoxInternals.sol";
 
@@ -275,8 +277,10 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
         uint32 firstResultTraits;
     }
 
+
+
     /// @notice Consume the active session's FIFO bet queue after human boxes finish.
-    function runDegeneretteWork(uint256 gasAllowance) external returns (MineFlipGas.Result memory) {
+    function runDegeneretteWork_g670(uint256 gasAllowance) external returns (MineFlipGas.Result memory) {
         return _runDegeneretteWork(gasAllowance);
     }
 
@@ -471,7 +475,7 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
         // spin), so doubling adds it again and zeroing subtracts it back out. The outcome
         // reads off DegeneretteResolved: totalPayout vs the payouts its packed spins imply.
         if (c.currency == CURRENCY_FLIP && totals.totalPayout != 0) {
-            if (EntropyLib.hash4(rngWord, c.playerId, betId, BET_SURVIVAL_TAG) & 1 == 1) {
+            if (EntropyLib.hash3(RngTags.BET_SURVIVAL, rngWord, betId) & 1 == 1) {
                 acc.flipMint += totals.totalPayout;
                 totals.totalPayout *= 2;
             } else {
@@ -494,7 +498,7 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
             uint256 rounded = totals.totalPayout > FlipRoundLib.FLIP_ROUND_THRESHOLD
                 ? FlipRoundLib.roundFlipToHundreds(
                     totals.totalPayout,
-                    EntropyLib.hash4(rngWord, c.playerId, betId, FLIP_ROUND_TAG)
+                    EntropyLib.hash3(RngTags.BET_ROUND, rngWord, betId)
                 )
                 : FlipRoundLib.floorWholeFlip(totals.totalPayout);
             if (rounded > totals.totalPayout) {
@@ -514,7 +518,7 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
             _resolveLootboxDirect(
                 c.playerId,
                 totals.betLootboxShare,
-                EntropyLib.hash2(rngWord, betId),
+                EntropyLib.hash3(RngTags.BET_BOX, rngWord, betId),
                 c.activityScore
             );
         }
@@ -525,7 +529,7 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
         if (totals.affiliateBoxShare > 0) {
             uint256 refFlip = (totals.affiliateBoxShare * PRICE_COIN_UNIT) /
                 PriceLookupLib.priceForLevel(level + 1);
-            coinflip.creditFlip(
+            coinflip.creditFlip_g317(
                 affiliate.getReferrerIdById(c.playerId), (refFlip * AFFILIATE_BOX_BPS) / 10_000
             );
         }
@@ -556,7 +560,7 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
                 c.playerId,
                 recordBounty * TOKEN_MATH_SCALE,
                 c.activityScore,
-                EntropyLib.hash4(rngWord, c.playerId, betId, RECORD_SPIN_TAG),
+                EntropyLib.hash3(RngTags.BET_RECORD, rngWord, betId),
                 c.symbol,
                 BOX_SPIN_TYPE_RECORD
             );
@@ -680,33 +684,12 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
         pure
         returns (SpinResult memory)
     {
-        // Spin results are derived deterministically from the lootbox RNG word + index.
-        // Spin 0 uses a shorter preimage (no spinIdx mixed in) to produce a distinct seed.
-        // Scratch-space keccak of the packed preimage — byte-identical layout to the
-        // abi.encodePacked form: rngWord[32] | index[4] | (spinIdx[1], spin>0 only) | salt[1].
-        // index is uint32 (shl 224 lands its 4 bytes at 0x20..0x23); QUICK_PLAY_SALT is bytes1
-        // (left-aligned) so byte(0,·) lifts its single byte into the low lane for mstore8.
-        // Writes only scratch (0x00..0x25); the free-memory pointer at 0x40 is untouched.
-        uint256 resultSeed;
-        if (spinIdx == 0) {
-            assembly ("memory-safe") {
-                mstore(0x00, rngWord)
-                mstore(0x20, shl(224, index))
-                mstore8(0x24, byte(0, QUICK_PLAY_SALT))
-                resultSeed := keccak256(0x00, 37)
-            }
-        } else {
-            assembly ("memory-safe") {
-                mstore(0x00, rngWord)
-                mstore(0x20, shl(224, index))
-                mstore8(0x24, spinIdx)
-                mstore8(0x25, byte(0, QUICK_PLAY_SALT))
-                resultSeed := keccak256(0x00, 38)
-            }
-        }
+        // One request word identifies the cohort. The house reel is shared across symbols;
+        // only spin position separates its successive outcomes.
+        uint256 resultSeed = EntropyLib.hash3(RngTags.BET_HOUSE, rngWord, spinIdx);
         // All bettors choosing this symbol share the same prefix of player tickets.
         // The house sequence above is shared across symbols.
-        uint256 spinSeed = EntropyLib.hash4(rngWord, index, symbol, spinIdx);
+        uint256 spinSeed = EntropyLib.hash4(RngTags.BET_PLAYER, rngWord, symbol, spinIdx);
         return _rollSpin(spinSeed, resultSeed, symbol, currency);
     }
 
@@ -742,7 +725,7 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
         if (currency == CURRENCY_WWXRP) {
             spin.resultTraits = _rigWwxrpResult(
                 spin.playerTraits, spin.resultTraits, symbol >> 3,
-                EntropyLib.hash2(seed, WWXRP_RIG_SALT)
+                EntropyLib.hash2(RngTags.SPIN_RIG, seed)
             );
         }
         (spin.score, spin.resultWilds) = _score(spin.playerTraits, spin.resultTraits);
@@ -753,7 +736,7 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
     ///      holds exactly one wild. Separate domains keep colors independent of the results.
     function _playerTicket(uint256 seed, uint8 symbol) internal pure returns (uint32 traits) {
         if (symbol >= DEGENERETTE_HERO_COUNT) revert InvalidBet();
-        traits = DegenerusTraitUtils.packedTraitsDegeneretteOrdinary(EntropyLib.hash2(seed, PLAYER_TICKET_TAG));
+        traits = DegenerusTraitUtils.packedTraitsDegeneretteOrdinary(EntropyLib.hash2(RngTags.SPIN_PLAYER, seed));
         uint32 shift = uint32(symbol >> 3) * 8;
         traits = (traits & ~(uint32(0xFF) << shift)) | (uint32(0x40 | (symbol & 7)) << shift);
     }
@@ -761,7 +744,7 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
     /// @dev Award spins may request a random hero with the internal sentinel 32.
     ///      All 24 Crypto, Zodiac and Cards symbols are equally eligible.
     function _spinSymbol(uint256 seed, uint8 symbol) internal pure returns (uint8) {
-        if (symbol == RANDOM_HERO) return uint8(EntropyLib.hash2(seed, HERO_PICK_TAG) % DEGENERETTE_HERO_COUNT);
+        if (symbol == RANDOM_HERO) return uint8(EntropyLib.hash2(RngTags.SPIN_HERO, seed) % DEGENERETTE_HERO_COUNT);
         if (symbol >= DEGENERETTE_HERO_COUNT) revert InvalidBet();
         return symbol;
     }
@@ -884,7 +867,7 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
         // Score adds the hero lane's second color point when the house lane is wild too.
         uint8 points = matches + uint8((resultTraits >> (uint32(heroQuadrant) * 8 + 6)) & 1);
         if (points < 3 || matches > 6) return rigged;
-        uint256 pick = EntropyLib.hash2(rigSeed, 1) % eligible;
+        uint256 pick = EntropyLib.hash2(RngTags.SPIN_RIG_PICK, rigSeed) % eligible;
         for (uint8 q; q < 4; ++q) {
             uint32 shift = uint32(q) * 8;
             uint8 d = uint8(diff >> shift);
@@ -1023,10 +1006,9 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
         if (address(this) != ContractAddresses.GAME) revert OnlyDelegatecall();
         if (stake == 0 || stake > type(uint128).max) return 0;
         uint64 betId = _boxBetId(seed, BOX_SPIN_TYPE_WWXRP);
-        seed = EntropyLib.hash2(seed, WWXRP_DRAW_TAG);
         uint128 betAmount = uint128(stake);
 
-        SpinResult memory spin = _rollSpin(seed, EntropyLib.hash2(seed, RESULT_TICKET_TAG), symbol, CURRENCY_WWXRP);
+        SpinResult memory spin = _rollSpin(seed, EntropyLib.hash2(RngTags.SPIN_HOUSE, seed), symbol, CURRENCY_WWXRP);
         uint256 rawPayout = _degenerettePayout(spin, CURRENCY_WWXRP, betAmount, activityScore);
         uint256 payout = rawPayout / TOKEN_MATH_SCALE;
         if (payout == 0 && rawPayout != 0) payout = 1;
@@ -1101,8 +1083,8 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
         uint256 total;
         uint256 packedSpins;
         for (uint256 i; i < BOX_FLIP_SPINS; ) {
-            uint256 ss = EntropyLib.hash2(seed, i);
-            SpinResult memory spin = _rollSpin(ss, EntropyLib.hash2(ss, RESULT_TICKET_TAG), symbol, CURRENCY_FLIP);
+            uint256 ss = EntropyLib.hash3(RngTags.SPIN_FLIP_ROUND, seed, i);
+            SpinResult memory spin = _rollSpin(ss, EntropyLib.hash2(RngTags.SPIN_HOUSE, ss), symbol, CURRENCY_FLIP);
             total += _degenerettePayout(spin, CURRENCY_FLIP, perSpin, activityScore);
             packedSpins |= _packSpin(i, spin);
             unchecked {
@@ -1112,7 +1094,7 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
 
         // Survival flip on the summed payout (the seed bit never otherwise consumed by the spins).
         bool survived = total != 0 &&
-            (EntropyLib.hash2(seed, BOX_SURVIVAL_TAG) & 1 == 1);
+            (EntropyLib.hash2(RngTags.SPIN_SURVIVAL, seed) & 1 == 1);
         total = survived ? total * 2 : 0;
         total /= TOKEN_MATH_SCALE;
         // Collapse the surviving mint onto a whole 100-FLIP multiple, EV-preserving, above
@@ -1123,7 +1105,7 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
         total = total > FlipRoundLib.FLIP_ROUND_THRESHOLD
             ? FlipRoundLib.roundFlipToHundreds(
                 total,
-                EntropyLib.hash2(seed, FLIP_ROUND_TAG)
+                EntropyLib.hash2(RngTags.SPIN_ROUND, seed)
             )
             : FlipRoundLib.floorWholeFlip(total);
         // The box caller sums this into the entry's FLIP lane; the record-bounty caller adds it
@@ -1165,7 +1147,7 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
         uint64 betId = _boxBetId(seed, BOX_SPIN_TYPE_ETH);
         uint128 betAmount = uint128(stake);
 
-        SpinResult memory spin = _rollSpin(seed, EntropyLib.hash2(seed, RESULT_TICKET_TAG), symbol, CURRENCY_ETH);
+        SpinResult memory spin = _rollSpin(seed, EntropyLib.hash2(RngTags.SPIN_HOUSE, seed), symbol, CURRENCY_ETH);
         uint8 s = spin.score;
         uint256 payout = _degenerettePayout(spin, CURRENCY_ETH, betAmount, activityScore);
 
@@ -1213,7 +1195,7 @@ abstract contract DegenerusGameDegeneretteModule is GameBoxInternals,
                     IDegenerusGameLootboxModule.resolveLootboxDirect.selector,
                     playerId,
                     lootboxShare,
-                    EntropyLib.hash2(seed, BOX_RECIRC_TAG),
+                    EntropyLib.hash2(RngTags.SPIN_RECIRC, seed),
                     activityScore
                 )
             );

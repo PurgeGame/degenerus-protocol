@@ -96,18 +96,18 @@ contract DegenesisGasHost is DegenerusGame, BucketSeed {
     // ---- production entries ----
     function hostRun(uint256 allowance) external returns (bool progressed, bool done, uint256 basis) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_DEGENESIS_MODULE.delegatecall(
-            abi.encodeWithSignature("runDegenesisWork(uint256)", allowance)
+            abi.encodeWithSignature("runDegenesisWork_g1860(uint256)", allowance)
         );
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
         (progressed, done, basis) = abi.decode(data, (bool, bool, uint256));
     }
-    function hostPrepare(uint24 day) external { _delegate(ContractAddresses.GAME_DEGENESIS_MODULE, abi.encodeWithSignature("prepareDegenesis(uint24)", day)); }
+    function hostPrepare(uint24 day) external { _delegate(ContractAddresses.GAME_DEGENESIS_MODULE, abi.encodeWithSignature("prepareDegenesis_g47(uint24)", day)); }
     function hostSplit() external { _delegate(ContractAddresses.GAME_DEGENESIS_MODULE, abi.encodeWithSignature("splitDegenesis()")); }
-    function hostTopUp() external { _delegate(ContractAddresses.GAME_DEGENESIS_MODULE, abi.encodeWithSignature("topUpSdgnrsAfking()")); }
+    function hostTopUp() external { _delegate(ContractAddresses.GAME_DEGENESIS_MODULE, abi.encodeWithSignature("topUpSdgnrsAfking_g318()")); }
     function hostRecord(uint24 day, uint256 word) external { _recordDailyRng(day, word); }
     function hostDailyPhase(uint256 allowance) external returns (bool progressed, bool done, uint256 basis) {
         (bool ok, bytes memory data) = ContractAddresses.GAME_ADVANCE_MODULE.delegatecall(
-            abi.encodeWithSignature("runDailyPhase(uint256)", allowance)
+            abi.encodeWithSignature("runDailyPhase_g2582(uint256)", allowance)
         );
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }
         (progressed, done, basis) = abi.decode(data, (bool, bool, uint256));
@@ -172,7 +172,7 @@ contract DegenesisGasHost is DegenerusGame, BucketSeed {
         _afkingEndpointDay = 200;
     }
     function hostRequestOnly() external {
-        _delegate(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("requestDailyRng(uint24)", _afkingResetDay));
+        _delegate(ContractAddresses.GAME_RNG_MODULE, abi.encodeWithSignature("requestDailyRng_g8190(uint24)", _afkingResetDay));
     }
     function hostRequestState() external view returns (uint24 lvl, bool lastDay, uint24 requestDay) {
         return (level, lastPurchaseDay, rngRequestDay);
@@ -650,7 +650,7 @@ contract DegenesisSettleCreditOneGas is DegenesisSettleGas {
 }
 
 /// @title DegenesisPrepareGas -- the daily request's Degenesis step, cold
-/// @notice prepareDegenesis after a long stall (every cohort sealed): seven splits with the
+/// @notice prepareDegenesis_g47 after a long stall (every cohort sealed): seven splits with the
 ///         first-split fresh Vault budget and an empty prize-pool word, empty-cohort closes,
 ///         pricing (fresh degenesisActive) and the closing burn.
 abstract contract DegenesisPrepareGas is DegenesisGasBase {
@@ -675,7 +675,7 @@ abstract contract DegenesisPrepareGas is DegenesisGasBase {
 
     function test_PrepareFitsRequestAddition() public {
         Measured memory m = _measure(abi.encodeCall(DegenesisGasHost.hostPrepare, (DAY)));
-        _log("prepareDegenesis", m);
+        _log("prepareDegenesis_g47", m);
         uint256 snap = vm.snapshotState();
         host.hostPrepare(DAY);
         (uint8 closed, uint256 active,,) = host.hostState(1);
@@ -755,7 +755,7 @@ contract DegenesisTopUpGas is DegenesisGasBase {
 
     function test_TopUpFitsWhaleCheckpoint() public {
         Measured memory m = _measure(abi.encodeCall(DegenesisGasHost.hostTopUp, ()));
-        _log("topUpSdgnrsAfking (afking 0, claimable 2,000 ETH)", m);
+        _log("topUpSdgnrsAfking_g318 (afking 0, claimable 2,000 ETH)", m);
         (, uint256 packed,) = host.hostBudgets();
         assertEq(packed >> 128, 0, "measured state unchanged");
         uint256 snap = vm.snapshotState();
@@ -812,7 +812,7 @@ contract DegenesisTerminalGas is DegenesisGasBase {
 
 /// @title DegenesisDayCloseGas -- the Degenesis daily-phase branch on the production engine
 /// @notice Drives the day-1 deploy to day 2's DailyPhase through single-step mining and the
-///         mock VRF, then measures runDailyPhase cold: refused at the branch (its allowance
+///         mock VRF, then measures runDailyPhase_g2582 cold: refused at the branch (its allowance
 ///         covers the stage's own 100k/150k check only) and admitted. Their difference is the
 ///         branch: `_unlockRng` with the pool unfreeze, the snapshot, the seat draw and the
 ///         RNG completion.
@@ -866,8 +866,8 @@ contract DegenesisDayCloseGas is DegenesisGasBase {
         }
         assertTrue(stage, "STAGE_DEGENESIS_DAY");
         assertTrue(seatDraw, "the seat draw pays a fresh winner");
-        _log("runDailyPhase refused at the branch", refused);
-        _log("runDailyPhase admitted", admitted);
+        _log("runDailyPhase_g2582 refused at the branch", refused);
+        _log("runDailyPhase_g2582 admitted", admitted);
         Measured memory branch = _sub(admitted, refused);
         _log("Degenesis day branch", branch);
         emit log_named_uint("seat draw paid", seatDraw ? 1 : 0);

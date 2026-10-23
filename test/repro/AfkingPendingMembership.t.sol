@@ -90,7 +90,7 @@ contract AfkingPendingMembershipTest is Test {
         vm.prank(PLAYER);
         vm.expectRevert(DegenerusGameStorage.RngLocked.selector);
         h.subscribe(playerId, false, 0, 0);
-        MineFlipGas.Result memory result = h.runAfkingWork(9_000_000);
+        MineFlipGas.Result memory result = h.runAfkingWork_g8553(9_000_000);
         assertTrue(result.done);
         assertEq(result.rewardBasis, 1);
         vm.prank(PLAYER);
@@ -114,7 +114,7 @@ contract AfkingPendingMembershipTest is Test {
         assertEq(pending, 1);
         assertEq(position1, 1);
         assertTrue(boxPending);
-        assertEq(h.runAfkingWork(9_000_000).rewardBasis, 1);
+        assertEq(h.runAfkingWork_g8553(9_000_000).rewardBasis, 1);
     }
 
     function test_PausedVaultKeepsItsEntryAfterOpeningAndLaterPassesSkipIt() public {
@@ -125,17 +125,17 @@ contract AfkingPendingMembershipTest is Test {
         vm.expectRevert(DegenerusGameStorage.RngLocked.selector);
         h.subscribe(vaultId, false, 0, 0);
         h.deliver();
-        MineFlipGas.Result memory opened = h.runAfkingWork(9_000_000);
+        MineFlipGas.Result memory opened = h.runAfkingWork_g8553(9_000_000);
         assertTrue(opened.done);
         assertEq(opened.rewardBasis, 1, "the already-paid box still opens");
-        assertEq(h.runAfkingWork(9_000_000).rewardBasis, 0, "no repeated open");
+        assertEq(h.runAfkingWork_g8553(9_000_000).rewardBasis, 0, "no repeated open");
 
         vm.prank(vault);
         h.subscribe(vaultId, false, 0, 0);
         assertEq(h.protocolFlags() & 4, 4, "the owner's pause is set");
         for (uint256 i; i < 3; ++i) {
             day = h.nextProcessDay();
-            MineFlipGas.Result memory staged = h.runSubscriberWork(day, 9_000_000);
+            MineFlipGas.Result memory staged = h.runSubscriberWork_g6352(day, 9_000_000);
             assertTrue(staged.done, "a paused Vault cannot stall purchasing");
             (uint256 pending, uint256 members, uint256 position1, bool boxPending, uint256 qty) = h.state(vault);
             assertEq(pending, 0, "no new box purchased");
@@ -150,7 +150,7 @@ contract AfkingPendingMembershipTest is Test {
     function test_SeizedRunIsRemovedByTheNextPassBeforeItBuys() public {
         h.seed(PLAYER, address(0xBB22), 1);
         h.deliver();
-        assertTrue(h.runAfkingWork(9_000_000).done);
+        assertTrue(h.runAfkingWork_g8553(9_000_000).done);
         h.markSeized(PLAYER);
         // Until the next pass the closed run keeps its place.
         (, uint256 members, uint256 position1,,) = h.state(PLAYER);
@@ -159,7 +159,7 @@ contract AfkingPendingMembershipTest is Test {
 
         uint24 day = h.nextProcessDay();
         vm.recordLogs();
-        h.runSubscriberWork(day, 9_000_000);
+        h.runSubscriberWork_g6352(day, 9_000_000);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bool expired;
         for (uint256 i; i < logs.length; ++i) {

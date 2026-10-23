@@ -2,6 +2,8 @@
 pragma solidity 0.8.38;
 
 import {LootboxCraps} from "../../contracts/LootboxCraps.sol";
+import {EntropyLib} from "../../contracts/libraries/EntropyLib.sol";
+import {RngTags} from "../../contracts/libraries/RngTags.sol";
 
 /// @dev Test-only seed derivation. Production derives the same seed inline in the engine and the
 ///      hottest-shooter payout; the suite recomputes it here to replay a table's dice.
@@ -17,6 +19,6 @@ abstract contract CrapsSeedViews is LootboxCraps {
 
     /// @dev The seed derivation alone, for a caller that already fetched the word.
     function _crapsSeed(uint256 word, uint48 index) internal pure returns (bytes32) {
-        return bytes32(_hash3(uint256(_CRAPS_SEED_DOMAIN), word, index));
+        return bytes32(EntropyLib.hash3(RngTags.CRAPS_DICE, word, index));
     }
 }

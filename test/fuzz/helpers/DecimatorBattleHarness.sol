@@ -7,7 +7,7 @@ import {WalletSeed} from "../../helpers/WalletSeed.sol";
 contract DecimatorBattleHarness is DegenerusGameDecimatorModule, WalletSeed {
     function recordFor(address player, uint24 lvl, uint256 amount, uint256 mult, uint32 chips) external returns (uint64) {
         uint32 id = player == address(0) ? 0 : _seedWallet(player);
-        return recordDecBurn(id, lvl, amount, mult, chips);
+        return recordDecBurn_g5574(id, lvl, amount, mult, chips);
     }
 
     function extsload(bytes32 slot) external view returns (bytes32 value) {

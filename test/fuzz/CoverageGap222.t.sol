@@ -195,12 +195,12 @@ contract CoverageGap222 is DeployProtocol {
         assertFalse(ok, "recordMint rejected non-coin caller");
     }
 
-    /// @notice Exercise recordDecBurn (onlyCoin-gated).
+    /// @notice Exercise recordDecBurn_g5574 (onlyCoin-gated).
     function test_gap_recordDecBurn_guard() public {
         vm.prank(buyer);
         (bool ok, ) = address(game).call(
             abi.encodeWithSignature(
-                "recordDecBurn(address,uint24,uint256,uint256,uint32)",
+                "recordDecBurn_g5574(address,uint24,uint256,uint256,uint32)",
                 buyer,
                 uint24(0),
                 uint256(1),
@@ -208,7 +208,7 @@ contract CoverageGap222 is DeployProtocol {
                 uint32(0)
             )
         );
-        assertFalse(ok, "recordDecBurn rejected non-coin caller");
+        assertFalse(ok, "recordDecBurn_g5574 rejected non-coin caller");
     }
 
     /// @notice Exercise reverseFlip (coinflip control; caller must hold coinflip state).
@@ -235,17 +235,17 @@ contract CoverageGap222 is DeployProtocol {
         assertFalse(ok2, "syncAfKingLazyPassFromCoin rejected non-coin caller");
     }
 
-    /// @notice Exercise consumeCoinflipBoon / consumeDecimatorBoon (gated).
+    /// @notice Exercise consumeCoinflipBoon_g2902 / consumeDecimatorBoon (gated).
     function test_gap_boon_consumers() public {
         vm.prank(buyer);
         (bool ok1, ) = address(game).call(
-            abi.encodeWithSignature("consumeCoinflipBoon(uint32)", uint32(1))
+            abi.encodeWithSignature("consumeCoinflipBoon_g2902(uint32)", uint32(1))
         );
         vm.prank(buyer);
         (bool ok2, ) = address(game).call(
             abi.encodeWithSignature("consumeDecimatorBoon(uint32)", uint32(1))
         );
-        assertFalse(ok1, "consumeCoinflipBoon rejected non-authorized caller");
+        assertFalse(ok1, "consumeCoinflipBoon_g2902 rejected non-authorized caller");
         assertFalse(ok2, "consumeDecimatorBoon rejected non-authorized caller");
     }
 
@@ -497,12 +497,12 @@ contract CoverageGap222 is DeployProtocol {
         assertFalse(ok, "processCoinflipPayouts rejected non-game caller");
     }
 
-    /// @notice Exercise coinflip creditFlip / creditFlipBatch (onlyFlipCreditors).
+    /// @notice Exercise coinflip creditFlip_g317 / creditFlipBatch (onlyFlipCreditors).
     function test_gap_coinflip_creditFlip_guards() public {
         vm.prank(buyer);
         (bool o1, ) = address(coinflip).call(
             abi.encodeWithSignature(
-                "creditFlip(uint32,uint256)",
+                "creditFlip_g317(uint32,uint256)",
                 uint32(1),
                 uint256(1)
             )
@@ -519,7 +519,7 @@ contract CoverageGap222 is DeployProtocol {
                 amounts
             )
         );
-        assertFalse(o1, "creditFlip rejected non-flipCreditor caller");
+        assertFalse(o1, "creditFlip_g317 rejected non-flipCreditor caller");
         assertFalse(o2, "creditFlipBatch rejected non-flipCreditor caller");
     }
 
@@ -1142,7 +1142,7 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o1, ) = address(quests).call(
             abi.encodeWithSignature(
-                "handlePurchase(uint32,uint256,uint32,uint256,uint256,uint256)",
+                "handlePurchase_g4831(uint32,uint256,uint32,uint256,uint256,uint256)",
                 uint32(1),
                 uint256(1),
                 uint32(1),
@@ -1178,7 +1178,7 @@ contract CoverageGap222 is DeployProtocol {
         vm.prank(buyer);
         (bool o6, ) = address(quests).call(
             abi.encodeWithSignature(
-                "handlePurchase(uint32,uint256,uint32,uint256,uint256,uint256)",
+                "handlePurchase_g4831(uint32,uint256,uint32,uint256,uint256,uint256)",
                 uint32(1),
                 uint256(1),
                 uint32(0),
@@ -1197,11 +1197,11 @@ contract CoverageGap222 is DeployProtocol {
                 uint256(1 ether)
             )
         );
-        assertFalse(o1, "quests.handlePurchase rejected non-coin caller");
+        assertFalse(o1, "quests.handlePurchase_g4831 rejected non-coin caller");
         assertFalse(o2, "quests.handleFlip rejected non-coin caller");
         assertFalse(o3, "quests.handleDecimator rejected non-coin caller");
         assertFalse(o4, "quests.handleAffiliate rejected non-coin caller");
-        assertFalse(o6, "quests.handlePurchase rejected non-coin caller");
+        assertFalse(o6, "quests.handlePurchase_g4831 rejected non-coin caller");
         assertFalse(o7, "quests.handleDegenerette rejected non-coin caller");
     }
 

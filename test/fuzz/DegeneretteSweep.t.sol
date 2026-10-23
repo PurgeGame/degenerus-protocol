@@ -50,7 +50,7 @@ contract DegeneretteCallbackMint {
 ///         5. KEEPER: a plain mineFlip() resolves the queue and pays the box-open bounty.
 ///
 ///         Callees the sweep reaches, driven here: IDegenerusCoin.mintForGame (the owner FLIP
-///         flush), ICoinflip.creditFlip + IDegenerusAffiliate.getReferrerId (the affiliate leg of
+///         flush), ICoinflip.creditFlip_g317 + IDegenerusAffiliate.getReferrerId (the affiliate leg of
 ///         a high-match ETH spin) and IsDGNRS.poolBalance / IsDGNRS.transferFromPool (the S>=7
 ///         award). The record-bounty chain's IDegenerusCoin.mintForGame is driven by
 ///         BigRecordArming.
@@ -450,7 +450,7 @@ contract DegeneretteSweep is DeployProtocol {
         _landWord(IDX, _wordScoring(7));
         uint256 dgnrsBefore = sdgnrs.balanceOf(alice);
         vm.expectCall(address(sdgnrs), abi.encodeWithSelector(sdgnrs.poolBalance.selector));
-        vm.expectCall(address(coinflip), abi.encodeWithSelector(coinflip.creditFlip.selector));
+        vm.expectCall(address(coinflip), abi.encodeWithSelector(coinflip.creditFlip_g317.selector));
         _resolveCohort();
         assertGt(sdgnrs.balanceOf(alice), dgnrsBefore, "S>=7 transferFromPool paid sDGNRS");
         assertEq(game.degeneretteBetInfo(IDX, 1), 0, "resolved by the sweep");

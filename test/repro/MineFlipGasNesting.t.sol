@@ -77,7 +77,7 @@ contract NestingWorker {
 
 /// @dev Production frame shape in one contract that delegatecalls itself: root = MinerModule
 ///      (first action mandatory, the next one estimate-admitted), mid = AdvanceModule
-///      runDailyPhase on an x0 purchase day (child sized with the seal tail, then the seal),
+///      runDailyPhase_g2582 on an x0 purchase day (child sized with the seal tail, then the seal),
 ///      leaf = a jackpot module group loop.
 contract NestingStack {
     uint256 internal constant UNIT_SLACK = 30_000;

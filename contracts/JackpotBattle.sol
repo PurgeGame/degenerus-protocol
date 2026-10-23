@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
+import {EntropyLib} from "./libraries/EntropyLib.sol";
+import {RngTags} from "./libraries/RngTags.sol";
+
 import {MineFlipGas} from "./libraries/MineFlipGas.sol";
 import {Craps} from "./Craps.sol";
 import {ICoinflipStake, ICrapsEngine, IFlipCoin, IGameCraps} from "./CrapsInterfaces.sol";
@@ -14,7 +17,9 @@ import {JackpotBattleFieldLib} from "./libraries/JackpotBattleFieldLib.sol";
 import {GameTimeLib} from "./libraries/GameTimeLib.sol";
 
 interface IGameCrapsPending {
-    function setCrapsRngPending(uint48 index, bool pending) external;
+
+
+    function setCrapsRngPending_g1406(uint48 index, bool pending) external;
 }
 
 interface IFlipCrapsComps {
@@ -66,7 +71,7 @@ contract JackpotBattle is CrapsBattleStorage {
         if (_loadBattle(key) == 0) revert BonusPeriodSpent();
         index = _writeBuffer();
         _setSlotIndex(slot, index + 1);
-        IReadCohortLifecycle(address(this)).registerRngSlot(index, slot, key);
+        IReadCohortLifecycle(address(this)).registerRngSlot_g709(index, slot, key);
         emit CrapsBonusArmed(key, uint48(slot), index);
     }
 
@@ -129,9 +134,9 @@ contract JackpotBattle is CrapsBattleStorage {
         if (slot < _CUSTOM_SLOT_BASE) {
             uint256 heat = (_loadHighField(key) >> _HF_HOTTEST_SHIFT) & _HF_HOTTEST_MASK;
             if (heat != 0 && pot != 0) {
-                uint256 seed = uint256(keccak256(abi.encode(_CRAPS_SEED_DOMAIN, word, uint256(slot))));
+                uint256 seed = uint256(EntropyLib.hash3(RngTags.CRAPS_DICE, word, uint256(slot)));
                 uint256 n = uint32(_loadBattle(key));
-                uint256 start = uint256(keccak256(abi.encode(uint256(0x526f746174696e6753686f6f746572), seed))) % n;
+                uint256 start = uint256(EntropyLib.hash2(RngTags.CRAPS_SHOOTER, seed)) % n;
                 uint256 seat = 1 + (start + 511 - (heat & 511)) % n;
                 uint256 daySlot = uint256(slot) / _BONUS_SLOTS_PER_DAY * _BONUS_SLOTS_PER_DAY;
                 uint256 dayN = slot % _BONUS_SLOTS_PER_DAY == 7 ? 0 : uint32(_loadDayTickets(daySlot));
@@ -194,7 +199,7 @@ contract JackpotBattle is CrapsBattleStorage {
             }
             if (!MineFlipGas.canRun(meter, _SEAT_GAS_MAX, _SETTLE_TAIL_GAS + _CREDIT_GAS_MAX + _WORK_TAIL_GAS)) break;
             uint256 childAllowance = MineFlipGas.child(meter, _WORK_TAIL_GAS + 30_000);
-            MineFlipGas.Result memory child = IReadCohortLifecycle(address(this)).resolveRngSlot(slot, childAllowance);
+            MineFlipGas.Result memory child = IReadCohortLifecycle(address(this)).resolveRngSlot_g1079(slot, childAllowance);
             result.progressed = result.progressed || child.progressed;
             if (child.progressed) MineFlipGas.markProgress(meter);
             result.rewardBasis += child.rewardBasis;
@@ -215,7 +220,9 @@ contract JackpotBattle is CrapsBattleStorage {
         revert BadJackpotField();
     }
 
-    function registerRngSlot(uint48 index, uint64 slot, bytes32 key) external {
+
+
+    function registerRngSlot_g709(uint48 index, uint64 slot, bytes32 key) external {
         if (msg.sender != address(this)) revert OnlyTableSelf();
         if (uint32(_loadBattle(key)) == 0) return;
         if (index > 1) revert BadJackpotField();
@@ -227,7 +234,7 @@ contract JackpotBattle is CrapsBattleStorage {
         }
         slots.push(slot);
         if (empty) {
-            IGameCrapsPending(ContractAddresses.GAME).setCrapsRngPending(index, true);
+            IGameCrapsPending(ContractAddresses.GAME).setCrapsRngPending_g1406(index, true);
         }
     }
 
@@ -238,7 +245,7 @@ contract JackpotBattle is CrapsBattleStorage {
         uint64 next = _rngCursor(index) + 1;
         _rngSlotCursor[index] = next + 1;
         if (next == _rngSlots[index].length) {
-            IGameCrapsPending(ContractAddresses.GAME).setCrapsRngPending(index, false);
+            IGameCrapsPending(ContractAddresses.GAME).setCrapsRngPending_g1406(index, false);
         }
         if (slot >= _CUSTOM_SLOT_BASE) {
             for (uint256 i; i < 4; ++i) {
@@ -329,11 +336,11 @@ contract JackpotBattle is CrapsBattleStorage {
         if (r.requestDay == 0 || word == 0) revert BadJackpotField();
         // A resumed draw keeps the word and level frozen when it began.
         if (r.drawCursor & _ROUND_PREPARED != 0) return r;
-        uint256 roll = _hash2(word, JACKPOT_MULT_TAG) % 1_000;
+        uint256 roll = EntropyLib.hash2(RngTags.CRAPS_JACKPOT_MULT, word) % 1_000;
         uint256 multiplier = roll < 900 ? 5_000 : roll < 990 ? 30_000 : roll < 999 ? 200_000 : 1_000_000;
         // The reserve and award target were committed at lock. This independently tagged
         // draw changes only the main subsidy, with 60/30/9/1 odds and an exact 1x mean.
-        uint256 subsidyBps = _subsidyMultiplier(_hash3(word, _activeJackpotSlot, JACKPOT_SUBSIDY_TAG));
+        uint256 subsidyBps = _subsidyMultiplier(EntropyLib.hash2(RngTags.CRAPS_SUBSIDY, word));
         uint256 mainAdded = r.added - r.added / _HIGH_RESERVE_DIVISOR;
         mainAdded = mainAdded * subsidyBps / 10_000;
         uint256 pool = (uint256(r.paidUnits) * r.entryPrice + mainAdded) * multiplier / 10_000;
@@ -450,7 +457,7 @@ contract JackpotBattle is CrapsBattleStorage {
             uint32 playerId = uint32(header);
             if (header & highBit == 0 || playerId == _SDGNRS_ID) continue;
             ++draw.eligible;
-            if (_hash3(r.drawWord, HIGH_RESERVE_WINNER_TAG, (uint256(slot) << 32) | draw.eligible) % draw.eligible == 0) {
+            if (EntropyLib.hash3(RngTags.CRAPS_RESERVE_WINNER, r.drawWord, (uint256(slot) << 32) | draw.eligible) % draw.eligible == 0) {
                 draw.nominee = playerId;
             }
         }
@@ -458,7 +465,7 @@ contract JackpotBattle is CrapsBattleStorage {
         uint256 amount;
         if (settled == uint256(r.paidCount) + r.drawnCount) {
             draw.resolved = true;
-            if (draw.eligible != 0 && _hash3(r.drawWord, HIGH_RESERVE_DRAW_TAG, slot) % _HIGH_RESERVE_CHANCE == 0) {
+            if (draw.eligible != 0 && EntropyLib.hash3(RngTags.CRAPS_RESERVE_DRAW, r.drawWord, slot) % _HIGH_RESERVE_CHANCE == 0) {
                 draw.won = true;
                 amount = _highRollerReserve - 1;
                 _highRollerReserve = 1;
@@ -550,7 +557,7 @@ contract JackpotBattle is CrapsBattleStorage {
     ///      key nor the payee is needed.
     function _accountId(uint32 id) private returns (uint32) {
         if (id == 0) return uint32(_walletWord(msg.sender, false) >> CrapsPreferenceLib.ID_SHIFT);
-        (,, bool authorized) = IGameCraps(_GAME).resolveAccount(id, msg.sender);
+        (,, bool authorized) = IGameCraps(_GAME).resolveAccount_g502(id, msg.sender);
         if (!authorized) revert NotApproved();
         return id;
     }
@@ -561,8 +568,10 @@ contract JackpotBattle is CrapsBattleStorage {
         }
     }
 
+
+
     /// @dev Self-only finalization executes atomically inside the last seat.
-    function finalizeBattle(Window calldata w, uint256 board, uint256 word) external {
+    function finalizeBattle_g3665(Window calldata w, uint256 board, uint256 word) external {
         if (msg.sender != address(this)) revert OnlyTableSelf();
         _payout(w, board, word);
         // Preserve payout-before-completion ordering in the same self-call.
@@ -576,7 +585,7 @@ contract JackpotBattle is CrapsBattleStorage {
 
     function _jackpotBonusRoll(uint256 word, uint256 period) private pure returns (uint256) {
         unchecked {
-            return _hash3(word, SCHEDULE_TAG, period == _BONUS_PERIODS_PER_DAY - 2 ? 0 : period);
+            return EntropyLib.hash3(RngTags.CRAPS_SCHEDULE, word, period == _BONUS_PERIODS_PER_DAY - 2 ? 0 : period);
         }
     }
 
@@ -586,7 +595,7 @@ contract JackpotBattle is CrapsBattleStorage {
 
     function _jackpotBoostMult(uint256 word, uint48 bound) internal pure returns (uint256) {
         unchecked {
-            uint256 roll = _hash3(word, bound, BOOST_TAG) % 1000;
+            uint256 roll = EntropyLib.hash3(RngTags.CRAPS_BOOST, word, bound) % 1000;
             if (roll < 768) return 1;
             if (roll < 976) return 4;
             if (roll < 996) return 40;
@@ -608,7 +617,7 @@ contract JackpotBattle is CrapsBattleStorage {
     }
 
     function _creditFlip(uint32 id, uint256 amount) private {
-        ICoinflipStake(ContractAddresses.COINFLIP).creditFlip(id, amount);
+        ICoinflipStake(ContractAddresses.COINFLIP).creditFlip_g317(id, amount);
     }
 
     function _jackpotDayField(uint256 slot) private view returns (uint256 base, uint64 n) {
@@ -882,7 +891,7 @@ contract JackpotBattle is CrapsBattleStorage {
         }
         // The shut window joins the write buffer's RNG round like any other consumer: the next
         // request, daily or mid-day, settles it. Its pending bit counts as work for that request.
-        IReadCohortLifecycle(address(this)).registerRngSlot(index, slot, w.key);
+        IReadCohortLifecycle(address(this)).registerRngSlot_g709(index, slot, w.key);
         emit CrapsBonusArmed(w.key, uint48(slot), index);
     }
 
@@ -1047,7 +1056,10 @@ contract JackpotBattle is CrapsBattleStorage {
         return _jackpotFinishWindowTerms(day, period, w, _highMultOf(word));
     }
 
-    function runCrapsMaintenance(uint256 allowance) external returns (MineFlipGas.Result memory result) {
+    // Low-selector protocol entry; the original ABI and guarded implementation remain.
+    function runCrapsMaintenance_g10712(uint256 allowance) external returns (MineFlipGas.Result memory result) { return runCrapsMaintenance(allowance); }
+
+    function runCrapsMaintenance(uint256 allowance) public returns (MineFlipGas.Result memory result) {
         if (msg.sender != _GAME) revert OnlyGame();
         return _keepScheduled(allowance);
     }
@@ -1068,7 +1080,7 @@ contract JackpotBattle is CrapsBattleStorage {
         }
         if (!MineFlipGas.canRun(meter, _SEAT_GAS_MAX, _SETTLE_TAIL_GAS + _CREDIT_GAS_MAX + _WORK_TAIL_GAS)) return result;
         uint256 childAllowance = MineFlipGas.child(meter, _WORK_TAIL_GAS + 30_000);
-        result = IReadCohortLifecycle(address(this)).resolveRngSlot(slot, childAllowance);
+        result = IReadCohortLifecycle(address(this)).resolveRngSlot_g1079(slot, childAllowance);
         MineFlipGas.finish(meter);
     }
 }

@@ -29,7 +29,7 @@ contract ProtocolCrapsTable is CrapsViews {
         w.tier = 1;
         _setSlotIndex(slot, 1);
         (bool ok,) = address(this).call(
-            abi.encodeWithSignature("registerRngSlot(uint48,uint64,bytes32)", uint48(0), slot, key)
+            abi.encodeWithSignature("registerRngSlot_g709(uint48,uint64,bytes32)", uint48(0), slot, key)
         );
         require(ok, "synthetic field registration");
         _scoreBattle(w, score, 1, 0);
@@ -126,7 +126,7 @@ contract CrapsWalletIdsProtocolTest is DeployProtocol {
         (address burner, uint32 burnId,) = abi.decode(burnArgs, (address, uint32, uint256));
         assertEq(burner, who, "FLIP burns from the address");
         assertEq(burnId, id, "FLIP receives the wallet ID");
-        (uint256 questCall, bytes memory questArgs) = _call(acc, address(quests), bytes4(keccak256("recordCrapsAction(uint32,uint8)")));
+        (uint256 questCall, bytes memory questArgs) = _call(acc, address(quests), bytes4(keccak256("recordCrapsAction_g14623(uint32,uint8)")));
         assertTrue(questCall != type(uint256).max, "Quests heard the action");
         (uint32 questId, uint8 questFlags) = abi.decode(questArgs, (uint32, uint8));
         assertEq(questId, id, "Quests keyed by the wallet ID");
@@ -223,7 +223,7 @@ contract CrapsWalletIdsProtocolTest is DeployProtocol {
         while (uint256(keccak256(abi.encode(word, DRAW_TAG, uint256(slot)))) % 10 != 0) ++word;
         uint256 reserve = 4_200;
         uint256 stakeBefore = coinflip.coinflipAmount(alice);
-        vm.expectCall(address(coinflip), abi.encodeWithSignature("creditFlip(uint32,uint256)", id, reserve), 1);
+        vm.expectCall(address(coinflip), abi.encodeWithSignature("creditFlip_g317(uint32,uint256)", id, reserve), 1);
         vm.recordLogs();
         t.standReserve(slot, word, id, reserve);
         Vm.Log[] memory logs = vm.getRecordedLogs();
