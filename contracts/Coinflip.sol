@@ -73,7 +73,10 @@ interface IDegenerusRecordBounty {
     function recordSet(uint8 kind, address to, uint256 value) external;
 }
 
-contract Coinflip {
+import {DegenerusQuests} from "./DegenerusQuests.sol";
+import {DegenerusAffiliate} from "./DegenerusAffiliate.sol";
+
+contract Coinflip is DegenerusQuests, DegenerusAffiliate {
     /*+======================================================================+
       |                              EVENTS                                  |
       +======================================================================+*/
@@ -387,7 +390,13 @@ contract Coinflip {
     ///         draw and the flip record.
     ///         Nothing mints up front — each day's seed only becomes claimable FLIP if it
     ///         survives that day's flip.
-    constructor() {
+    constructor(
+        address[] memory bootstrapOwners,
+        bytes32[] memory bootstrapCodes,
+        uint8[] memory bootstrapKickbacks,
+        address[] memory bootstrapPlayers,
+        bytes32[] memory bootstrapReferralCodes
+    ) DegenerusAffiliate(bootstrapOwners, bootstrapCodes, bootstrapKickbacks, bootstrapPlayers, bootstrapReferralCodes) {
         // Record clocks start at deploy, so each category's FIRST claim draws the
         // share accrued since launch (the 5% floor plus 0.5% per untouched day,
         // ceiling 75%) — a dormant category grows until its bounty justifies its
@@ -481,7 +490,7 @@ contract Coinflip {
     /// @param id The account receiving the stake (0 = caller).
     /// @param amount Amount of FLIP to deposit (min 100 FLIP, or 0 to settle pending claims);
     ///        floored to whole FLIP.
-    function depositCoinflip(uint32 id, uint256 amount) external {
+    function depositCoinflip(uint32 id, uint256 amount) external questsContext {
         (address key, address payee, bool authorized) = _resolve(id);
         _depositCoinflip(key, payee, id, amount, !authorized);
     }
@@ -572,7 +581,7 @@ contract Coinflip {
             uint8 questType,
             uint32 streak,
             bool completed
-        ) = questModule.handleFlip(questId, amount);
+        ) = _handleFlip(questId, amount);
         uint256 questReward = _questApplyReward(
             questId,
             reward,
@@ -610,7 +619,7 @@ contract Coinflip {
     function claimCoinflips(
         uint32 id,
         uint256 amount
-    ) external returns (uint256 claimed) {
+    ) external questsContext returns (uint256 claimed) {
         (address key, address payee) = _account(id);
         return _claimCoinflipsAmount(key, payee, id, amount, true);
     }
@@ -624,7 +633,7 @@ contract Coinflip {
     function claimCoinflipsFromFlip(
         address player,
         uint256 amount
-    ) external onlyFLIP returns (uint256 claimed) {
+    ) external questsContext onlyFLIP returns (uint256 claimed) {
         return _claimCoinflipsAmount(player, player, 0, amount, true);
     }
 
@@ -632,7 +641,7 @@ contract Coinflip {
     /// @param day The day to query.
     /// @return rewardPercent The reward percentage for that day.
     /// @return win Whether the flip was a win.
-    function getCoinflipDayResult(uint24 day) external view returns (uint16 rewardPercent, bool win) {
+    function getCoinflipDayResult(uint24 day) external questsContext view returns (uint16 rewardPercent, bool win) {
         return _dayResult(day);
     }
 
@@ -645,7 +654,7 @@ contract Coinflip {
     function consumeCoinflipsForBurn(
         address player,
         uint256 amount
-    ) external onlyFLIP returns (uint256 consumed) {
+    ) external questsContext onlyFLIP returns (uint256 consumed) {
         return _claimCoinflipsAmount(player, player, 0, amount, false);
     }
 
@@ -661,7 +670,7 @@ contract Coinflip {
     function consumeFlipBacking(
         address player,
         uint256 amount
-    ) external onlyFLIP returns (uint256 consumed) {
+    ) external questsContext onlyFLIP returns (uint256 consumed) {
         consumed = _claimCoinflipsAmount(player, player, 0, amount, false);
         uint256 remainder = amount - consumed;
         if (remainder == 0) return consumed;
@@ -691,7 +700,7 @@ contract Coinflip {
     ///      takes its whole-FLIP floor and saturates at the daily cap, so this never reverts
     ///      a transfer.
     /// @param amount FLIP (whole tokens) staked onto sDGNRS's next flip.
-    function creditSdgnrsBacking(uint256 amount) external onlyFLIP {
+    function creditSdgnrsBacking(uint256 amount) external questsContext onlyFLIP {
         if (amount == 0) return;
         _addFlipStake(SDGNRS_WALLET_ID, _targetFlipDay(), amount);
     }
@@ -1222,7 +1231,7 @@ contract Coinflip {
         uint8 kind,
         uint32 id,
         uint256 candidate
-    ) external onlyDegenerusGameContract returns (uint256) {
+    ) external questsContext onlyDegenerusGameContract returns (uint256) {
         return _armBigRecord(kind, id, candidate);
     }
 
@@ -1262,7 +1271,7 @@ contract Coinflip {
     function armDiceRunRecord(
         uint32 id,
         uint256 candidate
-    ) external returns (uint256 claimed) {
+    ) external questsContext returns (uint256 claimed) {
         if (msg.sender != ContractAddresses.CRAPS) revert OnlyCraps();
         if (candidate < BIGGEST_DICE_RUN_MIN) return 0;
         uint128 mark = biggestDiceRunEver;
@@ -1303,7 +1312,7 @@ contract Coinflip {
     ///      converted notionally at that level's ticket price — no ETH moves. Clamped
     ///      at the pool's uint128 width rather than wrapping, so a huge push cannot
     ///      zero an accrued pool.
-    function fundRecordPool(uint256 amount) external onlyDegenerusGameContract {
+    function fundRecordPool(uint256 amount) external questsContext onlyDegenerusGameContract {
         uint256 grown = uint256(recordPool) + amount;
         recordPool = grown > type(uint128).max
             ? type(uint128).max
@@ -1316,7 +1325,7 @@ contract Coinflip {
     ///      day the sealed window's direct deposits stake, and the day the bracket's
     ///      transition word resolves. Entries close structurally at the day
     ///      boundary, before that word can be requested.
-    function armBafDraw(uint24 day) external onlyDegenerusGameContract {
+    function armBafDraw(uint24 day) external questsContext onlyDegenerusGameContract {
         bafDrawDay = day;
         emit BafDrawArmed(day);
     }
@@ -1337,7 +1346,7 @@ contract Coinflip {
     ///      covering the pre-request gap the lock leaves open — and needs no cross-contract
     ///      read. `day` never exceeds the wall day (the advance clamps it down to dailyIdx + 1),
     ///      so equality is the settled state and the comparison cannot open early.
-    function flipResolvedToday() external view returns (bool) {
+    function flipResolvedToday() external questsContext view returns (bool) {
         return flipsClaimableDay >= GameTimeLib.currentDayIndex();
     }
 
@@ -1356,14 +1365,14 @@ contract Coinflip {
         uint32 id,
         bool enabled,
         uint256 takeProfit
-    ) external {
+    ) external questsContext {
         (address key, address payee) = _account(id);
         _setCoinflipAutoRebuy(key, payee, id, enabled, takeProfit);
     }
 
     /// @notice Collect for the current payee after Game.sweepAccounts authorizes the source.
     /// @dev Ordinary accounts retain auto-rebuy and its carry, just like claimCoinflips.
-    function sweepAccountCoinflips(uint32 id) external onlyDegenerusGameContract returns (uint256) {
+    function sweepAccountCoinflips(uint32 id) external questsContext onlyDegenerusGameContract returns (uint256) {
         uint32 buyer = degenerusGame.acquiredBuyer(id);
         if (buyer != 0) return _claimAcquiredCoinflips(id, buyer);
         (address key, address payee,) = degenerusGame.resolveAccount(id, address(this));
@@ -1395,7 +1404,7 @@ contract Coinflip {
     function setCoinflipAutoRebuyTakeProfit(
         uint32 id,
         uint256 takeProfit
-    ) external {
+    ) external questsContext {
         (address key, address payee) = _account(id);
         _setCoinflipAutoRebuyTakeProfit(key, payee, id, takeProfit);
     }
@@ -1493,7 +1502,7 @@ contract Coinflip {
     function claimCoinflipCarry(
         uint32 id,
         uint256 amount
-    ) external returns (uint256 claimed) {
+    ) external questsContext returns (uint256 claimed) {
         (address key, address payee) = _account(id);
         id = _walletId(key, id, false);
         PlayerCoinflipState storage state = playerState[id];
@@ -1533,7 +1542,7 @@ contract Coinflip {
         uint8 bonus,
         uint256 rngWord,
         uint24 epoch
-    ) external onlyDegenerusGameContract {
+    ) external questsContext onlyDegenerusGameContract {
         uint16 rewardPercent = _coinflipReward(bonus, rngWord, epoch);
         bool win = (rngWord & 1) == 1;
         _storeDayResult(epoch, rewardPercent, win);
@@ -1554,7 +1563,7 @@ contract Coinflip {
     ///      stays separate for the recovery day. Every gap reward is fixed at 100% profit.
     ///      Skipping an already-settled prefix must not restart the bit sequence.
     ///      The Game's shared recovery caller caps the range to 31 days before this call.
-    function processCoinflipGap(uint256 root, uint24 start, uint24 end) external onlyDegenerusGameContract {
+    function processCoinflipGap(uint256 root, uint24 start, uint24 end) external questsContext onlyDegenerusGameContract {
         if (end <= start) return;
         uint24 originalStart = start;
         if (start <= flipsClaimableDay) start = flipsClaimableDay + 1;
@@ -1654,7 +1663,11 @@ contract Coinflip {
     function creditFlip(
         uint32 id,
         uint256 amount
-    ) external onlyFlipCreditors {
+    ) external questsContext onlyFlipCreditors {
+        _creditFlip(id, amount);
+    }
+
+    function _creditFlip(uint32 id, uint256 amount) private {
         if (id == 0 || amount == 0) return;
         _addDailyFlip(id, amount, 0, false);
     }
@@ -1666,7 +1679,7 @@ contract Coinflip {
     function creditFlipBatch(
         uint32[] calldata ids,
         uint256[] calldata amounts
-    ) external onlyFlipCreditors {
+    ) external questsContext onlyFlipCreditors {
         uint256 len = ids.length;
         for (uint256 i; i < len; ) {
             uint32 id = ids[i];
@@ -1693,7 +1706,7 @@ contract Coinflip {
         uint256 amount1,
         uint32 id2,
         uint256 amount2
-    ) external onlyFlipCreditors {
+    ) external questsContext onlyFlipCreditors {
         if (id1 != 0 && amount1 != 0) {
             _addDailyFlip(id1, amount1, 0, false);
         }
@@ -1711,7 +1724,7 @@ contract Coinflip {
     ///         backing (sDGNRS never holds a wallet balance; incoming FLIP de-circulates
     ///         into tomorrow's stake and settles here; claimableStored is the genesis
     ///         seed reserve burns drain first).
-    function redeemableFlipBacking() external returns (uint256 backing) {
+    function redeemableFlipBacking() external questsContext returns (uint256 backing) {
         if (msg.sender != ContractAddresses.SDGNRS) revert OnlysDGNRS();
         PlayerCoinflipState storage state = playerState[SDGNRS_WALLET_ID];
         uint256 mintable = _claimCoinflipsInternal(SDGNRS_WALLET_ID, state);
@@ -1732,7 +1745,7 @@ contract Coinflip {
     ///      close, so the clamp to the carry only keeps the batch close total.
     /// @param base The whole-FLIP backing to remove from sDGNRS.
     /// @return removed Whole FLIP actually removed (equals `base` unless the clamp binds).
-    function withdrawRedeemedFlip(uint256 base) external returns (uint256 removed) {
+    function withdrawRedeemedFlip(uint256 base) external questsContext returns (uint256 removed) {
         if (msg.sender != ContractAddresses.SDGNRS) revert OnlysDGNRS();
         if (base == 0) return 0;
         address s = ContractAddresses.SDGNRS;
@@ -1763,11 +1776,11 @@ contract Coinflip {
     ///      the pending resolved days surface. The carry is excluded — it is not claimable
     ///      through this path — except where a disabled position still holds one, which a
     ///      claim cashes out.
-    function previewClaimCoinflips(address player) external view returns (uint256 mintable) {
+    function previewClaimCoinflips(address player) external questsContext view returns (uint256 mintable) {
         return previewClaimCoinflipsById(_viewWalletId(player));
     }
 
-    function previewClaimCoinflipsById(uint32 id) public view returns (uint256 mintable) {
+    function previewClaimCoinflipsById(uint32 id) public questsContext view returns (uint256 mintable) {
         PlayerCoinflipState storage state = playerState[id];
         (uint256 daily, ) = _viewClaimableCoin(state, id);
         return daily + state.claimableStored;
@@ -1777,22 +1790,22 @@ contract Coinflip {
     /// @dev Mirrors redeemableFlipBacking's components as a pure view without settlement. Both legs come from the same replay, so
     ///      the carry reported is the one the settle LEAVES — a pending losing day has
     ///      already wiped it here, exactly as consumeFlipBacking will.
-    function previewFlipBacking(address player) external view returns (uint256) {
+    function previewFlipBacking(address player) external questsContext view returns (uint256) {
         return previewFlipBackingById(_viewWalletId(player));
     }
 
-    function previewFlipBackingById(uint32 id) public view returns (uint256) {
+    function previewFlipBackingById(uint32 id) public questsContext view returns (uint256) {
         PlayerCoinflipState storage state = playerState[id];
         (uint256 daily, uint256 carry) = _viewClaimableCoin(state, id);
         return daily + state.claimableStored + carry;
     }
 
     /// @notice Get player's current coinflip stake for next day, the VAULT and sDGNRS seed included.
-    function coinflipAmount(address player) external view returns (uint256 amount) {
+    function coinflipAmount(address player) external questsContext view returns (uint256 amount) {
         return coinflipAmountById(_viewWalletId(player));
     }
 
-    function coinflipAmountById(uint32 id) public view returns (uint256 amount) {
+    function coinflipAmountById(uint32 id) public questsContext view returns (uint256 amount) {
         uint24 targetDay = _targetFlipDay();
         amount = _flipStake(targetDay, id);
         bool seeded = _seeded(id);
@@ -1803,7 +1816,7 @@ contract Coinflip {
 
     /// @notice Get player's auto-rebuy configuration.
     function coinflipAutoRebuyInfo(address player)
-        external
+        external questsContext
         view
         returns (
             bool enabled,
@@ -1816,7 +1829,7 @@ contract Coinflip {
     }
 
     function coinflipAutoRebuyInfoById(uint32 id)
-        public
+        public questsContext
         view
         returns (
             bool enabled,
@@ -1842,7 +1855,7 @@ contract Coinflip {
     ///      smallest cumulative endpoint strictly above the roll, by binary search.
     /// @param rngWord The BAF transition VRF word.
     /// @return winnerId The drawn depositor's wallet ID, or 0 if the armed day recorded no entries.
-    function bafDrawWinner(uint256 rngWord) external view returns (uint32 winnerId) {
+    function bafDrawWinner(uint256 rngWord) external questsContext view returns (uint32 winnerId) {
         uint24 day = bafDrawDay;
         uint256 header = bafDrawHeader[day];
         uint256 total = header & type(uint96).max;
@@ -1867,7 +1880,7 @@ contract Coinflip {
 
     /// @notice The armed BAF draw day and its book totals.
     function bafDrawInfo()
-        external
+        external questsContext
         view
         returns (uint24 day, uint96 totalWeight, uint32 entryCount)
     {
@@ -1887,7 +1900,7 @@ contract Coinflip {
     function bafDrawEntryAt(
         uint24 day,
         uint32 index
-    ) external view returns (uint32 id, uint96 cumulativeWeight) {
+    ) external questsContext view returns (uint32 id, uint96 cumulativeWeight) {
         uint256 entry = _bafDrawEntry(day, index);
         id = uint32(entry >> 96);
         cumulativeWeight = uint96(entry);
@@ -2131,5 +2144,24 @@ contract Coinflip {
         bool authorized;
         (key, payee, authorized) = _resolve(id);
         if (!authorized) revert NotApproved();
+    }
+
+    // These bridges are statically bound and absent from the public ABI. Each
+    // caller supplies the original credited wallet, independent of msg.sender.
+    function _questCreditFlip(uint32 id, uint256 amount) internal override {
+        _creditFlip(id, amount);
+    }
+
+    function _affiliateQuestReward(uint32 id, uint256 amount) internal override returns (uint256 reward) {
+        (reward,,,) = _handleAffiliate(id, amount);
+    }
+
+    function _affiliateCreditFlip(uint32 id, uint256 amount) internal override {
+        _creditFlip(id, amount);
+    }
+
+    function _affiliateCreditFlipPair(uint32 a, uint256 amountA, uint32 b, uint256 amountB) internal override {
+        _creditFlip(a, amountA);
+        _creditFlip(b, amountB);
     }
 }

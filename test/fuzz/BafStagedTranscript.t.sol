@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {QaSlots} from "../helpers/QaSlots.sol";
 import {PeripheralSlots} from "../helpers/PeripheralSlots.sol";
 
 import {BafViews} from "../helpers/BafViews.sol";
@@ -1087,7 +1088,7 @@ abstract contract BafTranscriptFixture is DeployProtocol {
         Bracket memory b = _bracket();
         h = keccak256(abi.encode(h, b.levelWord, b.top, b.resolvedDay));
         // Level type/version share the active daily-quest word at bits 128..143.
-        h = keccak256(abi.encode(h, bytes32(uint256(uint16(uint256(vm.load(address(quests), bytes32(0))) >> 128))), address(game).balance));
+        h = keccak256(abi.encode(h, bytes32(uint256(uint16(uint256(vm.load(address(quests), bytes32(QaSlots.ACTIVE))) >> 128))), address(game).balance));
     }
 
     /// @dev Every address an award log names, in first-seen order.

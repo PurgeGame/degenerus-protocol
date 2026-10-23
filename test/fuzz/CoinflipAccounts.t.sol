@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {QaTrace} from "../helpers/QaTrace.sol";
 
 import {CoinflipStorage} from "../helpers/CoinflipStorage.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -46,6 +47,20 @@ contract CoinflipAccountsTest is DeployProtocol {
     uint32 internal smurfId;
     address internal stranger;
     address internal operator;
+
+    uint32 private _expectedQuestId;
+    function _checkExpectedQuest() private {
+        if (_expectedQuestId==0) return;
+        bytes32 slot=keccak256(abi.encode(uint256(_expectedQuestId),QaTrace.QUESTS+1));
+        uint256 word=uint256(vm.load(address(coinflip),slot));
+        assertEq(uint24(word>>48),uint24(uint256(vm.load(address(coinflip),bytes32(QaTrace.QUESTS)))),"correct quest wallet synchronized");
+        _expectedQuestId=0;
+    }
+    function _readyFlipQuest(uint32 id) private {
+        uint256 day=_today();
+        vm.store(address(coinflip),bytes32(QaTrace.QUESTS),bytes32((day|(1<<24))|((day|(2<<24))<<64)));
+        vm.store(address(coinflip),keccak256(abi.encode(uint256(id),QaTrace.QUESTS+1)),bytes32(day|(day<<24)|(day<<48)|(uint256(1)<<192)));
+    }
 
     function setUp() public {
         _deployProtocol();
@@ -161,6 +176,7 @@ contract CoinflipAccountsTest is DeployProtocol {
         _resolveDay(d + 1, true);
         vm.prank(owner);
         coinflip.depositCoinflip(smurfId, 0);
+        _checkExpectedQuest();
         bank = _claimableStored(smurfId);
         require(bank > 0, "fixture: smurf winnings banked");
     }
@@ -215,12 +231,13 @@ contract CoinflipAccountsTest is DeployProtocol {
 
         vm.expectCall(GAME, abi.encodeCall(DegenerusGame.resolveAccount, (smurfId, owner)), 1);
         vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.registerWallet.selector), 0);
-        vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleFlip, (smurfId, amount)), 1);
+        _expectedQuestId = smurfId;
         vm.expectCall(GAME, abi.encodeCall(DegenerusGame.consumeCoinflipBoon, (smurfId)), 1);
         vm.expectCall(address(coin), abi.encodeWithSignature("burnForCoinflip(address,uint256)", owner, 1_000), 1);
         vm.recordLogs();
         vm.prank(owner);
         coinflip.depositCoinflip(smurfId, amount);
+        _checkExpectedQuest();
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         assertEq(_claimableStored(smurfId), 0, "the smurf's winnings funded the stake first");
@@ -249,6 +266,7 @@ contract CoinflipAccountsTest is DeployProtocol {
         vm.recordLogs();
         vm.prank(owner);
         coinflip.depositCoinflip(smurfId, 200_000);
+        _checkExpectedQuest();
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         assertEq(coinflip.biggestFlipEver(), 200_000, "the direct deposit set the record");
@@ -267,36 +285,31 @@ contract CoinflipAccountsTest is DeployProtocol {
     ///         the account's stake; on a gift it names the funding caller.
     function test_QuestCompleted_NamesAccountKey_OrGiftFunder() public {
         uint24 target = _today() + 1;
-        vm.mockCall(
-            address(quests),
-            abi.encodeWithSelector(DegenerusQuests.handleFlip.selector, smurfId),
-            abi.encode(uint256(50), uint8(2), uint32(1), true)
-        );
+        _readyFlipQuest(smurfId);
         _fundFlip(owner, 10_000);
         uint256 before = _lane(target, smurfId);
         vm.recordLogs();
         vm.prank(owner);
-        coinflip.depositCoinflip(smurfId, 1_000);
+        coinflip.depositCoinflip(smurfId, 2_000);
+        _checkExpectedQuest();
         Vm.Log[] memory logs = vm.getRecordedLogs();
         assertEq(_countFor(logs, address(coinflip), QUEST_COMPLETED, bytes32(uint256(_fixtureId(smurfId)))), 1, "quest names S's key");
         assertEq(_countFor(logs, address(coinflip), QUEST_COMPLETED, bytes32(uint256(_fixtureId(owner)))), 0);
-        assertEq(_lane(target, smurfId) - before, 1_050, "quest reward joins S's stake");
+        assertEq(_lane(target, smurfId) - before, 2_100, "quest reward joins S's stake");
 
-        uint32 funderId = uint32(_walletCount());
-        vm.mockCall(
-            address(quests),
-            abi.encodeWithSelector(DegenerusQuests.handleFlip.selector, funderId),
-            abi.encode(uint256(70), uint8(2), uint32(1), true)
-        );
+        vm.prank(address(coinflip));
+        uint32 funderId=game.registerWallet(stranger,true);
+        _readyFlipQuest(funderId);
         _fundFlip(stranger, 10_000);
         before = _lane(target, smurfId);
         vm.recordLogs();
         vm.prank(stranger);
-        coinflip.depositCoinflip(smurfId, 1_000);
+        coinflip.depositCoinflip(smurfId, 2_000);
+        _checkExpectedQuest();
         logs = vm.getRecordedLogs();
         assertEq(_countFor(logs, address(coinflip), QUEST_COMPLETED, bytes32(uint256(_fixtureId(stranger)))), 1, "a gift's quest names the funder");
         assertEq(_countFor(logs, address(coinflip), QUEST_COMPLETED, bytes32(uint256(_fixtureId(smurfId)))), 0);
-        assertEq(_lane(target, smurfId) - before, 1_070, "the funder's quest reward joins S's stake");
+        assertEq(_lane(target, smurfId) - before, 2_100, "the funder's quest reward joins S's stake");
         assertEq(_gameId(stranger), funderId);
     }
 
@@ -322,12 +335,13 @@ contract CoinflipAccountsTest is DeployProtocol {
 
         vm.expectCall(GAME, abi.encodeCall(DegenerusGame.resolveAccount, (smurfId, stranger)), 1);
         vm.expectCall(GAME, abi.encodeCall(DegenerusGame.registerWallet, (stranger, true)), 1);
-        vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleFlip, (funderId, 250_000)), 1);
+        _expectedQuestId = funderId;
         vm.expectCall(address(quests), abi.encodeWithSelector(DegenerusQuests.handleFlip.selector, smurfId), 0);
         vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.consumeCoinflipBoon.selector), 0);
         vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.payRecordSdgnrs.selector), 0);
         vm.prank(stranger);
         coinflip.depositCoinflip(smurfId, 250_000);
+        _checkExpectedQuest();
 
         assertEq(coin.balanceOf(stranger), 50_000, "the funder paid the whole principal");
         assertEq(coin.balanceOf(owner), ownerFlip, "the owner's wallet is untouched");
@@ -360,12 +374,13 @@ contract CoinflipAccountsTest is DeployProtocol {
         coinflip.armBafDraw(target);
 
         vm.expectCall(GAME, abi.encodeCall(DegenerusGame.resolveAccount, (aid, operator)), 1);
-        vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleFlip, (aid, 250_000)), 1);
+        _expectedQuestId = aid;
         vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.registerWallet.selector), 0);
         vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.consumeCoinflipBoon.selector), 0);
         vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.payRecordSdgnrs.selector), 0);
         vm.prank(operator);
         coinflip.depositCoinflip(aid, 250_000);
+        _checkExpectedQuest();
 
         assertEq(coin.balanceOf(a), 50_000, "the account's FLIP paid");
         assertEq(coin.balanceOf(operator), 0);
@@ -388,10 +403,11 @@ contract CoinflipAccountsTest is DeployProtocol {
 
         vm.expectCall(GAME, abi.encodeCall(DegenerusGame.resolveAccount, (smurfId, operator)), 1);
         vm.expectCall(address(coin), abi.encodeWithSignature("burnForCoinflip(address,uint256)", owner, 250_000), 1);
-        vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleFlip, (smurfId, 250_000)), 1);
+        _expectedQuestId = smurfId;
         vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.consumeCoinflipBoon.selector), 0);
         vm.prank(operator);
         coinflip.depositCoinflip(smurfId, 250_000);
+        _checkExpectedQuest();
 
         assertEq(coin.balanceOf(owner), 50_000, "the smurf's payee paid");
         assertEq(coin.balanceOf(operator), 0);
@@ -415,9 +431,11 @@ contract CoinflipAccountsTest is DeployProtocol {
         vm.expectRevert(abi.encodeWithSignature("E()"));
         vm.prank(stranger);
         coinflip.depositCoinflip(unallocated, 1_000);
+        _checkExpectedQuest();
         vm.expectRevert(abi.encodeWithSignature("E()"));
         vm.prank(owner);
         coinflip.depositCoinflip(unallocated, 1_000);
+        _checkExpectedQuest();
         assertEq(coin.balanceOf(stranger), 10_000);
 
         address fresh = makeAddr("cfa_fresh");
@@ -425,6 +443,7 @@ contract CoinflipAccountsTest is DeployProtocol {
         uint32 expected = uint32(_walletCount());
         vm.prank(fresh);
         coinflip.depositCoinflip(0, 1_000);
+        _checkExpectedQuest();
         assertEq(_gameId(fresh), expected, "a paid self deposit allocates");
 
         vm.store(address(game), bytes32(GameSlots.WALLETS), bytes32(PAST_PAID_ADMISSION));
@@ -433,8 +452,10 @@ contract CoinflipAccountsTest is DeployProtocol {
         vm.expectRevert(abi.encodeWithSignature("E()"));
         vm.prank(late);
         coinflip.depositCoinflip(0, 1_000);
+        _checkExpectedQuest();
         vm.prank(owner);
         coinflip.depositCoinflip(smurfId, 1_000);
+        _checkExpectedQuest();
         assertEq(coin.balanceOf(owner), 9_000, "the owner still deposits for S past admission");
     }
 
@@ -458,6 +479,7 @@ contract CoinflipAccountsTest is DeployProtocol {
         vm.expectCall(address(quests), abi.encodeWithSelector(DegenerusQuests.handleFlip.selector), 0);
         vm.prank(stranger);
         coinflip.depositCoinflip(smurfId, 0);
+        _checkExpectedQuest();
 
         assertEq(_claimableStored(smurfId), payout, "S's win settled into S's state");
         assertEq(_lastClaim(smurfId), d + 2, "both days walked");
@@ -481,6 +503,7 @@ contract CoinflipAccountsTest is DeployProtocol {
         vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.registerWallet.selector), 0);
         vm.prank(GAME);
         coinflip.depositCoinflip(1, 0);
+        _checkExpectedQuest();
         assertEq(_lastClaim(VAULT), d + 1, "the vault's days settled");
         assertGt(_claimableStored(VAULT), 0, "the vault's seed win banked in its own state");
     }
@@ -580,6 +603,7 @@ contract CoinflipAccountsTest is DeployProtocol {
         _fundFlip(owner, 10_000);
         vm.prank(owner);
         coinflip.depositCoinflip(smurfId, 1_000);
+        _checkExpectedQuest();
         _warpToDay(d + 1);
         _resolveDay(d + 1, true);
 
@@ -611,6 +635,7 @@ contract CoinflipAccountsTest is DeployProtocol {
 
         vm.prank(operator);
         coinflip.depositCoinflip(smurfId, 1_000);
+        _checkExpectedQuest();
         _warpToDay(d + 2);
         _resolveDay(d + 2, true);
         preview = coinflip.previewClaimCoinflipsById(_fixtureId(smurfId));
@@ -643,6 +668,7 @@ contract CoinflipAccountsTest is DeployProtocol {
         _fundFlip(owner, 10_000);
         vm.prank(owner);
         coinflip.depositCoinflip(smurfId, 1_000);
+        _checkExpectedQuest();
         _warpToDay(d + 1);
         _resolveDay(d + 1, true);
 
@@ -719,6 +745,7 @@ contract CoinflipAccountsTest is DeployProtocol {
         vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.resolveAccount.selector), 0);
         vm.prank(p);
         coinflip.depositCoinflip(0, 1_000);
+        _checkExpectedQuest();
         _warpToDay(d + 1);
         _resolveDay(d + 1, true);
         vm.startPrank(p);
@@ -728,6 +755,7 @@ contract CoinflipAccountsTest is DeployProtocol {
         coinflip.claimCoinflipCarry(0, 1);
         coinflip.setCoinflipAutoRebuy(0, false, 0);
         coinflip.depositCoinflip(0, 0);
+        _checkExpectedQuest();
         vm.stopPrank();
         assertGt(coin.balanceOf(p), 9_000, "the self win paid the caller");
     }

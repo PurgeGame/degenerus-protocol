@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {QaTrace} from "../helpers/QaTrace.sol";
 import {PeripheralSlots} from "../helpers/PeripheralSlots.sol";
 
 import {CoinflipStorage} from "../helpers/CoinflipStorage.sol";
@@ -49,6 +50,7 @@ contract CoinflipWalletIdsTest is DeployProtocol {
     uint8 internal constant KIND_DICE_RUN = 4;
 
     function setUp() public {
+        vm.startMappingRecording();
         _deployProtocol();
     }
 
@@ -174,10 +176,12 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         assertEq(_gameId(p), 0);
 
         vm.expectCall(GAME, abi.encodeCall(DegenerusGame.registerWallet, (p, true)), 1);
-        vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleFlip, (expectedId, 1_000)), 1);
+        vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleFlip, (expectedId, 1_000)), 0);
         vm.recordLogs();
+        vm.startStateDiffRecording();
         vm.prank(p);
         coinflip.depositCoinflip(0, 1_000);
+        assertEq(QaTrace.questId(vm.stopAndReturnStateDiff(), address(coinflip)), expectedId, "internal quest uses credited wallet");
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         (uint256 n, uint32 rid, address owner) = _registrations(logs);
@@ -210,10 +214,12 @@ contract CoinflipWalletIdsTest is DeployProtocol {
 
         vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.registerWallet.selector), 0);
         vm.expectCall(GAME, abi.encodeCall(DegenerusGame.resolveAccount, (expectedId, o)), 1);
-        vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleFlip, (expectedId, 1_000)), 1);
+        vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleFlip, (expectedId, 1_000)), 0);
         vm.recordLogs();
+        vm.startStateDiffRecording();
         vm.prank(o);
         coinflip.depositCoinflip(expectedId, 1_000);
+        assertEq(QaTrace.questId(vm.stopAndReturnStateDiff(), address(coinflip)), expectedId, "internal quest uses credited wallet");
 
         (uint256 n,,) = _registrations(vm.getRecordedLogs());
         assertEq(n, 0, "no registration on an ID-addressed deposit");
@@ -250,10 +256,12 @@ contract CoinflipWalletIdsTest is DeployProtocol {
         vm.expectCall(GAME, abi.encodeCall(DegenerusGame.resolveAccount, (rid, f)), 1);
         vm.expectCall(GAME, abi.encodeWithSelector(DegenerusGame.registerWallet.selector, r), 0);
         vm.expectCall(GAME, abi.encodeCall(DegenerusGame.registerWallet, (f, true)), 1);
-        vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleFlip, (fid, 1_000)), 1);
+        vm.expectCall(address(quests), abi.encodeCall(DegenerusQuests.handleFlip, (fid, 1_000)), 0);
         vm.recordLogs();
+        vm.startStateDiffRecording();
         vm.prank(f);
         coinflip.depositCoinflip(rid, 1_000);
+        assertEq(QaTrace.questId(vm.stopAndReturnStateDiff(), address(coinflip)), fid, "internal quest uses credited wallet");
 
         (uint256 n, uint32 regId, address owner) = _registrations(vm.getRecordedLogs());
         assertEq(n, 1, "only the funder registers");
@@ -307,6 +315,27 @@ contract CoinflipWalletIdsTest is DeployProtocol {
     /// @notice A credit by ID to a wallet that never touched Coinflip shows in the views through
     ///         walletIdOf; claims resolve that canonical ID without allocation, record BAF by ID
     ///         and mint to the caller.
+    function test_TerminalSettledClaimPaysOwnerExactlyOnce() public {
+        address p = makeAddr("terminal_claim");
+        uint32 id = _giveWalletId(p);
+        uint24 day = _today() + 1;
+        vm.prank(GAME);
+        coinflip.creditFlip(id, 5000);
+        _warpToDay(day);
+        _resolve(day, true);
+        uint256 owed = coinflip.previewClaimCoinflips(p);
+        assertGt(owed, 5000);
+        bytes32 flags = bytes32(GameSlots.GAME_OVER);
+        vm.store(address(game), flags, vm.load(address(game), flags) | bytes32(uint256(1) << (8 * GameSlots.GAME_OVER_OFFSET)));
+        assertTrue(game.gameOver());
+        uint256 before_ = coin.balanceOf(p);
+        vm.prank(p);
+        assertEq(coinflip.claimCoinflips(0, type(uint256).max), owed);
+        assertEq(coin.balanceOf(p) - before_, owed);
+        vm.prank(p);
+        assertEq(coinflip.claimCoinflips(0, type(uint256).max), 0);
+    }
+
     function test_CreditById_VisibleBeforeFirstClaim_MintsToCaller() public {
         address p = makeAddr("credited_player");
         uint32 id = _giveWalletId(p);

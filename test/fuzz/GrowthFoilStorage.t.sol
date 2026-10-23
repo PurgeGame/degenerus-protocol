@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {QaSlots} from "../helpers/QaSlots.sol";
 
 import {GrowthFoilFixture} from "../gas/GrowthFoilHotPathGas.t.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
@@ -12,7 +13,7 @@ contract GrowthFoilStorageTest is GrowthFoilFixture {
         mintData = deity ? mintData | (uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT)
             : mintData & ~(uint256(1) << BitPackingLib.HAS_DEITY_PASS_SHIFT);
         vm.mockCall(address(game), abi.encodeWithSignature("mintPackedOfId(uint32)", pid), abi.encode(mintData));
-        vm.store(address(quests), keccak256(abi.encode(uint256(pid), uint256(1))), bytes32(uint256(afking ? 1 : 0) << 104));
+        vm.store(address(quests), keccak256(abi.encode(uint256(pid), QaSlots.STATE)), bytes32(uint256(afking ? 1 : 0) << 104));
         uint24 unitsLevel = uint24(mintData >> BitPackingLib.LEVEL_UNITS_LEVEL_SHIFT);
         bool activity = (unitsLevel == lvl || unitsLevel == lvl + 1) && uint16(mintData >> BitPackingLib.LEVEL_UNITS_SHIFT) >= 400;
         uint256 passType = (mintData >> BitPackingLib.WHALE_PASS_TYPE_SHIFT) & 3;
@@ -32,7 +33,7 @@ contract GrowthFoilStorageTest is GrowthFoilFixture {
     function test_FoilZeroSpendStillSyncsAndFloors() public {
         (, , , uint32 snapshot, ) = _foil(0);
         assertEq(snapshot, 0);
-        bytes32 word = vm.load(address(quests), keccak256(abi.encode(uint256(pid), uint256(1))));
+        bytes32 word = vm.load(address(quests), keccak256(abi.encode(uint256(pid), QaSlots.STATE)));
         assertEq(uint24(uint256(word) >> 48), DAY);
         assertEq(uint16(uint256(word) >> 72), 12);
     }
@@ -54,7 +55,7 @@ contract GrowthFoilStorageTest is GrowthFoilFixture {
             | (uint256(uint16(seed >> 72)) << 160) | (uint256(uint16(seed >> 88)) << 176)
             | (((seed >> 104) & 3) << 192) | (uint256(uint8(seed >> 112)) << 200)
             | (uint256(uint8(seed >> 120)) << 208);
-        bytes32 playerWord = keccak256(abi.encode(uint256(pid), uint256(1)));
+        bytes32 playerWord = keccak256(abi.encode(uint256(pid), QaSlots.STATE));
         vm.store(address(quests), playerWord, bytes32(word));
         if ((seed & 8) != 0) _mintData(ELIGIBLE);
         // Days between the old anchor and today are actual rolled days, so lapse
@@ -69,7 +70,7 @@ contract GrowthFoilStorageTest is GrowthFoilFixture {
         vm.recordLogs(); vm.prank(address(game));
         (bool okNew, bytes memory retNew) = address(quests).call(callData);
         bytes32 logsNew = keccak256(abi.encode(vm.getRecordedLogs()));
-        bytes32 levelWord = keccak256(abi.encode(uint256(pid), uint256(2)));
+        bytes32 levelWord = keccak256(abi.encode(uint256(pid), QaSlots.LEVEL));
         bytes32 stateNew = keccak256(abi.encode(
             vm.load(address(quests), playerWord), vm.load(address(quests), levelWord)
         ));

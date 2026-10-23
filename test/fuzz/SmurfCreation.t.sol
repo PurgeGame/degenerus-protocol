@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {QaSlots} from "../helpers/QaSlots.sol";
 
 import {Vm} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -24,7 +25,7 @@ contract SmurfCreation is DeployProtocol {
     bytes32 private constant ENTRIES_BOUGHT = keccak256("EntriesBought(uint32,uint256,uint256)");
 
     /// @dev DegenerusAffiliate.playerReferralCode root (scripts/layout/golden/DegenerusAffiliate.json).
-    uint256 private constant AFF_REFERRAL_ROOT = 2;
+    uint256 private constant AFF_REFERRAL_ROOT = QaSlots.REFERRAL;
     bytes32 private constant REF_LOCKED = bytes32(uint256(1));
     uint32 private constant VAULT_ID = 1;
 

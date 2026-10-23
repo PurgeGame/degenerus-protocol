@@ -12,9 +12,16 @@ for (const [file, bounded, affiliate] of [
   let text = fs.readFileSync(file, 'utf8');
   const lines = [start, '        (address[] memory owners, bytes32[] memory codes, uint8[] memory kicks,',
     `            address[] memory players, bytes32[] memory refs) = ${affiliate};`];
-  for (const row of DEPLOYMENTS) {
-    const args = row.key === 'ICONS_32' ? 'false' : row.key === 'AFFILIATE' ? 'owners, codes, kicks, players, refs' : '';
-    const fromArtifact = bounded || ['DegenerusGamePassModule', 'DegenerusGameEndgameModule'].includes(row.fixtureType);
+  let previousOffset = -1;
+  for (const [index,row] of DEPLOYMENTS.entries()) {
+    const offset = row.nonceOffset ?? index;
+    const gap = offset - previousOffset - 1;
+    if (gap) lines.push(`        vm.setNonce(address(this), vm.getNonce(address(this)) + ${gap}); // retired deployment nonce; retain token addresses`);
+    previousOffset = offset;
+    if (file === 'test/fuzz/helpers/DeployProtocol.sol' && row.key === 'VAULT')
+      lines.push('        _beforeProtocolSubscriptions();');
+    const args = row.key === 'ICONS_32' ? 'false' : row.key === 'COINFLIP' ? 'owners, codes, kicks, players, refs' : '';
+    const fromArtifact = true; // Keep one compiled production artifact per deployment, including the large QA host.
     const creation = fromArtifact ? `${row.fixtureType}(payable(deployCode("${row.fixtureType}.sol:${row.fixtureType}", abi.encode(${args}))))` : `new ${row.fixtureType}(${args})`;
     lines.push(`        ${row.fixtureField} = ${creation};`);
   }

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {QaSlots} from "../helpers/QaSlots.sol";
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -10,8 +11,8 @@ import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 /// @notice Regression coverage for unrolled quest days and AFKing deliveries across an
 ///         unadvanced calendar gap. Test-only storage reads use compiler-derived packed offsets.
 contract QuestStreakStallForgiveness is DeployProtocol {
-    uint256 private constant QUEST_STATE_SLOT = 1;
-    uint256 private constant QUEST_BITMAP_SLOT = 3;
+    uint256 private constant QUEST_STATE_SLOT = QaSlots.STATE;
+    uint256 private constant QUEST_BITMAP_SLOT = QaSlots.ROLLED;
     uint256 private constant OFF_LAST_ACTIVE = 3;
     uint256 private constant OFF_LAST_SYNC = 6;
     uint256 private constant OFF_STREAK = 9;
@@ -500,7 +501,7 @@ contract QuestStreakStallForgiveness is DeployProtocol {
     }
 
     function _activeQuestDay() private view returns (uint24) {
-        return uint24(uint256(vm.load(address(quests), bytes32(0))));
+        return uint24(uint256(vm.load(address(quests), bytes32(uint256(QaSlots.ACTIVE)))));
     }
 
     function _questWord(address player) private view returns (uint256) {

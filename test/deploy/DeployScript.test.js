@@ -6,7 +6,7 @@ import {
   deployFullProtocol,
   restoreAddresses,
 } from "../helpers/deployFixture.js";
-import { DEPLOY_ORDER } from "../../scripts/lib/predictAddresses.js";
+import { DEPLOY_ORDER, DEPLOYMENTS } from "../../scripts/lib/predictAddresses.js";
 import { ZERO_ADDRESS } from "../helpers/testUtils.js";
 
 const deployDegenesisProtocol = () => deployFullProtocol({ degenesis: true });
@@ -18,7 +18,7 @@ describe("Deploy Pipeline", function () {
 
   it("deploys every contract at its predicted address", async function () {
     const f = await loadFixture(deployFullProtocol);
-    expect(f.deployedAddrs.size).to.equal(DEPLOY_ORDER.length);
+    expect(f.deployedAddrs.size).to.equal(f.predicted.size);
 
     for (const [key, predicted] of f.predicted) {
       const actual = f.deployedAddrs.get(key);
@@ -26,6 +26,16 @@ describe("Deploy Pipeline", function () {
         predicted.toLowerCase(),
         `Address mismatch for ${key}`
       );
+    }
+  });
+
+  it("hosts Quests and Affiliate on Coinflip and leaves reserved addresses empty", async function () {
+    const f = await loadFixture(deployFullProtocol);
+    expect(await f.quests.getAddress()).to.equal(await f.coinflip.getAddress());
+    expect(await f.affiliate.getAddress()).to.equal(await f.coinflip.getAddress());
+    for (const offset of [6, 10]) {
+      const address = hre.ethers.getCreateAddress({ from: f.deployer.address, nonce: f.startingNonce + offset });
+      expect(await hre.ethers.provider.getCode(address)).to.equal("0x");
     }
   });
 
@@ -38,17 +48,18 @@ describe("Deploy Pipeline", function () {
   it("the Degenesis fixture deploys on day index 1 at the predicted addresses", async function () {
     const f = await loadFixture(deployDegenesisProtocol);
     expect(await f.game.currentDayView()).to.equal(1n);
-    expect(f.deployedAddrs.size).to.equal(DEPLOY_ORDER.length);
+    expect(f.deployedAddrs.size).to.equal(f.predicted.size);
     for (const [key, predicted] of f.predicted) {
       expect(f.deployedAddrs.get(key).toLowerCase()).to.equal(predicted.toLowerCase(), `Address mismatch for ${key}`);
     }
   });
 
-  it("deployer nonce covers every deployment and one combined genesis transaction", async function () {
+  it("deployer nonce covers deployments, reserved addresses and combined genesis", async function () {
     const f = await loadFixture(deployFullProtocol);
     const endNonce = await f.deployer.getNonce();
-    // Genesis runs after all predicted CREATEs and consumes one additional nonce.
-    expect(endNonce - f.startingNonce).to.equal(DEPLOY_ORDER.length + 1);
+    // Reserved nonce gaps preserve token addresses; genesis consumes one more nonce.
+    const last = DEPLOYMENTS.at(-1).nonceOffset ?? DEPLOY_ORDER.length - 1;
+    expect(endNonce - f.startingNonce).to.equal(last + 2);
   });
 
   it("initializes both real protocol passes within the transaction gas cap", async function () {

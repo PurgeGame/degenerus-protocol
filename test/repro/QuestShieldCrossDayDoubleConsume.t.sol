@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {QaSlots} from "../helpers/QaSlots.sol";
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -27,7 +28,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 ///         QuestStreakStallForgiveness.t.sol).
 contract QuestShieldCrossDayDoubleConsume is DeployProtocol {
     // PlayerQuestState packed layout in questPlayerState mapping (base slot 1).
-    uint256 private constant QUEST_STATE_SLOT = 1;
+    uint256 private constant QUEST_STATE_SLOT = QaSlots.STATE;
     uint256 private constant OFF_STREAK = 9; // uint16 streak
     uint256 private constant OFF_SHIELD = 25; // uint8 streakShield
 

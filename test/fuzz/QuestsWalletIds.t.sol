@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {QaSlots} from "../helpers/QaSlots.sol";
 
+import {QaTrace} from "../helpers/QaTrace.sol";
 import {Vm, VmSafe} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -15,10 +17,10 @@ import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 ///         every handler is revert-free for its authorized caller whatever the ID.
 contract QuestsWalletIdsTest is DeployProtocol {
     // DegenerusQuests roots (scripts/layout/golden/DegenerusQuests.json).
-    uint256 private constant ACTIVE_ROOT = 0;
-    uint256 private constant STATE_ROOT = 1;
-    uint256 private constant LEVEL_ROOT = 2;
-    uint256 private constant BITMAP_ROOT = 3;
+    uint256 private constant ACTIVE_ROOT = QaSlots.ACTIVE;
+    uint256 private constant STATE_ROOT = QaSlots.STATE;
+    uint256 private constant LEVEL_ROOT = QaSlots.LEVEL;
+    uint256 private constant BITMAP_ROOT = QaSlots.ROLLED;
     // PlayerQuestState byte offsets.
     uint256 private constant OFF_LAST_SYNC = 6;
     uint256 private constant OFF_STREAK = 9;
@@ -47,6 +49,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
     uint256 private price;
 
     function setUp() public {
+        vm.startMappingRecording();
         _deployProtocol();
         (,,,, price) = game.purchaseInfo();
     }
@@ -195,15 +198,24 @@ contract QuestsWalletIdsTest is DeployProtocol {
     }
 
     /// @dev Every Quests write landed in wallet `id`'s two ID-keyed records.
-    function _assertWritesUnder(bytes32[] memory writes, uint32 id) private pure {
-        assertGt(writes.length, 0, "the handler wrote state");
+    function _assertWritesUnder(bytes32[] memory writes, uint32 id) private view {
+        bool seen;
         for (uint256 i; i < writes.length; ++i) {
-            assertTrue(writes[i] == _stateSlot(id) || writes[i] == _levelSlot(id), "write outside the wallet's records");
+            (bool questWrite, uint32 key) = QaTrace.questKey(address(quests),writes[i]);
+            if (!questWrite) continue; // Coinflip and Affiliate share this execution account.
+            seen = true;
+            assertEq(key,id,"quest write outside the wallet's records");
+            assertTrue(writes[i] == _stateSlot(id) || writes[i] == _levelSlot(id));
         }
+        assertTrue(seen,"the handler wrote quest state");
     }
 
     /// @dev The first argument of the only matching call.
     function _onlyId(Vm.AccountAccess[] memory acc, address from, bytes4 sel) private view returns (uint32 id) {
+        if (from == address(quests)) {
+            assertEq(_calls(acc, from, address(quests), sel).length,0,"internal handler has no self call");
+            return QaTrace.questId(acc,address(quests));
+        }
         bytes[] memory c = _calls(acc, from, address(quests), sel);
         assertEq(c.length, 1, "one handler call");
         id = uint32(uint256(bytes32(c[0])));
@@ -211,7 +223,7 @@ contract QuestsWalletIdsTest is DeployProtocol {
 
     /// @dev Quests credited `amount` to `id`, and every Quests credit in the window went to `id`.
     function _assertQuestCredit(Vm.AccountAccess[] memory acc, uint32 id, uint256 amount) private view {
-        bytes[] memory c = _calls(acc, address(quests), address(coinflip), coinflip.creditFlip.selector);
+        bytes[] memory c = QaTrace.credits(acc,address(coinflip));
         bool found;
         for (uint256 i; i < c.length; ++i) {
             (uint32 cid, uint256 amt) = abi.decode(c[i], (uint32, uint256));
@@ -536,9 +548,9 @@ contract QuestsWalletIdsTest is DeployProtocol {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         _assertQuestCredit(acc, upid, 800);
         assertEq(_countTopic(logs, E_LEVEL, upid), 1);
-        bytes[] memory aff = _calls(acc, address(affiliate), address(coinflip), coinflip.creditFlip.selector);
-        assertEq(aff.length, 1);
-        (uint32 cid, uint256 amt) = abi.decode(aff[0], (uint32, uint256));
+        bytes[] memory aff = QaTrace.affiliateCredits(acc,address(coinflip));
+        assertEq(aff.length, 2,"level reward then affiliate share");
+        (uint32 cid, uint256 amt) = abi.decode(aff[1], (uint32, uint256));
         assertEq(cid, upid, "the affiliate share goes to the upline's ID");
         assertGe(amt, 6_000);
     }

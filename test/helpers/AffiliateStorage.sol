@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {QaSlots} from "./QaSlots.sol";
 
 import {Vm} from "forge-std/Vm.sol";
 
@@ -9,7 +10,7 @@ library AffiliateStorage {
     uint256 private constant CAP = (uint256(1) << 35) - 1;
 
     function slot(uint32 id) internal pure returns (bytes32) {
-        return keccak256(abi.encode(uint256(id), uint256(1)));
+        return keccak256(abi.encode(uint256(id), uint256(QaSlots.EARNED)));
     }
 
     function set(address target, uint32 id, uint24 level, uint256 amount) internal {

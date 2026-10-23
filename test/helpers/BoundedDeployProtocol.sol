@@ -83,11 +83,11 @@ abstract contract BoundedDeployProtocol is DeployProtocol {
         passModule = DegenerusGamePassModule(payable(deployCode("DegenerusGamePassModule.sol:DegenerusGamePassModule", abi.encode())));
         boxModule = DegenerusGameBoxModule(payable(deployCode("DegenerusGameBoxModule.sol:DegenerusGameBoxModule", abi.encode())));
         coin = FLIP(payable(deployCode("FLIP.sol:FLIP", abi.encode())));
-        coinflip = Coinflip(payable(deployCode("Coinflip.sol:Coinflip", abi.encode())));
+        vm.setNonce(address(this), vm.getNonce(address(this)) + 1); // retired deployment nonce; retain token addresses
         game = DegenerusGame(payable(deployCode("DegenerusGame.sol:DegenerusGame", abi.encode())));
-        affiliate = DegenerusAffiliate(payable(deployCode("DegenerusAffiliate.sol:DegenerusAffiliate", abi.encode(owners, codes, kicks, players, refs))));
+        coinflip = Coinflip(payable(deployCode("Coinflip.sol:Coinflip", abi.encode(owners, codes, kicks, players, refs))));
         jackpots = DegenerusJackpots(payable(deployCode("DegenerusJackpots.sol:DegenerusJackpots", abi.encode())));
-        quests = DegenerusQuests(payable(deployCode("DegenerusQuests.sol:DegenerusQuests", abi.encode())));
+        vm.setNonce(address(this), vm.getNonce(address(this)) + 1); // retired deployment nonce; retain token addresses
         deityPass = DegenerusDeityPass(payable(deployCode("DegenerusDeityPass.sol:DegenerusDeityPass", abi.encode())));
         vault = DegenerusVault(payable(deployCode("DegenerusVault.sol:DegenerusVault", abi.encode())));
         sdgnrs = sDGNRS(payable(deployCode("sDGNRS.sol:sDGNRS", abi.encode())));
@@ -117,6 +117,8 @@ abstract contract BoundedDeployProtocol is DeployProtocol {
         afkingModule = GameAfkingModule(payable(address(boxModule)));
         bingoModule = DegenerusGameBingoModule(payable(address(game)));
         minerModule = DegenerusGameMinerModule(payable(address(game)));
+        affiliate = DegenerusAffiliate(payable(address(coinflip)));
+        quests = DegenerusQuests(payable(address(coinflip)));
         crapsEngine = CrapsEngine(payable(address(crapsBattle)));
         jackpotBattle = JackpotBattle(payable(address(crapsBattle)));
         // END CANONICAL DEPLOYMENTS

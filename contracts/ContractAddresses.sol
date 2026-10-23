@@ -60,7 +60,7 @@ library ContractAddresses {
     address internal constant COIN =
         address(0xD6BbDE9174b1CdAa358d2Cf4D57D1a9F7178FBfF);
     address internal constant COINFLIP =
-        address(0x15cF58144EF33af1e14b5208015d11F9143E27b9);
+        address(0x2a07706473244BC757E10F2a9E86fB532828afe3);
     address internal constant VAULT =
         address(0x13aa49bAc059d709dd0a18D6bb63290076a702D7);
     address internal constant AFFILIATE =
@@ -68,7 +68,7 @@ library ContractAddresses {
     address internal constant JACKPOTS =
         address(0x3D7Ebc40AF7092E3F1C81F2e996cbA5Cae2090d7);
     address internal constant QUESTS =
-        address(0xD16d567549A2a2a2005aEACf7fB193851603dd70);
+        address(0x2a07706473244BC757E10F2a9E86fB532828afe3);
     address internal constant GAME =
         address(0x212224D2F2d262cd093eE13240ca4873fcCBbA3C);
     address internal constant SDGNRS =

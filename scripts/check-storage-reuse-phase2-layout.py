@@ -53,6 +53,8 @@ print("Phase 2 layout: tagged five-word jackpot records, packed queue counts, pi
 import re
 pin_source = Path("test/helpers/PeripheralSlots.sol").read_text()
 pins = {k: int(v) for k,v in re.findall(r"constant (\w+) = (\d+);", pin_source)}
+if "constant AFF_LEVEL_SCORE = QaSlots.SCORE;" in pin_source:
+    pins["AFF_LEVEL_SCORE"] = int(json.loads(Path("scripts/consolidation/xa-namespaces.json").read_text())["affiliate"]["root"],16) + 3
 expected_pins = {'SD_BATCHES': {'contract': 'sDGNRS', 'label': '_redemptionBatches', 'field': 'slot', 'expected': 10}, 'SD_BATCH_PLAYERS': {'contract': 'sDGNRS', 'label': '_batchPlayers', 'field': 'slot', 'expected': 8}, 'SD_BATCH_COUNTS': {'contract': 'sDGNRS', 'label': '_batchPlayerCounts', 'field': 'slot', 'expected': 6}, 'AFF_LEVEL_SCORE': {'contract': 'DegenerusAffiliate', 'label': '_levelScore', 'field': 'slot', 'expected': 3}, 'CR_DAY_TICKETS': {'contract': 'CrapsBattle', 'label': '_dayTickets', 'field': 'slot', 'expected': 15}, 'CR_DAY_STAKED': {'contract': 'CrapsBattle', 'label': '_dayStaked', 'field': 'slot', 'expected': 79}, 'CR_BOOST_BUDGET': {'contract': 'CrapsBattle', 'label': '_boostBudget', 'field': 'slot', 'expected': 143}, 'CR_DAY_SEATED': {'contract': 'CrapsBattle', 'label': '_daySeated', 'field': 'slot', 'expected': 2833}, 'GNR_APPROVE_WEIGHT': {'contract': 'GNRUS', 'label': '_slotApproveWeight', 'field': 'slot', 'expected': 45}, 'WW_DRAW_HEADER': {'contract': 'WWXRP', 'label': '_drawHeader', 'field': 'slot', 'expected': 9}, 'WW_DRAW_ENTRY': {'contract': 'WWXRP', 'label': '_drawEntry', 'field': 'slot', 'expected': 3}, 'WW_INCIN_HEADER': {'contract': 'WWXRP', 'label': '_incinHeader', 'field': 'slot', 'expected': 39}, 'WW_INCIN_ENTRY': {'contract': 'WWXRP', 'label': '_incinEntry', 'field': 'slot', 'expected': 5}, 'WW_DAY_CLAIMED': {'contract': 'WWXRP', 'label': '_dayClaimed', 'field': 'slot', 'expected': 4}, 'WW_CLAIMABLE': {'contract': 'WWXRP', 'label': '_claimable', 'field': 'slot', 'expected': 8}, 'JP_BAF_TOP': {'contract': 'DegenerusJackpots', 'label': 'bafTop', 'field': 'slot', 'expected': 3}, 'JP_BAF_LEVEL': {'contract': 'DegenerusJackpots', 'label': 'bafLevel', 'field': 'slot', 'expected': 1}, 'JP_BAF_BANK_LEVELS': {'contract': 'DegenerusJackpots', 'label': 'bafTopLevels', 'field': 'slot', 'expected': 2}, 'CENSUS_DIRECT_END': {'contracts': ['DegenerusGame', 'CrapsBattle', 'JackpotBattle', 'sDGNRS', 'DegenerusAffiliate', 'DegenerusJackpots', 'GNRUS', 'WWXRP'], 'field': 'max_storage_end', 'expected': 2849}}
 assert set(pins) == set(expected_pins), (set(pins), set(expected_pins))
 for constant, specification in expected_pins.items():
@@ -64,7 +66,15 @@ for constant, specification in expected_pins.items():
                 value = max(value, int(row["slot"]) + (int(data["types"][row["type"]]["numberOfBytes"]) + 31) // 32)
     else:
         data = layout(specification["contract"])
-        row = next(r for r in data["storage"] if r["label"] == specification["label"])
-        value = int(row[specification["field"]])
+        if specification["contract"] == "DegenerusAffiliate" and not data["storage"]:
+            probe = json.loads((out / "XaLayout.sol" / "XaAffiliateLayout.json").read_text())["storageLayout"]
+            record = probe["types"][probe["storage"][0]["type"]]
+            row = next(r for r in record["members"] if r["label"] == specification["label"])
+            root = int(json.loads(Path("scripts/consolidation/xa-namespaces.json").read_text())["affiliate"]["root"], 16)
+            value = root + int(row["slot"])
+            specification = dict(specification, expected=root + specification["expected"])
+        else:
+            row = next(r for r in data["storage"] if r["label"] == specification["label"])
+            value = int(row[specification["field"]])
     assert pins[constant] == value == specification["expected"], (constant, pins[constant], value, specification)
     print("Compiler pin:", constant, value)

@@ -4,6 +4,7 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   predictAddresses,
+  reserveDeploymentNonces,
   computeDeployDayBoundary,
   DEPLOY_ORDER,
   expandAliases,
@@ -116,6 +117,7 @@ async function main() {
     }
 
     for (const key of DEPLOY_ORDER) {
+      await reserveDeploymentNonces(deployer,key,startingNonce);
       const contractName = KEY_TO_CONTRACT[key];
       const args = getConstructorArgs(
         key,
@@ -130,6 +132,8 @@ async function main() {
       deployedAddrs.set(key, addr);
       console.log(` ${addr}`);
     }
+
+    for (const [alias, address] of expandAliases(deployedAddrs)) deployedAddrs.set(alias, address);
 
     // Verify addresses match predictions
     verifyAddresses(predicted, deployedAddrs);
@@ -283,7 +287,7 @@ async function main() {
     }
 
     // Protocol contract ABIs
-    const allContracts = new Set();
+    const allContracts = new Set(["DegenerusQuests", "DegenerusAffiliate"]);
     for (const name of Object.values(KEY_TO_CONTRACT)) {
       allContracts.add(name);
     }
@@ -355,7 +359,7 @@ function getConstructorArgs(
     return [];
   }
   if (key === "ICONS_32") return [process.env.ICONS32_FINALIZE === "1"];
-  if (key === "AFFILIATE") {
+  if (key === "COINFLIP") {
     return [
       affiliateBootstrap.owners,
       affiliateBootstrap.codes,

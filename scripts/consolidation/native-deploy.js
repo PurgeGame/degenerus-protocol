@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { JsonRpcProvider, ContractFactory, getCreateAddress } from 'ethers';
 import { DEPLOYMENTS } from '../lib/deploymentManifest.js';
-import { predictAddresses, computeDeployDayBoundary } from '../lib/predictAddresses.js';
+import { predictAddresses, computeDeployDayBoundary, reserveDeploymentNonces } from '../lib/predictAddresses.js';
 import { patchContractAddresses } from '../lib/patchContractAddresses.js';
 import { wireIcons32 } from '../lib/deployHelpers.js';
 const [mode, rpc, directory] = process.argv.slice(2);
@@ -64,7 +64,10 @@ if (mode === 'prepare') {
     console.log(`${key}: gasUsed=${receipt.gasUsed} ${address}`);
   }
   for(const name of mocks) await deploy(name,name,name==='MockLinkEthFeed'?[4_000_000_000_000_000n]:[],manifest.mockAddresses[name]);
-  for(const row of DEPLOYMENTS) await deploy(row.key,row.contract,row.key==='ICONS_32'?[true]:row.key==='AFFILIATE'?[[],[],[],[],[]]:[],manifest.predicted[row.key]);
+  for(const row of DEPLOYMENTS) {
+    await reserveDeploymentNonces(signer,row.key,manifest.nonce+mocks.length);
+    await deploy(row.key,row.contract,row.key==='ICONS_32'?[true]:row.key==='COINFLIP'?[[],[],[],[],[]]:[],manifest.predicted[row.key]);
+  }
   for(const row of DEPLOYMENTS) for(const alias of row.aliases) contracts[alias]=contracts[row.key];
   stage = 'deity-bootstrap';
   const genesis=await (await contracts.GAME.initProtocolDeity({gasLimit:500_000_000})).wait();

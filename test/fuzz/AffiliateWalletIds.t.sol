@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {QaSlots} from "../helpers/QaSlots.sol";
 import {PeripheralSlots} from "../helpers/PeripheralSlots.sol";
 
+import {QaTrace} from "../helpers/QaTrace.sol";
 import {Vm, VmSafe} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -17,9 +19,9 @@ import {DegeneretteReference as Ref} from "../helpers/DegeneretteReference.sol";
 /// @notice Real deployment fixture with constructor-registered affiliate owners and referrals.
 abstract contract AffiliateIdFixture is DeployProtocol {
     // DegenerusAffiliate roots (scripts/layout/golden/DegenerusAffiliate.json).
-    uint256 internal constant CODE_ROOT = 0;
-    uint256 internal constant EARNED_ROOT = 1;
-    uint256 internal constant REFERRAL_ROOT = 2;
+    uint256 internal constant CODE_ROOT = QaSlots.CODE;
+    uint256 internal constant EARNED_ROOT = QaSlots.EARNED;
+    uint256 internal constant REFERRAL_ROOT = QaSlots.REFERRAL;
     uint256 internal constant LEVEL_SCORE_ROOT = PeripheralSlots.AFF_LEVEL_SCORE;
     uint256 internal constant SYNTHETIC_ENDPOINT = 10_000;
 
@@ -77,6 +79,7 @@ abstract contract AffiliateIdFixture is DeployProtocol {
     }
 
     function setUp() public virtual {
+        vm.startMappingRecording();
         vm.recordLogs();
         _deployProtocol();
         Vm.Log[] memory deployed = vm.getRecordedLogs();
@@ -373,19 +376,7 @@ abstract contract AffiliateIdFixture is DeployProtocol {
     /// @dev The affiliate's FLIP credits in execution order, one (ID, amount) argument blob per
     ///      credited leg: single credits as-is, paired credits split into their nonzero legs.
     function _affiliateCredits(Vm.AccountAccess[] memory acc) internal view returns (bytes[] memory found) {
-        found = new bytes[](acc.length * 2);
-        uint256 n;
-        for (uint256 i; i < acc.length; ++i) {
-            if (_match(acc[i], address(affiliate), address(coinflip), coinflip.creditFlip.selector)) {
-                found[n++] = _args(acc[i].data);
-            } else if (_match(acc[i], address(affiliate), address(coinflip), coinflip.creditFlipPair.selector)) {
-                (uint32 id1, uint256 a1, uint32 id2, uint256 a2) =
-                    abi.decode(_args(acc[i].data), (uint32, uint256, uint32, uint256));
-                if (id1 != 0 && a1 != 0) found[n++] = abi.encode(id1, a1);
-                if (id2 != 0 && a2 != 0) found[n++] = abi.encode(id2, a2);
-            }
-        }
-        assembly ("memory-safe") { mstore(found, n) }
+        return QaTrace.affiliateCredits(acc,address(coinflip));
     }
 
     function _firstIndex(Vm.AccountAccess[] memory acc, address from, address to, bytes4 sel)
@@ -590,6 +581,35 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
     // 1. Code info is one slot
     // =====================================================================
 
+    function test_TerminalPermissionlessClaimPreservesFrozenBaseAndPaysNothing() public {
+        uint32 sid = _giveWalletId(P_D);
+        _seedBase(sid, 1400);
+        // Prove the fixture owes a nonzero base before entering the terminal state.
+        uint256 snapshot = vm.snapshotState();
+        vm.recordLogs();
+        _claim(P_D);
+        assertEq(_staked(vm.getRecordedLogs(), _id(OWN_D)), 1050);
+        assertTrue(vm.revertToState(snapshot));
+        bytes32 flags = bytes32(GameSlots.GAME_OVER);
+        vm.store(address(game), flags, vm.load(address(game), flags) | bytes32(uint256(1) << (8 * GameSlots.GAME_OVER_OFFSET)));
+        assertTrue(game.gameOver());
+        vm.warp(block.timestamp + 365 days); // terminal time must also satisfy the liveness trigger
+        (uint256 beforeLane, uint256 beforePosition) = GameSlotKeys.subLane(address(game), sid);
+        for (uint256 i; i < 2; ++i) {
+            vm.recordLogs();
+            vm.prank(address(0xBAD));
+            _claim(P_D);
+            Vm.Log[] memory logs = vm.getRecordedLogs();
+            assertEq(_staked(logs, _id(OWN_D)), 0);
+            assertEq(_staked(logs, 1), 0);
+            assertEq(_staked(logs, 2), 0);
+            (uint256 lane, uint256 position) = GameSlotKeys.subLane(address(game), sid);
+            assertEq(lane, beforeLane, "terminal claim cannot drain the frozen base");
+            assertEq(position, beforePosition);
+        }
+        assertEq(_id(address(0xBAD)), 0, "claim caller never becomes a recipient");
+    }
+
     function test_CodeInfoIsOneSlotWithFieldOffsets() public {
         address up = makeAddr("infoUpline");
         address owner = makeAddr("infoOwner");
@@ -753,6 +773,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         bytes32 forged = bytes32(uint256(low) | (uint256(hi) << 160));
         address buyer = makeAddr("forgedFuzz");
         uint32 before = _id(address(low));
+        _giveWalletId(buyer);
         vm.startStateDiffRecording();
         (uint32 w,,) = _payCombined(forged, buyer, senderId, 1, 4000);
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
@@ -1050,7 +1071,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
         assertTrue(seen[0] && seen[1] && seen[2], "every roll class exercised");
         assertEq(_extsloads(acc), 0, "no extsload");
         assertEq(_registrations(acc), 0, "no registerWallet");
-        bytes[] memory credits = _calls(acc, address(affiliate), address(coinflip), coinflip.creditFlip.selector);
+        bytes[] memory credits = _affiliateCredits(acc);
         assertGt(credits.length, 0);
         for (uint256 i; i < credits.length; ++i) {
             (uint32 id,) = abi.decode(credits[i], (uint32, uint256));
@@ -1159,7 +1180,7 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
             uint256 kb = _pay(4000, bytes32(0), b, sid, 1);
             Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
             assertEq(kb, 0);
-            bytes[] memory credits = _calls(acc, address(affiliate), address(coinflip), coinflip.creditFlip.selector);
+            bytes[] memory credits = _affiliateCredits(acc);
             assertEq(credits.length, 1);
             _assertCredit(credits[0], parity == 0 ? 1 : 2, 1000);
             assertEq(_calls(acc, address(affiliate), address(quests), quests.handleAffiliate.selector).length, 0);
@@ -1184,29 +1205,22 @@ contract AffiliateWalletIdsTest is AffiliateIdFixture {
             Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
             Vm.Log[] memory logs = vm.getRecordedLogs();
             assertEq(kb, 100, "10% kickback of 1000");
-            uint256 hop = _firstIndex(acc, address(affiliate), address(quests), quests.handleAffiliate.selector);
-            uint256 credit = _firstIndex(acc, address(affiliate), address(coinflip), coinflip.creditFlip.selector);
-            assertLt(hop, credit, "quest hop precedes the credit");
-            bytes[] memory h = _calls(acc, address(affiliate), address(quests), quests.handleAffiliate.selector);
-            assertEq(h.length, 1);
-            (uint32 hid, uint256 hamt) = abi.decode(h[0], (uint32, uint256));
-            assertEq(hid, w, "quest hop by winner ID");
-            assertEq(hamt, 900, "share after kickback");
-            bytes[] memory c = _calls(acc, address(affiliate), address(coinflip), coinflip.creditFlip.selector);
+            (uint256 hop, uint256 credit) = QaTrace.order(acc,address(coinflip),w);
+            assertLt(hop,credit,"quest state precedes the credit");
+            assertEq(QaTrace.questId(acc,address(coinflip)),w,"quest effect by winner ID");
+            bytes[] memory c = _affiliateCredits(acc);
             assertEq(c.length, 1);
             uint256 expected = 900 + _questRewards(logs, w);
             _assertCredit(c[0], w, expected);
             assertEq(_staked(logs, w), expected, "winner's ID lane");
         }
-        // The quest hop's reward joins the winner's credit.
-        uint32 sid0 = _senderFor(bytes32("QHOP"), 0, 13_000_000);
-        vm.mockCall(
-            address(quests),
-            abi.encodeWithSelector(quests.handleAffiliate.selector, winners[0], uint256(900)),
-            abi.encode(uint256(77), uint8(3), uint32(0), true)
-        );
-        vm.expectCall(address(coinflip), abi.encodeCall(coinflip.creditFlip, (winners[0], uint256(977))));
-        _pay(4000, bytes32(0), b, sid0, 1);
+        // Same-day repeats cannot pay the completed quest again; only the share is credited.
+        uint32 sid0 = _senderFor(bytes32("QHOP"),0,13_000_000);
+        vm.recordLogs();
+        _pay(4000,bytes32(0),b,sid0,1);
+        Vm.Log[] memory repeatLogs=vm.getRecordedLogs();
+        assertEq(_questRewards(repeatLogs,winners[0]),0);
+        assertEq(_staked(repeatLogs,winners[0]),900);
     }
 
     function test_MutualReferralUplineIsSenderPaysNothing() public {

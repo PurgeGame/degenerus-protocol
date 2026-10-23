@@ -10,6 +10,9 @@ import {DegenerusGameDecimatorModule} from "../../contracts/modules/DegenerusGam
 import {DegenerusGameDegenesisModule} from "../../contracts/modules/DegenerusGameDegenesisModule.sol";
 import {DegenerusGameFoilPackModule} from "../../contracts/modules/DegenerusGameFoilPackModule.sol";
 
+import {Coinflip} from "../../contracts/Coinflip.sol";
+import {DegenerusQuests} from "../../contracts/DegenerusQuests.sol";
+import {DegenerusAffiliate} from "../../contracts/DegenerusAffiliate.sol";
 import {StorageCensusLongRunTest} from "../census/StorageCensusLongRun.t.sol";
 import {Vm, VmSafe} from "forge-std/Vm.sol";
 import {console} from "forge-std/console.sol";
@@ -36,9 +39,11 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
     bool private baseline;
     uint256 private checkpoint;
     bool private warm;
+    bool private xaVariantsApplied;
     address[] private replayModules;
 
     function setUp() public override {
+        vm.startMappingRecording();
         super.setUp();
         baseline = vm.envOr("DIFFERENTIAL_BASELINE", false);
         if (baseline) {
@@ -68,22 +73,8 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
             _baseline(address(jackpotBattle), "JackpotBattle");
             _baseline(address(parimutuel), "DegenerusParimutuel");
         }
-        // Optional same-pin runtime variants isolate one compiler change in the same fixture.
         string memory overrideFile = vm.envOr("DIFFERENTIAL_OVERRIDES", string(""));
-        if (bytes(overrideFile).length != 0) {
-            string memory variants = vm.readFile(overrideFile);
-            uint256 count = vm.parseJsonUint(variants, ".count");
-            for (uint256 i; i < count; ++i) {
-                string memory key = string.concat(".contracts[", vm.toString(i), "]");
-                address target = vm.parseJsonAddress(variants, string.concat(key, ".target"));
-                bytes memory code = vm.parseJsonBytes(variants, string.concat(key, ".runtime"));
-                require(code.length != 0, "missing variant runtime");
-                vm.etch(target, code);
-                string memory name = vm.keyExistsJson(variants, string.concat(key, ".name"))
-                    ? vm.parseJsonString(variants, string.concat(key, ".name")) : "";
-                _mapVariant(name, target);
-            }
-        }
+        if (!xaVariantsApplied) _loadVariants(false);
         if (vm.envOr("DIFFERENTIAL_DAILY_BASELINE", false)) {
             require(bytes(overrideFile).length != 0, "daily baseline requires runtime overrides");
             jackpotModule = DegenerusGameJackpotModule(address(0x4001));
@@ -122,12 +113,63 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
         vm.fee(0);
     }
 
+    function _beforeProtocolSubscriptions() internal override {
+        if (vm.envOr("DIFFERENTIAL_XA", false)) {
+            // Vault/sDGNRS constructors subscribe through Game, which calls Quests.
+            // Install the original QA bodies before those real constructor effects.
+            _loadVariants(true);
+            xaVariantsApplied = true;
+        }
+    }
+
+    function _beforeProtocolDeityInitialization() internal override {
+        if (xaVariantsApplied) _loadVariants(false);
+    }
+
+    function _loadVariants(bool existingOnly) private {
+        string memory overrideFile = vm.envOr("DIFFERENTIAL_OVERRIDES", string(""));
+        if (bytes(overrideFile).length != 0) {
+            string memory variants = vm.readFile(overrideFile);
+            if (vm.keyExistsJson(variants, ".xa")) {
+                require(vm.parseJsonAddress(variants, ".coinflip") == address(coinflip), "Coinflip seed domain mismatch");
+            }
+            uint256 count = vm.parseJsonUint(variants, ".count");
+            for (uint256 i; i < count; ++i) {
+                string memory key = string.concat(".contracts[", vm.toString(i), "]");
+                address target = vm.parseJsonAddress(variants, string.concat(key, ".target"));
+                bool initializer = vm.keyExistsJson(variants, string.concat(key, ".initRuntime"));
+                // Do not occupy a later CREATE target before its constructor runs.
+                if (existingOnly && target.code.length == 0 && !initializer) continue;
+                bytes memory code = vm.parseJsonBytes(variants, string.concat(key, ".runtime"));
+                require(code.length != 0, "missing variant runtime");
+                string memory name = vm.keyExistsJson(variants, string.concat(key, ".name"))
+                    ? vm.parseJsonString(variants, string.concat(key, ".name")) : "";
+                if (initializer && !xaVariantsApplied) {
+                    vm.etch(target, vm.parseJsonBytes(variants, string.concat(key, ".initRuntime")));
+                    bytes memory initData;
+                    if (keccak256(bytes(name)) == keccak256("DegenerusAffiliate")) {
+                        (address[] memory owners, bytes32[] memory codes, uint8[] memory kicks,
+                            address[] memory players, bytes32[] memory refs) = _affiliateBootstrap();
+                        initData = abi.encodeWithSignature("initializeXa(address[],bytes32[],uint8[],address[],bytes32[])", owners, codes, kicks, players, refs);
+                    } else initData = abi.encodeWithSignature("initializeXa()");
+                    (bool initialized, bytes memory reason) = target.call(initData);
+                    if (!initialized) assembly ("memory-safe") { revert(add(reason, 32), mload(reason)) }
+                }
+                vm.etch(target, code);
+                _mapVariant(name, target);
+            }
+        }
+    }
+
     function _flipShare() private view returns (address) {
         return address(uint160(uint256(keccak256(abi.encodePacked(hex"d694", address(vault), hex"01")))));
     }
 
     function _mapVariant(string memory name, address target) private {
         bytes32 key = keccak256(bytes(name));
+        if (key == keccak256("Coinflip")) coinflip = Coinflip(target);
+        if (key == keccak256("DegenerusQuests")) quests = DegenerusQuests(target);
+        if (key == keccak256("DegenerusAffiliate")) affiliate = DegenerusAffiliate(target);
         if (key == keccak256("DegenerusGameMintModule")) mintModule = DegenerusGameMintModule(payable(target));
         if (key == keccak256("DegenerusGameWhaleModule")) whaleModule = DegenerusGameWhaleModule(payable(target));
         if (key == keccak256("DegenerusGameTicketModule")) ticketModule = DegenerusGameTicketModule(payable(target));
@@ -156,9 +198,29 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
     }
 
     function _observe(address a, string memory name) private {
+        for (uint256 i; i < observed.length; ++i) if (observed[i] == a) return;
         _censusRegister(a, name);
         observed.push(a);
         console.log(string.concat("DIFFNAME|", vm.toString(a), "|", name));
+    }
+
+
+    /// @dev Map only the two versioned moved regions to the original logical roots.
+    ///      Mapping preimages come from the EVM recorder, never guessed from keys.
+    function _logicalStorage(address account, bytes32 slot) private view returns (string memory, bytes32) {
+        if (account != address(coinflip)) return (_name(account), slot);
+        uint256 q = 1901532333685506345381563804653063251365749963858977004851173307698040730112;
+        uint256 a = 66805284957968375743578360778328825040172275763452996655486391024476574631936;
+        uint256 at = uint256(slot);
+        if (at >= q && at < q + 4) return ("Quests", bytes32(at - q));
+        if (at >= a && at < a + 7) return ("Affiliate", bytes32(at - a));
+        (bool found, bytes32 key, bytes32 parent) = vm.getMappingKeyAndParentOf(account, slot);
+        if (found) {
+            at = uint256(parent);
+            if (at >= q && at < q + 4) return ("Quests", keccak256(abi.encode(key, at - q)));
+            if (at >= a && at < a + 3) return ("Affiliate", keccak256(abi.encode(key, at - a)));
+        }
+        return (_name(account), slot);
     }
 
     function _name(address a) private view returns (string memory) {
@@ -215,7 +277,8 @@ contract ConsolidationReplayTest is StorageCensusLongRunTest {
                 Vm.StorageAccess memory s = a.storageAccesses[j];
                 if (!s.isWrite || censusIndex[s.account] == 0 || a.reverted || s.reverted) continue;
                 ++censusCreates;
-                console.log(string.concat("DIFFSLOT|", _name(s.account), "|", vm.toString(s.slot), "|", vm.toString(vm.load(s.account, s.slot)), "|", vm.toString(s.previousValue)));
+                (string memory ownerName, bytes32 logicalSlot) = _logicalStorage(s.account, s.slot);
+                console.log(string.concat("DIFFSLOT|", ownerName, "|", vm.toString(logicalSlot), "|", vm.toString(vm.load(s.account, s.slot)), "|", vm.toString(s.previousValue)));
             }
             if (a.kind == VmSafe.AccountAccessKind.Call && a.value != 0) {
                 console.log(string.concat("DIFFETH|", _name(a.accessor), "|", vm.toString(a.accessor.balance)));

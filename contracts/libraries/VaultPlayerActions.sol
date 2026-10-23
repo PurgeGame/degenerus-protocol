@@ -62,7 +62,10 @@ library VaultPlayerActions {
                 || selector == ICoinflip.claimCoinflips.selector
                 || selector == ICoinflip.claimCoinflipCarry.selector
                 || selector == ICoinflip.setCoinflipAutoRebuy.selector
-                || selector == ICoinflip.setCoinflipAutoRebuyTakeProfit.selector;
+                || selector == ICoinflip.setCoinflipAutoRebuyTakeProfit.selector
+                || selector == IDegenerusAffiliate.createAffiliateCode.selector
+                || selector == IDegenerusAffiliate.referPlayer.selector
+                || selector == IDegenerusAffiliate.claim.selector;
         }
         if (target == ContractAddresses.COIN) {
             return selector == IDegenerusCoin.decimatorBurn.selector;
@@ -98,11 +101,6 @@ library VaultPlayerActions {
             return selector == DGNRS.burn.selector
                 || selector == DGNRS.claimVested.selector
                 || selector == DGNRS.yearSweep.selector;
-        }
-        if (target == ContractAddresses.AFFILIATE) {
-            return selector == IDegenerusAffiliate.createAffiliateCode.selector
-                || selector == IDegenerusAffiliate.referPlayer.selector
-                || selector == IDegenerusAffiliate.claim.selector;
         }
         if (target == ContractAddresses.JACKPOTS) {
             return selector == IDegenerusJackpots.claimBafConsolation.selector;

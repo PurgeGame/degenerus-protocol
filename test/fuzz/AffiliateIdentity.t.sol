@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {QaSlots} from "../helpers/QaSlots.sol";
 
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -65,13 +66,13 @@ contract AffiliateIdentityTest is DeployProtocol {
         (winnerId,,) = affiliate.payAffiliateCombined(code, buyerId, 5, 10000, 0, 0, 0, 0);
     }
     function _earningsSlot(uint24 lvl, address owner) private view returns (bytes32) {
-        return keccak256(abi.encode(uint256(_id(owner)), uint256(1)));
+        return keccak256(abi.encode(uint256(_id(owner)), uint256(QaSlots.EARNED)));
     }
     function _earningsWord(uint24 lvl, address owner) private view returns (uint256) {
         return uint256(vm.load(address(affiliate), _earningsSlot(lvl, owner)));
     }
     function _codeWord(bytes32 code) private view returns (uint256) {
-        return uint256(vm.load(address(affiliate), keccak256(abi.encode(code, uint256(0)))));
+        return uint256(vm.load(address(affiliate), keccak256(abi.encode(code, uint256(QaSlots.CODE)))));
     }
 
     function test_ReferRegistersCallerAtLastFreeIdAndRefusesNext() public {
@@ -245,7 +246,7 @@ contract AffiliateIdentityTest is DeployProtocol {
         assertEq(uint32(beforeWord >> 40), _id(b));
         assertEq(uint32(beforeWord >> 72), _id(c));
         assertEq(beforeWord >> 104, 6, "both upline caches valid, not pending");
-        assertEq(uint256(vm.load(address(affiliate), bytes32(uint256(keccak256(abi.encode(code, uint256(0)))) + 1))), 0, "code info is one slot");
+        assertEq(uint256(vm.load(address(affiliate), bytes32(uint256(keccak256(abi.encode(code, uint256(QaSlots.CODE)))) + 1))), 0, "code info is one slot");
         assertEq(_pay(code, 2, 0), _id(c));
         assertEq(_codeWord(code), beforeWord);
         assertEq(affiliate.affiliateScore(5, _id(a)), 2000);

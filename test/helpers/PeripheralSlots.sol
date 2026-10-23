@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {QaSlots} from "./QaSlots.sol";
 
 /// @dev Compiler pins checked by scripts/check-storage-reuse-phase2-layout.py.
 library PeripheralSlots {
     uint256 internal constant SD_BATCHES = 10;
     uint256 internal constant SD_BATCH_PLAYERS = 8;
     uint256 internal constant SD_BATCH_COUNTS = 6;
-    uint256 internal constant AFF_LEVEL_SCORE = 3;
+    uint256 internal constant AFF_LEVEL_SCORE = QaSlots.SCORE;
     uint256 internal constant CR_DAY_TICKETS = 15;
     uint256 internal constant CR_DAY_STAKED = 79;
     uint256 internal constant CR_BOOST_BUDGET = 143;

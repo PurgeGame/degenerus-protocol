@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {QaSlots} from "../helpers/QaSlots.sol";
 
 import {Vm, VmSafe} from "forge-std/Vm.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -17,7 +18,7 @@ import {BoxOrderLib} from "../helpers/BoxOrderLib.sol";
 contract SmurfReferralTest is DeployProtocol {
     // DegenerusAffiliate roots (scripts/layout/golden/DegenerusAffiliate.json).
     uint256 internal constant CODE_ROOT = 0;
-    uint256 internal constant REFERRAL_ROOT = 2;
+    uint256 internal constant REFERRAL_ROOT = QaSlots.REFERRAL;
     uint256 internal constant BOOT_OWNER_ROOT = 4;
     /// @dev `AffiliateCodeInfo.flags` sits at byte 13 of the packed code word; bit 0 = PENDING.
     uint256 internal constant CODE_FLAGS_SHIFT = 104;

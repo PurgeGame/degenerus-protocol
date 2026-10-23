@@ -163,7 +163,7 @@ contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
         vm.etch(ContractAddresses.GAME, address(new PariSettleMockGame()).code);
         vm.etch(ContractAddresses.QUESTS, address(new PariSettleMockQuests()).code);
         vm.etch(ContractAddresses.COIN, address(new PariSettleMockCoin()).code);
-        vm.etch(ContractAddresses.COINFLIP, address(new Coinflip()).code);
+        vm.etch(ContractAddresses.COINFLIP, address(new Coinflip(new address[](0), new bytes32[](0), new uint8[](0), new address[](0), new bytes32[](0))).code);
         DegenerusParimutuel built = new DegenerusParimutuel();
         assertEq(uint256(vm.load(address(built), bytes32(SETTLEMENT_SLOT))), 1, "construction starts the cursor at round 1");
         vm.etch(ContractAddresses.PARIMUTUEL, address(built).code);
@@ -186,6 +186,8 @@ contract ParimutuelSettlementMarketTest is Test, PariSettlementSlots {
     function _bet(uint32 id, bool over) private {
         address p = _who(id);
         mockGame.setId(p, id);
+        // Mock the quest selector while retaining the co-located real credit ledger.
+        vm.mockCall(ContractAddresses.QUESTS, abi.encodeWithSignature("marketBetGates(uint32,uint24)",id), abi.encode(id != 0,false,id));
         vm.prank(p);
         pari.placeBet(0, over);
     }

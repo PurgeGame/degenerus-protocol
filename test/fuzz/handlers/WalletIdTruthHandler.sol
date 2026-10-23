@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {QaSlots} from "../../helpers/QaSlots.sol";
 import {PeripheralSlots} from "../../helpers/PeripheralSlots.sol";
 
 import "forge-std/Test.sol";
@@ -92,9 +93,9 @@ contract WalletIdTruthHandler is Test {
     uint256 internal constant CR_ID_SHIFT = 85; // CrapsPreferenceLib.ID_SHIFT
     uint256 internal constant CR_BOARD_MASK = uint256(0xFFFFF) << 64;
     uint256 internal constant CR_INITIALIZED = uint256(1) << 84;
-    uint256 internal constant AFF_CODE = 0; // DegenerusAffiliate._affiliateCode
-    uint256 internal constant AFF_EARNED = 1; // affiliateCoinEarned[ownerId]
-    uint256 internal constant AFF_REFERRAL = 2; // playerReferralCode
+    uint256 internal constant AFF_CODE = QaSlots.CODE; // DegenerusAffiliate._affiliateCode
+    uint256 internal constant AFF_EARNED = QaSlots.EARNED; // affiliateCoinEarned[ownerId]
+    uint256 internal constant AFF_REFERRAL = QaSlots.REFERRAL; // playerReferralCode
     uint256 internal constant AFF_LEVEL_SCORE = PeripheralSlots.AFF_LEVEL_SCORE; // _levelScore
     uint256 internal constant SD_BATCH_PLAYERS = PeripheralSlots.SD_BATCH_PLAYERS; // sDGNRS._batchPlayers (packed-word mappings at 9, 10)
     uint256 internal constant SD_DAY_VALUE = 11; // sDGNRS._redemptionDayValue

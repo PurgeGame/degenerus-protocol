@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {QaSlots} from "../helpers/QaSlots.sol";
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
 import {DegenerusGameStorage} from "../../contracts/storage/DegenerusGameStorage.sol";
@@ -66,7 +67,7 @@ abstract contract GrowthFoilFixture is DeployProtocol {
     function _daily(bool foil) internal {
         uint256 word = uint256(DAY) | (uint256(1) << 24) | (uint256(DAY) << 64)
             | (uint256(foil ? 4 : 3) << 88) | (uint256(1) << 128) | (uint256(1) << 136);
-        vm.store(address(quests), bytes32(0), bytes32(word));
+        vm.store(address(quests), bytes32(QaSlots.ACTIVE), bytes32(word));
     }
 
     function _open(uint24 round) internal {
@@ -171,7 +172,7 @@ contract GrowthFoilHotPathGasTest is GrowthFoilFixture {
     function test_Gas_FoilQuestZeroSpend() public { _begin(); _foil(0); _end("foil_quest_zero_spend", 0); }
     function test_Gas_FoilQuestOtherDaily() public { _daily(false); _begin(); _foil(0.5 ether); _end("foil_quest_other_daily", 0); }
     function test_Gas_FoilQuestAfking() public {
-        bytes32 playerWord = keccak256(abi.encode(uint256(pid), uint256(1)));
+        bytes32 playerWord = keccak256(abi.encode(uint256(pid), QaSlots.STATE));
         vm.store(address(quests), playerWord, bytes32(uint256(1) << 104));
         _begin(); _foil(0.5 ether); _end("foil_quest_afking", 0);
     }

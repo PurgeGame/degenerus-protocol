@@ -5,6 +5,7 @@ import {Coinflip} from "../../contracts/Coinflip.sol";
 
 /// @dev Test-only fixture writer for one day's packed stake lane (the ledger is keyed by wallet ID).
 abstract contract CoinflipStakeSetter is Coinflip {
+    constructor() Coinflip(new address[](0), new bytes32[](0), new uint8[](0), new address[](0), new bytes32[](0)) {}
     uint256 private constant _STAKE_LANE_MAX = type(uint32).max;
 
     /// @dev Arbitrary-order fixture writes preserve both pages on a ring collision. This

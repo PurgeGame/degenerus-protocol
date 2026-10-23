@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {QaSlots} from "../helpers/QaSlots.sol";
 
 import {claimableBalance} from "../helpers/ClaimableBalance.sol";
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -29,7 +30,7 @@ contract ActivityScorePointFloorTest is DeployProtocol {
     /// @dev questPlayerState mapping root (slot 1 in DegenerusQuests; the per-player PlayerQuestState packs
     ///      into one slot). Byte offsets within that slot: lastCompletedDay u24 off0, lastActiveDay u24 off3,
     ///      lastSyncDay u24 off6, streak u16 off9, baseStreak u16 off11, afkingActive bool off13.
-    uint256 private constant QUESTSTATE_SLOT = 1;
+    uint256 private constant QUESTSTATE_SLOT = QaSlots.STATE;
     uint256 private constant OFF_QS_SYNCDAY = 6;
     uint256 private constant OFF_QS_STREAK = 9;
     uint256 private constant OFF_QS_BASESTREAK = 11;

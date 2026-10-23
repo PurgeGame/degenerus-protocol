@@ -7,7 +7,8 @@ export const DEPLOYMENTS = [
       "ICONS_32"
     ],
     "fixtureField": "icons32",
-    "fixtureType": "Icons32Data"
+    "fixtureType": "Icons32Data",
+    "nonceOffset": 0
   },
   {
     "key": "GAME_MINT_MODULE",
@@ -42,7 +43,8 @@ export const DEPLOYMENTS = [
         "field": "degenesisModule",
         "type": "DegenerusGameDegenesisModule"
       }
-    }
+    },
+    "nonceOffset": 1
   },
   {
     "key": "GAME_ADVANCE_MODULE",
@@ -72,7 +74,8 @@ export const DEPLOYMENTS = [
         "field": "jackpotDrawModule",
         "type": "DegenerusGameJackpotDrawModule"
       }
-    }
+    },
+    "nonceOffset": 2
   },
   {
     "key": "GAME_WHALE_MODULE",
@@ -92,7 +95,8 @@ export const DEPLOYMENTS = [
         "field": "ticketModule",
         "type": "DegenerusGameTicketModule"
       }
-    }
+    },
+    "nonceOffset": 3
   },
   {
     "key": "GAME_LOOTBOX_MODULE",
@@ -122,7 +126,8 @@ export const DEPLOYMENTS = [
         "field": "afkingModule",
         "type": "GameAfkingModule"
       }
-    }
+    },
+    "nonceOffset": 4
   },
   {
     "key": "COIN",
@@ -131,16 +136,8 @@ export const DEPLOYMENTS = [
       "COIN"
     ],
     "fixtureField": "coin",
-    "fixtureType": "FLIP"
-  },
-  {
-    "key": "COINFLIP",
-    "contract": "Coinflip",
-    "aliases": [
-      "COINFLIP"
-    ],
-    "fixtureField": "coinflip",
-    "fixtureType": "Coinflip"
+    "fixtureType": "FLIP",
+    "nonceOffset": 5
   },
   {
     "key": "GAME",
@@ -161,16 +158,30 @@ export const DEPLOYMENTS = [
         "field": "minerModule",
         "type": "DegenerusGameMinerModule"
       }
-    }
+    },
+    "nonceOffset": 7
   },
   {
-    "key": "AFFILIATE",
-    "contract": "DegenerusAffiliate",
+    "key": "COINFLIP",
+    "contract": "Coinflip",
     "aliases": [
-      "AFFILIATE"
+      "COINFLIP",
+      "AFFILIATE",
+      "QUESTS"
     ],
-    "fixtureField": "affiliate",
-    "fixtureType": "DegenerusAffiliate"
+    "fixtureField": "coinflip",
+    "fixtureType": "Coinflip",
+    "fixtureAliases": {
+      "AFFILIATE": {
+        "field": "affiliate",
+        "type": "DegenerusAffiliate"
+      },
+      "QUESTS": {
+        "field": "quests",
+        "type": "DegenerusQuests"
+      }
+    },
+    "nonceOffset": 8
   },
   {
     "key": "JACKPOTS",
@@ -179,16 +190,8 @@ export const DEPLOYMENTS = [
       "JACKPOTS"
     ],
     "fixtureField": "jackpots",
-    "fixtureType": "DegenerusJackpots"
-  },
-  {
-    "key": "QUESTS",
-    "contract": "DegenerusQuests",
-    "aliases": [
-      "QUESTS"
-    ],
-    "fixtureField": "quests",
-    "fixtureType": "DegenerusQuests"
+    "fixtureType": "DegenerusJackpots",
+    "nonceOffset": 9
   },
   {
     "key": "DEITY_PASS",
@@ -197,7 +200,8 @@ export const DEPLOYMENTS = [
       "DEITY_PASS"
     ],
     "fixtureField": "deityPass",
-    "fixtureType": "DegenerusDeityPass"
+    "fixtureType": "DegenerusDeityPass",
+    "nonceOffset": 11
   },
   {
     "key": "VAULT",
@@ -206,7 +210,8 @@ export const DEPLOYMENTS = [
       "VAULT"
     ],
     "fixtureField": "vault",
-    "fixtureType": "DegenerusVault"
+    "fixtureType": "DegenerusVault",
+    "nonceOffset": 12
   },
   {
     "key": "SDGNRS",
@@ -215,7 +220,8 @@ export const DEPLOYMENTS = [
       "SDGNRS"
     ],
     "fixtureField": "sdgnrs",
-    "fixtureType": "sDGNRS"
+    "fixtureType": "sDGNRS",
+    "nonceOffset": 13
   },
   {
     "key": "DGNRS",
@@ -224,7 +230,8 @@ export const DEPLOYMENTS = [
       "DGNRS"
     ],
     "fixtureField": "dgnrs",
-    "fixtureType": "DGNRS"
+    "fixtureType": "DGNRS",
+    "nonceOffset": 14
   },
   {
     "key": "ADMIN",
@@ -233,7 +240,8 @@ export const DEPLOYMENTS = [
       "ADMIN"
     ],
     "fixtureField": "admin",
-    "fixtureType": "DegenerusAdmin"
+    "fixtureType": "DegenerusAdmin",
+    "nonceOffset": 15
   },
   {
     "key": "GNRUS",
@@ -242,7 +250,8 @@ export const DEPLOYMENTS = [
       "GNRUS"
     ],
     "fixtureField": "gnrus",
-    "fixtureType": "GNRUS"
+    "fixtureType": "GNRUS",
+    "nonceOffset": 16
   },
   {
     "key": "AFKING_SUB_TOKEN",
@@ -251,7 +260,8 @@ export const DEPLOYMENTS = [
       "AFKING_SUB_TOKEN"
     ],
     "fixtureField": "afkingSubToken",
-    "fixtureType": "AFKingSubscriptionToken"
+    "fixtureType": "AFKingSubscriptionToken",
+    "nonceOffset": 17
   },
   {
     "key": "PARIMUTUEL",
@@ -260,7 +270,8 @@ export const DEPLOYMENTS = [
       "PARIMUTUEL"
     ],
     "fixtureField": "parimutuel",
-    "fixtureType": "DegenerusParimutuel"
+    "fixtureType": "DegenerusParimutuel",
+    "nonceOffset": 18
   },
   {
     "key": "RECORD_BOUNTY",
@@ -269,7 +280,8 @@ export const DEPLOYMENTS = [
       "RECORD_BOUNTY"
     ],
     "fixtureField": "recordBounty",
-    "fixtureType": "DegenerusRecordBounty"
+    "fixtureType": "DegenerusRecordBounty",
+    "nonceOffset": 19
   },
   {
     "key": "CRAPS",
@@ -290,7 +302,8 @@ export const DEPLOYMENTS = [
         "field": "jackpotBattle",
         "type": "JackpotBattle"
       }
-    }
+    },
+    "nonceOffset": 20
   },
   {
     "key": "WWXRP",
@@ -299,7 +312,8 @@ export const DEPLOYMENTS = [
       "WWXRP"
     ],
     "fixtureField": "wwxrp",
-    "fixtureType": "WWXRP"
+    "fixtureType": "WWXRP",
+    "nonceOffset": 21
   },
   {
     "key": "OWNER_GOVERNANCE",
@@ -308,7 +322,8 @@ export const DEPLOYMENTS = [
       "OWNER_GOVERNANCE"
     ],
     "fixtureField": "ownerGovernance",
-    "fixtureType": "DegenerusOwnerGovernance"
+    "fixtureType": "DegenerusOwnerGovernance",
+    "nonceOffset": 22
   }
 ];
 

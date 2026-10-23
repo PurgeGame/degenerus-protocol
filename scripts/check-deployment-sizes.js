@@ -20,7 +20,7 @@ if (!limits) throw new Error(`Unknown schedule: ${schedule}`);
 if (argv.length > 1 || argv.some(s => s.startsWith('--'))) throw new Error('Unexpected arguments');
 const out = argv[0] || process.env.FOUNDRY_OUT || 'forge-out';
 const overrides = file ? JSON.parse(fs.readFileSync(file)) : {};
-const entries = [...DEPLOYMENTS.map(row => ({ ...row, args: row.key === 'ICONS_32' ? [false] : row.key === 'AFFILIATE' ? [[], [], [], [], []] : [] })),
+const entries = [...DEPLOYMENTS.map(row => ({ ...row, args: row.key === 'ICONS_32' ? [false] : row.key === 'COINFLIP' ? [[], [], [], [], []] : [] })),
   { key: 'DGVF', contract: 'DegenerusVaultShare', source: 'DegenerusVault', args: ['Degenerus Vault Flip', 'DGVF', 'dgvf.degenerus.eth'] },
   { key: 'DGVE', contract: 'DegenerusVaultShare', source: 'DegenerusVault', args: ['Degenerus Vault Eth', 'DGVE', 'dgve.degenerus.eth'] },
   { key: 'GAME_LENS', contract: 'DegenerusGameLens', args: [] },

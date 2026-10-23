@@ -208,29 +208,29 @@ abstract contract ForkDeployProtocol is DeployProtocol {
         // BEGIN CANONICAL DEPLOYMENTS
         (address[] memory owners, bytes32[] memory codes, uint8[] memory kicks,
             address[] memory players, bytes32[] memory refs) = (new address[](0), new bytes32[](0), new uint8[](0), new address[](0), new bytes32[](0));
-        icons32 = new Icons32Data(false);
+        icons32 = Icons32Data(payable(deployCode("Icons32Data.sol:Icons32Data", abi.encode(false))));
         endgameModule = DegenerusGameEndgameModule(payable(deployCode("DegenerusGameEndgameModule.sol:DegenerusGameEndgameModule", abi.encode())));
-        dailyModule = new DegenerusGameDailyModule();
+        dailyModule = DegenerusGameDailyModule(payable(deployCode("DegenerusGameDailyModule.sol:DegenerusGameDailyModule", abi.encode())));
         passModule = DegenerusGamePassModule(payable(deployCode("DegenerusGamePassModule.sol:DegenerusGamePassModule", abi.encode())));
-        boxModule = new DegenerusGameBoxModule();
-        coin = new FLIP();
-        coinflip = new Coinflip();
-        game = new DegenerusGame();
-        affiliate = new DegenerusAffiliate(owners, codes, kicks, players, refs);
-        jackpots = new DegenerusJackpots();
-        quests = new DegenerusQuests();
-        deityPass = new DegenerusDeityPass();
-        vault = new DegenerusVault();
-        sdgnrs = new sDGNRS();
-        dgnrs = new DGNRS();
-        admin = new DegenerusAdmin();
-        gnrus = new GNRUS();
-        afkingSubToken = new AFKingSubscriptionToken();
-        parimutuel = new DegenerusParimutuel();
-        recordBounty = new DegenerusRecordBounty();
-        crapsBattle = new CrapsViews();
-        wwxrp = new WWXRP();
-        ownerGovernance = new DegenerusOwnerGovernance();
+        boxModule = DegenerusGameBoxModule(payable(deployCode("DegenerusGameBoxModule.sol:DegenerusGameBoxModule", abi.encode())));
+        coin = FLIP(payable(deployCode("FLIP.sol:FLIP", abi.encode())));
+        vm.setNonce(address(this), vm.getNonce(address(this)) + 1); // retired deployment nonce; retain token addresses
+        game = DegenerusGame(payable(deployCode("DegenerusGame.sol:DegenerusGame", abi.encode())));
+        coinflip = Coinflip(payable(deployCode("Coinflip.sol:Coinflip", abi.encode(owners, codes, kicks, players, refs))));
+        jackpots = DegenerusJackpots(payable(deployCode("DegenerusJackpots.sol:DegenerusJackpots", abi.encode())));
+        vm.setNonce(address(this), vm.getNonce(address(this)) + 1); // retired deployment nonce; retain token addresses
+        deityPass = DegenerusDeityPass(payable(deployCode("DegenerusDeityPass.sol:DegenerusDeityPass", abi.encode())));
+        vault = DegenerusVault(payable(deployCode("DegenerusVault.sol:DegenerusVault", abi.encode())));
+        sdgnrs = sDGNRS(payable(deployCode("sDGNRS.sol:sDGNRS", abi.encode())));
+        dgnrs = DGNRS(payable(deployCode("DGNRS.sol:DGNRS", abi.encode())));
+        admin = DegenerusAdmin(payable(deployCode("DegenerusAdmin.sol:DegenerusAdmin", abi.encode())));
+        gnrus = GNRUS(payable(deployCode("GNRUS.sol:GNRUS", abi.encode())));
+        afkingSubToken = AFKingSubscriptionToken(payable(deployCode("AFKingSubscriptionToken.sol:AFKingSubscriptionToken", abi.encode())));
+        parimutuel = DegenerusParimutuel(payable(deployCode("DegenerusParimutuel.sol:DegenerusParimutuel", abi.encode())));
+        recordBounty = DegenerusRecordBounty(payable(deployCode("DegenerusRecordBounty.sol:DegenerusRecordBounty", abi.encode())));
+        crapsBattle = CrapsViews(payable(deployCode("CrapsViews.sol:CrapsViews", abi.encode())));
+        wwxrp = WWXRP(payable(deployCode("WWXRP.sol:WWXRP", abi.encode())));
+        ownerGovernance = DegenerusOwnerGovernance(payable(deployCode("DegenerusOwnerGovernance.sol:DegenerusOwnerGovernance", abi.encode())));
         mintModule = DegenerusGameMintModule(payable(address(endgameModule)));
         decimatorModule = DegenerusGameDecimatorModule(payable(address(endgameModule)));
         gameOverModule = DegenerusGameGameOverModule(payable(address(endgameModule)));
@@ -248,6 +248,8 @@ abstract contract ForkDeployProtocol is DeployProtocol {
         afkingModule = GameAfkingModule(payable(address(boxModule)));
         bingoModule = DegenerusGameBingoModule(payable(address(game)));
         minerModule = DegenerusGameMinerModule(payable(address(game)));
+        affiliate = DegenerusAffiliate(payable(address(coinflip)));
+        quests = DegenerusQuests(payable(address(coinflip)));
         crapsEngine = CrapsEngine(payable(address(crapsBattle)));
         jackpotBattle = JackpotBattle(payable(address(crapsBattle)));
         // END CANONICAL DEPLOYMENTS

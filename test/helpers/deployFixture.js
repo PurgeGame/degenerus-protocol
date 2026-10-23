@@ -1,6 +1,7 @@
 import hre from "hardhat";
 import {
   predictAddresses,
+  reserveDeploymentNonces,
   computeDeployDayBoundary,
   DEPLOY_ORDER,
   expandAliases,
@@ -107,6 +108,7 @@ export async function deployFullProtocol({
   const deployedAddrs = new Map();
 
   for (const key of DEPLOY_ORDER) {
+      await reserveDeploymentNonces(deployer,key,startingNonce);
     const contractName = KEY_TO_CONTRACT[key];
     const args = getConstructorArgs(key, predicted, affiliateBootstrap, finalizeIcons);
     const contract = await deploy(contractName, args);
@@ -243,7 +245,7 @@ async function deploy(contractName, args = []) {
 
 function getConstructorArgs(key, predicted, affiliateBootstrap, finalizeIcons) {
   if (key === "ICONS_32") return [finalizeIcons];
-  if (key === "AFFILIATE") {
+  if (key === "COINFLIP") {
     return affiliateBootstrap;
   }
   if (key === "AF_KING") {

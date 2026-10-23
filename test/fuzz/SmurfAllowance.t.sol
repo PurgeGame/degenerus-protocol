@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {QaSlots} from "../helpers/QaSlots.sol";
 import {OwnerTargetCall} from "../helpers/OwnerTargetCall.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
@@ -264,7 +265,7 @@ contract SmurfAllowanceTest is DeployProtocol {
         vm.expectRevert(bytes4(keccak256("Insolvent()")));
         game.createSmurf(0, MintPaymentKind.DirectEth);
         assertEq(_quotaWord(), registry);
-        assertEq(vm.load(address(affiliate), keccak256(abi.encode(main, uint256(2)))), bytes32(0));
+        assertEq(vm.load(address(affiliate), keccak256(abi.encode(main, QaSlots.REFERRAL))), bytes32(0));
         assertEq(_info().baseAllowance, 1);
         assertEq(_info().createdLifetime, 0);
     }
@@ -280,7 +281,7 @@ contract SmurfAllowanceTest is DeployProtocol {
     function test_ReferSmurfRejectsRebindingAndInvalidIds() public {
         _grantSmurfBase(owner, 1);
         uint32 child = _create();
-        uint256 before = uint256(vm.load(address(affiliate), keccak256(abi.encode(child, uint256(2)))));
+        uint256 before = uint256(vm.load(address(affiliate), keccak256(abi.encode(child, QaSlots.REFERRAL))));
         vm.startPrank(address(game));
         vm.expectRevert(bytes4(keccak256("Insufficient()")));
         affiliate.referSmurf(main, child);
@@ -289,6 +290,6 @@ contract SmurfAllowanceTest is DeployProtocol {
         vm.expectRevert(bytes4(keccak256("Insufficient()")));
         affiliate.referSmurf(0, child);
         vm.stopPrank();
-        assertEq(uint256(vm.load(address(affiliate), keccak256(abi.encode(child, uint256(2))))), before);
+        assertEq(uint256(vm.load(address(affiliate), keccak256(abi.encode(child, QaSlots.REFERRAL)))), before);
     }
 }

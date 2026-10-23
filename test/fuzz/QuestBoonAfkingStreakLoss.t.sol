@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {QaSlots} from "../helpers/QaSlots.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -55,7 +56,7 @@ contract QuestBoonAfkingStreakLossTest is DeployProtocol {
     /// @dev lastCompletedDay u24 off0, lastActiveDay u24 off3, lastSyncDay u24 off6, streak u16 off9,
     ///      baseStreak u16 off11, afkingActive bool off13, ..., completionMask u8 off24, streakShield u8 off25,
     ///      shieldCenturyHighWater u8 off26 (PlayerQuestState single-slot pack, DegenerusQuests.sol:288).
-    uint256 private constant QUESTSTATE_SLOT = 1;
+    uint256 private constant QUESTSTATE_SLOT = QaSlots.STATE;
     uint256 private constant OFF_QS_SYNCDAY = 6; // uint24 lastSyncDay
     uint256 private constant OFF_QS_STREAK = 9; // uint16 streak
     uint256 private constant OFF_QS_SHIELD = 25; // uint8 streakShield

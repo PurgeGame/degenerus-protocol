@@ -8,6 +8,17 @@ import {DegenerusGameMintStreakUtils} from "../../../contracts/modules/Degenerus
 import {DegenerusAffiliate} from "../../../contracts/DegenerusAffiliate.sol";
 import {ContractAddresses} from "../../../contracts/ContractAddresses.sol";
 
+import {DegenerusQuests} from "../../../contracts/DegenerusQuests.sol";
+
+contract ActivityAffiliateRealQA is DegenerusQuests, DegenerusAffiliate {
+    constructor() DegenerusAffiliate(new address[](0), new bytes32[](0), new uint8[](0), new address[](0), new bytes32[](0)) {}
+}
+
+contract ActivityAffiliateStubQA is DegenerusAffiliate {
+    constructor() DegenerusAffiliate(new address[](0), new bytes32[](0), new uint8[](0), new address[](0), new bytes32[](0)) {}
+    function effectiveBaseStreakAndAfking(uint32) external pure returns (uint32, bool) { return (17, false); }
+}
+
 contract ActivityAffiliateCacheHost is DegenerusGameMintStreakUtils {
     function seed(address player, uint256 packed, uint24 currentLevel) external returns (uint32 id) {
         if (wallets.length == 0) wallets.push();
@@ -57,7 +68,7 @@ abstract contract ActivityAffiliateCacheFixture is Test {
         internal pure returns (uint256 affiliateCalls, uint256 stores)
     {
         for (uint256 i; i < accesses.length; ++i) {
-            if (accesses[i].account == ContractAddresses.AFFILIATE) ++affiliateCalls;
+            if (accesses[i].account == ContractAddresses.AFFILIATE && accesses[i].data.length >= 4 && bytes4(accesses[i].data) == DegenerusAffiliate.affiliateBonusPointsBest.selector) ++affiliateCalls;
             for (uint256 j; j < accesses[i].storageAccesses.length; ++j) {
                 Vm.StorageAccess memory access = accesses[i].storageAccesses[j];
                 if (access.account == target && access.isWrite) ++stores;

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
 
-import {ActivityAffiliateCacheFixture, ActivityAffiliateCacheHost} from "./helpers/ActivityAffiliateCacheFixture.sol";
+import {ActivityAffiliateCacheFixture, ActivityAffiliateCacheHost, ActivityAffiliateRealQA, ActivityAffiliateStubQA} from "./helpers/ActivityAffiliateCacheFixture.sol";
 import {DegenerusGame} from "../../contracts/DegenerusGame.sol";
 import {DegenerusGameMinerModule} from "../../contracts/modules/DegenerusGameMinerModule.sol";
 import {GameAfkingModule} from "../../contracts/modules/GameAfkingModule.sol";
@@ -102,8 +102,8 @@ contract ActivityAffiliateCacheTest is ActivityAffiliateCacheFixture {
         vm.etch(ContractAddresses.GAME, type(ActivityAffiliateCacheHost).runtimeCode);
         ActivityAffiliateCacheHost(ContractAddresses.GAME).seed(PLAYER, 1, 24);
         vm.etch(ContractAddresses.GAME, type(DegenerusGame).runtimeCode);
-        vm.etch(ContractAddresses.GAME_MINER_MODULE, type(DegenerusGameMinerModule).runtimeCode);
-        vm.etch(ContractAddresses.QUESTS, type(ActivityCacheQuestStub).runtimeCode);
+        if (ContractAddresses.GAME_MINER_MODULE != ContractAddresses.GAME) vm.etch(ContractAddresses.GAME_MINER_MODULE, type(DegenerusGameMinerModule).runtimeCode);
+        vm.etch(ContractAddresses.QUESTS, type(ActivityAffiliateStubQA).runtimeCode);
         _seedEarnings(23, PLAYER_ID, 100);
         DegenerusGame game = DegenerusGame(payable(ContractAddresses.GAME));
         (uint256 expected,) = game.playerActivityScore(PLAYER);
@@ -125,8 +125,8 @@ contract ActivityAffiliateCacheTest is ActivityAffiliateCacheFixture {
         vm.etch(ContractAddresses.GAME, type(ActivityAffiliateCacheHost).runtimeCode);
         ActivityAffiliateCacheHost(ContractAddresses.GAME).seed(PLAYER, packed, 24);
         vm.etch(ContractAddresses.GAME, type(DegenerusGame).runtimeCode);
-        vm.etch(ContractAddresses.GAME_MINER_MODULE, type(DegenerusGameMinerModule).runtimeCode);
-        vm.etch(ContractAddresses.QUESTS, type(DegenerusQuests).runtimeCode);
+        if (ContractAddresses.GAME_MINER_MODULE != ContractAddresses.GAME) vm.etch(ContractAddresses.GAME_MINER_MODULE, type(DegenerusGameMinerModule).runtimeCode);
+        vm.etch(ContractAddresses.QUESTS, type(ActivityAffiliateRealQA).runtimeCode);
         game = DegenerusGame(payable(ContractAddresses.GAME));
         quests = DegenerusQuests(ContractAddresses.QUESTS);
     }
@@ -159,11 +159,11 @@ contract ActivityAffiliateCacheTest is ActivityAffiliateCacheFixture {
     }
     function test_HitsAndHistoryFreeWalletsSkipMinerDispatch() public {
         (DegenerusGame game,) = _productionGame(1 | (uint256(24) << 173));
-        vm.etch(ContractAddresses.GAME_MINER_MODULE, hex"5f5ffd");
+        if (ContractAddresses.GAME_MINER_MODULE != ContractAddresses.GAME) vm.etch(ContractAddresses.GAME_MINER_MODULE, hex"5f5ffd");
         (uint256 cached,) = game.playerActivityScoreCached(PLAYER);
         assertEq(cached, activityScoreOf(address(game), PLAYER));
         (game,) = _productionGame(0);
-        vm.etch(ContractAddresses.GAME_MINER_MODULE, hex"5f5ffd");
+        if (ContractAddresses.GAME_MINER_MODULE != ContractAddresses.GAME) vm.etch(ContractAddresses.GAME_MINER_MODULE, hex"5f5ffd");
         (cached,) = game.playerActivityScoreCached(PLAYER);
         assertEq(cached, activityScoreOf(address(game), PLAYER));
         assertEq(game.mintPackedFor(PLAYER), 0);

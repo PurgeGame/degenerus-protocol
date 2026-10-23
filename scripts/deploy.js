@@ -11,6 +11,7 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   predictAddresses,
+  reserveDeploymentNonces,
   computeDeployDayBoundary,
   DEPLOY_ORDER,
   expandAliases,
@@ -99,6 +100,7 @@ async function main() {
   }
   try {
     for (const key of DEPLOY_ORDER) {
+      await reserveDeploymentNonces(deployer,key,startingNonce);
       const contractName = KEY_TO_CONTRACT[key];
       const args = getConstructorArgs(
         key,
@@ -241,6 +243,8 @@ async function main() {
     mkdirSync(abisDir, { recursive: true });
     const abiNames = new Set([
       ...Object.values(KEY_TO_CONTRACT),
+      "DegenerusQuests", // hosted at Coinflip; retain semantic ABI files for clients
+      "DegenerusAffiliate",
       "DegenerusVaultShare", // DGVF/DGVE, deployed from the vault constructor
       "DegenerusGameLens", // deployment-decoupled periphery, deployed separately
       "CrapsLens", // craps view periphery, deployed separately
@@ -288,7 +292,7 @@ function getConstructorArgs(
   affiliatePreReferrals
 ) {
   if (key === "ICONS_32") return [process.env.ICONS32_FINALIZE === "1"];
-  if (key === "AFFILIATE") {
+  if (key === "COINFLIP") {
     return [
       affiliateBootstrap.owners,
       affiliateBootstrap.codes,

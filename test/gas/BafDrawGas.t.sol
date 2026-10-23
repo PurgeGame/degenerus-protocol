@@ -6,6 +6,7 @@ import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
 import {Coinflip} from "../../contracts/Coinflip.sol";
 
 contract BafDrawSlotProbe is Coinflip {
+    constructor() Coinflip(new address[](0), new bytes32[](0), new uint8[](0), new address[](0), new bytes32[](0)) {}
     function roots() external pure returns (uint256 header, uint256 entry) {
         assembly { header := bafDrawHeader.slot entry := bafDrawEntry.slot }
     }
@@ -126,14 +127,19 @@ contract BafDrawGas is DeployProtocol {
         ];
         uint256 reads;
         uint256 writes;
+        uint256 uniqueAccounts;
         for (uint256 i; i < accounts.length; ++i) {
+            bool seen;
+            for (uint256 j; j < i; ++j) if (accounts[j] == accounts[i]) seen = true;
+            if (seen) continue; // Quests is hosted on Coinflip: count its storage once.
+            ++uniqueAccounts;
             (bytes32[] memory r, bytes32[] memory w) = vm.accesses(accounts[i]);
             reads += r.length;
             writes += w.length;
         }
         assertLe(reads, 32, "deposit storage-read footprint expanded");
         assertLe(writes, 16, "deposit storage-write footprint expanded");
-        allowance = reads * 2000 + writes * 2800 + accounts.length * 2600;
+        allowance = reads * 2000 + writes * 2800 + uniqueAccounts * 2600;
         emit log_named_uint("deposit_cold_storage_reads", reads);
         emit log_named_uint("deposit_cold_storage_writes", writes);
         emit log_named_uint("deposit_estimated_transaction_state_allowance", allowance);

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {QaSlots} from "../../helpers/QaSlots.sol";
 import {PeripheralSlots} from "../../helpers/PeripheralSlots.sol";
 
 import {console} from "forge-std/console.sol";
@@ -326,9 +327,9 @@ contract WalletIdTruthInvariant is DeployProtocol {
 
         uint256 cr = uint256(vm.load(address(crapsBattle), keccak256(abi.encode(id, CrapsSlots.PASS_CREDITS_BY_ID))));
         assertEq((cr >> 64) & 0xfffff, 1 | (1 << 6), "compressed preferred board");
-        uint256 rw = uint256(vm.load(address(affiliate), keccak256(abi.encode(id, uint256(2)))));
+        uint256 rw = uint256(vm.load(address(affiliate), keccak256(abi.encode(id, QaSlots.REFERRAL))));
         assertEq(rw, (uint256(1) << 32) | game.walletIdOf(ref), "referral stores only the ID");
-        uint256 vaultCode = uint256(vm.load(address(affiliate), keccak256(abi.encode(bytes32("VAULT"), uint256(0)))));
+        uint256 vaultCode = uint256(vm.load(address(affiliate), keccak256(abi.encode(bytes32("VAULT"), QaSlots.CODE))));
         assertEq(uint32(vaultCode), 1, "VAULT code owner ID");
         uint256 batch = uint256(vm.load(address(sdgnrs), keccak256(abi.encode(uint256(0), PeripheralSlots.SD_BATCH_PLAYERS + 0))))
             | uint256(vm.load(address(sdgnrs), keccak256(abi.encode(uint256(0), PeripheralSlots.SD_BATCH_PLAYERS + 1))));
@@ -366,12 +367,12 @@ contract WalletIdTruthInvariant is DeployProtocol {
         address a = seeded[2];
         address owner = seeded[3];
         uint256 forged = uint256(uint160(owner)) | (uint256(game.walletIdOf(seeded[0])) << 160);
-        vm.store(address(affiliate), keccak256(abi.encode(game.walletIdOf(a), uint256(2))), bytes32(forged));
+        vm.store(address(affiliate), keccak256(abi.encode(game.walletIdOf(a), QaSlots.REFERRAL)), bytes32(forged));
         _expectBreach("AFFILIATE");
     }
 
     function test_oracleDetectsAStaleCodeUpline() public {
-        bytes32 slot = keccak256(abi.encode(bytes32("VAULT"), uint256(0)));
+        bytes32 slot = keccak256(abi.encode(bytes32("VAULT"), QaSlots.CODE));
         uint256 w = uint256(vm.load(address(affiliate), slot));
         vm.store(address(affiliate), slot, bytes32((w & ~(uint256(type(uint32).max) << 40)) | (uint256(3) << 40)));
         _expectBreach("AFFCODE");
@@ -391,10 +392,10 @@ contract WalletIdTruthInvariant is DeployProtocol {
     }
 
     function _referralWord(address k) internal view returns (uint256) {
-        return uint256(vm.load(address(affiliate), keccak256(abi.encode(_fixtureId(k), uint256(2)))));
+        return uint256(vm.load(address(affiliate), keccak256(abi.encode(_fixtureId(k), QaSlots.REFERRAL))));
     }
     function _referralWord(uint32 k) internal view returns (uint256) {
-        return uint256(vm.load(address(affiliate), keccak256(abi.encode(_fixtureId(k), uint256(2)))));
+        return uint256(vm.load(address(affiliate), keccak256(abi.encode(_fixtureId(k), QaSlots.REFERRAL))));
     }
 
     /// @notice Creation with a blank code (owner already locked), an unregistered default code
@@ -534,7 +535,7 @@ contract WalletIdTruthInvariant is DeployProtocol {
         (, uint32 key) = _smurf(seeded[0]);
         uint256 forged = uint256(uint160(seeded[3])) | (uint256(game.walletIdOf(seeded[3])) << 160);
         assertTrue(forged != _referralWord(seeded[0]), "fixture: a different referrer");
-        vm.store(address(affiliate), keccak256(abi.encode(_fixtureId(key), uint256(2))), bytes32(forged));
+        vm.store(address(affiliate), keccak256(abi.encode(_fixtureId(key), QaSlots.REFERRAL)), bytes32(forged));
         _expectBreach("SMURFREF");
     }
 

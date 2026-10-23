@@ -2,8 +2,8 @@ import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { AbiCoder, Interface } from 'ethers';
 const [left, right, abiFile, output, mode = "P1"] = process.argv.slice(2);
-if (!["P1", "P2", "P3", "--p6", "--p5", "--p5-separate-mint", "--integrated", "--compiler-only"].includes(mode)) throw new Error(`Unknown comparison mode: ${mode}`);
-const compilerOnly = mode === "--compiler-only";
+if (!["P1", "P2", "P3", "--p6", "--p5", "--p5-separate-mint", "--integrated", "--compiler-only", "--xa"].includes(mode)) throw new Error(`Unknown comparison mode: ${mode}`);
+const compilerOnly = mode === "--compiler-only" || mode === "--xa";
 const phase = compilerOnly ? null : mode;
 const p5Mode = ["--p5", "--p5-separate-mint", "--integrated"].includes(mode);
 if (!output) throw new Error('usage: compare-replay.js BASELINE_LOG CANDIDATE_LOG BASELINE_CONTRACTS_JSON OUTPUT_JSON');
@@ -25,21 +25,24 @@ byTopic.set(spentEvent.topicHash, new Map([[spentEvent.format('full'), {fragment
 const abi = AbiCoder.defaultAbiCoder();
 export function parse(text) {
   const runs = [], names = new Map();
-  let run, tx;
+  let run, tx, suite = "", test = "";
   for (const line of text.split('\n')) {
+    if (line.startsWith('Ran ') && line.includes(' for ')) suite = line.slice(line.indexOf(' for ') + 5).trim();
+    const testLine = line.match(/^\[(?:PASS|FAIL[^\]]*)\] ([^( ]+)/);
+    if (testLine) test = testLine[1];
     const start = line.indexOf('DIFF');
     if (start < 0) continue;
     const [kind, ...p] = line.slice(start).trim().split('|');
     if (kind === 'DIFFNAME') {
       if (p[1] === 'player:0') {
-        run = { transactions: [], checkpoints: [], slots: {}, initial: {}, eth: {}, tokens: {}, events: [], edges: {}, gas: {} };
+        run = { identity: `${suite}/${test}`, transactions: [], checkpoints: [], slots: {}, initial: {}, eth: {}, tokens: {}, events: [], edges: {}, gas: {} };
         runs.push(run);
       }
       names.set(p[0].toLowerCase(), p[1]); continue;
     }
     if (kind === 'DIFFTX') {
       if (!run) {
-        run = { transactions: [], checkpoints: [], slots: {}, initial: {}, eth: {}, tokens: {}, events: [], edges: {}, gas: {} };
+        run = { identity: `${suite}/${test}`, transactions: [], checkpoints: [], slots: {}, initial: {}, eth: {}, tokens: {}, events: [], edges: {}, gas: {} };
         runs.push(run);
       }
       if (!run) throw new Error('Observation before first transaction');
@@ -134,6 +137,28 @@ export function differences(a, b) {
   return errors;
 }
 const a = parse(fs.readFileSync(left, 'utf8')), b = parse(fs.readFileSync(right, 'utf8'));
+if (mode === '--xa') {
+  // Forge suite completion order is nondeterministic; pair tests by their recorded identity.
+  for (const runs of [a,b]) {
+    assert.equal(new Set(runs.map(r=>r.identity)).size,runs.length,'ambiguous replay identity');
+    runs.sort((x,y)=>x.identity.localeCompare(y.identity));
+  }
+  assert.deepEqual(a.map(r=>r.identity),b.map(r=>r.identity),'replay test identities');
+  const alias = name => ['Quests', 'Affiliate'].includes(name) ? 'Coinflip' : name;
+  for (const runs of [a, b]) for (const r of runs) {
+    for (const tx of r.transactions) { tx.from = alias(tx.from); tx.to = alias(tx.to); }
+    for (const c of [...r.checkpoints, {events:r.events,eth:r.eth,tokens:r.tokens}]) {
+      for (const e of c.events) { e.emitter = alias(e.emitter); e.args = e.args.map(v => typeof v === 'string' ? alias(v) : v); }
+      // Retired peripherals hold no assets. Fail rather than silently omit custody.
+      for (const name of ['Quests','Affiliate']) {
+        if (name in c.eth) { assert.equal(c.eth[name], '0'); delete c.eth[name]; }
+        for (const key of Object.keys(c.tokens)) if (key.endsWith(':'+name)) {
+          assert.equal(c.tokens[key], '0'); delete c.tokens[key];
+        }
+      }
+    }
+  }
+}
 const errors = differences(a, b);
 const proofs = {};
 assert.deepEqual(differences(a, structuredClone(a)), []);
@@ -262,7 +287,7 @@ if (phase === 'P3' || mode === '--integrated') {
     gameEdges.push(row);
   }
 }
-const report = { differences: errors, proofs, removedEdges: edges, adapterEdges, boxEdges, gameEdges, crapsEdges, p5Edges, runs: a.map((r,i) => ({ transactions: r.transactions.length, checkpoints: r.checkpoints.length, slots: Object.keys(r.initial).length, baselineGas: r.gas, candidateGas: b[i]?.gas })) };
+const report = { differences: errors, proofs, removedEdges: edges, adapterEdges, boxEdges, gameEdges, crapsEdges, p5Edges, runs: a.map((r,i) => ({ identity:r.identity, transactions: r.transactions.length, checkpoints: r.checkpoints.length, slots: Object.keys(r.initial).length, baselineGas: r.gas, candidateGas: b[i]?.gas })) };
 fs.writeFileSync(output, JSON.stringify(report, null, 2)+'\n');
 console.log(JSON.stringify({ differences: errors.length, firstDifferences: errors.slice(0,10), proofs, removedEdges: edges, runs: report.runs.map(({ baselineGas,candidateGas,...r })=>r) }, null, 2));
 if (errors.length) process.exitCode = 1;

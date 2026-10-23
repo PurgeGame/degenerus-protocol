@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {QaSlots} from "../helpers/QaSlots.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {DeployProtocol} from "../fuzz/helpers/DeployProtocol.sol";
@@ -21,7 +22,7 @@ contract GenesisDailyQuestSeed is DeployProtocol {
     uint8 private constant QUEST_TYPE_DEGENERETTE_ETH = 7;
     uint8 private constant CURRENCY_ETH = 0;
     uint256 private constant LOOTBOX_RNG_PACKED_SLOT = GameSlots.LOOTBOX_RNG_PACKED;
-    uint256 private constant QUEST_BITMAP_SLOT = 3;
+    uint256 private constant QUEST_BITMAP_SLOT = QaSlots.ROLLED;
 
     address private player;
 

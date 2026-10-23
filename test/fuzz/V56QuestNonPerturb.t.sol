@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {QaSlots} from "../helpers/QaSlots.sol";
 
 import {DeployProtocol} from "./helpers/DeployProtocol.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -43,7 +44,7 @@ contract V56QuestNonPerturb is DeployProtocol {
     // -------------------------------------------------------------------------
 
     /// @dev questPlayerState mapping root (uint32 wallet ID => PlayerQuestState, one packed 256-bit slot).
-    uint256 private constant QUEST_PLAYER_STATE_SLOT = 1;
+    uint256 private constant QUEST_PLAYER_STATE_SLOT = QaSlots.STATE;
 
     // PlayerQuestState packed-field byte offsets within its single slot.
     uint256 private constant OFF_LAST_ACTIVE_DAY = 3;  // uint24 lastActiveDay (bytes 3..5)

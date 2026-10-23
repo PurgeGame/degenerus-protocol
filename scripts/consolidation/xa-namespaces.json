@@ -1,0 +1,26 @@
+{
+  "craps": {
+    "id": "degenerus.storage.craps.v1",
+    "root": "0x9565c9fe3530db8fa6334c4297b0966dcb03563ceb25cd4ef780f4da6fd48b00"
+  },
+  "sdgnrs": {
+    "id": "degenerus.storage.sdgnrs.v1",
+    "root": "0x448a9eef86b7ea3bae5b926539e78eee20106e240a5c6603005585dd7d3c2900"
+  },
+  "quests": {
+    "id": "degenerus.storage.quests.v1",
+    "root": "0x04343aaa474371a66bb47cad27e6432f6ed56b02c7b23c6e11e4d1818f7af200"
+  },
+  "affiliate": {
+    "id": "degenerus.storage.affiliate.v1",
+    "root": "0x93b2738aa52d403a1d6cd7cad14e72a7cda308b6a92d312ff0746cbfb7eec800"
+  },
+  "coinflip": {
+    "id": "degenerus.storage.coinflip.v1",
+    "root": "0x70455d57a841eb176b3cc8d3c248f67d71829fad2336d07f37350be03f3bd200"
+  },
+  "jackpots": {
+    "id": "degenerus.storage.jackpots.v1",
+    "root": "0xfd50cf0578a57447cfcc55de387bbb2ca122829f41c190a8196f40ee6be94400"
+  }
+}

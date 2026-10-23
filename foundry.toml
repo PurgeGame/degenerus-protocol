@@ -98,4 +98,4 @@ skip = ["test/access/**", "test/craps/**", "test/deploy/**", "test/differential/
 [profile.consolidation]
 # Test contracts embed the complete deployment bytecode. Production limits are checked separately.
 code_size_limit = 1048576
-fs_permissions = [{ access = "read", path = "./contracts" }, { access = "read", path = "./.planning/consolidation/baseline" }]
+fs_permissions = [{ access = "read", path = "./contracts" }, { access = "read", path = "./.planning/consolidation/baseline" }, { access = "read-write", path = "./.planning/consolidation/xa/native/fixtures" }]
