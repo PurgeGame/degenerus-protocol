@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {ProfileModules} from "../helpers/ProfileModules.sol";
 
 import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
 import {Test, Vm} from "forge-std/Test.sol";
@@ -17,15 +18,16 @@ contract JackpotCheckpointHarness is DegenerusGameJackpotModule, BucketSeed {
     function walletKeyOf(uint32 id) external view returns (address) { return _walletKey(id); }
     function seed(uint24 lvl, uint256 word, bool concentrated) external {
         level = lvl - 1;
-        dailyIdx = 100;
+        dailyIdx = 101;
+        rngRequestDay = 101;
         rngLockedFlag = true;
         uint8[4] memory traits = JackpotBucketLib.getRandomTraits(word);
         for (uint8 q; q < (concentrated ? 1 : 4); ++q) {
             this.seedOne(lvl, traits[q], uint160(0x10000 + uint256(q) * 0x10000));
         }
         traits[3] = GoldSixLib.daily(traits[3], word);
-        dailyFoilDraw[(dailyIdx + 1) & 1] = _packFoilDraw(
-            JackpotBucketLib.packWinningTraits(traits), level, dailyIdx + 1, word);
+        dailyFoilDraw[rngRequestDay & 1] = _packFoilDraw(
+            JackpotBucketLib.packWinningTraits(traits), level, rngRequestDay, word);
         // 1,000 tickets (40 ETH at 0.04): 192 winners at 5 tickets each.
         dailyTicketBudgetsPacked = uint256(1000 * 4) << 144;
     }
@@ -79,9 +81,10 @@ contract JackpotCheckpointsTest is Test {
     bytes32 private constant TICKET_WIN = keccak256("JackpotTicketWin(uint32,uint24,uint16,uint32,uint24,uint256,bool)");
 
     function setUp() public {
-        vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);
+        vm.setNonce(address(this), vm.getNonce(address(this)) + 1024);
+        ProfileModules.installGame(vm);
+        ProfileModules.installCraps(vm);
         h = new JackpotCheckpointHarness();
-        vm.etch(ContractAddresses.GAME_FOILPACK_MODULE, address(new DegenerusGameFoilPackModule()).code);
     }
 
     function _digest(bytes32 digest, Vm.Log[] memory logs) private pure returns (bytes32) {
@@ -271,7 +274,6 @@ contract JackpotCheckpointsTest is Test {
                 && ((traits[2] >> 3) & 7) == 7 && ((traits[3] >> 3) & 7) == 7) break;
             ++word;
         }
-        vm.etch(ContractAddresses.GAME_WHALE_MODULE, address(new DegenerusGameWhaleModule()).code);
         h.seed(LVL, word, false);
         h.seedDaily(LVL);
         uint256 snap = vm.snapshotState();

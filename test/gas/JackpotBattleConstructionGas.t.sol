@@ -77,7 +77,7 @@ contract BattleConstructionGameSeed is DegenerusGameStorage, WalletSeed {
     function runDraw(uint24 ceiling, uint256 word, uint256 allowance)
         external returns (MineFlipGas.Result memory)
     {
-        (bool ok, bytes memory data) = ContractAddresses.GAME_JACKPOT_MODULE.delegatecall(
+        (bool ok, bytes memory data) = ContractAddresses.GAME_JACKPOT_DRAW_MODULE.delegatecall(
             abi.encodeWithSignature("runPurchaseJackpotBattle(uint24,uint256,uint256)", ceiling, word, allowance)
         );
         if (!ok) assembly ("memory-safe") { revert(add(data, 32), mload(data)) }

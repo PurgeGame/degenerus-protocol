@@ -6,7 +6,8 @@ import {BoundedGasProbe} from "../helpers/BoundedGasProbe.sol";
 
 contract BoundedBoardHost is DegenerusGameJackpotModule {
     function seed(bool populated, bool recycled) external {
-        dailyIdx = 100;
+        dailyIdx = 101;
+        rngRequestDay = 101;
         if (populated) {
             for (uint8 q; q < 3; ++q) {
                 for (uint8 s; s < 8; ++s) {

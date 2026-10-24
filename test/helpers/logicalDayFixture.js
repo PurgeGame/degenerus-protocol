@@ -1,6 +1,12 @@
 import hre from "hardhat";
 import { compiledStorageLayout } from "./storageLayout.js";
 
+const questRoots = new Map();
+
+export async function registerLogicalDayQuestRoot(game, quests) {
+  questRoots.set((await game.getAddress()).toLowerCase(), await quests.getAddress());
+}
+
 /** Explicit header fixture for unit tests. Real lifecycle tests request and finish each round. */
 export async function setPackedField(contract, name, value, contractName = "DegenerusGame") {
   const layout = await compiledStorageLayout(contractName);
@@ -32,9 +38,11 @@ export async function seedLogicalDay(game, day, coinflip) {
     }
     await hre.network.provider.send("hardhat_setStorageAt", [address, "0x4", hre.ethers.toBeHex(packed, 32)]);
     const root = "0x04343aaa474371a66bb47cad27e6432f6ed56b02c7b23c6e11e4d1818f7af200";
-    const pair = BigInt(await hre.ethers.provider.getStorage(address, root));
+    const questAddress = questRoots.get((await game.getAddress()).toLowerCase());
+    if (!questAddress) throw new Error("Missing selected Quests root for logical-day fixture");
+    const pair = BigInt(await hre.ethers.provider.getStorage(questAddress, root));
     const mask = 0xffffffn | (0xffffffn << 64n);
-    await hre.network.provider.send("hardhat_setStorageAt", [address, root,
+    await hre.network.provider.send("hardhat_setStorageAt", [questAddress, root,
       hre.ethers.toBeHex((pair & ~mask) | BigInt(day) | (BigInt(day) << 64n), 32)]);
   }
 }

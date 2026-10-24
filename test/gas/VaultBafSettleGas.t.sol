@@ -184,7 +184,7 @@ abstract contract VaultSealChunkGas is VaultBafRig, NativeGasExport {
     uint24 internal latchDay;
     uint24 internal settledAt;
 
-    /// @dev Slow game: level 0 idles 240 days and each of levels 1-18 holds 27 purchase days,
+    /// @dev Slow game: levels 0-18 each hold 27 purchase days, below the 30-day deadline,
     ///      so the level-20 seal falls after day 90 and the vault can carry a full-window
     ///      backlog. Automatic craps funding can settle the vault along the way, so seed its
     ///      worst-case claim backlog immediately before the measured seal to keep the
@@ -199,7 +199,7 @@ abstract contract VaultSealChunkGas is VaultBafRig, NativeGasExport {
 
     function _holdFor(uint24 lvl) internal view override returns (uint256) {
         if (!_slow()) return super._holdFor(lvl);
-        return lvl == 0 ? 240 : (lvl < 19 ? 27 : 0);
+        return lvl < 19 ? 27 : 0;
     }
 
     function setUp() public override {
@@ -252,7 +252,7 @@ abstract contract VaultSealChunkGas is VaultBafRig, NativeGasExport {
             vm.deleteStateSnapshot(snap);
         }
         if (_slow()) {
-            require(latchDay > 731, "harness: the slow game reaches a full-window backlog");
+            require(latchDay > 90, "harness: the slow game reaches a full-window backlog");
             bytes memory original = address(coinflip).code;
             vm.etch(address(coinflip), type(VaultSettleSeeder).runtimeCode);
             VaultSettleSeeder(address(coinflip)).seedVaultHistory(latchDay, 90, _rebuy());

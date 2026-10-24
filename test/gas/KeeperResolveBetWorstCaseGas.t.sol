@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {GameTimeLib} from "../../contracts/libraries/GameTimeLib.sol";
 import {RecyclingState} from "../helpers/RecyclingState.sol";
 
 import {NativeGasExport} from "../helpers/NativeGasExport.sol";
@@ -570,7 +571,12 @@ contract KeeperResolveBetWorstCaseGas is DeployProtocol, NativeGasExport {
         // The day itself is sealed, as after a mid-day request: the delivered cohort's read
         // consumers are the engine's only work, so a measured call ends when the cohort completes.
         uint256 slot0 = uint256(vm.load(address(game), bytes32(0)));
-        slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(game.currentDayView()) << 24) | (uint256(1) << 192);
+        uint24 wallDay = GameTimeLib.currentDayIndex();
+        slot0 = (slot0 & ~(uint256(0xFFFFFF) << 24)) | (uint256(wallDay) << 24) | (uint256(1) << 192);
+        uint256 requestDay = uint256(vm.load(address(game), bytes32(GameSlots.LAST_DAILY_REQUEST_WALL_DAY)));
+        uint256 shift = GameSlots.LAST_DAILY_REQUEST_WALL_DAY_OFFSET * 8;
+        vm.store(address(game), bytes32(GameSlots.LAST_DAILY_REQUEST_WALL_DAY),
+            bytes32((requestDay & ~(uint256(type(uint24).max) << shift)) | (uint256(wallDay) << shift)));
         vm.store(address(game), bytes32(0), bytes32(slot0));
     }
 

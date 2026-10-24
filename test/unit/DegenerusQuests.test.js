@@ -71,7 +71,7 @@ async function rollQuestAsGame(hreEthers, game, quests, day, entropy, forceMintF
   ]);
   const gameSigner = await hreEthers.getSigner(gameAddr);
   await setPackedField(game, "dailyIdx", day);
-  await setPackedField(quests, "requestedDailyIdx", day, "Coinflip");
+  await setPackedField(questCoinflip, "requestedDailyIdx", day, "Coinflip");
   const tx = await quests.connect(gameSigner).rollDailyQuest(day, entropy, forceMintFlip, false, false);
   await hreEthers.provider.send("hardhat_stopImpersonatingAccount", [gameAddr]);
   return { tx };
@@ -128,7 +128,7 @@ async function rollQuestWithBonusType(hreEthers, game, quests, day, targetBonusT
     for (let entropy = 0n; entropy < 256n; entropy++) {
       const snapshot = await hreEthers.provider.send("evm_snapshot", []);
       await setPackedField(game, "dailyIdx", day);
-      await setPackedField(quests, "requestedDailyIdx", day, "Coinflip");
+      await setPackedField(questCoinflip, "requestedDailyIdx", day, "Coinflip");
       await quests.connect(gameSigner).rollDailyQuest(day, entropy, false, false, false);
       const active = await quests.getActiveQuests();
       if (Number(active[1].questType) === targetBonusType) return;
@@ -147,8 +147,10 @@ async function rollQuestWithBonusType(hreEthers, game, quests, day, targetBonusT
 // Wallet IDs of the two test players; the fixture registers both, and the snapshot keeps them.
 let ALICE;
 let BOB;
+let questCoinflip;
 async function questFixture() {
   const f = await deployFullProtocol();
+  questCoinflip = f.coinflip;
   ALICE = await giveWalletId(f.game, f.alice.address);
   BOB = await giveWalletId(f.game, f.bob.address);
   return f;
@@ -1092,7 +1094,7 @@ describe("DegenerusQuests", function () {
       let chosenDay = 0n;
       for (let d = 1n; d <= 300n; d++) {
         await setPackedField(game, "dailyIdx", d);
-        await setPackedField(quests, "requestedDailyIdx", d, "Coinflip");
+        await setPackedField(questCoinflip, "requestedDailyIdx", d, "Coinflip");
         await quests.connect(gameSigner).rollDailyQuest(d, d * 7919n, false, false, false);
         const active = await quests.getActiveQuests();
         if (Number(active[1].questType) !== QUEST_TYPE_FLIP) {
@@ -1219,7 +1221,7 @@ describe("DegenerusQuests", function () {
       let chosenDay = 0n;
       for (let d = 1n; d <= 300n; d++) {
         await setPackedField(game, "dailyIdx", d);
-        await setPackedField(quests, "requestedDailyIdx", d, "Coinflip");
+        await setPackedField(questCoinflip, "requestedDailyIdx", d, "Coinflip");
         await quests.connect(gameSigner).rollDailyQuest(d, d * 7919n, false, false, false);
         const active = await quests.getActiveQuests();
         if (Number(active[1].questType) !== QUEST_TYPE_AFFILIATE) {
@@ -1282,7 +1284,7 @@ describe("DegenerusQuests", function () {
       let chosenDay = 0n;
       for (let d = 1n; d <= 300n; d++) {
         await setPackedField(game, "dailyIdx", d);
-        await setPackedField(quests, "requestedDailyIdx", d, "Coinflip");
+        await setPackedField(questCoinflip, "requestedDailyIdx", d, "Coinflip");
         await quests.connect(gameSigner).rollDailyQuest(d, d * 7919n, false, false, false);
         const active = await quests.getActiveQuests();
         if (Number(active[1].questType) === targetType) {

@@ -2,6 +2,7 @@
 pragma solidity 0.8.38;
 import {DegenesisGasBase, DegenesisGasHost} from "./DegenesisGas.t.sol";
 import {Vm} from "forge-std/Vm.sol";
+import {NativeMeasuredGasExport} from "../helpers/NativeMeasuredGasExport.sol";
 import {DegenesisBoonReference as Ref} from "../fuzz/helpers/DegenesisBoonReference.sol";
 import {GameSlots, GameSlotKeys} from "../helpers/GameSlots.sol";
 import {BitPackingLib} from "../../contracts/libraries/BitPackingLib.sol";
@@ -10,7 +11,7 @@ import {sDGNRS} from "../../contracts/sDGNRS.sol";
 
 /// @notice Full production settlement calls: dispatch, expiry, all deliveries, event, primary,
 ///         flush and close. Paired native runs remove only the additional boon path.
-contract DegenesisBoonGasTest is DegenesisGasBase {
+contract DegenesisBoonGasTest is DegenesisGasBase, NativeMeasuredGasExport {
     uint32 private id;
     uint256 private q;
 
@@ -119,11 +120,78 @@ contract DegenesisBoonGasTest is DegenesisGasBase {
         host.hostCohort(7, n * 50_000, n, true);
         host.hostActive(q, 9, 0);
         host.hostWord(275);
-        // The storage-access recorder avoids a large nested state-diff transcript.
+        // Full dumps include every selected module and optional continuation slot.
+        // The cheatcode writes directly; export does not build a growing JSON string
+        // containing every runtime in the EVM test frame.
         string memory label = "degenesis-chunk-three-boons-seventh";
         string memory dir = vm.envOr("STORAGE_REUSE_EXPORT", string(""));
-        uint256 snapshot = vm.snapshotState();
-        vm.record();
+        if (bytes(dir).length != 0) {
+            // Isolated dumpState omits untouched cached deployment accounts.
+            // Materialize actual runtimes/headers, preserving every value.
+            for (uint256 i; i <= GameSlots.DEGENERETTE_QUEUE + 1; ++i) {
+                bytes32 slot = bytes32(i);
+                vm.store(address(host), slot, vm.load(address(host), slot));
+            }
+            address[32] memory accounts = [
+                ContractAddresses.GAME,
+                ContractAddresses.GAME_ACTIONS_MODULE,
+                ContractAddresses.GAME_PURCHASE_MODULE,
+                ContractAddresses.GAME_MINT_MODULE,
+                ContractAddresses.GAME_DEGENESIS_MODULE,
+                ContractAddresses.GAME_ADVANCE_MODULE,
+                ContractAddresses.GAME_RNG_MODULE,
+                ContractAddresses.GAME_JACKPOT_MODULE,
+                ContractAddresses.GAME_JACKPOT_DRAW_MODULE,
+                ContractAddresses.GAME_WHALE_MODULE,
+                ContractAddresses.GAME_TICKET_MODULE,
+                ContractAddresses.GAME_LOOTBOX_MODULE,
+                ContractAddresses.GAME_BOON_MODULE,
+                ContractAddresses.GAME_DEGENERETTE_MODULE,
+                ContractAddresses.GAME_AFKING_MODULE,
+                ContractAddresses.GAME_GAMEOVER_MODULE,
+                ContractAddresses.GAME_DECIMATOR_MODULE,
+                ContractAddresses.GAME_MINER_MODULE,
+                ContractAddresses.COIN,
+                ContractAddresses.COINFLIP,
+                ContractAddresses.QUESTS,
+                ContractAddresses.AFFILIATE,
+                ContractAddresses.SDGNRS,
+                ContractAddresses.DGNRS,
+                ContractAddresses.WWXRP,
+                ContractAddresses.VAULT,
+                ContractAddresses.GNRUS,
+                ContractAddresses.DEITY_PASS,
+                ContractAddresses.RECORD_BOUNTY,
+                ContractAddresses.CRAPS,
+                ContractAddresses.CRAPS_ENGINE,
+                ContractAddresses.CRAPS_LIFECYCLE_MODULE
+            ];
+            for (uint256 a; a < accounts.length; ++a) {
+                vm.etch(accounts[a], accounts[a].code);
+                for (uint256 i; i < 32; ++i) {
+                    bytes32 slot = bytes32(i);
+                    vm.store(accounts[a], slot, vm.load(accounts[a], slot));
+                }
+            }
+            bytes32[2] memory roots = [
+                bytes32(0x04343aaa474371a66bb47cad27e6432f6ed56b02c7b23c6e11e4d1818f7af200),
+                bytes32(0x93b2738aa52d403a1d6cd7cad14e72a7cda308b6a92d312ff0746cbfb7eec800)
+            ];
+            for (uint256 a; a < 2; ++a) {
+                address owner = a == 0 ? ContractAddresses.QUESTS : ContractAddresses.AFFILIATE;
+                for (uint256 i; i < 8; ++i) {
+                    bytes32 slot = bytes32(uint256(roots[a]) + i);
+                    vm.store(owner, slot, vm.load(owner, slot));
+                }
+            }
+            // Deployment cache also holds the pool inventory and the Game's
+            // sDGNRS claimable sentinel. Materialize those constructor mappings.
+            bytes32 poolBalanceSlot = keccak256(abi.encode(address(sdgnrs), uint256(1))); // sDGNRS.balanceOf
+            vm.store(address(sdgnrs), poolBalanceSlot, vm.load(address(sdgnrs), poolBalanceSlot));
+            bytes32 claimableSlot = keccak256(abi.encode(uint32(2), GameSlots.BALANCES_PACKED));
+            vm.store(address(host), claimableSlot, vm.load(address(host), claimableSlot));
+            vm.dumpState(string.concat(dir, "/", label, ".state.json"));
+        }
         bytes memory input = abi.encodeCall(DegenesisGasHost.hostRun, (type(uint128).max));
         _cool();
         vm.recordLogs();
@@ -146,118 +214,8 @@ contract DegenesisBoonGasTest is DegenesisGasBase {
         assertEq(companions, n);
         assertEq(sdgnrs.poolBalance(sDGNRS.Pool.Degenesis), 0, "seventh close burns inventory");
         if (bytes(dir).length != 0) {
-            ChunkAccess[] memory accesses = _chunkAccesses();
-            string memory post = "{";
-            for (uint256 i; i < accesses.length; ++i) {
-                ChunkAccess memory a = accesses[i];
-                string memory key = string.concat(label, "-post-", vm.toString(a.account));
-                string memory slots = this.chunkStorage(key, a.account, a.reads, a.writes);
-                post = string.concat(post, i == 0 ? "" : ",", '"', vm.toString(a.account), '":', slots);
-            }
-            post = string.concat(post, "}");
-            assertTrue(vm.revertToStateAndDelete(snapshot));
-            _writeChunk(label, dir, accesses, input, output, logs, post);
-        } else {
-            vm.deleteStateSnapshot(snapshot);
+            vm.dumpState(string.concat(dir, "/", label, ".post.json"));
+            this.writeDumpFixture(label, address(this), address(host), input, output, logs);
         }
-    }
-
-    struct ChunkAccess {
-        address account;
-        bytes32[] reads;
-        bytes32[] writes;
-    }
-
-    /// @dev Every possible callee of this settlement, including shared-host aliases.
-    /// Native replay separately rejects any accessed code or slot absent from the export.
-    function _chunkAccesses() private returns (ChunkAccess[] memory result) {
-        address[14] memory accounts = [
-            address(this),
-            address(host),
-            ContractAddresses.GAME_DEGENESIS_MODULE,
-            ContractAddresses.GAME_BOON_MODULE,
-            ContractAddresses.GAME_ADVANCE_MODULE,
-            ContractAddresses.GAME_WHALE_MODULE,
-            address(sdgnrs),
-            address(wwxrp),
-            address(crapsBattle),
-            address(coinflip),
-            address(coin),
-            address(mockStETH),
-            address(mockVRF),
-            address(gnrus)
-        ];
-        result = new ChunkAccess[](accounts.length);
-        for (uint256 i; i < accounts.length; ++i) {
-            (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(accounts[i]);
-            result[i] = ChunkAccess(accounts[i], reads, writes);
-        }
-    }
-
-    function chunkStorage(string calldata key, address account, bytes32[] calldata reads, bytes32[] calldata writes)
-        external
-        returns (string memory)
-    {
-        require(msg.sender == address(this), "chunk serializer self-call");
-        vm.serializeJson(key, "{}");
-        for (uint256 i; i < reads.length; ++i) {
-            this.nativeSerializeSlot(key, account, reads[i]);
-        }
-        for (uint256 i; i < writes.length; ++i) {
-            this.nativeSerializeSlot(key, account, writes[i]);
-        }
-        return vm.serializeBytes32(key, vm.toString(bytes32(0)), vm.load(account, 0));
-    }
-
-    function _writeChunk(
-        string memory label,
-        string memory dir,
-        ChunkAccess[] memory accesses,
-        bytes memory input,
-        bytes memory output,
-        Vm.Log[] memory logs,
-        string memory post
-    ) private {
-        string memory state = "{";
-        for (uint256 i; i < accesses.length; ++i) {
-            ChunkAccess memory a = accesses[i];
-            string memory key = string.concat(label, "-pre-", vm.toString(a.account));
-            string memory slots = this.chunkStorage(key, a.account, a.reads, a.writes);
-            state = string.concat(
-                state,
-                i == 0 ? "" : ",",
-                '"',
-                vm.toString(a.account),
-                '":{"code":"',
-                vm.toString(a.account.code),
-                '","balance":"',
-                vm.toString(bytes32(a.account.balance)),
-                '","nonce":',
-                vm.toString(vm.getNonce(a.account)),
-                ',"storage":',
-                slots,
-                "}"
-            );
-        }
-        vm.writeJson(string.concat(state, "}"), string.concat(dir, "/", label, ".state.json"));
-        vm.serializeJson(label, "{}");
-        vm.serializeAddress(label, "from", address(this));
-        vm.serializeAddress(label, "to", address(host));
-        vm.serializeBytes(label, "input", input);
-        vm.serializeBytes(label, "expectedReturn", output);
-        vm.serializeString(label, "expectedStorage", post);
-        vm.serializeUint(label, "baseFee", block.basefee);
-        vm.serializeUint(label, "number", block.number);
-        vm.serializeUint(label, "timestamp", block.timestamp);
-        string memory entries = "[";
-        for (uint256 i; i < logs.length; ++i) {
-            string memory key = string.concat(label, "-log-", vm.toString(i));
-            vm.serializeAddress(key, "address", logs[i].emitter);
-            vm.serializeBytes(key, "data", logs[i].data);
-            string memory entry = vm.serializeBytes32(key, "topics", logs[i].topics);
-            entries = string.concat(entries, i == 0 ? "" : ",", entry);
-        }
-        string memory json = vm.serializeString(label, "expectedLogs", string.concat(entries, "]"));
-        vm.writeJson(json, string.concat(dir, "/", label, ".call.json"));
     }
 }

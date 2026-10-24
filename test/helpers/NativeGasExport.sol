@@ -73,71 +73,113 @@ abstract contract NativeGasExport is Test {
 
     function _nativeExtraStorage(string memory, address) internal virtual {}
 
+    function nativeWriteState(string calldata label, string calldata dir, address[] calldata accounts,
+        VmSafe.AccountAccess[] calldata accesses) external
+    {
+        require(msg.sender == address(this), "state writer self-call");
+        string memory statePath = string.concat(dir, "/", label, ".state.json");
+        vm.writeFile(statePath, "{\n");
+        bool comma;
+        for (uint256 i; i < accounts.length; ++i) {
+            address account = accounts[i];
+            bool seen;
+            for (uint256 j; j < i; ++j) if (accounts[j] == account) { seen = true; break; }
+            if (seen) continue;
+            this.nativeWriteAccount(label, dir, account, accesses, comma);
+            comma = true;
+        }
+        vm.writeLine(statePath, "}");
+    }
+
+    /// @dev Stream one account in a fresh frame. Fixture runtimes can contain all
+    /// deployment creation code; repeatedly concatenating them into a growing
+    /// in-memory document makes export itself exhaust the test's memory budget.
+    function nativeWriteAccount(string calldata label, string calldata dir, address account,
+        VmSafe.AccountAccess[] calldata accesses, bool comma) external
+    {
+        require(msg.sender == address(this), "account writer self-call");
+        string memory key = string.concat(label, vm.toString(account), "-storage");
+        vm.serializeJson(key, "{}");
+        for (uint256 j; j < accesses.length; ++j) {
+            for (uint256 k; k < accesses[j].storageAccesses.length; ++k) {
+                VmSafe.StorageAccess calldata slot = accesses[j].storageAccesses[k];
+                if (slot.account == account) this.nativeSerializeSlot(key, account, slot.slot);
+            }
+        }
+        this.nativeReplayCoverage(key, account, dir);
+        _nativeExtraStorage(key, account);
+        string memory storageJson = vm.serializeBytes32(key, vm.toString(bytes32(0)), vm.load(account, 0));
+        vm.writeLine(string.concat(dir, "/", label, ".state.json"), string.concat(
+            comma ? "," : "", '"', vm.toString(account), '":{"code":"', vm.toString(account.code),
+            '","balance":"', vm.toString(bytes32(account.balance)), '","nonce":', vm.toString(vm.getNonce(account)),
+            ',"storage":', storageJson, '}'));
+    }
+
     function _nativeFixture(string memory label, address sender, address target, bytes memory input) internal {
         _nativeFixture(label, sender, target, 0, input);
     }
 
+    struct NativeFixtureData {
+        string label;
+        string dir;
+        address sender;
+        address target;
+        uint256 value;
+        bytes input;
+        bytes output;
+        string expectedStorage;
+        VmSafe.AccountAccess[] accesses;
+        Vm.Log[] logs;
+    }
+
     function _nativeFixture(string memory label, address sender, address target, uint256 value, bytes memory input) internal {
-        string memory dir = vm.envOr("STORAGE_REUSE_EXPORT", string(""));
+        NativeFixtureData memory work;
+        work.label = label;
+        work.dir = vm.envOr("STORAGE_REUSE_EXPORT", string(""));
+        work.sender = sender;
+        work.target = target;
+        work.value = value;
+        work.input = input;
         uint256 snapshot = vm.snapshotState();
         vm.startStateDiffRecording();
         vm.recordLogs();
         vm.prank(sender);
         (bool ok, bytes memory output) = target.call{value: value}(input);
-        VmSafe.AccountAccess[] memory accesses = vm.stopAndReturnStateDiff();
-        Vm.Log[] memory logs = vm.getRecordedLogs();
+        work.output = output;
+        work.accesses = vm.stopAndReturnStateDiff();
+        work.logs = vm.getRecordedLogs();
         if (!ok) assembly ("memory-safe") { revert(add(output, 32), mload(output)) }
-        string memory expectedStorage;
-        if (bytes(dir).length != 0) expectedStorage = this.nativeExpectedStorage(label, accesses);
+        if (bytes(work.dir).length != 0) work.expectedStorage = this.nativeExpectedStorage(label, work.accesses);
         assertTrue(vm.revertToStateAndDelete(snapshot));
-        if (bytes(dir).length != 0) {
-            address[] memory accounts = new address[](accesses.length + 2);
-            accounts[0] = sender;
-            accounts[1] = target;
-            for (uint256 i; i < accesses.length; ++i) accounts[i + 2] = accesses[i].account;
-            vm.serializeAddress(label, "accounts", accounts);
-            vm.serializeAddress(label, "from", sender);
-            vm.serializeAddress(label, "to", target);
-            vm.serializeBytes(label, "input", input);
-            vm.serializeUint(label, "value", value);
-            vm.serializeBytes(label, "expectedReturn", output);
-            vm.serializeString(label, "expectedStorage", expectedStorage);
-            vm.serializeUint(label, "baseFee", block.basefee);
-            vm.serializeUint(label, "number", block.number);
-            string memory logsJson = "[";
-            for (uint256 i; i < logs.length; ++i) {
-                string memory logKey = string.concat(label, "-log-", vm.toString(i));
-                vm.serializeAddress(logKey, "address", logs[i].emitter);
-                vm.serializeBytes(logKey, "data", logs[i].data);
-                string memory entry = vm.serializeBytes32(logKey, "topics", logs[i].topics);
-                logsJson = string.concat(logsJson, i == 0 ? "" : ",", entry);
-            }
-            vm.serializeString(label, "expectedLogs", string.concat(logsJson, "]"));
-            string memory json = vm.serializeUint(label, "timestamp", block.timestamp);
-            vm.writeJson(json, string.concat(dir, "/", label, ".call.json"));
-            string memory state = "{";
-            for (uint256 i; i < accounts.length; ++i) {
-                address account = accounts[i];
-                bool seen;
-                for (uint256 j; j < i; ++j) if (accounts[j] == account) { seen = true; break; }
-                if (seen) continue;
-                string memory key = string.concat(label, vm.toString(account), "-storage");
-                vm.serializeJson(key, "{}");
-                for (uint256 j; j < accesses.length; ++j) {
-                    VmSafe.StorageAccess[] memory slots = accesses[j].storageAccesses;
-                    for (uint256 k; k < slots.length; ++k) if (slots[k].account == account) {
-                        this.nativeSerializeSlot(key, account, slots[k].slot);
-                    }
-                }
-                this.nativeReplayCoverage(key, account, dir);
-                _nativeExtraStorage(key, account);
-                string memory storageJson = vm.serializeBytes32(key, vm.toString(bytes32(uint256(0))), vm.load(account, 0));
-                if (bytes(state).length > 1) state = string.concat(state, ",");
-                state = string.concat(state, '"', vm.toString(account), '":{"code":"', vm.toString(account.code),
-                    '","balance":"', vm.toString(bytes32(account.balance)), '","nonce":', vm.toString(vm.getNonce(account)),
-                    ',"storage":', storageJson, '}');
-            }
-            vm.writeJson(string.concat(state, "}"), string.concat(dir, "/", label, ".state.json"));
+        if (bytes(work.dir).length != 0) this.nativeWriteFixture(work);
+    }
+
+    function nativeWriteFixture(NativeFixtureData calldata work) external {
+        require(msg.sender == address(this), "fixture writer self-call");
+        address[] memory accounts = new address[](work.accesses.length + 2);
+        accounts[0] = work.sender;
+        accounts[1] = work.target;
+        for (uint256 i; i < work.accesses.length; ++i) accounts[i + 2] = work.accesses[i].account;
+        vm.serializeAddress(work.label, "accounts", accounts);
+        vm.serializeAddress(work.label, "from", work.sender);
+        vm.serializeAddress(work.label, "to", work.target);
+        vm.serializeBytes(work.label, "input", work.input);
+        vm.serializeUint(work.label, "value", work.value);
+        vm.serializeBytes(work.label, "expectedReturn", work.output);
+        vm.serializeString(work.label, "expectedStorage", work.expectedStorage);
+        vm.serializeUint(work.label, "baseFee", block.basefee);
+        vm.serializeUint(work.label, "number", block.number);
+        string memory logsJson = "[";
+        for (uint256 i; i < work.logs.length; ++i) {
+            string memory logKey = string.concat(work.label, "-log-", vm.toString(i));
+            vm.serializeAddress(logKey, "address", work.logs[i].emitter);
+            vm.serializeBytes(logKey, "data", work.logs[i].data);
+            string memory entry = vm.serializeBytes32(logKey, "topics", work.logs[i].topics);
+            logsJson = string.concat(logsJson, i == 0 ? "" : ",", entry);
         }
+        vm.serializeString(work.label, "expectedLogs", string.concat(logsJson, "]"));
+        string memory json = vm.serializeUint(work.label, "timestamp", block.timestamp);
+        vm.writeJson(json, string.concat(work.dir, "/", work.label, ".call.json"));
+        this.nativeWriteState(work.label, work.dir, accounts, work.accesses);
     }
 }

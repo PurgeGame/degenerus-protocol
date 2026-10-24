@@ -7,16 +7,22 @@ import {CrapsEngine} from "../../contracts/CrapsEngine.sol";
 import {JackpotBattle} from "../../contracts/JackpotBattle.sol";
 import {CrapsBattleStorage} from "../../contracts/storage/CrapsBattleStorage.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
+import {ProfileModules} from "../helpers/ProfileModules.sol";
 
 contract CrapsConsolidationTest is Test {
     CrapsBattle private table;
 
     function setUp() public {
+        ProfileModules.installCraps(vm);
         table = new CrapsBattle();
     }
 
     function test_aliasesResolveToTable() public pure {
-        assertEq(ContractAddresses.CRAPS_ENGINE, ContractAddresses.CRAPS);
+        if (ContractAddresses.CRAPS_LIFECYCLE_MODULE == ContractAddresses.CRAPS) {
+            assertEq(ContractAddresses.CRAPS_ENGINE, ContractAddresses.CRAPS);
+        } else {
+            assertNotEq(ContractAddresses.CRAPS_ENGINE, ContractAddresses.CRAPS);
+        }
         assertEq(ContractAddresses.JACKPOT_BATTLE, ContractAddresses.CRAPS);
     }
 
@@ -47,6 +53,8 @@ contract CrapsConsolidationTest is Test {
 
     function test_externalEngineSurfaceRunsUnderStaticcallWithoutWrites() public {
         CrapsEngine referenceEngine = new CrapsEngine();
+        address engine = ContractAddresses.CRAPS_ENGINE == ContractAddresses.CRAPS
+            ? address(table) : ContractAddresses.CRAPS_ENGINE;
         bytes[] memory calls = new bytes[](4);
         calls[0] = abi.encodeCall(CrapsEngine.settleSlip,
             (0, 300, 123, 10, bytes32(uint256(9)), 30_000 ether, 300_000 ether, 17, 0));
@@ -59,8 +67,8 @@ contract CrapsConsolidationTest is Test {
         for (uint256 i; i < calls.length; ++i) {
             (bool expectedOk, bytes memory expected) = address(referenceEngine).staticcall(calls[i]);
             vm.record();
-            (bool ok, bytes memory result) = address(table).staticcall(calls[i]);
-            (, bytes32[] memory writes) = vm.accesses(address(table));
+            (bool ok, bytes memory result) = engine.staticcall(calls[i]);
+            (, bytes32[] memory writes) = vm.accesses(engine);
             assertTrue(expectedOk);
             assertEq(ok, expectedOk);
             assertEq(result, expected);

@@ -1,15 +1,17 @@
 import { usesAffiliateBootstrap } from "../../scripts/lib/deploymentManifest.js";
-import { seedLogicalDay, setPackedField } from "./logicalDayFixture.js";
+import { seedLogicalDay, setPackedField, registerLogicalDayQuestRoot } from "./logicalDayFixture.js";
 import hre from "hardhat";
 import {
   predictAddresses,
   reserveDeploymentNonces,
   computeDeployDayBoundary,
+  JACKPOT_RESET_TIME,
   DEPLOY_ORDER,
   expandAliases,
   KEY_TO_CONTRACT,
 } from "../../scripts/lib/predictAddresses.js";
 import { patchContractAddresses } from "../../scripts/lib/patchContractAddresses.js";
+import { withDelegateMetadata } from "../../scripts/lib/profileAbi.js";
 
 // Module-level state: patch + compile happens only once per test run
 let _patched = false;
@@ -52,8 +54,15 @@ export async function deployFullProtocol({
   const signers = await hre.ethers.getSigners();
   const [deployer, alice, bob, carol, dan, eve, ...others] = signers;
 
-  const block = await hre.ethers.provider.getBlock("latest");
-  const deployDayBoundary = computeDeployDayBoundary(block.timestamp);
+  // Slow profile compilation and dozens of CREATEs must not cross a daily
+  // boundary during constructor bootstrap. Start the fixture one hour into a
+  // fresh protocol day; logical day 1 and the legacy +8-day offset are unchanged.
+  const previousBlock = await hre.ethers.provider.getBlock("latest");
+  const fixtureStart = (BigInt(computeDeployDayBoundary(previousBlock.timestamp)) + 1n)
+    * 86400n + JACKPOT_RESET_TIME + 3600n;
+  await hre.network.provider.send("evm_setNextBlockTimestamp", [Number(fixtureStart)]);
+  await hre.network.provider.send("evm_mine");
+  const deployDayBoundary = computeDeployDayBoundary(Number(fixtureStart));
   if (!degenesis) {
     await hre.network.provider.send("evm_increaseTime", [LEGACY_DEPLOY_OFFSET]);
     await hre.network.provider.send("evm_mine");
@@ -122,6 +131,14 @@ export async function deployFullProtocol({
   for (const [alias, contract] of expandAliases(new Map(Object.entries(contracts)))) contracts[alias] = contract;
   for (const [alias, addr] of expandAliases(deployedAddrs)) deployedAddrs.set(alias, addr);
 
+  contracts.GAME = new hre.ethers.Contract(
+    deployedAddrs.get("GAME"),
+    withDelegateMetadata(contracts.GAME.interface.fragments,
+      Object.entries(contracts).filter(([key]) => key.startsWith("GAME_"))
+        .map(([, worker]) => worker.interface.fragments)),
+    deployer,
+  );
+
   // --- Phase 5: Verify ---
   for (const [key, expectedAddr] of predicted) {
     const actualAddr = deployedAddrs.get(key);
@@ -131,6 +148,8 @@ export async function deployFullProtocol({
       );
     }
   }
+
+  await registerLogicalDayQuestRoot(contracts.GAME, contracts.QUESTS);
 
   // A post-Degenesis unit fixture explicitly seeds logical headers; wall time creates no rounds.
   if (!degenesis) {

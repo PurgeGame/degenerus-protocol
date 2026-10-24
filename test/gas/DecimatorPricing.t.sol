@@ -75,7 +75,7 @@ contract DecimatorPricingTest is NativeMeasuredGasExport {
         vm.etch(ContractAddresses.SDGNRS, type(DecimatorPricingRedemptionState).runtimeCode);
         h = new DecimatorBattleHarness();
         meter = new DecimatorPricingMeter();
-        vm.etch(ContractAddresses.CRAPS_ENGINE, type(CrapsBattle).runtimeCode);
+        vm.etch(ContractAddresses.CRAPS_ENGINE, type(CrapsEngine).runtimeCode);
     }
 
     /// @dev Valid boards naming 0..7 chips under the normal battle rules.
@@ -191,8 +191,9 @@ contract DecimatorPricingTest is NativeMeasuredGasExport {
         // The worker's frame before its first admission check, but less than one more item.
         uint256 tail = GasBounds.DECIMATOR_WORK_TAIL_GAS;
         uint256 runAllowance = GasBounds.DECIMATOR_RUN_GAS_MAX + tail + 40_000;
-        uint256 rankAllowance = GasBounds.DECIMATOR_RANK_GAS_MAX + tail + 30_000;
-        uint256 payAllowance = GasBounds.DECIMATOR_PAYMENT_GAS_MAX + tail + 30_000;
+        // Include the cold split-module preamble before the one-item admission check.
+        uint256 rankAllowance = GasBounds.DECIMATOR_RANK_GAS_MAX + tail + 40_000;
+        uint256 payAllowance = GasBounds.DECIMATOR_PAYMENT_GAS_MAX + tail + 40_000;
         for (uint256 guard; uint24(h.queue()) != 0 && guard < 20_000; ++guard) {
             uint24 lvl = uint24(h.queue());
             DegenerusGameStorage.DecBattleRound memory r = h.roundOf(lvl);
@@ -243,7 +244,7 @@ contract DecimatorPricingTest is NativeMeasuredGasExport {
 
         // The engine's ceiling: 511 rolls before 48 shooters, the heaviest named board, a
         // bankroll no run can bust. Seeds are searched for runs that reach the roll bound.
-        vm.etch(ContractAddresses.CRAPS_ENGINE, type(CrapsBattle).runtimeCode);
+        vm.etch(ContractAddresses.CRAPS_ENGINE, type(CrapsEngine).runtimeCode);
         DecimatorEngineMeter em = new DecimatorEngineMeter();
         uint256 chips = 3 | 3 << 9 | 1 << 24; // seven named chips
         uint256 boost = (0x050c070c0a0c0e0c120c140c190c1e0c >> (7 << 4)) & 0xFFFF;

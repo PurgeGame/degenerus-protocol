@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {ProfileModules} from "../helpers/ProfileModules.sol";
 import {NativeGasExport} from "../helpers/NativeGasExport.sol";
 
 import {Test, Vm} from "forge-std/Test.sol";
@@ -21,14 +22,15 @@ abstract contract DirectTicketFixture is BucketSeed {
     function seed(uint256 word, uint256 tickets, uint256 holders, bool repeated, bool prepared) external {
         level = 41;
         jackpotPhaseFlag = true;
-        dailyIdx = 100;
+        dailyIdx = 101;
+        rngRequestDay = 101;
         rngLockedFlag = true;
         // Keep zero-valued owner lanes out of the cold-write gas fixture.
         _seedWallet(address(1));
         uint8[4] memory traits = JackpotBucketLib.getRandomTraits(word);
         traits[3] = GoldSixLib.daily(traits[3], word);
-        dailyFoilDraw[(dailyIdx + 1) & 1] = _packFoilDraw(
-            JackpotBucketLib.packWinningTraits(traits), level, dailyIdx + 1, word);
+        dailyFoilDraw[rngRequestDay & 1] = _packFoilDraw(
+            JackpotBucketLib.packWinningTraits(traits), level, rngRequestDay, word);
         for (uint8 q; q < 4; ++q) {
             if (repeated) _seedBucket(41, traits[q], address(0xBEEF), holders);
             else _seedBucketDistinct(41, traits[q], holders, uint160(0x10000 + uint256(q) * 0x10000));
@@ -103,10 +105,12 @@ contract DirectJackpotTicketsTest is Test {
     bytes32 private allEvents;
 
     function setUp() public {
+        vm.setNonce(address(this), vm.getNonce(address(this)) + 1024);
+        ProfileModules.installGame(vm);
+        ProfileModules.installCraps(vm);
         h = new DirectJackpotHarness();
         queued = new QueuedJackpotHarness();
-        // Ticket and whale workers share the final Pass runtime.
-        vm.etch(ContractAddresses.GAME_TICKET_MODULE, type(DegenerusGamePassModule).runtimeCode);
+        // Worker placement follows the selected deployment profile.
     }
     function _wins(bytes32 digest, Vm.Log[] memory logs) private view returns (bytes32, uint256 entries) {
         for (uint256 i; i < logs.length; ++i) {
@@ -369,6 +373,9 @@ contract DirectRoundGasTest is NativeGasExport {
     uint256 private constant MAX_RARE_GROUPS = 8;
 
     function setUp() public {
+        vm.setNonce(address(this), vm.getNonce(address(this)) + 1024);
+        ProfileModules.installGame(vm);
+        ProfileModules.installCraps(vm);
         h = new DirectRoundGasHarness();
         repricer = new DirectRoundRepricer();
         h.prepare(TARGET, ROUND_WINNERS);

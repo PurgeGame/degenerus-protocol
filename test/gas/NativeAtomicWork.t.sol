@@ -109,7 +109,7 @@ contract NativeAtomicDecimatorTest is NativeGasExport {
     function test_LongRealDiceRunWithHeapInsertionFitsOneStep() public {
         vm.warp(uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621);
         vm.etch(ContractAddresses.SDGNRS, type(NativeAtomicRedemptionState).runtimeCode);
-        vm.etch(ContractAddresses.CRAPS_ENGINE, type(CrapsBattle).runtimeCode);
+        vm.etch(ContractAddresses.CRAPS_ENGINE, type(CrapsEngine).runtimeCode);
         DecimatorBattleHarness host = new DecimatorBattleHarness();
         uint256 word;
         uint64 longest;

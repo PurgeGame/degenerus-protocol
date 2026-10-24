@@ -83,10 +83,7 @@ function bingoClaimLeaf(_level, playerId) {
 }
 
 async function bingoAtGame(game) {
-  return hre.ethers.getContractAt(
-    "DegenerusGame",
-    await game.getAddress()
-  );
+  return game;
 }
 
 function bingoEvents(receipt, bingo) {

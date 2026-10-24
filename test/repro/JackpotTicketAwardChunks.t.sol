@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {ProfileModules} from "../helpers/ProfileModules.sol";
 import {NativeMeasuredGasExport} from "../helpers/NativeMeasuredGasExport.sol";
 
 import {DegenerusGameTicketModule} from "../../contracts/modules/DegenerusGameTicketModule.sol";
@@ -62,9 +63,10 @@ contract JackpotTicketAwardChunksTest is Test {
     }
 
     function setUp() public {
-        vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);
+        vm.setNonce(address(this), vm.getNonce(address(this)) + 1024);
+        ProfileModules.installGame(vm);
+        ProfileModules.installCraps(vm);
         h = new TicketChunkHarness();
-        vm.etch(ContractAddresses.GAME_FOILPACK_MODULE, address(new DegenerusGameFoilPackModule()).code);
         h.seed(LVL, WORD, true);
         dataStart = h.bucketData(LVL, JackpotBucketLib.getRandomTraits(WORD)[0]);
     }
@@ -321,9 +323,10 @@ contract JackpotTicketChunkGasTest is NativeMeasuredGasExport {
     uint8 private trait;
 
     function setUp() public {
-        vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);
+        vm.setNonce(address(this), vm.getNonce(address(this)) + 1024);
+        ProfileModules.installGame(vm);
+        ProfileModules.installCraps(vm);
         h = new TicketGasHarness();
-        vm.etch(ContractAddresses.GAME_FOILPACK_MODULE, address(new DegenerusGameFoilPackModule()).code);
         h.seed(LVL, WORD, true);
         trait = JackpotBucketLib.getRandomTraits(WORD)[0];
     }
@@ -511,10 +514,10 @@ contract JackpotEthQuadrantGasTest is NativeMeasuredGasExport {
     bytes32 private stream;
 
     function setUp() public {
-        vm.etch(ContractAddresses.GAME_TICKET_MODULE, address(new DegenerusGameTicketModule()).code);
+        vm.setNonce(address(this), vm.getNonce(address(this)) + 1024);
+        ProfileModules.installGame(vm);
+        ProfileModules.installCraps(vm);
         h = new TicketGasHarness();
-        vm.etch(ContractAddresses.GAME_FOILPACK_MODULE, address(new DegenerusGameFoilPackModule()).code);
-        vm.etch(ContractAddresses.GAME_WHALE_MODULE, address(new DegenerusGameWhaleModule()).code);
         h.seed(LVL, WORD, false);
         h.seedDaily(LVL);
     }

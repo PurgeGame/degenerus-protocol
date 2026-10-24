@@ -1,7 +1,7 @@
 import { ethers } from "ethers";
 
 // 22:57 UTC in seconds — matches GameTimeLib.JACKPOT_RESET_TIME
-const JACKPOT_RESET_TIME = 82620n;
+export const JACKPOT_RESET_TIME = 82620n;
 
 import { DEPLOYMENTS, expandAliases } from "./deploymentManifest.js";
 export { DEPLOYMENTS, expandAliases } from "./deploymentManifest.js";

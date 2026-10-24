@@ -1,3 +1,4 @@
+import { PROFILE } from "../../scripts/lib/deploymentProfiles.js";
 import { ownerAction } from "../helpers/deployFixture.js";
 import { expect } from "chai";
 import hre from "hardhat";
@@ -29,14 +30,14 @@ describe("Deploy Pipeline", function () {
     }
   });
 
-  it("hosts Quests and Affiliate on Coinflip and leaves reserved addresses empty", async function () {
+  it("places Quests and Affiliate at their selected profile roots", async function () {
     const f = await loadFixture(deployFullProtocol);
-    expect(await f.quests.getAddress()).to.equal(await f.coinflip.getAddress());
-    expect(await f.affiliate.getAddress()).to.equal(await f.coinflip.getAddress());
-    for (const offset of [6, 10]) {
-      const address = hre.ethers.getCreateAddress({ from: f.deployer.address, nonce: f.startingNonce + offset });
-      expect(await hre.ethers.provider.getCode(address)).to.equal("0x");
+    for (const [key, contract] of [["QUESTS", f.quests], ["AFFILIATE", f.affiliate]]) {
+      expect(await contract.getAddress()).to.equal(f.predicted.get(key));
+      if (PROFILE === "eip170") expect(await contract.getAddress()).to.not.equal(await f.coinflip.getAddress());
+      else expect(await contract.getAddress()).to.equal(await f.coinflip.getAddress());
     }
+    expect(DEPLOYMENTS.every((row, index) => (row.nonceOffset ?? index) === index)).to.equal(true);
   });
 
   it("the default fixture deploys on day index 9 (MAIN_LAUNCH_DAY)", async function () {
@@ -54,10 +55,10 @@ describe("Deploy Pipeline", function () {
     }
   });
 
-  it("deployer nonce covers deployments, reserved addresses and combined genesis", async function () {
+  it("deployer nonce covers contiguous deployments and combined genesis", async function () {
     const f = await loadFixture(deployFullProtocol);
     const endNonce = await f.deployer.getNonce();
-    // Reserved nonce gaps preserve token addresses; genesis consumes one more nonce.
+    // Profile deployments are contiguous; genesis consumes one more nonce.
     const last = DEPLOYMENTS.at(-1).nonceOffset ?? DEPLOY_ORDER.length - 1;
     expect(endNonce - f.startingNonce).to.equal(last + 2);
   });

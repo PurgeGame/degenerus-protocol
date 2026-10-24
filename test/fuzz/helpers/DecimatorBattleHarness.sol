@@ -17,6 +17,7 @@ contract DecimatorBattleHarness is DegenerusGameDecimatorModule, WalletSeed {
     /// @dev Mirrors the level transition that opens a window: the entry bank now belongs to `lvl`.
     function open(uint24 lvl) external {
         level = lvl - 1;
+        dailyIdx = _wallDay();
         _setDecWindowOpen(true);
         decBattleRounds[lvl].openedDay = _wallDay();
         decEntriesLevel = lvl;

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {ProfileModules} from "../helpers/ProfileModules.sol";
 
 import {DecimatorSampleReference as Sample} from "../helpers/DecimatorSamplingReference.sol";
 import {NativeGasExport} from "../helpers/NativeGasExport.sol";
@@ -157,13 +158,13 @@ contract DecimatorJackpotGasTest is NativeGasExport {
     bytes32 private constant WORK = keccak256("MinerWork(address,uint8,uint256,uint256)");
 
     function setUp() public {
+        vm.setNonce(address(this), vm.getNonce(address(this)) + 1024);
+        ProfileModules.installGame(vm);
+        ProfileModules.installCraps(vm);
         vm.warp(uint256(ContractAddresses.DEPLOY_DAY_BOUNDARY) * 1 days + 82_621 + 2 days);
         vm.fee(1 gwei);
         vm.etch(ContractAddresses.GAME, type(DecimatorGasHost).runtimeCode);
-        // Miner lives in Game; install each worker bundle once at its aliased address.
-        vm.etch(ContractAddresses.GAME_ADVANCE_MODULE, type(DegenerusGameDailyModule).runtimeCode);
-        vm.etch(ContractAddresses.GAME_DECIMATOR_MODULE, type(DegenerusGameEndgameModule).runtimeCode);
-        vm.etch(ContractAddresses.GAME_WHALE_MODULE, type(DegenerusGamePassModule).runtimeCode);
+        // The selected profile helper installs all miner and worker dependencies.
         vm.etch(ContractAddresses.CRAPS, type(CrapsBattle).runtimeCode);
         vm.etch(ContractAddresses.COINFLIP, type(DecimatorGasCoinflip).runtimeCode);
         vm.etch(ContractAddresses.SDGNRS, type(DecimatorJackpotNativeViews).runtimeCode);
@@ -391,7 +392,7 @@ contract DecimatorJackpotGasTest is NativeGasExport {
     }
 
     function _engineCeiling() private returns (uint256 engine) {
-        vm.etch(ContractAddresses.CRAPS_ENGINE, type(CrapsBattle).runtimeCode);
+        vm.etch(ContractAddresses.CRAPS_ENGINE, type(CrapsEngine).runtimeCode);
         address meterAddress = address(0xDEC17);
         vm.etch(meterAddress, type(DecimatorGeneratedEngineMeter).runtimeCode);
         DecimatorGeneratedEngineMeter meter = DecimatorGeneratedEngineMeter(meterAddress);

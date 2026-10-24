@@ -2,6 +2,7 @@
 pragma solidity 0.8.38;
 
 import {CrapsViews} from "./CrapsViews.sol";
+import {ProfileModules} from "../helpers/ProfileModules.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {ContractAddresses} from "../../contracts/ContractAddresses.sol";
@@ -445,6 +446,7 @@ abstract contract CrapsPins is Test {
         if (ContractAddresses.QUESTS != ContractAddresses.COINFLIP) {
             vm.etch(ContractAddresses.QUESTS, address(new MockQuests()).code);
         }
+        ProfileModules.installCraps(vm);
         vm.etch(ContractAddresses.CRAPS, type(CrapsBattle).runtimeCode);
         vm.etch(address(0xC6A6), type(CrapsEngine).runtimeCode);
         quests = MockQuests(ContractAddresses.QUESTS);

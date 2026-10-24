@@ -52,17 +52,20 @@ abstract contract NativeMeasuredGasExport is NativeGasExport {
         vm.serializeUint(label, "number", block.number);
         vm.serializeUint(label, "timestamp", block.timestamp);
         vm.serializeBool(label, "completeStateDump", true);
-        string memory entries = "[";
+        string memory json = vm.serializeString(label, "oracle", "cold call, complete vm.dumpState before and after, no state-diff recording");
+        bytes memory header = bytes(json);
+        // Stream logs: retaining each growing prefix makes a full cohort quadratic in memory.
+        assembly ("memory-safe") { mstore(header, sub(mload(header), 1)) }
+        string memory path = string.concat(vm.envString("STORAGE_REUSE_EXPORT"), "/", label, ".call.json");
+        vm.writeFile(path, string.concat(string(header), ",\"expectedLogs\":[\n"));
         for (uint256 i; i < coldLogs.length; ++i) {
             string memory key = string.concat(label, "-dump-log-", vm.toString(i));
             vm.serializeAddress(key, "address", coldLogs[i].emitter);
             vm.serializeBytes(key, "data", coldLogs[i].data);
             string memory entry = vm.serializeBytes32(key, "topics", coldLogs[i].topics);
-            entries = string.concat(entries, i == 0 ? "" : ",", entry);
+            vm.writeLine(path, string.concat(i == 0 ? "" : ",", entry));
         }
-        vm.serializeString(label, "expectedLogs", string.concat(entries, "]"));
-        string memory json = vm.serializeString(label, "oracle", "cold call, complete vm.dumpState before and after, no state-diff recording");
-        vm.writeJson(json, string.concat(vm.envString("STORAGE_REUSE_EXPORT"), "/", label, ".call.json"));
+        vm.writeLine(path, "]}");
     }
 
     function coldAccountStorage(string calldata label, string calldata state, string calldata account)
