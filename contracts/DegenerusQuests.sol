@@ -1352,8 +1352,7 @@ contract DegenerusQuests is IDegenerusQuests {
                 if (c) {
                     purchaseResult.ethMintReward += r;
                     purchaseResult.outQuestType = qt;
-                    PurchaseQuestResult memory purchaseResult;
-        purchaseResult.outStreak = s;
+                    purchaseResult.outStreak = s;
                     purchaseResult.anyCompleted = true;
                     purchaseResult.primaryCompleted = true;
                 }
@@ -1379,8 +1378,7 @@ contract DegenerusQuests is IDegenerusQuests {
                 if (c) {
                     purchaseResult.flipMintReward += r;
                     purchaseResult.outQuestType = qt;
-                    PurchaseQuestResult memory purchaseResult;
-        purchaseResult.outStreak = s;
+                    purchaseResult.outStreak = s;
                     purchaseResult.anyCompleted = true;
                     if (qt == QUEST_TYPE_MINT_ETH) purchaseResult.primaryCompleted = true;
                 }
@@ -1416,8 +1414,7 @@ contract DegenerusQuests is IDegenerusQuests {
                         if (c) {
                             purchaseResult.lootboxReward += r;
                             purchaseResult.outQuestType = qt;
-                            PurchaseQuestResult memory purchaseResult;
-        purchaseResult.outStreak = s;
+                            purchaseResult.outStreak = s;
                             purchaseResult.anyCompleted = true;
                             if (qt == QUEST_TYPE_MINT_ETH) purchaseResult.primaryCompleted = true;
                         }
