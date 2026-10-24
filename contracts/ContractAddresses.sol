@@ -29,6 +29,8 @@ pragma solidity 0.8.38;
 /// @notice Compile-time constant addresses for every Degenerus Protocol contract. The deploy
 ///         pipeline predicts addresses and patches this file before compilation.
 library ContractAddresses {
+    address internal constant GAME_ACTIONS_MODULE = address(0x212224D2F2d262cd093eE13240ca4873fcCBbA3C);
+    address internal constant GAME_PURCHASE_MODULE = address(0x212224D2F2d262cd093eE13240ca4873fcCBbA3C);
     uint48 internal constant DEPLOY_DAY_BOUNDARY = 0;
     bytes32 internal constant VRF_KEY_HASH =
         0xabababababababababababababababababababababababababababababababab;

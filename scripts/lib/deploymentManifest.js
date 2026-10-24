@@ -145,7 +145,9 @@ export const DEPLOYMENTS = [
     "aliases": [
       "GAME",
       "GAME_BINGO_MODULE",
-      "GAME_MINER_MODULE"
+      "GAME_MINER_MODULE",
+      "GAME_ACTIONS_MODULE",
+      "GAME_PURCHASE_MODULE"
     ],
     "fixtureField": "game",
     "fixtureType": "DegenerusGame",

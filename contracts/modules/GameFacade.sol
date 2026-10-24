@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.38;
+import {GameActionInternals} from "./GameActionInternals.sol";
+import {GameRngNudge} from "./GameRngNudge.sol";
 
 import {GameEntryInternals} from "./GameEntryInternals.sol";
 import {DegenerusGamePayoutUtils} from "./DegenerusGamePayoutUtils.sol";
@@ -101,7 +103,7 @@ interface IDegenerusVaultOwnerGame {
  *      components; bounded workers retain their explicit delegatecall frames.
  * @custom:security-contact burnie@degener.us
  */
-abstract contract GameFacade is GameEntryInternals, GameHooks, DegenerusGamePayoutUtils, GameAfkingClaims {
+abstract contract GameFacade is GameEntryInternals, GameActionInternals, GameRngNudge, GameHooks, DegenerusGamePayoutUtils, GameAfkingClaims {
     /*+======================================================================+
       |                              ERRORS                                  |
       +======================================================================+
@@ -155,9 +157,6 @@ abstract contract GameFacade is GameEntryInternals, GameHooks, DegenerusGamePayo
 
     IStETH internal constant steth = IStETH(ContractAddresses.STETH_TOKEN);
 
-    /// @notice Vault contract for owner verification.
-    IDegenerusVaultOwnerGame private constant vault =
-        IDegenerusVaultOwnerGame(ContractAddresses.VAULT);
 
     /*+======================================================================+
       |                           CONSTANTS                                  |
@@ -170,8 +169,6 @@ abstract contract GameFacade is GameEntryInternals, GameHooks, DegenerusGamePayo
     ///      this scale-down from the sDGNRS reward pool (0.01%-0.15% per claim).
     uint256 private constant RECORD_SDGNRS_SCALE_DIV = 500;
 
-    /// @dev Base cost for RNG nudge (100 FLIP), compounds +50% per queued nudge.
-    uint256 private constant RNG_NUDGE_BASE_COST = 100;
 
     /*+======================================================================+
       |                          CONSTRUCTOR                                 |
@@ -342,7 +339,7 @@ abstract contract GameFacade is GameEntryInternals, GameHooks, DegenerusGamePayo
 
     /// @notice Affiliate-only settlement of up to eight packed subscriptions and their upline bases.
     function drainAffiliateBases(uint256 ids, uint256 uplines) external returns (uint256, uint256, uint256) {
-        return _drainAffiliateBases(ids, uplines);
+        return _gameDrainAffiliateBases(ids, uplines);
     }
 
     /// @notice Permissionless paid cure of account `id`'s cashout/smite curse (100 FLIP from
@@ -379,11 +376,11 @@ abstract contract GameFacade is GameEntryInternals, GameHooks, DegenerusGamePayo
     /// @notice Wallet-ID hook for trusted protocol contracts: the existing ID, or with `allocate`
     ///         a new one (paid admission applies). The shared hook enforces the caller set.
     function registerWallet_g9539(address owner, bool allocate) external returns (uint32 id) {
-        return _registerWallet(owner, allocate);
+        return _gameRegisterWallet_g9539(owner, allocate);
     }
 
     function registerWalletIdentity(address owner) external returns (uint32 id) {
-        return _registerWalletIdentity(owner);
+        return _gameRegisterWalletIdentity(owner);
     }
 
     /// @notice Wallet-bound identity; does not change when its gameplay account is sold.
@@ -424,13 +421,13 @@ abstract contract GameFacade is GameEntryInternals, GameHooks, DegenerusGamePayo
     /// @notice Record a secondary/level quest completion against an afking sub's streak base.
     /// @dev QUESTS-only; the shared hook checks the caller.
     function recordAfkingSecondary(uint32 id, uint16 amount) external {
-        _recordAfkingSecondary(id, amount);
+        _gameRecordAfkingSecondary(id, amount);
     }
 
     /// @notice QUESTS-only: floor an afking sub's streak base
     ///         so a foil-pack purchase's quest-streak guarantee reaches a mid-run afker.
     function floorAfkingStreakBase(uint32 id, uint16 floor) external {
-        _floorAfkingStreakBase(id, floor);
+        _gameFloorAfkingStreakBase(id, floor);
     }
 
     /// @notice Pay the sDGNRS leg of an all-time record claim and name the record's payee.
@@ -447,12 +444,7 @@ abstract contract GameFacade is GameEntryInternals, GameHooks, DegenerusGamePayo
         uint32 id,
         uint256 shareBps
     ) external returns (uint256 paid, address payee) {
-        if (msg.sender != ContractAddresses.COINFLIP) revert Unauthorized();
-        payee = _payee(_walletElement(id));
-        if (shareBps == 0) return (0, payee);
-        uint256 payout = (dgnrs.poolBalance(IsDGNRS.Pool.Reward) * shareBps) /
-            (10_000 * RECORD_SDGNRS_SCALE_DIV);
-        if (payout != 0) paid = dgnrs.transferFromPool(IsDGNRS.Pool.Reward, payee, payout);
+        return _gamePayRecordSdgnrs(id, shareBps);
     }
 
     /*+======================================================================+
@@ -465,15 +457,7 @@ abstract contract GameFacade is GameEntryInternals, GameHooks, DegenerusGamePayo
     ///      cannot approve operators).
     /// @custom:reverts ZeroAddress If operator is the zero address.
     function setOperatorApproval(uint32 id, address operator, bool approved) external {
-        if (operator == address(0)) revert ZeroAddress();
-        if (id == 0) {
-            id = _requireWalletId(msg.sender);
-        } else {
-            (, address payee) = _accountKeys(id);
-            if (payee != msg.sender) revert NotApproved();
-        }
-        operatorApprovals[id][operator] = approved;
-        emit OperatorApproval(id, operator, approved);
+        _gameSetOperatorApproval(id, operator, approved);
     }
 
     /// @notice Resolve account `id` for `caller`: its key, its payee and whether `caller` may
@@ -530,24 +514,13 @@ abstract contract GameFacade is GameEntryInternals, GameHooks, DegenerusGamePayo
     }
 
     /// @dev Shared by the vault-owner controls; preserve the same external check and error.
-    function _requireVaultOwner() private view {
-        if (!vault.isVaultOwner(msg.sender)) revert OnlyVault();
-    }
 
     /// @notice Update lootbox RNG request threshold (wei).
     /// @dev Access: vault owner only (DGVE governance executor).
     /// @custom:reverts OnlyVault If caller is not the vault owner.
     /// @custom:reverts ZeroValue If newThreshold is zero.
     function setLootboxRngThreshold(uint256 newThreshold) external {
-        _requireVaultOwner();
-        if (newThreshold == 0) revert ZeroValue();
-        uint256 prev = _unpackMilliEthToWei(uint64(_lrRead(LR_THRESHOLD_SHIFT, LR_THRESHOLD_MASK)));
-        if (newThreshold == prev) {
-            emit LootboxRngThresholdUpdated(prev, newThreshold);
-            return;
-        }
-        _lrWrite(LR_THRESHOLD_SHIFT, LR_THRESHOLD_MASK, _packEthToMilliEth(newThreshold));
-        emit LootboxRngThresholdUpdated(prev, newThreshold);
+        _gameSetLootboxRngThreshold(newThreshold);
     }
 
     /// @notice Update the basefee ceiling above which mid-day RNG requests are refused.
@@ -560,11 +533,7 @@ abstract contract GameFacade is GameEntryInternals, GameHooks, DegenerusGamePayo
     /// @custom:reverts OnlyVault If caller is not the vault owner.
     /// @custom:reverts OutOfBounds If newGwei exceeds the packed field's range.
     function setMiddayMaxBasefee(uint256 newGwei) external {
-        _requireVaultOwner();
-        if (newGwei > MIDDAY_MAX_BASEFEE_GWEI_CAP) revert OutOfBounds();
-        uint256 prev = _lrRead(LR_MAX_BASEFEE_SHIFT, LR_MAX_BASEFEE_MASK);
-        _lrWrite(LR_MAX_BASEFEE_SHIFT, LR_MAX_BASEFEE_MASK, newGwei);
-        emit MiddayMaxBasefeeUpdated(prev, newGwei);
+        _gameSetMiddayMaxBasefee(newGwei);
     }
 
     /// @notice Declare a future level a thanos level: every entry drained for
@@ -957,7 +926,7 @@ abstract contract GameFacade is GameEntryInternals, GameHooks, DegenerusGamePayo
     ///      SECURITY: Reverts if balance ≤ 1 wei (nothing to claim).
     ///      Debits account `id` and pays its payee; the caller must be authorized for it.
     function claimWinnings(uint32 id) external {
-        _claimWinningsWithCurse(id, type(uint256).max);
+        _gameClaimWinnings(id);
     }
 
     /// @notice Claim a fixed amount of accrued ETH winnings (partial cashout).
@@ -969,76 +938,28 @@ abstract contract GameFacade is GameEntryInternals, GameHooks, DegenerusGamePayo
     ///      curse is activity-gated).
     /// @param amount Maximum wei of claimable winnings to take.
     function claimWinnings(uint32 id, uint256 amount) external {
-        _claimWinningsWithCurse(id, amount);
+        _gameClaimWinnings(id, amount);
     }
 
     /// @dev Shared claim body: pull winnings (capped pre-gameOver by `maxClaim`) to the account's
     ///      payee, then set the account's cashout curse in the same storage context.
-    function _claimWinningsWithCurse(uint32 id, uint256 maxClaim) private {
-        address payee;
-        (id, payee) = _resolveAccountPayee(id);
-        _claimWinningsInternal(id, payee, false, maxClaim);
-        _maybeCurse(id);
-    }
+
 
     /// @notice Claim accrued ETH winnings with stETH-first payout.
     /// @dev Restricted to self-claims by the vault contract.
     function claimWinningsStethFirst() external {
-        if (msg.sender != ContractAddresses.VAULT) revert OnlyVault();
-        _claimWinningsInternal(VAULT_WALLET_ID, msg.sender, true, type(uint256).max);
+        _gameClaimWinningsStethFirst();
     }
 
     ///        claim also settles the whole afking half.
-    function _claimWinningsInternal(uint32 id, address payee, bool stethFirst, uint256 maxClaim) private {
-        if (_goRead(GO_SWEPT_SHIFT, GO_SWEPT_MASK) != 0) revert AlreadySwept();
-        if (gameOver && id == SDGNRS_WALLET_ID) _releaseRedemptionReserve();
-        // One packed load: claimable is the low half, afking the high half. The read reuse
-        // below and the debit both ride this single SLOAD (no external call intervenes). An
-        // address with no wallet ID reads the always-empty ID-0 word and reverts below.
-        uint256 packed = balancesPacked[id];
-        uint256 amount = uint128(packed);
-        // Post-gameOver the claim ALSO pays the caller's prepaid
-        // afking ETH (lazy per-player merge — no unbounded loop). Pre-gameOver afkingFunding
-        // stays its own bucket (spent by afking auto-buys / reclaimed via withdrawAfkingFunding).
-        // Both this merge and withdrawAfkingFunding zero the SAME bucket → no double-spend.
-        uint256 afking = gameOver ? (packed >> 128) : 0;
-        uint256 claimDebit;
-        unchecked {
-            if (amount > 1) {
-                claimDebit = amount - 1; // available, leaving the 1-wei sentinel
-            }
-        }
-        // Cap the claimable draw to maxClaim (partial cashout), after game over too.
-        if (claimDebit > maxClaim) {
-            claimDebit = maxClaim;
-        }
-        uint256 payout;
-        unchecked {
-            payout = claimDebit + afking;
-        }
-        if (payout == 0) revert NothingToClaim();
-        // Debit both halves in one store from the load above. _debitClaimableAndAfking's two
-        // Insolvent guards are provably dead here: claimDebit <= amount-1 < uint128(packed), and
-        // afking is packed>>128 (or 0) — neither half can borrow, so the subtraction is
-        // byte-identical to the helper's (which stays for its other callers).
-        balancesPacked[id] = packed - claimDebit - (afking << 128);
-        claimablePool -= uint128(payout); // CEI: update state before external call (checked math)
-        emit WinningsClaimed(id, payout, uint128(amount - claimDebit));
-        if (stethFirst) {
-            _payoutWithEthFallback(payee, payout);
-        } else {
-            _payoutWithStethFallback(payee, payout);
-        }
-    }
+
 
     /// @notice Fund account `id`'s prepaid afking ETH bucket (consumed by the AfKing auto-buy).
     /// @dev Permissionless (fund anyone). `id` is a third-party recipient: nonzero and allocated.
     ///      The reservation rides inside claimablePool (no separate aggregate) — credited in tandem.
     ///      Blocked once the game is over, like receive(): post-sweep afking is unwithdrawable.
     function depositAfkingFunding(uint32 id) external payable {
-        if (gameOver) revert GameOver();
-        _requireAllocated(id);
-        _creditAfkingValue(id, msg.value);
+        _gameDepositAfkingFunding(id);
     }
 
     /// @notice Withdraw prepaid afking ETH from account `id` (0 = caller) to its payee.
@@ -1218,14 +1139,7 @@ abstract contract GameFacade is GameEntryInternals, GameHooks, DegenerusGamePayo
         address recipient,
         uint256 amount
     ) external payable {
-        if (msg.sender != ContractAddresses.ADMIN) revert OnlyAdmin();
-        if (recipient == address(0)) revert ZeroAddress();
-        if (amount == 0 || msg.value != amount) revert ValueMismatch();
-
-        uint256 stBal = steth.balanceOf(address(this));
-        if (stBal < amount) revert Insolvent();
-        if (!steth.transfer(recipient, amount)) revert TransferFailed();
-        emit AdminSwapEthForStEth(recipient, amount);
+        _gameAdminSwapEthForStEth(recipient, amount);
     }
 
     /// @notice Stake game-held ETH into stETH via Lido.
@@ -1238,27 +1152,7 @@ abstract contract GameFacade is GameEntryInternals, GameHooks, DegenerusGamePayo
     /// @custom:reverts Insolvent If ETH is insufficient or staking would dip into the player-claim ETH reserve.
     /// @custom:reverts TransferFailed If the Lido submit fails.
     function adminStakeEthForStEth(uint256 amount) external {
-        _requireVaultOwner();
-        if (amount == 0) revert ZeroValue();
-
-        uint256 ethBal = address(this).balance;
-        if (ethBal < amount) revert Insolvent();
-        // Vault and sDGNRS claimable (including its redemption reserve) can be settled in stETH
-        uint256 stethSettleable = _claimableOf(VAULT_WALLET_ID) +
-            _claimableOf(SDGNRS_WALLET_ID) + _redemptionReserve();
-        uint256 reserve = claimablePool > stethSettleable
-            ? claimablePool - stethSettleable
-            : 0;
-        if (ethBal <= reserve) revert Insolvent();
-        uint256 stakeable = ethBal - reserve;
-        if (amount > stakeable) revert Insolvent();
-
-        // submit() returns shares minted, not a stETH amount, and the value is intentionally
-        // ignored: nothing here validates the mint. Relies on Lido minting stETH ~1:1 for ETH.
-        try steth.submit{value: amount}(address(0)) returns (uint256) {} catch {
-            revert TransferFailed();
-        }
-        emit AdminStakeEthForStEth(amount);
+        _gameAdminStakeEthForStEth(amount);
     }
 
     /*+======================================================================+
@@ -1338,22 +1232,7 @@ abstract contract GameFacade is GameEntryInternals, GameHooks, DegenerusGamePayo
     /// @custom:reverts NudgeCostChanged If the live quote differs from expectedCost.
     /// @custom:reverts E Once the liveness timeout has fired (see the gate below).
     function reverseFlip(uint256 expectedCost) external {
-        if (rngLockedFlag) revert RngLocked();
-        // A nudge shifts the next word by +1, and the terminal path applies pending
-        // nudges to the word it publishes. Past the liveness trigger that word is the
-        // committed terminal word, already public and already known to select the
-        // winning traits, so a nudge bought here is a post-reveal steer of the final
-        // payout rather than an influence on an unknown future word.
-        if (_livenessTriggered()) revert E();
-        uint256 reversals = _nudgeCount();
-        if (reversals >= RNG_NUDGE_CAP) revert NudgeCapReached();
-        uint256 cost = _currentNudgeCost(reversals);
-        if (cost != expectedCost) revert NudgeCostChanged();
-        coin.burnCoin(msg.sender, cost);
-        uint256 newCount = reversals + 1;
-        // The 255 cap fits the low byte; the packed setter preserves neighboring flags.
-        _setNudgeCount(newCount);
-        emit ReverseFlip(msg.sender, newCount, cost);
+        _gameReverseFlip(expectedCost);
     }
 
     /// @notice Return the queued nudge count and exact cost of the next nudge.
@@ -1368,17 +1247,7 @@ abstract contract GameFacade is GameEntryInternals, GameHooks, DegenerusGamePayo
     ///      Base cost is 100 FLIP. Each +50% step floors to a whole token:
     ///      100, 150, 225, 337, 505, ... .
     /// @return cost FLIP cost for the next nudge.
-    function _currentNudgeCost(
-        uint256 reversals
-    ) private pure returns (uint256 cost) {
-        cost = RNG_NUDGE_BASE_COST;
-        while (reversals != 0) {
-            cost = (cost * 15) / 10;
-            unchecked {
-                --reversals;
-            }
-        }
-    }
+
 
     /// @notice Chainlink VRF callback for random word fulfillment.
     /// @dev Accepts exactly one matching coordinator response and stores the final session
@@ -1421,21 +1290,7 @@ abstract contract GameFacade is GameEntryInternals, GameHooks, DegenerusGamePayo
     ///      through the ETH-first path.
     /// @param to Recipient address.
     /// @param amount Total wei to send.
-    function _payoutWithEthFallback(address to, uint256 amount) private {
-        if (amount == 0) return;
 
-        uint256 stBal = steth.balanceOf(address(this));
-        uint256 stSend = amount <= stBal ? amount : stBal;
-        _transferSteth(to, stSend);
-
-        uint256 remaining = amount - stSend;
-        if (remaining == 0) return;
-
-        uint256 ethBal = address(this).balance;
-        if (ethBal < remaining) revert Insolvent();
-        (bool ok, ) = payable(to).call{value: remaining}("");
-        if (!ok) revert TransferFailed();
-    }
 
     /*+======================================================================+
       |                   VIEW: GAME STATUS & STATE                          |
