@@ -20,6 +20,32 @@ c = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(c)
 b = c.b
 BOX = "contracts/modules/DegenerusGameBoxModule.sol"
+
+
+def components(request):
+    """Only replace final profile shells that contain the forced outcome sites."""
+    pins = request["sources"]["contracts/ContractAddresses.sol"]["content"]
+    address = lambda pin: re.search(r"\b" + pin + r"\s*=\s*address\((0x[0-9A-Fa-f]{40})\)", pins)[1].lower()
+    if address("GAME_LOOTBOX_MODULE") != address("GAME_DEGENERETTE_MODULE"):
+        return [("GAME_LOOTBOX_MODULE", "contracts/profiles/eip170/Eip170Lootbox.sol", "Eip170Lootbox"),
+                ("GAME_DEGENERETTE_MODULE", "contracts/profiles/eip170/Eip170Degenerette.sol", "Eip170Degenerette")]
+    return [("GAME_LOOTBOX_MODULE", BOX, "DegenerusGameBoxModule")]
+
+
+def runtimes(output, request):
+    return {pin: output["contracts"][source][name]["evm"]["deployedBytecode"]["object"]
+            for pin, source, name in components(request)}
+
+
+def install_variants(state, args, variants):
+    request = json.loads((args.production / "input.json").read_text())
+    originals = runtimes(json.loads((args.production / "output.json").read_text()), request)
+    pins = request["sources"]["contracts/ContractAddresses.sol"]["content"]
+    for pin, variant in variants.items():
+        address = re.search(r"\b" + pin + r"\s*=\s*address\((0x[0-9A-Fa-f]{40})\)", pins)[1].lower()
+        assert runtime_without_metadata(state[address]["code"]) == runtime_without_metadata(originals[pin]), (pin, "fixture must contain final production runtime")
+        state[address]["code"] = "0x" + variant
+
 ROLL_KNOB = 0x4C334F314C4F4F54
 SCORE_KNOB = 0x4C334F31534F4F52
 
@@ -59,13 +85,13 @@ def build(args, extra_changes=()):
         text = request["sources"][source]["content"]
         assert text.count(old) == 1, (source, "unique forcing site")
         request["sources"][source]["content"] = text.replace(old, new)
-    request["settings"]["outputSelection"] = {BOX: {"DegenerusGameBoxModule": ["evm.deployedBytecode.object"]}}
+    request["settings"]["outputSelection"] = {source: {name: ["evm.deployedBytecode.object"]} for _, source, name in components(request)}
     previous_input = args.out / "input.json"
     previous_output = args.out / "output.json"
     if previous_input.exists() and previous_output.exists() and json.loads(previous_input.read_text()) == request:
         cached = json.loads(previous_output.read_text())
         if not any(e["severity"] == "error" for e in cached.get("errors", [])):
-            return cached["contracts"][BOX]["DegenerusGameBoxModule"]["evm"]["deployedBytecode"]["object"]
+            return runtimes(cached, request)
     if getattr(args, "reuse_build", False):
         raise RuntimeError("No matching successful measurement build; compilation requires forge-slot.sh")
     (args.out / "input.json").write_text(json.dumps(request))
@@ -79,7 +105,7 @@ def build(args, extra_changes=()):
         "testInputSha256": hashlib.sha256((args.out / "input.json").read_bytes()).hexdigest(),
         "method": "G7 Appendix B: direct roll 19, minimum ETH score 7, all twenty recirculation rolls; forcing SLOADs retained in measured gas"}
     (args.out / "build-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
-    return output["contracts"][BOX]["DegenerusGameBoxModule"]["evm"]["deployedBytecode"]["object"]
+    return runtimes(output, request)
 
 
 def accounts(dump):
@@ -99,6 +125,7 @@ def main():
     p.add_argument("--fixtures", type=Path, required=True)
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--rpc", required=True)
+    p.add_argument("--schedule", choices=("osaka", "amsterdam"), default="amsterdam")
     p.add_argument("--boxes", type=int, choices=[20, 100], default=100)
     p.add_argument("--prefix", default="human-forced-prestate-")
     p.add_argument("--reuse-build", action="store_true", help="Replay only; fail rather than invoke solc if the exact build is absent")
@@ -107,9 +134,6 @@ def main():
     args.out.mkdir(parents=True, exist_ok=True)
     assert int(b.rpc(args.rpc, "eth_chainId", []), 16) in (1337, 31337)
     variant = build(args)
-    original = json.loads((args.production / "output.json").read_text())["contracts"][BOX]["DegenerusGameBoxModule"]["evm"]["deployedBytecode"]["object"]
-    source = json.loads((args.production / "input.json").read_text())["sources"]["contracts/ContractAddresses.sol"]["content"]
-    address = re.search(r"GAME_LOOTBOX_MODULE\s*=\s*address\((0x[0-9A-Fa-f]{40})\)", source)[1].lower()
     spin_topic = b.topic("BoxSpin(uint32,uint64,uint256,uint256,uint256)")
     rows = []
     files = sorted(args.fixtures.glob(args.prefix + "*.call.json"))
@@ -134,8 +158,7 @@ def main():
             for slot, value in account["state"].items():
                 assert slot not in target["state"] or int(target["state"][slot], 16) == int(value, 16), (addr, slot)
                 target["state"][slot] = value
-        assert runtime_without_metadata(state[address]["code"]) == runtime_without_metadata(original), "fixture must contain final production Box runtime"
-        state[address]["code"] = "0x" + variant
+        install_variants(state, args, variant)
         host = call["to"].lower()
         bo = {"time": hex(call["timestamp"]), "baseFeePerGas": "0x0"}
         if call.get("number"): bo["number"] = hex(call["number"])
@@ -164,7 +187,7 @@ def main():
                     assert not missing, ("prestate", missing[:8])
                     delta = b.rpc(args.rpc, "debug_traceCall", [tx, "0x0", dict(opts, tracer="prestateTracer", tracerConfig={"diffMode": True})])
                     meter = b.rpc(args.rpc, "debug_traceCall", [tx, "0x0", dict(opts, tracer=c.gas_meter.METER)])
-                    measured = c.gas_meter.measured_gas(meter, limit)
+                    measured = c.gas_meter.measured_gas(meter, limit, schedule=args.schedule)
                     gas = measured["grossFrameUpperBound"] if profile == "no-reservoir" else measured["frameExecutionBudgetConsumed"]
                     fingerprint = digest({"logs": logs, "state": c.apply_delta(state, delta), "return": result["returnData"]})
                     fingerprints.append(fingerprint)

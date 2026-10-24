@@ -19,14 +19,15 @@ def main():
     p.add_argument("--fixtures", type=Path, required=True)
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--rpc", required=True)
+    p.add_argument("--schedule", choices=("osaka", "amsterdam"), default="amsterdam")
     p.add_argument("--reuse-build", action="store_true", help="Replay only; require an exact successful cached build")
     p.add_argument("--solc", type=Path, default=Path.home() / ".svm/0.8.38/solc-0.8.38")
     a = p.parse_args()
     a.out.mkdir(parents=True, exist_ok=True)
     assert int(b.rpc(a.rpc, "eth_chainId", []), 16) in (1337, 31337)
     source = "contracts/modules/DegenerusGameDegeneretteModule.sol"
-    manual = "            SpinResult memory spin = _rollBetSpin(rngWord, index, c.symbol, spinIdx, c.currency);"
-    survival = "            if (EntropyLib.hash3(RngTags.BET_SURVIVAL, rngWord, betId) & 1 == 1) {"
+    manual = "            SpinResult memory spin = _rollBetSpin(c.rngWord, c.index, c.symbol, spinIdx, c.currency);"
+    survival = "            if (EntropyLib.hash3(RngTags.BET_SURVIVAL, c.rngWord, c.betId) & 1 == 1) {"
     variant = h.build(a, [
         (source, manual, manual + """
             {
@@ -34,16 +35,13 @@ def main():
                 assembly ("memory-safe") { f := sload(0x4c334f31534f4f52) }
                 if (f != 0 && spin.score < f) spin.score = uint8(f);
             }"""),
-        (source, survival, """            uint256 survivalWord = EntropyLib.hash3(RngTags.BET_SURVIVAL, rngWord, betId);
+        (source, survival, """            uint256 survivalWord = EntropyLib.hash3(RngTags.BET_SURVIVAL, c.rngWord, c.betId);
             {
                 uint256 f;
                 assembly ("memory-safe") { f := sload(0x4c334f31534f4f52) }
                 if (f != 0) survivalWord |= 1;
             }
             if (survivalWord & 1 == 1) {""")])
-    original = json.loads((a.production / "output.json").read_text())["contracts"][h.BOX]["DegenerusGameBoxModule"]["evm"]["deployedBytecode"]["object"]
-    pins = json.loads((a.production / "input.json").read_text())["sources"]["contracts/ContractAddresses.sol"]["content"]
-    box = re.search(r"GAME_LOOTBOX_MODULE\s*=\s*address\((0x[0-9A-Fa-f]{40})\)", pins)[1].lower()
     resolved_topic = b.topic("DegeneretteResolved(uint32,uint32,uint64,uint256,uint32,bytes)")
     output = {"client": b.rpc(a.rpc, "web3_clientVersion", []), "cases": [],
         "method": "Original forced winning-bet branch envelope: preserve all RNG computation; force every score to at least seven/eight, FLIP survival and every ETH win-box branch. This artificial envelope is not a reachable RNG transcript."}
@@ -63,8 +61,7 @@ def main():
             for slot, value in account["state"].items():
                 assert slot not in target["state"] or int(target["state"][slot], 16) == int(value, 16)
                 target["state"][slot] = value
-        assert h.runtime_without_metadata(state[box]["code"]) == h.runtime_without_metadata(original)
-        state[box]["code"] = "0x" + variant
+        h.install_variants(state, a, variant)
         host = call["to"].lower()
         bo = {"time": hex(call["timestamp"]), "baseFeePerGas": "0x0"}
         if call.get("number"): bo["number"] = hex(call["number"])
@@ -102,7 +99,7 @@ def main():
                         assert not missing, ("prestate", missing[:8])
                         delta = b.rpc(a.rpc, "debug_traceCall", [tx, "0x0", dict(opts, tracer="prestateTracer", tracerConfig={"diffMode": True})])
                         meter = b.rpc(a.rpc, "debug_traceCall", [tx, "0x0", dict(opts, tracer=c.gas_meter.METER)])
-                        gas = c.gas_meter.measured_gas(meter, limit)
+                        gas = c.gas_meter.measured_gas(meter, limit, schedule=a.schedule)
                         frame = gas["grossFrameUpperBound"] if profile == "no-reservoir" else gas["frameExecutionBudgetConsumed"]
                         fingerprint = h.digest({"logs": logs, "state": c.apply_delta(state, delta), "return": result["returnData"]})
                         fingerprints.append(fingerprint)

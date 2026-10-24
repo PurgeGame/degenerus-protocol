@@ -5,7 +5,7 @@ The round state independently identifies runs, ranking, payments and finalizatio
 whole worker costs must not be mistaken for the cost of one operation.
 """
 import argparse,json,pathlib,importlib.util,hashlib
-p=argparse.ArgumentParser(description=__doc__);p.add_argument('--fixtures',type=pathlib.Path,required=True);p.add_argument('--out',type=pathlib.Path,required=True);p.add_argument('--rpc',required=True);a=p.parse_args()
+p=argparse.ArgumentParser(description=__doc__);p.add_argument('--fixtures',type=pathlib.Path,required=True);p.add_argument('--out',type=pathlib.Path,required=True);p.add_argument('--rpc',required=True);p.add_argument('--schedule',choices=['osaka','amsterdam'],default='amsterdam');a=p.parse_args()
 W=pathlib.Path(__file__).resolve().parents[2];D=a.out;D.mkdir(parents=True,exist_ok=True)
 s=importlib.util.spec_from_file_location('c',W/'scripts/consolidation/native-calibration.py');c=importlib.util.module_from_spec(s);s.loader.exec_module(c);b=c.b;rpc=a.rpc
 assert int(b.rpc(rpc,'eth_chainId',[]),16) in (1337,31337), 'local replay only'
@@ -28,7 +28,7 @@ for f in sorted(F.glob('decimator-*.call.json')):
    assert r['status']=='0x1',r.get('error')
    delta=b.rpc(rpc,'debug_traceCall',[tx,'0x0',dict(opts,tracer='prestateTracer',tracerConfig={'diffMode':True})]);post=c.apply_delta(state,delta);after=view(data,post)
    observed=b.rpc(rpc,'debug_traceCall',[tx,'0x0',dict(opts,tracer='prestateTracer')]);missing=c.missing_prestate(observed,state,True);assert not missing,missing
-   meter=b.rpc(rpc,'debug_traceCall',[tx,'0x0',dict(opts,tracer=c.gas_meter.METER)]);gas=c.gas_meter.measured_gas(meter,limit)
+   meter=b.rpc(rpc,'debug_traceCall',[tx,'0x0',dict(opts,tracer=c.gas_meter.METER)]);gas=c.gas_meter.measured_gas(meter,limit,schedule=a.schedule)
    kind={'runs':after[8]-before[8],'ranked':before[4]==1 and after[4]!=1,'payments':after[7]-before[7],'finalized':after[4]==3 and before[4]!=3}
    row['profiles'][profile]={'pass':True,'progressed':bool(c.result_words(r['returnData'])[0]),'gas':gas['grossFrameUpperBound' if profile=='no-reservoir' else 'frameExecutionBudgetConsumed'],'meter':gas,'before':before,'after':after,'operations':kind,'result':r['returnData'],'logs':c.events(r['logs']),'poststateSha256':hashlib.sha256(json.dumps(post,sort_keys=True).encode()).hexdigest()}
   except Exception as err:row['profiles'][profile]={'pass':False,'error':str(err)}

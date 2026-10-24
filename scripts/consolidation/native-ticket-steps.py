@@ -19,7 +19,7 @@ spec.loader.exec_module(c)
 b = c.b
 
 
-def run(rpc, file, profile):
+def run(rpc, file, profile, schedule="amsterdam"):
     call = json.loads(file.read_text())
     label = file.name.removesuffix(".call.json")
     dump = json.loads(file.with_name(label + ".state.json").read_text())
@@ -69,7 +69,7 @@ def run(rpc, file, profile):
             missing = c.missing_prestate(observed, state)
             assert not missing, (label, profile, allowance, "missing prestate", missing[:8])
             meter = b.rpc(rpc, "debug_traceCall", [tx, "0x0", dict(opts, tracer=c.gas_meter.METER)])
-            row["nativeGasMeter"] = c.gas_meter.measured_gas(meter, limit)
+            row["nativeGasMeter"] = c.gas_meter.measured_gas(meter, limit, schedule=schedule)
             row["gas"] = row["nativeGasMeter"]["grossFrameUpperBound" if profile == "no-reservoir" else "frameExecutionBudgetConsumed"]
             row["completeAccessedPrestate"] = True
         return row
@@ -103,6 +103,7 @@ def run(rpc, file, profile):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--schedule", choices=("osaka", "amsterdam"), default="amsterdam")
     parser.add_argument("--rpc", required=True)
     parser.add_argument("--fixtures", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
@@ -112,7 +113,7 @@ def main():
     for file in sorted(args.fixtures.glob("ticket-*.call.json")):
         row = {"label": file.name.removesuffix(".call.json"), "profiles": {}}
         for profile in ("no-reservoir", "reservoir"):
-            try: row["profiles"][profile] = run(args.rpc, file, profile)
+            try: row["profiles"][profile] = run(args.rpc, file, profile, args.schedule)
             except Exception as error: row["profiles"][profile] = {"pass": False, "error": str(error)}
         output["cases"].append(row)
         temp = args.output.with_suffix(".tmp")

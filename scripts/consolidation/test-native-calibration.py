@@ -44,6 +44,18 @@ class NativeReplayOracle(unittest.TestCase):
                 self.assertGreaterEqual(upper, gross)
                 self.assertLessEqual(upper, gross + 1)
 
+    def test_osaka_high_debug_budget_does_not_use_amsterdam_execution_cap(self):
+        meter = {"first": 500_000_000 - 21_000,
+                 "last": {"gas": 500_000_000 - 121_000, "cost": 0, "op": 0xF3},
+                 "refund": 0, "receiptGas": 121_000, "error": None,
+                 "frames": [{"executionBudgetConsumed": 99_000}]}
+        gas = n.gas_meter.measured_gas(meter, 500_000_000, schedule="osaka")
+        self.assertEqual(gas["intrinsicGas"], 21_000)
+        self.assertEqual(gas["frameExecutionBudgetConsumed"], 100_000)
+        self.assertEqual(gas["frames"], meter["frames"])
+        with self.assertRaises(AssertionError):
+            n.gas_meter.measured_gas(meter, 500_000_000, schedule="amsterdam")
+
     def test_clear_is_zero_but_untouched_slot_keeps_prestate(self):
         state = {A: {"state": {S: n.b.word(7), T: n.b.word(9)}}}
         delta = {"pre": {A: {"storage": {S: n.b.word(7)}}}, "post": {}}

@@ -149,11 +149,26 @@ def main():
     p.add_argument("--rpc", required=True)
     p.add_argument("--fixtures", type=Path, required=True)
     p.add_argument("--output", type=Path, required=True)
+    p.add_argument("--schedule", choices=("osaka", "amsterdam"), default="amsterdam")
+    p.add_argument("--resume", action="store_true", help="Reuse passing cases with identical input and prestate hashes")
     a = p.parse_args()
     assert int(b.rpc(a.rpc, "eth_chainId", []), 16) in (1337, 31337), "local replay only"
 
 
     rows = []
+    previous = {}
+    if a.resume and a.output.exists():
+        saved = json.loads(a.output.read_text())
+        assert saved["schedule"] == a.schedule, "Cannot resume a different gas schedule"
+        previous = {row["label"]: row for row in saved["cases"]}
+    def publish():
+        a.output.parent.mkdir(parents=True, exist_ok=True)
+        temporary = a.output.with_suffix(a.output.suffix + ".tmp")
+        temporary.write_text(json.dumps({"schedule": a.schedule, "client": b.rpc(a.rpc, "web3_clientVersion", []),
+            "method": "Cold native replay from original calibration prestates. Atomic cases require exact returns, ordered events and exported poststorage. Ticket admission searches preserve the original exact first-full-run criterion; later resumable work is reported but excluded from that probe's oracle. Resumable full-cohort cases require ordered events in each emitter/event lane (growth runs expanded to their exact winner indices and per-winner payouts), aggregated work count and exact final poststorage. All cases require complete accessed code/storage. Gas reports separate refunded receipts, gross state-inclusive gas, measured root execution-budget consumption and block max(execution,state) gas.",
+            "cases": rows}, indent=2) + "\n")
+        temporary.replace(a.output)
+
     for file in sorted(a.fixtures.glob("*.call.json")):
         label = file.name.removesuffix(".call.json")
         call = json.loads(file.read_text())
@@ -186,6 +201,12 @@ def main():
         if complete_post is not None:
             row["completeStateDump"] = True
             row["poststateSha256"] = hashlib.sha256(post_file.read_bytes()).hexdigest()
+        saved = previous.get(label)
+        if (saved and all(saved.get(key) == row.get(key) for key in
+                         ("fixtureSha256", "prestateSha256", "poststateSha256"))
+                and all(profile["pass"] for profile in saved["profiles"].values())):
+            rows.append(saved)
+            continue
         expected_events = events(json_value(call["expectedLogs"]))
         for profile, limit in [("no-reservoir", 16_777_216), ("reservoir", 500_000_000)]:
             tx = {"from": sender, "to": call["to"], "data": call["input"], "gas": hex(limit),
@@ -223,6 +244,23 @@ def main():
                                 changed += sum(slot not in diff.get("pre", {}).get(address, {}).get("storage", {})
                                     for address, account in diff.get("post", {}).items() for slot in account.get("storage", {}))
                                 result["_checkpointNotReached"] = changed < required
+                                if label.startswith("ticket-") and label.rsplit("-", 3)[-3] == "2":
+                                    # Dust-seat skips can commit the same Result and no
+                                    # events at many different cursors. Counting changed
+                                    # slots is not monotone (cleared lanes are omitted).
+                                    # Use the declared cursor only to direct the search;
+                                    # acceptance still requires the entire exact poststate.
+                                    layout = json.loads((Path(__file__).resolve().parents[1]
+                                        / "layout/golden/DegenerusGame.json").read_text())
+                                    field = next(r for r in layout if r["label"] == "ticketCursor")
+                                    key = b.word(int(field["slot"]))
+                                    mask = (1 << (8 * int(field["bytes"]))) - 1
+                                    shift = 8 * int(field["offset"])
+                                    cursor = next((m for m in mismatches if m[0] == call["to"].lower() and m[1] == key), None)
+                                    if cursor is not None:
+                                        done = result_words(result["returnData"])[1]
+                                        result["_checkpointNotReached"] = not done and (
+                                            (int(cursor[3], 16) >> shift) & mask) < ((int(cursor[2], 16) >> shift) & mask)
                         return result, exact
                     _, exact = trial(call["workerAllowance"])
                     low, high = 0, 16_777_216
@@ -237,7 +275,8 @@ def main():
                             high = mid
                         elif probe["status"] != "0x1" or probe.get("_checkpointNotReached", False) or (
                             len(probe.get("returnData", "")) == 194 and len(call["expectedReturn"]) == 194
-                            and result_words(probe["returnData"])[2] < result_words(call["expectedReturn"])[2]
+                            and (result_words(probe["returnData"])[0] < result_words(call["expectedReturn"])[0]
+                                 or result_words(probe["returnData"])[2] < result_words(call["expectedReturn"])[2])
                         ) or len(actual_events) < len(expected_events):
                             low = mid
                         else:
@@ -282,7 +321,7 @@ def main():
                 result = block["calls"][0]
                 trace = b.rpc(a.rpc, "debug_traceCall", [tx, "0x0", dict(opts, tracer="callTracer")])
                 meter = b.rpc(a.rpc, "debug_traceCall", [tx, "0x0", dict(opts, tracer=gas_meter.METER)])
-                native_gas = gas_meter.measured_gas(meter, limit)
+                native_gas = gas_meter.measured_gas(meter, limit, schedule=a.schedule)
                 same = (int(result["status"], 16) == 1 and result["returnData"] == call["expectedReturn"]
                         and events(result["logs"]) == expected_events)
                 continuation = None
@@ -342,7 +381,7 @@ def main():
                         diff = b.rpc(a.rpc, "debug_traceCall", [tx, "0x0", dict(piece_opts,
                             tracerConfig={"diffMode": True})])
                         piece_meter = b.rpc(a.rpc, "debug_traceCall", [tx, "0x0", dict(piece_opts, tracer=gas_meter.METER)])
-                        metrics = gas_meter.measured_gas(piece_meter, limit)
+                        metrics = gas_meter.measured_gas(piece_meter, limit, schedule=a.schedule)
                         pieces.append(metrics)
                         if metrics["grossGasUpperBound"] >= 10_000_000: break
                         post = apply_delta(next_state, diff)
@@ -391,10 +430,11 @@ def main():
                 row["profiles"][profile] = {"pass": False, "error": str(exc)}
         rows.append(row)
         print(label, {k: v["pass"] for k, v in row["profiles"].items()}, flush=True)
-        a.output.parent.mkdir(parents=True, exist_ok=True)
-        a.output.write_text(json.dumps({"client": b.rpc(a.rpc, "web3_clientVersion", []),
-            "method": "Cold native replay from original calibration prestates. Atomic cases require exact returns, ordered events and exported poststorage. Ticket admission searches preserve the original exact first-full-run criterion; later resumable work is reported but excluded from that probe's oracle. Resumable full-cohort cases require ordered events in each emitter/event lane (growth runs expanded to their exact winner indices and per-winner payouts), aggregated work count and exact final poststorage. All cases require complete accessed code/storage. Gas reports separate refunded receipts, gross state-inclusive gas, measured root execution-budget consumption and block max(execution,state) gas.",
-            "cases": rows}, indent=2) + "\n")
+        # Persist bounded batches atomically; serializing the complete growing
+        # trace archive after every case made the oracle quadratic in disk I/O.
+        if len(rows) % 25 == 0:
+            publish()
+    publish()
     assert rows and all(v["pass"] for r in rows for v in r["profiles"].values()), "native calibration cases require review"
 
 

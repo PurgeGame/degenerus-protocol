@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 p = argparse.ArgumentParser(description=__doc__)
@@ -25,6 +26,13 @@ a.work_root = a.work_root.resolve()
 a.forge_runner = a.forge_runner.resolve()
 a.out.mkdir(parents=True, exist_ok=True)
 a.work_root.mkdir(parents=True, exist_ok=True)
+# Freeze one source revision before either profile runs. A long first replay
+# must not cause the second profile to pick up concurrent workspace edits.
+snapshot_context = tempfile.TemporaryDirectory(prefix='source-', dir=a.work_root)
+snapshot = Path(snapshot_context.name)
+for directory in ('contracts', 'test', 'scripts'):
+    shutil.copytree(ROOT / directory, snapshot / directory)
+shutil.copyfile(ROOT / 'foundry.toml', snapshot / 'foundry.toml')
 logs = []
 abis = {}
 for profile in ('eip170', 'glamsterdam'):
@@ -36,8 +44,8 @@ for profile in ('eip170', 'glamsterdam'):
     assert marker.is_file() and marker.read_text() == str(ROOT), f'Not an owned proof copy: {work}'
     for directory in ('contracts', 'test', 'scripts'):
         shutil.rmtree(work / directory)
-        shutil.copytree(ROOT / directory, work / directory)
-    shutil.copyfile(ROOT / 'foundry.toml', work / 'foundry.toml')
+        shutil.copytree(snapshot / directory, work / directory)
+    shutil.copyfile(snapshot / 'foundry.toml', work / 'foundry.toml')
     if not (work / 'node_modules').exists():
         (work / 'node_modules').symlink_to(ROOT / 'node_modules', target_is_directory=True)
     subprocess.run(['git', 'submodule', 'update', '--init', 'lib/forge-std'], cwd=work, check=True)
@@ -64,8 +72,21 @@ for profile in ('eip170', 'glamsterdam'):
     assert summaries, 'Wrapper must retain .pin-logs/summary.json evidence'
     summary = json.loads(summaries[-1].read_text())
     assert len(summary) == 1 and summary[0]['exit_code'] == 0, summary
-    assert summary[0]['passed'] == 11 and summary[0]['failed'] == 0, summary
-    logs.append(str(work / '.pin-logs' / summary[0]['log']))
+    assert summary[0]['failed'] == 0, 'Profile replay or an imported helper suite failed'
+    replay_log = work / '.pin-logs' / summary[0]['log']
+    # Foundry also executes imported helper suites. Pin the actual replay suite,
+    # rather than mistaking the aggregate helper count for the scenario count.
+    active = False
+    replay_passes = 0
+    with replay_log.open() as stream:
+        for line in stream:
+            if line.startswith('Ran ') and ' tests for ' in line:
+                active = line.strip() == ('Ran 11 tests for '
+                    'test/differential/ConsolidationReplay.t.sol:ConsolidationReplayTest')
+            elif active and line.startswith('[PASS]'):
+                replay_passes += 1
+    assert replay_passes == 11, f'Expected all 11 replay scenarios, saw {replay_passes}'
+    logs.append(str(replay_log))
     if profile == 'eip170':
         for file in (work / 'forge-out').glob('*/*.json'):
             artifact = json.loads(file.read_text())
