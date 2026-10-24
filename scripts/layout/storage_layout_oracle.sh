@@ -111,5 +111,22 @@ if ! diff -u <(inspect_norm CrapsBattle) <(inspect_norm JackpotBattle); then
   echo "::error:: JackpotBattle delegate layout differs from CrapsBattle"; fail=1
 fi
 
+# Check the concrete deployed groups as well as the component goldens. A shell
+# can add storage even when every component's layout remains unchanged.
+mapfile -t SELECTED_MODULES < <(node --input-type=module -e '
+import {DEPLOYMENTS} from "./scripts/lib/deploymentManifest.js";
+for (const row of DEPLOYMENTS)
+  if (row.aliases.some(k => k.startsWith("GAME_") && k.endsWith("_MODULE")) && !row.aliases.includes("GAME"))
+    console.log(row.contract);
+')
+if [ "${#SELECTED_MODULES[@]}" -eq 0 ]; then
+  echo "::error:: no selected deployment modules"; fail=1
+fi
+for c in "${SELECTED_MODULES[@]}"; do
+  if ! diff -u "$GOLD/DegenerusGame.json" <(inspect_norm "$c"); then
+    echo "::error:: selected module $c differs from Game storage"; fail=1
+  fi
+done
+
 if [ $fail -eq 0 ]; then echo "STORAGE LAYOUT ORACLE: all goldens match ✓"; fi
 exit $fail

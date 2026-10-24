@@ -41,7 +41,7 @@ MUTATOR-DEF	_addPrizeContribution	_addPrizeContribution	storage/DegenerusGameSto
 VALUE-IN	_addPrizeContribution	_purchaseForWithCached	modules/GamePurchase.sol	READ	ticket + lootbox purchase revenue -> pools (fresh ETH and/or claimable draw; the draw leg is the POOL-TO-POOL debit below)
 MUTATOR-DEF	_creditClaimable	_creditClaimable	storage/DegenerusGameStorage.sol	READ	per-player credit helper definition (writes balancesPacked only; every call site pairs an aggregate move)
 PAIRED-CREDIT	_creditClaimable	payGoldenTicket	modules/DegenerusGameJackpotDrawModule.sol	READ	winner credit, per-player half of the future->claimable tandem; TWO callers now — the armed board resolution inside VRF fulfillment, and payGoldenTicketGrand pushed from the foil drain (_resolveFoilBuyer) when a pack's lines hold two or more all-gold tickets. Neither consults rngLockedFlag: both run inside advanceGame, a deterministic protocol function with no player discretion, and the foil drain strictly precedes the draw it feeds (the readiness gate holds rngGate until _foilDrainPending clears), so the future debit always lands ahead of the pool math that reads it
-PAIRED-CREDIT	_creditClaimable	_payEthQuadrant	modules/DegenerusGameJackpotModule.sol	READ	per-winner half of the liabilityDelta tandem
+PAIRED-CREDIT	_creditClaimable	_payEthAwardWork	modules/DegenerusGameJackpotModule.sol	READ	per-winner half of the liabilityDelta tandem
 PRE-COUNTED	_creditClaimable	_runDecimatorWork	modules/DegenerusGameDecimatorModule.sol	READ	Entire ETH award credits a winner from the sealed pool already reserved by Advance; no aggregate pool increase
 PRE-COUNTED	_creditClaimable	_payBafAward	modules/DegenerusGameJackpotDrawModule.sol	READ	BAF award-stage credits; the schedule's ETH term was reserved in claimablePool at consolidation (runBafJackpot's claimableDelta) and is tracked down in jackpotWork.paid
 POOL-TO-POOL	claimablePool	_handleGameOverAdvance	modules/DegenerusGameGameOverModule.sol	WRITE	game-over latch releases the uncredited BAF reservation (jackpotWork.paid, kind 7) back into the distributable total before the in-flight work is deleted
@@ -53,7 +53,7 @@ POOL-TO-POOL	_setFuturePrizePool	_flushPool	modules/DegenerusGameDegeneretteModu
 POOL-TO-POOL	_setFuturePrizePool	_freezePool	modules/DegenerusGameRngUtils.sol	READ	freeze seed: 1% of future moves to the pending-future buffer
 POOL-TO-POOL	_setFuturePrizePool	_releaseToFuture	modules/DegenerusGameDecimatorModule.sol	READ	The released amount credits the live future pool, paired with the claimablePool decrement
 MUTATOR-DEF	_setFuturePrizePool	_setFuturePrizePool	storage/DegenerusGameStorage.sol	READ	canonical future setter definition
-POOL-TO-POOL	_setFuturePrizePool	_boxResolveEthSpinFromBox	modules/DegenerusGameDegeneretteModule.sol	READ	box ETH-spin flush, unfrozen path
+POOL-TO-POOL	_setFuturePrizePool	_localboxResolveEthSpinFromBox	modules/DegenerusGameDegeneretteModule.sol	READ	box ETH-spin flush, unfrozen path
 VALUE-IN	_setPendingPools	_collectBetFunds	modules/GameDegeneretteBet.sol	READ	ETH bet lands in pending future during freeze; claimable/afking-funded shortfall leg pre-debited via _settleShortfall (relabel)
 VALUE-IN	_setPendingPools	_deliverWhalePass	modules/DegenerusGameWhaleModule.sol	READ	pass purchase revenue -> pending pools during freeze (player route and the sDGNRS automatic purchase share the delivery)
 POOL-TO-POOL	_setPendingPools	_flushPool	modules/DegenerusGameDegeneretteModule.sol	READ	frozen-path flush of the running pending-future local after ETH-win debits (manual resolve only; the sweep holds its queue while the pool is frozen)
@@ -64,7 +64,7 @@ MUTATOR-DEF	_setPendingPools	_setPendingPools	storage/DegenerusGameStorage.sol	R
 VALUE-IN	_setPendingPools	_buyFoilPack	modules/DegenerusGameFoilCore.sol	READ	foil premium lands in pending pools during freeze (75/25 split; fresh ETH + relabel mix) (private _buyFoilPack, reached only through purchaseWithFoil; the pack leg of the additive purchase)
 VALUE-IN	_setPendingPools	purchaseDeityPass	modules/DegenerusGameWhaleModule.sol	READ	pass purchase revenue -> pending pools during freeze
 VALUE-IN	_setPendingPools	purchaseLazyPass	modules/DegenerusGameWhaleModule.sol	READ	pass purchase revenue -> pending pools during freeze
-POOL-TO-POOL	_setPendingPools	_boxResolveEthSpinFromBox	modules/DegenerusGameDegeneretteModule.sol	READ	box ETH-spin flush (same shape as runDegeneretteWork)
+POOL-TO-POOL	_setPendingPools	_localboxResolveEthSpinFromBox	modules/DegenerusGameDegeneretteModule.sol	READ	box ETH-spin flush (same shape as runDegeneretteWork)
 POOL-TO-POOL	_setPendingPools	resolveRedemptionLootbox	modules/DegenerusGameLootboxModule.sol	READ	redemption reserve debit funds pending future during freeze
 MUTATOR-DEF	_setPrizePools	_addFuturePrizePool	modules/DegenerusGameJackpotModule.sol	READ	helper body delegates to the packed-slot setter
 MUTATOR-DEF	_setPrizePools	_addNextPrizePool	modules/DegenerusGameJackpotModule.sol	READ	helper body delegates to the packed-slot setter
@@ -85,7 +85,7 @@ VALUE-IN	_setPrizePools	purchaseLazyPass	modules/DegenerusGameWhaleModule.sol	RE
 POOL-TO-POOL	_setPrizePools	resolveRedemptionLootbox	modules/DegenerusGameLootboxModule.sol	READ	redemption reserve debit funds future (live path)
 DECL	claimablePool	<file-scope>	storage/DegenerusGameStorage.sol	DECL	counted-term state variable declaration
 PAIRED-CREDIT	claimablePool	_addClaimableEth	modules/DegenerusGameDegeneretteModule.sol	WRITE	aggregate + per-player in tandem; funded by the running pool debit in _distributePayout
-VALUE-OUT	claimablePool	_claimWinningsInternal	DegenerusGame.sol	WRITE	player withdrawal: aggregate falls as ETH leaves (CEI); per-player claimable zeroed in tandem
+VALUE-OUT	claimablePool	_claimWinningsInternal	modules/GameActions.sol	WRITE	player withdrawal: aggregate falls as ETH leaves (CEI); per-player claimable zeroed in tandem
 POOL-TO-POOL	claimablePool	_consolidatePoolsAndRewardJackpots	modules/DegenerusGameAdvanceModule.sol	WRITE	BAF + decimator claimableDelta: future -> claimable; rounds thereby PRE-COUNTED for later per-player claims
 VALUE-IN	claimablePool	_creditAfkingValue	storage/DegenerusGameStorage.sol	WRITE	overpay/bare-send and funded-subscribe ETH deposits, plus an atomic stETH fallback receipt verified by pullAfkingSteth before credit; per-player afking half in tandem (SOLVENCY-01 identity), with fallback uint128 bounds checked before the mutator
 POOL-TO-POOL	claimablePool	_runSubscriberWork	modules/GameAfkingModule.sol	WRITE	chunk-end release of the STAGE's summed delivery costs (both legs debited from the subscriber's balance word in _deliverAfkingBuy); the same sum credits the prize pools via _routeAfkingPoolEth

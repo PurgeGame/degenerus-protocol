@@ -18,6 +18,7 @@ test-assurance-tools:
 check-interfaces:
 	@if [ -z "$(CHECK_ARTIFACTS)" ]; then FOUNDRY_DISABLE_NIGHTLY_WARNING=1 forge build --skip test >/dev/null; fi
 	@CHECK_ARTIFACTS="$(CHECK_ARTIFACTS)" scripts/check-interface-coverage.sh
+	@python3 scripts/check-profile-routes.py
 
 # ── Delegatecall alignment gate ─────────────────────────────────────────
 # Verifies every interface-bound abi.encodeWithSelector(IFACE.fn.selector, ...)

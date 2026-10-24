@@ -14,7 +14,7 @@ class DelegatecallOptionsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             contracts = Path(directory)
             (contracts / "interfaces").mkdir()
-            for name in ("ContractAddresses.sol", "interfaces/IDegenerusGameModules.sol"):
+            for name in ("ContractAddresses.sol", "interfaces/IDegenerusGameModules.sol", "interfaces/IGameEntryModules.sol", "interfaces/IGameActionModule.sol"):
                 shutil.copyfile(ROOT / "contracts" / name, contracts / name)
             (contracts / "Probe.sol").write_text(
                 "contract Probe { function run() external {\n"
@@ -44,7 +44,7 @@ class DelegatecallOptionsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             contracts = Path(directory)
             (contracts / "interfaces").mkdir()
-            for name in ("ContractAddresses.sol", "interfaces/IDegenerusGameModules.sol"):
+            for name in ("ContractAddresses.sol", "interfaces/IDegenerusGameModules.sol", "interfaces/IGameEntryModules.sol", "interfaces/IGameActionModule.sol"):
                 shutil.copyfile(ROOT / "contracts" / name, contracts / name)
             (contracts / "GameMiner.sol").write_text(
                 "contract GameMiner { function run() external {\n"

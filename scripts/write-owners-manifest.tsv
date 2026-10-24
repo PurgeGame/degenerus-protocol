@@ -50,11 +50,11 @@ HELPER	ticketSoloOffset	storage/DegenerusGameStorage.sol	Ticket worker persists 
 HELPER	traitBucketLive	storage/DegenerusGameStorage.sol	Exact-tag takeover marks the retained bitmap stale; first append replaces the complete bitmap, later appends add live traits.
 HELPER	traitBucketStale	storage/DegenerusGameStorage.sol	Parity tag takeover marks stale and the first append clears the flag after discarding old logical bitmap.
 HELPER	walletIds	storage/DegenerusGameStorage.sol	_registerWallet assigns a default gameplay ID and initializes or preserves the permanent governance/affiliate identity in the high lane.
-INIT	_afkingEndpointDay	DegenerusGame.sol	constructor sets the deploy day as the first reward endpoint
-INIT	dailyIdx	DegenerusGame.sol	constructor seeds dailyIdx to the deploy day so gap detection starts there
-INIT	foilSlotRetained	DegenerusGame.sol	Constructor retains the foil cursor word through later empty swaps.
+INIT	_afkingEndpointDay	modules/GameFacade.sol	constructor sets the deploy day as the first reward endpoint
+INIT	dailyIdx	modules/GameFacade.sol	constructor seeds dailyIdx to the deploy day so gap detection starts there
+INIT	foilSlotRetained	modules/GameFacade.sol	Constructor retains the foil cursor word through later empty swaps.
 INIT	lastVrfProcessedTimestamp	modules/DegenerusGameGameOverModule.sol	wireVrf (deploy-only, called from the ADMIN constructor) seeds the timestamp; the deadman itself keys off dailyIdx
-INIT	purchaseStartDay	DegenerusGame.sol	constructor seeds the deploy day
+INIT	purchaseStartDay	modules/GameFacade.sol	constructor seeds the deploy day
 INIT	vrfCoordinator	modules/DegenerusGameGameOverModule.sol	_setVrfConfig from wireVrf (deploy) and the governance rotation; config, not game state
 INIT	vrfKeyHash	modules/DegenerusGameGameOverModule.sol	_setVrfConfig from wireVrf (deploy) and the governance rotation
 INIT	vrfSubscriptionId	modules/DegenerusGameGameOverModule.sol	_setVrfConfig from wireVrf (deploy) and the governance rotation
@@ -75,19 +75,19 @@ OWNER	_subCursor	modules/GameAfkingModule.sol	runSubscriberWork persists the adv
 OWNER	_subCursor	modules/GameMiner.sol	Internalized component retains the reviewed writer role: Miner resets the subscriber cursor only when beginning a new pinned preparation day; AFKing owns batch advancement.
 OWNER	_subOpenCursor	modules/GameAfkingModule.sol	_runAfkingWork persists the monotonic box-section cursor
 OWNER	_subOpenCursor	modules/GameMiner.sol	Internalized component retains the reviewed writer role: Reset once at daily preparation after the previous read cohort completed
-OWNER	balancesPacked	DegenerusGame.sol	claimWinnings/withdrawAfkingFunding debit a player's claimable/afking halves inline (byte-identical to the storage helpers) paired with a claimablePool debit
+OWNER	balancesPacked	modules/GameActions.sol	claimWinnings/withdrawAfkingFunding debit a player's claimable/afking halves inline (byte-identical to the storage helpers) paired with a claimablePool debit
 OWNER	balancesPacked	modules/DegenerusGameAdvanceModule.sol	_autoRepayLoan debits the due borrower's claimable then prepaid funding, paired with the lender's internal claimable credit; leaves the claimable sentinel
 OWNER	balancesPacked	modules/DegenerusGameDegenesisModule.sol	topUpSdgnrsAfking tops sDGNRS AFKing funding up from its claimable half (exact move inside one packed word); spendDegenesis moves the Vault budget in and the unspent part back around the unchanged purchase; _splitDegenesisCohorts adds the sDGNRS quarter to the AFKing half in tandem with the claimablePool/Vault budget carve
 OWNER	balancesPacked	modules/DegenerusGameGameOverModule.sol	_handleGameOverDrain one-shot Degenesis release clears the sDGNRS AFKing half (leaving its claimable half) in tandem with the claimablePool debit; the gameOver latch makes it once
 OWNER	balancesPacked	modules/GamePurchase.sol	_processMintPayment debits claimable and afking from one packed snapshot; preserves the low-half sentinel and checks high-half sufficiency; _purchaseForWithCached applies the matching combined claimablePool debit
-OWNER	boonPacked	DegenerusGame.sol	NOT A STORAGE WRITE: deityBoonData declares a local uint32 boonPacked = deityBoonPacked[deity] in a view; label collision with the storage identifier
+OWNER	boonPacked	modules/GameFacade.sol	NOT A STORAGE WRITE: deityBoonData declares a local uint32 boonPacked = deityBoonPacked[deity] in a view; label collision with the storage identifier
 OWNER	boonPacked	modules/DegenerusGameBoonModule.sol	NOT A STORAGE WRITE: issueDeityBoon's local uint32 boonPacked caches deityBoonPacked[deity]; the real store is deityBoonPacked (separate row)
 OWNER	boonPacked	modules/DegenerusGameWhaleModule.sol	Consumes the applicable box/pass boon field with its masked one-shot write; other packed boons are preserved.
 OWNER	boonPacked	modules/GameBoonActions.sol	Internalized component retains the reviewed writer role: NOT A STORAGE WRITE: issueDeityBoon's local uint32 boonPacked caches deityBoonPacked[deity]; the real store is deityBoonPacked (separate row)
 OWNER	boonPacked	modules/GamePurchaseBoon.sol	Purchase boost consumes the same packed tier/day fields in Game storage; no other fields or call authority change.
 OWNER	boonPacked	modules/GamePurchaseBox.sol	Consumes the applicable box/pass boon field with its masked one-shot write; other packed boons are preserved.
 OWNER	boxCursor	modules/GameAfkingModule.sol	Human FIFO worker stores the advanced cursor before each entry settles; the seal resets it.
-OWNER	claimablePool	DegenerusGame.sol	claimWinnings/withdrawAfkingFunding release liability: pool -= payout in tandem with the per-player debit
+OWNER	claimablePool	modules/GameActions.sol	claimWinnings/withdrawAfkingFunding release liability: pool -= payout in tandem with the per-player debit
 OWNER	claimablePool	modules/DegenerusGameAdvanceModule.sol	_consolidatePoolsAndRewardJackpots adds the level-transition claimableDelta after crediting winners; one of the paired liability writers
 OWNER	claimablePool	modules/DegenerusGameDecimatorModule.sol	_releaseToFuture moves an zero-quota round, or the pass money fixed at ranking, from the reservation to the (frozen-aware) future pool
 OWNER	claimablePool	modules/DegenerusGameDegeneretteModule.sol	_addClaimableEth pairs pool += with _creditClaimable for Degenerette ETH wins; same identity as every other crediting site
@@ -174,7 +174,7 @@ OWNER	lastPurchaseDay	modules/DegenerusGameAdvanceModule.sol	advanceGame arms (t
 OWNER	lastVrfProcessedTimestamp	modules/DegenerusGameRngUtils.sol	_applyDailyRng stamps the time the daily word was applied; runtime sole writer
 OWNER	level	modules/DegenerusGameAdvanceModule.sol	_finalizeRngRequest promotes level = lvl on the fresh last-purchase request; the sole writer (advance-chain coupling with GNRUS.pickCharity)
 OWNER	loanSeizeCursor	modules/DegenerusGameAdvanceModule.sol	prepareRequestBoundary resets it when arming a due level; _settleLevelLoans advances it past each chunk, from the ordinary stage or the game-over loan stage.
-OWNER	lootboxRngPacked	DegenerusGame.sol	setCrapsRngPending is CRAPS-only and changes only pending parity bits 250/251, preserving committed entropy/session fields.
+OWNER	lootboxRngPacked	modules/GameFacade.sol	setCrapsRngPending is CRAPS-only and changes only pending parity bits 250/251, preserving committed entropy/session fields.
 OWNER	lootboxRngPacked	modules/GameDegeneretteBet.sol	Internalized component retains the reviewed writer role: _collectBetFunds merges hero buffer-validity metadata and the pending ETH or FLIP addition and increments the write-buffer bet count in one write; preserves every other field.
 OWNER	middayRngCredit	modules/DegenerusGameRngModule.sol	creditMiddayRng (ADMIN, forwarded by the Game stub) banks a donor's LINK credit by wallet ID; _tryChargeMiddayCredit debits the caller's credit for a mid-day request; one module owns both sides
 OWNER	mintPacked_	modules/DegenerusGameBoonModule.sol	_creditActivity bumps LEVEL_COUNT via setPacked on a fresh read; field-isolated
@@ -182,7 +182,7 @@ OWNER	mintPacked_	modules/DegenerusGameMintStreakUtils.sol	_recordMintData/_reco
 OWNER	mintPacked_	modules/DegenerusGameWhaleModule.sol	purchaseWhalePass/purchaseDeityPass write the pass fields from the entry read; _grantSeatCoin sets SEAT_CLAIMED last in the function so no later whole-word write clobbers it
 OWNER	mintPacked_	modules/GameBoonActions.sol	Internalized component retains the reviewed writer role: _creditActivity bumps LEVEL_COUNT via setPacked on a fresh read; field-isolated
 OWNER	mintPacked_	modules/GamePurchase.sol	createSmurf initializes the fresh child flag and increments the main ID lifetime count in bits 224..239; raiseSmurfBaseAllowance writes only bits 240..255; both preserve neighboring fields before stateful external calls
-OWNER	operatorApprovals	DegenerusGame.sol	Player-controlled operator permission mapping; cannot authorize mutation of committed RNG inputs.
+OWNER	operatorApprovals	modules/GameActions.sol	Player-controlled operator permission mapping; cannot authorize mutation of committed RNG inputs.
 OWNER	phaseTransitionActive	modules/DegenerusGameAdvanceModule.sol	_endPhase sets; advanceGame clears at transition close; sole writer
 OWNER	prizePoolFrozen	modules/DegenerusGameAdvanceModule.sol	_freezePool/_unfreezePool own the freeze; unfreeze folds pending into live
 OWNER	prizePoolFrozen	modules/DegenerusGameGameOverModule.sol	_handleGameOverDrain clears the freeze after zeroing the live pools so _unlockRng's _unfreezePool cannot resurrect pending ETH; terminal
@@ -200,7 +200,7 @@ OWNER	rngRequestDay	modules/DegenerusGameGameOverModule.sol	Rng stamps the pinne
 OWNER	rngRequestDay	modules/DegenerusGameRngModule.sol	Rng stamps the pinned preparation day on a fresh daily request and zero for midday; GameOver clears retired daily identity and pins its terminal request day. Callback/retry never changes it.
 OWNER	rngRequestTime	modules/DegenerusGameGameOverModule.sol	Terminal first attempt arms the refusal timer once; successful request preserves that origin. Coordinator rotation leaves the origin untouched.
 OWNER	rngRequestTime	modules/DegenerusGameRngModule.sol	Fresh daily/midday request sets the actual send timestamp; transport retry leaves it. Logical day lives separately in rngRequestDay.
-OWNER	rngWordCurrent	DegenerusGame.sol	rawFulfillRandomWords stores the accepted coordinator word inline in the facade (callback runs without a delegatecall)
+OWNER	rngWordCurrent	modules/GameFacade.sol	rawFulfillRandomWords stores the accepted coordinator word inline in the facade (callback runs without a delegatecall)
 OWNER	rngWordCurrent	modules/DegenerusGameGameOverModule.sol	Successful terminal request invalidates buffered daily payload, as the previous Advance _tryRequestRng did.
 OWNER	rngWordCurrent	modules/DegenerusGameRngModule.sol	Fresh requests set WAIT sentinel1; retry preserves WAIT and published consumers retain the accepted word. The facade callback stores the final word.
 OWNER	snapLevel	modules/DegenerusGameAdvanceModule.sol	_finalizeRngRequest zeroes the declaration when lvl >= snapLevel after folding it into snapShift
@@ -227,13 +227,13 @@ OWNER	yieldAccumulator	modules/DegenerusGameAdvanceModule.sol	_consolidatePoolsA
 OWNER	yieldAccumulator	modules/DegenerusGameDegenesisModule.sol	_splitDegenesisCohorts reserves the insurance quarter in the existing accumulator
 OWNER	yieldAccumulator	modules/DegenerusGameGameOverModule.sol	_handleGameOverDrain zeroes at terminal drain
 OWNER	yieldAccumulator	modules/DegenerusGameJackpotModule.sol	runDailyJackpot adds the insurance cut; distributeYieldSurplus adds the quarter share
-INIT	dailyComplete	DegenerusGame.sol	Fresh request clears; final read certificate sets exactly once for a normal daily identity; constructor initializes.
+INIT	dailyComplete	modules/GameFacade.sol	Fresh request clears; final read certificate sets exactly once for a normal daily identity; constructor initializes.
 OWNER	dailyComplete	modules/DegenerusGameRngModule.sol	Fresh request clears; final read certificate sets exactly once for a normal daily identity; constructor initializes.
 HELPER	dailyComplete	storage/DegenerusGameStorage.sol	Fresh request clears; final read certificate sets exactly once for a normal daily identity; constructor initializes.
 OWNER	dailyIdx	modules/DegenerusGameRngModule.sol	Fresh daily request is the sole runtime writer; constructor bootstraps day 1.
-INIT	lastDailyCompletedAt	DegenerusGame.sol	Only final normal daily read completion refreshes the hard deadline after constructor initialization.
+INIT	lastDailyCompletedAt	modules/GameFacade.sol	Only final normal daily read completion refreshes the hard deadline after constructor initialization.
 HELPER	lastDailyCompletedAt	storage/DegenerusGameStorage.sol	Only final normal daily read completion refreshes the hard deadline after constructor initialization.
-INIT	lastDailyRequestWallDay	DegenerusGame.sol	Atomic fresh request stamps its actual calendar send window; constructor initializes pacing.
+INIT	lastDailyRequestWallDay	modules/GameFacade.sol	Atomic fresh request stamps its actual calendar send window; constructor initializes pacing.
 OWNER	lastDailyRequestWallDay	modules/DegenerusGameRngModule.sol	Atomic fresh request stamps its actual calendar send window; constructor initializes pacing.
 OWNER	vrfCallbackGasLimit	modules/DegenerusGameGameOverModule.sol	Existing imported P8C configurable callback gas: validated VRF wiring/coordinator replacement owns the packed field; exposed by refreshed compiled layout.
 OWNER	degenesisOpenedAt	modules/DegenerusGameRngModule.sol	Fresh daily requests during Degenesis alone stamp the exact cohort opening.

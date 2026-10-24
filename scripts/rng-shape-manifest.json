@@ -9,7 +9,7 @@
       "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
     },
     {
-      "file": "Coinflip.sol",
+      "file": "modules/CoinflipCore.sol",
       "function": "bafDrawWinner",
       "expression": "EntropyLib.hash2(RngTags.BAF_HEAD,rngWord)",
       "class": "RNG",
@@ -58,35 +58,35 @@
       "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
     },
     {
-      "file": "CrapsBattle.sol",
+      "file": "modules/CrapsBattleCore.sol",
       "function": "_bonusRoll",
       "expression": "EntropyLib.hash3(RngTags.CRAPS_SCHEDULE,word,period==_BONUS_PERIODS_PER_DAY-2?0:period)",
       "class": "RNG",
       "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
     },
     {
-      "file": "CrapsBattle.sol",
+      "file": "modules/CrapsBattleCore.sol",
       "function": "_battleKey",
       "expression": "keccak256(ptr,0xC0)",
       "class": "NON-RNG",
       "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
     },
     {
-      "file": "CrapsBattle.sol",
+      "file": "modules/CrapsBattleCore.sol",
       "function": "_tieBreak",
       "expression": "EntropyLib.hash3(RngTags.CRAPS_TIE,word,field|challenger)",
       "class": "RNG",
       "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
     },
     {
-      "file": "CrapsBattle.sol",
+      "file": "modules/CrapsBattleCore.sol",
       "function": "_tieBreak",
       "expression": "EntropyLib.hash3(RngTags.CRAPS_TIE,word,field|leader)",
       "class": "RNG",
       "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
     },
     {
-      "file": "CrapsBattle.sol",
+      "file": "modules/CrapsBattleCore.sol",
       "function": "_boostMult",
       "expression": "EntropyLib.hash3(RngTags.CRAPS_BOOST,word,bound)",
       "class": "RNG",
@@ -156,14 +156,14 @@
       "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input. Owner 2026-10-24: wall day is fine for this roll (cheapest source)."
     },
     {
-      "file": "DegenerusGame.sol",
+      "file": "modules/GameFacade.sol",
       "function": "sampleTraitEntries",
       "expression": "keccak256(0,32)",
       "class": "NON-RNG",
       "reason": "Storage addressing, commitment, serial/assignment identity or checkpoint fingerprint; no VRF input"
     },
     {
-      "file": "DegenerusGame.sol",
+      "file": "modules/GameFacade.sol",
       "function": "sampleFarFutureTickets",
       "expression": "EntropyLib.hash3(RngTags.BAF_FUTURE_ATTEMPT,entropy,attempt)",
       "class": "RNG",
@@ -345,7 +345,7 @@
       "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
     },
     {
-      "file": "JackpotBattle.sol",
+      "file": "modules/CrapsLifecycleViews.sol",
       "function": "_rngBattleKey",
       "expression": "keccak256(abi.encode(BATTLE_TAG,uint48(slot),bank,goal,played,terms))",
       "class": "NON-RNG",
@@ -368,7 +368,7 @@
     {
       "file": "JackpotBattle.sol",
       "function": "_settleHighRollerReserve",
-      "expression": "EntropyLib.hash3(RngTags.CRAPS_RESERVE_WINNER,r.drawWord,(uint256(slot)<<32)|draw.eligible)",
+      "expression": "EntropyLib.hash3(RngTags.CRAPS_RESERVE_WINNER,r.drawWord,(uint256(slot)<<32)|c.draw.eligible)",
       "class": "RNG",
       "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
     },
@@ -380,14 +380,14 @@
       "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
     },
     {
-      "file": "JackpotBattle.sol",
+      "file": "modules/CrapsLifecycleViews.sol",
       "function": "_jackpotBonusRoll",
       "expression": "EntropyLib.hash3(RngTags.CRAPS_SCHEDULE,word,period==_BONUS_PERIODS_PER_DAY-2?0:period)",
       "class": "RNG",
       "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
     },
     {
-      "file": "JackpotBattle.sol",
+      "file": "modules/CrapsLifecycleViews.sol",
       "function": "_jackpotBoostMult",
       "expression": "EntropyLib.hash3(RngTags.CRAPS_BOOST,word,bound)",
       "class": "RNG",
@@ -815,29 +815,29 @@
     },
     {
       "file": "modules/DegenerusGameDegeneretteModule.sol",
-      "function": "_resolveBet",
-      "expression": "EntropyLib.hash3(RngTags.BET_SURVIVAL,rngWord,betId)",
+      "function": "_resolveBetWork",
+      "expression": "EntropyLib.hash3(RngTags.BET_SURVIVAL,c.rngWord,c.betId)",
       "class": "RNG",
       "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
     },
     {
       "file": "modules/DegenerusGameDegeneretteModule.sol",
-      "function": "_resolveBet",
-      "expression": "EntropyLib.hash3(RngTags.BET_ROUND,rngWord,betId)",
+      "function": "_resolveBetWork",
+      "expression": "EntropyLib.hash3(RngTags.BET_ROUND,c.rngWord,c.betId)",
       "class": "RNG",
       "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
     },
     {
       "file": "modules/DegenerusGameDegeneretteModule.sol",
-      "function": "_resolveBet",
-      "expression": "EntropyLib.hash3(RngTags.BET_BOX,rngWord,betId)",
+      "function": "_resolveBetWork",
+      "expression": "EntropyLib.hash3(RngTags.BET_BOX,c.rngWord,c.betId)",
       "class": "RNG",
       "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
     },
     {
       "file": "modules/DegenerusGameDegeneretteModule.sol",
-      "function": "_resolveBet",
-      "expression": "EntropyLib.hash3(RngTags.BET_RECORD,rngWord,betId)",
+      "function": "_resolveBetWork",
+      "expression": "EntropyLib.hash3(RngTags.BET_RECORD,c.rngWord,c.betId)",
       "class": "RNG",
       "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
     },
@@ -885,7 +885,7 @@
     },
     {
       "file": "modules/DegenerusGameDegeneretteModule.sol",
-      "function": "_boxResolveWwxrpSpinFromBox",
+      "function": "_localboxResolveWwxrpSpinFromBox",
       "expression": "EntropyLib.hash2(RngTags.SPIN_HOUSE,seed)",
       "class": "RNG",
       "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
@@ -920,14 +920,14 @@
     },
     {
       "file": "modules/DegenerusGameDegeneretteModule.sol",
-      "function": "_boxResolveEthSpinFromBox",
+      "function": "_localboxResolveEthSpinFromBox",
       "expression": "EntropyLib.hash2(RngTags.SPIN_HOUSE,seed)",
       "class": "RNG",
       "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
     },
     {
       "file": "modules/DegenerusGameDegeneretteModule.sol",
-      "function": "_boxResolveEthSpinFromBox",
+      "function": "_localboxResolveEthSpinFromBox",
       "expression": "EntropyLib.hash2(RngTags.SPIN_RECIRC,seed)",
       "class": "RNG",
       "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
@@ -1089,7 +1089,7 @@
     {
       "file": "modules/DegenerusGameJackpotModule.sol",
       "function": "_resumeEth",
-      "expression": "EntropyLib.hash3(RngTags.JACKPOT_QUADRANT,entropy,q)",
+      "expression": "EntropyLib.hash3(RngTags.JACKPOT_QUADRANT,d.entropy,q)",
       "class": "RNG",
       "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
     },
@@ -1158,21 +1158,21 @@
     },
     {
       "file": "modules/DegenerusGameLootboxModule.sol",
-      "function": "_boxResolveHumanBoxOrder",
+      "function": "_localboxResolveHumanBoxOrder",
       "expression": "EntropyLib.hash3(RngTags.BOX_ORDER,rngWord,position)",
       "class": "RNG",
       "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
     },
     {
       "file": "modules/DegenerusGameLootboxModule.sol",
-      "function": "_boxResolveLootboxDirect",
+      "function": "_localboxResolveLootboxDirect",
       "expression": "EntropyLib.hash2(RngTags.BOX_DIRECT,rngWord)",
       "class": "RNG",
       "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
     },
     {
       "file": "modules/DegenerusGameLootboxModule.sol",
-      "function": "_boxResolveAfkingBox",
+      "function": "_localboxResolveAfkingBox",
       "expression": "EntropyLib.hash3(RngTags.BOX_AFKING,rngWord,uint256(id))",
       "class": "RNG",
       "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
@@ -1229,7 +1229,7 @@
     {
       "file": "modules/DegenerusGameTicketModule.sol",
       "function": "runJackpotTicketAwards",
-      "expression": "EntropyLib.hash4(RngTags.TICKET_DIRECT,plan.entropy,(uint256(q)<<32)|i,round)",
+      "expression": "EntropyLib.hash4(RngTags.TICKET_DIRECT,plan.entropy,(uint256(c.q)<<32)|c.i,c.round)",
       "class": "RNG",
       "reason": "Reviewed action and discriminators: .planning/consolidation/RNGCLEAN-INVENTORY.md"
     },
@@ -1656,7 +1656,7 @@
   ],
   "rawBitExceptions": [
     {
-      "file": "Coinflip.sol",
+      "file": "modules/CoinflipCore.sol",
       "function": "processCoinflipPayouts",
       "expression": "boolwin=(rngWord&1)==1;",
       "reason": "Owner 2026-10-22: each reverse flip adds one to the raw daily word and must reverse its win bit."

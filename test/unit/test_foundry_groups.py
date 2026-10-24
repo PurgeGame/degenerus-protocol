@@ -18,6 +18,9 @@ FAKE_TOOL = '''#!/usr/bin/env python3
 import json, os, signal, sys, time
 from pathlib import Path
 if Path(sys.argv[0]).name == "node":
+    if "--input-type=module" in sys.argv:
+        print("[]")
+        raise SystemExit(0)
     patches = Path("node-calls.json")
     patches.write_text(json.dumps([*(json.loads(patches.read_text()) if patches.exists() else []), sys.argv[1:]]))
     Path("contracts/ContractAddresses.sol").write_text("patched\\n")
@@ -101,6 +104,20 @@ class FoundryGroupsDriverTest(unittest.TestCase):
 
     def rows(self):
         return json.loads((self.root / ".audit-test-logs/foundry/summary.json").read_text())
+
+    def test_generated_profile_files_restore_after_a_failed_batch(self):
+        generated = self.root / 'contracts/Selected.sol'
+        generated.write_bytes(b'original profile\r\n')
+        node = self.root / 'bin/node'
+        source = node.read_text().replace('print("[]")', 'print(\'["contracts/Selected.sol"]\')')
+        source = source.replace('    patches = Path("node-calls.json")',
+                                '    Path("contracts/Selected.sol").write_text("generated profile")\n'
+                                '    patches = Path("node-calls.json")')
+        node.write_text(source)
+        self.sources('fuzz', 1)
+        result = self.run_driver(FAKE_MODE='failed')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(generated.read_bytes(), b'original profile\r\n')
 
     def test_integration_alias_shards_every_source_and_records_actual_inputs(self):
         selected = self.sources("gas", 41)

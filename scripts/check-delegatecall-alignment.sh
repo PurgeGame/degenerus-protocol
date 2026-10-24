@@ -33,6 +33,12 @@ declare -A NAMING_EXCEPTIONS=(
   [GameAfkingModule]=AFKING_MODULE
   [FoilPackModule]=FOILPACK_MODULE
   [FoilWorkerModule]=TICKET_MODULE
+  [GamePurchaseModule]=PURCHASE_MODULE
+  [GameActionModule]=ACTIONS_MODULE
+  [GameMinerModule]=MINER_MODULE
+  [GameBingoModule]=BINGO_MODULE
+  [GameBetModule]=DEGENERETTE_MODULE
+  [GameBoonActionsModule]=BOON_MODULE
 )
 
 # Reverse of NAMING_EXCEPTIONS for constant_to_iface(). Keyed by the post-`GAME_`
@@ -44,6 +50,8 @@ declare -A REVERSE_NAMING_EXCEPTIONS=(
   [GAMEOVER]=IDegenerusGameGameOverModule
   [AFKING]=IGameAfkingModule
   [FOILPACK]=IDegenerusGameFoilPackModule
+  [PURCHASE]=IGamePurchaseModule
+  [ACTIONS]=IGameActionModule
 )
 
 # Known dead constants — declared in ContractAddresses.sol but not expected to
@@ -122,7 +130,7 @@ validate_mapping() {
   [[ -f "$addr" ]] || { printf "%bFAIL%b %s missing\n" "$RED" "$NC" "$addr"; return 1; }
   [[ -f "$ifaces" ]] || { printf "%bFAIL%b %s missing\n" "$RED" "$NC" "$ifaces"; return 1; }
   constants=$(grep -oE 'GAME_[A-Z_]+_MODULE' "$addr" | sort -u)
-  interfaces=$(grep -oE 'interface I(DegenerusGame|Game)[A-Za-z]+Module' "$ifaces" \
+  interfaces=$(grep -h -oE 'interface I(DegenerusGame|Game)[A-Za-z]+Module' "${CONTRACTS_DIR}"/interfaces/*.sol \
     | awk '{print $2}' | sort -u)
 
   # Every LIVE constant must resolve to a declared interface.
@@ -250,6 +258,10 @@ while IFS=$'\t' read -r file lineno; do
   # (anchors this as a real delegatecall site) and take the LAST `.GAME_XXX_MODULE`
   # as the target.
   if printf '%s\n' "$window" | grep -Eq '\.delegatecall[[:space:]]*(\{[^}]*\}[[:space:]]*)?\('; then
+    target=$(printf '%s\n' "$window" | grep -oE '\.GAME_[A-Z_]+_MODULE' | tail -1 | sed -E 's/^\.//')
+  elif printf '%s\n' "$window" | grep -Eq '_componentDelegate[[:space:]]*\('; then
+    # The common helper preserves the caller and bubbles failures; every hook
+    # spells its address constant alongside the selector passed to that helper.
     target=$(printf '%s\n' "$window" | grep -oE '\.GAME_[A-Z_]+_MODULE' | tail -1 | sed -E 's/^\.//')
   elif [[ "${file##*/}" == "GameMiner.sol" || "${file##*/}" == "DegenerusGameMinerModule.sol" ]]; then
     # Resolve the enclosing branch, including parent targets for nested request

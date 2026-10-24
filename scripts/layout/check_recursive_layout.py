@@ -26,11 +26,14 @@ def read(out):
    result[p.stem]=normalize(d['storageLayout'])
  return result
 
-def expected_modules():
+def deployment_rows():
  import subprocess
- rows=json.loads(subprocess.check_output(['node','--input-type=module','-e',
+ return json.loads(subprocess.check_output(['node','--input-type=module','-e',
   'import {DEPLOYMENTS} from "./scripts/lib/deploymentManifest.js"; console.log(JSON.stringify(DEPLOYMENTS))'],text=True))
- return sorted({r['contract'] for r in rows if r['contract'].endswith('Module')})
+
+def expected_modules():
+ rows=deployment_rows()
+ return sorted({r['contract'] for r in rows if any(k.startswith('GAME_') and k.endswith('_MODULE') for k in r['aliases']) and 'GAME' not in r['aliases']})
 
 def main():
  p=argparse.ArgumentParser(description=__doc__);p.add_argument('--out',type=pathlib.Path,default=pathlib.Path('forge-out'));p.add_argument('--baseline',type=pathlib.Path);p.add_argument('--report',type=pathlib.Path,required=True);a=p.parse_args()
@@ -39,6 +42,15 @@ def main():
  for name in modules:
   if name not in layouts or layouts[name]!=game:fail.append(name)
  if layouts['CrapsBattle']!=layouts['JackpotBattle']:fail.append('JackpotBattle')
+ for row in deployment_rows():
+  if 'CRAPS_LIFECYCLE_MODULE' in row['aliases'] and layouts[row['contract']]!=layouts['CrapsBattle']:
+   fail.append(row['contract'])
+ namespaces=json.loads(pathlib.Path('scripts/consolidation/xa-namespaces.json').read_text())
+ for owner,key in [('DegenerusQuests','quests'),('DegenerusAffiliate','affiliate')]:
+  source=pathlib.Path('contracts/'+owner+'.sol').read_text()
+  root=re.search(r'bytes32 private constant '+key.upper()+r'_STORAGE_ROOT = (0x[0-9a-f]+);',source)
+  if not root or root[1]!=namespaces[key]['root']:fail.append(owner+' namespace root')
+  if layouts.get(owner,[]):fail.append(owner+' ordinary storage')
  delta={}
  if a.baseline:
   before=read(a.baseline)

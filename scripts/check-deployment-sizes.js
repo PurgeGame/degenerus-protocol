@@ -13,14 +13,14 @@ function option(flag, fallback) {
   if (!argv[i + 1] || argv[i + 1].startsWith('--')) throw new Error(`Missing ${flag} value`);
   return argv.splice(i, 2)[1];
 }
-const schedule = option('--schedule', 'osaka');
+const schedule = option('--schedule', 'eip170');
 const file = option('--arguments', null);
-const limits = { osaka: [24576, 49152], glamsterdam: [65536, 131072] }[schedule];
+const limits = { eip170: [24576, 49152], osaka: [24576, 49152], glamsterdam: [65536, 131072] }[schedule];
 if (!limits) throw new Error(`Unknown schedule: ${schedule}`);
 if (argv.length > 1 || argv.some(s => s.startsWith('--'))) throw new Error('Unexpected arguments');
 const out = argv[0] || process.env.FOUNDRY_OUT || 'forge-out';
 const overrides = file ? JSON.parse(fs.readFileSync(file)) : {};
-const entries = [...DEPLOYMENTS.map(row => ({ ...row, args: row.key === 'ICONS_32' ? [false] : row.key === 'COINFLIP' ? [[], [], [], [], []] : [] })),
+const entries = [...DEPLOYMENTS.map(row => ({ ...row, args: row.key === 'ICONS_32' ? [false] : row.bootstrap ? [[], [], [], [], []] : [] })),
   { key: 'DGVF', contract: 'DegenerusVaultShare', source: 'DegenerusVault', args: ['Degenerus Vault Flip', 'DGVF', 'dgvf.degenerus.eth'] },
   { key: 'DGVE', contract: 'DegenerusVaultShare', source: 'DegenerusVault', args: ['Degenerus Vault Eth', 'DGVE', 'dgve.degenerus.eth'] },
   { key: 'GAME_LENS', contract: 'DegenerusGameLens', args: [] },

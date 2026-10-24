@@ -41,10 +41,10 @@ RAW_COIN_BITS = {
 def validate_raw_coin_bits(root, manifest):
     errors = []
     registered = {(r['file'], r['function'], r['expression']) for r in manifest.get('rawBitExceptions', [])}
-    required = {('Coinflip.sol', fn, expression) for fn, expression in RAW_COIN_BITS.items()}
+    required = {('modules/CoinflipCore.sol', fn, expression) for fn, expression in RAW_COIN_BITS.items()}
     if registered != required or len(manifest.get('rawBitExceptions', [])) != len(required):
         errors.append('Raw coin-bit exception registry must contain exactly the reviewed ordinary-result entry')
-    source = (root / 'Coinflip.sol').read_text()
+    source = (root / 'modules/CoinflipCore.sol').read_text()
     masked = strip_comments_and_strings(source)
     for name, statement in RAW_COIN_BITS.items():
         match = re.search(r'\bfunction\s+' + name + r'\s*\(', masked)

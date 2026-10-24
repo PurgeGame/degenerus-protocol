@@ -83,6 +83,9 @@ class HardhatGroupsDriverTest(unittest.TestCase):
         for name in ("scripts", "contracts", "bin", "test", "node_modules/hardhat/internal/solidity/compiler"):
             (self.root / name).mkdir(parents=True)
         shutil.copyfile(RUNNER, self.root / "scripts/test-hardhat-groups.py")
+        (self.root / "scripts/select-profile.js").write_text("// fake profile generation\n")
+        (self.root / "scripts/lib").mkdir()
+        (self.root / "scripts/lib/selectProfile.js").write_text("exports.PROFILE_FILES = [];\n")
         self.pins = self.root / "contracts/ContractAddresses.sol"
         self.pins.write_bytes(b"original pins\r\n")
         (self.root / "contracts/Game.sol").write_text("original game\n")
@@ -115,6 +118,18 @@ class HardhatGroupsDriverTest(unittest.TestCase):
 
     def rows(self, log_dir=None):
         return json.loads(((log_dir or self.root / ".audit-test-logs/hardhat") / "summary.json").read_text())
+
+    def test_generated_profile_files_restore_after_a_failed_batch(self):
+        generated = self.root / 'contracts/Selected.sol'
+        generated.write_bytes(b'original profile\r\n')
+        (self.root / 'scripts/lib/selectProfile.js').write_text(
+            'exports.PROFILE_FILES = ["contracts/Selected.sol"];\n')
+        (self.root / 'scripts/select-profile.js').write_text(
+            'require("node:fs").writeFileSync("contracts/Selected.sol", "generated profile");\n')
+        self.sources('first', 1)
+        result = self.run_driver(FAKE_MODE='failed')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(generated.read_bytes(), b'original profile\r\n')
 
     def test_default_order_comes_from_config_and_each_file_gets_a_process(self):
         first = self.sources("first", 2)

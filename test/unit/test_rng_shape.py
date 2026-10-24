@@ -65,12 +65,12 @@ class RngShapeGateTests(unittest.TestCase):
         self.assertTrue(any('Unreviewed' in e for e in self.errors()))
 
     def test_raw_coin_bit_exception_is_pinned(self):
-        self.change('Coinflip.sol', '(rngWord & 1) == 1', '((rngWord >> 1) & 1) == 1')
+        self.change('modules/CoinflipCore.sol', '(rngWord & 1) == 1', '((rngWord >> 1) & 1) == 1')
         self.assertTrue(any('raw coin-bit expression' in e for e in self.errors()))
 
-    def test_gap_offset_is_pinned(self):
-        self.change('Coinflip.sol', 'root >> (1 + uint256(start) - originalStart)',
-                    'root >> (uint256(start) - originalStart)')
+    def test_extra_raw_coin_consumer_is_pinned(self):
+        self.change('modules/CoinflipCore.sol', '(rngWord & 1) == 1',
+                    '((rngWord & 1) == 1) || ((rngWord & 1) == 1)')
         self.assertTrue(any('raw coin-bit expression' in e for e in self.errors()))
 
     def test_other_consumer_cannot_use_raw_coin_bit(self):

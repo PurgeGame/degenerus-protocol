@@ -1,4 +1,5 @@
-import copy,importlib.util,json,pathlib,tempfile,unittest
+import copy,importlib.util,json,pathlib,tempfile,unittest,os
+from unittest.mock import patch
 spec=importlib.util.spec_from_file_location('recursive_layout',pathlib.Path(__file__).resolve().parents[2]/'scripts/layout/check_recursive_layout.py');module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 class RecursiveLayoutTests(unittest.TestCase):
  def fixture(self):
@@ -25,6 +26,11 @@ class RecursiveLayoutTests(unittest.TestCase):
    with self.assertRaisesRegex(ValueError,'duplicate'):
     module.read(out)
  def test_expected_modules_come_from_deployment_registry(self):
-  self.assertEqual(set(module.expected_modules()), {
-   'DegenerusGameBoxModule', 'DegenerusGameDailyModule',
-   'DegenerusGameEndgameModule', 'DegenerusGamePassModule'})
+  with patch.dict(os.environ, PROFILE='eip170'):
+   modules=set(module.expected_modules())
+   self.assertEqual(len(modules),17)
+   self.assertTrue({'Eip170Purchase','Eip170Actions','Eip170TicketFoil'} <= modules)
+  with patch.dict(os.environ, PROFILE='glamsterdam'):
+   self.assertEqual(set(module.expected_modules()), {
+    'DegenerusGameBoxModule', 'DegenerusGameDailyModule',
+    'DegenerusGameEndgameModule', 'DegenerusGamePassModule'})

@@ -18,7 +18,10 @@ class InterfaceCoverageTest(unittest.TestCase):
         self.root = Path(self.directory.name)
         (self.root / "scripts").mkdir()
         shutil.copy2(ROOT / "scripts/check-interface-coverage.sh", self.root / "scripts")
-        shutil.copytree(ROOT / "contracts/interfaces", self.root / "contracts/interfaces")
+        shutil.copytree(ROOT / "contracts", self.root / "contracts")
+        (self.root / "scripts/lib").mkdir()
+        for name in ("interfaceMappings.js", "deploymentProfiles.js"):
+            shutil.copy2(ROOT / "scripts/lib" / name, self.root / "scripts/lib" / name)
         self.bin = self.root / "bin"
         self.bin.mkdir()
         forge = self.bin / "forge"

@@ -21,7 +21,7 @@
     "label": "playerState",
     "offset": 0,
     "slot": 2,
-    "typeLabel": "mapping(uint32 => struct Coinflip.PlayerCoinflipState)"
+    "typeLabel": "mapping(uint32 => struct CoinflipCore.PlayerCoinflipState)"
   },
   {
     "bytes": "16",

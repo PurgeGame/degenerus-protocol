@@ -25,50 +25,10 @@ NC=$'\033[0m'
 
 # Interface -> implementation mapping.
 # Skipped (external protocols): IStETH (Lido), IVRFCoordinator (Chainlink).
-MAPPINGS=(
-  "contracts/interfaces/ILiquidation.sol:IDeityPassSeize|contracts/DegenerusDeityPass.sol:DegenerusDeityPass"
-  "contracts/interfaces/ICoinflip.sol:ICoinflip|contracts/Coinflip.sol:Coinflip"
-  "contracts/interfaces/IDegenerusAffiliate.sol:IDegenerusAffiliate|contracts/Coinflip.sol:Coinflip"
-  "contracts/interfaces/IDegenerusCoin.sol:IDegenerusCoin|contracts/FLIP.sol:FLIP"
-  "contracts/interfaces/IDegenerusGame.sol:IDegenerusGame|contracts/DegenerusGame.sol:DegenerusGame"
-  "contracts/interfaces/IDegenerusJackpots.sol:IDegenerusJackpots|contracts/DegenerusJackpots.sol:DegenerusJackpots"
-  "contracts/interfaces/IDegenerusParimutuel.sol:IDegenerusParimutuel|contracts/DegenerusParimutuel.sol:DegenerusParimutuel"
-  "contracts/interfaces/IDegenerusQuests.sol:IDegenerusQuests|contracts/Coinflip.sol:Coinflip"
-  # CrapsBattle directly inherits lifecycle and engine implementations.
-  "contracts/interfaces/IJackpotBattle.sol:IJackpotBattle|contracts/CrapsBattle.sol:CrapsBattle"
-  "contracts/interfaces/IsDGNRS.sol:IsDGNRS|contracts/sDGNRS.sol:sDGNRS"
-  "contracts/interfaces/IVaultCoin.sol:IVaultCoin|contracts/FLIP.sol:FLIP"
-  "contracts/interfaces/IOwnerActions.sol:IOwnerVault|contracts/DegenerusVault.sol:DegenerusVault"
-  # Overload aliases the Vault's player-action allowlist takes selectors from.
-  "contracts/interfaces/IVaultPlayerActions.sol:IVaultWinnings|contracts/DegenerusGame.sol:DegenerusGame"
-  "contracts/interfaces/IVaultPlayerActions.sol:IVaultPartialWinnings|contracts/DegenerusGame.sol:DegenerusGame"
-  "contracts/interfaces/IVaultPlayerActions.sol:IVaultAffiliateClaim|contracts/DegenerusGame.sol:DegenerusGame"
-  "contracts/interfaces/IVaultPlayerActions.sol:IVaultBatchAffiliateClaim|contracts/DegenerusGame.sol:DegenerusGame"
-  # Module interfaces map to the deployed bundles; Miner/Bingo run directly on Game.
-  # Validate each actual host ABI, never the retired adapter that happened to inherit it.
-  "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameAdvanceModule|contracts/modules/DegenerusGameDailyModule.sol:DegenerusGameDailyModule"
-  "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameMinerModule|contracts/DegenerusGame.sol:DegenerusGame"
-  "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameRngModule|contracts/modules/DegenerusGameDailyModule.sol:DegenerusGameDailyModule"
-  "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameTicketModule|contracts/modules/DegenerusGamePassModule.sol:DegenerusGamePassModule"
-  "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameJackpotDrawModule|contracts/modules/DegenerusGameDailyModule.sol:DegenerusGameDailyModule"
-  "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameGameOverModule|contracts/modules/DegenerusGameEndgameModule.sol:DegenerusGameEndgameModule"
-  "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameJackpotModule|contracts/modules/DegenerusGameDailyModule.sol:DegenerusGameDailyModule"
-  "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameDecimatorModule|contracts/modules/DegenerusGameEndgameModule.sol:DegenerusGameEndgameModule"
-  "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameWhaleModule|contracts/modules/DegenerusGamePassModule.sol:DegenerusGamePassModule"
-  # The undeployed Mint adapter remains a fixture/base fallback interface.
-  # Endgame overrides _foilPurchaseWith and _degenesisPurchaseWith internally;
-  # neither deployed route calls purchaseWith. Keep the legacy adapter checked
-  # while standalone component fixtures still use its interface.
-  "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameMintModule|contracts/modules/DegenerusGameMintModule.sol:DegenerusGameMintModule"
-  "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameLootboxModule|contracts/modules/DegenerusGameBoxModule.sol:DegenerusGameBoxModule"
-  "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameBoonModule|contracts/modules/DegenerusGameBoxModule.sol:DegenerusGameBoxModule"
-  "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameDegeneretteModule|contracts/modules/DegenerusGameBoxModule.sol:DegenerusGameBoxModule"
-  "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameBingoModule|contracts/DegenerusGame.sol:DegenerusGame"
-  "contracts/interfaces/IDegenerusGameModules.sol:IGameAfkingModule|contracts/modules/DegenerusGameBoxModule.sol:DegenerusGameBoxModule"
-  "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameFoilPackModule|contracts/modules/DegenerusGameEndgameModule.sol:DegenerusGameEndgameModule"
-  "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameFoilWorkerModule|contracts/modules/DegenerusGamePassModule.sol:DegenerusGamePassModule"
-  "contracts/interfaces/IDegenerusGameModules.sol:IDegenerusGameDegenesisModule|contracts/modules/DegenerusGameEndgameModule.sol:DegenerusGameEndgameModule"
-)
+# Generate targets from the selected deployment manifest. Preserve the fail-closed
+# declaration census below so adding an interface still requires an explicit map.
+mapfile -t MAPPINGS < <(node scripts/lib/interfaceMappings.js)
+[[ ${#MAPPINGS[@]} -gt 0 ]] || { echo "No profile interface mappings" >&2; exit 1; }
 
 # Fail closed when a new interface has not been assigned an implementation. The two
 # external dependencies have no production implementation in this repository.

@@ -33,7 +33,10 @@ REVIEWED = {
         "unpaidAttemptGas = MineFlipGas.consumed(beforeCall, gasleft());",
         "unpaidAttemptGas = MineFlipGas.consumed(beforeCall, gasleft());",
         "uint256 used = MineFlipGas.consumed(rewardStart, gasleft());"],
-    ("modules/DegenerusGameTicketModule.sol", "_solo"): ["uint256 actual = gasleft();"],
+    ("libraries/MineFlipGas.sol", "available"): ["uint256 actual = gasleft();"],
+    # Pinned lifecycle worker: uncapped forwarding, with exact return/revert propagation.
+    ("modules/CrapsLifecycleRouter.sol", "_delegateLifecycle"): [
+        "let ok := delegatecall(gas(), target, data, calldatasize(), 0, 0)"],
 }
 GAS_READ = re.compile(r"\b(?:gasleft|gas)\s*\(")
 AMBIENT = re.compile(r"\b(?:msg\s*\.\s*sender|tx\s*\.|block\s*\.|blockhash\s*\()")

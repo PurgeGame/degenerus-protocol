@@ -1,8 +1,2 @@
 # Contract<TAB>maximum entry pointer<TAB>measured reason for retaining the spill
-DegenerusGameEndgameModule	0x1a0	Cold spend accounting record reduces 0x1c0 to 0x1a0; equal native pairs and no hot regression. Optimization evidence: .planning/consolidation/OPT-REPORT.md item 4.
-DegenerusGameDailyModule	0x180	Quadrant and BAF award live values; retain checked per-checkpoint bounds. Optimization evidence: .planning/consolidation/OPT-REPORT.md item 4.
-DegenerusGamePassModule	0x320	Cold record reduced reservation but regressed ticket mining; rejected. Capacity extraction gave identical code/cost. Optimization evidence: .planning/consolidation/OPT-REPORT.md item 4.
-DegenerusGameBoxModule	0xe0	RNG normalization reduces 0x100 to 0xe0; measured native/replay evidence. Optimization evidence: .planning/consolidation/OPT-REPORT.md item 4.
 DegenerusParimutuel	0x140	Growth settlement winner batching owns the spill; preserve admitted winner and credit-flush accounting. Optimization evidence: .planning/consolidation/OPT-REPORT.md item 4.
-CrapsBattle	0xa0	RNG normalization reduces 0xc0 to 0xa0; bonus-day/window native gains. Optimization evidence: .planning/consolidation/OPT-REPORT.md item 4.
-Coinflip	0x160	Quests purchase path owns the spill; prior aggregate-record experiment regressed purchases. Optimization evidence: .planning/consolidation/OPT-REPORT.md item 4.
