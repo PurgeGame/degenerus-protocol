@@ -69,10 +69,6 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
         return slot < _CUSTOM_SLOT_BASE && slot % _BONUS_SLOTS_PER_DAY >= _BONUS_PERIODS_PER_DAY;
     }
 
-    function _slotWord(uint256 slot) internal view returns (uint256) {
-        return _slotWord(slot, _isJackpotSlot(slot) ? 0 : _gameState());
-    }
-
     function _slotWord(uint256 slot, uint256 gameState) internal view returns (uint256) {
         if (_isJackpotSlot(slot)) {
             JackpotRound storage r = _jackpotRounds[slot & 511];
@@ -406,7 +402,7 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
             // left a window between the moment a field stopped forming and the moment somebody
             // got round to shutting it, in which the last amender could re-tune a board against a
             // field that was already public and frozen. Nobody who entered on time had that move.
-            _joinableSlot(slot);
+            _joinableSlot(slot, _joinDay(slot));
         }
         // ZERO THROUGH SEVEN CHIPS, the same range every entry door takes. The stored count fixes
         // both how many of the ten the dice scatter and, on scheduled windows alone, which
@@ -506,11 +502,8 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
     // ---------------------------------------------------------------------------------------
 
     function _resolveSlotRange(uint64 slot, uint256 allowance, uint64 seatLimit) internal returns (MineFlipGas.Result memory result) {
-        uint256 gameState;
-        if (slot < _CUSTOM_SLOT_BASE) {
-            gameState = _gameState();
-            if (_scheduledExpired(slot, _currentDayIndex(gameState))) { result.done = true; return result; }
-        }
+        uint256 gameState = _gameState();
+        if (_scheduledExpired(slot, _currentDayIndex(gameState))) { result.done = true; return result; }
         SeatBatch memory batch;
         batch.meter = MineFlipGas.start(allowance);
         if (!MineFlipGas.canRun(batch.meter, _SEAT_GAS_MAX, _SETTLE_TAIL_GAS + _CREDIT_GAS_MAX)) return result;
@@ -522,7 +515,7 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
             result.done = true;
             return result;
         }
-        uint256 word = _slotWord(slot, slot < _CUSTOM_SLOT_BASE ? gameState : _gameState());
+        uint256 word = _slotWord(slot, gameState);
         if (word == 0) revert RngNotReady();
         uint64 end0 = uint64(uint32(board)) + 1;
         uint64 end = end0;
@@ -672,7 +665,7 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
     /// @custom:reverts NotApproved If the caller may not act for account `id`.
     function enterBattle(uint32 id, uint64 slot, uint32 chips, uint16 multiple) public returns (uint256 betId) {
         (uint256 word, uint256 account) = _paidDoor(id);
-        betId = _enterWindow(_joinableSlot(slot), chips, multiple, account, 0);
+        betId = _enterWindow(_joinableSlot(slot, _joinDay(slot)), chips, multiple, account, 0);
         _rememberBoard(word, chips);
     }
 
@@ -1413,10 +1406,7 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
     /// @dev THE joinability test: a battle you can still bet into. Every door that takes money on
     ///      a battle's behalf — an entry, a donation — goes through this one function, so a
     ///      donation can never reach a field an entrant could not also have reached.
-    function _joinableSlot(uint256 slot) internal view returns (Window memory w) {
-        return _joinableSlot(slot, slot < _CUSTOM_SLOT_BASE ? _currentDayIndex() : 0);
-    }
-
+    /// @dev `today` is the current logical day; custom and jackpot slots ignore it.
     function _joinableSlot(uint256 slot, uint24 today) internal view returns (Window memory w) {
         if (slot >= _CUSTOM_SLOT_BASE) {
             uint256 c;
@@ -1441,6 +1431,11 @@ abstract contract CrapsBattleCore is CrapsBattleStorage {
         // Shut is shut: a battle whose table has been taken takes no more of anything, whatever
         // some clock says.
         if (_slotIndexOf(slot) != 0) revert BonusPeriodSpent();
+    }
+
+    /// @dev The logical day `_joinableSlot` reads, loaded only for an ordinary scheduled window.
+    function _joinDay(uint256 slot) private view returns (uint24) {
+        return slot >= _CUSTOM_SLOT_BASE || _isJackpotSlot(slot) ? 0 : _currentDayIndex();
     }
 
     function _joinableWindow(uint256 period) private view returns (Window memory w) {

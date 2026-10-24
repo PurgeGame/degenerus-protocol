@@ -5281,7 +5281,7 @@
   },
   {
     "path": "contracts/modules/CoinflipCore.sol",
-    "scope": "CoinflipCore._claimCoinflipsInternal(uint32:default,struct CoinflipCore.PlayerCoinflipState:storage,uint24:default)",
+    "scope": "CoinflipCore._claimCoinflipsInternal(uint32:default,struct CoinflipCore.PlayerCoinflipState:storage,uint256:default)",
     "kind": "external",
     "expression": "coinflipGame.purchaseInfo()",
     "count": 1,
@@ -5289,7 +5289,7 @@
   },
   {
     "path": "contracts/modules/CoinflipCore.sol",
-    "scope": "CoinflipCore._claimCoinflipsInternal(uint32:default,struct CoinflipCore.PlayerCoinflipState:storage,uint24:default)",
+    "scope": "CoinflipCore._claimCoinflipsInternal(uint32:default,struct CoinflipCore.PlayerCoinflipState:storage,uint256:default)",
     "kind": "external",
     "expression": "jackpots.getLastBafResolvedDay()",
     "count": 1,
@@ -5297,7 +5297,7 @@
   },
   {
     "path": "contracts/modules/CoinflipCore.sol",
-    "scope": "CoinflipCore._claimCoinflipsInternal(uint32:default,struct CoinflipCore.PlayerCoinflipState:storage,uint24:default)",
+    "scope": "CoinflipCore._claimCoinflipsInternal(uint32:default,struct CoinflipCore.PlayerCoinflipState:storage,uint256:default)",
     "kind": "external",
     "expression": "jackpots.recordBafFlip(id, bafLvl, totals.winningBafCredit)",
     "count": 1,
@@ -5305,7 +5305,7 @@
   },
   {
     "path": "contracts/modules/CoinflipCore.sol",
-    "scope": "CoinflipCore._claimCoinflipsInternal(uint32:default,struct CoinflipCore.PlayerCoinflipState:storage,uint24:default)",
+    "scope": "CoinflipCore._claimCoinflipsInternal(uint32:default,struct CoinflipCore.PlayerCoinflipState:storage,uint256:default)",
     "kind": "external",
     "expression": "wwxrp.creditPrize(id, totals.lossCount * COINFLIP_LOSS_WWXRP_REWARD)",
     "count": 1,
@@ -5849,23 +5849,7 @@
   },
   {
     "path": "contracts/modules/CrapsBattleCore.sol",
-    "scope": "CrapsBattleCore._joinableSlot(uint256:default)",
-    "kind": "recipient-helper",
-    "expression": "_currentDayIndex()",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
-  },
-  {
-    "path": "contracts/modules/CrapsBattleCore.sol",
-    "scope": "CrapsBattleCore._joinableSlot(uint256:default)",
-    "kind": "recipient-helper",
-    "expression": "_joinableSlot(slot, slot < _CUSTOM_SLOT_BASE ? _currentDayIndex() : 0)",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
-  },
-  {
-    "path": "contracts/modules/CrapsBattleCore.sol",
-    "scope": "CrapsBattleCore._joinableSlot(uint256:default,uint24:default)",
+    "scope": "CrapsBattleCore._joinableSlot",
     "kind": "external",
     "expression": "IGameCraps(_GAME).rngLocked()",
     "count": 1,
@@ -5873,7 +5857,7 @@
   },
   {
     "path": "contracts/modules/CrapsBattleCore.sol",
-    "scope": "CrapsBattleCore._joinableSlot(uint256:default,uint24:default)",
+    "scope": "CrapsBattleCore._joinableSlot",
     "kind": "recipient-helper",
     "expression": "_currentBonusSlot(today)",
     "count": 1,
@@ -5881,7 +5865,7 @@
   },
   {
     "path": "contracts/modules/CrapsBattleCore.sol",
-    "scope": "CrapsBattleCore._joinableSlot(uint256:default,uint24:default)",
+    "scope": "CrapsBattleCore._joinableSlot",
     "kind": "recipient-helper",
     "expression": "_scheduledAdmissionsOpen()",
     "count": 1,
@@ -5889,11 +5873,19 @@
   },
   {
     "path": "contracts/modules/CrapsBattleCore.sol",
-    "scope": "CrapsBattleCore._joinableSlot(uint256:default,uint24:default)",
+    "scope": "CrapsBattleCore._joinableSlot",
     "kind": "recipient-helper",
     "expression": "_slotWindow(slot)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
+  },
+  {
+    "path": "contracts/modules/CrapsBattleCore.sol",
+    "scope": "CrapsBattleCore._joinDay",
+    "kind": "recipient-helper",
+    "expression": "_currentDayIndex()",
+    "count": 1,
+    "review": "DAYS_EFF_FIX: Game slot-0 header read for the logical day, only for an ordinary scheduled slot; custom and jackpot slots skip it. View only; no value transfer or recipient hook."
   },
   {
     "path": "contracts/modules/CrapsBattleCore.sol",
@@ -6052,7 +6044,7 @@
     "scope": "CrapsBattleCore._resolveSlotRange",
     "kind": "recipient-helper",
     "expression": "_gameState()",
-    "count": 2,
+    "count": 1,
     "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
   },
   {
@@ -6075,7 +6067,7 @@
     "path": "contracts/modules/CrapsBattleCore.sol",
     "scope": "CrapsBattleCore._resolveSlotRange",
     "kind": "recipient-helper",
-    "expression": "_slotWord(slot, slot < _CUSTOM_SLOT_BASE ? gameState : _gameState())",
+    "expression": "_slotWord(slot, gameState)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
   },
@@ -6137,23 +6129,7 @@
   },
   {
     "path": "contracts/modules/CrapsBattleCore.sol",
-    "scope": "CrapsBattleCore._slotWord(uint256:default)",
-    "kind": "recipient-helper",
-    "expression": "_gameState()",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
-  },
-  {
-    "path": "contracts/modules/CrapsBattleCore.sol",
-    "scope": "CrapsBattleCore._slotWord(uint256:default)",
-    "kind": "recipient-helper",
-    "expression": "_slotWord(slot, _isJackpotSlot(slot) ? 0 : _gameState())",
-    "count": 1,
-    "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
-  },
-  {
-    "path": "contracts/modules/CrapsBattleCore.sol",
-    "scope": "CrapsBattleCore._slotWord(uint256:default,uint256:default)",
+    "scope": "CrapsBattleCore._slotWord",
     "kind": "recipient-helper",
     "expression": "_wordAt(index - 1, gameState)",
     "count": 1,
@@ -6227,9 +6203,17 @@
     "path": "contracts/modules/CrapsBattleCore.sol",
     "scope": "CrapsBattleCore.amendSlip",
     "kind": "recipient-helper",
-    "expression": "_joinableSlot(slot)",
+    "expression": "_joinableSlot(slot, _joinDay(slot))",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
+  },
+  {
+    "path": "contracts/modules/CrapsBattleCore.sol",
+    "scope": "CrapsBattleCore.amendSlip",
+    "kind": "recipient-helper",
+    "expression": "_joinDay(slot)",
+    "count": 1,
+    "review": "DAYS_EFF_FIX: caller-local logical day for the joinability check (custom and jackpot slots read none). View only; no value transfer or recipient hook."
   },
   {
     "path": "contracts/modules/CrapsBattleCore.sol",
@@ -6331,7 +6315,7 @@
     "path": "contracts/modules/CrapsBattleCore.sol",
     "scope": "CrapsBattleCore.enterBattle",
     "kind": "recipient-helper",
-    "expression": "_enterWindow(_joinableSlot(slot), chips, multiple, account, 0)",
+    "expression": "_enterWindow(_joinableSlot(slot, _joinDay(slot)), chips, multiple, account, 0)",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
   },
@@ -6339,9 +6323,17 @@
     "path": "contracts/modules/CrapsBattleCore.sol",
     "scope": "CrapsBattleCore.enterBattle",
     "kind": "recipient-helper",
-    "expression": "_joinableSlot(slot)",
+    "expression": "_joinableSlot(slot, _joinDay(slot))",
     "count": 1,
     "review": "P9_COMPONENT_ROUTE: Relocated table helper or explicit pure-engine boundary. Validated/frozen slip terms and word reach the same engine implementation; payout recipients remain wallet IDs resolved by the pinned protocol, and settlement checkpoints retain their credit tail."
+  },
+  {
+    "path": "contracts/modules/CrapsBattleCore.sol",
+    "scope": "CrapsBattleCore.enterBattle",
+    "kind": "recipient-helper",
+    "expression": "_joinDay(slot)",
+    "count": 1,
+    "review": "DAYS_EFF_FIX: caller-local logical day for the joinability check (custom and jackpot slots read none). View only; no value transfer or recipient hook."
   },
   {
     "path": "contracts/modules/CrapsBattleCore.sol",

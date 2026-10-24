@@ -42,7 +42,7 @@ contract BattleHarness is CrapsViews {
         uint64 local = uint64(betId);
         w.seat = betId >> 64 == slot ? (local <= ownN ? local : local + dayN) : ownN + local;
         require(betId >> 64 == slot || (betId & ~uint256(type(uint64).max)) == dayBase, "preview field");
-        return _settlementOf(betId, _loadBet(betId), w, _slotWord(slot));
+        return _settlementOf(betId, _loadBet(betId), w, _slotWord(slot, _gameState()));
     }
 
     /// @dev The fold takes the whole WINDOW now, because the boost it announces at finalization

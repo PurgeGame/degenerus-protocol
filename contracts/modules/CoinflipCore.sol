@@ -794,7 +794,7 @@ abstract contract CoinflipCore {
     function _claimCoinflipsInternal(
         uint32 id,
         PlayerCoinflipState storage state,
-        uint24 latest
+        uint256 latest
     ) private returns (uint256 mintable) {
         IDegenerusGame coinflipGame = degenerusGame;
         FlipClaimTotals memory totals;
@@ -817,7 +817,7 @@ abstract contract CoinflipCore {
         if (id == 0) {
             // No wallet ID, so no stake and no carry: the walk would settle nothing, and only
             // the cursor moves.
-            state.lastClaim = latest;
+            state.lastClaim = uint24(latest);
             return mintable;
         }
 
@@ -826,7 +826,7 @@ abstract contract CoinflipCore {
         // forfeit; a rebuy carry that would have ridden them is dropped.
         uint24 minClaimableDay;
         unchecked {
-            minClaimableDay = latest > COIN_CLAIM_DAYS ? latest - COIN_CLAIM_DAYS : 0;
+            minClaimableDay = latest > COIN_CLAIM_DAYS ? uint24(latest - COIN_CLAIM_DAYS) : 0;
         }
         if (totals.start < minClaimableDay) {
             totals.start = minClaimableDay;
