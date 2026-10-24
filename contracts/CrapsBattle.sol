@@ -67,13 +67,17 @@ contract CrapsBattle is JackpotBattle, CrapsEngine {
     }
 
     function _slotWord(uint256 slot) internal view returns (uint256) {
+        return _slotWord(slot, _isJackpotSlot(slot) ? 0 : _gameState());
+    }
+
+    function _slotWord(uint256 slot, uint256 gameState) internal view returns (uint256) {
         if (_isJackpotSlot(slot)) {
             JackpotRound storage r = _jackpotRounds[slot & 511];
             return _roundExists(slot) && r.started ? r.drawWord : 0;
         }
         uint48 index = _slotIndexOf(slot);
         // The subtraction is evaluated only for a nonzero stored index.
-        unchecked { return index == 0 ? 0 : _wordAt(index - 1); }
+        unchecked { return index == 0 ? 0 : _wordAt(index - 1, gameState); }
     }
 
     /// @dev Paid own seats, paid day tickets, then awarded own seats. The cursor uses this dense order.
@@ -189,22 +193,24 @@ contract CrapsBattle is JackpotBattle, CrapsEngine {
         }
         // Settlement never writes this word. Before the slot closes, `amendSlip` may replace its
         // chip slice; the owner and the stakes flag remain fixed.
-        _writeSlip(betId, id, chips, high ? _BET_HIGH_BIT : 0, multiple - 1, boonMask);
+        _writeSlip(betId, id, chips, high ? _BET_HIGH_BIT : 0, multiple - 1, boonMask, _betWriteDay(betId));
     }
 
     /// @dev The one assembler of a stored bet word and its `CrapsSlipPlaced` echo — the window
     ///      door and the day lane both land here, so storage and the log cannot drift apart.
+    /// @dev The entry/reservation caller has already validated this day's write window.
     function _writeSlip(
         uint256 betId,
         uint32 id,
         uint256 chips,
         uint256 highBits,
         uint256 evMult,
-        uint256 boonMask
+        uint256 boonMask,
+        uint256 day
     ) private {
         uint256 boon = boonMask << _BET_BOON_SHIFT;
-        _appendBet(betId, uint256(id) | (chips << _BET_CHIPS_SHIFT)
-            | boon | highBits);
+        _appendBetOnDay(betId, uint256(id) | (chips << _BET_CHIPS_SHIFT)
+            | boon | highBits, day);
         // Keep the event's wire offsets separate from the compact slip: boon at 206, highs at
         // 217..222 (day ticket, one per period), above the bet ID and multiple. A
         // banked HIGH pass spent by `_seatBody` carries `evMult = 0`, so without this an indexer
@@ -473,7 +479,7 @@ contract CrapsBattle is JackpotBattle, CrapsEngine {
             uint256 seat = t & _MASK32;
             _storeDaySeat(daySlot, id, seat);
             _writeSlip(
-                (daySlot << 64) | seat, id, chips, high ? _BET_DAYHIGH_MASK : 0, evMult, boonMask
+                (daySlot << 64) | seat, id, chips, high ? _BET_DAYHIGH_MASK : 0, evMult, boonMask, daySlot >> 3
             );
         }
     }
@@ -497,7 +503,11 @@ contract CrapsBattle is JackpotBattle, CrapsEngine {
     // ---------------------------------------------------------------------------------------
 
     function _resolveSlotRange(uint64 slot, uint256 allowance, uint64 seatLimit) internal returns (MineFlipGas.Result memory result) {
-        if (_scheduledExpired(slot)) { result.done = true; return result; }
+        uint256 gameState;
+        if (slot < _CUSTOM_SLOT_BASE) {
+            gameState = _gameState();
+            if (_scheduledExpired(slot, _currentDayIndex(gameState))) { result.done = true; return result; }
+        }
         MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
         if (!MineFlipGas.canRun(meter, _SEAT_GAS_MAX, _SETTLE_TAIL_GAS + _CREDIT_GAS_MAX)) return result;
         Window memory w = _slotWindow(slot);
@@ -506,7 +516,7 @@ contract CrapsBattle is JackpotBattle, CrapsEngine {
             result.done = true;
             return result;
         }
-        uint256 word = _slotWord(slot);
+        uint256 word = _slotWord(slot, slot < _CUSTOM_SLOT_BASE ? gameState : _gameState());
         if (word == 0) revert RngNotReady();
         uint64 end0 = uint64(uint32(board)) + 1;
         uint64 from = _bonusCursorOf(slot) + 1;
@@ -574,14 +584,15 @@ contract CrapsBattle is JackpotBattle, CrapsEngine {
     /// @dev Read settlement and the dedicated daily battle have their own earlier stages.
     function minerMaintenancePending_g11976() external view returns (bool) {
         uint64 cur = _minerSlot;
-        if (_scheduledExpired(cur)) return true;
+        uint24 today = _currentDayIndex();
+        if (_scheduledExpired(cur, today)) return true;
         uint24 day = uint24(uint256(cur) / _BONUS_SLOTS_PER_DAY);
         uint256 period = cur % _BONUS_SLOTS_PER_DAY;
-        if (period == 0) return _loadBudget(day) != 0 || day < _currentDayIndex();
+        if (period == 0) return _loadBudget(day) != 0 || day < today;
         if (period > _BONUS_PERIODS_PER_DAY) return true;
         uint256 board = _loadBattle(bytes32(uint256(cur)));
         if (_slotIndexOf(cur) == 0) {
-            (,, uint256 open) = _currentBonusSlot();
+            (,, uint256 open) = _currentBonusSlot(today);
             return cur < open && !_isJackpotSlot(cur);
         }
         uint256 entrants = uint32(board);
@@ -1085,7 +1096,8 @@ contract CrapsBattle is JackpotBattle, CrapsEngine {
             chips,
             high ? _BET_HIGH_BIT : 0,
             0,
-            0
+            0,
+            day
         );
     }
 
@@ -1181,13 +1193,14 @@ contract CrapsBattle is JackpotBattle, CrapsEngine {
         uint256 newMask = periodMask & ~(header >> _BET_HIGH_SHIFT);
         if (newMask == 0) revert NothingToUpgrade();
         uint256 counters;
+        uint24 today = _currentDayIndex();
         unchecked {
             for (uint256 p = 0; p < _BONUS_PERIODS_PER_DAY; ++p) {
                 if (newMask & (1 << p) == 0) continue;
                 // The very test every paid door uses: opened, unarmed, and its period still to
                 // come. A window shut by the CLOCK fails it whether or not anyone has armed it
                 // yet — the same instant its own entry door closed.
-                Window memory w = _joinableSlot(_slotOf(day, p));
+                Window memory w = _joinableSlot(_slotOf(day, p), today);
                 // The missing copies of the WHOLE seat — the bankroll each runs and the bounty
                 // each posts, exactly as the high door prices them. The ticket itself is the one
                 // copy already paid for.
@@ -1338,7 +1351,7 @@ contract CrapsBattle is JackpotBattle, CrapsEngine {
             emit CrapsProgressiveFunded(today, contribution, pool);
             emit CrapsHighRollerDayOpened(today, uint16(_highMultOf(word)), mainBudget, highBudget);
             uint256 cost;
-            (, uint256 firstOpen,) = _currentBonusSlot();
+            (, uint256 firstOpen,) = _currentBonusSlot(today);
             for (uint256 p = 0; p < _BONUS_PERIODS_PER_DAY; ++p) {
                 if (p < firstOpen) {
                     bytes32 key = bytes32(_slotOf(today, p));
@@ -1386,6 +1399,10 @@ contract CrapsBattle is JackpotBattle, CrapsEngine {
     ///      a battle's behalf — an entry, a donation — goes through this one function, so a
     ///      donation can never reach a field an entrant could not also have reached.
     function _joinableSlot(uint256 slot) internal view returns (Window memory w) {
+        return _joinableSlot(slot, slot < _CUSTOM_SLOT_BASE ? _currentDayIndex() : 0);
+    }
+
+    function _joinableSlot(uint256 slot, uint24 today) internal view returns (Window memory w) {
         if (slot >= _CUSTOM_SLOT_BASE) {
             uint256 c;
             (w, c) = _customTerms(slot);
@@ -1399,7 +1416,7 @@ contract CrapsBattle is JackpotBattle, CrapsEngine {
                 if (slot != _slotOf(_bonus - 1, _BONUS_PERIODS_PER_DAY - 1)
                     || IGameCraps(_GAME).rngLocked()) revert BonusPeriodSpent();
             } else {
-                (,, uint256 live) = _currentBonusSlot();
+                (,, uint256 live) = _currentBonusSlot(today);
                 if (slot < live) revert BonusPeriodSpent();
             }
             w = _slotWindow(slot);
@@ -1414,7 +1431,7 @@ contract CrapsBattle is JackpotBattle, CrapsEngine {
     function _joinableWindow(uint256 period) private view returns (Window memory w) {
         if (period >= _BONUS_PERIODS_PER_DAY) revert BonusPeriodSpent();
         uint24 today = period == _BONUS_PERIODS_PER_DAY - 1 ? uint24(_bonus - 1) : _currentDayIndex();
-        return _joinableSlot(_slotOf(today, period));
+        return _joinableSlot(_slotOf(today, period), today);
     }
 
     /// @dev The one placement path every bonus door funnels through. Kept single on purpose:
@@ -1582,7 +1599,10 @@ contract CrapsBattle is JackpotBattle, CrapsEngine {
     /// @notice Where the seven-window daily schedule stands: protocol day, next closable window,
     ///         and its monotonic slot.
     function _currentBonusSlot() internal view returns (uint24 day, uint256 period, uint256 slot) {
-        day = _currentDayIndex();
+        return _currentBonusSlot(_currentDayIndex());
+    }
+
+    function _currentBonusSlot(uint24 day) internal view returns (uint24, uint256 period, uint256 slot) {
         uint256 elapsed = (block.timestamp - 82_620) % 1 days;
         if (_scheduleResetPassed()) period = _BONUS_PERIODS_PER_DAY;
         else if (elapsed >= 1 days - 20 minutes) period = 5;
@@ -1590,6 +1610,7 @@ contract CrapsBattle is JackpotBattle, CrapsEngine {
             unchecked { period = 1 + (elapsed - 3 minutes) / 6 hours; }
         }
         slot = _slotOf(day, period);
+        return (day, period, slot);
     }
 
     /// @dev A domain-separated draw per period, with matching bookends sharing period zero's terms.

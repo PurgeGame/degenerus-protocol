@@ -214,7 +214,7 @@ describe("AccessControl", function () {
       const { jackpots, alice } = await loadFixture(deployFullProtocol);
 
       await expect(
-        jackpots.connect(alice).beginBaf()
+        jackpots.connect(alice).beginBaf(1)
       ).to.be.revertedWithCustomError(jackpots, "OnlyGame");
     });
 

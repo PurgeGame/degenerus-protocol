@@ -73,7 +73,7 @@ interface IWWXRP {
 /// @notice Interface for the soulbound record-bounty trophy moved on record ratchets.
 interface IDegenerusRecordBounty {
     /// @notice Stamp record `kind`'s new mark and hand its trophy to `to`.
-    function recordSet(uint8 kind, address to, uint256 value) external;
+    function recordSet(uint8 kind, address to, uint256 value, uint24 day) external;
 }
 
 import {DegenerusQuests} from "./DegenerusQuests.sol";
@@ -529,7 +529,8 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
         // (claim-time routing off the promoted level) — state the pending draw
         // never reads.
 
-        uint256 mintable = _claimCoinflipsInternal(id, state);
+        uint256 cachedDays = _flipDays();
+        uint256 mintable = _claimCoinflipsInternal(id, state, uint24(cachedDays));
         uint128 storedBefore = state.claimableStored;
         uint128 storedAfter = storedBefore;
         if (mintable != 0) {
@@ -606,7 +607,7 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
         // Direct deposits (the caller is the payee) can set the flip record and enter the BAF
         // weighted draw; operator deposits and gifts cannot. Every manual route reverts past the
         // daily cap.
-        _addDailyFlip(id, creditedFlip, payee == msg.sender ? amount : 0, true);
+        _addDailyFlip(id, creditedFlip, payee == msg.sender ? amount : 0, true, cachedDays);
         emit CoinflipDeposit(id, amount);
     }
 
@@ -789,10 +790,17 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
         uint32 id,
         PlayerCoinflipState storage state
     ) internal returns (uint256 mintable) {
+        return _claimCoinflipsInternal(id, state, flipsClaimableDay);
+    }
+
+    function _claimCoinflipsInternal(
+        uint32 id,
+        PlayerCoinflipState storage state,
+        uint24 latest
+    ) private returns (uint256 mintable) {
         IDegenerusGame game = degenerusGame;
         FlipClaimTotals memory totals;
         if (id != 0) state.initialized = true;
-        uint24 latest = flipsClaimableDay;
         totals.start = state.lastClaim;
 
         bool rebuyActive = state.autoRebuyEnabled;
@@ -985,6 +993,22 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
         uint256 recordAmount,
         bool manual
     ) private {
+        _addDailyFlip(id, coinflipDeposit, recordAmount, manual, _flipDays());
+    }
+
+    /// @dev Packed requested/resolved/draw days. The pinned deposit callees cannot advance
+    ///      a daily request or arm a BAF draw, so these fields remain exact across the deposit.
+    function _flipDays() private view returns (uint256 cachedDays) {
+        assembly ("memory-safe") { cachedDays := sload(requestedDailyIdx.slot) }
+    }
+
+    function _addDailyFlip(
+        uint32 id,
+        uint256 coinflipDeposit,
+        uint256 recordAmount,
+        bool manual,
+        uint256 cachedDays
+    ) private {
         if (recordAmount != 0) {
             // Manual deposits only: check and consume coinflip boon (5%/10%/25% boost on max 100k FLIP deposit)
             // Max bonuses: 5% = 5k, 10% = 10k, 25% = 25k. The game handle is read HERE rather than
@@ -1018,7 +1042,8 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
         }
 
         // Determine which future day this stake applies to (always the next window).
-        uint24 targetDay = _targetFlipDay();
+        uint24 targetDay = uint24(cachedDays >> 176) + 1;
+        bool drawEntry = recordAmount != 0 && targetDay == uint24(cachedDays >> 128);
 
         // Principal, already floored bonuses and claims are summed in whole FLIP;
         // the lane event reports the accepted delta and total.
@@ -1031,7 +1056,7 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
         // slot the deposit's claim walk already loaded. Credit paths (quests,
         // gifts, operator deposits, sDGNRS backing) skip even that —
         // their recordAmount is zero and the compare short-circuits.
-        if (recordAmount != 0 && targetDay == bafDrawDay) {
+        if (drawEntry) {
             _appendBafDrawEntry(targetDay, id, recordAmount);
         }
     }
@@ -1163,12 +1188,12 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
         if (candidate <= mark) return 0;
 
         uint256 shareBps;
+        uint24 today = requestedDailyIdx;
         // A first mark has no bar to clear; after that the candidate must clear the
         // mark by an exact fifth: `mark + mark / 5` floors the bar, so a mark not
         // divisible by five would let a candidate claim on strictly less than a
         // fifth. Multiplying the increase instead is exact.
         if (mark == 0 || (candidate - mark) * RECORD_BEAT_DIV >= mark) {
-            uint24 today = requestedDailyIdx;
             uint256 stamped = _recordDay(kind);
             shareBps = RECORD_SHARE_FLOOR_BPS +
                 (uint256(today) > stamped ? uint256(today) - stamped : 0) *
@@ -1202,7 +1227,8 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
         IDegenerusRecordBounty(ContractAddresses.RECORD_BOUNTY).recordSet(
             kind,
             payee,
-            candidate
+            candidate,
+            today
         );
     }
 
@@ -1307,7 +1333,8 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
         IDegenerusRecordBounty(ContractAddresses.RECORD_BOUNTY).recordSet(
             RECORD_KIND_DICE_RUN,
             payee,
-            candidate
+            candidate,
+            today
         );
         return paid;
     }
@@ -1418,14 +1445,15 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
         id = _walletId(key, id, true);
         PlayerCoinflipState storage state = playerState[id];
         uint256 mintable;
-        if (_flipFrozen() && state.autoRebuyEnabled) {
+        uint24 latest = flipsClaimableDay;
+        if ((latest < requestedDailyIdx) && state.autoRebuyEnabled) {
             revert RngLocked();
         }
 
         if (enabled) {
             if (takeProfit > type(uint128).max) revert TakeProfitTooLarge();
             if (state.autoRebuyEnabled) revert AutoRebuyAlreadyEnabled();
-            mintable = _claimCoinflipsInternal(id, state);
+            mintable = _claimCoinflipsInternal(id, state, latest);
             state.autoRebuyStop = takeProfit == 0 ? 1 : uint128(takeProfit);
             state.autoRebuyUnlimited = takeProfit == 0;
             state.autoRebuyEnabled = true;
@@ -1433,7 +1461,7 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
             emit CoinflipAutoRebuyStopSet(id, takeProfit);
             emit CoinflipAutoRebuyToggled(id, true);
         } else {
-            mintable = _claimCoinflipsInternal(id, state);
+            mintable = _claimCoinflipsInternal(id, state, latest);
             uint256 carry = state.autoRebuyCarry;
             if (carry != 0) {
                 mintable += carry;
@@ -1463,10 +1491,11 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
         id = _walletId(key, id, false);
         PlayerCoinflipState storage state = playerState[id];
         if (!state.autoRebuyEnabled) revert AutoRebuyNotEnabled();
-        if (_flipFrozen()) revert RngLocked();
+        uint24 latest = flipsClaimableDay;
+        if (latest < requestedDailyIdx) revert RngLocked();
         if (takeProfit > type(uint128).max) revert TakeProfitTooLarge();
 
-        uint256 mintable = _claimCoinflipsInternal(id, state);
+        uint256 mintable = _claimCoinflipsInternal(id, state, latest);
         state.autoRebuyStop = takeProfit == 0 ? 1 : uint128(takeProfit);
         state.autoRebuyUnlimited = takeProfit == 0;
         emit CoinflipAutoRebuyStopSet(id, takeProfit);
@@ -1499,9 +1528,10 @@ contract Coinflip is DegenerusQuests, DegenerusAffiliate {
         id = _walletId(key, id, false);
         PlayerCoinflipState storage state = playerState[id];
         if (!state.autoRebuyEnabled) revert AutoRebuyNotEnabled();
-        if (_flipFrozen()) revert RngLocked();
+        uint24 latest = flipsClaimableDay;
+        if (latest < requestedDailyIdx) revert RngLocked();
 
-        uint256 mintable = _claimCoinflipsInternal(id, state);
+        uint256 mintable = _claimCoinflipsInternal(id, state, latest);
         if (mintable != 0) {
             state.claimableStored = _toUint128Sat(
                 uint256(state.claimableStored) + mintable

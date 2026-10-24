@@ -175,7 +175,8 @@ contract DegenerusRecordBounty {
     /// @param to The player who set the new mark.
     /// @param value The new mark, in the record's unit (uint128-bound by every
     ///        arming path — see Coinflip._armBigRecord).
-    function recordSet(uint8 kind, address to, uint256 value) external {
+    /// @param day Coinflip's authenticated mirror of the current logical Game day.
+    function recordSet(uint8 kind, address to, uint256 value, uint24 day) external {
         if (msg.sender != ContractAddresses.COINFLIP) revert NotAuthorized();
         if (kind >= KINDS) revert InvalidToken();
         if (to == address(0)) revert ZeroAddress();
@@ -188,7 +189,7 @@ contract DegenerusRecordBounty {
                 _balances[to] += 1;
             }
             _holders[kind] = to;
-            _sinceDays[kind] = GameTimeLib.gameDayIndex();
+            _sinceDays[kind] = day;
             emit Transfer(from, to, kind);
         }
     }

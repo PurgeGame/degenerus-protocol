@@ -64,12 +64,24 @@ contract LootboxCraps is Craps {
     /// @notice The physical write buffer new battles bind to.
     /// @dev A fresh request seals this buffer and flips the selector after all read consumers finish.
     function _writeBuffer() internal view returns (uint48) {
-        return uint48((_sload(RNG_STATE_SLOT) >> 252) & 1);
+        return _writeBuffer(_gameState());
+    }
+
+    function _gameState() internal view returns (uint256) {
+        return _sload(RNG_STATE_SLOT);
+    }
+
+    function _writeBuffer(uint256 state) internal pure returns (uint48) {
+        return uint48((state >> 252) & 1);
     }
 
     /// @notice The VRF word committed to `index`, or zero if it has not been drawn.
     function _wordAt(uint48 index) internal view returns (uint256) {
-        uint256 state = _sload(RNG_STATE_SLOT);
+        return _wordAt(index, _gameState());
+    }
+
+    /// @dev Reuse a header only while no intervening call can advance the Game session.
+    function _wordAt(uint48 index, uint256 state) internal view returns (uint256) {
         // Bit253 is terminal, bit255 is miner publication, bit252 selects write.
         if (state & (uint256(1) << 253) != 0) return 0;
         if (state & (uint256(1) << 255) == 0
@@ -109,9 +121,11 @@ contract LootboxCraps is Craps {
     }
 
     function _currentDayIndex() internal view returns (uint24) {
-        unchecked {
-            return uint24(_sload(RNG_STATE_SLOT) >> 24);
-        }
+        return _currentDayIndex(_gameState());
+    }
+
+    function _currentDayIndex(uint256 state) internal pure returns (uint24) {
+        return uint24(state >> 24);
     }
 
     // ---------------------------------------------------------------------------------------

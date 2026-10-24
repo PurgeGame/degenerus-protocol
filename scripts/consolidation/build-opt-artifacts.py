@@ -50,7 +50,7 @@ contract XaAffiliateLayout is DegenerusAffiliate {
 '''}
 rows = json.loads(subprocess.check_output(['node', '--input-type=module', '-e',
     'import {DEPLOYMENTS} from "./scripts/lib/deploymentManifest.js"; console.log(JSON.stringify(DEPLOYMENTS))'], text=True))
-names = {r['contract'] for r in rows} | {'DegenerusGameLens', 'CrapsLens', 'DegenerusVaultShare', 'CrapsViews'}
+names = {r['contract'] for r in rows} | {'DegenerusGameLens', 'CrapsLens', 'DegenerusVaultShare', 'CrapsViews', 'JackpotBattle'}
 selection = {'*': {'': ['ast'], '*': ['abi', 'storageLayout', 'evm.methodIdentifiers']}}
 for filename, source in sources.items():
     for name in names:

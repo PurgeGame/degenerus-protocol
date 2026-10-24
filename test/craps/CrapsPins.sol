@@ -49,7 +49,11 @@ contract MockGame {
         return 7;
     }
 
-    function setRngLocked(bool locked) external { rngLocked = locked; }
+    function setRngLocked(bool locked) external {
+        rngLocked = locked;
+        uint256 header = uint256(slots[bytes32(0)]);
+        slots[bytes32(0)] = bytes32((header & ~(uint256(0xff) << 152)) | (locked ? uint256(1) << 152 : 0));
+    }
 
     function set(bytes32 slot, bytes32 value) external {
         slots[slot] = value;

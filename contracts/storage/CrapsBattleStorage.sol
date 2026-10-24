@@ -522,6 +522,10 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
         return slot < _CUSTOM_SLOT_BASE && slot / _BONUS_SLOTS_PER_DAY + _SETTLEMENT_DAYS < _currentDayIndex();
     }
 
+    function _scheduledExpired(uint256 slot, uint24 today) internal pure returns (bool) {
+        return slot < _CUSTOM_SLOT_BASE && slot / _BONUS_SLOTS_PER_DAY + _SETTLEMENT_DAYS < today;
+    }
+
     /// @dev Windows open from Degenesis day 2 (or the day after a later deployment, which
     ///      `day > today` already covers).
     function _reservableDay(uint24 day) internal view returns (bool) {
@@ -574,7 +578,18 @@ abstract contract CrapsBattleStorage is LootboxCraps, CrapsCustomTerms {
         _writeBetLane(id, word, _betWriteDay(id), (uint256(uint64(id)) - 1) % 3 == 0);
     }
 
-    function _betWriteDay(uint256 id) private view returns (uint256 day) {
+    /// @dev The caller checked the shared slot's write day once before its append loop.
+    function _appendBetOnDay(uint256 id, uint256 word, uint256 day) internal {
+        if (uint64(id) == 0) revert NoSuchBet();
+        _writeBetLane(id, word, day, (uint256(uint64(id)) - 1) % 3 == 0);
+    }
+
+    /// @dev The caller validated a live scheduled slot; the ID already carries its exact day.
+    function _appendScheduledBet(uint256 id, uint256 word) internal {
+        _appendBetOnDay(id, word, id >> 67);
+    }
+
+    function _betWriteDay(uint256 id) internal view returns (uint256 day) {
         if (id >> 64 < _CUSTOM_SLOT_BASE) {
             day = id >> 67;
             uint256 today = _currentDayIndex();

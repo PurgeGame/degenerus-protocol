@@ -60,7 +60,7 @@ describe("DegenerusRecordBounty", function () {
   async function recordSetViaCoinflip(f, bounty, kind, to, mark) {
     const coinflipAddr = f.deployedAddrs.get("COINFLIP");
     const signer = await impersonate(coinflipAddr);
-    const tx = await bounty.connect(signer).recordSet(kind, to, mark);
+    const tx = await bounty.connect(signer).recordSet(kind, to, mark, await f.game.currentDayView());
     return tx;
   }
 
@@ -121,7 +121,7 @@ describe("DegenerusRecordBounty", function () {
       const f = await getFixture();
       const bounty = await getBounty(f);
       await expect(
-        bounty.connect(f.alice).recordSet(0, f.alice.address, 1n)
+        bounty.connect(f.alice).recordSet(0, f.alice.address, 1n, 1)
       ).to.be.revertedWithCustomError(bounty, "NotAuthorized");
     });
 
@@ -130,10 +130,10 @@ describe("DegenerusRecordBounty", function () {
       const bounty = await getBounty(f);
       const signer = await impersonate(f.deployedAddrs.get("COINFLIP"));
       await expect(
-        bounty.connect(signer).recordSet(5, f.alice.address, 1n)
+        bounty.connect(signer).recordSet(5, f.alice.address, 1n, 1)
       ).to.be.revertedWithCustomError(bounty, "InvalidToken");
       await expect(
-        bounty.connect(signer).recordSet(0, ZERO_ADDRESS, 1n)
+        bounty.connect(signer).recordSet(0, ZERO_ADDRESS, 1n, 1)
       ).to.be.revertedWithCustomError(bounty, "ZeroAddress");
     });
 

@@ -103,19 +103,19 @@ contract RecordBountyTrophyTest is DeployProtocol {
     function testRecordSetIsCoinflipOnly() public {
         vm.prank(player);
         vm.expectRevert(DegenerusRecordBounty.NotAuthorized.selector);
-        recordBounty.recordSet(RECORD_KIND_SPIN, player, 1 ether);
+        recordBounty.recordSet(RECORD_KIND_SPIN, player, 1 ether, 1);
 
         vm.prank(GAME);
         vm.expectRevert(DegenerusRecordBounty.NotAuthorized.selector);
-        recordBounty.recordSet(RECORD_KIND_SPIN, player, 1 ether);
+        recordBounty.recordSet(RECORD_KIND_SPIN, player, 1 ether, 1);
     }
 
     function testRecordSetRejectsBadKindAndZeroHolder() public {
         vm.startPrank(ContractAddresses.COINFLIP);
         vm.expectRevert(DegenerusRecordBounty.InvalidToken.selector);
-        recordBounty.recordSet(5, player, 1 ether);
+        recordBounty.recordSet(5, player, 1 ether, 1);
         vm.expectRevert(DegenerusRecordBounty.ZeroAddress.selector);
-        recordBounty.recordSet(RECORD_KIND_SPIN, address(0), 1 ether);
+        recordBounty.recordSet(RECORD_KIND_SPIN, address(0), 1 ether, 1);
         vm.stopPrank();
     }
 

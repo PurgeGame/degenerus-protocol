@@ -137,19 +137,27 @@
   },
   {
     "path": "contracts/Coinflip.sol",
-    "scope": "Coinflip._addDailyFlip",
-    "kind": "external",
-    "expression": "degenerusGame.consumeCoinflipBoon_g2902(id)",
+    "scope": "Coinflip._addDailyFlip(uint32:default,uint256:default,uint256:default,bool:default)",
+    "kind": "recipient-helper",
+    "expression": "_addDailyFlip(id, coinflipDeposit, recordAmount, manual, _flipDays())",
     "count": 1,
-    "review": "Optimization item 3: statically bound low-selector alias or its direct internal call to the original guarded implementation. Identical argument forwarding and original ABI retention are checked by check-opt-aliases.py; target, caller/value context and rollback boundary are unchanged."
+    "review": "DAYS_EFF: deposit snapshots packed requested/resolved/BAF days once. Only those fields are used after the pinned claim, FLIP burn, quest, boon and record callees; none can request a daily word or arm a BAF draw. No cached whole-word writeback; record-clock mutations remain intact. Recipient targets, authorization and credits are unchanged."
   },
   {
     "path": "contracts/Coinflip.sol",
-    "scope": "Coinflip._addDailyFlip",
+    "scope": "Coinflip._addDailyFlip(uint32:default,uint256:default,uint256:default,bool:default,uint256:default)",
+    "kind": "external",
+    "expression": "degenerusGame.consumeCoinflipBoon_g2902(id)",
+    "count": 1,
+    "review": "DAYS_EFF: deposit snapshots packed requested/resolved/BAF days once. Only those fields are used after the pinned claim, FLIP burn, quest, boon and record callees; none can request a daily word or arm a BAF draw. No cached whole-word writeback; record-clock mutations remain intact. Recipient targets, authorization and credits are unchanged."
+  },
+  {
+    "path": "contracts/Coinflip.sol",
+    "scope": "Coinflip._addDailyFlip(uint32:default,uint256:default,uint256:default,bool:default,uint256:default)",
     "kind": "recipient-helper",
     "expression": "_armBigRecord( RECORD_KIND_FLIP, id, recordAmount )",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "DAYS_EFF: deposit snapshots packed requested/resolved/BAF days once. Only those fields are used after the pinned claim, FLIP burn, quest, boon and record callees; none can request a daily word or arm a BAF draw. No cached whole-word writeback; record-clock mutations remain intact. Recipient targets, authorization and credits are unchanged."
   },
   {
     "path": "contracts/Coinflip.sol",
@@ -187,9 +195,9 @@
     "path": "contracts/Coinflip.sol",
     "scope": "Coinflip._armBigRecord",
     "kind": "external",
-    "expression": "IDegenerusRecordBounty(ContractAddresses.RECORD_BOUNTY).recordSet( kind, payee, candidate )",
+    "expression": "IDegenerusRecordBounty(ContractAddresses.RECORD_BOUNTY).recordSet( kind, payee, candidate, today )",
     "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+    "review": "DAYS_EFF: same pinned Game/Coinflip-authorized recipient; caller supplies its exact dailyIdx or requestedDailyIdx. Removed recipient-to-Game day callback. No value transfer or recipient hook added."
   },
   {
     "path": "contracts/Coinflip.sol",
@@ -241,35 +249,43 @@
   },
   {
     "path": "contracts/Coinflip.sol",
-    "scope": "Coinflip._claimCoinflipsInternal",
+    "scope": "Coinflip._claimCoinflipsInternal(uint32:default,struct Coinflip.PlayerCoinflipState:storage)",
+    "kind": "recipient-helper",
+    "expression": "_claimCoinflipsInternal(id, state, flipsClaimableDay)",
+    "count": 1,
+    "review": "DAYS_EFF: bounded internal helper reuses the exact packed Game header or Coinflip resolved frontier. Existing calls remain pinned; cached fields cannot change through the intervening storage-only work or pending-bit notification. No user-code callback or new destination."
+  },
+  {
+    "path": "contracts/Coinflip.sol",
+    "scope": "Coinflip._claimCoinflipsInternal(uint32:default,struct Coinflip.PlayerCoinflipState:storage,uint24:default)",
     "kind": "external",
     "expression": "game.purchaseInfo()",
     "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+    "review": "DAYS_EFF: unchanged recipient expression in a cached-day helper or overload. BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
   {
     "path": "contracts/Coinflip.sol",
-    "scope": "Coinflip._claimCoinflipsInternal",
+    "scope": "Coinflip._claimCoinflipsInternal(uint32:default,struct Coinflip.PlayerCoinflipState:storage,uint24:default)",
     "kind": "external",
     "expression": "jackpots.getLastBafResolvedDay()",
     "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+    "review": "DAYS_EFF: unchanged recipient expression in a cached-day helper or overload. BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
   {
     "path": "contracts/Coinflip.sol",
-    "scope": "Coinflip._claimCoinflipsInternal",
+    "scope": "Coinflip._claimCoinflipsInternal(uint32:default,struct Coinflip.PlayerCoinflipState:storage,uint24:default)",
     "kind": "external",
     "expression": "jackpots.recordBafFlip(id, bafLvl, totals.winningBafCredit)",
     "count": 1,
-    "review": "STACK_SPILL_REVIEW: Memory-only claim totals replace locals; the pinned Jackpots/WWXRP recipient, values, position after settlement loop and authorization are unchanged."
+    "review": "DAYS_EFF: unchanged recipient expression in a cached-day helper or overload. STACK_SPILL_REVIEW: Memory-only claim totals replace locals; the pinned Jackpots/WWXRP recipient, values, position after settlement loop and authorization are unchanged."
   },
   {
     "path": "contracts/Coinflip.sol",
-    "scope": "Coinflip._claimCoinflipsInternal",
+    "scope": "Coinflip._claimCoinflipsInternal(uint32:default,struct Coinflip.PlayerCoinflipState:storage,uint24:default)",
     "kind": "external",
     "expression": "wwxrp.creditPrize(id, totals.lossCount * COINFLIP_LOSS_WWXRP_REWARD)",
     "count": 1,
-    "review": "STACK_SPILL_REVIEW: Memory-only claim totals replace locals; the pinned Jackpots/WWXRP recipient, values, position after settlement loop and authorization are unchanged."
+    "review": "DAYS_EFF: unchanged recipient expression in a cached-day helper or overload. STACK_SPILL_REVIEW: Memory-only claim totals replace locals; the pinned Jackpots/WWXRP recipient, values, position after settlement loop and authorization are unchanged."
   },
   {
     "path": "contracts/Coinflip.sol",
@@ -291,17 +307,17 @@
     "path": "contracts/Coinflip.sol",
     "scope": "Coinflip._depositCoinflip",
     "kind": "recipient-helper",
-    "expression": "_addDailyFlip(id, creditedFlip, payee == msg.sender ? amount : 0, true)",
+    "expression": "_addDailyFlip(id, creditedFlip, payee == msg.sender ? amount : 0, true, cachedDays)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "DAYS_EFF: deposit snapshots packed requested/resolved/BAF days once. Only those fields are used after the pinned claim, FLIP burn, quest, boon and record callees; none can request a daily word or arm a BAF draw. No cached whole-word writeback; record-clock mutations remain intact. Recipient targets, authorization and credits are unchanged."
   },
   {
     "path": "contracts/Coinflip.sol",
     "scope": "Coinflip._depositCoinflip",
     "kind": "recipient-helper",
-    "expression": "_claimCoinflipsInternal(id, state)",
+    "expression": "_claimCoinflipsInternal(id, state, uint24(cachedDays))",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "DAYS_EFF: deposit snapshots packed requested/resolved/BAF days once. Only those fields are used after the pinned claim, FLIP burn, quest, boon and record callees; none can request a daily word or arm a BAF draw. No cached whole-word writeback; record-clock mutations remain intact. Recipient targets, authorization and credits are unchanged."
   },
   {
     "path": "contracts/Coinflip.sol",
@@ -355,9 +371,9 @@
     "path": "contracts/Coinflip.sol",
     "scope": "Coinflip._setCoinflipAutoRebuy",
     "kind": "recipient-helper",
-    "expression": "_claimCoinflipsInternal(id, state)",
+    "expression": "_claimCoinflipsInternal(id, state, latest)",
     "count": 2,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "DAYS_EFF: bounded internal helper reuses the exact packed Game header or Coinflip resolved frontier. Existing calls remain pinned; cached fields cannot change through the intervening storage-only work or pending-bit notification. No user-code callback or new destination."
   },
   {
     "path": "contracts/Coinflip.sol",
@@ -379,9 +395,9 @@
     "path": "contracts/Coinflip.sol",
     "scope": "Coinflip._setCoinflipAutoRebuyTakeProfit",
     "kind": "recipient-helper",
-    "expression": "_claimCoinflipsInternal(id, state)",
+    "expression": "_claimCoinflipsInternal(id, state, latest)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "DAYS_EFF: bounded internal helper reuses the exact packed Game header or Coinflip resolved frontier. Existing calls remain pinned; cached fields cannot change through the intervening storage-only work or pending-bit notification. No user-code callback or new destination."
   },
   {
     "path": "contracts/Coinflip.sol",
@@ -427,9 +443,9 @@
     "path": "contracts/Coinflip.sol",
     "scope": "Coinflip.armDiceRunRecord",
     "kind": "external",
-    "expression": "IDegenerusRecordBounty(ContractAddresses.RECORD_BOUNTY).recordSet( RECORD_KIND_DICE_RUN, payee, candidate )",
+    "expression": "IDegenerusRecordBounty(ContractAddresses.RECORD_BOUNTY).recordSet( RECORD_KIND_DICE_RUN, payee, candidate, today )",
     "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+    "review": "DAYS_EFF: same pinned Game/Coinflip-authorized recipient; caller supplies its exact dailyIdx or requestedDailyIdx. Removed recipient-to-Game day callback. No value transfer or recipient hook added."
   },
   {
     "path": "contracts/Coinflip.sol",
@@ -475,9 +491,9 @@
     "path": "contracts/Coinflip.sol",
     "scope": "Coinflip.claimCoinflipCarry",
     "kind": "recipient-helper",
-    "expression": "_claimCoinflipsInternal(id, state)",
+    "expression": "_claimCoinflipsInternal(id, state, latest)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "DAYS_EFF: bounded internal helper reuses the exact packed Game header or Coinflip resolved frontier. Existing calls remain pinned; cached fields cannot change through the intervening storage-only work or pending-bit notification. No user-code callback or new destination."
   },
   {
     "path": "contracts/Coinflip.sol",
@@ -721,19 +737,27 @@
   },
   {
     "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle._currentBonusSlot",
+    "scope": "CrapsBattle._currentBonusSlot()",
     "kind": "recipient-helper",
-    "expression": "_currentDayIndex()",
+    "expression": "_currentBonusSlot(_currentDayIndex())",
     "count": 1,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+    "review": "DAYS_EFF: bounded internal helper reuses the exact packed Game header or Coinflip resolved frontier. Existing calls remain pinned; cached fields cannot change through the intervening storage-only work or pending-bit notification. No user-code callback or new destination."
   },
   {
     "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle._currentBonusSlot",
+    "scope": "CrapsBattle._currentBonusSlot()",
+    "kind": "recipient-helper",
+    "expression": "_currentDayIndex()",
+    "count": 1,
+    "review": "DAYS_EFF: unchanged recipient expression in a cached-day helper or overload. LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/CrapsBattle.sol",
+    "scope": "CrapsBattle._currentBonusSlot(uint24:default)",
     "kind": "recipient-helper",
     "expression": "_scheduleResetPassed()",
     "count": 1,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+    "review": "DAYS_EFF: unchanged recipient expression in a cached-day helper or overload. LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
   },
   {
     "path": "contracts/CrapsBattle.sol",
@@ -758,14 +782,6 @@
     "expression": "_burnForCraps( account, _tag(cost, _CRAPS_FLAG_JOIN | _CRAPS_FLAG_PASS | (high ? _CRAPS_FLAG_HIGH : _CRAPS_FLAG_NORMAL) | flags) )",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle._enterDayLane",
-    "kind": "recipient-helper",
-    "expression": "_writeDaySeat(daySlot, id, packed, high, multiple - 1, boonMask)",
-    "count": 1,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
   },
   {
     "path": "contracts/CrapsBattle.sol",
@@ -801,35 +817,51 @@
   },
   {
     "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle._joinableSlot",
+    "scope": "CrapsBattle._joinableSlot(uint256:default)",
+    "kind": "recipient-helper",
+    "expression": "_currentDayIndex()",
+    "count": 1,
+    "review": "DAYS_EFF: unchanged recipient expression in a cached-day helper or overload. LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/CrapsBattle.sol",
+    "scope": "CrapsBattle._joinableSlot(uint256:default)",
+    "kind": "recipient-helper",
+    "expression": "_joinableSlot(slot, slot < _CUSTOM_SLOT_BASE ? _currentDayIndex() : 0)",
+    "count": 1,
+    "review": "DAYS_EFF: bounded internal helper reuses the exact packed Game header or Coinflip resolved frontier. Existing calls remain pinned; cached fields cannot change through the intervening storage-only work or pending-bit notification. No user-code callback or new destination."
+  },
+  {
+    "path": "contracts/CrapsBattle.sol",
+    "scope": "CrapsBattle._joinableSlot(uint256:default,uint24:default)",
     "kind": "external",
     "expression": "IGameCraps(_GAME).rngLocked()",
     "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+    "review": "DAYS_EFF: unchanged recipient expression in a cached-day helper or overload. BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
   },
   {
     "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle._joinableSlot",
+    "scope": "CrapsBattle._joinableSlot(uint256:default,uint24:default)",
     "kind": "recipient-helper",
-    "expression": "_currentBonusSlot()",
+    "expression": "_currentBonusSlot(today)",
     "count": 1,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+    "review": "DAYS_EFF: bounded internal helper reuses the exact packed Game header or Coinflip resolved frontier. Existing calls remain pinned; cached fields cannot change through the intervening storage-only work or pending-bit notification. No user-code callback or new destination."
   },
   {
     "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle._joinableSlot",
+    "scope": "CrapsBattle._joinableSlot(uint256:default,uint24:default)",
     "kind": "recipient-helper",
     "expression": "_scheduledAdmissionsOpen()",
     "count": 1,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+    "review": "DAYS_EFF: unchanged recipient expression in a cached-day helper or overload. LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
   },
   {
     "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle._joinableSlot",
+    "scope": "CrapsBattle._joinableSlot(uint256:default,uint24:default)",
     "kind": "recipient-helper",
     "expression": "_slotWindow(slot)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "DAYS_EFF: unchanged recipient expression in a cached-day helper or overload. TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/CrapsBattle.sol",
@@ -843,9 +875,9 @@
     "path": "contracts/CrapsBattle.sol",
     "scope": "CrapsBattle._joinableWindow",
     "kind": "recipient-helper",
-    "expression": "_joinableSlot(_slotOf(today, period))",
+    "expression": "_joinableSlot(_slotOf(today, period), today)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "DAYS_EFF: bounded internal helper reuses the exact packed Game header or Coinflip resolved frontier. Existing calls remain pinned; cached fields cannot change through the intervening storage-only work or pending-bit notification. No user-code callback or new destination."
   },
   {
     "path": "contracts/CrapsBattle.sol",
@@ -891,17 +923,17 @@
     "path": "contracts/CrapsBattle.sol",
     "scope": "CrapsBattle._place",
     "kind": "recipient-helper",
-    "expression": "_burnForCraps( account, _tag((uint256(w.bankroll) + w.stakeUnits * _BATTLE_STAKE_UNIT) * multiple, _CRAPS_FLAG_JOIN | flags) )",
+    "expression": "_betWriteDay(betId)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "DAYS_EFF: one slip writer takes the caller-validated day. Ordinary placement retains the checked Game day read; future reservations and opened day seats already established their range before storage-only writes. No recipient or value flow changes."
   },
   {
     "path": "contracts/CrapsBattle.sol",
     "scope": "CrapsBattle._place",
     "kind": "recipient-helper",
-    "expression": "_writeSlip(betId, id, chips, high ? _BET_HIGH_BIT : 0, multiple - 1, boonMask)",
+    "expression": "_burnForCraps( account, _tag((uint256(w.bankroll) + w.stakeUnits * _BATTLE_STAKE_UNIT) * multiple, _CRAPS_FLAG_JOIN | flags) )",
     "count": 1,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/CrapsBattle.sol",
@@ -918,22 +950,6 @@
     "expression": "_reservableDay(day)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle._reserveDay",
-    "kind": "recipient-helper",
-    "expression": "_reserveDaySeat(id, day, high, packed, boonMask)",
-    "count": 1,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
-  },
-  {
-    "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle._reserveDaySeat",
-    "kind": "recipient-helper",
-    "expression": "_writeDaySeat(daySlot, id, packed, high, 0, boonMask)",
-    "count": 1,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
   },
   {
     "path": "contracts/CrapsBattle.sol",
@@ -961,27 +977,11 @@
   },
   {
     "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle._reserveRun",
-    "kind": "recipient-helper",
-    "expression": "_reserveDaySeat(id, uint24(d), high, packed, i == 0 ? boonMask : 0)",
-    "count": 1,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
-  },
-  {
-    "path": "contracts/CrapsBattle.sol",
     "scope": "CrapsBattle._reserveWindow",
     "kind": "recipient-helper",
     "expression": "_reservableDay(day)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle._reserveWindow",
-    "kind": "recipient-helper",
-    "expression": "_writeSlip( betId, id, chips, high ? _BET_HIGH_BIT : 0, 0, 0 )",
-    "count": 1,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
   },
   {
     "path": "contracts/CrapsBattle.sol",
@@ -1011,9 +1011,9 @@
     "path": "contracts/CrapsBattle.sol",
     "scope": "CrapsBattle._resolveSlotRange",
     "kind": "recipient-helper",
-    "expression": "_scheduledExpired(slot)",
-    "count": 1,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+    "expression": "_gameState()",
+    "count": 2,
+    "review": "DAYS_EFF: bounded internal helper reuses the exact packed Game header or Coinflip resolved frontier. Existing calls remain pinned; cached fields cannot change through the intervening storage-only work or pending-bit notification. No user-code callback or new destination."
   },
   {
     "path": "contracts/CrapsBattle.sol",
@@ -1035,9 +1035,9 @@
     "path": "contracts/CrapsBattle.sol",
     "scope": "CrapsBattle._resolveSlotRange",
     "kind": "recipient-helper",
-    "expression": "_slotWord(slot)",
+    "expression": "_slotWord(slot, slot < _CUSTOM_SLOT_BASE ? gameState : _gameState())",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "DAYS_EFF: bounded internal helper reuses the exact packed Game header or Coinflip resolved frontier. Existing calls remain pinned; cached fields cannot change through the intervening storage-only work or pending-bit notification. No user-code callback or new destination."
   },
   {
     "path": "contracts/CrapsBattle.sol",
@@ -1054,14 +1054,6 @@
     "expression": "IFlipCoin(ContractAddresses.COIN).burnCoin(address(uint160(account)), cost)",
     "count": 1,
     "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
-  },
-  {
-    "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle._seatBody",
-    "kind": "recipient-helper",
-    "expression": "_writeDaySeat(daySlot, id, chips, high, 0, 0)",
-    "count": 1,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
   },
   {
     "path": "contracts/CrapsBattle.sol",
@@ -1097,11 +1089,27 @@
   },
   {
     "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle._slotWord",
+    "scope": "CrapsBattle._slotWord(uint256:default)",
     "kind": "recipient-helper",
-    "expression": "_wordAt(index - 1)",
+    "expression": "_gameState()",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "DAYS_EFF: bounded internal helper reuses the exact packed Game header or Coinflip resolved frontier. Existing calls remain pinned; cached fields cannot change through the intervening storage-only work or pending-bit notification. No user-code callback or new destination."
+  },
+  {
+    "path": "contracts/CrapsBattle.sol",
+    "scope": "CrapsBattle._slotWord(uint256:default)",
+    "kind": "recipient-helper",
+    "expression": "_slotWord(slot, _isJackpotSlot(slot) ? 0 : _gameState())",
+    "count": 1,
+    "review": "DAYS_EFF: bounded internal helper reuses the exact packed Game header or Coinflip resolved frontier. Existing calls remain pinned; cached fields cannot change through the intervening storage-only work or pending-bit notification. No user-code callback or new destination."
+  },
+  {
+    "path": "contracts/CrapsBattle.sol",
+    "scope": "CrapsBattle._slotWord(uint256:default,uint256:default)",
+    "kind": "recipient-helper",
+    "expression": "_wordAt(index - 1, gameState)",
+    "count": 1,
+    "review": "DAYS_EFF: bounded internal helper reuses the exact packed Game header or Coinflip resolved frontier. Existing calls remain pinned; cached fields cannot change through the intervening storage-only work or pending-bit notification. No user-code callback or new destination."
   },
   {
     "path": "contracts/CrapsBattle.sol",
@@ -1123,9 +1131,17 @@
     "path": "contracts/CrapsBattle.sol",
     "scope": "CrapsBattle._upgradeDayWindows",
     "kind": "recipient-helper",
-    "expression": "_joinableSlot(_slotOf(day, p))",
+    "expression": "_currentDayIndex()",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "DAYS_EFF: unchanged recipient expression in a cached-day helper or overload. LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/CrapsBattle.sol",
+    "scope": "CrapsBattle._upgradeDayWindows",
+    "kind": "recipient-helper",
+    "expression": "_joinableSlot(_slotOf(day, p), today)",
+    "count": 1,
+    "review": "DAYS_EFF: bounded internal helper reuses the exact packed Game header or Coinflip resolved frontier. Existing calls remain pinned; cached fields cannot change through the intervening storage-only work or pending-bit notification. No user-code callback or new destination."
   },
   {
     "path": "contracts/CrapsBattle.sol",
@@ -1142,22 +1158,6 @@
     "expression": "_dailyWordAt(day)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle._writeDaySeat",
-    "kind": "recipient-helper",
-    "expression": "_writeSlip( (daySlot << 64) | seat, id, chips, high ? _BET_DAYHIGH_MASK : 0, evMult, boonMask )",
-    "count": 1,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
-  },
-  {
-    "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle._writeSlip",
-    "kind": "recipient-helper",
-    "expression": "_appendBet(betId, uint256(id) | (chips << _BET_CHIPS_SHIFT) | boon | highBits)",
-    "count": 1,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
   },
   {
     "path": "contracts/CrapsBattle.sol",
@@ -1371,9 +1371,9 @@
     "path": "contracts/CrapsBattle.sol",
     "scope": "CrapsBattle.minerMaintenancePending_g11976",
     "kind": "recipient-helper",
-    "expression": "_currentBonusSlot()",
+    "expression": "_currentBonusSlot(today)",
     "count": 1,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+    "review": "DAYS_EFF: bounded internal helper reuses the exact packed Game header or Coinflip resolved frontier. Existing calls remain pinned; cached fields cannot change through the intervening storage-only work or pending-bit notification. No user-code callback or new destination."
   },
   {
     "path": "contracts/CrapsBattle.sol",
@@ -1385,19 +1385,11 @@
   },
   {
     "path": "contracts/CrapsBattle.sol",
-    "scope": "CrapsBattle.minerMaintenancePending_g11976",
-    "kind": "recipient-helper",
-    "expression": "_scheduledExpired(cur)",
-    "count": 1,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
-  },
-  {
-    "path": "contracts/CrapsBattle.sol",
     "scope": "CrapsBattle.openBonusDay",
     "kind": "recipient-helper",
-    "expression": "_currentBonusSlot()",
+    "expression": "_currentBonusSlot(today)",
     "count": 1,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+    "review": "DAYS_EFF: bounded internal helper reuses the exact packed Game header or Coinflip resolved frontier. Existing calls remain pinned; cached fields cannot change through the intervening storage-only work or pending-bit notification. No user-code callback or new destination."
   },
   {
     "path": "contracts/CrapsBattle.sol",
@@ -4409,14 +4401,6 @@
   },
   {
     "path": "contracts/DegenerusJackpots.sol",
-    "scope": "DegenerusJackpots.beginBaf",
-    "kind": "recipient-helper",
-    "expression": "GameTimeLib.gameDayIndex()",
-    "count": 1,
-    "review": "LOGICAL_DAYS: existing bounded protocol helper now reaches the immutable Game logical-day view, or the authenticated Coinflip boundary/closure hook. No new user destination or value transfer; caller and recipient accounting remain the existing path."
-  },
-  {
-    "path": "contracts/DegenerusJackpots.sol",
     "scope": "DegenerusJackpots.claimBafConsolation",
     "kind": "external",
     "expression": "degenerusGame.walletIdOf_g3120(msg.sender)",
@@ -4438,14 +4422,6 @@
     "expression": "ensReg.call( abi.encodeWithSignature(\"setName(string)\", \"jackpots.degenerus.eth\") )",
     "count": 1,
     "review": "DEPLOYMENT: constructor-only call; ENS registration is best effort."
-  },
-  {
-    "path": "contracts/DegenerusJackpots.sol",
-    "scope": "DegenerusJackpots.markBafSkipped",
-    "kind": "recipient-helper",
-    "expression": "GameTimeLib.gameDayIndex()",
-    "count": 1,
-    "review": "LOGICAL_DAYS: existing bounded protocol helper now reaches the immutable Game logical-day view, or the authenticated Coinflip boundary/closure hook. No new user destination or value transfer; caller and recipient accounting remain the existing path."
   },
   {
     "path": "contracts/DegenerusOwnerGovernance.sol",
@@ -5322,14 +5298,6 @@
   {
     "path": "contracts/DegenerusRecordBounty.sol",
     "scope": "DegenerusRecordBounty.recordInfo",
-    "kind": "recipient-helper",
-    "expression": "GameTimeLib.gameDayIndex()",
-    "count": 1,
-    "review": "LOGICAL_DAYS: existing bounded protocol helper now reaches the immutable Game logical-day view, or the authenticated Coinflip boundary/closure hook. No new user destination or value transfer; caller and recipient accounting remain the existing path."
-  },
-  {
-    "path": "contracts/DegenerusRecordBounty.sol",
-    "scope": "DegenerusRecordBounty.recordSet",
     "kind": "recipient-helper",
     "expression": "GameTimeLib.gameDayIndex()",
     "count": 1,
@@ -6307,14 +6275,6 @@
     "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle._append",
     "kind": "recipient-helper",
-    "expression": "_appendBet(id, uint256(playerId) | (uint256(chips) << _BET_CHIPS_SHIFT))",
-    "count": 1,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
-  },
-  {
-    "path": "contracts/JackpotBattle.sol",
-    "scope": "JackpotBattle._append",
-    "kind": "recipient-helper",
     "expression": "_bookFees(slot, r, totalUnits * bankroll, mainPool, uint32(_loadHighField(key)))",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing helper route; only the high-field read moved to the lane-C ring accessor."
@@ -6325,7 +6285,7 @@
     "kind": "recipient-helper",
     "expression": "_scheduledExpired(slot)",
     "count": 1,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+    "review": "DAYS_EFF: reviewed cached logical-day path; pinned protocol recipients and unchanged authorization. Header/day reuse is limited to callees that cannot advance the Game day or RNG session."
   },
   {
     "path": "contracts/JackpotBattle.sol",
@@ -6377,27 +6337,27 @@
   },
   {
     "path": "contracts/JackpotBattle.sol",
-    "scope": "JackpotBattle._jackpotArmSlot",
-    "kind": "recipient-helper",
-    "expression": "_writeBuffer()",
-    "count": 1,
-    "review": "P6: lifecycle helper renamed to preserve its inherited binding; recipient, caller guard, calldata and retained self-call boundary unchanged."
-  },
-  {
-    "path": "contracts/JackpotBattle.sol",
-    "scope": "JackpotBattle._jackpotCurrentBonusSlot",
+    "scope": "JackpotBattle._jackpotCurrentBonusSlot()",
     "kind": "recipient-helper",
     "expression": "_currentDayIndex()",
     "count": 1,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+    "review": "DAYS_EFF: unchanged recipient expression in a cached-day helper or overload. LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
   },
   {
     "path": "contracts/JackpotBattle.sol",
-    "scope": "JackpotBattle._jackpotCurrentBonusSlot",
+    "scope": "JackpotBattle._jackpotCurrentBonusSlot()",
+    "kind": "recipient-helper",
+    "expression": "_jackpotCurrentBonusSlot(_currentDayIndex())",
+    "count": 1,
+    "review": "DAYS_EFF: bounded internal helper reuses the exact packed Game header or Coinflip resolved frontier. Existing calls remain pinned; cached fields cannot change through the intervening storage-only work or pending-bit notification. No user-code callback or new destination."
+  },
+  {
+    "path": "contracts/JackpotBattle.sol",
+    "scope": "JackpotBattle._jackpotCurrentBonusSlot(uint24:default)",
     "kind": "recipient-helper",
     "expression": "_scheduleResetPassed()",
     "count": 1,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+    "review": "DAYS_EFF: unchanged recipient expression in a cached-day helper or overload. LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
   },
   {
     "path": "contracts/JackpotBattle.sol",
@@ -6435,6 +6395,14 @@
     "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle._keepRngCohort",
     "kind": "recipient-helper",
+    "expression": "_gameState()",
+    "count": 1,
+    "review": "DAYS_EFF: bounded internal helper reuses the exact packed Game header or Coinflip resolved frontier. Existing calls remain pinned; cached fields cannot change through the intervening storage-only work or pending-bit notification. No user-code callback or new destination."
+  },
+  {
+    "path": "contracts/JackpotBattle.sol",
+    "scope": "JackpotBattle._keepRngCohort",
+    "kind": "recipient-helper",
     "expression": "_readCrapsStage()",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
@@ -6443,49 +6411,33 @@
     "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle._keepRngCohort",
     "kind": "recipient-helper",
-    "expression": "_scheduledExpired(slot)",
+    "expression": "_wordAt(index, gameState)",
     "count": 1,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
-  },
-  {
-    "path": "contracts/JackpotBattle.sol",
-    "scope": "JackpotBattle._keepRngCohort",
-    "kind": "recipient-helper",
-    "expression": "_wordAt(index)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/JackpotBattle.sol",
-    "scope": "JackpotBattle._keepScheduled",
-    "kind": "external",
-    "expression": "IGameCraps(_GAME).rngLocked()",
-    "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+    "review": "DAYS_EFF: bounded internal helper reuses the exact packed Game header or Coinflip resolved frontier. Existing calls remain pinned; cached fields cannot change through the intervening storage-only work or pending-bit notification. No user-code callback or new destination."
   },
   {
     "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle._keepScheduled",
     "kind": "recipient-helper",
-    "expression": "_currentDayIndex()",
+    "expression": "_gameState()",
     "count": 1,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+    "review": "DAYS_EFF: bounded internal helper reuses the exact packed Game header or Coinflip resolved frontier. Existing calls remain pinned; cached fields cannot change through the intervening storage-only work or pending-bit notification. No user-code callback or new destination."
   },
   {
     "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle._keepScheduled",
     "kind": "recipient-helper",
-    "expression": "_jackpotArmSlot(cur, w)",
+    "expression": "_jackpotArmSlot(cur, w, read ^ 1)",
     "count": 1,
-    "review": "P6: lifecycle helper renamed to preserve its inherited binding; recipient, caller guard, calldata and retained self-call boundary unchanged."
+    "review": "DAYS_EFF: bounded internal helper reuses the exact packed Game header or Coinflip resolved frontier. Existing calls remain pinned; cached fields cannot change through the intervening storage-only work or pending-bit notification. No user-code callback or new destination."
   },
   {
     "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle._keepScheduled",
     "kind": "recipient-helper",
-    "expression": "_jackpotCurrentBonusSlot()",
+    "expression": "_jackpotCurrentBonusSlot(today)",
     "count": 1,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+    "review": "DAYS_EFF: bounded internal helper reuses the exact packed Game header or Coinflip resolved frontier. Existing calls remain pinned; cached fields cannot change through the intervening storage-only work or pending-bit notification. No user-code callback or new destination."
   },
   {
     "path": "contracts/JackpotBattle.sol",
@@ -6515,14 +6467,6 @@
     "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle._keepScheduled",
     "kind": "recipient-helper",
-    "expression": "_scheduledExpired(cur)",
-    "count": 1,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
-  },
-  {
-    "path": "contracts/JackpotBattle.sol",
-    "scope": "JackpotBattle._keepScheduled",
-    "kind": "recipient-helper",
     "expression": "_sweepLapsedDay(cur, day, meter)",
     "count": 1,
     "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
@@ -6531,17 +6475,9 @@
     "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle._keepScheduled",
     "kind": "recipient-helper",
-    "expression": "_wordAt(read)",
+    "expression": "_wordAt(read, gameState)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/JackpotBattle.sol",
-    "scope": "JackpotBattle._keepScheduled",
-    "kind": "recipient-helper",
-    "expression": "_writeBuffer()",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "DAYS_EFF: bounded internal helper reuses the exact packed Game header or Coinflip resolved frontier. Existing calls remain pinned; cached fields cannot change through the intervening storage-only work or pending-bit notification. No user-code callback or new destination."
   },
   {
     "path": "contracts/JackpotBattle.sol",
@@ -6716,32 +6652,32 @@
     "scope": "JackpotBattle.donate",
     "kind": "recipient-helper",
     "expression": "_currentDayIndex()",
-    "count": 2,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+    "count": 1,
+    "review": "DAYS_EFF: unchanged recipient expression in a cached-day helper or overload. LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
   },
   {
     "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle.donate",
     "kind": "recipient-helper",
-    "expression": "_dailyWordAt(_currentDayIndex())",
+    "expression": "_dailyWordAt(today)",
     "count": 1,
-    "review": "PROTOCOL_VIEW: donation readiness reads the recorded day word; no value decision, player door only."
+    "review": "DAYS_EFF: bounded internal helper reuses the exact packed Game header or Coinflip resolved frontier. Existing calls remain pinned; cached fields cannot change through the intervening storage-only work or pending-bit notification. No user-code callback or new destination."
   },
   {
     "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle.donate",
     "kind": "recipient-helper",
-    "expression": "_jackpotCurrentBonusSlot()",
+    "expression": "_jackpotCurrentBonusSlot(today)",
     "count": 1,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+    "review": "DAYS_EFF: bounded internal helper reuses the exact packed Game header or Coinflip resolved frontier. Existing calls remain pinned; cached fields cannot change through the intervening storage-only work or pending-bit notification. No user-code callback or new destination."
   },
   {
     "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle.donate",
     "kind": "recipient-helper",
     "expression": "_scheduledAdmissionsOpen()",
-    "count": 2,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+    "count": 1,
+    "review": "DAYS_EFF: unchanged recipient expression in a cached-day helper or overload. LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
   },
   {
     "path": "contracts/JackpotBattle.sol",
@@ -6771,17 +6707,9 @@
     "path": "contracts/JackpotBattle.sol",
     "scope": "JackpotBattle.lockJackpotBattle",
     "kind": "recipient-helper",
-    "expression": "_scheduledExpired(_activeJackpotSlot)",
+    "expression": "_currentDayIndex()",
     "count": 1,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
-  },
-  {
-    "path": "contracts/JackpotBattle.sol",
-    "scope": "JackpotBattle.lockJackpotBattle",
-    "kind": "recipient-helper",
-    "expression": "_scheduledExpired(slot)",
-    "count": 1,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+    "review": "DAYS_EFF: unchanged recipient expression in a cached-day helper or overload. LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
   },
   {
     "path": "contracts/JackpotBattle.sol",
@@ -6881,11 +6809,11 @@
   },
   {
     "path": "contracts/LootboxCraps.sol",
-    "scope": "LootboxCraps._currentDayIndex",
+    "scope": "LootboxCraps._currentDayIndex()",
     "kind": "recipient-helper",
-    "expression": "_sload(RNG_STATE_SLOT)",
+    "expression": "_gameState()",
     "count": 1,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+    "review": "DAYS_EFF: bounded internal helper reuses the exact packed Game header or Coinflip resolved frontier. Existing calls remain pinned; cached fields cannot change through the intervening storage-only work or pending-bit notification. No user-code callback or new destination."
   },
   {
     "path": "contracts/LootboxCraps.sol",
@@ -6929,6 +6857,14 @@
   },
   {
     "path": "contracts/LootboxCraps.sol",
+    "scope": "LootboxCraps._gameState",
+    "kind": "recipient-helper",
+    "expression": "_sload(RNG_STATE_SLOT)",
+    "count": 1,
+    "review": "DAYS_EFF: unchanged recipient expression in a cached-day helper or overload. LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+  },
+  {
+    "path": "contracts/LootboxCraps.sol",
     "scope": "LootboxCraps._scheduleResetPassed",
     "kind": "recipient-helper",
     "expression": "_sload(5)",
@@ -6953,27 +6889,35 @@
   },
   {
     "path": "contracts/LootboxCraps.sol",
-    "scope": "LootboxCraps._wordAt",
+    "scope": "LootboxCraps._wordAt(uint48:default)",
+    "kind": "recipient-helper",
+    "expression": "_gameState()",
+    "count": 1,
+    "review": "DAYS_EFF: bounded internal helper reuses the exact packed Game header or Coinflip resolved frontier. Existing calls remain pinned; cached fields cannot change through the intervening storage-only work or pending-bit notification. No user-code callback or new destination."
+  },
+  {
+    "path": "contracts/LootboxCraps.sol",
+    "scope": "LootboxCraps._wordAt(uint48:default)",
+    "kind": "recipient-helper",
+    "expression": "_wordAt(index, _gameState())",
+    "count": 1,
+    "review": "DAYS_EFF: bounded internal helper reuses the exact packed Game header or Coinflip resolved frontier. Existing calls remain pinned; cached fields cannot change through the intervening storage-only work or pending-bit notification. No user-code callback or new destination."
+  },
+  {
+    "path": "contracts/LootboxCraps.sol",
+    "scope": "LootboxCraps._wordAt(uint48:default,uint256:default)",
     "kind": "recipient-helper",
     "expression": "_sload(LOOTBOX_RNG_WORD_SLOT)",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "DAYS_EFF: unchanged recipient expression in a cached-day helper or overload. TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
   },
   {
     "path": "contracts/LootboxCraps.sol",
-    "scope": "LootboxCraps._wordAt",
+    "scope": "LootboxCraps._writeBuffer()",
     "kind": "recipient-helper",
-    "expression": "_sload(RNG_STATE_SLOT)",
+    "expression": "_gameState()",
     "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
-  },
-  {
-    "path": "contracts/LootboxCraps.sol",
-    "scope": "LootboxCraps._writeBuffer",
-    "kind": "recipient-helper",
-    "expression": "_sload(RNG_STATE_SLOT)",
-    "count": 1,
-    "review": "TRANSITIVE_BASELINE: existing protocol/library helper reaches a pinned recipient site; complete call and caller are reviewed checkpoint routes. Any new expression or multiplicity requires review."
+    "review": "DAYS_EFF: bounded internal helper reuses the exact packed Game header or Coinflip resolved frontier. Existing calls remain pinned; cached fields cannot change through the intervening storage-only work or pending-bit notification. No user-code callback or new destination."
   },
   {
     "path": "contracts/WWXRP.sol",
@@ -7363,9 +7307,9 @@
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
     "scope": "DegenerusGameAdvanceModule._consolidatePoolsAndRewardJackpots",
     "kind": "external",
-    "expression": "advanceJackpots.markBafSkipped(lvl)",
+    "expression": "advanceJackpots.markBafSkipped(lvl, dailyIdx)",
     "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+    "review": "DAYS_EFF: same pinned Game/Coinflip-authorized recipient; caller supplies its exact dailyIdx or requestedDailyIdx. Removed recipient-to-Game day callback. No value transfer or recipient hook added."
   },
   {
     "path": "contracts/modules/DegenerusGameAdvanceModule.sol",
@@ -8883,9 +8827,9 @@
     "path": "contracts/modules/DegenerusGameJackpotDrawModule.sol",
     "scope": "DegenerusGameJackpotDrawModule.runBafJackpot",
     "kind": "external",
-    "expression": "jackpots.beginBaf()",
+    "expression": "jackpots.beginBaf(dailyIdx)",
     "count": 1,
-    "review": "BASELINE: typed protocol/external call retained from the reviewed call census; any expression/count change requires reachability review."
+    "review": "DAYS_EFF: same pinned Game/Coinflip-authorized recipient; caller supplies its exact dailyIdx or requestedDailyIdx. Removed recipient-to-Game day callback. No value transfer or recipient hook added."
   },
   {
     "path": "contracts/modules/DegenerusGameJackpotDrawModule.sol",
@@ -11165,7 +11109,7 @@
     "kind": "recipient-helper",
     "expression": "_currentDayIndex()",
     "count": 1,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+    "review": "DAYS_EFF: one slip writer takes the caller-validated day. Ordinary placement retains the checked Game day read; future reservations and opened day seats already established their range before storage-only writes. No recipient or value flow changes."
   },
   {
     "path": "contracts/storage/CrapsBattleStorage.sol",
@@ -11201,11 +11145,11 @@
   },
   {
     "path": "contracts/storage/CrapsBattleStorage.sol",
-    "scope": "CrapsBattleStorage._scheduledExpired",
+    "scope": "CrapsBattleStorage._scheduledExpired(uint256:default)",
     "kind": "recipient-helper",
     "expression": "_currentDayIndex()",
     "count": 1,
-    "review": "LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
+    "review": "DAYS_EFF: unchanged recipient expression in a cached-day helper or overload. LOGICAL_DAYS: table helper now reaches immutable Game header/schedule/terminal-word reads. The retained commitment fixes recipients and outcomes; skipped-window refunds reuse bounded protocol comp credits. Independent terminal settlement uses existing FIFO and award accounting."
   },
   {
     "path": "contracts/storage/CrapsBattleStorage.sol",

@@ -1417,7 +1417,7 @@ contract CoverageGap222 is DeployProtocol {
 
     function test_gap_jackpots_bafResolutionHooks_guard() public {
         vm.prank(buyer);
-        (bool okBegin, bytes memory errBegin) = address(jackpots).call(abi.encodeWithSignature("beginBaf()"));
+        (bool okBegin, bytes memory errBegin) = address(jackpots).call(abi.encodeWithSignature("beginBaf(uint24)", uint24(1)));
         vm.prank(buyer);
         (bool okFinal, bytes memory errFinal) =
             address(jackpots).call(abi.encodeWithSignature("finalizeBaf(uint24)", uint24(10)));

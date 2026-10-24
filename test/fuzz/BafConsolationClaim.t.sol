@@ -66,7 +66,7 @@ contract BafConsolationClaimTest is DeployProtocol {
 
     function _skip(uint24 lvl) private {
         vm.prank(address(game));
-        jackpots.markBafSkipped(lvl);
+        jackpots.markBafSkipped(lvl, uint24(uint256(vm.load(address(game), bytes32(0))) >> 24));
     }
 
     function testClaimAfterSkipMintsScoreOverThousand() public {
@@ -134,7 +134,7 @@ contract BafConsolationClaimTest is DeployProtocol {
         // frozen scores, and `finalizeBaf` with the last award group bumps the epoch. The
         // bracket is never skipped, so nothing is claimable at any point.
         vm.prank(address(game));
-        jackpots.beginBaf();
+        jackpots.beginBaf(uint24(uint256(vm.load(address(game), bytes32(0))) >> 24));
         assertEq(jackpots.bafConsolationOf(alice, 20), 0, "a resolving bracket is not claimable");
         vm.expectRevert(NothingToClaim.selector);
         jackpots.claimBafConsolation(ids[alice], 20);

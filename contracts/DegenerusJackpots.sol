@@ -37,7 +37,6 @@ import {IDegenerusGame} from "./interfaces/IDegenerusGame.sol";
 import {IDegenerusJackpots} from "./interfaces/IDegenerusJackpots.sol";
 import {ContractAddresses} from "./ContractAddresses.sol";
 import {EntropyLib} from "./libraries/EntropyLib.sol";
-import {GameTimeLib} from "./libraries/GameTimeLib.sol";
 
 // ===========================================================================
 // External Interfaces
@@ -324,8 +323,8 @@ contract DegenerusJackpots is IDegenerusJackpots {
     /// @notice Opens a bracket's resolution: winning-flip credit claimed from today on belongs
     ///         to the next bracket.
     /// @custom:access Restricted to game contract via onlyGame modifier.
-    function beginBaf() external onlyGame {
-        lastBafResolvedDay = GameTimeLib.gameDayIndex();
+    function beginBaf(uint24 day) external onlyGame {
+        lastBafResolvedDay = day;
     }
 
     /// @notice Closes a resolved bracket once every award is paid: empties the board and bumps
@@ -435,11 +434,9 @@ contract DegenerusJackpots is IDegenerusJackpots {
     ///      player scores become claimable as WWXRP consolation.
     /// @param lvl Level whose BAF was skipped.
     /// @custom:access Restricted to game contract via onlyGame modifier.
-    function markBafSkipped(uint24 lvl) external onlyGame {
+    function markBafSkipped(uint24 lvl, uint24 today) external onlyGame {
         bafLevel[lvl].skipped = true;
-        // Day computed locally: identical to game.currentDayView() (pure GameTimeLib
-        // wall-clock) without the external call.
-        uint24 today = GameTimeLib.gameDayIndex();
+        // The authenticated Game caller supplies its current logical day.
         lastBafResolvedDay = today;
         emit BafSkipped(lvl, today);
     }

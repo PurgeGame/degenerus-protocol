@@ -565,7 +565,7 @@ describe("BafCreditRouting", function () {
       const gameSigner = await hre.ethers.getSigner(gameAddr);
 
       const dayBefore = await jackpots.getLastBafResolvedDay();
-      const skipTx = await jackpots.connect(gameSigner).markBafSkipped(10);
+      const skipTx = await jackpots.connect(gameSigner).markBafSkipped(10, await game.currentDayView());
       const skipReceipt = await skipTx.wait();
 
       await hre.ethers.provider.send("hardhat_stopImpersonatingAccount", [

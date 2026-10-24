@@ -18,6 +18,7 @@ def check_fields(data, expected):
 
 game = check_fields(layout("DegenerusGame", "DegenerusGame"), {
     "dailyIdx": (0, 3, "uint24"),
+    "rngLockedFlag": (0, 19, "bool"),
     "gameOver": (0, 21, "bool"),
     "rngFlagsAndNudges": (0, 30, "uint16"),
     "dailyComplete": (5, 3, "bool"),
@@ -29,6 +30,8 @@ assert "rngGapApplied" not in game
 assert "terminalCrapsWords" not in game
 check_fields(layout("Coinflip", "Coinflip"), {
     "requestedDailyIdx": (4, 22, "uint24"),
+    "flipsClaimableDay": (4, 0, "uint24"),
+    "bafDrawDay": (4, 16, "uint24"),
 })
 quest = layout("XaLayout", "XaQuestsLayout")
 record = quest["types"][quest["storage"][0]["type"]]

@@ -79,11 +79,13 @@ contract JackpotBattle is CrapsBattleStorage {
 
     function donate(bool custom, uint256 index, uint24 granules) external returns (uint256 amount) {
         uint256 slot;
+        uint24 today;
         unchecked {
             if (custom) slot = _CUSTOM_SLOT_BASE + index;
             else {
                 if (index >= _BONUS_PERIODS_PER_DAY) revert BonusPeriodSpent();
-                slot = _jackpotSlotOf(_currentDayIndex(), index);
+                today = _currentDayIndex();
+                slot = _jackpotSlotOf(today, index);
             }
         }
         if (slot >= _CUSTOM_SLOT_BASE) {
@@ -96,15 +98,14 @@ contract JackpotBattle is CrapsBattleStorage {
             if (slot != _jackpotSlotOf(_bonus - 1, _BONUS_PERIODS_PER_DAY - 1)
                 || IGameCraps(_GAME).rngLocked()) revert BonusPeriodSpent();
         } else {
-            if (!_scheduledAdmissionsOpen()) revert BonusPeriodSpent();
-            (,, uint256 live) = _jackpotCurrentBonusSlot();
+            (,, uint256 live) = _jackpotCurrentBonusSlot(today);
             if (slot < live) revert BonusPeriodSpent();
         }
         if (_slotIndexOf(slot) != 0) revert BonusPeriodSpent();
         bytes32 key = _rngBattleKey(uint64(slot));
         uint256 g = _loadBattle(key);
         if (slot < _CUSTOM_SLOT_BASE && !_jackpotIsJackpotSlot(slot)
-            && g >> 255 == 0 && _dailyWordAt(_currentDayIndex()) == 0) revert RngNotReady();
+            && g >> 255 == 0 && _dailyWordAt(today) == 0) revert RngNotReady();
         if (slot < _CUSTOM_SLOT_BASE && g == 0) revert BonusPeriodSpent();
         if (granules == 0) revert ZeroDonation();
         if (g == 0) revert NothingToSeed();
@@ -191,11 +192,13 @@ contract JackpotBattle is CrapsBattleStorage {
         uint64[] storage slots = _rngSlots[index];
         uint64 pos = _rngCursor(index);
         if (pos == slots.length) { result.done = true; return result; }
-        if (_readCrapsStage() != 6 || _wordAt(index) == 0) return result;
+        if (_readCrapsStage() != 6) return result;
+        uint256 gameState = _gameState();
+        if (_wordAt(index, gameState) == 0) return result;
         for (uint256 steps; pos < slots.length && steps < _KEEP_MAX_HOPS; ++steps) {
             if (!MineFlipGas.canRun(meter, _MAINTENANCE_GAS_MAX, _WORK_TAIL_GAS)) break;
             uint64 slot = slots[pos];
-            if (_scheduledExpired(slot)) {
+            if (_scheduledExpired(slot, _currentDayIndex(gameState))) {
                 _completeRngSlot(slot, index);
                 ++pos;
                 result.progressed = true;
@@ -265,7 +268,8 @@ contract JackpotBattle is CrapsBattleStorage {
     function lockJackpotBattle(uint24 requestDay, uint256 pool, uint24 level) external returns (bool locked) {
         if (msg.sender != ContractAddresses.GAME) revert OnlyGame();
         locked = true;
-        if (_activeJackpotSlot != 0 && !_scheduledExpired(_activeJackpotSlot)) {
+        uint24 today = _currentDayIndex();
+        if (_activeJackpotSlot != 0 && !_scheduledExpired(_activeJackpotSlot, today)) {
             JackpotRound storage prior = _jackpotRounds[_activeJackpotSlot & 511];
             // A retry never changes the field, allocation or request identity.
             uint256 priorBoard = _loadBattle(bytes32(uint256(_activeJackpotSlot)));
@@ -276,7 +280,7 @@ contract JackpotBattle is CrapsBattleStorage {
         uint64 slot = uint64(day * _BONUS_SLOTS_PER_DAY + _BONUS_PERIODS_PER_DAY);
         // Warm-up/skipped days have no paid field. Their free-only draw uses the unused
         // remainder-seven namespace, so lapsed reservations remain available to their refund walk.
-        bool detached = _scheduledExpired(slot) || _loadBudget(uint24(day)) == 0 || _slotIndexOf(slot) != 0;
+        bool detached = _scheduledExpired(slot, today) || _loadBudget(uint24(day)) == 0 || _slotIndexOf(slot) != 0;
         uint256 windowDay = detached ? uint256(requestDay) - 1 : day;
         // No round, award or reserve funding exists before the first window day.
         if (windowDay < _firstWindowDay) return false;
@@ -386,6 +390,9 @@ contract JackpotBattle is CrapsBattleStorage {
         uint256 ownN = r.paidCount - dayN;
         uint256 units = r.drawnUnits;
         uint256 drawn = r.drawnCount;
+        // lockJackpotBattle derives this scheduled slot from the opened or requested day.
+        // It cannot be future-dated; the expiry check above rejects a recycled day bank.
+        // Every appended ID has this same day, so no per-seat Game callback is needed.
         for (uint256 i; i < field.length && units < r.awardTarget; ++i) {
             uint256 entry = field[i];
             uint32 playerId = uint32(entry);
@@ -395,7 +402,7 @@ contract JackpotBattle is CrapsBattleStorage {
             ++units;
             (uint32 chips,) = CrapsPreferenceLib.decode(
                 entry >> (JackpotBattleFieldLib.BOARD_SHIFT - CrapsPreferenceLib.SHIFT));
-            _appendBet(id, uint256(playerId) | (uint256(chips) << _BET_CHIPS_SHIFT));
+            _appendScheduledBet(id, uint256(playerId) | (uint256(chips) << _BET_CHIPS_SHIFT));
             emit JackpotBattleEntry(slot, id, playerId, 1, chips);
         }
         r.drawnCount = uint32(drawn);
@@ -872,9 +879,8 @@ contract JackpotBattle is CrapsBattleStorage {
         unchecked { return budget * (1 << (tier - 1)) / weight; }
     }
 
-    function _jackpotArmSlot(uint64 slot, Window memory w) internal returns (uint48 index) {
+    function _jackpotArmSlot(uint64 slot, Window memory w, uint48 index) internal {
         unchecked {
-            index = _writeBuffer();
             _setSlotIndex(slot, index + 1);
             // The day field joins the window HERE rather than at the ticket sale, so selling a day
             // ticket never touches seven scoreboards. Both counts are already frozen — tickets
@@ -910,7 +916,10 @@ contract JackpotBattle is CrapsBattleStorage {
     }
 
     function _jackpotCurrentBonusSlot() internal view returns (uint24 day, uint256 period, uint256 slot) {
-        day = _currentDayIndex();
+        return _jackpotCurrentBonusSlot(_currentDayIndex());
+    }
+
+    function _jackpotCurrentBonusSlot(uint24 day) internal view returns (uint24, uint256 period, uint256 slot) {
         uint256 elapsed = (block.timestamp - 82_620) % 1 days;
         if (_scheduleResetPassed()) period = _BONUS_PERIODS_PER_DAY;
         else if (elapsed >= 1 days - 20 minutes) period = 5;
@@ -918,6 +927,7 @@ contract JackpotBattle is CrapsBattleStorage {
             unchecked { period = 1 + (elapsed - 3 minutes) / 6 hours; }
         }
         slot = _jackpotSlotOf(day, period);
+        return (day, period, slot);
     }
 
     function _jackpotFinishWindowTerms(uint24 day, uint256 period, Window memory w, uint256 highMult)
@@ -936,19 +946,20 @@ contract JackpotBattle is CrapsBattleStorage {
     function _keepScheduled(uint256 allowance) private returns (MineFlipGas.Result memory result) {
         MineFlipGas.Meter memory meter = MineFlipGas.start(allowance);
         uint8 stage = _readCrapsStage();
-        uint48 read = _writeBuffer() ^ 1;
+        uint256 gameState = _gameState();
+        uint48 read = _writeBuffer(gameState) ^ 1;
         // Before the first session, maintenance creates the commitments that request seals.
         // A live read cohort, locked day or earlier consumer always blocks admission work.
-        if (stage != 7 && !(stage == 0 && !IGameCraps(_GAME).rngLocked()
-            && _rngCursor(read) == _rngSlots[read].length && _wordAt(read) == 0)) return result;
+        if (stage != 7 && !(stage == 0 && uint8(gameState >> 152) == 0
+            && _rngCursor(read) == _rngSlots[read].length && _wordAt(read, gameState) == 0)) return result;
         uint64 cur = _minerSlot;
-        uint24 today = _currentDayIndex();
-        if (_scheduledExpired(cur)) {
+        uint24 today = _currentDayIndex(gameState);
+        if (_scheduledExpired(cur, today)) {
             // Bounded catch-up after a long outage. No expired seat is read or refunded.
             emit CrapsScheduledExpired(cur);
             cur = uint64((uint256(today) - _SETTLEMENT_DAYS) * _BONUS_SLOTS_PER_DAY);
         }
-        (,, uint256 open) = _jackpotCurrentBonusSlot();
+        (,, uint256 open) = _jackpotCurrentBonusSlot(today);
         for (uint256 hops; hops < _KEEP_MAX_HOPS; ++hops) {
             if (!MineFlipGas.canRun(meter, _MAINTENANCE_GAS_MAX, _WORK_TAIL_GAS)) break;
             uint24 day = uint24(uint256(cur) / _BONUS_SLOTS_PER_DAY);
@@ -971,7 +982,7 @@ contract JackpotBattle is CrapsBattleStorage {
                     continue;
                 }
                 Window memory w = _jackpotWindowTerms(day, (uint256(cur) % _BONUS_SLOTS_PER_DAY) - 1);
-                _jackpotArmSlot(cur, w);
+                _jackpotArmSlot(cur, w, read ^ 1);
                 result.progressed = true;
                 MineFlipGas.markProgress(meter);
                 // Re-examine the armed slot: a field ends maintenance (done) so the same miner
